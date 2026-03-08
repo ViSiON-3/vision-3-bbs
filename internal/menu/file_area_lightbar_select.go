@@ -1,0 +1,419 @@
+package menu
+
+import (
+	"errors"
+	"io"
+	"log"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gliderlabs/ssh"
+	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/stlalpha/vision3/internal/editor"
+	"github.com/stlalpha/vision3/internal/file"
+	"github.com/stlalpha/vision3/internal/terminalio"
+	"github.com/stlalpha/vision3/internal/user"
+	"golang.org/x/term"
+)
+
+// runSelectFileAreaLightbar is the lightbar version of runSelectFileArea.
+// It mirrors runSelectMessageAreaLightbar exactly, adapted for file areas.
+func runSelectFileAreaLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
+	userManager *user.UserMgr, currentUser *user.User,
+	nodeNumber int, sessionStartTime time.Time, args string,
+	outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+
+	log.Printf("DEBUG: Node %d: Running SELECTFILEAREA (lightbar)", nodeNumber)
+
+	// Resolve terminal dimensions: prefer passed values, then user prefs, then defaults.
+	if termWidth <= 0 && currentUser != nil {
+		termWidth = currentUser.ScreenWidth
+	}
+	if termWidth <= 0 {
+		termWidth = 80
+	}
+	if termHeight <= 0 && currentUser != nil {
+		termHeight = currentUser.ScreenHeight
+	}
+	if termHeight <= 0 {
+		termHeight = 24
+	}
+
+	if currentUser == nil {
+		msg := "\r\n|01Error: You must be logged in to select a file area.|07\r\n"
+		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		time.Sleep(1 * time.Second)
+		return nil, "", nil
+	}
+
+	templateDir := filepath.Join(e.MenuSetPath, "templates")
+	topBytes, errTop := readTemplateFile(filepath.Join(templateDir, "FILEAREA.TOP"))
+	midBytes, errMid := readTemplateFile(filepath.Join(templateDir, "FILEAREA.MID"))
+
+	if errTop != nil || errMid != nil {
+		log.Printf("WARN: Node %d: FILEAREA templates unavailable (%v/%v), using text mode", nodeNumber, errTop, errMid)
+		return runSelectFileArea(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+	}
+
+	processedMidTemplate := string(ansi.ReplacePipeCodes(midBytes))
+
+	// Build accessible conference list for left/right navigation.
+	var accessibleConfs []accessibleConf
+	if e.ConferenceMgr != nil {
+		for _, conf := range e.ConferenceMgr.ListConferences() {
+			if checkACS(conf.ACS, currentUser, s, terminal, sessionStartTime) {
+				accessibleConfs = append(accessibleConfs, accessibleConf{id: conf.ID, name: conf.Name})
+			}
+		}
+	}
+
+	filterConfID := currentUser.CurrentFileConferenceID
+
+	buildAreaList := func(confID int) []file.FileArea {
+		var areas []file.FileArea
+		for _, area := range e.FileMgr.ListAreas() {
+			if area.ConferenceID != confID {
+				continue
+			}
+			if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
+				continue
+			}
+			areas = append(areas, area)
+		}
+		sort.Slice(areas, func(i, j int) bool {
+			return areas[i].ID < areas[j].ID
+		})
+		return areas
+	}
+
+	buildItemLine := func(area file.FileArea, displayIdx int) string {
+		line := processedMidTemplate
+		line = strings.ReplaceAll(line, "^ID", padRight(strconv.Itoa(displayIdx), 3))
+		line = strings.ReplaceAll(line, "^TAG", padRight(truncateStr(area.Tag, 16), 16))
+		line = strings.ReplaceAll(line, "^NA", padRight(truncateStr(area.Name, 38), 38))
+		fileCount, _ := e.FileMgr.GetFileCountForArea(area.ID)
+		line = strings.ReplaceAll(line, "^NF", strconv.Itoa(fileCount))
+		line = strings.ReplaceAll(line, "^DS", area.Description)
+		return strings.TrimRight(line, "\r\n")
+	}
+
+	confNameFor := func(confID int) string {
+		if e.ConferenceMgr != nil {
+			if conf, ok := e.ConferenceMgr.GetByID(confID); ok {
+				return conf.Name
+			}
+		}
+		return "None"
+	}
+
+	// Load optional highlight BAR file (FILEAREAHI.BAR) — same pattern as MSGAREAHI.BAR.
+	hiBarOptions, hiBarErr := loadBarFile("FILEAREAHI", e)
+	if hiBarErr != nil {
+		log.Printf("WARN: Node %d: Failed to load FILEAREAHI.BAR: %v", nodeNumber, hiBarErr)
+	}
+
+	// Measure header rows using the same pipeline as renderTop so the count
+	// is accurate even when applyCommonTemplateTokens expands multi-line tokens.
+	sampleTop := strings.ReplaceAll(string(topBytes), "^CN", "")
+	sampleWithTokens := e.applyCommonTemplateTokens([]byte(sampleTop), currentUser, nodeNumber)
+	processedSample := string(ansi.ReplacePipeCodes(sampleWithTokens))
+	headerLines := strings.Count(processedSample, "\n")
+	// If the template's last row has no trailing \n, the cursor stays on that
+	// row and headerLines is undercounted by 1 — causing itemAreaStartRow to
+	// land on the separator line, which renderItemArea then overwrites.
+	// Detect visible content after the last \n and bump headerLines if found.
+	{
+		lastNL := strings.LastIndex(processedSample, "\n")
+		tail := processedSample
+		if lastNL >= 0 {
+			tail = processedSample[lastNL+1:]
+		}
+		tail = areaLightbarAnsiRe.ReplaceAllString(tail, "")
+		tail = strings.Trim(tail, "\r")
+		if len(tail) > 0 {
+			headerLines++
+		}
+	}
+	if headerLines < 1 {
+		headerLines = 1
+	}
+
+	itemAreaStartRow := headerLines + 1
+	separatorRow := termHeight - 1
+	hintRow := termHeight
+	if separatorRow <= itemAreaStartRow {
+		separatorRow = itemAreaStartRow + 1
+	}
+	visibleRows := separatorRow - itemAreaStartRow
+	if visibleRows < 3 {
+		visibleRows = 3
+	}
+
+	hiColorSeq := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
+	if len(hiBarOptions) > 0 {
+		hiColorSeq = colorCodeToAnsi(hiBarOptions[0].HighlightColor)
+	}
+
+	renderTop := func(confName string) error {
+		topStr := strings.ReplaceAll(string(topBytes), "^CN", confName)
+		withTokens := e.applyCommonTemplateTokens([]byte(topStr), currentUser, nodeNumber)
+		processed := ansi.ReplacePipeCodes(withTokens)
+		if err := terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(1, 1)), outputMode); err != nil {
+			return err
+		}
+		return terminalio.WriteProcessedBytes(terminal, processed, outputMode)
+	}
+
+	renderSeparator := func() error {
+		count := termWidth - 2
+		if count < 0 {
+			count = 0
+		}
+		sep := strings.Repeat("\xc4", count)
+		line := ansi.MoveCursor(separatorRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte("|08\xfa"+sep+"\xfa|07")))
+		return terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
+	}
+
+	renderHint := func() error {
+		hint := "|08[ |15Up|08/|15Dn|08 ] Nav  [ |15Lt|08/|15Rt|08 ] Conf  [ |15PgUp|08/|15PgDn|08 ] Page  [ |15Enter|08 ] Select  [ |15Q|08 ] Quit"
+		line := ansi.MoveCursor(hintRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(hint)))
+		return terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
+	}
+
+	renderItemArea := func(areas []file.FileArea, topIndex, selectedIndex int) error {
+		if len(areas) == 0 {
+			absRow := itemAreaStartRow
+			if err := terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(absRow, 1)+"\x1b[2K"), outputMode); err != nil {
+				return err
+			}
+			emptyMsg := string(ansi.ReplacePipeCodes([]byte("|08  No File Areas Available|07")))
+			if err := terminalio.WriteProcessedBytes(terminal, []byte(emptyMsg), outputMode); err != nil {
+				return err
+			}
+			for row := 1; row < visibleRows; row++ {
+				if err := terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(itemAreaStartRow+row, 1)+"\x1b[2K"), outputMode); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		for row := 0; row < visibleRows; row++ {
+			absRow := itemAreaStartRow + row
+			if err := terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(absRow, 1)+"\x1b[2K"), outputMode); err != nil {
+				return err
+			}
+			idx := topIndex + row
+			if idx >= len(areas) {
+				continue
+			}
+			line := buildItemLine(areas[idx], idx+1)
+			if idx == selectedIndex {
+				stripped := stripAreaAnsi(line)
+				if len(stripped) > termWidth {
+					stripped = stripped[:termWidth]
+				}
+				rendered := hiColorSeq + padRight(stripped, termWidth) + "\x1b[0m"
+				if err := terminalio.WriteProcessedBytes(terminal, []byte(rendered), outputMode); err != nil {
+					return err
+				}
+			} else {
+				if err := terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	renderFull := func(areas []file.FileArea, confName string, topIndex, selectedIndex int) error {
+		if err := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode); err != nil {
+			return err
+		}
+		if err := renderTop(confName); err != nil {
+			return err
+		}
+		if err := renderItemArea(areas, topIndex, selectedIndex); err != nil {
+			return err
+		}
+		if err := renderSeparator(); err != nil {
+			return err
+		}
+		return renderHint()
+	}
+
+	ih := getSessionIH(s)
+	_ = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25l"), outputMode)
+	defer terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h"), outputMode)
+
+	areas := buildAreaList(filterConfID)
+	confName := confNameFor(filterConfID)
+	selectedIndex := 0
+	topIndex := 0
+
+	clampSelection := func() {
+		if len(areas) == 0 {
+			selectedIndex, topIndex = 0, 0
+			return
+		}
+		if selectedIndex < 0 {
+			selectedIndex = 0
+		}
+		if selectedIndex >= len(areas) {
+			selectedIndex = len(areas) - 1
+		}
+		if selectedIndex < topIndex {
+			topIndex = selectedIndex
+		}
+		if selectedIndex >= topIndex+visibleRows {
+			topIndex = selectedIndex - visibleRows + 1
+		}
+		if topIndex < 0 {
+			topIndex = 0
+		}
+	}
+
+	prevSelectedIndex := -1
+	prevTopIndex := -1
+	needFullRedraw := true
+
+	for {
+		clampSelection()
+
+		if needFullRedraw {
+			if err := renderFull(areas, confName, topIndex, selectedIndex); err != nil {
+				return nil, "", err
+			}
+			needFullRedraw = false
+		} else if topIndex != prevTopIndex {
+			if err := renderItemArea(areas, topIndex, selectedIndex); err != nil {
+				return nil, "", err
+			}
+		} else if selectedIndex != prevSelectedIndex {
+			// Redraw only the two changed rows.
+			if prevSelectedIndex >= topIndex && prevSelectedIndex < topIndex+visibleRows {
+				oldRow := itemAreaStartRow + (prevSelectedIndex - topIndex)
+				oldLine := buildItemLine(areas[prevSelectedIndex], prevSelectedIndex+1)
+				if err := terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(oldRow, 1)+"\x1b[2K"), outputMode); err != nil {
+					return nil, "", err
+				}
+				if err := terminalio.WriteProcessedBytes(terminal, []byte(oldLine), outputMode); err != nil {
+					return nil, "", err
+				}
+			}
+			if selectedIndex >= topIndex && selectedIndex < topIndex+visibleRows {
+				newRow := itemAreaStartRow + (selectedIndex - topIndex)
+				newLine := buildItemLine(areas[selectedIndex], selectedIndex+1)
+				rendered := hiColorSeq + padRight(stripAreaAnsi(newLine), termWidth) + "\x1b[0m"
+				if err := terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(newRow, 1)+"\x1b[2K"), outputMode); err != nil {
+					return nil, "", err
+				}
+				if err := terminalio.WriteProcessedBytes(terminal, []byte(rendered), outputMode); err != nil {
+					return nil, "", err
+				}
+			}
+		}
+
+		prevSelectedIndex = selectedIndex
+		prevTopIndex = topIndex
+
+		keyInt, err := ih.ReadKey()
+		if err != nil {
+			if errors.Is(err, editor.ErrIdleTimeout) {
+				return nil, "LOGOFF", editor.ErrIdleTimeout
+			}
+			if errors.Is(err, io.EOF) {
+				return nil, "LOGOFF", io.EOF
+			}
+			return nil, "", err
+		}
+
+		switch keyInt {
+		case editor.KeyArrowUp:
+			selectedIndex--
+
+		case editor.KeyArrowDown:
+			selectedIndex++
+
+		case editor.KeyPageUp, editor.KeyCtrlR:
+			selectedIndex -= visibleRows
+			topIndex -= visibleRows
+			if topIndex < 0 {
+				topIndex = 0
+			}
+
+		case editor.KeyPageDown, editor.KeyCtrlC:
+			selectedIndex += visibleRows
+			topIndex += visibleRows
+
+		case editor.KeyHome:
+			selectedIndex = 0
+
+		case editor.KeyEnd:
+			if len(areas) > 0 {
+				selectedIndex = len(areas) - 1
+			}
+
+		case editor.KeyArrowLeft:
+			filterConfID = prevConf(accessibleConfs, filterConfID)
+			areas = buildAreaList(filterConfID)
+			confName = confNameFor(filterConfID)
+			selectedIndex, topIndex = 0, 0
+			needFullRedraw = true
+
+		case editor.KeyArrowRight:
+			filterConfID = nextConf(accessibleConfs, filterConfID)
+			areas = buildAreaList(filterConfID)
+			confName = confNameFor(filterConfID)
+			selectedIndex, topIndex = 0, 0
+			needFullRedraw = true
+
+		case editor.KeyEnter:
+			if len(areas) == 0 {
+				continue
+			}
+			area := areas[selectedIndex]
+			if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
+				continue
+			}
+			currentUser.CurrentFileAreaID = area.ID
+			currentUser.CurrentFileAreaTag = area.Tag
+			e.setUserFileConference(currentUser, area.ConferenceID)
+			if err := userManager.UpdateUser(currentUser); err != nil {
+				log.Printf("ERROR: Node %d: Failed to save user after file area change: %v", nodeNumber, err)
+			}
+
+			confirmMsg := "|08[ |15" + area.Name + " |08] |15Area Joined!|07"
+			hintLine := ansi.MoveCursor(hintRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(confirmMsg)))
+			_ = terminalio.WriteProcessedBytes(terminal, []byte(hintLine), outputMode)
+			time.Sleep(1 * time.Second)
+
+			log.Printf("INFO: Node %d: User %s changed file area to ID %d ('%s')",
+				nodeNumber, currentUser.Handle, area.ID, area.Tag)
+			return currentUser, "", nil
+
+		case editor.KeyEsc:
+			return currentUser, "", nil
+
+		default:
+			if keyInt >= 32 && keyInt < 127 {
+				ch := rune(keyInt)
+				switch {
+				case ch == 'q' || ch == 'Q':
+					return currentUser, "", nil
+				case ch >= '1' && ch <= '9':
+					idx := int(ch - '1')
+					if idx < len(areas) {
+						selectedIndex = idx
+					}
+				case ch == '0':
+					if 9 < len(areas) {
+						selectedIndex = 9
+					}
+				}
+			}
+		}
+	}
+}
