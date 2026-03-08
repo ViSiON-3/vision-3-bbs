@@ -259,12 +259,17 @@ readerLoop:
 
 			// Redraw screen if needed
 			if needsRedraw {
-				// Clear screen and display header
-				// processedHeader already has substitution values converted to the correct
-				// encoding for the terminal (CP437 values pre-converted before processTemplate),
-				// so write raw bytes directly for all modes.
+				// Clear screen and display header.
+				// CP437 mode: write raw bytes — substitutions were pre-converted and the
+				// ANSI art bytes must reach the terminal unchanged.
+				// Other modes (UTF-8): use WriteProcessedBytes so CP437 art bytes in the
+				// MSGHDR template are converted to Unicode before reaching the terminal.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-				terminal.Write(processedHeader)
+				if outputMode == ansi.OutputModeCP437 {
+					terminal.Write(processedHeader)
+				} else {
+					terminalio.WriteProcessedBytes(terminal, processedHeader, outputMode)
+				}
 
 				drawBody()
 
