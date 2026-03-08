@@ -1332,3 +1332,29 @@ func TestProcessAnsiAndExtractCoords_DollarAllColors(t *testing.T) {
 		}
 	}
 }
+
+func TestProcessAnsiAndExtractCoords_DualPurposePipeCode(t *testing.T) {
+	// |P is both a terminal command (save cursor) AND a field coordinate placeholder.
+	// This test verifies that ProcessAnsiAndExtractCoords records the field coord
+	// even when the pipe code is also in pipeCodeReplacements.
+	input := []byte("Hello|P")
+	result, err := ProcessAnsiAndExtractCoords(input, OutputModeCP437)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Must record field coordinate for "P"
+	coord, ok := result.FieldCoords["P"]
+	if !ok {
+		t.Fatal("expected dual-purpose pipe code |P to record field coord 'P'")
+	}
+	// "Hello" is 5 chars, so P should be at X=6 (1-based)
+	if coord.X != 6 || coord.Y != 1 {
+		t.Errorf("field coord P = (%d, %d), want (6, 1)", coord.X, coord.Y)
+	}
+
+	// Must also emit the save-cursor ANSI sequence
+	if !bytes.Contains(result.DisplayBytes, []byte("\x1b[s")) {
+		t.Errorf("expected save-cursor sequence in output, got %q", result.DisplayBytes)
+	}
+}

@@ -115,16 +115,37 @@ func loadInfoFormResponse(rootConfigPath string, userID int, formNum int) (*Info
 }
 
 // saveInfoFormResponse saves a user's response for a specific form.
+// Uses atomic write (temp file + rename) to prevent torn reads by concurrent sessions.
 func saveInfoFormResponse(rootConfigPath string, resp *InfoFormResponse) error {
 	data, err := json.MarshalIndent(resp, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal infoform response: %w", err)
 	}
 	fp := infoformsResponsePath(rootConfigPath, resp.UserID, resp.FormNum)
-	if err := os.MkdirAll(filepath.Dir(fp), 0755); err != nil {
+	dir := filepath.Dir(fp)
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create infoforms response directory: %w", err)
 	}
-	return os.WriteFile(fp, data, 0644)
+	// Write to temp file then rename for atomic update
+	tmp, err := os.CreateTemp(dir, ".infoform-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, fp); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("rename temp file: %w", err)
+	}
+	return nil
 }
 
 // deleteInfoFormResponse deletes a user's response for a specific form.
@@ -260,7 +281,7 @@ func runInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return currentUser, "", nil
 	}
 
-	isNewUser := currentUser.AccessLevel <= 1
+	isNewUser := !currentUser.Validated
 
 	for {
 		// Show available forms listing
@@ -556,7 +577,9 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 			if strings.TrimSpace(answer) == "" {
 				wvPaged("|08No answer")
 			} else {
-				wvPaged("|15" + answer)
+				// Escape pipe codes in stored answers to prevent pipe-code injection
+				sanitized := strings.ReplaceAll(answer, "|", "||")
+				wvPaged("|15" + sanitized)
 			}
 			answerIdx++
 		} else {
@@ -642,7 +665,7 @@ func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 }
 
-// runInfoFormView lets a user view their own completed forms, or sysops view any user's forms.
+// runInfoFormView lets a user view their own completed forms.
 // Maps to V2's ShowInfoForms call pattern.
 func runInfoFormView(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
