@@ -544,7 +544,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["VIEW_FILE"] = runViewFile                              // View file (archives show listing, text gets paged)
 	registry["TYPE_TEXT_FILE"] = runTypeTextFile                     // Type text file with paging
 	registry["LISTFILEAR"] = runListFileAreas                        // <-- ADDED: Register file area list runnable
-	registry["SELECTFILEAREA"] = runSelectFileArea                   // <-- ADDED: Register file area selection runnable
+	registry["SELECTFILEAREA"] = runSelectFileAreaDispatch             // File area selection (dispatches by fileListingMode)
 	registry["SELECTMSGAREA"] = runSelectMessageAreaLightbar         // Register message area selection runnable (lightbar)
 	registry["CHANGEMSGCONF"] = runChangeMsgConferenceLightbar       // Change message conference (lightbar)
 	registry["NEXTMSGAREA"] = runNextMsgArea                         // Navigate to next message area
@@ -9530,8 +9530,24 @@ func runListFileAreas(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 	return nil, "", nil // Success, return to current menu (FILEM)
 }
 
+// runSelectFileAreaDispatch checks the user/server fileListingMode setting and
+// dispatches to either the lightbar or classic text-mode file area selector.
+func runSelectFileAreaDispatch(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+	mode := ""
+	if currentUser != nil {
+		mode = currentUser.FileListingMode
+	}
+	if mode == "" {
+		mode = e.ServerCfg.FileListingMode
+	}
+	if strings.EqualFold(mode, "classic") {
+		return runSelectFileArea(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+	}
+	return runSelectFileAreaLightbar(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+}
+
 // runSelectFileArea prompts the user for a file area tag and changes the current user's
-// active file area if valid and accessible.
+// active file area if valid and accessible (classic text-mode).
 func runSelectFileArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	log.Printf("DEBUG: Node %d: Running SELECTFILEAREA", nodeNumber)
 
