@@ -71,7 +71,7 @@ func loadInfoFormConfig(rootConfigPath string) (*InfoFormConfig, error) {
 		if os.IsNotExist(err) {
 			// Return defaults matching V2 (CONFIG.PAS:73-78)
 			return &InfoFormConfig{
-				Descriptions: [5]string{"New User Application", "", "", "", "New User Voting Form"},
+				Descriptions: [5]string{"New User Application", "BBS SysOp Information", "", "", "New User Voting Form"},
 				MinLevels:    [5]int{0, 0, 0, 0, 0},
 				RequiredForms: "",
 			}, nil
@@ -123,7 +123,7 @@ func saveInfoFormResponse(rootConfigPath string, resp *InfoFormResponse) error {
 	}
 	fp := infoformsResponsePath(rootConfigPath, resp.UserID, resp.FormNum)
 	dir := filepath.Dir(fp)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create infoforms response directory: %w", err)
 	}
 	// Write to temp file then rename for atomic update
@@ -132,6 +132,11 @@ func saveInfoFormResponse(rootConfigPath string, resp *InfoFormResponse) error {
 		return fmt.Errorf("create temp file: %w", err)
 	}
 	tmpName := tmp.Name()
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		os.Remove(tmpName)
@@ -810,6 +815,13 @@ func runInfoFormRequired(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 		}
 		// Force fill out this required form
 		fillInfoForm(e, s, terminal, outputMode, nodeNumber, currentUser, formNum, termWidth, termHeight)
+		// Re-check: if form still not completed (save failed, user disconnected, etc.), block login
+		if !hasCompletedForm(e.RootConfigPath, currentUser.ID, formNum) {
+			log.Printf("WARN: Node %d: Required infoform #%d not completed by %s, blocking login",
+				nodeNumber, formNum, currentUser.Handle)
+			wv(terminal, fmt.Sprintf("\r\n|04Required form #%d was not completed. Disconnecting.\r\n", formNum), outputMode)
+			return currentUser, "LOGOFF", nil
+		}
 	}
 
 	return currentUser, "", nil
