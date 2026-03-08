@@ -15,5 +15,9 @@
     },
     {
         "command": "USERSTATS"
+    },
+    {
+        "command": "INFOFORMREQUIRED",
+        "clear_screen": true
     }
 ]
