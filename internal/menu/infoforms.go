@@ -115,7 +115,9 @@ func loadInfoFormResponse(rootConfigPath string, userID int, formNum int) (*Info
 }
 
 // saveInfoFormResponse saves a user's response for a specific form.
-// Uses atomic write (temp file + rename) to prevent torn reads by concurrent sessions.
+// Uses temp file + rename to prevent torn reads by concurrent sessions.
+// Note: os.Rename is atomic on Unix/POSIX but not guaranteed atomic on Windows.
+// On Windows, concurrent readers may briefly see a missing file during the rename.
 func saveInfoFormResponse(rootConfigPath string, resp *InfoFormResponse) error {
 	data, err := json.MarshalIndent(resp, "", "    ")
 	if err != nil {
@@ -429,7 +431,8 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return
 	}
 
-	// Check if already completed
+	// Check if already completed — prompt to replace but don't delete yet.
+	// The old response is preserved until the new one is fully saved (atomic rename).
 	if hasCompletedForm(e.RootConfigPath, currentUser.ID, formNum) {
 		replaceYes, err := e.PromptYesNo(s, terminal,
 			fmt.Sprintf("|07You have already filled out form #%d! Replace it? @", formNum),
@@ -437,9 +440,6 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		if err != nil || !replaceYes {
 			return
 		}
-		infoformsMu.Lock()
-		_ = deleteInfoFormResponse(e.RootConfigPath, currentUser.ID, formNum)
-		infoformsMu.Unlock()
 	}
 
 	wv(terminal, "\r\n", outputMode)
