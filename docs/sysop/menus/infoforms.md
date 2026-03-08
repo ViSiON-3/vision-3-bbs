@@ -123,8 +123,8 @@ The main infoforms screen lists all available forms with their status:
 
 The prompt depends on user type:
 
-- **Existing users:** `InfoForms (V)iew (Q)uit or #:` — can view completed forms or fill out by number
-- **New users:** `Newuser Forms (Q)uit or #:` — can only fill out forms, no view option
+- **Validated users:** `InfoForms (V)iew (Q)uit or #:` — can view completed forms or fill out by number
+- **Unvalidated users:** `Newuser Forms (Q)uit or #:` — can only fill out forms, no view option
 
 **Quit enforcement:** If required forms are incomplete, the user sees "You still must complete Infoform #N" and cannot quit until all required forms are done.
 
@@ -136,10 +136,10 @@ The prompt depends on user type:
 
 When a user selects a form number:
 
-1. If already completed, prompts "You have already filled out form #N! Replace it?" — old response is deleted if they say yes.
+1. If already completed, prompts "You have already filled out form #N! Replace it?" — the old response is preserved until the new one is fully saved.
 2. The template is displayed line by line. At each `*`, the user types their answer.
-3. All answers are saved as a JSON response file with a timestamp.
-4. If the user disconnects mid-form, nothing is saved (no partial responses).
+3. All answers are saved as a JSON response file with a timestamp (atomic write via temp file + rename).
+4. If the user disconnects mid-form, nothing is saved and the old response (if any) remains intact.
 
 ---
 
@@ -169,7 +169,7 @@ SysOp-only command that deletes all form responses for a specific user. Prompts 
 
 ### Required Forms at Login (`INFOFORMREQUIRED`)
 
-A login sequence command that checks if the current user has any incomplete required forms and forces them to fill out each one. This runs automatically during login if configured.
+A login sequence command that checks if the current user has any incomplete required forms and forces them to fill out each one. If a required form is not successfully completed (e.g., save failure or disconnect), the user is disconnected. This runs automatically during login if configured.
 
 Add to `configs/login.json`:
 
@@ -275,7 +275,7 @@ data/infoforms/
     <userID>_<formNum>.json      ← Per-user response files
 ```
 
-The `responses/` directory is created automatically when the first form is completed. Files are mutex-protected for concurrent access safety.
+The `responses/` directory is created automatically when the first form is completed (with `0700` permissions). Response files are written with `0600` permissions and use atomic writes (temp file + rename) for concurrent access safety.
 
 ---
 
