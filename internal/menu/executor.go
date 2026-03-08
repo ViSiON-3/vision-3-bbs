@@ -4789,7 +4789,7 @@ func runListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 	users := userManager.GetAllUsers() // Corrected method call
 	pendingCount := 0
 	for _, u := range users {
-		if u != nil && !u.Validated && !u.DeletedUser {
+		if isPendingValidationUser(u) {
 			pendingCount++
 		}
 	}
@@ -4884,6 +4884,12 @@ func runListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 	return nil, "", nil // Success
 }
 
+// isPendingValidationUser returns true if the user is awaiting validation:
+// not nil, not deleted, not banned (AccessLevel > 0), and not yet validated.
+func isPendingValidationUser(u *user.User) bool {
+	return u != nil && !u.Validated && !u.DeletedUser && u.AccessLevel > 0
+}
+
 func pendingValidationCount(userManager *user.UserMgr) int {
 	if userManager == nil {
 		return 0
@@ -4891,10 +4897,7 @@ func pendingValidationCount(userManager *user.UserMgr) int {
 	users := userManager.GetAllUsers()
 	count := 0
 	for _, u := range users {
-		if u == nil {
-			continue
-		}
-		if !u.Validated {
+		if isPendingValidationUser(u) {
 			count++
 		}
 	}
@@ -5985,7 +5988,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	allUsers := sortedUsersByID(userManager.GetAllUsers())
 	users := make([]*user.User, 0)
 	for _, u := range allUsers {
-		if u != nil && !u.Validated {
+		if isPendingValidationUser(u) {
 			users = append(users, u)
 		}
 	}
@@ -6547,7 +6550,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 					allUsers = sortedUsersByID(userManager.GetAllUsers())
 					users = make([]*user.User, 0)
 					for _, u := range allUsers {
-						if u != nil && !u.Validated {
+						if isPendingValidationUser(u) {
 							users = append(users, u)
 						}
 					}
@@ -6866,11 +6869,11 @@ func runNewUserValidation(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	// Security level check is handled by login.json sec_level field
 
-	// Get all unvalidated users
+	// Get all unvalidated users (skip deleted and banned users)
 	allUsers := userManager.GetAllUsers()
 	pendingCount := 0
 	for _, u := range allUsers {
-		if u != nil && !u.Validated {
+		if isPendingValidationUser(u) {
 			pendingCount++
 		}
 	}

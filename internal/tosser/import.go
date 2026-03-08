@@ -325,14 +325,21 @@ func (t *Tosser) isPacketFromKnownLink(hdr *ftn.PacketHeader) bool {
 func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) error {
 	parsed := ftn.ParsePackedMessageBody(msg.Body)
 
-	// Extract MSGID from kludges for dupe checking
+	// Extract MSGID and CHRS from kludges
 	msgID := ""
+	chrs := ""
 	for _, k := range parsed.Kludges {
 		if strings.HasPrefix(k, "MSGID: ") {
 			msgID = strings.TrimPrefix(k, "MSGID: ")
-			break
+		} else if strings.HasPrefix(k, "CHRS: ") {
+			chrs = strings.TrimPrefix(k, "CHRS: ")
 		}
 	}
+
+	// Decode header strings from their source encoding (CP437 unless CHRS says UTF-8)
+	msg.From = ftn.DecodeFTNString(msg.From, chrs)
+	msg.To = ftn.DecodeFTNString(msg.To, chrs)
+	msg.Subject = ftn.DecodeFTNString(msg.Subject, chrs)
 
 	// Netmail: messages without AREA: kludge are private point-to-point messages.
 	if parsed.Area == "" {
