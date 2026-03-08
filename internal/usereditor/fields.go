@@ -238,7 +238,7 @@ func editFields() []fieldDef {
 			Get: func(u *user.User) string { return strconv.Itoa(u.MessagesPosted) },
 		},
 		{
-			Label: "InfoForms", Type: ftDisplay, Col: 3, Row: 20, Width: 22,
+			Label: "InfoForms", Type: ftDisplay, Col: 3, Row: 20, Width: 24,
 			// Get is set dynamically by Model after creation (needs dataDir)
 		},
 		// Right column display fields

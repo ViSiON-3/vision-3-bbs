@@ -5868,64 +5868,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 					wv(terminal, "\r\n|04Error loading infoforms config.\r\n", outputMode)
 					e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 				} else {
-					infoformBrowseLoop:
-					for {
-						_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-						wv(terminal, fmt.Sprintf("\r\n|15InfoForms for |11%s |08(%s)|07\r\n", sel.Handle, sel.Username), outputMode)
-						wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n\r\n", outputMode)
-
-						hasAnyForm := false
-						for i := 0; i < 5; i++ {
-							formNum := i + 1
-							if !templateExists(e.RootConfigPath, formNum) {
-								continue
-							}
-							hasAnyForm = true
-							desc := ifCfg.Descriptions[i]
-							if desc == "" {
-								desc = fmt.Sprintf("Form #%d", formNum)
-							}
-							if hasCompletedForm(e.RootConfigPath, sel.ID, formNum) {
-								wv(terminal, fmt.Sprintf("  |15%d|08. |15%-30s |10[Completed]\r\n", formNum, desc), outputMode)
-							} else {
-								wv(terminal, fmt.Sprintf("  |08%d|08. |07%-30s |04[Incomplete]\r\n", formNum, desc), outputMode)
-							}
-						}
-						if !hasAnyForm {
-							wv(terminal, "|07No infoform templates configured.\r\n", outputMode)
-							e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
-							break
-						}
-
-						wv(terminal, "\r\n|08Press |151-5|08 to view a form, |15Q|08 to return.|07\r\n", outputMode)
-
-						key, err := getSessionIH(s).ReadKey()
-						if err != nil {
-							break
-						}
-						if key == int('q') || key == int('Q') || key == int(editor.KeyEsc) {
-							break infoformBrowseLoop
-						}
-						if key >= int('1') && key <= int('5') {
-							formNum := key - int('0')
-							if !templateExists(e.RootConfigPath, formNum) {
-								continue
-							}
-							_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-							desc := ifCfg.Descriptions[formNum-1]
-							if desc == "" {
-								desc = fmt.Sprintf("Form #%d", formNum)
-							}
-							wv(terminal, fmt.Sprintf("\r\n|15%s|07\r\n", desc), outputMode)
-							wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n", outputMode)
-							if hasCompletedForm(e.RootConfigPath, sel.ID, formNum) {
-								showInfoForm(e, s, terminal, outputMode, sel.ID, formNum, termHeight)
-							} else {
-								wv(terminal, "\r\n|04This form has not been completed.\r\n", outputMode)
-							}
-							e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
-						}
-					}
+					_ = browseInfoForms(e, s, terminal, outputMode, sel, ifCfg, termWidth, termHeight)
 				}
 				// Restore full screen layout after infoform viewer cleared the screen
 				if err := renderHeader(); err != nil {
@@ -6872,64 +6815,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 					wv(terminal, "\r\n|04Error loading infoforms config.\r\n", outputMode)
 					e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 				} else {
-					infoformBrowseLoop2:
-					for {
-						_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-						wv(terminal, fmt.Sprintf("\r\n|15InfoForms for |11%s |08(%s)|07\r\n", sel.Handle, sel.Username), outputMode)
-						wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n\r\n", outputMode)
-
-						hasAnyForm := false
-						for i := 0; i < 5; i++ {
-							formNum := i + 1
-							if !templateExists(e.RootConfigPath, formNum) {
-								continue
-							}
-							hasAnyForm = true
-							desc := ifCfg.Descriptions[i]
-							if desc == "" {
-								desc = fmt.Sprintf("Form #%d", formNum)
-							}
-							if hasCompletedForm(e.RootConfigPath, sel.ID, formNum) {
-								wv(terminal, fmt.Sprintf("  |15%d|08. |15%-30s |10[Completed]\r\n", formNum, desc), outputMode)
-							} else {
-								wv(terminal, fmt.Sprintf("  |08%d|08. |07%-30s |04[Incomplete]\r\n", formNum, desc), outputMode)
-							}
-						}
-						if !hasAnyForm {
-							wv(terminal, "|07No infoform templates configured.\r\n", outputMode)
-							e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
-							break
-						}
-
-						wv(terminal, "\r\n|08Press |151-5|08 to view a form, |15Q|08 to return.|07\r\n", outputMode)
-
-						key, err := getSessionIH(s).ReadKey()
-						if err != nil {
-							break
-						}
-						if key == int('q') || key == int('Q') || key == int(editor.KeyEsc) {
-							break infoformBrowseLoop2
-						}
-						if key >= int('1') && key <= int('5') {
-							formNum := key - int('0')
-							if !templateExists(e.RootConfigPath, formNum) {
-								continue
-							}
-							_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-							desc := ifCfg.Descriptions[formNum-1]
-							if desc == "" {
-								desc = fmt.Sprintf("Form #%d", formNum)
-							}
-							wv(terminal, fmt.Sprintf("\r\n|15%s|07\r\n", desc), outputMode)
-							wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n", outputMode)
-							if hasCompletedForm(e.RootConfigPath, sel.ID, formNum) {
-								showInfoForm(e, s, terminal, outputMode, sel.ID, formNum, termHeight)
-							} else {
-								wv(terminal, "\r\n|04This form has not been completed.\r\n", outputMode)
-							}
-							e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
-						}
-					}
+					_ = browseInfoForms(e, s, terminal, outputMode, sel, ifCfg, termWidth, termHeight)
 				}
 				// Restore full screen layout after infoform viewer cleared the screen
 				if err := renderHeader(); err != nil {

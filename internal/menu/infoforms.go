@@ -2,7 +2,9 @@ package menu
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +14,8 @@ import (
 	"time"
 
 	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/stlalpha/vision3/internal/editor"
+	"github.com/stlalpha/vision3/internal/terminalio"
 	"github.com/stlalpha/vision3/internal/user"
 	"github.com/stlalpha/vision3/internal/version"
 
@@ -430,9 +434,12 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			return
 		}
 
-		// Enforce max length if set
-		if field.MaxLen > 0 && len(answer) > field.MaxLen {
-			answer = answer[:field.MaxLen]
+		// Enforce max length if set (rune-aware to avoid breaking multi-byte UTF-8)
+		if field.MaxLen > 0 {
+			runes := []rune(answer)
+			if len(runes) > field.MaxLen {
+				answer = string(runes[:field.MaxLen])
+			}
 		}
 
 		answers = append(answers, answer)
@@ -534,8 +541,7 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 
 	// Replay template with answers interpolated at * markers
 	answerIdx := 0
-	for i, field := range tmpl.Fields {
-		_ = field
+	for i := range tmpl.Fields {
 		if aborted {
 			break
 		}
@@ -564,6 +570,75 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 			wvPaged(prepareSegment(tmpl.Segments[len(tmpl.Fields)]))
 		}
 		wvPaged("\r\n")
+	}
+}
+
+// browseInfoForms shows an interactive infoform browser for a user.
+// Used by both the admin and validate online user editors.
+// Returns an error only if ReadKey encounters io.EOF (session closed).
+func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
+	outputMode ansi.OutputMode, sel *user.User, ifCfg *InfoFormConfig,
+	termWidth int, termHeight int) error {
+
+	for {
+		_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
+		wv(terminal, fmt.Sprintf("\r\n|15InfoForms for |11%s |08(%s)|07\r\n", sel.Handle, sel.Username), outputMode)
+		wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n\r\n", outputMode)
+
+		hasAnyForm := false
+		for i := 0; i < 5; i++ {
+			formNum := i + 1
+			if !templateExists(e.RootConfigPath, formNum) {
+				continue
+			}
+			hasAnyForm = true
+			desc := ifCfg.Descriptions[i]
+			if desc == "" {
+				desc = fmt.Sprintf("Form #%d", formNum)
+			}
+			if hasCompletedForm(e.RootConfigPath, sel.ID, formNum) {
+				wv(terminal, fmt.Sprintf("  |15%d|08. |15%-30s |10[Completed]\r\n", formNum, desc), outputMode)
+			} else {
+				wv(terminal, fmt.Sprintf("  |08%d|08. |07%-30s |04[Incomplete]\r\n", formNum, desc), outputMode)
+			}
+		}
+		if !hasAnyForm {
+			wv(terminal, "|07No infoform templates configured.\r\n", outputMode)
+			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+			return nil
+		}
+
+		wv(terminal, "\r\n|08Press |151-5|08 to view a form, |15Q|08 to return.|07\r\n", outputMode)
+
+		key, err := getSessionIH(s).ReadKey()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return err
+			}
+			return nil
+		}
+		if key == int('q') || key == int('Q') || key == int(editor.KeyEsc) {
+			return nil
+		}
+		if key >= int('1') && key <= int('5') {
+			formNum := key - int('0')
+			if !templateExists(e.RootConfigPath, formNum) {
+				continue
+			}
+			_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
+			desc := ifCfg.Descriptions[formNum-1]
+			if desc == "" {
+				desc = fmt.Sprintf("Form #%d", formNum)
+			}
+			wv(terminal, fmt.Sprintf("\r\n|15%s|07\r\n", desc), outputMode)
+			wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n", outputMode)
+			if hasCompletedForm(e.RootConfigPath, sel.ID, formNum) {
+				showInfoForm(e, s, terminal, outputMode, sel.ID, formNum, termHeight)
+			} else {
+				wv(terminal, "\r\n|04This form has not been completed.\r\n", outputMode)
+			}
+			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+		}
 	}
 }
 
@@ -695,6 +770,7 @@ func runInfoFormRequired(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 	cfg, err := loadInfoFormConfig(e.RootConfigPath)
 	infoformsMu.Unlock()
 	if err != nil {
+		log.Printf("ERROR: Node %d: Failed to load infoforms config in required check: %v", nodeNumber, err)
 		return currentUser, "", nil
 	}
 
