@@ -9,6 +9,9 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
 
 // PacketType2Plus is the packet version identifier for Type-2+ packets.
@@ -461,4 +464,37 @@ func ParseFTNDateTime(s string) (time.Time, error) {
 		t, err = time.Parse("02 Jan 06 15:04:05", s)
 	}
 	return t, err
+}
+
+// DecodeFTNString converts an FTN packet header string (From, To, Subject)
+// from its source encoding to UTF-8 for storage and display.
+//
+// FTN messages traditionally use CP437 encoding for header fields. Modern
+// software (e.g., Synchronet) may send UTF-8 encoded strings, signaled by a
+// CHRS kludge value containing "UTF-8" (e.g., "UTF-8 4").
+//
+// If chrs contains "UTF-8" (case-insensitive), the string is assumed to be
+// valid UTF-8 and is returned unchanged. Otherwise, bytes 0x80–0xFF are
+// treated as CP437 and converted to their Unicode equivalents.
+func DecodeFTNString(s, chrs string) string {
+	if strings.Contains(strings.ToUpper(chrs), "UTF-8") {
+		return s
+	}
+	// Quick path: pure ASCII needs no conversion.
+	allASCII := true
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			allASCII = false
+			break
+		}
+	}
+	if allASCII {
+		return s
+	}
+	// Decode CP437 bytes to UTF-8.
+	decoded, _, err := transform.String(charmap.CodePage437.NewDecoder(), s)
+	if err != nil {
+		return s // Return original on decode error
+	}
+	return decoded
 }

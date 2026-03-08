@@ -5985,7 +5985,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	allUsers := sortedUsersByID(userManager.GetAllUsers())
 	users := make([]*user.User, 0)
 	for _, u := range allUsers {
-		if u != nil && !u.Validated {
+		if u != nil && !u.Validated && !u.DeletedUser && u.AccessLevel > 0 {
 			users = append(users, u)
 		}
 	}
@@ -6547,7 +6547,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 					allUsers = sortedUsersByID(userManager.GetAllUsers())
 					users = make([]*user.User, 0)
 					for _, u := range allUsers {
-						if u != nil && !u.Validated {
+						if u != nil && !u.Validated && !u.DeletedUser && u.AccessLevel > 0 {
 							users = append(users, u)
 						}
 					}
@@ -6866,11 +6866,11 @@ func runNewUserValidation(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	// Security level check is handled by login.json sec_level field
 
-	// Get all unvalidated users
+	// Get all unvalidated users (skip deleted and banned users)
 	allUsers := userManager.GetAllUsers()
 	pendingCount := 0
 	for _, u := range allUsers {
-		if u != nil && !u.Validated {
+		if u != nil && !u.Validated && !u.DeletedUser && u.AccessLevel > 0 {
 			pendingCount++
 		}
 	}

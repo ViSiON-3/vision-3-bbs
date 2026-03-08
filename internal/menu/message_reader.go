@@ -167,6 +167,12 @@ readerLoop:
 			}
 		}
 		substitutions := buildMsgSubstitutions(currentMsg, currentAreaTag, currentMsgNum, totalMsgCount, currentUser.AccessLevel, !templateUsesUserNote, replyCount, confName, areaName, e.MessageMgr, currentAreaID, userManager, nodeNumber)
+		// For CP437 terminals, convert UTF-8 substitution values to CP437 bytes so that
+		// multi-byte runes (e.g. Cyrillic from FTN UTF-8 messages) render as '?' instead
+		// of raw UTF-8 bytes that display as CP437 box-drawing characters.
+		if outputMode == ansi.OutputModeCP437 {
+			substitutions = convertSubsToCP437(substitutions)
+		}
 		autoWidths := buildAutoWidths(substitutions, totalMsgCount, termWidth)
 
 		// Process template with substitutions (auto-detects @CODE@ or |X format)
@@ -254,13 +260,11 @@ readerLoop:
 			// Redraw screen if needed
 			if needsRedraw {
 				// Clear screen and display header
+				// processedHeader already has substitution values converted to the correct
+				// encoding for the terminal (CP437 values pre-converted before processTemplate),
+				// so write raw bytes directly for all modes.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-				// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-				if outputMode == ansi.OutputModeCP437 {
-					terminal.Write(processedHeader)
-				} else {
-					terminalio.WriteProcessedBytes(terminal, processedHeader, outputMode)
-				}
+				terminal.Write(processedHeader)
 
 				drawBody()
 
@@ -745,6 +749,18 @@ func formatMessageBody(body, originAddr string, includeOrigin bool) string {
 // Delegates to MessageManager.FindMessageByMSGID which uses a cached index.
 func findMessageByMSGID(msgMgr *message.MessageManager, areaID int, msgID string) int {
 	return msgMgr.FindMessageByMSGID(areaID, msgID)
+}
+
+// convertSubsToCP437 converts all substitution map values from UTF-8 to CP437 bytes.
+// Runes with no CP437 equivalent fall back to a visual ASCII lookalike if one exists,
+// then '?'. This is used when outputMode is CP437 so that substituted text in MSGHDR
+// templates renders correctly on CP437 terminals instead of displaying raw UTF-8 bytes.
+func convertSubsToCP437(subs map[byte]string) map[byte]string {
+	result := make(map[byte]string, len(subs))
+	for k, v := range subs {
+		result[k] = toCP437Safe(v)
+	}
+	return result
 }
 
 // buildMsgSubstitutions creates the Pascal-style substitution map for MSGHDR templates.

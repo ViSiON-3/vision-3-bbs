@@ -281,9 +281,15 @@ func drawMessageListLine(terminal *term.Terminal, entry MessageListEntry, isHigh
 
 	// Truncate fields to fit columns
 	// Layout: Status(1) + Num(3) + Sep(2) + Subject(33) + Sep(4) + From(17) + Sep(2) + To(15) = 77 chars
-	subject := truncateString(entry.Subject, 33)
-	from := truncateString(entry.From, 17)
-	to := truncateString(entry.To, 15)
+	subjectVal, fromVal, toVal := entry.Subject, entry.From, entry.To
+	if outputMode == ansi.OutputModeCP437 {
+		subjectVal = toCP437Safe(subjectVal)
+		fromVal = toCP437Safe(fromVal)
+		toVal = toCP437Safe(toVal)
+	}
+	subject := truncateString(subjectVal, 33)
+	from := truncateString(fromVal, 17)
+	to := truncateString(toVal, 15)
 
 	// Format the line (total width: 79 chars including borders)
 	// Interior: Status(1) + Num(3) + Spaces(2) + Subject(33) + Spaces(4) + From(17) + Spaces(2) + To(15) = 77
