@@ -137,6 +137,7 @@ $dirs = @(
     "data\msgbases",
     "data\ftn\in", "data\ftn\secure_in", "data\ftn\temp_in", "data\ftn\temp_out",
     "data\ftn\out", "data\ftn\dupehist", "data\ftn\dloads", "data\ftn\dloads\pass",
+    "data\infoforms\templates", "data\infoforms\responses",
     "configs",
     "bin",
     "scripts"
@@ -175,6 +176,24 @@ Get-ChildItem -Path $templateConfigs -Filter "*.ini" -ErrorAction SilentlyContin
         Copy-Item $_.FullName $target
     } else {
         Write-Host "  $($_.Name) already exists, skipping."
+    }
+}
+
+# Copy infoform templates and config if they don't exist
+$infoformTemplates = Join-Path $scriptRoot "templates\infoforms"
+if (Test-Path $infoformTemplates) {
+    $infoformConfig = Join-Path $infoformTemplates "config.json"
+    $targetConfig = Join-Path $scriptRoot "data\infoforms\config.json"
+    if ((Test-Path $infoformConfig) -and -not (Test-Path $targetConfig)) {
+        Write-Host "  Creating infoforms config.json from template..."
+        Copy-Item $infoformConfig $targetConfig
+    }
+    Get-ChildItem -Path $infoformTemplates -Filter "form_*.txt" -ErrorAction SilentlyContinue | ForEach-Object {
+        $target = Join-Path $scriptRoot "data\infoforms\templates\$($_.Name)"
+        if (-not (Test-Path $target)) {
+            Write-Host "  Creating $($_.Name) from template..."
+            Copy-Item $_.FullName $target
+        }
     }
 }
 

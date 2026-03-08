@@ -1251,6 +1251,14 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 						displayBuf.WriteString(replacement)
 						consumed = 2
 						pipeCodeFound = true
+						// Also record as field coordinate if it's a single uppercase letter
+						// (e.g., |P is both "save cursor" AND a login field placeholder)
+						if content[i+1] >= 'A' && content[i+1] <= 'Z' {
+							placeholderCode := string(content[i+1 : i+2])
+							result.FieldCoords[placeholderCode] = struct{ X, Y int }{X: currentX, Y: currentY}
+							result.FieldColors[placeholderCode] = buildColorSequence()
+							log.Printf("DEBUG: ProcessAnsi recorded dual-purpose coord '%s' at (%d, %d)", placeholderCode, currentX, currentY)
+						}
 					}
 				}
 

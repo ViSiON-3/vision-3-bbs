@@ -1,0 +1,15 @@
+{
+    "TITLE": "InfoForms",
+    "CLR": true,
+    "USEPROMPT": true,
+    "PROMPT1": "|15InfoForms",
+    "PROMPT2": "|08[|15InfoForms|08] |07Command |08->|15 ",
+    "FALLBACK": "",
+    "ACS": "*",
+    "PASS": "",
+    "HELPMENU": "",
+    "FORCEHELPLEVEL": 0,
+    "MES_CONF": 0,
+    "FILE_CONF": 0,
+    "FORCEHOTKEY": false
+}

@@ -2,6 +2,8 @@ package usereditor
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -235,6 +237,10 @@ func editFields() []fieldDef {
 			Label: "Msgs Posted", Type: ftDisplay, Col: 3, Row: 19, Width: 6,
 			Get: func(u *user.User) string { return strconv.Itoa(u.MessagesPosted) },
 		},
+		{
+			Label: "InfoForms", Type: ftDisplay, Col: 3, Row: 20, Width: 24,
+			// Get is set dynamically by Model after creation (needs dataDir)
+		},
 		// Right column display fields
 		{
 			Label: "Created", Type: ftDisplay, Col: 50, Row: 18, Width: 16,
@@ -290,6 +296,25 @@ func formatTimeOnly(t time.Time) string {
 		return ""
 	}
 	return t.Format("03:04 PM")
+}
+
+// infoformStatus returns a compact string showing which infoforms a user has completed.
+// Example: "1[x] 2[x] 3[ ] 4[ ] 5[ ]"
+func infoformStatus(dataDir string, userID int) string {
+	if dataDir == "" {
+		return "N/A"
+	}
+	responsesDir := filepath.Join(dataDir, "infoforms", "responses")
+	var parts []string
+	for i := 1; i <= 5; i++ {
+		path := filepath.Join(responsesDir, fmt.Sprintf("%d_%d.json", userID, i))
+		if _, err := os.Stat(path); err == nil {
+			parts = append(parts, fmt.Sprintf("%d[x]", i))
+		} else {
+			parts = append(parts, fmt.Sprintf("%d[ ]", i))
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // padRight pads a string to width with spaces, truncating if longer.

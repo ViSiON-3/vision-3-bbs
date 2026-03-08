@@ -1,0 +1,11 @@
+|09ViSiON/3 Infoform v|VN
+|08---------------------
+
+|07How did you hear about this BBS?
+|03> *
+
+|07What are your interests?
+|03> *
+
+|07Any other comments for the SysOp?
+|03> *

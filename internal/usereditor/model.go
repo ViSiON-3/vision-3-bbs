@@ -2,6 +2,7 @@ package usereditor
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,7 @@ type Model struct {
 	users     []*user.User // All users (sorted by ID)
 	origUsers []*user.User // Snapshot at load time (for dirty tracking)
 	filePath  string
+	dataDir   string    // Root data directory (parent of users/, infoforms/, etc.)
 	fileMtime time.Time // mtime at load for optimistic concurrency
 	dirty     bool
 
@@ -76,7 +78,8 @@ type Model struct {
 }
 
 // New creates a new user editor model.
-func New(filePath string) (Model, error) {
+// dataDir is the root data directory (e.g., "data/") containing users/, infoforms/, etc.
+func New(filePath string, dataDir ...string) (Model, error) {
 	users, mtime, err := LoadUsers(filePath)
 	if err != nil {
 		return Model{}, fmt.Errorf("loading users: %w", err)
@@ -98,15 +101,38 @@ func New(filePath string) (Model, error) {
 		origUsers[i] = CloneUser(u)
 	}
 
+	// Resolve data directory
+	dd := ""
+	if len(dataDir) > 0 && dataDir[0] != "" {
+		dd = dataDir[0]
+	} else {
+		// Default: go up from users.json -> users/ -> data/
+		dd = filepath.Dir(filepath.Dir(filePath))
+	}
+
+	fields := editFields()
+
+	// Wire up the InfoForms display field with the resolved data directory.
+	for i := range fields {
+		if fields[i].Label == "InfoForms" {
+			capturedDD := dd
+			fields[i].Get = func(u *user.User) string {
+				return infoformStatus(capturedDD, u.ID)
+			}
+			break
+		}
+	}
+
 	return Model{
 		users:     users,
 		origUsers: origUsers,
 		filePath:  filePath,
+		dataDir:   dd,
 		fileMtime: mtime,
 		cursor:    0,
 		listType:  1,
 		tagged:    make(map[int]bool),
-		fields:    editFields(),
+		fields:    fields,
 		textInput: ti,
 		searchInput: si,
 		width:     minWidth,

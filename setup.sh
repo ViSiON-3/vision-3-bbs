@@ -106,6 +106,7 @@ mkdir -p data/files/general
 mkdir -p data/logs
 mkdir -p data/msgbases
 mkdir -p data/ftn/{in,secure_in,temp_in,temp_out,out,dupehist,dloads,dloads/pass}
+mkdir -p data/infoforms/{templates,responses}
 mkdir -p configs
 
 # Copy binkd.conf template to data/ftn/ if not present
@@ -163,6 +164,21 @@ if command -v dosemu &> /dev/null; then
 else
     echo -e "${YELLOW}Note:${NC} dosemu2 not installed — skipping .dosemurc setup (only needed for DOS doors)"
 fi
+
+# Copy infoform templates and config if they don't exist
+if [ -f "templates/infoforms/config.json" ] && [ ! -f "data/infoforms/config.json" ]; then
+    echo "  Creating infoforms config.json from template..."
+    cp templates/infoforms/config.json data/infoforms/config.json
+fi
+for template_file in templates/infoforms/form_*.txt; do
+    if [ -f "$template_file" ]; then
+        target_file="data/infoforms/templates/$(basename "$template_file")"
+        if [ ! -f "$target_file" ]; then
+            echo "  Creating $(basename "$template_file") from template..."
+            cp "$template_file" "$target_file"
+        fi
+    fi
+done
 
 # Create initial data files if they don't exist
 if [ ! -f "data/oneliners.json" ]; then

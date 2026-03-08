@@ -6,6 +6,8 @@ mkdir -p /vision3/data/users
 mkdir -p /vision3/data/logs
 mkdir -p /vision3/data/msgbases/privmail
 mkdir -p /vision3/data/files
+mkdir -p /vision3/data/infoforms/templates
+mkdir -p /vision3/data/infoforms/responses
 mkdir -p /vision3/temp
 for d in \
     /vision3/data/ftn/in \
@@ -48,6 +50,21 @@ for template_file in /vision3/templates/configs/*.json; do
     if [ ! -f "$target" ]; then
         echo "  Creating $(basename "$target") from template..."
         cp "$template_file" "$target"
+    fi
+done
+
+# Copy infoform templates and config if they don't exist
+if [ -f "/vision3/templates/infoforms/config.json" ] && [ ! -f "/vision3/data/infoforms/config.json" ]; then
+    echo "  Creating infoforms config.json from template..."
+    cp /vision3/templates/infoforms/config.json /vision3/data/infoforms/config.json
+fi
+for template_file in /vision3/templates/infoforms/form_*.txt; do
+    if [ -f "$template_file" ]; then
+        target="/vision3/data/infoforms/templates/$(basename "$template_file")"
+        if [ ! -f "$target" ]; then
+            echo "  Creating $(basename "$template_file") from template..."
+            cp "$template_file" "$target"
+        fi
     fi
 done
 

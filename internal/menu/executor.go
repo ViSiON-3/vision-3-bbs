@@ -606,6 +606,11 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["RUMORSSEARCH"] = runRumorsSearch        // Search rumors
 	registry["RUMORSNEWSCAN"] = runRumorsNewscan      // Rumors newscan (since last login)
 	registry["RANDOMRUMOR"] = runRandomRumor          // Display random rumor (login sequence)
+	registry["INFOFORMS"] = runInfoForms               // InfoForms menu (list/fill/view forms)
+	registry["INFOFORMVIEW"] = runInfoFormView          // View own completed infoform
+	registry["INFOFORMHUNT"] = runInfoFormHunt          // SysOp: browse all users' completed forms
+	registry["INFOFORMREQUIRED"] = runInfoFormRequired  // Login sequence: force required forms
+	registry["INFOFORMNUKE"] = runInfoFormNuke          // SysOp: delete all forms for a user
 }
 
 func runPlaceholderCommand(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
@@ -3985,8 +3990,9 @@ func runFullLoginSequence(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		"WHOISONLINE":   runLoginWhosOnline,
 		"PRINTNEWS":     runPrintNews,
 		"VOTEMANDATORY": runVoteOnMandatory,
-		"CHECKNUV":      runCheckNUV,
-		"RANDOMRUMOR":   runRandomRumor,
+		"CHECKNUV":         runCheckNUV,
+		"RANDOMRUMOR":      runRandomRumor,
+		"INFOFORMREQUIRED": runInfoFormRequired,
 	}
 
 	for i, item := range loginSequence {
@@ -5188,7 +5194,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				deleteLabel = "Un-Delete"
 				deleteColor = "|10" // Green for un-delete
 			}
-			barText = fmt.Sprintf("|08[|15H|08] %s%s  |08[|15P|08] |14Change PW  |08[|150|08] %s%s  |08[|159|08] %s%s  |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
+			barText = fmt.Sprintf("|08[|15H|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd |08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
 		}
 		if err := clearRow(actionRow); err != nil {
 			return err
@@ -5849,6 +5855,27 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				}
 			}
 			refresh = true
+		case 'i', 'I':
+			// View selected user's infoforms - interactive menu
+			if len(pendingChanges) == 0 {
+				sel := users[selectedIndex]
+				infoformsMu.Lock()
+				ifCfg, ifErr := loadInfoFormConfig(e.RootConfigPath)
+				infoformsMu.Unlock()
+
+				if ifErr != nil {
+					_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
+					wv(terminal, "\r\n|04Error loading infoforms config.\r\n", outputMode)
+					e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+				} else {
+					_ = browseInfoForms(e, s, terminal, outputMode, sel, ifCfg, termWidth, termHeight)
+				}
+				// Restore full screen layout after infoform viewer cleared the screen
+				if err := renderHeader(); err != nil {
+					return nil, "", err
+				}
+				refresh = true
+			}
 		case '\r', '\n':
 			// Enter/Return pressed - do nothing (removed help text display)
 		case editor.KeyArrowUp:
@@ -6087,7 +6114,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				deleteLabel = "Un-Delete"
 				deleteColor = "|10" // Green for un-delete
 			}
-			barText = fmt.Sprintf("|08[|15H|08] %s%s  |08[|15P|08] |14Change PW  |08[|150|08] %s%s  |08[|159|08] %s%s  |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
+			barText = fmt.Sprintf("|08[|15H|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd |08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
 		}
 		if err := clearRow(actionRow); err != nil {
 			return err
@@ -6775,6 +6802,27 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				}
 			}
 			refresh = true
+		case 'i', 'I':
+			// View selected user's infoforms - interactive menu
+			if len(pendingChanges) == 0 {
+				sel := users[selectedIndex]
+				infoformsMu.Lock()
+				ifCfg, ifErr := loadInfoFormConfig(e.RootConfigPath)
+				infoformsMu.Unlock()
+
+				if ifErr != nil {
+					_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
+					wv(terminal, "\r\n|04Error loading infoforms config.\r\n", outputMode)
+					e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+				} else {
+					_ = browseInfoForms(e, s, terminal, outputMode, sel, ifCfg, termWidth, termHeight)
+				}
+				// Restore full screen layout after infoform viewer cleared the screen
+				if err := renderHeader(); err != nil {
+					return nil, "", err
+				}
+				refresh = true
+			}
 		case editor.KeyArrowUp:
 			if len(pendingChanges) == 0 {
 				moveUp()

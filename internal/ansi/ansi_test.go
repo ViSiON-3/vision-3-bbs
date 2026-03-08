@@ -1332,3 +1332,57 @@ func TestProcessAnsiAndExtractCoords_DollarAllColors(t *testing.T) {
 		}
 	}
 }
+
+func TestProcessAnsiAndExtractCoords_DualPurposePipeCode(t *testing.T) {
+	// |P is both a terminal command (save cursor) AND a field coordinate placeholder.
+	// |O is only a field placeholder (not in pipeCodeReplacements).
+	// Both must record field coords; |P must also emit the terminal command.
+	tests := []struct {
+		name      string
+		input     []byte
+		fieldKey  string
+		wantX     int
+		wantY     int
+		wantAnsi  string // expected ANSI sequence in output (empty = no terminal command)
+	}{
+		{
+			name:     "|P dual-purpose (save cursor + field coord)",
+			input:    []byte("Hello|P"),
+			fieldKey: "P",
+			wantX:    6, wantY: 1,
+			wantAnsi: "\x1b[s",
+		},
+		{
+			name:     "|O field placeholder only",
+			input:    []byte("Hello|O"),
+			fieldKey: "O",
+			wantX:    6, wantY: 1,
+			wantAnsi: "", // |O has no terminal command
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ProcessAnsiAndExtractCoords(tt.input, OutputModeCP437)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			coord, ok := result.FieldCoords[tt.fieldKey]
+			if !ok {
+				t.Fatalf("expected field coord %q to be recorded", tt.fieldKey)
+			}
+			if coord.X != tt.wantX || coord.Y != tt.wantY {
+				t.Errorf("field coord %s = (%d, %d), want (%d, %d)",
+					tt.fieldKey, coord.X, coord.Y, tt.wantX, tt.wantY)
+			}
+
+			if tt.wantAnsi != "" {
+				if !bytes.Contains(result.DisplayBytes, []byte(tt.wantAnsi)) {
+					t.Errorf("expected ANSI sequence %q in output, got %q",
+						tt.wantAnsi, result.DisplayBytes)
+				}
+			}
+		})
+	}
+}
