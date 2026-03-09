@@ -5554,7 +5554,13 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 					}
 				}
 				if val, ok := pendingChanges["handle"]; ok {
-					target.Handle = val.(string)
+					normalizedHandle := strings.TrimSpace(val.(string))
+					if normalizedHandle == "" {
+						statusMessage = "|01Handle cannot be blank.|07"
+						refresh = true
+						continue
+					}
+					target.Handle = normalizedHandle
 				}
 				if val, ok := pendingChanges["realname"]; ok {
 					target.RealName = val.(string)
@@ -5689,7 +5695,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 					pendingChanges["handle"] = newVal
 					statusMessage = "|10Field marked for update.|07"
 				} else {
-					delete(pendingChanges, "username")
+					delete(pendingChanges, "handle")
 					statusMessage = "|08No change.|07"
 				}
 				refresh = true
@@ -6472,7 +6478,13 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 					}
 				}
 				if val, ok := pendingChanges["handle"]; ok {
-					target.Handle = val.(string)
+					normalizedHandle := strings.TrimSpace(val.(string))
+					if normalizedHandle == "" {
+						statusMessage = "|01Handle cannot be blank.|07"
+						refresh = true
+						continue
+					}
+					target.Handle = normalizedHandle
 				}
 				if val, ok := pendingChanges["realname"]; ok {
 					target.RealName = val.(string)
@@ -6636,7 +6648,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 					pendingChanges["handle"] = newVal
 					statusMessage = "|10Field marked for update.|07"
 				} else {
-					delete(pendingChanges, "username")
+					delete(pendingChanges, "handle")
 					statusMessage = "|08No change.|07"
 				}
 				refresh = true

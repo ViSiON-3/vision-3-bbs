@@ -769,7 +769,11 @@ func runInfoFormHunt(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		}
 
 		found++
-		wv(terminal, fmt.Sprintf("\r\n|11%s\r\n", resp.Handle), outputMode)
+		displayHandle := resp.Handle
+		if u, ok := userManager.GetUserByID(uid); ok && u.Handle != "" {
+			displayHandle = u.Handle
+		}
+		wv(terminal, fmt.Sprintf("\r\n|11%s\r\n", displayHandle), outputMode)
 		showInfoForm(e, s, terminal, outputMode, uid, formNum, termHeight)
 	}
 
