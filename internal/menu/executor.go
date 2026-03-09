@@ -5235,7 +5235,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				deleteLabel = "Un-Delete"
 				deleteColor = "|10" // Green for un-delete
 			}
-			barText = fmt.Sprintf("|08[|15H|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd |08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
+			barText = fmt.Sprintf("|08[|15G|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd |08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
 		}
 		if err := clearRow(actionRow); err != nil {
 			return err
@@ -6135,7 +6135,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				deleteLabel = "Un-Delete"
 				deleteColor = "|10" // Green for un-delete
 			}
-			barText = fmt.Sprintf("|08[|15H|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd |08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
+			barText = fmt.Sprintf("|08[|15G|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd |08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
 		}
 		if err := clearRow(actionRow); err != nil {
 			return err

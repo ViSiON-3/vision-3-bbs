@@ -94,7 +94,6 @@ func StringEntries() []StringEntry {
 		{Label: "Infoforms Prompt", Key: "infoformPrompt", Description: "Infoforms Prompt (V)iew, (Q)uit or (#)"},
 		{Label: "NewUser Infoforms Prompt", Key: "newInfoFormPrompt", Description: "NewUser Infoforms Prompt, (Q)uit or (#)"},
 		{Label: "View which Infoform", Key: "viewWhichForm", Description: "Displayed when a user (V)iews his infoform"},
-		{Label: "Checking Local Ratio", Key: "checkingLocalRatio", Description: "Displayed when checking local ratio"},
 		{Label: "Checking User Database", Key: "checkingUserBase", Description: "Displayed when finding a place for new users"},
 		{Label: "Name is already used", Key: "nameAlreadyUsed", Description: "Displayed when a newuser enters a name already in use"},
 		{Label: "Invalid Name", Key: "invalidUserName", Description: "Displayed if new user enters an invalid name"},

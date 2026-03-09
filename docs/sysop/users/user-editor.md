@@ -32,7 +32,7 @@ Users can be tagged with Space for bulk operations (validate, delete).
 
 ### Field Editor
 
-Press Enter on any user to open the field editor. Displays 28 fields across two columns:
+Press Enter on any user to open the field editor. Displays 27 fields across two columns:
 
 **Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit
 
