@@ -220,7 +220,6 @@ if (-not (Test-Path "data\users\users.json")) {
     "timesCalled": 0,
     "lastBulletinRead": "0001-01-01T00:00:00Z",
     "realName": "System Operator",
-    "phoneNumber": "",
     "createdAt": "2024-01-01T00:00:00Z",
     "validated": true,
     "filePoints": 0,

@@ -187,12 +187,10 @@ func (m Model) renderColumnTitle(width int) string {
 	case 1:
 		cols = "Level  Calls"
 	case 2:
-		cols = "Phone Number "
-	case 3:
 		cols = "Group/Location"
-	case 4:
+	case 3:
 		cols = "Posts    Valid"
-	case 5:
+	case 4:
 		cols = "Last Date Online"
 	}
 	full := nameStr + cols
@@ -231,17 +229,11 @@ func (m Model) renderUserRow(idx int, isHighlight bool, boxW int) string {
 		dataCols = padRight(fmt.Sprintf("%d", u.AccessLevel), 8) +
 			padRight(fmt.Sprintf("%d", u.TimesCalled), 11)
 	case 2:
-		phone := u.PhoneNumber
-		if phone == "" {
-			phone = "- No Number -"
-		}
-		dataCols = padRight(phone, 19)
-	case 3:
 		dataCols = padRight(u.GroupLocation, 19)
-	case 4:
+	case 3:
 		dataCols = padRight(fmt.Sprintf("%d", u.MessagesPosted), 8) +
 			padRight(boolToYN(u.Validated), 11)
-	case 5:
+	case 4:
 		dataCols = padRight(formatDate(u.LastLogin), 11) +
 			padRight(formatTimeOnly(u.LastLogin), 8)
 	}

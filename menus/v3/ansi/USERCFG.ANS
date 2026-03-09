@@ -3,9 +3,9 @@
 |15 Terminal                      |15 Personal Info
 |08 --------                      |08 -------------
 |07 [|15A|07] Screen Width              |07 [|15M|07] Real Name
-|07 [|15B|07] Screen Height             |07 [|15N|07] Phone Number
-|07 [|15C|07] Terminal Type             |07 [|15O|07] User Note
-|07 [|15D|07] Hot Keys                  |07 [|15P|07] Change Password
+|07 [|15B|07] Screen Height             |07 [|15N|07] User Note
+|07 [|15C|07] Terminal Type             |07 [|15P|07] Change Password
+|07 [|15D|07] Hot Keys
 |07 [|15E|07] More Prompts
 |07 [|15F|07] Message Header Style      |15 Colors
                                |08 ------

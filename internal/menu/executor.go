@@ -491,7 +491,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		ctx := buildDoorCtx(e, s, terminal,
 			currentUser.ID, currentUser.Handle, currentUser.RealName,
 			currentUser.AccessLevel, currentUser.TimeLimit, currentUser.TimesCalled,
-			currentUser.PhoneNumber, currentUser.GroupLocation,
+			currentUser.GroupLocation,
 			termWidth, termHeight,
 			nodeNumber, sessionStartTime, outputMode,
 			doorConfig, doorName)
@@ -576,7 +576,6 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["CFG_SCREENHEIGHT"] = runCfgScreenHeight
 	registry["CFG_TERMTYPE"] = runCfgTermType
 	registry["CFG_REALNAME"] = runCfgRealName
-	registry["CFG_PHONE"] = runCfgPhone
 	registry["CFG_NOTE"] = runCfgNote
 	registry["CFG_CUSTOMPROMPT"] = runCfgCustomPrompt
 	registry["CFG_COLOR"] = runCfgColor
@@ -3478,7 +3477,6 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		"|HANDLE":   "Guest",                    // Default
 		"|LEVEL":    "0",                        // Default
 		"|NAME":     "Guest User",               // Default
-		"|PHONE":    "",                         // Default
 		"|GL":       "",                         // Group/Location default
 		"|UN":       "",                         // User note (privateNote) default
 		"|UPLDS":    "0",                        // Default
@@ -3504,7 +3502,6 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		placeholders["|HANDLE"] = currentUser.Handle
 		placeholders["|LEVEL"] = strconv.Itoa(currentUser.AccessLevel)
 		placeholders["|NAME"] = currentUser.RealName
-		placeholders["|PHONE"] = currentUser.PhoneNumber
 		placeholders["|GL"] = currentUser.GroupLocation
 		placeholders["|UN"] = currentUser.PrivateNote
 		placeholders["|UPLDS"] = strconv.Itoa(currentUser.NumUploads)
@@ -5035,8 +5032,8 @@ func adminUserLightbarBrowser(s ssh.Session, terminal *term.Terminal, users []*u
 		sel := users[selectedIndex]
 		b.WriteString("|08--------------------------------------------------------------------------------|07\r\n")
 		b.WriteString(fmt.Sprintf("|15Handle        :|07 %s\r\n", adminTruncate(sel.Handle, 56)))
-		b.WriteString(fmt.Sprintf("|15Real Name     :|07 %-21s |15Phone         :|07 %s\r\n", adminTruncate(sel.RealName, 21), adminTruncate(sel.PhoneNumber, 29)))
-		b.WriteString(fmt.Sprintf("|15Group/Location:|07 %-16s |15Flags         :|07 %-8s\r\n", adminTruncate(sel.GroupLocation, 16), adminTruncate(sel.Flags, 8)))
+		b.WriteString(fmt.Sprintf("|15Real Name     :|07 %-21s |15Flags         :|07 %s\r\n", adminTruncate(sel.RealName, 21), adminTruncate(sel.Flags, 8)))
+		b.WriteString(fmt.Sprintf("|15Group/Location:|07 %s\r\n", adminTruncate(sel.GroupLocation, 40)))
 		b.WriteString(fmt.Sprintf("|15Validated     :|07 %-5t |15Level         :|07 %-3d |15TimeLimit     :|07 %-4d\r\n", sel.Validated, sel.AccessLevel, sel.TimeLimit))
 		b.WriteString(fmt.Sprintf("|15Created       :|07 %-16s |15Last Login    :|07 %s\r\n", adminTime(sel.CreatedAt), adminTime(sel.LastLogin)))
 		b.WriteString(fmt.Sprintf("|15Calls         :|07 %-5d |15Uploads       :|07 %-5d |15FilePoints    :|07 %-6d\r\n", sel.TimesCalled, sel.NumUploads, sel.FilePoints))
@@ -5350,12 +5347,8 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		}
 
 		deletedStatus := "No"
-		deletedAtStr := ""
 		if sel.DeletedUser {
 			deletedStatus = "Yes"
-			if sel.DeletedAt != nil {
-				deletedAtStr = adminTime(*sel.DeletedAt)
-			}
 		}
 
 		// Draw separator line above edit area
@@ -5365,15 +5358,14 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		}
 
 		lines := []string{
-			// Editable fields (A-H) in LEFT column, read-only stats in RIGHT column
+			// Editable fields (A-G) in LEFT column, read-only stats in RIGHT column
 			lineTwoCol("|08[|14A|08]|11 Handle", getFieldValue("handle", sel.Handle), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
 			lineTwoCol("|08[|14B|08]|11 Real Name", getFieldValue("realname", sel.RealName), "|11Uploads", fmt.Sprintf("%d", sel.NumUploads)),
-			lineTwoCol("|08[|14C|08]|11 Phone", getFieldValue("phone", sel.PhoneNumber), "|11FilePoints", fmt.Sprintf("%d", sel.FilePoints)),
-			lineTwoCol("|08[|14D|08]|11 Group/Loc", getFieldValue("grouploc", sel.GroupLocation), "|11Posts", fmt.Sprintf("%d", sel.MessagesPosted)),
-			lineTwoCol("|08[|14E|08]|11 Note", getFieldValue("note", sel.PrivateNote), "|11Created", adminTime(sel.CreatedAt)),
-			lineTwoCol("|08[|14F|08]|11 Flags", getFieldValue("flags", sel.Flags), "|11Last Login", adminTime(sel.LastLogin)),
-			lineTwoCol("|08[|14G|08]|11 Level", getIntFieldValue("level", sel.AccessLevel), "|11Deleted", deletedStatus),
-			lineTwoCol("|08[|14H|08]|11 Validated", getBoolFieldValue("validated", sel.Validated), "|11Deleted At", deletedAtStr),
+			lineTwoCol("|08[|14C|08]|11 Group/Loc", getFieldValue("grouploc", sel.GroupLocation), "|11FilePoints", fmt.Sprintf("%d", sel.FilePoints)),
+			lineTwoCol("|08[|14D|08]|11 Note", getFieldValue("note", sel.PrivateNote), "|11Posts", fmt.Sprintf("%d", sel.MessagesPosted)),
+			lineTwoCol("|08[|14E|08]|11 Flags", getFieldValue("flags", sel.Flags), "|11Created", adminTime(sel.CreatedAt)),
+			lineTwoCol("|08[|14F|08]|11 Level", getIntFieldValue("level", sel.AccessLevel), "|11Last Login", adminTime(sel.LastLogin)),
+			lineTwoCol("|08[|14G|08]|11 Validated", getBoolFieldValue("validated", sel.Validated), "|11Deleted", deletedStatus),
 		}
 		for i, line := range lines {
 			if err := writeAt(detailStartRow+i, 1, line); err != nil {
@@ -5571,9 +5563,6 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				if val, ok := pendingChanges["realname"]; ok {
 					target.RealName = val.(string)
 				}
-				if val, ok := pendingChanges["phone"]; ok {
-					target.PhoneNumber = val.(string)
-				}
 				if val, ok := pendingChanges["grouploc"]; ok {
 					target.GroupLocation = val.(string)
 				}
@@ -5642,8 +5631,6 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 							oldValue = currentUserData.Handle
 						case "realname":
 							oldValue = currentUserData.RealName
-						case "phone":
-							oldValue = currentUserData.PhoneNumber
 						case "grouploc":
 							oldValue = currentUserData.GroupLocation
 						case "note":
@@ -5732,23 +5719,6 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 			}
 		case 'c', 'C':
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("Phone", sel.PhoneNumber, 20); editErr == nil {
-				if newVal != sel.PhoneNumber {
-					pendingChanges["phone"] = newVal
-					statusMessage = "|10Field marked for update.|07"
-				} else {
-					delete(pendingChanges, "phone")
-					statusMessage = "|08No change.|07"
-				}
-				refresh = true
-			} else {
-				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
-				}
-				refresh = true
-			}
-		case 'd', 'D':
-			sel := users[selectedIndex]
 			if newVal, editErr := readFieldInput("Group/Location", sel.GroupLocation, 30); editErr == nil {
 				if newVal != sel.GroupLocation {
 					pendingChanges["grouploc"] = newVal
@@ -5764,7 +5734,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				}
 				refresh = true
 			}
-		case 'e', 'E':
+		case 'd', 'D':
 			sel := users[selectedIndex]
 			if newVal, editErr := readFieldInput("Note", sel.PrivateNote, 50); editErr == nil {
 				if newVal != sel.PrivateNote {
@@ -5781,7 +5751,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				}
 				refresh = true
 			}
-		case 'f', 'F':
+		case 'e', 'E':
 			sel := users[selectedIndex]
 			if newVal, editErr := readFieldInput("Flags", sel.Flags, 20); editErr == nil {
 				if newVal != sel.Flags {
@@ -5798,7 +5768,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				}
 				refresh = true
 			}
-		case 'g', 'G':
+		case 'f', 'F':
 			sel := users[selectedIndex]
 			levelStr := fmt.Sprintf("%d", sel.AccessLevel)
 			if newVal, editErr := readFieldInput("Level", levelStr, 3); editErr == nil {
@@ -5826,7 +5796,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				}
 				refresh = true
 			}
-		case 'h', 'H':
+		case 'g', 'G':
 			// Toggle validated status
 			sel := users[selectedIndex]
 			if sel.ID == 1 && sel.Validated {
@@ -6275,12 +6245,8 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 		}
 
 		deletedStatus := "No"
-		deletedAtStr := ""
 		if sel.DeletedUser {
 			deletedStatus = "Yes"
-			if sel.DeletedAt != nil {
-				deletedAtStr = adminTime(*sel.DeletedAt)
-			}
 		}
 
 		// Draw separator line above edit area
@@ -6290,15 +6256,14 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 		}
 
 		lines := []string{
-			// Editable fields (A-H) in LEFT column, read-only stats in RIGHT column
+			// Editable fields (A-G) in LEFT column, read-only stats in RIGHT column
 			lineTwoCol("|08[|14A|08]|11 Handle", getFieldValue("handle", sel.Handle), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
 			lineTwoCol("|08[|14B|08]|11 Real Name", getFieldValue("realname", sel.RealName), "|11Uploads", fmt.Sprintf("%d", sel.NumUploads)),
-			lineTwoCol("|08[|14C|08]|11 Phone", getFieldValue("phone", sel.PhoneNumber), "|11FilePoints", fmt.Sprintf("%d", sel.FilePoints)),
-			lineTwoCol("|08[|14D|08]|11 Group/Loc", getFieldValue("grouploc", sel.GroupLocation), "|11Posts", fmt.Sprintf("%d", sel.MessagesPosted)),
-			lineTwoCol("|08[|14E|08]|11 Note", getFieldValue("note", sel.PrivateNote), "|11Created", adminTime(sel.CreatedAt)),
-			lineTwoCol("|08[|14F|08]|11 Flags", getFieldValue("flags", sel.Flags), "|11Last Login", adminTime(sel.LastLogin)),
-			lineTwoCol("|08[|14G|08]|11 Level", getIntFieldValue("level", sel.AccessLevel), "|11Deleted", deletedStatus),
-			lineTwoCol("|08[|14H|08]|11 Validated", getBoolFieldValue("validated", sel.Validated), "|11Deleted At", deletedAtStr),
+			lineTwoCol("|08[|14C|08]|11 Group/Loc", getFieldValue("grouploc", sel.GroupLocation), "|11FilePoints", fmt.Sprintf("%d", sel.FilePoints)),
+			lineTwoCol("|08[|14D|08]|11 Note", getFieldValue("note", sel.PrivateNote), "|11Posts", fmt.Sprintf("%d", sel.MessagesPosted)),
+			lineTwoCol("|08[|14E|08]|11 Flags", getFieldValue("flags", sel.Flags), "|11Created", adminTime(sel.CreatedAt)),
+			lineTwoCol("|08[|14F|08]|11 Level", getIntFieldValue("level", sel.AccessLevel), "|11Last Login", adminTime(sel.LastLogin)),
+			lineTwoCol("|08[|14G|08]|11 Validated", getBoolFieldValue("validated", sel.Validated), "|11Deleted", deletedStatus),
 		}
 		for i, line := range lines {
 			if err := writeAt(detailStartRow+i, 1, line); err != nil {
@@ -6496,9 +6461,6 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				if val, ok := pendingChanges["realname"]; ok {
 					target.RealName = val.(string)
 				}
-				if val, ok := pendingChanges["phone"]; ok {
-					target.PhoneNumber = val.(string)
-				}
 				if val, ok := pendingChanges["grouploc"]; ok {
 					target.GroupLocation = val.(string)
 				}
@@ -6567,8 +6529,6 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 							oldValue = currentUserData.Handle
 						case "realname":
 							oldValue = currentUserData.RealName
-						case "phone":
-							oldValue = currentUserData.PhoneNumber
 						case "grouploc":
 							oldValue = currentUserData.GroupLocation
 						case "note":
@@ -6686,23 +6646,6 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 			}
 		case 'c', 'C':
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("Phone", sel.PhoneNumber, 20); editErr == nil {
-				if newVal != sel.PhoneNumber {
-					pendingChanges["phone"] = newVal
-					statusMessage = "|10Field marked for update.|07"
-				} else {
-					delete(pendingChanges, "phone")
-					statusMessage = "|08No change.|07"
-				}
-				refresh = true
-			} else {
-				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
-				}
-				refresh = true
-			}
-		case 'd', 'D':
-			sel := users[selectedIndex]
 			if newVal, editErr := readFieldInput("Group/Location", sel.GroupLocation, 30); editErr == nil {
 				if newVal != sel.GroupLocation {
 					pendingChanges["grouploc"] = newVal
@@ -6718,7 +6661,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				}
 				refresh = true
 			}
-		case 'e', 'E':
+		case 'd', 'D':
 			sel := users[selectedIndex]
 			if newVal, editErr := readFieldInput("Note", sel.PrivateNote, 50); editErr == nil {
 				if newVal != sel.PrivateNote {
@@ -6735,7 +6678,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				}
 				refresh = true
 			}
-		case 'f', 'F':
+		case 'e', 'E':
 			sel := users[selectedIndex]
 			if newVal, editErr := readFieldInput("Flags", sel.Flags, 20); editErr == nil {
 				if newVal != sel.Flags {
@@ -6752,7 +6695,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				}
 				refresh = true
 			}
-		case 'g', 'G':
+		case 'f', 'F':
 			sel := users[selectedIndex]
 			levelStr := fmt.Sprintf("%d", sel.AccessLevel)
 			if newVal, editErr := readFieldInput("Level", levelStr, 3); editErr == nil {
@@ -6780,7 +6723,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				}
 				refresh = true
 			}
-		case 'h', 'H':
+		case 'g', 'G':
 			// Toggle validated status
 			sel := users[selectedIndex]
 			if sel.ID == 1 && sel.Validated {

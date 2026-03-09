@@ -212,7 +212,6 @@ if [ ! -f "data/users/users.json" ]; then
     "timesCalled": 0,
     "lastBulletinRead": "0001-01-01T00:00:00Z",
     "realName": "System Operator",
-    "phoneNumber": "",
     "createdAt": "2024-01-01T00:00:00Z",
     "validated": true,
     "filePoints": 0,

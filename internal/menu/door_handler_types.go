@@ -17,7 +17,6 @@ type doorUserInfo struct {
 	AccessLevel   int
 	TimeLimit     int
 	TimesCalled   int
-	PhoneNumber   string
 	GroupLocation string
 	ScreenWidth   int
 	ScreenHeight  int

@@ -260,14 +260,6 @@ func runCfgRealName(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 	)
 }
 
-func runCfgPhone(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
-	return runCfgStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
-		"Phone Number", 15,
-		func(u *user.User) string { return u.PhoneNumber },
-		func(u *user.User, v string) { u.PhoneNumber = v },
-	)
-}
-
 func runCfgNote(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	return runCfgStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
 		"User Note", 35,
@@ -458,7 +450,6 @@ fmt.Sprintf(e.LoadedStrings.CfgViewHotKeys, boolStr(currentUser.HotKeys)),
 		fmt.Sprintf(e.LoadedStrings.CfgViewBarColor, currentUser.Colors[6], currentUser.Colors[6]),
 		"",
 		fmt.Sprintf(e.LoadedStrings.CfgViewRealName, currentUser.RealName),
-		fmt.Sprintf(e.LoadedStrings.CfgViewPhone, currentUser.PhoneNumber),
 		fmt.Sprintf(e.LoadedStrings.CfgViewNote, currentUser.PrivateNote),
 	}
 

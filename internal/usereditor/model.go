@@ -52,7 +52,7 @@ type Model struct {
 	// List mode state
 	cursor       int          // Current position in user list (0-based)
 	scrollOffset int          // First visible row in the list
-	listType     int          // Column view mode (1-5)
+	listType     int          // Column view mode (1-4)
 	listAlpha    bool         // Alphabetical sort active
 	tagged       map[int]bool // Tagged user indices (0-based)
 
@@ -264,7 +264,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.listType--
 			}
 		case "right":
-			if m.listType < 5 {
+			if m.listType < 4 {
 				m.listType++
 			}
 		case "shift+f2":

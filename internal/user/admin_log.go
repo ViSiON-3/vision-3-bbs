@@ -5,7 +5,7 @@ import "time"
 // AdminActivityLog records all administrative actions on user accounts.
 //
 // SECURITY/PRIVACY NOTICE:
-// - OldValue and NewValue may contain user PII (name, email, phone, real name, address)
+// - OldValue and NewValue may contain user PII (name, real name, address)
 // - Ensure admin_activity.json has restrictive file permissions (0600)
 // - Implement appropriate data retention policies per GDPR/CCPA requirements
 // - Consider redacting or hashing sensitive fields for audit purposes

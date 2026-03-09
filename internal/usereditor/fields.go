@@ -51,12 +51,7 @@ func editFields() []fieldDef {
 			Set: func(u *user.User, val string) error { u.RealName = val; return nil },
 		},
 		{
-			Label: "Phone Number", Type: ftString, Col: 3, Row: 6, Width: 15,
-			Get: func(u *user.User) string { return u.PhoneNumber },
-			Set: func(u *user.User, val string) error { u.PhoneNumber = val; return nil },
-		},
-		{
-			Label: "Access Level", Type: ftInteger, Col: 3, Row: 7, Width: 5, Min: 0, Max: 255,
+			Label: "Access Level", Type: ftInteger, Col: 3, Row: 6, Width: 5, Min: 0, Max: 255,
 			Get: func(u *user.User) string { return strconv.Itoa(u.AccessLevel) },
 			Set: func(u *user.User, val string) error {
 				n, err := strconv.Atoi(val)
@@ -68,7 +63,7 @@ func editFields() []fieldDef {
 			},
 		},
 		{
-			Label: "Total Calls", Type: ftInteger, Col: 3, Row: 8, Width: 5, Min: 0, Max: 32767,
+			Label: "Total Calls", Type: ftInteger, Col: 3, Row: 7, Width: 5, Min: 0, Max: 32767,
 			Get: func(u *user.User) string { return strconv.Itoa(u.TimesCalled) },
 			Set: func(u *user.User, val string) error {
 				n, err := strconv.Atoi(val)
@@ -80,22 +75,22 @@ func editFields() []fieldDef {
 			},
 		},
 		{
-			Label: "Group/Location", Type: ftString, Col: 3, Row: 9, Width: 22,
+			Label: "Group/Location", Type: ftString, Col: 3, Row: 8, Width: 22,
 			Get: func(u *user.User) string { return u.GroupLocation },
 			Set: func(u *user.User, val string) error { u.GroupLocation = val; return nil },
 		},
 		{
-			Label: "Access Flags", Type: ftString, Col: 3, Row: 10, Width: 22,
+			Label: "Access Flags", Type: ftString, Col: 3, Row: 9, Width: 22,
 			Get: func(u *user.User) string { return u.Flags },
 			Set: func(u *user.User, val string) error { u.Flags = strings.ToUpper(val); return nil },
 		},
 		{
-			Label: "Private Note", Type: ftString, Col: 3, Row: 11, Width: 22,
+			Label: "Private Note", Type: ftString, Col: 3, Row: 10, Width: 22,
 			Get: func(u *user.User) string { return u.PrivateNote },
 			Set: func(u *user.User, val string) error { u.PrivateNote = val; return nil },
 		},
 		{
-			Label: "File Points", Type: ftInteger, Col: 3, Row: 12, Width: 5, Min: 0, Max: 32767,
+			Label: "File Points", Type: ftInteger, Col: 3, Row: 11, Width: 5, Min: 0, Max: 32767,
 			Get: func(u *user.User) string { return strconv.Itoa(u.FilePoints) },
 			Set: func(u *user.User, val string) error {
 				n, err := strconv.Atoi(val)
@@ -107,12 +102,12 @@ func editFields() []fieldDef {
 			},
 		},
 		{
-			Label: "Custom Prompt", Type: ftString, Col: 3, Row: 13, Width: 22,
+			Label: "Custom Prompt", Type: ftString, Col: 3, Row: 12, Width: 22,
 			Get: func(u *user.User) string { return u.CustomPrompt },
 			Set: func(u *user.User, val string) error { u.CustomPrompt = val; return nil },
 		},
 		{
-			Label: "Time Limit", Type: ftInteger, Col: 3, Row: 14, Width: 6, Min: 0, Max: 1440,
+			Label: "Time Limit", Type: ftInteger, Col: 3, Row: 13, Width: 6, Min: 0, Max: 1440,
 			Get: func(u *user.User) string { return strconv.Itoa(u.TimeLimit) },
 			Set: func(u *user.User, val string) error {
 				n, err := strconv.Atoi(val)
@@ -124,7 +119,7 @@ func editFields() []fieldDef {
 			},
 		},
 		{
-			Label: "Password", Type: ftAction, Col: 3, Row: 15, Width: 22,
+			Label: "Password", Type: ftAction, Col: 3, Row: 14, Width: 22,
 			Get: func(u *user.User) string {
 				if u.PasswordHash == "" {
 					return "(not set)"

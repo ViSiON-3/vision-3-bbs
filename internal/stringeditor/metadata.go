@@ -84,8 +84,6 @@ func StringEntries() []StringEntry {
 
 		// Page 4: Items 61-80
 		{Label: "Enter User Note", Key: "enterUserNote", Description: "When prompting for a User Note"},
-		{Label: "Enter Phone Number", Key: "enterNumber", Description: "When prompting for User Phone Number"},
-		{Label: "Enter Number Header", Key: "enterNumberHeader", Description: "Displayed above 'Enter Phone Number' Prompt"},
 		{Label: "New User Welcome", Key: "welcomeNewUser", Description: "Displayed to New Users before User Number"},
 		{Label: "Your User Number", Key: "yourUserNum", Description: "When giving user his User Number (|UN = User Number)"},
 		{Label: "New User Current Prompt", Key: "yourCurrentPrompt", Description: "Displayed to new users before displaying their prompt"},
@@ -96,7 +94,7 @@ func StringEntries() []StringEntry {
 		{Label: "Infoforms Prompt", Key: "infoformPrompt", Description: "Infoforms Prompt (V)iew, (Q)uit or (#)"},
 		{Label: "NewUser Infoforms Prompt", Key: "newInfoFormPrompt", Description: "NewUser Infoforms Prompt, (Q)uit or (#)"},
 		{Label: "View which Infoform", Key: "viewWhichForm", Description: "Displayed when a user (V)iews his infoform"},
-		{Label: "Checking Local Ratio", Key: "checkingPhoneNum", Description: "Displayed when checking local ratio"},
+		{Label: "Checking Local Ratio", Key: "checkingLocalRatio", Description: "Displayed when checking local ratio"},
 		{Label: "Checking User Database", Key: "checkingUserBase", Description: "Displayed when finding a place for new users"},
 		{Label: "Name is already used", Key: "nameAlreadyUsed", Description: "Displayed when a newuser enters a name already in use"},
 		{Label: "Invalid Name", Key: "invalidUserName", Description: "Displayed if new user enters an invalid name"},
@@ -302,7 +300,6 @@ func StringEntries() []StringEntry {
 		{Label: "Cfg: View Text2Color", Key: "cfgViewText2Color", Description: "Display format for text2/stat2 colors"},
 		{Label: "Cfg: View BarColor", Key: "cfgViewBarColor", Description: "Display format for bar color"},
 		{Label: "Cfg: View RealName", Key: "cfgViewRealName", Description: "Display format for real name"},
-		{Label: "Cfg: View Phone", Key: "cfgViewPhone", Description: "Display format for phone number"},
 		{Label: "Cfg: View Note", Key: "cfgViewNote", Description: "Display format for user note"},
 		{Label: "Cfg: View FileList", Key: "cfgViewFileListMode", Description: "Display format for file listing mode"},
 		{Label: "Cfg: FileList Set", Key: "cfgFileListModeSet", Description: "Shown after changing file listing mode (%s=mode)"},

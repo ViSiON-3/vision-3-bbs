@@ -190,7 +190,6 @@ func (e *MenuExecutor) handleNewUserApplication(
 		password,
 		handle,
 		realName,
-		"", // phone number (legacy, not collected)
 		location,
 	)
 	if addErr != nil {
