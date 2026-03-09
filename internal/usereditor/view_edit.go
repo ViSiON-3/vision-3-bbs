@@ -194,9 +194,11 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) 
 	// Raw width is always label + field width (value is padded/clamped to f.Width)
 	rawW := labelLen + f.Width
 
-	// If actively editing this field
+	// If actively editing this field.
+	// textInput.View() renders Width+1 visible chars (cursor appended after text),
+	// so report rawW+1 to keep the row padding correct and avoid overflowing boxW.
 	if isActive && m.mode == modeEditField {
-		return fieldLabelStyle.Render(label) + m.textInput.View(), rawW
+		return fieldLabelStyle.Render(label) + m.textInput.View(), rawW + 1
 	}
 
 	// Display the value
