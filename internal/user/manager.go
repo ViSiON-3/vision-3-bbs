@@ -341,6 +341,10 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 	if u == nil {
 		return fmt.Errorf("cannot update nil user")
 	}
+	u.Handle = strings.TrimSpace(u.Handle)
+	if u.Handle == "" {
+		return fmt.Errorf("handle cannot be blank")
+	}
 	um.mu.Lock()
 	defer um.mu.Unlock()
 
@@ -527,6 +531,10 @@ func (um *UserMgr) NextUserID() int {
 
 // AddUser creates a new user, hashes the password, assigns an ID, and saves.
 func (um *UserMgr) AddUser(password, handle, realName, phoneNum, groupLocation string) (*User, error) {
+	handle = strings.TrimSpace(handle)
+	if handle == "" {
+		return nil, fmt.Errorf("handle cannot be blank")
+	}
 	lowerHandle := strings.ToLower(handle)
 
 	um.mu.Lock()
