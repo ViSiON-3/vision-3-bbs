@@ -83,23 +83,32 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 		// If loading fails (e.g., file not found), create default felonius user
 		if os.IsNotExist(err) {
 			log.Println("INFO: users.json not found, creating default felonius user.")
-			// AddUser will handle ID assignment and initialization
-			// Using "password" as default password
-			defaultUser, addErr := um.AddUser("password", "Felonius", "Felonius", "", "FAiRLiGHT/PC")
-			if addErr != nil {
-				return nil, fmt.Errorf("failed to create default felonius user: %w", addErr)
+			// Build the fully-initialized bootstrap user and write exactly once,
+			// avoiding a partially-initialized entry on disk if a second save fails.
+			hashedPw, hashErr := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+			if hashErr != nil {
+				return nil, fmt.Errorf("failed to hash default felonius password: %w", hashErr)
 			}
-			// Update felonius user fields after AddUser returns it
-			um.mu.Lock()                 // Lock necessary for direct modification
-			defaultUser.AccessLevel = 10 // Default user level
-			defaultUser.Validated = true // Default user is validated
-			// Ensure we update the map entry after modifying
+			now := time.Now()
+			defaultUser := &User{
+				ID:            1,
+				Handle:        "Felonius",
+				RealName:      "Felonius",
+				GroupLocation: "FAiRLiGHT/PC",
+				PasswordHash:  string(hashedPw),
+				AccessLevel:   10,
+				Validated:     true,
+				TimeLimit:     60,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+			um.mu.Lock()
 			um.users[strings.ToLower(defaultUser.Handle)] = defaultUser
+			um.nextUserID = 2
+			saveErr := um.saveUsersLocked()
 			um.mu.Unlock()
-
-			// Save again to ensure level/validation is persisted
-			if saveErr := um.SaveUsers(); saveErr != nil {
-				return nil, fmt.Errorf("failed to save default felonius user details: %w", saveErr)
+			if saveErr != nil {
+				return nil, fmt.Errorf("failed to save default felonius user: %w", saveErr)
 			}
 			log.Println("INFO: Default felonius user created (felonius/password).")
 			// Determine next user ID after creating the default user
