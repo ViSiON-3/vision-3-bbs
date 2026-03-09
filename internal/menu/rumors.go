@@ -25,11 +25,12 @@ import (
 // Simplified from V2's RumorRec — title dropped in favor of text-only graffiti wall.
 type RumorRecord struct {
 	ID       int       `json:"id"`
-	Author   string    `json:"author"`    // Displayed author (may be anonymous)
-	RealUser string    `json:"real_user"` // Actual username (V2: Author2)
-	Text     string    `json:"text"`      // Rumor text
-	PostedAt time.Time `json:"posted_at"` // When posted
-	MinLevel int       `json:"min_level"` // Minimum access level to view
+	Author   string    `json:"author"`              // Displayed author (may be anonymous)
+	RealUser string    `json:"real_user"`           // Actual handle (V2: Author2); legacy entries may contain old username
+	UserID   int       `json:"user_id,omitempty"`   // Stable owner ID for ownership checks (0 = legacy record)
+	Text     string    `json:"text"`                // Rumor text
+	PostedAt time.Time `json:"posted_at"`           // When posted
+	MinLevel int       `json:"min_level"`           // Minimum access level to view
 }
 
 // rumorsData holds all rumors with a NextID counter.
@@ -298,6 +299,7 @@ func runRumorsAdd(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	newRumor := RumorRecord{
 		Author:   author,
 		RealUser: realUser,
+		UserID:   currentUser.ID,
 		Text:     rumorSanitize(rumorText),
 		PostedAt: time.Now().UTC(),
 		MinLevel: minLevel,
@@ -424,10 +426,19 @@ func runRumorsDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return currentUser, "", nil
 	}
 
-	// Ownership check (V2: only sysop or author can delete)
-	if !isSysop && !strings.EqualFold(r.RealUser, currentUser.Handle) {
-		wv(terminal, "\r\n|04You didn't post that!\r\n", outputMode)
-		return currentUser, "", nil
+	// Ownership check (V2: only sysop or author can delete).
+	// Prefer stable UserID for newer records; fall back to handle comparison for legacy entries.
+	if !isSysop {
+		var isOwner bool
+		if r.UserID != 0 {
+			isOwner = r.UserID == currentUser.ID
+		} else {
+			isOwner = strings.EqualFold(r.RealUser, currentUser.Handle)
+		}
+		if !isOwner {
+			wv(terminal, "\r\n|04You didn't post that!\r\n", outputMode)
+			return currentUser, "", nil
+		}
 	}
 
 	// Confirm

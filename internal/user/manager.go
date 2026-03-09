@@ -318,6 +318,43 @@ func (um *UserMgr) SaveUsers() error { // Receiver uses renamed type
 	return um.saveUsersLocked()
 }
 
+// UpdateUserByID updates a user looked up by their stable ID, safely re-keying
+// the internal map when the handle has changed. Use this in any flow that may
+// rename a user's handle (e.g., admin editor); for all other updates prefer
+// UpdateUser.
+func (um *UserMgr) UpdateUserByID(u *User) error {
+	if u == nil {
+		return fmt.Errorf("cannot update nil user")
+	}
+	um.mu.Lock()
+	defer um.mu.Unlock()
+
+	// Locate existing map entry by stable ID.
+	var oldKey string
+	for k, existing := range um.users {
+		if existing.ID == u.ID {
+			oldKey = k
+			break
+		}
+	}
+	if oldKey == "" {
+		return ErrUserNotFound
+	}
+
+	newKey := strings.ToLower(u.Handle)
+	if newKey != oldKey {
+		// Handle changed — ensure no collision with a different user.
+		if existing, exists := um.users[newKey]; exists && existing.ID != u.ID {
+			return ErrHandleExists
+		}
+		delete(um.users, oldKey)
+	}
+
+	userCopy := *u
+	um.users[newKey] = &userCopy
+	return um.saveUsersLocked()
+}
+
 // UpdateUser copies the modified user back into the internal map and saves to disk.
 // Use this instead of SaveUsers when you have modified a user copy obtained from
 // GetUser or Authenticate and need those changes persisted.

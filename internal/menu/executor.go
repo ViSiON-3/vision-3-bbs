@@ -3325,11 +3325,17 @@ func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.
 			if currentUser.CurrentMsgConferenceID != 0 {
 				if conf, ok := e.ConferenceMgr.GetByID(currentUser.CurrentMsgConferenceID); ok {
 					tokens["|CCN"] = conf.Name
+					if tokens["|CC"] == "None" {
+						tokens["|CC"] = conf.Tag
+					}
 				}
 			}
 			if currentUser.CurrentFileConferenceID != 0 {
 				if conf, ok := e.ConferenceMgr.GetByID(currentUser.CurrentFileConferenceID); ok {
 					tokens["|FCN"] = conf.Name
+					if tokens["|FC"] == "None" {
+						tokens["|FC"] = conf.Tag
+					}
 				}
 			}
 		}
@@ -5621,7 +5627,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 				// Update timestamp for optimistic locking
 				target.UpdatedAt = time.Now()
 
-				if updateErr := userManager.UpdateUser(target); updateErr != nil {
+				if updateErr := userManager.UpdateUserByID(target); updateErr != nil {
 					statusMessage = fmt.Sprintf("|01Save failed: %v|07", updateErr)
 				} else {
 					// Update original timestamp after successful save
@@ -5691,8 +5697,9 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		case 'a', 'A':
 			sel := users[selectedIndex]
 			if newVal, editErr := readFieldInput("Handle", sel.Handle, 30); editErr == nil {
-				if newVal != sel.Handle {
-					pendingChanges["handle"] = newVal
+				trimmedHandle := strings.TrimSpace(newVal)
+				if trimmedHandle != sel.Handle {
+					pendingChanges["handle"] = trimmedHandle
 					statusMessage = "|10Field marked for update.|07"
 				} else {
 					delete(pendingChanges, "handle")
@@ -6545,7 +6552,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 				// Update timestamp for optimistic locking
 				target.UpdatedAt = time.Now()
 
-				if updateErr := userManager.UpdateUser(target); updateErr != nil {
+				if updateErr := userManager.UpdateUserByID(target); updateErr != nil {
 					statusMessage = fmt.Sprintf("|01Save failed: %v|07", updateErr)
 				} else {
 					// Update original timestamp after successful save
@@ -6644,8 +6651,9 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 		case 'a', 'A':
 			sel := users[selectedIndex]
 			if newVal, editErr := readFieldInput("Handle", sel.Handle, 30); editErr == nil {
-				if newVal != sel.Handle {
-					pendingChanges["handle"] = newVal
+				trimmedHandle := strings.TrimSpace(newVal)
+				if trimmedHandle != sel.Handle {
+					pendingChanges["handle"] = trimmedHandle
 					statusMessage = "|10Field marked for update.|07"
 				} else {
 					delete(pendingChanges, "handle")
@@ -8247,7 +8255,7 @@ func runNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMan
 	// Refresh user from the in-process manager so we pick up any newscan
 	// setting changes saved during this session (e.g. tagged areas modified
 	// via newscan config or by another goroutine on the same node).
-	if reloaded, exists := userManager.GetUser(currentUser.Handle); exists {
+	if reloaded, exists := userManager.GetUserByID(currentUser.ID); exists {
 		currentUser = reloaded
 	}
 
@@ -8499,7 +8507,7 @@ func runUploadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	}
 
 	// Reload user to get updated NumUploads
-	if reloaded, exists := userManager.GetUser(currentUser.Handle); exists {
+	if reloaded, exists := userManager.GetUserByID(currentUser.ID); exists {
 		currentUser = reloaded
 	}
 	return currentUser, "", nil
