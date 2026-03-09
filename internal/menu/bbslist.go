@@ -189,11 +189,27 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		emitPipe("|08" + strings.Repeat("\xc4", termWidth))
 	}
 
-	renderFooter := func() {
+	isCoSysOp := e.isCoSysOpOrAbove(currentUser)
+
+	canEdit := func(idx int) bool {
+		if idx < 0 || idx >= len(bld.Listings) {
+			return false
+		}
+		return strings.EqualFold(bld.Listings[idx].AddedBy, currentUser.Handle) || isCoSysOp
+	}
+
+	renderFooter := func(sel int) {
 		emit(ansi.MoveCursor(separatorRow, 1) + "\x1b[2K")
 		emitPipe("|08" + strings.Repeat("\xc4", termWidth))
 		emit(ansi.MoveCursor(hintRow, 1) + "\x1b[2K")
-		emitPipe("|08[ |15Up|08/|15Dn|08 ] Navigate  [ |15PgUp|08/|15PgDn|08 ] Page  [ |15Q|08/|15Esc|08 ] Quit")
+		hint := "|08[|15\x18\x19|08]Nav [|15PgUp|08/|15Dn|08]Page [|15Q|08]Quit"
+		if canEdit(sel) {
+			hint += " [|15C|08]Change"
+		}
+		if isCoSysOp {
+			hint += " [|15D|08]Del [|15V|08]Verify"
+		}
+		emitPipe(hint)
 	}
 
 	buildLeftLine := func(entry *BBSListing, idx int) string {
@@ -339,7 +355,7 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		renderHeader()
 		renderLeftPanel(topIndex, selectedIndex)
 		renderRightPanel(selectedIndex)
-		renderFooter()
+		renderFooter(selectedIndex)
 	}
 
 	// --- Input loop ---
@@ -386,6 +402,7 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			// Viewport scrolled — redraw both panels.
 			renderLeftPanel(topIndex, selectedIndex)
 			renderRightPanel(selectedIndex)
+			renderFooter(selectedIndex)
 		} else if selectedIndex != prevSelectedIndex {
 			// Only selection changed — update old/new left rows + right panel.
 			if prevSelectedIndex >= topIndex && prevSelectedIndex < topIndex+visibleRows {
@@ -395,6 +412,7 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				renderLeftRow(selectedIndex-topIndex, topIndex, selectedIndex)
 			}
 			renderRightPanel(selectedIndex)
+			renderFooter(selectedIndex)
 		}
 
 		prevSelectedIndex = selectedIndex
@@ -439,6 +457,53 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				if ch == 'q' || ch == 'Q' {
 					return currentUser, "", nil
 				}
+				if (ch == 'c' || ch == 'C') && canEdit(selectedIndex) {
+					entry := &bld.Listings[selectedIndex]
+					emit("\x1b[?25h") // show cursor
+					emit(ansi.ClearScreen())
+					bbsListEditEntry(e, s, terminal, currentUser, entry, selectedIndex, nodeNumber, outputMode)
+					bbsListMu.Lock()
+					_ = saveBBSListData(e.RootConfigPath, bld)
+					bbsListMu.Unlock()
+					emit("\x1b[?25l") // hide cursor
+					needFullRedraw = true
+				}
+				if (ch == 'd' || ch == 'D') && isCoSysOp && len(bld.Listings) > 0 {
+					entry := &bld.Listings[selectedIndex]
+					emit("\x1b[?25h") // show cursor
+					confirm, cerr := e.PromptYesNo(s, terminal,
+						fmt.Sprintf("\r\n|07Delete |15%s|07? ", bbsListSanitize(entry.Name)),
+						outputMode, nodeNumber, termWidth, termHeight, false)
+					emit("\x1b[?25l") // hide cursor
+					if cerr == nil && confirm {
+						bbsListMu.Lock()
+						bld.Listings = append(bld.Listings[:selectedIndex], bld.Listings[selectedIndex+1:]...)
+						_ = saveBBSListData(e.RootConfigPath, bld)
+						bbsListMu.Unlock()
+						log.Printf("INFO: Node %d: User %s deleted BBS listing: %s",
+							nodeNumber, currentUser.Handle, entry.Name)
+						if selectedIndex >= len(bld.Listings) && selectedIndex > 0 {
+							selectedIndex--
+						}
+						if len(bld.Listings) == 0 {
+							return currentUser, "", nil
+						}
+					}
+					needFullRedraw = true
+				}
+				if (ch == 'v' || ch == 'V') && isCoSysOp && len(bld.Listings) > 0 {
+					bbsListMu.Lock()
+					bld.Listings[selectedIndex].Verified = !bld.Listings[selectedIndex].Verified
+					status := "unverified"
+					if bld.Listings[selectedIndex].Verified {
+						status = "verified"
+					}
+					_ = saveBBSListData(e.RootConfigPath, bld)
+					bbsListMu.Unlock()
+					log.Printf("INFO: Node %d: User %s toggled BBS listing #%d (%s) to %s",
+						nodeNumber, currentUser.Handle, selectedIndex+1, bld.Listings[selectedIndex].Name, status)
+					needFullRedraw = true
+				}
 			}
 		}
 	}
@@ -457,7 +522,7 @@ func runBBSListAdd(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	log.Printf("DEBUG: Node %d: Running BBSLISTADD for user %s", nodeNumber, currentUser.Handle)
 
-	wv(terminal, "\r\n|15Add BBS Listing\r\n", outputMode)
+	wv(terminal, ansi.ClearScreen()+"|15Add BBS Listing\r\n", outputMode)
 	wv(terminal, "|08"+strings.Repeat("\xc4", 40)+"\r\n", outputMode)
 
 	// BBS Name (required)
@@ -591,6 +656,120 @@ func runBBSListAdd(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	return currentUser, "", nil
 }
 
+// bbsListEditEntry presents the numbered field editor for a single BBS listing entry.
+// It modifies entry in place; the caller is responsible for saving.
+func bbsListEditEntry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
+	currentUser *user.User, entry *BBSListing, idx int, nodeNumber int,
+	outputMode ansi.OutputMode) {
+
+	showEditFields := func() {
+		wv(terminal, fmt.Sprintf("\r\n|15Editing: |11%s\r\n", bbsListSanitize(entry.Name)), outputMode)
+		wv(terminal, "|08"+strings.Repeat("\xc4", 50)+"\r\n", outputMode)
+		wv(terminal, "|15[|111|15] |07Name        |08: |11"+bbsListSanitize(entry.Name)+"\r\n", outputMode)
+		wv(terminal, "|15[|112|15] |07Address     |08: |11"+bbsListSanitize(entry.Address)+"\r\n", outputMode)
+		wv(terminal, "|15[|113|15] |07Telnet Port |08: |11"+bbsListSanitize(entry.TelnetPort)+"\r\n", outputMode)
+		wv(terminal, "|15[|114|15] |07SSH Port    |08: |11"+bbsListSanitize(entry.SSHPort)+"\r\n", outputMode)
+		wv(terminal, "|15[|115|15] |07Web         |08: |11"+bbsListSanitize(entry.Web)+"\r\n", outputMode)
+		wv(terminal, "|15[|116|15] |07SysOp       |08: |11"+bbsListSanitize(entry.Sysop)+"\r\n", outputMode)
+		wv(terminal, "|15[|117|15] |07Software    |08: |11"+bbsListSanitize(entry.Software)+"\r\n", outputMode)
+		wv(terminal, "|15[|118|15] |07Description |08: |11"+bbsListSanitize(entry.Description)+"\r\n", outputMode)
+	}
+
+	showEditFields()
+
+	for {
+		wv(terminal, "\r\n|07Edit field |15[|111-8|15]|07, or |15Q|07 to save & quit: ", outputMode)
+		choice, err := readLineFromSessionIH(s, terminal)
+		if err != nil {
+			return
+		}
+		choice = strings.TrimSpace(strings.ToUpper(choice))
+
+		if choice == "Q" || choice == "" {
+			break
+		}
+
+		var fieldPrompt string
+		switch choice {
+		case "1":
+			fieldPrompt = "|07New Name: "
+		case "2":
+			fieldPrompt = "|07New Address: "
+		case "3":
+			fieldPrompt = "|07New Telnet Port: "
+		case "4":
+			fieldPrompt = "|07New SSH Port: "
+		case "5":
+			fieldPrompt = "|07New Web URL: "
+		case "6":
+			fieldPrompt = "|07New SysOp: "
+		case "7":
+			fieldPrompt = "|07New Software: "
+		case "8":
+			fieldPrompt = "|07New Description: "
+		default:
+			wv(terminal, "|07Invalid choice.\r\n", outputMode)
+			continue
+		}
+
+		wv(terminal, fieldPrompt, outputMode)
+		val, err := readLineFromSessionIH(s, terminal)
+		if err != nil {
+			return
+		}
+		val = strings.TrimSpace(val)
+		if val == "" {
+			continue
+		}
+
+		switch choice {
+		case "1":
+			if len(val) > 40 {
+				val = val[:40]
+			}
+			entry.Name = val
+		case "2":
+			if len(val) > 60 {
+				val = val[:60]
+			}
+			entry.Address = val
+		case "3":
+			if len(val) > 10 {
+				val = val[:10]
+			}
+			entry.TelnetPort = val
+		case "4":
+			if len(val) > 10 {
+				val = val[:10]
+			}
+			entry.SSHPort = val
+		case "5":
+			if len(val) > 80 {
+				val = val[:80]
+			}
+			entry.Web = val
+		case "6":
+			if len(val) > 30 {
+				val = val[:30]
+			}
+			entry.Sysop = val
+		case "7":
+			if len(val) > 20 {
+				val = val[:20]
+			}
+			entry.Software = val
+		case "8":
+			if len(val) > 200 {
+				val = val[:200]
+			}
+			entry.Description = val
+		}
+	}
+
+	wv(terminal, "\r\n|10Entry updated!\r\n", outputMode)
+	log.Printf("INFO: Node %d: User %s edited BBS listing #%d (%s)", nodeNumber, currentUser.Handle, idx+1, entry.Name)
+}
+
 // runBBSListEdit allows a user to edit their own BBS listing (or any if sysop).
 // Maps to V2's ChangeBBS procedure with ownership check.
 func runBBSListEdit(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
@@ -648,109 +827,7 @@ func runBBSListEdit(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return currentUser, "", nil
 	}
 
-	showEditFields := func() {
-		wv(terminal, fmt.Sprintf("\r\n|15Editing: |11%s\r\n", bbsListSanitize(entry.Name)), outputMode)
-		wv(terminal, "|08"+strings.Repeat("\xc4", 50)+"\r\n", outputMode)
-		wv(terminal, "|15[|111|15] |07Name        |08: |11"+bbsListSanitize(entry.Name)+"\r\n", outputMode)
-		wv(terminal, "|15[|112|15] |07Address     |08: |11"+bbsListSanitize(entry.Address)+"\r\n", outputMode)
-		wv(terminal, "|15[|113|15] |07Telnet Port |08: |11"+bbsListSanitize(entry.TelnetPort)+"\r\n", outputMode)
-		wv(terminal, "|15[|114|15] |07SSH Port    |08: |11"+bbsListSanitize(entry.SSHPort)+"\r\n", outputMode)
-		wv(terminal, "|15[|115|15] |07Web         |08: |11"+bbsListSanitize(entry.Web)+"\r\n", outputMode)
-		wv(terminal, "|15[|116|15] |07SysOp       |08: |11"+bbsListSanitize(entry.Sysop)+"\r\n", outputMode)
-		wv(terminal, "|15[|117|15] |07Software    |08: |11"+bbsListSanitize(entry.Software)+"\r\n", outputMode)
-		wv(terminal, "|15[|118|15] |07Description |08: |11"+bbsListSanitize(entry.Description)+"\r\n", outputMode)
-	}
-
-	showEditFields()
-
-	for {
-		wv(terminal, "\r\n|07Edit field |15[|111-8|15]|07, or |15Q|07 to save & quit: ", outputMode)
-		choice, err := readLineFromSessionIH(s, terminal)
-		if err != nil {
-			return currentUser, "", nil
-		}
-		choice = strings.TrimSpace(strings.ToUpper(choice))
-
-		if choice == "Q" || choice == "" {
-			break
-		}
-
-		var fieldPrompt string
-		switch choice {
-		case "1":
-			fieldPrompt = "|07New Name: "
-		case "2":
-			fieldPrompt = "|07New Address: "
-		case "3":
-			fieldPrompt = "|07New Telnet Port: "
-		case "4":
-			fieldPrompt = "|07New SSH Port: "
-		case "5":
-			fieldPrompt = "|07New Web URL: "
-		case "6":
-			fieldPrompt = "|07New SysOp: "
-		case "7":
-			fieldPrompt = "|07New Software: "
-		case "8":
-			fieldPrompt = "|07New Description: "
-		default:
-			wv(terminal, "|07Invalid choice.\r\n", outputMode)
-			continue
-		}
-
-		wv(terminal, fieldPrompt, outputMode)
-		val, err := readLineFromSessionIH(s, terminal)
-		if err != nil {
-			return currentUser, "", nil
-		}
-		val = strings.TrimSpace(val)
-		if val == "" {
-			continue
-		}
-
-		switch choice {
-		case "1":
-			if len(val) > 40 {
-				val = val[:40]
-			}
-			entry.Name = val
-		case "2":
-			if len(val) > 60 {
-				val = val[:60]
-			}
-			entry.Address = val
-		case "3":
-			if len(val) > 10 {
-				val = val[:10]
-			}
-			entry.TelnetPort = val
-		case "4":
-			if len(val) > 10 {
-				val = val[:10]
-			}
-			entry.SSHPort = val
-		case "5":
-			if len(val) > 80 {
-				val = val[:80]
-			}
-			entry.Web = val
-		case "6":
-			if len(val) > 30 {
-				val = val[:30]
-			}
-			entry.Sysop = val
-		case "7":
-			if len(val) > 20 {
-				val = val[:20]
-			}
-			entry.Software = val
-		case "8":
-			if len(val) > 200 {
-				val = val[:200]
-			}
-			entry.Description = val
-		}
-	}
+	bbsListEditEntry(e, s, terminal, currentUser, entry, idx, nodeNumber, outputMode)
 
 	// Save changes
 	bbsListMu.Lock()
@@ -761,19 +838,21 @@ func runBBSListEdit(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 	bbsListMu.Unlock()
 
-	wv(terminal, "\r\n|10Entry updated!\r\n", outputMode)
-	log.Printf("INFO: Node %d: User %s edited BBS listing #%d (%s)", nodeNumber, currentUser.Handle, n, entry.Name)
 	return currentUser, "", nil
 }
 
-// runBBSListDelete allows a user to delete their own BBS listing (or any if sysop).
-// Maps to V2's Deletebbs procedure with ownership check.
+// runBBSListDelete allows a co-sysop or above to delete a BBS listing.
 func runBBSListDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
 	termWidth int, termHeight int) (*user.User, string, error) {
 
 	if currentUser == nil {
+		return currentUser, "", nil
+	}
+
+	if !e.isCoSysOpOrAbove(currentUser) {
+		wv(terminal, "\r\n|04CoSysOp access required.\r\n", outputMode)
 		return currentUser, "", nil
 	}
 
@@ -815,12 +894,6 @@ func runBBSListDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	idx := n - 1
 	entry := bld.Listings[idx]
-
-	// V2 ownership check
-	if !strings.EqualFold(entry.AddedBy, currentUser.Handle) && !e.isCoSysOpOrAbove(currentUser) {
-		wv(terminal, "\r\n|04You can only delete your own listings.\r\n", outputMode)
-		return currentUser, "", nil
-	}
 
 	// Confirm deletion
 	confirm, err := e.PromptYesNo(s, terminal,
