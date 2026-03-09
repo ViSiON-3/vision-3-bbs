@@ -19,6 +19,7 @@ type User struct {
 	ID               int       `json:"id"` // Added User ID for ACS 'U' check
 	PasswordHash     string    `json:"passwordHash"` // Changed from []byte to string
 	Handle           string    `json:"handle"`
+	LegacyUsername   string    `json:"username,omitempty"` // Migration only: used during load when Handle is absent; cleared on save
 	AccessLevel      int       `json:"accessLevel"`
 	Flags            string    `json:"flags"` // Added Flags string for ACS 'F' check (e.g., "XYZ")
 	LastLogin        time.Time `json:"lastLogin"`

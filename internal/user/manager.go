@@ -142,6 +142,15 @@ func (um *UserMgr) loadUsers() error { // Receiver uses renamed type
 		if user == nil { // Safety check for nil entries in JSON array
 			continue
 		}
+		// Migration: legacy records stored handle in "username"; if Handle is absent use it.
+		if strings.TrimSpace(user.Handle) == "" && user.LegacyUsername != "" {
+			user.Handle = user.LegacyUsername
+			log.Printf("INFO: Migrated legacy username %q to handle for user ID %d.", user.LegacyUsername, user.ID)
+		}
+		if strings.TrimSpace(user.Handle) == "" {
+			log.Printf("WARN: Skipping user ID %d with no handle in users.json.", user.ID)
+			continue
+		}
 		lowerHandle := strings.ToLower(user.Handle)
 		if _, exists := um.users[lowerHandle]; exists {
 			log.Printf("WARN: Duplicate handle found in users.json: %s. Skipping subsequent entry.", user.Handle)
@@ -286,11 +295,17 @@ func (um *UserMgr) saveNextCallNumberLocked() error {
 // saveUsersLocked performs the actual saving without acquiring locks.
 // Uses um.path (which should point to data/users.json)
 func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
-	// Convert map back to slice for saving as JSON array
-	// We now store pointers in the map, so create a slice of pointers
+	// Convert map back to slice for saving as JSON array.
+	// Clear LegacyUsername before marshaling so the old "username" key is not written back.
 	usersList := make([]*User, 0, len(um.users))
 	for _, user := range um.users {
-		usersList = append(usersList, user) // Append pointers directly
+		if user.LegacyUsername != "" {
+			cp := *user
+			cp.LegacyUsername = ""
+			usersList = append(usersList, &cp)
+		} else {
+			usersList = append(usersList, user)
+		}
 	}
 
 	data, err := json.MarshalIndent(usersList, "", "  ")
@@ -342,17 +357,29 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 	}
 
 	newKey := strings.ToLower(u.Handle)
+	var originalEntry *User
+	rekeyed := false
 	if newKey != oldKey {
 		// Handle changed — ensure no collision with a different user.
 		if existing, exists := um.users[newKey]; exists && existing.ID != u.ID {
 			return ErrHandleExists
 		}
+		originalEntry = um.users[oldKey] // save for rollback
 		delete(um.users, oldKey)
+		rekeyed = true
 	}
 
 	userCopy := *u
 	um.users[newKey] = &userCopy
-	return um.saveUsersLocked()
+	if err := um.saveUsersLocked(); err != nil {
+		// Rollback in-memory map to match what is still on disk.
+		delete(um.users, newKey)
+		if rekeyed {
+			um.users[oldKey] = originalEntry
+		}
+		return err
+	}
+	return nil
 }
 
 // UpdateUser copies the modified user back into the internal map and saves to disk.

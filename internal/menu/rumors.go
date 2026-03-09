@@ -41,6 +41,21 @@ type rumorsData struct {
 
 var rumorsMu sync.Mutex
 
+// backfillRumorUserIDs populates UserID for legacy records where UserID == 0
+// by looking up RealUser as a handle. Returns true if any records were updated.
+func backfillRumorUserIDs(rd *rumorsData, um *user.UserMgr) bool {
+	changed := false
+	for i := range rd.Rumors {
+		if rd.Rumors[i].UserID == 0 && rd.Rumors[i].RealUser != "" {
+			if u, ok := um.GetUser(rd.Rumors[i].RealUser); ok {
+				rd.Rumors[i].UserID = u.ID
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
 func rumorsFilePath(rootConfigPath string) string {
 	return filepath.Join(rootConfigPath, "..", "data", "rumors.json")
 }
@@ -358,6 +373,9 @@ func runRumorsDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	rumorsMu.Lock()
 	rd, err := loadRumorsData(e.RootConfigPath)
+	if err == nil && backfillRumorUserIDs(rd, userManager) {
+		_ = saveRumorsData(e.RootConfigPath, rd) // best-effort migration; non-fatal
+	}
 	rumorsMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading rumors.\r\n", outputMode)
