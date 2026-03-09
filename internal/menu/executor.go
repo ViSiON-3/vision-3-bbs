@@ -3310,12 +3310,34 @@ func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.
 		"|ALIAS":     "Guest",
 		"|HANDLE":    "Guest",
 		"|LEVEL":     "0",
+		"|CC":        "None",
+		"|CCN":       "None",
+		"|FC":        "None",
+		"|FCN":       "None",
 	}
 	if currentUser != nil {
 		tokens["|UH"] = currentUser.Handle
 		tokens["|ALIAS"] = currentUser.Handle
 		tokens["|HANDLE"] = currentUser.Handle
 		tokens["|LEVEL"] = strconv.Itoa(currentUser.AccessLevel)
+		if currentUser.CurrentMsgConferenceTag != "" {
+			tokens["|CC"] = currentUser.CurrentMsgConferenceTag
+		}
+		if currentUser.CurrentFileConferenceTag != "" {
+			tokens["|FC"] = currentUser.CurrentFileConferenceTag
+		}
+		if e.ConferenceMgr != nil {
+			if currentUser.CurrentMsgConferenceID != 0 {
+				if conf, ok := e.ConferenceMgr.GetByID(currentUser.CurrentMsgConferenceID); ok {
+					tokens["|CCN"] = conf.Name
+				}
+			}
+			if currentUser.CurrentFileConferenceID != 0 {
+				if conf, ok := e.ConferenceMgr.GetByID(currentUser.CurrentFileConferenceID); ok {
+					tokens["|FCN"] = conf.Name
+				}
+			}
+		}
 	}
 
 	// Sort longest-key-first so |CFAN is replaced before |CFA, etc.
@@ -3468,7 +3490,10 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		"|CAN":      currentAreaDisplayName,     // Current message area display name
 		"|CFA":      currentFileAreaTag,         // Current file area tag
 		"|CFAN":     currentFileAreaDisplayName, // Current file area display name
-		"|CC":       "None",                     // Current conference default
+		"|CC":       "None",                     // Current message conference tag default
+		"|CCN":      "None",                     // Current message conference name default
+		"|FC":       "None",                     // Current file conference tag default
+		"|FCN":      "None",                     // Current file conference name default
 	}
 
 	// Populate user-specific placeholders if logged in
@@ -3487,9 +3512,24 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 			placeholders["|LCALL"] = currentUser.LastLogin.Format("01/02/06")
 		}
 
-		// Set |CC based on user's current message conference tag
+		// Set |CC/|CCN based on user's current message conference
 		if currentUser.CurrentMsgConferenceTag != "" {
 			placeholders["|CC"] = currentUser.CurrentMsgConferenceTag
+		}
+		if e.ConferenceMgr != nil && currentUser.CurrentMsgConferenceID != 0 {
+			if conf, ok := e.ConferenceMgr.GetByID(currentUser.CurrentMsgConferenceID); ok {
+				placeholders["|CCN"] = conf.Name
+			}
+		}
+
+		// Set |FC/|FCN based on user's current file conference
+		if currentUser.CurrentFileConferenceTag != "" {
+			placeholders["|FC"] = currentUser.CurrentFileConferenceTag
+		}
+		if e.ConferenceMgr != nil && currentUser.CurrentFileConferenceID != 0 {
+			if conf, ok := e.ConferenceMgr.GetByID(currentUser.CurrentFileConferenceID); ok {
+				placeholders["|FCN"] = conf.Name
+			}
 		}
 
 		// Calculate Time Left |TL
