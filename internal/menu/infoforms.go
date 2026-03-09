@@ -35,7 +35,6 @@ type InfoFormConfig struct {
 // Maps to V2's FORMS.TXT/FORMS.MAP entries.
 type InfoFormResponse struct {
 	UserID      int       `json:"user_id"`
-	Username    string    `json:"username"`
 	Handle      string    `json:"handle"`
 	FormNum     int       `json:"form_num"`
 	FilledOutAt time.Time `json:"filled_out_at"`
@@ -479,7 +478,6 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// Save the response
 	resp := &InfoFormResponse{
 		UserID:      currentUser.ID,
-		Username:    currentUser.Username,
 		Handle:      currentUser.Handle,
 		FormNum:     formNum,
 		FilledOutAt: time.Now().UTC(),
@@ -610,7 +608,7 @@ func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	for {
 		_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-		wv(terminal, fmt.Sprintf("\r\n|15InfoForms for |11%s |08(%s)|07\r\n", sel.Handle, sel.Username), outputMode)
+		wv(terminal, fmt.Sprintf("\r\n|15InfoForms for |11%s|07\r\n", sel.Handle), outputMode)
 		wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n\r\n", outputMode)
 
 		hasAnyForm := false
@@ -771,7 +769,7 @@ func runInfoFormHunt(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		}
 
 		found++
-		wv(terminal, fmt.Sprintf("\r\n|11%s |08(%s)\r\n", resp.Handle, resp.Username), outputMode)
+		wv(terminal, fmt.Sprintf("\r\n|11%s\r\n", resp.Handle), outputMode)
 		showInfoForm(e, s, terminal, outputMode, uid, formNum, termHeight)
 	}
 
@@ -844,24 +842,21 @@ func runInfoFormNuke(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return currentUser, "", nil
 	}
 
-	wv(terminal, "\r\n|07Username to nuke infoforms for: ", outputMode)
+	wv(terminal, "\r\n|07Handle to nuke infoforms for: ", outputMode)
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		return currentUser, "", nil
 	}
-	username := strings.TrimSpace(input)
-	if username == "" {
+	handle := strings.TrimSpace(input)
+	if handle == "" {
 		return currentUser, "", nil
 	}
 
-	// Look up user by username or handle
-	targetUser, found := userManager.GetUser(username)
+	// Look up user by handle
+	targetUser, found := userManager.GetUser(handle)
 	if !found {
-		targetUser, found = userManager.GetUserByHandle(username)
-		if !found {
-			wv(terminal, "\r\n|04User not found.\r\n", outputMode)
-			return currentUser, "", nil
-		}
+		wv(terminal, "\r\n|04User not found.\r\n", outputMode)
+		return currentUser, "", nil
 	}
 
 	nukeYes, err := e.PromptYesNo(s, terminal,

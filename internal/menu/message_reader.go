@@ -790,7 +790,7 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	// Look up the message author's user note from users.json
 	userNoteToUse := ""
 	if userMgr != nil {
-		if authorUser, found := userMgr.GetUserByHandle(msg.From); found {
+		if authorUser, found := userMgr.GetUser(msg.From); found {
 			userNoteToUse = authorUser.PrivateNote
 		}
 	}

@@ -187,7 +187,6 @@ func (e *MenuExecutor) handleNewUserApplication(
 
 	// 9. Create account
 	newUser, addErr := userManager.AddUser(
-		strings.ToLower(handle), // username = lowercase handle
 		password,
 		handle,
 		realName,
@@ -224,7 +223,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		log.Printf("ERROR: Node %d: Failed to save user note for '%s': %v", nodeNumber, handle, saveErr)
 	}
 
-	log.Printf("INFO: Node %d: New user '%s' created (ID: %d, Handle: %s)", nodeNumber, newUser.Username, newUser.ID, newUser.Handle)
+	log.Printf("INFO: Node %d: New user '%s' created (ID: %d)", nodeNumber, newUser.Handle, newUser.ID)
 
 	// Add to NUV queue if configured.
 	cfg := e.GetServerConfig()
@@ -344,15 +343,8 @@ func (e *MenuExecutor) promptForHandle(
 		// Show "checking user base" message (matches Pascal: MultiColor(Strng^.Checking_User_Base))
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(checkingMsg+"\r\n")), outputMode)
 
-		// Check for duplicate username
-		if _, exists := userManager.GetUser(strings.ToLower(handle)); exists {
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(nameUsedMsg+"\r\n")), outputMode)
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-
 		// Check for duplicate handle
-		if _, exists := userManager.GetUserByHandle(handle); exists {
+		if _, exists := userManager.GetUser(handle); exists {
 			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(nameUsedMsg+"\r\n")), outputMode)
 			time.Sleep(500 * time.Millisecond)
 			continue

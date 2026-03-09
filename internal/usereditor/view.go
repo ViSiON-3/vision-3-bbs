@@ -181,7 +181,7 @@ func (m Model) viewListScreen() string {
 
 // renderColumnTitle returns the column header text based on listType.
 func (m Model) renderColumnTitle(width int) string {
-	nameStr := "  #  User Name / Handle              "
+	nameStr := "  #  Handle                           "
 	var cols string
 	switch m.listType {
 	case 1:

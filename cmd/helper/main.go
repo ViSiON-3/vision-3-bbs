@@ -294,10 +294,10 @@ func cmdUsersPurge(args []string) {
 	fmt.Printf("Purged %d user account(s) (retention: %d days):\n\n", len(purged), retentionDays)
 	for _, p := range purged {
 		if p.DeletedAt.IsZero() {
-			fmt.Printf("  #%-4d  %-20s  %s  (no deletion timestamp)\n", p.ID, p.Username, p.Handle)
+			fmt.Printf("  #%-4d  %-20s  (no deletion timestamp)\n", p.ID, p.Handle)
 		} else {
-			fmt.Printf("  #%-4d  %-20s  %-20s  deleted %s\n",
-				p.ID, p.Username, p.Handle, p.DeletedAt.Format("2006-01-02"))
+			fmt.Printf("  #%-4d  %-20s  deleted %s\n",
+				p.ID, p.Handle, p.DeletedAt.Format("2006-01-02"))
 		}
 	}
 }
@@ -342,8 +342,8 @@ func cmdUsersList(args []string) {
 			fmt.Println("No soft-deleted users found.")
 			return
 		}
-		fmt.Printf("%-6s  %-20s  %-20s  %-12s  %s\n", "ID", "Username", "Handle", "Deleted On", "Days Until Purge")
-		fmt.Println(strings.Repeat("-", 78))
+		fmt.Printf("%-6s  %-20s  %-12s  %s\n", "ID", "Handle", "Deleted On", "Days Until Purge")
+		fmt.Println(strings.Repeat("-", 60))
 		for _, u := range deleted {
 			deletedOn := "(no timestamp)"
 			daysLeft := "n/a"
@@ -359,13 +359,13 @@ func cmdUsersList(args []string) {
 					}
 				}
 			}
-			fmt.Printf("%-6d  %-20s  %-20s  %-12s  %s\n", u.ID, u.Username, u.Handle, deletedOn, daysLeft)
+			fmt.Printf("%-6d  %-20s  %-12s  %s\n", u.ID, u.Handle, deletedOn, daysLeft)
 		}
 		return
 	}
 
-	fmt.Printf("%-6s  %-20s  %-20s  %-10s  %s\n", "ID", "Username", "Handle", "Level", "Status")
-	fmt.Println(strings.Repeat("-", 72))
+	fmt.Printf("%-6s  %-20s  %-10s  %s\n", "ID", "Handle", "Level", "Status")
+	fmt.Println(strings.Repeat("-", 55))
 	for _, u := range all {
 		status := "active"
 		if u.DeletedUser {
@@ -376,7 +376,7 @@ func cmdUsersList(args []string) {
 		} else if !u.Validated {
 			status = "unvalidated"
 		}
-		fmt.Printf("%-6d  %-20s  %-20s  %-10d  %s\n", u.ID, u.Username, u.Handle, u.AccessLevel, status)
+		fmt.Printf("%-6d  %-20s  %-10d  %s\n", u.ID, u.Handle, u.AccessLevel, status)
 	}
 	fmt.Printf("\nTotal: %d user(s)\n", len(all))
 }
@@ -397,14 +397,14 @@ func eligibleForPurge(users []*user.User, cutoff time.Time) []*user.User {
 
 // printPurgeCandidates prints a table of users eligible for purge.
 func printPurgeCandidates(users []*user.User, retentionDays int) {
-	fmt.Printf("  %-6s  %-20s  %-20s  %s\n", "ID", "Username", "Handle", "Deleted On")
-	fmt.Println("  " + strings.Repeat("-", 64))
+	fmt.Printf("  %-6s  %-20s  %s\n", "ID", "Handle", "Deleted On")
+	fmt.Println("  " + strings.Repeat("-", 42))
 	for _, u := range users {
 		deletedOn := "(no timestamp)"
 		if u.DeletedAt != nil {
 			deletedOn = u.DeletedAt.Format("2006-01-02")
 		}
-		fmt.Printf("  %-6d  %-20s  %-20s  %s\n", u.ID, u.Username, u.Handle, deletedOn)
+		fmt.Printf("  %-6d  %-20s  %s\n", u.ID, u.Handle, deletedOn)
 	}
 }
 

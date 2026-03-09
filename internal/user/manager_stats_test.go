@@ -12,9 +12,9 @@ func setupTestUserManager(t *testing.T) *UserMgr {
 	tmpDir := t.TempDir()
 
 	users := []User{
-		{ID: 1, Username: "sysop", Handle: "SysOp", AccessLevel: 255},
-		{ID: 2, Username: "user1", Handle: "User1", AccessLevel: 10},
-		{ID: 3, Username: "user2", Handle: "User2", AccessLevel: 10},
+		{ID: 1, Handle: "SysOp", AccessLevel: 255},
+		{ID: 2, Handle: "User1", AccessLevel: 10},
+		{ID: 3, Handle: "User2", AccessLevel: 10},
 	}
 	data, _ := json.Marshal(users)
 	os.WriteFile(filepath.Join(tmpDir, "users.json"), data, 0644)

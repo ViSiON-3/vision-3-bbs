@@ -1301,23 +1301,18 @@ func runOneliners(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 		}
 
 		if newOneliner != "" {
-			postedByUsername := ""
 			postedByHandle := ""
 			if currentUser != nil {
-				postedByUsername = currentUser.Username
 				postedByHandle = currentUser.Handle
 			}
-			if strings.TrimSpace(postedByUsername) == "" {
-				postedByUsername = "Unknown"
-			}
 			if strings.TrimSpace(postedByHandle) == "" {
-				postedByHandle = postedByUsername
+				postedByHandle = "Unknown"
 			}
 
 			entry := onelinerRecord{
 				Text:             newOneliner,
 				Anonymous:        isAnonymous,
-				PostedByUsername: postedByUsername,
+				PostedByUsername: postedByHandle,
 				PostedByHandle:   postedByHandle,
 				PostedAt:         time.Now().UTC().Format(time.RFC3339),
 			}
@@ -1514,7 +1509,7 @@ func runAuthenticate(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	}
 
 	// Authentication Successful!
-	log.Printf("INFO: Node %d: User '%s' (Handle: %s) authenticated successfully via RUN:AUTHENTICATE", nodeNumber, authUser.Username, authUser.Handle)
+	log.Printf("INFO: Node %d: User '%s' authenticated successfully via RUN:AUTHENTICATE", nodeNumber, authUser.Handle)
 
 	// Clear failed login attempts for this IP
 	if e.IPLockoutCheck != nil {
@@ -2531,7 +2526,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		return nil, nil // Insufficient level, treat as failed login
 	}
 
-	log.Printf("INFO: Node %d: User '%s' (Handle: %s) authenticated successfully via LOGIN prompt", nodeNumber, authUser.Username, authUser.Handle)
+	log.Printf("INFO: Node %d: User '%s' authenticated successfully via LOGIN prompt", nodeNumber, authUser.Handle)
 
 	// Clear failed login attempts for this IP
 	if e.IPLockoutCheck != nil {
@@ -5019,7 +5014,7 @@ func adminUserLightbarBrowser(s ssh.Session, terminal *term.Terminal, users []*u
 			if idx == selectedIndex {
 				prefix = "» "
 			}
-			line := fmt.Sprintf("%s%-22s  @%-16s ID:%-4d L:%-3d %-2s", prefix, adminTruncate(u.Handle, 22), adminTruncate(u.Username, 16), u.ID, u.AccessLevel, status)
+			line := fmt.Sprintf("%s%-22s  ID:%-4d L:%-3d %-2s", prefix, adminTruncate(u.Handle, 22), u.ID, u.AccessLevel, status)
 			if idx == selectedIndex {
 				b.WriteString("\x1b[7m" + line + "\x1b[0m\r\n")
 			} else {
@@ -5033,7 +5028,7 @@ func adminUserLightbarBrowser(s ssh.Session, terminal *term.Terminal, users []*u
 
 		sel := users[selectedIndex]
 		b.WriteString("|08--------------------------------------------------------------------------------|07\r\n")
-		b.WriteString(fmt.Sprintf("|15Handle        :|07 %-24s |15Username      :|07 %s\r\n", adminTruncate(sel.Handle, 24), adminTruncate(sel.Username, 30)))
+		b.WriteString(fmt.Sprintf("|15Handle        :|07 %s\r\n", adminTruncate(sel.Handle, 56)))
 		b.WriteString(fmt.Sprintf("|15Real Name     :|07 %-21s |15Phone         :|07 %s\r\n", adminTruncate(sel.RealName, 21), adminTruncate(sel.PhoneNumber, 29)))
 		b.WriteString(fmt.Sprintf("|15Group/Location:|07 %-16s |15Flags         :|07 %-8s\r\n", adminTruncate(sel.GroupLocation, 16), adminTruncate(sel.Flags, 8)))
 		b.WriteString(fmt.Sprintf("|15Validated     :|07 %-5t |15Level         :|07 %-3d |15TimeLimit     :|07 %-4d\r\n", sel.Validated, sel.AccessLevel, sel.TimeLimit))
@@ -5365,7 +5360,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 
 		lines := []string{
 			// Editable fields (A-H) in LEFT column, read-only stats in RIGHT column
-			lineTwoCol("|08[|14A|08]|11 User Name", getFieldValue("username", sel.Username), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
+			lineTwoCol("|08[|14A|08]|11 Handle", getFieldValue("handle", sel.Handle), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
 			lineTwoCol("|08[|14B|08]|11 Real Name", getFieldValue("realname", sel.RealName), "|11Uploads", fmt.Sprintf("%d", sel.NumUploads)),
 			lineTwoCol("|08[|14C|08]|11 Phone", getFieldValue("phone", sel.PhoneNumber), "|11FilePoints", fmt.Sprintf("%d", sel.FilePoints)),
 			lineTwoCol("|08[|14D|08]|11 Group/Loc", getFieldValue("grouploc", sel.GroupLocation), "|11Posts", fmt.Sprintf("%d", sel.MessagesPosted)),
@@ -5558,8 +5553,8 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 						}
 					}
 				}
-				if val, ok := pendingChanges["username"]; ok {
-					target.Username = val.(string)
+				if val, ok := pendingChanges["handle"]; ok {
+					target.Handle = val.(string)
 				}
 				if val, ok := pendingChanges["realname"]; ok {
 					target.RealName = val.(string)
@@ -5631,8 +5626,8 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 						oldValue := ""
 						// Get old value based on field name
 						switch fieldName {
-						case "username":
-							oldValue = currentUserData.Username
+						case "handle":
+							oldValue = currentUserData.Handle
 						case "realname":
 							oldValue = currentUserData.RealName
 						case "phone":
@@ -5666,7 +5661,7 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 						_ = userManager.LogAdminActivity(logEntry) // Log errors but don't fail save
 					}
 
-					statusMessage = fmt.Sprintf("|10Changes saved for %s.|07", target.Username)
+					statusMessage = fmt.Sprintf("|10Changes saved for %s.|07", target.Handle)
 					pendingChanges = make(map[string]interface{})
 					users = sortedUsersByID(userManager.GetAllUsers())
 				}
@@ -5689,9 +5684,9 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 			}
 		case 'a', 'A':
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("User Name", sel.Username, 30); editErr == nil {
-				if newVal != sel.Username {
-					pendingChanges["username"] = newVal
+			if newVal, editErr := readFieldInput("Handle", sel.Handle, 30); editErr == nil {
+				if newVal != sel.Handle {
+					pendingChanges["handle"] = newVal
 					statusMessage = "|10Field marked for update.|07"
 				} else {
 					delete(pendingChanges, "username")
@@ -6283,7 +6278,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 
 		lines := []string{
 			// Editable fields (A-H) in LEFT column, read-only stats in RIGHT column
-			lineTwoCol("|08[|14A|08]|11 User Name", getFieldValue("username", sel.Username), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
+			lineTwoCol("|08[|14A|08]|11 Handle", getFieldValue("handle", sel.Handle), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
 			lineTwoCol("|08[|14B|08]|11 Real Name", getFieldValue("realname", sel.RealName), "|11Uploads", fmt.Sprintf("%d", sel.NumUploads)),
 			lineTwoCol("|08[|14C|08]|11 Phone", getFieldValue("phone", sel.PhoneNumber), "|11FilePoints", fmt.Sprintf("%d", sel.FilePoints)),
 			lineTwoCol("|08[|14D|08]|11 Group/Loc", getFieldValue("grouploc", sel.GroupLocation), "|11Posts", fmt.Sprintf("%d", sel.MessagesPosted)),
@@ -6476,8 +6471,8 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 						}
 					}
 				}
-				if val, ok := pendingChanges["username"]; ok {
-					target.Username = val.(string)
+				if val, ok := pendingChanges["handle"]; ok {
+					target.Handle = val.(string)
 				}
 				if val, ok := pendingChanges["realname"]; ok {
 					target.RealName = val.(string)
@@ -6549,8 +6544,8 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 						oldValue := ""
 						// Get old value based on field name
 						switch fieldName {
-						case "username":
-							oldValue = currentUserData.Username
+						case "handle":
+							oldValue = currentUserData.Handle
 						case "realname":
 							oldValue = currentUserData.RealName
 						case "phone":
@@ -6584,7 +6579,7 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 						_ = userManager.LogAdminActivity(logEntry) // Log errors but don't fail save
 					}
 
-					statusMessage = fmt.Sprintf("|10Changes saved for %s.|07", target.Username)
+					statusMessage = fmt.Sprintf("|10Changes saved for %s.|07", target.Handle)
 					pendingChanges = make(map[string]interface{})
 					// Refresh the user list (user may no longer be unvalidated)
 					allUsers = sortedUsersByID(userManager.GetAllUsers())
@@ -6636,9 +6631,9 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 			}
 		case 'a', 'A':
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("User Name", sel.Username, 30); editErr == nil {
-				if newVal != sel.Username {
-					pendingChanges["username"] = newVal
+			if newVal, editErr := readFieldInput("Handle", sel.Handle, 30); editErr == nil {
+				if newVal != sel.Handle {
+					pendingChanges["handle"] = newVal
 					statusMessage = "|10Field marked for update.|07"
 				} else {
 					delete(pendingChanges, "username")
@@ -7344,8 +7339,8 @@ func runPurgeUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 		if u.DeletedAt != nil {
 			deletedOn = u.DeletedAt.Format("2006-01-02")
 		}
-		line := fmt.Sprintf("  |15#%-4d|07  %-20s  %-20s  deleted |14%s|07\r\n",
-			u.ID, u.Username, u.Handle, deletedOn)
+		line := fmt.Sprintf("  |15#%-4d|07  %-20s  deleted |14%s|07\r\n",
+			u.ID, u.Handle, deletedOn)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 	}
 
@@ -7386,7 +7381,7 @@ func runPurgeUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	// Log each purged account to admin activity log
 	for _, p := range purged {
 		logEntry := user.AdminActivityLog{
-			AdminUsername: currentUser.Username,
+			AdminHandle:  currentUser.Handle,
 			AdminID:       currentUser.ID,
 			TargetUserID:  p.ID,
 			TargetHandle:  p.Handle,
@@ -8240,7 +8235,7 @@ func runNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMan
 	// Refresh user from the in-process manager so we pick up any newscan
 	// setting changes saved during this session (e.g. tagged areas modified
 	// via newscan config or by another goroutine on the same node).
-	if reloaded, exists := userManager.GetUser(strings.ToLower(currentUser.Username)); exists {
+	if reloaded, exists := userManager.GetUser(currentUser.Handle); exists {
 		currentUser = reloaded
 	}
 
@@ -8492,7 +8487,7 @@ func runUploadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	}
 
 	// Reload user to get updated NumUploads
-	if reloaded, exists := userManager.GetUser(strings.ToLower(currentUser.Username)); exists {
+	if reloaded, exists := userManager.GetUser(currentUser.Handle); exists {
 		currentUser = reloaded
 	}
 	return currentUser, "", nil
@@ -9266,7 +9261,7 @@ func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 				log.Printf("ERROR: Node %d: Upload failed: %v", nodeNumber, uploadErr)
 			}
 			// Reload user to get updated NumUploads
-			if reloaded, exists := userManager.GetUser(strings.ToLower(currentUser.Username)); exists {
+			if reloaded, exists := userManager.GetUser(currentUser.Handle); exists {
 				currentUser = reloaded
 			}
 			// Refresh file count and page data

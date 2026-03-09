@@ -233,7 +233,7 @@ func runRumorsAdd(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// Anonymous option (V2: only if user level >= AnonymousLevel)
 	author := currentUser.Handle
-	realUser := currentUser.Username
+	realUser := currentUser.Handle
 	allowAnon := userLevel >= e.ServerCfg.AnonymousLevel
 	if allowAnon {
 		anonPrompt := e.LoadedStrings.AddRumorAnonymous
@@ -425,7 +425,7 @@ func runRumorsDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	// Ownership check (V2: only sysop or author can delete)
-	if !isSysop && !strings.EqualFold(r.RealUser, currentUser.Username) {
+	if !isSysop && !strings.EqualFold(r.RealUser, currentUser.Handle) {
 		wv(terminal, "\r\n|04You didn't post that!\r\n", outputMode)
 		return currentUser, "", nil
 	}

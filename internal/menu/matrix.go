@@ -244,7 +244,7 @@ func (e *MenuExecutor) processMatrixAction(
 	}
 }
 
-// handleCheckAccess prompts for a username and shows their validation status.
+// handleCheckAccess prompts for a handle and shows their validation status.
 func (e *MenuExecutor) handleCheckAccess(
 	s ssh.Session,
 	terminal *term.Terminal,
@@ -261,16 +261,12 @@ func (e *MenuExecutor) handleCheckAccess(
 		return
 	}
 
-	username := strings.TrimSpace(input)
-	if username == "" {
+	handle := strings.TrimSpace(input)
+	if handle == "" {
 		return
 	}
 
-	foundUser, exists := userManager.GetUser(strings.ToLower(username))
-	if !exists {
-		// Also check by handle
-		foundUser, exists = userManager.GetUserByHandle(username)
-	}
+	foundUser, exists := userManager.GetUser(handle)
 
 	if !exists {
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MatrixUserNotFound)), outputMode)
