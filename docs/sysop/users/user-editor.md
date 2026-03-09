@@ -19,15 +19,14 @@ The editor reads and writes `data/users/users.json`. It uses optimistic concurre
 
 ### User List (Main Screen)
 
-Displays all users in a scrollable list. Five column views are available, toggled with Left/Right arrows:
+Displays all users in a scrollable list. Four column views are available, toggled with Left/Right arrows:
 
 | View | Columns |
 |------|---------|
 | 1 | Access Level, Total Calls |
-| 2 | Phone Number |
-| 3 | Group/Location |
-| 4 | Messages Posted, Validated |
-| 5 | Last Login Date, Last Login Time |
+| 2 | Group/Location |
+| 3 | Messages Posted, Validated |
+| 4 | Last Login Date, Last Login Time |
 
 Users can be tagged with Space for bulk operations (validate, delete).
 
@@ -35,7 +34,7 @@ Users can be tagged with Space for bulk operations (validate, delete).
 
 Press Enter on any user to open the field editor. Displays 28 fields across two columns:
 
-**Left column:** Handle, Username, Real Name, Phone Number, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Num Uploads, Messages Posted, Custom Prompt, Time Limit
+**Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit
 
 **Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User, Created At, Updated At, Last Login, Last Bulletin
 

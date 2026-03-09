@@ -37,7 +37,7 @@ type UserMgr struct {
 func NewUserManager(dataPath string) (*UserMgr, error)
 func (um *UserMgr) Authenticate(username, password string) (*User, bool)
 func (um *UserMgr) GetUser(username string) (*User, bool)
-func (um *UserMgr) AddUser(username, password, handle, realName, phoneNum, groupLocation string) (*User, error)
+func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*User, error)
 func (um *UserMgr) SaveUsers() error
 func (um *UserMgr) GetAllUsers() []*User
 func (um *UserMgr) AddCallRecord(record CallRecord)
@@ -253,7 +253,6 @@ type User struct {
     PasswordHash       string
     Handle             string
     RealName           string
-    PhoneNumber        string
     GroupLocation      string
     AccessLevel        int
     Flags              string

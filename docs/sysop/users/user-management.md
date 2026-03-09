@@ -24,7 +24,6 @@ Users are stored as a JSON array. Each user account contains:
   "timesCalled": 220,
   "lastBulletinRead": "0001-01-01T00:00:00Z",
   "realName": "Felonius",
-  "phoneNumber": "",
   "createdAt": "0001-01-01T00:00:00Z",
   "validated": true,
   "filePoints": 0,
@@ -72,7 +71,6 @@ Users are stored as a JSON array. Each user account contains:
 #### Personal Information
 
 - `realName` - User's real name
-- `phoneNumber` - Contact number
 - `createdAt` - Account creation timestamp
 - `group_location` - Group/Location affiliation
 - `privateNote` - SysOp note about user
@@ -351,10 +349,9 @@ The application can also be invoked from a menu command via `RUN:NEWUSER`.
    - Minimum 4 characters
    - Must contain a space (first and last name)
    - Up to 5 attempts
-6. **Phone Number** — Header displayed from `enterNumberHeader`, input prompted with `enterNumber`. Optional.
-7. **Group/Location** — Prompted inline. Optional.
-8. **User Note** — Prompted with `enterUserNote`. Stored in `privateNote` field. Optional.
-9. **Account Creation** — Calls `UserMgr.AddUser()` which:
+6. **Group/Location** — Prompted inline. Optional.
+7. **User Note** — Prompted with `enterUserNote`. Stored in `privateNote` field. Optional.
+8. **Account Creation** — Calls `UserMgr.AddUser()` which:
    - Assigns the next available user ID
    - Hashes the password with bcrypt
    - Sets `accessLevel` to 1 and `validated` to false
@@ -376,8 +373,6 @@ All prompts are configurable in `configs/strings.json`:
 | `createAPassword`   | Password creation prompt                                         |
 | `reEnterPassword`   | Password confirmation prompt                                     |
 | `enterRealName`     | Real name entry prompt                                           |
-| `enterNumberHeader` | Phone number format hint                                         |
-| `enterNumber`       | Phone number entry prompt                                        |
 | `enterUserNote`     | User note entry prompt                                           |
 | `yourUserNum`       | "Your user # is" display (supports `\|UN` placeholder)           |
 | `welcomeNewUser`    | Welcome message after account creation                           |

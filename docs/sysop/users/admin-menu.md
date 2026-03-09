@@ -56,24 +56,23 @@ Opens a lightbar browser showing only **unvalidated** user accounts. The lower h
 
 | Key | Action |
 |-----|--------|
-| `H` | Toggle validated status (Validate ↔ Un-Validate) |
+| `G` | Toggle validated status (Validate ↔ Un-Validate) |
 | `P` | Set new password (bcrypt-hashed before saving) |
 | `0` | Toggle ban status — ban sets level 0 + unvalidated; un-ban restores regular level + validated |
 | `9` | Toggle soft delete — delete sets `deletedUser=true`; un-delete restores the account |
 | `A` | Edit username |
 | `B` | Edit real name |
-| `C` | Edit phone number |
-| `D` | Edit group/location |
-| `E` | Edit private note (sysop-only memo) |
-| `F` | Edit access flags |
-| `G` | Edit access level (numeric) |
+| `C` | Edit group/location |
+| `D` | Edit private note (sysop-only memo) |
+| `E` | Edit access flags |
+| `F` | Edit access level (numeric) |
 | `S` | **Save** all staged changes |
 | `X` | **Abort** — discard all staged changes |
 | `Q` / Esc | Quit |
 
 Changes to individual fields are **staged** (shown with a `*` prefix). Nothing is written to disk until you press `S`. Pressing `Q` with unsaved changes will warn rather than exit.
 
-> **Validation behaviour:** When `H` is used to validate a user whose access level is currently 0, the level is automatically raised to `regularUserLevel` (configured in `config.json`, default 10).
+> **Validation behaviour:** When `G` is used to validate a user whose access level is currently 0, the level is automatically raised to `regularUserLevel` (configured in `config.json`, default 10).
 >
 > **User #1 protection:** The primary SysOp account (user ID 1) cannot be unvalidated, banned, or deleted through any admin screen.
 
@@ -93,12 +92,11 @@ The lower half of the screen shows the following for the highlighted user:
 |-----|---------------|----------------|
 | `A` | Username | Total calls |
 | `B` | Real name | Uploads |
-| `C` | Phone number | File points |
-| `D` | Group/Location | Messages posted |
-| `E` | Private note | Created date |
-| `F` | Access flags | Last login |
-| `G` | Access level | Deleted status |
-| `H` | Validated (toggle) | Deleted date |
+| `C` | Group/Location | File points |
+| `D` | Private note | Messages posted |
+| `E` | Access flags | Created date |
+| `F` | Access level | Last login |
+| `G` | Validated (toggle) | Deleted status |
 
 ### Online Indicator
 

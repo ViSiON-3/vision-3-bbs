@@ -155,7 +155,7 @@ The editor contains approximately 250 string entries organized by function:
 |-------|----------|
 | 1–20 | Core prompts (login, pause, chat, quoting) |
 | 21–40 | Message base prompts (posting, boards, scanning) |
-| 41–60 | User system (registration, passwords, phone) |
+| 41–60 | User system (registration, passwords) |
 | 61–80 | Mail and feedback prompts |
 | 81–100 | New user voting, rumors, BBS list |
 | 101–120 | File system prompts (upload, download, batch) |
