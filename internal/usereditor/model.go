@@ -312,6 +312,8 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textInput.SetValue("")
 			m.textInput.Placeholder = "New password..."
 			m.textInput.EchoMode = textinput.EchoPassword
+			m.textInput.CharLimit = 72 // bcrypt max input length
+			m.textInput.Width = 48
 			m.textInput.Focus()
 			return m, textinput.Blink
 		}
@@ -591,6 +593,12 @@ func (m Model) updatePassword(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		pw := m.textInput.Value()
 		if pw != "" {
+			// bcrypt has a 72-byte limit (not 72 characters);
+			// non-ASCII runes may exceed 72 bytes before 72 chars.
+			if len([]byte(pw)) > 72 {
+				m.message = "Password too long (max 72 bytes)"
+				return m, nil
+			}
 			hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 			if err != nil {
 				m.message = fmt.Sprintf("Hash error: %v", err)
