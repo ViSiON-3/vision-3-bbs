@@ -539,7 +539,7 @@ func (um *UserMgr) NextUserID() int {
 }
 
 // AddUser creates a new user, hashes the password, assigns an ID, and saves.
-func (um *UserMgr) AddUser(password, handle, realName, phoneNum, groupLocation string) (*User, error) {
+func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*User, error) {
 	handle = strings.TrimSpace(handle)
 	if handle == "" {
 		return nil, fmt.Errorf("handle cannot be blank")
@@ -566,7 +566,6 @@ func (um *UserMgr) AddUser(password, handle, realName, phoneNum, groupLocation s
 		PasswordHash:  string(hashedPassword),
 		Handle:        handle,
 		RealName:      realName,
-		PhoneNumber:   phoneNum,
 		GroupLocation: groupLocation,
 		AccessLevel:   um.newUserLevel,
 		TimeLimit:     60,

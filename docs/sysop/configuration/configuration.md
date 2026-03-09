@@ -116,7 +116,6 @@ This file contains all the customizable text strings displayed by the BBS. You c
 - `newUserNameStr` - New user alias prompt
 - `createAPassword` - New user password creation
 - `enterRealName` - Real name prompt
-- `enterNumber` - Phone number prompt
 - `checkingUserBase` - Message shown while validating handle uniqueness
 
 **Message System Strings:**

@@ -86,7 +86,6 @@ type StringsConfig struct {
 	ListRange               string `json:"listRange"`
 	ContinueStr             string `json:"continueStr"`
 	ViewWhichForm           string `json:"viewWhichForm"`
-	CheckingPhoneNum        string `json:"checkingPhoneNum"`
 	CheckingUserBase        string `json:"checkingUserBase"`
 	NameAlreadyUsed         string `json:"nameAlreadyUsed"`
 	InvalidUserName         string `json:"invalidUserName"`
@@ -280,7 +279,6 @@ CfgViewHotKeys         string `json:"cfgViewHotKeys"`
 	CfgViewText2Color      string `json:"cfgViewText2Color"`
 	CfgViewBarColor        string `json:"cfgViewBarColor"`
 	CfgViewRealName        string `json:"cfgViewRealName"`
-	CfgViewPhone           string `json:"cfgViewPhone"`
 	CfgViewNote            string `json:"cfgViewNote"`
 	CfgViewFileListMode    string `json:"cfgViewFileListMode"`
 	CfgFileListModeSet     string `json:"cfgFileListModeSet"`

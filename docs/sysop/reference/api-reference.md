@@ -37,7 +37,7 @@ type UserMgr struct {
 func NewUserManager(dataPath string) (*UserMgr, error)
 func (um *UserMgr) Authenticate(username, password string) (*User, bool)
 func (um *UserMgr) GetUser(username string) (*User, bool)
-func (um *UserMgr) AddUser(username, password, handle, realName, phoneNum, groupLocation string) (*User, error)
+func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*User, error)
 func (um *UserMgr) SaveUsers() error
 func (um *UserMgr) GetAllUsers() []*User
 func (um *UserMgr) AddCallRecord(record CallRecord)
@@ -248,24 +248,49 @@ type AutoRunTracker map[string]bool
 
 ```go
 type User struct {
-    ID                 int
-    Username           string
-    PasswordHash       string
-    Handle             string
-    RealName           string
-    PhoneNumber        string
-    GroupLocation      string
-    AccessLevel        int
-    Flags              string
-    LastLogin          time.Time
-    TimesCalled        int
-    Validated          bool
-    TimeLimit          int
-    CurrentMessageAreaID   int
-    CurrentMessageAreaTag  string
-    CurrentFileAreaID      int
-    CurrentFileAreaTag     string
-    // Additional fields...
+    ID                       int
+    PasswordHash             string
+    Handle                   string
+    AccessLevel              int
+    Flags                    string
+    LastLogin                time.Time
+    TimesCalled              int
+    LastBulletinRead         time.Time
+    RealName                 string
+    CreatedAt                time.Time
+    UpdatedAt                time.Time
+    Validated                bool
+    FilePoints               int
+    NumUploads               int
+    NumDownloads             int
+    MessagesPosted           int
+    TimeLimit                int
+    PrivateNote              string
+    CurrentMsgConferenceID   int
+    CurrentMsgConferenceTag  string
+    CurrentFileConferenceID  int
+    CurrentFileConferenceTag string
+    GroupLocation            string
+    CurrentMessageAreaID     int
+    CurrentMessageAreaTag    string
+    LastReadMessageIDs       map[int]string
+    CurrentFileAreaID        int
+    CurrentFileAreaTag       string
+    TaggedFileIDs            []uuid.UUID
+    TaggedMessageAreaTags    []string
+    ScreenWidth              int
+    ScreenHeight             int
+    PreferredEncoding        string
+    MsgHdr                   int
+    HotKeys                  bool
+    MorePrompts              bool
+    CustomPrompt             string
+    OutputMode               string
+    FileListingMode          string
+    AutoSignature            string
+    Colors                   [7]int
+    DeletedUser              bool
+    DeletedAt                *time.Time
 }
 ```
 

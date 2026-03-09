@@ -15,7 +15,6 @@ Users are stored as a JSON array. Each user account contains:
 ```json
 {
   "id": 1,
-  "username": "felonius",
   "passwordHash": "$2a$10$...",
   "handle": "Felonius",
   "accessLevel": 10,
@@ -24,13 +23,19 @@ Users are stored as a JSON array. Each user account contains:
   "timesCalled": 220,
   "lastBulletinRead": "0001-01-01T00:00:00Z",
   "realName": "Felonius",
-  "phoneNumber": "",
   "createdAt": "0001-01-01T00:00:00Z",
+  "updatedAt": "2025-05-01T15:13:20Z",
   "validated": true,
   "filePoints": 0,
   "numUploads": 0,
+  "numDownloads": 0,
+  "messagesPosted": 12,
   "timeLimit": 60,
   "privateNote": "",
+  "current_msg_conference_id": 1,
+  "current_msg_conference_tag": "LOCAL",
+  "current_file_conference_id": 1,
+  "current_file_conference_tag": "LOCAL",
   "group_location": "FAiRLiGHT/PC",
   "current_message_area_id": 1,
   "current_message_area_tag": "GENERAL",
@@ -40,8 +45,18 @@ Users are stored as a JSON array. Each user account contains:
   "current_file_area_id": 1,
   "current_file_area_tag": "GENERAL",
   "tagged_file_ids": [],
-  "screen_width": 80,
-  "screen_height": 24
+  "tagged_message_area_tags": ["GENERAL", "BBS_TALK"],
+  "screenWidth": 80,
+  "screenHeight": 24,
+  "preferredEncoding": "cp437",
+  "msgHdr": 3,
+  "hotKeys": true,
+  "morePrompts": true,
+  "customPrompt": "",
+  "outputMode": "",
+  "fileListingMode": "lightbar",
+  "autoSignature": "",
+  "colors": [13, 9, 7, 8, 3, 11, 9]
 }
 ```
 
@@ -49,16 +64,15 @@ Users are stored as a JSON array. Each user account contains:
 
 #### Essential Fields
 
-- `id` - Unique numeric identifier
-- `username` - Login name (case-insensitive)
+- `id` - Unique numeric identifier (auto-assigned)
 - `passwordHash` - Bcrypt hashed password
-- `handle` - Display name/alias
+- `handle` - Display name/alias (used for login and display)
 
-#### Access 
+#### Access
 
 - `accessLevel` - Numeric access level (0-255)
-- `flags` - String of single-character flags (e.g., "ABC")
-- `validated` - Whether user is validated
+- `flags` - String of single-character flags for ACS checks (e.g., "ABC")
+- `validated` - Whether user is validated by SysOp
 
 #### Statistics
 
@@ -67,22 +81,36 @@ Users are stored as a JSON array. Each user account contains:
 - `lastBulletinRead` - Last time bulletins were read
 - `filePoints` - File area points
 - `numUploads` - Number of file uploads
+- `numDownloads` - Number of file downloads (used for ACS 'B' ratio)
+- `messagesPosted` - Number of messages posted
 - `timeLimit` - Time limit per call in minutes (0=unlimited)
 
 #### Personal Information
 
 - `realName` - User's real name
-- `phoneNumber` - Contact number
 - `createdAt` - Account creation timestamp
+- `updatedAt` - Last modification timestamp (used for optimistic locking)
 - `group_location` - Group/Location affiliation
-- `privateNote` - SysOp note about user
+- `privateNote` - SysOp-only note about user
 
 #### Terminal Preferences
 
-- `screen_width` - Preferred terminal width (0 = use detected PTY width)
-- `screen_height` - Preferred terminal height (0 = use detected PTY height)
+- `screenWidth` - Preferred terminal width (0 = use detected PTY width)
+- `screenHeight` - Preferred terminal height (0 = use detected PTY height)
+- `preferredEncoding` - Encoding preference: `"utf8"`, `"cp437"`, or `""` (not set)
+- `msgHdr` - Selected message header style (1-14, 0 = unset)
 
 After authentication, the system applies these preferences: if a user's stored screen dimensions are smaller than the detected PTY size (or the PTY defaults to 80x25), the stored values cap the effective terminal dimensions. ANSI art is truncated to fit the effective height to prevent scrolling.
+
+#### User Configuration Preferences
+
+- `hotKeys` - Hot keys enabled (single-keypress menu selection)
+- `morePrompts` - More prompts enabled (pause on long output)
+- `customPrompt` - Custom command prompt string
+- `outputMode` - Output mode preference
+- `fileListingMode` - File listing style: `"lightbar"` or `"classic"` (empty = server default)
+- `autoSignature` - Auto-signature appended to messages (max 5 lines)
+- `colors` - Array of 7 color values: [prompt, input, text, stat, text2, stat2, bar]
 
 #### Soft Delete
 
@@ -91,14 +119,19 @@ After authentication, the system applies these preferences: if a user's stored s
 
 Soft-deleted users cannot log in and are hidden from public user listings, but all their data (messages, files, call history) is preserved and attributed to them. They remain visible in admin views.
 
-#### System State
+#### System State (Conference/Area Tracking)
 
+- `current_msg_conference_id` - Current message conference ID
+- `current_msg_conference_tag` - Current message conference tag
+- `current_file_conference_id` - Current file conference ID
+- `current_file_conference_tag` - Current file conference tag
 - `current_message_area_id` - Current message area ID
 - `current_message_area_tag` - Current message area tag
 - `last_read_message_ids` - Map of area ID to last read message UUID
 - `current_file_area_id` - Current file area ID
 - `current_file_area_tag` - Current file area tag
-- `tagged_file_ids` - Array of file UUIDs marked for download
+- `tagged_file_ids` - Array of file UUIDs marked for batch download
+- `tagged_message_area_tags` - Array of message area tags tagged for newscan
 
 ## Access Levels
 
@@ -351,10 +384,9 @@ The application can also be invoked from a menu command via `RUN:NEWUSER`.
    - Minimum 4 characters
    - Must contain a space (first and last name)
    - Up to 5 attempts
-6. **Phone Number** — Header displayed from `enterNumberHeader`, input prompted with `enterNumber`. Optional.
-7. **Group/Location** — Prompted inline. Optional.
-8. **User Note** — Prompted with `enterUserNote`. Stored in `privateNote` field. Optional.
-9. **Account Creation** — Calls `UserMgr.AddUser()` which:
+6. **Group/Location** — Prompted inline. Optional.
+7. **User Note** — Prompted with `enterUserNote`. Stored in `privateNote` field. Optional.
+8. **Account Creation** — Calls `UserMgr.AddUser()` which:
    - Assigns the next available user ID
    - Hashes the password with bcrypt
    - Sets `accessLevel` to 1 and `validated` to false
@@ -376,8 +408,6 @@ All prompts are configurable in `configs/strings.json`:
 | `createAPassword`   | Password creation prompt                                         |
 | `reEnterPassword`   | Password confirmation prompt                                     |
 | `enterRealName`     | Real name entry prompt                                           |
-| `enterNumberHeader` | Phone number format hint                                         |
-| `enterNumber`       | Phone number entry prompt                                        |
 | `enterUserNote`     | User note entry prompt                                           |
 | `yourUserNum`       | "Your user # is" display (supports `\|UN` placeholder)           |
 | `welcomeNewUser`    | Welcome message after account creation                           |

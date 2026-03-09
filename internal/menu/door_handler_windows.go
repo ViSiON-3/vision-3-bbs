@@ -183,7 +183,7 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 		ctx := buildDoorCtx(e, s, terminal,
 			currentUser.ID, currentUser.Handle, currentUser.RealName,
 			currentUser.AccessLevel, currentUser.TimeLimit, currentUser.TimesCalled,
-			currentUser.PhoneNumber, currentUser.GroupLocation,
+			currentUser.GroupLocation,
 			termWidth, termHeight,
 			nodeNumber, sessionStartTime, outputMode,
 			doorConfig, upperInput)

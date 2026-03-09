@@ -55,6 +55,9 @@ else
 fi
 
 
+# Ensure bin/ exists before copying sexyz.ini
+mkdir -p bin
+
 # Copy sexyz.ini to bin/ if not present
 if [ -f "templates/configs/sexyz.ini" ] && [ ! -f "bin/sexyz.ini" ]; then
     echo "  Creating bin/sexyz.ini from template..."
@@ -71,9 +74,9 @@ if [ -x "bin/sexyz" ]; then
     fi
 else
     echo -e "${YELLOW}!${NC} sexyz not found at bin/sexyz (required for file transfers)"
-    echo "  Build from source: https://gitlab.synchro.net/main/sbbs.git"
-    echo "  See documentation/file-transfer-protocols.md for build instructions"
-    echo "  Place the binary at bin/sexyz and make it executable"
+    echo "  Download a release bundle which includes pre-built binaries:"
+    echo "  https://github.com/robbiew/vision3-dist/releases/latest"
+    echo "  Copy bin/sexyz from the bundle into this installation's bin/ directory."
 fi
 
 echo
@@ -89,6 +92,14 @@ fi
 
 echo -e "${GREEN}All prerequisites satisfied!${NC}"
 echo
+
+# macOS: remove quarantine attribute so Gatekeeper doesn't block downloaded binaries
+if [ "$(uname)" = "Darwin" ]; then
+    echo "Removing macOS quarantine attributes..."
+    for f in vision3 helper v3mail strings ue config menuedit bin/sexyz bin/binkd; do
+        [ -f "$f" ] && xattr -d com.apple.quarantine "$f" 2>/dev/null
+    done
+fi
 
 # Check if SSH host key exists
 if [ ! -f "configs/ssh_host_rsa_key" ]; then
@@ -201,7 +212,6 @@ if [ ! -f "data/users/users.json" ]; then
     "timesCalled": 0,
     "lastBulletinRead": "0001-01-01T00:00:00Z",
     "realName": "System Operator",
-    "phoneNumber": "",
     "createdAt": "2024-01-01T00:00:00Z",
     "validated": true,
     "filePoints": 0,

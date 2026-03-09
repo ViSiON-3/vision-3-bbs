@@ -18,7 +18,7 @@ import (
 // buildDoorCtx creates a DoorCtx from the standard RunnableFunc parameters.
 func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userID int, handle, realName string, accessLevel, timeLimit, timesCalled int,
-	phoneNumber, groupLocation string, screenWidth, screenHeight int,
+	groupLocation string, screenWidth, screenHeight int,
 	nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode,
 	doorConfig config.DoorConfig, doorName string) *DoorCtx {
 
@@ -56,7 +56,6 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			AccessLevel:   accessLevel,
 			TimeLimit:     timeLimit,
 			TimesCalled:   timesCalled,
-			PhoneNumber:   phoneNumber,
 			GroupLocation: groupLocation,
 			ScreenWidth:   screenWidth,
 			ScreenHeight:  screenHeight,

@@ -129,7 +129,7 @@ func TestNewUserManager_UTF8BOM(t *testing.T) {
 func TestAddUser_Success(t *testing.T) {
 	um := newTestManager(t, []User{})
 
-	u, err := um.AddUser("secret123", "NewHandle", "Real Name", "555-1234", "SomeGroup")
+	u, err := um.AddUser("secret123", "NewHandle", "Real Name", "SomeGroup")
 	if err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestAddUser_DuplicateHandle(t *testing.T) {
 	seed := []User{{ID: 1, Handle: "TakenHandle", AccessLevel: 1}}
 	um := newTestManager(t, seed)
 
-	_, err := um.AddUser("pw", "TakenHandle", "", "", "")
+	_, err := um.AddUser("pw", "TakenHandle", "", "")
 	if err != ErrHandleExists {
 		t.Errorf("expected ErrHandleExists, got %v", err)
 	}
@@ -167,7 +167,7 @@ func TestAddUser_DuplicateHandle_CaseInsensitive(t *testing.T) {
 	seed := []User{{ID: 1, Handle: "MyHandle", AccessLevel: 1}}
 	um := newTestManager(t, seed)
 
-	_, err := um.AddUser("pw", "myhandle", "", "", "")
+	_, err := um.AddUser("pw", "myhandle", "", "")
 	if err != ErrHandleExists {
 		t.Errorf("expected ErrHandleExists for case-insensitive handle match, got %v", err)
 	}
@@ -176,8 +176,8 @@ func TestAddUser_DuplicateHandle_CaseInsensitive(t *testing.T) {
 func TestAddUser_IDsIncrement(t *testing.T) {
 	um := newTestManager(t, []User{})
 
-	u1, _ := um.AddUser("pw", "First", "", "", "")
-	u2, _ := um.AddUser("pw", "Second", "", "", "")
+	u1, _ := um.AddUser("pw", "First", "", "")
+	u2, _ := um.AddUser("pw", "Second", "", "")
 
 	if u2.ID <= u1.ID {
 		t.Errorf("expected u2.ID (%d) > u1.ID (%d)", u2.ID, u1.ID)
@@ -190,7 +190,7 @@ func TestAddUser_PersistsToDisk(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDir, "users.json"), []byte("[]"), 0644)
 
 	um, _ := NewUserManager(tmpDir)
-	um.AddUser("pw", "PersistHandle", "", "", "")
+	um.AddUser("pw", "PersistHandle", "", "")
 
 	// Reload from disk
 	um2, err := NewUserManager(tmpDir)
@@ -206,7 +206,7 @@ func TestAddUser_UsesNewUserLevel(t *testing.T) {
 	um := newTestManager(t, []User{})
 	um.SetNewUserLevel(50)
 
-	u, err := um.AddUser("pw", "LevelHandle", "", "", "")
+	u, err := um.AddUser("pw", "LevelHandle", "", "")
 	if err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
@@ -481,7 +481,7 @@ func TestSetNewUserLevel_Normal(t *testing.T) {
 	um := newTestManager(t, []User{})
 	um.SetNewUserLevel(42)
 
-	u, _ := um.AddUser("pw", "Test42", "", "", "")
+	u, _ := um.AddUser("pw", "Test42", "", "")
 	if u.AccessLevel != 42 {
 		t.Errorf("expected level 42, got %d", u.AccessLevel)
 	}
@@ -491,7 +491,7 @@ func TestSetNewUserLevel_ClampsNegative(t *testing.T) {
 	um := newTestManager(t, []User{})
 	um.SetNewUserLevel(-5)
 
-	u, _ := um.AddUser("pw", "TestNeg", "", "", "")
+	u, _ := um.AddUser("pw", "TestNeg", "", "")
 	if u.AccessLevel != 0 {
 		t.Errorf("expected clamped level 0, got %d", u.AccessLevel)
 	}
@@ -501,7 +501,7 @@ func TestSetNewUserLevel_ClampsHigh(t *testing.T) {
 	um := newTestManager(t, []User{})
 	um.SetNewUserLevel(999)
 
-	u, _ := um.AddUser("pw", "TestHigh", "", "", "")
+	u, _ := um.AddUser("pw", "TestHigh", "", "")
 	if u.AccessLevel != 255 {
 		t.Errorf("expected clamped level 255, got %d", u.AccessLevel)
 	}
@@ -533,7 +533,7 @@ func TestSaveUsers_CreatesDirectory(t *testing.T) {
 	os.WriteFile(filepath.Join(nestedDir, "users.json"), []byte("[]"), 0644)
 
 	um, _ := NewUserManager(nestedDir)
-	um.AddUser("pw", "Test", "", "", "")
+	um.AddUser("pw", "Test", "", "")
 
 	// Verify file was written
 	data, err := os.ReadFile(filepath.Join(nestedDir, "users.json"))
@@ -796,7 +796,7 @@ func TestConcurrentAddAndGet(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			handle := strings.ToUpper(string(rune('a'+idx))) + "Handle"
-			_, err := um.AddUser("pw", handle, "", "", "")
+			_, err := um.AddUser("pw", handle, "", "")
 			if err != nil {
 				errs <- err
 			}
@@ -952,7 +952,7 @@ func TestAddUser_EmptyPassword(t *testing.T) {
 	um := newTestManager(t, []User{})
 
 	// bcrypt should handle empty password (it's valid)
-	u, err := um.AddUser("", "EmptyPass", "", "", "")
+	u, err := um.AddUser("", "EmptyPass", "", "")
 	if err != nil {
 		t.Fatalf("AddUser with empty password: %v", err)
 	}
@@ -980,8 +980,8 @@ func TestAuthenticate_EmptyPassword(t *testing.T) {
 
 func TestGetUserCount_AfterAddAndPurge(t *testing.T) {
 	um := newTestManager(t, []User{})
-	um.AddUser("pw", "A", "", "", "")
-	um.AddUser("pw", "B", "", "", "")
+	um.AddUser("pw", "A", "", "")
+	um.AddUser("pw", "B", "", "")
 
 	if um.GetUserCount() != 2 {
 		t.Errorf("expected 2, got %d", um.GetUserCount())

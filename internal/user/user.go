@@ -26,7 +26,6 @@ type User struct {
 	TimesCalled      int       `json:"timesCalled"` // Used for E (NumLogons)
 	LastBulletinRead time.Time `json:"lastBulletinRead"`
 	RealName         string    `json:"realName"`
-	PhoneNumber      string    `json:"phoneNumber"`
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"` // For optimistic locking - tracks last modification
 	Validated        bool      `json:"validated"`
