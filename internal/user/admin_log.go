@@ -12,7 +12,7 @@ import "time"
 type AdminActivityLog struct {
 	ID            int       `json:"id"`
 	Timestamp     time.Time `json:"timestamp"`
-	AdminUsername string    `json:"adminUsername"` // Admin who made the change
+	AdminHandle  string    `json:"adminUsername"` // Admin who made the change (JSON key kept for backward compat)
 	AdminID       int       `json:"adminId"`       // Admin user ID
 	TargetUserID  int       `json:"targetUserId"`  // User being modified
 	TargetHandle  string    `json:"targetHandle"`  // Handle of user being modified
@@ -24,10 +24,10 @@ type AdminActivityLog struct {
 }
 
 // AdminActivityLogEntry creates a formatted log entry for a single field change
-func AdminActivityLogEntry(adminUsername string, adminID int, targetUserID int, targetHandle string, fieldName string, oldValue string, newValue string) AdminActivityLog {
+func AdminActivityLogEntry(adminHandle string, adminID int, targetUserID int, targetHandle string, fieldName string, oldValue string, newValue string) AdminActivityLog {
 	return AdminActivityLog{
-		Timestamp:     time.Now().UTC(),
-		AdminUsername: adminUsername,
+		Timestamp:    time.Now().UTC(),
+		AdminHandle:  adminHandle,
 		AdminID:       adminID,
 		TargetUserID:  targetUserID,
 		TargetHandle:  targetHandle,

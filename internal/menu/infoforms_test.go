@@ -179,11 +179,10 @@ func TestSaveAndLoadInfoFormResponse(t *testing.T) {
 	}
 
 	resp := &InfoFormResponse{
-		UserID:   1,
-		Username: "testuser",
-		Handle:   "TestHandle",
-		FormNum:  2,
-		Answers:  []string{"Answer1", "Answer2"},
+		UserID:  1,
+		Handle:  "TestHandle",
+		FormNum: 2,
+		Answers: []string{"Answer1", "Answer2"},
 	}
 
 	if err := saveInfoFormResponse(configPath, resp); err != nil {

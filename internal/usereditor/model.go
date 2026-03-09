@@ -560,8 +560,7 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			for offset := 0; offset < len(m.users); offset++ {
 				idx := (m.cursor + offset + 1) % len(m.users)
 				u := m.users[idx]
-				if strings.Contains(strings.ToLower(u.Handle), query) ||
-					strings.Contains(strings.ToLower(u.Username), query) {
+				if strings.Contains(strings.ToLower(u.Handle), query) {
 					m.cursor = idx
 					m.message = fmt.Sprintf("Found: %s", u.Handle)
 					break

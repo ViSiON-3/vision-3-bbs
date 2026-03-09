@@ -144,7 +144,7 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 	}
 
 	// Build the row using pre-computed raw widths (not ANSI measurement).
-	leftW := 41 // Left column width (40 content + 1 gap before right column)
+	leftW := 42 // Left column width (41 content + 1 gap before right column)
 	rightW := boxW - leftW
 
 	var result string
@@ -175,11 +175,11 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) 
 	isActive := m.editField == fieldIdx
 
 	// Pad labels to consistent widths so colons align vertically.
-	// Left column: longest is "Messages Posted" at 15 chars.
+	// Left column: longest is "Group/Location" at 14 chars.
 	// Right column: longest is "Screen Height" at 13 chars.
 	labelText := f.Label
 	if f.Col == 3 {
-		labelText = padRight(labelText, 15)
+		labelText = padRight(labelText, 14)
 	} else if f.Col == 50 {
 		labelText = padRight(labelText, 13)
 	}

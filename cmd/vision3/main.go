@@ -1183,7 +1183,6 @@ func sessionHandler(s ssh.Session) {
 			// --- START MOVED Login Event Recording --- Removed call to AddLoginEvent
 			/* // Removed LoginEvent tracking
 			event := user.LoginEvent{
-				Username:  authenticatedUser.Username,
 				Handle:    authenticatedUser.Handle,
 				Timestamp: time.Now(), // Record time NOW
 			}

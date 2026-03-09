@@ -56,8 +56,8 @@ func TestNewUserManager_EmptyDir_CreatesDefault(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should create a default "felonius" user
-	u, ok := um.GetUser("felonius")
+	// Should create a default "Felonius" user
+	u, ok := um.GetUser("Felonius")
 	if !ok {
 		t.Fatal("expected default felonius user to exist")
 	}
@@ -79,8 +79,8 @@ func TestNewUserManager_EmptyDir_CreatesDefault(t *testing.T) {
 
 func TestNewUserManager_LoadsExistingUsers(t *testing.T) {
 	seed := []User{
-		{ID: 1, Username: "alice", Handle: "Alice", PasswordHash: hashPassword(t, "pw1"), AccessLevel: 5},
-		{ID: 2, Username: "bob", Handle: "Bob", PasswordHash: hashPassword(t, "pw2"), AccessLevel: 10},
+		{ID: 1, Handle: "Alice", PasswordHash: hashPassword(t, "pw1"), AccessLevel: 5},
+		{ID: 2, Handle: "Bob", PasswordHash: hashPassword(t, "pw2"), AccessLevel: 10},
 	}
 	um := newTestManager(t, seed)
 
@@ -88,7 +88,7 @@ func TestNewUserManager_LoadsExistingUsers(t *testing.T) {
 		t.Errorf("expected 2 users, got %d", um.GetUserCount())
 	}
 
-	alice, ok := um.GetUser("alice")
+	alice, ok := um.GetUser("Alice")
 	if !ok {
 		t.Fatal("expected alice to exist")
 	}
@@ -108,7 +108,7 @@ func TestNewUserManager_InvalidJSON(t *testing.T) {
 }
 
 func TestNewUserManager_UTF8BOM(t *testing.T) {
-	seed := []User{{ID: 1, Username: "bomuser", Handle: "BOM", AccessLevel: 1}}
+	seed := []User{{ID: 1, Handle: "BOM", AccessLevel: 1}}
 	data, _ := json.Marshal(seed)
 	bom := append([]byte{0xEF, 0xBB, 0xBF}, data...)
 
@@ -119,8 +119,8 @@ func TestNewUserManager_UTF8BOM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error with BOM: %v", err)
 	}
-	if _, ok := um.GetUser("bomuser"); !ok {
-		t.Error("expected bomuser to be loaded despite BOM prefix")
+	if _, ok := um.GetUser("BOM"); !ok {
+		t.Error("expected BOM user to be loaded despite BOM prefix")
 	}
 }
 
@@ -129,14 +129,11 @@ func TestNewUserManager_UTF8BOM(t *testing.T) {
 func TestAddUser_Success(t *testing.T) {
 	um := newTestManager(t, []User{})
 
-	u, err := um.AddUser("newuser", "secret123", "NewHandle", "Real Name", "555-1234", "SomeGroup")
+	u, err := um.AddUser("secret123", "NewHandle", "Real Name", "555-1234", "SomeGroup")
 	if err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
 
-	if u.Username != "newuser" {
-		t.Errorf("expected username newuser, got %q", u.Username)
-	}
 	if u.Handle != "NewHandle" {
 		t.Errorf("expected handle NewHandle, got %q", u.Handle)
 	}
@@ -156,41 +153,21 @@ func TestAddUser_Success(t *testing.T) {
 	}
 }
 
-func TestAddUser_DuplicateUsername(t *testing.T) {
-	seed := []User{{ID: 1, Username: "existing", Handle: "Existing", AccessLevel: 1}}
-	um := newTestManager(t, seed)
-
-	_, err := um.AddUser("existing", "pw", "DifferentHandle", "", "", "")
-	if err != ErrUserExists {
-		t.Errorf("expected ErrUserExists, got %v", err)
-	}
-}
-
-func TestAddUser_DuplicateUsername_CaseInsensitive(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 1}}
-	um := newTestManager(t, seed)
-
-	_, err := um.AddUser("ALICE", "pw", "DifferentHandle", "", "", "")
-	if err != ErrUserExists {
-		t.Errorf("expected ErrUserExists for case-insensitive match, got %v", err)
-	}
-}
-
 func TestAddUser_DuplicateHandle(t *testing.T) {
-	seed := []User{{ID: 1, Username: "user1", Handle: "TakenHandle", AccessLevel: 1}}
+	seed := []User{{ID: 1, Handle: "TakenHandle", AccessLevel: 1}}
 	um := newTestManager(t, seed)
 
-	_, err := um.AddUser("user2", "pw", "TakenHandle", "", "", "")
+	_, err := um.AddUser("pw", "TakenHandle", "", "", "")
 	if err != ErrHandleExists {
 		t.Errorf("expected ErrHandleExists, got %v", err)
 	}
 }
 
 func TestAddUser_DuplicateHandle_CaseInsensitive(t *testing.T) {
-	seed := []User{{ID: 1, Username: "user1", Handle: "MyHandle", AccessLevel: 1}}
+	seed := []User{{ID: 1, Handle: "MyHandle", AccessLevel: 1}}
 	um := newTestManager(t, seed)
 
-	_, err := um.AddUser("user2", "pw", "myhandle", "", "", "")
+	_, err := um.AddUser("pw", "myhandle", "", "", "")
 	if err != ErrHandleExists {
 		t.Errorf("expected ErrHandleExists for case-insensitive handle match, got %v", err)
 	}
@@ -199,8 +176,8 @@ func TestAddUser_DuplicateHandle_CaseInsensitive(t *testing.T) {
 func TestAddUser_IDsIncrement(t *testing.T) {
 	um := newTestManager(t, []User{})
 
-	u1, _ := um.AddUser("first", "pw", "First", "", "", "")
-	u2, _ := um.AddUser("second", "pw", "Second", "", "", "")
+	u1, _ := um.AddUser("pw", "First", "", "", "")
+	u2, _ := um.AddUser("pw", "Second", "", "", "")
 
 	if u2.ID <= u1.ID {
 		t.Errorf("expected u2.ID (%d) > u1.ID (%d)", u2.ID, u1.ID)
@@ -213,14 +190,14 @@ func TestAddUser_PersistsToDisk(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDir, "users.json"), []byte("[]"), 0644)
 
 	um, _ := NewUserManager(tmpDir)
-	um.AddUser("persist", "pw", "PersistHandle", "", "", "")
+	um.AddUser("pw", "PersistHandle", "", "", "")
 
 	// Reload from disk
 	um2, err := NewUserManager(tmpDir)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if _, ok := um2.GetUser("persist"); !ok {
+	if _, ok := um2.GetUser("PersistHandle"); !ok {
 		t.Error("expected user to persist to disk after AddUser")
 	}
 }
@@ -229,7 +206,7 @@ func TestAddUser_UsesNewUserLevel(t *testing.T) {
 	um := newTestManager(t, []User{})
 	um.SetNewUserLevel(50)
 
-	u, err := um.AddUser("leveltest", "pw", "LevelHandle", "", "", "")
+	u, err := um.AddUser("pw", "LevelHandle", "", "", "")
 	if err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
@@ -241,10 +218,10 @@ func TestAddUser_UsesNewUserLevel(t *testing.T) {
 // --- GetUser ---
 
 func TestGetUser_Exists(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
-	u, ok := um.GetUser("alice")
+	u, ok := um.GetUser("Alice")
 	if !ok {
 		t.Fatal("expected alice to exist")
 	}
@@ -254,7 +231,7 @@ func TestGetUser_Exists(t *testing.T) {
 }
 
 func TestGetUser_CaseInsensitive(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
 	_, ok := um.GetUser("ALICE")
@@ -273,64 +250,30 @@ func TestGetUser_NotFound(t *testing.T) {
 }
 
 func TestGetUser_ReturnsCopy(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
-	u1, _ := um.GetUser("alice")
+	u1, _ := um.GetUser("Alice")
 	u1.Handle = "MODIFIED"
 
-	u2, _ := um.GetUser("alice")
+	u2, _ := um.GetUser("Alice")
 	if u2.Handle == "MODIFIED" {
 		t.Error("GetUser should return a copy; internal data was mutated")
-	}
-}
-
-// --- GetUserByHandle ---
-
-func TestGetUserByHandle_Found(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5}}
-	um := newTestManager(t, seed)
-
-	u, ok := um.GetUserByHandle("Alice")
-	if !ok {
-		t.Fatal("expected to find user by handle Alice")
-	}
-	if u.Username != "alice" {
-		t.Errorf("expected username alice, got %q", u.Username)
-	}
-}
-
-func TestGetUserByHandle_CaseInsensitive(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5}}
-	um := newTestManager(t, seed)
-
-	_, ok := um.GetUserByHandle("alice")
-	if !ok {
-		t.Error("expected case-insensitive handle lookup to work")
-	}
-}
-
-func TestGetUserByHandle_NotFound(t *testing.T) {
-	um := newTestManager(t, []User{})
-
-	_, ok := um.GetUserByHandle("NoSuchHandle")
-	if ok {
-		t.Error("expected not found for nonexistent handle")
 	}
 }
 
 // --- GetUserByID ---
 
 func TestGetUserByID_Found(t *testing.T) {
-	seed := []User{{ID: 42, Username: "alice", Handle: "Alice", AccessLevel: 5}}
+	seed := []User{{ID: 42, Handle: "Alice", AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
 	u, ok := um.GetUserByID(42)
 	if !ok {
 		t.Fatal("expected to find user by ID 42")
 	}
-	if u.Username != "alice" {
-		t.Errorf("expected username alice, got %q", u.Username)
+	if u.Handle != "Alice" {
+		t.Errorf("expected handle Alice, got %q", u.Handle)
 	}
 }
 
@@ -347,34 +290,34 @@ func TestGetUserByID_NotFound(t *testing.T) {
 
 func TestAuthenticate_Success(t *testing.T) {
 	pw := "correcthorse"
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", PasswordHash: hashPassword(t, pw), AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", PasswordHash: hashPassword(t, pw), AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
-	u, ok := um.Authenticate("alice", pw)
+	u, ok := um.Authenticate("Alice", pw)
 	if !ok {
 		t.Fatal("expected authentication to succeed")
 	}
-	if u.Username != "alice" {
-		t.Errorf("expected username alice, got %q", u.Username)
+	if u.Handle != "Alice" {
+		t.Errorf("expected handle Alice, got %q", u.Handle)
 	}
 }
 
-func TestAuthenticate_CaseInsensitiveUsername(t *testing.T) {
+func TestAuthenticate_CaseInsensitiveHandle(t *testing.T) {
 	pw := "mypass"
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", PasswordHash: hashPassword(t, pw), AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", PasswordHash: hashPassword(t, pw), AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
 	_, ok := um.Authenticate("ALICE", pw)
 	if !ok {
-		t.Error("expected case-insensitive username auth to succeed")
+		t.Error("expected case-insensitive handle auth to succeed")
 	}
 }
 
 func TestAuthenticate_WrongPassword(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", PasswordHash: hashPassword(t, "correct"), AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", PasswordHash: hashPassword(t, "correct"), AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
-	_, ok := um.Authenticate("alice", "wrong")
+	_, ok := um.Authenticate("Alice", "wrong")
 	if ok {
 		t.Error("expected authentication to fail with wrong password")
 	}
@@ -392,12 +335,12 @@ func TestAuthenticate_NonexistentUser(t *testing.T) {
 func TestAuthenticate_DeletedUser(t *testing.T) {
 	deletedAt := time.Now()
 	seed := []User{{
-		ID: 1, Username: "deleted", Handle: "Del", PasswordHash: hashPassword(t, "pw"),
+		ID: 1, Handle: "Del", PasswordHash: hashPassword(t, "pw"),
 		AccessLevel: 5, DeletedUser: true, DeletedAt: &deletedAt,
 	}}
 	um := newTestManager(t, seed)
 
-	_, ok := um.Authenticate("deleted", "pw")
+	_, ok := um.Authenticate("Del", "pw")
 	if ok {
 		t.Error("expected authentication to fail for deleted user")
 	}
@@ -405,11 +348,11 @@ func TestAuthenticate_DeletedUser(t *testing.T) {
 
 func TestAuthenticate_UpdatesLastLoginAndTimesCalled(t *testing.T) {
 	pw := "pass"
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", PasswordHash: hashPassword(t, pw), AccessLevel: 5, TimesCalled: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", PasswordHash: hashPassword(t, pw), AccessLevel: 5, TimesCalled: 5}}
 	um := newTestManager(t, seed)
 
 	before := time.Now()
-	u, ok := um.Authenticate("alice", pw)
+	u, ok := um.Authenticate("Alice", pw)
 	if !ok {
 		t.Fatal("auth should succeed")
 	}
@@ -425,30 +368,29 @@ func TestAuthenticate_UpdatesLastLoginAndTimesCalled(t *testing.T) {
 // --- UpdateUser ---
 
 func TestUpdateUser_Success(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
-	u, _ := um.GetUser("alice")
+	u, _ := um.GetUser("Alice")
 	u.AccessLevel = 100
-	u.Handle = "AliceUpdated"
 
 	if err := um.UpdateUser(u); err != nil {
 		t.Fatalf("UpdateUser: %v", err)
 	}
 
-	updated, _ := um.GetUser("alice")
+	updated, _ := um.GetUser("Alice")
 	if updated.AccessLevel != 100 {
 		t.Errorf("expected access level 100, got %d", updated.AccessLevel)
 	}
-	if updated.Handle != "AliceUpdated" {
-		t.Errorf("expected handle AliceUpdated, got %q", updated.Handle)
+	if updated.Handle != "Alice" {
+		t.Errorf("expected handle Alice, got %q", updated.Handle)
 	}
 }
 
 func TestUpdateUser_NonexistentUser(t *testing.T) {
 	um := newTestManager(t, []User{})
 
-	ghost := &User{Username: "ghost", Handle: "Ghost"}
+	ghost := &User{Handle: "Ghost"}
 	err := um.UpdateUser(ghost)
 	if err != ErrUserNotFound {
 		t.Errorf("expected ErrUserNotFound, got %v", err)
@@ -466,28 +408,28 @@ func TestUpdateUser_NilUser(t *testing.T) {
 
 func TestUpdateUser_PersistsToDisk(t *testing.T) {
 	tmpDir := t.TempDir()
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", AccessLevel: 5}}
 	data, _ := json.Marshal(seed)
 	os.WriteFile(filepath.Join(tmpDir, "users.json"), data, 0644)
 
 	um, _ := NewUserManager(tmpDir)
-	u, _ := um.GetUser("alice")
+	u, _ := um.GetUser("Alice")
 	u.AccessLevel = 200
 	um.UpdateUser(u)
 
 	// Reload from disk
 	um2, _ := NewUserManager(tmpDir)
-	reloaded, _ := um2.GetUser("alice")
+	reloaded, _ := um2.GetUser("Alice")
 	if reloaded.AccessLevel != 200 {
 		t.Errorf("expected persisted access level 200, got %d", reloaded.AccessLevel)
 	}
 }
 
 func TestUpdateUser_DefensiveCopy(t *testing.T) {
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
-	u, _ := um.GetUser("alice")
+	u, _ := um.GetUser("Alice")
 	u.AccessLevel = 99
 	um.UpdateUser(u)
 
@@ -495,7 +437,7 @@ func TestUpdateUser_DefensiveCopy(t *testing.T) {
 	u.AccessLevel = 0
 
 	// Internal state should not be affected
-	internal, _ := um.GetUser("alice")
+	internal, _ := um.GetUser("Alice")
 	if internal.AccessLevel != 99 {
 		t.Errorf("expected internal state 99, got %d (defensive copy failed)", internal.AccessLevel)
 	}
@@ -505,8 +447,8 @@ func TestUpdateUser_DefensiveCopy(t *testing.T) {
 
 func TestGetAllUsers(t *testing.T) {
 	seed := []User{
-		{ID: 1, Username: "alice", Handle: "Alice", AccessLevel: 5},
-		{ID: 2, Username: "bob", Handle: "Bob", AccessLevel: 10},
+		{ID: 1, Handle: "Alice", AccessLevel: 5},
+		{ID: 2, Handle: "Bob", AccessLevel: 10},
 	}
 	um := newTestManager(t, seed)
 
@@ -519,7 +461,7 @@ func TestGetAllUsers(t *testing.T) {
 	for _, u := range all {
 		u.Handle = "MODIFIED"
 	}
-	alice, _ := um.GetUser("alice")
+	alice, _ := um.GetUser("Alice")
 	if alice.Handle == "MODIFIED" {
 		t.Error("GetAllUsers should return copies")
 	}
@@ -539,7 +481,7 @@ func TestSetNewUserLevel_Normal(t *testing.T) {
 	um := newTestManager(t, []User{})
 	um.SetNewUserLevel(42)
 
-	u, _ := um.AddUser("test", "pw", "Test", "", "", "")
+	u, _ := um.AddUser("pw", "Test42", "", "", "")
 	if u.AccessLevel != 42 {
 		t.Errorf("expected level 42, got %d", u.AccessLevel)
 	}
@@ -549,7 +491,7 @@ func TestSetNewUserLevel_ClampsNegative(t *testing.T) {
 	um := newTestManager(t, []User{})
 	um.SetNewUserLevel(-5)
 
-	u, _ := um.AddUser("test", "pw", "Test", "", "", "")
+	u, _ := um.AddUser("pw", "TestNeg", "", "", "")
 	if u.AccessLevel != 0 {
 		t.Errorf("expected clamped level 0, got %d", u.AccessLevel)
 	}
@@ -559,7 +501,7 @@ func TestSetNewUserLevel_ClampsHigh(t *testing.T) {
 	um := newTestManager(t, []User{})
 	um.SetNewUserLevel(999)
 
-	u, _ := um.AddUser("test", "pw", "Test", "", "", "")
+	u, _ := um.AddUser("pw", "TestHigh", "", "", "")
 	if u.AccessLevel != 255 {
 		t.Errorf("expected clamped level 255, got %d", u.AccessLevel)
 	}
@@ -569,8 +511,8 @@ func TestSetNewUserLevel_ClampsHigh(t *testing.T) {
 
 func TestNextUserID(t *testing.T) {
 	seed := []User{
-		{ID: 5, Username: "alice", Handle: "Alice"},
-		{ID: 10, Username: "bob", Handle: "Bob"},
+		{ID: 5, Handle: "Alice"},
+		{ID: 10, Handle: "Bob"},
 	}
 	um := newTestManager(t, seed)
 
@@ -591,15 +533,15 @@ func TestSaveUsers_CreatesDirectory(t *testing.T) {
 	os.WriteFile(filepath.Join(nestedDir, "users.json"), []byte("[]"), 0644)
 
 	um, _ := NewUserManager(nestedDir)
-	um.AddUser("test", "pw", "Test", "", "", "")
+	um.AddUser("pw", "Test", "", "", "")
 
 	// Verify file was written
 	data, err := os.ReadFile(filepath.Join(nestedDir, "users.json"))
 	if err != nil {
 		t.Fatalf("expected users.json to exist: %v", err)
 	}
-	if !strings.Contains(string(data), "test") {
-		t.Error("expected users.json to contain 'test'")
+	if !strings.Contains(string(data), "Test") {
+		t.Error("expected users.json to contain 'Test'")
 	}
 }
 
@@ -736,7 +678,7 @@ func TestLogAdminActivity_WritesFile(t *testing.T) {
 	um, _ := NewUserManager(tmpDir)
 
 	entry := AdminActivityLog{
-		AdminUsername: "sysop",
+		AdminHandle:  "sysop",
 		AdminID:       1,
 		TargetUserID:  2,
 		TargetHandle:  "Bob",
@@ -776,7 +718,7 @@ func TestLogAdminActivity_AppendsToExisting(t *testing.T) {
 	um, _ := NewUserManager(tmpDir)
 
 	for i := 0; i < 3; i++ {
-		um.LogAdminActivity(AdminActivityLog{AdminUsername: "sysop", Action: "TEST"})
+		um.LogAdminActivity(AdminActivityLog{AdminHandle: "sysop", Action: "TEST"})
 	}
 
 	logPath := filepath.Join(tmpDir, adminLogFile)
@@ -794,8 +736,8 @@ func TestLogAdminActivity_AppendsToExisting(t *testing.T) {
 func TestAdminActivityLogEntry_Helper(t *testing.T) {
 	entry := AdminActivityLogEntry("admin", 1, 2, "Bob", "accessLevel", "10", "50")
 
-	if entry.AdminUsername != "admin" {
-		t.Errorf("expected admin, got %q", entry.AdminUsername)
+	if entry.AdminHandle != "admin" {
+		t.Errorf("expected admin, got %q", entry.AdminHandle)
 	}
 	if entry.Action != "EDIT_USER" {
 		t.Errorf("expected EDIT_USER, got %q", entry.Action)
@@ -853,9 +795,8 @@ func TestConcurrentAddAndGet(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			name := strings.ToLower(string(rune('a'+idx))) + "user"
 			handle := strings.ToUpper(string(rune('a'+idx))) + "Handle"
-			_, err := um.AddUser(name, "pw", handle, "", "", "")
+			_, err := um.AddUser("pw", handle, "", "", "")
 			if err != nil {
 				errs <- err
 			}
@@ -876,7 +817,7 @@ func TestConcurrentAddAndGet(t *testing.T) {
 
 func TestConcurrentAuthenticate(t *testing.T) {
 	pw := "secret"
-	seed := []User{{ID: 1, Username: "alice", Handle: "Alice", PasswordHash: hashPassword(t, pw), AccessLevel: 5}}
+	seed := []User{{ID: 1, Handle: "Alice", PasswordHash: hashPassword(t, pw), AccessLevel: 5}}
 	um := newTestManager(t, seed)
 
 	failures := make(chan string, 5)
@@ -885,7 +826,7 @@ func TestConcurrentAuthenticate(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, ok := um.Authenticate("alice", pw)
+			_, ok := um.Authenticate("Alice", pw)
 			if !ok {
 				failures <- "concurrent auth should succeed"
 			}
@@ -993,9 +934,9 @@ func TestLoadCallHistory_TruncatesOverLimit(t *testing.T) {
 
 func TestDetermineNextUserID_GapInIDs(t *testing.T) {
 	seed := []User{
-		{ID: 1, Username: "a", Handle: "A"},
-		{ID: 5, Username: "b", Handle: "B"},
-		{ID: 3, Username: "c", Handle: "C"},
+		{ID: 1, Handle: "A"},
+		{ID: 5, Handle: "B"},
+		{ID: 3, Handle: "C"},
 	}
 	um := newTestManager(t, seed)
 
@@ -1011,7 +952,7 @@ func TestAddUser_EmptyPassword(t *testing.T) {
 	um := newTestManager(t, []User{})
 
 	// bcrypt should handle empty password (it's valid)
-	u, err := um.AddUser("emptypass", "", "EmptyPass", "", "", "")
+	u, err := um.AddUser("", "EmptyPass", "", "", "")
 	if err != nil {
 		t.Fatalf("AddUser with empty password: %v", err)
 	}
@@ -1023,15 +964,15 @@ func TestAddUser_EmptyPassword(t *testing.T) {
 }
 
 func TestAuthenticate_EmptyPassword(t *testing.T) {
-	seed := []User{{ID: 1, Username: "emptypass", Handle: "EP", PasswordHash: hashPassword(t, ""), AccessLevel: 1}}
+	seed := []User{{ID: 1, Handle: "EP", PasswordHash: hashPassword(t, ""), AccessLevel: 1}}
 	um := newTestManager(t, seed)
 
-	_, ok := um.Authenticate("emptypass", "")
+	_, ok := um.Authenticate("EP", "")
 	if !ok {
 		t.Error("expected auth with empty password to succeed when hash matches")
 	}
 
-	_, ok = um.Authenticate("emptypass", "notempty")
+	_, ok = um.Authenticate("EP", "notempty")
 	if ok {
 		t.Error("expected auth with wrong password to fail")
 	}
@@ -1039,8 +980,8 @@ func TestAuthenticate_EmptyPassword(t *testing.T) {
 
 func TestGetUserCount_AfterAddAndPurge(t *testing.T) {
 	um := newTestManager(t, []User{})
-	um.AddUser("a", "pw", "A", "", "", "")
-	um.AddUser("b", "pw", "B", "", "", "")
+	um.AddUser("pw", "A", "", "", "")
+	um.AddUser("pw", "B", "", "", "")
 
 	if um.GetUserCount() != 2 {
 		t.Errorf("expected 2, got %d", um.GetUserCount())

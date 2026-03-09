@@ -17,9 +17,7 @@ import (
 // Predefined errors for user management
 var (
 	ErrUserNotFound = errors.New("user not found")
-	ErrUserExists   = errors.New("username already exists")
 	ErrHandleExists = errors.New("handle already exists")
-	// MaxLastLogins   = 10 // Removed MaxLastLogins constant
 )
 
 const (
@@ -85,23 +83,32 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 		// If loading fails (e.g., file not found), create default felonius user
 		if os.IsNotExist(err) {
 			log.Println("INFO: users.json not found, creating default felonius user.")
-			// AddUser will handle ID assignment and initialization
-			// Using "password" as default password
-			defaultUser, addErr := um.AddUser("felonius", "password", "Felonius", "Felonius", "", "FAiRLiGHT/PC")
-			if addErr != nil {
-				return nil, fmt.Errorf("failed to create default felonius user: %w", addErr)
+			// Build the fully-initialized bootstrap user and write exactly once,
+			// avoiding a partially-initialized entry on disk if a second save fails.
+			hashedPw, hashErr := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+			if hashErr != nil {
+				return nil, fmt.Errorf("failed to hash default felonius password: %w", hashErr)
 			}
-			// Update felonius user fields after AddUser returns it
-			um.mu.Lock()                 // Lock necessary for direct modification
-			defaultUser.AccessLevel = 10 // Default user level
-			defaultUser.Validated = true // Default user is validated
-			// Ensure we update the map entry after modifying
-			um.users[strings.ToLower(defaultUser.Username)] = defaultUser
+			now := time.Now()
+			defaultUser := &User{
+				ID:            1,
+				Handle:        "Felonius",
+				RealName:      "Felonius",
+				GroupLocation: "FAiRLiGHT/PC",
+				PasswordHash:  string(hashedPw),
+				AccessLevel:   10,
+				Validated:     true,
+				TimeLimit:     60,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+			um.mu.Lock()
+			um.users[strings.ToLower(defaultUser.Handle)] = defaultUser
+			um.nextUserID = 2
+			saveErr := um.saveUsersLocked()
 			um.mu.Unlock()
-
-			// Save again to ensure level/validation is persisted
-			if saveErr := um.SaveUsers(); saveErr != nil {
-				return nil, fmt.Errorf("failed to save default felonius user details: %w", saveErr)
+			if saveErr != nil {
+				return nil, fmt.Errorf("failed to save default felonius user: %w", saveErr)
 			}
 			log.Println("INFO: Default felonius user created (felonius/password).")
 			// Determine next user ID after creating the default user
@@ -144,13 +151,22 @@ func (um *UserMgr) loadUsers() error { // Receiver uses renamed type
 		if user == nil { // Safety check for nil entries in JSON array
 			continue
 		}
-		lowerUsername := strings.ToLower(user.Username)
-		if _, exists := um.users[lowerUsername]; exists {
-			log.Printf("WARN: Duplicate username found in users.json: %s. Skipping subsequent entry.", user.Username)
+		// Migration: legacy records stored handle in "username"; if Handle is absent use it.
+		if strings.TrimSpace(user.Handle) == "" && user.LegacyUsername != "" {
+			user.Handle = user.LegacyUsername
+			log.Printf("INFO: Migrated legacy username %q to handle for user ID %d.", user.LegacyUsername, user.ID)
+		}
+		if strings.TrimSpace(user.Handle) == "" {
+			log.Printf("WARN: Skipping user ID %d with no handle in users.json.", user.ID)
 			continue
 		}
-		um.users[lowerUsername] = user
-		log.Printf("TRACE: Loaded user %s (Handle: %s, Group: %s) from JSON.", user.Username, user.Handle, user.GroupLocation)
+		lowerHandle := strings.ToLower(user.Handle)
+		if _, exists := um.users[lowerHandle]; exists {
+			log.Printf("WARN: Duplicate handle found in users.json: %s. Skipping subsequent entry.", user.Handle)
+			continue
+		}
+		um.users[lowerHandle] = user
+		log.Printf("TRACE: Loaded user %s (Group: %s) from JSON.", user.Handle, user.GroupLocation)
 	}
 
 	// Note: determineNextUserID should be called *after* successful load
@@ -288,11 +304,17 @@ func (um *UserMgr) saveNextCallNumberLocked() error {
 // saveUsersLocked performs the actual saving without acquiring locks.
 // Uses um.path (which should point to data/users.json)
 func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
-	// Convert map back to slice for saving as JSON array
-	// We now store pointers in the map, so create a slice of pointers
+	// Convert map back to slice for saving as JSON array.
+	// Clear LegacyUsername before marshaling so the old "username" key is not written back.
 	usersList := make([]*User, 0, len(um.users))
 	for _, user := range um.users {
-		usersList = append(usersList, user) // Append pointers directly
+		if user.LegacyUsername != "" {
+			cp := *user
+			cp.LegacyUsername = ""
+			usersList = append(usersList, &cp)
+		} else {
+			usersList = append(usersList, user)
+		}
 	}
 
 	data, err := json.MarshalIndent(usersList, "", "  ")
@@ -320,6 +342,59 @@ func (um *UserMgr) SaveUsers() error { // Receiver uses renamed type
 	return um.saveUsersLocked()
 }
 
+// UpdateUserByID updates a user looked up by their stable ID, safely re-keying
+// the internal map when the handle has changed. Use this in any flow that may
+// rename a user's handle (e.g., admin editor); for all other updates prefer
+// UpdateUser.
+func (um *UserMgr) UpdateUserByID(u *User) error {
+	if u == nil {
+		return fmt.Errorf("cannot update nil user")
+	}
+	u.Handle = strings.TrimSpace(u.Handle)
+	if u.Handle == "" {
+		return fmt.Errorf("handle cannot be blank")
+	}
+	um.mu.Lock()
+	defer um.mu.Unlock()
+
+	// Locate existing map entry by stable ID.
+	var oldKey string
+	for k, existing := range um.users {
+		if existing.ID == u.ID {
+			oldKey = k
+			break
+		}
+	}
+	if oldKey == "" {
+		return ErrUserNotFound
+	}
+
+	newKey := strings.ToLower(u.Handle)
+	var originalEntry *User
+	rekeyed := false
+	if newKey != oldKey {
+		// Handle changed — ensure no collision with a different user.
+		if existing, exists := um.users[newKey]; exists && existing.ID != u.ID {
+			return ErrHandleExists
+		}
+		originalEntry = um.users[oldKey] // save for rollback
+		delete(um.users, oldKey)
+		rekeyed = true
+	}
+
+	userCopy := *u
+	um.users[newKey] = &userCopy
+	if err := um.saveUsersLocked(); err != nil {
+		// Rollback in-memory map to match what is still on disk.
+		delete(um.users, newKey)
+		if rekeyed {
+			um.users[oldKey] = originalEntry
+		}
+		return err
+	}
+	return nil
+}
+
 // UpdateUser copies the modified user back into the internal map and saves to disk.
 // Use this instead of SaveUsers when you have modified a user copy obtained from
 // GetUser or Authenticate and need those changes persisted.
@@ -329,13 +404,13 @@ func (um *UserMgr) UpdateUser(u *User) error {
 	}
 	um.mu.Lock()
 	defer um.mu.Unlock()
-	lowerUsername := strings.ToLower(u.Username)
-	if _, exists := um.users[lowerUsername]; !exists {
+	lowerHandle := strings.ToLower(u.Handle)
+	if _, exists := um.users[lowerHandle]; !exists {
 		return ErrUserNotFound
 	}
 	// Create a defensive copy to prevent external mutations from bypassing locks
 	userCopy := *u
-	um.users[lowerUsername] = &userCopy
+	um.users[lowerHandle] = &userCopy
 	return um.saveUsersLocked()
 }
 
@@ -377,13 +452,14 @@ func (um *UserMgr) LogAdminActivity(logEntry AdminActivityLog) error {
 	return nil
 }
 
-// Authenticate checks username and compares password hash.
+// Authenticate checks handle and compares password hash.
+// Handle lookup is case-insensitive.
 // Returns: (user, success)
-func (um *UserMgr) Authenticate(username, password string) (*User, bool) { // Receiver uses renamed type
-	lowerUsername := strings.ToLower(username)
+func (um *UserMgr) Authenticate(handle, password string) (*User, bool) {
+	lowerHandle := strings.ToLower(handle)
 
 	um.mu.RLock()
-	user, exists := um.users[lowerUsername]
+	user, exists := um.users[lowerHandle]
 	if !exists {
 		um.mu.RUnlock()
 		return nil, false
@@ -405,7 +481,7 @@ func (um *UserMgr) Authenticate(username, password string) (*User, bool) { // Re
 
 	// Authentication successful - update LastLogin and TimesCalled
 	um.mu.Lock()
-	user = um.users[lowerUsername] // Re-fetch under write lock
+	user = um.users[lowerHandle] // Re-fetch under write lock
 	if user == nil {
 		um.mu.Unlock()
 		return nil, false
@@ -416,44 +492,28 @@ func (um *UserMgr) Authenticate(username, password string) (*User, bool) { // Re
 
 	// Save outside the write lock to avoid blocking other user operations
 	if err := um.SaveUsers(); err != nil {
-		log.Printf("ERROR: Failed to save user data after successful login for %s: %v", username, err)
+		log.Printf("ERROR: Failed to save user data after successful login for %s: %v", handle, err)
 	}
 
 	// Return a copy
 	um.mu.RLock()
-	userCopy := *um.users[lowerUsername]
+	userCopy := *um.users[lowerHandle]
 	um.mu.RUnlock()
 	return &userCopy, true
 }
 
-// GetUser retrieves a user by username.
+// GetUser retrieves a user by handle (case-insensitive).
 // Returns a copy to prevent callers from mutating internal state without the lock.
-func (um *UserMgr) GetUser(username string) (*User, bool) { // Receiver uses renamed type
+func (um *UserMgr) GetUser(handle string) (*User, bool) {
 	um.mu.RLock()
 	defer um.mu.RUnlock()
 
-	user, exists := um.users[strings.ToLower(username)] // Use lower case for lookup
+	user, exists := um.users[strings.ToLower(handle)]
 	if !exists {
 		return nil, false
 	}
 	userCopy := *user
 	return &userCopy, true
-}
-
-// GetUserByHandle retrieves a user by their handle (case-insensitive search).
-func (um *UserMgr) GetUserByHandle(handle string) (*User, bool) { // Receiver uses renamed type
-	um.mu.RLock()
-	defer um.mu.RUnlock()
-
-	lowerHandle := strings.ToLower(handle)
-	for _, user := range um.users {
-		if strings.ToLower(user.Handle) == lowerHandle {
-			// Return a copy to prevent modification of the internal user data
-			userCopy := *user
-			return &userCopy, true
-		}
-	}
-	return nil, false
 }
 
 // GetUserByID returns a user by their ID (for optimistic locking checks)
@@ -479,24 +539,19 @@ func (um *UserMgr) NextUserID() int {
 }
 
 // AddUser creates a new user, hashes the password, assigns an ID, and saves.
-// Added GroupLocation parameter.
-func (um *UserMgr) AddUser(username, password, handle, realName, phoneNum, groupLocation string) (*User, error) { // Receiver uses renamed type
-	lowerUsername := strings.ToLower(username)
+func (um *UserMgr) AddUser(password, handle, realName, phoneNum, groupLocation string) (*User, error) {
+	handle = strings.TrimSpace(handle)
+	if handle == "" {
+		return nil, fmt.Errorf("handle cannot be blank")
+	}
 	lowerHandle := strings.ToLower(handle)
 
 	um.mu.Lock()
 	defer um.mu.Unlock()
 
-	// Check if username already exists
-	if _, exists := um.users[lowerUsername]; exists {
-		return nil, ErrUserExists
-	}
-
 	// Check if handle already exists
-	for _, u := range um.users {
-		if strings.ToLower(u.Handle) == lowerHandle {
-			return nil, ErrHandleExists
-		}
+	if _, exists := um.users[lowerHandle]; exists {
+		return nil, ErrHandleExists
 	}
 
 	// Hash the password
@@ -507,36 +562,32 @@ func (um *UserMgr) AddUser(username, password, handle, realName, phoneNum, group
 
 	// Create new user
 	newUser := &User{
-		ID:            um.nextUserID,    // Assign the next available ID
-		Username:      username,
+		ID:            um.nextUserID,
 		PasswordHash:  string(hashedPassword),
 		Handle:        handle,
 		RealName:      realName,
 		PhoneNumber:   phoneNum,
 		GroupLocation: groupLocation,
-		AccessLevel:   um.newUserLevel, // Access level from config (default: 1)
-		TimeLimit:     60,               // Default time limit (e.g., 60 minutes)
-		Validated:     false,            // New users require validation
-		LastLogin:     time.Time{},      // Initialize zero time
-		// Initialize other fields as needed
+		AccessLevel:   um.newUserLevel,
+		TimeLimit:     60,
+		Validated:     false,
+		LastLogin:     time.Time{},
 	}
 
 	// Add to map and increment nextUserID
-	um.users[lowerUsername] = newUser
+	um.users[lowerHandle] = newUser
 	um.nextUserID++
 
 	// Save the updated user list *while still holding the lock*
 	if err := um.saveUsersLocked(); err != nil {
-		log.Printf("ERROR: Failed to save users after adding %s: %v", username, err)
-		// If save fails, should we attempt to roll back the in-memory add?
-		// For now, return the error, the user exists in memory but not saved.
-		delete(um.users, lowerUsername) // Rollback in-memory add on save failure
-		um.nextUserID--                 // Rollback ID increment
+		log.Printf("ERROR: Failed to save users after adding %s: %v", handle, err)
+		delete(um.users, lowerHandle)
+		um.nextUserID--
 		return nil, err
 	}
 
-	log.Printf("INFO: Added user %s (Handle: %s, ID: %d)", newUser.Username, newUser.Handle, newUser.ID)
-	return newUser, nil // Return the newly created user
+	log.Printf("INFO: Added user %s (ID: %d)", newUser.Handle, newUser.ID)
+	return newUser, nil
 }
 
 // AddCallRecord adds a call record to the history and saves.
@@ -656,7 +707,6 @@ func (um *UserMgr) IsUserOnline(userID int) bool {
 // PurgeResult holds information about a permanently purged user for reporting.
 type PurgeResult struct {
 	ID        int
-	Username  string
 	Handle    string
 	DeletedAt time.Time
 }
@@ -692,9 +742,8 @@ func (um *UserMgr) PurgeDeletedUsers(retentionDays int) ([]PurgeResult, error) {
 				key:  key,
 				user: u,
 				result: PurgeResult{
-					ID:       u.ID,
-					Username: u.Username,
-					Handle:   u.Handle,
+					ID:     u.ID,
+					Handle: u.Handle,
 				},
 			})
 		} else if u.DeletedAt.Before(cutoff) {
@@ -703,7 +752,6 @@ func (um *UserMgr) PurgeDeletedUsers(retentionDays int) ([]PurgeResult, error) {
 				user: u,
 				result: PurgeResult{
 					ID:        u.ID,
-					Username:  u.Username,
 					Handle:    u.Handle,
 					DeletedAt: *u.DeletedAt,
 				},

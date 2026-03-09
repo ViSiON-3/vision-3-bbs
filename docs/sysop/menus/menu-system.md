@@ -186,8 +186,12 @@ Dynamic content placeholders in prompts and ANSI files:
 - `|TL` - Time left (in minutes)
 - `|CA` - Current message area tag
 - `|CAN` - Current message area name (resolved display name)
+- `|CC` - Current message conference tag
+- `|CCN` - Current message conference name
 - `|CFA` - Current file area tag
 - `|CFAN` - Current file area name (resolved display name)
+- `|FC` - Current file conference tag
+- `|FCN` - Current file conference name
 - `|DATE` - Current date (MM/DD/YY)
 - `|TIME` - Current time (HH:MM)
 - `|CALLS` - User's total calls
@@ -195,7 +199,6 @@ Dynamic content placeholders in prompts and ANSI files:
 - `|MN` - Current menu name
 - `|GL` - Group/Location (from user profile)
 - `|UN` - User note (privateNote from user profile)
-- `|CC` - Current message conference
 - `|NEWUSERS` - New user registration status (`YES` or `NO`)
 
 ### AT-Code Placeholders
@@ -532,7 +535,7 @@ Functions available via `RUN:` command:
 
 - `LISTFILES` - List files in current area
 - `LISTFILEAR` - List file areas
-- `SELECTFILEAREA` - Choose file area
+- `SELECTFILEAREA` - Choose file area (lightbar or classic, based on `fileListingMode`)
 
 ### Private Mail
 

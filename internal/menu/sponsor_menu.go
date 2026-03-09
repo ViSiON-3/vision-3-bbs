@@ -500,7 +500,7 @@ func runSponsorEditArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				edited.Sponsor = ""
 			case newHandle != "":
 				if userManager != nil {
-					if _, exists := userManager.GetUserByHandle(newHandle); !exists {
+					if _, exists := userManager.GetUser(newHandle); !exists {
 						msg := fmt.Sprintf("|01User '%s' not found — sponsor unchanged.|07", newHandle)
 						_ = terminalio.WriteProcessedBytes(terminal,
 							ansi.ReplacePipeCodes([]byte(msg)), outputMode)

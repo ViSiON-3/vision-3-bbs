@@ -18,13 +18,13 @@ func setupPurgeTestManager(t *testing.T) (*UserMgr, time.Time) {
 	recently := time.Now().AddDate(0, 0, -5)   // 5 days ago — within a 30-day retention window
 
 	users := []User{
-		{ID: 1, Username: "sysop", Handle: "SysOp", AccessLevel: 255},
-		{ID: 2, Username: "active1", Handle: "Active1", AccessLevel: 10},
-		{ID: 3, Username: "olddeleted", Handle: "OldDeleted", AccessLevel: 10,
+		{ID: 1, Handle: "SysOp", AccessLevel: 255},
+		{ID: 2, Handle: "Active1", AccessLevel: 10},
+		{ID: 3, Handle: "OldDeleted", AccessLevel: 10,
 			DeletedUser: true, DeletedAt: &longAgo},
-		{ID: 4, Username: "newdeleted", Handle: "NewDeleted", AccessLevel: 10,
+		{ID: 4, Handle: "NewDeleted", AccessLevel: 10,
 			DeletedUser: true, DeletedAt: &recently},
-		{ID: 5, Username: "notimestamp", Handle: "NoTimestamp", AccessLevel: 10,
+		{ID: 5, Handle: "NoTimestamp", AccessLevel: 10,
 			DeletedUser: true}, // DeletedAt == nil
 	}
 
@@ -73,18 +73,18 @@ func TestPurgeDeletedUsers_RetentionWindow(t *testing.T) {
 	// Verify purged set contains the right usernames
 	purgedNames := make(map[string]bool)
 	for _, p := range purged {
-		purgedNames[p.Username] = true
+		purgedNames[p.Handle] = true
 	}
-	if !purgedNames["olddeleted"] {
+	if !purgedNames["OldDeleted"] {
 		t.Error("expected 'olddeleted' to be purged")
 	}
-	if !purgedNames["notimestamp"] {
+	if !purgedNames["NoTimestamp"] {
 		t.Error("expected 'notimestamp' (nil DeletedAt) to be purged")
 	}
-	if purgedNames["newdeleted"] {
+	if purgedNames["NewDeleted"] {
 		t.Error("did not expect 'newdeleted' (5 days ago) to be purged with 30-day retention")
 	}
-	if purgedNames["sysop"] || purgedNames["active1"] {
+	if purgedNames["SysOp"] || purgedNames["Active1"] {
 		t.Error("active users must not be purged")
 	}
 }
@@ -123,8 +123,8 @@ func TestPurgeDeletedUsers_NoneEligible(t *testing.T) {
 	if len(purged) != 1 {
 		t.Errorf("expected 1 purged user (notimestamp) with 365-day retention, got %d", len(purged))
 	}
-	if purged[0].Username != "notimestamp" {
-		t.Errorf("expected 'notimestamp' to be purged, got %q", purged[0].Username)
+	if purged[0].Handle != "NoTimestamp" {
+		t.Errorf("expected 'NoTimestamp' to be purged, got %q", purged[0].Handle)
 	}
 	if um.GetUserCount() != 4 {
 		t.Errorf("expected 4 remaining users after purging notimestamp, got %d", um.GetUserCount())
@@ -149,16 +149,16 @@ func TestPurgeDeletedUsers_Persistence(t *testing.T) {
 	}
 
 	// newdeleted (5 days) should still be present
-	if _, ok := um2.GetUser("newdeleted"); !ok {
-		t.Error("expected 'newdeleted' to survive purge and be present after reload")
+	if _, ok := um2.GetUser("NewDeleted"); !ok {
+		t.Error("expected 'NewDeleted' to survive purge and be present after reload")
 	}
 	// olddeleted should be gone
-	if _, ok := um2.GetUser("olddeleted"); ok {
-		t.Error("expected 'olddeleted' to be absent after reload")
+	if _, ok := um2.GetUser("OldDeleted"); ok {
+		t.Error("expected 'OldDeleted' to be absent after reload")
 	}
 	// notimestamp should be gone
-	if _, ok := um2.GetUser("notimestamp"); ok {
-		t.Error("expected 'notimestamp' to be absent after reload")
+	if _, ok := um2.GetUser("NoTimestamp"); ok {
+		t.Error("expected 'NoTimestamp' to be absent after reload")
 	}
 }
 
@@ -172,7 +172,7 @@ func TestPurgeDeletedUsers_PurgeResultFields(t *testing.T) {
 	}
 
 	for _, p := range purged {
-		if p.Username == "olddeleted" {
+		if p.Handle == "OldDeleted" {
 			if p.ID != 3 {
 				t.Errorf("expected ID=3 for olddeleted, got %d", p.ID)
 			}
@@ -185,7 +185,7 @@ func TestPurgeDeletedUsers_PurgeResultFields(t *testing.T) {
 				t.Errorf("unexpected DeletedAt for olddeleted: %v (expected ~%v)", p.DeletedAt, deletedAt)
 			}
 		}
-		if p.Username == "notimestamp" {
+		if p.Handle == "NoTimestamp" {
 			if !p.DeletedAt.IsZero() {
 				t.Errorf("expected zero DeletedAt for notimestamp, got %v", p.DeletedAt)
 			}

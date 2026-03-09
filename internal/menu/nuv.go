@@ -156,7 +156,7 @@ func nuvApplyThresholds(e *MenuExecutor, nd *NUVData, idx int, userManager *user
 		shouldRemove := true
 		if cfg.NUVValidate {
 			shouldRemove = false
-			if u, ok := userManager.GetUserByHandle(c.Handle); ok {
+			if u, ok := userManager.GetUser(c.Handle); ok {
 				u.AccessLevel = cfg.NUVLevel
 				u.Validated = true
 				if err := userManager.UpdateUser(u); err != nil {
@@ -180,7 +180,7 @@ func nuvApplyThresholds(e *MenuExecutor, nd *NUVData, idx int, userManager *user
 
 	if cfg.NUVNoVotes > 0 && no >= cfg.NUVNoVotes {
 		if cfg.NUVKill {
-			if u, ok := userManager.GetUserByHandle(c.Handle); ok {
+			if u, ok := userManager.GetUser(c.Handle); ok {
 				u.DeletedUser = true
 				if err := userManager.UpdateUser(u); err != nil {
 					log.Printf("ERROR: NUV: failed to delete user '%s': %v", c.Handle, err)
