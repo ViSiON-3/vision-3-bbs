@@ -100,9 +100,9 @@ if (Test-Path "bin\sexyz.exe") {
     }
 } else {
     Write-Host "[!] sexyz not found at bin\sexyz.exe (required for file transfers)" -ForegroundColor Yellow
-    Write-Host "  Build from source: https://gitlab.synchro.net/main/sbbs.git"
-    Write-Host "  See documentation/file-transfer-protocols.md for build instructions"
-    Write-Host "  Place the binary at bin\sexyz.exe"
+    Write-Host "  Download a release bundle which includes pre-built binaries:"
+    Write-Host "  https://github.com/robbiew/vision3-dist/releases/latest"
+    Write-Host "  Copy bin\sexyz.exe from the bundle into this installation's bin\ directory."
 }
 
 Write-Host ""
