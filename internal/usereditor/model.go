@@ -312,6 +312,8 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textInput.SetValue("")
 			m.textInput.Placeholder = "New password..."
 			m.textInput.EchoMode = textinput.EchoPassword
+			m.textInput.CharLimit = 72 // bcrypt max input length
+			m.textInput.Width = 48
 			m.textInput.Focus()
 			return m, textinput.Blink
 		}

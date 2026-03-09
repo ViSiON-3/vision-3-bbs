@@ -242,7 +242,7 @@ func approximateVisibleLen(s string) int {
 // overlayPasswordDialog renders a password entry dialog over the background.
 func (m Model) overlayPasswordDialog(background string) string {
 	lines := strings.Split(background, "\n")
-	dialogW := 40
+	dialogW := 54
 	dialogH := 5
 	startRow := (m.height - dialogH) / 2
 	startCol := (m.width - dialogW) / 2
@@ -261,21 +261,28 @@ func (m Model) overlayPasswordDialog(background string) string {
 		dialogTextStyle.Render(strings.Repeat(" ", dialogW-2)) +
 		side
 
+	// textinput.View() width varies (cursor, placeholder styling, etc).
+	// Measure actual visible width to compute correct right padding.
+	tiView := m.textInput.View()
+	inputVisLen := 1 + approximateVisibleLen(tiView) // 1 for left space
+	innerW := dialogW - 2
+	rightPad := max(0, innerW-inputVisLen)
 	inputLine := side +
 		dialogTextStyle.Render(" ") +
-		m.textInput.View() +
-		dialogTextStyle.Render(strings.Repeat(" ", max(0, dialogW-3-m.textInput.Width))) +
+		tiView +
+		dialogTextStyle.Render(strings.Repeat(" ", rightPad)) +
 		side
 
 	dialogLines := []string{border, titleLine, emptyLine, inputLine, borderBot}
 
-	// Fill remaining width with styled ░
-	tailW := max(0, m.width-startCol-dialogW)
-	tail := bgFillStyle.Render(strings.Repeat("░", tailW))
+	// Overlay dialog on background, preserving content on both sides
+	endCol := startCol + dialogW
 	for i, dl := range dialogLines {
 		row := startRow + i
 		if row >= 0 && row < len(lines) {
-			lines[row] = padToCol(lines[row], startCol) + dl + tail
+			left := padToCol(lines[row], startCol)
+			right := skipToCol(lines[row], endCol)
+			lines[row] = left + dl + right
 		}
 	}
 
