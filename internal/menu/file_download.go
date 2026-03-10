@@ -64,11 +64,7 @@ func (e *MenuExecutor) downloadLoop(
 	// addFile prompts the user for a filename and appends the file to the
 	// tagged batch. Returns true if a file was added.
 	addFile := func() (bool, error) {
-		prompt := e.LoadedStrings.AddBatchPrompt
-		if prompt == "" {
-			prompt = "|07Filename to add: "
-		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.AddBatchPrompt)), outputMode)
 
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
@@ -81,11 +77,7 @@ func (e *MenuExecutor) downloadLoop(
 
 		rec, err := findFileInArea(e.FileMgr, currentUser.CurrentFileAreaID, input)
 		if err != nil {
-			msg := e.LoadedStrings.FileNotFoundFormat
-			if msg == "" {
-				msg = "|01File not found: %s\r\n"
-			}
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(msg, input))), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.FileNotFoundFormat, input))), outputMode)
 			time.Sleep(1 * time.Second)
 			return false, nil
 		}
@@ -93,11 +85,7 @@ func (e *MenuExecutor) downloadLoop(
 		// Check for duplicates.
 		for _, id := range currentUser.TaggedFileIDs {
 			if id == rec.ID {
-				msg := e.LoadedStrings.FileAlreadyMarked
-				if msg == "" {
-					msg = "|01File already marked.\r\n"
-				}
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileAlreadyMarked)), outputMode)
 				time.Sleep(1 * time.Second)
 				return false, nil
 			}
@@ -105,11 +93,7 @@ func (e *MenuExecutor) downloadLoop(
 
 		// Check batch limit.
 		if len(currentUser.TaggedFileIDs) >= 50 {
-			msg := e.LoadedStrings.FiftyFilesMaximum
-			if msg == "" {
-				msg = "|0150 files maximum.\r\n"
-			}
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FiftyFilesMaximum)), outputMode)
 			time.Sleep(1 * time.Second)
 			return false, nil
 		}
@@ -141,11 +125,7 @@ func (e *MenuExecutor) downloadLoop(
 
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|14Batch: %d file(s) tagged.|07\r\n", len(currentUser.TaggedFileIDs)))), outputMode)
 
-		prompt := e.LoadedStrings.DownloadStr
-		if prompt == "" {
-			prompt = "|07e(|15X|07)it, (|15A|07)dd, (|15CR|07) Continue: "
-		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DownloadStr)), outputMode)
 
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
@@ -227,11 +207,7 @@ func runDownloadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	}
 
 	if currentUser.CurrentFileAreaID <= 0 {
-		msg := e.LoadedStrings.FileNoAreaSelected
-		if msg == "" {
-			msg = "|01No file area selected.\r\n"
-		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileNoAreaSelected)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -244,11 +220,7 @@ func runDownloadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	}
 
 	if area.ACSDownload != "" && !checkACS(area.ACSDownload, currentUser, s, terminal, sessionStartTime) {
-		msg := e.LoadedStrings.YouCantDownloadHere
-		if msg == "" {
-			msg = "|01You can't download here.\r\n"
-		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.YouCantDownloadHere)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
