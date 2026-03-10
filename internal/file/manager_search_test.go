@@ -84,6 +84,61 @@ func TestGetFilesNewerThan(t *testing.T) {
 	}
 }
 
+func TestSearchFiles_ResultsHaveCorrectAreaID(t *testing.T) {
+	areas := []FileArea{
+		{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"},
+		{ID: 2, Tag: "GAMES", Name: "Games", Path: "games"},
+	}
+	fm := setupTestFileManager(t, areas)
+
+	fm.AddFileRecord(FileRecord{ID: uuid.New(), AreaID: 1, Filename: "TOOL.ZIP", Description: "A tool"})
+	fm.AddFileRecord(FileRecord{ID: uuid.New(), AreaID: 2, Filename: "TOOL2.ZIP", Description: "Another tool"})
+
+	results := fm.SearchFiles("tool")
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	areaIDs := map[int]bool{}
+	for _, r := range results {
+		areaIDs[r.AreaID] = true
+	}
+	if !areaIDs[1] || !areaIDs[2] {
+		t.Errorf("expected results from areas 1 and 2, got %v", areaIDs)
+	}
+}
+
+func TestSearchFiles_EmptyQuery(t *testing.T) {
+	areas := []FileArea{{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"}}
+	fm := setupTestFileManager(t, areas)
+	fm.AddFileRecord(FileRecord{ID: uuid.New(), AreaID: 1, Filename: "FILE.ZIP"})
+
+	results := fm.SearchFiles("")
+	if len(results) != 1 {
+		t.Errorf("empty query should match all files, got %d", len(results))
+	}
+}
+
+func TestGetUnreviewedFiles_MarkReviewed(t *testing.T) {
+	areas := []FileArea{{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"}}
+	fm := setupTestFileManager(t, areas)
+
+	id := uuid.New()
+	fm.AddFileRecord(FileRecord{ID: id, AreaID: 1, Filename: "NEW.ZIP"})
+
+	results := fm.GetUnreviewedFiles(1)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 unreviewed, got %d", len(results))
+	}
+
+	fm.UpdateFileRecord(id, func(r *FileRecord) { r.Reviewed = true })
+
+	results = fm.GetUnreviewedFiles(1)
+	if len(results) != 0 {
+		t.Errorf("expected 0 unreviewed after marking, got %d", len(results))
+	}
+}
+
 func TestGetUnreviewedFiles(t *testing.T) {
 	areas := []FileArea{
 		{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"},
