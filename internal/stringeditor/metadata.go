@@ -209,6 +209,17 @@ func StringEntries() []StringEntry {
 		{Label: "Not enough File Points", Key: "notEnoughFP", Description: "Displayed when user tries to leech without enough file points"},
 		{Label: "File Area Password", Key: "fileAreaPassword", Description: "When prompting for file area password."},
 
+		// Download/batch workflow
+		{Label: "Batch Queue Empty", Key: "batchQueueEmpty", Description: "Displayed when user tries to clear an already empty batch queue"},
+		{Label: "Batch Cleared Format", Key: "batchClearedFormat", Description: "Displayed after clearing batch queue (%d=count)"},
+		{Label: "Added to Batch Format", Key: "addedToBatchFormat", Description: "Displayed when file is added to batch (%s=filename)"},
+		{Label: "No Files Tagged", Key: "noFilesTagged", Description: "Displayed when batch queue is empty at download time"},
+		{Label: "Batch Count Format", Key: "batchCountFormat", Description: "Shows number of tagged files (%d=count)"},
+		{Label: "Files Resolve Error", Key: "filesResolveError", Description: "Displayed when tagged files cannot be resolved to paths"},
+		{Label: "Download Finished", Key: "downloadFinishedFormat", Description: "Displayed after transfer completes (%d=success, %d=failed)"},
+		{Label: "File Area Not Found", Key: "fileAreaNotFound", Description: "Displayed when selected file area no longer exists"},
+		{Label: "Save User Error", Key: "saveUserError", Description: "Displayed when user data fails to save"},
+
 		// === V3-Specific Strings ===
 
 		// General / Misc

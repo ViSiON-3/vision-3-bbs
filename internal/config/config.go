@@ -199,6 +199,18 @@ type StringsConfig struct {
 	FileAlreadyMarked      string `json:"fileAlreadyMarked"`
 	NotEnoughFP            string `json:"notEnoughFP"`
 	FileAreaPassword       string `json:"fileAreaPassword"`
+
+	// Download/batch workflow strings (V3-specific)
+	BatchQueueEmpty        string `json:"batchQueueEmpty"`
+	BatchClearedFormat     string `json:"batchClearedFormat"`
+	AddedToBatchFormat     string `json:"addedToBatchFormat"`
+	NoFilesTagged          string `json:"noFilesTagged"`
+	BatchCountFormat       string `json:"batchCountFormat"`
+	FilesResolveError      string `json:"filesResolveError"`
+	DownloadFinishedFormat string `json:"downloadFinishedFormat"`
+	FileAreaNotFound       string `json:"fileAreaNotFound"`
+	SaveUserError          string `json:"saveUserError"`
+
 	QuotePrefix            string `json:"QuotePrefix"`
 
 	// Chat strings (V3-specific)

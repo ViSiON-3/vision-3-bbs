@@ -24,8 +24,7 @@ func runClearBatch(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	}
 
 	if len(currentUser.TaggedFileIDs) == 0 {
-		msg := "|07Batch queue is already empty.\r\n"
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.BatchQueueEmpty)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -35,13 +34,12 @@ func runClearBatch(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
 		log.Printf("ERROR: Node %d: Failed to update user after clearing batch queue: %v", nodeNumber, err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|01Error saving user data.\r\n")), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SaveUserError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
 
-	msg := fmt.Sprintf("|15Cleared %d file(s) from batch queue.\r\n", count)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.BatchClearedFormat, count))), outputMode)
 	log.Printf("INFO: Node %d: User %s cleared %d file(s) from batch queue", nodeNumber, currentUser.Handle, count)
 	time.Sleep(1 * time.Second)
 
@@ -99,7 +97,7 @@ func (e *MenuExecutor) downloadLoop(
 		}
 
 		currentUser.TaggedFileIDs = append(currentUser.TaggedFileIDs, rec.ID)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|15%s|07 added to batch.\r\n", rec.Filename))), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.AddedToBatchFormat, rec.Filename))), outputMode)
 		log.Printf("INFO: Node %d: User %s tagged file %s (%s)", nodeNumber, currentUser.Handle, rec.ID, rec.Filename)
 		return true, nil
 	}
@@ -118,12 +116,12 @@ func (e *MenuExecutor) downloadLoop(
 	// Main loop.
 	for {
 		if len(currentUser.TaggedFileIDs) == 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07No files tagged for download.\r\n")), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NoFilesTagged)), outputMode)
 			time.Sleep(1 * time.Second)
 			return currentUser, nil
 		}
 
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|14Batch: %d file(s) tagged.|07\r\n", len(currentUser.TaggedFileIDs)))), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.BatchCountFormat, len(currentUser.TaggedFileIDs)))), outputMode)
 
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DownloadStr)), outputMode)
 
@@ -161,7 +159,7 @@ func (e *MenuExecutor) downloadLoop(
 		}
 
 		if len(paths) == 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|01No valid files could be resolved for download.\r\n")), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FilesResolveError)), outputMode)
 			currentUser.TaggedFileIDs = nil
 			time.Sleep(2 * time.Second)
 			return currentUser, nil
@@ -192,7 +190,7 @@ func (e *MenuExecutor) downloadLoop(
 			log.Printf("ERROR: Node %d: Failed to update user after download: %v", nodeNumber, err)
 		}
 
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|15Download finished. Success: %d, Failed: %d.|07\r\n", successCount, failCount))), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.DownloadFinishedFormat, successCount, failCount))), outputMode)
 		log.Printf("INFO: Node %d: User %s download complete — success=%d fail=%d", nodeNumber, currentUser.Handle, successCount, failCount)
 		time.Sleep(2 * time.Second)
 
@@ -214,7 +212,7 @@ func runDownloadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 
 	area, ok := e.FileMgr.GetAreaByID(currentUser.CurrentFileAreaID)
 	if !ok {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|01File area not found.\r\n")), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileAreaNotFound)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -248,7 +246,7 @@ func runBatchDownload(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 	}
 
 	if len(currentUser.TaggedFileIDs) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07No files tagged for download.\r\n")), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NoFilesTagged)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
