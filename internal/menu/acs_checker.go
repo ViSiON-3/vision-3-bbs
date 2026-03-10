@@ -296,15 +296,23 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 			result = u.AccessLevel >= level
 		}
 	case "L": // Local connection
-		network := s.RemoteAddr().Network()
-		addr := s.RemoteAddr().String()
-		isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
-		result = (network == "pipe" || network == "unix" || isLoopback)
-		log.Printf("DEBUG: ACS 'L' check: Network='%s', Addr='%s', IsLoopback=%t -> %t", network, addr, isLoopback, result)
+		if s == nil {
+			result = false
+		} else {
+			network := s.RemoteAddr().Network()
+			addr := s.RemoteAddr().String()
+			isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
+			result = (network == "pipe" || network == "unix" || isLoopback)
+			log.Printf("DEBUG: ACS 'L' check: Network='%s', Addr='%s', IsLoopback=%t -> %t", network, addr, isLoopback, result)
+		}
 	case "A": // ANSI graphics supported
-		_, _, isPty := s.Pty()
-		result = isPty
-		log.Printf("DEBUG: ACS 'A' check: isPty=%t -> %t", isPty, result)
+		if s == nil {
+			result = false
+		} else {
+			_, _, isPty := s.Pty()
+			result = isPty
+			log.Printf("DEBUG: ACS 'A' check: isPty=%t -> %t", isPty, result)
+		}
 	case "F": // Flag is set
 		if len(value) != 1 {
 			log.Printf("WARN: Invalid flag value in ACS condition '%s': Flag must be single character", condition)
