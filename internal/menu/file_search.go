@@ -46,8 +46,10 @@ func runSearchFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 		return currentUser, "", nil
 	}
 
-	// Search all files
+	log.Printf("DEBUG: Node %d: SEARCH_FILES query=%q", nodeNumber, query)
+
 	results := e.FileMgr.SearchFiles(query)
+	log.Printf("DEBUG: Node %d: SEARCH_FILES raw results=%d", nodeNumber, len(results))
 
 	// Filter by area ACS and build display lines
 	type searchResult struct {
@@ -91,12 +93,12 @@ func runSearchFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 
 	lineCount := 0
 	for _, r := range filtered {
-		desc := r.description
-		if len(desc) > 40 {
-			desc = desc[:40]
+		fname := r.filename
+		if len(fname) > 12 {
+			fname = fname[:12]
 		}
 
-		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, r.filename, r.size/1024, desc)
+		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, fname, r.size/1024, r.description)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 		lineCount++
 
@@ -112,5 +114,6 @@ func runSearchFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 		fmt.Sprintf(e.LoadedStrings.SearchResultsSummary, len(filtered)),
 	)), outputMode)
 
+	writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight)
 	return currentUser, "", nil
 }

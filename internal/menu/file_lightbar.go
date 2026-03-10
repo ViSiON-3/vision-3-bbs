@@ -154,8 +154,9 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		}
 	}
 
-	// Append sysop-only entries (not exposed via BAR file).
+	// Build sysop-only entries (toggled with * key).
 	isSysop := e.isCoSysOpOrAbove(currentUser)
+	var sysopEntries []cmdEntry
 	if isSysop {
 		defHiSysop := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
 		defLoSysop := colorCodeToAnsi(e.Theme.YesNoRegularColor)
@@ -169,7 +170,7 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			{"Rename", "r"},
 		}
 		for _, d := range sysopCmds {
-			cmdEntries = append(cmdEntries, cmdEntry{
+			sysopEntries = append(sysopEntries, cmdEntry{
 				label:          d.label,
 				hotkey:         d.hotkey,
 				highlightColor: defHiSysop,
@@ -177,6 +178,9 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			})
 		}
 	}
+	userEntries := make([]cmdEntry, len(cmdEntries))
+	copy(userEntries, cmdEntries)
+	showSysopBar := false
 
 	// Highlight colors for file rows.
 	hiColorSeq := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
@@ -828,6 +832,21 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			} else {
 				continue // Ignore non-printable, non-navigation keys
 			}
+		}
+
+		// Toggle sysop command bar with *
+		if key == "*" && isSysop {
+			showSysopBar = !showSysopBar
+			if showSysopBar {
+				cmdEntries = make([]cmdEntry, len(sysopEntries))
+				copy(cmdEntries, sysopEntries)
+			} else {
+				cmdEntries = make([]cmdEntry, len(userEntries))
+				copy(cmdEntries, userEntries)
+			}
+			cmdIndex = 0
+			needFullRedraw = true
+			continue
 		}
 
 		// Command dispatch (direct hotkeys or Enter-selected command).
