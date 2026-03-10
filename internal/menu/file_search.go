@@ -98,7 +98,7 @@ func runSearchFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 			fname = fname[:12]
 		}
 
-		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, fname, r.size/1024, r.description)
+		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, fname, (r.size+1023)/1024, r.description)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 		lineCount++
 

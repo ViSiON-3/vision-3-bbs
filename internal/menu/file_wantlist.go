@@ -117,8 +117,8 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 		}
 		idx, err := strconv.Atoi(strings.TrimSpace(numInput))
 		wantListMu.Lock()
-		entries, _ = loadWantList(e.RootConfigPath)
-		if err != nil || idx < 1 || idx > len(entries) {
+		entries, loadErr := loadWantList(e.RootConfigPath)
+		if err != nil || loadErr != nil || idx < 1 || idx > len(entries) {
 			wantListMu.Unlock()
 			return currentUser, "", nil
 		}

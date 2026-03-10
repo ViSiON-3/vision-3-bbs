@@ -203,7 +203,13 @@ func evaluateRPN(rpnQueue []token, u *user.User, s ssh.Session, terminal *term.T
 	return evalStack[0], nil
 }
 
-// --- Refactored checkACS ---
+// CheckUserACS evaluates an ACS string against a user without requiring a
+// session or terminal. Use this for access checks outside of menu execution
+// (e.g., selecting default areas on login).
+func CheckUserACS(acsString string, u *user.User) bool {
+	return checkACS(acsString, u, nil, nil, time.Now())
+}
+
 // checkACS evaluates a ViSiON/2 Access Control String (ACS) against user credentials.
 // Returns true if the user meets the ACS requirements, false otherwise.
 func checkACS(acsString string, u *user.User, s ssh.Session, terminal *term.Terminal, startTime time.Time) bool {

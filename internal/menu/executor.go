@@ -8800,7 +8800,13 @@ func runListFilesExtended(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 // runListFiles displays a paginated list of files in the current file area.
 func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
-	extendedMode := strings.Contains(strings.ToUpper(args), "EXTENDED")
+	extendedMode := false
+	for _, tok := range strings.Fields(args) {
+		if strings.EqualFold(tok, "EXTENDED") {
+			extendedMode = true
+			break
+		}
+	}
 	log.Printf("DEBUG: Node %d: Running LISTFILES (extended=%v)", nodeNumber, extendedMode)
 
 	// 1. Check User and Current File Area

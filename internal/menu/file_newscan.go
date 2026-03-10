@@ -390,7 +390,7 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		case editor.KeyPageUp, editor.KeyCtrlR:
 			n := currentIdx; for m := 0; m < availableRows && n > 0; m++ { t := findNextSelectable(n, -1); if t == n { break }; n = t }
 			if n != currentIdx { currentIdx = n; adjustViewport(); drawItems(); previousIdx = currentIdx; previousViewportOffset = viewportOffset }
-		case editor.KeyPageDown, editor.KeyCtrlC:
+		case editor.KeyPageDown:
 			n := currentIdx; for m := 0; m < availableRows && n < len(accessibleAreas)-1; m++ { t := findNextSelectable(n, 1); if t == n { break }; n = t }
 			if n != currentIdx { currentIdx = n; adjustViewport(); drawItems(); previousIdx = currentIdx; previousViewportOffset = viewportOffset }
 		case ' ', editor.KeyEnter:
