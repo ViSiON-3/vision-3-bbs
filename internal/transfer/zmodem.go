@@ -275,7 +275,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		} else {
 			log.Printf("WARN: (%s) rawBinaryWriter assertion FAILED (type=%T), falling back to session.Write", cmd.Path, s)
 		}
-		n, cpErr := pacedCopy(dst, stdoutPipe, 4096)
+		n, cpErr := pacedCopy(dst, stdoutPipe, 8192)
 		log.Printf("DEBUG: (%s) direct stdout copy finished. Bytes: %d, Error: %v", cmd.Path, n, cpErr)
 	}()
 
