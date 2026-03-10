@@ -93,6 +93,9 @@ func (e *MenuExecutor) downloadLoop(
 			return false
 		}
 		currentUser.TaggedFileIDs = append(currentUser.TaggedFileIDs, rec.ID)
+		if err := userManager.UpdateUser(currentUser); err != nil {
+			log.Printf("ERROR: Node %d: Failed to persist tagged file: %v", nodeNumber, err)
+		}
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.AddedToBatchFormat, rec.Filename))), outputMode)
 		log.Printf("INFO: Node %d: User %s tagged file %s (%s)", nodeNumber, currentUser.Handle, rec.ID, rec.Filename)
 		return true
@@ -171,6 +174,9 @@ func (e *MenuExecutor) downloadLoop(
 		if len(paths) == 0 {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FilesResolveError)), outputMode)
 			currentUser.TaggedFileIDs = nil
+			if err := userManager.UpdateUser(currentUser); err != nil {
+				log.Printf("ERROR: Node %d: Failed to persist cleared batch: %v", nodeNumber, err)
+			}
 			time.Sleep(2 * time.Second)
 			return currentUser, nil
 		}
