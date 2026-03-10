@@ -116,9 +116,9 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | Message List View (scan)      | ✅ Working     | Title/subject scan view                                                                                             |
 | QWK Offline Mail              | ✅ Working     | QWK packet download/upload for offline reading                                                                      |
 | **Files**                     |               |                                                                                                                     |
-| File Areas                    | ✅ Working     | List areas, list files, select area, archive viewing                                                                |
-| File Transfers                | ✅ Working     | ZMODEM upload/download via `sexyz`                                                                                  |
-| File Management               | ✅ Working     | SysOp file delete, move between areas, edit descriptions                                                            |
+| File Areas                    | ✅ Working     | List/select areas, list files, search, file info, newscan, configurable columns, extended listing                   |
+| File Transfers                | ✅ Working     | ZMODEM upload/download via `sexyz`, batch download with per-area ACS validation                                     |
+| File Management               | ✅ Working     | SysOp file delete, move, edit descriptions, review queue for uploads, lightbar sysop bar (`*` toggle)               |
 | **Doors**                     |               |                                                                                                                     |
 | Door/External Programs        | ✅ Working     | Dropfile generation, PTY passthrough                                                                                |
 | **Networking/FTN**            |               |                                                                                                                     |

@@ -4,6 +4,25 @@ This file tracks active and planned development tasks for the ViSiON/3 BBS proje
 
 ## Recent Completions
 
+*   **[DONE] File Area Completion (2026-03-10):**
+    *   **Goal:** Implement all remaining file menu commands — zero PLACEHOLDERs remain in the file menu.
+    *   **Features implemented:**
+        *   File search (`RUN:SEARCHFILES`) — keyword search across file descriptions with results display.
+        *   File info (`RUN:FILEINFO`) — detailed file record display with metadata.
+        *   File newscan (`RUN:FILENEWSCAN`) — scan tagged areas for files newer than last scan date.
+        *   Newscan configuration (`RUN:FILENEWSCANCONFIG`) — per-user file area tagging for newscans.
+        *   Configurable file list columns (`FileListColumns` user field) — user-selectable column layout.
+        *   Extended file listing — verbose multi-line file display mode.
+        *   Sysop review queue (`RUN:REVIEWFILES`) — list/approve unreviewed uploads via `FileRecord.Reviewed` field.
+        *   Lightbar rename with `*` toggle — sysop bar appears on `*` keypress in lightbar file list.
+        *   Want list — user-maintained list of wanted files.
+    *   **Patterns:**
+        *   String externalization via `LoadedStrings` with defaults in `applyStringDefaults`.
+        *   FileManager methods: `SearchFiles`, `GetFilesNewerThan`, `GetUnreviewedFiles`, `GetFileRecordByID`.
+        *   User fields: `TaggedFileAreaIDs`, `TaggedFileAreaTags`, `FileListColumns`.
+        *   Batch file download with ACS re-validation at transfer time.
+    *   **Status:** COMPLETE.
+
 *   **[DONE] BBS Listings Directory (2026-03-08):**
     *   **Goal:** Implement the BBS Listings feature from V2 (BBSLIST.PAS) — a user-contributed directory of other BBS systems.
     *   **Implementation:**
