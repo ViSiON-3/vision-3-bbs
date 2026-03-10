@@ -570,6 +570,11 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["DOWNLOADFILE"] = runDownloadFile                        // V2-style download: prompt, add to batch, transfer
 	registry["BATCHDOWNLOAD"] = runBatchDownload                      // Download tagged batch files
 	registry["CLEAR_BATCH"] = runClearBatch                          // Clear tagged file batch queue
+	registry["SEARCH_FILES"] = runSearchFiles                        // Search files across all areas
+	registry["SHOWFILEINFO"] = runShowFileInfo                       // Show file metadata
+	registry["FILE_NEWSCAN"] = runFileNewscan                        // Scan file areas for new uploads
+	registry["EDITFILERECORD"] = runEditFileRecord                   // Sysop file review queue
+	registry["WANTLIST"] = runWantList                               // File want list
 	registry["QWKDOWNLOAD"] = runQWKDownload                         // QWK mail packet download
 	registry["QWKUPLOAD"] = runQWKUpload                             // QWK REP packet upload
 	registry["WHOISONLINE"] = runWhoIsOnline                         // Who's online display

@@ -463,5 +463,38 @@ func StringEntries() []StringEntry {
 		{Label: "Term: Size Detected", Key: "termSizeNewDetectedPrompt", Description: "Prompt when new terminal size is detected"},
 		{Label: "Term: Update Defaults", Key: "termSizeUpdateDefaultsPrompt", Description: "Prompt to update default terminal size"},
 		{Label: "Invisible Logon", Key: "invisibleLogonPrompt", Description: "Prompt for invisible (hidden) logon"},
+
+		// File Search (V3)
+		{Label: "Search: Prompt", Key: "searchFilesPrompt", Description: "Prompt for file search text"},
+		{Label: "Search: Min Chars", Key: "searchFilesMinChars", Description: "Shown when search text is too short (min 3 chars)"},
+		{Label: "Search: No Results", Key: "searchNoResults", Description: "Shown when no files match the search"},
+		{Label: "Search: Results Header", Key: "searchResultsHeader", Description: "Header for search results (%s=query)"},
+		{Label: "Search: Result Line", Key: "searchResultFormat", Description: "Format for each search result line (%s=area,file,size,desc)"},
+
+		// File Info (V3)
+		{Label: "File: Info Prompt", Key: "fileInfoPrompt", Description: "Prompt for filename when showing file info"},
+		{Label: "File: Info Header", Key: "fileInfoHeader", Description: "Header text before file info display"},
+
+		// File Newscan (V3)
+		{Label: "File Newscan Header", Key: "fileNewscanHeader", Description: "Header displayed at start of file newscan"},
+		{Label: "File Newscan Area Hdr", Key: "fileNewscanAreaHdr", Description: "Per-area header during file newscan (%s=area name, %d=count)"},
+		{Label: "File Newscan No New", Key: "fileNewscanNoNew", Description: "Shown when no new files found during newscan"},
+		{Label: "File Newscan Complete", Key: "fileNewscanComplete", Description: "Shown at end of file newscan (%d=total new files)"},
+
+		// Sysop File Review (V3)
+		{Label: "SysRev: Header", Key: "sysopReviewHeader", Description: "Header displayed when reviewing a file record"},
+		{Label: "SysRev: Action Prompt", Key: "sysopReviewPrompt", Description: "Action menu prompt for file review"},
+		{Label: "SysRev: Marked", Key: "sysopReviewMarked", Description: "Shown after marking a file as reviewed"},
+		{Label: "SysRev: No Files", Key: "sysopReviewNoFiles", Description: "Shown when no unreviewed files exist"},
+		{Label: "SysRev: Scan All?", Key: "sysopReviewScanAll", Description: "Prompt asking whether to scan all areas or current only"},
+		{Label: "SysRev: Renamed", Key: "sysopReviewRenamed", Description: "Shown after successfully renaming a file"},
+
+		// Want List (V3)
+		{Label: "WantList: Filename", Key: "wantListPrompt", Description: "Prompt for filename to request"},
+		{Label: "WantList: Reason", Key: "wantListReasonPrompt", Description: "Prompt for reason (optional)"},
+		{Label: "WantList: Submitted", Key: "wantListSubmitted", Description: "Shown after request is submitted"},
+		{Label: "WantList: Empty", Key: "wantListEmpty", Description: "Shown when want list has no requests"},
+		{Label: "WantList: Header", Key: "wantListHeader", Description: "Header displayed above want list entries"},
+		{Label: "WantList: Cleared", Key: "wantListCleared", Description: "Shown after want list is cleared"},
 	}
 }

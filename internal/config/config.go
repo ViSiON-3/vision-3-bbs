@@ -370,6 +370,39 @@ CfgViewHotKeys         string `json:"cfgViewHotKeys"`
 	FilePausePrompt    string `json:"filePausePrompt"`
 	FileOpenError      string `json:"fileOpenError"`
 
+	// File search strings
+	SearchFilesPrompt   string `json:"searchFilesPrompt"`
+	SearchFilesMinChars string `json:"searchFilesMinChars"`
+	SearchNoResults     string `json:"searchNoResults"`
+	SearchResultsHeader string `json:"searchResultsHeader"`
+	SearchResultFormat  string `json:"searchResultFormat"`
+
+	// File info strings
+	FileInfoPrompt string `json:"fileInfoPrompt"`
+	FileInfoHeader string `json:"fileInfoHeader"`
+
+	// File newscan strings
+	FileNewscanHeader   string `json:"fileNewscanHeader"`
+	FileNewscanAreaHdr  string `json:"fileNewscanAreaHdr"`
+	FileNewscanNoNew    string `json:"fileNewscanNoNew"`
+	FileNewscanComplete string `json:"fileNewscanComplete"`
+
+	// Sysop file review strings
+	SysopReviewHeader  string `json:"sysopReviewHeader"`
+	SysopReviewPrompt  string `json:"sysopReviewPrompt"`
+	SysopReviewMarked  string `json:"sysopReviewMarked"`
+	SysopReviewNoFiles string `json:"sysopReviewNoFiles"`
+	SysopReviewScanAll string `json:"sysopReviewScanAll"`
+	SysopReviewRenamed string `json:"sysopReviewRenamed"`
+
+	// Want list strings
+	WantListPrompt       string `json:"wantListPrompt"`
+	WantListReasonPrompt string `json:"wantListReasonPrompt"`
+	WantListSubmitted    string `json:"wantListSubmitted"`
+	WantListEmpty        string `json:"wantListEmpty"`
+	WantListHeader       string `json:"wantListHeader"`
+	WantListCleared      string `json:"wantListCleared"`
+
 	// Door handler strings (V3-specific)
 	DoorDropfileError     string `json:"doorDropfileError"`
 	DoorErrorFormat       string `json:"doorErrorFormat"`
