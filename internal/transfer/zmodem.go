@@ -176,7 +176,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	}
 
 	inputDone := make(chan struct{})
-	outputDone := make(chan struct{})
+	outputDone := make(chan error, 1)
 
 	// stdinActivity receives a signal each time bytes arrive from the session.
 	// Used by the idle monitor goroutine below; nil when idle timeout is disabled.
@@ -321,7 +321,6 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// throughput. If the stdin goroutine detects a ZRPOS (retransmission
 	// request), it signals backoff and the chunk size is halved.
 	go func() {
-		defer close(outputDone)
 		dst := io.Writer(s)
 		if rw, ok := s.(rawBinaryWriter); ok {
 			log.Printf("DEBUG: (%s) using RawWrite for binary-safe output (type=%T)", cmd.Path, s)
@@ -331,6 +330,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		}
 		n, cpErr := adaptiveCopy(dst, stdoutPipe, &zrposBackoff)
 		log.Printf("DEBUG: (%s) direct stdout copy finished. Bytes: %d, Error: %v", cmd.Path, n, cpErr)
+		outputDone <- cpErr
 	}()
 
 	// Race: ctx cancellation vs normal completion (outputDone then cmd.Wait).
@@ -343,20 +343,24 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// the connection: outputDone fires immediately but the process is still
 	// alive trying to flush its final ZModem frames through a now-dead pipe.
 	const postOutputGrace = 5 * time.Second
-	cmdDone := make(chan error, 1)
+	type cmdResult struct {
+		waitErr error
+		copyErr error
+	}
+	cmdDone := make(chan cmdResult, 1)
 	go func() {
-		<-outputDone
+		copyErr := <-outputDone
 		waitDone := make(chan error, 1)
 		go func() { waitDone <- cmd.Wait() }()
 		select {
 		case err := <-waitDone:
-			cmdDone <- err
+			cmdDone <- cmdResult{waitErr: err, copyErr: copyErr}
 		case <-time.After(postOutputGrace):
 			log.Printf("DEBUG: (%s) process still running %v after output closed; killing", cmd.Path, postOutputGrace)
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
-			cmdDone <- <-waitDone
+			cmdDone <- cmdResult{waitErr: <-waitDone, copyErr: copyErr}
 		}
 	}()
 
@@ -368,7 +372,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 			_ = cmd.Process.Kill()
 		}
 		_ = stdinPipe.Close()
-		// Close stdoutPipe to unblock the io.Copy goroutine so outputDone fires.
+		// Close stdoutPipe to unblock the output goroutine so outputDone fires.
 		_ = stdoutPipe.Close()
 		select {
 		case <-cmdDone:
@@ -376,8 +380,11 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 			log.Printf("WARN: (%s) timed out waiting for command goroutine after cancel", cmd.Path)
 		}
 		cmdErr = ctx.Err()
-	case err := <-cmdDone:
-		cmdErr = err
+	case res := <-cmdDone:
+		cmdErr = res.waitErr
+		if cmdErr == nil && res.copyErr != nil {
+			cmdErr = fmt.Errorf("stdout copy failed: %w", res.copyErr)
+		}
 	}
 	log.Printf("DEBUG: (%s) command finished (direct). Error: %v", cmd.Path, cmdErr)
 
