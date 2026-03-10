@@ -489,6 +489,16 @@ func StringEntries() []StringEntry {
 		{Label: "SysRev: Scan All?", Key: "sysopReviewScanAll", Description: "Prompt asking whether to scan all areas or current only"},
 		{Label: "SysRev: Renamed", Key: "sysopReviewRenamed", Description: "Shown after successfully renaming a file"},
 
+		// File Newscan Config (V3)
+		{Label: "FileNS Config Header", Key: "fileNewscanConfigHeader", Description: "Header for file newscan config screen"},
+		{Label: "FileNS Config Prompt", Key: "fileNewscanConfigPrompt", Description: "Prompt in file newscan config"},
+		{Label: "FileNS Config Saved", Key: "fileNewscanConfigSaved", Description: "Shown after saving file newscan config (%d=count)"},
+
+		// Column Config (V3)
+		{Label: "ColCfg: Header", Key: "cfgFileColumnsHeader", Description: "Header for column config screen"},
+		{Label: "ColCfg: Toggle", Key: "cfgFileColumnsToggle", Description: "Toggle prompt for column config"},
+		{Label: "ColCfg: Saved", Key: "cfgFileColumnsSaved", Description: "Shown after saving column config"},
+
 		// Want List (V3)
 		{Label: "WantList: Filename", Key: "wantListPrompt", Description: "Prompt for filename to request"},
 		{Label: "WantList: Reason", Key: "wantListReasonPrompt", Description: "Prompt for reason (optional)"},

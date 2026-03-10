@@ -575,6 +575,9 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["FILE_NEWSCAN"] = runFileNewscan                        // Scan file areas for new uploads
 	registry["EDITFILERECORD"] = runEditFileRecord                   // Sysop file review queue
 	registry["WANTLIST"] = runWantList                               // File want list
+	registry["FILENEWSCANCONFIG"] = runFileNewscanConfig              // File newscan area config
+	registry["CFG_FILECOLUMNS"] = runCfgFileColumns                  // Configure file listing columns
+	registry["LISTFILES_EXTENDED"] = runListFilesExtended            // Extended file listing (all columns)
 	registry["QWKDOWNLOAD"] = runQWKDownload                         // QWK mail packet download
 	registry["QWKUPLOAD"] = runQWKUpload                             // QWK REP packet upload
 	registry["WHOISONLINE"] = runWhoIsOnline                         // Who's online display
@@ -8759,6 +8762,40 @@ func (e *MenuExecutor) runUploadFiles(
 	time.Sleep(2 * time.Second)
 
 	return nil
+}
+
+// fileColumnEnabled returns whether a column should be shown in the classic file listing.
+// When extended is true, all columns are shown. When all user toggles are false (zero value),
+// all columns are shown (backwards compatible default).
+func fileColumnEnabled(u *user.User, col string, extended bool) bool {
+	if extended {
+		return true
+	}
+	c := u.FileListColumns
+	allDefault := !c.Name && !c.Size && !c.Date && !c.Downloads && !c.Uploader && !c.Description
+	if allDefault {
+		return true
+	}
+	switch col {
+	case "name":
+		return c.Name
+	case "size":
+		return c.Size
+	case "date":
+		return c.Date
+	case "downloads":
+		return c.Downloads
+	case "uploader":
+		return c.Uploader
+	case "description":
+		return c.Description
+	}
+	return true
+}
+
+// runListFilesExtended displays a file listing with all columns visible regardless of user config.
+func runListFilesExtended(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+	return runListFiles(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, "EXTENDED", outputMode, termWidth, termHeight)
 }
 
 // runListFiles displays a paginated list of files in the current file area.

@@ -395,6 +395,16 @@ CfgViewHotKeys         string `json:"cfgViewHotKeys"`
 	SysopReviewScanAll string `json:"sysopReviewScanAll"`
 	SysopReviewRenamed string `json:"sysopReviewRenamed"`
 
+	// File newscan config strings
+	FileNewscanConfigHeader string `json:"fileNewscanConfigHeader"`
+	FileNewscanConfigPrompt string `json:"fileNewscanConfigPrompt"`
+	FileNewscanConfigSaved  string `json:"fileNewscanConfigSaved"`
+
+	// Column config strings
+	CfgFileColumnsHeader string `json:"cfgFileColumnsHeader"`
+	CfgFileColumnsToggle string `json:"cfgFileColumnsToggle"`
+	CfgFileColumnsSaved  string `json:"cfgFileColumnsSaved"`
+
 	// Want list strings
 	WantListPrompt       string `json:"wantListPrompt"`
 	WantListReasonPrompt string `json:"wantListReasonPrompt"`

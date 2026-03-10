@@ -623,6 +623,84 @@ func runCfgAutoSig(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	}
 }
 
+func runCfgFileColumns(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+	if currentUser == nil {
+		return nil, "", nil
+	}
+
+	boolStr := func(v bool) string {
+		if v {
+			return e.LoadedStrings.CfgToggleOn
+		}
+		return e.LoadedStrings.CfgToggleOff
+	}
+
+	for {
+		c := currentUser.FileListColumns
+		allDefault := !c.Name && !c.Size && !c.Date && !c.Downloads && !c.Uploader && !c.Description
+
+		displayState := func(val bool) string {
+			if allDefault {
+				return boolStr(true)
+			}
+			return boolStr(val)
+		}
+
+		var buf strings.Builder
+		buf.WriteString(e.LoadedStrings.CfgFileColumnsHeader)
+		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "N", "Name", displayState(c.Name)))
+		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "S", "Size", displayState(c.Size)))
+		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "D", "Date", displayState(c.Date)))
+		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "L", "Downloads", displayState(c.Downloads)))
+		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "U", "Uploader", displayState(c.Uploader)))
+		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "E", "Description", displayState(c.Description)))
+		buf.WriteString(e.LoadedStrings.CfgFileColumnsHeader) // reuse as prompt separator
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(buf.String())), outputMode)
+
+		input, err := readLineFromSessionIH(s, terminal)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, "LOGOFF", io.EOF
+			}
+			return currentUser, "", nil
+		}
+
+		input = strings.TrimSpace(strings.ToUpper(input))
+		if input == "" || input == "Q" {
+			if err := userManager.UpdateUser(currentUser); err != nil {
+				log.Printf("ERROR: Node %d: Failed to save file column preferences: %v", nodeNumber, err)
+			}
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.CfgFileColumnsSaved)), outputMode)
+			time.Sleep(500 * time.Millisecond)
+			return currentUser, "", nil
+		}
+
+		if allDefault {
+			currentUser.FileListColumns.Name = true
+			currentUser.FileListColumns.Size = true
+			currentUser.FileListColumns.Date = true
+			currentUser.FileListColumns.Downloads = true
+			currentUser.FileListColumns.Uploader = true
+			currentUser.FileListColumns.Description = true
+		}
+
+		switch input {
+		case "N":
+			currentUser.FileListColumns.Name = !currentUser.FileListColumns.Name
+		case "S":
+			currentUser.FileListColumns.Size = !currentUser.FileListColumns.Size
+		case "D":
+			currentUser.FileListColumns.Date = !currentUser.FileListColumns.Date
+		case "L":
+			currentUser.FileListColumns.Downloads = !currentUser.FileListColumns.Downloads
+		case "U":
+			currentUser.FileListColumns.Uploader = !currentUser.FileListColumns.Uploader
+		case "E":
+			currentUser.FileListColumns.Description = !currentUser.FileListColumns.Description
+		}
+	}
+}
+
 func runCfgCustomPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	if currentUser == nil {
 		return nil, "", nil
