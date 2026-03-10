@@ -47,50 +47,82 @@ type writeFunc func([]byte) (int, error)
 
 func (f writeFunc) Write(p []byte) (int, error) { return f(p) }
 
-// pacedCopy copies src → dst using small fixed-size reads and writes.
-// Unlike io.Copy (which uses a 32 KB buffer), pacedCopy caps each write
-// at writeChunkSize bytes.  This produces more, smaller SSH channel data
-// packets, giving the remote terminal (e.g. SyncTerm) more time to process
-// each one.  A concurrency guard detects unexpected concurrent writes.
-//
-// writeChunkSize should be 4096–8192 for maximum compatibility with
-// BBS terminal clients that may struggle with back-to-back 32 KB packets.
-func pacedCopy(dst io.Writer, src io.Reader, writeChunkSize int) (int64, error) {
-	if writeChunkSize <= 0 {
-		writeChunkSize = 4096
-	}
+// Adaptive chunk sizing constants for binary transfers.
+const (
+	adaptiveMinChunk    = 4096     // 4 KB — starting chunk size
+	adaptiveMaxChunk    = 8192    // 8 KB — ceiling (SyncTerm chokes above this)
+	adaptiveRampWrites  = 50      // double chunk size every N writes at current level
+	adaptiveBackoffDiv  = 2       // halve chunk size on ZRPOS detection
+)
 
-	var concurrent atomic.Int32
+// adaptiveCopy copies src → dst with dynamic chunk sizing that ramps up for
+// throughput and backs off when the receiver signals trouble (via ZRPOS).
+//
+// The backoff signal is read from the backoff atomic: when the stdin goroutine
+// detects a ZRPOS frame (receiver requesting retransmission), it increments
+// backoff. adaptiveCopy checks this counter on each write and halves the chunk
+// size when it changes, then resumes ramping after stabilizing.
+//
+// Ramp schedule: starts at 4 KB, doubles every ~50 writes, caps at 32 KB.
+// Backoff: halves chunk size (floor 4 KB), resets ramp counter.
+func adaptiveCopy(dst io.Writer, src io.Reader, backoff *atomic.Int32) (int64, error) {
 	hasher := sha256.New()
-	buf := make([]byte, writeChunkSize)
+	chunkSize := adaptiveMinChunk
+	buf := make([]byte, adaptiveMaxChunk) // allocate max once, slice as needed
 	var total int64
+	var writesAtLevel int
+	var lastBackoff int32
 
 	for {
-		nr, rerr := src.Read(buf)
-		if nr > 0 {
-			// Concurrent write guard — should never fire.
-			if concurrent.Add(1) > 1 {
-				log.Printf("CRITICAL: pacedCopy: concurrent write detected!")
+		// Check for backoff signal from stdin goroutine (ZRPOS detected).
+		if backoff != nil {
+			cur := backoff.Load()
+			if cur != lastBackoff {
+				lastBackoff = cur
+				oldChunk := chunkSize
+				chunkSize = chunkSize / adaptiveBackoffDiv
+				if chunkSize < adaptiveMinChunk {
+					chunkSize = adaptiveMinChunk
+				}
+				writesAtLevel = 0
+				log.Printf("DEBUG: adaptiveCopy: ZRPOS backoff %d→%d bytes (signal #%d) at %d total bytes",
+					oldChunk, chunkSize, cur, total)
 			}
+		}
+
+		// Ramp up chunk size after sustained successful writes.
+		writesAtLevel++
+		if writesAtLevel >= adaptiveRampWrites && chunkSize < adaptiveMaxChunk {
+			oldChunk := chunkSize
+			chunkSize = chunkSize * 2
+			if chunkSize > adaptiveMaxChunk {
+				chunkSize = adaptiveMaxChunk
+			}
+			writesAtLevel = 0
+			log.Printf("DEBUG: adaptiveCopy: ramp %d→%d bytes at %d total bytes", oldChunk, chunkSize, total)
+		}
+
+		nr, rerr := src.Read(buf[:chunkSize])
+		if nr > 0 {
 			nw, werr := dst.Write(buf[:nr])
-			concurrent.Add(-1)
 			total += int64(nw)
-			hasher.Write(buf[:nr]) // hash is always based on what we read
+			hasher.Write(buf[:nr])
 			if werr != nil {
-				log.Printf("DEBUG: pacedCopy: write error after %d bytes: %v", total, werr)
+				log.Printf("DEBUG: adaptiveCopy: write error after %d bytes: %v", total, werr)
 				return total, werr
 			}
 			if nw != nr {
-				log.Printf("DEBUG: pacedCopy: short write %d/%d after %d total bytes", nw, nr, total)
+				log.Printf("DEBUG: adaptiveCopy: short write %d/%d after %d total bytes", nw, nr, total)
 				return total, io.ErrShortWrite
 			}
 		}
 		if rerr != nil {
 			if rerr == io.EOF {
-				log.Printf("DEBUG: pacedCopy: finished. Bytes=%d SHA256=%x", total, hasher.Sum(nil))
+				log.Printf("DEBUG: adaptiveCopy: finished. Bytes=%d ChunkSize=%d SHA256=%x",
+					total, chunkSize, hasher.Sum(nil))
 				return total, nil
 			}
-			log.Printf("DEBUG: pacedCopy: read error after %d bytes: %v", total, rerr)
+			log.Printf("DEBUG: adaptiveCopy: read error after %d bytes: %v", total, rerr)
 			return total, rerr
 		}
 	}
@@ -153,14 +185,18 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		stdinActivity = make(chan struct{}, 1)
 	}
 
+	// zrposBackoff is incremented by the stdin goroutine when it detects a
+	// ZRPOS frame from the client (receiver requesting retransmission). The
+	// output goroutine's adaptiveCopy reads this to halve its chunk size.
+	var zrposBackoff atomic.Int32
+
 	// session → command stdin
 	// Uses a manual read loop (rather than io.Copy) so we can:
 	//  1. Signal non-CAN stdin activity to the idle monitor.
 	//  2. Detect ZModem abort (5+ consecutive CAN / 0x18 bytes) and kill the
-	//     process immediately rather than waiting for the idle timer. This
-	//     handles the case where the client (e.g. SyncTerm) sends a CAN abort
-	//     when the user cancels the upload dialog — sexyz may not handle the
-	//     CAN reliably, so we enforce the kill ourselves.
+	//     process immediately rather than waiting for the idle timer.
+	//  3. Detect ZRPOS frames (receiver requesting retransmission due to data
+	//     corruption) and signal the output goroutine to reduce chunk size.
 	go func() {
 		defer close(inputDone)
 		buf := make([]byte, 32*1024)
@@ -171,16 +207,13 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		for {
 			nr, rerr := s.Read(buf)
 			if nr > 0 {
-				// Scan for consecutive CAN bytes and decide whether this
-				// chunk counts as real file activity.
+				// Scan for consecutive CAN bytes, ZRPOS frames, and decide
+				// whether this chunk counts as real file activity.
 				hasNonCAN := false
-				for _, b := range buf[:nr] {
+				for i, b := range buf[:nr] {
 					if b == 0x18 { // CAN
 						canRun++
 						if canRun >= 5 && !killed {
-							// ZModem abort sequence — kill the process so the
-							// BBS returns to the menu immediately rather than
-							// waiting for the idle timer to fire.
 							killed = true
 							log.Printf("DEBUG: (%s) ZModem CAN abort detected in stdin; killing process", cmd.Path)
 							if cmd.Process != nil {
@@ -192,13 +225,35 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 						canRun = 0
 						hasNonCAN = true
 					}
+
+					// Detect ZRPOS headers in the byte stream.
+					// Hex header: 2A 2A 18 42 30 39 (ZDLE ZHEX "B" "09")
+					//   → "**\x18B09" where 09 = ZRPOS frame type
+					// Binary header: 2A 18 41 09 (ZPAD ZDLE ZBIN ZRPOS)
+					if b == 0x09 && i >= 3 {
+						chunk := buf[i-3 : i+1]
+						if chunk[0] == 0x2a && chunk[1] == 0x18 && chunk[2] == 0x41 {
+							// Binary ZRPOS header: * ZDLE A ZRPOS
+							zrposBackoff.Add(1)
+							log.Printf("DEBUG: (%s) ZRPOS binary header detected in stdin at offset %d (backoff #%d)",
+								cmd.Path, total+int64(i), zrposBackoff.Load())
+						}
+					}
+					if b == '9' && i >= 5 {
+						chunk := buf[i-5 : i+1]
+						if chunk[0] == 0x2a && chunk[1] == 0x2a && chunk[2] == 0x18 &&
+							chunk[3] == 0x42 && chunk[4] == '0' {
+							// Hex ZRPOS header: ** ZDLE B 0 9
+							zrposBackoff.Add(1)
+							log.Printf("DEBUG: (%s) ZRPOS hex header detected in stdin at offset %d (backoff #%d)",
+								cmd.Path, total+int64(i), zrposBackoff.Load())
+						}
+					}
 				}
 				if killed {
 					break
 				}
 				// Only reset the idle timer for real file data.
-				// CAN bytes indicate an abort — treating them as "activity"
-				// would restart the timer and delay the kill by another 30 s.
 				if stdinActivity != nil && hasNonCAN {
 					select {
 					case stdinActivity <- struct{}{}:
@@ -262,10 +317,9 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// Use RawWrite when available to bypass gliderlabs' \n→\r\n expansion,
 	// which corrupts ZMODEM and other binary transfer protocol streams.
 	//
-	// pacedCopy sends data in small chunks (4 KB) instead of io.Copy's 32 KB.
-	// This produces more, smaller SSH packets, giving the remote terminal more
-	// processing time per packet and avoiding "Invalid Subpacket" CRC errors
-	// seen with high-throughput transfers to SyncTerm.
+	// adaptiveCopy starts with small chunks (4 KB) and ramps up to 32 KB for
+	// throughput. If the stdin goroutine detects a ZRPOS (retransmission
+	// request), it signals backoff and the chunk size is halved.
 	go func() {
 		defer close(outputDone)
 		dst := io.Writer(s)
@@ -275,7 +329,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		} else {
 			log.Printf("WARN: (%s) rawBinaryWriter assertion FAILED (type=%T), falling back to session.Write", cmd.Path, s)
 		}
-		n, cpErr := pacedCopy(dst, stdoutPipe, 8192)
+		n, cpErr := adaptiveCopy(dst, stdoutPipe, &zrposBackoff)
 		log.Printf("DEBUG: (%s) direct stdout copy finished. Bytes: %d, Error: %v", cmd.Path, n, cpErr)
 	}()
 
