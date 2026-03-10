@@ -51,15 +51,43 @@ func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		}
 	}
 
-	// Display header
-	terminalio.WriteProcessedBytes(terminal,
-		ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileNewscanHeader)), outputMode)
+	// Load templates (FILESCAN.TOP, FILESCAN.MID, FILESCAN.BOT, FILESCAN.AREA)
+	// Fall back to hardcoded defaults if files don't exist.
+	defaultTop := []byte("|15File Newscan |07— new files since |11@DATE@|07\r\n|08────────────────────────────────────────────────────────────────|07\r\n")
+	defaultMid := []byte("|15^NAME |07^DATE ^SIZE |03^DESC\r\n")
+	defaultBot := []byte("|08────────────────────────────────────────────────────────────────|07\r\n")
+	defaultArea := []byte("\r\n|11@AREA@ |07(@COUNT@ new)\r\n")
+
+	topBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.TOP"))
+	if err != nil {
+		topBytes = defaultTop
+	}
+	midBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.MID"))
+	if err != nil {
+		midBytes = defaultMid
+	}
+	botBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.BOT"))
+	if err != nil {
+		botBytes = defaultBot
+	}
+	areaHdrBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.AREA"))
+	if err != nil {
+		areaHdrBytes = defaultArea
+	}
+
+	// Apply common tokens to templates
+	topBytes = e.applyCommonTemplateTokens(topBytes, currentUser, nodeNumber)
+	midTemplate := string(ansi.ReplacePipeCodes(midBytes))
+	botRendered := ansi.ReplacePipeCodes(e.applyCommonTemplateTokens(botBytes, currentUser, nodeNumber))
+
+	// Replace date placeholder in header
+	topRendered := strings.ReplaceAll(string(topBytes), "@DATE@", since.Format("01/02/2006"))
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(topRendered)), outputMode)
 
 	totalNew := 0
 	lineCount := 0
 	pausePrompt := e.LoadedStrings.PauseString
-	// Reserve lines for header/footer; pause every (termHeight - 2) lines
-	pageLines := termHeight - 2
+	pageLines := termHeight - 4
 	if pageLines < 5 {
 		pageLines = 5
 	}
@@ -70,15 +98,16 @@ func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			continue
 		}
 
-		// Area header
-		areaHdr := fmt.Sprintf(e.LoadedStrings.FileNewscanAreaHdr, area.Name, len(newFiles))
+		// Area header from template
+		areaHdr := string(areaHdrBytes)
+		areaHdr = strings.ReplaceAll(areaHdr, "@AREA@", area.Name)
+		areaHdr = strings.ReplaceAll(areaHdr, "@COUNT@", fmt.Sprintf("%d", len(newFiles)))
 		terminalio.WriteProcessedBytes(terminal,
 			ansi.ReplacePipeCodes([]byte(areaHdr)), outputMode)
-		lineCount += 2 // area header typically takes ~2 lines
+		lineCount += 2
 
 		for _, f := range newFiles {
 			desc := f.Description
-			// Use first line only (FILE_ID.DIZ can be multi-line)
 			if idx := strings.IndexAny(desc, "\r\n"); idx >= 0 {
 				desc = desc[:idx]
 			}
@@ -95,13 +124,14 @@ func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			if len(fname) > 12 {
 				fname = fname[:12]
 			}
-			sizeKB := (f.Size + 1023) / 1024
-			dateFmt := f.UploadedAt.Format("01/02/06")
-			line := fmt.Sprintf("  %-12s %6dK  %s  %s\r\n",
-				fname, sizeKB, dateFmt, desc)
 
-			terminalio.WriteProcessedBytes(terminal,
-				ansi.ReplacePipeCodes([]byte(line)), outputMode)
+			line := midTemplate
+			line = strings.ReplaceAll(line, "^NAME", fmt.Sprintf("%-12s", fname))
+			line = strings.ReplaceAll(line, "^DATE", f.UploadedAt.Format("01/02/06"))
+			line = strings.ReplaceAll(line, "^SIZE", fmt.Sprintf("%5dk", (f.Size+1023)/1024))
+			line = strings.ReplaceAll(line, "^DESC", desc)
+
+			terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
 			lineCount++
 			totalNew++
 
@@ -117,6 +147,9 @@ func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			}
 		}
 	}
+
+	// Footer
+	terminalio.WriteProcessedBytes(terminal, botRendered, outputMode)
 
 	// Summary
 	if totalNew == 0 {
