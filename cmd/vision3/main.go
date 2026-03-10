@@ -1070,67 +1070,59 @@ func sessionHandler(s ssh.Session) {
 	currentMenuName := "LOGIN"               // Start with LOGIN
 	autoRunLog := make(types.AutoRunTracker) // Initialize tracker for this session
 
-	// Check if user is already authenticated via SSH
-	sshUsername := s.User()
-	if sshUsername != "" {
-		log.Printf("Node %d: SSH user '%s' detected, attempting auto-login", nodeID, sshUsername)
-		// Try to load the user from the database
-		sshUser, found := userMgr.GetUser(sshUsername)
-		if found && sshUser != nil {
-			// User exists in database, authenticate them automatically
-			authenticatedUser = sshUser
-			bbsSession.Mutex.Lock()
-			bbsSession.User = authenticatedUser
-			bbsSession.Mutex.Unlock()
-			log.Printf("Node %d: SSH auto-login successful for user '%s' (Handle: %s)", nodeID, sshUsername, sshUser.Handle)
+	// Check if user was pre-authenticated at the SSH layer (password verified).
+	// The PasswordHandler in ssh_server.go stashes the authenticated user in the
+	// context when the SSH username matches a known BBS handle and the password
+	// is correct. Unknown usernames are accepted without verification so the BBS
+	// login menu can handle them.
+	if authedUser, ok := s.Context().Value(sshAuthUserKey{}).(*user.User); ok && authedUser != nil {
+		log.Printf("Node %d: SSH pre-authenticated user '%s' detected", nodeID, authedUser.Handle)
+		authenticatedUser = authedUser
+		bbsSession.Mutex.Lock()
+		bbsSession.User = authenticatedUser
+		bbsSession.Mutex.Unlock()
 
-			// Mark user as online
-			userMgr.MarkUserOnline(authenticatedUser.ID)
+		// Mark user as online
+		userMgr.MarkUserOnline(authenticatedUser.ID)
 
-			// Terminal size preferences will be handled in post-auth section
-			// Set default message area if not already set
-			if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
-				for _, area := range messageMgr.ListAreas() {
-					if area.ACSRead == "" || authenticatedUser.AccessLevel > 0 {
-						authenticatedUser.CurrentMessageAreaID = area.ID
-						authenticatedUser.CurrentMessageAreaTag = area.Tag
-						authenticatedUser.CurrentMsgConferenceID = area.ConferenceID
-						if confMgr != nil {
-							if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
-								authenticatedUser.CurrentMsgConferenceTag = conf.Tag
-							}
+		// Set default message area if not already set
+		if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
+			for _, area := range messageMgr.ListAreas() {
+				if area.ACSRead == "" || authenticatedUser.AccessLevel > 0 {
+					authenticatedUser.CurrentMessageAreaID = area.ID
+					authenticatedUser.CurrentMessageAreaTag = area.Tag
+					authenticatedUser.CurrentMsgConferenceID = area.ConferenceID
+					if confMgr != nil {
+						if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
+							authenticatedUser.CurrentMsgConferenceTag = conf.Tag
 						}
-						break
 					}
+					break
 				}
 			}
-			// Set default file area if not already set
-			if authenticatedUser.CurrentFileAreaID == 0 && fileMgr != nil {
-				for _, area := range fileMgr.ListAreas() {
-					if area.ACSList == "" || authenticatedUser.AccessLevel > 0 {
-						authenticatedUser.CurrentFileAreaID = area.ID
-						authenticatedUser.CurrentFileAreaTag = area.Tag
-						authenticatedUser.CurrentFileConferenceID = area.ConferenceID
-						if confMgr != nil {
-							if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
-								authenticatedUser.CurrentFileConferenceTag = conf.Tag
-							}
-						}
-						break
-					}
-				}
-			}
-			// Persist defaults
-			if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
-				log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
-			}
-
-			currentMenuName = "MAIN" // Will be overridden by login sequence result
-		} else {
-			log.Printf("Node %d: SSH user '%s' not found in BBS database, sending to PDMATRIX screen", nodeID, sshUsername)
-			// User not in database, send to PDMATRIX like telnet users
-			// (sshUsername will be kept for potential use in matrix or login)
 		}
+		// Set default file area if not already set
+		if authenticatedUser.CurrentFileAreaID == 0 && fileMgr != nil {
+			for _, area := range fileMgr.ListAreas() {
+				if area.ACSList == "" || authenticatedUser.AccessLevel > 0 {
+					authenticatedUser.CurrentFileAreaID = area.ID
+					authenticatedUser.CurrentFileAreaTag = area.Tag
+					authenticatedUser.CurrentFileConferenceID = area.ConferenceID
+					if confMgr != nil {
+						if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
+							authenticatedUser.CurrentFileConferenceTag = conf.Tag
+						}
+					}
+					break
+				}
+			}
+		}
+		// Persist defaults
+		if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
+			log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
+		}
+
+		currentMenuName = "MAIN"
 	}
 
 	// Pre-login matrix screen for unauthenticated users (telnet or SSH without account)

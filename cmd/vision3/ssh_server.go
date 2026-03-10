@@ -10,6 +10,9 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
+// Context key for storing a pre-authenticated BBS user from SSH-level auth.
+type sshAuthUserKey struct{}
+
 // startSSHServer creates, configures, and starts the pure-Go SSH server.
 // Returns a cleanup function to shut down the server.
 func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms bool) (func(), error) {
@@ -22,12 +25,25 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 		LegacySSHAlgorithms: legacyAlgorithms,
 		SessionHandler:      sshSessionHandler,
 		Version:             "Vision3",
-		// BBS handles its own login flow — accept all SSH auth methods.
-		// The PasswordHandler and KeyboardInteractiveHandler both return true
-		// so any SSH client (SyncTERM, NetRunner, OpenSSH, etc.) can connect
-		// regardless of which auth method it prefers.
 		PasswordHandler: func(ctx ssh.Context, password string) bool {
-			log.Printf("DEBUG: SSH password auth from user=%q addr=%s", ctx.User(), ctx.RemoteAddr())
+			username := ctx.User()
+			log.Printf("DEBUG: SSH password auth from user=%q addr=%s", username, ctx.RemoteAddr())
+
+			// If username matches a known BBS user and password is correct,
+			// stash the authenticated user for auto-login. Otherwise accept
+			// the connection anyway and let the BBS LOGIN menu handle it.
+			if username != "" && userMgr != nil {
+				if bbsUser, found := userMgr.GetUser(username); found && bbsUser != nil {
+					authedUser, ok := userMgr.Authenticate(username, password)
+					if ok {
+						ctx.SetValue(sshAuthUserKey{}, authedUser)
+						log.Printf("INFO: SSH pre-authenticated known user %q from %s", username, ctx.RemoteAddr())
+					} else {
+						log.Printf("INFO: SSH password mismatch for known user %q from %s, deferring to BBS login", username, ctx.RemoteAddr())
+					}
+				}
+			}
+
 			return true
 		},
 		KeyboardInteractiveHandler: func(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool {
