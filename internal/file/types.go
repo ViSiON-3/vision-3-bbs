@@ -29,6 +29,7 @@ type FileRecord struct {
 	UploadedAt    time.Time `json:"uploaded_at"`
 	UploadedBy    string    `json:"uploaded_by"` // User Handle
 	DownloadCount int       `json:"download_count"`
+	Reviewed      bool      `json:"reviewed,omitempty"`
 	// TODO: Add []string Tags for keyword tagging later if needed
 	// TODO: Add hash?
 }
