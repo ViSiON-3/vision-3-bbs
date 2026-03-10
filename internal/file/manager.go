@@ -245,6 +245,22 @@ func (fm *FileManager) GetAreaByID(id int) (*FileArea, bool) {
 	return area, exists // Return pointer directly
 }
 
+// GetFileRecordByID looks up a file record by UUID across all areas.
+func (fm *FileManager) GetFileRecordByID(fileID uuid.UUID) (*FileRecord, error) {
+	fm.muFiles.RLock()
+	defer fm.muFiles.RUnlock()
+
+	for _, records := range fm.fileRecords {
+		for i := range records {
+			if records[i].ID == fileID {
+				rec := records[i]
+				return &rec, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("file record with ID %s not found", fileID)
+}
+
 // GetFilesForArea returns a slice of FileRecord for a given area ID.
 // Returns an empty slice if the area doesn't exist or has no files.
 func (fm *FileManager) GetFilesForArea(areaID int) []FileRecord {

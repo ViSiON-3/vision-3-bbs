@@ -55,6 +55,7 @@ func (e *MenuExecutor) downloadLoop(
 	userManager *user.UserMgr,
 	currentUser *user.User,
 	nodeNumber int,
+	sessionStartTime time.Time,
 	outputMode ansi.OutputMode,
 	startByAdding bool,
 ) (*user.User, error) {
@@ -158,10 +159,25 @@ func (e *MenuExecutor) downloadLoop(
 			continue
 		}
 
-		// Resolve tagged file IDs to paths.
+		// Resolve tagged file IDs to paths, re-checking download ACS.
 		var paths []string
 		var fileIDs []uuid.UUID
 		for _, id := range currentUser.TaggedFileIDs {
+			rec, err := e.FileMgr.GetFileRecordByID(id)
+			if err != nil {
+				log.Printf("WARN: Node %d: Could not find record for file %s: %v", nodeNumber, id, err)
+				continue
+			}
+			area, ok := e.FileMgr.GetAreaByID(rec.AreaID)
+			if !ok {
+				log.Printf("WARN: Node %d: Area %d not found for file %s", nodeNumber, rec.AreaID, id)
+				continue
+			}
+			if area.ACSDownload != "" && !checkACS(area.ACSDownload, currentUser, s, terminal, sessionStartTime) {
+				log.Printf("WARN: Node %d: User %s no longer authorized to download from area %d (%s), skipping file %s",
+					nodeNumber, currentUser.Handle, area.ID, area.Name, id)
+				continue
+			}
 			p, err := e.FileMgr.GetFilePath(id)
 			if err != nil {
 				log.Printf("WARN: Node %d: Could not resolve path for file %s: %v", nodeNumber, id, err)
@@ -239,7 +255,7 @@ func runDownloadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 		return currentUser, "", nil
 	}
 
-	updatedUser, err := e.downloadLoop(s, terminal, userManager, currentUser, nodeNumber, outputMode, true)
+	updatedUser, err := e.downloadLoop(s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, outputMode, true)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
@@ -254,8 +270,8 @@ func runDownloadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	return updatedUser, "", nil
 }
 
-// runBatchDownload transfers the user's already-tagged batch files without
-// re-checking file area or download ACS (validated at tag time).
+// runBatchDownload transfers the user's already-tagged batch files.
+// Download ACS is re-validated per-area at transfer time.
 func runBatchDownload(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	if currentUser == nil {
 		return nil, "", nil
@@ -267,7 +283,7 @@ func runBatchDownload(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 		return currentUser, "", nil
 	}
 
-	updatedUser, err := e.downloadLoop(s, terminal, userManager, currentUser, nodeNumber, outputMode, false)
+	updatedUser, err := e.downloadLoop(s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, outputMode, false)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
