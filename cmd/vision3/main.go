@@ -33,6 +33,7 @@ import (
 	"github.com/stlalpha/vision3/internal/message"
 	"github.com/stlalpha/vision3/internal/scheduler"
 	"github.com/stlalpha/vision3/internal/session"
+	"github.com/stlalpha/vision3/internal/sshserver"
 	"github.com/stlalpha/vision3/internal/telnetserver"
 	"github.com/stlalpha/vision3/internal/terminalio"
 	"github.com/stlalpha/vision3/internal/transfer"
@@ -1017,7 +1018,14 @@ func sessionHandler(s ssh.Session) {
 					termHeight.Store(int32(win.Height))
 				}
 				if win.Width > 0 && win.Height > 0 {
-					_ = terminal.SetSize(win.Width, win.Height)
+					// Skip terminal repaint during binary transfers — SetSize
+					// writes ANSI sequences via session.Write() which does CRLF
+					// conversion, corrupting the RawWrite binary data stream.
+					if bs, ok := s.(*sshserver.BBSSession); ok && bs.IsTransferActive() {
+						log.Printf("Node %d: Suppressed terminal.SetSize during active transfer", nodeID)
+					} else {
+						_ = terminal.SetSize(win.Width, win.Height)
+					}
 				}
 			}
 			log.Printf("Node %d: Window change channel closed.", nodeID)

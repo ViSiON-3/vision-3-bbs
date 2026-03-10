@@ -12,6 +12,7 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
@@ -163,6 +164,11 @@ type BBSSession struct {
 	// pending holds leftover bytes when an orphan drain returned more
 	// data than the caller's buffer could hold.
 	pending *readResult
+	// transferActive is set to 1 during binary file transfers (ZMODEM etc).
+	// When active, callers must NOT write to the session (e.g. terminal
+	// repaint on window resize) because session.Write() does CRLF conversion
+	// that would interleave with RawWrite binary data on the same channel.
+	transferActive atomic.Int32
 }
 
 // WrapSession wraps a gliderlabs ssh.Session to add BBS-specific features
@@ -219,6 +225,22 @@ func (s *BBSSession) RawWrite(p []byte) (int, error) {
 		return s.rawCh.Write(p)
 	}
 	return s.Session.Write(p)
+}
+
+// SetTransferActive marks/unmarks the session as being in a binary transfer.
+// While active, nothing should write to the session via session.Write()
+// (which does CRLF conversion) because it would corrupt the binary stream.
+func (s *BBSSession) SetTransferActive(active bool) {
+	if active {
+		s.transferActive.Store(1)
+	} else {
+		s.transferActive.Store(0)
+	}
+}
+
+// IsTransferActive returns true if a binary transfer is in progress.
+func (s *BBSSession) IsTransferActive() bool {
+	return s.transferActive.Load() != 0
 }
 
 // SetReadInterrupt registers a channel that, when closed, causes any

@@ -3,6 +3,7 @@ package transfer
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -33,10 +35,66 @@ type rawBinaryWriter interface {
 	RawWrite(p []byte) (int, error)
 }
 
+// transferLocker is implemented by BBSSession to signal that a binary
+// transfer is in progress. While active, background code (e.g. terminal
+// repaint on window resize) must not write to the session.
+type transferLocker interface {
+	SetTransferActive(active bool)
+}
+
 // writeFunc adapts a func([]byte)(int,error) to the io.Writer interface.
 type writeFunc func([]byte) (int, error)
 
 func (f writeFunc) Write(p []byte) (int, error) { return f(p) }
+
+// pacedCopy copies src → dst using small fixed-size reads and writes.
+// Unlike io.Copy (which uses a 32 KB buffer), pacedCopy caps each write
+// at writeChunkSize bytes.  This produces more, smaller SSH channel data
+// packets, giving the remote terminal (e.g. SyncTerm) more time to process
+// each one.  A concurrency guard detects unexpected concurrent writes.
+//
+// writeChunkSize should be 4096–8192 for maximum compatibility with
+// BBS terminal clients that may struggle with back-to-back 32 KB packets.
+func pacedCopy(dst io.Writer, src io.Reader, writeChunkSize int) (int64, error) {
+	if writeChunkSize <= 0 {
+		writeChunkSize = 4096
+	}
+
+	var concurrent atomic.Int32
+	hasher := sha256.New()
+	buf := make([]byte, writeChunkSize)
+	var total int64
+
+	for {
+		nr, rerr := src.Read(buf)
+		if nr > 0 {
+			// Concurrent write guard — should never fire.
+			if concurrent.Add(1) > 1 {
+				log.Printf("CRITICAL: pacedCopy: concurrent write detected!")
+			}
+			nw, werr := dst.Write(buf[:nr])
+			concurrent.Add(-1)
+			total += int64(nw)
+			hasher.Write(buf[:nr]) // hash is always based on what we read
+			if werr != nil {
+				log.Printf("DEBUG: pacedCopy: write error after %d bytes: %v", total, werr)
+				return total, werr
+			}
+			if nw != nr {
+				log.Printf("DEBUG: pacedCopy: short write %d/%d after %d total bytes", nw, nr, total)
+				return total, io.ErrShortWrite
+			}
+		}
+		if rerr != nil {
+			if rerr == io.EOF {
+				log.Printf("DEBUG: pacedCopy: finished. Bytes=%d SHA256=%x", total, hasher.Sum(nil))
+				return total, nil
+			}
+			log.Printf("DEBUG: pacedCopy: read error after %d bytes: %v", total, rerr)
+			return total, rerr
+		}
+	}
+}
 
 // RunCommandDirect executes an external command with its stdin/stdout/stderr
 // piped directly to the SSH session — no PTY allocated. This is essential for
@@ -53,6 +111,14 @@ func (f writeFunc) Write(p []byte) (int, error) { return f(p) }
 // upload dialog without sending a ZModem abort), the process would otherwise
 // retry indefinitely. Pass 0 to disable.
 func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinIdleTimeout time.Duration) error {
+	// Signal that a binary transfer is active so background code (terminal
+	// repaint on window resize) doesn't write to the session and corrupt
+	// the binary stream.
+	if tl, ok := s.(transferLocker); ok {
+		tl.SetTransferActive(true)
+		defer tl.SetTransferActive(false)
+	}
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -195,13 +261,21 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// command stdout → session (raw bytes, no CRLF conversion)
 	// Use RawWrite when available to bypass gliderlabs' \n→\r\n expansion,
 	// which corrupts ZMODEM and other binary transfer protocol streams.
+	//
+	// pacedCopy sends data in small chunks (4 KB) instead of io.Copy's 32 KB.
+	// This produces more, smaller SSH packets, giving the remote terminal more
+	// processing time per packet and avoiding "Invalid Subpacket" CRC errors
+	// seen with high-throughput transfers to SyncTerm.
 	go func() {
 		defer close(outputDone)
 		dst := io.Writer(s)
 		if rw, ok := s.(rawBinaryWriter); ok {
+			log.Printf("DEBUG: (%s) using RawWrite for binary-safe output (type=%T)", cmd.Path, s)
 			dst = writeFunc(rw.RawWrite)
+		} else {
+			log.Printf("WARN: (%s) rawBinaryWriter assertion FAILED (type=%T), falling back to session.Write", cmd.Path, s)
 		}
-		n, cpErr := io.Copy(dst, stdoutPipe)
+		n, cpErr := pacedCopy(dst, stdoutPipe, 4096)
 		log.Printf("DEBUG: (%s) direct stdout copy finished. Bytes: %d, Error: %v", cmd.Path, n, cpErr)
 	}()
 
