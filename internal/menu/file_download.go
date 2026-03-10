@@ -115,6 +115,8 @@ func (e *MenuExecutor) downloadLoop(
 		currentUser.TaggedFileIDs = append(currentUser.TaggedFileIDs, rec.ID)
 		if err := userManager.UpdateUser(currentUser); err != nil {
 			log.Printf("ERROR: Node %d: Failed to persist tagged file: %v", nodeNumber, err)
+			currentUser.TaggedFileIDs = currentUser.TaggedFileIDs[:len(currentUser.TaggedFileIDs)-1]
+			return false
 		}
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.AddedToBatchFormat, rec.Filename))), outputMode)
 		log.Printf("INFO: Node %d: User %s tagged file %s (%s)", nodeNumber, currentUser.Handle, rec.ID, rec.Filename)

@@ -376,6 +376,7 @@ CfgViewHotKeys         string `json:"cfgViewHotKeys"`
 	SearchNoResults     string `json:"searchNoResults"`
 	SearchResultsHeader string `json:"searchResultsHeader"`
 	SearchResultFormat  string `json:"searchResultFormat"`
+	SearchResultsSummary string `json:"searchResultsSummary"`
 
 	// File info strings
 	FileInfoPrompt string `json:"fileInfoPrompt"`

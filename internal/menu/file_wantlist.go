@@ -116,11 +116,13 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 			return currentUser, "", err
 		}
 		idx, err := strconv.Atoi(strings.TrimSpace(numInput))
+		wantListMu.Lock()
+		entries, _ = loadWantList(e.RootConfigPath)
 		if err != nil || idx < 1 || idx > len(entries) {
+			wantListMu.Unlock()
 			return currentUser, "", nil
 		}
 		entries = append(entries[:idx-1], entries[idx:]...)
-		wantListMu.Lock()
 		err = saveWantList(e.RootConfigPath, entries)
 		wantListMu.Unlock()
 		if err != nil {

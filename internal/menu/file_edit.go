@@ -222,8 +222,9 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 	})
 	if updateErr != nil {
 		log.Printf("ERROR: Node %d: Failed to update filename record for %s: %v", nodeNumber, rec.Filename, updateErr)
-		// Try to undo the disk rename.
-		_ = os.Rename(newPath, oldPath)
+		if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
+			log.Printf("ERROR: Node %d: Rollback rename failed %s -> %s: %v (disk/DB inconsistent)", nodeNumber, newPath, oldPath, rollbackErr)
+		}
 		return nil
 	}
 

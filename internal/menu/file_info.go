@@ -67,17 +67,22 @@ func runShowFileInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	// Display header and file metadata.
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileInfoHeader)), outputMode)
 
-	sizeKB := rec.Size / 1024
+	sizeStr := ""
+	if rec.Size < 1024 {
+		sizeStr = fmt.Sprintf("%d bytes", rec.Size)
+	} else {
+		sizeStr = fmt.Sprintf("%d KB", (rec.Size+1023)/1024)
+	}
 	info := fmt.Sprintf(
 		"\r\n|15Filename    : |07%s\r\n"+
-			"|15Size        : |07%d KB\r\n"+
+			"|15Size        : |07%s\r\n"+
 			"|15Date        : |07%s\r\n"+
 			"|15Uploaded By : |07%s\r\n"+
 			"|15Downloads   : |07%d\r\n"+
 			"|15Area        : |07%s\r\n"+
 			"|15Description : |07%s\r\n",
 		rec.Filename,
-		sizeKB,
+		sizeStr,
 		rec.UploadedAt.Format("01/02/2006"),
 		rec.UploadedBy,
 		rec.DownloadCount,

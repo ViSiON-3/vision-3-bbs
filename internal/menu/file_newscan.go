@@ -103,7 +103,7 @@ func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 					if err == io.EOF {
 						return currentUser, "", nil
 					}
-					return currentUser, "", nil
+					return currentUser, "", err
 				}
 			}
 		}

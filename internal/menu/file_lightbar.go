@@ -1228,6 +1228,9 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 				r.Filename = newName
 			}); updErr != nil {
 				log.Printf("ERROR: Node %d: Failed to update record for %s: %v", nodeNumber, newName, updErr)
+				if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
+					log.Printf("ERROR: Node %d: Rollback rename failed for %s: %v (disk/DB inconsistent)", nodeNumber, newName, rollbackErr)
+				}
 			} else {
 				log.Printf("INFO: Node %d: Sysop renamed file '%s' to '%s' in area %d.", nodeNumber, rec.Filename, newName, currentAreaID)
 				allFiles = e.FileMgr.GetFilesForArea(currentAreaID)

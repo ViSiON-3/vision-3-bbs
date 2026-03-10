@@ -109,7 +109,7 @@ func runSearchFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 	}
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(
-		fmt.Sprintf(e.LoadedStrings.SearchResultsHeader, fmt.Sprintf("%d file(s) found", len(filtered))),
+		fmt.Sprintf(e.LoadedStrings.SearchResultsSummary, len(filtered)),
 	)), outputMode)
 
 	return currentUser, "", nil

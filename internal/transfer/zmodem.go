@@ -204,9 +204,52 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		var cpErr error
 		var canRun int  // consecutive CAN (0x18) bytes seen so far
 		var killed bool // set once CAN abort fires; stops further writes
+		var prevTail [6]byte // tail bytes from previous read for split-header detection
+		var prevLen int
 		for {
 			nr, rerr := s.Read(buf)
 			if nr > 0 {
+				// Check for ZRPOS headers split across read boundaries.
+				// Concatenate previous tail with start of current buffer.
+				if prevLen > 0 {
+					combined := make([]byte, prevLen+nr)
+					copy(combined, prevTail[:prevLen])
+					copy(combined[prevLen:], buf[:nr])
+					// Only need to scan the overlap region (positions where a header could span)
+					scanEnd := prevLen + 5 // max header is 6 bytes
+					if scanEnd > len(combined) {
+						scanEnd = len(combined)
+					}
+					for i := 0; i < scanEnd; i++ {
+						b := combined[i]
+						if b == 0x09 && i >= 3 {
+							chunk := combined[i-3 : i+1]
+							if chunk[0] == 0x2a && chunk[1] == 0x18 && chunk[2] == 0x41 {
+								zrposBackoff.Add(1)
+								log.Printf("DEBUG: (%s) ZRPOS binary header detected across boundary at offset %d (backoff #%d)",
+									cmd.Path, total-int64(prevLen)+int64(i), zrposBackoff.Load())
+							}
+						}
+						if b == '9' && i >= 5 {
+							chunk := combined[i-5 : i+1]
+							if chunk[0] == 0x2a && chunk[1] == 0x2a && chunk[2] == 0x18 &&
+								chunk[3] == 0x42 && chunk[4] == '0' {
+								zrposBackoff.Add(1)
+								log.Printf("DEBUG: (%s) ZRPOS hex header detected across boundary at offset %d (backoff #%d)",
+									cmd.Path, total-int64(prevLen)+int64(i), zrposBackoff.Load())
+							}
+						}
+					}
+				}
+				// Save tail for next iteration
+				if nr >= 6 {
+					copy(prevTail[:], buf[nr-6:nr])
+					prevLen = 6
+				} else {
+					copy(prevTail[:], buf[:nr])
+					prevLen = nr
+				}
+
 				// Scan for consecutive CAN bytes, ZRPOS frames, and decide
 				// whether this chunk counts as real file activity.
 				hasNonCAN := false

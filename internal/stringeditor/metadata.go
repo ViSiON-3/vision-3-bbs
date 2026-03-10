@@ -470,6 +470,7 @@ func StringEntries() []StringEntry {
 		{Label: "Search: No Results", Key: "searchNoResults", Description: "Shown when no files match the search"},
 		{Label: "Search: Results Header", Key: "searchResultsHeader", Description: "Header for search results (%s=query)"},
 		{Label: "Search: Result Line", Key: "searchResultFormat", Description: "Format for each search result line (%s=area,file,size,desc)"},
+		{Label: "Search: Summary", Key: "searchResultsSummary", Description: "Summary shown after search results (%d=count)"},
 
 		// File Info (V3)
 		{Label: "File: Info Prompt", Key: "fileInfoPrompt", Description: "Prompt for filename when showing file info"},

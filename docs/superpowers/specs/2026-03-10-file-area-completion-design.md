@@ -90,7 +90,7 @@ FileListColumns struct {
 } `json:"file_list_columns,omitempty"`
 ```
 
-Defaults: all true (when zero-value/omitted, treat as all-on).
+Defaults: all true (when zero-value/omitted, treat as all-on). Go bools default to `false`, so `fileColumnEnabled()` explicitly checks if all fields are false (zero-value struct) and returns `true` for all columns in that case. First toggle from default state sets all to `true` then flips the selected column off.
 
 Display current column config with toggles. User enters letter to flip each column.
 
@@ -164,6 +164,8 @@ Users submit file requests stored in `data/wantlist.json`:
   {"handle": "CoolDude", "filename": "GAME.ZIP", "reason": "Need this game", "date": "2026-03-10"}
 ]
 ```
+
+Date format: ISO 8601 (`YYYY-MM-DD`). Concurrent access protected by `sync.Mutex` around all read-modify-write operations.
 
 Two modes based on ACS:
 - **User mode:** Submit a request (filename + optional reason)

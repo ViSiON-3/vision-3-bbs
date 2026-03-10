@@ -8800,7 +8800,8 @@ func runListFilesExtended(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 // runListFiles displays a paginated list of files in the current file area.
 func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
-	log.Printf("DEBUG: Node %d: Running LISTFILES", nodeNumber)
+	extendedMode := strings.Contains(strings.ToUpper(args), "EXTENDED")
+	log.Printf("DEBUG: Node %d: Running LISTFILES (extended=%v)", nodeNumber, extendedMode)
 
 	// 1. Check User and Current File Area
 	if currentUser == nil {
@@ -9008,13 +9009,28 @@ func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 				fileNumOnPage := (currentPage-1)*filesPerPage + i + 1
 
 				fileNumStr := strconv.Itoa(fileNumOnPage)
-				fileNameStr := fileRec.Filename
-				if len(fileNameStr) > 12 {
-					fileNameStr = fileNameStr[:12]
+				fileNameStr := ""
+				if fileColumnEnabled(currentUser, "name", extendedMode) {
+					fileNameStr = fileRec.Filename
+					if len(fileNameStr) > 12 {
+						fileNameStr = fileNameStr[:12]
+					}
+					fileNameStr = fmt.Sprintf("%-12s", fileNameStr)
+				} else {
+					fileNameStr = strings.Repeat(" ", 12)
 				}
-				fileNameStr = fmt.Sprintf("%-12s", fileNameStr)
-				dateStr := fileRec.UploadedAt.Format("01/02/06")
-				sizeStr := fmt.Sprintf("%5s", fmt.Sprintf("%dk", fileRec.Size/1024))
+				dateStr := ""
+				if fileColumnEnabled(currentUser, "date", extendedMode) {
+					dateStr = fileRec.UploadedAt.Format("01/02/06")
+				} else {
+					dateStr = strings.Repeat(" ", 8)
+				}
+				sizeStr := ""
+				if fileColumnEnabled(currentUser, "size", extendedMode) {
+					sizeStr = fmt.Sprintf("%5s", fmt.Sprintf("%dk", fileRec.Size/1024))
+				} else {
+					sizeStr = strings.Repeat(" ", 5)
+				}
 
 				markStr := " "
 				if currentUser.TaggedFileIDs != nil {
@@ -9026,10 +9042,13 @@ func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 					}
 				}
 
-				dizLines := formatDIZLines(fileRec.Description, dizMaxWidth, dizMaxLines)
+				var dizLines []string
 				firstDesc := ""
-				if len(dizLines) > 0 {
-					firstDesc = dizLines[0]
+				if fileColumnEnabled(currentUser, "description", extendedMode) {
+					dizLines = formatDIZLines(fileRec.Description, dizMaxWidth, dizMaxLines)
+					if len(dizLines) > 0 {
+						firstDesc = dizLines[0]
+					}
 				}
 
 				line = strings.ReplaceAll(line, "^MARK", markStr)
