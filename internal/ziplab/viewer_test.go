@@ -268,7 +268,7 @@ func TestFormatArchiveListing_ManyFiles(t *testing.T) {
 }
 
 func TestRunZipLabView_Exists(t *testing.T) {
-	var fn func(context.Context, ssh.Session, *term.Terminal, string, string, ansi.OutputMode)
+	var fn func(context.Context, ssh.Session, *term.Terminal, string, string, ansi.OutputMode, ReadLineFunc, ReadKeyFunc)
 	fn = RunZipLabView
 	_ = fn
 }

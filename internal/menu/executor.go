@@ -9346,7 +9346,7 @@ func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 					time.Sleep(1 * time.Second)
 				} else {
 					ctx, cancel := e.transferContext(s.Context())
-					ziplab.RunZipLabView(ctx, s, terminal, viewFilePath, fileToView.Filename, outputMode)
+					ziplab.RunZipLabView(ctx, s, terminal, viewFilePath, fileToView.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s))
 					cancel()
 				}
 			} else {

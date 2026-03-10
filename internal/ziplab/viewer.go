@@ -2,7 +2,6 @@ package ziplab
 
 import (
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -22,6 +21,14 @@ import (
 	"github.com/stlalpha/vision3/internal/transfer"
 	"github.com/stlalpha/vision3/internal/util"
 )
+
+// ReadLineFunc reads a line of user input (without the trailing newline).
+// Callers must provide an implementation that reads through the session's
+// shared InputHandler to avoid leaving stale bytes for subsequent readers.
+type ReadLineFunc func() (string, error)
+
+// ReadKeyFunc reads a single keypress and returns its integer code.
+type ReadKeyFunc func() (int, error)
 
 // sanitizeEntryName strips control characters (including ANSI ESC) and pipe
 // characters from ZIP entry names to prevent terminal escape injection and
@@ -141,20 +148,22 @@ func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 // RunZipLabView presents an interactive archive viewer that lets the user
 // browse entries and extract individual files via ZMODEM.
 // ctx controls transfer timeout; pass nil for default 30-minute timeout.
-func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode) {
+// readLine and readKey must use the session's shared InputHandler to avoid
+// leaving stale bytes in the input stream for subsequent readers.
+func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode, readLine ReadLineFunc, readKey ReadKeyFunc) {
 	// Build the listing into a buffer to get the file count.
 	var buf bytes.Buffer
 	fileCount, err := formatArchiveListing(&buf, filePath, filename, 24)
 	if err != nil {
 		msg := "\r\n|01Error reading archive.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		pauseEnterViewer(s, terminal, outputMode)
+		pauseEnterViewer(terminal, outputMode, readKey)
 		return
 	}
 	if fileCount == 0 {
 		msg := "\r\n|01Archive is empty.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		pauseEnterViewer(s, terminal, outputMode)
+		pauseEnterViewer(terminal, outputMode, readKey)
 		return
 	}
 
@@ -165,7 +174,7 @@ func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, 
 		prompt := fmt.Sprintf("\r\n|07ZipLab [|15#|07/|15Q|07]: |15")
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
-		line, err := terminal.ReadLine()
+		line, err := readLine()
 		if err != nil {
 			return
 		}
@@ -226,16 +235,15 @@ func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, 
 }
 
 // pauseEnterViewer waits for the user to press ENTER before continuing.
-func pauseEnterViewer(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode) {
+func pauseEnterViewer(terminal *term.Terminal, outputMode ansi.OutputMode, readKey ReadKeyFunc) {
 	prompt := "\r\n|07Press |15[ENTER]|07 to continue... "
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
-	bufioReader := bufio.NewReader(s)
 	for {
-		r, _, err := bufioReader.ReadRune()
+		key, err := readKey()
 		if err != nil {
 			return
 		}
-		if r == '\r' || r == '\n' {
+		if key == '\r' || key == '\n' {
 			return
 		}
 	}

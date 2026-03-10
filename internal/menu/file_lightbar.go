@@ -802,7 +802,7 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			topIndex = newTop
 			selectedIndex = newTop
 			continue
-		case editor.KeyPageDown, editor.KeyCtrlC: // Page Down
+		case editor.KeyPageDown: // Page Down
 			count := filesVisibleFrom(topIndex)
 			nextTop := topIndex + count
 			if nextTop >= len(allFiles) {
@@ -933,7 +933,7 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 				_ = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h"), outputMode)
 				if e.FileMgr.IsSupportedArchive(sel.Filename) {
 					ctx, cancel := e.transferContext(s.Context())
-					ziplab.RunZipLabView(ctx, s, terminal, filePath, sel.Filename, outputMode)
+					ziplab.RunZipLabView(ctx, s, terminal, filePath, sel.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s))
 					cancel()
 				} else {
 					termWidth, termHeight := getTerminalSize(s)
