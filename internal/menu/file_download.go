@@ -30,10 +30,12 @@ func runClearBatch(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	}
 
 	count := len(currentUser.TaggedFileIDs)
+	oldTagged := currentUser.TaggedFileIDs
 	currentUser.TaggedFileIDs = nil
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
 		log.Printf("ERROR: Node %d: Failed to update user after clearing batch queue: %v", nodeNumber, err)
+		currentUser.TaggedFileIDs = oldTagged
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SaveUserError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
@@ -72,9 +74,26 @@ func (e *MenuExecutor) downloadLoop(
 	}
 
 	// tryAddFile looks up filename in the current area and adds it to the
-	// batch. Returns true if the file was added. On failure (not found,
-	// duplicate, limit) it displays the appropriate message and returns false.
+	// batch. Returns true if the file was added. On failure (no area, no ACS,
+	// not found, duplicate, limit) it displays the appropriate message and
+	// returns false.
 	tryAddFile := func(filename string) bool {
+		if currentUser.CurrentFileAreaID <= 0 {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileNoAreaSelected)), outputMode)
+			time.Sleep(1 * time.Second)
+			return false
+		}
+		area, ok := e.FileMgr.GetAreaByID(currentUser.CurrentFileAreaID)
+		if !ok {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileAreaNotFound)), outputMode)
+			time.Sleep(1 * time.Second)
+			return false
+		}
+		if area.ACSDownload != "" && !checkACS(area.ACSDownload, currentUser, s, terminal, sessionStartTime) {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.YouCantDownloadHere)), outputMode)
+			time.Sleep(1 * time.Second)
+			return false
+		}
 		rec, err := findFileInArea(e.FileMgr, currentUser.CurrentFileAreaID, filename)
 		if err != nil {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.FileNotFoundFormat, filename))), outputMode)
