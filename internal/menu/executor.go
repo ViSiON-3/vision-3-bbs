@@ -567,6 +567,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["OPENDOOR"] = runOpenDoor                               // Prompt and open a door
 	registry["DOORINFO"] = runDoorInfo                               // Show door information
 	registry["UPLOADFILE"] = runUploadFile                           // ZMODEM file upload
+	registry["CLEAR_BATCH"] = runClearBatch                          // Clear tagged file batch queue
 	registry["QWKDOWNLOAD"] = runQWKDownload                         // QWK mail packet download
 	registry["QWKUPLOAD"] = runQWKUpload                             // QWK REP packet upload
 	registry["WHOISONLINE"] = runWhoIsOnline                         // Who's online display
