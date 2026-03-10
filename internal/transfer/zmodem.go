@@ -63,7 +63,7 @@ const (
 // backoff. adaptiveCopy checks this counter on each write and halves the chunk
 // size when it changes, then resumes ramping after stabilizing.
 //
-// Ramp schedule: starts at 4 KB, doubles every ~50 writes, caps at 32 KB.
+// Ramp schedule: starts at 4 KB, doubles every ~50 writes, caps at 8 KB.
 // Backoff: halves chunk size (floor 4 KB), resets ramp counter.
 func adaptiveCopy(dst io.Writer, src io.Reader, backoff *atomic.Int32) (int64, error) {
 	hasher := sha256.New()
@@ -317,7 +317,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// Use RawWrite when available to bypass gliderlabs' \n→\r\n expansion,
 	// which corrupts ZMODEM and other binary transfer protocol streams.
 	//
-	// adaptiveCopy starts with small chunks (4 KB) and ramps up to 32 KB for
+	// adaptiveCopy starts with small chunks (4 KB) and ramps up to 8 KB for
 	// throughput. If the stdin goroutine detects a ZRPOS (retransmission
 	// request), it signals backoff and the chunk size is halved.
 	go func() {

@@ -91,11 +91,12 @@ func (c *TelnetSessionContext) SetValue(key, value interface{}) {
 // TelnetSessionAdapter adapts a telnet connection to the gliderlabs/ssh.Session interface
 // so that the existing sessionHandler() works unchanged.
 type TelnetSessionAdapter struct {
-	telnetConn *TelnetConn
-	ctx        *TelnetSessionContext
-	winCh      chan ssh.Window
-	ptyMu      sync.Mutex // protects pty from concurrent access
-	pty        ssh.Pty
+	telnetConn     *TelnetConn
+	ctx            *TelnetSessionContext
+	winCh          chan ssh.Window
+	ptyMu          sync.Mutex // protects pty from concurrent access
+	pty            ssh.Pty
+	transferActive atomic.Int32
 }
 
 // NewTelnetSessionAdapter creates an adapter that implements ssh.Session for a telnet connection.
@@ -257,4 +258,18 @@ func (a *TelnetSessionAdapter) Break(c chan<- bool) {
 // to return without consuming data. Used to cleanly stop door I/O goroutines.
 func (a *TelnetSessionAdapter) SetReadInterrupt(ch <-chan struct{}) {
 	a.telnetConn.SetReadInterrupt(ch)
+}
+
+// SetTransferActive marks/unmarks the session as being in a binary transfer.
+func (a *TelnetSessionAdapter) SetTransferActive(active bool) {
+	if active {
+		a.transferActive.Store(1)
+	} else {
+		a.transferActive.Store(0)
+	}
+}
+
+// IsTransferActive returns true if a binary transfer is in progress.
+func (a *TelnetSessionAdapter) IsTransferActive() bool {
+	return a.transferActive.Load() != 0
 }
