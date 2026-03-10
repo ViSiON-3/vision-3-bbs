@@ -59,56 +59,62 @@ func (e *MenuExecutor) downloadLoop(
 	startByAdding bool,
 ) (*user.User, error) {
 
-	// addFile prompts the user for a filename and appends the file to the
-	// tagged batch. Returns true if a file was added.
-	addFile := func() (bool, error) {
+	// promptFilename shows the add-batch prompt and reads user input.
+	// Returns the trimmed filename or "" if the user pressed Enter (cancel).
+	promptFilename := func() (string, error) {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.AddBatchPrompt)), outputMode)
-
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
-			return false, err
+			return "", err
 		}
-		input = strings.TrimSpace(input)
-		if input == "" {
-			return false, nil
-		}
+		return strings.TrimSpace(input), nil
+	}
 
-		rec, err := findFileInArea(e.FileMgr, currentUser.CurrentFileAreaID, input)
+	// tryAddFile looks up filename in the current area and adds it to the
+	// batch. Returns true if the file was added. On failure (not found,
+	// duplicate, limit) it displays the appropriate message and returns false.
+	tryAddFile := func(filename string) bool {
+		rec, err := findFileInArea(e.FileMgr, currentUser.CurrentFileAreaID, filename)
 		if err != nil {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.FileNotFoundFormat, input))), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.FileNotFoundFormat, filename))), outputMode)
 			time.Sleep(1 * time.Second)
-			return false, nil
+			return false
 		}
-
-		// Check for duplicates.
 		for _, id := range currentUser.TaggedFileIDs {
 			if id == rec.ID {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileAlreadyMarked)), outputMode)
 				time.Sleep(1 * time.Second)
-				return false, nil
+				return false
 			}
 		}
-
-		// Check batch limit.
 		if len(currentUser.TaggedFileIDs) >= 50 {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FiftyFilesMaximum)), outputMode)
 			time.Sleep(1 * time.Second)
-			return false, nil
+			return false
 		}
-
 		currentUser.TaggedFileIDs = append(currentUser.TaggedFileIDs, rec.ID)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.AddedToBatchFormat, rec.Filename))), outputMode)
 		log.Printf("INFO: Node %d: User %s tagged file %s (%s)", nodeNumber, currentUser.Handle, rec.ID, rec.Filename)
-		return true, nil
+		return true
 	}
 
-	// If starting from DOWNLOADFILE, prompt for the first file.
+	// If starting from DOWNLOADFILE, prompt until a file is added or the
+	// user cancels with empty input. Non-fatal failures re-prompt.
 	if startByAdding {
-		added, err := addFile()
-		if err != nil {
-			return currentUser, err
+		for {
+			filename, err := promptFilename()
+			if err != nil {
+				return currentUser, err
+			}
+			if filename == "" {
+				break // user cancelled
+			}
+			if tryAddFile(filename) {
+				break // file added, proceed to main loop
+			}
+			// Not found / duplicate / limit — re-prompt
 		}
-		if !added && len(currentUser.TaggedFileIDs) == 0 {
+		if len(currentUser.TaggedFileIDs) == 0 {
 			return currentUser, nil
 		}
 	}
@@ -135,8 +141,12 @@ func (e *MenuExecutor) downloadLoop(
 		case "X":
 			return currentUser, nil
 		case "A":
-			if _, err := addFile(); err != nil {
+			filename, err := promptFilename()
+			if err != nil {
 				return currentUser, err
+			}
+			if filename != "" {
+				tryAddFile(filename)
 			}
 			continue
 		case "", "C":
