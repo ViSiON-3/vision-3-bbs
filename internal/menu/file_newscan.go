@@ -78,6 +78,11 @@ func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		for _, f := range newFiles {
 			desc := f.Description
+			// Use first line only (FILE_ID.DIZ can be multi-line)
+			if idx := strings.IndexAny(desc, "\r\n"); idx >= 0 {
+				desc = desc[:idx]
+			}
+			desc = strings.TrimSpace(desc)
 			maxDesc := termWidth - 40
 			if maxDesc < 10 {
 				maxDesc = 10
