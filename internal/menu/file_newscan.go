@@ -86,10 +86,14 @@ func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				desc = desc[:maxDesc-3] + "..."
 			}
 
+			fname := f.Filename
+			if len(fname) > 12 {
+				fname = fname[:12]
+			}
 			sizeKB := (f.Size + 1023) / 1024
 			dateFmt := f.UploadedAt.Format("01/02/06")
 			line := fmt.Sprintf("  %-12s %6dK  %s  %s\r\n",
-				f.Filename, sizeKB, dateFmt, desc)
+				fname, sizeKB, dateFmt, desc)
 
 			terminalio.WriteProcessedBytes(terminal,
 				ansi.ReplacePipeCodes([]byte(line)), outputMode)
