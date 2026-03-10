@@ -21,7 +21,7 @@ The primary download command. Enters a loop where the user builds a download que
 1. Check user logged in and file area selected (`FileNoAreaSelected`)
 2. Check download ACS on current area (`YouCantDownloadHere` / `NoDownloadsHere`)
 3. Prompt for filename using `AddBatchPrompt`
-4. Case-insensitive exact match via `FileManager.GetFileByName(areaID, name)`
+4. Case-insensitive exact match via `findFileInArea(fm, areaID, name)` (exists in file_viewer.go)
 5. No match → `FileNotFoundFormat` → re-prompt
 6. Match → add file ID to `TaggedFileIDs` (skip if already tagged, using `FileAlreadyMarked`)
 7. Show `DownloadStr` prompt — options:
@@ -82,9 +82,9 @@ Three runnables:
 Shared helper:
 - `downloadLoop` — the add/continue/exit loop used by both DOWNLOADFILE and BATCHDOWNLOAD
 
-### New method: `internal/file/manager.go`
+### Existing helper reused: `internal/menu/file_viewer.go`
 
-- `GetFileByName(areaID int, name string) (*FileRecord, bool)` — case-insensitive filename lookup within an area
+- `findFileInArea(fm, areaID, filename)` — case-insensitive filename lookup (already exists)
 
 ### Registration: `internal/menu/executor.go`
 
@@ -103,5 +103,7 @@ registry["CLEAR_BATCH"] = runClearBatch
 
 ## Testing
 
-- Unit test `FileManager.GetFileByName` (case-insensitive match, no match, empty area)
+- Unit test `findFileInArea` (already has coverage via file_viewer tests)
+- Unit tests for `runClearBatch` edge cases
+- Build verification: `go build ./...` and `go vet ./...`
 - Manual test on pms.vision3bbs.com: upload file, D to download, B for batch, - to clear
