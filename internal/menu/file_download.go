@@ -267,3 +267,31 @@ func runDownloadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 
 	return updatedUser, "", nil
 }
+
+// runBatchDownload transfers the user's already-tagged batch files without
+// re-checking file area or download ACS (validated at tag time).
+func runBatchDownload(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+	if currentUser == nil {
+		return nil, "", nil
+	}
+
+	if len(currentUser.TaggedFileIDs) == 0 {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07No files tagged for download.\r\n")), outputMode)
+		time.Sleep(1 * time.Second)
+		return currentUser, "", nil
+	}
+
+	updatedUser, err := e.downloadLoop(s, terminal, userManager, currentUser, nodeNumber, outputMode, false)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, "LOGOFF", io.EOF
+		}
+		log.Printf("ERROR: Node %d: downloadLoop error: %v", nodeNumber, err)
+		if updatedUser != nil {
+			return updatedUser, "", nil
+		}
+		return currentUser, "", nil
+	}
+
+	return updatedUser, "", nil
+}
