@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -53,9 +54,10 @@ func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// Load templates (FILESCAN.TOP, FILESCAN.MID, FILESCAN.BOT, FILESCAN.AREA)
 	// Fall back to hardcoded defaults if files don't exist.
-	defaultTop := []byte("|15File Newscan |07- new files since |11@DATE@|07\r\n|08---------------------------------------------------------------\r\n")
+	scanLine := string(bytes.Repeat([]byte{0xC4}, 63)) // CP437 horizontal line ─
+	defaultTop := []byte("|15File Newscan |07- new files since |11@DATE@|07\r\n|08" + scanLine + "|07\r\n")
 	defaultMid := []byte("|15^NAME |07^DATE ^SIZE |03^DESC\r\n")
-	defaultBot := []byte("|08---------------------------------------------------------------\r\n")
+	defaultBot := []byte("|08" + scanLine + "|07\r\n")
 	defaultArea := []byte("\r\n|11@AREA@ |07(@COUNT@ new)\r\n")
 
 	topBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.TOP"))
