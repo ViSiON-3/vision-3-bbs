@@ -1,14 +1,14 @@
 {
-  "boardName": "My BBS",
+  "boardName": "Another Fine ViSiON/3 BBS",
   "sysOpName": "felonius",
   "timezone": "America/Chicago",
   "sysOpLevel": 255,
   "coSysOpLevel": 250,
   "invisibleLevel": 250,
   "newUserLevel": 10,
-  "regularUserLevel": 20,
+  "regularUserLevel": 25,
   "logonLevel": 10,
-  "anonymousLevel": 20,
+  "anonymousLevel": 50,
   "sshEnabled": true,
   "sshPort": 2222,
   "sshHost": "0.0.0.0",
@@ -26,5 +26,13 @@
   "allowNewUsers": true,
   "sessionIdleTimeoutMinutes": 5,
   "transferTimeoutMinutes": 30,
-  "deletedUserRetentionDays": -1
+  "deletedUserRetentionDays": -1,
+  "useNuv": false,
+  "autoAddNuv": false,
+  "nuvUseLevel": 25,
+  "nuvYesVotes": 2,
+  "nuvNoVotes": 5,
+  "nuvValidate": true,
+  "nuvKill": false,
+  "nuvLevel": 25
 }

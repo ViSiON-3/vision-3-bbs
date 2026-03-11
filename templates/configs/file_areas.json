@@ -7,7 +7,7 @@
         "path": "general",
         "acs_list": "s10",
         "acs_upload": "s250",
-        "acs_download": "s20",
+        "acs_download": "s25",
         "conference_id": 1
     },
     {
