@@ -1008,6 +1008,40 @@ func sessionHandler(s ssh.Session) {
 	// Guard against nil winCh (ranging a nil channel blocks forever).
 	if isPty && winCh != nil {
 		go func() {
+			type transferChecker interface{ IsTransferActive() bool }
+			var pendingResize atomic.Bool
+			var pendingW, pendingH atomic.Int32
+			// When a resize is suppressed during a transfer, spin up a
+			// short-lived goroutine that polls for transfer completion and
+			// replays the suppressed resize so the terminal doesn't stay at
+			// the wrong dimensions for the rest of the session.
+			var replayOnce sync.Once
+			var replayDone atomic.Bool
+			spawnReplayWaiter := func() {
+				tc, ok := s.(transferChecker)
+				if !ok {
+					return
+				}
+				replayOnce.Do(func() {
+					go func() {
+						ticker := time.NewTicker(250 * time.Millisecond)
+						defer ticker.Stop()
+						for range ticker.C {
+							if !tc.IsTransferActive() {
+								if pendingResize.Load() {
+									w := int(pendingW.Load())
+									h := int(pendingH.Load())
+									log.Printf("Node %d: Replaying pending resize %dx%d after transfer ended", nodeID, w, h)
+									_ = terminal.SetSize(w, h)
+									pendingResize.Store(false)
+								}
+								replayDone.Store(true)
+								return
+							}
+						}
+					}()
+				})
+			}
 			for win := range winCh {
 				log.Printf("Node %d: Window resize event: %dx%d", nodeID, win.Width, win.Height)
 				if win.Width > 0 {
@@ -1020,10 +1054,26 @@ func sessionHandler(s ssh.Session) {
 					// Skip terminal repaint during binary transfers — SetSize
 					// writes ANSI sequences via session.Write() which does CRLF
 					// conversion, corrupting the RawWrite binary data stream.
-					type transferChecker interface{ IsTransferActive() bool }
 					if tc, ok := s.(transferChecker); ok && tc.IsTransferActive() {
 						log.Printf("Node %d: Suppressed terminal.SetSize during active transfer", nodeID)
+						pendingResize.Store(true)
+						pendingW.Store(int32(win.Width))
+						pendingH.Store(int32(win.Height))
+						spawnReplayWaiter()
 					} else {
+						// Replay any suppressed resize now that the transfer is done.
+						if pendingResize.Load() {
+							w := int(pendingW.Load())
+							h := int(pendingH.Load())
+							log.Printf("Node %d: Replaying pending resize %dx%d after transfer ended", nodeID, w, h)
+							pendingResize.Store(false)
+							_ = terminal.SetSize(w, h)
+						}
+						// Reset the one-shot replay waiter for the next transfer.
+						if replayDone.Load() {
+							replayOnce = sync.Once{}
+							replayDone.Store(false)
+						}
 						_ = terminal.SetSize(win.Width, win.Height)
 					}
 				}

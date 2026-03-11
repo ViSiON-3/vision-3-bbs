@@ -12,7 +12,7 @@
 
 ---
 
-### Task 1: Create feature branch
+## Task 1: Create feature branch
 
 **Step 1: Create and switch to feature branch**
 
@@ -30,7 +30,7 @@ Expected: `feature/file-download-batch`
 
 ---
 
-### Task 2: Implement CLEAR_BATCH runnable
+## Task 2: Implement CLEAR_BATCH runnable
 
 Simplest of the three — no transfer logic, validates the pattern.
 
@@ -120,7 +120,7 @@ git commit -m "feat: add CLEAR_BATCH runnable for file transfer menu"
 
 ---
 
-### Task 3: Implement the download loop helper and DOWNLOADFILE runnable
+## Task 3: Implement the download loop helper and DOWNLOADFILE runnable
 
 **Files:**
 - Modify: `internal/menu/file_download.go`
@@ -405,7 +405,7 @@ git commit -m "feat: add DOWNLOADFILE runnable with V2-style download loop"
 
 ---
 
-### Task 4: Implement BATCHDOWNLOAD runnable
+## Task 4: Implement BATCHDOWNLOAD runnable
 
 **Files:**
 - Modify: `internal/menu/file_download.go`
@@ -475,7 +475,7 @@ git commit -m "feat: add BATCHDOWNLOAD runnable, register all download commands"
 
 ---
 
-### Task 5: Build, test, and deploy
+## Task 5: Build, test, and deploy
 
 **Step 1: Run full test suite**
 
@@ -521,7 +521,7 @@ git push -u origin feature/file-download-batch
 
 ---
 
-### Task 6: Create pull request
+## Task 6: Create pull request
 
 ```bash
 gh pr create --title "feat: add file download, batch download, and clear batch" --body "$(cat <<'EOF'
