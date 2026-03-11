@@ -53,6 +53,8 @@ type User struct {
 
 	// Message System Related
 	TaggedMessageAreaTags []string `json:"tagged_message_area_tags,omitempty"` // List of message area tags tagged for newscan
+	TaggedFileAreaIDs     []int    `json:"tagged_file_area_ids,omitempty"`     // File area IDs tagged for file newscan
+	TaggedFileAreaTags    []string `json:"tagged_file_area_tags,omitempty"`    // File area tags tagged for file newscan config
 
 	// Terminal Preferences
 	ScreenWidth       int    `json:"screenWidth,omitempty"`       // Detected/preferred terminal width (default 80)
@@ -66,6 +68,14 @@ type User struct {
 	CustomPrompt    string `json:"customPrompt,omitempty"`
 	OutputMode      string `json:"outputMode,omitempty"`
 	FileListingMode string `json:"fileListingMode,omitempty"` // "lightbar" or "classic" (empty = server default)
+	FileListColumns struct {
+		Name        bool `json:"name"`
+		Size        bool `json:"size"`
+		Date        bool `json:"date"`
+		Downloads   bool `json:"downloads"`
+		Uploader    bool `json:"uploader"`
+		Description bool `json:"description"`
+	} `json:"file_list_columns,omitempty"`
 	AutoSignature   string `json:"autoSignature,omitempty"`   // Auto-signature appended to messages (max 5 lines)
 	Colors           [7]int `json:"colors,omitempty"`
 

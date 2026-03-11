@@ -209,6 +209,17 @@ func StringEntries() []StringEntry {
 		{Label: "Not enough File Points", Key: "notEnoughFP", Description: "Displayed when user tries to leech without enough file points"},
 		{Label: "File Area Password", Key: "fileAreaPassword", Description: "When prompting for file area password."},
 
+		// Download/batch workflow
+		{Label: "Batch Queue Empty", Key: "batchQueueEmpty", Description: "Displayed when user tries to clear an already empty batch queue"},
+		{Label: "Batch Cleared Format", Key: "batchClearedFormat", Description: "Displayed after clearing batch queue (%d=count)"},
+		{Label: "Added to Batch Format", Key: "addedToBatchFormat", Description: "Displayed when file is added to batch (%s=filename)"},
+		{Label: "No Files Tagged", Key: "noFilesTagged", Description: "Displayed when batch queue is empty at download time"},
+		{Label: "Batch Count Format", Key: "batchCountFormat", Description: "Shows number of tagged files (%d=count)"},
+		{Label: "Files Resolve Error", Key: "filesResolveError", Description: "Displayed when tagged files cannot be resolved to paths"},
+		{Label: "Download Finished", Key: "downloadFinishedFormat", Description: "Displayed after transfer completes (%d=success, %d=failed)"},
+		{Label: "File Area Not Found", Key: "fileAreaNotFound", Description: "Displayed when selected file area no longer exists"},
+		{Label: "Save User Error", Key: "saveUserError", Description: "Displayed when user data fails to save"},
+
 		// === V3-Specific Strings ===
 
 		// General / Misc
@@ -452,5 +463,49 @@ func StringEntries() []StringEntry {
 		{Label: "Term: Size Detected", Key: "termSizeNewDetectedPrompt", Description: "Prompt when new terminal size is detected"},
 		{Label: "Term: Update Defaults", Key: "termSizeUpdateDefaultsPrompt", Description: "Prompt to update default terminal size"},
 		{Label: "Invisible Logon", Key: "invisibleLogonPrompt", Description: "Prompt for invisible (hidden) logon"},
+
+		// File Search (V3)
+		{Label: "Search: Prompt", Key: "searchFilesPrompt", Description: "Prompt for file search text"},
+		{Label: "Search: Min Chars", Key: "searchFilesMinChars", Description: "Shown when search text is too short (min 3 chars)"},
+		{Label: "Search: No Results", Key: "searchNoResults", Description: "Shown when no files match the search"},
+		{Label: "Search: Results Header", Key: "searchResultsHeader", Description: "Header for search results (%s=query)"},
+		{Label: "Search: Result Line", Key: "searchResultFormat", Description: "Format for each search result line (%s=area,file,size,desc)"},
+		{Label: "Search: Summary", Key: "searchResultsSummary", Description: "Summary shown after search results (%d=count)"},
+
+		// File Info (V3)
+		{Label: "File: Info Prompt", Key: "fileInfoPrompt", Description: "Prompt for filename when showing file info"},
+		{Label: "File: Info Header", Key: "fileInfoHeader", Description: "Header text before file info display"},
+
+		// File Newscan (V3)
+		{Label: "File Newscan Header", Key: "fileNewscanHeader", Description: "Header displayed at start of file newscan"},
+		{Label: "File Newscan Area Hdr", Key: "fileNewscanAreaHdr", Description: "Per-area header during file newscan (%s=area name, %d=count)"},
+		{Label: "File Newscan No New", Key: "fileNewscanNoNew", Description: "Shown when no new files found during newscan"},
+		{Label: "File Newscan Complete", Key: "fileNewscanComplete", Description: "Shown at end of file newscan (%d=total new files)"},
+
+		// Sysop File Review (V3)
+		{Label: "SysRev: Header", Key: "sysopReviewHeader", Description: "Header displayed when reviewing a file record"},
+		{Label: "SysRev: Action Prompt", Key: "sysopReviewPrompt", Description: "Action menu prompt for file review"},
+		{Label: "SysRev: Marked", Key: "sysopReviewMarked", Description: "Shown after marking a file as reviewed"},
+		{Label: "SysRev: No Files", Key: "sysopReviewNoFiles", Description: "Shown when no unreviewed files exist"},
+		{Label: "SysRev: Scan All?", Key: "sysopReviewScanAll", Description: "Prompt asking whether to scan all areas or current only"},
+		{Label: "SysRev: Renamed", Key: "sysopReviewRenamed", Description: "Shown after successfully renaming a file"},
+
+		// File Newscan Config (V3)
+		{Label: "FileNS Config Header", Key: "fileNewscanConfigHeader", Description: "Header for file newscan config screen"},
+		{Label: "FileNS Config Prompt", Key: "fileNewscanConfigPrompt", Description: "Prompt in file newscan config"},
+		{Label: "FileNS Config Saved", Key: "fileNewscanConfigSaved", Description: "Shown after saving file newscan config (%d=count)"},
+
+		// Column Config (V3)
+		{Label: "ColCfg: Header", Key: "cfgFileColumnsHeader", Description: "Header for column config screen"},
+		{Label: "ColCfg: Toggle", Key: "cfgFileColumnsToggle", Description: "Toggle prompt for column config"},
+		{Label: "ColCfg: Saved", Key: "cfgFileColumnsSaved", Description: "Shown after saving column config"},
+
+		// Want List (V3)
+		{Label: "WantList: Filename", Key: "wantListPrompt", Description: "Prompt for filename to request"},
+		{Label: "WantList: Reason", Key: "wantListReasonPrompt", Description: "Prompt for reason (optional)"},
+		{Label: "WantList: Submitted", Key: "wantListSubmitted", Description: "Shown after request is submitted"},
+		{Label: "WantList: Empty", Key: "wantListEmpty", Description: "Shown when want list has no requests"},
+		{Label: "WantList: Header", Key: "wantListHeader", Description: "Header displayed above want list entries"},
+		{Label: "WantList: Cleared", Key: "wantListCleared", Description: "Shown after want list is cleared"},
 	}
 }

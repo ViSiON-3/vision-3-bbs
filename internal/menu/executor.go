@@ -567,6 +567,17 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["OPENDOOR"] = runOpenDoor                               // Prompt and open a door
 	registry["DOORINFO"] = runDoorInfo                               // Show door information
 	registry["UPLOADFILE"] = runUploadFile                           // ZMODEM file upload
+	registry["DOWNLOADFILE"] = runDownloadFile                        // V2-style download: prompt, add to batch, transfer
+	registry["BATCHDOWNLOAD"] = runBatchDownload                      // Download tagged batch files
+	registry["CLEAR_BATCH"] = runClearBatch                          // Clear tagged file batch queue
+	registry["SEARCH_FILES"] = runSearchFiles                        // Search files across all areas
+	registry["SHOWFILEINFO"] = runShowFileInfo                       // Show file metadata
+	registry["FILE_NEWSCAN"] = runFileNewscan                        // Scan file areas for new uploads
+	registry["EDITFILERECORD"] = runEditFileRecord                   // Sysop file review queue
+	registry["WANTLIST"] = runWantList                               // File want list
+	registry["FILENEWSCANCONFIG"] = runFileNewscanConfig              // File newscan area config
+	registry["CFG_FILECOLUMNS"] = runCfgFileColumns                  // Configure file listing columns
+	registry["LISTFILES_EXTENDED"] = runListFilesExtended            // Extended file listing (all columns)
 	registry["QWKDOWNLOAD"] = runQWKDownload                         // QWK mail packet download
 	registry["QWKUPLOAD"] = runQWKUpload                             // QWK REP packet upload
 	registry["WHOISONLINE"] = runWhoIsOnline                         // Who's online display
@@ -8753,9 +8764,50 @@ func (e *MenuExecutor) runUploadFiles(
 	return nil
 }
 
+// fileColumnEnabled returns whether a column should be shown in the classic file listing.
+// When extended is true, all columns are shown. When all user toggles are false (zero value),
+// all columns are shown (backwards compatible default).
+func fileColumnEnabled(u *user.User, col string, extended bool) bool {
+	if extended {
+		return true
+	}
+	c := u.FileListColumns
+	allDefault := !c.Name && !c.Size && !c.Date && !c.Downloads && !c.Uploader && !c.Description
+	if allDefault {
+		return true
+	}
+	switch col {
+	case "name":
+		return c.Name
+	case "size":
+		return c.Size
+	case "date":
+		return c.Date
+	case "downloads":
+		return c.Downloads
+	case "uploader":
+		return c.Uploader
+	case "description":
+		return c.Description
+	}
+	return true
+}
+
+// runListFilesExtended displays a file listing with all columns visible regardless of user config.
+func runListFilesExtended(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+	return runListFiles(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, "EXTENDED", outputMode, termWidth, termHeight)
+}
+
 // runListFiles displays a paginated list of files in the current file area.
 func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
-	log.Printf("DEBUG: Node %d: Running LISTFILES", nodeNumber)
+	extendedMode := false
+	for _, tok := range strings.Fields(args) {
+		if strings.EqualFold(tok, "EXTENDED") {
+			extendedMode = true
+			break
+		}
+	}
+	log.Printf("DEBUG: Node %d: Running LISTFILES (extended=%v)", nodeNumber, extendedMode)
 
 	// 1. Check User and Current File Area
 	if currentUser == nil {
@@ -8963,13 +9015,28 @@ func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 				fileNumOnPage := (currentPage-1)*filesPerPage + i + 1
 
 				fileNumStr := strconv.Itoa(fileNumOnPage)
-				fileNameStr := fileRec.Filename
-				if len(fileNameStr) > 12 {
-					fileNameStr = fileNameStr[:12]
+				fileNameStr := ""
+				if fileColumnEnabled(currentUser, "name", extendedMode) {
+					fileNameStr = fileRec.Filename
+					if len(fileNameStr) > 12 {
+						fileNameStr = fileNameStr[:12]
+					}
+					fileNameStr = fmt.Sprintf("%-12s", fileNameStr)
+				} else {
+					fileNameStr = strings.Repeat(" ", 12)
 				}
-				fileNameStr = fmt.Sprintf("%-12s", fileNameStr)
-				dateStr := fileRec.UploadedAt.Format("01/02/06")
-				sizeStr := fmt.Sprintf("%5s", fmt.Sprintf("%dk", fileRec.Size/1024))
+				dateStr := ""
+				if fileColumnEnabled(currentUser, "date", extendedMode) {
+					dateStr = fileRec.UploadedAt.Format("01/02/06")
+				} else {
+					dateStr = strings.Repeat(" ", 8)
+				}
+				sizeStr := ""
+				if fileColumnEnabled(currentUser, "size", extendedMode) {
+					sizeStr = fmt.Sprintf("%5s", fmt.Sprintf("%dk", fileRec.Size/1024))
+				} else {
+					sizeStr = strings.Repeat(" ", 5)
+				}
 
 				markStr := " "
 				if currentUser.TaggedFileIDs != nil {
@@ -8981,10 +9048,13 @@ func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 					}
 				}
 
-				dizLines := formatDIZLines(fileRec.Description, dizMaxWidth, dizMaxLines)
+				var dizLines []string
 				firstDesc := ""
-				if len(dizLines) > 0 {
-					firstDesc = dizLines[0]
+				if fileColumnEnabled(currentUser, "description", extendedMode) {
+					dizLines = formatDIZLines(fileRec.Description, dizMaxWidth, dizMaxLines)
+					if len(dizLines) > 0 {
+						firstDesc = dizLines[0]
+					}
 				}
 
 				line = strings.ReplaceAll(line, "^MARK", markStr)
@@ -9276,7 +9346,7 @@ func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 					time.Sleep(1 * time.Second)
 				} else {
 					ctx, cancel := e.transferContext(s.Context())
-					ziplab.RunZipLabView(ctx, s, terminal, viewFilePath, fileToView.Filename, outputMode)
+					ziplab.RunZipLabView(ctx, s, terminal, viewFilePath, fileToView.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s))
 					cancel()
 				}
 			} else {

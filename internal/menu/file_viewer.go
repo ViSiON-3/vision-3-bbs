@@ -21,6 +21,17 @@ import (
 	"github.com/stlalpha/vision3/internal/ziplab"
 )
 
+// sessionReadLine returns a ReadLineFunc that reads through the session's shared
+// InputHandler, preventing stale bytes from being left for subsequent readers.
+func sessionReadLine(s ssh.Session, terminal *term.Terminal) ziplab.ReadLineFunc {
+	return func() (string, error) { return readLineFromSessionIH(s, terminal) }
+}
+
+// sessionReadKey returns a ReadKeyFunc that reads through the session's shared InputHandler.
+func sessionReadKey(s ssh.Session) ziplab.ReadKeyFunc {
+	return func() (int, error) { return getSessionIH(s).ReadKey() }
+}
+
 // findFileInArea searches for a file by name (case-insensitive) in the given area.
 func findFileInArea(fm *file.FileManager, areaID int, filename string) (*file.FileRecord, error) {
 	files := fm.GetFilesForArea(areaID)
@@ -96,7 +107,7 @@ func runViewFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 	if e.FileMgr.IsSupportedArchive(record.Filename) {
 		ctx, cancel := e.transferContext(s.Context())
 		defer cancel()
-		ziplab.RunZipLabView(ctx, s, terminal, filePath, record.Filename, outputMode)
+		ziplab.RunZipLabView(ctx, s, terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s))
 	} else {
 		if termHeight <= 0 {
 			_, termHeight = getTerminalSize(s)
@@ -143,7 +154,7 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 	if e.FileMgr.IsSupportedArchive(record.Filename) {
 		ctx, cancel := e.transferContext(s.Context())
 		defer cancel()
-		ziplab.RunZipLabView(ctx, s, terminal, filePath, record.Filename, outputMode)
+		ziplab.RunZipLabView(ctx, s, terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s))
 	} else {
 		if termHeight <= 0 {
 			_, termHeight = getTerminalSize(s)

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -153,8 +154,9 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		}
 	}
 
-	// Append sysop-only entries (not exposed via BAR file).
+	// Build sysop-only entries (toggled with * key).
 	isSysop := e.isCoSysOpOrAbove(currentUser)
+	var sysopEntries []cmdEntry
 	if isSysop {
 		defHiSysop := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
 		defLoSysop := colorCodeToAnsi(e.Theme.YesNoRegularColor)
@@ -165,9 +167,10 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			{"Edit", "e"},
 			{"Kill", "k"},
 			{"Move", "m"},
+			{"Rename", "r"},
 		}
 		for _, d := range sysopCmds {
-			cmdEntries = append(cmdEntries, cmdEntry{
+			sysopEntries = append(sysopEntries, cmdEntry{
 				label:          d.label,
 				hotkey:         d.hotkey,
 				highlightColor: defHiSysop,
@@ -175,6 +178,9 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			})
 		}
 	}
+	userEntries := make([]cmdEntry, len(cmdEntries))
+	copy(userEntries, cmdEntries)
+	showSysopBar := false
 
 	// Highlight colors for file rows.
 	hiColorSeq := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
@@ -796,7 +802,7 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			topIndex = newTop
 			selectedIndex = newTop
 			continue
-		case editor.KeyPageDown, editor.KeyCtrlC: // Page Down
+		case editor.KeyPageDown: // Page Down
 			count := filesVisibleFrom(topIndex)
 			nextTop := topIndex + count
 			if nextTop >= len(allFiles) {
@@ -826,6 +832,21 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			} else {
 				continue // Ignore non-printable, non-navigation keys
 			}
+		}
+
+		// Toggle sysop command bar with *
+		if key == "*" && isSysop {
+			showSysopBar = !showSysopBar
+			if showSysopBar {
+				cmdEntries = make([]cmdEntry, len(sysopEntries))
+				copy(cmdEntries, sysopEntries)
+			} else {
+				cmdEntries = make([]cmdEntry, len(userEntries))
+				copy(cmdEntries, userEntries)
+			}
+			cmdIndex = 0
+			needFullRedraw = true
+			continue
 		}
 
 		// Command dispatch (direct hotkeys or Enter-selected command).
@@ -912,7 +933,7 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 				_ = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h"), outputMode)
 				if e.FileMgr.IsSupportedArchive(sel.Filename) {
 					ctx, cancel := e.transferContext(s.Context())
-					ziplab.RunZipLabView(ctx, s, terminal, filePath, sel.Filename, outputMode)
+					ziplab.RunZipLabView(ctx, s, terminal, filePath, sel.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s))
 					cancel()
 				} else {
 					termWidth, termHeight := getTerminalSize(s)
@@ -1168,6 +1189,70 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 						selectedIndex = len(allFiles) - 1
 					}
 				}
+			}
+			needFullRedraw = true
+
+		case "r": // Rename file on disk (sysop only)
+			if !isSysop || len(allFiles) == 0 {
+				continue
+			}
+			rec := allFiles[selectedIndex]
+			clearFooter := ansi.MoveCursor(separatorRow, 1) + "\x1b[2K" + ansi.MoveCursor(cmdBarRow, 1) + "\x1b[2K"
+			_ = terminalio.WriteProcessedBytes(terminal, []byte(clearFooter), outputMode)
+			_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(cmdBarRow, 1)), outputMode)
+			_ = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h"), outputMode)
+			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|15New filename: |07")), outputMode)
+			newName, readErr := readLineFromSessionIHAllowAbort(s, terminal)
+			_ = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25l"), outputMode)
+			if readErr != nil || strings.TrimSpace(newName) == "" {
+				needFullRedraw = true
+				continue
+			}
+			newName = filepath.Base(strings.TrimSpace(newName))
+			if newName == "." || newName == ".." {
+				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Invalid filename.|07\r\n")), outputMode)
+				time.Sleep(1 * time.Second)
+				needFullRedraw = true
+				continue
+			}
+			// Check for duplicate filename in the current area.
+			duplicate := false
+			for _, f := range allFiles {
+				if strings.EqualFold(f.Filename, newName) && f.ID != rec.ID {
+					duplicate = true
+					break
+				}
+			}
+			if duplicate {
+				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Filename already exists in this area.|07\r\n")), outputMode)
+				time.Sleep(1 * time.Second)
+				needFullRedraw = true
+				continue
+			}
+			oldPath, pathErr := e.FileMgr.GetFilePath(rec.ID)
+			if pathErr != nil {
+				log.Printf("ERROR: Node %d: Failed to resolve path for %s: %v", nodeNumber, rec.Filename, pathErr)
+				needFullRedraw = true
+				continue
+			}
+			newPath := filepath.Join(filepath.Dir(oldPath), newName)
+			if renErr := os.Rename(oldPath, newPath); renErr != nil {
+				log.Printf("ERROR: Node %d: Failed to rename %s to %s: %v", nodeNumber, rec.Filename, newName, renErr)
+				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Rename failed.|07\r\n")), outputMode)
+				time.Sleep(1 * time.Second)
+				needFullRedraw = true
+				continue
+			}
+			if updErr := e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
+				r.Filename = newName
+			}); updErr != nil {
+				log.Printf("ERROR: Node %d: Failed to update record for %s: %v", nodeNumber, newName, updErr)
+				if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
+					log.Printf("ERROR: Node %d: Rollback rename failed for %s: %v (disk/DB inconsistent)", nodeNumber, newName, rollbackErr)
+				}
+			} else {
+				log.Printf("INFO: Node %d: Sysop renamed file '%s' to '%s' in area %d.", nodeNumber, rec.Filename, newName, currentAreaID)
+				allFiles = e.FileMgr.GetFilesForArea(currentAreaID)
 			}
 			needFullRedraw = true
 		}

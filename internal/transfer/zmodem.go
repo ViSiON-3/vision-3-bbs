@@ -3,6 +3,7 @@ package transfer
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -33,10 +35,98 @@ type rawBinaryWriter interface {
 	RawWrite(p []byte) (int, error)
 }
 
+// transferLocker is implemented by BBSSession to signal that a binary
+// transfer is in progress. While active, background code (e.g. terminal
+// repaint on window resize) must not write to the session.
+type transferLocker interface {
+	SetTransferActive(active bool)
+}
+
 // writeFunc adapts a func([]byte)(int,error) to the io.Writer interface.
 type writeFunc func([]byte) (int, error)
 
 func (f writeFunc) Write(p []byte) (int, error) { return f(p) }
+
+// Adaptive chunk sizing constants for binary transfers.
+const (
+	adaptiveMinChunk    = 4096     // 4 KB — starting chunk size
+	adaptiveMaxChunk    = 8192    // 8 KB — ceiling (SyncTerm chokes above this)
+	adaptiveRampWrites  = 50      // double chunk size every N writes at current level
+	adaptiveBackoffDiv  = 2       // halve chunk size on ZRPOS detection
+)
+
+// adaptiveCopy copies src → dst with dynamic chunk sizing that ramps up for
+// throughput and backs off when the receiver signals trouble (via ZRPOS).
+//
+// The backoff signal is read from the backoff atomic: when the stdin goroutine
+// detects a ZRPOS frame (receiver requesting retransmission), it increments
+// backoff. adaptiveCopy checks this counter on each write and halves the chunk
+// size when it changes, then resumes ramping after stabilizing.
+//
+// Ramp schedule: starts at 4 KB, doubles every ~50 writes, caps at 8 KB.
+// Backoff: halves chunk size (floor 4 KB), resets ramp counter.
+func adaptiveCopy(dst io.Writer, src io.Reader, backoff *atomic.Int32) (int64, error) {
+	hasher := sha256.New()
+	chunkSize := adaptiveMinChunk
+	buf := make([]byte, adaptiveMaxChunk) // allocate max once, slice as needed
+	var total int64
+	var writesAtLevel int
+	var lastBackoff int32
+
+	for {
+		// Check for backoff signal from stdin goroutine (ZRPOS detected).
+		if backoff != nil {
+			cur := backoff.Load()
+			if cur != lastBackoff {
+				lastBackoff = cur
+				oldChunk := chunkSize
+				chunkSize = chunkSize / adaptiveBackoffDiv
+				if chunkSize < adaptiveMinChunk {
+					chunkSize = adaptiveMinChunk
+				}
+				writesAtLevel = 0
+				log.Printf("DEBUG: adaptiveCopy: ZRPOS backoff %d→%d bytes (signal #%d) at %d total bytes",
+					oldChunk, chunkSize, cur, total)
+			}
+		}
+
+		// Ramp up chunk size after sustained successful writes.
+		writesAtLevel++
+		if writesAtLevel >= adaptiveRampWrites && chunkSize < adaptiveMaxChunk {
+			oldChunk := chunkSize
+			chunkSize = chunkSize * 2
+			if chunkSize > adaptiveMaxChunk {
+				chunkSize = adaptiveMaxChunk
+			}
+			writesAtLevel = 0
+			log.Printf("DEBUG: adaptiveCopy: ramp %d→%d bytes at %d total bytes", oldChunk, chunkSize, total)
+		}
+
+		nr, rerr := src.Read(buf[:chunkSize])
+		if nr > 0 {
+			nw, werr := dst.Write(buf[:nr])
+			total += int64(nw)
+			hasher.Write(buf[:nr])
+			if werr != nil {
+				log.Printf("DEBUG: adaptiveCopy: write error after %d bytes: %v", total, werr)
+				return total, werr
+			}
+			if nw != nr {
+				log.Printf("DEBUG: adaptiveCopy: short write %d/%d after %d total bytes", nw, nr, total)
+				return total, io.ErrShortWrite
+			}
+		}
+		if rerr != nil {
+			if rerr == io.EOF {
+				log.Printf("DEBUG: adaptiveCopy: finished. Bytes=%d ChunkSize=%d SHA256=%x",
+					total, chunkSize, hasher.Sum(nil))
+				return total, nil
+			}
+			log.Printf("DEBUG: adaptiveCopy: read error after %d bytes: %v", total, rerr)
+			return total, rerr
+		}
+	}
+}
 
 // RunCommandDirect executes an external command with its stdin/stdout/stderr
 // piped directly to the SSH session — no PTY allocated. This is essential for
@@ -53,6 +143,14 @@ func (f writeFunc) Write(p []byte) (int, error) { return f(p) }
 // upload dialog without sending a ZModem abort), the process would otherwise
 // retry indefinitely. Pass 0 to disable.
 func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinIdleTimeout time.Duration) error {
+	// Signal that a binary transfer is active so background code (terminal
+	// repaint on window resize) doesn't write to the session and corrupt
+	// the binary stream.
+	if tl, ok := s.(transferLocker); ok {
+		tl.SetTransferActive(true)
+		defer tl.SetTransferActive(false)
+	}
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -78,7 +176,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	}
 
 	inputDone := make(chan struct{})
-	outputDone := make(chan struct{})
+	outputDone := make(chan error, 1)
 
 	// stdinActivity receives a signal each time bytes arrive from the session.
 	// Used by the idle monitor goroutine below; nil when idle timeout is disabled.
@@ -87,14 +185,18 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		stdinActivity = make(chan struct{}, 1)
 	}
 
+	// zrposBackoff is incremented by the stdin goroutine when it detects a
+	// ZRPOS frame from the client (receiver requesting retransmission). The
+	// output goroutine's adaptiveCopy reads this to halve its chunk size.
+	var zrposBackoff atomic.Int32
+
 	// session → command stdin
 	// Uses a manual read loop (rather than io.Copy) so we can:
 	//  1. Signal non-CAN stdin activity to the idle monitor.
 	//  2. Detect ZModem abort (5+ consecutive CAN / 0x18 bytes) and kill the
-	//     process immediately rather than waiting for the idle timer. This
-	//     handles the case where the client (e.g. SyncTerm) sends a CAN abort
-	//     when the user cancels the upload dialog — sexyz may not handle the
-	//     CAN reliably, so we enforce the kill ourselves.
+	//     process immediately rather than waiting for the idle timer.
+	//  3. Detect ZRPOS frames (receiver requesting retransmission due to data
+	//     corruption) and signal the output goroutine to reduce chunk size.
 	go func() {
 		defer close(inputDone)
 		buf := make([]byte, 32*1024)
@@ -102,19 +204,59 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		var cpErr error
 		var canRun int  // consecutive CAN (0x18) bytes seen so far
 		var killed bool // set once CAN abort fires; stops further writes
+		var prevTail [6]byte // tail bytes from previous read for split-header detection
+		var prevLen int
 		for {
 			nr, rerr := s.Read(buf)
 			if nr > 0 {
-				// Scan for consecutive CAN bytes and decide whether this
-				// chunk counts as real file activity.
+				// Check for ZRPOS headers split across read boundaries.
+				// Concatenate previous tail with start of current buffer.
+				if prevLen > 0 {
+					combined := make([]byte, prevLen+nr)
+					copy(combined, prevTail[:prevLen])
+					copy(combined[prevLen:], buf[:nr])
+					// Only need to scan the overlap region (positions where a header could span)
+					scanEnd := prevLen + 5 // max header is 6 bytes
+					if scanEnd > len(combined) {
+						scanEnd = len(combined)
+					}
+					for i := 0; i < scanEnd; i++ {
+						b := combined[i]
+						if b == 0x09 && i >= 3 {
+							chunk := combined[i-3 : i+1]
+							if chunk[0] == 0x2a && chunk[1] == 0x18 && chunk[2] == 0x41 {
+								zrposBackoff.Add(1)
+								log.Printf("DEBUG: (%s) ZRPOS binary header detected across boundary at offset %d (backoff #%d)",
+									cmd.Path, total-int64(prevLen)+int64(i), zrposBackoff.Load())
+							}
+						}
+						if b == '9' && i >= 5 {
+							chunk := combined[i-5 : i+1]
+							if chunk[0] == 0x2a && chunk[1] == 0x2a && chunk[2] == 0x18 &&
+								chunk[3] == 0x42 && chunk[4] == '0' {
+								zrposBackoff.Add(1)
+								log.Printf("DEBUG: (%s) ZRPOS hex header detected across boundary at offset %d (backoff #%d)",
+									cmd.Path, total-int64(prevLen)+int64(i), zrposBackoff.Load())
+							}
+						}
+					}
+				}
+				// Save tail for next iteration
+				if nr >= 6 {
+					copy(prevTail[:], buf[nr-6:nr])
+					prevLen = 6
+				} else {
+					copy(prevTail[:], buf[:nr])
+					prevLen = nr
+				}
+
+				// Scan for consecutive CAN bytes, ZRPOS frames, and decide
+				// whether this chunk counts as real file activity.
 				hasNonCAN := false
-				for _, b := range buf[:nr] {
+				for i, b := range buf[:nr] {
 					if b == 0x18 { // CAN
 						canRun++
 						if canRun >= 5 && !killed {
-							// ZModem abort sequence — kill the process so the
-							// BBS returns to the menu immediately rather than
-							// waiting for the idle timer to fire.
 							killed = true
 							log.Printf("DEBUG: (%s) ZModem CAN abort detected in stdin; killing process", cmd.Path)
 							if cmd.Process != nil {
@@ -126,13 +268,35 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 						canRun = 0
 						hasNonCAN = true
 					}
+
+					// Detect ZRPOS headers in the byte stream.
+					// Hex header: 2A 2A 18 42 30 39 (ZDLE ZHEX "B" "09")
+					//   → "**\x18B09" where 09 = ZRPOS frame type
+					// Binary header: 2A 18 41 09 (ZPAD ZDLE ZBIN ZRPOS)
+					if b == 0x09 && i >= 3 {
+						chunk := buf[i-3 : i+1]
+						if chunk[0] == 0x2a && chunk[1] == 0x18 && chunk[2] == 0x41 {
+							// Binary ZRPOS header: * ZDLE A ZRPOS
+							zrposBackoff.Add(1)
+							log.Printf("DEBUG: (%s) ZRPOS binary header detected in stdin at offset %d (backoff #%d)",
+								cmd.Path, total+int64(i), zrposBackoff.Load())
+						}
+					}
+					if b == '9' && i >= 5 {
+						chunk := buf[i-5 : i+1]
+						if chunk[0] == 0x2a && chunk[1] == 0x2a && chunk[2] == 0x18 &&
+							chunk[3] == 0x42 && chunk[4] == '0' {
+							// Hex ZRPOS header: ** ZDLE B 0 9
+							zrposBackoff.Add(1)
+							log.Printf("DEBUG: (%s) ZRPOS hex header detected in stdin at offset %d (backoff #%d)",
+								cmd.Path, total+int64(i), zrposBackoff.Load())
+						}
+					}
 				}
 				if killed {
 					break
 				}
 				// Only reset the idle timer for real file data.
-				// CAN bytes indicate an abort — treating them as "activity"
-				// would restart the timer and delay the kill by another 30 s.
 				if stdinActivity != nil && hasNonCAN {
 					select {
 					case stdinActivity <- struct{}{}:
@@ -195,14 +359,21 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// command stdout → session (raw bytes, no CRLF conversion)
 	// Use RawWrite when available to bypass gliderlabs' \n→\r\n expansion,
 	// which corrupts ZMODEM and other binary transfer protocol streams.
+	//
+	// adaptiveCopy starts with small chunks (4 KB) and ramps up to 8 KB for
+	// throughput. If the stdin goroutine detects a ZRPOS (retransmission
+	// request), it signals backoff and the chunk size is halved.
 	go func() {
-		defer close(outputDone)
 		dst := io.Writer(s)
 		if rw, ok := s.(rawBinaryWriter); ok {
+			log.Printf("DEBUG: (%s) using RawWrite for binary-safe output (type=%T)", cmd.Path, s)
 			dst = writeFunc(rw.RawWrite)
+		} else {
+			log.Printf("WARN: (%s) rawBinaryWriter assertion FAILED (type=%T), falling back to session.Write", cmd.Path, s)
 		}
-		n, cpErr := io.Copy(dst, stdoutPipe)
+		n, cpErr := adaptiveCopy(dst, stdoutPipe, &zrposBackoff)
 		log.Printf("DEBUG: (%s) direct stdout copy finished. Bytes: %d, Error: %v", cmd.Path, n, cpErr)
+		outputDone <- cpErr
 	}()
 
 	// Race: ctx cancellation vs normal completion (outputDone then cmd.Wait).
@@ -215,20 +386,24 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// the connection: outputDone fires immediately but the process is still
 	// alive trying to flush its final ZModem frames through a now-dead pipe.
 	const postOutputGrace = 5 * time.Second
-	cmdDone := make(chan error, 1)
+	type cmdResult struct {
+		waitErr error
+		copyErr error
+	}
+	cmdDone := make(chan cmdResult, 1)
 	go func() {
-		<-outputDone
+		copyErr := <-outputDone
 		waitDone := make(chan error, 1)
 		go func() { waitDone <- cmd.Wait() }()
 		select {
 		case err := <-waitDone:
-			cmdDone <- err
+			cmdDone <- cmdResult{waitErr: err, copyErr: copyErr}
 		case <-time.After(postOutputGrace):
 			log.Printf("DEBUG: (%s) process still running %v after output closed; killing", cmd.Path, postOutputGrace)
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
-			cmdDone <- <-waitDone
+			cmdDone <- cmdResult{waitErr: <-waitDone, copyErr: copyErr}
 		}
 	}()
 
@@ -240,7 +415,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 			_ = cmd.Process.Kill()
 		}
 		_ = stdinPipe.Close()
-		// Close stdoutPipe to unblock the io.Copy goroutine so outputDone fires.
+		// Close stdoutPipe to unblock the output goroutine so outputDone fires.
 		_ = stdoutPipe.Close()
 		select {
 		case <-cmdDone:
@@ -248,8 +423,11 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 			log.Printf("WARN: (%s) timed out waiting for command goroutine after cancel", cmd.Path)
 		}
 		cmdErr = ctx.Err()
-	case err := <-cmdDone:
-		cmdErr = err
+	case res := <-cmdDone:
+		cmdErr = res.waitErr
+		if cmdErr == nil && res.copyErr != nil {
+			cmdErr = fmt.Errorf("stdout copy failed: %w", res.copyErr)
+		}
 	}
 	log.Printf("DEBUG: (%s) command finished (direct). Error: %v", cmd.Path, cmdErr)
 

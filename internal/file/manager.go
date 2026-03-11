@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stlalpha/vision3/internal/archiver"
@@ -243,6 +244,69 @@ func (fm *FileManager) GetAreaByID(id int) (*FileArea, bool) {
 
 	area, exists := fm.fileAreas[id]
 	return area, exists // Return pointer directly
+}
+
+// GetFileRecordByID looks up a file record by UUID across all areas.
+func (fm *FileManager) GetFileRecordByID(fileID uuid.UUID) (*FileRecord, error) {
+	fm.muFiles.RLock()
+	defer fm.muFiles.RUnlock()
+
+	for _, records := range fm.fileRecords {
+		for i := range records {
+			if records[i].ID == fileID {
+				rec := records[i]
+				return &rec, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("file record with ID %s not found", fileID)
+}
+
+// SearchFiles returns file records whose filename or description contains
+// query (case-insensitive) across all areas.
+func (fm *FileManager) SearchFiles(query string) []FileRecord {
+	fm.muFiles.RLock()
+	defer fm.muFiles.RUnlock()
+
+	lowerQuery := strings.ToLower(query)
+	var results []FileRecord
+	for _, records := range fm.fileRecords {
+		for _, rec := range records {
+			if strings.Contains(strings.ToLower(rec.Filename), lowerQuery) ||
+				strings.Contains(strings.ToLower(rec.Description), lowerQuery) {
+				results = append(results, rec)
+			}
+		}
+	}
+	return results
+}
+
+// GetFilesNewerThan returns file records in the given area uploaded after since.
+func (fm *FileManager) GetFilesNewerThan(areaID int, since time.Time) []FileRecord {
+	fm.muFiles.RLock()
+	defer fm.muFiles.RUnlock()
+
+	var results []FileRecord
+	for _, rec := range fm.fileRecords[areaID] {
+		if rec.UploadedAt.After(since) {
+			results = append(results, rec)
+		}
+	}
+	return results
+}
+
+// GetUnreviewedFiles returns file records in the given area where Reviewed is false.
+func (fm *FileManager) GetUnreviewedFiles(areaID int) []FileRecord {
+	fm.muFiles.RLock()
+	defer fm.muFiles.RUnlock()
+
+	var results []FileRecord
+	for _, rec := range fm.fileRecords[areaID] {
+		if !rec.Reviewed {
+			results = append(results, rec)
+		}
+	}
+	return results
 }
 
 // GetFilesForArea returns a slice of FileRecord for a given area ID.
