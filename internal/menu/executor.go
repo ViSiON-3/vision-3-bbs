@@ -1242,12 +1242,14 @@ func runOneliners(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 			promptColWidth = termWidth
 		}
 
-		// Prefer current cursor row so EnterOneLiner prompt reuses the same line
-		// as the previous Yes/No prompt, avoiding stacked prompts.
+		// Use the known prompt row directly. requestCursorPosition sends a DSR
+		// (\x1b[6n) and tries to read the response via a raw bufio.Reader on the
+		// session, but the session input is already consumed by the shared
+		// InputHandler goroutine. The blocking ReadByte call inside a
+		// select/default also prevents the timeout from ever firing, causing the
+		// screen to freeze until the user presses a key. Since we already know
+		// termHeight, just compute the position.
 		inputRow := promptRow
-		if row, _, posErr := requestCursorPosition(s, terminal); posErr == nil && row > 0 {
-			inputRow = row
-		}
 
 		legendText := strings.TrimSpace(e.LoadedStrings.OneLinerLegend)
 		legendRow := inputRow - 1
@@ -4491,82 +4493,6 @@ func drawLightbarMenu(terminal *term.Terminal, backgroundBytes []byte, options [
 	return nil
 }
 
-// Helper function to request and parse cursor position
-// Returns row, col, error
-func requestCursorPosition(s ssh.Session, terminal *term.Terminal) (int, int, error) {
-	// Ensure terminal is in a state to respond (raw mode might be needed temporarily,
-	// but the main loop often handles raw mode via terminal.ReadLine() or pty)
-	// If not in raw mode, the response might not be read correctly.
-
-	err := terminalio.WriteProcessedBytes(terminal, []byte("\x1b[6n"), ansi.OutputModeAuto) // DSR - Device Status Report - Request cursor position
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to send cursor position request: %w", err)
-	}
-
-	// Read the response, typically \x1b[<row>;<col>R
-	// This is tricky and needs robust parsing. A simple ReadRune loop might not suffice
-	// if other data arrives or if the response format varies slightly.
-	// We need to read until 'R', accumulating digits.
-	var response []byte
-	reader := bufio.NewReader(s)                  // Use the session reader
-	timeout := time.After(500 * time.Millisecond) // Add a timeout
-
-	log.Printf("DEBUG: Waiting for cursor position report...")
-
-	for {
-		select {
-		case <-timeout:
-			log.Printf("WARN: Timeout waiting for cursor position report.")
-			return 0, 0, fmt.Errorf("timeout waiting for cursor position report")
-		default:
-			b, err := reader.ReadByte()
-			if err != nil {
-				// Check for EOF specifically
-				if errors.Is(err, io.EOF) {
-					log.Printf("WARN: EOF received while waiting for cursor position report.")
-					return 0, 0, io.EOF
-				}
-				log.Printf("ERROR: Error reading byte for cursor position report: %v", err)
-				return 0, 0, fmt.Errorf("error reading cursor position report: %w", err)
-			}
-
-			response = append(response, b)
-			// log.Printf("DEBUG: Read byte: %d (%c)", b, b) // Verbose logging
-
-			// Check if we have the expected end marker 'R'
-			if b == 'R' {
-				// Also check if the response starts with \x1b[
-				if !bytes.HasPrefix(response, []byte("\x1b[")) {
-					log.Printf("WARN: Invalid cursor position report format (missing ESC [): %q", string(response))
-					return 0, 0, fmt.Errorf("invalid cursor position report format: %q", response)
-				}
-				// Extract the part between '[' and 'R'
-				payload := response[2 : len(response)-1]
-				parts := bytes.Split(payload, []byte(";"))
-				if len(parts) != 2 {
-					log.Printf("WARN: Invalid cursor position report format (expected row;col): %q", string(response))
-					return 0, 0, fmt.Errorf("invalid cursor position report format: %q", response)
-				}
-
-				row, errRow := strconv.Atoi(string(parts[0]))
-				col, errCol := strconv.Atoi(string(parts[1]))
-
-				if errRow != nil || errCol != nil {
-					log.Printf("WARN: Failed to parse row/col from cursor report %q: RowErr=%v, ColErr=%v", string(response), errRow, errCol)
-					return 0, 0, fmt.Errorf("failed to parse cursor position report %q", response)
-				}
-				log.Printf("DEBUG: Received cursor position: Row=%d, Col=%d", row, col)
-				return row, col, nil // Success!
-			}
-
-			// Prevent infinitely growing buffer if 'R' is never received
-			if len(response) > 32 {
-				log.Printf("WARN: Cursor position report buffer exceeded limit without finding 'R': %q", string(response))
-				return 0, 0, fmt.Errorf("cursor position report too long or invalid")
-			}
-		}
-	}
-}
 
 // PromptYesNo is the canonical Yes/No prompt entrypoint for menu flows.
 // defaultYes controls which option is pre-selected (true = Yes, false = No).
