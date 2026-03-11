@@ -288,9 +288,13 @@ func (e *MenuExecutor) handleCheckAccess(
 					if strings.EqualFold(c.Handle, foundUser.Handle) {
 						yes := nuvYesCount(&c)
 						no := len(c.Votes) - yes
+						nuvSuffix := "yes needed to reach threshold"
+						if cfg.NUVValidate {
+							nuvSuffix = "yes needed to validate"
+						}
 						nuvMsg := fmt.Sprintf("\r\n|07Your application is in the voting queue.\r\n"+
-							"|07Votes so far: |10%d Yes|07, |12%d No|07  |08(|10%d|08 yes needed to validate)\r\n",
-							yes, no, cfg.NUVYesVotes)
+							"|07Votes so far: |10%d Yes|07, |12%d No|07  |08(|10%d|08 %s)\r\n",
+							yes, no, cfg.NUVYesVotes, nuvSuffix)
 						terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(nuvMsg)), outputMode)
 						break
 					}

@@ -243,10 +243,10 @@ func nuvApplyThresholds(e *MenuExecutor, nd *NUVData, idx int, userManager *user
 	return false
 }
 
-// nuvPromptComment prompts for and saves a comment on the current vote.
-// Returns the comment text entered. Matches V2's NuvComment function.
+// nuvPromptComment prompts for a comment on the current vote.
+// Matches V2's NuvComment function.
 func nuvPromptComment(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	currentUser *user.User, nd *NUVData, c *NUVCandidate, idx int,
+	currentUser *user.User, nd *NUVData, c *NUVCandidate,
 	outputMode ansi.OutputMode) {
 
 	commentPrompt := e.LoadedStrings.EnterNUVCommentPrompt
@@ -386,7 +386,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				wv(terminal, votePrompt, outputMode)
 				continue
 			}
-			nuvPromptComment(e, s, terminal, currentUser, nd, c, idx, outputMode)
+			nuvPromptComment(e, s, terminal, currentUser, nd, c, outputMode)
 			// Refresh pointers after comment save.
 			freshIdx := nuvFindCandidate(nd, c.Handle)
 			if freshIdx >= 0 {
@@ -453,7 +453,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 					// V2 auto-prompts for comment immediately after new vote.
 					if !removed && !isChange {
-						nuvPromptComment(e, s, terminal, currentUser, nd, c, idx, outputMode)
+						nuvPromptComment(e, s, terminal, currentUser, nd, c, outputMode)
 						freshIdx2 := nuvFindCandidate(nd, c.Handle)
 						if freshIdx2 >= 0 {
 							idx = freshIdx2

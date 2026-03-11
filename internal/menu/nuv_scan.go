@@ -165,7 +165,7 @@ func runNUVList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	wv(terminal, "\r\n", outputMode)
 
 	// Non-sysop users just see the list.
-	if currentUser.AccessLevel < 255 {
+	if !e.isCoSysOpOrAbove(currentUser) {
 		e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 		return currentUser, "", nil
 	}
