@@ -593,13 +593,10 @@ type DoorConfig struct {
 	IsDOS        bool     `json:"is_dos,omitempty"`        // true = DOS door launched via a DOS emulator
 	DOSCommands  []string `json:"dos_commands,omitempty"`  // DOS commands to run (e.g. ["cd c:\\doors\\lord\\", "lord /n{NODE}"])
 	DriveCPath   string   `json:"drive_c_path,omitempty"`  // Path to drive_c directory (default: ~/.dosemu/drive_c)
-	DOSEmulator  string   `json:"dos_emulator,omitempty"`  // Emulator to use: "auto" (default), "dosemu", or "dosbox"
+	DOSEmulator  string   `json:"dos_emulator,omitempty"`  // Emulator to use: "auto" (default) or "dosemu"
 	// dosemu2-specific fields (Linux x86 only)
 	DosemuPath   string `json:"dosemu_path,omitempty"`   // Path to dosemu binary (default: /usr/bin/dosemu)
 	DosemuConfig string `json:"dosemu_config,omitempty"` // Path to custom .dosemurc (optional)
-	// DOSBox-X-specific fields (cross-platform)
-	DOSBoxPath   string `json:"dosbox_path,omitempty"`   // Path to dosbox-x binary (default: auto-detect)
-	DOSBoxConfig string `json:"dosbox_config,omitempty"` // Path to base dosbox-x.conf template (optional)
 }
 
 // LoadDoors loads the door configuration from the specified file path.
@@ -858,6 +855,7 @@ type ServerConfig struct {
 	NUVValidate bool `json:"nuvValidate"` // auto-validate user when yes threshold reached
 	NUVKill     bool `json:"nuvKill"`     // auto-delete user when no threshold reached
 	NUVLevel    int  `json:"nuvLevel"`    // access level assigned on NUV auto-validation
+	NUVForm     int  `json:"nuvForm"`     // infoform number (1-5) to display during NUV voting; 0 = disabled
 }
 
 // EventConfig defines a scheduled event configuration
@@ -921,6 +919,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		NUVValidate:               true,
 		NUVKill:                   false,
 		NUVLevel:                  25,
+		NUVForm:                   1,
 	}
 
 	data, err := os.ReadFile(filePath)

@@ -1,11 +1,24 @@
-|09ViSiON/3 Infoform v|VN
-|08---------------------
+|CL|09New User Application v|VN
+|08------------------------------
+
+|07This form helps existing members get to know you
+|07before voting on your account. Your answers will
+|07be visible to all voters.
 
 |07How did you hear about this BBS?
-|03> *
+|03> |B60;*!
 
-|07What are your interests?
-|03> *
+|07Do you know anyone on this board? |08(If so, who?)
+|03> |B30;*!
 
-|07Any other comments for the SysOp?
-|03> *
+|07Have you used a BBS before? |08(Which ones?)
+|03> *!
+
+|07What are your interests or hobbies?
+|03> *!
+
+|07Why do you want to join this board?
+|03> *!
+
+|07Anything else you'd like voters to know about you?
+|03> *!

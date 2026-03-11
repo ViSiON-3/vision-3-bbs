@@ -140,8 +140,6 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | Comprehensive Testing         | 📋 Planned     |                                                                                                                     |
 | Complete Documentation        | 📋 Planned     |                                                                                                                     |
 
-See `tasks/tasks.md` for development history and completed features.
-
 ## Technology Stack
 
 *   **Language:** Go 1.24+
@@ -247,8 +245,7 @@ vision3/
 ├── output/                 # Output support files
 ├── scripts/                # Utility scripts
 ├── docs/                   # GitHub Pages website (vision3bbs.com)
-├── docs/sysop/             # Sysop documentation
-└── tasks/                  # Development task tracking
+│   └── sysop/              # Sysop documentation
 ```
 
 ## Setup & Installation

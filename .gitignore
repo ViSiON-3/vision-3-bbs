@@ -83,8 +83,8 @@ Thumbs.db
 # Cursor rules (local development)
 .cursorrules
 
-# Claude Code worktrees
-.claude/worktrees/
+# Claude Code (local developer settings)
+.claude/
 
 # Beads runtime data
 .beads/*.pid

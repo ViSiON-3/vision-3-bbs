@@ -70,7 +70,7 @@ func loadInfoFormConfig(rootConfigPath string) (*InfoFormConfig, error) {
 		if os.IsNotExist(err) {
 			// Return defaults matching V2 (CONFIG.PAS:73-78)
 			return &InfoFormConfig{
-				Descriptions: [5]string{"New User Application", "BBS SysOp Information", "", "", "New User Voting Form"},
+				Descriptions: [5]string{"New User Application", "", "", "", ""},
 				MinLevels:    [5]int{0, 0, 0, 0, 0},
 				RequiredForms: "",
 			}, nil
@@ -199,10 +199,12 @@ func prepareSegment(s string) string {
 // parseTemplate reads a form template and returns the text segments and field metadata.
 // Template format (from V2):
 //   - Plain text displayed to user character by character
-//   - * = pause for user input (one answer field)
+//   - * = pause for user input (one answer field, optional)
+//   - *! = pause for user input (required — user cannot leave blank)
 //   - |B<n>; = set max input buffer length to n characters for next field
 type templateField struct {
-	MaxLen int // Max input length (0 = default/unlimited)
+	MaxLen   int  // Max input length (0 = default/unlimited)
+	Required bool // If true, user cannot leave this field blank
 }
 
 type parsedTemplate struct {
@@ -226,10 +228,15 @@ func parseTemplateFile(rootConfigPath string, formNum int) (*parsedTemplate, err
 		ch := data[i]
 
 		if ch == '*' {
-			// Input field marker
+			// Input field marker: * = optional, *! = required
+			required := false
+			if i+1 < len(data) && data[i+1] == '!' {
+				required = true
+				i++ // consume the '!'
+			}
 			tmpl.Segments = append(tmpl.Segments, currentSegment.String())
 			currentSegment.Reset()
-			tmpl.Fields = append(tmpl.Fields, templateField{MaxLen: currentMaxLen})
+			tmpl.Fields = append(tmpl.Fields, templateField{MaxLen: currentMaxLen, Required: required})
 			currentMaxLen = 0 // Reset for next field
 			i++
 			continue
@@ -448,26 +455,40 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	for i, field := range tmpl.Fields {
 		// Display the text segment before this field
+		segment := ""
 		if i < len(tmpl.Segments) {
-			wv(terminal, prepareSegment(tmpl.Segments[i]), outputMode)
+			segment = prepareSegment(tmpl.Segments[i])
+			wv(terminal, segment, outputMode)
 		}
 
-		// Collect user input
-		answer, err := readLineFromSessionIH(s, terminal)
-		if err != nil {
-			// User disconnected — don't save partial form
-			return
-		}
-
-		// Enforce max length if set (rune-aware to avoid breaking multi-byte UTF-8)
-		if field.MaxLen > 0 {
-			runes := []rune(answer)
-			if len(runes) > field.MaxLen {
-				answer = string(runes[:field.MaxLen])
+		// Collect user input — loop on required fields until non-empty
+		for {
+			answer, err := readLineFromSessionIH(s, terminal)
+			if err != nil {
+				// User disconnected — don't save partial form
+				return
 			}
-		}
 
-		answers = append(answers, answer)
+			// Enforce max length if set (rune-aware to avoid breaking multi-byte UTF-8)
+			if field.MaxLen > 0 {
+				runes := []rune(answer)
+				if len(runes) > field.MaxLen {
+					answer = string(runes[:field.MaxLen])
+				}
+			}
+
+			if field.Required && strings.TrimSpace(answer) == "" {
+				wv(terminal, "\r\n|04This field is required.|07\r\n", outputMode)
+				// Re-display the segment so the prompt appears again
+				if segment != "" {
+					wv(terminal, segment, outputMode)
+				}
+				continue
+			}
+
+			answers = append(answers, answer)
+			break
+		}
 	}
 
 	// Display trailing text segment

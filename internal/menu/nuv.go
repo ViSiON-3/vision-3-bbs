@@ -20,9 +20,10 @@ import (
 
 // NUVVote represents a single vote cast on a NUV candidate.
 type NUVVote struct {
-	Voter   string `json:"voter"`
-	Yes     bool   `json:"yes"`
-	Comment string `json:"comment,omitempty"`
+	Voter   string    `json:"voter"`
+	Yes     bool      `json:"yes"`
+	Comment string    `json:"comment,omitempty"`
+	VotedAt time.Time `json:"votedAt,omitempty"`
 }
 
 // NUVCandidate represents a new user pending community voting.
@@ -69,18 +70,18 @@ func saveNUVData(rootConfigPath string, nd *NUVData) error {
 
 // nuvAddCandidate adds a new user handle to the NUV queue.
 // Called automatically after new user registration when AutoAddNUV is true.
-func nuvAddCandidate(rootConfigPath, handle string) {
+func nuvAddCandidate(rootConfigPath, handle string) error {
 	nuvMu.Lock()
 	defer nuvMu.Unlock()
 	nd, err := loadNUVData(rootConfigPath)
 	if err != nil {
 		log.Printf("WARN: NUV: failed to load nuv.json: %v", err)
-		return
+		return fmt.Errorf("load nuv data: %w", err)
 	}
 	lower := strings.ToLower(handle)
 	for _, c := range nd.Candidates {
 		if strings.ToLower(c.Handle) == lower {
-			return // already queued
+			return nil // already queued
 		}
 	}
 	nd.Candidates = append(nd.Candidates, NUVCandidate{
@@ -89,8 +90,10 @@ func nuvAddCandidate(rootConfigPath, handle string) {
 	})
 	if err := saveNUVData(rootConfigPath, nd); err != nil {
 		log.Printf("WARN: NUV: failed to save nuv.json: %v", err)
+		return fmt.Errorf("save nuv data: %w", err)
 	}
 	log.Printf("INFO: NUV: added candidate '%s' to queue", handle)
+	return nil
 }
 
 // nuvVoteIndex returns the index of the voter's vote in candidate.Votes, or -1.
@@ -116,30 +119,74 @@ func nuvYesCount(c *NUVCandidate) int {
 }
 
 // nuvDisplayStats shows the voting stats for a candidate (clears screen first).
-func nuvDisplayStats(terminal *term.Terminal, c *NUVCandidate, idx int, outputMode ansi.OutputMode) {
+// Matches V2's DisplayStats procedure in NUV.PAS.
+func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, idx int, outputMode ansi.OutputMode) {
+	cfg := e.GetServerConfig()
 	yes := nuvYesCount(c)
 	no := len(c.Votes) - yes
 	terminalio.WriteProcessedBytes(terminal, []byte("\x1b[2J\x1b[H"), outputMode)
 	wv(terminal, fmt.Sprintf("\r\n|15New User Voting — Candidate #%d\r\n|08%s\r\n", idx, strings.Repeat("\xc4", 50)), outputMode)
-	wv(terminal, fmt.Sprintf("|07Voting for : |11%s\r\n", c.Handle), outputMode)
-	wv(terminal, fmt.Sprintf("|07Yes votes  : |10%d\r\n", yes), outputMode)
-	wv(terminal, fmt.Sprintf("|07No votes   : |12%d\r\n", no), outputMode)
+
+	// V2: NUV_Voting_On = '|08U|07s|15er |08N|07a|15me|09: |15|NA'
+	nameStr := e.LoadedStrings.WhosBeingVotedOn
+	if nameStr == "" {
+		nameStr = "|08U|07s|15er |08N|07a|15me|09: |15|NA"
+	}
+	nameStr = strings.ReplaceAll(nameStr, "|NA", c.Handle)
+	wv(terminal, nameStr+"\r\n", outputMode)
+
+	// V2: NUV_Yes_Votes includes threshold: '...|YV  |09(|13Required|01: |05|YT Votes|09)'
+	// Macros: |YV = current yes votes, |YT = yes threshold from config
+	yesStr := e.LoadedStrings.NumYesVotes
+	if yesStr == "" {
+		yesStr = "|08Y|07e|15s |08V|07o|15tes|09: |15|YV"
+		if cfg.NUVYesVotes > 0 {
+			yesStr += "  |09(|13Required|01: |05|YT Votes|09)"
+		}
+	}
+	yesStr = strings.ReplaceAll(yesStr, "|YV", fmt.Sprintf("%d", yes))
+	yesStr = strings.ReplaceAll(yesStr, "|YT", fmt.Sprintf("%d", cfg.NUVYesVotes))
+	wv(terminal, yesStr+"\r\n", outputMode)
+
+	// V2: NUV_No_Votes includes threshold: '...|NV  |09(|13Deletion|01: |05|NT Votes|09)'
+	// Macros: |NV = current no votes, |NT = no threshold from config
+	noStr := e.LoadedStrings.NumNoVotes
+	if noStr == "" {
+		noStr = "|08N|07o |08V|07o|15tes|09: |15|NV"
+		if cfg.NUVNoVotes > 0 {
+			noStr += "  |09(|13Deletion|01: |05|NT Votes|09)"
+		}
+	}
+	noStr = strings.ReplaceAll(noStr, "|NV", fmt.Sprintf("%d", no))
+	noStr = strings.ReplaceAll(noStr, "|NT", fmt.Sprintf("%d", cfg.NUVNoVotes))
+	wv(terminal, noStr+"\r\n", outputMode)
+
 	wv(terminal, fmt.Sprintf("|07Added      : |11%s\r\n", c.When.Format("01/02/2006")), outputMode)
+
+	// V2: NUV_Comment_Header = '|08C|07o|15mments |08S|07o |08F|07a|15r|09...'
+	commentHdr := e.LoadedStrings.NUVCommentHeader
+	if commentHdr == "" {
+		commentHdr = "\r\n|08C|07o|15mments |08S|07o |08F|07a|15r|09..."
+	}
+	wv(terminal, commentHdr+"\r\n", outputMode)
 	if len(c.Votes) > 0 {
-		wv(terminal, fmt.Sprintf("\r\n|15Voter Comments:\r\n|08%s\r\n", strings.Repeat("\xc4", 40)), outputMode)
+		hasComments := false
 		for _, v := range c.Votes {
-			vote := "|12No "
-			if v.Yes {
-				vote = "|10Yes"
+			if v.Comment != "" {
+				hasComments = true
+				dateSuffix := ""
+				if !v.VotedAt.IsZero() {
+					dateSuffix = fmt.Sprintf(" |08%s", v.VotedAt.Format("01/02/06"))
+				}
+				// V2 style: Tab(Voter,27) then ': "comment"'
+				wv(terminal, fmt.Sprintf("|07%-27s|09: |07\"%s\"%s\r\n", v.Voter, v.Comment, dateSuffix), outputMode)
 			}
-			comment := v.Comment
-			if comment == "" {
-				comment = "(no comment)"
-			}
-			wv(terminal, fmt.Sprintf("|11%-20s |07%s |07%s\r\n", v.Voter, vote, comment), outputMode)
+		}
+		if !hasComments {
+			wv(terminal, "|07No Comments Now!\r\n", outputMode)
 		}
 	} else {
-		wv(terminal, "\r\n|07No votes yet.\r\n", outputMode)
+		wv(terminal, "|07No Comments Now!\r\n", outputMode)
 	}
 	wv(terminal, "\r\n", outputMode)
 }
@@ -198,8 +245,70 @@ func nuvApplyThresholds(e *MenuExecutor, nd *NUVData, idx int, userManager *user
 	return false
 }
 
+// nuvPromptComment prompts for a comment on the current vote.
+// Matches V2's NuvComment function.
+func nuvPromptComment(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
+	currentUser *user.User, nd *NUVData, c *NUVCandidate,
+	outputMode ansi.OutputMode) {
+
+	commentPrompt := e.LoadedStrings.EnterNUVCommentPrompt
+	if commentPrompt == "" {
+		// V2: '|08E|07n|15ter |08a C|07o|15mment |08o|07n |15|NA ...'
+		commentPrompt = "\r\n|08E|07n|15ter |08a C|07o|15mment |08o|07n |15|NA |09(|07Cr|09/|07Aborts|09)\r\n|09: "
+	}
+	commentPrompt = strings.ReplaceAll(commentPrompt, "|NA", c.Handle)
+	wv(terminal, commentPrompt, outputMode)
+	comment, _ := readLineFromSessionIH(s, terminal)
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return
+	}
+	if runes := []rune(comment); len(runes) > 80 {
+		comment = string(runes[:80])
+	}
+	nuvMu.Lock()
+	fresh, loadErr := loadNUVData(e.RootConfigPath)
+	if loadErr == nil {
+		freshIdx := nuvFindCandidate(fresh, c.Handle)
+		if freshIdx >= 0 {
+			vi := nuvVoteIndex(&fresh.Candidates[freshIdx], currentUser.Handle)
+			if vi >= 0 {
+				fresh.Candidates[freshIdx].Votes[vi].Comment = comment
+				if err := saveNUVData(e.RootConfigPath, fresh); err != nil {
+					log.Printf("WARN: NUV: failed to save comment: %v", err)
+				} else {
+					*nd = *fresh
+				}
+			}
+		}
+	}
+	nuvMu.Unlock()
+}
+
+// nuvFindCandidate returns the index of a candidate by handle, or -1.
+func nuvFindCandidate(nd *NUVData, handle string) int {
+	for i := range nd.Candidates {
+		if strings.EqualFold(nd.Candidates[i].Handle, handle) {
+			return i
+		}
+	}
+	return -1
+}
+
+// nuvShowHelp displays the NUV voting help screen. Matches V2's Help procedure.
+func nuvShowHelp(terminal *term.Terminal, outputMode ansi.OutputMode) {
+	wv(terminal, "\r\n|15New User Voting Help\r\n", outputMode)
+	wv(terminal, "|07[|15Y|07] - Yes\r\n", outputMode)
+	wv(terminal, "|07[|15N|07] - No\r\n", outputMode)
+	wv(terminal, "|07[|15C|07] - Comment About User\r\n", outputMode)
+	wv(terminal, "|07[|15I|07] - View Infoform\r\n", outputMode)
+	wv(terminal, "|07[|15R|07] - Reshow Stats\r\n", outputMode)
+	wv(terminal, "|07[|15Q|07] - Quit\r\n\r\n", outputMode)
+}
+
 // nuvVoteOn handles the interactive vote on a single candidate.
 // Returns true if the candidate was removed from the queue after threshold.
+// Matches V2's VoteOn procedure in NUV.PAS.
 func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User,
 	nd *NUVData, idx int, outputMode ansi.OutputMode,
@@ -207,7 +316,15 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	ih := getSessionIH(s)
 	c := &nd.Candidates[idx]
-	nuvDisplayStats(terminal, c, idx+1, outputMode)
+	cfg := e.GetServerConfig()
+
+	// V2: NUV_Vote_Prompt = '|09New User Voting |01- |09(|10?|02/|10Help|09): '
+	votePrompt := e.LoadedStrings.NUVVotePrompt
+	if votePrompt == "" {
+		votePrompt = "|09New User Voting |01- |09(|10?|02/|10Help|09): "
+	}
+
+	nuvDisplayStats(e, terminal, c, idx+1, outputMode)
 
 	voterIdx := nuvVoteIndex(c, currentUser.Handle)
 	if voterIdx >= 0 {
@@ -215,10 +332,11 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		if c.Votes[voterIdx].Yes {
 			vote = "|10Yes"
 		}
-		wv(terminal, fmt.Sprintf("|07Your current vote: %s\r\n\r\n", vote), outputMode)
+		// V2: 'Your Vote: Yes/No'
+		wv(terminal, fmt.Sprintf("|07Your Vote|09: %s\r\n\r\n", vote), outputMode)
 	}
 
-	wv(terminal, "|15[Y]|07es  |15[N]|07o  |15[C]|07omment  |15[R]|07eshow  |15[Q]|07uit: ", outputMode)
+	wv(terminal, votePrompt, outputMode)
 
 	for {
 		key, err := ih.ReadKey()
@@ -228,80 +346,101 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		switch {
 		case key == 'Q' || key == 'q' || key == editor.KeyEsc:
 			return false
+
+		case key == '?':
+			nuvShowHelp(terminal, outputMode)
+			wv(terminal, votePrompt, outputMode)
+
 		case key == 'R' || key == 'r':
-			nuvDisplayStats(terminal, c, idx+1, outputMode)
+			nuvDisplayStats(e, terminal, c, idx+1, outputMode)
 			if voterIdx >= 0 {
 				vote := "|12No"
 				if c.Votes[voterIdx].Yes {
 					vote = "|10Yes"
 				}
-				wv(terminal, fmt.Sprintf("|07Your current vote: %s\r\n\r\n", vote), outputMode)
+				wv(terminal, fmt.Sprintf("|07Your Vote|09: %s\r\n\r\n", vote), outputMode)
 			}
-			wv(terminal, "|15[Y]|07es  |15[N]|07o  |15[C]|07omment  |15[R]|07eshow  |15[Q]|07uit: ", outputMode)
+			wv(terminal, votePrompt, outputMode)
+
+		case key == 'I' || key == 'i':
+			if cfg.NUVForm > 0 && cfg.NUVForm <= 5 {
+				if u, ok := userManager.GetUser(c.Handle); ok {
+					showInfoForm(e, s, terminal, outputMode, u.ID, cfg.NUVForm, termHeight)
+					wv(terminal, "\r\n", outputMode)
+					e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+				} else {
+					wv(terminal, "\r\n|07User not found in database.\r\n", outputMode)
+				}
+				nuvDisplayStats(e, terminal, c, idx+1, outputMode)
+				if voterIdx >= 0 {
+					vote := "|12No"
+					if c.Votes[voterIdx].Yes {
+						vote = "|10Yes"
+					}
+					wv(terminal, fmt.Sprintf("|07Your Vote|09: %s\r\n\r\n", vote), outputMode)
+				}
+			} else {
+				wv(terminal, "\r\n|07Infoform viewing is not configured.\r\n", outputMode)
+			}
+			wv(terminal, votePrompt, outputMode)
+
 		case key == 'C' || key == 'c':
 			if voterIdx < 0 {
-				wv(terminal, "\r\n|07You must vote before adding a comment.\r\n", outputMode)
-				wv(terminal, "|15[Y]|07es  |15[N]|07o  |15[C]|07omment  |15[R]|07eshow  |15[Q]|07uit: ", outputMode)
+				// V2: 'You have to Vote First!'
+				wv(terminal, "\r\n|07You have to Vote First!\r\n", outputMode)
+				wv(terminal, votePrompt, outputMode)
 				continue
 			}
-			wv(terminal, "\r\n|07Comment: ", outputMode)
-			comment, _ := readLineFromSessionIH(s, terminal)
-			comment = strings.TrimSpace(comment)
-			nuvMu.Lock()
-			fresh, loadErr := loadNUVData(e.RootConfigPath)
-			if loadErr == nil {
-				freshIdx := -1
-				for i := range fresh.Candidates {
-					if strings.EqualFold(fresh.Candidates[i].Handle, c.Handle) {
-						freshIdx = i
-						break
-					}
-				}
-				if freshIdx >= 0 {
-					vi := nuvVoteIndex(&fresh.Candidates[freshIdx], currentUser.Handle)
-					if vi >= 0 {
-						fresh.Candidates[freshIdx].Votes[vi].Comment = comment
-						_ = saveNUVData(e.RootConfigPath, fresh)
-						*nd = *fresh
-						idx = freshIdx
-						c = &nd.Candidates[idx]
-					}
-				}
+			nuvPromptComment(e, s, terminal, currentUser, nd, c, outputMode)
+			// Refresh pointers after comment save.
+			freshIdx := nuvFindCandidate(nd, c.Handle)
+			if freshIdx >= 0 {
+				idx = freshIdx
+				c = &nd.Candidates[idx]
 			}
-			nuvMu.Unlock()
-			wv(terminal, "|10Comment saved.\r\n", outputMode)
-			wv(terminal, "|15[Y]|07es  |15[N]|07o  |15[C]|07omment  |15[R]|07eshow  |15[Q]|07uit: ", outputMode)
+			wv(terminal, votePrompt, outputMode)
+
 		case key == 'Y' || key == 'y' || key == 'N' || key == 'n':
 			castYes := key == 'Y' || key == 'y'
 			nuvMu.Lock()
 			fresh, loadErr := loadNUVData(e.RootConfigPath)
 			removed := false
 			if loadErr == nil {
-				freshIdx := -1
-				for i := range fresh.Candidates {
-					if strings.EqualFold(fresh.Candidates[i].Handle, c.Handle) {
-						freshIdx = i
-						break
-					}
-				}
+				freshIdx := nuvFindCandidate(fresh, c.Handle)
 				if freshIdx >= 0 {
 					vi := nuvVoteIndex(&fresh.Candidates[freshIdx], currentUser.Handle)
-					if vi >= 0 {
+					isChange := vi >= 0
+					if isChange {
 						fresh.Candidates[freshIdx].Votes[vi].Yes = castYes
-						if castYes {
-							wv(terminal, "\r\n|10Vote changed to YES.\r\n", outputMode)
-						} else {
-							wv(terminal, "\r\n|12Vote changed to NO.\r\n", outputMode)
-						}
+						fresh.Candidates[freshIdx].Votes[vi].VotedAt = time.Now()
 					} else {
 						fresh.Candidates[freshIdx].Votes = append(fresh.Candidates[freshIdx].Votes, NUVVote{
-							Voter: currentUser.Handle,
-							Yes:   castYes,
+							Voter:   currentUser.Handle,
+							Yes:     castYes,
+							VotedAt: time.Now(),
 						})
-						if castYes {
-							wv(terminal, "\r\n|10YES vote cast!\r\n", outputMode)
+					}
+					if castYes {
+						if isChange {
+							wv(terminal, "\r\n|07Vote changed to |10YES\r\n", outputMode)
 						} else {
-							wv(terminal, "\r\n|12NO vote cast!\r\n", outputMode)
+							// V2: NUV_Yes_Cast = '|04Y|12e|14s |09Vote Cast!'
+							yesMsg := e.LoadedStrings.YesVoteCast
+							if yesMsg == "" {
+								yesMsg = "|04Y|12e|14s |09Vote Cast!"
+							}
+							wv(terminal, "\r\n"+yesMsg+"\r\n", outputMode)
+						}
+					} else {
+						if isChange {
+							wv(terminal, "\r\n|07Vote changed to |12NO\r\n", outputMode)
+						} else {
+							// V2: NUV_No_Cast = '|04N|12a|14h |09Vote Cast!'
+							noMsg := e.LoadedStrings.NoVoteCast
+							if noMsg == "" {
+								noMsg = "|04N|12a|14h |09Vote Cast!"
+							}
+							wv(terminal, "\r\n"+noMsg+"\r\n", outputMode)
 						}
 					}
 					_ = saveNUVData(e.RootConfigPath, fresh)
@@ -309,8 +448,32 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 					idx = freshIdx
 					c = &nd.Candidates[idx]
 					voterIdx = nuvVoteIndex(c, currentUser.Handle)
+					voteStr := "NO"
+					if castYes {
+						voteStr = "YES"
+					}
+					log.Printf("INFO: NUV: %s voted %s on '%s'", currentUser.Handle, voteStr, c.Handle)
 					removed = nuvApplyThresholds(e, nd, idx, userManager)
 					_ = saveNUVData(e.RootConfigPath, nd)
+
+					// V2 auto-prompts for comment immediately after new vote.
+					// Unlock before nuvPromptComment — it acquires nuvMu internally.
+					if !removed && !isChange {
+						nuvMu.Unlock()
+						nuvPromptComment(e, s, terminal, currentUser, nd, c, outputMode)
+						nuvMu.Lock()
+						// Reload after comment to ensure consistency.
+						fresh, loadErr = loadNUVData(e.RootConfigPath)
+						if loadErr == nil {
+							*nd = *fresh
+						}
+						freshIdx2 := nuvFindCandidate(nd, c.Handle)
+						if freshIdx2 >= 0 {
+							idx = freshIdx2
+							c = &nd.Candidates[idx]
+							voterIdx = nuvVoteIndex(c, currentUser.Handle)
+						}
+					}
 				}
 			}
 			nuvMu.Unlock()
@@ -318,7 +481,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				wv(terminal, "|10Threshold reached — candidate processed.\r\n", outputMode)
 				return true
 			}
-			wv(terminal, "|15[Y]|07es  |15[N]|07o  |15[C]|07omment  |15[R]|07eshow  |15[Q]|07uit: ", outputMode)
+			wv(terminal, votePrompt, outputMode)
 		}
 	}
 }

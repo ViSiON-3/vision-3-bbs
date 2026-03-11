@@ -24,13 +24,18 @@ Forms can be marked as **required** — users cannot bypass them during login un
 
 Templates are plain text files stored in `data/infoforms/templates/`. Each form is named `form_<n>.txt` where `n` is 1–5.
 
-### Markers
+### Markers & Codes
 
 | Marker | Description |
 |--------|-------------|
 | `*` | Input field — the system pauses here for user input |
-| `\|B<n>;` | Set maximum input length to `n` characters for the next `*` field |
+| `*!` | Required input field — the user must enter a non-empty answer |
+| `\|B<n>;` | Set maximum input length to `n` characters for the next `*` field (1–255) |
+| `\|VN` | Replaced with the BBS version number |
+| `\|CL` | Clear screen and home cursor |
 | `\|01`–`\|15` | Standard pipe color codes for colored text |
+
+All standard pipe codes are supported in templates (color codes, `\|CL`, `\|CR`, etc.) — template text is processed through the same pipe code engine used everywhere else in the BBS.
 
 ### Example Template (`form_1.txt`)
 
@@ -54,26 +59,27 @@ Templates are plain text files stored in `data/infoforms/templates/`. Each form 
 |03> *
 ```
 
-### Example with Input Length Limits (`form_2.txt`)
+### Example with Input Length Limits
 
 ```text
-|09BBS SysOp Information
-|08---------------------
+|CL|09Favorite Things Survey v|VN
+|08------------------------------
 
-|07Are you a BBS SysOp? |08(Yes/No)
-|03> |B3;*
+|07Favorite color?
+|03> |B20;*
 
-|07What is the name of your BBS?
-|03> |B40;*
-
-|07What software does it run? |08(Mystic, Enigma, Talisman, etc.)
+|07Favorite BBS software? |08(Mystic, Enigma, Talisman, etc.)
 |03> |B30;*
 
-|07What is the address to connect? |08(telnet://host:port)
-|03> |B60;*
+|07Tell us more about yourself:
+|03> *
 ```
 
-The `|B3;` before the first `*` limits the "Are you a BBS SysOp?" answer to 3 characters. The `|B40;` limits the BBS name to 40 characters. If no `|B` code precedes a `*`, input length is unlimited.
+- `|CL` clears the screen before the form starts
+- `|VN` inserts the current BBS version number
+- `|B20;` before the first `*` limits the answer to 20 characters
+- `|B30;` limits the next answer to 30 characters
+- The final `*` has no `|B` code, so input length is unlimited
 
 ---
 
@@ -85,13 +91,13 @@ InfoForms configuration is stored in `data/infoforms/config.json`:
 {
     "descriptions": [
         "New User Application",
-        "BBS SysOp Information",
         "",
         "",
-        "New User Voting Form"
+        "",
+        ""
     ],
     "min_levels": [0, 0, 0, 0, 0],
-    "required_forms": "12"
+    "required_forms": "1"
 }
 ```
 
@@ -99,7 +105,7 @@ InfoForms configuration is stored in `data/infoforms/config.json`:
 |-------|-------------|
 | `descriptions` | Array of 5 strings — display name for each form (empty = no form) |
 | `min_levels` | Array of 5 integers — minimum access level to see each form (0 = everyone) |
-| `required_forms` | String of form numbers that are mandatory, e.g. `"12"` = forms 1 and 2 required, `"135"` = forms 1, 3, and 5 required |
+| `required_forms` | String of form numbers that are mandatory, e.g. `"1"` = form 1 required, `"135"` = forms 1, 3, and 5 required |
 
 A form only appears in the listing if:
 1. Its template file exists (`data/infoforms/templates/form_<n>.txt`)
@@ -117,8 +123,6 @@ The main infoforms screen lists all available forms with their status:
  #  Description                    Required   Status
 ──────────────────────────────────────────────────────────────────────────
 1   New User Application           Required   Completed..
-2   BBS SysOp Information          Required   Incomplete!
-5   New User Voting Form           Optional   Incomplete!
 ```
 
 The prompt depends on user type:
@@ -145,7 +149,9 @@ When a user selects a form number:
 
 ### Viewing a Completed Form (`RUN:INFOFORMVIEW`)
 
-Replays the template with the user's stored answers interpolated at each `*` marker. Shows the completion date at the top. Empty answers display as "No answer".
+Replays the template with the user's stored answers interpolated at each `*` marker. Shows the completion date at the top. Empty answers display as "No answer". Output is paged — the viewer pauses at each screenful and prompts to continue or quit.
+
+For security, pipe codes in stored answers are escaped when displayed, so users cannot inject color codes or control sequences through their responses.
 
 **Default menu binding:** `V` on the InfoForms Menu.
 
@@ -153,7 +159,7 @@ Replays the template with the user's stored answers interpolated at each `*` mar
 
 ### InfoForm Hunt — SysOp (`RUN:INFOFORMHUNT`)
 
-SysOp-only command that prompts for a form number (1–5) and displays all users' completed responses for that form. Each response shows the user's handle, username, and their answers.
+SysOp-only command that prompts for a form number (1–5) and displays all users' completed responses for that form. Each response shows the user's handle and their answers.
 
 **Default menu binding:** `H` on the InfoForms Menu (ACS: `S255`).
 
@@ -161,9 +167,17 @@ SysOp-only command that prompts for a form number (1–5) and displays all users
 
 ### Nuke InfoForms — SysOp (`RUN:INFOFORMNUKE`)
 
-SysOp-only command that deletes all form responses for a specific user. Prompts for a username/handle and confirms before deleting.
+SysOp-only command that deletes all form responses for a specific user. Prompts for a handle and confirms before deleting.
 
 **Default menu binding:** `*` on the InfoForms Menu (ACS: `S255`, hidden).
+
+---
+
+### InfoForm Browser (User Editor / Validate)
+
+When editing a user in the online User Editor or Validate screen, SysOps can browse that user's infoforms interactively. This displays a list of the user's forms with completion status, and pressing `1`–`5` views the selected form. Press `Q` or `Esc` to return.
+
+This is not a standalone menu command — it is accessed from within the user editor screens.
 
 ---
 
@@ -248,7 +262,6 @@ Each response file:
 ```json
 {
     "user_id": 1,
-    "username": "johndoe",
     "handle": "J0hnDoe",
     "form_num": 1,
     "filled_out_at": "2026-03-08T14:30:00Z",
@@ -268,9 +281,7 @@ Each response file:
 data/infoforms/
   config.json                    ← Form descriptions, levels, required forms
   templates/
-    form_1.txt                   ← Template for form 1
-    form_2.txt                   ← Template for form 2
-    form_5.txt                   ← Template for form 5 (gaps are OK)
+    form_1.txt                   ← Template for form 1 (gaps are OK — e.g., form_3.txt with no form_2.txt)
   responses/
     <userID>_<formNum>.json      ← Per-user response files
 ```
