@@ -21,10 +21,11 @@ import (
 )
 
 // executeDoor dispatches to the appropriate executor.
-// DOS doors use DOSBox-X (cross-platform). Native POSIX doors are not supported on Windows.
+// DOS doors require dosemu2 (Linux only) or a 32-bit Windows build with native 16-bit support.
+// 64-bit Windows does not support DOS doors. Native POSIX doors are not supported on Windows.
 func executeDoor(ctx *DoorCtx) error {
 	if ctx.Config.IsDOS {
-		return executeDOSBoxDoor(ctx)
+		return fmt.Errorf("DOS doors are not supported on 64-bit Windows; use dosemu2 on Linux or a 32-bit Windows build")
 	}
 	return fmt.Errorf("native doors are not supported on Windows")
 }
@@ -38,8 +39,7 @@ func doorErrorMessage(ctx *DoorCtx, msg string) {
 	}
 }
 
-// runListDoors lists configured DOS doors from the door registry. Native doors are not
-// supported on Windows and are excluded; only DOSBox-X-capable entries are shown.
+// runListDoors lists configured doors from the door registry on Windows.
 func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	log.Printf("DEBUG: Node %d: runListDoors (Windows)", nodeNumber)
 
@@ -73,13 +73,11 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 		terminalio.WriteProcessedBytes(terminal, processedTop, outputMode)
 	}
 
-	// Get door registry and filter to DOS doors only (native doors not supported on Windows)
+	// Get door registry (DOS doors are not supported on 64-bit Windows)
 	e.configMu.RLock()
 	doorRegistryCopy := make(map[string]config.DoorConfig, len(e.DoorRegistry))
 	for k, v := range e.DoorRegistry {
-		if v.IsDOS {
-			doorRegistryCopy[k] = v
-		}
+		doorRegistryCopy[k] = v
 	}
 	e.configMu.RUnlock()
 
@@ -114,8 +112,7 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 	return currentUser, "", nil
 }
 
-// runOpenDoor prompts for a door name and launches it via DOSBox-X on Windows. Native
-// doors are not supported; only DOS doors can be launched.
+// runOpenDoor prompts for a door name and launches it on Windows.
 func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	log.Printf("DEBUG: Node %d: runOpenDoor (Windows)", nodeNumber)
 
@@ -169,17 +166,6 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 			continue
 		}
 
-		if !doorConfig.IsDOS {
-			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
-			terminalio.WriteProcessedBytes(terminal,
-				ansi.ReplacePipeCodes([]byte("|12Native doors are not supported on Windows. Choose a DOS door.|07\r\n")),
-				outputMode)
-			time.Sleep(1 * time.Second)
-			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
-			continue
-		}
-
 		ctx := buildDoorCtx(e, s, terminal,
 			currentUser.ID, currentUser.Handle, currentUser.RealName,
 			currentUser.AccessLevel, currentUser.TimeLimit, currentUser.TimesCalled,
@@ -207,7 +193,7 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	log.Printf("DEBUG: Node %d: runDoorInfo (Windows)", nodeNumber)
 	terminalio.WriteProcessedBytes(terminal,
-		ansi.ReplacePipeCodes([]byte("|12Native doors are not supported on Windows. DOS doors via DOSBox-X are available.|07\r\n")),
+		ansi.ReplacePipeCodes([]byte("|12DOS doors require dosemu2 (Linux) or a 32-bit Windows build. Native doors are not supported on Windows.|07\r\n")),
 		outputMode)
 	time.Sleep(1 * time.Second)
 	return currentUser, "", nil

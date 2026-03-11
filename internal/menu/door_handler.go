@@ -482,14 +482,10 @@ func executeNativeDoor(ctx *DoorCtx) error {
 // --- Door Dispatcher ---
 
 // executeDoor dispatches to the appropriate door executor based on config.
+// DOS doors require dosemu2 on Linux x86/x86-64.
 func executeDoor(ctx *DoorCtx) error {
 	if ctx.Config.IsDOS {
-		switch resolveDOSEmulator(ctx) {
-		case "dosemu":
-			return executeDOSDoor(ctx)
-		default:
-			return executeDOSBoxDoor(ctx)
-		}
+		return executeDOSDoor(ctx)
 	}
 	return executeNativeDoor(ctx)
 }
@@ -729,14 +725,7 @@ func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		doorType := "Native Linux"
 		if doorConfig.IsDOS {
-			switch strings.ToLower(strings.TrimSpace(doorConfig.DOSEmulator)) {
-			case "dosemu":
-				doorType = "DOS (dosemu2)"
-			case "dosbox":
-				doorType = "DOS (dosbox-x)"
-			default:
-				doorType = "DOS (auto)"
-			}
+			doorType = "DOS (dosemu2)"
 		}
 
 		info := fmt.Sprintf("|15Door: |07%s\r\n|15Type: |07%s\r\n", upperInput, doorType)

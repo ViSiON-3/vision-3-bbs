@@ -31,64 +31,56 @@ Door programs are stored in `configs/doors.json`. Each entry is keyed by a uniqu
 
 ### Native Doors
 
-| Field | Description |
-|-------|-------------|
-| `name` | Display name for the door |
-| `command` | Path to the executable |
-| `args` | Command-line arguments (supports placeholders) |
-| `working_directory` | Directory to run the command in |
-| `dropfile_type` | Dropfile format: `DOOR.SYS`, `CHAIN.TXT`, or `NONE` |
-| `io_mode` | I/O handling: `STDIO` |
-| `requires_raw_terminal` | Whether raw terminal mode is needed |
-| `environment_variables` | Additional environment variables to set |
+| Field                   | Description                                         |
+| ----------------------- | --------------------------------------------------- |
+| `name`                  | Display name for the door                           |
+| `command`               | Path to the executable                              |
+| `args`                  | Command-line arguments (supports placeholders)      |
+| `working_directory`     | Directory to run the command in                     |
+| `dropfile_type`         | Dropfile format: `DOOR.SYS`, `CHAIN.TXT`, or `NONE` |
+| `io_mode`               | I/O handling: `STDIO`                               |
+| `requires_raw_terminal` | Whether raw terminal mode is needed                 |
+| `environment_variables` | Additional environment variables to set             |
 
 ### DOS Doors
 
-Set `is_dos: true` to run a 16-bit DOS door game via a DOS emulator.
+Set `is_dos: true` to run a 16-bit DOS door game via dosemu2.
 
-| Field | Description |
-|-------|-------------|
-| `is_dos` | `true` = DOS door |
-| `dos_commands` | Array of DOS commands to run (supports placeholders) |
-| `drive_c_path` | Host path mounted as DOS C: drive (default: `~/.dosemu/drive_c`) |
-| `dos_emulator` | Emulator selection: `""` or `"auto"` (default), `"dosemu"`, `"dosbox"` |
-| `dosemu_path` | Path to dosemu2 binary (default: `/usr/bin/dosemu`) |
-| `dosemu_config` | Custom `.dosemurc` config file path (optional) |
-| `dosbox_path` | Path to dosbox-x binary (default: auto-detect `dosbox-x` or `dosbox` in `$PATH`) |
-| `dosbox_config` | Base `dosbox-x.conf` template path (default: built-in BBS template) |
+| Field           | Description                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| `is_dos`        | `true` = DOS door                                                |
+| `dos_commands`  | Array of DOS commands to run (supports placeholders)             |
+| `drive_c_path`  | Host path mounted as DOS C: drive (default: `~/.dosemu/drive_c`) |
+| `dos_emulator`  | Emulator selection: `""` or `"auto"` (default), `"dosemu"`       |
+| `dosemu_path`   | Path to dosemu2 binary (default: `/usr/bin/dosemu`)              |
+| `dosemu_config` | Custom `.dosemurc` config file path (optional)                   |
 
-#### Emulator Selection
+#### Running DOS Doors
 
-| `dos_emulator` value | Behaviour |
-|---|---|
-| `""` or `"auto"` | Prefer dosemu2 on Linux x86 if installed; otherwise use DOSBox-X |
-| `"dosemu"` | Always use dosemu2 (Linux x86 only) |
-| `"dosbox"` | Always use DOSBox-X (cross-platform: Linux, macOS, Windows) |
+There are currently two supported ways to run DOS doors with ViSiON/3:
+
+1. **dosemu2 on Linux x86/x86-64** — The recommended approach for running 16-bit DOS doors. dosemu2 connects the door's COM1 serial port back to the user's SSH session via a PTY pair (`serial { virtual com 1 }`).
+
+2. **32-bit Windows build** — A 32-bit Windows build of ViSiON/3 can natively launch 16-bit DOS door executables without any emulator. This relies on Windows' built-in NTVDM (NT Virtual DOS Machine) subsystem, which is only available on 32-bit editions of Windows.
+
+> **Note:** 64-bit Windows does not support DOS doors, as NTVDM is not available on 64-bit editions.
 
 #### Platform Support
 
-| Platform | dosemu2 | DOSBox-X |
-|---|---|---|
-| Linux x86 / x86-64 | Yes | Yes |
-| Linux ARM / ARM64 | No | Yes |
-| macOS (Intel or Apple Silicon) | No | Yes |
-| Windows 64-bit | No | Yes |
+| Platform           | DOS Door Support   |
+| ------------------ | ------------------ |
+| Linux x86 / x86-64 | Yes (dosemu2)      |
+| Linux ARM / ARM64  | No                 |
+| macOS              | No                 |
+| Windows 32-bit     | Yes (native NTVDM) |
+| Windows 64-bit     | No                 |
 
-#### I/O
-
-Both emulators connect the door's COM1 serial port back to the user's SSH session:
-- **dosemu2** — via a PTY pair (`serial { virtual com 1 }`)
-- **DOSBox-X** — via a TCP loopback socket (`serial1=nullmodem`, raw CP437 bytes)
-
-The user's terminal sees identical raw byte streams from both paths.
-
-#### DOS Door Example (DOSBox-X)
+#### DOS Door Example
 
 ```json
 {
   "name": "LORD",
   "is_dos": true,
-  "dos_emulator": "dosbox",
   "dos_commands": [
     "cd C:\\DOORS\\LORD",
     "LORD.EXE /N{NODE} /T{TIMELEFT}"
@@ -98,37 +90,20 @@ The user's terminal sees identical raw byte streams from both paths.
 }
 ```
 
-#### DOS Door Example (auto-detect)
-
-```json
-{
-  "name": "USURPER",
-  "is_dos": true,
-  "dos_commands": [
-    "cd C:\\DOORS\\USURPER",
-    "USR.EXE /N{NODE}"
-  ],
-  "drive_c_path": "/opt/bbs/drive_c",
-  "dropfile_type": "DOOR.SYS"
-}
-```
-
-With no `dos_emulator` set, dosemu2 is used on Linux x86 if available, otherwise DOSBox-X is used automatically.
-
 ## Placeholders
 
 The following placeholders can be used in `args` (native doors) and `dos_commands` (DOS doors) and are substituted at runtime:
 
-| Placeholder | Value |
-|-------------|-------|
-| `{NODE}` | Node number |
-| `{PORT}` | Port number |
-| `{TIMELEFT}` | Minutes remaining in session |
-| `{BAUD}` | Baud rate (simulated) |
-| `{USERHANDLE}` | User's handle |
-| `{USERID}` | User ID number |
-| `{REALNAME}` | User's real name |
-| `{LEVEL}` | Access level |
+| Placeholder    | Value                        |
+| -------------- | ---------------------------- |
+| `{NODE}`       | Node number                  |
+| `{PORT}`       | Port number                  |
+| `{TIMELEFT}`   | Minutes remaining in session |
+| `{BAUD}`       | Baud rate (simulated)        |
+| `{USERHANDLE}` | User's handle                |
+| `{USERID}`     | User ID number               |
+| `{REALNAME}`   | User's real name             |
+| `{LEVEL}`      | Access level                 |
 
 ## Menu Integration
 
