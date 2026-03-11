@@ -47,6 +47,16 @@ type bbsListData struct {
 
 var bbsListMu sync.Mutex
 
+// findListingIndexByID returns the index of the listing with the given ID, or -1.
+func findListingIndexByID(bld *bbsListData, id int) int {
+	for i := range bld.Listings {
+		if bld.Listings[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 func bbsListFilePath(rootConfigPath string) string {
 	return filepath.Join(rootConfigPath, "..", "data", "bbslist.json")
 }
@@ -202,7 +212,7 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		emit(ansi.MoveCursor(separatorRow, 1) + "\x1b[2K")
 		emitPipe("|08" + strings.Repeat("\xc4", termWidth))
 		emit(ansi.MoveCursor(hintRow, 1) + "\x1b[2K")
-		hint := "|08[|15\x18\x19|08]Nav [|15PgUp|08/|15Dn|08]Page [|15Q|08]Quit"
+		hint := "|08[|15\x18\x19|08]Nav [|15PgUp|08/|15PgDn|08]Page [|15Q|08]Quit"
 		if canEdit(sel) {
 			hint += " [|15C|08]Change"
 		}
@@ -458,30 +468,55 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 					return currentUser, "", nil
 				}
 				if (ch == 'c' || ch == 'C') && canEdit(selectedIndex) {
-					entry := &bld.Listings[selectedIndex]
+					entryID := bld.Listings[selectedIndex].ID
+					entryCopy := bld.Listings[selectedIndex]
 					emit("\x1b[?25h") // show cursor
 					emit(ansi.ClearScreen())
-					bbsListEditEntry(e, s, terminal, currentUser, entry, selectedIndex, nodeNumber, outputMode)
-					bbsListMu.Lock()
-					_ = saveBBSListData(e.RootConfigPath, bld)
-					bbsListMu.Unlock()
+					edited, saved := bbsListEditEntry(e, s, terminal, currentUser, entryCopy, selectedIndex, nodeNumber, outputMode)
+					if saved {
+						bbsListMu.Lock()
+						freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+						if loadErr == nil {
+							if fi := findListingIndexByID(freshBld, entryID); fi >= 0 {
+								edited.ID = entryID
+								freshBld.Listings[fi] = edited
+								if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
+									log.Printf("ERROR: Node %d: failed to save BBS list after edit: %v", nodeNumber, saveErr)
+								} else {
+									bld = freshBld
+									selectedIndex = fi
+								}
+							}
+						}
+						bbsListMu.Unlock()
+					}
 					emit("\x1b[?25l") // hide cursor
 					needFullRedraw = true
 				}
 				if (ch == 'd' || ch == 'D') && isCoSysOp && len(bld.Listings) > 0 {
-					entry := &bld.Listings[selectedIndex]
+					entryID := bld.Listings[selectedIndex].ID
+					entryName := bld.Listings[selectedIndex].Name
 					emit("\x1b[?25h") // show cursor
 					confirm, cerr := e.PromptYesNo(s, terminal,
-						fmt.Sprintf("\r\n|07Delete |15%s|07? ", bbsListSanitize(entry.Name)),
+						fmt.Sprintf("\r\n|07Delete |15%s|07? ", bbsListSanitize(entryName)),
 						outputMode, nodeNumber, termWidth, termHeight, false)
 					emit("\x1b[?25l") // hide cursor
 					if cerr == nil && confirm {
 						bbsListMu.Lock()
-						bld.Listings = append(bld.Listings[:selectedIndex], bld.Listings[selectedIndex+1:]...)
-						_ = saveBBSListData(e.RootConfigPath, bld)
+						freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+						if loadErr == nil {
+							if fi := findListingIndexByID(freshBld, entryID); fi >= 0 {
+								freshBld.Listings = append(freshBld.Listings[:fi], freshBld.Listings[fi+1:]...)
+								if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
+									log.Printf("ERROR: Node %d: failed to save BBS list after delete: %v", nodeNumber, saveErr)
+								} else {
+									bld = freshBld
+									log.Printf("INFO: Node %d: User %s deleted BBS listing: %s",
+										nodeNumber, currentUser.Handle, entryName)
+								}
+							}
+						}
 						bbsListMu.Unlock()
-						log.Printf("INFO: Node %d: User %s deleted BBS listing: %s",
-							nodeNumber, currentUser.Handle, entry.Name)
 						if selectedIndex >= len(bld.Listings) && selectedIndex > 0 {
 							selectedIndex--
 						}
@@ -492,16 +527,27 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 					needFullRedraw = true
 				}
 				if (ch == 'v' || ch == 'V') && isCoSysOp && len(bld.Listings) > 0 {
+					entryID := bld.Listings[selectedIndex].ID
 					bbsListMu.Lock()
-					bld.Listings[selectedIndex].Verified = !bld.Listings[selectedIndex].Verified
-					status := "unverified"
-					if bld.Listings[selectedIndex].Verified {
-						status = "verified"
+					freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+					if loadErr == nil {
+						if fi := findListingIndexByID(freshBld, entryID); fi >= 0 {
+							freshBld.Listings[fi].Verified = !freshBld.Listings[fi].Verified
+							status := "unverified"
+							if freshBld.Listings[fi].Verified {
+								status = "verified"
+							}
+							if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
+								log.Printf("ERROR: Node %d: failed to save BBS list after verify toggle: %v", nodeNumber, saveErr)
+							} else {
+								bld = freshBld
+								selectedIndex = fi
+								log.Printf("INFO: Node %d: User %s toggled BBS listing #%d (%s) to %s",
+									nodeNumber, currentUser.Handle, fi+1, freshBld.Listings[fi].Name, status)
+							}
+						}
 					}
-					_ = saveBBSListData(e.RootConfigPath, bld)
 					bbsListMu.Unlock()
-					log.Printf("INFO: Node %d: User %s toggled BBS listing #%d (%s) to %s",
-						nodeNumber, currentUser.Handle, selectedIndex+1, bld.Listings[selectedIndex].Name, status)
 					needFullRedraw = true
 				}
 			}
@@ -657,10 +703,11 @@ func runBBSListAdd(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 }
 
 // bbsListEditEntry presents the numbered field editor for a single BBS listing entry.
-// It modifies entry in place; the caller is responsible for saving.
+// It operates on a copy; the caller is responsible for applying and saving on success.
+// Returns the edited copy and true if the user chose to save, or false on I/O error.
 func bbsListEditEntry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	currentUser *user.User, entry *BBSListing, idx int, nodeNumber int,
-	outputMode ansi.OutputMode) {
+	currentUser *user.User, entry BBSListing, idx int, nodeNumber int,
+	outputMode ansi.OutputMode) (BBSListing, bool) {
 
 	showEditFields := func() {
 		wv(terminal, fmt.Sprintf("\r\n|15Editing: |11%s\r\n", bbsListSanitize(entry.Name)), outputMode)
@@ -681,7 +728,7 @@ func bbsListEditEntry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		wv(terminal, "\r\n|07Edit field |15[|111-8|15]|07, or |15Q|07 to save & quit: ", outputMode)
 		choice, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
-			return
+			return entry, false
 		}
 		choice = strings.TrimSpace(strings.ToUpper(choice))
 
@@ -715,7 +762,7 @@ func bbsListEditEntry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		wv(terminal, fieldPrompt, outputMode)
 		val, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
-			return
+			return entry, false
 		}
 		val = strings.TrimSpace(val)
 		if val == "" {
@@ -768,6 +815,7 @@ func bbsListEditEntry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	wv(terminal, "\r\n|10Entry updated!\r\n", outputMode)
 	log.Printf("INFO: Node %d: User %s edited BBS listing #%d (%s)", nodeNumber, currentUser.Handle, idx+1, entry.Name)
+	return entry, true
 }
 
 // runBBSListEdit allows a user to edit their own BBS listing (or any if sysop).
@@ -819,22 +867,35 @@ func runBBSListEdit(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	idx := n - 1
-	entry := &bld.Listings[idx]
+	entryCopy := bld.Listings[idx]
 
 	// V2 ownership check: user must own entry or be sysop
-	if !strings.EqualFold(entry.AddedBy, currentUser.Handle) && !e.isCoSysOpOrAbove(currentUser) {
+	if !strings.EqualFold(entryCopy.AddedBy, currentUser.Handle) && !e.isCoSysOpOrAbove(currentUser) {
 		wv(terminal, "\r\n|04You can only edit your own listings.\r\n", outputMode)
 		return currentUser, "", nil
 	}
 
-	bbsListEditEntry(e, s, terminal, currentUser, entry, idx, nodeNumber, outputMode)
-
-	// Save changes
-	bbsListMu.Lock()
-	if err := saveBBSListData(e.RootConfigPath, bld); err != nil {
-		bbsListMu.Unlock()
-		wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
+	edited, saved := bbsListEditEntry(e, s, terminal, currentUser, entryCopy, idx, nodeNumber, outputMode)
+	if !saved {
 		return currentUser, "", nil
+	}
+
+	// Reload fresh data and apply edits to avoid clobbering concurrent changes.
+	bbsListMu.Lock()
+	freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+	if loadErr != nil {
+		bbsListMu.Unlock()
+		wv(terminal, "\r\n|04Error loading BBS list data.\r\n", outputMode)
+		return currentUser, "", nil
+	}
+	if fi := findListingIndexByID(freshBld, entryCopy.ID); fi >= 0 {
+		edited.ID = entryCopy.ID
+		freshBld.Listings[fi] = edited
+		if err := saveBBSListData(e.RootConfigPath, freshBld); err != nil {
+			bbsListMu.Unlock()
+			wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
+			return currentUser, "", nil
+		}
 	}
 	bbsListMu.Unlock()
 
