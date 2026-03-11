@@ -37,7 +37,6 @@ Thumbs.db
 
 # Documentation (not needed in container)
 docs/
-tasks/
 *.md
 !README.md
 
