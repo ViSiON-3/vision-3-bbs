@@ -19,11 +19,13 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/ViSiON3 ./cmd/vision3
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/v3mail   ./cmd/v3mail
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/helper   ./cmd/helper
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/strings  ./cmd/strings
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/ue       ./cmd/ue
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/ViSiON3   ./cmd/vision3
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/v3mail    ./cmd/v3mail
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/helper    ./cmd/helper
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/strings   ./cmd/strings
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/ue        ./cmd/ue
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/config    ./cmd/config
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /vision3/menuedit  ./cmd/menuedit
 
 # ---------------------------------------------------------------------------
 # Stage 2: Runtime image
@@ -42,20 +44,16 @@ COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod a+x /usr/local/bin/docker-entrypoint.sh
 
 # Copy all built Go binaries
-COPY --from=builder /vision3/ViSiON3 .
-COPY --from=builder /vision3/v3mail  .
-COPY --from=builder /vision3/helper  .
-COPY --from=builder /vision3/strings .
-COPY --from=builder /vision3/ue      .
+COPY --from=builder /vision3/ViSiON3   .
+COPY --from=builder /vision3/v3mail    .
+COPY --from=builder /vision3/helper    .
+COPY --from=builder /vision3/strings   .
+COPY --from=builder /vision3/ue        .
+COPY --from=builder /vision3/config    .
+COPY --from=builder /vision3/menuedit  .
 
-# Copy sexyz.ini config (user must provide bin/sexyz binary for their platform)
-COPY bin/sexyz.ini ./bin/sexyz.ini
-
-# Copy binkd (statically linked FTN mailer)
-COPY bin/binkd ./bin/binkd
-RUN chmod +x ./bin/binkd
-
-# Copy template configs for initialization
+# Copy template configs for initialization (includes sexyz.ini; entrypoint copies it to bin/)
+# Note: bin/sexyz and bin/binkd must be provided via a volume or added to a derived image
 COPY templates/ ./templates/
 
 RUN chown -R vision3:vision3 /vision3
