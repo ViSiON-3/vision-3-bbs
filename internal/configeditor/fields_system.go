@@ -483,5 +483,17 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 				return nil
 			},
 		},
+		{
+			Label: "NUV Form", Help: "Infoform number (1-5) shown to voters; 0 = disabled", Type: ftInteger, Col: 3, Row: 9, Width: 1, Min: 0, Max: 5,
+			Get: func() string { return strconv.Itoa(cfg.NUVForm) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.NUVForm = n
+				return nil
+			},
+		},
 	}
 }

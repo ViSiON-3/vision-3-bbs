@@ -228,6 +228,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	cfg := e.GetServerConfig()
 	if cfg.UseNUV && cfg.AutoAddNUV {
 		nuvAddCandidate(e.RootConfigPath, newUser.Handle)
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Your account has been submitted for community review.\r\n")), outputMode)
 	}
 
 	// 11. Show validation message

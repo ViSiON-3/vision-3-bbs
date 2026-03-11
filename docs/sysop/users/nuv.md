@@ -83,6 +83,18 @@ Pressing `Y` immediately starts a scan of unvoted candidates. Pressing `N` conti
 {"command": "CHECKNUV"}
 ```
 
+This is included in the default `configs/login.json`. If upgrading an existing deployment, add this entry manually to your login sequence.
+
+---
+
+### New user notification
+
+When `autoAddNuv` is enabled, new users see a message after registration:
+
+```
+Your account has been submitted for community review.
+```
+
 ---
 
 ### `RUN:SCANNUV` — Vote on pending candidates
@@ -99,8 +111,8 @@ Added      : 01/15/2026
 
 Voter Comments:
 ────────────────────────────────────────
-SysOp               Yes Seems legit
-OldTimer            No  No referral
+SysOp               Yes Seems legit           01/15/26
+OldTimer            No  No referral            01/16/26
 
 [Y]es  [N]o  [C]omment  [R]eshow  [Q]uit:
 ```
@@ -109,7 +121,7 @@ OldTimer            No  No referral
 |-----|--------|
 | `Y` | Cast or change vote to YES |
 | `N` | Cast or change vote to NO |
-| `C` | Add or update a comment on your vote (must vote first) |
+| `C` | Add or update a comment on your vote (must vote first; max 80 characters) |
 | `R` | Redisplay the candidate stats |
 | `Q` / Esc | Quit scan (remaining candidates not shown) |
 
@@ -133,7 +145,22 @@ New User Voting Queue — 3 Candidate(s)
 3    RetroFan             01/17/26        3    2 Yes
 ```
 
-Read-only — no voting from this view. Use `SCANNUV` to vote.
+For non-SysOp users this is a read-only view. Use `SCANNUV` to vote.
+
+**SysOp management (access level 255):** SysOps see an interactive hotkey prompt instead of a static list:
+
+```
+[A]dd  [R]emove #  [V]ote on #  [Q]uit:
+```
+
+| Key | Action |
+|-----|--------|
+| `A` | Prompt for a handle, verify the user exists, add them to the NUV queue |
+| `R` | Prompt for a candidate number, remove them from the queue |
+| `V` | Prompt for a candidate number, open the voting screen for that candidate |
+| `Q` / Esc | Return to the previous menu |
+
+After each action the candidate table is refreshed automatically.
 
 **Default binding:** Admin Menu `U` key.
 
@@ -141,7 +168,7 @@ Read-only — no voting from this view. Use `SCANNUV` to vote.
 
 ## SysOp Access
 
-The Admin Menu includes `U` → `LISTNUV` for reviewing the queue at a glance. SysOps can also use `SCANNUV` from any menu to cast their own votes. All threshold-triggered actions (auto-validate, auto-delete) are logged to the application log.
+The Admin Menu includes `U` → `LISTNUV` for reviewing and managing the queue. SysOps can add or remove candidates, vote directly from the list, and use `SCANNUV` from any menu to cast votes. All threshold-triggered actions (auto-validate, auto-delete) and SysOp queue removals are logged to the application log.
 
 To manually manage a user affected by NUV thresholds when auto-action is disabled, use the Admin Menu `V` (Validate) or `E` (Edit Users) screens.
 
@@ -161,12 +188,14 @@ Candidates are stored in `data/nuv.json`:
                 {
                     "voter": "SysOp",
                     "yes": true,
-                    "comment": "Seems legit"
+                    "comment": "Seems legit",
+                    "votedAt": "2026-01-15T19:00:00Z"
                 },
                 {
                     "voter": "OldTimer",
                     "yes": false,
-                    "comment": "No referral"
+                    "comment": "No referral",
+                    "votedAt": "2026-01-16T10:15:00Z"
                 }
             ]
         }
@@ -180,7 +209,9 @@ The file is created automatically when the first candidate is added. It is safe 
 
 ## Manually Adding a Candidate
 
-To add a user to the NUV queue without them re-registering (e.g., if `autoAddNuv` was off at the time), edit `data/nuv.json` and add an entry to the `candidates` array. The `votes` array can be empty.
+SysOps can add a user to the NUV queue directly from `LISTNUV` by pressing `A` and entering the handle.
+
+Alternatively, edit `data/nuv.json` and add an entry to the `candidates` array. The `votes` array can be empty.
 
 ---
 

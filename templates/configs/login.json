@@ -19,5 +19,8 @@
     {
         "command": "INFOFORMREQUIRED",
         "clear_screen": true
+    },
+    {
+        "command": "CHECKNUV"
     }
 ]

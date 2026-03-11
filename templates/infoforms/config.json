@@ -1,11 +1,11 @@
 {
     "descriptions": [
         "New User Application",
-        "BBS SysOp Information",
         "",
         "",
-        "New User Voting Form"
+        "",
+        ""
     ],
     "min_levels": [0, 0, 0, 0, 0],
-    "required_forms": "12"
+    "required_forms": "1"
 }

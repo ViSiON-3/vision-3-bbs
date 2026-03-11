@@ -855,6 +855,7 @@ type ServerConfig struct {
 	NUVValidate bool `json:"nuvValidate"` // auto-validate user when yes threshold reached
 	NUVKill     bool `json:"nuvKill"`     // auto-delete user when no threshold reached
 	NUVLevel    int  `json:"nuvLevel"`    // access level assigned on NUV auto-validation
+	NUVForm     int  `json:"nuvForm"`     // infoform number (1-5) to display during NUV voting; 0 = disabled
 }
 
 // EventConfig defines a scheduled event configuration
@@ -918,6 +919,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		NUVValidate:               true,
 		NUVKill:                   false,
 		NUVLevel:                  25,
+		NUVForm:                   1,
 	}
 
 	data, err := os.ReadFile(filePath)

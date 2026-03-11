@@ -163,8 +163,8 @@ func TestLoadInfoFormConfig_Defaults(t *testing.T) {
 	if cfg.Descriptions[0] != "New User Application" {
 		t.Errorf("default desc[0] = %q, want %q", cfg.Descriptions[0], "New User Application")
 	}
-	if cfg.Descriptions[1] != "BBS SysOp Information" {
-		t.Errorf("default desc[1] = %q, want %q", cfg.Descriptions[1], "BBS SysOp Information")
+	if cfg.Descriptions[1] != "" {
+		t.Errorf("default desc[1] = %q, want %q", cfg.Descriptions[1], "")
 	}
 	if cfg.RequiredForms != "" {
 		t.Errorf("default RequiredForms = %q, want empty", cfg.RequiredForms)
