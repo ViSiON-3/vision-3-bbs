@@ -1,11 +1,5 @@
 # ViSiON/3 Development Guidelines
 
-> **Team Mode**: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is enabled. See `AGENTS.md` for multi-agent coordination, task ownership, and communication protocols.
-
-## Task Tracking
-
-- Use `bd` (beads) for **active task tracking** — see `AGENTS.md` for full protocol.
-
 ## Core Philosophy
 
 - **Simplicity**: Prioritize simple, clear, and maintainable solutions. Avoid unnecessary complexity or over-engineering.
@@ -44,10 +38,6 @@ Before making significant changes:
 1. **Identify Impact**: Determine affected components, dependencies, and potential side effects.
 2. **Plan**: Outline the steps. Tackle one logical change or file at a time.
 3. **Verify Testing**: Confirm how the change will be tested. Add tests if necessary before implementing.
-
-### Progress Tracking
-
-- Use `bd` commands to track active work (see `AGENTS.md`)
 
 ## Code Quality & Style
 
