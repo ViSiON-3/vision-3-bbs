@@ -21,11 +21,11 @@ import (
 )
 
 // executeDoor dispatches to the appropriate executor.
-// DOS doors require dosemu2 (Linux only) or a 32-bit Windows build with native 16-bit support.
-// 64-bit Windows does not support DOS doors. Native POSIX doors are not supported on Windows.
+// DOS doors require dosemu2 (Linux) or NTVDM (32-bit Windows, not yet implemented).
+// Native POSIX doors are not supported on Windows.
 func executeDoor(ctx *DoorCtx) error {
 	if ctx.Config.IsDOS {
-		return fmt.Errorf("DOS doors are not supported on 64-bit Windows; use dosemu2 on Linux or a 32-bit Windows build")
+		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
 	}
 	return fmt.Errorf("native doors are not supported on Windows")
 }
@@ -87,13 +87,18 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 	}
 	sort.Strings(doorNames)
 
-	// Display each DOS door
+	// Display each door
 	midTemplate := string(ansi.ReplacePipeCodes(midBytes))
 	for i, name := range doorNames {
+		doorCfg := doorRegistryCopy[name]
+		doorType := "Native"
+		if doorCfg.IsDOS {
+			doorType = "DOS"
+		}
 		line := midTemplate
 		line = strings.ReplaceAll(line, "^ID", fmt.Sprintf("%-3d", i+1))
 		line = strings.ReplaceAll(line, "^NA", fmt.Sprintf("%-30s", name))
-		line = strings.ReplaceAll(line, "^TY", "DOS")
+		line = strings.ReplaceAll(line, "^TY", doorType)
 		terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
 	}
 
@@ -193,7 +198,7 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	log.Printf("DEBUG: Node %d: runDoorInfo (Windows)", nodeNumber)
 	terminalio.WriteProcessedBytes(terminal,
-		ansi.ReplacePipeCodes([]byte("|12DOS doors require dosemu2 (Linux) or a 32-bit Windows build. Native doors are not supported on Windows.|07\r\n")),
+		ansi.ReplacePipeCodes([]byte("|12DOS doors require dosemu2 (Linux) or NTVDM (32-bit Windows, not yet implemented). Native doors are not supported on Windows.|07\r\n")),
 		outputMode)
 	time.Sleep(1 * time.Second)
 	return currentUser, "", nil

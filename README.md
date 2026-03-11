@@ -245,7 +245,7 @@ vision3/
 ├── output/                 # Output support files
 ├── scripts/                # Utility scripts
 ├── docs/                   # GitHub Pages website (vision3bbs.com)
-└── docs/sysop/             # Sysop documentation
+│   └── sysop/              # Sysop documentation
 ```
 
 ## Setup & Installation

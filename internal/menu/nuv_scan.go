@@ -196,7 +196,10 @@ func runNUVList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				wv(terminal, fmt.Sprintf("|12User '%s' not found.\r\n", handle), outputMode)
 				continue
 			}
-			nuvAddCandidate(e.RootConfigPath, handle)
+			if err := nuvAddCandidate(e.RootConfigPath, handle); err != nil {
+				wv(terminal, fmt.Sprintf("|12Failed to add '%s': %v\r\n", handle, err), outputMode)
+				continue
+			}
 			wv(terminal, fmt.Sprintf("|10Added '%s' to NUV queue.\r\n", handle), outputMode)
 
 		case key == 'R' || key == 'r':
@@ -220,7 +223,12 @@ func runNUVList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			}
 			removed := nd.Candidates[num-1]
 			nd.Candidates = append(nd.Candidates[:num-1], nd.Candidates[num:]...)
-			_ = saveNUVData(e.RootConfigPath, nd)
+			if err := saveNUVData(e.RootConfigPath, nd); err != nil {
+				nuvMu.Unlock()
+				log.Printf("ERROR: NUV: failed to save after removing '%s': %v", removed.Handle, err)
+				wv(terminal, "|12Failed to save changes.\r\n", outputMode)
+				continue
+			}
 			nuvMu.Unlock()
 			log.Printf("INFO: NUV: SysOp %s removed candidate '%s' from queue", currentUser.Handle, removed.Handle)
 			wv(terminal, fmt.Sprintf("|10Removed '%s' from queue.\r\n", removed.Handle), outputMode)

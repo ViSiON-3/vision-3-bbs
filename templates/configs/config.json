@@ -34,5 +34,6 @@
   "nuvNoVotes": 5,
   "nuvValidate": true,
   "nuvKill": false,
-  "nuvLevel": 25
+  "nuvLevel": 25,
+  "nuvForm": 1
 }

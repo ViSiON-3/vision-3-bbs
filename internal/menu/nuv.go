@@ -70,18 +70,18 @@ func saveNUVData(rootConfigPath string, nd *NUVData) error {
 
 // nuvAddCandidate adds a new user handle to the NUV queue.
 // Called automatically after new user registration when AutoAddNUV is true.
-func nuvAddCandidate(rootConfigPath, handle string) {
+func nuvAddCandidate(rootConfigPath, handle string) error {
 	nuvMu.Lock()
 	defer nuvMu.Unlock()
 	nd, err := loadNUVData(rootConfigPath)
 	if err != nil {
 		log.Printf("WARN: NUV: failed to load nuv.json: %v", err)
-		return
+		return fmt.Errorf("load nuv data: %w", err)
 	}
 	lower := strings.ToLower(handle)
 	for _, c := range nd.Candidates {
 		if strings.ToLower(c.Handle) == lower {
-			return // already queued
+			return nil // already queued
 		}
 	}
 	nd.Candidates = append(nd.Candidates, NUVCandidate{
@@ -90,8 +90,10 @@ func nuvAddCandidate(rootConfigPath, handle string) {
 	})
 	if err := saveNUVData(rootConfigPath, nd); err != nil {
 		log.Printf("WARN: NUV: failed to save nuv.json: %v", err)
+		return fmt.Errorf("save nuv data: %w", err)
 	}
 	log.Printf("INFO: NUV: added candidate '%s' to queue", handle)
+	return nil
 }
 
 // nuvVoteIndex returns the index of the voter's vote in candidate.Votes, or -1.
@@ -272,8 +274,11 @@ func nuvPromptComment(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			vi := nuvVoteIndex(&fresh.Candidates[freshIdx], currentUser.Handle)
 			if vi >= 0 {
 				fresh.Candidates[freshIdx].Votes[vi].Comment = comment
-				_ = saveNUVData(e.RootConfigPath, fresh)
-				*nd = *fresh
+				if err := saveNUVData(e.RootConfigPath, fresh); err != nil {
+					log.Printf("WARN: NUV: failed to save comment: %v", err)
+				} else {
+					*nd = *fresh
+				}
 			}
 		}
 	}
@@ -364,7 +369,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 					wv(terminal, "\r\n", outputMode)
 					e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 				} else {
-					wv(terminal, "\r\n|07That user has no information form.\r\n", outputMode)
+					wv(terminal, "\r\n|07User not found in database.\r\n", outputMode)
 				}
 				nuvDisplayStats(e, terminal, c, idx+1, outputMode)
 				if voterIdx >= 0 {
@@ -452,8 +457,16 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 					_ = saveNUVData(e.RootConfigPath, nd)
 
 					// V2 auto-prompts for comment immediately after new vote.
+					// Unlock before nuvPromptComment — it acquires nuvMu internally.
 					if !removed && !isChange {
+						nuvMu.Unlock()
 						nuvPromptComment(e, s, terminal, currentUser, nd, c, outputMode)
+						nuvMu.Lock()
+						// Reload after comment to ensure consistency.
+						fresh, loadErr = loadNUVData(e.RootConfigPath)
+						if loadErr == nil {
+							*nd = *fresh
+						}
 						freshIdx2 := nuvFindCandidate(nd, c.Handle)
 						if freshIdx2 >= 0 {
 							idx = freshIdx2

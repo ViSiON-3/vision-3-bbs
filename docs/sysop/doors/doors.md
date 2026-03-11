@@ -57,23 +57,21 @@ Set `is_dos: true` to run a 16-bit DOS door game via dosemu2.
 
 #### Running DOS Doors
 
-There are currently two supported ways to run DOS doors with ViSiON/3:
+DOS doors are currently supported on Linux x86/x86-64 via dosemu2. dosemu2 connects the door's COM1 serial port back to the user's SSH session via a PTY pair (`serial { virtual com 1 }`).
 
-1. **dosemu2 on Linux x86/x86-64** — The recommended approach for running 16-bit DOS doors. dosemu2 connects the door's COM1 serial port back to the user's SSH session via a PTY pair (`serial { virtual com 1 }`).
+32-bit editions of Windows include NTVDM (NT Virtual DOS Machine) which can natively run 16-bit DOS executables. ViSiON/3 does not yet implement NTVDM-based door launching, but it is planned for a future release.
 
-2. **32-bit Windows build** — A 32-bit Windows build of ViSiON/3 can natively launch 16-bit DOS door executables without any emulator. This relies on Windows' built-in NTVDM (NT Virtual DOS Machine) subsystem, which is only available on 32-bit editions of Windows.
-
-> **Note:** 64-bit Windows does not support DOS doors, as NTVDM is not available on 64-bit editions.
+> **Note:** 64-bit Windows does not include NTVDM and cannot run DOS doors.
 
 #### Platform Support
 
-| Platform           | DOS Door Support   |
-| ------------------ | ------------------ |
-| Linux x86 / x86-64 | Yes (dosemu2)      |
-| Linux ARM / ARM64  | No                 |
-| macOS              | No                 |
-| Windows 32-bit     | Yes (native NTVDM) |
-| Windows 64-bit     | No                 |
+| Platform             | DOS Door Support        |
+| -------------------- | ----------------------- |
+| Linux x86 / x86-64   | Yes (dosemu2)           |
+| Linux ARM / ARM64    | No                      |
+| macOS                | No                      |
+| Windows 32-bit       | Not yet (NTVDM planned) |
+| Windows 64-bit       | No                      |
 
 #### DOS Door Example
 

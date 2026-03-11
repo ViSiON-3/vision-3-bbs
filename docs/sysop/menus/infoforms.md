@@ -29,6 +29,7 @@ Templates are plain text files stored in `data/infoforms/templates/`. Each form 
 | Marker | Description |
 |--------|-------------|
 | `*` | Input field — the system pauses here for user input |
+| `*!` | Required input field — the user must enter a non-empty answer |
 | `\|B<n>;` | Set maximum input length to `n` characters for the next `*` field (1–255) |
 | `\|VN` | Replaced with the BBS version number |
 | `\|CL` | Clear screen and home cursor |

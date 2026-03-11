@@ -6,8 +6,8 @@
   "outbound_path": "data/ftn/temp_out",
   "binkd_outbound_path": "data/ftn/out",
   "temp_path": "data/ftn/temp_in",
-  "bad_area_tag": "BAD",
-  "dupe_area_tag": "DUPE",
+  "bad_area_tag": "",
+  "dupe_area_tag": "",
   "networks": {
     "fsxnet": {
       "_comment": "Example: FSXNet. Replace own_address with your assigned node number.",
