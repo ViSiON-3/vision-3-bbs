@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,14 +22,204 @@ import (
 	"golang.org/x/term"
 )
 
+// executeNativeDoorWindows runs a native door program on Windows using STDIO redirection.
+// PTY mode is not supported on Windows; RequiresRawTerminal is ignored with a warning.
+func executeNativeDoorWindows(ctx *DoorCtx) error {
+	doorConfig := ctx.Config
+
+	// --- Dropfile Generation ---
+	var dropfilePath string
+	dropfileDir := "."
+	if doorConfig.WorkingDirectory != "" {
+		dropfileDir = doorConfig.WorkingDirectory
+	}
+
+	// Configurable dropfile location
+	dropfileLoc := strings.ToLower(doorConfig.DropfileLocation)
+	nodeDropfileDir := ""
+	if dropfileLoc == "node" {
+		nodeDropfileDir = filepath.Join(os.TempDir(), fmt.Sprintf("vision3_node%d", ctx.NodeNumber))
+		if err := os.MkdirAll(nodeDropfileDir, 0700); err != nil {
+			return fmt.Errorf("failed to create node dropfile directory %s: %w", nodeDropfileDir, err)
+		}
+		dropfileDir = nodeDropfileDir
+	}
+
+	dropfileTypeUpper := strings.ToUpper(doorConfig.DropfileType)
+
+	if dropfileTypeUpper == "DOOR.SYS" || dropfileTypeUpper == "CHAIN.TXT" || dropfileTypeUpper == "DOOR32.SYS" || dropfileTypeUpper == "DORINFO1.DEF" {
+		dropfilePath = filepath.Join(dropfileDir, dropfileTypeUpper)
+		log.Printf("INFO: Generating %s dropfile at: %s", dropfileTypeUpper, dropfilePath)
+
+		var genErr error
+		switch dropfileTypeUpper {
+		case "DOOR.SYS":
+			genErr = generateDoorSys(ctx, dropfileDir)
+		case "DOOR32.SYS":
+			genErr = generateDoor32Sys(ctx, dropfileDir)
+		case "CHAIN.TXT":
+			genErr = generateChainTxt(ctx, dropfileDir)
+		case "DORINFO1.DEF":
+			genErr = generateDorInfo(ctx, dropfileDir)
+		}
+
+		if genErr != nil {
+			log.Printf("ERROR: Failed to write dropfile %s: %v", dropfilePath, genErr)
+			errMsg := fmt.Sprintf(ctx.Executor.LoadedStrings.DoorDropfileError, ctx.DoorName)
+			if wErr := terminalio.WriteProcessedBytes(ctx.Session.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), ctx.OutputMode); wErr != nil {
+				log.Printf("ERROR: Failed writing dropfile creation error message: %v", wErr)
+			}
+			return genErr
+		}
+
+		defer func() {
+			log.Printf("DEBUG: Cleaning up dropfile: %s", dropfilePath)
+			if err := os.Remove(dropfilePath); err != nil {
+				log.Printf("WARN: Failed to remove dropfile %s: %v", dropfilePath, err)
+			}
+			if nodeDropfileDir != "" {
+				if err := os.Remove(nodeDropfileDir); err != nil {
+					log.Printf("DEBUG: Node dropfile dir %s not removed: %v", nodeDropfileDir, err)
+				}
+			}
+		}()
+	}
+
+	// Populate placeholders
+	ctx.Subs["{DROPFILE}"] = dropfilePath
+	ctx.Subs["{NODEDIR}"] = dropfileDir
+
+	// Substitute in Arguments
+	substitutedArgs := make([]string, len(doorConfig.Args))
+	for i, arg := range doorConfig.Args {
+		newArg := arg
+		for key, val := range ctx.Subs {
+			newArg = strings.ReplaceAll(newArg, key, val)
+		}
+		substitutedArgs[i] = newArg
+	}
+
+	// Substitute in Environment Variables
+	substitutedEnv := make(map[string]string)
+	if doorConfig.EnvironmentVars != nil {
+		for key, val := range doorConfig.EnvironmentVars {
+			newVal := val
+			for subKey, subVal := range ctx.Subs {
+				newVal = strings.ReplaceAll(newVal, subKey, subVal)
+			}
+			substitutedEnv[key] = newVal
+		}
+	}
+
+	// Prepare command — optionally wrap in cmd.exe
+	var cmd *exec.Cmd
+	if doorConfig.UseShell {
+		shellCmd := doorConfig.Command + " " + strings.Join(substitutedArgs, " ")
+		cmd = exec.Command("cmd", "/c", shellCmd)
+		log.Printf("DEBUG: Node %d: Using shell execution: cmd /c %q", ctx.NodeNumber, shellCmd)
+	} else {
+		cmd = exec.Command(doorConfig.Command, substitutedArgs...)
+	}
+
+	if doorConfig.WorkingDirectory != "" {
+		cmd.Dir = doorConfig.WorkingDirectory
+	}
+
+	// Set environment variables
+	cmd.Env = os.Environ()
+	if len(substitutedEnv) > 0 {
+		for key, val := range substitutedEnv {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
+		}
+	}
+
+	// Add standard BBS env vars
+	envMap := make(map[string]bool)
+	for _, envPair := range cmd.Env {
+		envMap[strings.SplitN(envPair, "=", 2)[0]] = true
+	}
+	if _, exists := envMap["BBS_USERHANDLE"]; !exists {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_USERHANDLE=%s", ctx.User.Handle))
+	}
+	if _, exists := envMap["BBS_USERID"]; !exists {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_USERID=%s", ctx.UserIDStr))
+	}
+	if _, exists := envMap["BBS_NODE"]; !exists {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_NODE=%s", ctx.NodeNumStr))
+	}
+	if _, exists := envMap["BBS_TIMELEFT"]; !exists {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_TIMELEFT=%s", ctx.TimeLeftStr))
+	}
+
+	if doorConfig.RequiresRawTerminal {
+		log.Printf("WARN: Node %d: Door '%s' requires raw terminal, but PTY is not supported on Windows. Falling back to STDIO.", ctx.NodeNumber, ctx.DoorName)
+	}
+
+	log.Printf("INFO: Node %d: Starting door '%s' with standard I/O redirection (Windows)", ctx.NodeNumber, ctx.DoorName)
+	cmd.Stdout = ctx.Session
+	cmd.Stderr = ctx.Session
+	cmd.Stdin = ctx.Session
+	cmdErr := cmd.Run()
+
+	time.Sleep(100 * time.Millisecond)
+	return cmdErr
+}
+
 // executeDoor dispatches to the appropriate executor.
 // DOS doors require dosemu2 (Linux) or NTVDM (32-bit Windows, not yet implemented).
-// Native POSIX doors are not supported on Windows.
+// Native doors are supported on Windows via STDIO redirection.
 func executeDoor(ctx *DoorCtx) error {
+	// Single-instance locking
+	if ctx.Config.SingleInstance {
+		if !acquireDoorLock(ctx.DoorName, ctx.NodeNumber) {
+			log.Printf("WARN: Node %d: Door '%s' is already in use by another node", ctx.NodeNumber, ctx.DoorName)
+			return fmt.Errorf("door '%s' is currently in use by another node", ctx.DoorName)
+		}
+		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
+	}
+
 	if ctx.Config.IsDOS {
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
 	}
-	return fmt.Errorf("native doors are not supported on Windows")
+
+	err := executeNativeDoorWindows(ctx)
+
+	// Run cleanup command after door exits
+	executeCleanupWindows(ctx)
+
+	return err
+}
+
+// executeCleanupWindows runs the optional post-door cleanup command on Windows.
+func executeCleanupWindows(ctx *DoorCtx) {
+	if ctx.Config.CleanupCommand == "" {
+		return
+	}
+
+	substitutedArgs := make([]string, len(ctx.Config.CleanupArgs))
+	for i, arg := range ctx.Config.CleanupArgs {
+		newArg := arg
+		for key, val := range ctx.Subs {
+			newArg = strings.ReplaceAll(newArg, key, val)
+		}
+		substitutedArgs[i] = newArg
+	}
+
+	log.Printf("INFO: Node %d: Running cleanup command for door '%s': %s %v",
+		ctx.NodeNumber, ctx.DoorName, ctx.Config.CleanupCommand, substitutedArgs)
+
+	cmd := exec.Command(ctx.Config.CleanupCommand, substitutedArgs...)
+	if ctx.Config.WorkingDirectory != "" {
+		cmd.Dir = ctx.Config.WorkingDirectory
+	}
+	cmd.Env = os.Environ()
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		log.Printf("WARN: Node %d: Cleanup command for door '%s' failed: %v (output: %s)",
+			ctx.NodeNumber, ctx.DoorName, err, string(output))
+	} else {
+		log.Printf("DEBUG: Node %d: Cleanup command for door '%s' completed successfully", ctx.NodeNumber, ctx.DoorName)
+	}
 }
 
 // doorErrorMessage writes a formatted error message to the session.
@@ -73,7 +265,7 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 		terminalio.WriteProcessedBytes(terminal, processedTop, outputMode)
 	}
 
-	// Get door registry (DOS doors are not supported on 64-bit Windows)
+	// Get door registry
 	e.configMu.RLock()
 	doorRegistryCopy := make(map[string]config.DoorConfig, len(e.DoorRegistry))
 	for k, v := range e.DoorRegistry {
@@ -87,16 +279,24 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 	}
 	sort.Strings(doorNames)
 
-	// Display each door
+	// Display each door (skip doors the user lacks access to)
 	midTemplate := string(ansi.ReplacePipeCodes(midBytes))
-	for i, name := range doorNames {
+	displayIdx := 0
+	for _, name := range doorNames {
 		doorCfg := doorRegistryCopy[name]
+
+		// Filter out doors the user doesn't have access to
+		if doorCfg.MinAccessLevel > 0 && currentUser.AccessLevel < doorCfg.MinAccessLevel {
+			continue
+		}
+
+		displayIdx++
 		doorType := "Native"
 		if doorCfg.IsDOS {
 			doorType = "DOS"
 		}
 		line := midTemplate
-		line = strings.ReplaceAll(line, "^ID", fmt.Sprintf("%-3d", i+1))
+		line = strings.ReplaceAll(line, "^ID", fmt.Sprintf("%-3d", displayIdx))
 		line = strings.ReplaceAll(line, "^NA", fmt.Sprintf("%-30s", name))
 		line = strings.ReplaceAll(line, "^TY", doorType)
 		terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
@@ -171,6 +371,17 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 			continue
 		}
 
+		// Check per-door access level
+		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
+			log.Printf("WARN: Node %d: User %s (level %d) denied access to door %s (requires %d)",
+				nodeNumber, currentUser.Handle, currentUser.AccessLevel, upperInput, doorConfig.MinAccessLevel)
+			msg := fmt.Sprintf(e.LoadedStrings.DoorAccessDenied, upperInput)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			time.Sleep(1 * time.Second)
+			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			continue
+		}
+
 		ctx := buildDoorCtx(e, s, terminal,
 			currentUser.ID, currentUser.Handle, currentUser.RealName,
 			currentUser.AccessLevel, currentUser.TimeLimit, currentUser.TimesCalled,
@@ -197,9 +408,96 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 // runDoorInfo shows door configuration details on Windows.
 func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	log.Printf("DEBUG: Node %d: runDoorInfo (Windows)", nodeNumber)
-	terminalio.WriteProcessedBytes(terminal,
-		ansi.ReplacePipeCodes([]byte("|12DOS doors require dosemu2 (Linux) or NTVDM (32-bit Windows, not yet implemented). Native doors are not supported on Windows.|07\r\n")),
-		outputMode)
-	time.Sleep(1 * time.Second)
-	return currentUser, "", nil
+
+	if currentUser == nil {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorInfoLoginRequired)), outputMode)
+		time.Sleep(1 * time.Second)
+		return nil, "", nil
+	}
+
+	renderedPrompt := ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorPrompt))
+	curUpClear := "\x1b[A\r\x1b[2K"
+
+	terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+
+	for {
+		inputName, err := readLineFromSessionIH(s, terminal)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, "LOGOFF", io.EOF
+			}
+			return currentUser, "", err
+		}
+
+		inputClean := strings.TrimSpace(inputName)
+		upperInput := strings.ToUpper(inputClean)
+
+		if upperInput == "Q" {
+			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+			return currentUser, "", nil
+		}
+		if upperInput == "" {
+			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			continue
+		}
+
+		if upperInput == "?" {
+			runListDoors(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, "", outputMode, termWidth, termHeight)
+			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			continue
+		}
+
+		doorConfig, exists := e.GetDoorConfig(upperInput)
+		if !exists {
+			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
+			msg := fmt.Sprintf(e.LoadedStrings.DoorNotFoundFormat, inputClean)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			time.Sleep(1 * time.Second)
+			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
+			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			continue
+		}
+
+		// Display door info
+		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+		doorType := "Native Windows"
+		if doorConfig.IsDOS {
+			doorType = "DOS (not supported on Windows)"
+		}
+
+		info := fmt.Sprintf("|15Door: |07%s\r\n|15Type: |07%s\r\n", upperInput, doorType)
+		if doorConfig.Command != "" {
+			info += fmt.Sprintf("|15Command: |07%s\r\n", doorConfig.Command)
+		}
+		if doorConfig.WorkingDirectory != "" {
+			info += fmt.Sprintf("|15Directory: |07%s\r\n", doorConfig.WorkingDirectory)
+		}
+		if doorConfig.DropfileType != "" {
+			dropLoc := doorConfig.DropfileLocation
+			if dropLoc == "" {
+				dropLoc = "startup"
+			}
+			info += fmt.Sprintf("|15Dropfile: |07%s |08(%s)|07\r\n", doorConfig.DropfileType, dropLoc)
+		}
+		if doorConfig.IOMode != "" {
+			info += fmt.Sprintf("|15I/O Mode: |07%s\r\n", doorConfig.IOMode)
+		}
+		if doorConfig.MinAccessLevel > 0 {
+			info += fmt.Sprintf("|15Min Access: |07%d\r\n", doorConfig.MinAccessLevel)
+		}
+		if doorConfig.SingleInstance {
+			info += "|15Single Instance: |07Yes\r\n"
+		}
+		if doorConfig.UseShell {
+			info += "|15Use Shell: |07Yes\r\n"
+		}
+		if doorConfig.CleanupCommand != "" {
+			info += fmt.Sprintf("|15Cleanup: |07%s\r\n", doorConfig.CleanupCommand)
+		}
+
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(info)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+
+		return currentUser, "", nil
+	}
 }

@@ -423,6 +423,8 @@ CfgViewHotKeys         string `json:"cfgViewHotKeys"`
 	DoorNoneConfigured    string `json:"doorNoneConfigured"`
 	DoorTemplateError     string `json:"doorTemplateError"`
 	DoorInfoLoginRequired string `json:"doorInfoLoginRequired"`
+	DoorAccessDenied      string `json:"doorAccessDenied"`
+	DoorBusyFormat        string `json:"doorBusyFormat"`
 
 	// Matrix strings (V3-specific)
 	MatrixDisconnecting       string `json:"matrixDisconnecting"`
@@ -586,8 +588,14 @@ type DoorConfig struct {
 	Args                []string          `json:"args"`                            // Command-line arguments (can include placeholders)
 	WorkingDirectory    string            `json:"working_directory,omitempty"`     // Directory to run the command in (optional)
 	DropfileType        string            `json:"dropfile_type,omitempty"`         // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "NONE") (optional, defaults to NONE)
-	IOMode              string            `json:"io_mode,omitempty"`               // I/O handling ("STDIO", "FOSSIL" - future) (optional, defaults to STDIO)
+	DropfileLocation    string            `json:"dropfile_location,omitempty"`     // Where to write dropfile: "startup" (working dir, default) or "node" (per-node temp dir)
+	IOMode              string            `json:"io_mode,omitempty"`               // I/O handling ("STDIO", "SOCKET") (optional, defaults to STDIO)
 	RequiresRawTerminal bool              `json:"requires_raw_terminal,omitempty"` // Whether the BBS should attempt to put the terminal in raw mode (optional, defaults to false)
+	UseShell            bool              `json:"use_shell,omitempty"`             // Wrap command in /bin/sh -c (Linux) or cmd /c (Windows)
+	SingleInstance      bool              `json:"single_instance,omitempty"`       // Only allow one node to run this door at a time
+	MinAccessLevel      int               `json:"min_access_level,omitempty"`      // Minimum user access level required (0 = no restriction)
+	CleanupCommand      string            `json:"cleanup_command,omitempty"`       // Command to run after door exits (optional)
+	CleanupArgs         []string          `json:"cleanup_args,omitempty"`          // Arguments for cleanup command (supports placeholders)
 	EnvironmentVars     map[string]string `json:"environment_variables,omitempty"` // Additional environment variables (optional)
 	// DOS door fields
 	IsDOS        bool     `json:"is_dos,omitempty"`        // true = DOS door launched via a DOS emulator

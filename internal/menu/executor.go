@@ -486,6 +486,18 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			return nil, "", nil
 		}
 
+		// Check per-door access level
+		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
+			log.Printf("WARN: Node %d: User %s (level %d) denied access to door %s (requires %d)",
+				nodeNumber, currentUser.Handle, currentUser.AccessLevel, doorName, doorConfig.MinAccessLevel)
+			errMsg := fmt.Sprintf(e.LoadedStrings.DoorAccessDenied, doorName)
+			wErr := terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+			if wErr != nil {
+				log.Printf("ERROR: Failed writing door access denied message: %v", wErr)
+			}
+			return nil, "", nil
+		}
+
 		// Build door context and execute
 		// Use passed termWidth/termHeight (from user preferences) instead of reading from User struct
 		ctx := buildDoorCtx(e, s, terminal,

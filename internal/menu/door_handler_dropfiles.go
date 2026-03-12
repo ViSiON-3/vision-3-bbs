@@ -34,6 +34,11 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	baudStr := "38400"
 	userIDStr := strconv.Itoa(userID)
 
+	startupDir := doorConfig.WorkingDirectory
+	if startupDir == "" {
+		startupDir = "."
+	}
+
 	subs := map[string]string{
 		"{NODE}":       nodeNumStr,
 		"{PORT}":       portStr,
@@ -43,6 +48,9 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		"{USERID}":     userIDStr,
 		"{REALNAME}":   realName,
 		"{LEVEL}":      strconv.Itoa(accessLevel),
+		"{STARTUPDIR}": startupDir,
+		"{DROPFILE}":   "", // populated after dropfile generation
+		"{NODEDIR}":    "", // populated after dropfile generation
 	}
 
 	return &DoorCtx{

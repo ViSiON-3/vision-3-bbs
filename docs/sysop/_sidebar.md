@@ -80,6 +80,7 @@
 
 * **HOW-TO GUIDES**
 * [How-To Guides](how-to-guides/README.md)
+* [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md)
 
 * **REFERENCE**
 * [Architecture](reference/architecture.md)

@@ -26,6 +26,20 @@ import (
 
 // --- Batch File Generator ---
 
+// dosDropfileName returns the DOS filename for the configured dropfile type.
+func dosDropfileName(dropfileType string) string {
+	switch strings.ToUpper(strings.TrimSpace(dropfileType)) {
+	case "DOOR32.SYS":
+		return "DOOR32.SYS"
+	case "CHAIN.TXT":
+		return "CHAIN.TXT"
+	case "DORINFO1.DEF":
+		return "DORINFO1.DEF"
+	default:
+		return "DOOR.SYS"
+	}
+}
+
 // writeBatchFile generates EXTERNAL.BAT for dosemu2 execution.
 // driveCNodeDir is the Linux path to the per-node temp directory inside drive_c.
 func writeBatchFile(ctx *DoorCtx, batchPath, driveCNodeDir string) error {
@@ -58,7 +72,7 @@ func writeBatchFile(ctx *DoorCtx, batchPath, driveCNodeDir string) error {
 // for COM1 via "serial { virtual com 1 }"), stdout/stderr go to /dev/null
 // (hiding boot text), and door I/O flows through COM1 → PTY as raw CP437.
 func executeDOSDoor(ctx *DoorCtx) error {
-	// Determine drive_c path
+	// Determine drive_c path (supports relative paths resolved against BBS root)
 	driveCPath := ctx.Config.DriveCPath
 	if driveCPath == "" {
 		homeDir, err := os.UserHomeDir()
@@ -66,6 +80,10 @@ func executeDOSDoor(ctx *DoorCtx) error {
 			return fmt.Errorf("failed to get home directory: %w", err)
 		}
 		driveCPath = filepath.Join(homeDir, ".dosemu", "drive_c")
+	} else if !filepath.IsAbs(driveCPath) {
+		// Resolve relative paths against BBS root (parent of configs dir)
+		bbsRoot := filepath.Dir(ctx.Executor.RootConfigPath)
+		driveCPath = filepath.Join(bbsRoot, driveCPath)
 	}
 
 	// Determine dosemu binary path
@@ -86,6 +104,14 @@ func executeDOSDoor(ctx *DoorCtx) error {
 		return fmt.Errorf("failed to generate dropfiles: %w", err)
 	}
 	defer cleanupDropfiles(nodePath)
+
+	// Populate placeholders for batch file substitution
+	dosNodeDir := fmt.Sprintf("C:\\NODES\\%s", strings.ToUpper(nodeDir))
+	dropfileName := dosDropfileName(ctx.Config.DropfileType)
+	ctx.Subs["{NODEDIR}"] = nodePath
+	ctx.Subs["{DROPFILE}"] = filepath.Join(nodePath, dropfileName)
+	ctx.Subs["{DOSNODEDIR}"] = dosNodeDir
+	ctx.Subs["{DOSDROPFILE}"] = dosNodeDir + "\\" + dropfileName
 
 	// Write batch file
 	batchPath := filepath.Join(nodePath, "EXTERNAL.BAT")
@@ -227,33 +253,23 @@ func executeDOSDoor(ctx *DoorCtx) error {
 func executeNativeDoor(ctx *DoorCtx) error {
 	doorConfig := ctx.Config
 
-	// Substitute in Arguments
-	substitutedArgs := make([]string, len(doorConfig.Args))
-	for i, arg := range doorConfig.Args {
-		newArg := arg
-		for key, val := range ctx.Subs {
-			newArg = strings.ReplaceAll(newArg, key, val)
-		}
-		substitutedArgs[i] = newArg
-	}
-
-	// Substitute in Environment Variables
-	substitutedEnv := make(map[string]string)
-	if doorConfig.EnvironmentVars != nil {
-		for key, val := range doorConfig.EnvironmentVars {
-			newVal := val
-			for subKey, subVal := range ctx.Subs {
-				newVal = strings.ReplaceAll(newVal, subKey, subVal)
-			}
-			substitutedEnv[key] = newVal
-		}
-	}
-
 	// --- Dropfile Generation ---
+	// Must happen before arg substitution so {DROPFILE} and {NODEDIR} are available.
 	var dropfilePath string
 	dropfileDir := "."
 	if doorConfig.WorkingDirectory != "" {
 		dropfileDir = doorConfig.WorkingDirectory
+	}
+
+	// Configurable dropfile location: "node" uses a per-node temp directory
+	dropfileLoc := strings.ToLower(doorConfig.DropfileLocation)
+	nodeDropfileDir := "" // track if we created a temp dir for cleanup
+	if dropfileLoc == "node" {
+		nodeDropfileDir = filepath.Join(os.TempDir(), fmt.Sprintf("vision3_node%d", ctx.NodeNumber))
+		if err := os.MkdirAll(nodeDropfileDir, 0700); err != nil {
+			return fmt.Errorf("failed to create node dropfile directory %s: %w", nodeDropfileDir, err)
+		}
+		dropfileDir = nodeDropfileDir
 	}
 
 	dropfileTypeUpper := strings.ToUpper(doorConfig.DropfileType)
@@ -289,11 +305,50 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			if err := os.Remove(dropfilePath); err != nil {
 				log.Printf("WARN: Failed to remove dropfile %s: %v", dropfilePath, err)
 			}
+			// Clean up node temp directory if we created one
+			if nodeDropfileDir != "" {
+				if err := os.Remove(nodeDropfileDir); err != nil {
+					log.Printf("DEBUG: Node dropfile dir %s not removed (may not be empty): %v", nodeDropfileDir, err)
+				}
+			}
 		}()
 	}
 
-	// Prepare command
-	cmd := exec.Command(doorConfig.Command, substitutedArgs...)
+	// Populate {DROPFILE} and {NODEDIR} now that dropfile generation is done
+	ctx.Subs["{DROPFILE}"] = dropfilePath
+	ctx.Subs["{NODEDIR}"] = dropfileDir
+
+	// Substitute in Arguments (after dropfile generation so {DROPFILE} etc. are available)
+	substitutedArgs := make([]string, len(doorConfig.Args))
+	for i, arg := range doorConfig.Args {
+		newArg := arg
+		for key, val := range ctx.Subs {
+			newArg = strings.ReplaceAll(newArg, key, val)
+		}
+		substitutedArgs[i] = newArg
+	}
+
+	// Substitute in Environment Variables
+	substitutedEnv := make(map[string]string)
+	if doorConfig.EnvironmentVars != nil {
+		for key, val := range doorConfig.EnvironmentVars {
+			newVal := val
+			for subKey, subVal := range ctx.Subs {
+				newVal = strings.ReplaceAll(newVal, subKey, subVal)
+			}
+			substitutedEnv[key] = newVal
+		}
+	}
+
+	// Prepare command — optionally wrap in shell
+	var cmd *exec.Cmd
+	if doorConfig.UseShell {
+		shellCmd := doorConfig.Command + " " + strings.Join(substitutedArgs, " ")
+		cmd = exec.Command("/bin/sh", "-c", shellCmd)
+		log.Printf("DEBUG: Node %d: Using shell execution: /bin/sh -c %q", ctx.NodeNumber, shellCmd)
+	} else {
+		cmd = exec.Command(doorConfig.Command, substitutedArgs...)
+	}
 
 	if doorConfig.WorkingDirectory != "" {
 		cmd.Dir = doorConfig.WorkingDirectory
@@ -461,6 +516,70 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			ptmx.Close()
 			<-outputDone
 		}
+	} else if strings.ToUpper(doorConfig.IOMode) == "SOCKET" {
+		// Socket I/O: create a Unix socketpair and pass one end to the door as FD 3.
+		// The other end is bridged bidirectionally to the BBS session.
+		log.Printf("INFO: Node %d: Starting door '%s' with Socket I/O mode", ctx.NodeNumber, ctx.DoorName)
+
+		fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+		if err != nil {
+			cmdErr = fmt.Errorf("failed to create socketpair for door '%s': %w", ctx.DoorName, err)
+		} else {
+			// fds[0] = BBS side, fds[1] = door side (will become FD 3 in child)
+			bbsSock := os.NewFile(uintptr(fds[0]), "bbs-socket")
+			doorSock := os.NewFile(uintptr(fds[1]), "door-socket")
+
+			cmd.ExtraFiles = []*os.File{doorSock} // child FD 3
+			cmd.Env = append(cmd.Env, "DOOR_SOCKET_FD=3")
+
+			if startErr := cmd.Start(); startErr != nil {
+				bbsSock.Close()
+				doorSock.Close()
+				cmdErr = fmt.Errorf("failed to start door '%s' with socket I/O: %w", ctx.DoorName, startErr)
+			} else {
+				// Parent closes the door's end
+				doorSock.Close()
+
+				// Set up read interrupt for clean shutdown
+				readInterrupt := make(chan struct{})
+				hasInterrupt := false
+				if ri, ok := ctx.Session.(interface{ SetReadInterrupt(<-chan struct{}) }); ok {
+					ri.SetReadInterrupt(readInterrupt)
+					defer ri.SetReadInterrupt(nil)
+					hasInterrupt = true
+				}
+
+				// Bidirectional bridge: session <-> socketpair
+				inputDone := make(chan struct{})
+				outputDone := make(chan struct{})
+				go func() {
+					defer close(inputDone)
+					_, err := io.Copy(bbsSock, ctx.Session)
+					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
+						if !strings.Contains(err.Error(), "read interrupted") {
+							log.Printf("WARN: Node %d: Socket I/O input error for door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+						}
+					}
+				}()
+				go func() {
+					defer close(outputDone)
+					_, err := io.Copy(ctx.Session, bbsSock)
+					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
+						log.Printf("WARN: Node %d: Socket I/O output error for door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+					}
+				}()
+
+				cmdErr = cmd.Wait()
+				log.Printf("DEBUG: Node %d: Door '%s' (socket I/O) process exited", ctx.NodeNumber, ctx.DoorName)
+
+				close(readInterrupt)
+				if hasInterrupt {
+					<-inputDone
+				}
+				bbsSock.Close()
+				<-outputDone
+			}
+		}
 	} else {
 		if doorConfig.RequiresRawTerminal && !isPty {
 			log.Printf("WARN: Node %d: Door '%s' requires raw terminal, but no PTY was allocated.", ctx.NodeNumber, ctx.DoorName)
@@ -479,15 +598,68 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	return cmdErr
 }
 
+// --- Door Cleanup ---
+
+// executeCleanup runs the optional post-door cleanup command.
+// Errors are logged but not returned — cleanup failure should not mask door results.
+func executeCleanup(ctx *DoorCtx) {
+	if ctx.Config.CleanupCommand == "" {
+		return
+	}
+
+	// Substitute placeholders in cleanup args
+	substitutedArgs := make([]string, len(ctx.Config.CleanupArgs))
+	for i, arg := range ctx.Config.CleanupArgs {
+		newArg := arg
+		for key, val := range ctx.Subs {
+			newArg = strings.ReplaceAll(newArg, key, val)
+		}
+		substitutedArgs[i] = newArg
+	}
+
+	log.Printf("INFO: Node %d: Running cleanup command for door '%s': %s %v",
+		ctx.NodeNumber, ctx.DoorName, ctx.Config.CleanupCommand, substitutedArgs)
+
+	cmd := exec.Command(ctx.Config.CleanupCommand, substitutedArgs...)
+	if ctx.Config.WorkingDirectory != "" {
+		cmd.Dir = ctx.Config.WorkingDirectory
+	}
+	cmd.Env = os.Environ()
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		log.Printf("WARN: Node %d: Cleanup command for door '%s' failed: %v (output: %s)",
+			ctx.NodeNumber, ctx.DoorName, err, string(output))
+	} else {
+		log.Printf("DEBUG: Node %d: Cleanup command for door '%s' completed successfully", ctx.NodeNumber, ctx.DoorName)
+	}
+}
+
 // --- Door Dispatcher ---
 
 // executeDoor dispatches to the appropriate door executor based on config.
 // DOS doors require dosemu2 on Linux x86/x86-64.
+// Handles single-instance locking and post-execution cleanup.
 func executeDoor(ctx *DoorCtx) error {
-	if ctx.Config.IsDOS {
-		return executeDOSDoor(ctx)
+	// Single-instance locking
+	if ctx.Config.SingleInstance {
+		if !acquireDoorLock(ctx.DoorName, ctx.NodeNumber) {
+			log.Printf("WARN: Node %d: Door '%s' is already in use by another node", ctx.NodeNumber, ctx.DoorName)
+			return fmt.Errorf("door '%s' is currently in use by another node", ctx.DoorName)
+		}
+		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
-	return executeNativeDoor(ctx)
+
+	var err error
+	if ctx.Config.IsDOS {
+		err = executeDOSDoor(ctx)
+	} else {
+		err = executeNativeDoor(ctx)
+	}
+
+	// Run cleanup command after door exits (before dropfile cleanup)
+	executeCleanup(ctx)
+
+	return err
 }
 
 // --- Door Post-Execution ---
@@ -553,17 +725,25 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 	}
 	sort.Strings(doorNames)
 
-	// Display each door
+	// Display each door (skip doors the user lacks access to)
 	midTemplate := string(ansi.ReplacePipeCodes(midBytes))
-	for i, name := range doorNames {
+	displayIdx := 0
+	for _, name := range doorNames {
 		doorCfg := doorRegistryCopy[name]
+
+		// Filter out doors the user doesn't have access to
+		if doorCfg.MinAccessLevel > 0 && currentUser.AccessLevel < doorCfg.MinAccessLevel {
+			continue
+		}
+
+		displayIdx++
 		doorType := "Native"
 		if doorCfg.IsDOS {
 			doorType = "DOS"
 		}
 
 		line := midTemplate
-		line = strings.ReplaceAll(line, "^ID", fmt.Sprintf("%-3d", i+1))
+		line = strings.ReplaceAll(line, "^ID", fmt.Sprintf("%-3d", displayIdx))
 		line = strings.ReplaceAll(line, "^NA", fmt.Sprintf("%-30s", name))
 		line = strings.ReplaceAll(line, "^TY", doorType)
 
@@ -637,6 +817,17 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
+			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			continue
+		}
+
+		// Check per-door access level
+		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
+			log.Printf("WARN: Node %d: User %s (level %d) denied access to door %s (requires %d)",
+				nodeNumber, currentUser.Handle, currentUser.AccessLevel, upperInput, doorConfig.MinAccessLevel)
+			msg := fmt.Sprintf(e.LoadedStrings.DoorAccessDenied, upperInput)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			time.Sleep(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
 		}
@@ -736,10 +927,29 @@ func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 			info += fmt.Sprintf("|15Directory: |07%s\r\n", doorConfig.WorkingDirectory)
 		}
 		if doorConfig.DropfileType != "" {
-			info += fmt.Sprintf("|15Dropfile: |07%s\r\n", doorConfig.DropfileType)
+			dropLoc := doorConfig.DropfileLocation
+			if dropLoc == "" {
+				dropLoc = "startup"
+			}
+			info += fmt.Sprintf("|15Dropfile: |07%s |08(%s)|07\r\n", doorConfig.DropfileType, dropLoc)
+		}
+		if doorConfig.IOMode != "" {
+			info += fmt.Sprintf("|15I/O Mode: |07%s\r\n", doorConfig.IOMode)
 		}
 		if doorConfig.IsDOS && len(doorConfig.DOSCommands) > 0 {
 			info += fmt.Sprintf("|15DOS Commands: |07%s\r\n", strings.Join(doorConfig.DOSCommands, " && "))
+		}
+		if doorConfig.MinAccessLevel > 0 {
+			info += fmt.Sprintf("|15Min Access: |07%d\r\n", doorConfig.MinAccessLevel)
+		}
+		if doorConfig.SingleInstance {
+			info += "|15Single Instance: |07Yes\r\n"
+		}
+		if doorConfig.UseShell {
+			info += "|15Use Shell: |07Yes\r\n"
+		}
+		if doorConfig.CleanupCommand != "" {
+			info += fmt.Sprintf("|15Cleanup: |07%s\r\n", doorConfig.CleanupCommand)
 		}
 
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(info)), outputMode)

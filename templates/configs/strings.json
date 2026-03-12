@@ -323,6 +323,8 @@
   "doorNoneConfigured": "  |07No doors configured.\r\n",
   "doorTemplateError": "\r\n|01Error loading Door List templates.|07\r\n",
   "doorInfoLoginRequired": "\r\n|01Error: You must be logged in to view door info.|07\r\n",
+  "doorAccessDenied": "\r\n|12Access denied: you do not have permission to run '%s'.|07\r\n",
+  "doorBusyFormat": "\r\n|12Door '%s' is currently in use by another user. Please try again later.|07\r\n",
   "matrixDisconnecting": "\r\n|09Disconnecting...|07\r\n",
   "matrixCheckAccessPrompt": "\r\n|09Enter your username to check access|07: ",
   "matrixUserNotFound": "\r\n|01Username not found.|07\r\n",

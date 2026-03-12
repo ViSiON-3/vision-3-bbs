@@ -1,11 +1,14 @@
 [
     {
         "name": "LORD",
-        "command": "lord.exe",
-        "args": ["/N{NODE}", "/P{PORT}", "/T{TIMELEFT}"],
-        "working_directory": "/path/to/doors/lord",
+        "is_dos": true,
+        "dos_commands": [
+            "cd C:\\DOORS\\LORD",
+            "START.BAT {NODE}"
+        ],
+        "drive_c_path": "drive_c",
         "dropfile_type": "DOOR.SYS",
-        "io_mode": "STDIO",
-        "requires_raw_terminal": true
+        "single_instance": true,
+        "min_access_level": 0
     }
 ]
