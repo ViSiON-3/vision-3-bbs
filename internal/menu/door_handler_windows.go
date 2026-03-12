@@ -35,15 +35,21 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 		dropfileDir = doorConfig.WorkingDirectory
 	}
 
-	// Configurable dropfile location
+	// Configurable dropfile location: "node" uses a unique per-node temp directory.
+	// Uses os.MkdirTemp for unique names and defers os.RemoveAll unconditionally
+	// so the directory is always cleaned up, even if no recognized dropfile is generated.
 	dropfileLoc := strings.ToLower(doorConfig.DropfileLocation)
-	nodeDropfileDir := ""
 	if dropfileLoc == "node" {
-		nodeDropfileDir = filepath.Join(os.TempDir(), fmt.Sprintf("vision3_node%d", ctx.NodeNumber))
-		if err := os.MkdirAll(nodeDropfileDir, 0700); err != nil {
-			return fmt.Errorf("failed to create node dropfile directory %s: %w", nodeDropfileDir, err)
+		nodeDir, err := os.MkdirTemp("", fmt.Sprintf("vision3_node%d_", ctx.NodeNumber))
+		if err != nil {
+			return fmt.Errorf("failed to create node dropfile directory: %w", err)
 		}
-		dropfileDir = nodeDropfileDir
+		defer func() {
+			if err := os.RemoveAll(nodeDir); err != nil {
+				log.Printf("WARN: Failed to remove node dropfile dir %s: %v", nodeDir, err)
+			}
+		}()
+		dropfileDir = nodeDir
 	}
 
 	dropfileTypeUpper := strings.ToUpper(doorConfig.DropfileType)
@@ -77,11 +83,6 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 			log.Printf("DEBUG: Cleaning up dropfile: %s", dropfilePath)
 			if err := os.Remove(dropfilePath); err != nil {
 				log.Printf("WARN: Failed to remove dropfile %s: %v", dropfilePath, err)
-			}
-			if nodeDropfileDir != "" {
-				if err := os.Remove(nodeDropfileDir); err != nil {
-					log.Printf("DEBUG: Node dropfile dir %s not removed: %v", nodeDropfileDir, err)
-				}
 			}
 		}()
 	}
