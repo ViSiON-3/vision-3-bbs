@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -113,12 +114,18 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 		}
 	}
 
-	// Prepare command — optionally wrap in cmd.exe
+	// Prepare command — optionally wrap in cmd.exe.
+	// When using cmd.exe, we build the command line manually via SysProcAttr.CmdLine
+	// because cmd.exe uses different parsing rules than Go's standard CommandLineToArgvW
+	// quoting. This prevents special characters (&|^()%!) from being reinterpreted.
 	var cmd *exec.Cmd
 	if doorConfig.UseShell {
-		// Pass command and args directly to cmd /c with proper quoting to prevent injection
-		cmdParts := append([]string{doorConfig.Command}, substitutedArgs...)
-		cmd = exec.Command("cmd", append([]string{"/c"}, cmdParts...)...)
+		cmd = exec.Command("cmd")
+		cmdLine := "cmd /c " + syscall.EscapeArg(doorConfig.Command)
+		for _, arg := range substitutedArgs {
+			cmdLine += " " + syscall.EscapeArg(arg)
+		}
+		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdLine}
 		log.Printf("DEBUG: Node %d: Using shell execution for %q with %d arg(s)", ctx.NodeNumber, doorConfig.Command, len(substitutedArgs))
 	} else {
 		cmd = exec.Command(doorConfig.Command, substitutedArgs...)
@@ -182,9 +189,13 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 func executeDoor(ctx *DoorCtx) error {
 	// Single-instance locking
 	if ctx.Config.SingleInstance {
-		if !acquireDoorLock(ctx.DoorName, ctx.NodeNumber) {
-			log.Printf("WARN: Node %d: Door '%s' is already in use by another node", ctx.NodeNumber, ctx.DoorName)
-			return fmt.Errorf("%w: %s", ErrDoorBusy, ctx.DoorName)
+		if err := acquireDoorLock(ctx.DoorName, ctx.NodeNumber); err != nil {
+			if errors.Is(err, ErrDoorBusy) {
+				log.Printf("WARN: Node %d: Door '%s' is already in use by another node", ctx.NodeNumber, ctx.DoorName)
+				return fmt.Errorf("%w: %s", ErrDoorBusy, ctx.DoorName)
+			}
+			log.Printf("ERROR: Node %d: Failed to acquire lock for door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+			return fmt.Errorf("failed to acquire door lock: %w", err)
 		}
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
@@ -220,7 +231,14 @@ func executeCleanupWindows(ctx *DoorCtx) {
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(cleanupCtx, ctx.Config.CleanupCommand, substitutedArgs...)
+	cmd := exec.CommandContext(cleanupCtx, ctx.Config.CleanupCommand)
+	// Build command line with proper escaping so .bat/.cmd cleanup scripts
+	// don't reinterpret special characters in substituted arguments.
+	cmdLine := syscall.EscapeArg(ctx.Config.CleanupCommand)
+	for _, arg := range substitutedArgs {
+		cmdLine += " " + syscall.EscapeArg(arg)
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdLine}
 	if ctx.Config.WorkingDirectory != "" {
 		cmd.Dir = ctx.Config.WorkingDirectory
 	}

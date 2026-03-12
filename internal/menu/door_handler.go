@@ -717,9 +717,13 @@ func executeCleanup(ctx *DoorCtx) {
 func executeDoor(ctx *DoorCtx) error {
 	// Single-instance locking
 	if ctx.Config.SingleInstance {
-		if !acquireDoorLock(ctx.DoorName, ctx.NodeNumber) {
-			log.Printf("WARN: Node %d: Door '%s' is already in use by another node", ctx.NodeNumber, ctx.DoorName)
-			return fmt.Errorf("%w: %s", ErrDoorBusy, ctx.DoorName)
+		if err := acquireDoorLock(ctx.DoorName, ctx.NodeNumber); err != nil {
+			if errors.Is(err, ErrDoorBusy) {
+				log.Printf("WARN: Node %d: Door '%s' is already in use by another node", ctx.NodeNumber, ctx.DoorName)
+				return fmt.Errorf("%w: %s", ErrDoorBusy, ctx.DoorName)
+			}
+			log.Printf("ERROR: Node %d: Failed to acquire lock for door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+			return fmt.Errorf("failed to acquire door lock: %w", err)
 		}
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}

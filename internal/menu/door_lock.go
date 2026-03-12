@@ -28,9 +28,10 @@ func doorLockDir() string {
 }
 
 // acquireDoorLock attempts to acquire an exclusive file-based lock for the given door.
-// Returns true if the lock was acquired, false if another node or process holds it.
+// Returns nil on success, ErrDoorBusy if another node/process holds the lock,
+// or a different error for filesystem/permission failures.
 // Door names are normalized to uppercase for consistent locking.
-func acquireDoorLock(doorName string, nodeNumber int) bool {
+func acquireDoorLock(doorName string, nodeNumber int) error {
 	doorLocksMu.Lock()
 	defer doorLocksMu.Unlock()
 
@@ -38,25 +39,23 @@ func acquireDoorLock(doorName string, nodeNumber int) bool {
 
 	// If this node already holds the lock, allow re-entry
 	if holder, exists := doorLockNodes[key]; exists && holder == nodeNumber {
-		return true
+		return nil
 	}
 
 	lockDir := doorLockDir()
 	if err := os.MkdirAll(lockDir, 0700); err != nil {
-		log.Printf("ERROR: Failed to create door lock directory %s: %v", lockDir, err)
-		return false
+		return fmt.Errorf("failed to create door lock directory %s: %w", lockDir, err)
 	}
 
 	lockPath := filepath.Join(lockDir, key+".lock")
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		log.Printf("ERROR: Failed to open door lock file %s: %v", lockPath, err)
-		return false
+		return fmt.Errorf("failed to open door lock file %s: %w", lockPath, err)
 	}
 
 	if !tryFileLock(f) {
 		f.Close()
-		return false
+		return ErrDoorBusy
 	}
 
 	// Write node/pid info for debugging stale locks
@@ -68,7 +67,7 @@ func acquireDoorLock(doorName string, nodeNumber int) bool {
 	doorLockFiles[key] = f
 	doorLockNodes[key] = nodeNumber
 	log.Printf("DEBUG: Acquired file lock for door %s (node %d, pid %d)", key, nodeNumber, os.Getpid())
-	return true
+	return nil
 }
 
 // releaseDoorLock releases the file-based lock for the given door if held by the specified node.
@@ -82,7 +81,9 @@ func releaseDoorLock(doorName string, nodeNumber int) {
 		if f, ok := doorLockFiles[key]; ok {
 			releaseFileLock(f)
 			f.Close()
-			os.Remove(f.Name())
+			// Lock file is intentionally NOT deleted: removing it after unlock
+			// creates a race where another process can lock the same path between
+			// our unlock and remove, then our remove unlinks their lock file.
 			delete(doorLockFiles, key)
 		}
 		delete(doorLockNodes, key)
