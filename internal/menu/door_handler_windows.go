@@ -153,6 +153,10 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_TIMELEFT=%s", ctx.TimeLeftStr))
 	}
 
+	if strings.EqualFold(doorConfig.IOMode, "SOCKET") {
+		return fmt.Errorf("socket I/O mode is not implemented on Windows yet")
+	}
+
 	if doorConfig.RequiresRawTerminal {
 		log.Printf("WARN: Node %d: Door '%s' requires raw terminal, but PTY is not supported on Windows. Falling back to STDIO.", ctx.NodeNumber, ctx.DoorName)
 	}
@@ -164,6 +168,10 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	cmdErr := cmd.Run()
 
 	time.Sleep(100 * time.Millisecond)
+
+	// Run cleanup while dropfiles/node dirs still exist (before deferred cleanup fires)
+	executeCleanupWindows(ctx)
+
 	return cmdErr
 }
 
@@ -184,12 +192,7 @@ func executeDoor(ctx *DoorCtx) error {
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
 	}
 
-	err := executeNativeDoorWindows(ctx)
-
-	// Run cleanup command after door exits
-	executeCleanupWindows(ctx)
-
-	return err
+	return executeNativeDoorWindows(ctx)
 }
 
 // cleanupTimeout is the maximum time allowed for a cleanup command to run.

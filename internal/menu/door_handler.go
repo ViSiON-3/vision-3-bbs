@@ -296,11 +296,14 @@ func executeDOSDoor(ctx *DoorCtx) error {
 
 	if cmdErr != nil {
 		log.Printf("ERROR: Node %d: DOS door '%s' failed: %v", ctx.NodeNumber, ctx.DoorName, cmdErr)
-		return cmdErr
+	} else {
+		log.Printf("INFO: Node %d: DOS door '%s' completed successfully", ctx.NodeNumber, ctx.DoorName)
 	}
 
-	log.Printf("INFO: Node %d: DOS door '%s' completed successfully", ctx.NodeNumber, ctx.DoorName)
-	return nil
+	// Run cleanup while dropfiles/node dirs still exist (before deferred cleanup fires)
+	executeCleanup(ctx)
+
+	return cmdErr
 }
 
 // --- Native Door Executor ---
@@ -653,6 +656,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	// Run cleanup while dropfiles/node dirs still exist (before deferred cleanup fires)
+	executeCleanup(ctx)
+
 	return cmdErr
 }
 
@@ -718,19 +724,10 @@ func executeDoor(ctx *DoorCtx) error {
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
 
-	var err error
 	if ctx.Config.IsDOS {
-		err = executeDOSDoor(ctx)
-	} else {
-		err = executeNativeDoor(ctx)
+		return executeDOSDoor(ctx)
 	}
-
-	// Run cleanup command after door exits.
-	// Note: executeDOSDoor/executeNativeDoor may already have removed dropfiles
-	// via deferred cleanup, so cleanup_command must not rely on {DROPFILE}/{NODEDIR}.
-	executeCleanup(ctx)
-
-	return err
+	return executeNativeDoor(ctx)
 }
 
 // --- Door Post-Execution ---
