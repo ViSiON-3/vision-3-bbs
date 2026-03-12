@@ -3,6 +3,7 @@
 package menu
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -114,9 +115,10 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	// Prepare command — optionally wrap in cmd.exe
 	var cmd *exec.Cmd
 	if doorConfig.UseShell {
-		shellCmd := doorConfig.Command + " " + strings.Join(substitutedArgs, " ")
-		cmd = exec.Command("cmd", "/c", shellCmd)
-		log.Printf("DEBUG: Node %d: Using shell execution: cmd /c %q", ctx.NodeNumber, shellCmd)
+		// Pass command and args directly to cmd /c with proper quoting to prevent injection
+		cmdParts := append([]string{doorConfig.Command}, substitutedArgs...)
+		cmd = exec.Command("cmd", append([]string{"/c"}, cmdParts...)...)
+		log.Printf("DEBUG: Node %d: Using shell execution for %q with %d arg(s)", ctx.NodeNumber, doorConfig.Command, len(substitutedArgs))
 	} else {
 		cmd = exec.Command(doorConfig.Command, substitutedArgs...)
 	}
@@ -173,7 +175,7 @@ func executeDoor(ctx *DoorCtx) error {
 	if ctx.Config.SingleInstance {
 		if !acquireDoorLock(ctx.DoorName, ctx.NodeNumber) {
 			log.Printf("WARN: Node %d: Door '%s' is already in use by another node", ctx.NodeNumber, ctx.DoorName)
-			return fmt.Errorf("door '%s' is currently in use by another node", ctx.DoorName)
+			return fmt.Errorf("%w: %s", ErrDoorBusy, ctx.DoorName)
 		}
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
@@ -190,7 +192,10 @@ func executeDoor(ctx *DoorCtx) error {
 	return err
 }
 
-// executeCleanupWindows runs the optional post-door cleanup command on Windows.
+// cleanupTimeout is the maximum time allowed for a cleanup command to run.
+const cleanupTimeout = 30 * time.Second
+
+// executeCleanupWindows runs the optional post-door cleanup command on Windows with a timeout.
 func executeCleanupWindows(ctx *DoorCtx) {
 	if ctx.Config.CleanupCommand == "" {
 		return
@@ -208,15 +213,23 @@ func executeCleanupWindows(ctx *DoorCtx) {
 	log.Printf("INFO: Node %d: Running cleanup command for door '%s': %s %v",
 		ctx.NodeNumber, ctx.DoorName, ctx.Config.CleanupCommand, substitutedArgs)
 
-	cmd := exec.Command(ctx.Config.CleanupCommand, substitutedArgs...)
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(cleanupCtx, ctx.Config.CleanupCommand, substitutedArgs...)
 	if ctx.Config.WorkingDirectory != "" {
 		cmd.Dir = ctx.Config.WorkingDirectory
 	}
 	cmd.Env = os.Environ()
 
 	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("WARN: Node %d: Cleanup command for door '%s' failed: %v (output: %s)",
-			ctx.NodeNumber, ctx.DoorName, err, string(output))
+		if cleanupCtx.Err() == context.DeadlineExceeded {
+			log.Printf("WARN: Node %d: Cleanup command for door '%s' timed out after %v",
+				ctx.NodeNumber, ctx.DoorName, cleanupTimeout)
+		} else {
+			log.Printf("WARN: Node %d: Cleanup command for door '%s' failed: %v (output: %s)",
+				ctx.NodeNumber, ctx.DoorName, err, string(output))
+		}
 	} else {
 		log.Printf("DEBUG: Node %d: Cleanup command for door '%s' completed successfully", ctx.NodeNumber, ctx.DoorName)
 	}
@@ -302,7 +315,7 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 		terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
 	}
 
-	if len(doorNames) == 0 {
+	if displayIdx == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorNoneConfigured)), outputMode)
 	}
 
@@ -396,7 +409,17 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 
 		if cmdErr != nil {
 			log.Printf("ERROR: Node %d: Door execution failed for user %s, door %s: %v", nodeNumber, currentUser.Handle, upperInput, cmdErr)
-			doorErrorMessage(ctx, fmt.Sprintf("Error running door '%s': %v", upperInput, cmdErr))
+			if errors.Is(cmdErr, ErrDoorBusy) {
+				busyFmt := e.LoadedStrings.DoorBusyFormat
+				if strings.TrimSpace(busyFmt) == "" {
+					busyFmt = "\r\n|14Door is currently in use: |11%s|07\r\n"
+				}
+				busyMsg := fmt.Sprintf(busyFmt, upperInput)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
+				time.Sleep(1 * time.Second)
+			} else {
+				doorErrorMessage(ctx, fmt.Sprintf("Error running door '%s': %v", upperInput, cmdErr))
+			}
 		} else {
 			log.Printf("INFO: Node %d: Door completed for user %s, door %s", nodeNumber, currentUser.Handle, upperInput)
 		}
@@ -454,6 +477,17 @@ func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
+			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			continue
+		}
+
+		// Check per-door access level
+		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
+			log.Printf("WARN: Node %d: User %s (level %d) denied access to door info %s (requires %d)",
+				nodeNumber, currentUser.Handle, currentUser.AccessLevel, upperInput, doorConfig.MinAccessLevel)
+			msg := fmt.Sprintf(e.LoadedStrings.DoorAccessDenied, upperInput)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			time.Sleep(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
 		}

@@ -180,7 +180,7 @@ DOS doors are supported on Linux x86/x86-64 via dosemu2. ViSiON/3 uses dosemu2's
 ### How It Works
 
 1. ViSiON/3 generates a per-node `dosemurc` config that maps `drive_c_path` as the DOS C: drive
-2. An `EXTERNAL.BAT` batch file is generated containing: FOSSIL driver loading (if configured), `cls`, dropfile copy (if `dropfile_dest` is set), and the user's `dos_commands`
+2. An `EXTERNAL.BAT` batch file is generated containing: FOSSIL driver loading (if configured), dropfile copy (if `dropfile_dest` is set), `cls`, and the user's `dos_commands`
 3. dosemu2 boots DOS, executes EXTERNAL.BAT, and exits via `exitemu`
 4. The PTY output bridge gates on the `cls` clear screen sequence (`ESC[2J`), suppressing all DOS boot text from reaching the user
 5. After the door exits, the BBS session resumes

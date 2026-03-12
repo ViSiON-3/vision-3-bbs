@@ -252,7 +252,17 @@ func (m *Model) fieldsDoor() []fieldDef {
 		fields = append(fields, fieldDef{
 			Label: "I/O Mode", Help: "I/O handling: STDIO or SOCKET (pass FD to door)", Type: ftString, Col: 3, Row: row, Width: 15,
 			Get: func() string { return dPtr.IOMode },
-			Set: func(val string) error { dPtr.IOMode = val; save(); return nil },
+			Set: func(val string) error {
+				v := strings.ToUpper(strings.TrimSpace(val))
+				switch v {
+				case "", "STDIO", "SOCKET":
+					dPtr.IOMode = v
+					save()
+					return nil
+				default:
+					return fmt.Errorf("invalid I/O mode %q: must be blank, STDIO, or SOCKET", val)
+				}
+			},
 		})
 		row++
 		fields = append(fields, fieldDef{

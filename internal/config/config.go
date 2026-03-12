@@ -579,6 +579,10 @@ func applyStringDefaults(c *StringsConfig) {
 	d(&c.CfgFileColumnsHeader, "\r\n|15File Listing Columns|07\r\n|08────────────────────────────────────────|07\r\n")
 	d(&c.CfgFileColumnsToggle, "  |15[%s]|07 %-12s : %s\r\n")
 	d(&c.CfgFileColumnsSaved, "\r\n|10Column preferences saved.|07\r\n")
+
+	// Door access control
+	d(&c.DoorAccessDenied, "\r\n|14Access denied to door: |11%s|07\r\n")
+	d(&c.DoorBusyFormat, "\r\n|14Door is currently in use: |11%s|07\r\n")
 }
 
 // DoorConfig defines the configuration for a single external door program.
