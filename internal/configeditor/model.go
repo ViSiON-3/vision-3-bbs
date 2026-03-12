@@ -133,6 +133,7 @@ func New(configPath string) (Model, error) {
 		{"Default Settings"},
 		{"IP Blocklist/Allowlist"},
 		{"New User Voting (NUV)"},
+		{"DOS Emulation"},
 	}
 
 	return Model{

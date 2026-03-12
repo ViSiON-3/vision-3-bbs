@@ -152,7 +152,7 @@ The strings support pipe color codes:
 
 > *Use the [Configuration Editor](#configuration-editor-tui) (section 5 — Door Programs) to manage door settings interactively. The JSON structure below is for reference or manual editing.*
 
-Configures external door programs that can be launched from the BBS. The file contains an array of door configurations.
+Configures external door programs that can be launched from the BBS. The file contains an array of door configurations. See the [Door Programs Guide](../doors/doors.md) for full documentation including DOS door setup, FOSSIL drivers, and dosemu2 configuration.
 
 ### Door Configuration Structure
 
@@ -160,30 +160,61 @@ Configures external door programs that can be launched from the BBS. The file co
 [
   {
     "name": "LORD",
-    "command": "lord.exe",
-    "args": ["/N{NODE}", "/P{PORT}", "/T{TIMELEFT}"],
-    "working_directory": "C:/BBS/DOORS/LORD",
+    "command": "",
+    "args": [],
+    "working_directory": "",
     "dropfile_type": "DOOR.SYS",
-    "io_mode": "STDIO",
-    "requires_raw_terminal": true,
-    "environment_variables": {
-      "TERM": "ansi",
-      "BBS_NAME": "My Vision3 BBS"
-    }
+    "dropfile_location": "node",
+    "io_mode": "",
+    "requires_raw_terminal": false,
+    "use_shell": false,
+    "single_instance": true,
+    "min_access_level": 0,
+    "cleanup_command": "",
+    "cleanup_args": [],
+    "environment_variables": {},
+    "is_dos": true,
+    "dos_commands": [
+      "cd C:\\DOORS\\LORD",
+      "START.BAT {NODE}"
+    ],
+    "drive_c_path": "drive_c",
+    "dropfile_dest": "C:\\DOORS\\LORD",
+    "dos_emulator": "dosemu",
+    "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
+    "dosemu_config": ""
   }
 ]
 ```
 
-### Configuration Fields
+### Common Fields
 
-- `name` - Unique identifier used in DOOR commands
+- `name` - Unique identifier used in `DOOR:NAME` menu commands
+- `dropfile_type` - Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or blank
+- `dropfile_location` - Where to write dropfile: `startup` (working dir) or `node` (per-node temp dir)
+- `min_access_level` - Minimum user access level (0 = no restriction)
+- `single_instance` - Only allow one node to run this door at a time
+- `cleanup_command` / `cleanup_args` - Post-exit cleanup command (supports placeholders)
+
+### Native Door Fields
+
 - `command` - Path to the executable
-- `args` - Command-line arguments (can include placeholders)
-- `working_directory` - Directory to run the command in (optional)
-- `dropfile_type` - Type of dropfile: "DOOR.SYS", "CHAIN.TXT", or "NONE" (optional)
-- `io_mode` - I/O handling mode: "STDIO" (optional)
-- `requires_raw_terminal` - Whether raw terminal mode is needed (optional)
-- `environment_variables` - Additional environment variables (optional)
+- `args` - Command-line arguments (supports placeholders)
+- `working_directory` - Directory to run the command in
+- `io_mode` - I/O handling: `STDIO` (default) or `SOCKET`
+- `requires_raw_terminal` - Allocate a PTY for raw terminal I/O
+- `use_shell` - Wrap command in `/bin/sh -c`
+- `environment_variables` - Additional environment variables
+
+### DOS Door Fields
+
+- `is_dos` - Set to `true` for DOS doors launched via dosemu2
+- `dos_commands` - DOS commands written to EXTERNAL.BAT (supports placeholders)
+- `drive_c_path` - Host path mounted as DOS C: drive (relative to BBS root, or absolute)
+- `dropfile_dest` - DOS path to auto-copy dropfile to (e.g., `C:\DOORS\LORD`)
+- `dos_emulator` - Emulator: `auto` (default) or `dosemu`
+- `fossil_driver` - FOSSIL driver command (e.g., `C:\UTILS\X00.EXE eliminate`)
+- `dosemu_config` - Custom `.dosemurc` config file path
 
 ### Available Placeholders
 
@@ -195,6 +226,8 @@ Configures external door programs that can be launched from the BBS. The file co
 - `{USERID}` - User ID number
 - `{REALNAME}` - User's real name
 - `{LEVEL}` - Access level
+- `{DROPFILE}` / `{NODEDIR}` - Linux paths to dropfile and its directory
+- `{DOSDROPFILE}` / `{DOSNODEDIR}` - DOS paths (e.g., `C:\NODES\TEMP1\DOOR.SYS`)
 
 ## archivers.json
 
@@ -332,7 +365,8 @@ General BBS configuration settings.
   "ipBlocklistPath": "",
   "ipAllowlistPath": "",
   "maxFailedLogins": 5,
-  "lockoutMinutes": 30
+  "lockoutMinutes": 30,
+  "dosemuPath": ""
 }
 ```
 
@@ -383,6 +417,12 @@ General BBS configuration settings.
 - `nuvLevel` - Access level assigned to auto-validated NUV users (default: `25`)
 
 See [New User Voting](../users/nuv.md) for full details.
+
+**DOS Emulation:**
+
+- `dosemuPath` - Path to the dosemu2 binary (default: `/usr/libexec/dosemu2/dosemu2.bin`). ViSiON/3 calls the binary directly, bypassing the bash wrapper which mangles backslash arguments. Leave blank to use the default path.
+
+See [Door Programs](../doors/doors.md#running-dos-doors) for full DOS door setup documentation.
 
 **Timezone behavior:**
 

@@ -601,9 +601,10 @@ type DoorConfig struct {
 	IsDOS        bool     `json:"is_dos,omitempty"`        // true = DOS door launched via a DOS emulator
 	DOSCommands  []string `json:"dos_commands,omitempty"`  // DOS commands to run (e.g. ["cd c:\\doors\\lord\\", "lord /n{NODE}"])
 	DriveCPath   string   `json:"drive_c_path,omitempty"`  // Path to drive_c directory (default: ~/.dosemu/drive_c)
+	DropfileDest string   `json:"dropfile_dest,omitempty"` // DOS path to auto-copy dropfile before running (e.g. "C:\\DOORS\\LORD")
 	DOSEmulator  string   `json:"dos_emulator,omitempty"`  // Emulator to use: "auto" (default) or "dosemu"
+	FossilDriver string   `json:"fossil_driver,omitempty"` // DOS FOSSIL driver command (e.g. "C:\\UTILS\\X00.EXE eliminate")
 	// dosemu2-specific fields (Linux x86 only)
-	DosemuPath   string `json:"dosemu_path,omitempty"`   // Path to dosemu binary (default: /usr/bin/dosemu)
 	DosemuConfig string `json:"dosemu_config,omitempty"` // Path to custom .dosemurc (optional)
 }
 
@@ -864,6 +865,9 @@ type ServerConfig struct {
 	NUVKill     bool `json:"nuvKill"`     // auto-delete user when no threshold reached
 	NUVLevel    int  `json:"nuvLevel"`    // access level assigned on NUV auto-validation
 	NUVForm     int  `json:"nuvForm"`     // infoform number (1-5) to display during NUV voting; 0 = disabled
+
+	// DOS emulation — system-wide dosemu2 settings for DOS door games.
+	DosemuPath string `json:"dosemuPath,omitempty"` // Path to dosemu2 binary (default: /usr/libexec/dosemu2/dosemu2.bin)
 }
 
 // EventConfig defines a scheduled event configuration

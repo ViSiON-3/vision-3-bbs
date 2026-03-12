@@ -224,9 +224,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "DOSemu Path", Help: "Path to dosemu binary (blank=/usr/bin/dosemu)", Type: ftString, Col: 3, Row: row, Width: 45,
-			Get: func() string { return dPtr.DosemuPath },
-			Set: func(val string) error { dPtr.DosemuPath = val; save(); return nil },
+			Label: "Dropfile Dest", Help: "DOS path to auto-copy dropfile before running (e.g. C:\\DOORS\\LORD)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.DropfileDest },
+			Set: func(val string) error { dPtr.DropfileDest = val; save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "FOSSIL Driver", Help: "DOS FOSSIL driver command (e.g. C:\\UTILS\\X00.EXE eliminate)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.FossilDriver },
+			Set: func(val string) error { dPtr.FossilDriver = val; save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{

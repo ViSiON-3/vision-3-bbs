@@ -211,9 +211,24 @@ type DoorConfig struct {
     Command             string
     Args                []string
     WorkingDirectory    string
-    RequiresRawTerminal bool
     DropfileType        string
+    DropfileLocation    string
+    IOMode              string
+    RequiresRawTerminal bool
+    UseShell            bool
+    SingleInstance      bool
+    MinAccessLevel      int
+    CleanupCommand      string
+    CleanupArgs         []string
     EnvironmentVars     map[string]string
+    // DOS door fields
+    IsDOS        bool
+    DOSCommands  []string
+    DriveCPath   string
+    DropfileDest string
+    DOSEmulator  string
+    FossilDriver string
+    DosemuConfig string
 }
 
 // Key functions:
