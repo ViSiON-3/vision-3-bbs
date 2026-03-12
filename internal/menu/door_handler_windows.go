@@ -408,8 +408,8 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 		_ = getSessionIH(s)
 
 		if cmdErr != nil {
-			log.Printf("ERROR: Node %d: Door execution failed for user %s, door %s: %v", nodeNumber, currentUser.Handle, upperInput, cmdErr)
 			if errors.Is(cmdErr, ErrDoorBusy) {
+				log.Printf("INFO: Node %d: Door %s is busy for user %s", nodeNumber, upperInput, currentUser.Handle)
 				busyFmt := e.LoadedStrings.DoorBusyFormat
 				if strings.TrimSpace(busyFmt) == "" {
 					busyFmt = "\r\n|14Door is currently in use: |11%s|07\r\n"
@@ -418,6 +418,7 @@ func runOpenDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
 				time.Sleep(1 * time.Second)
 			} else {
+				log.Printf("ERROR: Node %d: Door execution failed for user %s, door %s: %v", nodeNumber, currentUser.Handle, upperInput, cmdErr)
 				doorErrorMessage(ctx, fmt.Sprintf("Error running door '%s': %v", upperInput, cmdErr))
 			}
 		} else {
