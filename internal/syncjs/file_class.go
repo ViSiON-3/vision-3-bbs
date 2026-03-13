@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
-
 	"github.com/dop251/goja"
 )
 
@@ -102,6 +100,10 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 				return vm.ToValue(true)
 			}
 			pos, _ := jf.f.Seek(0, io.SeekCurrent)
+			// Adjust for bufio.Reader's read-ahead buffer
+			if jf.reader != nil {
+				pos -= int64(jf.reader.Buffered())
+			}
 			info, err := jf.f.Stat()
 			if err != nil {
 				return vm.ToValue(true)
@@ -159,10 +161,10 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 			return vm.ToValue(err == nil)
 		})
 		obj.Set("lock", func(call goja.FunctionCall) goja.Value {
-			return vm.ToValue(jf.lock(call, true))
+			return vm.ToValue(jf.fileLock(call, true))
 		})
 		obj.Set("unlock", func(call goja.FunctionCall) goja.Value {
-			return vm.ToValue(jf.lock(call, false))
+			return vm.ToValue(jf.fileLock(call, false))
 		})
 
 		// INI file methods — Synchronet File objects can read/write INI format
@@ -353,9 +355,8 @@ func (jf *jsFile) readAll(vm *goja.Runtime) goja.Value {
 		jf.reader = bufio.NewReader(jf.f)
 	}
 	var lines []interface{}
-	reader := bufio.NewReader(jf.reader)
 	for {
-		line, err := reader.ReadBytes('\n')
+		line, err := jf.reader.ReadBytes('\n')
 		if len(line) > 0 {
 			line = bytes.TrimRight(line, "\r\n")
 			lines = append(lines, bytesToLatin1(line))
@@ -446,35 +447,6 @@ func (jf *jsFile) writeBin(vm *goja.Runtime, call goja.FunctionCall) goja.Value 
 	_, err := jf.f.Write(buf)
 	jf.reader = nil
 	return vm.ToValue(err == nil)
-}
-
-// lock/unlock using fcntl byte-range locks for multi-node safety.
-func (jf *jsFile) lock(call goja.FunctionCall, doLock bool) bool {
-	if jf.f == nil {
-		return false
-	}
-	offset := int64(0)
-	length := int64(0)
-	if len(call.Arguments) > 0 {
-		offset = call.Arguments[0].ToInteger()
-	}
-	if len(call.Arguments) > 1 {
-		length = call.Arguments[1].ToInteger()
-	}
-
-	lockType := syscall.F_UNLCK
-	if doLock {
-		lockType = syscall.F_WRLCK
-	}
-
-	flock := syscall.Flock_t{
-		Type:   int16(lockType),
-		Whence: io.SeekStart,
-		Start:  offset,
-		Len:    length,
-	}
-	err := syscall.FcntlFlock(jf.f.Fd(), syscall.F_SETLKW, &flock)
-	return err == nil
 }
 
 // modeToFlags converts a Synchronet file mode string to os.OpenFile flags.

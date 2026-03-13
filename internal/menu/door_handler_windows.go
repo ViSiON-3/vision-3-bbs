@@ -210,6 +210,10 @@ func executeDoor(ctx *DoorCtx) error {
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
 
+	if ctx.Config.Type == "synchronet_js" {
+		return executeSyncJSDoor(ctx)
+	}
+
 	if ctx.Config.IsDOS {
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
 	}

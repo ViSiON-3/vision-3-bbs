@@ -357,16 +357,6 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		return vm.ToValue(true)
 	})
 
-	// file_remove(filename) — delete a file
-	vm.Set("file_remove", func(call goja.FunctionCall) goja.Value {
-		if len(call.Arguments) == 0 {
-			return vm.ToValue(false)
-		}
-		path := eng.resolveFilePath(call.Arguments[0].String())
-		err := os.Remove(path)
-		return vm.ToValue(err == nil)
-	})
-
 	// file_removecase(filename) — case-insensitive file removal (stub, just calls remove)
 	vm.Set("file_removecase", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
@@ -490,12 +480,38 @@ func (eng *Engine) getLiveLoadPaths() []string {
 }
 
 // resolveFilePath resolves a file path for File class operations.
+// After resolving, it validates that the path stays within allowed directories
+// and logs a warning if it doesn't (but still allows it for game compatibility).
 func (eng *Engine) resolveFilePath(path string) string {
+	var resolved string
 	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
+		resolved = filepath.Clean(path)
+	} else {
+		resolved = filepath.Join(eng.cfg.WorkingDir, path)
 	}
-	// Relative to working directory
-	return filepath.Join(eng.cfg.WorkingDir, path)
+
+	// Validate against allowed directories
+	allowed := []string{
+		eng.cfg.WorkingDir,
+		eng.cfg.DataDir,
+		eng.cfg.NodeDir,
+		eng.cfg.ExecDir,
+	}
+	allowed = append(allowed, eng.cfg.LibraryPaths...)
+	allowed = append(allowed, os.TempDir())
+
+	for _, dir := range allowed {
+		if dir == "" {
+			continue
+		}
+		cleanDir := filepath.Clean(dir)
+		if strings.HasPrefix(resolved, cleanDir+string(filepath.Separator)) || resolved == cleanDir {
+			return resolved
+		}
+	}
+
+	log.Printf("WARN: SyncJS: resolved file path %q is outside all allowed directories", resolved)
+	return resolved
 }
 
 // sprintfJS provides basic printf-style formatting for JS format() calls.
