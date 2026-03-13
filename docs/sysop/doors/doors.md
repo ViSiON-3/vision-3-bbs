@@ -8,7 +8,9 @@ Use the [Configuration Editor](../configuration/configuration.md#configuration-e
 
 ### JSON Reference
 
-Door programs are stored in `configs/doors.json` as an array:
+Door programs are stored in `configs/doors.json` as an array.
+
+> **Note:** The template `doors.json` ships with example configurations for a DOS door (LORD) and a Synchronet JS door (LORDJS), but **does not include the door programs themselves**. You must obtain the actual game files separately — for example, by downloading DOS door games from their original distributors or BBS archives, or by cloning the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) for JS-based doors. See [Synchronet JS Doors](synchronet-js-doors.md#required-files-from-synchronet) for details on obtaining those files.
 
 ```json
 [
