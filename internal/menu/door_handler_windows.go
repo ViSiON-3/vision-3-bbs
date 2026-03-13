@@ -92,9 +92,19 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	ctx.Subs["{DROPFILE}"] = dropfilePath
 	ctx.Subs["{NODEDIR}"] = dropfileDir
 
-	// Substitute in Arguments
-	substitutedArgs := make([]string, len(doorConfig.Args))
-	for i, arg := range doorConfig.Args {
+	// Extract command and args from Commands slice (native: [0]=executable, [1:]=args)
+	if len(doorConfig.Commands) == 0 || doorConfig.Commands[0] == "" {
+		return fmt.Errorf("door %q has no command configured", ctx.DoorName)
+	}
+	doorCommand := doorConfig.Commands[0]
+	doorArgs := doorConfig.Commands[1:]
+
+	// Substitute placeholders in command and arguments
+	for key, val := range ctx.Subs {
+		doorCommand = strings.ReplaceAll(doorCommand, key, val)
+	}
+	substitutedArgs := make([]string, len(doorArgs))
+	for i, arg := range doorArgs {
 		newArg := arg
 		for key, val := range ctx.Subs {
 			newArg = strings.ReplaceAll(newArg, key, val)
@@ -121,14 +131,14 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	var cmd *exec.Cmd
 	if doorConfig.UseShell {
 		cmd = exec.Command("cmd")
-		cmdLine := "cmd /c " + syscall.EscapeArg(doorConfig.Command)
+		cmdLine := "cmd /c " + syscall.EscapeArg(doorCommand)
 		for _, arg := range substitutedArgs {
 			cmdLine += " " + syscall.EscapeArg(arg)
 		}
 		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdLine}
-		log.Printf("DEBUG: Node %d: Using shell execution for %q with %d arg(s)", ctx.NodeNumber, doorConfig.Command, len(substitutedArgs))
+		log.Printf("DEBUG: Node %d: Using shell execution for %q with %d arg(s)", ctx.NodeNumber, doorCommand, len(substitutedArgs))
 	} else {
-		cmd = exec.Command(doorConfig.Command, substitutedArgs...)
+		cmd = exec.Command(doorCommand, substitutedArgs...)
 	}
 
 	if doorConfig.WorkingDirectory != "" {
@@ -523,8 +533,8 @@ func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 		}
 
 		info := fmt.Sprintf("|15Door: |07%s\r\n|15Type: |07%s\r\n", upperInput, doorType)
-		if doorConfig.Command != "" {
-			info += fmt.Sprintf("|15Command: |07%s\r\n", doorConfig.Command)
+		if len(doorConfig.Commands) > 0 {
+			info += fmt.Sprintf("|15Commands: |07%s\r\n", strings.Join(doorConfig.Commands, ", "))
 		}
 		if doorConfig.WorkingDirectory != "" {
 			info += fmt.Sprintf("|15Directory: |07%s\r\n", doorConfig.WorkingDirectory)

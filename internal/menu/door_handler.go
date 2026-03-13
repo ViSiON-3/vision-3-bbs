@@ -55,19 +55,20 @@ func writeBatchFile(ctx *DoorCtx, batchPath string) error {
 		b.WriteString(ctx.Config.FossilDriver + crlf)
 	}
 
-	// Auto-copy dropfile to the door's directory if dropfile_dest is set
-	if ctx.Config.DropfileDest != "" {
-		dropfileName := dosDropfileName(ctx.Config.DropfileType)
-		src := ctx.Subs["{DOSNODEDIR}"] + "\\" + dropfileName
-		dest := ctx.Config.DropfileDest + "\\" + dropfileName
-		b.WriteString(fmt.Sprintf("COPY \"%s\" \"%s\" >NUL", src, dest) + crlf)
-	}
-
 	// Clear screen — the PTY bridge detects this ESC[2J sequence to know
 	// boot is done, discarding all prior DOS boot text.
 	b.WriteString("cls" + crlf)
 
-	for _, cmd := range ctx.Config.DOSCommands {
+	// Auto-cd to the door's working directory if configured
+	if ctx.Config.WorkingDirectory != "" {
+		// Switch drive letter first (e.g. "D:"), then cd with quotes for spaces
+		if len(ctx.Config.WorkingDirectory) >= 2 && ctx.Config.WorkingDirectory[1] == ':' {
+			b.WriteString(ctx.Config.WorkingDirectory[:2] + crlf)
+		}
+		b.WriteString(fmt.Sprintf("cd \"%s\"", ctx.Config.WorkingDirectory) + crlf)
+	}
+
+	for _, cmd := range ctx.Config.Commands {
 		processed := strings.ReplaceAll(cmd, "{NODE}", ctx.NodeNumStr)
 		for key, val := range ctx.Subs {
 			processed = strings.ReplaceAll(processed, key, val)
@@ -378,9 +379,19 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	ctx.Subs["{DROPFILE}"] = dropfilePath
 	ctx.Subs["{NODEDIR}"] = dropfileDir
 
-	// Substitute in Arguments (after dropfile generation so {DROPFILE} etc. are available)
-	substitutedArgs := make([]string, len(doorConfig.Args))
-	for i, arg := range doorConfig.Args {
+	// Extract command and args from Commands slice (native: [0]=executable, [1:]=args)
+	if len(doorConfig.Commands) == 0 || doorConfig.Commands[0] == "" {
+		return fmt.Errorf("door %q has no command configured", ctx.DoorName)
+	}
+	doorCommand := doorConfig.Commands[0]
+	doorArgs := doorConfig.Commands[1:]
+
+	// Substitute placeholders in command and arguments
+	for key, val := range ctx.Subs {
+		doorCommand = strings.ReplaceAll(doorCommand, key, val)
+	}
+	substitutedArgs := make([]string, len(doorArgs))
+	for i, arg := range doorArgs {
 		newArg := arg
 		for key, val := range ctx.Subs {
 			newArg = strings.ReplaceAll(newArg, key, val)
@@ -404,11 +415,11 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	var cmd *exec.Cmd
 	if doorConfig.UseShell {
 		// Use exec "$0" "$@" to preserve argument boundaries and prevent injection
-		shellArgs := append([]string{"-c", `exec "$0" "$@"`, doorConfig.Command}, substitutedArgs...)
+		shellArgs := append([]string{"-c", `exec "$0" "$@"`, doorCommand}, substitutedArgs...)
 		cmd = exec.Command("/bin/sh", shellArgs...)
-		log.Printf("DEBUG: Node %d: Using shell execution for %q with %d arg(s)", ctx.NodeNumber, doorConfig.Command, len(substitutedArgs))
+		log.Printf("DEBUG: Node %d: Using shell execution for %q with %d arg(s)", ctx.NodeNumber, doorCommand, len(substitutedArgs))
 	} else {
-		cmd = exec.Command(doorConfig.Command, substitutedArgs...)
+		cmd = exec.Command(doorCommand, substitutedArgs...)
 	}
 
 	if doorConfig.WorkingDirectory != "" {
@@ -1014,8 +1025,8 @@ func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 		}
 
 		info := fmt.Sprintf("|15Door: |07%s\r\n|15Type: |07%s\r\n", upperInput, doorType)
-		if doorConfig.Command != "" {
-			info += fmt.Sprintf("|15Command: |07%s\r\n", doorConfig.Command)
+		if len(doorConfig.Commands) > 0 {
+			info += fmt.Sprintf("|15Commands: |07%s\r\n", strings.Join(doorConfig.Commands, ", "))
 		}
 		if doorConfig.WorkingDirectory != "" {
 			info += fmt.Sprintf("|15Directory: |07%s\r\n", doorConfig.WorkingDirectory)
@@ -1029,9 +1040,6 @@ func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 		}
 		if doorConfig.IOMode != "" {
 			info += fmt.Sprintf("|15I/O Mode: |07%s\r\n", doorConfig.IOMode)
-		}
-		if doorConfig.IsDOS && len(doorConfig.DOSCommands) > 0 {
-			info += fmt.Sprintf("|15DOS Commands: |07%s\r\n", strings.Join(doorConfig.DOSCommands, " && "))
 		}
 		if doorConfig.MinAccessLevel > 0 {
 			info += fmt.Sprintf("|15Min Access: |07%d\r\n", doorConfig.MinAccessLevel)

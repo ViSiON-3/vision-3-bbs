@@ -93,7 +93,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			Set: func(val string) error { a.BasePath = val; return nil },
 		},
 		{
-			Label: "Conference", Help: "Press Enter to select a conference", Type: ftLookup, Col: 3, Row: 9, Width: 40,
+			Label: "Conference", Help: "Select a conference", Type: ftLookup, Col: 3, Row: 9, Width: 40,
 			Get: func() string { return m.conferenceName(a.ConferenceID) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -224,7 +224,7 @@ func (m *Model) fieldsFileArea() []fieldDef {
 			Set: func(val string) error { a.ACSDownload = val; return nil },
 		},
 		{
-			Label: "Conference", Help: "Press Enter to select a conference", Type: ftLookup, Col: 3, Row: 8, Width: 40,
+			Label: "Conference", Help: "Select a conference", Type: ftLookup, Col: 3, Row: 8, Width: 40,
 			Get: func() string {
 				return m.conferenceName(a.ConferenceID)
 			},

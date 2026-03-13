@@ -14,9 +14,10 @@ Door programs are stored in `configs/doors.json` as an array:
 [
   {
     "name": "LORD",
-    "command": "",
-    "args": [],
-    "working_directory": "",
+    "commands": [
+      "START.BAT {NODE}"
+    ],
+    "working_directory": "C:\\DOORS\\LORD",
     "dropfile_type": "DOOR.SYS",
     "dropfile_location": "node",
     "io_mode": "",
@@ -28,12 +29,7 @@ Door programs are stored in `configs/doors.json` as an array:
     "cleanup_args": [],
     "environment_variables": {},
     "is_dos": true,
-    "dos_commands": [
-      "cd C:\\DOORS\\LORD",
-      "START.BAT {NODE}"
-    ],
     "drive_c_path": "drive_c",
-    "dropfile_dest": "C:\\DOORS\\LORD",
     "dos_emulator": "dosemu",
     "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
     "dosemu_config": ""
@@ -50,12 +46,15 @@ These fields apply to both native and DOS doors:
 | Field | Type | Description |
 | --- | --- | --- |
 | `name` | string | Display name for the door (used in `DOOR:NAME` menu commands) |
+| `commands` | []string | Native: `[0]`=executable, `[1:]`=args. DOS: each entry is a batch command line |
+| `working_directory` | string | Native: Linux directory to run the command in. DOS: DOS path to `cd` into before running commands (e.g., `C:\DOORS\LORD`) |
 | `dropfile_type` | string | Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or blank for none |
 | `dropfile_location` | string | Where to write dropfile: `startup` (working dir, default) or `node` (per-node temp dir) |
 | `min_access_level` | int | Minimum user access level required (0 = no restriction) |
 | `single_instance` | bool | Only allow one node to run this door at a time |
 | `cleanup_command` | string | Command to run after the door exits (optional) |
 | `cleanup_args` | []string | Arguments for cleanup command (supports placeholders) |
+| `environment_variables` | map | Additional environment variables to set (supports placeholders). Format: `{"KEY": "VALUE"}` |
 
 ### Native Door Fields
 
@@ -63,13 +62,9 @@ These fields are used when `is_dos` is `false` (the default):
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `command` | string | Path to the executable |
-| `args` | []string | Command-line arguments (supports placeholders) |
-| `working_directory` | string | Directory to run the command in |
 | `io_mode` | string | I/O handling: `STDIO` (default) or `SOCKET` |
 | `requires_raw_terminal` | bool | Allocate a PTY for raw terminal I/O |
 | `use_shell` | bool | Wrap command in `/bin/sh -c` (Linux) or `cmd /c` (Windows) |
-| `environment_variables` | map | Additional environment variables to set |
 
 ### DOS Door Fields
 
@@ -78,9 +73,7 @@ Set `is_dos: true` to run a 16-bit DOS door game via dosemu2.
 | Field | Type | Description |
 | --- | --- | --- |
 | `is_dos` | bool | `true` = DOS door launched via dosemu2 |
-| `dos_commands` | []string | DOS commands written to EXTERNAL.BAT (supports placeholders) |
 | `drive_c_path` | string | Host path mounted as DOS C: drive. Relative paths are resolved against the BBS root directory. Default: `~/.dosemu/drive_c` |
-| `dropfile_dest` | string | DOS path to auto-copy the dropfile before running (e.g., `C:\DOORS\LORD`). If set, a `COPY` command is automatically inserted into EXTERNAL.BAT |
 | `dos_emulator` | string | Emulator selection: `""` or `"auto"` (default), `"dosemu"` |
 | `fossil_driver` | string | DOS FOSSIL driver command to load before the door (e.g., `C:\UTILS\X00.EXE eliminate`). Loaded in EXTERNAL.BAT before `cls` and the door commands |
 | `dosemu_config` | string | Path to a custom `.dosemurc` config file. If blank, the user's `~/.dosemu/.dosemurc` is used as a base with per-node overrides appended |
@@ -95,7 +88,7 @@ The dosemu2 binary path is configured globally in `config.json` (System Configur
 
 ## Placeholders
 
-The following placeholders can be used in `args` (native doors), `dos_commands` (DOS doors), `cleanup_args`, and `environment_variables`. They are substituted at runtime:
+The following placeholders can be used in `commands`, `cleanup_args`, and `environment_variables`. They are substituted at runtime:
 
 | Placeholder | Value |
 | --- | --- |
@@ -127,7 +120,7 @@ Creates a Unix socketpair and passes one end to the door process as file descrip
 
 By default (`dropfile_location: "startup"` or blank), the dropfile is written to the door's `working_directory`. Set `dropfile_location: "node"` to write it to a per-node temporary directory (`/tmp/vision3_nodeN/`) instead. This is useful for multi-instance doors where multiple nodes may run simultaneously and need isolated dropfiles.
 
-For DOS doors, dropfiles are always written to the per-node temp directory inside `drive_c` (at `C:\NODES\TEMPn\`) regardless of this setting. Use `dropfile_dest` to automatically copy the dropfile to the door's game directory.
+For DOS doors, dropfiles are written to the per-node temp directory inside `drive_c` (at `C:\NODES\TEMPn\`). Configure the door game itself to read the dropfile from the node directory using the `{DOSNODEDIR}` placeholder, or set `dropfile_location: "startup"` to write it to the working directory instead.
 
 ## Access Control
 
@@ -180,7 +173,7 @@ DOS doors are supported on Linux x86/x86-64 via dosemu2. ViSiON/3 uses dosemu2's
 ### How It Works
 
 1. ViSiON/3 generates a per-node `dosemurc` config that maps `drive_c_path` as the DOS C: drive
-2. An `EXTERNAL.BAT` batch file is generated containing: FOSSIL driver loading (if configured), dropfile copy (if `dropfile_dest` is set), `cls`, and the user's `dos_commands`
+2. An `EXTERNAL.BAT` batch file is generated containing: FOSSIL driver loading (if configured), `cls`, `cd` to working directory (if set), and the user's `commands`
 3. dosemu2 boots DOS, executes EXTERNAL.BAT, and exits via `exitemu`
 4. The PTY output bridge gates on the `cls` clear screen sequence (`ESC[2J`), suppressing all DOS boot text from reaching the user
 5. After the door exits, the BBS session resumes
@@ -233,16 +226,15 @@ A complete LORD (Legend of the Red Dragon) configuration:
 ```json
 {
   "name": "LORD",
+  "working_directory": "C:\\DOORS\\LORD",
   "dropfile_type": "DOOR.SYS",
   "dropfile_location": "node",
   "single_instance": true,
   "is_dos": true,
-  "dos_commands": [
-    "cd C:\\DOORS\\LORD",
+  "commands": [
     "START.BAT {NODE}"
   ],
   "drive_c_path": "drive_c",
-  "dropfile_dest": "C:\\DOORS\\LORD",
   "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
   "dos_emulator": "dosemu"
 }
@@ -250,10 +242,10 @@ A complete LORD (Legend of the Red Dragon) configuration:
 
 This configuration:
 
+- Sets the DOS working directory to `C:\DOORS\LORD` (auto `cd` before commands)
 - Generates a `DOOR.SYS` dropfile in the per-node directory (`C:\NODES\TEMPn\`)
-- Automatically copies `DOOR.SYS` to `C:\DOORS\LORD\` (via `dropfile_dest`)
 - Loads the X00.EXE FOSSIL driver for COM1 serial I/O
-- Changes to the LORD directory and runs `START.BAT` with the node number
+- Runs `START.BAT` with the node number
 - Prevents multiple nodes from running LORD simultaneously (`single_instance`)
 
 ### dosemurc Template
@@ -293,4 +285,16 @@ The following environment variables are automatically set for all door processes
 | `DOOR_SOCKET_FD` | Socket FD (SOCKET mode only) |
 | `DOSEMU_QUIET` | `1` (DOS doors only, suppresses dosemu startup messages) |
 
-Additional variables can be configured per-door via the `environment_variables` field.
+Additional variables can be configured per-door via the `environment_variables` field. These are set in the OS environment before the door process (or DOS emulator) is launched. Placeholders are substituted at runtime.
+
+Example:
+
+```json
+{
+  "environment_variables": {
+    "TERM": "ansi",
+    "DSZLOG": "/tmp/node{NODE}_dsz.log",
+    "GAME_DATA": "/opt/bbs/doors/lord/data"
+  }
+}
+```

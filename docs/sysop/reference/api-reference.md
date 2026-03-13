@@ -208,8 +208,7 @@ type StringsConfig map[string]string
 type ThemeConfig map[string]interface{}
 type DoorConfig struct {
     Name                string
-    Command             string
-    Args                []string
+    Commands            []string
     WorkingDirectory    string
     DropfileType        string
     DropfileLocation    string
@@ -222,10 +221,8 @@ type DoorConfig struct {
     CleanupArgs         []string
     EnvironmentVars     map[string]string
     // DOS door fields
-    IsDOS        bool
-    DOSCommands  []string
-    DriveCPath   string
-    DropfileDest string
+    IsDOS       bool
+    DriveCPath  string
     DOSEmulator  string
     FossilDriver string
     DosemuConfig string

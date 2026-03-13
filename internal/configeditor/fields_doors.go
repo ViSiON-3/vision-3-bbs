@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -35,45 +36,90 @@ func csvToSlice(s string) []string {
 }
 
 // doorCommandsGet returns the command string for display.
-// Native doors: "command arg1, arg2, ..."
-// DOS doors: "cmd1, cmd2, ..." from DOSCommands
+// Native doors: "command arg1, arg2, ..." (Commands[0] + Commands[1:])
+// DOS doors: "cmd1, cmd2, ..." (each Commands entry is a batch line)
 func doorCommandsGet(d *doorEditProxy) string {
-	if d.IsDOS {
-		return sliceToCSV(d.DOSCommands)
-	}
-	if d.Command == "" {
+	if len(d.Commands) == 0 {
 		return ""
 	}
-	if len(d.Args) == 0 {
-		return d.Command
+	if d.IsDOS {
+		return sliceToCSV(d.Commands)
 	}
-	return d.Command + " " + sliceToCSV(d.Args)
+	// Native: first entry is command, rest are args
+	if len(d.Commands) == 1 {
+		return d.Commands[0]
+	}
+	return d.Commands[0] + " " + sliceToCSV(d.Commands[1:])
 }
 
-// doorCommandsSet parses the command string back into the appropriate fields.
+// doorCommandsSet parses the command string back into the Commands field.
 // Native doors: first token is command, rest are comma-separated args.
-// DOS doors: comma-separated list goes into DOSCommands.
+// DOS doors: comma-separated list of batch commands.
 func doorCommandsSet(d *doorEditProxy, val string) {
 	if d.IsDOS {
-		d.DOSCommands = csvToSlice(val)
-		d.Command = ""
-		d.Args = nil
+		d.Commands = csvToSlice(val)
 		return
 	}
 	val = strings.TrimSpace(val)
 	if val == "" {
-		d.Command = ""
-		d.Args = nil
+		d.Commands = nil
 		return
 	}
 	// Split first space-separated token as the command
 	parts := strings.SplitN(val, " ", 2)
-	d.Command = parts[0]
+	d.Commands = []string{parts[0]}
 	if len(parts) > 1 {
-		d.Args = csvToSlice(parts[1])
-	} else {
-		d.Args = nil
+		d.Commands = append(d.Commands, csvToSlice(parts[1])...)
 	}
+}
+
+// envMapToCSV serializes a map[string]string as "KEY=VALUE, KEY2=VALUE2" for display.
+// Keys are sorted for stable output.
+func envMapToCSV(m map[string]string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	pairs := make([]string, 0, len(m))
+	for _, k := range keys {
+		pairs = append(pairs, k+"="+m[k])
+	}
+	return strings.Join(pairs, ", ")
+}
+
+// csvToEnvMap parses "KEY=VALUE, KEY2=VALUE2" into a map[string]string.
+// Returns nil for empty input.
+func csvToEnvMap(s string) (map[string]string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	parts := strings.Split(s, ",")
+	result := make(map[string]string, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		kv := strings.SplitN(p, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid entry %q: expected KEY=VALUE", p)
+		}
+		key := strings.TrimSpace(kv[0])
+		val := strings.TrimSpace(kv[1])
+		if key == "" {
+			return nil, fmt.Errorf("empty key in %q", p)
+		}
+		result[key] = val
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, nil
 }
 
 // doorEditProxy wraps DoorConfig fields for in-place editing via closures.
@@ -113,6 +159,17 @@ func (m *Model) fieldsDoor() []fieldDef {
 	})
 
 	row++
+	workDirHelp := "Directory to run the command in"
+	if dPtr.IsDOS {
+		workDirHelp = "DOS directory to cd into before running commands (e.g. C:\\DOORS\\LORD)"
+	}
+	fields = append(fields, fieldDef{
+		Label: "Working Dir", Help: workDirHelp, Type: ftString, Col: 3, Row: row, Width: 45,
+		Get: func() string { return dPtr.WorkingDirectory },
+		Set: func(val string) error { dPtr.WorkingDirectory = val; save(); return nil },
+	})
+
+	row++
 	fields = append(fields, fieldDef{
 		Label: "Commands", Help: "Native: command args / DOS: comma-separated DOS commands", Type: ftString, Col: 3, Row: row, Width: 45,
 		Get: func() string { return doorCommandsGet(dPtr) },
@@ -121,24 +178,29 @@ func (m *Model) fieldsDoor() []fieldDef {
 
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Dropfile Type", Help: "DOOR.SYS, DOOR32.SYS, CHAIN.TXT, DORINFO1.DEF, or NONE", Type: ftString, Col: 3, Row: row, Width: 15,
+		Label: "Dropfile Type", Help: "Dropfile format", Type: ftLookup, Col: 3, Row: row, Width: 15,
 		Get: func() string { return dPtr.DropfileType },
 		Set: func(val string) error { dPtr.DropfileType = val; save(); return nil },
+		LookupItems: func() []LookupItem {
+			return []LookupItem{
+				{Value: "", Display: "(none)"},
+				{Value: "DOOR.SYS", Display: "DOOR.SYS"},
+				{Value: "DOOR32.SYS", Display: "DOOR32.SYS"},
+				{Value: "CHAIN.TXT", Display: "CHAIN.TXT"},
+				{Value: "DORINFO1.DEF", Display: "DORINFO1.DEF"},
+			}
+		},
 	})
 
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Dropfile Location", Help: "Where to write dropfile: startup (working dir) or node (per-node temp dir)", Type: ftString, Col: 3, Row: row, Width: 10,
+		Label: "Dropfile Location", Help: "Where to write dropfile", Type: ftLookup, Col: 3, Row: row, Width: 10,
 		Get: func() string { return dPtr.DropfileLocation },
-		Set: func(val string) error {
-			val = strings.ToLower(strings.TrimSpace(val))
-			switch val {
-			case "", "startup", "node":
-				dPtr.DropfileLocation = val
-				save()
-				return nil
-			default:
-				return fmt.Errorf("invalid location %q: must be blank, startup, or node", val)
+		Set: func(val string) error { dPtr.DropfileLocation = val; save(); return nil },
+		LookupItems: func() []LookupItem {
+			return []LookupItem{
+				{Value: "startup", Display: "startup - Working directory (or '.')"},
+				{Value: "node", Display: "node - Per-node temp directory"},
 			}
 		},
 	})
@@ -146,11 +208,11 @@ func (m *Model) fieldsDoor() []fieldDef {
 	// Common fields for all door types
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Min Access Level", Help: "Minimum user access level (0=no restriction)", Type: ftString, Col: 3, Row: row, Width: 5,
+		Label: "Min Access Level", Help: "Minimum user access level (0=no restriction)", Type: ftInteger, Col: 3, Row: row, Width: 5, Min: 0, Max: 255,
 		Get: func() string { return strconv.Itoa(dPtr.MinAccessLevel) },
 		Set: func(val string) error {
 			v, err := strconv.Atoi(strings.TrimSpace(val))
-			if err != nil || v < 0 || v > 255 {
+			if err != nil {
 				return fmt.Errorf("access level must be 0-255")
 			}
 			dPtr.MinAccessLevel = v
@@ -198,6 +260,21 @@ func (m *Model) fieldsDoor() []fieldDef {
 		},
 	})
 
+	row++
+	fields = append(fields, fieldDef{
+		Label: "Env Vars", Help: "Environment variables: KEY=VALUE, KEY2=VALUE2", Type: ftString, Col: 3, Row: row, Width: 45,
+		Get: func() string { return envMapToCSV(dPtr.EnvironmentVars) },
+		Set: func(val string) error {
+			m, err := csvToEnvMap(val)
+			if err != nil {
+				return err
+			}
+			dPtr.EnvironmentVars = m
+			save()
+			return nil
+		},
+	})
+
 	if dPtr.IsDOS {
 		// DOS-specific fields
 		row++
@@ -208,25 +285,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "DOS Emulator", Help: "Emulator: blank=auto, dosemu=dosemu2 (Linux x86 only)", Type: ftString, Col: 3, Row: row, Width: 10,
+			Label: "DOS Emulator", Help: "DOS emulator to use", Type: ftLookup, Col: 3, Row: row, Width: 10,
 			Get: func() string { return dPtr.DOSEmulator },
-			Set: func(val string) error {
-				val = strings.ToLower(strings.TrimSpace(val))
-				switch val {
-				case "", "auto", "dosemu":
-					dPtr.DOSEmulator = val
-					save()
-					return nil
-				default:
-					return fmt.Errorf("invalid emulator %q: must be blank, auto, or dosemu", val)
+			Set: func(val string) error { dPtr.DOSEmulator = val; save(); return nil },
+			LookupItems: func() []LookupItem {
+				return []LookupItem{
+					{Value: "auto", Display: "auto - Detect available emulator"},
+					{Value: "dosemu", Display: "dosemu - dosemu2 (Linux only)"},
 				}
 			},
-		})
-		row++
-		fields = append(fields, fieldDef{
-			Label: "Dropfile Dest", Help: "DOS path to auto-copy dropfile before running (e.g. C:\\DOORS\\LORD)", Type: ftString, Col: 3, Row: row, Width: 45,
-			Get: func() string { return dPtr.DropfileDest },
-			Set: func(val string) error { dPtr.DropfileDest = val; save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{
@@ -244,23 +311,13 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// Native-specific fields
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Working Dir", Help: "Directory to run the command in", Type: ftString, Col: 3, Row: row, Width: 45,
-			Get: func() string { return dPtr.WorkingDirectory },
-			Set: func(val string) error { dPtr.WorkingDirectory = val; save(); return nil },
-		})
-		row++
-		fields = append(fields, fieldDef{
-			Label: "I/O Mode", Help: "I/O handling: STDIO or SOCKET (pass FD to door)", Type: ftString, Col: 3, Row: row, Width: 15,
+			Label: "I/O Mode", Help: "I/O handling mode", Type: ftLookup, Col: 3, Row: row, Width: 15,
 			Get: func() string { return dPtr.IOMode },
-			Set: func(val string) error {
-				v := strings.ToUpper(strings.TrimSpace(val))
-				switch v {
-				case "", "STDIO", "SOCKET":
-					dPtr.IOMode = v
-					save()
-					return nil
-				default:
-					return fmt.Errorf("invalid I/O mode %q: must be blank, STDIO, or SOCKET", val)
+			Set: func(val string) error { dPtr.IOMode = val; save(); return nil },
+			LookupItems: func() []LookupItem {
+				return []LookupItem{
+					{Value: "STDIO", Display: "STDIO - Standard I/O redirection"},
+					{Value: "SOCKET", Display: "SOCKET - Pass socket FD to door"},
 				}
 			},
 		})
