@@ -67,6 +67,7 @@
 
 * **DOORS**
 * [Door Programs](doors/doors.md)
+* [Synchronet JS Doors](doors/synchronet-js-doors.md)
 
 * **NETWORKING**
 * [SSH Server](networking/ssh.md)

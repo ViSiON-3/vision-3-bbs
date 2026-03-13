@@ -223,7 +223,7 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 		if idx < len(keys) {
 			k := keys[idx]
 			d := m.configs.Doors[k]
-			content = fmt.Sprintf("  %-22s %-28s %s", padRight(k, 22), padRight(d.Name, 28), d.IOMode)
+			content = fmt.Sprintf("  %-22s %-28s %s", padRight(k, 22), padRight(d.Name, 28), doorTypeLabel(&d))
 		}
 	case "event":
 		if idx < len(m.configs.Events.Events) {

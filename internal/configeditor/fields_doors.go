@@ -125,8 +125,24 @@ func csvToEnvMap(s string) (map[string]string, error) {
 // doorEditProxy wraps DoorConfig fields for in-place editing via closures.
 type doorEditProxy = config.DoorConfig
 
+// doorTypeLabel returns a short label for the door type, used in list views.
+func doorTypeLabel(d *config.DoorConfig) string {
+	if d.Type == "synchronet_js" {
+		return "SyncJS"
+	}
+	if d.IsDOS {
+		return "DOS"
+	}
+	return "Native"
+}
+
+// isSyncJS returns true if the door is a Synchronet JS door.
+func isSyncJS(d *doorEditProxy) bool {
+	return d.Type == "synchronet_js"
+}
+
 // fieldsDoor returns fields for editing a door program.
-// Fields shown depend on whether the door is DOS or native.
+// Fields shown depend on door type: native, DOS, or synchronet_js.
 func (m *Model) fieldsDoor() []fieldDef {
 	keys := m.doorKeys()
 	idx := m.recordEditIdx
@@ -151,59 +167,114 @@ func (m *Model) fieldsDoor() []fieldDef {
 		},
 	}
 
+	// Door type selector — determines which type-specific fields are shown
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Is DOS", Help: "Y=DOS door (dosemu2), N=native program", Type: ftYesNo, Col: 3, Row: row, Width: 1,
-		Get: func() string { return boolToYN(dPtr.IsDOS) },
-		Set: func(val string) error { dPtr.IsDOS = ynToBool(val); save(); return nil },
+		Label: "Type", Help: "Door type: Native binary, DOS (dosemu2), or Synchronet JS game", Type: ftLookup, Col: 3, Row: row, Width: 20,
+		Get: func() string {
+			if dPtr.Type == "synchronet_js" {
+				return "synchronet_js"
+			}
+			if dPtr.IsDOS {
+				return "dos"
+			}
+			return "native"
+		},
+		Set: func(val string) error {
+			switch val {
+			case "synchronet_js":
+				dPtr.Type = "synchronet_js"
+				dPtr.IsDOS = false
+			case "dos":
+				dPtr.Type = ""
+				dPtr.IsDOS = true
+			default:
+				dPtr.Type = ""
+				dPtr.IsDOS = false
+			}
+			save()
+			return nil
+		},
+		LookupItems: func() []LookupItem {
+			return []LookupItem{
+				{Value: "native", Display: "Native - Linux/macOS/Windows binary"},
+				{Value: "dos", Display: "DOS - DOS door via dosemu2"},
+				{Value: "synchronet_js", Display: "Synchronet JS - JavaScript door game"},
+			}
+		},
 	})
 
 	row++
-	workDirHelp := "Directory to run the command in"
-	if dPtr.IsDOS {
-		workDirHelp = "DOS directory to cd into before running commands (e.g. C:\\DOORS\\LORD)"
-	}
 	fields = append(fields, fieldDef{
-		Label: "Working Dir", Help: workDirHelp, Type: ftString, Col: 3, Row: row, Width: 45,
+		Label: "Working Dir", Help: "Directory to run the door in", Type: ftString, Col: 3, Row: row, Width: 45,
 		Get: func() string { return dPtr.WorkingDirectory },
 		Set: func(val string) error { dPtr.WorkingDirectory = val; save(); return nil },
 	})
 
-	row++
-	fields = append(fields, fieldDef{
-		Label: "Commands", Help: "Native: command args / DOS: comma-separated DOS commands", Type: ftString, Col: 3, Row: row, Width: 45,
-		Get: func() string { return doorCommandsGet(dPtr) },
-		Set: func(val string) error { doorCommandsSet(dPtr, val); save(); return nil },
-	})
+	if isSyncJS(dPtr) {
+		// Synchronet JS-specific fields
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Script", Help: "Main JS file to execute (relative to working dir)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.Script },
+			Set: func(val string) error { dPtr.Script = val; save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Exec Dir", Help: "Synchronet exec directory (system.exec_dir)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.ExecDir },
+			Set: func(val string) error { dPtr.ExecDir = val; save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Library Paths", Help: "Search paths for load()/require(), comma-separated", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return sliceToCSV(dPtr.LibraryPaths) },
+			Set: func(val string) error { dPtr.LibraryPaths = csvToSlice(val); save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Script Args", Help: "Arguments passed to script (available as argv), comma-separated", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return sliceToCSV(dPtr.Args) },
+			Set: func(val string) error { dPtr.Args = csvToSlice(val); save(); return nil },
+		})
+	} else {
+		// Native and DOS doors have commands and dropfiles
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Commands", Help: "Native: command args / DOS: comma-separated DOS commands", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return doorCommandsGet(dPtr) },
+			Set: func(val string) error { doorCommandsSet(dPtr, val); save(); return nil },
+		})
 
-	row++
-	fields = append(fields, fieldDef{
-		Label: "Dropfile Type", Help: "Dropfile format", Type: ftLookup, Col: 3, Row: row, Width: 15,
-		Get: func() string { return dPtr.DropfileType },
-		Set: func(val string) error { dPtr.DropfileType = val; save(); return nil },
-		LookupItems: func() []LookupItem {
-			return []LookupItem{
-				{Value: "", Display: "(none)"},
-				{Value: "DOOR.SYS", Display: "DOOR.SYS"},
-				{Value: "DOOR32.SYS", Display: "DOOR32.SYS"},
-				{Value: "CHAIN.TXT", Display: "CHAIN.TXT"},
-				{Value: "DORINFO1.DEF", Display: "DORINFO1.DEF"},
-			}
-		},
-	})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Dropfile Type", Help: "Dropfile format", Type: ftLookup, Col: 3, Row: row, Width: 15,
+			Get: func() string { return dPtr.DropfileType },
+			Set: func(val string) error { dPtr.DropfileType = val; save(); return nil },
+			LookupItems: func() []LookupItem {
+				return []LookupItem{
+					{Value: "", Display: "(none)"},
+					{Value: "DOOR.SYS", Display: "DOOR.SYS"},
+					{Value: "DOOR32.SYS", Display: "DOOR32.SYS"},
+					{Value: "CHAIN.TXT", Display: "CHAIN.TXT"},
+					{Value: "DORINFO1.DEF", Display: "DORINFO1.DEF"},
+				}
+			},
+		})
 
-	row++
-	fields = append(fields, fieldDef{
-		Label: "Dropfile Location", Help: "Where to write dropfile", Type: ftLookup, Col: 3, Row: row, Width: 10,
-		Get: func() string { return dPtr.DropfileLocation },
-		Set: func(val string) error { dPtr.DropfileLocation = val; save(); return nil },
-		LookupItems: func() []LookupItem {
-			return []LookupItem{
-				{Value: "startup", Display: "startup - Working directory (or '.')"},
-				{Value: "node", Display: "node - Per-node temp directory"},
-			}
-		},
-	})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Dropfile Location", Help: "Where to write dropfile", Type: ftLookup, Col: 3, Row: row, Width: 10,
+			Get: func() string { return dPtr.DropfileLocation },
+			Set: func(val string) error { dPtr.DropfileLocation = val; save(); return nil },
+			LookupItems: func() []LookupItem {
+				return []LookupItem{
+					{Value: "startup", Display: "startup - Working directory (or '.')"},
+					{Value: "node", Display: "node - Per-node temp directory"},
+				}
+			},
+		})
+	}
 
 	// Common fields for all door types
 	row++
@@ -228,54 +299,57 @@ func (m *Model) fieldsDoor() []fieldDef {
 		Set: func(val string) error { dPtr.SingleInstance = ynToBool(val); save(); return nil },
 	})
 
-	row++
-	fields = append(fields, fieldDef{
-		Label: "Cleanup Command", Help: "Command to run after door exits (blank=none)", Type: ftString, Col: 3, Row: row, Width: 45,
-		Get: func() string {
-			if dPtr.CleanupCommand == "" {
-				return ""
-			}
-			if len(dPtr.CleanupArgs) == 0 {
-				return dPtr.CleanupCommand
-			}
-			return dPtr.CleanupCommand + " " + sliceToCSV(dPtr.CleanupArgs)
-		},
-		Set: func(val string) error {
-			val = strings.TrimSpace(val)
-			if val == "" {
-				dPtr.CleanupCommand = ""
-				dPtr.CleanupArgs = nil
+	if !isSyncJS(dPtr) {
+		// Cleanup and env vars for native/DOS doors only
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Cleanup Command", Help: "Command to run after door exits (blank=none)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string {
+				if dPtr.CleanupCommand == "" {
+					return ""
+				}
+				if len(dPtr.CleanupArgs) == 0 {
+					return dPtr.CleanupCommand
+				}
+				return dPtr.CleanupCommand + " " + sliceToCSV(dPtr.CleanupArgs)
+			},
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if val == "" {
+					dPtr.CleanupCommand = ""
+					dPtr.CleanupArgs = nil
+					save()
+					return nil
+				}
+				parts := strings.SplitN(val, " ", 2)
+				dPtr.CleanupCommand = parts[0]
+				if len(parts) > 1 {
+					dPtr.CleanupArgs = csvToSlice(parts[1])
+				} else {
+					dPtr.CleanupArgs = nil
+				}
 				save()
 				return nil
-			}
-			parts := strings.SplitN(val, " ", 2)
-			dPtr.CleanupCommand = parts[0]
-			if len(parts) > 1 {
-				dPtr.CleanupArgs = csvToSlice(parts[1])
-			} else {
-				dPtr.CleanupArgs = nil
-			}
-			save()
-			return nil
-		},
-	})
+			},
+		})
 
-	row++
-	fields = append(fields, fieldDef{
-		Label: "Env Vars", Help: "Environment variables: KEY=VALUE, KEY2=VALUE2", Type: ftString, Col: 3, Row: row, Width: 45,
-		Get: func() string { return envMapToCSV(dPtr.EnvironmentVars) },
-		Set: func(val string) error {
-			m, err := csvToEnvMap(val)
-			if err != nil {
-				return err
-			}
-			dPtr.EnvironmentVars = m
-			save()
-			return nil
-		},
-	})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Env Vars", Help: "Environment variables: KEY=VALUE, KEY2=VALUE2", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return envMapToCSV(dPtr.EnvironmentVars) },
+			Set: func(val string) error {
+				m, err := csvToEnvMap(val)
+				if err != nil {
+					return err
+				}
+				dPtr.EnvironmentVars = m
+				save()
+				return nil
+			},
+		})
+	}
 
-	if dPtr.IsDOS {
+	if dPtr.IsDOS && !isSyncJS(dPtr) {
 		// DOS-specific fields
 		row++
 		fields = append(fields, fieldDef{
@@ -307,7 +381,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Get: func() string { return dPtr.DosemuConfig },
 			Set: func(val string) error { dPtr.DosemuConfig = val; save(); return nil },
 		})
-	} else {
+	} else if !dPtr.IsDOS && !isSyncJS(dPtr) {
 		// Native-specific fields
 		row++
 		fields = append(fields, fieldDef{

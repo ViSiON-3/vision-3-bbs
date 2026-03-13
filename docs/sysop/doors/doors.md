@@ -166,6 +166,12 @@ Doors are launched via menu commands:
 
 See [Menus & ACS](../menus/menu-system.md) for details on adding door entries to menus.
 
+## Running Synchronet JavaScript Doors
+
+ViSiON/3 can run Synchronet BBS JavaScript door games natively using a built-in JS engine. No Synchronet installation is required — only the game files and Synchronet's JS library directories. Set `"type": "synchronet_js"` in the door configuration.
+
+See [Synchronet JS Doors](synchronet-js-doors.md) for full setup instructions.
+
 ## Running DOS Doors
 
 DOS doors are supported on Linux x86/x86-64 via dosemu2. ViSiON/3 uses dosemu2's terminal translator (`$_term_color`, `$_term_esc_char`) to convert DOS INT 10h screen output to ANSI escape sequences, which are bridged to the user's SSH session via a PTY.

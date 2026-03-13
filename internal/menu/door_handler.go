@@ -840,6 +840,9 @@ func executeDoor(ctx *DoorCtx) error {
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
 
+	if ctx.Config.Type == "synchronet_js" {
+		return executeSyncJSDoor(ctx)
+	}
 	if ctx.Config.IsDOS {
 		return executeDOSDoor(ctx)
 	}

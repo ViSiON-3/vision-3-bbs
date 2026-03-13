@@ -600,6 +600,12 @@ type DoorConfig struct {
 	CleanupCommand      string            `json:"cleanup_command,omitempty"`       // Command to run after door exits (optional)
 	CleanupArgs         []string          `json:"cleanup_args,omitempty"`          // Arguments for cleanup command (supports placeholders)
 	EnvironmentVars     map[string]string `json:"environment_variables,omitempty"` // Additional environment variables (optional)
+	// Synchronet JS door fields
+	Type         string   `json:"type,omitempty"`          // "synchronet_js" for JS doors (empty = legacy native/DOS)
+	Script       string   `json:"script,omitempty"`        // Main JS file to execute (relative to working_directory)
+	LibraryPaths []string `json:"library_paths,omitempty"` // Search paths for load()/require()
+	Args         []string `json:"args,omitempty"`          // Script arguments (available as argv in JS)
+	ExecDir      string   `json:"exec_dir,omitempty"`      // Synchronet exec directory (system.exec_dir)
 	// DOS door fields
 	IsDOS        bool   `json:"is_dos,omitempty"`        // true = DOS door launched via a DOS emulator
 	DriveCPath   string `json:"drive_c_path,omitempty"`  // Path to drive_c directory (default: ~/.dosemu/drive_c)

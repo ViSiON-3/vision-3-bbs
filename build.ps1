@@ -3,6 +3,9 @@
 # Compiles all ViSiON/3 binaries. Run .\setup.ps1 first for initial installation.
 #
 # Usage: .\build.ps1
+#
+# If running scripts is disabled on your system, use build.bat instead, or run:
+#   powershell -ExecutionPolicy Bypass -File build.ps1
 
 $ErrorActionPreference = "Stop"
 

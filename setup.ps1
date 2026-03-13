@@ -1,5 +1,8 @@
 # ViSiON/3 BBS Setup Script (Windows)
 # Requires PowerShell 5.1 or later.
+#
+# If running scripts is disabled on your system, use setup.bat instead, or run:
+#   powershell -ExecutionPolicy Bypass -File setup.ps1
 
 $ErrorActionPreference = "Stop"
 
