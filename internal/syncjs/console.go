@@ -140,7 +140,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		for {
 			key, err := eng.readKey(0)
 			if err != nil {
-				return vm.ToValue("")
+				panic(vm.NewGoError(err))
 			}
 			upper := strings.ToUpper(key)
 			if validKeys == "" || strings.Contains(validKeys, upper) {
@@ -248,12 +248,12 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 
 // Input mode flags matching Synchronet's sbbsdefs.js K_* constants.
 const (
-	kUpper    = 1 << 0  // Convert to uppercase
-	kNumber   = 1 << 2  // Allow numbers only
-	kNoEcho   = 1 << 4  // Don't echo input
-	kNoCRLF   = 1 << 5  // Don't add CRLF after input
-	kEdit     = 1 << 6  // Edit existing string
-	kTrim     = 1 << 8  // Trim whitespace
+	kUpper  = 1 << 0 // Convert to uppercase
+	kNumber = 1 << 2 // Allow numbers only
+	kNoEcho = 1 << 4 // Don't echo input
+	kNoCRLF = 1 << 5 // Don't add CRLF after input
+	kEdit   = 1 << 6 // Edit existing string
+	kTrim   = 1 << 8 // Trim whitespace
 )
 
 // argsToString concatenates all JS function arguments into a single string.

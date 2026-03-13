@@ -4,6 +4,7 @@ package menu
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -82,7 +83,7 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 	runErr := eng.Run(cfg.Script)
 
 	if runErr != nil {
-		if runErr == syncjs.ErrDisconnect {
+		if errors.Is(runErr, syncjs.ErrDisconnect) {
 			log.Printf("INFO: Node %d: User disconnected from JS door '%s'",
 				ctx.NodeNumber, ctx.DoorName)
 			return nil

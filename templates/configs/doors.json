@@ -20,5 +20,17 @@
         "dos_emulator": "dosemu",
         "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
         "dosemu_config": ""
+    },
+        {
+        "name": "LORDJS",
+        "type": "synchronet_js",
+        "script": "lord.js",
+        "working_directory": "/home/bbs/git/sbbs/xtrn/lord",
+        "exec_dir": "/home/bbs/git/sbbs/exec/",
+        "library_paths": [
+            "/home/bbs/git/sbbs/exec/load",
+            "/home/bbs/git/sbbs/exec/load/dorkit"
+        ],
+        "single_instance": true
     }
 ]
