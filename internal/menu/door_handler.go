@@ -78,10 +78,14 @@ func writeBatchFile(ctx *DoorCtx, batchPath string) error {
 		}
 		// In DOS, running a .BAT without CALL replaces the current batch
 		// context — execution never returns, so exitemu would never run.
-		// Prepend CALL for .BAT commands so control returns to EXTERNAL.BAT.
+		// Prepend CALL when the first token (the executable) ends with .BAT,
+		// so control returns to EXTERNAL.BAT after the called batch finishes.
 		trimUpper := strings.ToUpper(strings.TrimSpace(processed))
-		if !strings.HasPrefix(trimUpper, "CALL ") && strings.Contains(trimUpper, ".BAT") {
-			processed = "CALL " + processed
+		if !strings.HasPrefix(trimUpper, "CALL ") {
+			firstToken := strings.Fields(trimUpper)
+			if len(firstToken) > 0 && strings.HasSuffix(firstToken[0], ".BAT") {
+				processed = "CALL " + processed
+			}
 		}
 		b.WriteString(processed + crlf)
 	}
@@ -275,9 +279,10 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	// Two modes depending on whether a FOSSIL driver is configured:
 	//
 	// FOSSIL mode: $_com1="virtual" maps COM1 to the PTY. The door's output
-	// flows through the FOSSIL driver → COM1 → PTY. Video falls back to
-	// Video_none, so no DOS boot text appears on the PTY. Pass through all
-	// PTY data directly (no gating needed).
+	// flows through the FOSSIL driver → COM1 → PTY. $_video="none" suppresses
+	// DOS screen output, but dosemu still writes plain-ASCII boot text directly
+	// to the PTY. Gate on the first ESC (0x1B) byte: boot text is plain ASCII,
+	// while door output (via FOSSIL) contains ANSI escape sequences.
 	//
 	// Terminal mode: -t translates DOS screen writes (INT 10h) to ANSI on
 	// the PTY. The output goroutine buffers until it detects ESC[2J (clear

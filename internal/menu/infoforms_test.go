@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/stlalpha/vision3/internal/user"
 )
 
 func TestParseTemplateFile(t *testing.T) {
@@ -215,5 +218,47 @@ func TestExpandInfoformCodes(t *testing.T) {
 	// Should not contain the literal |VN anymore
 	if result == "" {
 		t.Error("result should not be empty")
+	}
+}
+
+func TestRunInfoFormRequired_ValidatedUserSkipped(t *testing.T) {
+	// Validated users should not be forced through required infoforms.
+	// We pass a minimal executor with an invalid RootConfigPath — if the
+	// validated check is working, we return before ever loading config.
+	e := &MenuExecutor{
+		RootConfigPath: "/nonexistent/path",
+	}
+	validatedUser := &user.User{
+		ID:        1,
+		Handle:    "TestUser",
+		Validated: true,
+	}
+
+	result, nextCmd, err := runInfoFormRequired(e, nil, nil, nil, validatedUser, 1, time.Time{}, "", 0, 80, 25)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if nextCmd != "" {
+		t.Errorf("expected empty nextCmd, got %q", nextCmd)
+	}
+	if result != validatedUser {
+		t.Error("expected same user returned")
+	}
+}
+
+func TestRunInfoFormRequired_NilUserSkipped(t *testing.T) {
+	e := &MenuExecutor{
+		RootConfigPath: "/nonexistent/path",
+	}
+
+	result, nextCmd, err := runInfoFormRequired(e, nil, nil, nil, nil, 1, time.Time{}, "", 0, 80, 25)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if nextCmd != "" {
+		t.Errorf("expected empty nextCmd, got %q", nextCmd)
+	}
+	if result != nil {
+		t.Error("expected nil user returned")
 	}
 }
