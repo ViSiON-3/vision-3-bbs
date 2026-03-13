@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -73,13 +74,19 @@ func doorCommandsSet(d *doorEditProxy, val string) {
 }
 
 // envMapToCSV serializes a map[string]string as "KEY=VALUE, KEY2=VALUE2" for display.
+// Keys are sorted for stable output.
 func envMapToCSV(m map[string]string) string {
 	if len(m) == 0 {
 		return ""
 	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 	pairs := make([]string, 0, len(m))
-	for k, v := range m {
-		pairs = append(pairs, k+"="+v)
+	for _, k := range keys {
+		pairs = append(pairs, k+"="+m[k])
 	}
 	return strings.Join(pairs, ", ")
 }

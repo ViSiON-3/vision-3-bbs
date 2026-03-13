@@ -211,7 +211,7 @@ type StringsConfig struct {
 	FileAreaNotFound       string `json:"fileAreaNotFound"`
 	SaveUserError          string `json:"saveUserError"`
 
-	QuotePrefix            string `json:"QuotePrefix"`
+	QuotePrefix string `json:"QuotePrefix"`
 
 	// Chat strings (V3-specific)
 	ChatHeader        string `json:"chatHeader"`
@@ -282,7 +282,7 @@ type StringsConfig struct {
 	CfgViewScreenWidth     string `json:"cfgViewScreenWidth"`
 	CfgViewScreenHeight    string `json:"cfgViewScreenHeight"`
 	CfgViewTermType        string `json:"cfgViewTermType"`
-CfgViewHotKeys         string `json:"cfgViewHotKeys"`
+	CfgViewHotKeys         string `json:"cfgViewHotKeys"`
 	CfgViewMorePrompts     string `json:"cfgViewMorePrompts"`
 	CfgViewMsgHeader       string `json:"cfgViewMsgHeader"`
 	CfgViewCustomPrompt    string `json:"cfgViewCustomPrompt"`
@@ -371,11 +371,11 @@ CfgViewHotKeys         string `json:"cfgViewHotKeys"`
 	FileOpenError      string `json:"fileOpenError"`
 
 	// File search strings
-	SearchFilesPrompt   string `json:"searchFilesPrompt"`
-	SearchFilesMinChars string `json:"searchFilesMinChars"`
-	SearchNoResults     string `json:"searchNoResults"`
-	SearchResultsHeader string `json:"searchResultsHeader"`
-	SearchResultFormat  string `json:"searchResultFormat"`
+	SearchFilesPrompt    string `json:"searchFilesPrompt"`
+	SearchFilesMinChars  string `json:"searchFilesMinChars"`
+	SearchNoResults      string `json:"searchNoResults"`
+	SearchResultsHeader  string `json:"searchResultsHeader"`
+	SearchResultFormat   string `json:"searchResultFormat"`
 	SearchResultsSummary string `json:"searchResultsSummary"`
 
 	// File info strings
@@ -601,10 +601,10 @@ type DoorConfig struct {
 	CleanupArgs         []string          `json:"cleanup_args,omitempty"`          // Arguments for cleanup command (supports placeholders)
 	EnvironmentVars     map[string]string `json:"environment_variables,omitempty"` // Additional environment variables (optional)
 	// DOS door fields
-	IsDOS       bool   `json:"is_dos,omitempty"`       // true = DOS door launched via a DOS emulator
-	DriveCPath  string `json:"drive_c_path,omitempty"` // Path to drive_c directory (default: ~/.dosemu/drive_c)
-	DOSEmulator string   `json:"dos_emulator,omitempty"`  // Emulator to use: "auto" (default) or "dosemu"
-	FossilDriver string   `json:"fossil_driver,omitempty"` // DOS FOSSIL driver command (e.g. "C:\\UTILS\\X00.EXE eliminate")
+	IsDOS        bool   `json:"is_dos,omitempty"`        // true = DOS door launched via a DOS emulator
+	DriveCPath   string `json:"drive_c_path,omitempty"`  // Path to drive_c directory (default: ~/.dosemu/drive_c)
+	DOSEmulator  string `json:"dos_emulator,omitempty"`  // Emulator to use: "auto" (default) or "dosemu"
+	FossilDriver string `json:"fossil_driver,omitempty"` // DOS FOSSIL driver command (e.g. "C:\\UTILS\\X00.EXE eliminate")
 	// dosemu2-specific fields (Linux x86 only)
 	DosemuConfig string `json:"dosemu_config,omitempty"` // Path to custom .dosemurc (optional)
 }

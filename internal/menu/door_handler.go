@@ -61,7 +61,11 @@ func writeBatchFile(ctx *DoorCtx, batchPath string) error {
 
 	// Auto-cd to the door's working directory if configured
 	if ctx.Config.WorkingDirectory != "" {
-		b.WriteString("cd " + ctx.Config.WorkingDirectory + crlf)
+		// Switch drive letter first (e.g. "D:"), then cd with quotes for spaces
+		if len(ctx.Config.WorkingDirectory) >= 2 && ctx.Config.WorkingDirectory[1] == ':' {
+			b.WriteString(ctx.Config.WorkingDirectory[:2] + crlf)
+		}
+		b.WriteString(fmt.Sprintf("cd \"%s\"", ctx.Config.WorkingDirectory) + crlf)
 	}
 
 	for _, cmd := range ctx.Config.Commands {
@@ -376,14 +380,16 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	ctx.Subs["{NODEDIR}"] = dropfileDir
 
 	// Extract command and args from Commands slice (native: [0]=executable, [1:]=args)
-	doorCommand := ""
-	var doorArgs []string
-	if len(doorConfig.Commands) > 0 {
-		doorCommand = doorConfig.Commands[0]
-		doorArgs = doorConfig.Commands[1:]
+	if len(doorConfig.Commands) == 0 || doorConfig.Commands[0] == "" {
+		return fmt.Errorf("door %q has no command configured", ctx.DoorName)
 	}
+	doorCommand := doorConfig.Commands[0]
+	doorArgs := doorConfig.Commands[1:]
 
-	// Substitute in Arguments (after dropfile generation so {DROPFILE} etc. are available)
+	// Substitute placeholders in command and arguments
+	for key, val := range ctx.Subs {
+		doorCommand = strings.ReplaceAll(doorCommand, key, val)
+	}
 	substitutedArgs := make([]string, len(doorArgs))
 	for i, arg := range doorArgs {
 		newArg := arg

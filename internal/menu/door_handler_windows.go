@@ -93,14 +93,16 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	ctx.Subs["{NODEDIR}"] = dropfileDir
 
 	// Extract command and args from Commands slice (native: [0]=executable, [1:]=args)
-	doorCommand := ""
-	var doorArgs []string
-	if len(doorConfig.Commands) > 0 {
-		doorCommand = doorConfig.Commands[0]
-		doorArgs = doorConfig.Commands[1:]
+	if len(doorConfig.Commands) == 0 || doorConfig.Commands[0] == "" {
+		return fmt.Errorf("door %q has no command configured", ctx.DoorName)
 	}
+	doorCommand := doorConfig.Commands[0]
+	doorArgs := doorConfig.Commands[1:]
 
-	// Substitute in Arguments
+	// Substitute placeholders in command and arguments
+	for key, val := range ctx.Subs {
+		doorCommand = strings.ReplaceAll(doorCommand, key, val)
+	}
 	substitutedArgs := make([]string, len(doorArgs))
 	for i, arg := range doorArgs {
 		newArg := arg
