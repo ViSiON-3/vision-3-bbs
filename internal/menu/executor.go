@@ -532,6 +532,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			} else {
 				log.Printf("ERROR: Node %d: Door execution failed for user %s, door %s: %v", nodeNumber, currentUser.Handle, doorName, cmdErr)
 				doorErrorMessage(ctx, fmt.Sprintf("Error running external program '%s': %v", doorName, cmdErr))
+				time.Sleep(2 * time.Second)
 			}
 		} else {
 			log.Printf("INFO: Node %d: Door completed for user %s, door %s", nodeNumber, currentUser.Handle, doorName)
