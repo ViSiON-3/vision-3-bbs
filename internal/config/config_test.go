@@ -10,8 +10,8 @@ import (
 func TestLoadDoors_ValidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	doors := []DoorConfig{
-		{Name: "LORD", Command: "/usr/bin/lord", Args: []string{"-n", "{NODE}"}},
-		{Name: "BRE", Command: "/usr/bin/bre"},
+		{Name: "LORD", Commands: []string{"/usr/bin/lord", "-n", "{NODE}"}},
+		{Name: "BRE", Commands: []string{"/usr/bin/bre"}},
 	}
 	data, _ := json.Marshal(doors)
 	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
@@ -23,8 +23,8 @@ func TestLoadDoors_ValidFile(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 doors, got %d", len(result))
 	}
-	if result["LORD"].Command != "/usr/bin/lord" {
-		t.Errorf("expected LORD command /usr/bin/lord, got %s", result["LORD"].Command)
+	if len(result["LORD"].Commands) == 0 || result["LORD"].Commands[0] != "/usr/bin/lord" {
+		t.Errorf("expected LORD command /usr/bin/lord, got %v", result["LORD"].Commands)
 	}
 }
 
@@ -41,8 +41,8 @@ func TestLoadDoors_MissingFile(t *testing.T) {
 func TestLoadDoors_DuplicateNames(t *testing.T) {
 	tmpDir := t.TempDir()
 	doors := []DoorConfig{
-		{Name: "LORD", Command: "/usr/bin/lord"},
-		{Name: "LORD", Command: "/usr/bin/lord2"},
+		{Name: "LORD", Commands: []string{"/usr/bin/lord"}},
+		{Name: "LORD", Commands: []string{"/usr/bin/lord2"}},
 	}
 	data, _ := json.Marshal(doors)
 	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)

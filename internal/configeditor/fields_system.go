@@ -112,7 +112,7 @@ func sysFieldsRegistration(cfg *config.ServerConfig) []fieldDef {
 			Set: func(val string) error { cfg.SysOpName = val; return nil },
 		},
 		{
-			Label: "Timezone", Help: "IANA timezone (press Enter to select)", Type: ftLookup, Col: 3, Row: 3, Width: 30,
+			Label: "Timezone", Help: "IANA timezone", Type: ftLookup, Col: 3, Row: 3, Width: 30,
 			Get: func() string { return cfg.Timezone },
 			Set: func(val string) error { cfg.Timezone = val; return nil },
 			LookupItems: func() []LookupItem {
@@ -373,7 +373,7 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 			Set: func(val string) error { cfg.AllowNewUsers = ynToBool(val); return nil },
 		},
 		{
-			Label: "File List Mode", Help: "File listing style (press Enter to select)", Type: ftLookup, Col: 3, Row: 2, Width: 15,
+			Label: "File List Mode", Help: "File listing style", Type: ftLookup, Col: 3, Row: 2, Width: 15,
 			Get: func() string { return cfg.FileListingMode },
 			Set: func(val string) error { cfg.FileListingMode = val; return nil },
 			LookupItems: func() []LookupItem {

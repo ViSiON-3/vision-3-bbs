@@ -109,7 +109,7 @@ func (m *Model) fieldsEvent() []fieldDef {
 			Set: func(val string) error { e.RunAtStartup = ynToBool(val); return nil },
 		},
 		{
-			Label: "Run After", Help: "Run after this event completes (press Enter to select)", Type: ftLookup, Col: 3, Row: 8, Width: 20,
+			Label: "Run After", Help: "Run after this event completes", Type: ftLookup, Col: 3, Row: 8, Width: 20,
 			Get: func() string {
 				if e.RunAfter == "" {
 					return "(none)"

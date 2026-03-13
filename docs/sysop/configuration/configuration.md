@@ -160,9 +160,10 @@ Configures external door programs that can be launched from the BBS. The file co
 [
   {
     "name": "LORD",
-    "command": "",
-    "args": [],
-    "working_directory": "",
+    "commands": [
+      "START.BAT {NODE}"
+    ],
+    "working_directory": "C:\\DOORS\\LORD",
     "dropfile_type": "DOOR.SYS",
     "dropfile_location": "node",
     "io_mode": "",
@@ -174,12 +175,7 @@ Configures external door programs that can be launched from the BBS. The file co
     "cleanup_args": [],
     "environment_variables": {},
     "is_dos": true,
-    "dos_commands": [
-      "cd C:\\DOORS\\LORD",
-      "START.BAT {NODE}"
-    ],
     "drive_c_path": "drive_c",
-    "dropfile_dest": "C:\\DOORS\\LORD",
     "dos_emulator": "dosemu",
     "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
     "dosemu_config": ""
@@ -190,6 +186,8 @@ Configures external door programs that can be launched from the BBS. The file co
 ### Common Fields
 
 - `name` - Unique identifier used in `DOOR:NAME` menu commands
+- `commands` - Native: `[0]`=executable, `[1:]`=args. DOS: each entry is a batch command line
+- `working_directory` - Native: Linux directory to run the command in. DOS: DOS path to cd into before running commands
 - `dropfile_type` - Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or blank
 - `dropfile_location` - Where to write dropfile: `startup` (working dir) or `node` (per-node temp dir)
 - `min_access_level` - Minimum user access level (0 = no restriction)
@@ -198,9 +196,6 @@ Configures external door programs that can be launched from the BBS. The file co
 
 ### Native Door Fields
 
-- `command` - Path to the executable
-- `args` - Command-line arguments (supports placeholders)
-- `working_directory` - Directory to run the command in
 - `io_mode` - I/O handling: `STDIO` (default) or `SOCKET`
 - `requires_raw_terminal` - Allocate a PTY for raw terminal I/O
 - `use_shell` - Wrap command in `/bin/sh -c`
@@ -209,9 +204,7 @@ Configures external door programs that can be launched from the BBS. The file co
 ### DOS Door Fields
 
 - `is_dos` - Set to `true` for DOS doors launched via dosemu2
-- `dos_commands` - DOS commands written to EXTERNAL.BAT (supports placeholders)
 - `drive_c_path` - Host path mounted as DOS C: drive (relative to BBS root, or absolute)
-- `dropfile_dest` - DOS path to auto-copy dropfile to (e.g., `C:\DOORS\LORD`)
 - `dos_emulator` - Emulator: `auto` (default) or `dosemu`
 - `fossil_driver` - FOSSIL driver command (e.g., `C:\UTILS\X00.EXE eliminate`)
 - `dosemu_config` - Custom `.dosemurc` config file path

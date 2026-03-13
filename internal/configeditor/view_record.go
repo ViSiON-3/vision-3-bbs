@@ -327,9 +327,12 @@ func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW int) stri
 	}
 	if m.editField >= 0 && m.editField < len(fields) && fields[m.editField].Help != "" {
 		helpText := fields[m.editField].Help
-		// Add toggle hint for Y/N fields
-		if fields[m.editField].Type == ftYesNo {
+		// Add interaction hints
+		switch fields[m.editField].Type {
+		case ftYesNo:
 			helpText += " (Space toggles)"
+		case ftLookup:
+			helpText += " (Enter to select)"
 		}
 		return bgFillStyle.Render(strings.Repeat("░", padL)) +
 			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
