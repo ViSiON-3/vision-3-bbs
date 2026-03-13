@@ -10,7 +10,7 @@
 * [Config Editor](configuration/configuration.md#configuration-editor-tui)
 * [General Settings](configuration/configuration.md#configjson)
 * [Strings](configuration/configuration.md#stringsjson)
-* [Doors](configuration/configuration.md#doorsjson)
+* [Doors Config](configuration/configuration.md#doorsjson)
 * [Archivers](configuration/configuration.md#archiversjson)
 * [File Areas](configuration/configuration.md#file_areasjson)
 * [Message Areas](configuration/configuration.md#message_areasjson)
