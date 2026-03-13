@@ -817,6 +817,12 @@ func runInfoFormRequired(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 		return currentUser, "", nil
 	}
 
+	// Only force required infoforms on new (unvalidated) users.
+	// Existing validated users should not be prompted.
+	if currentUser.Validated {
+		return currentUser, "", nil
+	}
+
 	infoformsMu.Lock()
 	cfg, err := loadInfoFormConfig(e.RootConfigPath)
 	infoformsMu.Unlock()
