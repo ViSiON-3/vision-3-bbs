@@ -1,11 +1,28 @@
 [
     {
         "name": "LORD",
-        "command": "lord.exe",
-        "args": ["/N{NODE}", "/P{PORT}", "/T{TIMELEFT}"],
-        "working_directory": "/path/to/doors/lord",
+        "command": "",
+        "args": [],
+        "working_directory": "",
         "dropfile_type": "DOOR.SYS",
-        "io_mode": "STDIO",
-        "requires_raw_terminal": true
+        "dropfile_location": "node",
+        "io_mode": "",
+        "requires_raw_terminal": false,
+        "use_shell": false,
+        "single_instance": true,
+        "min_access_level": 0,
+        "cleanup_command": "",
+        "cleanup_args": [],
+        "environment_variables": {},
+        "is_dos": true,
+        "dos_commands": [
+            "cd C:\\DOORS\\LORD",
+            "START.BAT {NODE}"
+        ],
+        "drive_c_path": "drive_c",
+        "dropfile_dest": "C:\\DOORS\\LORD",
+        "dos_emulator": "dosemu",
+        "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
+        "dosemu_config": ""
     }
 ]

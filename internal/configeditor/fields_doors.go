@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/stlalpha/vision3/internal/config"
@@ -125,6 +126,78 @@ func (m *Model) fieldsDoor() []fieldDef {
 		Set: func(val string) error { dPtr.DropfileType = val; save(); return nil },
 	})
 
+	row++
+	fields = append(fields, fieldDef{
+		Label: "Dropfile Location", Help: "Where to write dropfile: startup (working dir) or node (per-node temp dir)", Type: ftString, Col: 3, Row: row, Width: 10,
+		Get: func() string { return dPtr.DropfileLocation },
+		Set: func(val string) error {
+			val = strings.ToLower(strings.TrimSpace(val))
+			switch val {
+			case "", "startup", "node":
+				dPtr.DropfileLocation = val
+				save()
+				return nil
+			default:
+				return fmt.Errorf("invalid location %q: must be blank, startup, or node", val)
+			}
+		},
+	})
+
+	// Common fields for all door types
+	row++
+	fields = append(fields, fieldDef{
+		Label: "Min Access Level", Help: "Minimum user access level (0=no restriction)", Type: ftString, Col: 3, Row: row, Width: 5,
+		Get: func() string { return strconv.Itoa(dPtr.MinAccessLevel) },
+		Set: func(val string) error {
+			v, err := strconv.Atoi(strings.TrimSpace(val))
+			if err != nil || v < 0 || v > 255 {
+				return fmt.Errorf("access level must be 0-255")
+			}
+			dPtr.MinAccessLevel = v
+			save()
+			return nil
+		},
+	})
+
+	row++
+	fields = append(fields, fieldDef{
+		Label: "Single Instance", Help: "Only allow one node to run this door at a time", Type: ftYesNo, Col: 3, Row: row, Width: 1,
+		Get: func() string { return boolToYN(dPtr.SingleInstance) },
+		Set: func(val string) error { dPtr.SingleInstance = ynToBool(val); save(); return nil },
+	})
+
+	row++
+	fields = append(fields, fieldDef{
+		Label: "Cleanup Command", Help: "Command to run after door exits (blank=none)", Type: ftString, Col: 3, Row: row, Width: 45,
+		Get: func() string {
+			if dPtr.CleanupCommand == "" {
+				return ""
+			}
+			if len(dPtr.CleanupArgs) == 0 {
+				return dPtr.CleanupCommand
+			}
+			return dPtr.CleanupCommand + " " + sliceToCSV(dPtr.CleanupArgs)
+		},
+		Set: func(val string) error {
+			val = strings.TrimSpace(val)
+			if val == "" {
+				dPtr.CleanupCommand = ""
+				dPtr.CleanupArgs = nil
+				save()
+				return nil
+			}
+			parts := strings.SplitN(val, " ", 2)
+			dPtr.CleanupCommand = parts[0]
+			if len(parts) > 1 {
+				dPtr.CleanupArgs = csvToSlice(parts[1])
+			} else {
+				dPtr.CleanupArgs = nil
+			}
+			save()
+			return nil
+		},
+	})
+
 	if dPtr.IsDOS {
 		// DOS-specific fields
 		row++
@@ -151,9 +224,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "DOSemu Path", Help: "Path to dosemu binary (blank=/usr/bin/dosemu)", Type: ftString, Col: 3, Row: row, Width: 45,
-			Get: func() string { return dPtr.DosemuPath },
-			Set: func(val string) error { dPtr.DosemuPath = val; save(); return nil },
+			Label: "Dropfile Dest", Help: "DOS path to auto-copy dropfile before running (e.g. C:\\DOORS\\LORD)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.DropfileDest },
+			Set: func(val string) error { dPtr.DropfileDest = val; save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "FOSSIL Driver", Help: "DOS FOSSIL driver command (e.g. C:\\UTILS\\X00.EXE eliminate)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.FossilDriver },
+			Set: func(val string) error { dPtr.FossilDriver = val; save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{
@@ -171,15 +250,31 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "I/O Mode", Help: "I/O handling mode (STDIO)", Type: ftString, Col: 3, Row: row, Width: 15,
+			Label: "I/O Mode", Help: "I/O handling: STDIO or SOCKET (pass FD to door)", Type: ftString, Col: 3, Row: row, Width: 15,
 			Get: func() string { return dPtr.IOMode },
-			Set: func(val string) error { dPtr.IOMode = val; save(); return nil },
+			Set: func(val string) error {
+				v := strings.ToUpper(strings.TrimSpace(val))
+				switch v {
+				case "", "STDIO", "SOCKET":
+					dPtr.IOMode = v
+					save()
+					return nil
+				default:
+					return fmt.Errorf("invalid I/O mode %q: must be blank, STDIO, or SOCKET", val)
+				}
+			},
 		})
 		row++
 		fields = append(fields, fieldDef{
 			Label: "Raw Terminal", Help: "Allocate PTY for raw terminal I/O", Type: ftYesNo, Col: 3, Row: row, Width: 1,
 			Get: func() string { return boolToYN(dPtr.RequiresRawTerminal) },
 			Set: func(val string) error { dPtr.RequiresRawTerminal = ynToBool(val); save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Use Shell", Help: "Wrap command in /bin/sh -c (Linux) or cmd /c (Windows)", Type: ftYesNo, Col: 3, Row: row, Width: 1,
+			Get: func() string { return boolToYN(dPtr.UseShell) },
+			Set: func(val string) error { dPtr.UseShell = ynToBool(val); save(); return nil },
 		})
 	}
 

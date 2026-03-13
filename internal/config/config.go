@@ -423,6 +423,8 @@ CfgViewHotKeys         string `json:"cfgViewHotKeys"`
 	DoorNoneConfigured    string `json:"doorNoneConfigured"`
 	DoorTemplateError     string `json:"doorTemplateError"`
 	DoorInfoLoginRequired string `json:"doorInfoLoginRequired"`
+	DoorAccessDenied      string `json:"doorAccessDenied"`
+	DoorBusyFormat        string `json:"doorBusyFormat"`
 
 	// Matrix strings (V3-specific)
 	MatrixDisconnecting       string `json:"matrixDisconnecting"`
@@ -577,6 +579,10 @@ func applyStringDefaults(c *StringsConfig) {
 	d(&c.CfgFileColumnsHeader, "\r\n|15File Listing Columns|07\r\n|08────────────────────────────────────────|07\r\n")
 	d(&c.CfgFileColumnsToggle, "  |15[%s]|07 %-12s : %s\r\n")
 	d(&c.CfgFileColumnsSaved, "\r\n|10Column preferences saved.|07\r\n")
+
+	// Door access control
+	d(&c.DoorAccessDenied, "\r\n|14Access denied to door: |11%s|07\r\n")
+	d(&c.DoorBusyFormat, "\r\n|14Door is currently in use: |11%s|07\r\n")
 }
 
 // DoorConfig defines the configuration for a single external door program.
@@ -586,16 +592,23 @@ type DoorConfig struct {
 	Args                []string          `json:"args"`                            // Command-line arguments (can include placeholders)
 	WorkingDirectory    string            `json:"working_directory,omitempty"`     // Directory to run the command in (optional)
 	DropfileType        string            `json:"dropfile_type,omitempty"`         // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "NONE") (optional, defaults to NONE)
-	IOMode              string            `json:"io_mode,omitempty"`               // I/O handling ("STDIO", "FOSSIL" - future) (optional, defaults to STDIO)
+	DropfileLocation    string            `json:"dropfile_location,omitempty"`     // Where to write dropfile: "startup" (working dir, default) or "node" (per-node temp dir)
+	IOMode              string            `json:"io_mode,omitempty"`               // I/O handling ("STDIO", "SOCKET") (optional, defaults to STDIO)
 	RequiresRawTerminal bool              `json:"requires_raw_terminal,omitempty"` // Whether the BBS should attempt to put the terminal in raw mode (optional, defaults to false)
+	UseShell            bool              `json:"use_shell,omitempty"`             // Wrap command in /bin/sh -c (Linux) or cmd /c (Windows)
+	SingleInstance      bool              `json:"single_instance,omitempty"`       // Only allow one node to run this door at a time
+	MinAccessLevel      int               `json:"min_access_level,omitempty"`      // Minimum user access level required (0 = no restriction)
+	CleanupCommand      string            `json:"cleanup_command,omitempty"`       // Command to run after door exits (optional)
+	CleanupArgs         []string          `json:"cleanup_args,omitempty"`          // Arguments for cleanup command (supports placeholders)
 	EnvironmentVars     map[string]string `json:"environment_variables,omitempty"` // Additional environment variables (optional)
 	// DOS door fields
 	IsDOS        bool     `json:"is_dos,omitempty"`        // true = DOS door launched via a DOS emulator
 	DOSCommands  []string `json:"dos_commands,omitempty"`  // DOS commands to run (e.g. ["cd c:\\doors\\lord\\", "lord /n{NODE}"])
 	DriveCPath   string   `json:"drive_c_path,omitempty"`  // Path to drive_c directory (default: ~/.dosemu/drive_c)
+	DropfileDest string   `json:"dropfile_dest,omitempty"` // DOS path to auto-copy dropfile before running (e.g. "C:\\DOORS\\LORD")
 	DOSEmulator  string   `json:"dos_emulator,omitempty"`  // Emulator to use: "auto" (default) or "dosemu"
+	FossilDriver string   `json:"fossil_driver,omitempty"` // DOS FOSSIL driver command (e.g. "C:\\UTILS\\X00.EXE eliminate")
 	// dosemu2-specific fields (Linux x86 only)
-	DosemuPath   string `json:"dosemu_path,omitempty"`   // Path to dosemu binary (default: /usr/bin/dosemu)
 	DosemuConfig string `json:"dosemu_config,omitempty"` // Path to custom .dosemurc (optional)
 }
 
@@ -856,6 +869,9 @@ type ServerConfig struct {
 	NUVKill     bool `json:"nuvKill"`     // auto-delete user when no threshold reached
 	NUVLevel    int  `json:"nuvLevel"`    // access level assigned on NUV auto-validation
 	NUVForm     int  `json:"nuvForm"`     // infoform number (1-5) to display during NUV voting; 0 = disabled
+
+	// DOS emulation — system-wide dosemu2 settings for DOS door games.
+	DosemuPath string `json:"dosemuPath,omitempty"` // Path to dosemu2 binary (default: /usr/libexec/dosemu2/dosemu2.bin)
 }
 
 // EventConfig defines a scheduled event configuration

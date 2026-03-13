@@ -486,6 +486,23 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			return nil, "", nil
 		}
 
+		// Check per-door access level
+		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
+			log.Printf("WARN: Node %d: User %s (level %d) denied access to door %s (requires %d)",
+				nodeNumber, currentUser.Handle, currentUser.AccessLevel, doorName, doorConfig.MinAccessLevel)
+			errFmt := e.LoadedStrings.DoorAccessDenied
+			if strings.TrimSpace(errFmt) == "" {
+				errFmt = "\r\n|14Access denied to door: |11%s|07\r\n"
+			}
+			errMsg := fmt.Sprintf(errFmt, doorName)
+			wErr := terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+			if wErr != nil {
+				log.Printf("ERROR: Failed writing door access denied message: %v", wErr)
+			}
+			time.Sleep(1 * time.Second)
+			return nil, "", nil
+		}
+
 		// Build door context and execute
 		// Use passed termWidth/termHeight (from user preferences) instead of reading from User struct
 		ctx := buildDoorCtx(e, s, terminal,
@@ -503,8 +520,19 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		_ = getSessionIH(s)
 
 		if cmdErr != nil {
-			log.Printf("ERROR: Node %d: Door execution failed for user %s, door %s: %v", nodeNumber, currentUser.Handle, doorName, cmdErr)
-			doorErrorMessage(ctx, fmt.Sprintf("Error running external program '%s': %v", doorName, cmdErr))
+			if errors.Is(cmdErr, ErrDoorBusy) {
+				log.Printf("INFO: Node %d: Door %s is busy for user %s", nodeNumber, doorName, currentUser.Handle)
+				busyFmt := e.LoadedStrings.DoorBusyFormat
+				if strings.TrimSpace(busyFmt) == "" {
+					busyFmt = "\r\n|14Door is currently in use: |11%s|07\r\n"
+				}
+				busyMsg := fmt.Sprintf(busyFmt, doorName)
+				terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
+				time.Sleep(1 * time.Second)
+			} else {
+				log.Printf("ERROR: Node %d: Door execution failed for user %s, door %s: %v", nodeNumber, currentUser.Handle, doorName, cmdErr)
+				doorErrorMessage(ctx, fmt.Sprintf("Error running external program '%s': %v", doorName, cmdErr))
+			}
 		} else {
 			log.Printf("INFO: Node %d: Door completed for user %s, door %s", nodeNumber, currentUser.Handle, doorName)
 		}

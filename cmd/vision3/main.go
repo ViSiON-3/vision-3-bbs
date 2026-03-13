@@ -1768,15 +1768,6 @@ func main() {
 		log.Printf("INFO: Event scheduler disabled")
 	}
 
-	// Host key path for libssh
-	hostKeyPath := filepath.Join(rootConfigPath, "ssh_host_rsa_key")
-
-	// Verify host key exists
-	if _, err := os.Stat(hostKeyPath); err != nil {
-		log.Fatalf("FATAL: Host key not found at %s: %v", hostKeyPath, err)
-	}
-	log.Printf("INFO: Host key found at %s", hostKeyPath)
-
 	// Ensure at least one protocol is enabled
 	if !serverConfig.SSHEnabled && !serverConfig.TelnetEnabled {
 		log.Fatalf("FATAL: Neither SSH nor Telnet is enabled in config. Enable at least one protocol.")
@@ -1784,6 +1775,12 @@ func main() {
 
 	// Start SSH server if enabled
 	if serverConfig.SSHEnabled {
+		hostKeyPath := filepath.Join(rootConfigPath, "ssh_host_rsa_key")
+		if _, err := os.Stat(hostKeyPath); err != nil {
+			log.Fatalf("FATAL: Host key not found at %s: %v", hostKeyPath, err)
+		}
+		log.Printf("INFO: Host key found at %s", hostKeyPath)
+
 		cleanup, err := startSSHServer(
 			hostKeyPath,
 			serverConfig.SSHHost,

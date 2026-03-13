@@ -92,6 +92,8 @@ func (m *Model) buildSysFields(screen int) []fieldDef {
 		return sysFieldsIPLists(cfg)
 	case 6:
 		return sysFieldsNUV(cfg)
+	case 7:
+		return sysFieldsDOS(cfg)
 	}
 	return nil
 }
@@ -494,6 +496,17 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 				cfg.NUVForm = n
 				return nil
 			},
+		},
+	}
+}
+
+// sysFieldsDOS returns fields for DOS Emulation sub-screen.
+func sysFieldsDOS(cfg *config.ServerConfig) []fieldDef {
+	return []fieldDef{
+		{
+			Label: "DOSemu Path", Help: "Path to dosemu2 binary (blank=auto-detect)", Type: ftString, Col: 3, Row: 1, Width: 45,
+			Get: func() string { return cfg.DosemuPath },
+			Set: func(val string) error { cfg.DosemuPath = val; return nil },
 		},
 	}
 }

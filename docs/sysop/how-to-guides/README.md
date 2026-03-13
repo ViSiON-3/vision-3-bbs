@@ -2,4 +2,4 @@
 
 Step-by-step guides for common sysop tasks.
 
-> Guides will be added here as they are written.
+- [Keeping Binaries Updated](keeping-binaries-updated.md) — Track development builds using symlinks so your BBS always runs the latest code
