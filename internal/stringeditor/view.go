@@ -362,19 +362,20 @@ func (m Model) overlayDialog(background string, title string) string {
 
 	dialogLines := []string{border, titleLine, emptyLine, buttonLine, borderBot}
 
-	// Overlay dialog on background
+	// Overlay dialog on background, padding each line to full terminal width
 	for i, dl := range dialogLines {
 		row := startRow + i
 		if row >= 0 && row < len(lines) {
 			line := lines[row]
-			// Replace the portion of the line with the dialog
-			// This is approximate since lines contain ANSI codes
-			runeLen := visualLen(line)
-			if startCol+dialogW <= runeLen {
-				lines[row] = truncateVisual(line, startCol) + dl + skipVisual(line, startCol+dialogW)
-			} else {
-				lines[row] = truncateVisual(line, startCol) + dl
+			// Pad or truncate left side to startCol so all rows align
+			left := padToCol(line, startCol)
+			right := skipVisual(line, startCol+dialogW)
+			composed := left + dl + right
+			// Pad to full terminal width so no gap appears on wide terminals
+			if vis := visualLen(composed); vis < m.width {
+				composed += strings.Repeat(" ", m.width-vis)
 			}
+			lines[row] = composed
 		}
 	}
 
@@ -411,6 +412,15 @@ func visualLen(s string) int {
 	return count
 }
 
+// padToCol truncates or pads a line to reach exactly n visible columns.
+func padToCol(s string, n int) string {
+	vis := visualLen(s)
+	if vis >= n {
+		return truncateVisual(s, n)
+	}
+	return s + strings.Repeat(" ", n-vis)
+}
+
 // truncateVisual returns the first n visible characters (preserving ANSI codes).
 func truncateVisual(s string, n int) string {
 	var b strings.Builder
@@ -436,23 +446,31 @@ func truncateVisual(s string, n int) string {
 	return b.String()
 }
 
-// skipVisual skips the first n visible characters and returns the rest.
+// skipVisual skips the first n visible characters and returns the rest,
+// replaying the last active ANSI escape sequence so styling is preserved.
 func skipVisual(s string, n int) string {
+	var lastESC strings.Builder
+	var curESC strings.Builder
 	inEsc := false
 	count := 0
 	for i, r := range s {
-		if count >= n && !inEsc {
-			return s[i:]
-		}
 		if r == '\x1b' {
 			inEsc = true
+			curESC.Reset()
+			curESC.WriteRune(r)
 			continue
 		}
 		if inEsc {
+			curESC.WriteRune(r)
 			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
 				inEsc = false
+				lastESC.Reset()
+				lastESC.WriteString(curESC.String())
 			}
 			continue
+		}
+		if count >= n {
+			return lastESC.String() + s[i:]
 		}
 		count++
 	}

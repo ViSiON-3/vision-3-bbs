@@ -2,6 +2,7 @@ package usereditor
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/stlalpha/vision3/internal/config"
 	"github.com/stlalpha/vision3/internal/user"
 )
 
@@ -24,30 +26,37 @@ const (
 type editorMode int
 
 const (
-	modeList          editorMode = iota // Main list browser
-	modeEdit                           // Per-user field editor
-	modeEditField                      // Actively editing a field value
-	modeSearch                         // Search for user by handle
-	modeDeleteConfirm                  // Confirm single user delete
-	modeMassDelete                     // Confirm mass delete of tagged
-	modeValidate                       // Confirm auto-validate
-	modeMassValidate                   // Confirm mass validate
-	modeHelp                           // Help screen overlay
-	modeFileChanged                    // File modified externally warning
-	modeExitConfirm                    // Unsaved changes exit confirm
-	modePasswordEntry                  // Password entry for reset
-	modeSaveConfirm                    // Confirm save before exit
+	modeList            editorMode = iota // Main list browser
+	modeEdit                              // Per-user field editor
+	modeEditField                         // Actively editing a field value
+	modeSearch                            // Search for user by handle
+	modeDeleteConfirm                     // Confirm single user delete
+	modeUndeleteConfirm                   // Confirm single user undelete
+	modeMassDelete                        // Confirm mass delete of tagged
+	modeValidate                          // Confirm auto-validate
+	modeMassValidate                      // Confirm mass validate
+	modeHelp                              // Help screen overlay
+	modeFileChanged                       // File modified externally warning
+	modeExitConfirm                       // Unsaved changes exit confirm
+	modePasswordEntry                     // Password entry for reset
+	modeSaveConfirm                       // Confirm save before exit
+	modeSaveOnLeave                       // Prompt save when leaving edit screen
+	modeExitClean                         // Simple exit confirmation (no unsaved changes)
+	modeInfoAlert                         // Info alert dismissed by any key
+	modePurgeConfirm                      // Confirm purge after delete
+	modeMassPurge                         // Confirm purge all deleted users
 )
 
 // Model is the BubbleTea model for the user editor TUI.
 type Model struct {
 	// Data
-	users     []*user.User // All users (sorted by ID)
-	origUsers []*user.User // Snapshot at load time (for dirty tracking)
-	filePath  string
-	dataDir   string    // Root data directory (parent of users/, infoforms/, etc.)
-	fileMtime time.Time // mtime at load for optimistic concurrency
-	dirty     bool
+	users         []*user.User // All users (sorted by ID)
+	origUsers     []*user.User // Snapshot at load time (for dirty tracking)
+	filePath      string
+	dataDir       string    // Root data directory (parent of users/, infoforms/, etc.)
+	fileMtime     time.Time // mtime at load for optimistic concurrency
+	dirty         bool
+	retentionDays int // Deleted user retention days from config (-1 = never purge)
 
 	// List mode state
 	cursor       int          // Current position in user list (0-based)
@@ -59,6 +68,7 @@ type Model struct {
 	// Edit mode state
 	editIndex int        // Index into users slice being edited
 	editField int        // Current field index (0-based)
+	editDirty bool       // Whether changes were made during current edit session
 	fields    []fieldDef // Field definitions
 
 	// Text input (shared for editing fields, search, password)
@@ -68,7 +78,13 @@ type Model struct {
 	searchInput textinput.Model
 
 	// Confirm dialog
-	confirmYes bool
+	confirmYes      bool
+	confirmFromEdit bool // true when confirm dialog was opened from edit screen
+
+	// Info alert dialog
+	alertTitle   string
+	alertMessage string
+	alertReturn  editorMode // mode to return to when dismissed
 
 	// Terminal
 	width   int
@@ -110,34 +126,64 @@ func New(filePath string, dataDir ...string) (Model, error) {
 		dd = filepath.Dir(filepath.Dir(filePath))
 	}
 
+	// Load retention days from config (best effort)
+	retDays := -1
+	configDir := filepath.Join(dd, "..", "configs")
+	if cfg, err := config.LoadServerConfig(configDir); err == nil {
+		retDays = cfg.DeletedUserRetentionDays
+	}
+
+	// Sort users by ID with deleted users at the bottom
+	sortUsers(users, false)
+
 	fields := editFields()
 
-	// Wire up the InfoForms display field with the resolved data directory.
+	// Wire up dynamic display fields that need runtime context.
 	for i := range fields {
-		if fields[i].Label == "InfoForms" {
+		switch fields[i].Label {
+		case "InfoForms":
 			capturedDD := dd
 			fields[i].Get = func(u *user.User) string {
 				return infoformStatus(capturedDD, u.ID)
 			}
-			break
+		case "Auto Purge":
+			capturedRet := retDays
+			fields[i].Get = func(u *user.User) string {
+				if !u.DeletedUser || u.DeletedAt == nil {
+					return ""
+				}
+				if capturedRet < 0 {
+					return "Never"
+				}
+				purgeDate := u.DeletedAt.AddDate(0, 0, capturedRet)
+				remaining := int(time.Until(purgeDate).Hours()/24) + 1
+				if remaining <= 0 {
+					return "Eligible now"
+				}
+				if remaining == 1 {
+					return "1 day"
+				}
+				return fmt.Sprintf("%d days", remaining)
+			}
 		}
 	}
 
 	return Model{
-		users:     users,
-		origUsers: origUsers,
-		filePath:  filePath,
-		dataDir:   dd,
-		fileMtime: mtime,
-		cursor:    0,
-		listType:  1,
-		tagged:    make(map[int]bool),
-		fields:    fields,
-		textInput: ti,
-		searchInput: si,
-		width:     minWidth,
-		height:    minHeight,
-		mode:      modeList,
+		users:         users,
+		origUsers:     origUsers,
+		filePath:      filePath,
+		dataDir:       dd,
+		fileMtime:     mtime,
+		retentionDays: retDays,
+		cursor:        0,
+		listType:      1,
+		tagged:        make(map[int]bool),
+		fields:        fields,
+		textInput:     ti,
+		searchInput:   si,
+		width:         minWidth,
+		height:        minHeight,
+		mode:          modeList,
 	}, nil
 }
 
@@ -170,9 +216,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateEditField(msg)
 		case modeSearch:
 			return m.updateSearch(msg)
-		case modeDeleteConfirm, modeMassDelete, modeValidate, modeMassValidate,
-			modeExitConfirm, modeFileChanged, modeSaveConfirm:
+		case modeDeleteConfirm, modeUndeleteConfirm, modeMassDelete, modePurgeConfirm, modeMassPurge,
+			modeValidate, modeMassValidate,
+			modeExitConfirm, modeExitClean, modeFileChanged, modeSaveConfirm, modeSaveOnLeave:
 			return m.updateConfirm(msg)
+		case modeInfoAlert:
+			// Any key dismisses the alert
+			m.mode = m.alertReturn
+			return m, nil
 		case modeHelp:
 			return m.updateHelp(msg)
 		case modePasswordEntry:
@@ -220,6 +271,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Open edit screen for highlighted user
 		m.editIndex = m.cursor
 		m.editField = 0
+		m.editDirty = false
 		m.mode = modeEdit
 		return m, nil
 	case tea.KeyEscape:
@@ -228,20 +280,63 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.confirmYes = false
 			return m, nil
 		}
-		return m, tea.Quit
-	case tea.KeyF2:
-		// Delete highlighted user
-		m.mode = modeDeleteConfirm
+		m.mode = modeExitClean
 		m.confirmYes = false
+		return m, nil
+	case tea.KeyF2:
+		// Toggle delete on highlighted user (protect User 1)
+		if m.cursor >= 0 && m.cursor < len(m.users) {
+			u := m.users[m.cursor]
+			if u.ID == 1 {
+				m.alertTitle = "-- Cannot Delete --"
+				m.alertMessage = "Cannot Delete User 1. Edit instead."
+				m.alertReturn = modeList
+				m.mode = modeInfoAlert
+				return m, nil
+			}
+			if u.DeletedUser {
+				m.mode = modeUndeleteConfirm
+			} else {
+				m.mode = modeDeleteConfirm
+			}
+			m.confirmYes = false
+			m.confirmFromEdit = false
+			return m, nil
+		}
 		return m, nil
 	case tea.KeyF3:
 		// Toggle alphabetical sort
 		m.toggleSort()
 		return m, nil
+	case tea.KeyF4:
+		// Purge deleted user
+		if m.cursor >= 0 && m.cursor < len(m.users) {
+			u := m.users[m.cursor]
+			if u.ID == 1 {
+				m.alertTitle = "-- Cannot Purge --"
+				m.alertMessage = "Cannot Purge User 1."
+				m.alertReturn = modeList
+				m.mode = modeInfoAlert
+				return m, nil
+			}
+			if !u.DeletedUser {
+				m.alertTitle = "-- Cannot Purge --"
+				m.alertMessage = "User must be deleted before purging."
+				m.alertReturn = modeList
+				m.mode = modeInfoAlert
+				return m, nil
+			}
+			m.mode = modePurgeConfirm
+			m.confirmYes = false
+			m.confirmFromEdit = false
+			return m, nil
+		}
+		return m, nil
 	case tea.KeyF5:
 		// Auto-validate highlighted user
 		m.mode = modeValidate
 		m.confirmYes = false
+		m.confirmFromEdit = false
 		return m, nil
 	case tea.KeyF10:
 		// Tag all users
@@ -275,6 +370,16 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.mode = modeMassDelete
+			m.confirmYes = false
+			return m, nil
+		case "shift+f4":
+			// Mass purge all deleted users
+			deletedCount := m.deletedCount()
+			if deletedCount == 0 {
+				m.message = "No deleted users to purge."
+				return m, nil
+			}
+			m.mode = modeMassPurge
 			m.confirmYes = false
 			return m, nil
 		case "shift+f5":
@@ -332,8 +437,13 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editField = m.nextEditableField(-1)
 
 	case tea.KeyEscape:
-		// Save and return to list
+		// Only prompt to save if changes were made during this edit session
 		m.saveCurrentUser()
+		if m.editDirty {
+			m.mode = modeSaveOnLeave
+			m.confirmYes = true
+			return m, nil
+		}
 		m.mode = modeList
 		return m, nil
 
@@ -345,6 +455,7 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.editIndex = 0
 		}
 		m.editField = 0
+		m.editDirty = false
 		return m, nil
 
 	case tea.KeyPgUp:
@@ -355,18 +466,61 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.editIndex = len(m.users) - 1
 		}
 		m.editField = 0
+		m.editDirty = false
 		return m, nil
 
 	case tea.KeyF2:
-		// Delete current user
-		m.mode = modeDeleteConfirm
-		m.confirmYes = false
+		// Toggle delete on current user (protect User 1)
+		if m.editIndex >= 0 && m.editIndex < len(m.users) {
+			u := m.users[m.editIndex]
+			if u.ID == 1 {
+				m.alertTitle = "-- Cannot Delete --"
+				m.alertMessage = "Cannot Delete User 1. Edit instead."
+				m.alertReturn = modeEdit
+				m.mode = modeInfoAlert
+				return m, nil
+			}
+			if u.DeletedUser {
+				m.mode = modeUndeleteConfirm
+			} else {
+				m.mode = modeDeleteConfirm
+			}
+			m.confirmYes = false
+			m.confirmFromEdit = true
+			return m, nil
+		}
+		return m, nil
+
+	case tea.KeyF4:
+		// Purge deleted user
+		if m.editIndex >= 0 && m.editIndex < len(m.users) {
+			u := m.users[m.editIndex]
+			if u.ID == 1 {
+				m.alertTitle = "-- Cannot Purge --"
+				m.alertMessage = "Cannot Purge User 1."
+				m.alertReturn = modeEdit
+				m.mode = modeInfoAlert
+				return m, nil
+			}
+			if !u.DeletedUser {
+				m.alertTitle = "-- Cannot Purge --"
+				m.alertMessage = "User must be deleted before purging."
+				m.alertReturn = modeEdit
+				m.mode = modeInfoAlert
+				return m, nil
+			}
+			m.mode = modePurgeConfirm
+			m.confirmYes = false
+			m.confirmFromEdit = true
+			return m, nil
+		}
 		return m, nil
 
 	case tea.KeyF5:
 		// Set defaults
 		m.mode = modeValidate
 		m.confirmYes = false
+		m.confirmFromEdit = true
 		return m, nil
 
 	case tea.KeyF10:
@@ -546,6 +700,7 @@ func (m *Model) applyFieldValue(f fieldDef) error {
 		}
 		u.UpdatedAt = time.Now()
 		m.dirty = true
+		m.editDirty = true
 		m.message = ""
 	}
 	return nil
@@ -606,6 +761,7 @@ func (m Model) updatePassword(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.users[m.editIndex].PasswordHash = string(hash)
 				m.users[m.editIndex].UpdatedAt = time.Now()
 				m.dirty = true
+				m.editDirty = true
 				m.message = "Password updated"
 			}
 		}
@@ -659,6 +815,14 @@ func (m Model) rejectConfirm() (tea.Model, tea.Cmd) {
 	case modeExitConfirm:
 		// "Save changes before exit? No" → quit without saving
 		return m, tea.Quit
+	case modeExitClean:
+		// "No" → cancel exit, return to list
+		m.mode = modeList
+		return m, nil
+	case modeSaveOnLeave:
+		// "No" → return to list without saving to disk
+		m.mode = modeList
+		return m, nil
 	default:
 		m.mode = m.previousMode()
 		return m, nil
@@ -667,13 +831,17 @@ func (m Model) rejectConfirm() (tea.Model, tea.Cmd) {
 
 func (m Model) previousMode() editorMode {
 	switch m.mode {
-	case modeDeleteConfirm, modeMassDelete, modeValidate, modeMassValidate:
-		if m.editIndex >= 0 && m.editIndex < len(m.users) {
-			// Could be from edit or list mode; default to list
+	case modeDeleteConfirm, modeUndeleteConfirm, modePurgeConfirm, modeValidate:
+		if m.confirmFromEdit {
+			return modeEdit
 		}
 		return modeList
-	case modeExitConfirm, modeSaveConfirm:
+	case modeMassDelete, modeMassValidate, modeMassPurge:
 		return modeList
+	case modeExitConfirm, modeExitClean, modeSaveConfirm:
+		return modeList
+	case modeSaveOnLeave:
+		return modeEdit
 	case modeFileChanged:
 		return modeList
 	}
@@ -684,10 +852,51 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case modeDeleteConfirm:
 		idx := m.cursor
-		if m.mode == modeDeleteConfirm && m.editIndex >= 0 {
-			// Could be from edit screen
+		if m.confirmFromEdit {
+			idx = m.editIndex
 		}
 		m.softDeleteUser(idx)
+		// After soft delete, offer to purge
+		m.mode = modePurgeConfirm
+		m.confirmYes = false
+		return m, nil
+
+	case modePurgeConfirm:
+		idx := m.cursor
+		if m.confirmFromEdit {
+			idx = m.editIndex
+		}
+		m.purgeUser(idx)
+		if m.confirmFromEdit {
+			m.mode = modeEdit
+		} else {
+			m.mode = modeList
+		}
+		return m, nil
+
+	case modeUndeleteConfirm:
+		idx := m.cursor
+		if m.confirmFromEdit {
+			idx = m.editIndex
+		}
+		m.undeleteUser(idx)
+		if m.confirmFromEdit {
+			m.mode = modeEdit
+		} else {
+			m.mode = modeList
+		}
+		return m, nil
+
+	case modeMassPurge:
+		// Purge all deleted users (iterate in reverse to keep indices stable)
+		purged := 0
+		for i := len(m.users) - 1; i >= 0; i-- {
+			if m.users[i].DeletedUser {
+				m.purgeUser(i)
+				purged++
+			}
+		}
+		m.message = fmt.Sprintf("Purged %d deleted user(s)", purged)
 		m.mode = modeList
 		return m, nil
 
@@ -703,8 +912,15 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 
 	case modeValidate:
 		idx := m.cursor
+		if m.confirmFromEdit {
+			idx = m.editIndex
+		}
 		m.autoValidateUser(idx)
-		m.mode = modeList
+		if m.confirmFromEdit {
+			m.mode = modeEdit
+		} else {
+			m.mode = modeList
+		}
 		return m, nil
 
 	case modeMassValidate:
@@ -722,6 +938,10 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		m.saveAllToDisk()
 		return m, tea.Quit
 
+	case modeExitClean:
+		// No unsaved changes, just quit
+		return m, tea.Quit
+
 	case modeSaveConfirm:
 		m.saveAllToDisk()
 		return m, tea.Quit
@@ -730,6 +950,15 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		// Force overwrite
 		m.saveAllToDisk()
 		m.mode = modeList
+		return m, nil
+
+	case modeSaveOnLeave:
+		// Save to disk and return to list
+		m.saveAllToDisk()
+		// Only go to list if saveAllToDisk didn't switch to modeFileChanged
+		if m.mode == modeSaveOnLeave {
+			m.mode = modeList
+		}
 		return m, nil
 	}
 
@@ -752,12 +981,92 @@ func (m *Model) softDeleteUser(idx int) {
 		return
 	}
 	u := m.users[idx]
+	if u.ID == 1 {
+		m.message = "Can't delete User 1. Edit instead."
+		return
+	}
 	u.DeletedUser = true
 	now := time.Now()
 	u.DeletedAt = &now
 	u.UpdatedAt = now
 	m.dirty = true
+	m.editDirty = true
 	m.message = fmt.Sprintf("Deleted: %s", u.Handle)
+	m.resortAndTrack(u)
+}
+
+func (m *Model) undeleteUser(idx int) {
+	if idx < 0 || idx >= len(m.users) {
+		return
+	}
+	u := m.users[idx]
+	u.DeletedUser = false
+	u.DeletedAt = nil
+	u.UpdatedAt = time.Now()
+	m.dirty = true
+	m.editDirty = true
+	m.message = fmt.Sprintf("Undeleted: %s", u.Handle)
+	m.resortAndTrack(u)
+}
+
+// purgeUser permanently removes a user from the list and deletes their data files
+// (infoform responses, etc.). The user record is removed from the in-memory list.
+func (m *Model) purgeUser(idx int) {
+	if idx < 0 || idx >= len(m.users) {
+		return
+	}
+	u := m.users[idx]
+	handle := u.Handle
+	userID := u.ID
+
+	// Remove infoform responses for this user
+	if m.dataDir != "" {
+		responsesDir := filepath.Join(m.dataDir, "infoforms", "responses")
+		pattern := filepath.Join(responsesDir, fmt.Sprintf("%d_*.json", userID))
+		matches, _ := filepath.Glob(pattern)
+		for _, f := range matches {
+			os.Remove(f)
+		}
+	}
+
+	// Remove user from the list
+	m.users = append(m.users[:idx], m.users[idx+1:]...)
+
+	// Fix tagged indices (shift down indices above removed)
+	newTagged := make(map[int]bool)
+	for k, v := range m.tagged {
+		if k < idx {
+			newTagged[k] = v
+		} else if k > idx {
+			newTagged[k-1] = v
+		}
+	}
+	m.tagged = newTagged
+
+	// Clamp cursor and editIndex
+	if m.cursor >= len(m.users) {
+		m.cursor = len(m.users) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	m.editIndex = m.cursor
+
+	m.dirty = true
+	m.editDirty = true
+	m.message = fmt.Sprintf("Purged: %s", handle)
+}
+
+// resortAndTrack re-sorts the user list and updates cursor/editIndex to follow the given user.
+func (m *Model) resortAndTrack(target *user.User) {
+	sortUsers(m.users, m.listAlpha)
+	for i, u := range m.users {
+		if u == target {
+			m.cursor = i
+			m.editIndex = i
+			break
+		}
+	}
 }
 
 func (m *Model) autoValidateUser(idx int) {
@@ -771,6 +1080,7 @@ func (m *Model) autoValidateUser(idx int) {
 	u.TimeLimit = 60
 	u.UpdatedAt = time.Now()
 	m.dirty = true
+	m.editDirty = true
 	m.message = fmt.Sprintf("Validated: %s", u.Handle)
 }
 
@@ -825,23 +1135,26 @@ func (m *Model) saveAllToDisk() {
 
 // clampScroll adjusts scrollOffset so the cursor is always visible,
 // with the lightbar stopping at ~2/3 of the visible area before scrolling.
+// scrollOffset is in display-row space (accounts for separator row).
 func (m *Model) clampScroll() {
-	total := len(m.users)
+	totalDisplay := len(m.buildDisplayRows())
+	displayPos := m.cursorToDisplayRow(m.cursor)
+
 	// Scroll threshold: lightbar stops at this row (0-indexed) and list starts scrolling
 	scrollThreshold := listVisible * 2 / 3 // ~8 for 13 visible rows
 
 	// If cursor is above the visible window, scroll up to show it at top
-	if m.cursor < m.scrollOffset {
-		m.scrollOffset = m.cursor
+	if displayPos < m.scrollOffset {
+		m.scrollOffset = displayPos
 	}
 
 	// If cursor has moved past the threshold row, scroll to keep it at threshold
-	if m.cursor >= m.scrollOffset+scrollThreshold {
-		m.scrollOffset = m.cursor - scrollThreshold
+	if displayPos >= m.scrollOffset+scrollThreshold {
+		m.scrollOffset = displayPos - scrollThreshold
 	}
 
 	// Don't scroll past the end of the list
-	maxOffset := total - listVisible
+	maxOffset := totalDisplay - listVisible
 	if maxOffset < 0 {
 		maxOffset = 0
 	}
@@ -865,12 +1178,25 @@ func (m Model) taggedCount() int {
 	return count
 }
 
+func (m Model) deletedCount() int {
+	count := 0
+	for _, u := range m.users {
+		if u.DeletedUser {
+			count++
+		}
+	}
+	return count
+}
+
 // sortUsers sorts users by handle (alpha) or by ID (numeric).
+// Deleted users are always sorted to the bottom of the list.
 func sortUsers(users []*user.User, alpha bool) {
 	if alpha {
 		for i := 1; i < len(users); i++ {
 			for j := i; j > 0; j-- {
-				if strings.ToLower(users[j].Handle) < strings.ToLower(users[j-1].Handle) {
+				if shouldSwap(users[j], users[j-1], func(a, b *user.User) bool {
+					return strings.ToLower(a.Handle) < strings.ToLower(b.Handle)
+				}) {
 					users[j], users[j-1] = users[j-1], users[j]
 				} else {
 					break
@@ -880,7 +1206,9 @@ func sortUsers(users []*user.User, alpha bool) {
 	} else {
 		for i := 1; i < len(users); i++ {
 			for j := i; j > 0; j-- {
-				if users[j].ID < users[j-1].ID {
+				if shouldSwap(users[j], users[j-1], func(a, b *user.User) bool {
+					return a.ID < b.ID
+				}) {
 					users[j], users[j-1] = users[j-1], users[j]
 				} else {
 					break
@@ -888,4 +1216,13 @@ func sortUsers(users []*user.User, alpha bool) {
 			}
 		}
 	}
+}
+
+// shouldSwap returns true if a should come before b, with deleted users always last.
+func shouldSwap(a, b *user.User, less func(a, b *user.User) bool) bool {
+	if a.DeletedUser != b.DeletedUser {
+		// Non-deleted users come first
+		return !a.DeletedUser && b.DeletedUser
+	}
+	return less(a, b)
 }

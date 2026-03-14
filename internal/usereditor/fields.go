@@ -201,18 +201,21 @@ func editFields() []fieldDef {
 			Set: func(u *user.User, val string) error { u.OutputMode = val; return nil },
 		},
 		{
-			Label: "Deleted User", Type: ftYesNo, Col: 50, Row: 12, Width: 1,
+			Label: "Deleted User", Type: ftDisplay, Col: 50, Row: 12, Width: 1,
 			Get: func(u *user.User) string { return boolToYN(u.DeletedUser) },
-			Set: func(u *user.User, val string) error {
-				u.DeletedUser = ynToBool(val)
-				if u.DeletedUser && u.DeletedAt == nil {
-					now := time.Now()
-					u.DeletedAt = &now
-				} else if !u.DeletedUser {
-					u.DeletedAt = nil
+		},
+		{
+			Label: "Deleted At", Type: ftDisplay, Col: 50, Row: 13, Width: 16,
+			Get: func(u *user.User) string {
+				if u.DeletedAt != nil {
+					return formatTime(*u.DeletedAt)
 				}
-				return nil
+				return ""
 			},
+		},
+		{
+			Label: "Auto Purge", Type: ftDisplay, Col: 50, Row: 14, Width: 16,
+			// Get is set dynamically by Model after creation (needs retentionDays)
 		},
 
 		// Row 17: separator rendered by view_edit.go

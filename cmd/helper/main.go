@@ -277,6 +277,16 @@ func cmdUsersPurge(args []string) {
 		fmt.Printf("Dry run: %d user(s) would be purged (retention: %d days, cutoff: %s):\n\n",
 			len(eligible), retentionDays, cutoff.Format("2006-01-02"))
 		printPurgeCandidates(eligible, retentionDays)
+
+		// Show infoform files that would be cleaned up
+		infoformDir := filepath.Join(filepath.Dir(*dataDir), "infoforms", "responses")
+		for _, u := range eligible {
+			pattern := filepath.Join(infoformDir, fmt.Sprintf("%d_*.json", u.ID))
+			matches, _ := filepath.Glob(pattern)
+			if len(matches) > 0 {
+				fmt.Printf("  Would remove %d infoform response(s) for user #%d (%s)\n", len(matches), u.ID, u.Handle)
+			}
+		}
 		return
 	}
 
@@ -291,7 +301,17 @@ func cmdUsersPurge(args []string) {
 		return
 	}
 
-	fmt.Printf("Purged %d user account(s) (retention: %d days):\n\n", len(purged), retentionDays)
+	// Clean up infoform responses for purged users.
+	// Data dir points to data/users; infoforms are at data/infoforms/responses.
+	infoformDir := filepath.Join(filepath.Dir(*dataDir), "infoforms", "responses")
+	for _, p := range purged {
+		removed := cleanupInfoformResponses(infoformDir, p.ID)
+		if removed > 0 {
+			fmt.Printf("  Cleaned up %d infoform response(s) for user #%d (%s)\n", removed, p.ID, p.Handle)
+		}
+	}
+
+	fmt.Printf("\nPurged %d user account(s) (retention: %d days):\n\n", len(purged), retentionDays)
 	for _, p := range purged {
 		if p.DeletedAt.IsZero() {
 			fmt.Printf("  #%-4d  %-20s  (no deletion timestamp)\n", p.ID, p.Handle)
@@ -300,6 +320,25 @@ func cmdUsersPurge(args []string) {
 				p.ID, p.Handle, p.DeletedAt.Format("2006-01-02"))
 		}
 	}
+}
+
+// cleanupInfoformResponses removes infoform response files for a given user ID.
+// Returns the number of files removed.
+func cleanupInfoformResponses(responsesDir string, userID int) int {
+	pattern := filepath.Join(responsesDir, fmt.Sprintf("%d_*.json", userID))
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		return 0
+	}
+	removed := 0
+	for _, f := range matches {
+		if err := os.Remove(f); err == nil {
+			removed++
+		} else {
+			fmt.Fprintf(os.Stderr, "  Warning: failed to remove %s: %v\n", f, err)
+		}
+	}
+	return removed
 }
 
 func cmdUsersList(args []string) {

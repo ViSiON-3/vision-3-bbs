@@ -77,7 +77,17 @@ func (m Model) viewEditScreen() string {
 
 	// === Bottom help bar ===
 	// UE.PAS: 'F2 - Delete  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes'
-	helpText := centerText("F2 - Delete  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes", m.width)
+	f2Label := "Delete"
+	if u.DeletedUser {
+		f2Label = "Undelete"
+	}
+	var helpItems string
+	if u.DeletedUser {
+		helpItems = fmt.Sprintf("F2 - %s  F4 - Purge  F5 - Set Defaults  F10 - Aborts  ESC - Save", f2Label)
+	} else {
+		helpItems = fmt.Sprintf("F2 - %s  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes", f2Label)
+	}
+	helpText := centerText(helpItems, m.width)
 	b.WriteString(helpBarStyle.Render(helpText))
 
 	// Overlay for password entry
@@ -85,11 +95,20 @@ func (m Model) viewEditScreen() string {
 	if m.mode == modePasswordEntry {
 		result = m.overlayPasswordDialog(result)
 	} else if m.mode == modeDeleteConfirm {
-		result = m.overlayConfirmDialog(result, "-- Delete User --",
-			fmt.Sprintf("Delete %s? ", u.Handle))
+		result = m.overlayDeleteDialog(result, u.Handle)
+	} else if m.mode == modePurgeConfirm {
+		result = m.overlayPurgeDialog(result, u.Handle)
+	} else if m.mode == modeUndeleteConfirm {
+		result = m.overlayConfirmDialog(result, "-- Undelete User --",
+			fmt.Sprintf("Undelete %s? ", u.Handle))
 	} else if m.mode == modeValidate {
 		result = m.overlayConfirmDialog(result, "-- Auto Validate --",
 			fmt.Sprintf("Set %s to Defaults? ", u.Handle))
+	} else if m.mode == modeSaveOnLeave {
+		result = m.overlayConfirmDialog(result, "-- Unsaved Changes --",
+			"Save changes to disk? ")
+	} else if m.mode == modeInfoAlert {
+		result = m.overlayInfoAlert(result)
 	}
 
 	return result
@@ -133,8 +152,8 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 			editInfoValueStyle.Render(fmt.Sprintf("%d", m.editIndex+1)) +
 			editInfoLabelStyle.Render(" of ") +
 			editInfoValueStyle.Render(fmt.Sprintf("%d", len(m.users)))
-		leftPad := 40
 		rawLen := len(infoText)
+		leftPad := (boxW - rawLen) / 2
 		return fieldDisplayStyle.Render(strings.Repeat(" ", leftPad)) + infoRendered +
 			fieldDisplayStyle.Render(strings.Repeat(" ", max(0, boxW-leftPad-rawLen)))
 	}
