@@ -23,7 +23,7 @@ Each connected user gets their own isolated JS runtime. There is no shared state
 You do **not** need to install Synchronet or clone the full repository. You need three directories:
 
 ```
-/opt/sbbs/
+/sbbs/
 ├── exec/
 │   ├── load/          JS utility libraries (~176 files, ~2.8 MB)
 │   └── dorkit/        DORKit framework (~13 files, ~92 KB)
@@ -65,11 +65,11 @@ Add a door entry with `"type": "synchronet_js"`:
   "name": "LORDJS",
   "type": "synchronet_js",
   "script": "lord.js",
-  "working_directory": "/opt/sbbs/xtrn/lord",
-  "exec_dir": "/opt/sbbs/exec/",
+  "working_directory": "/sbbs/xtrn/lord",
+  "exec_dir": "/sbbs/exec/",
   "library_paths": [
-    "/opt/sbbs/exec/load",
-    "/opt/sbbs/exec/load/dorkit"
+    "/sbbs/exec/load",
+    "/sbbs/exec/load/dorkit"
   ],
   "single_instance": true,
   "min_access_level": 10
@@ -214,8 +214,8 @@ Verify that your terminal supports CP437 encoding. Most modern SSH clients (Sync
    ```bash
    # Clone just the needed directories from Synchronet
    git clone --depth 1 --filter=blob:none --sparse \
-     https://gitlab.synchro.net/main/sbbs.git /opt/sbbs
-   cd /opt/sbbs
+     https://gitlab.synchro.net/main/sbbs.git /sbbs
+   cd /sbbs
    git sparse-checkout set exec/load exec/dorkit xtrn/lord
    ```
 
@@ -225,11 +225,11 @@ Verify that your terminal supports CP437 encoding. Most modern SSH clients (Sync
      "name": "LORDJS",
      "type": "synchronet_js",
      "script": "lord.js",
-     "working_directory": "/opt/sbbs/xtrn/lord",
-     "exec_dir": "/opt/sbbs/exec/",
+     "working_directory": "/sbbs/xtrn/lord",
+     "exec_dir": "/sbbs/exec/",
      "library_paths": [
-       "/opt/sbbs/exec/load",
-       "/opt/sbbs/exec/load/dorkit"
+       "/sbbs/exec/load",
+       "/sbbs/exec/load/dorkit"
      ],
      "single_instance": true
    }
