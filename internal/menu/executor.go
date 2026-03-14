@@ -512,6 +512,8 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			termWidth, termHeight,
 			nodeNumber, sessionStartTime, outputMode,
 			doorConfig, doorName)
+		ctx.UserManager = userManager
+		ctx.CurrentUser = currentUser
 
 		// Doors read directly from ssh.Session; reset shared InputHandler first
 		// so it does not race and steal door/menu keystrokes.

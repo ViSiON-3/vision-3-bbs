@@ -32,5 +32,48 @@
             "/sbbs/exec/load/dorkit"
         ],
         "single_instance": true
+    },
+    {
+        "name": "HELLO",
+        "type": "v3_script",
+        "script": "hello.js",
+        "working_directory": "scripts/examples"
+    },
+    {
+        "name": "ONELINERS",
+        "type": "v3_script",
+        "script": "oneliners.js",
+        "working_directory": "scripts/examples"
+    },
+    {
+        "name": "VOTING",
+        "type": "v3_script",
+        "script": "voting.js",
+        "working_directory": "scripts/examples",
+        "args": ["poll1", "What is the best BBS software?", "Vision/3", "Mystic", "Synchronet", "ENiGMA½"]
+    },
+    {
+        "name": "STATS",
+        "type": "v3_script",
+        "script": "stats.js",
+        "working_directory": "scripts/examples"
+    },
+    {
+        "name": "AUTOMSG",
+        "type": "v3_script",
+        "script": "automsg.js",
+        "working_directory": "scripts/examples"
+    },
+    {
+        "name": "USERSTATS",
+        "type": "v3_script",
+        "script": "userstats.js",
+        "working_directory": "scripts/examples"
+    },
+    {
+        "name": "LAST10",
+        "type": "v3_script",
+        "script": "last10.js",
+        "working_directory": "scripts/examples"
     }
 ]

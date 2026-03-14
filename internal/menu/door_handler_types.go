@@ -6,6 +6,7 @@ import (
 	"github.com/gliderlabs/ssh"
 	"github.com/stlalpha/vision3/internal/ansi"
 	"github.com/stlalpha/vision3/internal/config"
+	"github.com/stlalpha/vision3/internal/user"
 	"golang.org/x/term"
 )
 
@@ -28,6 +29,8 @@ type DoorCtx struct {
 	Session          ssh.Session
 	Terminal         *term.Terminal
 	User             doorUserInfo
+	UserManager      *user.UserMgr   // For V3 scripts that need user DB access
+	CurrentUser      *user.User      // Live pointer to current session's user record
 	NodeNumber       int
 	SessionStartTime time.Time
 	OutputMode       ansi.OutputMode
