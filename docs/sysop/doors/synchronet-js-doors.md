@@ -8,6 +8,8 @@ Synchronet BBS has a large library of JavaScript-based door games (LORD, Chicken
 
 ViSiON/3 embeds [goja](https://github.com/dop251/goja), a pure-Go ES5.1+ JavaScript engine, and implements enough of Synchronet's API surface to run these games. DORKit, frame.js, recordfile.js, and other Synchronet JS libraries run unmodified.
 
+> **Note:** Currently only **LORD** (Legend of the Red Dragon) has been tested. Other Synchronet JS door games may work but are untested — please report any issues you encounter.
+
 ### How It Works
 
 1. User selects a Synchronet JS door from a menu
@@ -40,11 +42,11 @@ These files can be obtained from:
 
 ### What Each Directory Contains
 
-| Directory | Contents |
-| --- | --- |
-| `exec/load/` | Core JS libraries: dorkit.js, recordfile.js, sbbsdefs.js, graphic.js, and other shared utilities used by most games |
+| Directory      | Contents                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `exec/load/`   | Core JS libraries: dorkit.js, recordfile.js, sbbsdefs.js, graphic.js, and other shared utilities used by most games       |
 | `exec/dorkit/` | DORKit display/console abstraction: sbbs_console.js, screen.js, ansi_input.js, and related files that handle terminal I/O |
-| `xtrn/{game}/` | Game-specific files: main JS script, data files, ANSI art, configuration — varies per game |
+| `xtrn/{game}/` | Game-specific files: main JS script, data files, ANSI art, configuration — varies per game                                |
 
 ### What You Do NOT Need
 
@@ -78,17 +80,17 @@ Add a door entry with `"type": "synchronet_js"`:
 
 ### Configuration Fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | string | Yes | Door name (used in `DOOR:NAME` menu commands) |
-| `type` | string | Yes | Must be `"synchronet_js"` |
-| `script` | string | Yes | Main JS file to execute, relative to `working_directory` |
-| `working_directory` | string | Yes | Absolute path to the game's data directory |
-| `exec_dir` | string | Yes | Path to Synchronet's `exec/` directory (mapped to `system.exec_dir` in JS) |
-| `library_paths` | []string | Yes | Search paths for `load()` and `require()` — include both `exec/load` and `exec/load/dorkit` |
-| `single_instance` | bool | No | Only allow one node at a time (default: false) |
-| `min_access_level` | int | No | Minimum access level required (default: 0) |
-| `args` | []string | No | Arguments passed to the script as `argv` |
+| Field               | Type     | Required | Description                                                                                 |
+| ------------------- | -------- | -------- | ------------------------------------------------------------------------------------------- |
+| `name`              | string   | Yes      | Door name (used in `DOOR:NAME` menu commands)                                               |
+| `type`              | string   | Yes      | Must be `"synchronet_js"`                                                                   |
+| `script`            | string   | Yes      | Main JS file to execute, relative to `working_directory`                                    |
+| `working_directory` | string   | Yes      | Absolute path to the game's data directory                                                  |
+| `exec_dir`          | string   | Yes      | Path to Synchronet's `exec/` directory (mapped to `system.exec_dir` in JS)                  |
+| `library_paths`     | []string | Yes      | Search paths for `load()` and `require()` — include both `exec/load` and `exec/load/dorkit` |
+| `single_instance`   | bool     | No       | Only allow one node at a time (default: false)                                              |
+| `min_access_level`  | int      | No       | Minimum access level required (default: 0)                                                  |
+| `args`              | []string | No       | Arguments passed to the script as `argv`                                                    |
 
 ### Config Editor
 
@@ -120,44 +122,44 @@ The following Synchronet API objects and functions are available to JS door game
 
 ### Global Objects
 
-| Object | Description |
-| --- | --- |
+| Object    | Description                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------- |
 | `console` | Terminal I/O: write, read, getkey, inkey, getstr, cursor movement, attributes, clear screen |
-| `bbs` | BBS state: node_num, sys_status, online, get_time_left() |
-| `user` | Current user: alias, name, number, security.level, settings, stats |
-| `system` | System info: name, operator, exec_dir, data_dir, node_dir, timer |
-| `server` | Server identification (stub for DORKit mode detection) |
-| `client` | Client connection info (stub for DORKit mode detection) |
-| `js` | Runtime: exec_dir, load_path_list, terminated, on_exit() |
+| `bbs`     | BBS state: node_num, sys_status, online, get_time_left()                                    |
+| `user`    | Current user: alias, name, number, security.level, settings, stats                          |
+| `system`  | System info: name, operator, exec_dir, data_dir, node_dir, timer                            |
+| `server`  | Server identification (stub for DORKit mode detection)                                      |
+| `client`  | Client connection info (stub for DORKit mode detection)                                     |
+| `js`      | Runtime: exec_dir, load_path_list, terminated, on_exit()                                    |
 
 ### Classes
 
-| Class | Description |
-| --- | --- |
-| `File` | File I/O: open, close, read, write, readln, writeln, readBin, writeBin, seek (via position property), lock/unlock, flush, truncate, INI file methods |
-| `Queue` | Inter-thread message queue with session I/O fallback (used by DORKit for input buffering) |
+| Class   | Description                                                                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `File`  | File I/O: open, close, read, write, readln, writeln, readBin, writeBin, seek (via position property), lock/unlock, flush, truncate, INI file methods |
+| `Queue` | Inter-thread message queue with session I/O fallback (used by DORKit for input buffering)                                                            |
 
 ### Global Functions
 
-| Function | Description |
-| --- | --- |
-| `load(filename)` | Load and execute a JS module |
-| `require(filename, symbol)` | Load a module and verify a symbol exists |
-| `exit(code)` | Terminate the script |
-| `ascii(str)` / `ascii_str(code)` | Character code conversion |
-| `random(max)` | Random integer 0 to max-1 |
-| `time()` | Current Unix timestamp |
-| `sleep(ms)` | Sleep for milliseconds |
-| `mswait(ms)` | Alias for sleep |
-| `format(fmt, ...)` | sprintf-style formatting |
-| `strftime(fmt, time)` | Date formatting |
-| `file_exists(path)` | Check if a file exists |
-| `file_remove(path)` | Delete a file |
-| `file_rename(old, new)` | Rename a file |
-| `file_mutex(path)` | Atomic lock file creation |
-| `backslash(path)` | Ensure path ends with `/` |
-| `truncsp(str)` | Trim trailing whitespace |
-| `log(msg)` | Log a message |
+| Function                         | Description                              |
+| -------------------------------- | ---------------------------------------- |
+| `load(filename)`                 | Load and execute a JS module             |
+| `require(filename, symbol)`      | Load a module and verify a symbol exists |
+| `exit(code)`                     | Terminate the script                     |
+| `ascii(str)` / `ascii_str(code)` | Character code conversion                |
+| `random(max)`                    | Random integer 0 to max-1                |
+| `time()`                         | Current Unix timestamp                   |
+| `sleep(ms)`                      | Sleep for milliseconds                   |
+| `mswait(ms)`                     | Alias for sleep                          |
+| `format(fmt, ...)`               | sprintf-style formatting                 |
+| `strftime(fmt, time)`            | Date formatting                          |
+| `file_exists(path)`              | Check if a file exists                   |
+| `file_remove(path)`              | Delete a file                            |
+| `file_rename(old, new)`          | Rename a file                            |
+| `file_mutex(path)`               | Atomic lock file creation                |
+| `backslash(path)`                | Ensure path ends with `/`                |
+| `truncsp(str)`                   | Trim trailing whitespace                 |
+| `log(msg)`                       | Log a message                            |
 
 ## Encoding and ANSI Art
 
