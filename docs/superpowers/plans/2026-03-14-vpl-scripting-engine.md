@@ -162,7 +162,6 @@ Expose read/write access to user accounts and BBS data, enabling scripts that mo
   v3.users.getByID(id)        // get user by ID
   v3.users.count()            // total user count
   v3.users.list()             // returns array of {id, handle, accessLevel, lastOn}
-  v3.users.find(opts)         // search: {minLevel: 50, location: "NYC"}
   ```
 
   Security: Read-only access. No password fields exposed. Sysop-level scripts (accessLevel >= configured threshold) could get write access in a future phase.

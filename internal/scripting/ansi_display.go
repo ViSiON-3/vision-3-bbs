@@ -3,6 +3,7 @@ package scripting
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dop251/goja"
 	"github.com/stlalpha/vision3/internal/ansi"
@@ -69,26 +70,53 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 //
 // Returns empty string if not found in any location.
 func resolveAnsiPath(eng *Engine, filename string) string {
+	// Sanitize filename: reject absolute paths and path traversal.
+	cleaned := filepath.Clean(filename)
+	if filepath.IsAbs(cleaned) || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return ""
+	}
+
 	// Try working directory first.
-	path := filepath.Join(eng.cfg.WorkingDir, filename)
+	path := filepath.Join(eng.cfg.WorkingDir, cleaned)
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
 
-	// Derive BBS root from working dir (scripts/examples -> BBS root).
-	bbsRoot := filepath.Join(eng.cfg.WorkingDir, "..", "..")
+	// Derive BBS root by walking up from working dir until we find a "menus" subdirectory.
+	bbsRoot := findBBSRoot(eng.cfg.WorkingDir)
+	if bbsRoot == "" {
+		return ""
+	}
 
 	// Try menus/v3/ansi/.
-	path = filepath.Join(bbsRoot, "menus", "v3", "ansi", filename)
+	path = filepath.Join(bbsRoot, "menus", "v3", "ansi", cleaned)
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
 
 	// Try menus/v3/templates/.
-	path = filepath.Join(bbsRoot, "menus", "v3", "templates", filename)
+	path = filepath.Join(bbsRoot, "menus", "v3", "templates", cleaned)
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
 
 	return ""
+}
+
+// findBBSRoot walks up from dir until it finds a directory containing a "menus" subdirectory.
+func findBBSRoot(dir string) string {
+	current, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	for {
+		if info, err := os.Stat(filepath.Join(current, "menus")); err == nil && info.IsDir() {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		current = parent
+	}
 }

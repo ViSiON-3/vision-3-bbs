@@ -30,10 +30,12 @@ function displayTable(title, users, field, label) {
     v3.console.println("|09" + v3.util.padRight("", 50, "-"));
 
     var count = Math.min(users.length, TOP_COUNT);
+    var displayedRank = 0;
     for (var i = 0; i < count; i++) {
         var u = users[i];
         if (u[field] === 0) continue;
-        var rank = v3.util.padRight((i + 1) + ".", 4);
+        displayedRank++;
+        var rank = v3.util.padRight(displayedRank + ".", 4);
         var handle = v3.util.padRight(u.handle, 22);
         var value = v3.util.padLeft("" + u[field], 12);
         v3.console.println("|15" + rank + "|07" + handle + "|14" + value);

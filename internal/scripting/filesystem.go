@@ -90,7 +90,7 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 		}
 		path, err := resolveSandboxPath(sandbox, call.Arguments[0].String())
 		if err != nil {
-			panic(vm.NewGoError(err))
+			return vm.ToValue(false)
 		}
 		err = os.Remove(path)
 		return vm.ToValue(err == nil)
@@ -157,23 +157,45 @@ func sandboxRoot(cfg ScriptConfig) string {
 
 // resolveSandboxPath resolves a user-provided path within the sandbox.
 // Returns an error if the resolved path escapes the sandbox directory.
+// Symlinks are resolved to prevent traversal via symbolic links.
 func resolveSandboxPath(sandbox, userPath string) (string, error) {
 	if userPath == "" {
 		return sandbox, nil
 	}
 
-	// Join and clean the path.
-	resolved := filepath.Join(sandbox, filepath.Clean(userPath))
-	abs, err := filepath.Abs(resolved)
+	// Resolve the sandbox to a canonical absolute path.
+	sandboxAbs, err := filepath.EvalSymlinks(sandbox)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %s", userPath)
+		return "", fmt.Errorf("invalid sandbox path: %w", err)
+	}
+	sandboxAbs, err = filepath.Abs(sandboxAbs)
+	if err != nil {
+		return "", fmt.Errorf("invalid sandbox path: %w", err)
 	}
 
-	// Ensure the resolved path is within the sandbox.
-	sandboxAbs, _ := filepath.Abs(sandbox)
-	if !strings.HasPrefix(abs, sandboxAbs+string(filepath.Separator)) && abs != sandboxAbs {
+	// Join and clean the user path.
+	resolved := filepath.Join(sandboxAbs, filepath.Clean(userPath))
+
+	// Resolve symlinks in the user-provided path. If the target doesn't
+	// exist yet (e.g. new file), resolve the parent directory instead.
+	eval, err := filepath.EvalSymlinks(resolved)
+	if err != nil {
+		// Target may not exist; resolve the parent directory.
+		parentEval, perr := filepath.EvalSymlinks(filepath.Dir(resolved))
+		if perr != nil {
+			return "", fmt.Errorf("invalid path %q: %w", userPath, perr)
+		}
+		eval = filepath.Join(parentEval, filepath.Base(resolved))
+	}
+	eval, err = filepath.Abs(eval)
+	if err != nil {
+		return "", fmt.Errorf("invalid path %q: %w", userPath, err)
+	}
+
+	// Ensure the evaluated path is within the sandbox.
+	if !strings.HasPrefix(eval, sandboxAbs+string(filepath.Separator)) && eval != sandboxAbs {
 		return "", fmt.Errorf("access denied: path %q is outside sandbox", userPath)
 	}
 
-	return abs, nil
+	return eval, nil
 }

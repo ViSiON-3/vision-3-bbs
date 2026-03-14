@@ -1,6 +1,8 @@
 package scripting
 
 import (
+	"fmt"
+
 	"github.com/dop251/goja"
 	"github.com/stlalpha/vision3/internal/message"
 )
@@ -101,6 +103,9 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		areaID := int(call.Arguments[0].ToInteger())
 		opts := call.Arguments[1].ToObject(vm)
 		to := jsString(opts, "to", "")
+		if to == "" {
+			panic(vm.NewGoError(fmt.Errorf("postPrivate: missing required 'to' recipient")))
+		}
 		subject := jsString(opts, "subject", "")
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")

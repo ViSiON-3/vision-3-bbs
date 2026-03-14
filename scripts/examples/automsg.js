@@ -29,7 +29,8 @@ function displayAutoMsg(msg) {
         v3.console.println("|03  Left by: |15" + msg.handle);
         v3.console.println("|03  Date:    |07" + msg.date);
         v3.console.println("");
-        var lines = msg.text.split("\n");
+        var text = typeof msg.text === "string" ? msg.text : "";
+        var lines = text.split("\n");
         for (var i = 0; i < lines.length; i++) {
             v3.console.center("|11" + lines[i]);
         }

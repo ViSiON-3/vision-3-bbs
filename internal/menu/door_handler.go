@@ -931,6 +931,8 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 		switch {
 		case doorCfg.Type == "v3_script":
 			doorType = "VPL"
+		case doorCfg.Type == "synchronet_js":
+			doorType = "Synchronet JS"
 		case doorCfg.IsDOS:
 			doorType = "DOS"
 		}
