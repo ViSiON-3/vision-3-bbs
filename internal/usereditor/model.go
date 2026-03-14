@@ -26,33 +26,33 @@ const (
 type editorMode int
 
 const (
-	modeList          editorMode = iota // Main list browser
-	modeEdit                           // Per-user field editor
-	modeEditField                      // Actively editing a field value
-	modeSearch                         // Search for user by handle
-	modeDeleteConfirm                  // Confirm single user delete
-	modeUndeleteConfirm                // Confirm single user undelete
-	modeMassDelete                     // Confirm mass delete of tagged
-	modeValidate                       // Confirm auto-validate
-	modeMassValidate                   // Confirm mass validate
-	modeHelp                           // Help screen overlay
-	modeFileChanged                    // File modified externally warning
-	modeExitConfirm                    // Unsaved changes exit confirm
-	modePasswordEntry                  // Password entry for reset
-	modeSaveConfirm                    // Confirm save before exit
-	modeSaveOnLeave                    // Prompt save when leaving edit screen
-	modeExitClean                      // Simple exit confirmation (no unsaved changes)
-	modeInfoAlert                      // Info alert dismissed by any key
-	modePurgeConfirm                   // Confirm purge after delete
-	modeMassPurge                      // Confirm purge all deleted users
+	modeList            editorMode = iota // Main list browser
+	modeEdit                              // Per-user field editor
+	modeEditField                         // Actively editing a field value
+	modeSearch                            // Search for user by handle
+	modeDeleteConfirm                     // Confirm single user delete
+	modeUndeleteConfirm                   // Confirm single user undelete
+	modeMassDelete                        // Confirm mass delete of tagged
+	modeValidate                          // Confirm auto-validate
+	modeMassValidate                      // Confirm mass validate
+	modeHelp                              // Help screen overlay
+	modeFileChanged                       // File modified externally warning
+	modeExitConfirm                       // Unsaved changes exit confirm
+	modePasswordEntry                     // Password entry for reset
+	modeSaveConfirm                       // Confirm save before exit
+	modeSaveOnLeave                       // Prompt save when leaving edit screen
+	modeExitClean                         // Simple exit confirmation (no unsaved changes)
+	modeInfoAlert                         // Info alert dismissed by any key
+	modePurgeConfirm                      // Confirm purge after delete
+	modeMassPurge                         // Confirm purge all deleted users
 )
 
 // Model is the BubbleTea model for the user editor TUI.
 type Model struct {
 	// Data
-	users     []*user.User // All users (sorted by ID)
-	origUsers []*user.User // Snapshot at load time (for dirty tracking)
-	filePath  string
+	users         []*user.User // All users (sorted by ID)
+	origUsers     []*user.User // Snapshot at load time (for dirty tracking)
+	filePath      string
 	dataDir       string    // Root data directory (parent of users/, infoforms/, etc.)
 	fileMtime     time.Time // mtime at load for optimistic concurrency
 	dirty         bool
@@ -160,27 +160,30 @@ func New(filePath string, dataDir ...string) (Model, error) {
 				if remaining <= 0 {
 					return "Eligible now"
 				}
+				if remaining == 1 {
+					return "1 day"
+				}
 				return fmt.Sprintf("%d days", remaining)
 			}
 		}
 	}
 
 	return Model{
-		users:     users,
-		origUsers: origUsers,
+		users:         users,
+		origUsers:     origUsers,
 		filePath:      filePath,
 		dataDir:       dd,
 		fileMtime:     mtime,
 		retentionDays: retDays,
-		cursor:    0,
-		listType:  1,
-		tagged:    make(map[int]bool),
-		fields:    fields,
-		textInput: ti,
-		searchInput: si,
-		width:     minWidth,
-		height:    minHeight,
-		mode:      modeList,
+		cursor:        0,
+		listType:      1,
+		tagged:        make(map[int]bool),
+		fields:        fields,
+		textInput:     ti,
+		searchInput:   si,
+		width:         minWidth,
+		height:        minHeight,
+		mode:          modeList,
 	}, nil
 }
 
