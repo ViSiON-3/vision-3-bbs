@@ -170,7 +170,7 @@ See [Menus & ACS](menus/menu-system.md) for details on adding door entries to me
 
 ## Running Synchronet JavaScript Doors
 
-ViSiON/3 can run Synchronet BBS JavaScript door games natively using a built-in JS engine. No Synchronet installation is required — only the game files and Synchronet's JS library directories. Set `"type": "synchronet_js"` in the door configuration.
+ViSiON/3 can run Synchronet BBS JavaScript door games natively using a built-in JS engine. A full Synchronet installation is not required, but you will need the game files and Synchronet's JS library directories (available from the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs)). Set `"type": "synchronet_js"` in the door configuration.
 
 See [Synchronet JS Doors](doors/synchronet-js-doors.md) for full setup instructions.
 

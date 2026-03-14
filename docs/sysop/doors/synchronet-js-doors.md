@@ -1,6 +1,6 @@
 # Synchronet JavaScript Door Games
 
-ViSiON/3 includes a built-in JavaScript engine that can run Synchronet BBS door games natively. Games run inside the BBS process with no external programs, no PTY bridging, and no Synchronet installation required.
+ViSiON/3 includes a built-in JavaScript engine that can run Synchronet BBS door games natively. Games run inside the BBS process with no external programs and no PTY bridging. A full Synchronet installation is not required, but you will need the game files and certain Synchronet JS libraries — see [Required Files from Synchronet](#required-files-from-synchronet) below.
 
 ## Overview
 
