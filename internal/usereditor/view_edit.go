@@ -77,7 +77,11 @@ func (m Model) viewEditScreen() string {
 
 	// === Bottom help bar ===
 	// UE.PAS: 'F2 - Delete  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes'
-	helpText := centerText("F2 - Delete  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes", m.width)
+	f2Label := "Delete"
+	if u.DeletedUser {
+		f2Label = "UnDelete"
+	}
+	helpText := centerText(fmt.Sprintf("F2 - %s  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes", f2Label), m.width)
 	b.WriteString(helpBarStyle.Render(helpText))
 
 	// Overlay for password entry
@@ -90,6 +94,9 @@ func (m Model) viewEditScreen() string {
 	} else if m.mode == modeValidate {
 		result = m.overlayConfirmDialog(result, "-- Auto Validate --",
 			fmt.Sprintf("Set %s to Defaults? ", u.Handle))
+	} else if m.mode == modeSaveOnLeave {
+		result = m.overlayConfirmDialog(result, "-- Unsaved Changes --",
+			"Save changes to disk? ")
 	}
 
 	return result

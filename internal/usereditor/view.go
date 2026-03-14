@@ -10,7 +10,7 @@ import (
 // View implements tea.Model.
 func (m Model) View() string {
 	switch m.mode {
-	case modeEdit, modeEditField, modePasswordEntry:
+	case modeEdit, modeEditField, modePasswordEntry, modeSaveOnLeave:
 		return m.viewEditScreen()
 	default:
 		return m.viewListScreen()

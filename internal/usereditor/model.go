@@ -37,6 +37,7 @@ const (
 	modeExitConfirm                    // Unsaved changes exit confirm
 	modePasswordEntry                  // Password entry for reset
 	modeSaveConfirm                    // Confirm save before exit
+	modeSaveOnLeave                    // Prompt save when leaving edit screen
 )
 
 // Model is the BubbleTea model for the user editor TUI.
@@ -171,7 +172,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case modeSearch:
 			return m.updateSearch(msg)
 		case modeDeleteConfirm, modeMassDelete, modeValidate, modeMassValidate,
-			modeExitConfirm, modeFileChanged, modeSaveConfirm:
+			modeExitConfirm, modeFileChanged, modeSaveConfirm, modeSaveOnLeave:
 			return m.updateConfirm(msg)
 		case modeHelp:
 			return m.updateHelp(msg)
@@ -230,7 +231,18 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 	case tea.KeyF2:
-		// Delete highlighted user
+		// Toggle delete on highlighted user (protect User 1)
+		if m.cursor >= 0 && m.cursor < len(m.users) {
+			u := m.users[m.cursor]
+			if u.ID == 1 {
+				m.message = "Can't delete User 1. Edit instead."
+				return m, nil
+			}
+			if u.DeletedUser {
+				m.undeleteUser(m.cursor)
+				return m, nil
+			}
+		}
 		m.mode = modeDeleteConfirm
 		m.confirmYes = false
 		return m, nil
@@ -332,8 +344,13 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editField = m.nextEditableField(-1)
 
 	case tea.KeyEscape:
-		// Save and return to list
+		// If there are unsaved changes, prompt to save to disk now
 		m.saveCurrentUser()
+		if m.dirty {
+			m.mode = modeSaveOnLeave
+			m.confirmYes = true
+			return m, nil
+		}
 		m.mode = modeList
 		return m, nil
 
@@ -358,7 +375,18 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyF2:
-		// Delete current user
+		// Toggle delete on current user (protect User 1)
+		if m.editIndex >= 0 && m.editIndex < len(m.users) {
+			u := m.users[m.editIndex]
+			if u.ID == 1 {
+				m.message = "Can't delete User 1. Edit instead."
+				return m, nil
+			}
+			if u.DeletedUser {
+				m.undeleteUser(m.editIndex)
+				return m, nil
+			}
+		}
 		m.mode = modeDeleteConfirm
 		m.confirmYes = false
 		return m, nil
@@ -659,6 +687,10 @@ func (m Model) rejectConfirm() (tea.Model, tea.Cmd) {
 	case modeExitConfirm:
 		// "Save changes before exit? No" → quit without saving
 		return m, tea.Quit
+	case modeSaveOnLeave:
+		// "No" → return to list without saving to disk
+		m.mode = modeList
+		return m, nil
 	default:
 		m.mode = m.previousMode()
 		return m, nil
@@ -674,6 +706,8 @@ func (m Model) previousMode() editorMode {
 		return modeList
 	case modeExitConfirm, modeSaveConfirm:
 		return modeList
+	case modeSaveOnLeave:
+		return modeEdit
 	case modeFileChanged:
 		return modeList
 	}
@@ -731,6 +765,12 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		m.saveAllToDisk()
 		m.mode = modeList
 		return m, nil
+
+	case modeSaveOnLeave:
+		// Save to disk and return to list
+		m.saveAllToDisk()
+		m.mode = modeList
+		return m, nil
 	}
 
 	m.mode = modeList
@@ -752,12 +792,28 @@ func (m *Model) softDeleteUser(idx int) {
 		return
 	}
 	u := m.users[idx]
+	if u.ID == 1 {
+		m.message = "Can't delete User 1. Edit instead."
+		return
+	}
 	u.DeletedUser = true
 	now := time.Now()
 	u.DeletedAt = &now
 	u.UpdatedAt = now
 	m.dirty = true
 	m.message = fmt.Sprintf("Deleted: %s", u.Handle)
+}
+
+func (m *Model) undeleteUser(idx int) {
+	if idx < 0 || idx >= len(m.users) {
+		return
+	}
+	u := m.users[idx]
+	u.DeletedUser = false
+	u.DeletedAt = nil
+	u.UpdatedAt = time.Now()
+	m.dirty = true
+	m.message = fmt.Sprintf("Undeleted: %s", u.Handle)
 }
 
 func (m *Model) autoValidateUser(idx int) {
