@@ -25,11 +25,11 @@
         "name": "LORDJS",
         "type": "synchronet_js",
         "script": "lord.js",
-        "working_directory": "/home/bbs/git/sbbs/xtrn/lord",
-        "exec_dir": "/home/bbs/git/sbbs/exec/",
+        "working_directory": "/sbbs/xtrn/lord",
+        "exec_dir": "/sbbs/exec/",
         "library_paths": [
-            "/home/bbs/git/sbbs/exec/load",
-            "/home/bbs/git/sbbs/exec/load/dorkit"
+            "/sbbs/exec/load",
+            "/sbbs/exec/load/dorkit"
         ],
         "single_instance": true
     }
