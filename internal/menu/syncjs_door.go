@@ -78,7 +78,8 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 		SysOpName:        ctx.Executor.ServerCfg.SysOpName,
 	}
 
-	engineCtx, engineCancel := context.WithCancel(context.Background())
+	// Derive from the SSH session context so scripts cancel on disconnect.
+	engineCtx, engineCancel := context.WithCancel(ctx.Session.Context())
 	defer engineCancel()
 
 	eng := syncjs.NewEngine(engineCtx, session, cfg)

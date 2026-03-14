@@ -142,7 +142,11 @@ func (eng *Engine) Close() {
 	// the session. This relies on the caller closing the read interrupt
 	// (via SetReadInterrupt) to unblock the copier's session.Read().
 	if eng.copierDone != nil {
-		<-eng.copierDone
+		select {
+		case <-eng.copierDone:
+		case <-time.After(2 * time.Second):
+			log.Printf("WARN: SyncJS: copier goroutine did not exit within 2s; proceeding with cleanup")
+		}
 	}
 	if eng.pipeReader != nil {
 		eng.pipeReader.Close()
@@ -317,6 +321,7 @@ func (eng *Engine) startReader() {
 					}
 				}
 				if err != nil {
+					eng.cancel() // signal context so CPU-bound scripts stop on disconnect
 					eng.pipeWriter.CloseWithError(err)
 					return
 				}

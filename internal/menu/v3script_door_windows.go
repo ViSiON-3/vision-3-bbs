@@ -62,7 +62,8 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		BBSVersion:       version.Number,
 	}
 
-	engineCtx, engineCancel := context.WithCancel(context.Background())
+	// Derive from the SSH session context so scripts cancel on disconnect.
+	engineCtx, engineCancel := context.WithCancel(ctx.Session.Context())
 	defer engineCancel()
 
 	providers := &scripting.Providers{

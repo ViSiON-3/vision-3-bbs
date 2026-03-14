@@ -192,8 +192,10 @@ func resolveSandboxPath(sandbox, userPath string) (string, error) {
 		return "", fmt.Errorf("invalid path %q: %w", userPath, err)
 	}
 
-	// Ensure the evaluated path is within the sandbox.
-	if !strings.HasPrefix(eval, sandboxAbs+string(filepath.Separator)) && eval != sandboxAbs {
+	// Ensure the evaluated path is within the sandbox using filepath.Rel,
+	// which is more robust than string prefix matching against path separators.
+	rel, err := filepath.Rel(sandboxAbs, eval)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
 		return "", fmt.Errorf("access denied: path %q is outside sandbox", userPath)
 	}
 

@@ -545,14 +545,14 @@ for (var i = 0; i < files.length; i++) {
 
 ### v3.ansi
 
-Display ANSI art files (.ANS) from scripts. Files are resolved relative to the script's working directory first, then `menus/v3/ansi/`.
+Display ANSI art files (.ANS) from scripts. Files are resolved by searching the script's working directory first, then `menus/v3/ansi/`, then `menus/v3/templates/`.
 
 | Function | Description |
 |----------|-------------|
 | `display(filename)` | Read and display an .ANS file with pipe-code processing |
 | `displayRaw(filename)` | Display an .ANS file without pipe-code processing |
 
-SAUCE metadata is automatically stripped. CP437 encoding is converted to UTF-8 for display.
+SAUCE metadata is automatically stripped. Raw bytes are sent as-is to the terminal (no CP437-to-UTF-8 conversion).
 
 ```javascript
 v3.ansi.display("welcome.ans");     // with pipe codes

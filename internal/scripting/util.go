@@ -33,6 +33,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 	})
 
 	// random(max) — returns a random integer from 0 to max-1.
+	// Note: math/rand is automatically seeded since Go 1.20 (we require 1.24+).
 	obj.Set("random", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(0)
