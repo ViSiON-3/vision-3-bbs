@@ -8,7 +8,7 @@ The file system allows users to browse, upload, and download files organized int
 
 ## File Area Configuration
 
-Use the [Configuration Editor](../configuration/configuration.md#configuration-editor-tui) (`./config`, section 3 — File Areas) to add, edit, and remove file areas interactively. This is the recommended approach.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 3 — File Areas) to add, edit, and remove file areas interactively. This is the recommended approach.
 
 ### JSON Reference
 
@@ -231,7 +231,7 @@ File listings use templates in `menus/v3/templates/`:
 | `@FTOTAL@` | File count, value as-is |
 | `@FTOTAL######@` | File count in fixed-width field (12 cols in this example) |
 
-**Alignment modifiers** (`|L` left, `|R` right, `|C` center) — same syntax as [message header placeholders](../messages/placeholders.md):
+**Alignment modifiers** (`|L` left, `|R` right, `|C` center) — same syntax as [message header placeholders](messages/placeholders.md):
 
 | Placeholder | Description |
 | ----------- | ----------- |
@@ -314,7 +314,7 @@ Use the `helper files import` command to bulk import files from a directory:
 ./helper files import --dir /path/to/files --area GENERAL --preserve-dates
 ```
 
-This automatically copies files, extracts FILE_ID.DIZ descriptions from archives, generates UUIDs, and updates `metadata.json`. See [Bulk File Import](bulk-import.md) for full documentation.
+This automatically copies files, extracts FILE_ID.DIZ descriptions from archives, generates UUIDs, and updates `metadata.json`. See [Bulk File Import](files/bulk-import.md) for full documentation.
 
 ## Best Practices
 
@@ -336,11 +336,11 @@ Protocol configurations are defined in `configs/protocols.json`. ViSiON/3 uses *
 - Works on both SSH and telnet connections
 - Operates on raw I/O pipes — no PTY required
 - Binary is included at `bin/sexyz`
-- Can be built from source — see [File Transfer Protocols](file-transfer.md)
+- Can be built from source — see [File Transfer Protocols](files/file-transfer.md)
 
 ### Transfer Binary
 
-sexyz is included as a pre-built binary at `bin/sexyz`. If you need to build it for a different platform, see [File Transfer Protocols](file-transfer.md) for instructions.
+sexyz is included as a pre-built binary at `bin/sexyz`. If you need to build it for a different platform, see [File Transfer Protocols](files/file-transfer.md) for instructions.
 
 **Docker:** The sexyz binary is copied into the Docker image automatically if present at `bin/sexyz`.
 

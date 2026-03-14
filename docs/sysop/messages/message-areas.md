@@ -4,9 +4,9 @@ ViSiON/3's message system lets users post and read messages across topic areas. 
 
 ## Configuring Message Areas
 
-Use the [Configuration Editor](../configuration/configuration.md#configuration-editor-tui) (`./config`, section 2 — Message Areas) to add, edit, and remove message areas interactively. This is the recommended approach.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 2 — Message Areas) to add, edit, and remove message areas interactively. This is the recommended approach.
 
-SysOps and area sponsors can also edit area settings live from within the BBS via the [Sponsor Menu](../users/sponsor-menus.md) (`%` in the Messages Menu) — no restart required.
+SysOps and area sponsors can also edit area settings live from within the BBS via the [Sponsor Menu](users/sponsor-menus.md) (`%` in the Messages Menu) — no restart required.
 
 ### JSON Reference
 
@@ -58,7 +58,7 @@ Message areas are defined in `configs/message_areas.json` as an array:
 - `origin_addr` — FTN origin address for echomail (e.g., `"21:3/110"`)
 - `max_msgs` — Maximum number of messages to retain (0 = no limit). Oldest messages are removed when the count is exceeded.
 - `max_msg_age` — Maximum message age in days (0 = no limit). Messages older than this are removed.
-- `sponsor` — Handle of the area sponsor/moderator (optional). See [Sponsor Menus](../users/sponsor-menus.md).
+- `sponsor` — Handle of the area sponsor/moderator (optional). See [Sponsor Menus](users/sponsor-menus.md).
 
 ### Area Types
 
@@ -74,7 +74,7 @@ SysOps, Co-SysOps, and designated area sponsors can edit area settings live from
 
 From the **Messages Menu**, press `%` to open the Sponsor Menu for the currently selected area. From there, press `E` to open the area editor, where you can update the name, description, ACS strings, max message limits, sponsor handle, and more. Changes are saved atomically to `configs/message_areas.json`.
 
-See [Sponsor Menus](../users/sponsor-menus.md) for the full key reference and field details.
+See [Sponsor Menus](users/sponsor-menus.md) for the full key reference and field details.
 
 > **Sysop access:** SysOps and Co-SysOps automatically have sponsor access to all areas. The `%` key is hidden from the menu listing — press it directly.
 
@@ -102,7 +102,7 @@ See [Sponsor Menus](../users/sponsor-menus.md) for the full key reference and fi
 3. Restart the BBS (areas are loaded at startup)
 4. JAM base files are created automatically on first access
 
-> **Tip:** Once the BBS is running, you can also edit existing area settings live via the [Sponsor Menu](../users/sponsor-menus.md) (`%` in the Messages Menu).
+> **Tip:** Once the BBS is running, you can also edit existing area settings live via the [Sponsor Menu](users/sponsor-menus.md) (`%` in the Messages Menu).
 
 ---
 
@@ -229,7 +229,7 @@ JAM bases are binary files that may need periodic maintenance:
 - **Integrity**: If a base becomes corrupted, delete the 4 JAM files and the base will be recreated (messages will be lost)
 - **Growth**: JAM text files (.jdt) grow as messages are added. Deleted messages leave gaps that can be reclaimed by packing.
 
-The `v3mail` command handles all message base maintenance. See [Nightly Message Base Maintenance](../advanced/event-scheduler.md#nightly-message-base-maintenance) in the event scheduler docs for the recommended automated maintenance sequence.
+The `v3mail` command handles all message base maintenance. See [Nightly Message Base Maintenance](advanced/event-scheduler.md#nightly-message-base-maintenance) in the event scheduler docs for the recommended automated maintenance sequence.
 
 ### Message Purge Configuration
 
@@ -259,7 +259,7 @@ The FTN dupe database (`data/ftn/dupes.json`) tracks MSGIDs to prevent duplicate
 
 ## Private Mail
 
-See [Private Mail](private-mail.md) for setup and configuration.
+See [Private Mail](messages/private-mail.md) for setup and configuration.
 
 ---
 
@@ -405,7 +405,7 @@ Message display templates live in `menus/v3/templates/`.
 
 #### Message Header
 
-The message header is rendered using the `MSGHDR.*.ans` style system in `menus/v3/templates/message_headers/`. Users can select a header style via message reader settings. See [Message Header Placeholders](placeholders.md) for available tokens.
+The message header is rendered using the `MSGHDR.*.ans` style system in `menus/v3/templates/message_headers/`. Users can select a header style via message reader settings. See [Message Header Placeholders](messages/placeholders.md) for available tokens.
 
 #### Read Prompt
 

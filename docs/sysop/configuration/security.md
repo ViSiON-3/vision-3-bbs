@@ -765,10 +765,10 @@ iptables -A INPUT -p tcp --dport 2222 -m state --state NEW \
 
 ## Additional Resources
 
-- [Configuration Guide](configuration.md) - Detailed configuration options
-- [Installation Guide](../getting-started/installation.md) - Setup and deployment
-- [Docker Deployment](../getting-started/docker.md) - Containerized security
-- [User Management](../users/user-management.md) - User access control
+- [Configuration Guide](configuration/configuration.md) - Detailed configuration options
+- [Installation Guide](getting-started/installation.md) - Setup and deployment
+- [Docker Deployment](getting-started/docker.md) - Containerized security
+- [User Management](users/user-management.md) - User access control
 
 ## Support
 

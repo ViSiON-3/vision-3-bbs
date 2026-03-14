@@ -18,7 +18,7 @@ The tosser is built into Vision/3 via the `v3mail` command, conceptually similar
 | `v3mail scan` | Scans JAM bases for new outbound echomail and creates `.pkt` files |
 | `v3mail ftn-pack` | Packs outbound `.pkt` files into ZIP bundles for mailer pickup |
 
-Configured via `configs/ftn.json`. The [Configuration Editor](../configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Echomail Networks, section 8 — Echomail Links) manages network and link settings interactively.
+Configured via `configs/ftn.json`. The [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Echomail Networks, section 8 — Echomail Links) manages network and link settings interactively.
 
 > **Current limitation — single uplink per network:** Vision/3 currently supports one uplink (hub) per FTN network. All outbound echomail for a network is sent to every configured link, so defining more than one link will result in duplicate packets being delivered to each. Multi-link routing (hub/downlink operation) is planned for a future release.
 
@@ -453,11 +453,11 @@ scheduler (configured in `configs/events.json`) to run these automatically:
 }
 ```
 
-See [event-scheduler.md](../advanced/event-scheduler.md) for the full recommended FTN workflow configuration.
+See [event-scheduler.md](advanced/event-scheduler.md) for the full recommended FTN workflow configuration.
 
 ## Configuration Files Reference
 
-> *The [Configuration Editor](../configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Echomail Networks, section 8 — Echomail Links) manages FTN network and link settings interactively. Mailer-specific configuration (binkd.conf) and directory setup are still handled manually as described below.*
+> *The [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Echomail Networks, section 8 — Echomail Links) manages FTN network and link settings interactively. Mailer-specific configuration (binkd.conf) and directory setup are still handled manually as described below.*
 
 ### ftn.json
 

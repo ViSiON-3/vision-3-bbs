@@ -74,9 +74,9 @@ Configuration files are split between two directories:
 
 **In `menus/v3/` directory (menu set):**
 
-- `bar/PDMATRIX.BAR`, `cfg/PDMATRIX.CFG`, `mnu/PDMATRIX.MNU` - Pre-login matrix menu (see [Menu System Guide](../menus/menu-system.md#pre-login-matrix-screen))
+- `bar/PDMATRIX.BAR`, `cfg/PDMATRIX.CFG`, `mnu/PDMATRIX.MNU` - Pre-login matrix menu (see [Menu System Guide](menus/menu-system.md#pre-login-matrix-screen))
 - `theme.json` - Theme color settings
-- `ansi/PRELOGON.ANS` (or `PRELOGON.1`, `PRELOGON.2`, ...) - Pre-login ANSI screens shown before LOGIN (see [Menu System Guide](../menus/menu-system.md#pre-login-ansi-files-prelogon))
+- `ansi/PRELOGON.ANS` (or `PRELOGON.1`, `PRELOGON.2`, ...) - Pre-login ANSI screens shown before LOGIN (see [Menu System Guide](menus/menu-system.md#pre-login-ansi-files-prelogon))
 
 **In `data/` directory:**
 
@@ -85,7 +85,7 @@ Configuration files are split between two directories:
 
 ## strings.json
 
-> *Use the [String Editor](../advanced/string-editor.md) (`./strings`) to edit display strings interactively. It is a Go reimplementation of the original Vision/2 `STRINGS.EXE` utility. The JSON structure below is for reference or manual editing.*
+> *Use the [String Editor](advanced/string-editor.md) (`./strings`) to edit display strings interactively. It is a Go reimplementation of the original Vision/2 `STRINGS.EXE` utility. The JSON structure below is for reference or manual editing.*
 
 This file contains all the customizable text strings displayed by the BBS. You can modify these to personalize your system.
 
@@ -152,7 +152,7 @@ The strings support pipe color codes:
 
 > *Use the [Configuration Editor](#configuration-editor-tui) (section 5 — Door Programs) to manage door settings interactively. The JSON structure below is for reference or manual editing.*
 
-Configures external door programs that can be launched from the BBS. The file contains an array of door configurations. See the [Door Programs Guide](../doors/doors.md) for full documentation including DOS door setup, FOSSIL drivers, and dosemu2 configuration.
+Configures external door programs that can be launched from the BBS. The file contains an array of door configurations. See the [Door Programs Guide](doors/doors.md) for full documentation including DOS door setup, FOSSIL drivers, and dosemu2 configuration.
 
 ### Door Configuration Structure
 
@@ -409,13 +409,13 @@ General BBS configuration settings.
 - `nuvKill` - If `true`, auto-soft-delete the user when no threshold is reached; if `false`, log a notice (default: `false`)
 - `nuvLevel` - Access level assigned to auto-validated NUV users (default: `25`)
 
-See [New User Voting](../users/nuv.md) for full details.
+See [New User Voting](users/nuv.md) for full details.
 
 **DOS Emulation:**
 
 - `dosemuPath` - Path to the dosemu2 binary (default: `/usr/libexec/dosemu2/dosemu2.bin`). ViSiON/3 calls the binary directly, bypassing the bash wrapper which mangles backslash arguments. Leave blank to use the default path.
 
-See [Door Programs](../doors/doors.md#running-dos-doors) for full DOS door setup documentation.
+See [Door Programs](doors/doors.md#running-dos-doors) for full DOS door setup documentation.
 
 **Timezone behavior:**
 
@@ -456,7 +456,7 @@ Both blocklist and allowlist files use the same format:
 - When you edit and save either file, changes apply **within seconds** (no BBS restart needed)
 - Debouncing (500ms) handles rapid successive edits
 - All reloads are logged for debugging
-- See [Security Guide](security.md#auto-reload-feature) for detailed usage
+- See [Security Guide](configuration/security.md#auto-reload-feature) for detailed usage
 
 **Example setup:**
 
@@ -475,7 +475,7 @@ Leave paths empty (`""`) to disable the feature.
 
 Located in the `configs/` directory. Defines message areas available on the BBS.
 
-See [Message Areas Guide](../messages/message-areas.md) for detailed configuration.
+See [Message Areas Guide](messages/message-areas.md) for detailed configuration.
 
 ## ftn.json
 
@@ -483,7 +483,7 @@ See [Message Areas Guide](../messages/message-areas.md) for detailed configurati
 
 Located in the `configs/` directory. Configures the internal FTN tosser (v3mail) for echomail. Global fields include directory paths (`inbound_path`, `outbound_path`, `binkd_outbound_path`, `temp_path`) and routing tags (`bad_area_tag`, `dupe_area_tag`). Per-network fields include `own_address`, `internal_tosser_enabled`, `poll_interval_seconds`, and `tearline`. Per-link fields include `address`, `packet_password`, `areafix_password`, `name`, and `flavour`.
 
-See [FTN Echomail Guide](../messages/ftn-echomail.md) for setup and full field reference.
+See [FTN Echomail Guide](messages/ftn-echomail.md) for setup and full field reference.
 
 ## conferences.json
 
@@ -551,7 +551,7 @@ If `conferences.json` is missing or empty, the system operates as before — are
 
 The event scheduler configuration file defines automated tasks that run on cron-style schedules.
 
-See the complete [Event Scheduler Guide](../advanced/event-scheduler.md) for detailed documentation.
+See the complete [Event Scheduler Guide](advanced/event-scheduler.md) for detailed documentation.
 
 ### Basic Structure
 

@@ -194,6 +194,6 @@ To display news at login, add `PRINTNEWS` to `configs/login.json`:
 
 ## See Also
 
-- [Login Sequence](../users/login-sequence.md) — configuring `PRINTNEWS` in `login.json`
-- [Admin Menu](../users/admin-menu.md) — `W` key for news management
-- [Pipe Color Codes](menu-system.md#pipe-color-codes) — colors in `NEWSHDR.ANS`
+- [Login Sequence](users/login-sequence.md) — configuring `PRINTNEWS` in `login.json`
+- [Admin Menu](users/admin-menu.md) — `W` key for news management
+- [Pipe Color Codes](menus/menu-system.md#pipe-color-codes) — colors in `NEWSHDR.ANS`

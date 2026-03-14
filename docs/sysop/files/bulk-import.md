@@ -191,7 +191,7 @@ Native ZIP extraction reads FILE_ID.DIZ directly from the archive without extrac
 
 ## File Area Configuration Reference
 
-File areas are defined in `configs/file_areas.json`. See [File Areas](file-areas.md) for full documentation on area configuration, metadata format, and template variables.
+File areas are defined in `configs/file_areas.json`. See [File Areas](files/file-areas.md) for full documentation on area configuration, metadata format, and template variables.
 
 ## Troubleshooting
 

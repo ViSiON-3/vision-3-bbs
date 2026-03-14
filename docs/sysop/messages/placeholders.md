@@ -35,7 +35,7 @@ All width-constrained formats support an optional alignment modifier using `|` f
 
 The modifier is placed between the code letter and the width specifier, separated by `|`. This syntax is inspired by Synchronet BBS @-codes.
 
-The same alignment modifier syntax applies to file list placeholders (`@FPAGE`, `@FTOTAL`, `@FCONFPATH`) — see [file-areas.md](../files/file-areas.md).
+The same alignment modifier syntax applies to file list placeholders (`@FPAGE`, `@FTOTAL`, `@FCONFPATH`) — see [file-areas.md](files/file-areas.md).
 
 The visual placeholder format is particularly useful for ANSI art templates where precise character positioning is critical. The `#` characters show exactly how much horizontal space the field will occupy, making it easy to design layouts visually.
 

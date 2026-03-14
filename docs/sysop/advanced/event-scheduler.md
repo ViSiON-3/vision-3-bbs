@@ -15,7 +15,7 @@ The event scheduler provides:
 
 ## Configuration
 
-Use the [Configuration Editor](../configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Event Scheduler) to add, edit, and remove scheduled events interactively. This is the recommended approach.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Event Scheduler) to add, edit, and remove scheduled events interactively. This is the recommended approach.
 
 ### JSON Reference
 
@@ -322,7 +322,7 @@ ViSiON/3 uses `v3mail` for JAM message base maintenance. The recommended nightly
 | 2:15 AM | `purge --all` | Remove messages exceeding per-area age/count limits |
 | 2:30 AM | `pack --all` | Defragment bases and reclaim space from deleted messages |
 
-Purge limits (`max_age`, `max_messages`) are configured per area in `message_areas.json`. See [Message Purge Configuration](../messages/message-areas.md#message-purge-configuration) for details.
+Purge limits (`max_age`, `max_messages`) are configured per area in `message_areas.json`. See [Message Purge Configuration](messages/message-areas.md#message-purge-configuration) for details.
 
 ```json
 {
@@ -379,7 +379,7 @@ Permanently remove soft-deleted user accounts that have exceeded the retention p
 }
 ```
 
-See [Purging Deleted Users](../users/user-management.md#purging-deleted-users) for full details including CLI usage and the `--dry-run` preview flag.
+See [Purging Deleted Users](users/user-management.md#purging-deleted-users) for full details including CLI usage and the `--dry-run` preview flag.
 
 ### Nightly Maintenance
 

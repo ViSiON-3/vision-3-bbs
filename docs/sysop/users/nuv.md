@@ -217,7 +217,7 @@ Alternatively, edit `data/nuv.json` and add an entry to the `candidates` array. 
 
 ## See Also
 
-- [Login Sequence](login-sequence.md) — configuring `CHECKNUV` in `login.json`
-- [Admin Menu](admin-menu.md) — `U` key for NUV queue review
-- [User Management](user-management.md) — manual validation and soft-delete
-- [Configuration](../configuration/configuration.md) — `useNuv`, `nuvYesVotes`, and related fields
+- [Login Sequence](users/login-sequence.md) — configuring `CHECKNUV` in `login.json`
+- [Admin Menu](users/admin-menu.md) — `U` key for NUV queue review
+- [User Management](users/user-management.md) — manual validation and soft-delete
+- [Configuration](configuration/configuration.md) — `useNuv`, `nuvYesVotes`, and related fields

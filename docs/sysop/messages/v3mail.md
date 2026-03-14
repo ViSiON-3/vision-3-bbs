@@ -151,7 +151,7 @@ The recommended nightly sequence (configured via the event scheduler):
 
 ## Event Scheduler Integration
 
-`v3mail` is designed to run as scheduled events. See `configs/events.json` and [Event Scheduler](../advanced/event-scheduler.md) for full examples. A typical configuration:
+`v3mail` is designed to run as scheduled events. See `configs/events.json` and [Event Scheduler](advanced/event-scheduler.md) for full examples. A typical configuration:
 
 ```json
 {
@@ -178,7 +178,7 @@ Check `data/ftn/dupes.json`. If the file is corrupt or very large, remove it and
 
 ## See Also
 
-- [FTN Echomail](ftn-echomail.md) — End-to-end FTN setup guide
-- [JAM Echomail](jam-echomail.md) — JAM message base internals
-- [Event Scheduler](../advanced/event-scheduler.md) — Scheduling v3mail commands
-- [Message Areas](message-areas.md) — Configuring message areas
+- [FTN Echomail](messages/ftn-echomail.md) — End-to-end FTN setup guide
+- [JAM Echomail](messages/jam-echomail.md) — JAM message base internals
+- [Event Scheduler](advanced/event-scheduler.md) — Scheduling v3mail commands
+- [Message Areas](messages/message-areas.md) — Configuring message areas

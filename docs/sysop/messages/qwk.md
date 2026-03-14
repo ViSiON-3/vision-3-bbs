@@ -61,11 +61,11 @@ Three display strings in `configs/strings.json` control QWK messaging:
 | `totalQWKAdded` | `\|TO` = count | Displayed after REP processing completes |
 | `sendQWKPacketPrompt` | — | Confirmation prompt before sending a QWK packet |
 
-Edit these via the [String Editor](../advanced/string-editor.md) (strings 147–149) or directly in `configs/strings.json`.
+Edit these via the [String Editor](advanced/string-editor.md) (strings 147–149) or directly in `configs/strings.json`.
 
 ## Transfer Protocols
 
-QWK download and upload use the same file transfer subsystem as file areas. Any protocol configured in `configs/doors.json` and available for the user's connection type (SSH or telnet) will be offered. See [File Transfer](../files/file-transfer.md) for protocol setup.
+QWK download and upload use the same file transfer subsystem as file areas. Any protocol configured in `configs/doors.json` and available for the user's connection type (SSH or telnet) will be offered. See [File Transfer](files/file-transfer.md) for protocol setup.
 
 ## Per-Area Write Access
 
@@ -82,4 +82,4 @@ All new messages in tagged areas have already been downloaded (lastread pointers
 - The REP packet may not contain a `BBSID.MSG` file. Check logs for `ERROR: QWK: failed to parse REP`.
 
 **Transfer fails with "Transfer program not found"**
-The transfer protocol binary (e.g. `sz`, `rz`) is not installed or not in `PATH`. See [File Transfer](../files/file-transfer.md).
+The transfer protocol binary (e.g. `sz`, `rz`) is not installed or not in `PATH`. See [File Transfer](files/file-transfer.md).

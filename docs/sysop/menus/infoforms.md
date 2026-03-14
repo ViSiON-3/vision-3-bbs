@@ -312,8 +312,8 @@ The `responses/` directory is created automatically when the first form is compl
 
 ## See Also
 
-- [Menu System](menu-system.md) — menu and command file configuration
-- [Login Sequence](../users/login-sequence.md) — configuring login steps
-- [New User Voting (NUV)](../users/nuv.md) — community-based user approval
-- [Rumors](rumors.md) — similar community feature
-- [String Editor](../advanced/string-editor.md) — customizing prompt strings
+- [Menu System](menus/menu-system.md) — menu and command file configuration
+- [Login Sequence](users/login-sequence.md) — configuring login steps
+- [New User Voting (NUV)](users/nuv.md) — community-based user approval
+- [Rumors](menus/rumors.md) — similar community feature
+- [String Editor](advanced/string-editor.md) — customizing prompt strings

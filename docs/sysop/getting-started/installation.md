@@ -12,7 +12,7 @@
 |--------|----------|
 | [Download Pre-Built Release](#option-1-download-pre-built-release) | Fastest path — no Go toolchain required |
 | [Build from Source](#option-2-build-from-source) | Contributors, or to run unreleased code |
-| [Docker Deployment](docker.md) | Containerized / production setup |
+| [Docker Deployment](getting-started/docker.md) | Containerized / production setup |
 
 ---
 
@@ -73,7 +73,7 @@ Download from: [https://github.com/stlalpha/vision3/releases](https://github.com
    notepad configs\config.json    # Windows
    ```
 
-   See the [Configuration Guide](../configuration/configuration.md) for all settings.
+   See the [Configuration Guide](configuration/configuration.md) for all settings.
 
 4. **Start the BBS:**
 
@@ -141,7 +141,7 @@ This will:
 nano configs/config.json
 ```
 
-See the [Configuration Guide](../configuration/configuration.md) for all settings.
+See the [Configuration Guide](configuration/configuration.md) for all settings.
 
 ### 4. Start the Server
 
@@ -180,7 +180,7 @@ Available output modes:
 
 **sexyz** is Synchronet's ZModem 8k implementation used for file transfers on both SSH and telnet connections. It is included in the release archive and in `bin/sexyz` in the source tree. No separate installation is needed.
 
-If you need to build it for a different platform, see [File Transfer Protocols](../files/file-transfer.md).
+If you need to build it for a different platform, see [File Transfer Protocols](files/file-transfer.md).
 
 ---
 
@@ -231,8 +231,8 @@ If you encounter SSH key errors, ensure the key exists at `configs/ssh_host_rsa_
 
 ## Next Steps
 
-- Review the [Configuration Guide](../configuration/configuration.md) to customize your BBS
-- Set up [Message Areas](../messages/message-areas.md) and [File Areas](../files/file-areas.md)
-- Configure [Door Programs](../doors/doors.md) if desired
-- Review [File Transfer Protocols](../files/file-transfer.md) (sexyz ZModem 8k)
-- Refer to [User Management](../users/user-management.md) for managing users
+- Review the [Configuration Guide](configuration/configuration.md) to customize your BBS
+- Set up [Message Areas](messages/message-areas.md) and [File Areas](files/file-areas.md)
+- Configure [Door Programs](doors/doors.md) if desired
+- Review [File Transfer Protocols](files/file-transfer.md) (sexyz ZModem 8k)
+- Refer to [User Management](users/user-management.md) for managing users

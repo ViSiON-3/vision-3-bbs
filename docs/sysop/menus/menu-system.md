@@ -242,8 +242,8 @@ Add `|L`, `|R`, or `|C` between the code and width specifier to control alignmen
 - Menu ANSI files (`.ANS`)
 - Prompt strings (`PROMPT1` in `.CFG`)
 - Last Caller templates (`LASTCALL.TOP`, `LASTCALL.MID`, `LASTCALL.BOT`)
-- File list templates (`FILELIST.TOP`, `FILELIST.BOT`) — see [File Areas](../files/file-areas.md#file-list-templates) for file-specific codes (`@FPAGE@`, `@FTOTAL@`, `@FCONFPATH@`)
-- Message header templates — see [Header Placeholders](../messages/placeholders.md) for the full message-specific code list
+- File list templates (`FILELIST.TOP`, `FILELIST.BOT`) — see [File Areas](files/file-areas.md#file-list-templates) for file-specific codes (`@FPAGE@`, `@FTOTAL@`, `@FCONFPATH@`)
+- Message header templates — see [Header Placeholders](messages/placeholders.md) for the full message-specific code list
 
 ### Coordinate Codes
 

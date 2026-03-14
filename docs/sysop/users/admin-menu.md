@@ -130,13 +130,13 @@ The screen shows a list of eligible accounts with their deletion date, then prom
 
 If `deletedUserRetentionDays` is set to `-1`, purge is disabled and `P` will report that.
 
-See [User Management — Soft Delete and Purge](user-management.md#soft-deleting-users) for retention period configuration.
+See [User Management — Soft Delete and Purge](users/user-management.md#soft-deleting-users) for retention period configuration.
 
 ---
 
 ## W — Edit News
 
-Opens the system news management interface. See [News](../menus/news.md) for full details on news items, the `NEWSHDR.ANS` header template, and data file format.
+Opens the system news management interface. See [News](menus/news.md) for full details on news items, the `NEWSHDR.ANS` header template, and data file format.
 
 | Key | Action |
 |-----|--------|
@@ -155,7 +155,7 @@ You can also type an item number directly to jump to that item.
 
 Displays a read-only list of all pending New User Voting candidates with their current yes/no tallies and whether you have voted on each. Use `SCANNUV` (or the `CHECKNUV` login prompt) to cast votes.
 
-See [New User Voting](nuv.md) for full configuration and usage details.
+See [New User Voting](users/nuv.md) for full configuration and usage details.
 
 ---
 
@@ -175,7 +175,7 @@ Password changes are logged as `********` — the actual values are never writte
 
 ## See Also
 
-- [User Management](user-management.md) — accounts, access levels, soft delete, and purge configuration
-- [User Editor (`ue`)](user-editor.md) — offline TUI for bulk operations and detailed field editing
-- [News](../menus/news.md) — system news items, `NEWSHDR.ANS` template, and `EDITNEWS` reference
-- [New User Voting (NUV)](nuv.md) — NUV configuration, thresholds, and voting commands
+- [User Management](users/user-management.md) — accounts, access levels, soft delete, and purge configuration
+- [User Editor (`ue`)](users/user-editor.md) — offline TUI for bulk operations and detailed field editing
+- [News](menus/news.md) — system news items, `NEWSHDR.ANS` template, and `EDITNEWS` reference
+- [New User Voting (NUV)](users/nuv.md) — NUV configuration, thresholds, and voting commands

@@ -4,13 +4,13 @@ Doors are external programs launched from the BBS. ViSiON/3 generates a dropfile
 
 ## Configuration
 
-Use the [Configuration Editor](../configuration/configuration.md#configuration-editor-tui) (`./config`, section 5 — Door Programs) to add, edit, and remove door definitions interactively. This is the recommended approach.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 5 — Door Programs) to add, edit, and remove door definitions interactively. This is the recommended approach.
 
 ### JSON Reference
 
 Door programs are stored in `configs/doors.json` as an array.
 
-> **Note:** The template `doors.json` ships with example configurations for a DOS door (LORD) and a Synchronet JS door (LORDJS), but **does not include the door programs themselves**. You must obtain the actual game files separately — for example, by downloading DOS door games from their original distributors or BBS archives, or by cloning the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) for JS-based doors. See [Synchronet JS Doors](synchronet-js-doors.md#required-files-from-synchronet) for details on obtaining those files.
+> **Note:** The template `doors.json` ships with example configurations for a DOS door (LORD) and a Synchronet JS door (LORDJS), but **does not include the door programs themselves**. You must obtain the actual game files separately — for example, by downloading DOS door games from their original distributors or BBS archives, or by cloning the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) for JS-based doors. See [Synchronet JS Doors](doors/synchronet-js-doors.md#required-files-from-synchronet) for details on obtaining those files.
 
 ```json
 [
@@ -166,13 +166,13 @@ Doors are launched via menu commands:
 - `OPENDOOR` — Prompt the user to enter a door name (supports `?` to list)
 - `DOORINFO` — Show configuration details for a specific door
 
-See [Menus & ACS](../menus/menu-system.md) for details on adding door entries to menus.
+See [Menus & ACS](menus/menu-system.md) for details on adding door entries to menus.
 
 ## Running Synchronet JavaScript Doors
 
 ViSiON/3 can run Synchronet BBS JavaScript door games natively using a built-in JS engine. No Synchronet installation is required — only the game files and Synchronet's JS library directories. Set `"type": "synchronet_js"` in the door configuration.
 
-See [Synchronet JS Doors](synchronet-js-doors.md) for full setup instructions.
+See [Synchronet JS Doors](doors/synchronet-js-doors.md) for full setup instructions.
 
 ## Running DOS Doors
 

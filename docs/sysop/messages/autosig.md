@@ -119,6 +119,6 @@ Lines are separated by `\n`. The field is empty (`""`) when no signature is set.
 
 ## See Also
 
-- [User Management](../users/user-management.md) — user record fields
-- [Message Areas](message-areas.md) — where auto-signatures appear
-- [QWK Offline Mail](qwk.md) — auto-signature in QWK replies
+- [User Management](users/user-management.md) — user record fields
+- [Message Areas](messages/message-areas.md) — where auto-signatures appear
+- [QWK Offline Mail](messages/qwk.md) — auto-signature in QWK replies

@@ -136,7 +136,7 @@ Checks whether the current user is eligible to vote in the New User Voting syste
 {"command": "CHECKNUV"}
 ```
 
-Place this after `VOTEMANDATORY` so standard voting and NUV both run in the same login pass. See [New User Voting](nuv.md) for configuration details.
+Place this after `VOTEMANDATORY` so standard voting and NUV both run in the same login pass. See [New User Voting](users/nuv.md) for configuration details.
 
 ### PRINTNEWS
 
@@ -146,7 +146,7 @@ Displays system news items that are new since the user's last login, or flagged 
 {"command": "PRINTNEWS"}
 ```
 
-If no new news items exist, this step is silently skipped. See [News](../menus/news.md) for details on creating and managing news items.
+If no new news items exist, this step is silently skipped. See [News](menus/news.md) for details on creating and managing news items.
 
 ### WHOISONLINE
 

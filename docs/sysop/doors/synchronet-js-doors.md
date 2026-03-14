@@ -92,7 +92,7 @@ Add a door entry with `"type": "synchronet_js"`:
 
 ### Config Editor
 
-You can also configure Synchronet JS doors through the interactive [Configuration Editor](../configuration/configuration.md#configuration-editor-tui) (`./config`, section 5 — Door Programs). Set the "Type" field to `synchronet_js` and fill in the Script, Exec Dir, and Library Paths fields.
+You can also configure Synchronet JS doors through the interactive [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 5 — Door Programs). Set the "Type" field to `synchronet_js` and fill in the Script, Exec Dir, and Library Paths fields.
 
 ## Menu Integration
 
@@ -102,7 +102,7 @@ Launch Synchronet JS doors the same way as any other door:
 DOOR:LORDJS
 ```
 
-See [Menus & ACS](../menus/menu-system.md) for details on adding door entries to menus.
+See [Menus & ACS](menus/menu-system.md) for details on adding door entries to menus.
 
 ## Module Resolution
 

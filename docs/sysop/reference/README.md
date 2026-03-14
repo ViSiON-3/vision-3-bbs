@@ -2,6 +2,6 @@
 
 Technical reference for developers and advanced sysops.
 
-- **[Architecture](architecture.md)** — system design, component relationships
-- **[API Reference](api-reference.md)** — package and interface documentation
-- **[Developer Guide](developer-guide.md)** — contributing, extending ViSiON/3
+- **[Architecture](reference/architecture.md)** — system design, component relationships
+- **[API Reference](reference/api-reference.md)** — package and interface documentation
+- **[Developer Guide](reference/developer-guide.md)** — contributing, extending ViSiON/3

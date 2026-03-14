@@ -207,6 +207,6 @@ The file is created automatically when the first entry is added. The `next_id` f
 
 ## See Also
 
-- [Menu System](menu-system.md) — menu and command file configuration
-- [Access Control (ACS)](menu-system.md#access-control-strings-acs) — restricting commands
-- [News](news.md) — similar SysOp-managed content system
+- [Menu System](menus/menu-system.md) — menu and command file configuration
+- [Access Control (ACS)](menus/menu-system.md#access-control-strings-acs) — restricting commands
+- [News](menus/news.md) — similar SysOp-managed content system

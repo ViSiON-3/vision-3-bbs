@@ -83,7 +83,7 @@ ViSiON/3 uses a pure-Go SSH implementation (`gliderlabs/ssh`) — no CGO or nati
 - Copies `bin/sexyz` for ZModem 8k file transfers (works on both SSH and telnet)
 - Copies the static `binkd` binary for FTN mailer support
 
-> **Note:** The sexyz binary at `bin/sexyz` must match the container's architecture (typically linux/amd64). See [File Transfer Protocols](../files/file-transfer.md) for build instructions.
+> **Note:** The sexyz binary at `bin/sexyz` must match the container's architecture (typically linux/amd64). See [File Transfer Protocols](files/file-transfer.md) for build instructions.
 
 ### Persistent Data
 

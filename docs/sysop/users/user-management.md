@@ -2,7 +2,7 @@
 
 This guide covers user management in ViSiON/3, including user accounts, access levels, and administration.
 
-Use the [User Editor](user-editor.md) (`./ue`) to manage user accounts interactively from the command line — no JSON editing required. It is a Go reimplementation of the original Vision/2 `UE.EXE` utility. SysOps can also edit users live from within the BBS via the [Admin Menu](admin-menu.md).
+Use the [User Editor](users/user-editor.md) (`./ue`) to manage user accounts interactively from the command line — no JSON editing required. It is a Go reimplementation of the original Vision/2 `UE.EXE` utility. SysOps can also edit users live from within the BBS via the [Admin Menu](users/admin-menu.md).
 
 ## User Database
 
@@ -340,7 +340,7 @@ The system creates a default user on first run:
 Users are added through:
 
 1. New user application (type "new" at login screen)
-2. The `ue` TUI user editor (see [User Editor](user-editor.md))
+2. The `ue` TUI user editor (see [User Editor](users/user-editor.md))
 3. Manual editing of `users.json` (not recommended)
 
 When adding users manually, ensure:
@@ -428,7 +428,7 @@ New accounts are created with:
 - `accessLevel: 1` — minimal access level
 - `timeLimit: 60` — 60-minute time limit per call
 
-The SysOp can validate users in-BBS from the Admin Menu (`X` from MAIN → `V`). See [Admin Menu](admin-menu.md) for the full key reference.
+The SysOp can validate users in-BBS from the Admin Menu (`X` from MAIN → `V`). See [Admin Menu](users/admin-menu.md) for the full key reference.
 
 SysOp accounts also receive an automatic notification on MAIN menu entry when there are pending unvalidated users.
 
@@ -606,7 +606,7 @@ The access level threshold is driven by `coSysOpLevel` in `configs/config.json` 
 
 Since passwords are hashed, you cannot recover them. To reset:
 
-**Option 1 — `ue` TUI (recommended):** Run `./ue` from the BBS root, select the user, and use the password reset field. See [User Editor](user-editor.md).
+**Option 1 — `ue` TUI (recommended):** Run `./ue` from the BBS root, select the user, and use the password reset field. See [User Editor](users/user-editor.md).
 
 **Option 2 — manual JSON edit:**
 
@@ -626,7 +626,7 @@ fmt.Println(string(hash))
 
 ### Validating New Users
 
-**Recommended:** use the in-BBS Admin Menu (`X` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `H` to toggle validation status, then `S` to save. See [Admin Menu](admin-menu.md) for all key bindings.
+**Recommended:** use the in-BBS Admin Menu (`X` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `H` to toggle validation status, then `S` to save. See [Admin Menu](users/admin-menu.md) for all key bindings.
 
 **Manual alternative:** change `validated` from `false` to `true` and set appropriate `accessLevel` (typically 10) in `data/users/users.json` while the BBS is stopped.
 
