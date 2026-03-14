@@ -79,7 +79,7 @@ func (m Model) viewEditScreen() string {
 	// UE.PAS: 'F2 - Delete  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes'
 	f2Label := "Delete"
 	if u.DeletedUser {
-		f2Label = "UnDelete"
+		f2Label = "Undelete"
 	}
 	helpText := centerText(fmt.Sprintf("F2 - %s  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes", f2Label), m.width)
 	b.WriteString(helpBarStyle.Render(helpText))

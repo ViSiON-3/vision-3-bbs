@@ -769,7 +769,10 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 	case modeSaveOnLeave:
 		// Save to disk and return to list
 		m.saveAllToDisk()
-		m.mode = modeList
+		// Only go to list if saveAllToDisk didn't switch to modeFileChanged
+		if m.mode == modeSaveOnLeave {
+			m.mode = modeList
+		}
 		return m, nil
 	}
 
