@@ -9,8 +9,12 @@ import (
 
 // View implements tea.Model.
 func (m Model) View() string {
-	switch m.mode {
-	case modeEdit, modeEditField, modePasswordEntry, modeSaveOnLeave:
+	switch {
+	case m.mode == modeEdit || m.mode == modeEditField || m.mode == modePasswordEntry || m.mode == modeSaveOnLeave:
+		return m.viewEditScreen()
+	case m.confirmFromEdit && (m.mode == modeDeleteConfirm || m.mode == modeUndeleteConfirm || m.mode == modePurgeConfirm || m.mode == modeValidate):
+		return m.viewEditScreen()
+	case m.mode == modeInfoAlert && m.alertReturn == modeEdit:
 		return m.viewEditScreen()
 	default:
 		return m.viewListScreen()
@@ -86,16 +90,23 @@ func (m Model) viewListScreen() string {
 	b.WriteByte('\n')
 
 	// === User list (13 rows, traditional scrolling lightbar) ===
-	total := len(m.users)
+	// Build display list: user indices with a separator (-1) before deleted users.
+	displayRows := m.buildDisplayRows()
+	totalDisplay := len(displayRows)
 	startIdx := m.scrollOffset
 	for row := 0; row < listVisible; row++ {
-		idx := startIdx + row
-		isHighlight := idx == m.cursor
+		dIdx := startIdx + row
 
 		var rowContent string
-		if idx < 0 || idx >= total {
+		if dIdx < 0 || dIdx >= totalDisplay {
 			rowContent = listItemStyle.Render(strings.Repeat(" ", boxW))
+		} else if displayRows[dIdx] == -1 {
+			// Separator row for deleted users
+			sepText := "--- DELETED USERS ---"
+			rowContent = separatorStyle.Render(centerText(sepText, boxW))
 		} else {
+			idx := displayRows[dIdx]
+			isHighlight := idx == m.cursor
 			rowContent = m.renderUserRow(idx, isHighlight, boxW)
 		}
 
@@ -118,8 +129,8 @@ func (m Model) viewListScreen() string {
 	// === Row 23: Message or background ===
 	if m.message != "" {
 		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			flashMessageStyle.Render(" "+padRight(m.message, boxW-1)) +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR+1)))
+			flashMessageStyle.Render(" "+padRight(m.message, boxW+1)) +
+			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
 		b.WriteString(msgLine)
 	} else if m.mode == modeSearch {
 		searchLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
@@ -151,8 +162,23 @@ func (m Model) viewListScreen() string {
 		if m.cursor >= 0 && m.cursor < len(m.users) {
 			handle = m.users[m.cursor].Handle
 		}
-		result = m.overlayConfirmDialog(result, "-- Automatic User Annihilator! --",
-			fmt.Sprintf("Delete %s? ", handle))
+		result = m.overlayDeleteDialog(result, handle)
+	case modePurgeConfirm:
+		handle := ""
+		if m.cursor >= 0 && m.cursor < len(m.users) {
+			handle = m.users[m.cursor].Handle
+		}
+		result = m.overlayPurgeDialog(result, handle)
+	case modeUndeleteConfirm:
+		handle := ""
+		if m.cursor >= 0 && m.cursor < len(m.users) {
+			handle = m.users[m.cursor].Handle
+		}
+		result = m.overlayConfirmDialog(result, "-- Undelete User --",
+			fmt.Sprintf("Undelete %s? ", handle))
+	case modeMassPurge:
+		result = m.overlayConfirmDialog(result, "-- Purge All Deleted Users --",
+			fmt.Sprintf("Permanently purge %d deleted user(s)? ", m.deletedCount()))
 	case modeMassDelete:
 		result = m.overlayConfirmDialog(result, "-- Super Duper User Nuker --",
 			fmt.Sprintf("Delete All Tagged (%d) Users? ", m.taggedCount()))
@@ -169,29 +195,35 @@ func (m Model) viewListScreen() string {
 	case modeExitConfirm:
 		result = m.overlayConfirmDialog(result, "-- Unsaved Changes --",
 			"Save changes before exit? ")
+	case modeExitClean:
+		result = m.overlayConfirmDialog(result, "-- Exit --",
+			"Exit user editor? ")
 	case modeFileChanged:
 		result = m.overlayConfirmDialog(result, "-- File Modified Externally --",
 			"Overwrite with your changes? ")
 	case modeHelp:
 		result = m.overlayHelpScreen(result)
+	case modeInfoAlert:
+		result = m.overlayInfoAlert(result)
 	}
 
 	return result
 }
 
 // renderColumnTitle returns the column header text based on listType.
+// Column positions match renderUserRow: tag(1) + num(3) + space(1) + handle(30) + data cols.
 func (m Model) renderColumnTitle(width int) string {
-	nameStr := "  #  Handle                           "
+	nameStr := " " + padRight("#", 3) + " " + padRight("Handle", 30)
 	var cols string
 	switch m.listType {
 	case 1:
-		cols = "Level  Calls"
+		cols = padRight("Level", 8) + padRight("Calls", 11)
 	case 2:
-		cols = "Group/Location"
+		cols = padRight("Group/Location", 19)
 	case 3:
-		cols = "Posts    Valid"
+		cols = padRight("Posts", 8) + padRight("Valid", 11)
 	case 4:
-		cols = "Last Date Online"
+		cols = padRight("Last Date", 11) + padRight("Online", 8)
 	}
 	full := nameStr + cols
 	if len(full) > width {
@@ -261,6 +293,43 @@ func (m Model) renderUserRow(idx int, isHighlight bool, boxW int) string {
 		return tagPart + textPart
 	}
 	return listItemStyle.Render(content)
+}
+
+// buildDisplayRows returns a list of user indices for the list view.
+// A value of -1 indicates the "--- DELETED USERS ---" separator row.
+// Deleted users are always at the end (after sorting), so the separator
+// appears just before the first deleted user.
+func (m Model) buildDisplayRows() []int {
+	var rows []int
+	hasDeleted := false
+	for i, u := range m.users {
+		if u.DeletedUser && !hasDeleted {
+			hasDeleted = true
+			rows = append(rows, -1) // separator
+		}
+		rows = append(rows, i)
+	}
+	return rows
+}
+
+// firstDeletedIndex returns the index of the first deleted user, or -1 if none.
+func (m Model) firstDeletedIndex() int {
+	for i, u := range m.users {
+		if u.DeletedUser {
+			return i
+		}
+	}
+	return -1
+}
+
+// cursorToDisplayRow converts a user index (cursor) to a display row position,
+// accounting for the separator row before deleted users.
+func (m Model) cursorToDisplayRow(cursor int) int {
+	sep := m.firstDeletedIndex()
+	if sep >= 0 && cursor >= sep {
+		return cursor + 1 // +1 for separator row
+	}
+	return cursor
 }
 
 // centerText centers a string within a given width.
