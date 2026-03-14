@@ -69,6 +69,10 @@
 * [Door Programs](doors/doors.md)
 * [Synchronet JS Doors](doors/synchronet-js-doors.md)
 
+* **SCRIPTING (VPL)**
+* [VPL Scripting](scripting/vpl-scripting.md)
+* [Programming Reference](scripting/vpl-scripting.md#programming-reference)
+
 * **NETWORKING**
 * [SSH Server](networking/ssh.md)
 * [Telnet Server](networking/telnet.md)

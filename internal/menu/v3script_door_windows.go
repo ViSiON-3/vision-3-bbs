@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build windows
 
 package menu
 
@@ -7,17 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 
-	"github.com/stlalpha/vision3/internal/syncjs"
+	"github.com/stlalpha/vision3/internal/scripting"
+	"github.com/stlalpha/vision3/internal/version"
 )
 
-// executeSyncJSDoor runs a Synchronet-compatible JavaScript door game
-// using an embedded JS runtime with the Synchronet API surface.
-func executeSyncJSDoor(ctx *DoorCtx) error {
+// executeV3ScriptDoor runs a Vision/3 VPL script using the embedded JS engine.
+func executeV3ScriptDoor(ctx *DoorCtx) error {
 	if ctx.Config.Script == "" {
-		return fmt.Errorf("synchronet_js door '%s' has no script configured", ctx.DoorName)
+		return fmt.Errorf("v3_script door '%s' has no script configured", ctx.DoorName)
 	}
 
 	workDir := ctx.Config.WorkingDirectory
@@ -29,15 +28,8 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 		return fmt.Errorf("resolving working directory: %w", err)
 	}
 
-	// Create per-node temp directory for system.node_dir
-	nodeDir := filepath.Join(os.TempDir(), fmt.Sprintf("vision3_syncjs_node%d", ctx.NodeNumber))
-	if err := os.MkdirAll(nodeDir, 0o755); err != nil {
-		return fmt.Errorf("creating node directory: %w", err)
-	}
-	defer os.RemoveAll(nodeDir)
-
 	// Set up a read interrupt so the engine's copier goroutine can be
-	// cleanly stopped when the door exits, preventing it from consuming
+	// cleanly stopped when the script exits, preventing it from consuming
 	// the next keypress meant for the menu system.
 	readInterrupt := make(chan struct{})
 	if ri, ok := ctx.Session.(interface{ SetReadInterrupt(<-chan struct{}) }); ok {
@@ -45,24 +37,13 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 		defer ri.SetReadInterrupt(nil)
 	}
 
-	// Determine exec_dir — explicit config, or derive from first library path parent
-	execDir := ctx.Config.ExecDir
-	if execDir == "" {
-		execDir = workDir
+	cfg := scripting.ScriptConfig{
+		Script:     ctx.Config.Script,
+		WorkingDir: workDir,
+		Args:       ctx.Config.Args,
 	}
 
-	cfg := syncjs.SyncJSDoorConfig{
-		Script:       ctx.Config.Script,
-		WorkingDir:   workDir,
-		LibraryPaths: ctx.Config.LibraryPaths,
-		Args:         ctx.Config.Args,
-		ExecDir:      execDir,
-		DataDir:      workDir,
-		NodeDir:      nodeDir,
-	}
-
-	// Build session context from DoorCtx — bridges menu types to syncjs types
-	session := &syncjs.SessionContext{
+	session := &scripting.SessionContext{
 		Session:          ctx.Session,
 		OutputMode:       ctx.OutputMode,
 		UserID:           ctx.User.ID,
@@ -78,14 +59,23 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 		SessionStartTime: ctx.SessionStartTime,
 		BoardName:        ctx.Executor.ServerCfg.BoardName,
 		SysOpName:        ctx.Executor.ServerCfg.SysOpName,
+		BBSVersion:       version.Number,
 	}
 
 	engineCtx, engineCancel := context.WithCancel(context.Background())
 	defer engineCancel()
 
-	eng := syncjs.NewEngine(engineCtx, session, cfg)
+	providers := &scripting.Providers{
+		UserMgr:         ctx.UserManager,
+		CurrentUser:     ctx.CurrentUser,
+		MessageMgr:      ctx.Executor.MessageMgr,
+		FileMgr:         ctx.Executor.FileMgr,
+		SessionRegistry: ctx.Executor.SessionRegistry,
+	}
 
-	log.Printf("INFO: Node %d: Starting Synchronet JS door '%s' (script: %s)",
+	eng := scripting.NewEngine(engineCtx, session, cfg, providers)
+
+	log.Printf("INFO: Node %d: Starting V3 script '%s' (script: %s)",
 		ctx.NodeNumber, ctx.DoorName, ctx.Config.Script)
 
 	runErr := eng.Run(cfg.Script)
@@ -96,17 +86,17 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 	eng.Close()
 
 	if runErr != nil {
-		if errors.Is(runErr, syncjs.ErrDisconnect) {
-			log.Printf("INFO: Node %d: User disconnected from JS door '%s'",
+		if errors.Is(runErr, scripting.ErrDisconnect) {
+			log.Printf("INFO: Node %d: User disconnected from V3 script '%s'",
 				ctx.NodeNumber, ctx.DoorName)
 			return nil
 		}
-		log.Printf("ERROR: Node %d: JS door '%s' error: %v",
+		log.Printf("ERROR: Node %d: V3 script '%s' error: %v",
 			ctx.NodeNumber, ctx.DoorName, runErr)
 		return runErr
 	}
 
-	log.Printf("INFO: Node %d: Synchronet JS door '%s' completed normally",
+	log.Printf("INFO: Node %d: V3 script '%s' completed normally",
 		ctx.NodeNumber, ctx.DoorName)
 	return nil
 }

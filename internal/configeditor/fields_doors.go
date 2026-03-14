@@ -127,8 +127,11 @@ type doorEditProxy = config.DoorConfig
 
 // doorTypeLabel returns a short label for the door type, used in list views.
 func doorTypeLabel(d *config.DoorConfig) string {
-	if d.Type == "synchronet_js" {
+	switch d.Type {
+	case "synchronet_js":
 		return "SyncJS"
+	case "v3_script":
+		return "VPL"
 	}
 	if d.IsDOS {
 		return "DOS"
@@ -139,6 +142,11 @@ func doorTypeLabel(d *config.DoorConfig) string {
 // isSyncJS returns true if the door is a Synchronet JS door.
 func isSyncJS(d *doorEditProxy) bool {
 	return d.Type == "synchronet_js"
+}
+
+// isV3Script returns true if the door is a Vision/3 VPL script.
+func isV3Script(d *doorEditProxy) bool {
+	return d.Type == "v3_script"
 }
 
 // fieldsDoor returns fields for editing a door program.
@@ -170,10 +178,13 @@ func (m *Model) fieldsDoor() []fieldDef {
 	// Door type selector — determines which type-specific fields are shown
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Type", Help: "Door type: Native binary, DOS (dosemu2), or Synchronet JS game", Type: ftLookup, Col: 3, Row: row, Width: 20,
+		Label: "Type", Help: "Door type: Native binary, DOS (dosemu2), Synchronet JS, or VPL script", Type: ftLookup, Col: 3, Row: row, Width: 20,
 		Get: func() string {
-			if dPtr.Type == "synchronet_js" {
+			switch dPtr.Type {
+			case "synchronet_js":
 				return "synchronet_js"
+			case "v3_script":
+				return "v3_script"
 			}
 			if dPtr.IsDOS {
 				return "dos"
@@ -184,6 +195,9 @@ func (m *Model) fieldsDoor() []fieldDef {
 			switch val {
 			case "synchronet_js":
 				dPtr.Type = "synchronet_js"
+				dPtr.IsDOS = false
+			case "v3_script":
+				dPtr.Type = "v3_script"
 				dPtr.IsDOS = false
 			case "dos":
 				dPtr.Type = ""
@@ -200,6 +214,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 				{Value: "native", Display: "Native - Linux/macOS/Windows binary"},
 				{Value: "dos", Display: "DOS - DOS door via dosemu2"},
 				{Value: "synchronet_js", Display: "Synchronet JS - JavaScript door game"},
+				{Value: "v3_script", Display: "VPL Script - Vision/3 JavaScript script"},
 			}
 		},
 	})
@@ -234,6 +249,20 @@ func (m *Model) fieldsDoor() []fieldDef {
 		row++
 		fields = append(fields, fieldDef{
 			Label: "Script Args", Help: "Arguments passed to script (available as argv), comma-separated", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return sliceToCSV(dPtr.Args) },
+			Set: func(val string) error { dPtr.Args = csvToSlice(val); save(); return nil },
+		})
+	} else if isV3Script(dPtr) {
+		// VPL script fields — Script and Args only (no Exec Dir or Library Paths)
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Script", Help: "Main JS file to execute (relative to working dir)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.Script },
+			Set: func(val string) error { dPtr.Script = val; save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Script Args", Help: "Arguments passed to script (available as v3.args), comma-separated", Type: ftString, Col: 3, Row: row, Width: 45,
 			Get: func() string { return sliceToCSV(dPtr.Args) },
 			Set: func(val string) error { dPtr.Args = csvToSlice(val); save(); return nil },
 		})
@@ -299,7 +328,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		Set: func(val string) error { dPtr.SingleInstance = ynToBool(val); save(); return nil },
 	})
 
-	if !isSyncJS(dPtr) {
+	if !isSyncJS(dPtr) && !isV3Script(dPtr) {
 		// Cleanup and env vars for native/DOS doors only
 		row++
 		fields = append(fields, fieldDef{
@@ -381,7 +410,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Get: func() string { return dPtr.DosemuConfig },
 			Set: func(val string) error { dPtr.DosemuConfig = val; save(); return nil },
 		})
-	} else if !dPtr.IsDOS && !isSyncJS(dPtr) {
+	} else if !dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) {
 		// Native-specific fields
 		row++
 		fields = append(fields, fieldDef{

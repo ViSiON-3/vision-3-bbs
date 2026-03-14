@@ -213,6 +213,9 @@ func executeDoor(ctx *DoorCtx) error {
 	if ctx.Config.Type == "synchronet_js" {
 		return executeSyncJSDoor(ctx)
 	}
+	if ctx.Config.Type == "v3_script" {
+		return executeV3ScriptDoor(ctx)
+	}
 
 	if ctx.Config.IsDOS {
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
@@ -341,7 +344,10 @@ func runListDoors(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 
 		displayIdx++
 		doorType := "Native"
-		if doorCfg.IsDOS {
+		switch {
+		case doorCfg.Type == "v3_script":
+			doorType = "VPL"
+		case doorCfg.IsDOS:
 			doorType = "DOS"
 		}
 		line := midTemplate
@@ -532,7 +538,12 @@ func runDoorInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 		// Display door info
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		doorType := "Native Windows"
-		if doorConfig.IsDOS {
+		switch {
+		case doorConfig.Type == "v3_script":
+			doorType = "VPL Script"
+		case doorConfig.Type == "synchronet_js":
+			doorType = "Synchronet JS"
+		case doorConfig.IsDOS:
 			doorType = "DOS (not supported on Windows)"
 		}
 
