@@ -132,7 +132,8 @@ vision3/
 ├── doors/
 │   ├── drive_c/         # DOS door C: drive (populate with your DOS door programs)
 │   └── sbbs/            # Synchronet JS door runtime
-│       ├── exec/load/   # JS libraries (dorkit.js, sbbsdefs.js, etc.)
+│       ├── exec/load/   # JS utility libraries (recordfile.js, sbbsdefs.js, etc.)
+│       ├── exec/dorkit/ # DORKit terminal I/O framework
 │       └── xtrn/        # Door games (lord/, lord2/ included)
 └── menus/v3/            # Menu system files
 ```

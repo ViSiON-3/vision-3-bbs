@@ -28,7 +28,8 @@
         "working_directory": "doors/sbbs/xtrn/lord",
         "exec_dir": "doors/sbbs/exec/",
         "library_paths": [
-            "doors/sbbs/exec/load"
+            "doors/sbbs/exec/load",
+            "doors/sbbs/exec/dorkit"
         ],
         "single_instance": true
     },
@@ -39,7 +40,8 @@
         "working_directory": "doors/sbbs/xtrn/lord2",
         "exec_dir": "doors/sbbs/exec/",
         "library_paths": [
-            "doors/sbbs/exec/load"
+            "doors/sbbs/exec/load",
+            "doors/sbbs/exec/dorkit"
         ],
         "single_instance": true
     },

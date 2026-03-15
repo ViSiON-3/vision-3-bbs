@@ -27,7 +27,8 @@ The release bundle includes everything needed to run Synchronet JS doors under `
 ```
 doors/sbbs/
 ├── exec/
-│   └── load/          JS utility libraries (dorkit.js, recordfile.js, sbbsdefs.js, and more)
+│   ├── load/          JS utility libraries (recordfile.js, sbbsdefs.js, and more)
+│   └── dorkit/        DORKit terminal I/O framework (sbbs_console.js, screen.js, etc.)
 └── xtrn/
     ├── lord/          Legend of the Red Dragon
     └── lord2/         Legend of the Red Dragon II
@@ -49,7 +50,8 @@ Add a door entry with `"type": "synchronet_js"`:
   "working_directory": "doors/sbbs/xtrn/lord",
   "exec_dir": "doors/sbbs/exec/",
   "library_paths": [
-    "doors/sbbs/exec/load"
+    "doors/sbbs/exec/load",
+    "doors/sbbs/exec/dorkit"
   ],
   "single_instance": true,
   "min_access_level": 10
@@ -65,7 +67,7 @@ Add a door entry with `"type": "synchronet_js"`:
 | `script`            | string   | Yes      | Main JS file to execute, relative to `working_directory`                 |
 | `working_directory` | string   | Yes      | Path to the game's data directory (relative to BBS root or absolute)     |
 | `exec_dir`          | string   | Yes      | Path to Synchronet's `exec/` directory (mapped to `system.exec_dir` in JS) |
-| `library_paths`     | []string | Yes      | Search paths for `load()` and `require()` — `exec/load` contains all JS libraries including DORKit |
+| `library_paths`     | []string | Yes      | Search paths for `load()` and `require()` — include both `exec/load` (JS libraries) and `exec/dorkit` (DORKit terminal framework) |
 | `single_instance`   | bool     | No       | Only allow one node at a time (default: false)                           |
 | `min_access_level`  | int      | No       | Minimum access level required (default: 0)                               |
 | `args`              | []string | No       | Arguments passed to the script as `argv`                                 |
@@ -170,8 +172,8 @@ Each node gets its own temporary directory (`system.node_dir`) for per-node stat
 ### Game exits immediately with no output
 
 Check the ViSiON/3 log file for JS errors. Common causes:
-- Wrong `library_paths` — should point to `exec/load` (all JS libraries including DORKit are in this directory)
-- Wrong `exec_dir` — should point to the `exec/` directory, not `exec/load/`
+- Wrong `library_paths` — must include both `exec/load` and `exec/dorkit`
+- Wrong `exec_dir` — should point to the `exec/` directory, not `exec/load/` or `exec/dorkit/`
 - Missing game files in `working_directory`
 
 ### "module not found" errors
@@ -201,7 +203,8 @@ LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `d
      "working_directory": "doors/sbbs/xtrn/lord",
      "exec_dir": "doors/sbbs/exec/",
      "library_paths": [
-       "doors/sbbs/exec/load"
+       "doors/sbbs/exec/load",
+       "doors/sbbs/exec/dorkit"
      ],
      "single_instance": true
    },
@@ -212,7 +215,8 @@ LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `d
      "working_directory": "doors/sbbs/xtrn/lord2",
      "exec_dir": "doors/sbbs/exec/",
      "library_paths": [
-       "doors/sbbs/exec/load"
+       "doors/sbbs/exec/load",
+       "doors/sbbs/exec/dorkit"
      ],
      "single_instance": true
    }
