@@ -1586,10 +1586,14 @@ func main() {
 	logFilePath := filepath.Join(dataPath, "logs", "vision3.log") // Example log path
 
 	// Pre-flight: ensure setup has been run
-	if _, statErr := os.Stat(filepath.Join(rootConfigPath, "config.json")); os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(rootConfigPath, "config.json")); statErr != nil {
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "ERROR: ViSiON/3 has not been set up yet.")
-		fmt.Fprintln(os.Stderr, "       Please run ./setup.sh (Linux/macOS) or setup.bat (Windows) first.")
+		if os.IsNotExist(statErr) {
+			fmt.Fprintln(os.Stderr, "ERROR: ViSiON/3 has not been set up yet.")
+			fmt.Fprintln(os.Stderr, "       Please run ./setup.sh (Linux/macOS) or setup.bat (Windows) first.")
+		} else {
+			fmt.Fprintf(os.Stderr, "ERROR: Cannot access configs/config.json: %v\n", statErr)
+		}
 		fmt.Fprintln(os.Stderr, "")
 		os.Exit(1)
 	}
