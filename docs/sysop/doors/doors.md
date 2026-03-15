@@ -31,7 +31,7 @@ Door programs are stored in `configs/doors.json` as an array.
     "cleanup_args": [],
     "environment_variables": {},
     "is_dos": true,
-    "drive_c_path": "drive_c",
+    "drive_c_path": "doors/drive_c",
     "dos_emulator": "dosemu",
     "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
     "dosemu_config": ""
@@ -75,7 +75,7 @@ Set `is_dos: true` to run a 16-bit DOS door game via dosemu2.
 | Field | Type | Description |
 | --- | --- | --- |
 | `is_dos` | bool | `true` = DOS door launched via dosemu2 |
-| `drive_c_path` | string | Host path mounted as DOS C: drive. Relative paths are resolved against the BBS root directory. Default: `~/.dosemu/drive_c` |
+| `drive_c_path` | string | Host path mounted as DOS C: drive. Relative paths are resolved against the BBS root directory. Default: `doors/drive_c` (blank falls back to `~/.dosemu/drive_c`) |
 | `dos_emulator` | string | Emulator selection: `""` or `"auto"` (default), `"dosemu"` |
 | `fossil_driver` | string | DOS FOSSIL driver command to load before the door (e.g., `C:\UTILS\X00.EXE eliminate`). Loaded in EXTERNAL.BAT before `cls` and the door commands |
 | `dosemu_config` | string | Path to a custom `.dosemurc` config file. If blank, the user's `~/.dosemu/.dosemurc` is used as a base with per-node overrides appended |

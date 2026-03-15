@@ -175,7 +175,7 @@ Configures external door programs that can be launched from the BBS. The file co
     "cleanup_args": [],
     "environment_variables": {},
     "is_dos": true,
-    "drive_c_path": "drive_c",
+    "drive_c_path": "doors/drive_c",
     "dos_emulator": "dosemu",
     "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
     "dosemu_config": ""

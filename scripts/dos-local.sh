@@ -10,7 +10,7 @@
 # Usage: ./scripts/dos-local.sh [drive_c_path]
 #
 #   drive_c_path  Optional path to drive_c directory.
-#                 Defaults to drive_c/ relative to BBS root.
+#                 Defaults to doors/drive_c/ relative to BBS root.
 #                 BBS root is auto-detected from the script's
 #                 location in the repository.
 # --------------------------------------------------------
@@ -23,7 +23,7 @@ stty cols 80 rows 25
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BBS_ROOT="$(dirname "$SCRIPT_DIR")"
 
-DRIVE_C="${1:-$BBS_ROOT/drive_c}"
+DRIVE_C="${1:-$BBS_ROOT/doors/drive_c}"
 LOG_DIR="$DRIVE_C/nodes"
 DOSEMU_BIN="/usr/libexec/dosemu2/dosemu2.bin"
 
