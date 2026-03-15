@@ -39,14 +39,14 @@ function displayResults(poll) {
     v3.console.println("");
     v3.console.println("|11--- Results ---");
     var total = 0;
-    for (var i = 0; i < choices.length; i++) {
-        total += (poll.votes[choices[i]] || 0);
+    for (var ti = 0; ti < choices.length; ti++) {
+        total += (poll.votes[choices[ti]] || 0);
     }
-    for (var i = 0; i < choices.length; i++) {
-        var count = poll.votes[choices[i]] || 0;
+    for (var ri = 0; ri < choices.length; ri++) {
+        var count = poll.votes[choices[ri]] || 0;
         var pct = total > 0 ? Math.round((count / total) * 100) : 0;
         var bar = v3.util.padRight("", Math.round(pct / 5), "#");
-        v3.console.println("|07" + v3.util.padRight(choices[i], 20) + " |15" + v3.util.padRight(bar, 20) + " |07" + count + " (" + pct + "%)");
+        v3.console.println("|07" + v3.util.padRight(choices[ri], 20) + " |15" + v3.util.padRight(bar, 20) + " |07" + count + " (" + pct + "%)");
     }
     v3.console.println("|08Total votes: " + total);
 }
@@ -68,8 +68,8 @@ if (poll.voters[v3.user.handle]) {
 }
 
 // Display choices.
-for (var i = 0; i < choices.length; i++) {
-    v3.console.println("|15" + (i + 1) + "|07. " + choices[i]);
+for (var ci = 0; ci < choices.length; ci++) {
+    v3.console.println("|15" + (ci + 1) + "|07. " + choices[ci]);
 }
 v3.console.println("");
 v3.console.print("|07Your choice (1-" + choices.length + "): ");

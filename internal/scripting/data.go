@@ -10,10 +10,19 @@ import (
 	"github.com/dop251/goja"
 )
 
+// globalDataLocks provides per-file-path mutexes so concurrent sessions writing
+// the same script's data file do not overwrite each other.
+var globalDataLocks sync.Map // map[string]*sync.Mutex
+
+func dataFileLock(path string) *sync.Mutex {
+	mu := &sync.Mutex{}
+	actual, _ := globalDataLocks.LoadOrStore(path, mu)
+	return actual.(*sync.Mutex)
+}
+
 // dataStore manages a per-script JSON key-value store in scripts/data/.
 type dataStore struct {
 	path string
-	mu   sync.Mutex
 }
 
 // registerData creates the v3.data object for script-local persistent storage.
@@ -32,7 +41,10 @@ func registerData(v3 *goja.Object, eng *Engine) {
 			return goja.Undefined()
 		}
 		key := call.Arguments[0].String()
-		data := store.load()
+		mu := dataFileLock(store.path)
+		mu.Lock()
+		data := store.loadFile()
+		mu.Unlock()
 		val, ok := data[key]
 		if !ok {
 			return goja.Undefined()
@@ -47,9 +59,12 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		}
 		key := call.Arguments[0].String()
 		value := call.Arguments[1].Export()
-		data := store.load()
+		mu := dataFileLock(store.path)
+		mu.Lock()
+		defer mu.Unlock()
+		data := store.loadFile()
 		data[key] = value
-		store.save(data)
+		store.saveFile(data)
 		return goja.Undefined()
 	})
 
@@ -59,15 +74,21 @@ func registerData(v3 *goja.Object, eng *Engine) {
 			return goja.Undefined()
 		}
 		key := call.Arguments[0].String()
-		data := store.load()
+		mu := dataFileLock(store.path)
+		mu.Lock()
+		defer mu.Unlock()
+		data := store.loadFile()
 		delete(data, key)
-		store.save(data)
+		store.saveFile(data)
 		return goja.Undefined()
 	})
 
 	// keys() — return array of all keys.
 	obj.Set("keys", func(call goja.FunctionCall) goja.Value {
-		data := store.load()
+		mu := dataFileLock(store.path)
+		mu.Lock()
+		data := store.loadFile()
+		mu.Unlock()
 		arr := vm.NewArray()
 		i := 0
 		for k := range data {
@@ -79,7 +100,10 @@ func registerData(v3 *goja.Object, eng *Engine) {
 
 	// getAll() — return entire store as an object.
 	obj.Set("getAll", func(call goja.FunctionCall) goja.Value {
-		data := store.load()
+		mu := dataFileLock(store.path)
+		mu.Lock()
+		data := store.loadFile()
+		mu.Unlock()
 		return vm.ToValue(data)
 	})
 
@@ -87,26 +111,34 @@ func registerData(v3 *goja.Object, eng *Engine) {
 }
 
 // dataFilePath computes the JSON storage path for a script.
-// Given script "voting.js" in working dir "scripts/", produces "scripts/data/voting.json".
+// Given script "voting.js" with working dir "scripts/", produces "scripts/data/voting.json".
+// Given working dir "scripts/examples/", produces "scripts/data/voting.json".
 func dataFilePath(cfg ScriptConfig) string {
 	scriptName := filepath.Base(cfg.Script)
 	scriptName = strings.TrimSuffix(scriptName, filepath.Ext(scriptName))
-
-	// Walk up from working dir to find or create scripts/data/.
-	// If working dir is under scripts/, use scripts/data/.
-	// Otherwise, use <working_dir>/data/.
-	dataDir := filepath.Join(cfg.WorkingDir, "..", "data")
-	abs, err := filepath.Abs(dataDir)
-	if err != nil {
-		abs = filepath.Join(cfg.WorkingDir, "data")
-	}
-	return filepath.Join(abs, scriptName+".json")
+	return filepath.Join(resolveDataDir(cfg.WorkingDir), scriptName+".json")
 }
 
-func (ds *dataStore) load() map[string]any {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
+// resolveDataDir returns the scripts/data directory for the given working dir.
+// If workingDir IS the scripts dir (i.e. its base name is "scripts"), data lives
+// directly inside it. Otherwise we walk up one level, covering the common case
+// where the working dir is a subdirectory such as scripts/examples.
+func resolveDataDir(workingDir string) string {
+	var dataDir string
+	if filepath.Base(workingDir) == "scripts" {
+		dataDir = filepath.Join(workingDir, "data")
+	} else {
+		dataDir = filepath.Join(workingDir, "..", "data")
+	}
+	abs, err := filepath.Abs(dataDir)
+	if err != nil {
+		abs = filepath.Join(workingDir, "data")
+	}
+	return abs
+}
 
+// loadFile reads the data file without acquiring the mutex (caller must hold it).
+func (ds *dataStore) loadFile() map[string]any {
 	data := make(map[string]any)
 	raw, err := os.ReadFile(ds.path)
 	if err != nil {
@@ -116,13 +148,9 @@ func (ds *dataStore) load() map[string]any {
 	return data
 }
 
-func (ds *dataStore) save(data map[string]any) {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-
-	// Ensure directory exists.
+// saveFile writes the data file without acquiring the mutex (caller must hold it).
+func (ds *dataStore) saveFile(data map[string]any) {
 	os.MkdirAll(filepath.Dir(ds.path), 0o755) //nolint:errcheck
-
 	raw, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return

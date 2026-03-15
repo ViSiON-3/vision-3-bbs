@@ -20,7 +20,7 @@ func registerSession(v3 *goja.Object, eng *Engine) {
 		elapsed := time.Since(eng.session.SessionStartTime)
 		limit := time.Duration(eng.session.TimeLimit) * time.Minute
 		if limit <= 0 {
-			return vm.ToValue(3600) // default 1 hour if no limit
+			limit = time.Hour // default 1 hour if no limit configured
 		}
 		remaining := limit - elapsed
 		if remaining < 0 {

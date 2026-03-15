@@ -26,8 +26,8 @@ for (var i = 0; i < allUsers.length; i++) {
 }
 
 var count = Math.min(allUsers.length, 10);
-for (var i = 0; i < count; i++) {
-    var u = allUsers[i];
+for (var k = 0; k < count; k++) {
+    var u = allUsers[k];
     // Convert Unix timestamp to readable date.
     var d = new Date(u.lastLogin * 1000);
     var dateStr = (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear();

@@ -69,6 +69,7 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 //  3. menus/v3/templates/
 //
 // Returns empty string if not found in any location.
+// Symlinks are resolved to prevent traversal outside the intended directories.
 func resolveAnsiPath(eng *Engine, filename string) string {
 	// Sanitize filename: reject absolute paths and path traversal.
 	cleaned := filepath.Clean(filename)
@@ -79,7 +80,9 @@ func resolveAnsiPath(eng *Engine, filename string) string {
 	// Try working directory first.
 	path := filepath.Join(eng.cfg.WorkingDir, cleaned)
 	if _, err := os.Stat(path); err == nil {
-		return path
+		if real := pathUnderBase(eng.cfg.WorkingDir, path); real != "" {
+			return real
+		}
 	}
 
 	// Derive BBS root by walking up from working dir until we find a "menus" subdirectory.
@@ -89,18 +92,42 @@ func resolveAnsiPath(eng *Engine, filename string) string {
 	}
 
 	// Try menus/v3/ansi/.
-	path = filepath.Join(bbsRoot, "menus", "v3", "ansi", cleaned)
+	ansiBase := filepath.Join(bbsRoot, "menus", "v3", "ansi")
+	path = filepath.Join(ansiBase, cleaned)
 	if _, err := os.Stat(path); err == nil {
-		return path
+		if real := pathUnderBase(ansiBase, path); real != "" {
+			return real
+		}
 	}
 
 	// Try menus/v3/templates/.
-	path = filepath.Join(bbsRoot, "menus", "v3", "templates", cleaned)
+	tmplBase := filepath.Join(bbsRoot, "menus", "v3", "templates")
+	path = filepath.Join(tmplBase, cleaned)
 	if _, err := os.Stat(path); err == nil {
-		return path
+		if real := pathUnderBase(tmplBase, path); real != "" {
+			return real
+		}
 	}
 
 	return ""
+}
+
+// pathUnderBase resolves symlinks in p and returns the real path only if it
+// falls within base. Returns "" if p escapes base or cannot be resolved.
+func pathUnderBase(base, p string) string {
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return ""
+	}
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return ""
+	}
+	rel, err := filepath.Rel(baseAbs, real)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return ""
+	}
+	return real
 }
 
 // findBBSRoot walks up from dir until it finds a directory containing a "menus" subdirectory.

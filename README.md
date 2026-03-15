@@ -168,7 +168,7 @@ Pre-built releases are available for all major platforms. Linux x86_64 is the pr
 ## Project Structure
 
 ```
-vision3/
+vision-3-bbs/
 ├── cmd/
 │   ├── ansitest/           # ANSI color test utility
 │   ├── config/             # TUI system configuration editor

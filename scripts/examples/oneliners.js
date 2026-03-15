@@ -42,7 +42,7 @@ var lines = loadOneliners();
 displayOneliners(lines);
 
 v3.console.println("");
-if (v3.console.yesno("|07Add a oneliner")) {
+if (v3.console.yesno("|07Add an oneliner")) {
     v3.console.print("|07> |15");
     var text = v3.console.getstr(MAX_LENGTH);
     if (text && text.length > 0) {

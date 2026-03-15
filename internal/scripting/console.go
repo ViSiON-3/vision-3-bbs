@@ -184,7 +184,12 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 		if len(call.Arguments) > 0 {
 			maxVal = int(call.Arguments[0].ToInteger())
 		}
-		result, err := eng.readLine(len(fmt.Sprintf("%d", maxVal)), lineOpts{numberOnly: true})
+		// When maxVal is 0 (no limit), allow up to 10 digits.
+		maxLen := len(fmt.Sprintf("%d", maxVal))
+		if maxVal == 0 {
+			maxLen = 10
+		}
+		result, err := eng.readLine(maxLen, lineOpts{numberOnly: true})
 		if err != nil || result == "" {
 			return vm.ToValue(0)
 		}

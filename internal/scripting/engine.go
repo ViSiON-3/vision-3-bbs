@@ -376,13 +376,14 @@ func skipCSI(data []byte) int {
 	return len(data)
 }
 
-// isExitPanic checks if an error is from a clean exit() call or context cancellation.
+// isExitPanic checks if an error is from a clean exit() call.
+// Other interrupts (context timeout, disconnect) should not be treated as clean exits.
 func isExitPanic(err error) bool {
 	if ex, ok := err.(*goja.InterruptedError); ok {
 		if _, isExit := ex.Value().(exitCode); isExit {
 			return true
 		}
-		return true
+		return false
 	}
 	return false
 }

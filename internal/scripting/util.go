@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dop251/goja"
 	"github.com/stlalpha/vision3/internal/ansi"
@@ -73,7 +74,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 		if len(call.Arguments) > 2 {
 			s := call.Arguments[2].String()
 			if len(s) > 0 {
-				padChar = rune(s[0])
+				padChar, _ = utf8.DecodeRuneInString(s)
 			}
 		}
 		return vm.ToValue(ansi.PadVisible(str, width, padChar))
@@ -91,7 +92,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 		if len(call.Arguments) > 2 {
 			s := call.Arguments[2].String()
 			if len(s) > 0 {
-				padChar = rune(s[0])
+				padChar, _ = utf8.DecodeRuneInString(s)
 			}
 		}
 		visLen := ansi.VisibleLength(str)

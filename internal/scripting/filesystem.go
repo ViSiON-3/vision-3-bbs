@@ -146,13 +146,7 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 
 // sandboxRoot returns the scripts/data/ directory for the current script config.
 func sandboxRoot(cfg ScriptConfig) string {
-	// Same logic as dataFilePath but just the directory.
-	dataDir := filepath.Join(cfg.WorkingDir, "..", "data")
-	abs, err := filepath.Abs(dataDir)
-	if err != nil {
-		abs = filepath.Join(cfg.WorkingDir, "data")
-	}
-	return abs
+	return resolveDataDir(cfg.WorkingDir)
 }
 
 // resolveSandboxPath resolves a user-provided path within the sandbox.
@@ -164,13 +158,19 @@ func resolveSandboxPath(sandbox, userPath string) (string, error) {
 	}
 
 	// Resolve the sandbox to a canonical absolute path.
+	// If the sandbox directory doesn't exist yet (fresh install), fall back to
+	// filepath.Abs so that mkdir/write calls can create it.
 	sandboxAbs, err := filepath.EvalSymlinks(sandbox)
 	if err != nil {
-		return "", fmt.Errorf("invalid sandbox path: %w", err)
-	}
-	sandboxAbs, err = filepath.Abs(sandboxAbs)
-	if err != nil {
-		return "", fmt.Errorf("invalid sandbox path: %w", err)
+		sandboxAbs, err = filepath.Abs(sandbox)
+		if err != nil {
+			return "", fmt.Errorf("invalid sandbox path: %w", err)
+		}
+	} else {
+		sandboxAbs, err = filepath.Abs(sandboxAbs)
+		if err != nil {
+			return "", fmt.Errorf("invalid sandbox path: %w", err)
+		}
 	}
 
 	// Join and clean the user path.
