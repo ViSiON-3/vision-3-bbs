@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stlalpha/vision3/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 )
 
 func TestShouldSkipFile(t *testing.T) {

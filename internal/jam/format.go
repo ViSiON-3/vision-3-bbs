@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/stlalpha/vision3/internal/version"
+	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
 // Version is kept for compatibility; use internal/version.Number for new code.

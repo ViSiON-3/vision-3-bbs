@@ -4,7 +4,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // SyncJSDoorConfig holds the configuration specific to Synchronet JS door execution.

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/stlalpha/vision3/internal/archiver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 )
 
 // StepConfig holds the configuration for an individual ZipLab pipeline step.

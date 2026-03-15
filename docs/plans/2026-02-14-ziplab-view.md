@@ -452,7 +452,7 @@ This requires adding imports for `ssh`, `term`, and `ansi` packages:
 import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
-	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 ```
 
@@ -474,9 +474,9 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/terminalio"
-	"github.com/stlalpha/vision3/internal/transfer"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 )
 
 // RunZipLabView displays an interactive archive viewer with extraction support.
@@ -685,7 +685,7 @@ if e.FileMgr.IsSupportedArchive(record.Filename) {
 }
 ```
 
-Add `"github.com/stlalpha/vision3/internal/ziplab"` to the imports in `file_viewer.go`.
+Add `"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"` to the imports in `file_viewer.go`.
 
 Also update `viewFileByRecord` (line 181-182) the same way:
 

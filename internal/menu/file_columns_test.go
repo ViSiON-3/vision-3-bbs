@@ -3,7 +3,7 @@ package menu
 import (
 	"testing"
 
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func TestFileColumnEnabled_AllDefault(t *testing.T) {

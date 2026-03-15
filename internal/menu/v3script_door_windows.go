@@ -9,8 +9,8 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/stlalpha/vision3/internal/scripting"
-	"github.com/stlalpha/vision3/internal/version"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
+	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
 // executeV3ScriptDoor runs a Vision/3 VPL script using the embedded JS engine.

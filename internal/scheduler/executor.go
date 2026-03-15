@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 // executeEvent runs a scheduled event and returns the result

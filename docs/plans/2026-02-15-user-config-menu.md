@@ -245,9 +245,9 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/terminalio"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // runCfgToggle is a generic toggle handler for boolean user preferences.

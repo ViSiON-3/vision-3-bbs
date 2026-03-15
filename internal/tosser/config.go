@@ -1,6 +1,6 @@
 package tosser
 
-import "github.com/stlalpha/vision3/internal/config"
+import "github.com/ViSiON-3/vision-3-bbs/internal/config"
 
 // Type aliases for config types used throughout the tosser package.
 type networkConfig = config.FTNNetworkConfig

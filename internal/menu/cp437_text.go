@@ -1,6 +1,6 @@
 package menu
 
-import "github.com/stlalpha/vision3/internal/ansi"
+import "github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 
 // unicodeASCIILookalikes maps Unicode characters that are visually identical (or nearly
 // identical) to ASCII characters but have no CP437 representation. Common in FTN handles

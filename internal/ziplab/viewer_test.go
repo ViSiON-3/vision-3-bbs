@@ -14,7 +14,7 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // createTestZipWithTimes creates a ZIP with entries that have specific modification times.

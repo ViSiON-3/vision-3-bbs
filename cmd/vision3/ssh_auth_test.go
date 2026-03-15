@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // TestSSHAuthGating verifies the SSH-level password handler logic:

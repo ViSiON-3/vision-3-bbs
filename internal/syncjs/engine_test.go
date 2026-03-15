@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // mockSession implements io.ReadWriter for testing.

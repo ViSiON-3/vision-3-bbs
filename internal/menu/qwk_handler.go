@@ -15,11 +15,11 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/qwk"
-	"github.com/stlalpha/vision3/internal/terminalio"
-	"github.com/stlalpha/vision3/internal/transfer"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // qwkBBSID returns a short BBS identifier for QWK packet filenames.

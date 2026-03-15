@@ -2,7 +2,7 @@
 
 Welcome, SysOp. This wiki covers everything you need to install, configure, and run a l33t ViSiON/3 BBS like it's 1992 all over again.
 
-> **Current Version: v0.1.0** | [GitHub Releases](https://github.com/stlalpha/vision3/releases)
+> **Current Version: v0.1.0** | [GitHub Releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
 >
 > ⚠️ **Early Development:** ViSiON/3 is under active development and not yet feature-complete. Expect rough edges and missing features. Use at your own risk.
 
@@ -40,6 +40,6 @@ New to ViSiON/3? Start here:
 
 ViSiON/3 is a ground-up rewrite of ViSiON/2 in Go — SSH instead of dialup, everything else the real deal.
 
-- **GitHub**: [stlalpha/vision3](https://github.com/stlalpha/vision3)
+- **GitHub**: [ViSiON-3/vision-3-bbs](https://github.com/ViSiON-3/vision-3-bbs)
 - **Discord**: [Join the server](https://discord.gg/VkjRN2Ms)
 - **Main Site**: [vision3bbs.com](https://vision3bbs.com)

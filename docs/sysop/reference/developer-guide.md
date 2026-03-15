@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-git clone https://github.com/stlalpha/vision3.git
+git clone https://github.com/ViSiON-3/vision-3-bbs.git
 cd vision3
 cd cmd/vision3 && go build
 ```
@@ -162,6 +162,6 @@ dataPath := filepath.Join("data", "users", "users.json")
 
 ## Common Issues
 
-- **Import errors**: Make sure all imports use `github.com/stlalpha/vision3/internal/...`
+- **Import errors**: Make sure all imports use `github.com/ViSiON-3/vision-3-bbs/internal/...`
 - **ANSI display issues**: Always use `terminalio.WriteProcessedBytes()` for output
 - **Path issues**: Use `e.MenuSetPath` for menu files, `e.RootConfigPath` for configs

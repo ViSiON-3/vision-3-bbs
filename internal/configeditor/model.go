@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/stlalpha/vision3/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 const (

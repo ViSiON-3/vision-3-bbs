@@ -3,9 +3,9 @@ package menu
 import (
 	"testing"
 
-	"github.com/stlalpha/vision3/internal/config"
-	"github.com/stlalpha/vision3/internal/message"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func TestCanAccessSponsorMenu(t *testing.T) {

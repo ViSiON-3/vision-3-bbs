@@ -1,8 +1,8 @@
 # ViSiON/3 Installation Guide
 
-> **Current Version: v0.1.0** — [GitHub Releases](https://github.com/stlalpha/vision3/releases)
+> **Current Version: v0.1.0** — [GitHub Releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
 >
-> ⚠️ **Early Development:** ViSiON/3 is under active development and not yet feature-complete. Expect rough edges and missing features. Use at your own risk. Check the [releases page](https://github.com/stlalpha/vision3/releases) and the [README](https://github.com/stlalpha/vision3) for the current status of features.
+> ⚠️ **Early Development:** ViSiON/3 is under active development and not yet feature-complete. Expect rough edges and missing features. Use at your own risk. Check the [releases page](https://github.com/ViSiON-3/vision-3-bbs/releases) and the [README](https://github.com/ViSiON-3/vision-3-bbs) for the current status of features.
 
 ---
 
@@ -30,7 +30,7 @@ No Go toolchain or build tools required. Download, extract, and run.
 | macOS | Universal (Intel + Apple Silicon) | `vision3_darwin_universal.tar.gz` |
 | Windows | x86_64 | `vision3_windows_amd64.zip` |
 
-Download from: [https://github.com/stlalpha/vision3/releases](https://github.com/stlalpha/vision3/releases)
+Download from: [https://github.com/ViSiON-3/vision-3-bbs/releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
 
 ### Steps
 
@@ -113,7 +113,7 @@ Download from: [https://github.com/stlalpha/vision3/releases](https://github.com
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/stlalpha/vision3.git
+git clone https://github.com/ViSiON-3/vision-3-bbs.git
 cd vision3
 ```
 

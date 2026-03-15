@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/dop251/goja"
-	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // registerUtil creates the v3.util object with common utility functions.

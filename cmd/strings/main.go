@@ -19,7 +19,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/stlalpha/vision3/internal/stringeditor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
 )
 
 // loadShippedDefaults reads the factory default strings from the templates directory.

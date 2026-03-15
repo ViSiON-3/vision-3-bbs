@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stlalpha/vision3/internal/archiver"
-	"github.com/stlalpha/vision3/internal/file"
-	"github.com/stlalpha/vision3/internal/ziplab"
+	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
 )
 
 type importStats struct {

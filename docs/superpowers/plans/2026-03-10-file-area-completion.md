@@ -284,9 +284,9 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/terminalio"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func runSearchFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
@@ -422,9 +422,9 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/terminalio"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func runShowFileInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
@@ -551,9 +551,9 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/terminalio"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,

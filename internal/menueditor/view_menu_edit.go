@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/stlalpha/vision3/internal/stringeditor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
 )
 
 // viewMenuEditScreen renders the per-menu field editor.

@@ -1,10 +1,10 @@
 package scripting
 
 import (
-	"github.com/stlalpha/vision3/internal/file"
-	"github.com/stlalpha/vision3/internal/message"
-	"github.com/stlalpha/vision3/internal/session"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // Providers holds optional manager references for V3 script API access.

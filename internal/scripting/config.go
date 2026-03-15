@@ -4,7 +4,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // ScriptConfig holds the configuration for a V3 script execution.

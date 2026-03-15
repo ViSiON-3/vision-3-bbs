@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/stlalpha/vision3/internal/config"
-	"github.com/stlalpha/vision3/internal/menu"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // ConfigWatcher watches configuration files for changes and hot-reloads them.

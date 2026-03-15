@@ -774,7 +774,7 @@ iptables -A INPUT -p tcp --dport 2222 -m state --state NEW \
 
 For security issues:
 
-- GitHub Issues: <https://github.com/stlalpha/vision3/issues>
+- GitHub Issues: <https://github.com/ViSiON-3/vision-3-bbs/issues>
 - Email: <robbiew@gmail.com> (for sensitive security issues)
 
 **Note:** Never share your SSH host keys, user database, or configuration files containing sensitive information.

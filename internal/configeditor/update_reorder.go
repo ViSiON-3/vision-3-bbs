@@ -1,8 +1,8 @@
 package configeditor
 
 import (
-	"github.com/stlalpha/vision3/internal/conference"
-	"github.com/stlalpha/vision3/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
 // reorderRecord performs the slice manipulation for the current record type:

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stlalpha/vision3/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 func TestFileListPlaceholderRegex(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 // lookPath finds the absolute path to a command, skipping the test if not found.
