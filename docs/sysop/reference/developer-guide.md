@@ -27,10 +27,10 @@ cmd/vision3/main.go → SSH Server → Session Handler → Menu Executor → Run
 1. Add to `internal/menu/executor.go`:
 
 ```go
-func runMyFeature(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
-    userManager *user.UserMgr, currentUser *user.User, nodeNumber int, 
+func runMyFeature(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
+    userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
     sessionStartTime time.Time, args string, outputMode ansi.OutputMode) (*user.User, string, error) {
-    
+
     msg := "|15Feature output|07\r\n"
     wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
     if wErr != nil {

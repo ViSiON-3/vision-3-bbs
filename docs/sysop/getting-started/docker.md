@@ -184,8 +184,8 @@ To use different ports, edit `docker-compose.yml`:
 
 ```yaml
 ports:
-  - "2323:2222"  # Expose SSH on port 2323
-  - "2324:2323"  # Expose telnet on port 2324
+  - "2323:2222" # Expose SSH on port 2323
+  - "2324:2323" # Expose telnet on port 2324
 ```
 
 ### Resource Limits
