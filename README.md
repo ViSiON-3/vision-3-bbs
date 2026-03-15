@@ -104,6 +104,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | Signup & Authentication       | ✅ Working | bcrypt hashed passwords, JSON persistence                                                                           |
 | User Listings & Stats         | ✅ Working | Last callers, user listing, call history, stats display                                                             |
 | NUV (New User Verification)   | ✅ Working | Voting-based approval system for new user accounts                                                                  |
+| Info Forms                    | ✅ Working | Up to 5 configurable forms; required form enforcement on login; user fill/view; SysOp browse and management         |
 | TUI User Editor (`ue`)        | ✅ Working | Full-screen terminal user management                                                                                |
 | **Menus**                     |           |                                                                                                                     |
 | Menu System                   | ✅ Working | `.MNU`, `.CFG`, `.ANS` files, ACS evaluation, password protection                                                   |
@@ -117,8 +118,10 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | File Areas                    | ✅ Working | List/select areas, list files, search, file info, newscan, configurable columns, extended listing                   |
 | File Transfers                | ✅ Working | ZMODEM upload/download via `sexyz`, batch download with per-area ACS validation                                     |
 | File Management               | ✅ Working | SysOp file delete, move, edit descriptions, review queue for uploads, lightbar sysop bar (`*` toggle)               |
-| **Doors**                     |           |                                                                                                                     |
+| **Doors & Scripting**         |           |                                                                                                                     |
 | Door/External Programs        | ✅ Working | Dropfile generation, PTY passthrough                                                                                |
+| SyncJS Doors                  | ✅ Working | Synchronet-compatible JavaScript door engine                                                                        |
+| V3 Scripting Engine           | ✅ Working | goja-based JavaScript runtime for native V3 script doors                                                            |
 | **Networking/FTN**            |           |                                                                                                                     |
 | FTN Echomail/Netmail          | ✅ Working | JAM-backed, tosser, import/export, dupe checking                                                                    |
 | **Community Features**        |           |                                                                                                                     |
@@ -143,6 +146,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 *   **Language:** Go 1.24+
 *   **SSH Server:** `github.com/gliderlabs/ssh` — pure-Go SSH server with legacy algorithm support (SyncTerm, NetRunner compatible)
 *   **TUI Framework:** Charmbracelet BubbleTea (`github.com/charmbracelet/bubbletea`) — full-screen terminal editors and admin tools
+*   **JavaScript Engine:** `github.com/dop251/goja` — embedded JS runtime for V3 scripting and SyncJS door support
 *   **Event Scheduling:** `github.com/robfig/cron/v3` — cron-style event scheduler
 *   **Config Monitoring:** `github.com/fsnotify/fsnotify` — live configuration hot reload
 *   **PTY Support:** `github.com/creack/pty` — PTY handling for door programs
@@ -194,7 +198,8 @@ vision-3-bbs/
 │   ├── strings.json        # BBS string customizations
 │   └── ssh_host_rsa_key    # SSH host key
 ├── templates/              # Configuration templates (tracked in git)
-│   └── configs/            # Template configuration files
+│   ├── configs/            # Template configuration files
+│   └── infoforms/          # Info form templates
 ├── data/                   # Runtime data
 │   ├── users/              # User database and call history
 │   ├── msgbases/           # JAM format message bases
@@ -219,9 +224,11 @@ vision-3-bbs/
 │   ├── message/            # Message base management
 │   ├── qwk/                # QWK offline mail packet format
 │   ├── scheduler/          # Cron-style event scheduler
+│   ├── scripting/          # V3 scripting engine (goja-based JavaScript runtime)
 │   ├── session/            # Session management
 │   ├── sshserver/          # pure-Go SSH server (gliderlabs/ssh wrapper)
 │   ├── stringeditor/       # TUI string configuration editor
+│   ├── syncjs/             # Synchronet-compatible JavaScript door engine
 │   ├── telnetserver/       # Telnet server
 │   ├── terminalio/         # Terminal I/O handling
 │   ├── tosser/             # FTN echomail tosser (import/export)
@@ -240,9 +247,12 @@ vision-3-bbs/
 │   └── templates/          # Display templates
 │       └── message_headers/ # Customizable message header styles (unlimited, 16 included)
 ├── bin/                    # External helper binaries (not tracked in git)
-├── output/                 # Output support files
-├── scripts/                # Utility scripts
+├── scripts/                # Utility scripts and example V3/SyncJS scripts
+│   └── examples/           # Example JavaScript scripts for V3 scripting and SyncJS
+├── third_party/            # Modified third-party packages (tracked in git)
+├── ziplab/                 # ZipLab support data files
 ├── docs/                   # GitHub Pages website (vision3bbs.com)
+│   ├── plans/              # Development plan documents
 │   └── sysop/              # Sysop documentation
 ```
 
