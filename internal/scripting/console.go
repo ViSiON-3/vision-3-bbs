@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dop251/goja"
 	"github.com/stlalpha/vision3/internal/ansi"
@@ -222,22 +221,5 @@ func argsToString(call goja.FunctionCall) string {
 // displayLength returns the visible display length of a string,
 // stripping ANSI escape sequences.
 func displayLength(s string) int {
-	result := 0
-	i := 0
-	for i < len(s) {
-		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[' {
-			i += 2
-			for i < len(s) && !(s[i] >= 0x40 && s[i] <= 0x7E) {
-				i++
-			}
-			if i < len(s) {
-				i++
-			}
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(s[i:])
-		result++
-		i += size
-	}
-	return result
+	return ansi.VisibleLength(s)
 }

@@ -64,7 +64,9 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		defer mu.Unlock()
 		data := store.loadFile()
 		data[key] = value
-		store.saveFile(data)
+		if err := store.saveFile(data); err != nil {
+			panic(vm.NewGoError(err))
+		}
 		return goja.Undefined()
 	})
 
@@ -79,7 +81,9 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		defer mu.Unlock()
 		data := store.loadFile()
 		delete(data, key)
-		store.saveFile(data)
+		if err := store.saveFile(data); err != nil {
+			panic(vm.NewGoError(err))
+		}
 		return goja.Undefined()
 	})
 
@@ -149,13 +153,15 @@ func (ds *dataStore) loadFile() map[string]any {
 }
 
 // saveFile writes the data file without acquiring the mutex (caller must hold it).
-func (ds *dataStore) saveFile(data map[string]any) {
-	os.MkdirAll(filepath.Dir(ds.path), 0o755) //nolint:errcheck
+func (ds *dataStore) saveFile(data map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(ds.path), 0o755); err != nil {
+		return err
+	}
 	raw, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return
+		return err
 	}
-	os.WriteFile(ds.path, raw, 0o644) //nolint:errcheck
+	return os.WriteFile(ds.path, raw, 0o644)
 }
 
 func intToDataStr(i int) string {

@@ -378,7 +378,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 	}
 
-	if dPtr.IsDOS && !isSyncJS(dPtr) {
+	if dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) {
 		// DOS-specific fields
 		row++
 		fields = append(fields, fieldDef{
