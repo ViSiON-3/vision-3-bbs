@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/stlalpha/vision3/internal/archiver"
-	"github.com/stlalpha/vision3/internal/ziplab"
+	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
 )
 
 func cmdFilesReextractDIZ(args []string) {

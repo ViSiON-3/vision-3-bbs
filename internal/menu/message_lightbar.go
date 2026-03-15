@@ -9,8 +9,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"golang.org/x/term"
 )
 

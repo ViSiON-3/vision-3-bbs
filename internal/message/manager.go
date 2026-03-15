@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/jam"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
 // ErrAreaNotFound is returned when a message area doesn't exist.

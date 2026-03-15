@@ -1,18 +1,18 @@
 # ViSiON/3 Installation Guide
 
-> **Current Version: v0.1.0** — [GitHub Releases](https://github.com/stlalpha/vision3/releases)
+> **Current Version: v0.1.0** — [GitHub Releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
 >
-> ⚠️ **Early Development:** ViSiON/3 is under active development and not yet feature-complete. Expect rough edges and missing features. Use at your own risk. Check the [releases page](https://github.com/stlalpha/vision3/releases) and the [README](https://github.com/stlalpha/vision3) for the current status of features.
+> ⚠️ **Early Development:** ViSiON/3 is under active development and not yet feature-complete. Expect rough edges and missing features. Use at your own risk. Check the [releases page](https://github.com/ViSiON-3/vision-3-bbs/releases) and the [README](https://github.com/ViSiON-3/vision-3-bbs) for the current status of features.
 
 ---
 
 ## Installation Options
 
-| Option | Best For |
-|--------|----------|
+| Option                                                             | Best For                                |
+| ------------------------------------------------------------------ | --------------------------------------- |
 | [Download Pre-Built Release](#option-1-download-pre-built-release) | Fastest path — no Go toolchain required |
-| [Build from Source](#option-2-build-from-source) | Contributors, or to run unreleased code |
-| [Docker Deployment](getting-started/docker.md) | Containerized / production setup |
+| [Build from Source](#option-2-build-from-source)                   | Contributors, or to run unreleased code |
+| [Docker Deployment](docker.md)                                     | Containerized / production setup        |
 
 ---
 
@@ -22,27 +22,29 @@ No Go toolchain or build tools required. Download, extract, and run.
 
 ### Available Platforms
 
-| Platform | Architecture | Archive |
-|----------|-------------|---------|
-| Linux | x86_64 (amd64) | `vision3_linux_amd64.tar.gz` |
-| Linux | ARM64 | `vision3_linux_arm64.tar.gz` |
-| Linux | ARMv7 (Raspberry Pi 3) | `vision3_linux_armv7.tar.gz` |
-| macOS | Universal (Intel + Apple Silicon) | `vision3_darwin_universal.tar.gz` |
-| Windows | x86_64 | `vision3_windows_amd64.zip` |
+| Platform | Architecture                      | Archive                           |
+| -------- | --------------------------------- | --------------------------------- |
+| Linux    | x86_64 (amd64)                    | `vision3_linux_amd64.tar.gz`      |
+| Linux    | ARM64                             | `vision3_linux_arm64.tar.gz`      |
+| Linux    | ARMv7 (Raspberry Pi 3)            | `vision3_linux_armv7.tar.gz`      |
+| macOS    | Universal (Intel + Apple Silicon) | `vision3_darwin_universal.tar.gz` |
+| Windows  | x86_64                            | `vision3_windows_amd64.zip`       |
 
-Download from: [https://github.com/stlalpha/vision3/releases](https://github.com/stlalpha/vision3/releases)
+Download from: [https://github.com/ViSiON-3/vision-3-bbs/releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
 
 ### Steps
 
 1. **Download and extract the archive for your platform:**
 
    **Linux / macOS:**
+
    ```bash
    tar -xzf vision3_<platform>.tar.gz
    cd vision3
    ```
 
    **Windows (PowerShell):**
+
    ```powershell
    Expand-Archive vision3_windows_amd64.zip
    cd vision3
@@ -51,11 +53,13 @@ Download from: [https://github.com/stlalpha/vision3/releases](https://github.com
 2. **Run the setup script:**
 
    **Linux / macOS:**
+
    ```bash
    ./setup.sh
    ```
 
    **Windows (PowerShell):**
+
    ```powershell
    .\setup.ps1
    ```
@@ -78,11 +82,13 @@ Download from: [https://github.com/stlalpha/vision3/releases](https://github.com
 4. **Start the BBS:**
 
    **Linux / macOS:**
+
    ```bash
    ./vision3
    ```
 
    **Windows:**
+
    ```powershell
    .\vision3.exe
    ```
@@ -113,23 +119,26 @@ Download from: [https://github.com/stlalpha/vision3/releases](https://github.com
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/stlalpha/vision3.git
-cd vision3
+git clone https://github.com/ViSiON-3/vision-3-bbs.git
+cd vision-3-bbs
 ```
 
 ### 2. Run the Setup Script
 
 **Linux / macOS:**
+
 ```bash
 ./setup.sh
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 .\setup.ps1
 ```
 
 This will:
+
 - Generate SSH host keys
 - Copy template configuration files to `configs/`
 - Create the necessary directory structure and initial data files

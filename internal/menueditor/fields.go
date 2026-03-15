@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stlalpha/vision3/internal/stringeditor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
 )
 
 // fieldType defines the edit behaviour for a field.

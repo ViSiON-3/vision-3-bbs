@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/stlalpha/vision3/internal/syncjs"
+	"github.com/ViSiON-3/vision-3-bbs/internal/syncjs"
 )
 
 // executeSyncJSDoor runs a Synchronet-compatible JavaScript door game

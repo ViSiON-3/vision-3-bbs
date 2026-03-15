@@ -11,7 +11,7 @@ import (
 	"golang.org/x/term" // Keep for potential future use (e.g., baud check)
 
 	// Update local imports
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // --- Tokenizer ---

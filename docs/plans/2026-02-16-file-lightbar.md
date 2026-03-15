@@ -103,10 +103,10 @@ import (
     "time"
 
     "github.com/google/uuid"
-    "github.com/stlalpha/vision3/internal/ansi"
-    "github.com/stlalpha/vision3/internal/file"
-    "github.com/stlalpha/vision3/internal/terminalio"
-    "github.com/stlalpha/vision3/internal/user"
+    "github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+    "github.com/ViSiON-3/vision-3-bbs/internal/file"
+    "github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+    "github.com/ViSiON-3/vision-3-bbs/internal/user"
     "golang.org/x/crypto/ssh"
     "golang.org/x/term"
 )

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stlalpha/vision3/internal/archiver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 )
 
 // FileManager manages file areas and their associated file records.

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gliderlabs/ssh"
-	"github.com/stlalpha/vision3/internal/sshserver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/sshserver"
 	gossh "golang.org/x/crypto/ssh"
 )
 

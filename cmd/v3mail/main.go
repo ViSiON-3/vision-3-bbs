@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/jam"
-	"github.com/stlalpha/vision3/internal/version"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
+	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
 // areaConfig is a minimal struct for parsing message_areas.json

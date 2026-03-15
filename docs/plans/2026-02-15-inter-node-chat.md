@@ -384,7 +384,7 @@ git commit -m "feat: add ChatRoom with broadcast, subscribe, and ring buffer his
 In `internal/menu/executor.go`, add the import:
 
 ```go
-"github.com/stlalpha/vision3/internal/chat"
+"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 ```
 
 Add the field to the `MenuExecutor` struct (after `SessionRegistry`):
@@ -407,7 +407,7 @@ In `cmd/vision3/main.go`, before the `menu.NewExecutor` call (around line 1396),
 chatRoom := chat.NewChatRoom(100)
 ```
 
-Add the import for `"github.com/stlalpha/vision3/internal/chat"` and pass `chatRoom` as the last argument to `NewExecutor`.
+Add the import for `"github.com/ViSiON-3/vision-3-bbs/internal/chat"` and pass `chatRoom` as the last argument to `NewExecutor`.
 
 **Step 3: Build and verify**
 
@@ -454,10 +454,10 @@ import (
 	"github.com/gliderlabs/ssh"
 	term "golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/chat"
-	"github.com/stlalpha/vision3/internal/terminalio"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func runChat(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode) (*user.User, string, error) {
@@ -607,9 +607,9 @@ import (
 	"github.com/gliderlabs/ssh"
 	term "golang.org/x/term"
 
-	"github.com/stlalpha/vision3/internal/ansi"
-	"github.com/stlalpha/vision3/internal/terminalio"
-	"github.com/stlalpha/vision3/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func runPage(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode) (*user.User, string, error) {

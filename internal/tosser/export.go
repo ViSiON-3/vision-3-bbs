@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/ftn"
-	"github.com/stlalpha/vision3/internal/jam"
-	"github.com/stlalpha/vision3/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
 // getBaseHWM reads the export high-water mark from a JAM base's .jlr file.

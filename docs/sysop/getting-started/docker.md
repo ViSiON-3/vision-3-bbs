@@ -12,8 +12,8 @@ This guide covers deploying ViSiON/3 using Docker and Docker Compose.
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/stlalpha/vision3.git
-   cd vision3
+   git clone https://github.com/ViSiON-3/vision-3-bbs.git
+   cd vision-3-bbs
    ```
 
 2. **Start the BBS:**
@@ -184,8 +184,8 @@ To use different ports, edit `docker-compose.yml`:
 
 ```yaml
 ports:
-  - "2323:2222"  # Expose SSH on port 2323
-  - "2324:2323"  # Expose telnet on port 2324
+  - "2323:2222" # Expose SSH on port 2323
+  - "2324:2323" # Expose telnet on port 2324
 ```
 
 ### Resource Limits
@@ -251,5 +251,5 @@ For production deployments:
 For issues related to Docker deployment:
 
 - Check logs: `docker compose logs -f`
-- GitHub Issues: <https://github.com/stlalpha/vision3/issues>
+- GitHub Issues: <https://github.com/ViSiON-3/vision-3-bbs/issues>
 - Include Docker version, OS, and error logs when reporting issues

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stlalpha/vision3/internal/ftn"
-	"github.com/stlalpha/vision3/internal/jam"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
 // PackResult holds the results of a pack (bundle creation) operation.

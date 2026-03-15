@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/stlalpha/vision3/internal/archiver"
-	"github.com/stlalpha/vision3/internal/conference"
-	"github.com/stlalpha/vision3/internal/config"
-	"github.com/stlalpha/vision3/internal/file"
-	"github.com/stlalpha/vision3/internal/message"
-	"github.com/stlalpha/vision3/internal/transfer"
+	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 )
 
 // allConfigs holds all loaded configuration data.

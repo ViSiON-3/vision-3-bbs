@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/stlalpha/vision3.git
-cd vision3
+git clone https://github.com/ViSiON-3/vision-3-bbs.git
+cd vision-3-bbs
 cd cmd/vision3 && go build
 ```
 
@@ -27,10 +27,10 @@ cmd/vision3/main.go → SSH Server → Session Handler → Menu Executor → Run
 1. Add to `internal/menu/executor.go`:
 
 ```go
-func runMyFeature(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
-    userManager *user.UserMgr, currentUser *user.User, nodeNumber int, 
+func runMyFeature(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
+    userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
     sessionStartTime time.Time, args string, outputMode ansi.OutputMode) (*user.User, string, error) {
-    
+
     msg := "|15Feature output|07\r\n"
     wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
     if wErr != nil {
@@ -162,6 +162,6 @@ dataPath := filepath.Join("data", "users", "users.json")
 
 ## Common Issues
 
-- **Import errors**: Make sure all imports use `github.com/stlalpha/vision3/internal/...`
+- **Import errors**: Make sure all imports use `github.com/ViSiON-3/vision-3-bbs/internal/...`
 - **ANSI display issues**: Always use `terminalio.WriteProcessedBytes()` for output
 - **Path issues**: Use `e.MenuSetPath` for menu files, `e.RootConfigPath` for configs

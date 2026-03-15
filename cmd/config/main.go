@@ -20,7 +20,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/stlalpha/vision3/internal/configeditor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/configeditor"
 )
 
 func main() {

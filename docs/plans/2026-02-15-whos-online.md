@@ -191,7 +191,7 @@ In `cmd/vision3/main.go`, in the `var` block near line 47, add:
 sessionRegistry *session.SessionRegistry
 ```
 
-Add import for `"github.com/stlalpha/vision3/internal/session"` if not already present.
+Add import for `"github.com/ViSiON-3/vision-3-bbs/internal/session"` if not already present.
 
 **Step 2: Initialize registry before executor creation**
 
@@ -265,7 +265,7 @@ In `internal/menu/executor.go`, add to the `MenuExecutor` struct (after line 78,
 SessionRegistry *session.SessionRegistry // Active session registry for who's online
 ```
 
-Add import: `"github.com/stlalpha/vision3/internal/session"`
+Add import: `"github.com/ViSiON-3/vision-3-bbs/internal/session"`
 
 **Step 2: Update NewExecutor signature and body**
 

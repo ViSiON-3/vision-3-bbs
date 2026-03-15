@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stlalpha/vision3/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 // sliceToCSV joins a string slice with ", " for display.

@@ -18,7 +18,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/stlalpha/vision3/internal/menueditor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menueditor"
 )
 
 func main() {

@@ -9,10 +9,10 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 
-	// "github.com/stlalpha/vision3/internal/menu" // Removed menu import
-	"github.com/stlalpha/vision3/internal/types" // Import the new types package
-	"github.com/stlalpha/vision3/internal/user"
-	// Remove main import main "github.com/stlalpha/vision3"
+	// "github.com/ViSiON-3/vision-3-bbs/internal/menu" // Removed menu import
+	"github.com/ViSiON-3/vision-3-bbs/internal/types" // Import the new types package
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	// Remove main import main "github.com/ViSiON-3/vision-3-bbs"
 )
 
 // Session represents an active user connection to the BBS.

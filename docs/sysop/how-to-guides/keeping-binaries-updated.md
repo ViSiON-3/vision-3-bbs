@@ -12,7 +12,7 @@ The idea is simple: keep a cloned copy of the repo for building, and point your 
 
 - **Go 1.24+** — required to build from source ([install Go](https://golang.org/dl/))
 - **Git**
-- A working ViSiON/3 installation (from a [release archive](https://github.com/stlalpha/vision3/releases) or a prior `setup.sh` run)
+- A working ViSiON/3 installation (from a [release archive](https://github.com/ViSiON-3/vision-3-bbs/releases) or a prior `setup.sh` run)
 
 ---
 
@@ -21,7 +21,7 @@ The idea is simple: keep a cloned copy of the repo for building, and point your 
 Pick a location for the source tree. This is where you'll pull updates and build.
 
 ```bash
-git clone https://github.com/stlalpha/vision3.git ~/git/vision3
+git clone https://github.com/ViSiON-3/vision-3-bbs.git ~/git/vision3
 cd ~/git/vision3
 ./build.sh
 ```
