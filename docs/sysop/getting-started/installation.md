@@ -6,124 +6,49 @@
 
 ---
 
-## Installation Options
+## Installation
 
-| Option                                                             | Best For                                |
-| ------------------------------------------------------------------ | --------------------------------------- |
-| [Download Pre-Built Release](#option-1-download-pre-built-release) | Fastest path — no Go toolchain required |
-| [Build from Source](#option-2-build-from-source)                   | Contributors, or to run unreleased code |
-| [Docker Deployment](docker.md)                                     | Containerized / production setup        |
+**Always start with a release archive.** Pre-built bundles include all binaries (`vision3`, `v3mail`, `helper`, `strings`, `ue`, `config`, `menuedit`, `binkd`, `sexyz`) and all runtime assets (configs, menus, data skeleton, Synchronet JS door libraries). No Go toolchain or build tools required.
+
+If you later want to track active development without re-downloading releases, see [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md).
 
 ---
 
-## Option 1: Download Pre-Built Release
+## Step 1: Download a Release Archive
 
-No Go toolchain or build tools required. Download, extract, and run.
+Download the archive for your platform from the [releases page](https://github.com/ViSiON-3/vision-3-bbs/releases):
 
-### Available Platforms
+| Platform | Architecture                      | Archive                                        |
+| -------- | --------------------------------- | ---------------------------------------------- |
+| Linux    | x86_64 (amd64)                    | `vision3-bundle-linux-amd64-v*.tar.gz`         |
+| Linux    | ARM64                             | `vision3-bundle-linux-arm64-v*.tar.gz`         |
+| Linux    | ARMv7 (Raspberry Pi 3/4)          | `vision3-bundle-linux-armv7-v*.tar.gz`         |
+| macOS    | Universal (Intel + Apple Silicon) | `vision3-bundle-darwin-universal-v*.tar.gz`    |
+| Windows  | x86_64                            | `vision3-bundle-windows-amd64-v*.zip`          |
+| Windows  | x86 (32-bit)                      | `vision3-bundle-windows-386-v*.zip`            |
 
-| Platform | Architecture                      | Archive                           |
-| -------- | --------------------------------- | --------------------------------- |
-| Linux    | x86_64 (amd64)                    | `vision3_linux_amd64.tar.gz`      |
-| Linux    | ARM64                             | `vision3_linux_arm64.tar.gz`      |
-| Linux    | ARMv7 (Raspberry Pi 3)            | `vision3_linux_armv7.tar.gz`      |
-| macOS    | Universal (Intel + Apple Silicon) | `vision3_darwin_universal.tar.gz` |
-| Windows  | x86_64                            | `vision3_windows_amd64.zip`       |
+## Step 2: Extract
 
-Download from: [https://github.com/ViSiON-3/vision-3-bbs/releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
+Pick an install location and extract the archive there.
 
-### Steps
-
-1. **Download and extract the archive for your platform:**
-
-   **Linux / macOS:**
-
-   ```bash
-   tar -xzf vision3_<platform>.tar.gz
-   cd vision3
-   ```
-
-   **Windows (PowerShell):**
-
-   ```powershell
-   Expand-Archive vision3_windows_amd64.zip
-   cd vision3
-   ```
-
-2. **Run the setup script:**
-
-   **Linux / macOS:**
-
-   ```bash
-   ./setup.sh
-   ```
-
-   **Windows (PowerShell):**
-
-   ```powershell
-   .\setup.ps1
-   ```
-
-   This will:
-   - Generate SSH host keys
-   - Copy template configs to `configs/`
-   - Create required directory structure
-   - Create initial data files
-
-3. **Configure your BBS:**
-
-   ```bash
-   nano configs/config.json       # Linux/macOS
-   notepad configs\config.json    # Windows
-   ```
-
-   See the [Configuration Guide](configuration/configuration.md) for all settings.
-
-4. **Start the BBS:**
-
-   **Linux / macOS:**
-
-   ```bash
-   ./vision3
-   ```
-
-   **Windows:**
-
-   ```powershell
-   .\vision3.exe
-   ```
-
-5. **Connect and verify:**
-
-   ```bash
-   ssh felonius@localhost -p 2222
-   # Default password: password
-   ```
-
-   **Important:** Change the default password immediately after first login!
-
-> **Note:** Release archives include all binaries: `vision3`, `v3mail`, `helper`, `strings`, `ue`, and `sexyz` (ZModem file transfers).
-
----
-
-## Option 2: Build from Source
-
-### Prerequisites
-
-- **Go 1.24+** — the only build requirement ([install Go](https://golang.org/dl/))
-- Git
-- SSH client for testing
-
-> **Note:** ViSiON/3 uses a pure-Go SSH server (`gliderlabs/ssh`). No CGO, libssh, or pkg-config is required.
-
-### 1. Clone the Repository
+**Linux / macOS:**
 
 ```bash
-git clone https://github.com/ViSiON-3/vision-3-bbs.git
-cd vision-3-bbs
+mkdir -p /opt/vision3
+tar -xzf vision3-bundle-linux-amd64-v*.tar.gz -C /opt/vision3
+cd /opt/vision3
 ```
 
-### 2. Run the Setup Script
+**Windows (PowerShell):**
+
+```powershell
+Expand-Archive vision3-bundle-windows-amd64-v*.zip -DestinationPath C:\vision3
+cd C:\vision3
+```
+
+## Step 3: Run the Setup Script
+
+The setup script generates your SSH host key and creates any missing runtime directories.
 
 **Linux / macOS:**
 
@@ -137,30 +62,36 @@ cd vision-3-bbs
 .\setup.ps1
 ```
 
-This will:
+On macOS, the setup script also removes quarantine attributes from the downloaded binaries.
 
-- Generate SSH host keys
-- Copy template configuration files to `configs/`
-- Create the necessary directory structure and initial data files
-- Build all binaries (`vision3`, `v3mail`, `helper`, `strings`, `ue`)
+## Step 4: Configure Your BBS
 
-### 3. Configure Your BBS
+Open `configs/config.json` and set at minimum your BBS name, sysop name, and hostname:
 
 ```bash
-nano configs/config.json
+nano configs/config.json       # Linux/macOS
+notepad configs\config.json    # Windows
 ```
 
 See the [Configuration Guide](configuration/configuration.md) for all settings.
 
-### 4. Start the Server
+## Step 5: Start the BBS
+
+**Linux / macOS:**
 
 ```bash
 ./vision3
 ```
 
+**Windows:**
+
+```powershell
+.\vision3.exe
+```
+
 The server listens on port 2222 (SSH) and 2323 (Telnet) by default.
 
-### 5. First Login
+## Step 6: Connect and Verify
 
 ```bash
 ssh felonius@localhost -p 2222
@@ -168,6 +99,42 @@ ssh felonius@localhost -p 2222
 ```
 
 **Important:** Change the default password immediately after first login.
+
+---
+
+## Directory Structure After Installation
+
+```text
+vision3/
+├── vision3              # Main BBS server binary
+├── v3mail               # JAM message base / FTN mail processor
+├── helper               # FTN setup utility
+├── strings              # TUI string configuration editor
+├── ue                   # TUI user editor
+├── config               # TUI configuration editor
+├── menuedit             # TUI menu editor
+├── setup.sh             # One-time setup script
+├── bin/
+│   ├── binkd            # FTN mailer
+│   ├── sexyz            # ZModem file transfer binary
+│   └── sexyz.ini        # sexyz configuration
+├── configs/             # Configuration files
+│   ├── config.json
+│   ├── doors.json
+│   ├── file_areas.json
+│   ├── strings.json
+│   └── ssh_host_rsa_key # SSH host key (generated by setup.sh)
+├── data/                # Runtime data (created automatically)
+│   ├── users/           # User database and call history
+│   ├── msgbases/        # JAM message bases
+│   ├── ftn/             # FidoNet/echomail data
+│   └── logs/            # Application logs (vision3.log)
+├── doors/
+│   └── sbbs/            # Synchronet JS door runtime
+│       ├── exec/load/   # JS libraries (dorkit.js, sbbsdefs.js, etc.)
+│       └── xtrn/        # Door games (lord/, lord2/ included)
+└── menus/v3/            # Menu system files
+```
 
 ---
 
@@ -182,41 +149,6 @@ Available output modes:
 - `auto` — Detect based on terminal type (default)
 - `utf8` — Force UTF-8 output
 - `cp437` — Force CP437 for authentic BBS experience
-
----
-
-## File Transfer Binary: sexyz
-
-**sexyz** is Synchronet's ZModem 8k implementation used for file transfers on both SSH and telnet connections. It is included in the release archive and in `bin/sexyz` in the source tree. No separate installation is needed.
-
-If you need to build it for a different platform, see [File Transfer Protocols](files/file-transfer.md).
-
----
-
-## Directory Structure After Installation
-
-```text
-vision3/
-├── vision3              # Main BBS server binary
-├── v3mail               # JAM message base / FTN mail processor
-├── helper               # FTN setup utility
-├── strings              # TUI string configuration editor
-├── ue                   # TUI user editor
-├── configs/             # Configuration files
-│   ├── config.json
-│   ├── doors.json
-│   ├── file_areas.json
-│   ├── strings.json
-│   └── ssh_host_rsa_key # SSH host key (auto-generated)
-├── data/                # Runtime data (created automatically)
-│   ├── users/           # User database and call history
-│   ├── msgbases/        # JAM message bases
-│   ├── ftn/             # FidoNet/echomail data
-│   └── logs/            # Application logs (vision3.log)
-├── bin/
-│   └── sexyz            # ZModem file transfer binary
-└── menus/v3/            # Menu system files
-```
 
 ---
 
@@ -235,6 +167,12 @@ chmod +x vision3
 ### SSH Key Issues
 
 If you encounter SSH key errors, ensure the key exists at `configs/ssh_host_rsa_key`. Re-run `setup.sh` to regenerate it.
+
+---
+
+## Tracking Development Builds
+
+If you want to run the latest unreleased code without re-downloading releases each time, see [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md). That guide walks through cloning the repo, building from source, and symlinking the binaries into your release installation.
 
 ---
 

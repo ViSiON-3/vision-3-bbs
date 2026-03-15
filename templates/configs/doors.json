@@ -21,15 +21,25 @@
         "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
         "dosemu_config": ""
     },
-        {
+    {
         "name": "LORDJS",
         "type": "synchronet_js",
         "script": "lord.js",
-        "working_directory": "/sbbs/xtrn/lord",
-        "exec_dir": "/sbbs/exec/",
+        "working_directory": "doors/sbbs/xtrn/lord",
+        "exec_dir": "doors/sbbs/exec/",
         "library_paths": [
-            "/sbbs/exec/load",
-            "/sbbs/exec/load/dorkit"
+            "doors/sbbs/exec/load"
+        ],
+        "single_instance": true
+    },
+    {
+        "name": "LORD2JS",
+        "type": "synchronet_js",
+        "script": "lord2.js",
+        "working_directory": "doors/sbbs/xtrn/lord2",
+        "exec_dir": "doors/sbbs/exec/",
+        "library_paths": [
+            "doors/sbbs/exec/load"
         ],
         "single_instance": true
     },

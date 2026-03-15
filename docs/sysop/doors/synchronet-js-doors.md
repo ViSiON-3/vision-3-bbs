@@ -1,14 +1,14 @@
 # Synchronet JavaScript Door Games
 
-ViSiON/3 includes a built-in JavaScript engine that can run Synchronet BBS door games natively. Games run inside the BBS process with no external programs and no PTY bridging. A full Synchronet installation is not required, but you will need the game files and certain Synchronet JS libraries — see [Required Files from Synchronet](#required-files-from-synchronet) below.
+ViSiON/3 includes a built-in JavaScript engine that can run Synchronet BBS door games natively. Games run inside the BBS process with no external programs and no PTY bridging. The required Synchronet JS libraries and two example doors (LORD and LORD II) are included in the release bundle under `doors/sbbs/` — no separate download or installation is needed to get started.
 
 ## Overview
 
-Synchronet BBS has a large library of JavaScript-based door games (LORD, Chicken Delivery, Synkroban, and many more). These games use Synchronet-specific JS APIs (`console.*`, `bbs.*`, `user.*`, `system.*`, `File`, `load()`) and a framework called **DORKit** for terminal I/O.
+Synchronet BBS has a large library of JavaScript-based door games (LORD, LORD II, Chicken Delivery, Synkroban, and many more). These games use Synchronet-specific JS APIs (`console.*`, `bbs.*`, `user.*`, `system.*`, `File`, `load()`) and a framework called **DORKit** for terminal I/O.
 
 ViSiON/3 embeds [goja](https://github.com/dop251/goja), a pure-Go ES5.1+ JavaScript engine, and implements enough of Synchronet's API surface to run these games. DORKit, frame.js, recordfile.js, and other Synchronet JS libraries run unmodified.
 
-> **Note:** Currently only **LORD** (Legend of the Red Dragon) has been tested. Other Synchronet JS door games may work but are untested — please report any issues you encounter.
+> **Note:** LORD and LORD II have been tested. Other Synchronet JS door games may work but are untested — please report any issues you encounter.
 
 ### How It Works
 
@@ -20,41 +20,20 @@ ViSiON/3 embeds [goja](https://github.com/dop251/goja), a pure-Go ES5.1+ JavaScr
 
 Each connected user gets their own isolated JS runtime. There is no shared state between sessions except through the game's own data files, which use file locking for multi-node safety.
 
-## Required Files from Synchronet
+## Included Files
 
-You do **not** need to install Synchronet or clone the full repository. You need three directories:
+The release bundle includes everything needed to run Synchronet JS doors under `doors/sbbs/`:
 
 ```
-/sbbs/
+doors/sbbs/
 ├── exec/
-│   ├── load/          JS utility libraries (~176 files, ~2.8 MB)
-│   └── dorkit/        DORKit framework (~13 files, ~92 KB)
+│   └── load/          JS utility libraries (dorkit.js, recordfile.js, sbbsdefs.js, and more)
 └── xtrn/
-    └── lord/          Game-specific files (varies per game)
+    ├── lord/          Legend of the Red Dragon
+    └── lord2/         Legend of the Red Dragon II
 ```
 
-### Where to Get Them
-
-These files can be obtained from:
-
-- **Synchronet Git repository**: [gitlab.synchro.net/main/sbbs](https://gitlab.synchro.net/main/sbbs) — clone or download just the `exec/load/`, `exec/dorkit/`, and `xtrn/{game}/` directories
-- **An existing Synchronet installation**: copy the same directories from any working Synchronet BBS
-
-### What Each Directory Contains
-
-| Directory      | Contents                                                                                                                  |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `exec/load/`   | Core JS libraries: dorkit.js, recordfile.js, sbbsdefs.js, graphic.js, and other shared utilities used by most games       |
-| `exec/dorkit/` | DORKit display/console abstraction: sbbs_console.js, screen.js, ansi_input.js, and related files that handle terminal I/O |
-| `xtrn/{game}/` | Game-specific files: main JS script, data files, ANSI art, configuration — varies per game                                |
-
-### What You Do NOT Need
-
-- Synchronet binaries or compiled programs
-- Synchronet source code (C/C++)
-- The Synchronet `ctrl/` or `data/` directories
-- Other game directories (only the specific games you want to run)
-- Any Synchronet configuration files
+To run other Synchronet JS doors, add the game's directory from the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) (or an existing Synchronet installation) under `doors/sbbs/xtrn/` and add a configuration entry as described below.
 
 ## Configuration
 
@@ -67,11 +46,10 @@ Add a door entry with `"type": "synchronet_js"`:
   "name": "LORDJS",
   "type": "synchronet_js",
   "script": "lord.js",
-  "working_directory": "/sbbs/xtrn/lord",
-  "exec_dir": "/sbbs/exec/",
+  "working_directory": "doors/sbbs/xtrn/lord",
+  "exec_dir": "doors/sbbs/exec/",
   "library_paths": [
-    "/sbbs/exec/load",
-    "/sbbs/exec/load/dorkit"
+    "doors/sbbs/exec/load"
   ],
   "single_instance": true,
   "min_access_level": 10
@@ -80,17 +58,17 @@ Add a door entry with `"type": "synchronet_js"`:
 
 ### Configuration Fields
 
-| Field               | Type     | Required | Description                                                                                 |
-| ------------------- | -------- | -------- | ------------------------------------------------------------------------------------------- |
-| `name`              | string   | Yes      | Door name (used in `DOOR:NAME` menu commands)                                               |
-| `type`              | string   | Yes      | Must be `"synchronet_js"`                                                                   |
-| `script`            | string   | Yes      | Main JS file to execute, relative to `working_directory`                                    |
-| `working_directory` | string   | Yes      | Absolute path to the game's data directory                                                  |
-| `exec_dir`          | string   | Yes      | Path to Synchronet's `exec/` directory (mapped to `system.exec_dir` in JS)                  |
-| `library_paths`     | []string | Yes      | Search paths for `load()` and `require()` — include both `exec/load` and `exec/load/dorkit` |
-| `single_instance`   | bool     | No       | Only allow one node at a time (default: false)                                              |
-| `min_access_level`  | int      | No       | Minimum access level required (default: 0)                                                  |
-| `args`              | []string | No       | Arguments passed to the script as `argv`                                                    |
+| Field               | Type     | Required | Description                                                              |
+| ------------------- | -------- | -------- | ------------------------------------------------------------------------ |
+| `name`              | string   | Yes      | Door name (used in `DOOR:NAME` menu commands)                            |
+| `type`              | string   | Yes      | Must be `"synchronet_js"`                                                |
+| `script`            | string   | Yes      | Main JS file to execute, relative to `working_directory`                 |
+| `working_directory` | string   | Yes      | Path to the game's data directory (relative to BBS root or absolute)     |
+| `exec_dir`          | string   | Yes      | Path to Synchronet's `exec/` directory (mapped to `system.exec_dir` in JS) |
+| `library_paths`     | []string | Yes      | Search paths for `load()` and `require()` — `exec/load` contains all JS libraries including DORKit |
+| `single_instance`   | bool     | No       | Only allow one node at a time (default: false)                           |
+| `min_access_level`  | int      | No       | Minimum access level required (default: 0)                               |
+| `args`              | []string | No       | Arguments passed to the script as `argv`                                 |
 
 ### Config Editor
 
@@ -192,7 +170,7 @@ Each node gets its own temporary directory (`system.node_dir`) for per-node stat
 ### Game exits immediately with no output
 
 Check the ViSiON/3 log file for JS errors. Common causes:
-- Wrong `library_paths` — make sure both `exec/load` and `exec/load/dorkit` are listed
+- Wrong `library_paths` — should point to `exec/load` (all JS libraries including DORKit are in this directory)
 - Wrong `exec_dir` — should point to the `exec/` directory, not `exec/load/`
 - Missing game files in `working_directory`
 
@@ -200,7 +178,7 @@ Check the ViSiON/3 log file for JS errors. Common causes:
 
 The requested JS file could not be found in any search path. Verify that:
 - The file exists in one of the `library_paths` directories
-- The `exec_dir` is set correctly (DORKit constructs paths like `system.exec_dir + "dorkit/"`)
+- The `exec_dir` is set correctly (DORKit constructs paths like `system.exec_dir + "load/"`)
 
 ### Stale lock file errors
 
@@ -210,36 +188,48 @@ If a game crashes or is forcefully terminated, lock files (`.lock`) may be left 
 
 Verify that your terminal supports CP437 encoding. Most modern SSH clients (SyncTERM, NetRunner, mTelnet) handle this correctly. If using a UTF-8 terminal, some block characters may not render as expected.
 
-## Example: Setting Up LORD
+## Example: Setting Up LORD and LORD II
 
-1. **Get the files**:
-   ```bash
-   # Clone just the needed directories from Synchronet
-   git clone --depth 1 --filter=blob:none --sparse \
-     https://gitlab.synchro.net/main/sbbs.git /sbbs
-   cd /sbbs
-   git sparse-checkout set exec/load exec/dorkit xtrn/lord
-   ```
+LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `doors/sbbs/xtrn/lord2/`. To enable them:
 
-2. **Add to doors.json**:
+1. **Add to doors.json**:
    ```json
    {
      "name": "LORDJS",
      "type": "synchronet_js",
      "script": "lord.js",
-     "working_directory": "/sbbs/xtrn/lord",
-     "exec_dir": "/sbbs/exec/",
+     "working_directory": "doors/sbbs/xtrn/lord",
+     "exec_dir": "doors/sbbs/exec/",
      "library_paths": [
-       "/sbbs/exec/load",
-       "/sbbs/exec/load/dorkit"
+       "doors/sbbs/exec/load"
+     ],
+     "single_instance": true
+   },
+   {
+     "name": "LORD2JS",
+     "type": "synchronet_js",
+     "script": "lord2.js",
+     "working_directory": "doors/sbbs/xtrn/lord2",
+     "exec_dir": "doors/sbbs/exec/",
+     "library_paths": [
+       "doors/sbbs/exec/load"
      ],
      "single_instance": true
    }
    ```
 
-3. **Add a menu entry** in your `.CFG` file:
+2. **Add menu entries** in your `.CFG` file:
    ```
    L,DOOR:LORDJS,*
+   2,DOOR:LORD2JS,*
    ```
 
-4. **Connect and play** — select the door from your menu and LORD should start.
+3. **Connect and play** — select the door from your menu.
+
+## Adding Other Synchronet JS Doors
+
+To add a door beyond the included examples:
+
+1. Obtain the game's `xtrn/{game}/` directory from the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) or an existing Synchronet installation
+2. Place it under `doors/sbbs/xtrn/{game}/`
+3. Add a `synchronet_js` entry to `configs/doors.json` pointing to it
