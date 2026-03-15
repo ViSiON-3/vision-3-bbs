@@ -39,6 +39,7 @@ type Engine struct {
 	pipeReader *io.PipeReader  // engine reads from this end
 	pipeWriter *io.PipeWriter  // copier writes session data to this end
 	readerOnce sync.Once
+	copierDone chan struct{} // closed when the copier goroutine exits
 
 	// Lock files created by file_mutex() — cleaned up on Close()
 	lockFiles []string
@@ -131,14 +132,21 @@ func (eng *Engine) Close() {
 			eng.vm.RunString(eng.exitCodes[i])
 		}()
 	}
-	// Stop the reader goroutines by closing the pipe.
-	// The copier goroutine's Write will fail, and the reader goroutine's Read
-	// will return io.ErrClosedPipe. The copier goroutine will be left blocked
-	// on session.Read — it will unblock on the next keypress and exit when it
-	// sees the pipe is closed. That single keypress is consumed by the copier,
-	// not by the BBS menu, but this is acceptable (1 key vs 5+).
+	// Stop the reader goroutines by closing the pipe. The caller should
+	// close a SetReadInterrupt channel before calling Close() so the
+	// copier goroutine's blocked session.Read() returns immediately.
 	if eng.pipeWriter != nil {
 		eng.pipeWriter.Close()
+	}
+	// Wait for the copier goroutine to exit so it stops reading from
+	// the session. This relies on the caller closing the read interrupt
+	// (via SetReadInterrupt) to unblock the copier's session.Read().
+	if eng.copierDone != nil {
+		select {
+		case <-eng.copierDone:
+		case <-time.After(2 * time.Second):
+			log.Printf("WARN: SyncJS: copier goroutine did not exit within 2s; proceeding with cleanup")
+		}
 	}
 	if eng.pipeReader != nil {
 		eng.pipeReader.Close()
@@ -299,9 +307,11 @@ func (eng *Engine) startReader() {
 	eng.readerOnce.Do(func() {
 		eng.rawInputCh = make(chan readResult, 4)
 		eng.pipeReader, eng.pipeWriter = io.Pipe()
+		eng.copierDone = make(chan struct{})
 
-		// Copier: session -> pipe (blocks on session.Read, killed by pipe close)
+		// Copier: session -> pipe (blocks on session.Read, killed by read interrupt)
 		go func() {
+			defer close(eng.copierDone)
 			buf := make([]byte, 256)
 			for {
 				n, err := eng.session.Session.Read(buf)
@@ -311,6 +321,7 @@ func (eng *Engine) startReader() {
 					}
 				}
 				if err != nil {
+					eng.cancel() // signal context so CPU-bound scripts stop on disconnect
 					eng.pipeWriter.CloseWithError(err)
 					return
 				}

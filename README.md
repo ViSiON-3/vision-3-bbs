@@ -6,8 +6,6 @@
 
 This project is a work-in-progress refactor and modernization of the classic ViSiON/2 BBS software, written in Go. The goal is to recreate the core functionality of the classic BBS experience using modern technologies.
 
-This version uses a **pure-Go SSH server** (`github.com/gliderlabs/ssh`) for SSH functionality, providing full compatibility with legacy BBS terminal software like SyncTerm while maintaining modern security standards.
-
 **Note:** This is currently under active development and is not yet feature-complete.
 
 ## Community
@@ -49,10 +47,10 @@ Are you the kind of person who can wrangle a Go codebase while arguing about why
 
 **What we won't do:**
 
-- Rewrite this in Rust/JavaScript/whatever
+- Rewrite this in another language
 - Add a REST API and React frontend
 - Turn it into a web app
-- Modernize away what makes it a BBS
+- Modernize away what makes it a BBS (we want to keep the soul, not just the name)
 
 If this sounds like your particular flavor of madness, email: **spaceman@vision3bbs.com**
 
@@ -95,50 +93,50 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 
 **Please submit PRs!**
 
-## Current Status
+## Current Status: PRE-ALPHA (Expect crashes, data loss, and general chaos)
 
-| Feature                       | Status        | Notes                                                                                                               |
-| ----------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Networking**                |               |                                                                                                                     |
-| SSH Server                    | ✅ Working     | Pure-Go (gliderlabs/ssh), PTY support, SyncTerm compatible, legacy algorithms, auto-login                           |
-| Telnet Server                 | ✅ Working     | Full IAC negotiation, TERM_TYPE detection                                                                           |
-| **Users**                     |               |                                                                                                                     |
-| Signup & Authentication       | ✅ Working     | bcrypt hashed passwords, JSON persistence                                                                           |
-| User Listings & Stats         | ✅ Working     | Last callers, user listing, call history, stats display                                                             |
-| NUV (New User Verification)   | ✅ Working     | Voting-based approval system for new user accounts                                                                  |
-| TUI User Editor (`ue`)        | ✅ Working     | Full-screen terminal user management                                                                                |
-| **Menus**                     |               |                                                                                                                     |
-| Menu System                   | ✅ Working     | `.MNU`, `.CFG`, `.ANS` files, ACS evaluation, password protection                                                   |
-| TUI Menu Editor (`menuedit`)  | ✅ Working     | Full-screen menu configuration editor                                                                               |
-| **Messaging**                 |               |                                                                                                                     |
-| Message Areas                 | ✅ Working     | JAM format, echomail/netmail, conferences, lightbar reader, threading, quoting, vi-style editor, newscan, last read |
-| Private Mail                  | ✅ Working     | User-to-user messaging, send/read/list                                                                              |
-| Message List View (scan)      | ✅ Working     | Title/subject scan view                                                                                             |
-| QWK Offline Mail              | ✅ Working     | QWK packet download/upload for offline reading                                                                      |
-| **Files**                     |               |                                                                                                                     |
-| File Areas                    | ✅ Working     | List/select areas, list files, search, file info, newscan, configurable columns, extended listing                   |
-| File Transfers                | ✅ Working     | ZMODEM upload/download via `sexyz`, batch download with per-area ACS validation                                     |
-| File Management               | ✅ Working     | SysOp file delete, move, edit descriptions, review queue for uploads, lightbar sysop bar (`*` toggle)               |
-| **Doors**                     |               |                                                                                                                     |
-| Door/External Programs        | ✅ Working     | Dropfile generation, PTY passthrough                                                                                |
-| **Networking/FTN**            |               |                                                                                                                     |
-| FTN Echomail/Netmail          | ✅ Working     | JAM-backed, tosser, import/export, dupe checking                                                                    |
-| **Community Features**        |               |                                                                                                                     |
-| Voting System                 | ✅ Working     | Voting booths, mandatory topics, SysOp management                                                                   |
-| News System                   | ✅ Working     | SysOp-managed news items, auto-display on login                                                                     |
-| Chat & SysOp Paging           | ✅ Working     | Inter-node chat, SysOp page                                                                                         |
-| One-liner System              | ✅ Working     |                                                                                                                      |
-| Sponsor Menus                 | ✅ Working     | Area management for SysOps and area sponsors                                                                        |
-| **Admin & Tools**             |               |                                                                                                                     |
-| Event Scheduler               | ✅ Working     | Cron-style, automated maintenance, FTN polling                                                                      |
-| Admin Functions               | ✅ Working     | User validation, banning, deletion, purge                                                                           |
-| TUI String Editor (`strings`) | ✅ Working     | Full-screen BBS string customizations                                                                               |
-| Config Hot Reload             | ✅ Working     | Live reload via fsnotify, no restart required                                                                       |
-| Invisible SysOp Login         | ✅ Working     | SysOp/CoSysOp login without appearing in caller log                                                                 |
-| SysOp Config TUI (`config`)   | ✅ Working     | Full-screen TUI configuration editor (`cmd/config`)                                                                 |
-| **Quality**                   |               |                                                                                                                     |
-| Comprehensive Testing         | 📋 Planned     |                                                                                                                     |
-| Complete Documentation        | 📋 Planned     |                                                                                                                     |
+| Feature                       | Status    | Notes                                                                                                               |
+| ----------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Networking**                |           |                                                                                                                     |
+| SSH Server                    | ✅ Working | Pure-Go (gliderlabs/ssh), PTY support, SyncTerm compatible, legacy algorithms, auto-login                           |
+| Telnet Server                 | ✅ Working | Full IAC negotiation, TERM_TYPE detection                                                                           |
+| **Users**                     |           |                                                                                                                     |
+| Signup & Authentication       | ✅ Working | bcrypt hashed passwords, JSON persistence                                                                           |
+| User Listings & Stats         | ✅ Working | Last callers, user listing, call history, stats display                                                             |
+| NUV (New User Verification)   | ✅ Working | Voting-based approval system for new user accounts                                                                  |
+| TUI User Editor (`ue`)        | ✅ Working | Full-screen terminal user management                                                                                |
+| **Menus**                     |           |                                                                                                                     |
+| Menu System                   | ✅ Working | `.MNU`, `.CFG`, `.ANS` files, ACS evaluation, password protection                                                   |
+| TUI Menu Editor (`menuedit`)  | ✅ Working | Full-screen menu configuration editor                                                                               |
+| **Messaging**                 |           |                                                                                                                     |
+| Message Areas                 | ✅ Working | JAM format, echomail/netmail, conferences, lightbar reader, threading, quoting, vi-style editor, newscan, last read |
+| Private Mail                  | ✅ Working | User-to-user messaging, send/read/list                                                                              |
+| Message List View (scan)      | ✅ Working | Title/subject scan view                                                                                             |
+| QWK Offline Mail              | ✅ Working | QWK packet download/upload for offline reading                                                                      |
+| **Files**                     |           |                                                                                                                     |
+| File Areas                    | ✅ Working | List/select areas, list files, search, file info, newscan, configurable columns, extended listing                   |
+| File Transfers                | ✅ Working | ZMODEM upload/download via `sexyz`, batch download with per-area ACS validation                                     |
+| File Management               | ✅ Working | SysOp file delete, move, edit descriptions, review queue for uploads, lightbar sysop bar (`*` toggle)               |
+| **Doors**                     |           |                                                                                                                     |
+| Door/External Programs        | ✅ Working | Dropfile generation, PTY passthrough                                                                                |
+| **Networking/FTN**            |           |                                                                                                                     |
+| FTN Echomail/Netmail          | ✅ Working | JAM-backed, tosser, import/export, dupe checking                                                                    |
+| **Community Features**        |           |                                                                                                                     |
+| Voting System                 | ✅ Working | Voting booths, mandatory topics, SysOp management                                                                   |
+| News System                   | ✅ Working | SysOp-managed news items, auto-display on login                                                                     |
+| Chat & SysOp Paging           | ✅ Working | Inter-node chat, SysOp page                                                                                         |
+| One-liner System              | ✅ Working |                                                                                                                     |
+| Sponsor Menus                 | ✅ Working | Area management for SysOps and area sponsors                                                                        |
+| **Admin & Tools**             |           |                                                                                                                     |
+| Event Scheduler               | ✅ Working | Cron-style, automated maintenance, FTN polling                                                                      |
+| Admin Functions               | ✅ Working | User validation, banning, deletion, purge                                                                           |
+| TUI String Editor (`strings`) | ✅ Working | Full-screen BBS string customizations                                                                               |
+| Config Hot Reload             | ✅ Working | Live reload via fsnotify, no restart required                                                                       |
+| Invisible SysOp Login         | ✅ Working | SysOp/CoSysOp login without appearing in caller log                                                                 |
+| SysOp Config TUI (`config`)   | ✅ Working | Full-screen TUI configuration editor (`cmd/config`)                                                                 |
+| **Quality**                   |           |                                                                                                                     |
+| Comprehensive Testing         | 📋 Planned |                                                                                                                     |
+| Complete Documentation        | 📋 Planned |                                                                                                                     |
 
 ## Technology Stack
 
@@ -157,20 +155,20 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 
 Pre-built releases are available for all major platforms. Linux x86_64 is the primary development platform.
 
-| Platform | Architecture          | Status      | Notes                               |
-| -------- | --------------------- | ----------- | ----------------------------------- |
-| Linux    | x86_64                | ✅ Tested    | Primary development platform        |
-| Linux    | ARM64                 | ✅ Released  | Includes Raspberry Pi 4/5 (64-bit)  |
-| Linux    | ARMv7                 | ✅ Released  | Raspberry Pi 3 and earlier          |
-| macOS    | Universal             | ✅ Released  | Intel + Apple Silicon (M1/M2/M3/M4) |
-| Windows  | x86_64                | ✅ Released  |                                     |
+| Platform | Architecture | Status     | Notes                               |
+| -------- | ------------ | ---------- | ----------------------------------- |
+| Linux    | x86_64       | ✅ Tested   | Primary development platform        |
+| Linux    | ARM64        | ✅ Released | Includes Raspberry Pi 4/5 (64-bit)  |
+| Linux    | ARMv7        | ✅ Released | Raspberry Pi 3 and earlier          |
+| macOS    | Universal    | ✅ Released | Intel + Apple Silicon (M1/M2/M3/M4) |
+| Windows  | x86_64       | ✅ Released |                                     |
 
 > **Note:** ViSiON/3 is pure Go. The standard Go toolchain is all that's required to build for any supported platform.
 
 ## Project Structure
 
-```
-vision3/
+```text
+vision-3-bbs/
 ├── cmd/
 │   ├── ansitest/           # ANSI color test utility
 │   ├── config/             # TUI system configuration editor
@@ -250,13 +248,13 @@ vision3/
 
 ## Setup & Installation
 
-> **Third-party binaries:** `sexyz` (ZMODEM file transfers) and `binkd` (FTN echomail/netmail) are not built by this project. Pre-compiled binaries for these — along with all ViSiON/3 binaries — are available on the [GitHub Releases page](https://github.com/stlalpha/vision3/releases).
+> **Third-party binaries:** `sexyz` (ZMODEM file transfers) and `binkd` (FTN echomail/netmail) are not built by this project. Pre-compiled binaries for these — along with all ViSiON/3 binaries — are available on the [GitHub Releases page](https://github.com/ViSiON-3/vision-3-bbs/releases).
 
 ### Option 1: Download a Pre-Built Release
 
 The fastest way to get started — no Go toolchain required.
 
-1. Download the archive for your platform from the [GitHub Releases page](https://github.com/stlalpha/vision3/releases)
+1. Download the archive for your platform from the [GitHub Releases page](https://github.com/ViSiON-3/vision-3-bbs/releases)
 2. Extract it and run the setup script:
     ```bash
     tar -xzf vision3_<platform>.tar.gz   # Linux/macOS
@@ -274,8 +272,8 @@ The fastest way to get started — no Go toolchain required.
 ### Option 2: Docker (Recommended for Production)
 
 ```bash
-git clone https://github.com/stlalpha/vision3.git
-cd vision3
+git clone https://github.com/ViSiON-3/vision-3-bbs.git
+cd vision-3-bbs
 docker-compose up -d
 ```
 
@@ -287,8 +285,8 @@ See [Docker Deployment Guide](docs/sysop/getting-started/docker.md) for detailed
 
 1. **Clone and set up:**
     ```bash
-    git clone https://github.com/stlalpha/vision3.git
-    cd vision3
+    git clone https://github.com/ViSiON-3/vision-3-bbs.git
+    cd vision-3-bbs
     ./setup.sh          # Linux/macOS
     .\setup.ps1         # Windows (PowerShell)
     ```
