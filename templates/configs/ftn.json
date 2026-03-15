@@ -1,28 +1,3 @@
 {
-  "_comment": "FTN (FidoNet Technology Network) echomail configuration. Used by the internal tosser (v3mail toss/scan/ftn-pack). Run 'helper ftnsetup' to populate networks from a FIDONET.NA file.",
-  "dupe_db_path": "data/ftn/dupes.json",
-  "inbound_path": "data/ftn/in",
-  "secure_inbound_path": "data/ftn/secure_in",
-  "outbound_path": "data/ftn/temp_out",
-  "binkd_outbound_path": "data/ftn/out",
-  "temp_path": "data/ftn/temp_in",
-  "bad_area_tag": "",
-  "dupe_area_tag": "",
-  "networks": {
-    "fsxnet": {
-      "_comment": "Example: FSXNet. Replace own_address with your assigned node number.",
-      "internal_tosser_enabled": true,
-      "own_address": "21:4/999.1",
-      "poll_interval_seconds": 0,
-      "links": [
-        {
-          "address": "21:4/100",
-          "packet_password": "",
-          "name": "FSXNet Region 4 Hub",
-          "flavour": "Crash",
-          "areafix_password": ""
-        }
-      ]
-    }
-  }
+  "_comment": "FTN (FidoNet Technology Network) echomail configuration. See docs/sysop for setup instructions."
 }

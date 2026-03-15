@@ -93,8 +93,9 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 			defaultUser := &User{
 				ID:            1,
 				Handle:        "Felonius",
-				RealName:      "Felonius",
-				GroupLocation: "FAiRLiGHT/PC",
+				RealName:      "Joe Sysop",
+				GroupLocation: "ViSiON/3",
+				PrivateNote:   "SysOp",
 				PasswordHash:  string(hashedPw),
 				AccessLevel:   10,
 				Validated:     true,
