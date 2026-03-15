@@ -12,7 +12,7 @@
 | ------------------------------------------------------------------ | --------------------------------------- |
 | [Download Pre-Built Release](#option-1-download-pre-built-release) | Fastest path — no Go toolchain required |
 | [Build from Source](#option-2-build-from-source)                   | Contributors, or to run unreleased code |
-| [Docker Deployment](getting-started/docker.md)                     | Containerized / production setup        |
+| [Docker Deployment](docker.md)                                     | Containerized / production setup        |
 
 ---
 
