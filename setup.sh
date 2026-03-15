@@ -156,6 +156,9 @@ for template_file in templates/configs/*.txt; do
     fi
 done
 
+# Ensure doors/drive_c exists (DOS door C: drive — populate with your DOS door programs)
+mkdir -p doors/drive_c
+
 # Copy dosemu2 config templates if dosemu is installed
 if command -v dosemu &> /dev/null; then
     echo "Setting up dosemu2 configuration..."

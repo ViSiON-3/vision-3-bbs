@@ -143,7 +143,8 @@ $dirs = @(
     "data\infoforms\templates", "data\infoforms\responses",
     "configs",
     "bin",
-    "scripts"
+    "scripts",
+    "doors\drive_c"
 )
 foreach ($d in $dirs) {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
