@@ -13,7 +13,7 @@ This guide covers deploying ViSiON/3 using Docker and Docker Compose.
 
    ```bash
    git clone https://github.com/ViSiON-3/vision-3-bbs.git
-   cd vision3
+   cd vision-3-bbs
    ```
 
 2. **Start the BBS:**

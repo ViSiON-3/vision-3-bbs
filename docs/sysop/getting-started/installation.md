@@ -114,7 +114,7 @@ Download from: [https://github.com/ViSiON-3/vision-3-bbs/releases](https://githu
 
 ```bash
 git clone https://github.com/ViSiON-3/vision-3-bbs.git
-cd vision3
+cd vision-3-bbs
 ```
 
 ### 2. Run the Setup Script
