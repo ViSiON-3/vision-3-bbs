@@ -27,10 +27,12 @@ type readInterrupter interface {
 	SetReadInterrupt(ch <-chan struct{})
 }
 
-// rawBinaryWriter is implemented by BBSSession (and TelnetSessionAdapter) to
-// provide a write path that bypasses gliderlabs' \n→\r\n CRLF conversion.
-// Without this, ZMODEM frame type byte 0x0A (ZDATA) is expanded to 0x0D 0x0A,
-// shifting the header and causing CRC mismatches at the receiver.
+// rawBinaryWriter is implemented by session types that need a binary-safe
+// write path.  For SSH (BBSSession) it bypasses gliderlabs' \n→\r\n CRLF
+// conversion which would expand ZMODEM frame type byte 0x0A (ZDATA) to
+// 0x0D 0x0A, shifting the header and causing CRC mismatches.  For telnet
+// (TelnetSessionAdapter) it is equivalent to Write (telnet has no CRLF
+// conversion; IAC escaping is still required by the protocol).
 type rawBinaryWriter interface {
 	RawWrite(p []byte) (int, error)
 }
@@ -49,10 +51,10 @@ func (f writeFunc) Write(p []byte) (int, error) { return f(p) }
 
 // Adaptive chunk sizing constants for binary transfers.
 const (
-	adaptiveMinChunk    = 4096     // 4 KB — starting chunk size
-	adaptiveMaxChunk    = 8192    // 8 KB — ceiling (SyncTerm chokes above this)
-	adaptiveRampWrites  = 50      // double chunk size every N writes at current level
-	adaptiveBackoffDiv  = 2       // halve chunk size on ZRPOS detection
+	adaptiveMinChunk   = 4096 // 4 KB — starting chunk size
+	adaptiveMaxChunk   = 8192 // 8 KB — ceiling (SyncTerm chokes above this)
+	adaptiveRampWrites = 50   // double chunk size every N writes at current level
+	adaptiveBackoffDiv = 2    // halve chunk size on ZRPOS detection
 )
 
 // adaptiveCopy copies src → dst with dynamic chunk sizing that ramps up for
@@ -202,8 +204,8 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		buf := make([]byte, 32*1024)
 		var total int64
 		var cpErr error
-		var canRun int  // consecutive CAN (0x18) bytes seen so far
-		var killed bool // set once CAN abort fires; stops further writes
+		var canRun int       // consecutive CAN (0x18) bytes seen so far
+		var killed bool      // set once CAN abort fires; stops further writes
 		var prevTail [6]byte // tail bytes from previous read for split-header detection
 		var prevLen int
 		for {

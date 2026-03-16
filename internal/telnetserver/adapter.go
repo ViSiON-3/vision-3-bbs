@@ -157,6 +157,15 @@ func (a *TelnetSessionAdapter) Write(p []byte) (int, error) {
 	return a.telnetConn.Write(p)
 }
 
+// RawWrite provides a binary-safe write path for transfer protocols (ZMODEM
+// etc.).  For telnet, IAC escaping is still required by the protocol, so this
+// is functionally identical to Write.  It exists so TelnetSessionAdapter
+// satisfies the rawBinaryWriter interface used by RunCommandDirect, avoiding
+// the fallback warning and keeping the code path consistent with BBSSession.
+func (a *TelnetSessionAdapter) RawWrite(p []byte) (int, error) {
+	return a.telnetConn.Write(p)
+}
+
 // Close closes the telnet session.
 func (a *TelnetSessionAdapter) Close() error {
 	a.ctx.cancel()

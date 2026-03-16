@@ -191,7 +191,8 @@ func (p *ProtocolConfig) ExecuteReceive(ctx context.Context, s ssh.Session, targ
 	// CAN bytes do NOT reset this timer; CAN abort is handled separately in
 	// RunCommandDirect. Other protocols get no idle timeout (0).
 	var recvIdleTimeout time.Duration
-	if strings.EqualFold(filepath.Base(cmdPath), "sexyz") {
+	base := filepath.Base(cmdPath)
+	if strings.EqualFold(base, "sexyz") || strings.EqualFold(base, "sexyz.exe") {
 		recvIdleTimeout = 10 * time.Second
 	}
 
