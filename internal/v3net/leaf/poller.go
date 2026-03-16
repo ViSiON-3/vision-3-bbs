@@ -34,11 +34,11 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
-		if resp.StatusCode != 200 {
-			return total, fmt.Errorf("leaf: fetch messages returned %d", resp.StatusCode)
-		}
 		if err != nil {
 			return total, fmt.Errorf("leaf: read response: %w", err)
+		}
+		if resp.StatusCode != 200 {
+			return total, fmt.Errorf("leaf: fetch messages returned %d", resp.StatusCode)
 		}
 
 		var messages []protocol.Message

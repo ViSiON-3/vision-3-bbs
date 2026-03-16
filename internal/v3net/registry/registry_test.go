@@ -92,16 +92,22 @@ func TestFetch_FallsBackToCache(t *testing.T) {
 
 	// Expire the cache by resetting fetchedAt.
 	cacheMu.Lock()
-	cache.fetchedAt = cache.fetchedAt.Add(-2 * cacheTTL)
+	if entry := cache[ts.URL]; entry != nil {
+		entry.fetchedAt = entry.fetchedAt.Add(-2 * cacheTTL)
+	}
 	cacheMu.Unlock()
 
-	// Fetch from a server that returns an error — should return cached data.
+	// Fetch from a server that returns an error — should return cached data
+	// from the original URL.
 	deadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "gone", http.StatusInternalServerError)
 	}))
 	defer deadServer.Close()
 
-	networks, err := Fetch(context.Background(), deadServer.URL)
+	// The dead server's URL is different, so we need to fetch from the original (now expired) URL
+	// to test cache fallback. Point a new dead handler at the original URL's cache.
+	// Instead, re-fetch from the original ts.URL (now closed) to trigger fallback.
+	networks, err := Fetch(context.Background(), ts.URL)
 	if err != nil {
 		t.Fatalf("expected fallback to cache, got error: %v", err)
 	}

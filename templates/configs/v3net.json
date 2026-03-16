@@ -7,7 +7,7 @@
     "enabled": false,
     "listenAddr": ":8765",
     "dataDir": "data/v3net_hub",
-    "autoApprove": true,
+    "autoApprove": false,
     "networks": []
   },
   "leaves": []

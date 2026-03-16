@@ -18,6 +18,9 @@ const DefaultURL = "https://raw.githubusercontent.com/ViSiON-3/v3net-registry/ma
 
 const cacheTTL = 1 * time.Hour
 
+// httpTimeout is the maximum time allowed for a registry fetch.
+const httpTimeout = 30 * time.Second
+
 type cacheEntry struct {
 	networks  []protocol.RegistryEntry
 	fetchedAt time.Time
@@ -25,16 +28,16 @@ type cacheEntry struct {
 
 var (
 	cacheMu sync.RWMutex
-	cache   *cacheEntry
+	cache   = make(map[string]*cacheEntry) // keyed by URL
 )
 
 // Fetch retrieves the registry from the given URL. Results are cached in memory
-// for 1 hour. If the fetch fails but cached data exists, the cached data is
-// returned instead of an error.
+// per URL for 1 hour. If the fetch fails but cached data exists for that URL,
+// the cached data is returned instead of an error.
 func Fetch(ctx context.Context, url string) ([]protocol.RegistryEntry, error) {
 	cacheMu.RLock()
-	if cache != nil && time.Since(cache.fetchedAt) < cacheTTL {
-		networks := cache.networks
+	if entry := cache[url]; entry != nil && time.Since(entry.fetchedAt) < cacheTTL {
+		networks := entry.networks
 		cacheMu.RUnlock()
 		return networks, nil
 	}
@@ -45,18 +48,20 @@ func Fetch(ctx context.Context, url string) ([]protocol.RegistryEntry, error) {
 		slog.Warn("registry: fetch failed, using cache if available", "error", err)
 		cacheMu.RLock()
 		defer cacheMu.RUnlock()
-		if cache != nil {
-			return cache.networks, nil
+		if entry := cache[url]; entry != nil {
+			return entry.networks, nil
 		}
 		return nil, fmt.Errorf("registry: fetch failed with no cache: %w", err)
 	}
 
 	cacheMu.Lock()
-	cache = &cacheEntry{networks: networks, fetchedAt: time.Now()}
+	cache[url] = &cacheEntry{networks: networks, fetchedAt: time.Now()}
 	cacheMu.Unlock()
 
 	return networks, nil
 }
+
+var registryClient = &http.Client{Timeout: httpTimeout}
 
 func fetchRemote(ctx context.Context, url string) ([]protocol.RegistryEntry, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -64,7 +69,7 @@ func fetchRemote(ctx context.Context, url string) ([]protocol.RegistryEntry, err
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := registryClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", url, err)
 	}
@@ -85,6 +90,6 @@ func fetchRemote(ctx context.Context, url string) ([]protocol.RegistryEntry, err
 // ClearCache resets the in-memory cache (used in tests).
 func ClearCache() {
 	cacheMu.Lock()
-	cache = nil
+	cache = make(map[string]*cacheEntry)
 	cacheMu.Unlock()
 }

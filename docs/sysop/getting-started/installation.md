@@ -10,7 +10,7 @@
 
 **Always start with a release archive.** Pre-built bundles include all binaries (`vision3`, `v3mail`, `helper`, `strings`, `ue`, `config`, `menuedit`, `binkd`, `sexyz`) and all runtime assets (configs, menus, data skeleton, Synchronet JS door libraries). No Go toolchain or build tools required.
 
-If you later want to track active development without re-downloading releases, see [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md).
+If you want to run from source instead, clone the repo and use `dev-setup.sh` — see [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md).
 
 ---
 
@@ -172,9 +172,17 @@ If you encounter SSH key errors, ensure the key exists at `configs/ssh_host_rsa_
 
 ---
 
-## Tracking Development Builds
+## Running from Source
 
-If you want to run the latest unreleased code without re-downloading releases each time, see [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md). That guide walks through cloning the repo, building from source, and symlinking the binaries into your release installation.
+If you want to run the latest unreleased code, clone the repo and use `dev-setup.sh`:
+
+```bash
+git clone https://github.com/ViSiON-3/vision-3-bbs.git ~/git/vision3
+cd ~/git/vision3
+./dev-setup.sh /opt/vision3 --symlink
+```
+
+This builds all binaries, creates a full BBS directory at the target path, and symlinks the binaries back to the repo. Rebuilding (`./build.sh`) automatically updates the BBS. See [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md) for details.
 
 ---
 

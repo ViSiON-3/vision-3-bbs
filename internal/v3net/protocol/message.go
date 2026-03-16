@@ -17,21 +17,21 @@ const MaxBodyBytes = 32768
 
 // Message represents a V3Net networked message in wire format.
 type Message struct {
-	V3Net      string            `json:"v3net"`
-	Network    string            `json:"network"`
-	MsgUUID    string            `json:"msg_uuid"`
-	ThreadUUID string            `json:"thread_uuid"`
-	ParentUUID *string           `json:"parent_uuid"`
-	OriginNode string            `json:"origin_node"`
-	OriginBoard string           `json:"origin_board"`
-	From       string            `json:"from"`
-	To         string            `json:"to"`
-	Subject    string            `json:"subject"`
-	DateUTC    string            `json:"date_utc"`
-	Body       string            `json:"body"`
-	Tearline   string            `json:"tearline,omitempty"`
-	Attributes uint32            `json:"attributes"`
-	Kludges    map[string]any    `json:"kludges"`
+	V3Net       string         `json:"v3net"`
+	Network     string         `json:"network"`
+	MsgUUID     string         `json:"msg_uuid"`
+	ThreadUUID  string         `json:"thread_uuid"`
+	ParentUUID  *string        `json:"parent_uuid"`
+	OriginNode  string         `json:"origin_node"`
+	OriginBoard string         `json:"origin_board"`
+	From        string         `json:"from"`
+	To          string         `json:"to"`
+	Subject     string         `json:"subject"`
+	DateUTC     string         `json:"date_utc"`
+	Body        string         `json:"body"`
+	Tearline    string         `json:"tearline,omitempty"`
+	Attributes  uint32         `json:"attributes"`
+	Kludges     map[string]any `json:"kludges"`
 }
 
 var (
@@ -79,12 +79,21 @@ func (m *Message) IsTruncated() bool {
 	return len(m.Body) > MaxBodyBytes
 }
 
-// Truncate truncates the body to MaxBodyBytes and sets the v3net_truncated kludge.
+// Truncate truncates the body to MaxBodyBytes at a valid UTF-8 rune boundary
+// and sets the v3net_truncated kludge.
 func (m *Message) Truncate() {
 	if len(m.Body) <= MaxBodyBytes {
 		return
 	}
-	m.Body = m.Body[:MaxBodyBytes]
+	// Find the largest byte index <= MaxBodyBytes that falls on a rune boundary.
+	cut := 0
+	for i := range m.Body {
+		if i > MaxBodyBytes {
+			break
+		}
+		cut = i
+	}
+	m.Body = m.Body[:cut]
 	if m.Kludges == nil {
 		m.Kludges = make(map[string]any)
 	}

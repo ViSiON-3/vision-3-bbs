@@ -78,7 +78,7 @@ func (ss *SubscriberStore) Add(s Subscriber) (string, error) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
-	_, err := ss.db.Exec(
+	result, err := ss.db.Exec(
 		`INSERT OR IGNORE INTO subscribers (node_id, network, pubkey_b64, bbs_name, bbs_host, status)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		s.NodeID, s.Network, s.PubKeyB64, s.BBSName, s.BBSHost, s.Status,
@@ -87,7 +87,15 @@ func (ss *SubscriberStore) Add(s Subscriber) (string, error) {
 		return "", fmt.Errorf("hub: add subscriber: %w", err)
 	}
 
-	ss.cache[s.NodeID+":"+s.Network] = &s
+	// Only update cache if the row was actually inserted (not ignored).
+	if n, err := result.RowsAffected(); err == nil && n > 0 {
+		ss.cache[s.NodeID+":"+s.Network] = &s
+	}
+
+	// If the insert was ignored, the existing row's status applies.
+	if existing := ss.cache[s.NodeID+":"+s.Network]; existing != nil {
+		return existing.Status, nil
+	}
 	return s.Status, nil
 }
 

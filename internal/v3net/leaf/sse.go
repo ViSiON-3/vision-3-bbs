@@ -78,12 +78,12 @@ func (l *Leaf) connectSSE(ctx context.Context) error {
 
 		if strings.HasPrefix(line, "data: ") {
 			data := strings.TrimPrefix(line, "data: ")
-			if eventType != "" && l.cfg.OnEvent != nil {
+			if eventType != "" {
 				ev := protocol.Event{
 					Type: eventType,
 					Data: json.RawMessage(data),
 				}
-				l.cfg.OnEvent(ev)
+				l.onEvent(ev)
 			}
 			eventType = ""
 			continue

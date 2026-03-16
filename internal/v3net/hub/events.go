@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	pingInterval    = 30 * time.Second
-	eventBufSize    = 64
+	pingInterval = 30 * time.Second
+	eventBufSize = 64
 )
 
 // Broadcaster fans out SSE events to connected leaf nodes.
@@ -81,11 +81,18 @@ func (b *Broadcaster) StartPing(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Copy network keys under RLock, then publish outside the lock
+			// to avoid nested RLock (Publish also acquires RLock).
 			b.mu.RLock()
+			networks := make([]string, 0, len(b.subs))
 			for network := range b.subs {
-				b.Publish(network, pingEvent)
+				networks = append(networks, network)
 			}
 			b.mu.RUnlock()
+
+			for _, network := range networks {
+				b.Publish(network, pingEvent)
+			}
 		}
 	}
 }

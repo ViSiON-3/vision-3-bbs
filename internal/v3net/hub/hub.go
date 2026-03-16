@@ -87,6 +87,7 @@ func (h *Hub) Start(ctx context.Context) error {
 
 // Close gracefully shuts down the hub and releases resources.
 func (h *Hub) Close() error {
+	h.chatLimiter.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	h.server.Shutdown(ctx)
