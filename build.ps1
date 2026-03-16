@@ -23,6 +23,9 @@ if (-not $goCmd) {
 }
 $goExe = $goCmd.Source
 
+# Build 32-bit (x86) Windows binaries for maximum compatibility
+$env:GOARCH = "386"
+
 $targets = @(
     @{ Cmd = "vision3"; Desc = "BBS server" },
     @{ Cmd = "helper"; Desc = "helper process" },
