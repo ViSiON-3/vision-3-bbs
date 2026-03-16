@@ -43,6 +43,25 @@ func registerPolyfills(vm *goja.Runtime) {
 			Date.prototype.getYear = function() { return this.getFullYear() - 1900; };
 		}
 	`)
+
+	// SpiderMonkey eval() compatibility — SpiderMonkey allows eval('function() { ... }')
+	// as a function expression, but ES5 strict parsing treats bare "function" at the
+	// statement level as a FunctionDeclaration requiring a name. Wrapping in parens
+	// forces expression parsing. Used by Synchronet's l2lib.js (LORD II) extensively.
+	vm.RunString(`
+		(function() {
+			var _nativeEval = eval;
+			this.eval = function(code) {
+				if (typeof code === 'string') {
+					var t = code.replace(/^\s+/, '');
+					if (t.substr(0, 9) === 'function(' || t.substr(0, 10) === 'function (') {
+						return _nativeEval('(' + code + ')');
+					}
+				}
+				return _nativeEval(code);
+			};
+		})();
+	`)
 }
 
 // registerJSObject creates the js.* namespace.
@@ -376,6 +395,15 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		newPath := eng.resolveFilePath(call.Arguments[1].String())
 		err := os.Rename(oldPath, newPath)
 		return vm.ToValue(err == nil)
+	})
+
+	// strerror(errno) — return string description of an error number
+	vm.Set("strerror", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return vm.ToValue("Unknown error")
+		}
+		errno := int(call.Arguments[0].ToInteger())
+		return vm.ToValue(fmt.Sprintf("Error %d", errno))
 	})
 
 	// argv — script arguments

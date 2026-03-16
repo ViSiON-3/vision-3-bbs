@@ -317,3 +317,40 @@ func TestEngineLiveLoadPathList(t *testing.T) {
 		t.Errorf("expected 'helper:99', got %q", output)
 	}
 }
+
+func TestEngineEvalFunctionExpression(t *testing.T) {
+	// SpiderMonkey allows eval('function() { ... }') as a function expression.
+	// This is used extensively by Synchronet's l2lib.js (LORD II).
+	eng, mock := newTestEngine(t, `
+		var fn1 = eval('function() { return 42; }');
+		if (typeof fn1 !== 'function') throw new Error('eval did not return a function');
+		console.write("fn1:" + fn1());
+
+		var i = 5;
+		var fn2 = eval('function() { return i; }');
+		console.write(",fn2:" + fn2());
+
+		var fn3 = eval('function(val) { return val * 2; }');
+		console.write(",fn3:" + fn3(3));
+
+		// Regular eval must still work
+		var result = eval('1 + 2');
+		console.write(",regular:" + result);
+
+		// Array-creating eval (used by l2lib.js)
+		var arr = eval('var aret = []; while(aret.length < 5) aret.push(0); aret;');
+		console.write(",arr:" + arr.length);
+	`)
+	defer eng.Close()
+
+	err := eng.Run("test.js")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	output := mock.output.String()
+	expected := "fn1:42,fn2:5,fn3:6,regular:3,arr:5"
+	if !strings.Contains(output, expected) {
+		t.Errorf("expected %q, got %q", expected, output)
+	}
+}
