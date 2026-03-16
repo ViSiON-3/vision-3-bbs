@@ -23,25 +23,22 @@ func registerModuleSystem(vm *goja.Runtime, eng *Engine) {
 func registerPolyfills(vm *goja.Runtime) {
 	// toSource() — Mozilla extension used by recordfile.js for deep cloning.
 	// Converts a value to a source code string that eval() can recreate.
+	// toSource() and getYear() polyfills must be non-enumerable so they
+	// don't appear in for-in loops over arrays/objects.
 	vm.RunString(`
-		if (!Object.prototype.toSource) {
-			Object.prototype.toSource = function() { return JSON.stringify(this); };
-		}
-		if (!Array.prototype.toSource) {
-			Array.prototype.toSource = function() { return JSON.stringify(this); };
-		}
-		if (!Number.prototype.toSource) {
-			Number.prototype.toSource = function() { return '(' + this.toString() + ')'; };
-		}
-		if (!String.prototype.toSource) {
-			String.prototype.toSource = function() { return '"' + this.toString().replace(/"/g, '\\"') + '"'; };
-		}
-		if (!Boolean.prototype.toSource) {
-			Boolean.prototype.toSource = function() { return '(' + this.toString() + ')'; };
-		}
-		if (!Date.prototype.getYear) {
-			Date.prototype.getYear = function() { return this.getFullYear() - 1900; };
-		}
+		(function() {
+			function defHidden(obj, name, fn) {
+				if (!obj[name]) {
+					Object.defineProperty(obj, name, {value: fn, writable: true, configurable: true, enumerable: false});
+				}
+			}
+			defHidden(Object.prototype, 'toSource', function() { return JSON.stringify(this); });
+			defHidden(Array.prototype, 'toSource', function() { return JSON.stringify(this); });
+			defHidden(Number.prototype, 'toSource', function() { return '(' + this.toString() + ')'; });
+			defHidden(String.prototype, 'toSource', function() { return '"' + this.toString().replace(/"/g, '\\"') + '"'; });
+			defHidden(Boolean.prototype, 'toSource', function() { return '(' + this.toString() + ')'; });
+			defHidden(Date.prototype, 'getYear', function() { return this.getFullYear() - 1900; });
+		})();
 	`)
 
 	// SpiderMonkey eval() compatibility — SpiderMonkey allows eval('function() { ... }')
@@ -453,13 +450,20 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// argv — script arguments as a native JS Array.
-	// Build via vm.NewArray() so for-in only enumerates numeric indices,
-	// not "length" or other Go proxy artifacts.
-	argvArr := vm.NewArray()
-	for i, a := range eng.cfg.Args {
-		argvArr.Set(fmt.Sprintf("%d", i), a)
+	// Set via _argv_tmp + JSON.parse so for-in only enumerates numeric indices.
+	if len(eng.cfg.Args) > 0 {
+		// Build JSON array of strings
+		parts := make([]string, len(eng.cfg.Args))
+		for i, a := range eng.cfg.Args {
+			// Escape for JSON string
+			escaped := strings.ReplaceAll(a, `\`, `\\`)
+			escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+			parts[i] = `"` + escaped + `"`
+		}
+		vm.RunString(`var argv = [` + strings.Join(parts, ",") + `];`)
+	} else {
+		vm.RunString(`var argv = [];`)
 	}
-	vm.Set("argv", argvArr)
 
 	// argc
 	vm.Set("argc", len(eng.cfg.Args))
