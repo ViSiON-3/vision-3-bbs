@@ -340,14 +340,14 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		return vm.ToValue(strings.TrimRight(call.Arguments[0].String(), " \t\r\n"))
 	})
 
-	// backslash(path) — ensure path ends with directory separator
+	// backslash(path) — ensure path ends with directory separator (OS-native)
 	vm.Set("backslash", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
-			return vm.ToValue("/")
+			return vm.ToValue(string(filepath.Separator))
 		}
 		p := call.Arguments[0].String()
-		if p == "" || p[len(p)-1] != '/' {
-			p += "/"
+		if p == "" || (p[len(p)-1] != '/' && p[len(p)-1] != '\\') {
+			p += string(filepath.Separator)
 		}
 		return vm.ToValue(p)
 	})
@@ -419,6 +419,26 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		return goja.Undefined()
 	})
 
+	// file_isdir(path) — check if path is a directory
+	vm.Set("file_isdir", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return vm.ToValue(false)
+		}
+		path := eng.resolveFilePath(call.Arguments[0].String())
+		info, err := os.Stat(path)
+		return vm.ToValue(err == nil && info.IsDir())
+	})
+
+	// mkdir(path) — create a directory (including parents)
+	vm.Set("mkdir", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return vm.ToValue(false)
+		}
+		path := eng.resolveFilePath(call.Arguments[0].String())
+		err := os.MkdirAll(path, 0o755)
+		return vm.ToValue(err == nil)
+	})
+
 	// file_removecase(filename) — case-insensitive file removal (stub, just calls remove)
 	vm.Set("file_removecase", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
@@ -485,7 +505,7 @@ func (eng *Engine) loadModule(filename string, args []goja.Value) (goja.Value, e
 	}
 
 	// Push exec_dir for the loaded module
-	moduleDir := filepath.Dir(resolved) + "/"
+	moduleDir := filepath.Dir(resolved) + string(filepath.Separator)
 	eng.pushExecDir(moduleDir)
 	defer eng.popExecDir()
 

@@ -60,7 +60,7 @@ func NewEngine(ctx context.Context, session *SessionContext, cfg SyncJSDoorConfi
 		ctx:          ctx,
 		cancel:       cancel,
 		currentAttr:  7, // default: light gray on black
-		execDirStack: []string{cfg.WorkingDir + "/"},
+		execDirStack: []string{cfg.WorkingDir + string(filepath.Separator)},
 	}
 
 	// Set up interrupt checking — allows context cancellation to halt JS execution
@@ -91,7 +91,7 @@ func (eng *Engine) Run(scriptPath string) error {
 	}
 
 	// Set initial exec_dir to the script's directory
-	eng.pushExecDir(filepath.Dir(scriptPath) + "/")
+	eng.pushExecDir(filepath.Dir(scriptPath) + string(filepath.Separator))
 
 	log.Printf("INFO: SyncJS: Running script %s for node %d", scriptPath, eng.session.NodeNumber)
 
