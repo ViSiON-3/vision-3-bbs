@@ -486,11 +486,26 @@ func (eng *Engine) loadModule(filename string, args []goja.Value) (goja.Value, e
 		}
 	}
 
-	result, err := eng.vm.RunScript(resolved, string(data))
+	result, err := eng.vm.RunScript(resolved, stripUseStrict(string(data)))
 	if err != nil {
 		return goja.Undefined(), fmt.Errorf("executing module %s: %w", resolved, err)
 	}
 	return result, nil
+}
+
+// stripUseStrict removes 'use strict' directives from script source code.
+// Synchronet uses SpiderMonkey 1.8.5 which doesn't fully enforce strict mode,
+// so many Synchronet scripts declare 'use strict' but rely on non-strict
+// behavior (e.g. undeclared for-in variables, implicit globals). Goja enforces
+// strict mode correctly, causing breakage. Stripping the directive restores
+// Synchronet-compatible behavior.
+func stripUseStrict(src string) string {
+	return strings.NewReplacer(
+		"'use strict';", "",
+		"\"use strict\";", "",
+		"'use strict'", "",
+		"\"use strict\"", "",
+	).Replace(src)
 }
 
 // resolveModulePath searches for a module file in configured paths.

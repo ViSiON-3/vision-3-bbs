@@ -95,7 +95,7 @@ func (eng *Engine) Run(scriptPath string) error {
 
 	log.Printf("INFO: SyncJS: Running script %s for node %d", scriptPath, eng.session.NodeNumber)
 
-	_, err = eng.vm.RunScript(scriptPath, string(data))
+	_, err = eng.vm.RunScript(scriptPath, stripUseStrict(string(data)))
 	if err != nil {
 		if isExitPanic(err) {
 			return nil
