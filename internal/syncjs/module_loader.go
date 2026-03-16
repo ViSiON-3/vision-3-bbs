@@ -634,12 +634,15 @@ func (eng *Engine) resolveFilePath(path string) string {
 }
 
 // sprintfJS provides basic printf-style formatting for JS format() calls.
+// Go's fmt.Sprintf doesn't support %u (unsigned int), which is used by
+// dorkit's local_console.js and ansi_console.js for cursor positioning.
+// We convert %u → %d since the values are always non-negative integers.
 func sprintfJS(fmtStr string, args []goja.Value) string {
 	goArgs := make([]interface{}, len(args))
 	for i, a := range args {
 		goArgs[i] = a.Export()
 	}
-	// Use Go's Sprintf — format specifiers are close enough for BBS game usage
+	fmtStr = strings.ReplaceAll(fmtStr, "%u", "%d")
 	return fmt.Sprintf(fmtStr, goArgs...)
 }
 
