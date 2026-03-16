@@ -131,7 +131,7 @@ func (m Model) viewRecordList() string {
 	} else if m.recordTypeSupportsReorder() {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  P - Position  |  ESC - Return"
 	} else if m.recordType == "ftn" || m.recordType == "v3netleaf" {
-		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  G - Global Settings  |  ESC - Return"
+		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  G - Global  |  ESC - Return"
 	} else if m.recordType == "ftnlink" {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  ESC - Return"
 	} else {
@@ -198,9 +198,9 @@ func (m Model) recordColumnHeader(boxW int) string {
 	case "login":
 		return "  #  Command          Data"
 	case "v3netleaf":
-		return "  #  Hub URL                                   Network          Board"
+		return fmt.Sprintf("   #  %-30s %-14s %s", "Hub URL", "Network", "Board")
 	case "v3nethub":
-		return "  #  Network Name                Description"
+		return fmt.Sprintf("   #  %-16s %s", "Network", "Description")
 	}
 	return ""
 }
@@ -276,12 +276,12 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 	case "v3netleaf":
 		if idx < len(m.configs.V3Net.Leaves) {
 			l := m.configs.V3Net.Leaves[idx]
-			content = fmt.Sprintf(" %3d  %-44s %-16s %s", idx+1, padRight(l.HubURL, 44), padRight(l.Network, 16), l.Board)
+			content = fmt.Sprintf(" %3d  %-30s %-14s %s", idx+1, padRight(l.HubURL, 30), padRight(l.Network, 14), l.Board)
 		}
 	case "v3nethub":
 		if idx < len(m.configs.V3Net.Hub.Networks) {
 			n := m.configs.V3Net.Hub.Networks[idx]
-			content = fmt.Sprintf(" %3d  %-28s %s", idx+1, padRight(n.Name, 28), n.Description)
+			content = fmt.Sprintf(" %3d  %-16s %s", idx+1, padRight(n.Name, 16), n.Description)
 		}
 	}
 

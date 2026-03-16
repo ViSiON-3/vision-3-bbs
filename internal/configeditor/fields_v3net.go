@@ -27,12 +27,12 @@ func (m *Model) fieldsV3NetGlobal() []fieldDef {
 			Set: func(val string) error { v.DedupDBPath = val; return nil },
 		},
 		{
-			Label: "Registry URL", Help: "Central V3Net registry URL (optional)", Type: ftString, Col: 3, Row: 4, Width: 60,
+			Label: "Registry URL", Help: "Central V3Net registry URL (optional)", Type: ftString, Col: 3, Row: 4, Width: 49,
 			Get: func() string { return v.RegistryURL },
 			Set: func(val string) error { v.RegistryURL = val; return nil },
 		},
 		{
-			Label: "", Help: "", Type: ftDisplay, Col: 3, Row: 5, Width: 1,
+			Label: "", Help: "", Type: ftDisplay, Col: 3, Row: 5, Width: 30,
 			Get: func() string { return "── Hub Configuration ──" },
 		},
 		{
@@ -93,7 +93,7 @@ func (m *Model) fieldsV3NetHubNetwork() []fieldDef {
 			},
 		},
 		{
-			Label: "Description", Help: "Human-readable description of this network", Type: ftString, Col: 3, Row: 2, Width: 50,
+			Label: "Description", Help: "Human-readable description of this network", Type: ftString, Col: 3, Row: 2, Width: 49,
 			Get: func() string { return n.Description },
 			Set: func(val string) error { n.Description = val; return nil },
 		},
@@ -110,7 +110,7 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 
 	return []fieldDef{
 		{
-			Label: "Hub URL", Help: "URL of the V3Net hub (e.g. https://hub.felonynet.org)", Type: ftString, Col: 3, Row: 1, Width: 50,
+			Label: "Hub URL", Help: "URL of the V3Net hub (e.g. https://hub.felonynet.org)", Type: ftString, Col: 3, Row: 1, Width: 49,
 			Get: func() string { return l.HubURL },
 			Set: func(val string) error { l.HubURL = val; return nil },
 		},
