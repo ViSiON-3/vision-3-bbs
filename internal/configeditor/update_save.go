@@ -46,6 +46,10 @@ func (m *Model) saveAll() {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
 	}
+	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {
+		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+		return
+	}
 	if err := saveProtocols(m.configPath, m.configs.Protocols); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
@@ -87,6 +91,10 @@ func (m Model) recordCount() int {
 		return len(m.configs.Archivers.Archivers)
 	case "login":
 		return len(m.configs.LoginSeq)
+	case "v3netleaf":
+		return len(m.configs.V3Net.Leaves)
+	case "v3nethub":
+		return len(m.configs.V3Net.Hub.Networks)
 	}
 	return 0
 }
@@ -211,6 +219,16 @@ func (m *Model) insertRecord() {
 		m.configs.LoginSeq = append(m.configs.LoginSeq, config.LoginItem{
 			Command: "DISPLAYFILE",
 		})
+	case "v3netleaf":
+		m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, config.V3NetLeafConfig{
+			Network:      "newnetwork",
+			PollInterval: "5m",
+		})
+	case "v3nethub":
+		m.configs.V3Net.Hub.Networks = append(m.configs.V3Net.Hub.Networks, config.V3NetHubNetwork{
+			Name:        "newnetwork",
+			Description: "New network",
+		})
 	}
 }
 
@@ -262,6 +280,14 @@ func (m *Model) deleteRecord() {
 	case "login":
 		if idx >= 0 && idx < len(m.configs.LoginSeq) {
 			m.configs.LoginSeq = append(m.configs.LoginSeq[:idx], m.configs.LoginSeq[idx+1:]...)
+		}
+	case "v3netleaf":
+		if idx >= 0 && idx < len(m.configs.V3Net.Leaves) {
+			m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves[:idx], m.configs.V3Net.Leaves[idx+1:]...)
+		}
+	case "v3nethub":
+		if idx >= 0 && idx < len(m.configs.V3Net.Hub.Networks) {
+			m.configs.V3Net.Hub.Networks = append(m.configs.V3Net.Hub.Networks[:idx], m.configs.V3Net.Hub.Networks[idx+1:]...)
 		}
 	}
 

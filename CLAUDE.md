@@ -141,3 +141,7 @@ Before making significant changes:
 - Follow the project's established structure for new packages and components.
 - Use Go modules for dependency management.
 - Organize code by functionality rather than type.
+
+## V3Net
+
+When working on V3Net (native message networking protocol), follow the instructions in `internal/v3net/CLAUDE.md` and the design plan in `docs/plans/2026-03-16-v3net-protocol-design.md`.

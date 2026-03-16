@@ -225,6 +225,7 @@ type MenuExecutor struct {
 	SessionRegistry *session.SessionRegistry      // Session registry for who's online
 	ChatRoom        *chat.ChatRoom                // Global teleconference chat room
 	Protocols       []transfer.ProtocolConfig     // Loaded transfer protocol configurations
+	V3NetStatus     V3NetStatusProvider           // V3Net service status (nil if disabled)
 	configMu        sync.RWMutex                  // Mutex for thread-safe config updates
 }
 
@@ -652,6 +653,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["INFOFORMHUNT"] = runInfoFormHunt          // SysOp: browse all users' completed forms
 	registry["INFOFORMREQUIRED"] = runInfoFormRequired  // Login sequence: force required forms
 	registry["INFOFORMNUKE"] = runInfoFormNuke          // SysOp: delete all forms for a user
+	registry["V3NETSTATUS"] = runV3NetStatus            // V3Net networking status display
 }
 
 func runPlaceholderCommand(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {

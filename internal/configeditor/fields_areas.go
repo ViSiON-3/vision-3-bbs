@@ -32,6 +32,13 @@ func (m *Model) buildRecordFields() []fieldDef {
 		return m.fieldsArchiver()
 	case "login":
 		return m.fieldsLogin()
+	case "v3netleaf":
+		if m.recordEditIdx < 0 {
+			return m.fieldsV3NetGlobal()
+		}
+		return m.fieldsV3NetLeaf()
+	case "v3nethub":
+		return m.fieldsV3NetHubNetwork()
 	}
 	return nil
 }

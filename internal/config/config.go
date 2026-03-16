@@ -875,6 +875,42 @@ type ServerConfig struct {
 
 	// DOS emulation — system-wide dosemu2 settings for DOS door games.
 	DosemuPath string `json:"dosemuPath,omitempty"` // Path to dosemu2 binary (default: /usr/libexec/dosemu2/dosemu2.bin)
+
+}
+
+// V3NetConfig holds V3Net networking configuration.
+type V3NetConfig struct {
+	Enabled      bool              `json:"enabled"`
+	KeystorePath string            `json:"keystorePath"` // Path to ed25519 keypair file
+	DedupDBPath  string            `json:"dedupDbPath"`  // Path to dedup SQLite database
+	RegistryURL  string            `json:"registryUrl"`  // Central registry URL (optional)
+	Hub          V3NetHubConfig    `json:"hub,omitempty"`
+	Leaves       []V3NetLeafConfig `json:"leaves,omitempty"`
+}
+
+// V3NetHubConfig configures this node as a V3Net hub.
+type V3NetHubConfig struct {
+	Enabled     bool              `json:"enabled"`
+	ListenAddr  string            `json:"listenAddr"`
+	TLSCert     string            `json:"tlsCert,omitempty"`
+	TLSKey      string            `json:"tlsKey,omitempty"`
+	DataDir     string            `json:"dataDir"`
+	AutoApprove bool              `json:"autoApprove"`
+	Networks    []V3NetHubNetwork `json:"networks,omitempty"`
+}
+
+// V3NetHubNetwork defines a network hosted by this hub.
+type V3NetHubNetwork struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// V3NetLeafConfig configures a subscription to a V3Net network.
+type V3NetLeafConfig struct {
+	HubURL       string `json:"hubUrl"`
+	Network      string `json:"network"`
+	Board        string `json:"board"`        // Local message area tag to write received messages
+	PollInterval string `json:"pollInterval"` // Duration string (e.g., "5m")
 }
 
 // EventConfig defines a scheduled event configuration
@@ -1022,6 +1058,48 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	}
 
 	return config, nil
+}
+
+// LoadV3NetConfig loads V3Net networking configuration from v3net.json.
+// Returns a disabled config if the file does not exist.
+func LoadV3NetConfig(configPath string) (V3NetConfig, error) {
+	filePath := filepath.Join(configPath, "v3net.json")
+	log.Printf("INFO: Loading V3Net configuration from %s", filePath)
+
+	defaultConfig := V3NetConfig{}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("INFO: v3net.json not found at %s. V3Net disabled.", filePath)
+			return defaultConfig, nil
+		}
+		return defaultConfig, fmt.Errorf("failed to read V3Net config file %s: %w", filePath, err)
+	}
+
+	var cfg V3NetConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		log.Printf("ERROR: Failed to parse V3Net config JSON from %s: %v", filePath, err)
+		return defaultConfig, fmt.Errorf("failed to parse V3Net config JSON from %s: %w", filePath, err)
+	}
+
+	log.Printf("INFO: Loaded V3Net configuration: enabled=%v, hub=%v, leaves=%d",
+		cfg.Enabled, cfg.Hub.Enabled, len(cfg.Leaves))
+
+	return cfg, nil
+}
+
+// SaveV3NetConfig writes the V3NetConfig back to v3net.json in the given configPath directory.
+func SaveV3NetConfig(configPath string, cfg V3NetConfig) error {
+	filePath := filepath.Join(configPath, "v3net.json")
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal V3Net config: %w", err)
+	}
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write V3Net config to %s: %w", filePath, err)
+	}
+	return nil
 }
 
 // SaveServerConfig writes the ServerConfig back to config.json in the given configPath directory.

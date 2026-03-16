@@ -38,6 +38,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	v3net "github.com/ViSiON-3/vision-3-bbs/internal/v3net"
 )
 
 var (
@@ -56,6 +57,7 @@ var (
 	// colorTestMode       bool   // Flag variable REMOVED
 	outputModeFlag    string             // Output mode flag (auto, utf8, cp437)
 	connectionTracker *ConnectionTracker // Global connection tracker
+	v3netService      *v3net.Service     // V3Net networking service (nil if disabled)
 )
 
 // allocateNodeIDForSession assigns the lowest available node slot (1..maxNodes)
@@ -864,6 +866,11 @@ func sessionHandler(s ssh.Session) {
 			sessionRegistry.Unregister(int(nodeID))
 		}
 
+		// V3Net logoff notification
+		if v3netService != nil && authenticatedUser != nil {
+			v3netService.SendLogoff(authenticatedUser.Handle)
+		}
+
 		// --- Record Call History ---
 		if authenticatedUser != nil {
 			log.Printf("DEBUG: Node %d: Adding call record for user %s (ID: %d)", nodeID, authenticatedUser.Handle, authenticatedUser.ID)
@@ -1492,6 +1499,12 @@ func sessionHandler(s ssh.Session) {
 	} else {
 		currentMenuName = loginNextMenu
 	}
+
+	// V3Net logon notification
+	if v3netService != nil && authenticatedUser != nil {
+		v3netService.SendLogon(authenticatedUser.Handle)
+	}
+
 	for {
 		if currentMenuName == "" || currentMenuName == "LOGOFF" {
 			log.Printf("Node %d: User %s selected Logoff or reached end state.", nodeID, authenticatedUser.Handle)
@@ -1771,6 +1784,64 @@ func main() {
 		log.Printf("INFO: Event scheduler started with %d events", len(eventsConfig.Events))
 	} else {
 		log.Printf("INFO: Event scheduler disabled")
+	}
+
+	// Load V3Net configuration from v3net.json (separate from main config, like ftn.json).
+	v3netConfig, v3netCfgErr := config.LoadV3NetConfig(rootConfigPath)
+	if v3netCfgErr != nil {
+		log.Printf("ERROR: Failed to load V3Net config: %v", v3netCfgErr)
+	}
+
+	// Start V3Net networking service if enabled
+	if v3netCfgErr == nil && v3netConfig.Enabled {
+		svc, v3err := v3net.New(v3netConfig)
+		if v3err != nil {
+			log.Printf("ERROR: V3Net initialization failed: %v", v3err)
+		} else {
+			v3netService = svc
+
+			// Configure leaf clients for each subscribed network.
+			v3netAreaToNetwork := make(map[int]string) // area ID → network name
+			for _, lcfg := range v3netConfig.Leaves {
+				area, ok := messageMgr.GetAreaByTag(lcfg.Board)
+				if !ok {
+					log.Printf("WARN: V3Net leaf %q: message area %q not found, skipping", lcfg.Network, lcfg.Board)
+					continue
+				}
+				writer := v3net.NewJAMAdapter(messageMgr, area.ID)
+				if err := v3netService.AddLeaf(lcfg, writer, nil); err != nil {
+					log.Printf("ERROR: V3Net leaf %q: %v", lcfg.Network, err)
+					continue
+				}
+				v3netAreaToNetwork[area.ID] = lcfg.Network
+			}
+
+			// Hook message posts to forward to V3Net when posted to a networked area.
+			messageMgr.OnMessagePosted = func(area *message.MessageArea, msgNum int, from, to, subject, body string) {
+				network, ok := v3netAreaToNetwork[area.ID]
+				if !ok {
+					return
+				}
+				msg := v3net.BuildWireMessage(network, svc.NodeID(), area.Name, from, to, subject, body)
+				if err := svc.SendMessage(network, msg); err != nil {
+					log.Printf("ERROR: V3Net: failed to send message to %s: %v", network, err)
+				}
+			}
+
+			v3netCtx, v3netCancel := context.WithCancel(context.Background())
+			defer func() {
+				log.Printf("INFO: Shutting down V3Net service...")
+				v3netCancel()
+				v3netService.Close()
+			}()
+
+			go v3netService.Start(v3netCtx)
+			menuExecutor.V3NetStatus = v3netService
+			log.Printf("INFO: V3Net service started (node_id=%s, hub=%v, leaves=%d)",
+				v3netService.NodeID(), v3netService.HubActive(), v3netService.LeafCount())
+		}
+	} else if v3netCfgErr == nil {
+		log.Printf("INFO: V3Net networking disabled")
 	}
 
 	// Ensure at least one protocol is enabled

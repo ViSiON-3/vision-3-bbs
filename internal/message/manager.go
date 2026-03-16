@@ -58,6 +58,10 @@ type MessageManager struct {
 	networkTearlines map[string]string
 	threadIndex      map[int]*threadIndex
 	msgidIndex       map[int]*msgidIndex
+
+	// OnMessagePosted is called after a message is successfully written to a JAM base.
+	// The callback receives the area and the message details. May be nil.
+	OnMessagePosted func(area *MessageArea, msgNum int, from, to, subject, body string)
 }
 
 // NewMessageManager creates and initializes a new MessageManager.
@@ -546,6 +550,9 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 
 	if err == nil {
 		mm.invalidateThreadIndex(areaID)
+		if mm.OnMessagePosted != nil {
+			mm.OnMessagePosted(area, msgNum, from, to, subject, body)
+		}
 	}
 	return msgNum, err
 }
