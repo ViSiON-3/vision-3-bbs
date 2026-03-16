@@ -274,13 +274,32 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		return vm.ToValue(strftimeGo(fmtStr, ts))
 	})
 
-	// log(msg) — log a message
+	// log([level,] msg) — log a message with optional syslog-style level
 	vm.Set("log", func(call goja.FunctionCall) goja.Value {
-		if len(call.Arguments) > 0 {
-			log.Printf("INFO: SyncJS: %s", call.Arguments[0].String())
+		if len(call.Arguments) == 0 {
+			return goja.Undefined()
 		}
+		msg := ""
+		if len(call.Arguments) >= 2 {
+			// log(level, message) — Synchronet style
+			msg = call.Arguments[1].String()
+		} else {
+			msg = call.Arguments[0].String()
+		}
+		log.Printf("INFO: SyncJS: %s", msg)
 		return goja.Undefined()
 	})
+
+	// Syslog-level constants used by Synchronet's log() function
+	vm.Set("LOG_EMERG", 0)
+	vm.Set("LOG_ALERT", 1)
+	vm.Set("LOG_CRIT", 2)
+	vm.Set("LOG_ERR", 3)
+	vm.Set("LOG_ERROR", 3) // alias used by some scripts (e.g. lord2.js)
+	vm.Set("LOG_WARNING", 4)
+	vm.Set("LOG_NOTICE", 5)
+	vm.Set("LOG_INFO", 6)
+	vm.Set("LOG_DEBUG", 7)
 
 	// alert(msg) — alias for log
 	vm.Set("alert", func(call goja.FunctionCall) goja.Value {
