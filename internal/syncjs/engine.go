@@ -470,6 +470,118 @@ func (eng *Engine) parseInput(data []byte) string {
 	return result
 }
 
+// readRawByte reads a single raw byte from the session with timeout.
+// Unlike readKey, it does NOT parse ANSI escape sequences.
+func (eng *Engine) readRawByte(timeout time.Duration) (byte, bool) {
+	if len(eng.inputBuf) > 0 {
+		ch := eng.inputBuf[0]
+		eng.inputBuf = eng.inputBuf[1:]
+		return ch, true
+	}
+
+	eng.startReader()
+
+	var timer <-chan time.Time
+	if timeout > 0 {
+		timer = time.After(timeout)
+	}
+
+	select {
+	case result := <-eng.rawInputCh:
+		if result.err != nil {
+			eng.cancel()
+			return 0, false
+		}
+		if len(result.data) == 0 {
+			return 0, false
+		}
+		ch := result.data[0]
+		if len(result.data) > 1 {
+			eng.inputBuf = append(eng.inputBuf, result.data[1:]...)
+		}
+		return ch, true
+	case <-timer:
+		return 0, false
+	case <-eng.ctx.Done():
+		return 0, false
+	}
+}
+
+// readKeyDorkit reads input and formats it the way DORKit's ansi_input.js would.
+// Normal characters are returned as-is. ANSI escape sequences are translated to
+// DORKit named keys like "KEY_UP\x00\x1b[A".
+func (eng *Engine) readKeyDorkit(timeout time.Duration) (string, error) {
+	ch, ok := eng.readRawByte(timeout)
+	if !ok {
+		if eng.ctx.Err() != nil {
+			return "", ErrTerminated
+		}
+		return "", nil
+	}
+
+	if ch != 0x1b {
+		return string(ch), nil
+	}
+
+	// Got ESC — try to read the rest of an ANSI sequence with a short timeout
+	ch2, ok := eng.readRawByte(100 * time.Millisecond)
+	if !ok {
+		return "\x1b", nil // bare ESC
+	}
+
+	seq := string([]byte{0x1b, ch2})
+
+	if ch2 == '[' || ch2 == 'O' {
+		// CSI or SS3 sequence — read until final byte (0x40-0x7E)
+		for {
+			ch3, ok := eng.readRawByte(100 * time.Millisecond)
+			if !ok {
+				break
+			}
+			seq += string(ch3)
+			if ch3 >= 0x40 && ch3 <= 0x7E {
+				break
+			}
+		}
+	}
+
+	// Map to DORKit key names (matching ansi_input.js)
+	name := ""
+	switch seq {
+	case "\x1b[A", "\x1bOA", "\x1bA":
+		name = "KEY_UP"
+	case "\x1b[B", "\x1bOB", "\x1bB":
+		name = "KEY_DOWN"
+	case "\x1b[C", "\x1bOC", "\x1bC":
+		name = "KEY_RIGHT"
+	case "\x1b[D", "\x1bOD", "\x1bD":
+		name = "KEY_LEFT"
+	case "\x1bH", "\x1b[H", "\x1b[1~", "\x1bOH":
+		name = "KEY_HOME"
+	case "\x1bK", "\x1b[K", "\x1b[4~", "\x1bOK":
+		name = "KEY_END"
+	case "\x1b[5~", "\x1b[V":
+		name = "KEY_PGUP"
+	case "\x1b[6~", "\x1b[U":
+		name = "KEY_PGDOWN"
+	case "\x1b[2~":
+		name = "KEY_INS"
+	case "\x1b[3~":
+		name = "KEY_DEL"
+	}
+
+	if name != "" {
+		return name + "\x00" + seq, nil
+	}
+
+	// Check for cursor position response: \x1b[row;colR
+	if len(seq) > 3 && seq[len(seq)-1] == 'R' {
+		return "POSITION_REPORT\x00" + seq, nil
+	}
+
+	return "UNKNOWN_ANSI\x00" + seq, nil
+}
+
 // skipCSI finds the end of a CSI escape sequence starting at data[0]=ESC.
 // CSI sequences end with a byte in the range 0x40-0x7E.
 func skipCSI(data []byte) int {

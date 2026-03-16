@@ -104,8 +104,10 @@ func (q *jsQueue) read() goja.Value {
 		return q.vm.ToValue(fmt.Sprintf("POSITION_%d_%d\x00\x1b[%d;%dR", rows, cols, rows, cols))
 	}
 
-	// Fall back to session I/O — replaces Synchronet's background input thread
-	key, err := q.eng.readKey(0)
+	// Fall back to session I/O — replaces Synchronet's background input thread.
+	// Use readKeyDorkit to produce DORKit-formatted named keys (e.g. "KEY_UP\x00\x1b[A")
+	// matching what ansi_input.js would produce in the background thread.
+	key, err := q.eng.readKeyDorkit(0)
 	if err != nil || key == "" {
 		return goja.Undefined()
 	}
@@ -131,7 +133,7 @@ func (q *jsQueue) poll(timeout time.Duration) bool {
 	}
 
 	// Fall back to session I/O with timeout
-	key, err := q.eng.readKey(timeout)
+	key, err := q.eng.readKeyDorkit(timeout)
 	if err != nil || key == "" {
 		return false
 	}
