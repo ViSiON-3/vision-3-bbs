@@ -376,6 +376,33 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		return vm.ToValue(true)
 	})
 
+	// file_getcase(path) — case-insensitive file lookup.
+	// Returns the actual path with correct case, or undefined if not found.
+	vm.Set("file_getcase", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return goja.Undefined()
+		}
+		target := call.Arguments[0].String()
+		resolved := eng.resolveFilePath(target)
+		// First try exact match
+		if _, err := os.Stat(resolved); err == nil {
+			return vm.ToValue(resolved)
+		}
+		// Case-insensitive search in the parent directory
+		dir := filepath.Dir(resolved)
+		base := filepath.Base(resolved)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return goja.Undefined()
+		}
+		for _, e := range entries {
+			if strings.EqualFold(e.Name(), base) {
+				return vm.ToValue(filepath.Join(dir, e.Name()))
+			}
+		}
+		return goja.Undefined()
+	})
+
 	// file_removecase(filename) — case-insensitive file removal (stub, just calls remove)
 	vm.Set("file_removecase", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
