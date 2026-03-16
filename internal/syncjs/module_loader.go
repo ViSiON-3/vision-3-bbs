@@ -419,6 +419,19 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		return goja.Undefined()
 	})
 
+	// file_size(path) — return file size in bytes, or -1 if not found
+	vm.Set("file_size", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return vm.ToValue(-1)
+		}
+		path := eng.resolveFilePath(call.Arguments[0].String())
+		info, err := os.Stat(path)
+		if err != nil {
+			return vm.ToValue(-1)
+		}
+		return vm.ToValue(info.Size())
+	})
+
 	// file_isdir(path) — check if path is a directory
 	vm.Set("file_isdir", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
