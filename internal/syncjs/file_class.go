@@ -461,7 +461,7 @@ func modeToFlags(mode string) (int, os.FileMode) {
 		return os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0o644
 	case "w+", "w+b", "wb+":
 		return os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0o644
-	case "a":
+	case "a", "ab":
 		return os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0o644
 	case "a+", "a+b", "ab+":
 		return os.O_RDWR | os.O_CREATE | os.O_APPEND, 0o644
