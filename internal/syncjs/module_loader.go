@@ -452,8 +452,14 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		return vm.ToValue(fmt.Sprintf("Error %d", errno))
 	})
 
-	// argv — script arguments
-	vm.Set("argv", eng.cfg.Args)
+	// argv — script arguments as a proper JS array.
+	// Must use []interface{} so goja creates a native JS Array (not a Go proxy
+	// object whose for-in would also enumerate "length").
+	jsArgs := make([]interface{}, len(eng.cfg.Args))
+	for i, a := range eng.cfg.Args {
+		jsArgs[i] = a
+	}
+	vm.Set("argv", jsArgs)
 
 	// argc
 	vm.Set("argc", len(eng.cfg.Args))
