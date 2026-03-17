@@ -81,6 +81,7 @@ func NewMessageManager(dataPath, configPath, boardName string, networkTearlines 
 		areasPath:        filepath.Join(configPath, messageAreaFile),
 		areasByID:        make(map[int]*MessageArea),
 		areasByTag:       make(map[string]*MessageArea),
+		areasByEchoTag:   make(map[string]*MessageArea),
 		boardName:        boardName,
 		networkTearlines: normalizeNetworkTearlines(networkTearlines),
 		threadIndex:      make(map[int]*threadIndex),

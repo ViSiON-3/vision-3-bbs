@@ -215,6 +215,11 @@ func (h *Hub) handleApproveAccess(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
+	req.NodeIDs = normalizeNodeIDs(req.NodeIDs)
+	if len(req.NodeIDs) == 0 {
+		http.Error(w, `{"error":"no valid node_ids"}`, http.StatusBadRequest)
+		return
+	}
 
 	// Add nodes to allow list in NAL.
 	if err := h.updateNALArea(network, tag, func(area *protocol.Area) {
@@ -258,6 +263,11 @@ func (h *Hub) handleDenyAccess(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
+	req.NodeIDs = normalizeNodeIDs(req.NodeIDs)
+	if len(req.NodeIDs) == 0 {
+		http.Error(w, `{"error":"no valid node_ids"}`, http.StatusBadRequest)
+		return
+	}
 
 	// Remove from allow list and add to deny list.
 	if err := h.updateNALArea(network, tag, func(area *protocol.Area) {
@@ -282,11 +292,15 @@ func (h *Hub) handleDenyAccess(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Notify denied node (NodeID allows clients to filter events not meant for them).
-		ev, _ := protocol.NewEvent(protocol.EventSubscriptionDenied, protocol.SubscriptionDeniedPayload{
+		ev, err := protocol.NewEvent(protocol.EventSubscriptionDenied, protocol.SubscriptionDeniedPayload{
 			Network: network,
 			Tag:     tag,
 			NodeID:  nid,
 		})
+		if err != nil {
+			slog.Error("build subscription_denied event", "node", nid, "error", err)
+			continue
+		}
 		h.broadcaster.Publish(network, ev)
 	}
 
@@ -307,6 +321,11 @@ func (h *Hub) handleRemoveFromDenyList(w http.ResponseWriter, r *http.Request) {
 	var req protocol.NodeIDsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		return
+	}
+	req.NodeIDs = normalizeNodeIDs(req.NodeIDs)
+	if len(req.NodeIDs) == 0 {
+		http.Error(w, `{"error":"no valid node_ids"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -351,12 +370,16 @@ func (h *Hub) updateNALArea(network, tag string, mutate func(area *protocol.Area
 		return fmt.Errorf("put nal: %w", err)
 	}
 
-	ev, _ := protocol.NewEvent(protocol.EventNALUpdated, protocol.NALUpdatedPayload{
+	ev, err := protocol.NewEvent(protocol.EventNALUpdated, protocol.NALUpdatedPayload{
 		Network:   network,
 		Updated:   currentNAL.Updated,
 		AreaCount: len(currentNAL.Areas),
 	})
-	h.broadcaster.Publish(network, ev)
+	if err != nil {
+		slog.Error("build nal_updated event", "network", network, "error", err)
+	} else {
+		h.broadcaster.Publish(network, ev)
+	}
 
 	return nil
 }
@@ -391,4 +414,23 @@ func removeStr(ss []string, s string) []string {
 		}
 	}
 	return result
+}
+
+// normalizeNodeIDs deduplicates and strips whitespace from node IDs,
+// discarding empty entries.
+func normalizeNodeIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }

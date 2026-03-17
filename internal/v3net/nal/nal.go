@@ -215,9 +215,13 @@ func Fetch(ctx context.Context, url string) (*protocol.NAL, error) {
 		return nil, fmt.Errorf("nal: fetch status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1MB limit
+	const maxNALBytes = 1 << 20 // 1MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxNALBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("nal: read body: %w", err)
+	}
+	if len(body) > maxNALBytes {
+		return nil, fmt.Errorf("nal: response too large (max %d bytes)", maxNALBytes)
 	}
 
 	var n protocol.NAL
@@ -296,21 +300,28 @@ func (c *Cache) FetchAndVerify(ctx context.Context, url, network string) (*proto
 		return nil, fmt.Errorf("nal: verify %s: %w", network, err)
 	}
 
+	if n.Network != network {
+		err := fmt.Errorf("nal: network mismatch: got %q want %q", n.Network, network)
+		if e != nil {
+			slog.Warn("nal: network mismatch, returning stale cache", "network", network, "error", err)
+			return e.nal, nil
+		}
+		return nil, err
+	}
+
 	c.Put(network, n)
 	return n, nil
 }
 
 // Area returns the area with the given tag from the cached NAL.
+// Returns ErrNetworkNotCached if the entry is missing or expired.
 func (c *Cache) Area(network, tag string) (*protocol.Area, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	e := c.entries[network]
-	if e == nil {
+	n := c.Get(network)
+	if n == nil {
 		return nil, ErrNetworkNotCached
 	}
 
-	a := e.nal.FindArea(tag)
+	a := n.FindArea(tag)
 	if a == nil {
 		return nil, ErrAreaNotFound
 	}
