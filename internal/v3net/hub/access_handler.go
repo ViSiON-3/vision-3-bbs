@@ -39,15 +39,28 @@ func NewAccessRequestStore(db *sql.DB) (*AccessRequestStore, error) {
 	return &AccessRequestStore{db: db}, nil
 }
 
-// Add inserts a new access request. Returns the ID.
+// Add inserts a new access request or returns the existing one's ID.
 func (ar *AccessRequestStore) Add(network, areaTag, nodeID, bbsName string) (string, error) {
+	// Check for an existing pending request first.
+	var existingID string
+	err := ar.db.QueryRow(
+		`SELECT id FROM area_access_requests WHERE network = ? AND area_tag = ? AND node_id = ? AND status = 'pending'`,
+		network, areaTag, nodeID,
+	).Scan(&existingID)
+	if err == nil {
+		return existingID, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", fmt.Errorf("hub: check existing access request: %w", err)
+	}
+
 	id, err := newUUID()
 	if err != nil {
 		return "", fmt.Errorf("hub: generate access request ID: %w", err)
 	}
 	_, err = ar.db.Exec(
-		`INSERT OR IGNORE INTO area_access_requests (id, network, area_tag, node_id, bbs_name)
-		 VALUES (?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO area_access_requests (id, network, area_tag, node_id, bbs_name, status)
+		 VALUES (?, ?, ?, ?, ?, 'pending')`,
 		id, network, areaTag, nodeID, bbsName,
 	)
 	if err != nil {
@@ -268,10 +281,11 @@ func (h *Hub) handleDenyAccess(w http.ResponseWriter, r *http.Request) {
 			slog.Error("set subscription denied", "node", nid, "network", network, "tag", tag, "error", err)
 		}
 
-		// Notify denied node.
+		// Notify denied node (NodeID allows clients to filter events not meant for them).
 		ev, _ := protocol.NewEvent(protocol.EventSubscriptionDenied, protocol.SubscriptionDeniedPayload{
 			Network: network,
 			Tag:     tag,
+			NodeID:  nid,
 		})
 		h.broadcaster.Publish(network, ev)
 	}
@@ -312,6 +326,9 @@ func (h *Hub) handleRemoveFromDenyList(w http.ResponseWriter, r *http.Request) {
 // updateNALArea loads the NAL, applies a mutation to the named area, re-signs,
 // persists, and fans out an nal_updated event.
 func (h *Hub) updateNALArea(network, tag string, mutate func(area *protocol.Area)) error {
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
+
 	currentNAL, err := h.nalStore.Get(network)
 	if err != nil {
 		return fmt.Errorf("get nal: %w", err)

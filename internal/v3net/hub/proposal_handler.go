@@ -240,7 +240,12 @@ func (h *Hub) handleListProposals(w http.ResponseWriter, r *http.Request) {
 // broadcasts the nal_updated event. It accepts optional overrides for
 // access mode and allow_ansi (pass empty/false to use proposal defaults).
 func (h *Hub) approveProposal(network, proposalID, accessModeOverride string, _ bool) error {
-	// Read proposal from DB.
+	// Serialize the entire approve operation to prevent concurrent approvals
+	// from overwriting each other or appending duplicate areas.
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
+
+	// Read proposal from DB (inside lock to prevent TOCTOU with duplicate check).
 	var tag, name, desc, lang, accessMode, fromNode string
 	var allowANSI int
 	err := h.proposals.db.QueryRow(
@@ -263,11 +268,6 @@ func (h *Hub) approveProposal(network, proposalID, accessModeOverride string, _ 
 		managerPubKeyB64 = managerSub.PubKeyB64
 	}
 
-	// Serialize NAL read-modify-write to prevent concurrent approvals
-	// from overwriting each other.
-	h.nalMu.Lock()
-	defer h.nalMu.Unlock()
-
 	// Load current NAL (or create new one).
 	currentNAL, err := h.nalStore.Get(network)
 	if err != nil {
@@ -278,6 +278,15 @@ func (h *Hub) approveProposal(network, proposalID, accessModeOverride string, _ 
 			V3NetNAL: "1.0",
 			Network:  network,
 		}
+	}
+
+	// Check if tag already exists in the NAL (prevents duplicate appends).
+	if currentNAL.FindArea(tag) != nil {
+		// Area already in NAL — just resolve the proposal as approved.
+		if err := h.proposals.Resolve(proposalID, "approved", "area already exists"); err != nil {
+			slog.Error("resolve duplicate proposal", "error", err)
+		}
+		return nil
 	}
 
 	// Add the new area.
@@ -338,9 +347,12 @@ func (h *Hub) handleApproveProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse optional overrides.
+	// Parse optional overrides (empty body is fine — overrides are optional).
 	var overrides protocol.ProposalApproveRequest
-	json.NewDecoder(r.Body).Decode(&overrides) // ignore errors — overrides are optional
+	if err := json.NewDecoder(r.Body).Decode(&overrides); err != nil && err.Error() != "EOF" {
+		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		return
+	}
 
 	if err := h.approveProposal(network, proposalID, overrides.AccessMode, false); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -388,7 +400,10 @@ func (h *Hub) handleRejectProposal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req protocol.ProposalRejectRequest
-	json.NewDecoder(r.Body).Decode(&req) // ignore errors — reason is optional
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		return
+	}
 
 	if err := h.proposals.Resolve(proposalID, "rejected", req.Reason); err != nil {
 		slog.Error("resolve proposal rejection", "error", err)
@@ -396,11 +411,12 @@ func (h *Hub) handleRejectProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fan out proposal_rejected to the proposing node.
+	// Fan out proposal_rejected (NodeID allows the proposing node to identify it).
 	ev, _ := protocol.NewEvent(protocol.EventProposalRejected, protocol.ProposalRejectedPayload{
 		Network: network,
 		Tag:     tag,
 		Reason:  req.Reason,
+		NodeID:  fromNode,
 	})
 	h.broadcaster.Publish(network, ev)
 

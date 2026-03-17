@@ -578,7 +578,6 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 	if err != nil {
 		return 0, err
 	}
-	defer b.Close()
 
 	// Apply body transform (e.g. V3Net tearline/origin) for the local JAM copy.
 	// The original body is preserved for OnMessagePosted so the wire message
@@ -617,6 +616,11 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 	} else {
 		msgNum, err = b.WriteMessage(msg)
 	}
+
+	// Close the base before firing the callback. The V3Net hook calls
+	// MarkMessageSent which re-opens the same JAM base, so having it
+	// still open here can cause nested-open/file-sharing issues.
+	b.Close()
 
 	if err == nil {
 		mm.invalidateThreadIndex(areaID)

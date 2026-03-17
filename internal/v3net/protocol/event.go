@@ -82,16 +82,20 @@ type AreaAccessRequestedPayload struct {
 }
 
 // ProposalRejectedPayload notifies the proposing node of rejection.
+// NodeID identifies the target node so other leaves can ignore the event.
 type ProposalRejectedPayload struct {
 	Network string `json:"network"`
 	Tag     string `json:"tag"`
 	Reason  string `json:"reason"`
+	NodeID  string `json:"node_id"`
 }
 
 // SubscriptionDeniedPayload notifies a node that area access was denied.
+// NodeID identifies the target node so other leaves can ignore the event.
 type SubscriptionDeniedPayload struct {
 	Network string `json:"network"`
 	Tag     string `json:"tag"`
+	NodeID  string `json:"node_id"`
 }
 
 // CoordTransferPendingPayload notifies the incoming coordinator.

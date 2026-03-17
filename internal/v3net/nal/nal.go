@@ -255,11 +255,12 @@ func (c *Cache) Put(network string, n *protocol.NAL) {
 }
 
 // Get returns a cached NAL if present and not expired.
+// Returns nil if the entry has exceeded the cache TTL.
 func (c *Cache) Get(network string) *protocol.NAL {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	e := c.entries[network]
-	if e == nil {
+	if e == nil || time.Since(e.fetchedAt) >= c.ttl {
 		return nil
 	}
 	return e.nal

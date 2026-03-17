@@ -1226,6 +1226,7 @@ func sessionHandler(s ssh.Session) {
 		return
 	}
 	// Set default message area if not already set (handles both SSH pre-auth and normal login)
+	defaultsChanged := false
 	if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
 		for _, area := range messageMgr.ListAreas() {
 			if menu.CheckUserACS(area.ACSRead, authenticatedUser) {
@@ -1237,6 +1238,7 @@ func sessionHandler(s ssh.Session) {
 						authenticatedUser.CurrentMsgConferenceTag = conf.Tag
 					}
 				}
+				defaultsChanged = true
 				break
 			}
 		}
@@ -1253,13 +1255,16 @@ func sessionHandler(s ssh.Session) {
 						authenticatedUser.CurrentFileConferenceTag = conf.Tag
 					}
 				}
+				defaultsChanged = true
 				break
 			}
 		}
 	}
-	// Persist defaults if any were set
-	if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
-		log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
+	// Persist defaults only if we actually assigned new values
+	if defaultsChanged {
+		if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
+			log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
+		}
 	}
 
 	log.Printf("Node %d: Entering main loop for authenticated user: %s", nodeID, authenticatedUser.Handle)
@@ -1858,7 +1863,7 @@ func main() {
 				if strings.HasPrefix(body, "\x01V3NETUUID: ") {
 					return
 				}
-				msg := v3net.BuildWireMessage(info.Network, svc.NodeID(), area.Name, from, to, subject, body, info.Origin)
+				msg := v3net.BuildWireMessage(info.Network, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, info.Origin)
 				if err := svc.SendMessage(info.Network, msg); err != nil {
 					log.Printf("ERROR: V3Net: failed to send message to %s: %v", info.Network, err)
 					return
