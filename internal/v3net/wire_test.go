@@ -30,8 +30,8 @@ func TestBuildWireMessageEmptyOrigin(t *testing.T) {
 }
 
 func TestDefaultTearline(t *testing.T) {
-	tl := defaultTearline()
+	tl := DefaultTearline()
 	if !strings.HasPrefix(tl, "--- ViSiON/3 ") {
-		t.Errorf("defaultTearline() = %q, want prefix '--- ViSiON/3 '", tl)
+		t.Errorf("DefaultTearline() = %q, want prefix '--- ViSiON/3 '", tl)
 	}
 }

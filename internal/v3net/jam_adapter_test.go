@@ -11,22 +11,25 @@ func TestAppendV3NetOrigin(t *testing.T) {
 		body     string
 		tearline string
 		origin   string
+		nodeID   string
 		wantTear bool
 		wantOrig string
 	}{
 		{
-			name:     "tearline and origin",
+			name:     "tearline and origin with node ID",
 			body:     "Hello world",
 			tearline: "--- ViSiON/3 0.1.0/linux",
 			origin:   "My Cool BBS",
+			nodeID:   "abc123",
 			wantTear: true,
-			wantOrig: " * Origin: My Cool BBS",
+			wantOrig: " * Origin: My Cool BBS (abc123)",
 		},
 		{
-			name:     "origin only",
+			name:     "origin without node ID",
 			body:     "Hello world",
 			tearline: "",
 			origin:   "My Cool BBS",
+			nodeID:   "",
 			wantTear: false,
 			wantOrig: " * Origin: My Cool BBS",
 		},
@@ -35,6 +38,7 @@ func TestAppendV3NetOrigin(t *testing.T) {
 			body:     "Hello world",
 			tearline: "--- ViSiON/3 0.1.0/linux",
 			origin:   "",
+			nodeID:   "",
 			wantTear: true,
 			wantOrig: "",
 		},
@@ -43,6 +47,7 @@ func TestAppendV3NetOrigin(t *testing.T) {
 			body:     "Hello world",
 			tearline: "",
 			origin:   "",
+			nodeID:   "",
 			wantTear: false,
 			wantOrig: "",
 		},
@@ -50,7 +55,7 @@ func TestAppendV3NetOrigin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := appendV3NetOrigin(tt.body, tt.tearline, tt.origin)
+			got := AppendV3NetOrigin(tt.body, tt.tearline, tt.origin, tt.nodeID)
 
 			if tt.wantTear && !strings.Contains(got, tt.tearline) {
 				t.Errorf("want tearline %q in result %q", tt.tearline, got)
@@ -69,7 +74,7 @@ func TestAppendV3NetOrigin(t *testing.T) {
 }
 
 func TestAppendV3NetOriginOrder(t *testing.T) {
-	got := appendV3NetOrigin("body", "--- ViSiON/3 0.1.0/linux", "My BBS")
+	got := AppendV3NetOrigin("body", "--- ViSiON/3 0.1.0/linux", "My BBS", "node1")
 	tearIdx := strings.Index(got, "---")
 	origIdx := strings.Index(got, " * Origin:")
 	if tearIdx >= origIdx {

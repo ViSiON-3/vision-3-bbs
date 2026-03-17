@@ -62,6 +62,12 @@ type MessageManager struct {
 	// OnMessagePosted is called after a message is successfully written to a JAM base.
 	// The callback receives the area and the message details. May be nil.
 	OnMessagePosted func(area *MessageArea, msgNum int, from, to, subject, body string)
+
+	// BodyTransform is called before writing a message to JAM, allowing callers
+	// (e.g. V3Net) to modify the body for the local copy (e.g. appending tearline/origin).
+	// The original (untransformed) body is still passed to OnMessagePosted.
+	// May be nil.
+	BodyTransform func(areaID int, body string) string
 }
 
 // NewMessageManager creates and initializes a new MessageManager.
@@ -518,11 +524,19 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 	}
 	defer b.Close()
 
+	// Apply body transform (e.g. V3Net tearline/origin) for the local JAM copy.
+	// The original body is preserved for OnMessagePosted so the wire message
+	// carries tearline/origin as separate protocol fields, not inline.
+	jamBody := body
+	if mm.BodyTransform != nil {
+		jamBody = mm.BodyTransform(areaID, body)
+	}
+
 	msg := jam.NewMessage()
 	msg.From = from
 	msg.To = to
 	msg.Subject = subject
-	msg.Text = body
+	msg.Text = jamBody
 	msg.DateTime = time.Now()
 
 	if replyToMsgID != "" {
@@ -892,6 +906,24 @@ func (mm *MessageManager) SetLastRead(areaID int, username string, msgNum int) e
 	defer b.Close()
 
 	return b.MarkMessageRead(username, msgNum)
+}
+
+// MarkMessageSent sets the MSG_SENT attribute on a message header.
+// Used by V3Net to indicate a locally-posted message was transmitted to the hub.
+func (mm *MessageManager) MarkMessageSent(areaID, msgNum int) error {
+	b, _, err := mm.openBase(areaID)
+	if err != nil {
+		return err
+	}
+	defer b.Close()
+
+	hdr, err := b.ReadMessageHeader(msgNum)
+	if err != nil {
+		return fmt.Errorf("mark sent: read header: %w", err)
+	}
+
+	hdr.Attribute |= jam.MsgSent
+	return b.UpdateMessageHeader(msgNum, hdr)
 }
 
 // GetNextUnreadMessage returns the next unread message number for a user.

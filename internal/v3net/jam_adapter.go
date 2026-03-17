@@ -28,7 +28,7 @@ func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 	body := "\x01V3NETUUID: " + msg.MsgUUID + "\n" + msg.Body
 
 	// Append tearline and origin so users can see where the message came from.
-	body = appendV3NetOrigin(body, msg.Tearline, msg.Origin)
+	body = AppendV3NetOrigin(body, msg.Tearline, msg.Origin, msg.OriginNode)
 
 	// Parse the date for the message.
 	dateUTC, err := time.Parse(time.RFC3339, msg.DateUTC)
@@ -45,12 +45,12 @@ func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 	return int64(msgNum), nil
 }
 
-// appendV3NetOrigin appends a tearline and origin line to the message body,
+// AppendV3NetOrigin appends a tearline and origin line to the message body,
 // matching the FTN convention:
 //
 //	--- ViSiON/3 0.1.0/linux
-//	 * Origin: My Cool BBS - bbs.example.com
-func appendV3NetOrigin(body, tearline, origin string) string {
+//	 * Origin: My Cool BBS (a1b2c3d4e5f6a7b8)
+func AppendV3NetOrigin(body, tearline, origin, nodeID string) string {
 	// Nothing to append if both are empty.
 	if tearline == "" && origin == "" {
 		return body
@@ -62,7 +62,11 @@ func appendV3NetOrigin(body, tearline, origin string) string {
 		body += tearline + "\n"
 	}
 	if origin != "" {
-		body += fmt.Sprintf(" * Origin: %s\n", origin)
+		if nodeID != "" {
+			body += fmt.Sprintf(" * Origin: %s (%s)\n", origin, nodeID)
+		} else {
+			body += fmt.Sprintf(" * Origin: %s\n", origin)
+		}
 	}
 	return body
 }

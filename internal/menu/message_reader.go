@@ -841,7 +841,11 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	var statusParts []string
 
 	if isV3Net {
-		statusParts = append(statusParts, "V3NET")
+		if isSent {
+			statusParts = append(statusParts, "V3NET SENT")
+		} else {
+			statusParts = append(statusParts, "V3NET")
+		}
 	} else if isEcho {
 		if isSent {
 			statusParts = append(statusParts, "ECHOMAIL SENT")

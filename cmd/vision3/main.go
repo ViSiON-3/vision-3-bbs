@@ -1142,43 +1142,6 @@ func sessionHandler(s ssh.Session) {
 		// Mark user as online
 		userMgr.MarkUserOnline(authenticatedUser.ID)
 
-		// Set default message area if not already set
-		if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
-			for _, area := range messageMgr.ListAreas() {
-				if menu.CheckUserACS(area.ACSRead, authenticatedUser) {
-					authenticatedUser.CurrentMessageAreaID = area.ID
-					authenticatedUser.CurrentMessageAreaTag = area.Tag
-					authenticatedUser.CurrentMsgConferenceID = area.ConferenceID
-					if confMgr != nil {
-						if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
-							authenticatedUser.CurrentMsgConferenceTag = conf.Tag
-						}
-					}
-					break
-				}
-			}
-		}
-		// Set default file area if not already set
-		if authenticatedUser.CurrentFileAreaID == 0 && fileMgr != nil {
-			for _, area := range fileMgr.ListAreas() {
-				if menu.CheckUserACS(area.ACSList, authenticatedUser) {
-					authenticatedUser.CurrentFileAreaID = area.ID
-					authenticatedUser.CurrentFileAreaTag = area.Tag
-					authenticatedUser.CurrentFileConferenceID = area.ConferenceID
-					if confMgr != nil {
-						if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
-							authenticatedUser.CurrentFileConferenceTag = conf.Tag
-						}
-					}
-					break
-				}
-			}
-		}
-		// Persist defaults
-		if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
-			log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
-		}
-
 		currentMenuName = "MAIN"
 	}
 
@@ -1262,6 +1225,43 @@ func sessionHandler(s ssh.Session) {
 		log.Printf("ERROR: Node %d: Reached post-auth loop but authenticatedUser is nil. Logging off.", nodeID)
 		return
 	}
+	// Set default message area if not already set (handles both SSH pre-auth and normal login)
+	if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
+		for _, area := range messageMgr.ListAreas() {
+			if menu.CheckUserACS(area.ACSRead, authenticatedUser) {
+				authenticatedUser.CurrentMessageAreaID = area.ID
+				authenticatedUser.CurrentMessageAreaTag = area.Tag
+				authenticatedUser.CurrentMsgConferenceID = area.ConferenceID
+				if confMgr != nil {
+					if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
+						authenticatedUser.CurrentMsgConferenceTag = conf.Tag
+					}
+				}
+				break
+			}
+		}
+	}
+	// Set default file area if not already set
+	if authenticatedUser.CurrentFileAreaID == 0 && fileMgr != nil {
+		for _, area := range fileMgr.ListAreas() {
+			if menu.CheckUserACS(area.ACSList, authenticatedUser) {
+				authenticatedUser.CurrentFileAreaID = area.ID
+				authenticatedUser.CurrentFileAreaTag = area.Tag
+				authenticatedUser.CurrentFileConferenceID = area.ConferenceID
+				if confMgr != nil {
+					if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
+						authenticatedUser.CurrentFileConferenceTag = conf.Tag
+					}
+				}
+				break
+			}
+		}
+	}
+	// Persist defaults if any were set
+	if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
+		log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
+	}
+
 	log.Printf("Node %d: Entering main loop for authenticated user: %s", nodeID, authenticatedUser.Handle)
 
 	// --- Invisible Login Prompt (users at or above invisibleLevel) ---
@@ -1808,6 +1808,7 @@ func main() {
 				Origin  string
 			}
 			v3netAreaMap := make(map[int]v3netAreaInfo) // area ID → network info
+			nodeID := svc.NodeID()
 			for _, lcfg := range v3netConfig.Leaves {
 				area, ok := messageMgr.GetAreaByTag(lcfg.Board)
 				if !ok {
@@ -1819,8 +1820,23 @@ func main() {
 					log.Printf("ERROR: V3Net leaf %q: %v", lcfg.Network, err)
 					continue
 				}
-				v3netAreaMap[area.ID] = v3netAreaInfo{Network: lcfg.Network, Origin: lcfg.Origin}
+				// Default origin to BBS name if not configured.
+				origin := lcfg.Origin
+				if origin == "" {
+					origin = serverConfig.BoardName
+				}
+				v3netAreaMap[area.ID] = v3netAreaInfo{Network: lcfg.Network, Origin: origin}
 				svc.RegisterArea(area.ID, lcfg.Network)
+			}
+
+			// Append tearline/origin to local JAM copy for V3Net areas so
+			// the user sees the origin on locally-created messages too.
+			messageMgr.BodyTransform = func(areaID int, body string) string {
+				info, ok := v3netAreaMap[areaID]
+				if !ok {
+					return body
+				}
+				return v3net.AppendV3NetOrigin(body, v3net.DefaultTearline(), info.Origin, nodeID)
 			}
 
 			// Hook message posts to forward to V3Net when posted to a networked area.
@@ -1836,6 +1852,11 @@ func main() {
 				msg := v3net.BuildWireMessage(info.Network, svc.NodeID(), area.Name, from, to, subject, body, info.Origin)
 				if err := svc.SendMessage(info.Network, msg); err != nil {
 					log.Printf("ERROR: V3Net: failed to send message to %s: %v", info.Network, err)
+					return
+				}
+				// Mark the local JAM copy as sent so the reader shows "V3NET SENT".
+				if err := messageMgr.MarkMessageSent(area.ID, msgNum); err != nil {
+					log.Printf("WARN: V3Net: failed to mark message %d as sent: %v", msgNum, err)
 				}
 			}
 

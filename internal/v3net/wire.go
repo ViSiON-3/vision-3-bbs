@@ -28,14 +28,14 @@ func BuildWireMessage(network, originNode, originBoard, from, to, subject, body,
 		Subject:     subject,
 		DateUTC:     time.Now().UTC().Format(time.RFC3339),
 		Body:        body,
-		Tearline:    defaultTearline(),
+		Tearline:    DefaultTearline(),
 		Origin:      origin,
 		Kludges:     map[string]any{},
 	}
 }
 
-// defaultTearline returns the standard ViSiON/3 software tearline.
-func defaultTearline() string {
+// DefaultTearline returns the standard ViSiON/3 software tearline.
+func DefaultTearline() string {
 	return fmt.Sprintf("--- ViSiON/3 %s/%s", version.Number, runtime.GOOS)
 }
 

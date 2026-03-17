@@ -23,8 +23,6 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/gliderlabs/ssh"
-	"github.com/google/uuid"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
@@ -40,6 +38,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
+	"github.com/gliderlabs/ssh"
+	"github.com/google/uuid"
 	"golang.org/x/term"
 )
 
@@ -576,7 +576,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["VIEW_FILE"] = runViewFile                              // View file (archives show listing, text gets paged)
 	registry["TYPE_TEXT_FILE"] = runTypeTextFile                     // Type text file with paging
 	registry["LISTFILEAR"] = runListFileAreas                        // <-- ADDED: Register file area list runnable
-	registry["SELECTFILEAREA"] = runSelectFileAreaDispatch             // File area selection (dispatches by fileListingMode)
+	registry["SELECTFILEAREA"] = runSelectFileAreaDispatch           // File area selection (dispatches by fileListingMode)
 	registry["SELECTMSGAREA"] = runSelectMessageAreaLightbar         // Register message area selection runnable (lightbar)
 	registry["CHANGEMSGCONF"] = runChangeMsgConferenceLightbar       // Change message conference (lightbar)
 	registry["NEXTMSGAREA"] = runNextMsgArea                         // Navigate to next message area
@@ -599,15 +599,15 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["OPENDOOR"] = runOpenDoor                               // Prompt and open a door
 	registry["DOORINFO"] = runDoorInfo                               // Show door information
 	registry["UPLOADFILE"] = runUploadFile                           // ZMODEM file upload
-	registry["DOWNLOADFILE"] = runDownloadFile                        // V2-style download: prompt, add to batch, transfer
-	registry["BATCHDOWNLOAD"] = runBatchDownload                      // Download tagged batch files
+	registry["DOWNLOADFILE"] = runDownloadFile                       // V2-style download: prompt, add to batch, transfer
+	registry["BATCHDOWNLOAD"] = runBatchDownload                     // Download tagged batch files
 	registry["CLEAR_BATCH"] = runClearBatch                          // Clear tagged file batch queue
 	registry["SEARCH_FILES"] = runSearchFiles                        // Search files across all areas
 	registry["SHOWFILEINFO"] = runShowFileInfo                       // Show file metadata
 	registry["FILE_NEWSCAN"] = runFileNewscan                        // Scan file areas for new uploads
 	registry["EDITFILERECORD"] = runEditFileRecord                   // Sysop file review queue
 	registry["WANTLIST"] = runWantList                               // File want list
-	registry["FILENEWSCANCONFIG"] = runFileNewscanConfig              // File newscan area config
+	registry["FILENEWSCANCONFIG"] = runFileNewscanConfig             // File newscan area config
 	registry["CFG_FILECOLUMNS"] = runCfgFileColumns                  // Configure file listing columns
 	registry["LISTFILES_EXTENDED"] = runListFilesExtended            // Extended file listing (all columns)
 	registry["QWKDOWNLOAD"] = runQWKDownload                         // QWK mail packet download
@@ -628,32 +628,32 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["CFG_VIEWCONFIG"] = runCfgViewConfig
 	registry["CHAT"] = runChat
 	registry["PAGE"] = runPage
-	registry["SPONSORMENU"] = runSponsorMenu         // Sponsor menu (% key in Messages Menu)
-	registry["SPONSOREDITAREA"] = runSponsorEditArea // Edit current message area fields
-	registry["PRINTNEWS"] = runPrintNews             // Display news new since last login (login sequence)
-	registry["LISTNEWS"] = runListNews               // List/read all news items
-	registry["EDITNEWS"] = runEditNews               // SysOp: news management (Add/Delete/Edit/List/View)
-	registry["VOTE"] = runVote                       // Voting booths system
-	registry["VOTEMANDATORY"] = runVoteOnMandatory   // Mandatory voting check (login sequence)
-	registry["LISTNUV"] = runNUVList                 // List NUV candidates and vote tallies
-	registry["SCANNUV"] = runNUVScan                 // Vote on pending NUV candidates
-	registry["BBSLIST"] = runBBSList                 // List BBS directory entries
-	registry["BBSLISTADD"] = runBBSListAdd           // Add new BBS listing
-	registry["BBSLISTEDIT"] = runBBSListEdit         // Edit BBS listing (owner or sysop)
-	registry["BBSLISTDELETE"] = runBBSListDelete     // Delete BBS listing (owner or sysop)
-	registry["BBSLISTVERIFY"] = runBBSListVerify     // SysOp: toggle verified flag
+	registry["SPONSORMENU"] = runSponsorMenu           // Sponsor menu (% key in Messages Menu)
+	registry["SPONSOREDITAREA"] = runSponsorEditArea   // Edit current message area fields
+	registry["PRINTNEWS"] = runPrintNews               // Display news new since last login (login sequence)
+	registry["LISTNEWS"] = runListNews                 // List/read all news items
+	registry["EDITNEWS"] = runEditNews                 // SysOp: news management (Add/Delete/Edit/List/View)
+	registry["VOTE"] = runVote                         // Voting booths system
+	registry["VOTEMANDATORY"] = runVoteOnMandatory     // Mandatory voting check (login sequence)
+	registry["LISTNUV"] = runNUVList                   // List NUV candidates and vote tallies
+	registry["SCANNUV"] = runNUVScan                   // Vote on pending NUV candidates
+	registry["BBSLIST"] = runBBSList                   // List BBS directory entries
+	registry["BBSLISTADD"] = runBBSListAdd             // Add new BBS listing
+	registry["BBSLISTEDIT"] = runBBSListEdit           // Edit BBS listing (owner or sysop)
+	registry["BBSLISTDELETE"] = runBBSListDelete       // Delete BBS listing (owner or sysop)
+	registry["BBSLISTVERIFY"] = runBBSListVerify       // SysOp: toggle verified flag
 	registry["RUMORSLIST"] = runRumorsList             // List all rumors
-	registry["RUMORSADD"] = runRumorsAdd              // Add a new rumor
-	registry["RUMORSDELETE"] = runRumorsDelete        // Delete a rumor
-	registry["RUMORSSEARCH"] = runRumorsSearch        // Search rumors
-	registry["RUMORSNEWSCAN"] = runRumorsNewscan      // Rumors newscan (since last login)
-	registry["RANDOMRUMOR"] = runRandomRumor          // Display random rumor (login sequence)
+	registry["RUMORSADD"] = runRumorsAdd               // Add a new rumor
+	registry["RUMORSDELETE"] = runRumorsDelete         // Delete a rumor
+	registry["RUMORSSEARCH"] = runRumorsSearch         // Search rumors
+	registry["RUMORSNEWSCAN"] = runRumorsNewscan       // Rumors newscan (since last login)
+	registry["RANDOMRUMOR"] = runRandomRumor           // Display random rumor (login sequence)
 	registry["INFOFORMS"] = runInfoForms               // InfoForms menu (list/fill/view forms)
-	registry["INFOFORMVIEW"] = runInfoFormView          // View own completed infoform
-	registry["INFOFORMHUNT"] = runInfoFormHunt          // SysOp: browse all users' completed forms
-	registry["INFOFORMREQUIRED"] = runInfoFormRequired  // Login sequence: force required forms
-	registry["INFOFORMNUKE"] = runInfoFormNuke          // SysOp: delete all forms for a user
-	registry["V3NETSTATUS"] = runV3NetStatus            // V3Net networking status display
+	registry["INFOFORMVIEW"] = runInfoFormView         // View own completed infoform
+	registry["INFOFORMHUNT"] = runInfoFormHunt         // SysOp: browse all users' completed forms
+	registry["INFOFORMREQUIRED"] = runInfoFormRequired // Login sequence: force required forms
+	registry["INFOFORMNUKE"] = runInfoFormNuke         // SysOp: delete all forms for a user
+	registry["V3NETSTATUS"] = runV3NetStatus           // V3Net networking status display
 }
 
 func runPlaceholderCommand(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
@@ -1770,8 +1770,8 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					}
 				}
 
-				// --- BEGIN Set Default Message Area ---
-				if e.MessageMgr != nil {
+				// --- BEGIN Set Default Message Area (only if not already set from saved prefs) ---
+				if currentUser.CurrentMessageAreaID == 0 && e.MessageMgr != nil {
 					allAreas := e.MessageMgr.ListAreas() // Already sorted by Position
 					log.Printf("DEBUG: Found %d message areas for user %s.", len(allAreas), currentUser.Handle)
 					foundDefaultArea := false
@@ -1790,16 +1790,18 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					}
 					if !foundDefaultArea {
 						log.Printf("WARN: User %s has no access to any message areas.", currentUser.Handle)
-						currentUser.CurrentMessageAreaID = 0 // Set to 0 if no accessible areas found
+						currentUser.CurrentMessageAreaID = 0
 						currentUser.CurrentMessageAreaTag = ""
 					}
-				} else {
-					log.Printf("WARN: Cannot set default message area: MessageMgr is nil.")
+				} else if currentUser.CurrentMessageAreaID != 0 {
+					log.Printf("INFO: User %s has saved message area %d (%s), conference %d (%s)",
+						currentUser.Handle, currentUser.CurrentMessageAreaID, currentUser.CurrentMessageAreaTag,
+						currentUser.CurrentMsgConferenceID, currentUser.CurrentMsgConferenceTag)
 				}
 				// --- END Set Default Message Area ---
 
-				// --- BEGIN Set Default File Area ---
-				if e.FileMgr != nil {
+				// --- BEGIN Set Default File Area (only if not already set from saved prefs) ---
+				if currentUser.CurrentFileAreaID == 0 && e.FileMgr != nil {
 					allFileAreas := e.FileMgr.ListAreas() // Assumes ListAreas is sorted by ID
 					log.Printf("DEBUG: Found %d file areas for user %s.", len(allFileAreas), currentUser.Handle)
 					foundDefaultFileArea := false
@@ -1818,11 +1820,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					}
 					if !foundDefaultFileArea {
 						log.Printf("WARN: User %s has no access to any file areas.", currentUser.Handle)
-						currentUser.CurrentFileAreaID = 0 // Set to 0 if no accessible areas found
+						currentUser.CurrentFileAreaID = 0
 						currentUser.CurrentFileAreaTag = ""
 					}
-				} else {
-					log.Printf("WARN: Cannot set default file area: FileMgr is nil.")
+				} else if currentUser.CurrentFileAreaID != 0 {
+					log.Printf("INFO: User %s has saved file area %d (%s), conference %d (%s)",
+						currentUser.Handle, currentUser.CurrentFileAreaID, currentUser.CurrentFileAreaTag,
+						currentUser.CurrentFileConferenceID, currentUser.CurrentFileConferenceTag)
 				}
 				// --- END Set Default File Area ---
 
@@ -4063,17 +4067,17 @@ func runFullLoginSequence(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	type loginHandler func(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error)
 
 	handlers := map[string]loginHandler{
-		"LASTCALLS":     runLastCallers,
-		"ONELINERS":     runOneliners,
-		"USERSTATS":     runShowStats,
-		"NMAILSCAN":     runNewMailScan,
-		"DISPLAYFILE":   runLoginDisplayFile,
-		"RUNDOOR":       runLoginDoor,
-		"FASTLOGIN":     runFastLogin,
-		"NEWUSERVAL":    runNewUserValidation,
-		"WHOISONLINE":   runLoginWhosOnline,
-		"PRINTNEWS":     runPrintNews,
-		"VOTEMANDATORY": runVoteOnMandatory,
+		"LASTCALLS":        runLastCallers,
+		"ONELINERS":        runOneliners,
+		"USERSTATS":        runShowStats,
+		"NMAILSCAN":        runNewMailScan,
+		"DISPLAYFILE":      runLoginDisplayFile,
+		"RUNDOOR":          runLoginDoor,
+		"FASTLOGIN":        runFastLogin,
+		"NEWUSERVAL":       runNewUserValidation,
+		"WHOISONLINE":      runLoginWhosOnline,
+		"PRINTNEWS":        runPrintNews,
+		"VOTEMANDATORY":    runVoteOnMandatory,
 		"CHECKNUV":         runCheckNUV,
 		"RANDOMRUMOR":      runRandomRumor,
 		"INFOFORMREQUIRED": runInfoFormRequired,
@@ -4525,7 +4529,6 @@ func drawLightbarMenu(terminal *term.Terminal, backgroundBytes []byte, options [
 
 	return nil
 }
-
 
 // PromptYesNo is the canonical Yes/No prompt entrypoint for menu flows.
 // defaultYes controls which option is pre-selected (true = Yes, false = No).
@@ -7315,11 +7318,11 @@ func runPurgeUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	for _, p := range purged {
 		logEntry := user.AdminActivityLog{
 			AdminHandle:  currentUser.Handle,
-			AdminID:       currentUser.ID,
-			TargetUserID:  p.ID,
-			TargetHandle:  p.Handle,
-			Action:        "PURGE_USER",
-			Notes:         fmt.Sprintf("Permanently purged after %d-day retention period", retentionDays),
+			AdminID:      currentUser.ID,
+			TargetUserID: p.ID,
+			TargetHandle: p.Handle,
+			Action:       "PURGE_USER",
+			Notes:        fmt.Sprintf("Permanently purged after %d-day retention period", retentionDays),
 		}
 		_ = userManager.LogAdminActivity(logEntry)
 	}
