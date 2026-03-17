@@ -130,8 +130,15 @@ func (h *Hub) Close() error {
 	h.chatLimiter.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	h.server.Shutdown(ctx)
-	return h.db.Close()
+	shutdownErr := h.server.Shutdown(ctx)
+	dbErr := h.db.Close()
+	if shutdownErr != nil && dbErr != nil {
+		return fmt.Errorf("hub: shutdown: %w; db close: %v", shutdownErr, dbErr)
+	}
+	if shutdownErr != nil {
+		return shutdownErr
+	}
+	return dbErr
 }
 
 // Subscribers returns the subscriber store (used in tests).

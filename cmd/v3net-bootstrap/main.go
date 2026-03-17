@@ -61,7 +61,7 @@ func main() {
 			Access:           protocol.AreaAccess{Mode: protocol.AccessModeOpen},
 			Policy: protocol.AreaPolicy{
 				MaxBodyBytes: 64000,
-				AllowANSI:   true,
+				AllowANSI:    true,
 			},
 		})
 	}
@@ -104,7 +104,8 @@ func main() {
 	req.Header.Set("X-V3Net-Node-ID", ks.NodeID())
 	req.Header.Set("X-V3Net-Signature", sig)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatalf("POST NAL: %v", err)
 	}

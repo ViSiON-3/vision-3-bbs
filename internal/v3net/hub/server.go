@@ -24,10 +24,10 @@ func (h *Hub) newMux() http.Handler {
 		case path == "/v3net/v1/subscribe" && r.Method == http.MethodPost:
 			h.handleSubscribe(w, r)
 			return
-		case strings.HasSuffix(path, "/info") && r.Method == http.MethodGet:
+		case strings.HasPrefix(path, "/v3net/") && strings.HasSuffix(path, "/info") && r.Method == http.MethodGet:
 			h.handleNetworkInfo(w, r)
 			return
-		case strings.HasSuffix(path, "/nal") && r.Method == http.MethodGet:
+		case strings.HasPrefix(path, "/v3net/") && strings.HasSuffix(path, "/nal") && r.Method == http.MethodGet:
 			h.handleGetNAL(w, r)
 			return
 		}

@@ -58,6 +58,8 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 			localNum, err := l.cfg.JAMWriter.WriteMessage(msg)
 			if err != nil {
 				slog.Error("leaf: write message to JAM", "uuid", msg.MsgUUID, "error", err)
+				// Advance cursor past the failed message to avoid infinite retry loops.
+				cursor = msg.MsgUUID
 				continue
 			}
 

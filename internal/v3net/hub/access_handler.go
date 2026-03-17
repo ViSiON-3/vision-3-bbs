@@ -215,8 +215,12 @@ func (h *Hub) handleApproveAccess(w http.ResponseWriter, r *http.Request) {
 
 	// Update access request status and area subscriptions.
 	for _, nid := range req.NodeIDs {
-		h.accessRequests.Resolve(network, tag, nid, "approved")
-		h.areaSubscriptions.SetStatus(nid, network, tag, "active")
+		if err := h.accessRequests.Resolve(network, tag, nid, "approved"); err != nil {
+			slog.Error("approve access request", "node", nid, "network", network, "tag", tag, "error", err)
+		}
+		if err := h.areaSubscriptions.SetStatus(nid, network, tag, "active"); err != nil {
+			slog.Error("set subscription active", "node", nid, "network", network, "tag", tag, "error", err)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -254,8 +258,12 @@ func (h *Hub) handleDenyAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, nid := range req.NodeIDs {
-		h.accessRequests.Resolve(network, tag, nid, "denied")
-		h.areaSubscriptions.SetStatus(nid, network, tag, "denied")
+		if err := h.accessRequests.Resolve(network, tag, nid, "denied"); err != nil {
+			slog.Error("deny access request", "node", nid, "network", network, "tag", tag, "error", err)
+		}
+		if err := h.areaSubscriptions.SetStatus(nid, network, tag, "denied"); err != nil {
+			slog.Error("set subscription denied", "node", nid, "network", network, "tag", tag, "error", err)
+		}
 
 		// Notify denied node.
 		ev, _ := protocol.NewEvent(protocol.EventSubscriptionDenied, protocol.SubscriptionDeniedPayload{

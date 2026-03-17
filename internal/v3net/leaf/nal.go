@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"time"
@@ -58,15 +59,18 @@ func (l *Leaf) ProposeArea(req protocol.AreaProposalRequest) (*protocol.Proposal
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		var pr protocol.ProposalResponse
+		if json.Unmarshal(body, &pr) == nil && pr.Error != "" {
+			return nil, fmt.Errorf("hub: %s", pr.Error)
+		}
+		return nil, fmt.Errorf("leaf: propose returned %d: %s", resp.StatusCode, string(body))
+	}
+
 	var pr protocol.ProposalResponse
 	if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
 		return nil, fmt.Errorf("leaf: decode proposal response: %w", err)
-	}
-	if resp.StatusCode != 200 {
-		if pr.Error != "" {
-			return nil, fmt.Errorf("hub: %s", pr.Error)
-		}
-		return nil, fmt.Errorf("leaf: propose returned %d", resp.StatusCode)
 	}
 	return &pr, nil
 }

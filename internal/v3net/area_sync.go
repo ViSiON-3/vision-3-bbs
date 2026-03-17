@@ -68,6 +68,9 @@ func areaNameFromTag(tag, network string) string {
 	}
 
 	// Try to use a nice network name prefix.
+	if len(network) == 0 {
+		return strings.Join(words, " ")
+	}
 	netName := strings.ToUpper(network[:1]) + network[1:]
 	return netName + " " + strings.Join(words, " ")
 }

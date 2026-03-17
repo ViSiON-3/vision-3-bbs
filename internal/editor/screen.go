@@ -161,13 +161,15 @@ func (s *Screen) LoadFooterTemplate(menuSetPath string) error {
 	fixedChars := 4 + 1 + trailingDashes + 1 + len(ctrlText) + 3 // 43
 	maxWidth := s.termWidth - 1                                  // 79 cols max to avoid wrap on col 80
 	availForNameAndDashes := maxWidth - fixedChars
-	nameLen := len([]rune(boardName))
+	if availForNameAndDashes < 0 {
+		availForNameAndDashes = 0
+	}
+	nameRunes := []rune(boardName)
+	nameLen := len(nameRunes)
 	if nameLen > availForNameAndDashes {
-		nameRunes := []rune(boardName)
 		nameLen = availForNameAndDashes
-		if nameLen < 3 {
-			nameLen = 3
-		}
+	}
+	if nameLen < len(nameRunes) {
 		boardName = string(nameRunes[:nameLen])
 	}
 	dashCount := availForNameAndDashes - nameLen

@@ -34,8 +34,12 @@ func (l *Leaf) runSSE(ctx context.Context) {
 			return
 		}
 
-		slog.Warn("leaf: SSE disconnected", "network", l.cfg.Network, "error", err)
-		attempt++
+		if err == nil {
+			attempt = 0
+		} else {
+			slog.Warn("leaf: SSE disconnected", "network", l.cfg.Network, "error", err)
+			attempt++
+		}
 		delay := backoff(attempt)
 		slog.Info("leaf: SSE reconnecting", "network", l.cfg.Network, "delay", delay)
 

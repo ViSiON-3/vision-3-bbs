@@ -109,7 +109,7 @@ func (l *Leaf) signedPost(path string, body []byte) error {
 		return fmt.Errorf("leaf: sign request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("leaf: create request: %w", err)
 	}
@@ -144,7 +144,7 @@ func (l *Leaf) signedPostWithResponse(path string, body []byte) (*http.Response,
 		return nil, fmt.Errorf("leaf: sign request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("leaf: create request: %w", err)
 	}

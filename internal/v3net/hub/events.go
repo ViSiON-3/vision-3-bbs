@@ -47,6 +47,7 @@ func (b *Broadcaster) Subscribe(network string) (<-chan protocol.Event, func()) 
 			if c == ch {
 				b.subs[network] = append(channels[:i], channels[i+1:]...)
 				close(ch)
+				ch = nil // prevent double-close
 				return
 			}
 		}

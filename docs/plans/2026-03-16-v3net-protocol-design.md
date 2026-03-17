@@ -16,7 +16,7 @@ Hub-and-leaf topology:
 
 ### Node Identity
 
-`node_id` = lowercase hex of the first 16 bytes of `SHA-256(raw_ed25519_public_key)` (16 hex chars = 8 bytes). Generated once on first run, persisted at `v3net.keystore_path`.
+`node_id` = lowercase hex of the first 8 bytes of `SHA-256(raw_ed25519_public_key)` (16 hex chars = 8 bytes). Generated once on first run, persisted at `v3net.keystore_path`.
 
 ### Authentication
 

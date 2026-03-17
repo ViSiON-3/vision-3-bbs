@@ -176,7 +176,7 @@ func (s *Service) SendLogon(handle string) {
 	for _, l := range s.leaves {
 		go func(lf *leaf.Leaf) {
 			if err := lf.SendLogon(handle); err != nil {
-				slog.Warn("v3net: SendLogon failed", "handle", handle, "error", err)
+				slog.Warn("v3net: SendLogon failed", "error", err)
 			}
 		}(l)
 	}
@@ -188,7 +188,7 @@ func (s *Service) SendLogoff(handle string) {
 	for _, l := range s.leaves {
 		go func(lf *leaf.Leaf) {
 			if err := lf.SendLogoff(handle); err != nil {
-				slog.Warn("v3net: SendLogoff failed", "handle", handle, "error", err)
+				slog.Warn("v3net: SendLogoff failed", "error", err)
 			}
 		}(l)
 	}

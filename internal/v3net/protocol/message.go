@@ -94,7 +94,8 @@ func (m *Message) NeedsTruncation() bool {
 }
 
 // Truncate truncates the body to MaxBodyBytes at a valid UTF-8 rune boundary
-// and sets the v3net_truncated kludge.
+// and sets the v3net_truncated kludge. The resulting body may be shorter than
+// MaxBodyBytes when the boundary falls inside a multi-byte rune.
 func (m *Message) Truncate() {
 	if len(m.Body) <= MaxBodyBytes {
 		return

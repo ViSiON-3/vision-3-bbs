@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -47,7 +48,9 @@ func NewProposalStore(db *sql.DB) (*ProposalStore, error) {
 // newUUID generates a UUID v4 string.
 func newUUID() string {
 	var b [16]byte
-	_, _ = rand.Read(b[:])
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("crypto/rand.Read failed: " + err.Error())
+	}
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
@@ -332,7 +335,7 @@ func (h *Hub) handleApproveProposal(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&overrides) // ignore errors — overrides are optional
 
 	if err := h.approveProposal(network, proposalID, overrides.AccessMode, false); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, `{"error":"proposal not found or not pending"}`, http.StatusNotFound)
 			return
 		}
@@ -366,7 +369,7 @@ func (h *Hub) handleRejectProposal(w http.ResponseWriter, r *http.Request) {
 		`SELECT tag, from_node FROM area_proposals WHERE id = ? AND network = ? AND status = 'pending'`,
 		proposalID, network,
 	).Scan(&tag, &fromNode)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, `{"error":"proposal not found or not pending"}`, http.StatusNotFound)
 		return
 	}

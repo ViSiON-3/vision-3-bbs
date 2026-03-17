@@ -74,8 +74,8 @@ func runV3NetPropose(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, _ 
 	statusMsg := ""
 
 	// Layout constants.
-	formStartRow := 5  // first field row
-	fieldLabelCol := 3 // label column
+	formStartRow := 5   // first field row
+	fieldLabelCol := 3  // label column
 	fieldValueCol := 18 // value column
 
 	renderForm := func() {
@@ -156,7 +156,7 @@ func runV3NetPropose(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, _ 
 		// Clear the value area and show cursor.
 		var buf strings.Builder
 		buf.WriteString(ansi.MoveCursor(row, fieldValueCol))
-		buf.WriteString("\x1b[K") // clear to end of line
+		buf.WriteString("\x1b[K")    // clear to end of line
 		buf.WriteString("\x1b[?25h") // show cursor
 		buf.Write(ansi.ReplacePipeCodes([]byte("|15")))
 		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
@@ -319,12 +319,12 @@ func runV3NetPropose(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, _ 
 			}
 
 			req := protocol.AreaProposalRequest{
-				Tag:        tag,
-				Name:       name,
+				Tag:         tag,
+				Name:        name,
 				Description: strings.TrimSpace(fields[fldDesc].value),
-				Language:   strings.TrimSpace(fields[fldLang].value),
-				AccessMode: fields[fldAccess].value,
-				AllowANSI:  fields[fldANSI].value == "Yes",
+				Language:    strings.TrimSpace(fields[fldLang].value),
+				AccessMode:  fields[fldAccess].value,
+				AllowANSI:   fields[fldANSI].value == "Yes",
 			}
 			if req.Language == "" {
 				req.Language = "en"
@@ -344,7 +344,9 @@ func runV3NetPropose(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, _ 
 			renderForm()
 
 			// Wait for a keypress, then return.
-			ih.ReadKey()
+			if _, err := ih.ReadKey(); err != nil {
+				return nil, "", err
+			}
 			return nil, "", nil
 
 		case 'q', 'Q', editor.KeyEsc:
@@ -376,7 +378,7 @@ func proposeShowMessage(e *MenuExecutor, terminal *term.Terminal, s ssh.Session,
 	terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 
 	pausePrompt := e.LoadedStrings.PauseString
-	if pausePrompt == ""  {
+	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
 	if err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight); err != nil {
