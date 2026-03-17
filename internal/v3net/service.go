@@ -18,6 +18,10 @@ import (
 )
 
 // Service manages V3Net hub and leaf lifecycle.
+//
+// leaves, leafByNetwork, and areaToNetwork are populated during initialization
+// (via AddLeaf/RegisterArea) before Start() is called, and are read-only after
+// that point. No mutex is needed for concurrent read access.
 type Service struct {
 	cfg      config.V3NetConfig
 	ks       *keystore.Keystore
@@ -26,9 +30,11 @@ type Service struct {
 	leaves   []*leaf.Leaf
 
 	// leafByNetwork maps network name to its leaf for message sending.
+	// Populated at init time only; read-only after Start().
 	leafByNetwork map[string]*leaf.Leaf
 
 	// areaToNetwork maps message area ID to its V3Net network name.
+	// Populated at init time only; read-only after Start().
 	areaToNetwork map[int]string
 
 	// BBSName and BBSHost are sent in subscribe requests.
@@ -140,6 +146,9 @@ func (s *Service) Start(ctx context.Context) {
 
 // Close releases resources held by the service.
 func (s *Service) Close() error {
+	for _, l := range s.leaves {
+		l.Close()
+	}
 	if s.hub != nil {
 		s.hub.Close()
 	}

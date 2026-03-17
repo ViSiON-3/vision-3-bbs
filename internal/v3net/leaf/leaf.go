@@ -64,6 +64,11 @@ func (l *Leaf) onEvent(ev protocol.Event) {
 	}
 }
 
+// Close releases resources held by the leaf (idle HTTP connections, etc.).
+func (l *Leaf) Close() {
+	l.client.CloseIdleConnections()
+}
+
 // Start begins the polling and SSE goroutines. Blocks until ctx is cancelled.
 func (l *Leaf) Start(ctx context.Context) {
 	slog.Info("leaf: starting", "network", l.cfg.Network, "hub", l.cfg.HubURL)

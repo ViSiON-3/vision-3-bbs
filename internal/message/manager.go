@@ -350,6 +350,7 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 			delete(mm.areasByEchoTag, area.EchoTag)
 		}
 		mm.mu.Unlock()
+		log.Printf("ERROR: Rolling back area %q after save failure: %v", area.Tag, err)
 		return 0, fmt.Errorf("save areas after add: %w", err)
 	}
 	return area.ID, nil
