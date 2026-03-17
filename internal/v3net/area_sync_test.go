@@ -10,7 +10,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
-func TestSyncAreasCreatessMissing(t *testing.T) {
+func TestSyncAreasCreatesMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "config")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
