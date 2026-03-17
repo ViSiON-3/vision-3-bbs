@@ -28,6 +28,9 @@ type Service struct {
 	// leafByNetwork maps network name to its leaf for message sending.
 	leafByNetwork map[string]*leaf.Leaf
 
+	// areaToNetwork maps message area ID to its V3Net network name.
+	areaToNetwork map[int]string
+
 	// BBSName and BBSHost are sent in subscribe requests.
 	BBSName string
 	BBSHost string
@@ -51,6 +54,7 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 		ks:            ks,
 		dedupIdx:      ix,
 		leafByNetwork: make(map[string]*leaf.Leaf),
+		areaToNetwork: make(map[int]string),
 	}
 
 	// Initialize hub if enabled.
@@ -167,16 +171,26 @@ func (s *Service) SendMessage(network string, msg protocol.Message) error {
 }
 
 // SendLogon notifies all connected hubs of a user logon.
+// Runs asynchronously so it never blocks the caller's session.
 func (s *Service) SendLogon(handle string) {
 	for _, l := range s.leaves {
-		l.SendLogon(handle)
+		go func(lf *leaf.Leaf) {
+			if err := lf.SendLogon(handle); err != nil {
+				slog.Warn("v3net: SendLogon failed", "handle", handle, "error", err)
+			}
+		}(l)
 	}
 }
 
 // SendLogoff notifies all connected hubs of a user logoff.
+// Runs asynchronously so it never blocks the caller's session.
 func (s *Service) SendLogoff(handle string) {
 	for _, l := range s.leaves {
-		l.SendLogoff(handle)
+		go func(lf *leaf.Leaf) {
+			if err := lf.SendLogoff(handle); err != nil {
+				slog.Warn("v3net: SendLogoff failed", "handle", handle, "error", err)
+			}
+		}(l)
 	}
 }
 
@@ -197,4 +211,17 @@ func (s *Service) LeafNetworks() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// RegisterArea associates a message area ID with a V3Net network name.
+// Called during startup so the message reader can identify V3Net areas.
+func (s *Service) RegisterArea(areaID int, network string) {
+	slog.Info("v3net: registering area", "area_id", areaID, "network", network)
+	s.areaToNetwork[areaID] = network
+}
+
+// NetworkForArea returns the V3Net network name for a message area, or empty
+// string if the area is not a V3Net-networked area.
+func (s *Service) NetworkForArea(areaID int) string {
+	return s.areaToNetwork[areaID]
 }

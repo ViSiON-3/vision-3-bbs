@@ -29,7 +29,8 @@ type Message struct {
 	Subject     string         `json:"subject"`
 	DateUTC     string         `json:"date_utc"`
 	Body        string         `json:"body"`
-	Tearline    string         `json:"tearline,omitempty"`
+	Tearline    string         `json:"tearline,omitempty"` // Software tearline (e.g. "--- ViSiON/3 0.1.0/linux")
+	Origin      string         `json:"origin,omitempty"`   // User-defined origin line (e.g. "My Cool BBS - bbs.example.com")
 	Attributes  uint32         `json:"attributes"`
 	Kludges     map[string]any `json:"kludges"`
 }

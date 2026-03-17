@@ -911,6 +911,7 @@ type V3NetLeafConfig struct {
 	Network      string `json:"network"`
 	Board        string `json:"board"`        // Local message area tag to write received messages
 	PollInterval string `json:"pollInterval"` // Duration string (e.g., "5m")
+	Origin       string `json:"origin,omitempty"` // Origin line text (e.g. "My Cool BBS - bbs.example.com")
 }
 
 // EventConfig defines a scheduled event configuration

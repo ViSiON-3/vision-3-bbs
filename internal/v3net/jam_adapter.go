@@ -2,6 +2,7 @@ package v3net
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -20,10 +21,14 @@ func NewJAMAdapter(mgr *message.MessageManager, areaID int) *JAMAdapter {
 }
 
 // WriteMessage writes a V3Net protocol message to the local JAM base.
-// It prepends a V3NETUUID kludge line to the body for UUID recovery.
+// It prepends a V3NETUUID kludge line to the body for UUID recovery and
+// appends the tearline + origin line (matching FTN echomail convention).
 func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 	// Prepend UUID kludge for recovery if dedup index is lost.
 	body := "\x01V3NETUUID: " + msg.MsgUUID + "\n" + msg.Body
+
+	// Append tearline and origin so users can see where the message came from.
+	body = appendV3NetOrigin(body, msg.Tearline, msg.Origin)
 
 	// Parse the date for the message.
 	dateUTC, err := time.Parse(time.RFC3339, msg.DateUTC)
@@ -38,4 +43,26 @@ func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 	}
 
 	return int64(msgNum), nil
+}
+
+// appendV3NetOrigin appends a tearline and origin line to the message body,
+// matching the FTN convention:
+//
+//	--- ViSiON/3 0.1.0/linux
+//	 * Origin: My Cool BBS - bbs.example.com
+func appendV3NetOrigin(body, tearline, origin string) string {
+	// Nothing to append if both are empty.
+	if tearline == "" && origin == "" {
+		return body
+	}
+	if !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	if tearline != "" {
+		body += tearline + "\n"
+	}
+	if origin != "" {
+		body += fmt.Sprintf(" * Origin: %s\n", origin)
+	}
+	return body
 }

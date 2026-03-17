@@ -135,5 +135,10 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			Get: func() string { return l.PollInterval },
 			Set: func(val string) error { l.PollInterval = val; return nil },
 		},
+		{
+			Label: "Origin", Help: "Origin line identifying your BBS on this network (e.g. My Cool BBS - bbs.example.com)", Type: ftString, Col: 3, Row: 5, Width: 49,
+			Get: func() string { return l.Origin },
+			Set: func(val string) error { l.Origin = val; return nil },
+		},
 	}
 }

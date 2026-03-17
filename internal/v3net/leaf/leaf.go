@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
@@ -25,7 +26,7 @@ func New(cfg Config) *Leaf {
 	}
 	l := &Leaf{
 		cfg:    cfg,
-		client: &http.Client{},
+		client: &http.Client{Timeout: 10 * time.Second},
 	}
 	if cfg.OnEvent != nil {
 		l.eventCb.Store(cfg.OnEvent)

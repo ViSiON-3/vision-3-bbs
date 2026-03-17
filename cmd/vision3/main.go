@@ -1803,7 +1803,11 @@ func main() {
 			v3netService = svc
 
 			// Configure leaf clients for each subscribed network.
-			v3netAreaToNetwork := make(map[int]string) // area ID → network name
+			type v3netAreaInfo struct {
+				Network string
+				Origin  string
+			}
+			v3netAreaMap := make(map[int]v3netAreaInfo) // area ID → network info
 			for _, lcfg := range v3netConfig.Leaves {
 				area, ok := messageMgr.GetAreaByTag(lcfg.Board)
 				if !ok {
@@ -1815,22 +1819,23 @@ func main() {
 					log.Printf("ERROR: V3Net leaf %q: %v", lcfg.Network, err)
 					continue
 				}
-				v3netAreaToNetwork[area.ID] = lcfg.Network
+				v3netAreaMap[area.ID] = v3netAreaInfo{Network: lcfg.Network, Origin: lcfg.Origin}
+				svc.RegisterArea(area.ID, lcfg.Network)
 			}
 
 			// Hook message posts to forward to V3Net when posted to a networked area.
 			// Skip messages imported from V3Net (contain the UUID kludge) to prevent feedback loops.
 			messageMgr.OnMessagePosted = func(area *message.MessageArea, msgNum int, from, to, subject, body string) {
-				network, ok := v3netAreaToNetwork[area.ID]
+				info, ok := v3netAreaMap[area.ID]
 				if !ok {
 					return
 				}
-				if strings.Contains(body, "\x01V3NETUUID: ") {
+				if strings.HasPrefix(body, "\x01V3NETUUID: ") {
 					return
 				}
-				msg := v3net.BuildWireMessage(network, svc.NodeID(), area.Name, from, to, subject, body)
-				if err := svc.SendMessage(network, msg); err != nil {
-					log.Printf("ERROR: V3Net: failed to send message to %s: %v", network, err)
+				msg := v3net.BuildWireMessage(info.Network, svc.NodeID(), area.Name, from, to, subject, body, info.Origin)
+				if err := svc.SendMessage(info.Network, msg); err != nil {
+					log.Printf("ERROR: V3Net: failed to send message to %s: %v", info.Network, err)
 				}
 			}
 

@@ -1,14 +1,19 @@
 package v3net
 
 import (
+	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
+	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 	"github.com/google/uuid"
 )
 
 // BuildWireMessage constructs a V3Net protocol message from local post data.
-func BuildWireMessage(network, originNode, originBoard, from, to, subject, body string) protocol.Message {
+// The origin parameter is the user-defined origin line text (e.g. "My Cool BBS").
+// The tearline is always the standard ViSiON/3 software identifier.
+func BuildWireMessage(network, originNode, originBoard, from, to, subject, body, origin string) protocol.Message {
 	uuid := newUUID()
 	return protocol.Message{
 		V3Net:       protocol.ProtocolVersion,
@@ -23,8 +28,15 @@ func BuildWireMessage(network, originNode, originBoard, from, to, subject, body 
 		Subject:     subject,
 		DateUTC:     time.Now().UTC().Format(time.RFC3339),
 		Body:        body,
+		Tearline:    defaultTearline(),
+		Origin:      origin,
 		Kludges:     map[string]any{},
 	}
+}
+
+// defaultTearline returns the standard ViSiON/3 software tearline.
+func defaultTearline() string {
+	return fmt.Sprintf("--- ViSiON/3 %s/%s", version.Number, runtime.GOOS)
 }
 
 func newUUID() string {

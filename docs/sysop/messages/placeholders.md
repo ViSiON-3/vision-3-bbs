@@ -58,8 +58,9 @@ The visual placeholder format is particularly useful for ANSI art templates wher
 | `@W@` | Message time (`h:mm am/pm`)                                                                                                         |
 | `@P@` | Reply-to message number (e.g., `12`), or `None` if the message is not a reply                                                       |
 | `@E@` | Thread reply count — number of other messages with the same subject (e.g., `3`). Returns `0` if no replies                          |
-| `@O@` | Origin FTN address (if present)                                                                                                     |
+| `@O@` | Origin address: FTN address for FTN areas, V3Net node ID for V3Net areas                                                            |
 | `@A@` | Destination FTN address (if present)                                                                                                |
+| `@I@` | V3Net network name (e.g., `felonynet`). Empty if the area is not V3Net-networked                                                    |
 | `@Z@` | Combined conference and area name (format: `CONF NAME > AREA NAME`)                                                                 |
 | `@X@` | Combined conference/area and message count (format: `CONF NAME > AREA NAME [current/total]`)                                        |
 | `@K@` | Current node number                                                                                                                 |
@@ -354,7 +355,7 @@ If you have old templates using `|X` format, they will continue to work. To conv
 1. Replace all `|B` with `@B@`
 2. Replace all `|T` with `@T@`
 3. Replace all `|F` with `@F@`
-4. (Continue for all codes: B, T, F, S, U, M, L, #, N, D, W, P, E, O, A)
+4. (Continue for all codes: B, T, F, S, U, M, L, #, N, D, W, P, E, O, A, I)
 5. Optionally add width constraints for better layout control
 6. Consider using new `@Z@` placeholder for combined conference/area display (not available in legacy format)
 

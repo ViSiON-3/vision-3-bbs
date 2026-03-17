@@ -166,7 +166,7 @@ readerLoop:
 				replyCount = count
 			}
 		}
-		substitutions := buildMsgSubstitutions(currentMsg, currentAreaTag, currentMsgNum, totalMsgCount, currentUser.AccessLevel, !templateUsesUserNote, replyCount, confName, areaName, e.MessageMgr, currentAreaID, userManager, nodeNumber)
+		substitutions := buildMsgSubstitutions(currentMsg, currentAreaTag, currentMsgNum, totalMsgCount, currentUser.AccessLevel, !templateUsesUserNote, replyCount, confName, areaName, e.MessageMgr, currentAreaID, userManager, nodeNumber, e.V3NetStatus)
 		// For CP437 terminals, convert UTF-8 substitution values to CP437 bytes so that
 		// multi-byte runes (e.g. Cyrillic from FTN UTF-8 messages) render as '?' instead
 		// of raw UTF-8 bytes that display as CP437 box-drawing characters.
@@ -769,7 +769,7 @@ func convertSubsToCP437(subs map[byte]string) map[byte]string {
 }
 
 // buildMsgSubstitutions creates the Pascal-style substitution map for MSGHDR templates.
-func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, totalMsgs int, userLevel int, includeNoteInFrom bool, replyCount int, confName string, areaName string, msgMgr *message.MessageManager, areaID int, userMgr *user.UserMgr, nodeNumber int) map[byte]string {
+func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, totalMsgs int, userLevel int, includeNoteInFrom bool, replyCount int, confName string, areaName string, msgMgr *message.MessageManager, areaID int, userMgr *user.UserMgr, nodeNumber int, v3netStatus V3NetStatusProvider) map[byte]string {
 	// Import jam constants
 	const (
 		msgTypeLocal = 0x00800000
@@ -787,6 +787,20 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	isRead := (msg.Attributes & msgRead) != 0
 	isPrivate := (msg.Attributes & msgPrivate) != 0
 
+	// Check if this area is V3Net-networked.
+	v3netNetwork := ""
+	v3netNodeID := ""
+	if v3netStatus != nil {
+		v3netNetwork = v3netStatus.NetworkForArea(areaID)
+		if v3netNetwork != "" {
+			v3netNodeID = v3netStatus.NodeID()
+		}
+		log.Printf("DEBUG: V3Net check: areaID=%d, v3netNetwork=%q, v3netNodeID=%q", areaID, v3netNetwork, v3netNodeID)
+	} else {
+		log.Printf("DEBUG: V3Net check: v3netStatus is nil, areaID=%d", areaID)
+	}
+	isV3Net := v3netNetwork != ""
+
 	// Look up the message author's user note from users.json
 	userNoteToUse := ""
 	if userMgr != nil {
@@ -802,8 +816,8 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		truncatedNote = userNoteToUse[:maxUserNoteLen-3] + "..."
 	}
 
-	// Build From field with user note and/or FidoNet address.
-	// Names are truncated if needed to preserve the FTN address suffix,
+	// Build From field with user note and/or network address.
+	// Names are truncated if needed to preserve the address suffix,
 	// preventing display like "(21:4/158" with a missing closing paren.
 	fromStr := msg.From
 	if includeNoteInFrom && truncatedNote != "" && msg.OrigAddr != "" {
@@ -813,7 +827,7 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		// Just user note
 		fromStr = fmt.Sprintf("%s \"%s\"", msg.From, truncatedNote)
 	} else if msg.OrigAddr != "" {
-		// Just FidoNet address
+		// FidoNet address
 		fromStr = buildNameWithAddr(msg.From, msg.OrigAddr)
 	}
 
@@ -823,11 +837,12 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		toStr = buildNameWithAddr(msg.To, msg.DestAddr)
 	}
 
-	// Build message status string from message attributes
+	// Build message status string from message attributes and network type.
 	var statusParts []string
 
-	// Determine message type
-	if isEcho {
+	if isV3Net {
+		statusParts = append(statusParts, "V3NET")
+	} else if isEcho {
 		if isSent {
 			statusParts = append(statusParts, "ECHOMAIL SENT")
 		} else {
@@ -867,13 +882,19 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		// If neither works, leave as "None" — no confusing text for users
 	}
 
+	// Origin address: FTN address for FTN areas, V3Net node ID for V3Net areas.
+	originAddr := msg.OrigAddr
+	if isV3Net && originAddr == "" {
+		originAddr = v3netNodeID
+	}
+
 	return map[byte]string{
 		'B': areaTag,
 		'T': msg.Subject,
-		'F': fromStr,                 // From with FidoNet address
-		'S': toStr,                   // To with FidoNet address
+		'F': fromStr,                 // From with network address
+		'S': toStr,                   // To with network address
 		'U': userNoteToUse,           // User note from user profile (local only)
-		'M': msgStatusStr,            // Message status (LOCAL, PRIVATE, ECHOMAIL, NETMAIL)
+		'M': msgStatusStr,            // Message status (LOCAL, ECHOMAIL, NETMAIL, V3NET, etc.)
 		'L': strconv.Itoa(userLevel), // User level/access level
 		'#': strconv.Itoa(msgNum),
 		'N': strconv.Itoa(totalMsgs),
@@ -882,12 +903,13 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		'W': msg.DateTime.Format("3:04 pm"),
 		'P': replyStr,
 		'E': strconv.Itoa(replyCount),
-		'O': msg.OrigAddr,                                                          // Origin address
+		'O': originAddr,                                                            // Origin: FTN address or V3Net node ID
 		'A': msg.DestAddr,                                                          // Destination address
 		'Z': fmt.Sprintf("%s > %s", confName, areaName),                            // Conference > Area Name
 		'V': fmt.Sprintf("%d of %d", msgNum, totalMsgs),                            // Verbose count: "1 of 24"
 		'X': fmt.Sprintf("%s > %s [%d/%d]", confName, areaName, msgNum, totalMsgs), // Conference > Area [current/total]
 		'K': strconv.Itoa(nodeNumber),                                              // Node number
+		'I': v3netNetwork,                                                          // V3Net network name (empty if not V3Net)
 	}
 }
 

@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -621,6 +621,42 @@ func runListMsgs(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			if nextAction == "LOGOFF" {
 				return currentUser, "LOGOFF", nil
 			}
+
+			// Rebuild list to pick up posted/deleted messages and updated lastread markers
+			newEntries, newLastRead, rebuildErr := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle)
+			if rebuildErr != nil {
+				log.Printf("ERROR: Node %d: Failed to rebuild message list: %v", nodeNumber, rebuildErr)
+			} else {
+				state.Entries = newEntries
+				state.TotalMessages = len(newEntries)
+				state.LastRead = newLastRead
+
+				// Clamp page/selection if messages were deleted
+				totalPages := (state.TotalMessages + state.ItemsPerPage - 1) / state.ItemsPerPage
+				if totalPages < 1 {
+					totalPages = 1
+				}
+				if state.CurrentPage > totalPages {
+					state.CurrentPage = totalPages
+				}
+				_, end := calculatePagination(len(state.Entries), state.ItemsPerPage, state.CurrentPage)
+				start, _ := calculatePagination(len(state.Entries), state.ItemsPerPage, state.CurrentPage)
+				itemsOnPage := end - start
+				if state.SelectedIndex >= itemsOnPage {
+					state.SelectedIndex = itemsOnPage - 1
+				}
+				if state.SelectedIndex < 0 {
+					state.SelectedIndex = 0
+				}
+			}
+
+			// Handle empty area after deletions
+			if state.TotalMessages == 0 {
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgListNoMessages)), outputMode)
+				time.Sleep(2 * time.Second)
+				return currentUser, "", nil
+			}
+
 			// Redraw full screen after returning from reader
 			if err := drawMessageListScreen(terminal, state, area.Name, confName, outputMode); err != nil {
 				log.Printf("ERROR: Node %d: Failed to redraw message list: %v", nodeNumber, err)

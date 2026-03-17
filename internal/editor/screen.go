@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -38,17 +39,17 @@ type Screen struct {
 	nextMsgNum       int            // Next message number for @#@ placeholder
 	confArea         string         // "Conference > Area" for @Z@ placeholder
 	// Row-4 info bar overlay positions (tracked from template before substitution)
-	msgNumRow      int    // Terminal row of the @#@ msg-number field
-	msgNumCol      int    // Terminal col of the @#@ msg-number field (1-based)
-	msgNumColor    string // ANSI SGR escape at the @#@ position (digit color)
-	msgNumPadColor string // ANSI SGR escape one column before @#@ (░ shade color)
-	nodeNumRow     int    // Terminal row of the @K@ node-number field
-	nodeNumCol     int    // Terminal col of the @K@ node-number field (1-based)
-	nodeNumColor   string // ANSI SGR escape at the @K@ position (digit color)
+	msgNumRow       int    // Terminal row of the @#@ msg-number field
+	msgNumCol       int    // Terminal col of the @#@ msg-number field (1-based)
+	msgNumColor     string // ANSI SGR escape at the @#@ position (digit color)
+	msgNumPadColor  string // ANSI SGR escape one column before @#@ (░ shade color)
+	nodeNumRow      int    // Terminal row of the @K@ node-number field
+	nodeNumCol      int    // Terminal col of the @K@ node-number field (1-based)
+	nodeNumColor    string // ANSI SGR escape at the @K@ position (digit color)
 	nodeNumPadColor string // ANSI SGR escape one column before @K@ (░ shade color)
-	confAreaRow   int    // Terminal row of the @Z@ conf-area field
-	confAreaCol   int    // Terminal col where the middle section begins (1-based)
-	confAreaColor string // ANSI SGR escape at the @Z@ position
+	confAreaRow     int    // Terminal row of the @Z@ conf-area field
+	confAreaCol     int    // Terminal col where the middle section begins (1-based)
+	confAreaColor   string // ANSI SGR escape at the @Z@ position
 	// Footer
 	boardName     string // BBS board name for @B@ placeholder in FSEDITORF.ANS
 	footerContent string
@@ -137,24 +138,73 @@ func (s *Screen) LoadFooterTemplate(menuSetPath string) error {
 
 	s.footerHeight = 2 // FSEDITORF.ANS is always 2 rows
 
-	// Adjust statusLineY so that RefreshScreen's ClearEOL guard stops before
-	// the footer rows. screenLines does not change — the existing -1 reservation
-	// in parseGeometryMarkers already leaves exactly 2 rows free at the bottom.
+	// Adjust geometry so the editing area does not overlap the footer.
+	// calculateGeometry reserved 1 row at the bottom for a status line;
+	// the footer occupies 2 rows, so reduce screenLines by 1 more.
 	s.statusLineY = s.termHeight - s.footerHeight + 1
+	s.screenLines = s.termHeight - s.editingStartY - s.footerHeight
+	if s.screenLines < 5 {
+		s.screenLines = 5
+	}
 
-	// Substitute @B@ with the BBS board name, colored using the same per-character
-	// rules as the @Z@ conf>area field: first letter |07, rest |15, punctuation |09.
+	// Dynamically build footer line 1 so the filler dashes between the board
+	// name and the CTRL command labels adjust to fit within termWidth.
 	boardName := s.boardName
 	if boardName == "" {
 		boardName = "BBS"
 	}
-	substitutions := map[byte]string{'B': colorizeConfAreaText(boardName)}
-	content = ansi.ProcessEditorPlaceholders(content, substitutions)
 
-	// Convert CP437→UTF-8 then expand pipe color codes (|07, |15, |09 etc.).
-	utf8Content := ansi.CP437BytesToUTF8(content)
-	processed := ansi.ReplacePipeCodes(utf8Content)
-	s.footerContent = string(processed)
+	// Layout of footer line 1 (visible chars):
+	//   " └─▌" (4) + name + "▐" (1) + dashes + "────▌" (5) + "CTRL (A)Abort (Z)Save (Q)Quote" (30) + "▐─┘" (3) = 43 fixed
+	const trailingDashes = 4 // bright dashes just before ▌CTRL
+	const ctrlText = "CTRL (A)Abort (Z)Save (Q)Quote"
+	fixedChars := 4 + 1 + trailingDashes + 1 + len(ctrlText) + 3 // 43
+	maxWidth := s.termWidth - 1                                  // 79 cols max to avoid wrap on col 80
+	availForNameAndDashes := maxWidth - fixedChars
+	nameLen := len([]rune(boardName))
+	if nameLen > availForNameAndDashes {
+		nameRunes := []rune(boardName)
+		nameLen = availForNameAndDashes
+		if nameLen < 3 {
+			nameLen = 3
+		}
+		boardName = string(nameRunes[:nameLen])
+	}
+	dashCount := availForNameAndDashes - nameLen
+	if dashCount < 0 {
+		dashCount = 0
+	}
+
+	coloredName := colorizeConfAreaText(boardName)
+
+	// Build line 1 with raw ANSI escapes matching the original FSEDITORF.ANS colors.
+	var line1 strings.Builder
+	line1.WriteString("\x1b[0m \x1b[34m└─\x1b[1m▌\x1b[0m")
+	line1.WriteString(coloredName)
+	line1.WriteString("\x1b[34m▐\x1b[0;34m")
+	line1.WriteString(strings.Repeat("─", dashCount))
+	line1.WriteString("\x1b[1m")
+	line1.WriteString(strings.Repeat("─", trailingDashes))
+	line1.WriteString("▌\x1b[36mCTRL\x1b[0m ")
+	line1.WriteString("\x1b[1;34m(\x1b[0mA\x1b[1;34m)\x1b[36mAbort\x1b[0m ")
+	line1.WriteString("\x1b[1;34m(\x1b[0mZ\x1b[1;34m)\x1b[36mSave\x1b[0m ")
+	line1.WriteString("\x1b[1;34m(\x1b[0mQ\x1b[1;34m)\x1b[36mQuote")
+	line1.WriteString("\x1b[34m▐\x1b[0;34m─┘\x1b[37m")
+
+	// colorizeConfAreaText uses pipe codes — expand them to ANSI.
+	line1Processed := ansi.ReplacePipeCodes([]byte(line1.String()))
+
+	// Extract line 2 from the original template (it's static, no substitution needed)
+	parts := bytes.SplitN(content, []byte("\r\n"), 2)
+	var line2Content []byte
+	if len(parts) > 1 {
+		line2Content = parts[1]
+	}
+	line2UTF8 := ansi.CP437BytesToUTF8(line2Content)
+	line2Processed := ansi.ReplacePipeCodes(line2UTF8)
+
+	// Combine: line 1 (dynamically built) + CRLF + line 2 (from template)
+	s.footerContent = string(line1Processed) + "\r\n" + string(line2Processed)
 
 	return nil
 }
@@ -719,6 +769,10 @@ func (s *Screen) Resize(newWidth, newHeight int) {
 	// Re-apply footer geometry if the footer template was loaded.
 	if s.footerHeight > 0 {
 		s.statusLineY = s.termHeight - s.footerHeight + 1
+		s.screenLines = s.termHeight - s.editingStartY - s.footerHeight
+		if s.screenLines < 5 {
+			s.screenLines = 5
+		}
 	}
 	// Clear physical state to force full redraw on next refresh
 	s.physicalLines = make(map[int]string)

@@ -634,7 +634,7 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 		To:         msg.To,
 		Subject:    msg.Subject,
 		DateTime:   msg.DateTime,
-		Body:       normalizeLineEndings(msg.Text),
+		Body:       stripKludgeLines(normalizeLineEndings(msg.Text)),
 		MsgID:      msg.MsgID,
 		ReplyID:    msg.ReplyID,
 		ReplyToNum: replyToNum,
@@ -968,4 +968,19 @@ func normalizeLineEndings(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	return text
+}
+
+// stripKludgeLines removes FTN kludge lines (lines starting with \x01) from
+// message text. These are metadata lines (e.g. V3NETUUID, MSGID) that should
+// not be visible to users or included in quoted text.
+func stripKludgeLines(text string) string {
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if len(line) > 0 && line[0] == '\x01' {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
 }
