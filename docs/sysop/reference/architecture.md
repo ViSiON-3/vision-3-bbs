@@ -71,7 +71,21 @@ The system is designed as a single Go application that listens for incoming SSH 
    * Background polling at configurable interval
    * JSON-based dupe database with automatic purge
 
-9. **File Manager (`internal/file/manager.go`)**
+9. **V3Net Networking (`internal/v3net/`)**
+   * Native inter-BBS message networking using REST+SSE over HTTPS
+   * **Service** (`service.go`) — top-level orchestrator that wires keystore, dedup, hub, and leaf components; manages area-to-network mapping
+   * **Hub** (`hub/`) — HTTP server with SSE broadcaster, subscriber management, message storage, NAL store, area proposals, access requests, coordinator transfers; SQLite-backed
+   * **Leaf** (`leaf/`) — client that subscribes to a hub, polls for messages, maintains an SSE connection for real-time events, and sends locally-posted messages
+   * **Protocol** (`protocol/`) — wire format types, message signing/verification, event definitions, NAL data structures, area tag validation
+   * **Keystore** (`keystore/`) — Ed25519 keypair generation, persistence, signing, and verification
+   * **Dedup** (`dedup/`) — UUID-based SQLite deduplication index to prevent re-importing messages
+   * **NAL** (`nal/`) — Network Area List signing, verification, caching, and access control evaluation
+   * **Registry** (`registry/`) — fetches and caches network registry listings from a remote JSON endpoint
+   * **JAM Adapter** (`jam_adapter.go`) — writes V3Net protocol messages to local JAM bases via MessageManager
+   * Configuration loaded from `configs/v3net.json`
+   * Hub data stored in `data/v3net_hub/` (SQLite), keypair in `data/v3net.key`, dedup in `data/v3net_dedup.sqlite`
+
+10. **File Manager (`internal/file/manager.go`)**
    * Manages file areas and file listings
    * Configuration loaded from `configs/file_areas.json`
    * File metadata stored in `data/files/` directory
@@ -115,6 +129,7 @@ The system is designed as a single Go application that listens for incoming SSH 
 * `message_areas.json` - Message area definitions
 * `conferences.json` - Conference grouping definitions
 * `events.json` - Event scheduler configuration
+* `v3net.json` - V3Net networking configuration (hub, leaf subscriptions)
 * SSH host keys (`ssh_host_rsa_key`, etc.)
 
 ## Data Flow
@@ -144,6 +159,10 @@ vision3/
 │   │   ├── outbound/   # Outgoing .PKT files
 │   │   ├── temp/       # Temp for failed packets
 │   │   └── dupes.json  # MSGID dupe database
+│   ├── v3net.key       # V3Net Ed25519 keypair (auto-generated)
+│   ├── v3net_dedup.sqlite  # V3Net message deduplication index
+│   ├── v3net_hub/      # V3Net hub data (if hub enabled)
+│   │   └── hub.sqlite  # Hub database (subscribers, messages, NALs, proposals)
 │   └── logs/           # Application logs and event history
 │       └── event_history.json  # Event execution statistics
 ├── internal/           # Internal packages
@@ -164,7 +183,15 @@ vision3/
 │   ├── tosser/         # FTN echomail tosser
 │   ├── transfer/       # File transfer protocols
 │   ├── types/          # Shared types
-│   └── user/           # User management
+│   ├── user/           # User management
+│   └── v3net/          # V3Net message networking
+│       ├── dedup/      # UUID-based message deduplication
+│       ├── hub/        # Hub server (REST+SSE, SQLite)
+│       ├── keystore/   # Ed25519 keypair management
+│       ├── leaf/       # Leaf client (poller, SSE, sender)
+│       ├── nal/        # Network Area List signing/verification
+│       ├── protocol/   # Wire format, message types, events
+│       └── registry/   # Network registry client
 └── menus/v3/           # Menu resources
     ├── ansi/           # ANSI art files
     ├── cfg/            # Menu display configurations
@@ -188,6 +215,7 @@ vision3/
 * `internal/tosser`: FTN echomail import/export, dupe checking, SEEN-BY/PATH
 * `internal/scheduler`: Cron-style event scheduler for automated tasks
 * `internal/file`: File area management and metadata
+* `internal/v3net`: V3Net message networking (hub, leaf, protocol, keystore, dedup, NAL, registry)
 * `internal/session`: Session state tracking (currently minimal)
 * `menus/v3`: Static menu resources (ANSI art, menu definitions)
 * `data`: Persisted application data (users, JAM bases, FTN packets, logs)
