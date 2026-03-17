@@ -891,12 +891,22 @@ type V3NetConfig struct {
 // V3NetHubConfig configures this node as a V3Net hub.
 type V3NetHubConfig struct {
 	Enabled     bool              `json:"enabled"`
-	ListenAddr  string            `json:"listenAddr"`
+	Host        string            `json:"host"`              // Listen host (blank = all interfaces)
+	Port        int               `json:"port"`              // Listen port (default: 8765)
 	TLSCert     string            `json:"tlsCert,omitempty"`
 	TLSKey      string            `json:"tlsKey,omitempty"`
 	DataDir     string            `json:"dataDir"`
 	AutoApprove bool              `json:"autoApprove"`
 	Networks    []V3NetHubNetwork `json:"networks,omitempty"`
+}
+
+// ListenAddr returns the host:port string for net.Listen / http.Server.
+func (c *V3NetHubConfig) ListenAddr() string {
+	port := c.Port
+	if port == 0 {
+		port = 8765
+	}
+	return fmt.Sprintf("%s:%d", c.Host, port)
 }
 
 // V3NetHubNetwork defines a network hosted by this hub.

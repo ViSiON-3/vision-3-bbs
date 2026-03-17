@@ -176,3 +176,80 @@ func TestSaveAreasPreservesOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestAddArea verifies that AddArea auto-assigns ID/Position, indexes by tag,
+// and persists to disk.
+func TestAddArea(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("MkdirAll config: %v", err)
+	}
+
+	initial := []*MessageArea{
+		{ID: 1, Position: 1, Tag: "GENERAL", Name: "General", BasePath: "msgbases/general", AreaType: "local"},
+	}
+	data, err := json.MarshalIndent(initial, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	areasFile := filepath.Join(configDir, "message_areas.json")
+	if err := os.WriteFile(areasFile, data, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	mm, err := NewMessageManager(tmpDir, configDir, "TestBBS", nil)
+	if err != nil {
+		t.Fatalf("NewMessageManager: %v", err)
+	}
+	defer mm.Close()
+
+	// Add a new V3Net area.
+	id, err := mm.AddArea(MessageArea{
+		Tag:      "FELGEN",
+		Name:     "FelonyNet General",
+		AreaType: "v3net",
+		Network:  "felonynet",
+		EchoTag:  "fel.general",
+	})
+	if err != nil {
+		t.Fatalf("AddArea: %v", err)
+	}
+	if id != 2 {
+		t.Errorf("AddArea ID = %d, want 2", id)
+	}
+
+	// Verify in-memory lookup.
+	area, ok := mm.GetAreaByTag("FELGEN")
+	if !ok {
+		t.Fatal("GetAreaByTag FELGEN failed")
+	}
+	if area.ID != 2 || area.AreaType != "v3net" || area.Network != "felonynet" {
+		t.Errorf("area mismatch: %+v", area)
+	}
+	if area.Position != 2 {
+		t.Errorf("Position = %d, want 2", area.Position)
+	}
+	if area.BasePath == "" {
+		t.Error("BasePath should be auto-assigned")
+	}
+
+	// Verify persisted to disk.
+	raw, err := os.ReadFile(areasFile)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var saved []*MessageArea
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if len(saved) != 2 {
+		t.Fatalf("saved count = %d, want 2", len(saved))
+	}
+
+	// Duplicate tag should fail.
+	_, err = mm.AddArea(MessageArea{Tag: "FELGEN", Name: "Dup", AreaType: "v3net"})
+	if err == nil {
+		t.Error("expected error for duplicate tag")
+	}
+}

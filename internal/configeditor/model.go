@@ -122,8 +122,8 @@ func New(configPath string) (Model, error) {
 		{"9", "Transfer Protocols"},
 		{"A", "Archivers"},
 		{"B", "Login Sequence"},
-		{"C", "V3Net Leaves"},
-		{"D", "V3Net Hub Networks"},
+		{"C", "V3Net Subscriptions"},
+		{"D", "V3Net Networks"},
 		{"Q", "Quit Program"},
 	}
 

@@ -67,7 +67,7 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 			})
 		}
 		h, err := hub.New(hub.Config{
-			ListenAddr:  cfg.Hub.ListenAddr,
+			ListenAddr:  cfg.Hub.ListenAddr(),
 			TLSCertFile: cfg.Hub.TLSCert,
 			TLSKeyFile:  cfg.Hub.TLSKey,
 			DataDir:     cfg.Hub.DataDir,

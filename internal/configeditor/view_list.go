@@ -130,9 +130,9 @@ func (m Model) viewRecordList() string {
 		}
 	} else if m.recordTypeSupportsReorder() {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  P - Position  |  ESC - Return"
-	} else if m.recordType == "ftn" || m.recordType == "v3netleaf" {
+	} else if m.recordType == "ftn" {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  G - Global  |  ESC - Return"
-	} else if m.recordType == "ftnlink" {
+	} else if m.recordType == "ftnlink" || m.recordType == "v3netleaf" {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  ESC - Return"
 	} else {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  ESC - Return"
@@ -167,9 +167,9 @@ func (m Model) recordTypeTitle() string {
 	case "login":
 		return "Login Sequence"
 	case "v3netleaf":
-		return "V3Net Leaf Subscriptions"
+		return "V3Net Subscriptions"
 	case "v3nethub":
-		return "V3Net Hub Networks"
+		return "V3Net Networks"
 	}
 	return "Records"
 }

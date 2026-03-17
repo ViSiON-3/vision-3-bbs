@@ -47,13 +47,13 @@ const messageAreaFile = "message_areas.json"
 // Bases are opened on-demand and closed after each operation to allow
 // v3mail and other external tools concurrent access.
 type MessageManager struct {
-	mu              sync.RWMutex
-	dataPath        string // Base data directory (e.g., "data")
-	areasPath       string // Full path to message_areas.json
-	areasByID       map[int]*MessageArea
-	areasByTag      map[string]*MessageArea
-	areasByEchoTag  map[string]*MessageArea // indexed by EchoTag when it differs from Tag
-	boardName       string                  // BBS name for echomail origin lines
+	mu             sync.RWMutex
+	dataPath       string // Base data directory (e.g., "data")
+	areasPath      string // Full path to message_areas.json
+	areasByID      map[int]*MessageArea
+	areasByTag     map[string]*MessageArea
+	areasByEchoTag map[string]*MessageArea // indexed by EchoTag when it differs from Tag
+	boardName      string                  // BBS name for echomail origin lines
 	// networkTearlines maps network key -> custom tearline text.
 	networkTearlines map[string]string
 	threadIndex      map[int]*threadIndex
@@ -297,6 +297,54 @@ func (mm *MessageManager) UpdateAreaByID(id int, updated MessageArea) error {
 	mm.areasByID[id] = replacement
 	mm.areasByTag[updated.Tag] = replacement
 	return nil
+}
+
+// AddArea inserts a new message area, auto-assigning the next available ID
+// and Position. The area's Tag must be unique. After insertion the area list
+// is persisted to disk. Returns the assigned ID.
+func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
+	mm.mu.Lock()
+
+	// Check tag uniqueness.
+	if _, exists := mm.areasByTag[area.Tag]; exists {
+		mm.mu.Unlock()
+		return 0, fmt.Errorf("message area tag %q already exists", area.Tag)
+	}
+
+	// Assign next ID and position.
+	maxID := 0
+	maxPos := 0
+	for _, a := range mm.areasByID {
+		if a.ID > maxID {
+			maxID = a.ID
+		}
+		if a.Position > maxPos {
+			maxPos = a.Position
+		}
+	}
+	area.ID = maxID + 1
+	area.Position = maxPos + 1
+
+	// Default base path if empty.
+	if area.BasePath == "" {
+		area.BasePath = fmt.Sprintf("msgbases/area_%d", area.ID)
+	}
+
+	ptr := new(MessageArea)
+	*ptr = area
+	mm.areasByID[area.ID] = ptr
+	mm.areasByTag[area.Tag] = ptr
+	if area.EchoTag != "" && area.EchoTag != area.Tag {
+		mm.areasByEchoTag[area.EchoTag] = ptr
+	}
+	mm.mu.Unlock()
+
+	log.Printf("INFO: Auto-created message area ID %d, Tag %q, Type %q", area.ID, area.Tag, area.AreaType)
+
+	if err := mm.SaveAreas(); err != nil {
+		return area.ID, fmt.Errorf("save areas after add: %w", err)
+	}
+	return area.ID, nil
 }
 
 // SaveAreas persists all message areas to message_areas.json atomically.

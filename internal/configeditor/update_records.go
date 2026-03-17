@@ -79,12 +79,6 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.fieldScroll = 0
 				m.recordEditIdx = -1
 				m.mode = modeRecordEdit
-			} else if m.recordType == "v3netleaf" {
-				m.recordFields = m.fieldsV3NetGlobal()
-				m.editField = 0
-				m.fieldScroll = 0
-				m.recordEditIdx = -1
-				m.mode = modeRecordEdit
 			}
 			return m, nil
 		case "d", "D", "delete":
