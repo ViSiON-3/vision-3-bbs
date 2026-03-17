@@ -149,6 +149,28 @@ func Sign(n *protocol.NAL, ks *keystore.Keystore) error {
 	return nil
 }
 
+// SignPreserveCoord signs the NAL using the provided keystore without
+// overwriting CoordNodeID and CoordPubKeyB64. This is used during
+// coordinator transfers where the NAL should reflect the new coordinator's
+// identity but the hub signs on their behalf.
+func SignPreserveCoord(n *protocol.NAL, ks *keystore.Keystore) error {
+	n.Updated = time.Now().UTC().Format("2006-01-02")
+	n.SignatureB64 = ""
+
+	payload, err := canonicalBytes(n)
+	if err != nil {
+		return fmt.Errorf("nal: marshal canonical: %w", err)
+	}
+
+	sigBytes, err := ks.SignRaw(payload)
+	if err != nil {
+		return fmt.Errorf("nal: sign: %w", err)
+	}
+
+	n.SignatureB64 = base64.StdEncoding.EncodeToString(sigBytes)
+	return nil
+}
+
 // Verify checks that the NAL's SignatureB64 is a valid ed25519 signature
 // over the canonical payload using CoordPubKeyB64.
 func Verify(n *protocol.NAL) error {

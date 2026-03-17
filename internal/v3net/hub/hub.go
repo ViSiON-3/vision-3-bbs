@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -22,6 +23,7 @@ type Hub struct {
 	server            *http.Server
 	chatLimiter       *rateLimiter
 	nalStore          *NALStore
+	nalMu             sync.Mutex // serializes NAL read-modify-write operations
 	proposals         *ProposalStore
 	accessRequests    *AccessRequestStore
 	areaSubscriptions *AreaSubscriptionStore

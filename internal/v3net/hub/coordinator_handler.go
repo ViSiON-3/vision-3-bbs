@@ -127,6 +127,10 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Serialize NAL read-modify-write to prevent concurrent updates.
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
+
 	// Update the NAL with the new coordinator.
 	currentNAL, err := h.nalStore.Get(network)
 	if err != nil || currentNAL == nil {
@@ -144,8 +148,8 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 	currentNAL.CoordNodeID = newNodeID
 	currentNAL.CoordPubKeyB64 = newPubKeyB64
 
-	// Re-sign with the hub's key (the hub acts as the signer during transfer).
-	if err := nal.Sign(currentNAL, h.cfg.Keystore); err != nil {
+	// Re-sign with the hub's key, preserving the new coordinator's identity.
+	if err := nal.SignPreserveCoord(currentNAL, h.cfg.Keystore); err != nil {
 		slog.Error("sign nal after coord transfer", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return

@@ -46,21 +46,24 @@ func NewProposalStore(db *sql.DB) (*ProposalStore, error) {
 }
 
 // newUUID generates a UUID v4 string.
-func newUUID() string {
+func newUUID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		panic("crypto/rand.Read failed: " + err.Error())
+		return "", fmt.Errorf("crypto/rand.Read: %w", err)
 	}
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
 }
 
 // Add inserts a new proposal.
 func (ps *ProposalStore) Add(network, tag, name, desc, lang, accessMode, fromNode string, allowANSI bool) (string, error) {
-	id := newUUID()
-	_, err := ps.db.Exec(
+	id, err := newUUID()
+	if err != nil {
+		return "", fmt.Errorf("hub: generate proposal ID: %w", err)
+	}
+	_, err = ps.db.Exec(
 		`INSERT INTO area_proposals (id, network, tag, name, description, language, access_mode, allow_ansi, from_node)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, network, tag, name, desc, lang, accessMode, boolToInt(allowANSI), fromNode,
@@ -259,6 +262,11 @@ func (h *Hub) approveProposal(network, proposalID, accessModeOverride string, _ 
 	if managerSub != nil {
 		managerPubKeyB64 = managerSub.PubKeyB64
 	}
+
+	// Serialize NAL read-modify-write to prevent concurrent approvals
+	// from overwriting each other.
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
 
 	// Load current NAL (or create new one).
 	currentNAL, err := h.nalStore.Get(network)

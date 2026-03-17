@@ -192,22 +192,18 @@ readerLoop:
 
 		// Check if message contains ANSI art using improved detection
 		hasAnsiArt := detectAnsiArtInMessage(processedBodyStr)
-		log.Printf("DEBUG: Message %d ANSI art detection: %v (body length: %d)", currentMsgNum, hasAnsiArt, len(processedBodyStr))
 
 		if hasAnsiArt {
-			log.Printf("DEBUG: Using ANSI renderer (no-wrap mode) for message %d (termWidth=%d)", currentMsgNum, termWidth)
 			// Render ANSI art into virtual buffer with NO AUTO-WRAPPING
 			// Cursor positioning is relative to buffer (0,0), not terminal screen
 			// Text that exceeds buffer width is clipped, not wrapped
 			wrappedBodyLines = RenderANSIArtToLines(processedBodyStr, termWidth, 500)
-			log.Printf("DEBUG: Rendered %d lines from ANSI art", len(wrappedBodyLines))
 
 			// Convert CP437 bytes to UTF-8 for modern terminals
 			for i, line := range wrappedBodyLines {
 				wrappedBodyLines[i] = string(ansi.CP437BytesToUTF8([]byte(line)))
 			}
 		} else {
-			log.Printf("DEBUG: Using normal text wrapping for message %d", currentMsgNum)
 			// Regular text message - use normal wrapping
 			wrappedBodyLines = wrapAnsiString(processedBodyStr, termWidth)
 		}
@@ -795,9 +791,6 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		if v3netNetwork != "" {
 			v3netNodeID = v3netStatus.NodeID()
 		}
-		log.Printf("DEBUG: V3Net check: areaID=%d, v3netNetwork=%q, v3netNodeID=%q", areaID, v3netNetwork, v3netNodeID)
-	} else {
-		log.Printf("DEBUG: V3Net check: v3netStatus is nil, areaID=%d", areaID)
 	}
 	isV3Net := v3netNetwork != ""
 

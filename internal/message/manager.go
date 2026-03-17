@@ -342,7 +342,15 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 	log.Printf("INFO: Auto-created message area ID %d, Tag %q, Type %q", area.ID, area.Tag, area.AreaType)
 
 	if err := mm.SaveAreas(); err != nil {
-		return area.ID, fmt.Errorf("save areas after add: %w", err)
+		// Rollback in-memory state so it stays consistent with disk.
+		mm.mu.Lock()
+		delete(mm.areasByID, area.ID)
+		delete(mm.areasByTag, area.Tag)
+		if area.EchoTag != "" && area.EchoTag != area.Tag {
+			delete(mm.areasByEchoTag, area.EchoTag)
+		}
+		mm.mu.Unlock()
+		return 0, fmt.Errorf("save areas after add: %w", err)
 	}
 	return area.ID, nil
 }

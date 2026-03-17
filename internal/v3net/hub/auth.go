@@ -3,6 +3,7 @@ package hub
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"bytes"
 	"io"
 	"net/http"
 	"strings"
@@ -64,7 +65,7 @@ func (h *Hub) authMiddleware(next http.Handler) http.Handler {
 			http.Error(w, `{"error":"request body too large or unreadable"}`, http.StatusBadRequest)
 			return
 		}
-		r.Body = io.NopCloser(strings.NewReader(string(bodyBytes)))
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 		bodyHash := sha256.Sum256(bodyBytes)
 		bodySHA := hex.EncodeToString(bodyHash[:])

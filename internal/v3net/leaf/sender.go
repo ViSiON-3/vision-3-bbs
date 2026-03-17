@@ -99,6 +99,10 @@ func (l *Leaf) sendPresence(eventType, handle string) error {
 }
 
 func (l *Leaf) signedPost(path string, body []byte) error {
+	return l.signedPostCtx(context.Background(), path, body)
+}
+
+func (l *Leaf) signedPostCtx(ctx context.Context, path string, body []byte) error {
 	url := l.cfg.HubURL + path
 	bodyHash := sha256.Sum256(body)
 	bodySHA := hex.EncodeToString(bodyHash[:])
@@ -109,7 +113,7 @@ func (l *Leaf) signedPost(path string, body []byte) error {
 		return fmt.Errorf("leaf: sign request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("leaf: create request: %w", err)
 	}
@@ -133,7 +137,7 @@ func (l *Leaf) signedPost(path string, body []byte) error {
 
 // signedPostWithResponse is like signedPost but returns the raw response
 // so the caller can parse the body. The caller must close resp.Body.
-func (l *Leaf) signedPostWithResponse(path string, body []byte) (*http.Response, error) {
+func (l *Leaf) signedPostWithResponse(ctx context.Context, path string, body []byte) (*http.Response, error) {
 	url := l.cfg.HubURL + path
 	bodyHash := sha256.Sum256(body)
 	bodySHA := hex.EncodeToString(bodyHash[:])
@@ -144,7 +148,7 @@ func (l *Leaf) signedPostWithResponse(path string, body []byte) (*http.Response,
 		return nil, fmt.Errorf("leaf: sign request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("leaf: create request: %w", err)
 	}
@@ -157,10 +161,10 @@ func (l *Leaf) signedPostWithResponse(path string, body []byte) (*http.Response,
 }
 
 func (l *Leaf) signedGet(path string) (*http.Response, error) {
-	return l.signedGetWithContext(context.Background(), path)
+	return l.signedGetCtx(context.Background(), path)
 }
 
-func (l *Leaf) signedGetWithContext(ctx context.Context, path string) (*http.Response, error) {
+func (l *Leaf) signedGetCtx(ctx context.Context, path string) (*http.Response, error) {
 	url := l.cfg.HubURL + path
 	emptyHash := sha256.Sum256(nil)
 	bodySHA := hex.EncodeToString(emptyHash[:])

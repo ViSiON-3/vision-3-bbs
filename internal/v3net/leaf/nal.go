@@ -53,7 +53,7 @@ func (l *Leaf) ProposeArea(req protocol.AreaProposalRequest) (*protocol.Proposal
 		return nil, fmt.Errorf("leaf: marshal proposal: %w", err)
 	}
 	path := fmt.Sprintf("/v3net/v1/%s/areas/propose", l.cfg.Network)
-	resp, err := l.signedPostWithResponse(path, data)
+	resp, err := l.signedPostWithResponse(context.Background(), path, data)
 	if err != nil {
 		return nil, err
 	}

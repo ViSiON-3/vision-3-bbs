@@ -41,8 +41,11 @@ func NewAccessRequestStore(db *sql.DB) (*AccessRequestStore, error) {
 
 // Add inserts a new access request. Returns the ID.
 func (ar *AccessRequestStore) Add(network, areaTag, nodeID, bbsName string) (string, error) {
-	id := newUUID()
-	_, err := ar.db.Exec(
+	id, err := newUUID()
+	if err != nil {
+		return "", fmt.Errorf("hub: generate access request ID: %w", err)
+	}
+	_, err = ar.db.Exec(
 		`INSERT OR IGNORE INTO area_access_requests (id, network, area_tag, node_id, bbs_name)
 		 VALUES (?, ?, ?, ?, ?)`,
 		id, network, areaTag, nodeID, bbsName,

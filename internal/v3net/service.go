@@ -129,10 +129,10 @@ func (s *Service) Start(ctx context.Context) {
 
 	for _, l := range s.leaves {
 		wg.Add(1)
-		go func() {
+		go func(lf *leaf.Leaf) {
 			defer wg.Done()
-			l.Start(ctx)
-		}()
+			lf.Start(ctx)
+		}(l)
 	}
 
 	wg.Wait()

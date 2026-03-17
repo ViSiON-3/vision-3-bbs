@@ -1839,6 +1839,12 @@ func main() {
 				if !ok {
 					return body
 				}
+				// Skip if the body already contains a tearline (e.g. inbound
+				// V3Net imports that were written by JAMAdapter with the
+				// remote tearline/origin already appended).
+				if strings.Contains(body, "\n--- ") || strings.HasPrefix(body, "--- ") {
+					return body
+				}
 				return v3net.AppendV3NetOrigin(body, v3net.DefaultTearline(), info.Origin, nodeID)
 			}
 
