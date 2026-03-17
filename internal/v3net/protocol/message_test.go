@@ -167,14 +167,21 @@ func TestTruncate(t *testing.T) {
 	m := validMessage()
 	m.Body = strings.Repeat("x", MaxBodyBytes+100)
 
-	if !m.IsTruncated() {
-		t.Fatal("expected IsTruncated to be true")
+	if !m.NeedsTruncation() {
+		t.Fatal("expected NeedsTruncation to be true")
+	}
+
+	if m.IsTruncated() {
+		t.Fatal("expected IsTruncated to be false before Truncate")
 	}
 
 	m.Truncate()
 
 	if len(m.Body) != MaxBodyBytes {
 		t.Errorf("expected body length %d, got %d", MaxBodyBytes, len(m.Body))
+	}
+	if !m.IsTruncated() {
+		t.Error("expected IsTruncated to be true after Truncate")
 	}
 	if m.Kludges["v3net_truncated"] != true {
 		t.Error("expected v3net_truncated kludge to be true")

@@ -93,15 +93,8 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
 	nodeID := r.Header.Get(headerNodeID)
 
-	// Check that the submitter is the coordinator.
-	existing, err := h.nalStore.Get(network)
-	if err != nil {
-		slog.Error("get nal for coord check", "error", err)
-		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
-		return
-	}
-	if existing != nil && existing.CoordNodeID != nodeID {
-		http.Error(w, `{"error":"only the coordinator may update the NAL"}`, http.StatusForbidden)
+	if h.findNetwork(network) == nil {
+		http.Error(w, `{"error":"network not found"}`, http.StatusNotFound)
 		return
 	}
 
@@ -113,6 +106,23 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 
 	if n.Network != network {
 		http.Error(w, `{"error":"network mismatch"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Check that the submitter is the coordinator.
+	existing, err := h.nalStore.Get(network)
+	if err != nil {
+		slog.Error("get nal for coord check", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if existing != nil && existing.CoordNodeID != nodeID {
+		http.Error(w, `{"error":"only the coordinator may update the NAL"}`, http.StatusForbidden)
+		return
+	}
+	// For initial NAL creation, verify the submitted CoordNodeID matches the sender.
+	if existing == nil && n.CoordNodeID != nodeID {
+		http.Error(w, `{"error":"coordinator node ID must match sender"}`, http.StatusBadRequest)
 		return
 	}
 

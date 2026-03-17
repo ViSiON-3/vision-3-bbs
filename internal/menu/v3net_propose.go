@@ -23,23 +23,9 @@ func runV3NetPropose(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	header := "|12V3Net: Propose New Area|07\r\n|08────────────────────────────────────────────────────────────────────────────────|07\r\n"
 	buf.Write(ansi.ReplacePipeCodes([]byte(header)))
 
-	lines := []string{
-		"|03  Area Tag     |08: |15fel.________________|07",
-		"|03  Display Name |08: |15________________________________|07",
-		"|03  Description  |08: |15________________________________________________|07",
-		"|03  Language     |08: |15en|07",
-		"|03  Access Mode  |08: |15[Open]|08 / Approval / Closed|07",
-		"|03  Allow ANSI   |08: |15[Y]|07",
-		"",
-		"|08  [|15S|08]ubmit  [|15Q|08]uit|07",
-	}
+	msg := "\r\n  |14This feature is not yet implemented.|07\r\n\r\n  |08Area proposals will be available in a future update.|07\r\n\r\n"
+	buf.Write(ansi.ReplacePipeCodes([]byte(msg)))
 
-	for _, line := range lines {
-		buf.Write(ansi.ReplacePipeCodes([]byte(line)))
-		buf.WriteString("\r\n")
-	}
-
-	buf.WriteString("\r\n")
 	footer := "|08────────────────────────────────────────────────────────────────────────────────|07\r\n"
 	buf.Write(ansi.ReplacePipeCodes([]byte(footer)))
 

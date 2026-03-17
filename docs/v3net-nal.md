@@ -113,7 +113,7 @@ When sysops propose new areas, you review them from the Pending Proposals screen
 
 ### Transferring Coordinator Role
 
-If you need to hand off coordination to another sysop, use the **Transfer coordinator role** option. This is a two-step process:
+If you need to hand off coordination to another sysop, use the **Transfer coordinator role** option. This is a three-step process:
 
 1. You initiate the transfer by specifying the new coordinator's node ID
 2. The new coordinator accepts the transfer from their sysop menu

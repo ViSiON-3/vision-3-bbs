@@ -29,54 +29,55 @@ SYMLINK=0
 TARGET=""
 
 for arg in "$@"; do
-  case "$arg" in
-    --symlink) SYMLINK=1 ;;
-    --help|-h)
-      echo "Usage: $0 <target-dir> [--symlink]"
-      echo ""
-      echo "Sets up a development BBS instance from this git checkout."
-      echo ""
-      echo "Options:"
-      echo "  --symlink   Symlink binaries to git repo instead of copying"
-      echo "              (BBS always uses latest 'go build' output)"
-      echo ""
-      echo "After setup, build binaries and start the BBS:"
-      echo "  cd <target-dir> && ./vision3"
-      exit 0
-      ;;
-    -*)
-      fail "Unknown option: $arg"
-      ;;
-    *)
-      if [[ -n "$TARGET" ]]; then
-        fail "Multiple target directories specified"
-      fi
-      TARGET="$arg"
-      ;;
-  esac
+    case "$arg" in
+        --symlink) SYMLINK=1 ;;
+        --help|-h)
+            echo "Usage: $0 <target-dir> [--symlink]"
+            echo ""
+            echo "Sets up a development BBS instance from this git checkout."
+            echo ""
+            echo "Options:"
+            echo "  --symlink   Symlink binaries to git repo instead of copying"
+            echo "              (BBS always uses latest 'go build' output)"
+            echo ""
+            echo "After setup, build binaries and start the BBS:"
+            echo "  cd <target-dir> && ./vision3"
+            exit 0
+        ;;
+        -*)
+            fail "Unknown option: $arg"
+        ;;
+        *)
+            if [[ -n "$TARGET" ]]; then
+                fail "Multiple target directories specified"
+            fi
+            TARGET="$arg"
+        ;;
+    esac
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "Usage: $0 <target-dir> [--symlink]"
-  echo "Run '$0 --help' for details."
-  exit 1
+    echo "Usage: $0 <target-dir> [--symlink]"
+    echo "Run '$0 --help' for details."
+    exit 1
 fi
 
 # Resolve paths
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-TARGET="$(realpath -m "$TARGET")"
+mkdir -p "$(dirname "$TARGET")"
+TARGET="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
 
 if [[ "$TARGET" == "$REPO_DIR" ]]; then
-  fail "Target directory cannot be the git repo itself"
+    fail "Target directory cannot be the git repo itself"
 fi
 
 echo "=== ViSiON/3 Dev Setup ==="
 echo "  Source repo: $REPO_DIR"
 echo "  Target dir:  $TARGET"
 if [[ $SYMLINK -eq 1 ]]; then
-  echo "  Binaries:    symlinked to repo"
+    echo "  Binaries:    symlinked to repo"
 else
-  echo "  Binaries:    copied"
+    echo "  Binaries:    copied"
 fi
 echo ""
 
@@ -92,28 +93,28 @@ BINARIES=(vision3 helper v3mail strings ue config menuedit)
 
 info "Building binaries..."
 for bin in "${BINARIES[@]}"; do
-  if [[ -d "$REPO_DIR/cmd/$bin" ]]; then
-    echo "  Building $bin..."
-    (cd "$REPO_DIR" && go build -o "$bin" "./cmd/$bin")
-  fi
+    if [[ -d "$REPO_DIR/cmd/$bin" ]]; then
+        echo "  Building $bin..."
+        (cd "$REPO_DIR" && go build -o "$bin" "./cmd/$bin")
+    fi
 done
 echo ""
 
 # ── Install binaries ─────────────────────────────────────────────
 info "Installing binaries..."
 for bin in "${BINARIES[@]}"; do
-  src="$REPO_DIR/$bin"
-  dst="$TARGET/$bin"
-  [[ -f "$src" ]] || continue
-
-  if [[ $SYMLINK -eq 1 ]]; then
-    ln -sf "$src" "$dst"
-    echo "  $bin -> $src"
-  else
-    cp "$src" "$dst"
-    chmod +x "$dst"
-    echo "  $bin (copied)"
-  fi
+    src="$REPO_DIR/$bin"
+    dst="$TARGET/$bin"
+    [[ -f "$src" ]] || continue
+    
+    if [[ $SYMLINK -eq 1 ]]; then
+        ln -sf "$src" "$dst"
+        echo "  $bin -> $src"
+    else
+        cp "$src" "$dst"
+        chmod +x "$dst"
+        echo "  $bin (copied)"
+    fi
 done
 echo ""
 
@@ -128,71 +129,71 @@ mkdir -p "$TARGET"/doors/drive_c
 # ── Copy template configs ────────────────────────────────────────
 info "Setting up configuration files..."
 for f in "$REPO_DIR"/templates/configs/*.json; do
-  [[ -f "$f" ]] || continue
-  dst="$TARGET/configs/$(basename "$f")"
-  if [[ ! -f "$dst" ]]; then
-    echo "  Creating $(basename "$f") from template..."
-    cp "$f" "$dst"
-  else
-    echo "  $(basename "$f") already exists, skipping."
-  fi
+    [[ -f "$f" ]] || continue
+    dst="$TARGET/configs/$(basename "$f")"
+    if [[ ! -f "$dst" ]]; then
+        echo "  Creating $(basename "$f") from template..."
+        cp "$f" "$dst"
+    else
+        echo "  $(basename "$f") already exists, skipping."
+    fi
 done
 
 for f in "$REPO_DIR"/templates/configs/*.txt; do
-  [[ -f "$f" ]] || continue
-  dst="$TARGET/configs/$(basename "$f")"
-  if [[ ! -f "$dst" ]]; then
-    cp "$f" "$dst"
-  fi
+    [[ -f "$f" ]] || continue
+    dst="$TARGET/configs/$(basename "$f")"
+    if [[ ! -f "$dst" ]]; then
+        cp "$f" "$dst"
+    fi
 done
 
 # sexyz.ini
 if [[ -f "$REPO_DIR/templates/configs/sexyz.ini" ]] && [[ ! -f "$TARGET/bin/sexyz.ini" ]]; then
-  cp "$REPO_DIR/templates/configs/sexyz.ini" "$TARGET/bin/sexyz.ini"
+    cp "$REPO_DIR/templates/configs/sexyz.ini" "$TARGET/bin/sexyz.ini"
 fi
 
 # binkd.conf
 if [[ -f "$REPO_DIR/templates/configs/binkd.conf" ]] && [[ ! -f "$TARGET/data/ftn/binkd.conf" ]]; then
-  cp "$REPO_DIR/templates/configs/binkd.conf" "$TARGET/data/ftn/binkd.conf"
+    cp "$REPO_DIR/templates/configs/binkd.conf" "$TARGET/data/ftn/binkd.conf"
 fi
 
 # ── Copy menus ───────────────────────────────────────────────────
 if [[ -d "$REPO_DIR/menus" ]] && [[ ! -d "$TARGET/menus" ]]; then
-  info "Copying menus..."
-  cp -r "$REPO_DIR/menus" "$TARGET/menus"
-elif [[ -d "$TARGET/menus" ]]; then
-  info "Menus directory already exists, skipping."
+    info "Copying menus..."
+    cp -r "$REPO_DIR/menus" "$TARGET/menus"
+    elif [[ -d "$TARGET/menus" ]]; then
+    info "Menus directory already exists, skipping."
 fi
 
 # ── Copy scripts ─────────────────────────────────────────────────
 if [[ -d "$REPO_DIR/scripts/examples" ]] && [[ ! -d "$TARGET/scripts/examples" ]]; then
-  info "Copying example scripts..."
-  cp -r "$REPO_DIR/scripts/examples" "$TARGET/scripts/examples"
+    info "Copying example scripts..."
+    cp -r "$REPO_DIR/scripts/examples" "$TARGET/scripts/examples"
 fi
 
 # ── Infoforms ────────────────────────────────────────────────────
 if [[ -f "$REPO_DIR/templates/infoforms/config.json" ]] && [[ ! -f "$TARGET/data/infoforms/config.json" ]]; then
-  cp "$REPO_DIR/templates/infoforms/config.json" "$TARGET/data/infoforms/config.json"
+    cp "$REPO_DIR/templates/infoforms/config.json" "$TARGET/data/infoforms/config.json"
 fi
 for f in "$REPO_DIR"/templates/infoforms/form_*.txt; do
-  [[ -f "$f" ]] || continue
-  dst="$TARGET/data/infoforms/templates/$(basename "$f")"
-  [[ -f "$dst" ]] || cp "$f" "$dst"
+    [[ -f "$f" ]] || continue
+    dst="$TARGET/data/infoforms/templates/$(basename "$f")"
+    [[ -f "$dst" ]] || cp "$f" "$dst"
 done
 
 # ── SSH host key ─────────────────────────────────────────────────
 if [[ ! -f "$TARGET/configs/ssh_host_rsa_key" ]]; then
-  info "Generating SSH host key..."
-  ssh-keygen -t rsa -b 4096 -f "$TARGET/configs/ssh_host_rsa_key" -N "" -q
+    info "Generating SSH host key..."
+    ssh-keygen -t rsa -b 4096 -f "$TARGET/configs/ssh_host_rsa_key" -N "" -q
 fi
 
 # ── Initial data files ───────────────────────────────────────────
 if [[ ! -f "$TARGET/data/oneliners.json" ]]; then
-  echo "[]" > "$TARGET/data/oneliners.json"
+    echo "[]" > "$TARGET/data/oneliners.json"
 fi
 
 if [[ ! -f "$TARGET/data/users/users.json" ]]; then
-  info "Creating default sysop account..."
+    info "Creating default sysop account..."
   cat > "$TARGET/data/users/users.json" << 'EOF'
 [
   {
@@ -229,11 +230,11 @@ EOF
 fi
 
 if [[ ! -f "$TARGET/data/users/callhistory.json" ]]; then
-  echo "[]" > "$TARGET/data/users/callhistory.json"
+    echo "[]" > "$TARGET/data/users/callhistory.json"
 fi
 
 if [[ ! -f "$TARGET/data/users/callnumber.json" ]]; then
-  echo "1" > "$TARGET/data/users/callnumber.json"
+    echo "1" > "$TARGET/data/users/callnumber.json"
 fi
 
 # ── Initialize JAM bases ─────────────────────────────────────────
@@ -248,10 +249,10 @@ echo "  Target: $TARGET"
 echo "  Login:  felonius / password"
 echo ""
 if [[ $SYMLINK -eq 1 ]]; then
-  echo "Binaries are symlinked to $REPO_DIR"
-  echo "After rebuilding (go build -o vision3 ./cmd/vision3), the BBS"
-  echo "picks up the new binary automatically."
-  echo ""
+    echo "Binaries are symlinked to $REPO_DIR"
+    echo "After rebuilding (go build -o vision3 ./cmd/vision3), the BBS"
+    echo "picks up the new binary automatically."
+    echo ""
 fi
 echo "To start the BBS:"
 echo "  cd $TARGET && ./vision3"

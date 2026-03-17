@@ -162,11 +162,10 @@ func Verify(n *protocol.NAL) error {
 		return fmt.Errorf("nal: decode signature: %w", err)
 	}
 
-	// Build canonical with signature cleared.
-	saved := n.SignatureB64
-	n.SignatureB64 = ""
-	payload, err := canonicalBytes(n)
-	n.SignatureB64 = saved
+	// Build canonical with signature cleared on a copy to avoid races.
+	copy := *n
+	copy.SignatureB64 = ""
+	payload, err := canonicalBytes(&copy)
 	if err != nil {
 		return fmt.Errorf("nal: marshal canonical: %w", err)
 	}
@@ -184,7 +183,7 @@ func Fetch(ctx context.Context, url string) (*protocol.NAL, error) {
 		return nil, fmt.Errorf("nal: create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("nal: fetch: %w", err)
 	}

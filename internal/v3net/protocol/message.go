@@ -75,8 +75,21 @@ func (m *Message) Validate() error {
 	return nil
 }
 
-// IsTruncated returns true if the body exceeds MaxBodyBytes.
+// IsTruncated returns true if the message was truncated by Truncate().
 func (m *Message) IsTruncated() bool {
+	if m.Kludges == nil {
+		return false
+	}
+	v, ok := m.Kludges["v3net_truncated"]
+	if !ok {
+		return false
+	}
+	b, _ := v.(bool)
+	return b
+}
+
+// NeedsTruncation returns true if the body exceeds MaxBodyBytes.
+func (m *Message) NeedsTruncation() bool {
 	return len(m.Body) > MaxBodyBytes
 }
 

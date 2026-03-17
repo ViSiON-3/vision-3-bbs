@@ -57,7 +57,7 @@ func NewSubscriberStore(db *sql.DB) (*SubscriberStore, error) {
 }
 
 func (ss *SubscriberStore) loadCache() error {
-	rows, err := ss.db.Query("SELECT node_id, network, pubkey_b64, bbs_name, bbs_host, status FROM subscribers")
+	rows, err := ss.db.Query("SELECT node_id, network, pubkey_b64, COALESCE(bbs_name, ''), COALESCE(bbs_host, ''), status FROM subscribers")
 	if err != nil {
 		return fmt.Errorf("hub: load subscribers: %w", err)
 	}

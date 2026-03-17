@@ -38,10 +38,13 @@ func (w *testJAMWriter) count() int {
 	return len(w.messages)
 }
 
-func (w *testJAMWriter) get(i int) protocol.Message {
+func (w *testJAMWriter) get(i int) *protocol.Message {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.messages[i]
+	if i < 0 || i >= len(w.messages) {
+		return nil
+	}
+	return &w.messages[i]
 }
 
 // setupIntegration creates a hub with httptest.NewServer, a registered leaf,

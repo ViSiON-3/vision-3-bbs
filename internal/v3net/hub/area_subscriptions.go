@@ -58,14 +58,17 @@ func (as *AreaSubscriptionStore) SetStatus(nodeID, network, areaTag, status stri
 }
 
 // IsActive checks if a node has an active subscription for an area.
-func (as *AreaSubscriptionStore) IsActive(nodeID, network, areaTag string) bool {
+func (as *AreaSubscriptionStore) IsActive(nodeID, network, areaTag string) (bool, error) {
 	var count int
 	err := as.db.QueryRow(
 		`SELECT COUNT(*) FROM area_subscriptions
 		 WHERE node_id = ? AND network = ? AND area_tag = ? AND status = 'active'`,
 		nodeID, network, areaTag,
 	).Scan(&count)
-	return err == nil && count > 0
+	if err != nil {
+		return false, fmt.Errorf("hub: check area subscription active: %w", err)
+	}
+	return count > 0, nil
 }
 
 // ListForNode returns all area subscription statuses for a node on a network.

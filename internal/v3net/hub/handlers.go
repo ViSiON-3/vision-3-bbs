@@ -107,7 +107,7 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if msg.IsTruncated() {
+	if msg.NeedsTruncation() {
 		msg.Truncate()
 	}
 
@@ -266,6 +266,17 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var areaStatuses []protocol.AreaSubscriptionStatus
+		type pendingSubscription struct {
+			tag    string
+			status string
+		}
+		var pending []pendingSubscription
+		type pendingAccessRequest struct {
+			tag string
+		}
+		var pendingRequests []pendingAccessRequest
+
+		// First pass: validate all tags and determine statuses.
 		for _, tag := range req.AreaTags {
 			area := currentNAL.FindArea(tag)
 			if area == nil {
@@ -287,15 +298,7 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 				areaStatus = "active"
 			case protocol.AccessModeApproval:
 				areaStatus = "pending"
-				// Create access request and notify manager.
-				h.accessRequests.Add(req.Network, tag, req.NodeID, req.BBSName)
-				ev, _ := protocol.NewEvent(protocol.EventAreaAccessRequested, protocol.AreaAccessRequestedPayload{
-					Network: req.Network,
-					Tag:     tag,
-					NodeID:  req.NodeID,
-					BBSName: req.BBSName,
-				})
-				h.broadcaster.Publish(req.Network, ev)
+				pendingRequests = append(pendingRequests, pendingAccessRequest{tag: tag})
 			case protocol.AccessModeClosed:
 				// Only allowed if already on allow list.
 				if containsStr(area.Access.AllowList, req.NodeID) {
@@ -306,11 +309,27 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			h.areaSubscriptions.Upsert(req.NodeID, req.Network, tag, areaStatus)
+			pending = append(pending, pendingSubscription{tag: tag, status: areaStatus})
+		}
+
+		// Second pass: all validations passed, apply subscriptions and events.
+		for _, ps := range pending {
+			h.areaSubscriptions.Upsert(req.NodeID, req.Network, ps.tag, ps.status)
 			areaStatuses = append(areaStatuses, protocol.AreaSubscriptionStatus{
-				Tag:    tag,
-				Status: areaStatus,
+				Tag:    ps.tag,
+				Status: ps.status,
 			})
+		}
+
+		for _, pr := range pendingRequests {
+			h.accessRequests.Add(req.Network, pr.tag, req.NodeID, req.BBSName)
+			ev, _ := protocol.NewEvent(protocol.EventAreaAccessRequested, protocol.AreaAccessRequestedPayload{
+				Network: req.Network,
+				Tag:     pr.tag,
+				NodeID:  req.NodeID,
+				BBSName: req.BBSName,
+			})
+			h.broadcaster.Publish(req.Network, ev)
 		}
 
 		writeJSON(w, http.StatusOK, protocol.SubscribeWithAreasResponse{

@@ -101,11 +101,12 @@ func (ps *ProposalStore) ListPending(network string) ([]protocol.AreaProposal, e
 func (ps *ProposalStore) Get(id string) (*protocol.AreaProposal, error) {
 	var p protocol.AreaProposal
 	var allowANSI int
+	var network, reason string
 	err := ps.db.QueryRow(
-		`SELECT id, network, tag, name, description, language, access_mode, allow_ansi, from_node, status, reason, proposed_at
+		`SELECT id, network, tag, name, COALESCE(description, ''), language, access_mode, allow_ansi, from_node, status, COALESCE(reason, ''), proposed_at
 		 FROM area_proposals WHERE id = ?`, id,
-	).Scan(&p.ID, &p.Tag, &p.Tag, &p.Name, &p.Description, &p.Language,
-		&p.AccessMode, &allowANSI, &p.FromNode, &p.Status, &p.ProposedAt, &p.ProposedAt)
+	).Scan(&p.ID, &network, &p.Tag, &p.Name, &p.Description, &p.Language,
+		&p.AccessMode, &allowANSI, &p.FromNode, &p.Status, &reason, &p.ProposedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
