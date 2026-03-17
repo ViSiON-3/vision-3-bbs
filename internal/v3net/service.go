@@ -27,6 +27,10 @@ type Service struct {
 
 	// leafByNetwork maps network name to its leaf for message sending.
 	leafByNetwork map[string]*leaf.Leaf
+
+	// BBSName and BBSHost are sent in subscribe requests.
+	BBSName string
+	BBSHost string
 }
 
 // New creates a V3Net service from the given config. Call Start to begin operations.
@@ -96,6 +100,8 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		DedupIndex:   s.dedupIdx,
 		JAMWriter:    writer,
 		OnEvent:      onEvent,
+		BBSName:      s.BBSName,
+		BBSHost:      s.BBSHost,
 	})
 
 	s.leaves = append(s.leaves, l)
@@ -143,12 +149,21 @@ func (s *Service) NodeID() string {
 
 // SendMessage sends a message to the hub for the given network.
 // Returns nil if no leaf is configured for that network.
+// Also marks the message as seen in the dedup index so the local leaf
+// does not re-import it when polling.
 func (s *Service) SendMessage(network string, msg protocol.Message) error {
 	l, ok := s.leafByNetwork[network]
 	if !ok {
 		return nil
 	}
-	return l.SendMessage(msg)
+	if err := l.SendMessage(msg); err != nil {
+		return err
+	}
+	// Mark as seen so our own leaf won't write it back to JAM.
+	if err := s.dedupIdx.MarkSeen(msg.MsgUUID, network, nil); err != nil {
+		slog.Warn("v3net: failed to mark outbound message as seen", "uuid", msg.MsgUUID, "error", err)
+	}
+	return nil
 }
 
 // SendLogon notifies all connected hubs of a user logon.

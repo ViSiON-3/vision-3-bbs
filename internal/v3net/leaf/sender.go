@@ -14,6 +14,51 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
+// subscribe registers this leaf with the hub. This is the bootstrap step that
+// must succeed before any authenticated requests will work.
+func (l *Leaf) subscribe(ctx context.Context) error {
+	req := protocol.SubscribeRequest{
+		Network:   l.cfg.Network,
+		NodeID:    l.cfg.Keystore.NodeID(),
+		PubKeyB64: l.cfg.Keystore.PubKeyBase64(),
+		BBSName:   l.cfg.BBSName,
+		BBSHost:   l.cfg.BBSHost,
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("leaf: marshal subscribe: %w", err)
+	}
+
+	url := l.cfg.HubURL + "/v3net/v1/subscribe"
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("leaf: create subscribe request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := l.client.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("leaf: subscribe POST: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("leaf: subscribe returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var sr protocol.SubscribeResponse
+	if err := json.Unmarshal(body, &sr); err != nil {
+		return fmt.Errorf("leaf: parse subscribe response: %w", err)
+	}
+
+	if sr.Status != "active" {
+		return fmt.Errorf("leaf: subscription status %q (not active, hub may require manual approval)", sr.Status)
+	}
+
+	return nil
+}
+
 // SendMessage signs and POSTs a message to the hub.
 func (l *Leaf) SendMessage(msg protocol.Message) error {
 	data, err := json.Marshal(msg)

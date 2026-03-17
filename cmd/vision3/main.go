@@ -1798,6 +1798,8 @@ func main() {
 		if v3err != nil {
 			log.Printf("ERROR: V3Net initialization failed: %v", v3err)
 		} else {
+			svc.BBSName = serverConfig.BoardName
+			svc.BBSHost = serverConfig.SSHHost
 			v3netService = svc
 
 			// Configure leaf clients for each subscribed network.
@@ -1817,9 +1819,13 @@ func main() {
 			}
 
 			// Hook message posts to forward to V3Net when posted to a networked area.
+			// Skip messages imported from V3Net (contain the UUID kludge) to prevent feedback loops.
 			messageMgr.OnMessagePosted = func(area *message.MessageArea, msgNum int, from, to, subject, body string) {
 				network, ok := v3netAreaToNetwork[area.ID]
 				if !ok {
+					return
+				}
+				if strings.Contains(body, "\x01V3NETUUID: ") {
 					return
 				}
 				msg := v3net.BuildWireMessage(network, svc.NodeID(), area.Name, from, to, subject, body)

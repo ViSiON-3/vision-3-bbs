@@ -59,6 +59,13 @@ func (l *Leaf) onEvent(ev protocol.Event) {
 func (l *Leaf) Start(ctx context.Context) {
 	slog.Info("leaf: starting", "network", l.cfg.Network, "hub", l.cfg.HubURL)
 
+	// Subscribe to the hub (bootstrap — no auth required).
+	if err := l.subscribe(ctx); err != nil {
+		slog.Error("leaf: subscribe failed", "network", l.cfg.Network, "error", err)
+		return
+	}
+	slog.Info("leaf: subscribed to hub", "network", l.cfg.Network, "hub", l.cfg.HubURL)
+
 	var wg sync.WaitGroup
 
 	wg.Add(1)
