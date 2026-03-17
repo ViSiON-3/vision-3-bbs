@@ -26,6 +26,7 @@ type V3NetStatusProvider interface {
 	FetchNALForNetwork(ctx context.Context, network string) (*protocol.NAL, error)
 	HubURLForNetwork(network string) string
 	ProposeArea(network string, req protocol.AreaProposalRequest) (*protocol.ProposalResponse, error)
+	RegistryURL() string
 }
 
 func runV3NetStatus(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {

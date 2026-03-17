@@ -658,6 +658,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["V3NETPROPOSE"] = runV3NetPropose                 // V3Net propose new area
 	registry["V3NETACCESSREQUESTS"] = runV3NetAccessRequests   // V3Net area access requests (manager)
 	registry["V3NETCOORDINATOR"] = runV3NetCoordinator         // V3Net coordinator panel
+	registry["V3NETREGISTRY"] = runV3NetRegistry               // V3Net network registry browser
 }
 
 func runPlaceholderCommand(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {

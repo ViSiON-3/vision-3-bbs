@@ -15,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/registry"
 )
 
 // Service manages V3Net hub and leaf lifecycle.
@@ -260,6 +261,14 @@ func (s *Service) HubURLForNetwork(network string) string {
 		return ""
 	}
 	return l.HubURL()
+}
+
+// RegistryURL returns the configured registry URL, or the default if not set.
+func (s *Service) RegistryURL() string {
+	if s.cfg.RegistryURL != "" {
+		return s.cfg.RegistryURL
+	}
+	return registry.DefaultURL
 }
 
 // ConfigPath returns the path used to load the V3Net config (for saving).
