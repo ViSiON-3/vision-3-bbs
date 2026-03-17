@@ -176,19 +176,34 @@ func (h *Hub) handlePropose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notify coordinator via SSE.
-	ev, _ := protocol.NewEvent(protocol.EventAreaProposed, protocol.AreaProposedPayload{
-		Network:    network,
-		Tag:        req.Tag,
-		FromNode:   nodeID,
-		ProposalID: id,
-	})
-	h.broadcaster.Publish(network, ev)
+	status := "pending"
+
+	// Auto-approve if hub is configured for it.
+	if h.cfg.AutoApprove {
+		if err := h.approveProposal(network, id, accessMode, req.AllowANSI); err != nil {
+			slog.Error("auto-approve proposal", "id", id, "error", err)
+			// Fall through — proposal is still stored as pending.
+		} else {
+			status = "approved"
+			slog.Info("auto-approved area proposal", "network", network, "tag", req.Tag, "id", id)
+		}
+	}
+
+	if status == "pending" {
+		// Notify coordinator via SSE.
+		ev, _ := protocol.NewEvent(protocol.EventAreaProposed, protocol.AreaProposedPayload{
+			Network:    network,
+			Tag:        req.Tag,
+			FromNode:   nodeID,
+			ProposalID: id,
+		})
+		h.broadcaster.Publish(network, ev)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":          true,
 		"proposal_id": id,
-		"status":      "pending",
+		"status":      status,
 	})
 }
 
@@ -214,6 +229,88 @@ func (h *Hub) handleListProposals(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, proposals)
 }
 
+// approveProposal is the core logic for approving a proposal: reads the
+// proposal from the DB, adds the area to the NAL, signs, persists, and
+// broadcasts the nal_updated event. It accepts optional overrides for
+// access mode and allow_ansi (pass empty/false to use proposal defaults).
+func (h *Hub) approveProposal(network, proposalID, accessModeOverride string, _ bool) error {
+	// Read proposal from DB.
+	var tag, name, desc, lang, accessMode, fromNode string
+	var allowANSI int
+	err := h.proposals.db.QueryRow(
+		`SELECT tag, name, description, language, access_mode, allow_ansi, from_node
+		 FROM area_proposals WHERE id = ? AND network = ? AND status = 'pending'`,
+		proposalID, network,
+	).Scan(&tag, &name, &desc, &lang, &accessMode, &allowANSI, &fromNode)
+	if err != nil {
+		return fmt.Errorf("read proposal: %w", err)
+	}
+
+	if accessModeOverride != "" {
+		accessMode = accessModeOverride
+	}
+
+	// Get manager pubkey.
+	managerPubKeyB64 := ""
+	managerSub := h.subscribers.Get(fromNode, network)
+	if managerSub != nil {
+		managerPubKeyB64 = managerSub.PubKeyB64
+	}
+
+	// Load current NAL (or create new one).
+	currentNAL, err := h.nalStore.Get(network)
+	if err != nil {
+		return fmt.Errorf("get nal: %w", err)
+	}
+	if currentNAL == nil {
+		currentNAL = &protocol.NAL{
+			V3NetNAL: "1.0",
+			Network:  network,
+		}
+	}
+
+	// Add the new area.
+	newArea := protocol.Area{
+		Tag:              tag,
+		Name:             name,
+		Description:      desc,
+		Language:         lang,
+		ManagerNodeID:    fromNode,
+		ManagerPubKeyB64: managerPubKeyB64,
+		Access: protocol.AreaAccess{
+			Mode: accessMode,
+		},
+		Policy: protocol.AreaPolicy{
+			MaxBodyBytes: protocol.MaxBodyBytes,
+			AllowANSI:    allowANSI != 0,
+		},
+	}
+	currentNAL.Areas = append(currentNAL.Areas, newArea)
+
+	// Re-sign the NAL.
+	if err := nal.Sign(currentNAL, h.cfg.Keystore); err != nil {
+		return fmt.Errorf("sign nal: %w", err)
+	}
+
+	if err := h.nalStore.Put(network, currentNAL); err != nil {
+		return fmt.Errorf("put nal: %w", err)
+	}
+
+	if err := h.proposals.Resolve(proposalID, "approved", ""); err != nil {
+		slog.Error("resolve proposal", "error", err)
+	}
+
+	// Fan out nal_updated event.
+	ev, _ := protocol.NewEvent(protocol.EventNALUpdated, protocol.NALUpdatedPayload{
+		Network:   network,
+		Updated:   currentNAL.Updated,
+		AreaCount: len(currentNAL.Areas),
+	})
+	h.broadcaster.Publish(network, ev)
+
+	return nil
+}
+
 // handleApproveProposal approves a proposal and adds the area to the NAL.
 func (h *Hub) handleApproveProposal(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
@@ -230,98 +327,19 @@ func (h *Hub) handleApproveProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read proposal from DB.
-	var tag, name, desc, lang, accessMode, fromNode string
-	var allowANSI int
-	err := h.proposals.db.QueryRow(
-		`SELECT tag, name, description, language, access_mode, allow_ansi, from_node
-		 FROM area_proposals WHERE id = ? AND network = ? AND status = 'pending'`,
-		proposalID, network,
-	).Scan(&tag, &name, &desc, &lang, &accessMode, &allowANSI, &fromNode)
-	if err == sql.ErrNoRows {
-		http.Error(w, `{"error":"proposal not found or not pending"}`, http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		slog.Error("get proposal for approve", "error", err)
-		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
-		return
-	}
-
 	// Parse optional overrides.
 	var overrides protocol.ProposalApproveRequest
 	json.NewDecoder(r.Body).Decode(&overrides) // ignore errors — overrides are optional
-	if overrides.AccessMode != "" {
-		accessMode = overrides.AccessMode
-	}
-	managerNodeID := fromNode
-	if overrides.ManagerNodeID != "" {
-		managerNodeID = overrides.ManagerNodeID
-	}
 
-	// Get manager pubkey.
-	managerPubKeyB64 := ""
-	managerSub := h.subscribers.Get(managerNodeID, network)
-	if managerSub != nil {
-		managerPubKeyB64 = managerSub.PubKeyB64
-	}
-
-	// Load current NAL (or create new one).
-	currentNAL, err := h.nalStore.Get(network)
-	if err != nil {
-		slog.Error("get nal for approve", "error", err)
-		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
-		return
-	}
-	if currentNAL == nil {
-		currentNAL = &protocol.NAL{
-			V3NetNAL: "1.0",
-			Network:  network,
+	if err := h.approveProposal(network, proposalID, overrides.AccessMode, false); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, `{"error":"proposal not found or not pending"}`, http.StatusNotFound)
+			return
 		}
-	}
-
-	// Add the new area.
-	newArea := protocol.Area{
-		Tag:              tag,
-		Name:             name,
-		Description:      desc,
-		Language:         lang,
-		ManagerNodeID:    managerNodeID,
-		ManagerPubKeyB64: managerPubKeyB64,
-		Access: protocol.AreaAccess{
-			Mode: accessMode,
-		},
-		Policy: protocol.AreaPolicy{
-			MaxBodyBytes: protocol.MaxBodyBytes,
-			AllowANSI:    allowANSI != 0,
-		},
-	}
-	currentNAL.Areas = append(currentNAL.Areas, newArea)
-
-	// Re-sign the NAL.
-	if err := nal.Sign(currentNAL, h.cfg.Keystore); err != nil {
-		slog.Error("sign nal after approve", "error", err)
+		slog.Error("approve proposal", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-
-	if err := h.nalStore.Put(network, currentNAL); err != nil {
-		slog.Error("put nal after approve", "error", err)
-		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
-		return
-	}
-
-	if err := h.proposals.Resolve(proposalID, "approved", ""); err != nil {
-		slog.Error("resolve proposal", "error", err)
-	}
-
-	// Fan out nal_updated event.
-	ev, _ := protocol.NewEvent(protocol.EventNALUpdated, protocol.NALUpdatedPayload{
-		Network:   network,
-		Updated:   currentNAL.Updated,
-		AreaCount: len(currentNAL.Areas),
-	})
-	h.broadcaster.Publish(network, ev)
 
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

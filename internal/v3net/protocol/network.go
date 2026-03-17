@@ -92,6 +92,14 @@ type AreaProposal struct {
 	Status      string `json:"status"`
 }
 
+// ProposalResponse holds the hub's response to an area proposal.
+type ProposalResponse struct {
+	OK         bool   `json:"ok"`
+	ProposalID string `json:"proposal_id"`
+	Status     string `json:"status"`
+	Error      string `json:"error"`
+}
+
 // AreaProposalRequest is the body of POST /areas/propose.
 type AreaProposalRequest struct {
 	Tag         string `json:"tag"`

@@ -225,3 +225,35 @@ func (s *Service) RegisterArea(areaID int, network string) {
 func (s *Service) NetworkForArea(areaID int) string {
 	return s.areaToNetwork[areaID]
 }
+
+// ProposeArea submits an area proposal to the hub for the given network.
+func (s *Service) ProposeArea(network string, req protocol.AreaProposalRequest) (*protocol.ProposalResponse, error) {
+	l, ok := s.leafByNetwork[network]
+	if !ok {
+		return nil, fmt.Errorf("v3net: no leaf configured for network %q", network)
+	}
+	return l.ProposeArea(req)
+}
+
+// FetchNALForNetwork fetches and verifies the NAL for the given network.
+func (s *Service) FetchNALForNetwork(ctx context.Context, network string) (*protocol.NAL, error) {
+	l, ok := s.leafByNetwork[network]
+	if !ok {
+		return nil, fmt.Errorf("v3net: no leaf configured for network %q", network)
+	}
+	return l.FetchNAL(ctx)
+}
+
+// HubURLForNetwork returns the hub URL for the given network, or empty string.
+func (s *Service) HubURLForNetwork(network string) string {
+	l, ok := s.leafByNetwork[network]
+	if !ok {
+		return ""
+	}
+	return l.HubURL()
+}
+
+// ConfigPath returns the path used to load the V3Net config (for saving).
+func (s *Service) ConfigPath() string {
+	return s.cfg.KeystorePath // parent dir derived at call site
+}

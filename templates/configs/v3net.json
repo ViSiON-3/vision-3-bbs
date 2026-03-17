@@ -5,10 +5,18 @@
   "registryUrl": "https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json",
   "hub": {
     "enabled": false,
-    "listenAddr": ":8765",
+    "host": "",
+    "port": 8765,
     "dataDir": "data/v3net_hub",
     "autoApprove": false,
     "networks": []
   },
-  "leaves": []
+  "leaves": [
+    {
+      "hubUrl": "http://localhost:8765",
+      "network": "felonynet",
+      "board": "fel.general",
+      "pollInterval": "5m"
+    }
+  ]
 }

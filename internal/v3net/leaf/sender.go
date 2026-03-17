@@ -131,6 +131,31 @@ func (l *Leaf) signedPost(path string, body []byte) error {
 	return nil
 }
 
+// signedPostWithResponse is like signedPost but returns the raw response
+// so the caller can parse the body. The caller must close resp.Body.
+func (l *Leaf) signedPostWithResponse(path string, body []byte) (*http.Response, error) {
+	url := l.cfg.HubURL + path
+	bodyHash := sha256.Sum256(body)
+	bodySHA := hex.EncodeToString(bodyHash[:])
+	dateStr := time.Now().UTC().Format(http.TimeFormat)
+
+	sig, err := l.cfg.Keystore.Sign("POST", path, dateStr, bodySHA)
+	if err != nil {
+		return nil, fmt.Errorf("leaf: sign request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("leaf: create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Date", dateStr)
+	req.Header.Set("X-V3Net-Node-ID", l.cfg.Keystore.NodeID())
+	req.Header.Set("X-V3Net-Signature", sig)
+
+	return l.client.Do(req)
+}
+
 func (l *Leaf) signedGet(path string) (*http.Response, error) {
 	return l.signedGetWithContext(context.Background(), path)
 }

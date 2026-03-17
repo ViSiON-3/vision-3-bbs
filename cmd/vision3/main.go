@@ -1803,7 +1803,7 @@ func main() {
 			v3netService = svc
 
 			// Auto-create message areas for V3Net subscriptions if missing.
-			v3net.SyncAreas(v3netConfig.Leaves, messageMgr)
+			v3net.SyncAreas(v3netConfig.Leaves, messageMgr, confMgr)
 
 			// Configure leaf clients for each subscribed network.
 			type v3netAreaInfo struct {

@@ -38,7 +38,7 @@ func TestSyncAreasCreatesMissing(t *testing.T) {
 		{HubURL: "https://hub.example.com", Network: "felonynet", Board: "FELTECH"},
 	}
 
-	created := SyncAreas(leaves, mgr)
+	created := SyncAreas(leaves, mgr, nil)
 	if created != 2 {
 		t.Errorf("SyncAreas created = %d, want 2", created)
 	}
@@ -74,7 +74,7 @@ func TestSyncAreasCreatesMissing(t *testing.T) {
 	}
 
 	// Run again — should create nothing.
-	created2 := SyncAreas(leaves, mgr)
+	created2 := SyncAreas(leaves, mgr, nil)
 	if created2 != 0 {
 		t.Errorf("second SyncAreas created = %d, want 0", created2)
 	}

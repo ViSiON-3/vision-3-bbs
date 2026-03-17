@@ -6,5 +6,13 @@
         "name": "Local Areas",
         "description": "Local BBS discussion and file areas",
         "acs": "s10"
+    },
+    {
+        "id": 2,
+        "position": 2,
+        "tag": "FELONYNET",
+        "name": "FelonyNet",
+        "description": "FelonyNet message network areas",
+        "acs": "s10"
     }
 ]

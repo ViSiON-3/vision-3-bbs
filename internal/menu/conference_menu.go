@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -259,8 +259,8 @@ func displayConferenceList(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 		displayedConfs = append(displayedConfs, conf)
 		line := processedMid
 		line = strings.ReplaceAll(line, "^CI", padRight(strconv.Itoa(len(displayedConfs)), 3))
-		line = strings.ReplaceAll(line, "^CN", padRight(truncateStr(conf.Name, 33), 33))
-		line = strings.ReplaceAll(line, "^CD", truncateStr(conf.Description, 40))
+		line = strings.ReplaceAll(line, "^CN", padRight(truncateStr(conf.Name, 20), 20))
+		line = strings.ReplaceAll(line, "^CD", truncateStr(conf.Description, 53))
 		buf.WriteString(line)
 	}
 

@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -93,8 +93,9 @@ func runSelectMessageAreaLightbar(e *MenuExecutor, s ssh.Session, terminal *term
 		line := processedMidTemplate
 		line = strings.ReplaceAll(line, "^ID", padRight(strconv.Itoa(displayIdx), 3))
 		line = strings.ReplaceAll(line, "^TAG", padRight(truncateStr(area.Tag, 16), 16))
-		line = strings.ReplaceAll(line, "^NA", padRight(truncateStr(area.Name, 38), 38))
-		line = strings.ReplaceAll(line, "^DS", area.AreaType)
+		line = strings.ReplaceAll(line, "^NA", padRight(truncateStr(area.Name, 14), 14))
+		line = strings.ReplaceAll(line, "^DE", padRight(truncateStr(area.Description, 32), 32))
+		line = strings.ReplaceAll(line, "^DS", truncateStr(area.AreaType, 8))
 		return strings.TrimRight(line, "\r\n")
 	}
 

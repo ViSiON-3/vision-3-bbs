@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 // V3NetStatusProvider is an interface for querying V3Net service status.
@@ -21,6 +23,9 @@ type V3NetStatusProvider interface {
 	LeafCount() int
 	LeafNetworks() []string
 	NetworkForArea(areaID int) string
+	FetchNALForNetwork(ctx context.Context, network string) (*protocol.NAL, error)
+	HubURLForNetwork(network string) string
+	ProposeArea(network string, req protocol.AreaProposalRequest) (*protocol.ProposalResponse, error)
 }
 
 func runV3NetStatus(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {

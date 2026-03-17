@@ -37,6 +37,11 @@ func New(cfg Config) *Leaf {
 	return l
 }
 
+// HubURL returns the hub URL this leaf connects to.
+func (l *Leaf) HubURL() string {
+	return l.cfg.HubURL
+}
+
 // Poll runs a single poll cycle. Exported for integration testing.
 func (l *Leaf) Poll(ctx context.Context) (int, error) {
 	return l.poll(ctx)

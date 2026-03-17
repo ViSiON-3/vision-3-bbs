@@ -45,14 +45,30 @@ func (l *Leaf) Areas(ctx context.Context) ([]protocol.Area, error) {
 	return n.Areas, nil
 }
 
-// ProposeArea submits an area proposal to the hub.
-func (l *Leaf) ProposeArea(req protocol.AreaProposalRequest) error {
+// ProposeArea submits an area proposal to the hub and returns the response.
+func (l *Leaf) ProposeArea(req protocol.AreaProposalRequest) (*protocol.ProposalResponse, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("leaf: marshal proposal: %w", err)
+		return nil, fmt.Errorf("leaf: marshal proposal: %w", err)
 	}
 	path := fmt.Sprintf("/v3net/v1/%s/areas/propose", l.cfg.Network)
-	return l.signedPost(path, data)
+	resp, err := l.signedPostWithResponse(path, data)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var pr protocol.ProposalResponse
+	if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
+		return nil, fmt.Errorf("leaf: decode proposal response: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		if pr.Error != "" {
+			return nil, fmt.Errorf("hub: %s", pr.Error)
+		}
+		return nil, fmt.Errorf("leaf: propose returned %d", resp.StatusCode)
+	}
+	return &pr, nil
 }
 
 // handleNALUpdated schedules a NAL re-fetch after receiving an nal_updated SSE event.
