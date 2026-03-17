@@ -45,11 +45,12 @@ type Registry struct {
 
 // SubscribeRequest is the body of POST /v3net/v1/subscribe.
 type SubscribeRequest struct {
-	Network   string `json:"network"`
-	NodeID    string `json:"node_id"`
-	PubKeyB64 string `json:"pubkey_b64"`
-	BBSName   string `json:"bbs_name"`
-	BBSHost   string `json:"bbs_host"`
+	Network   string   `json:"network"`
+	NodeID    string   `json:"node_id"`
+	PubKeyB64 string   `json:"pubkey_b64"`
+	BBSName   string   `json:"bbs_name"`
+	BBSHost   string   `json:"bbs_host"`
+	AreaTags  []string `json:"area_tags,omitempty"`
 }
 
 // SubscribeResponse is the response to a subscribe request.
@@ -66,7 +67,7 @@ type ChatRequest struct {
 
 // PresenceRequest is the body of POST /v3net/v1/{network}/presence.
 type PresenceRequest struct {
-	Type   string `json:"type"`   // "logon" or "logoff"
+	Type   string `json:"type"` // "logon" or "logoff"
 	Handle string `json:"handle"`
 }
 
@@ -74,4 +75,89 @@ type PresenceRequest struct {
 type MessageResponse struct {
 	OK      bool   `json:"ok"`
 	MsgUUID string `json:"msg_uuid"`
+}
+
+// AreaProposal represents a proposed area awaiting coordinator approval.
+type AreaProposal struct {
+	ID          string `json:"id"`
+	Tag         string `json:"tag"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Language    string `json:"language"`
+	AccessMode  string `json:"access_mode"`
+	AllowANSI   bool   `json:"allow_ansi"`
+	FromNode    string `json:"from_node"`
+	FromBBS     string `json:"from_bbs"`
+	ProposedAt  string `json:"proposed_at"`
+	Status      string `json:"status"`
+}
+
+// AreaProposalRequest is the body of POST /areas/propose.
+type AreaProposalRequest struct {
+	Tag         string `json:"tag"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Language    string `json:"language"`
+	AccessMode  string `json:"access_mode"`
+	AllowANSI   bool   `json:"allow_ansi"`
+}
+
+// ProposalApproveRequest is the optional body for approve with overrides.
+type ProposalApproveRequest struct {
+	AccessMode    string `json:"access_mode,omitempty"`
+	ManagerNodeID string `json:"manager_node_id,omitempty"`
+}
+
+// ProposalRejectRequest is the optional body for reject.
+type ProposalRejectRequest struct {
+	Reason string `json:"reason"`
+}
+
+// AccessRequest represents a pending area subscription request.
+type AccessRequest struct {
+	NodeID      string `json:"node_id"`
+	BBSName     string `json:"bbs_name"`
+	BBSHost     string `json:"bbs_host"`
+	RequestedAt string `json:"requested_at"`
+}
+
+// AreaAccessConfig is the access configuration for an area.
+type AreaAccessConfig struct {
+	Mode      string   `json:"mode"`
+	AllowList []string `json:"allow_list"`
+	DenyList  []string `json:"deny_list"`
+}
+
+// AccessModeRequest is the body of POST /areas/{tag}/access/mode.
+type AccessModeRequest struct {
+	Mode string `json:"mode"`
+}
+
+// NodeIDsRequest is the body for approve/deny/remove endpoints.
+type NodeIDsRequest struct {
+	NodeIDs []string `json:"node_ids"`
+	Reason  string   `json:"reason,omitempty"`
+}
+
+// AreaSubscriptionStatus is a per-area status in the subscribe response.
+type AreaSubscriptionStatus struct {
+	Tag    string `json:"tag"`
+	Status string `json:"status"`
+}
+
+// SubscribeWithAreasResponse is the response when area_tags are provided.
+type SubscribeWithAreasResponse struct {
+	OK    bool                     `json:"ok"`
+	Areas []AreaSubscriptionStatus `json:"areas,omitempty"`
+}
+
+// CoordTransferRequest is the body of POST /coordinator/transfer.
+type CoordTransferRequest struct {
+	NewNodeID    string `json:"new_node_id"`
+	NewPubKeyB64 string `json:"new_pubkey_b64"`
+}
+
+// CoordAcceptRequest is the body of POST /coordinator/accept.
+type CoordAcceptRequest struct {
+	Token string `json:"token"`
 }

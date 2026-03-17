@@ -129,7 +129,7 @@ func New(configPath string) (Model, error) {
 
 	sysMenuItems := []sysConfigMenuItem{
 		{"BBS Registration"},
-		{"Network Setup"},
+		{"Server Setup"},
 		{"Connection Limits"},
 		{"Access Levels"},
 		{"Default Settings"},

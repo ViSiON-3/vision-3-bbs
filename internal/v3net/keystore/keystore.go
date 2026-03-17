@@ -105,6 +105,11 @@ func (ks *Keystore) Sign(method, path, dateUTC, bodySHA256 string) (string, erro
 	return base64.RawURLEncoding.EncodeToString(sig), nil
 }
 
+// SignRaw produces a raw ed25519 signature over the given payload bytes.
+func (ks *Keystore) SignRaw(payload []byte) ([]byte, error) {
+	return ed25519.Sign(ks.privKey, payload), nil
+}
+
 // Verify checks a base64url-encoded signature against the given canonical components
 // using the provided public key.
 func Verify(pubKey ed25519.PublicKey, method, path, dateUTC, bodySHA256, sigB64 string) bool {

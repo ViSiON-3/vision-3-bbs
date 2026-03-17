@@ -256,7 +256,80 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If area_tags are provided, process area subscriptions.
+	if len(req.AreaTags) > 0 {
+		currentNAL, nalErr := h.nalStore.Get(req.Network)
+		if nalErr != nil || currentNAL == nil {
+			// No NAL available — return basic response without area status.
+			writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
+			return
+		}
+
+		var areaStatuses []protocol.AreaSubscriptionStatus
+		for _, tag := range req.AreaTags {
+			area := currentNAL.FindArea(tag)
+			if area == nil {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+					"error": "unknown area tag: " + tag,
+				})
+				return
+			}
+
+			// Check deny list.
+			if isDenied(area, req.NodeID) {
+				http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+				return
+			}
+
+			var areaStatus string
+			switch area.Access.Mode {
+			case protocol.AccessModeOpen:
+				areaStatus = "active"
+			case protocol.AccessModeApproval:
+				areaStatus = "pending"
+				// Create access request and notify manager.
+				h.accessRequests.Add(req.Network, tag, req.NodeID, req.BBSName)
+				ev, _ := protocol.NewEvent(protocol.EventAreaAccessRequested, protocol.AreaAccessRequestedPayload{
+					Network: req.Network,
+					Tag:     tag,
+					NodeID:  req.NodeID,
+					BBSName: req.BBSName,
+				})
+				h.broadcaster.Publish(req.Network, ev)
+			case protocol.AccessModeClosed:
+				// Only allowed if already on allow list.
+				if containsStr(area.Access.AllowList, req.NodeID) {
+					areaStatus = "active"
+				} else {
+					http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+					return
+				}
+			}
+
+			h.areaSubscriptions.Upsert(req.NodeID, req.Network, tag, areaStatus)
+			areaStatuses = append(areaStatuses, protocol.AreaSubscriptionStatus{
+				Tag:    tag,
+				Status: areaStatus,
+			})
+		}
+
+		writeJSON(w, http.StatusOK, protocol.SubscribeWithAreasResponse{
+			OK:    true,
+			Areas: areaStatuses,
+		})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
+}
+
+func isDenied(area *protocol.Area, nodeID string) bool {
+	for _, id := range area.Access.DenyList {
+		if id == nodeID {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Hub) findNetwork(name string) *NetworkConfig {

@@ -90,6 +90,29 @@ uses auto-approve (FelonyNet does), you start receiving messages immediately.
 From the sysop admin menu, press `3` for **V3Net Status** to confirm your node
 ID, subscription count, and network list.
 
+## Area Subscriptions
+
+FelonyNet uses the **Network Area List (NAL)** to define its message areas.
+Each area has a tag (e.g., `fel.general`), a name, and an access mode.
+
+### Subscribing to Areas
+
+From the sysop menu, go to **V3Net > Area Subscriptions** to see all available
+areas on FelonyNet. Press **Space** to subscribe, **E** to set the local message
+base name for an area.
+
+Most FelonyNet areas use **open** access — subscribe and you're in immediately.
+Some specialized areas may use **approval** mode, where the area manager reviews
+your subscription request first.
+
+### Proposing New Areas
+
+Any FelonyNet sysop can propose a new message area. From the Area Subscriptions
+screen, press **P** to open the proposal form. The FelonyNet coordinator reviews
+proposals and adds approved areas to the signed NAL.
+
+For full details on area management, see [V3Net NAL documentation](v3net-nal.md).
+
 ## How It Works
 
 1. **Polling**: Your leaf node polls the hub every `pollInterval` for new

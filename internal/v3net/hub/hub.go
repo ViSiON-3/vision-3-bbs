@@ -14,13 +14,18 @@ import (
 
 // Hub is the V3Net hub server.
 type Hub struct {
-	cfg         Config
-	db          *sql.DB
-	subscribers *SubscriberStore
-	messages    *MessageStore
-	broadcaster *Broadcaster
-	server      *http.Server
-	chatLimiter *rateLimiter
+	cfg               Config
+	db                *sql.DB
+	subscribers       *SubscriberStore
+	messages          *MessageStore
+	broadcaster       *Broadcaster
+	server            *http.Server
+	chatLimiter       *rateLimiter
+	nalStore          *NALStore
+	proposals         *ProposalStore
+	accessRequests    *AccessRequestStore
+	areaSubscriptions *AreaSubscriptionStore
+	coordTransfers    *CoordTransferStore
 }
 
 // New creates a new Hub with the given configuration.
@@ -43,13 +48,48 @@ func New(cfg Config) (*Hub, error) {
 		return nil, err
 	}
 
+	nalStore, err := NewNALStore(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	proposals, err := NewProposalStore(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	accessReqs, err := NewAccessRequestStore(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	areaSubs, err := NewAreaSubscriptionStore(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	coordTransfers, err := NewCoordTransferStore(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	h := &Hub{
-		cfg:         cfg,
-		db:          db,
-		subscribers: subscribers,
-		messages:    messages,
-		broadcaster: NewBroadcaster(),
-		chatLimiter: newRateLimiter(time.Second),
+		cfg:               cfg,
+		db:                db,
+		subscribers:       subscribers,
+		messages:          messages,
+		broadcaster:       NewBroadcaster(),
+		chatLimiter:       newRateLimiter(time.Second),
+		nalStore:          nalStore,
+		proposals:         proposals,
+		accessRequests:    accessReqs,
+		areaSubscriptions: areaSubs,
+		coordTransfers:    coordTransfers,
 	}
 
 	h.server = &http.Server{

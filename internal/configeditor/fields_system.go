@@ -141,7 +141,7 @@ func sysFieldsRegistration(cfg *config.ServerConfig) []fieldDef {
 	}
 }
 
-// sysFieldsNetwork returns fields for Network Setup sub-screen.
+// sysFieldsNetwork returns fields for Server Setup sub-screen.
 func sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 	return []fieldDef{
 		{

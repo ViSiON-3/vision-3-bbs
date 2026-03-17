@@ -8,15 +8,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 // Leaf is a V3Net leaf client that polls a hub for messages and maintains
 // an SSE connection for real-time events.
 type Leaf struct {
-	cfg     Config
-	client  *http.Client
-	eventCb atomic.Value // stores func(protocol.Event)
+	cfg      Config
+	client   *http.Client
+	eventCb  atomic.Value // stores func(protocol.Event)
+	nalCache *nal.Cache
 }
 
 // New creates a new Leaf with the given configuration.
@@ -25,8 +27,9 @@ func New(cfg Config) *Leaf {
 		cfg.PollInterval = DefaultPollInterval
 	}
 	l := &Leaf{
-		cfg:    cfg,
-		client: &http.Client{Timeout: 10 * time.Second},
+		cfg:      cfg,
+		client:   &http.Client{Timeout: 10 * time.Second},
+		nalCache: nal.NewCache(1 * time.Hour),
 	}
 	if cfg.OnEvent != nil {
 		l.eventCb.Store(cfg.OnEvent)

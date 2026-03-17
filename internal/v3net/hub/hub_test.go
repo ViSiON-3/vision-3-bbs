@@ -251,7 +251,10 @@ func TestDuplicatePostReturns200(t *testing.T) {
 
 	// Verify only one message stored.
 	getReq := signedRequest(t, leafKS, "GET", ts.URL+"/v3net/v1/testnet/messages", "")
-	resp, _ := http.DefaultClient.Do(getReq)
+	resp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("GET messages: %v", err)
+	}
 	defer resp.Body.Close()
 
 	var messages []json.RawMessage
