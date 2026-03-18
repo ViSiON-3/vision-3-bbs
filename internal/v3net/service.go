@@ -46,16 +46,13 @@ type Service struct {
 }
 
 // hubAutoInit performs idempotent hub initialization steps:
-// 1. Creates the hub data directory.
-// 2. Self-registers the hub node as an active subscriber for each network.
-// 3. Seeds the initial NAL from cfg.Hub.InitialAreas if none exists.
+// 1. Self-registers the hub node as an active subscriber for each network.
+// 2. Seeds the initial NAL from cfg.Hub.InitialAreas if none exists.
+//
+// Note: The hub data directory is created by New() before calling hub.New(),
+// which is the correct location for SQLite database initialization.
 func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
-	// Step 1: ensure data dir exists.
-	if err := os.MkdirAll(cfg.Hub.DataDir, 0755); err != nil {
-		slog.Warn("v3net: could not create hub data dir", "path", cfg.Hub.DataDir, "error", err)
-	}
-
-	// Step 2: self-register the hub node for each network.
+	// Step 1: self-register the hub node for each network.
 	for _, n := range cfg.Hub.Networks {
 		sub := hub.Subscriber{
 			NodeID:    ks.NodeID(),
@@ -72,7 +69,7 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 		}
 	}
 
-	// Step 3: seed NAL from InitialAreas if no NAL exists yet.
+	// Step 2: seed NAL from InitialAreas if no NAL exists yet.
 	if len(cfg.Hub.InitialAreas) == 0 {
 		return
 	}
