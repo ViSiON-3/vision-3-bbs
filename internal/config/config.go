@@ -880,10 +880,10 @@ type ServerConfig struct {
 
 // V3NetConfig holds V3Net networking configuration.
 type V3NetConfig struct {
-	Enabled      bool              `json:"enabled"`
-	KeystorePath string            `json:"keystorePath"` // Path to ed25519 keypair file
-	DedupDBPath  string            `json:"dedupDbPath"`  // Path to dedup SQLite database
-	RegistryURL  string            `json:"registryUrl"`  // Central registry URL (optional)
+	Enabled      bool   `json:"enabled"`
+	KeystorePath string `json:"keystorePath"` // Path to ed25519 keypair file
+	DedupDBPath  string `json:"dedupDbPath"`  // Path to dedup SQLite database
+	RegistryURL  string `json:"registryUrl"`  // Central registry URL (optional)
 	// ConfigPath is the configs directory path. Set at runtime, not persisted.
 	ConfigPath string            `json:"-"`
 	Hub        V3NetHubConfig    `json:"hub,omitempty"`
@@ -892,13 +892,13 @@ type V3NetConfig struct {
 
 // V3NetHubConfig configures this node as a V3Net hub.
 type V3NetHubConfig struct {
-	Enabled     bool              `json:"enabled"`
-	Host        string            `json:"host"`              // Listen host (blank = all interfaces)
-	Port        int               `json:"port"`              // Listen port (default: 8765)
-	TLSCert     string            `json:"tlsCert,omitempty"`
-	TLSKey      string            `json:"tlsKey,omitempty"`
-	DataDir     string            `json:"dataDir"`
-	AutoApprove  bool            `json:"autoApprove"`
+	Enabled      bool              `json:"enabled"`
+	Host         string            `json:"host"` // Listen host (blank = all interfaces)
+	Port         int               `json:"port"` // Listen port (default: 8765)
+	TLSCert      string            `json:"tlsCert,omitempty"`
+	TLSKey       string            `json:"tlsKey,omitempty"`
+	DataDir      string            `json:"dataDir"`
+	AutoApprove  bool              `json:"autoApprove"`
 	Networks     []V3NetHubNetwork `json:"networks,omitempty"`
 	InitialAreas []V3NetHubArea    `json:"initialAreas,omitempty"`
 }
@@ -929,8 +929,8 @@ type V3NetHubArea struct {
 type V3NetLeafConfig struct {
 	HubURL       string `json:"hubUrl"`
 	Network      string `json:"network"`
-	Board        string `json:"board"`        // Local message area tag to write received messages
-	PollInterval string `json:"pollInterval"` // Duration string (e.g., "5m")
+	Board        string `json:"board"`            // Local message area tag to write received messages
+	PollInterval string `json:"pollInterval"`     // Duration string (e.g., "5m")
 	Origin       string `json:"origin,omitempty"` // Origin line text (e.g. "My Cool BBS - bbs.example.com")
 }
 
