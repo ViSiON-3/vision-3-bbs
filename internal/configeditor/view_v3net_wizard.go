@@ -239,9 +239,9 @@ func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
-	boxH := 7
+	boxH := 6
 	if notice != "" {
-		boxH = 9
+		boxH = 7
 	}
 	extraV := maxInt(0, m.height-boxH-3)
 	topPad := extraV / 2
@@ -270,7 +270,7 @@ func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
 	b.WriteString(border(editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(padRight("  > "+m.textInput.View(), boxW)) +
+		fieldDisplayStyle.Width(boxW).Render("  > "+m.textInput.View()) +
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
 

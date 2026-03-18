@@ -63,6 +63,7 @@ func (m Model) updateV3NetSetupFork(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				origin:       boardName,
 			}
 			m.mode = modeV3NetWizardStep
+			m.textInput.Width = 56 // boxW(60) - "  > "(4)
 			m.textInput.Reset()
 			m.textInput.Focus()
 		case "h":
@@ -72,6 +73,7 @@ func (m Model) updateV3NetSetupFork(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				port: "8765",
 			}
 			m.mode = modeV3NetWizardStep
+			m.textInput.Width = 56 // boxW(60) - "  > "(4)
 			m.textInput.Reset()
 			m.textInput.Focus()
 		}
