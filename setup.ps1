@@ -104,7 +104,7 @@ if (Test-Path "bin\sexyz.exe") {
 } else {
     Write-Host "[!] sexyz not found at bin\sexyz.exe (required for file transfers)" -ForegroundColor Yellow
     Write-Host "  Download a release bundle which includes pre-built binaries:"
-    Write-Host "  https://github.com/robbiew/vision3-dist/releases/latest"
+    Write-Host "  https://github.com/ViSiON-3/vision-3-bbs/releases/latest"
     Write-Host "  Copy bin\sexyz.exe from the bundle into this installation's bin\ directory."
 }
 

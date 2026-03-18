@@ -25,6 +25,7 @@ type allConfigs struct {
 	Doors       map[string]config.DoorConfig
 	Events      config.EventsConfig
 	FTN         config.FTNConfig
+	V3Net       config.V3NetConfig
 	Protocols   []transfer.ProtocolConfig
 	Archivers   archiver.Config
 	LoginSeq    []config.LoginItem
@@ -80,6 +81,12 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 	ac.FTN, err = config.LoadFTNConfig(configPath)
 	if err != nil {
 		return ac, fmt.Errorf("loading ftn: %w", err)
+	}
+
+	// V3Net
+	ac.V3Net, err = config.LoadV3NetConfig(configPath)
+	if err != nil {
+		return ac, fmt.Errorf("loading v3net: %w", err)
 	}
 
 	// Protocols

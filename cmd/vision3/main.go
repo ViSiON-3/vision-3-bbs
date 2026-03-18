@@ -38,6 +38,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	v3net "github.com/ViSiON-3/vision-3-bbs/internal/v3net"
 )
 
 var (
@@ -56,6 +57,7 @@ var (
 	// colorTestMode       bool   // Flag variable REMOVED
 	outputModeFlag    string             // Output mode flag (auto, utf8, cp437)
 	connectionTracker *ConnectionTracker // Global connection tracker
+	v3netService      *v3net.Service     // V3Net networking service (nil if disabled)
 )
 
 // allocateNodeIDForSession assigns the lowest available node slot (1..maxNodes)
@@ -864,6 +866,11 @@ func sessionHandler(s ssh.Session) {
 			sessionRegistry.Unregister(int(nodeID))
 		}
 
+		// V3Net logoff notification
+		if v3netService != nil && authenticatedUser != nil {
+			v3netService.SendLogoff(authenticatedUser.Handle)
+		}
+
 		// --- Record Call History ---
 		if authenticatedUser != nil {
 			log.Printf("DEBUG: Node %d: Adding call record for user %s (ID: %d)", nodeID, authenticatedUser.Handle, authenticatedUser.ID)
@@ -1135,43 +1142,6 @@ func sessionHandler(s ssh.Session) {
 		// Mark user as online
 		userMgr.MarkUserOnline(authenticatedUser.ID)
 
-		// Set default message area if not already set
-		if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
-			for _, area := range messageMgr.ListAreas() {
-				if menu.CheckUserACS(area.ACSRead, authenticatedUser) {
-					authenticatedUser.CurrentMessageAreaID = area.ID
-					authenticatedUser.CurrentMessageAreaTag = area.Tag
-					authenticatedUser.CurrentMsgConferenceID = area.ConferenceID
-					if confMgr != nil {
-						if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
-							authenticatedUser.CurrentMsgConferenceTag = conf.Tag
-						}
-					}
-					break
-				}
-			}
-		}
-		// Set default file area if not already set
-		if authenticatedUser.CurrentFileAreaID == 0 && fileMgr != nil {
-			for _, area := range fileMgr.ListAreas() {
-				if menu.CheckUserACS(area.ACSList, authenticatedUser) {
-					authenticatedUser.CurrentFileAreaID = area.ID
-					authenticatedUser.CurrentFileAreaTag = area.Tag
-					authenticatedUser.CurrentFileConferenceID = area.ConferenceID
-					if confMgr != nil {
-						if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
-							authenticatedUser.CurrentFileConferenceTag = conf.Tag
-						}
-					}
-					break
-				}
-			}
-		}
-		// Persist defaults
-		if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
-			log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
-		}
-
 		currentMenuName = "MAIN"
 	}
 
@@ -1255,6 +1225,48 @@ func sessionHandler(s ssh.Session) {
 		log.Printf("ERROR: Node %d: Reached post-auth loop but authenticatedUser is nil. Logging off.", nodeID)
 		return
 	}
+	// Set default message area if not already set (handles both SSH pre-auth and normal login)
+	defaultsChanged := false
+	if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
+		for _, area := range messageMgr.ListAreas() {
+			if menu.CheckUserACS(area.ACSRead, authenticatedUser) {
+				authenticatedUser.CurrentMessageAreaID = area.ID
+				authenticatedUser.CurrentMessageAreaTag = area.Tag
+				authenticatedUser.CurrentMsgConferenceID = area.ConferenceID
+				if confMgr != nil {
+					if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
+						authenticatedUser.CurrentMsgConferenceTag = conf.Tag
+					}
+				}
+				defaultsChanged = true
+				break
+			}
+		}
+	}
+	// Set default file area if not already set
+	if authenticatedUser.CurrentFileAreaID == 0 && fileMgr != nil {
+		for _, area := range fileMgr.ListAreas() {
+			if menu.CheckUserACS(area.ACSList, authenticatedUser) {
+				authenticatedUser.CurrentFileAreaID = area.ID
+				authenticatedUser.CurrentFileAreaTag = area.Tag
+				authenticatedUser.CurrentFileConferenceID = area.ConferenceID
+				if confMgr != nil {
+					if conf, ok := confMgr.GetByID(area.ConferenceID); ok {
+						authenticatedUser.CurrentFileConferenceTag = conf.Tag
+					}
+				}
+				defaultsChanged = true
+				break
+			}
+		}
+	}
+	// Persist defaults only if we actually assigned new values
+	if defaultsChanged {
+		if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
+			log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
+		}
+	}
+
 	log.Printf("Node %d: Entering main loop for authenticated user: %s", nodeID, authenticatedUser.Handle)
 
 	// --- Invisible Login Prompt (users at or above invisibleLevel) ---
@@ -1492,6 +1504,12 @@ func sessionHandler(s ssh.Session) {
 	} else {
 		currentMenuName = loginNextMenu
 	}
+
+	// V3Net logon notification
+	if v3netService != nil && authenticatedUser != nil {
+		v3netService.SendLogon(authenticatedUser.Handle)
+	}
+
 	for {
 		if currentMenuName == "" || currentMenuName == "LOGOFF" {
 			log.Printf("Node %d: User %s selected Logoff or reached end state.", nodeID, authenticatedUser.Handle)
@@ -1771,6 +1789,105 @@ func main() {
 		log.Printf("INFO: Event scheduler started with %d events", len(eventsConfig.Events))
 	} else {
 		log.Printf("INFO: Event scheduler disabled")
+	}
+
+	// Load V3Net configuration from v3net.json (separate from main config, like ftn.json).
+	v3netConfig, v3netCfgErr := config.LoadV3NetConfig(rootConfigPath)
+	if v3netCfgErr != nil {
+		log.Printf("ERROR: Failed to load V3Net config: %v", v3netCfgErr)
+	}
+
+	// Start V3Net networking service if enabled
+	if v3netCfgErr == nil && v3netConfig.Enabled {
+		svc, v3err := v3net.New(v3netConfig)
+		if v3err != nil {
+			log.Printf("ERROR: V3Net initialization failed: %v", v3err)
+		} else {
+			svc.BBSName = serverConfig.BoardName
+			svc.BBSHost = serverConfig.SSHHost
+			v3netService = svc
+
+			// Auto-create message areas for V3Net subscriptions if missing.
+			v3net.SyncAreas(v3netConfig.Leaves, messageMgr, confMgr)
+
+			// Configure leaf clients for each subscribed network.
+			type v3netAreaInfo struct {
+				Network string
+				Origin  string
+			}
+			v3netAreaMap := make(map[int]v3netAreaInfo) // area ID → network info
+			nodeID := svc.NodeID()
+			for _, lcfg := range v3netConfig.Leaves {
+				area, ok := messageMgr.GetAreaByTag(lcfg.Board)
+				if !ok {
+					log.Printf("WARN: V3Net leaf %q: message area %q not found, skipping", lcfg.Network, lcfg.Board)
+					continue
+				}
+				writer := v3net.NewJAMAdapter(messageMgr, area.ID)
+				if err := v3netService.AddLeaf(lcfg, writer, nil); err != nil {
+					log.Printf("ERROR: V3Net leaf %q: %v", lcfg.Network, err)
+					continue
+				}
+				// Default origin to BBS name if not configured.
+				origin := lcfg.Origin
+				if origin == "" {
+					origin = serverConfig.BoardName
+				}
+				v3netAreaMap[area.ID] = v3netAreaInfo{Network: lcfg.Network, Origin: origin}
+				svc.RegisterArea(area.ID, lcfg.Network)
+			}
+
+			// Append tearline/origin to local JAM copy for V3Net areas so
+			// the user sees the origin on locally-created messages too.
+			messageMgr.BodyTransform = func(areaID int, body string) string {
+				info, ok := v3netAreaMap[areaID]
+				if !ok {
+					return body
+				}
+				// Skip if the body already contains a tearline (e.g. inbound
+				// V3Net imports that were written by JAMAdapter with the
+				// remote tearline/origin already appended).
+				if strings.Contains(body, "\n--- ") || strings.HasPrefix(body, "--- ") {
+					return body
+				}
+				return v3net.AppendV3NetOrigin(body, v3net.DefaultTearline(), info.Origin, nodeID)
+			}
+
+			// Hook message posts to forward to V3Net when posted to a networked area.
+			// Skip messages imported from V3Net (contain the UUID kludge) to prevent feedback loops.
+			messageMgr.OnMessagePosted = func(area *message.MessageArea, msgNum int, from, to, subject, body string) {
+				info, ok := v3netAreaMap[area.ID]
+				if !ok {
+					return
+				}
+				if strings.HasPrefix(body, "\x01V3NETUUID: ") {
+					return
+				}
+				msg := v3net.BuildWireMessage(info.Network, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, info.Origin)
+				if err := svc.SendMessage(info.Network, msg); err != nil {
+					log.Printf("ERROR: V3Net: failed to send message to %s: %v", info.Network, err)
+					return
+				}
+				// Mark the local JAM copy as sent so the reader shows "V3NET SENT".
+				if err := messageMgr.MarkMessageSent(area.ID, msgNum); err != nil {
+					log.Printf("WARN: V3Net: failed to mark message %d as sent: %v", msgNum, err)
+				}
+			}
+
+			v3netCtx, v3netCancel := context.WithCancel(context.Background())
+			defer func() {
+				log.Printf("INFO: Shutting down V3Net service...")
+				v3netCancel()
+				v3netService.Close()
+			}()
+
+			go v3netService.Start(v3netCtx)
+			menuExecutor.V3NetStatus = v3netService
+			log.Printf("INFO: V3Net service started (node_id=%s, hub=%v, leaves=%d)",
+				v3netService.NodeID(), v3netService.HubActive(), v3netService.LeafCount())
+		}
+	} else if v3netCfgErr == nil {
+		log.Printf("INFO: V3Net networking disabled")
 	}
 
 	// Ensure at least one protocol is enabled

@@ -131,8 +131,8 @@ func (m Model) viewRecordList() string {
 	} else if m.recordTypeSupportsReorder() {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  P - Position  |  ESC - Return"
 	} else if m.recordType == "ftn" {
-		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  G - Global Settings  |  ESC - Return"
-	} else if m.recordType == "ftnlink" {
+		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  G - Global  |  ESC - Return"
+	} else if m.recordType == "ftnlink" || m.recordType == "v3netleaf" {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  ESC - Return"
 	} else {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  ESC - Return"
@@ -166,6 +166,10 @@ func (m Model) recordTypeTitle() string {
 		return "Archivers"
 	case "login":
 		return "Login Sequence"
+	case "v3netleaf":
+		return "V3Net Subscriptions"
+	case "v3nethub":
+		return "V3Net Networks"
 	}
 	return "Records"
 }
@@ -193,6 +197,10 @@ func (m Model) recordColumnHeader(boxW int) string {
 		return "  ID     Name                  Ext      Enabled"
 	case "login":
 		return "  #  Command          Data"
+	case "v3netleaf":
+		return fmt.Sprintf("   #  %-30s %-14s %s", "Hub URL", "Network", "Board")
+	case "v3nethub":
+		return fmt.Sprintf("   #  %-16s %s", "Network", "Description")
 	}
 	return ""
 }
@@ -264,6 +272,16 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 		if idx < len(m.configs.LoginSeq) {
 			l := m.configs.LoginSeq[idx]
 			content = fmt.Sprintf(" %3d  %-16s %s", idx+1, padRight(l.Command, 16), l.Data)
+		}
+	case "v3netleaf":
+		if idx < len(m.configs.V3Net.Leaves) {
+			l := m.configs.V3Net.Leaves[idx]
+			content = fmt.Sprintf(" %3d  %-30s %-14s %s", idx+1, padRight(l.HubURL, 30), padRight(l.Network, 14), l.Board)
+		}
+	case "v3nethub":
+		if idx < len(m.configs.V3Net.Hub.Networks) {
+			n := m.configs.V3Net.Hub.Networks[idx]
+			content = fmt.Sprintf(" %3d  %-16s %s", idx+1, padRight(n.Name, 16), n.Description)
 		}
 	}
 

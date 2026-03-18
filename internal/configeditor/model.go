@@ -122,12 +122,14 @@ func New(configPath string) (Model, error) {
 		{"9", "Transfer Protocols"},
 		{"A", "Archivers"},
 		{"B", "Login Sequence"},
+		{"C", "V3Net Subscriptions"},
+		{"D", "V3Net Networks"},
 		{"Q", "Quit Program"},
 	}
 
 	sysMenuItems := []sysConfigMenuItem{
 		{"BBS Registration"},
-		{"Network Setup"},
+		{"Server Setup"},
 		{"Connection Limits"},
 		{"Access Levels"},
 		{"Default Settings"},
@@ -233,6 +235,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 	recordTypes := []string{
 		"", "msgarea", "filearea", "conference", "door",
 		"event", "ftn", "ftnlink", "protocol", "archiver", "login",
+		"v3netleaf", "v3nethub",
 	}
 
 	switch m.topCursor {
@@ -240,7 +243,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeSysConfigMenu
 		m.sysMenuCursor = 0
 		return m, nil
-	case 11: // Quit
+	case 13: // Quit
 		return m.tryExit()
 	default:
 		// Items 1-9 are record list editors

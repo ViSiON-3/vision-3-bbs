@@ -17,8 +17,8 @@
     "auto_join": true
   },
   {
-    "id": 5,
-    "position": 5,
+    "id": 2,
+    "position": 2,
     "tag": "PRIVMAIL",
     "name": "Private Mail",
     "description": "Private user-to-user mail",

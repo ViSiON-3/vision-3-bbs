@@ -261,6 +261,11 @@ func (m Model) renderRecordEditRow(row, boxW int) string {
 	}
 
 	padBefore := 2
+	maxFieldW := boxW - padBefore
+	// Truncate field content to fit within the box
+	if lipgloss.Width(fieldStr) > maxFieldW {
+		fieldStr = truncateToDisplayWidth(fieldStr, maxFieldW)
+	}
 	// Use actual visual width to avoid blow-out from multi-byte characters
 	padAfter := boxW - padBefore - lipgloss.Width(fieldStr)
 	if padAfter < 0 {

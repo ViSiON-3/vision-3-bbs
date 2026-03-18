@@ -41,29 +41,30 @@ The visual placeholder format is particularly useful for ANSI art templates wher
 
 ## Available Placeholders
 
-| Code  | Replaced With                                                                                                                       |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `@B@` | Current message area tag                                                                                                            |
-| `@T@` | Message subject                                                                                                                     |
-| `@F@` | From (sender). Includes FTN origin address when available; may also include the user note when `@U@` is not present in the template |
-| `@S@` | To (recipient). Includes FTN destination address when available                                                                     |
-| `@U@` | User note for the message author, looked up from users.json. Blank if author is not a local user                                    |
-| `@M@` | Message status (LOCAL, ECHOMAIL, NETMAIL, READ, PRIVATE, etc.)                                                                      |
-| `@L@` | User access level                                                                                                                   |
-| `@#@` | Current message number (1-based)                                                                                                    |
-| `@N@` | Total messages in area                                                                                                              |
-| `@C@` | Message count display (format: `[current/total]` e.g., `[1/24]`, `[6/10]`)                                                          |
-| `@V@` | Verbose message count (format: `current of total` e.g., `1 of 24`, `6 of 10`)                                                       |
-| `@D@` | Message date (`MM/DD/YY`)                                                                                                           |
-| `@W@` | Message time (`h:mm am/pm`)                                                                                                         |
-| `@P@` | Reply-to message number (e.g., `12`), or `None` if the message is not a reply                                                       |
-| `@E@` | Thread reply count — number of other messages with the same subject (e.g., `3`). Returns `0` if no replies                          |
-| `@O@` | Origin FTN address (if present)                                                                                                     |
-| `@A@` | Destination FTN address (if present)                                                                                                |
-| `@Z@` | Combined conference and area name (format: `CONF NAME > AREA NAME`)                                                                 |
-| `@X@` | Combined conference/area and message count (format: `CONF NAME > AREA NAME [current/total]`)                                        |
-| `@K@` | Current node number                                                                                                                 |
-| `@G@` | Gap fill: fills remaining line width with `─` (CP437 0xC4). See Gap Fill section below                                              |
+| Code  | Replaced With                                                                                                                                                                                             |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@B@` | Current message area tag                                                                                                                                                                                  |
+| `@T@` | Message subject                                                                                                                                                                                           |
+| `@F@` | From (sender). Includes FTN origin address when available; may also include the user note when `@U@` is not present in the template                                                                       |
+| `@S@` | To (recipient). Includes FTN destination address when available                                                                                                                                           |
+| `@U@` | User note for the message author, looked up from users.json. Blank if author is not a local user                                                                                                          |
+| `@M@` | Message status (LOCAL, ECHOMAIL, NETMAIL, READ, PRIVATE, etc.)                                                                                                                                            |
+| `@L@` | User access level                                                                                                                                                                                         |
+| `@#@` | Current message number (1-based)                                                                                                                                                                          |
+| `@N@` | Total messages in area                                                                                                                                                                                    |
+| `@C@` | Message count display (format: `[current/total]` e.g., `[1/24]`, `[6/10]`)                                                                                                                                |
+| `@V@` | Verbose message count (format: `current of total` e.g., `1 of 24`, `6 of 10`)                                                                                                                             |
+| `@D@` | Message date (`MM/DD/YY`)                                                                                                                                                                                 |
+| `@W@` | Message time (`h:mm am/pm`)                                                                                                                                                                               |
+| `@P@` | Reply-to message number (e.g., `12`), or `None` if the message is not a reply                                                                                                                             |
+| `@E@` | Thread reply count — number of other messages with the same subject (e.g., `3`). Returns `0` if no replies                                                                                                |
+| `@O@` | Origin address: FTN address for FTN areas, V3Net node ID for V3Net areas                                                                                                                                  |
+| `@A@` | Destination FTN address (if present)                                                                                                                                                                      |
+| `@I@` | V3Net network name (e.g., `felonynet`). Empty if the area is not V3Net-networked. **Note:** This code is also used in `FSEDITOR.ANS` as the Insert/Overwrite indicator — the meaning is context-dependent |
+| `@Z@` | Combined conference and area name (format: `CONF NAME > AREA NAME`)                                                                                                                                       |
+| `@X@` | Combined conference/area and message count (format: `CONF NAME > AREA NAME [current/total]`)                                                                                                              |
+| `@K@` | Current node number                                                                                                                                                                                       |
+| `@G@` | Gap fill: fills remaining line width with `─` (CP437 0xC4). See Gap Fill section below                                                                                                                    |
 
 ## Width Control Features
 
@@ -324,17 +325,17 @@ Vision3 maintains support for legacy `|X` format templates:
 
 The full-screen editor header template (`menus/v3/ansi/FSEDITOR.ANS`) uses the same `@CODE@` placeholder system with alignment modifiers. The editor supports these codes:
 
-| Code  | Replaced With                             |
-| ----- | ----------------------------------------- |
-| `@S@` | Recipient (To field)                      |
-| `@F@` | Sender (From field)                       |
-| `@E@` | Subject                                   |
-| `@T@` | Current time                              |
-| `@D@` | Current date                              |
-| `@I@` | Insert/Overwrite mode indicator (dynamic) |
-| `@K@` | Current node number                       |
-| `@#@` | Next message number                       |
-| `@Z@` | Conference > Area name                    |
+| Code  | Replaced With                                                                                                                                                        |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@S@` | Recipient (To field)                                                                                                                                                 |
+| `@F@` | Sender (From field)                                                                                                                                                  |
+| `@E@` | Subject                                                                                                                                                              |
+| `@T@` | Current time                                                                                                                                                         |
+| `@D@` | Current date                                                                                                                                                         |
+| `@I@` | Insert/Overwrite mode indicator (dynamic). **Note:** This code is also used in message header templates as the V3Net network name — the meaning is context-dependent |
+| `@K@` | Current node number                                                                                                                                                  |
+| `@#@` | Next message number                                                                                                                                                  |
+| `@Z@` | Conference > Area name                                                                                                                                               |
 
 The default FSEDITOR.ANS template uses `@T|R8@` to right-justify the time display in an 8-character field.
 
@@ -354,7 +355,7 @@ If you have old templates using `|X` format, they will continue to work. To conv
 1. Replace all `|B` with `@B@`
 2. Replace all `|T` with `@T@`
 3. Replace all `|F` with `@F@`
-4. (Continue for all codes: B, T, F, S, U, M, L, #, N, D, W, P, E, O, A)
+4. (Continue for all codes: B, T, F, S, U, M, L, #, N, D, W, P, E, O, A, I)
 5. Optionally add width constraints for better layout control
 6. Consider using new `@Z@` placeholder for combined conference/area display (not available in legacy format)
 

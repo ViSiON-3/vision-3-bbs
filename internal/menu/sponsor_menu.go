@@ -668,7 +668,7 @@ func runSponsorEditArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				break
 			}
 			newVal := promptAreaField(s, terminal, outputMode,
-				"Area Type (local/echomail/netmail)", edited.AreaType, 16)
+				"Area Type (local/echomail/netmail/v3net)", edited.AreaType, 16)
 			if newVal != edited.AreaType {
 				dirty = true
 				edited.AreaType = newVal

@@ -1,0 +1,12 @@
+{
+  "v3net_registry": "1.0",
+  "updated": "2026-03-17",
+  "networks": [
+    {
+      "name": "felonynet",
+      "description": "Official ViSiON/3 BBS message network",
+      "hub_url": "https://felonynet.example.com/v3net",
+      "hub_node_id": "0000000000000000"
+    }
+  ]
+}

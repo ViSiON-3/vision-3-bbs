@@ -47,17 +47,27 @@ const messageAreaFile = "message_areas.json"
 // Bases are opened on-demand and closed after each operation to allow
 // v3mail and other external tools concurrent access.
 type MessageManager struct {
-	mu              sync.RWMutex
-	dataPath        string // Base data directory (e.g., "data")
-	areasPath       string // Full path to message_areas.json
-	areasByID       map[int]*MessageArea
-	areasByTag      map[string]*MessageArea
-	areasByEchoTag  map[string]*MessageArea // indexed by EchoTag when it differs from Tag
-	boardName       string                  // BBS name for echomail origin lines
+	mu             sync.RWMutex
+	dataPath       string // Base data directory (e.g., "data")
+	areasPath      string // Full path to message_areas.json
+	areasByID      map[int]*MessageArea
+	areasByTag     map[string]*MessageArea
+	areasByEchoTag map[string]*MessageArea // indexed by EchoTag when it differs from Tag
+	boardName      string                  // BBS name for echomail origin lines
 	// networkTearlines maps network key -> custom tearline text.
 	networkTearlines map[string]string
 	threadIndex      map[int]*threadIndex
 	msgidIndex       map[int]*msgidIndex
+
+	// OnMessagePosted is called after a message is successfully written to a JAM base.
+	// The callback receives the area and the message details. May be nil.
+	OnMessagePosted func(area *MessageArea, msgNum int, from, to, subject, body string)
+
+	// BodyTransform is called before writing a message to JAM, allowing callers
+	// (e.g. V3Net) to modify the body for the local copy (e.g. appending tearline/origin).
+	// The original (untransformed) body is still passed to OnMessagePosted.
+	// May be nil.
+	BodyTransform func(areaID int, body string) string
 }
 
 // NewMessageManager creates and initializes a new MessageManager.
@@ -71,6 +81,7 @@ func NewMessageManager(dataPath, configPath, boardName string, networkTearlines 
 		areasPath:        filepath.Join(configPath, messageAreaFile),
 		areasByID:        make(map[int]*MessageArea),
 		areasByTag:       make(map[string]*MessageArea),
+		areasByEchoTag:   make(map[string]*MessageArea),
 		boardName:        boardName,
 		networkTearlines: normalizeNetworkTearlines(networkTearlines),
 		threadIndex:      make(map[int]*threadIndex),
@@ -287,6 +298,63 @@ func (mm *MessageManager) UpdateAreaByID(id int, updated MessageArea) error {
 	mm.areasByID[id] = replacement
 	mm.areasByTag[updated.Tag] = replacement
 	return nil
+}
+
+// AddArea inserts a new message area, auto-assigning the next available ID
+// and Position. The area's Tag must be unique. After insertion the area list
+// is persisted to disk. Returns the assigned ID.
+func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
+	mm.mu.Lock()
+
+	// Check tag uniqueness.
+	if _, exists := mm.areasByTag[area.Tag]; exists {
+		mm.mu.Unlock()
+		return 0, fmt.Errorf("message area tag %q already exists", area.Tag)
+	}
+
+	// Assign next ID and position.
+	maxID := 0
+	maxPos := 0
+	for _, a := range mm.areasByID {
+		if a.ID > maxID {
+			maxID = a.ID
+		}
+		if a.Position > maxPos {
+			maxPos = a.Position
+		}
+	}
+	area.ID = maxID + 1
+	area.Position = maxPos + 1
+
+	// Default base path if empty.
+	if area.BasePath == "" {
+		area.BasePath = fmt.Sprintf("msgbases/area_%d", area.ID)
+	}
+
+	ptr := new(MessageArea)
+	*ptr = area
+	mm.areasByID[area.ID] = ptr
+	mm.areasByTag[area.Tag] = ptr
+	if area.EchoTag != "" && area.EchoTag != area.Tag {
+		mm.areasByEchoTag[area.EchoTag] = ptr
+	}
+	mm.mu.Unlock()
+
+	log.Printf("INFO: Auto-created message area ID %d, Tag %q, Type %q", area.ID, area.Tag, area.AreaType)
+
+	if err := mm.SaveAreas(); err != nil {
+		// Rollback in-memory state so it stays consistent with disk.
+		mm.mu.Lock()
+		delete(mm.areasByID, area.ID)
+		delete(mm.areasByTag, area.Tag)
+		if area.EchoTag != "" && area.EchoTag != area.Tag {
+			delete(mm.areasByEchoTag, area.EchoTag)
+		}
+		mm.mu.Unlock()
+		log.Printf("ERROR: Rolling back area %q after save failure: %v", area.Tag, err)
+		return 0, fmt.Errorf("save areas after add: %w", err)
+	}
+	return area.ID, nil
 }
 
 // SaveAreas persists all message areas to message_areas.json atomically.
@@ -512,13 +580,20 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 	if err != nil {
 		return 0, err
 	}
-	defer b.Close()
+
+	// Apply body transform (e.g. V3Net tearline/origin) for the local JAM copy.
+	// The original body is preserved for OnMessagePosted so the wire message
+	// carries tearline/origin as separate protocol fields, not inline.
+	jamBody := body
+	if mm.BodyTransform != nil {
+		jamBody = mm.BodyTransform(areaID, body)
+	}
 
 	msg := jam.NewMessage()
 	msg.From = from
 	msg.To = to
 	msg.Subject = subject
-	msg.Text = body
+	msg.Text = jamBody
 	msg.DateTime = time.Now()
 
 	if replyToMsgID != "" {
@@ -544,8 +619,16 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 		msgNum, err = b.WriteMessage(msg)
 	}
 
+	// Close the base before firing the callback. The V3Net hook calls
+	// MarkMessageSent which re-opens the same JAM base, so having it
+	// still open here can cause nested-open/file-sharing issues.
+	b.Close()
+
 	if err == nil {
 		mm.invalidateThreadIndex(areaID)
+		if mm.OnMessagePosted != nil {
+			mm.OnMessagePosted(area, msgNum, from, to, subject, body)
+		}
 	}
 	return msgNum, err
 }
@@ -627,7 +710,7 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 		To:         msg.To,
 		Subject:    msg.Subject,
 		DateTime:   msg.DateTime,
-		Body:       normalizeLineEndings(msg.Text),
+		Body:       stripKludgeLines(normalizeLineEndings(msg.Text)),
 		MsgID:      msg.MsgID,
 		ReplyID:    msg.ReplyID,
 		ReplyToNum: replyToNum,
@@ -887,6 +970,24 @@ func (mm *MessageManager) SetLastRead(areaID int, username string, msgNum int) e
 	return b.MarkMessageRead(username, msgNum)
 }
 
+// MarkMessageSent sets the MSG_SENT attribute on a message header.
+// Used by V3Net to indicate a locally-posted message was transmitted to the hub.
+func (mm *MessageManager) MarkMessageSent(areaID, msgNum int) error {
+	b, _, err := mm.openBase(areaID)
+	if err != nil {
+		return err
+	}
+	defer b.Close()
+
+	hdr, err := b.ReadMessageHeader(msgNum)
+	if err != nil {
+		return fmt.Errorf("mark sent: read header: %w", err)
+	}
+
+	hdr.Attribute |= jam.MsgSent
+	return b.UpdateMessageHeader(msgNum, hdr)
+}
+
 // GetNextUnreadMessage returns the next unread message number for a user.
 // Returns 0, nil if there are no unread messages.
 func (mm *MessageManager) GetNextUnreadMessage(areaID int, username string) (int, error) {
@@ -961,4 +1062,19 @@ func normalizeLineEndings(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	return text
+}
+
+// stripKludgeLines removes FTN kludge lines (lines starting with \x01) from
+// message text. These are metadata lines (e.g. V3NETUUID, MSGID) that should
+// not be visible to users or included in quoted text.
+func stripKludgeLines(text string) string {
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if len(line) > 0 && line[0] == '\x01' {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
 }

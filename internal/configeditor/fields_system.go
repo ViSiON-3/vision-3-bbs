@@ -81,7 +81,7 @@ func (m *Model) buildSysFields(screen int) []fieldDef {
 	case 0:
 		return sysFieldsRegistration(cfg)
 	case 1:
-		return sysFieldsNetwork(cfg)
+		return m.sysFieldsNetwork(cfg)
 	case 2:
 		return sysFieldsLimits(cfg)
 	case 3:
@@ -141,8 +141,11 @@ func sysFieldsRegistration(cfg *config.ServerConfig) []fieldDef {
 	}
 }
 
-// sysFieldsNetwork returns fields for Network Setup sub-screen.
-func sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
+// sysFieldsNetwork returns fields for Server Setup sub-screen.
+func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
+	v3 := &m.configs.V3Net
+	hub := &m.configs.V3Net.Hub
+
 	return []fieldDef{
 		{
 			Label: "SSH Enabled", Help: "Enable SSH server", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
@@ -192,6 +195,74 @@ func sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 				cfg.TelnetPort = n
 				return nil
 			},
+		},
+		{
+			Label: "V3Net", Help: "Enable V3Net networking", Type: ftYesNo, Col: 3, Row: 10, Width: 1,
+			Get: func() string { return boolToYN(v3.Enabled) },
+			Set: func(val string) error { v3.Enabled = ynToBool(val); return nil },
+		},
+		{
+			Label: "Keystore Path", Help: "Path to Ed25519 keypair file", Type: ftString, Col: 3, Row: 11, Width: 40,
+			Get: func() string { return v3.KeystorePath },
+			Set: func(val string) error { v3.KeystorePath = val; return nil },
+		},
+		{
+			Label: "Dedup DB Path", Help: "Path to deduplication SQLite database", Type: ftString, Col: 3, Row: 12, Width: 40,
+			Get: func() string { return v3.DedupDBPath },
+			Set: func(val string) error { v3.DedupDBPath = val; return nil },
+		},
+		{
+			Label: "Registry URL", Help: "Central V3Net registry URL (optional)", Type: ftString, Col: 3, Row: 13, Width: 49,
+			Get: func() string { return v3.RegistryURL },
+			Set: func(val string) error { v3.RegistryURL = val; return nil },
+		},
+		{
+			Label: "V3Net Hub", Help: "Run a V3Net hub server on this node", Type: ftYesNo, Col: 3, Row: 15, Width: 1,
+			Get: func() string { return boolToYN(hub.Enabled) },
+			Set: func(val string) error { hub.Enabled = ynToBool(val); return nil },
+		},
+		{
+			Label: "Hub Host", Help: "Hub listen address (blank=all interfaces)", Type: ftString, Col: 3, Row: 16, Width: 20,
+			Get: func() string { return hub.Host },
+			Set: func(val string) error { hub.Host = val; return nil },
+		},
+		{
+			Label: "Hub Port", Help: "Hub listen port (default: 8765)", Type: ftInteger, Col: 3, Row: 17, Width: 5, Min: 1, Max: 65535,
+			Get: func() string {
+				p := hub.Port
+				if p == 0 {
+					p = 8765
+				}
+				return strconv.Itoa(p)
+			},
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				hub.Port = n
+				return nil
+			},
+		},
+		{
+			Label: "Hub TLS Cert", Help: "Path to TLS certificate (blank for plain HTTP)", Type: ftString, Col: 3, Row: 18, Width: 40,
+			Get: func() string { return hub.TLSCert },
+			Set: func(val string) error { hub.TLSCert = val; return nil },
+		},
+		{
+			Label: "Hub TLS Key", Help: "Path to TLS private key", Type: ftString, Col: 3, Row: 19, Width: 40,
+			Get: func() string { return hub.TLSKey },
+			Set: func(val string) error { hub.TLSKey = val; return nil },
+		},
+		{
+			Label: "Hub Data Dir", Help: "Hub data storage directory", Type: ftString, Col: 3, Row: 20, Width: 40,
+			Get: func() string { return hub.DataDir },
+			Set: func(val string) error { hub.DataDir = val; return nil },
+		},
+		{
+			Label: "Auto Approve", Help: "Automatically approve new leaf subscriptions", Type: ftYesNo, Col: 3, Row: 21, Width: 1,
+			Get: func() string { return boolToYN(hub.AutoApprove) },
+			Set: func(val string) error { hub.AutoApprove = ynToBool(val); return nil },
 		},
 	}
 }

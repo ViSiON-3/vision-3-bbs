@@ -75,7 +75,7 @@ if [ -x "bin/sexyz" ]; then
 else
     echo -e "${YELLOW}!${NC} sexyz not found at bin/sexyz (required for file transfers)"
     echo "  Download a release bundle which includes pre-built binaries:"
-    echo "  https://github.com/robbiew/vision3-dist/releases/latest"
+    echo "  https://github.com/ViSiON-3/vision-3-bbs/releases/latest"
     echo "  Copy bin/sexyz from the bundle into this installation's bin/ directory."
 fi
 

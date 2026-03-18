@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -65,8 +65,8 @@ func runChangeMsgConferenceLightbar(e *MenuExecutor, s ssh.Session, terminal *te
 	buildItemLine := func(name, description string, displayIdx int) string {
 		line := processedMidTemplate
 		line = strings.ReplaceAll(line, "^CI", padRight(strconv.Itoa(displayIdx), 3))
-		line = strings.ReplaceAll(line, "^CN", padRight(truncateStr(name, 33), 33))
-		line = strings.ReplaceAll(line, "^CD", truncateStr(description, 40))
+		line = strings.ReplaceAll(line, "^CN", padRight(truncateStr(name, 20), 20))
+		line = strings.ReplaceAll(line, "^CD", truncateStr(description, 53))
 		return strings.TrimRight(line, "\r\n")
 	}
 

@@ -18,7 +18,7 @@ type MessageArea struct {
 	MaxMessages  int    `json:"max_messages,omitempty"`    // Max messages to retain (0=unlimited)
 	MaxAge       int    `json:"max_age,omitempty"`         // Auto-purge messages older than N days (0=unlimited)
 	AutoJoin     bool   `json:"auto_join,omitempty"`       // Auto-join this area for new users
-	AreaType     string `json:"area_type"`                 // "local", "echomail", "netmail"
+	AreaType     string `json:"area_type"`                 // "local", "echomail", "netmail", "v3net"
 	EchoTag      string `json:"echo_tag,omitempty"`        // FTN echo tag (e.g., "FSX_GEN")
 	OriginAddr   string `json:"origin_addr,omitempty"`     // FTN origin address (e.g., "21:3/110")
 	Network      string `json:"network,omitempty"`         // FTN network name (e.g., "fsxnet")

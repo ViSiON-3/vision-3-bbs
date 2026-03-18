@@ -32,6 +32,10 @@ func (m *Model) buildRecordFields() []fieldDef {
 		return m.fieldsArchiver()
 	case "login":
 		return m.fieldsLogin()
+	case "v3netleaf":
+		return m.fieldsV3NetLeaf()
+	case "v3nethub":
+		return m.fieldsV3NetHubNetwork()
 	}
 	return nil
 }
@@ -66,7 +70,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			Set: func(val string) error { a.Description = val; return nil },
 		},
 		{
-			Label: "Area Type", Help: "local = BBS-only  |  echomail = FTN echo  |  netmail = FTN point-to-point", Type: ftLookup, Col: 3, Row: 5, Width: 10,
+			Label: "Area Type", Help: "local = BBS-only  |  echomail = FTN echo  |  netmail = FTN netmail  |  v3net = V3Net", Type: ftLookup, Col: 3, Row: 5, Width: 10,
 			Get: func() string { return a.AreaType },
 			Set: func(val string) error { a.AreaType = val; return nil },
 			LookupItems: func() []LookupItem {
@@ -74,6 +78,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 					{Value: "local", Display: "local - BBS-only message area"},
 					{Value: "echomail", Display: "echomail - FTN echoed message area"},
 					{Value: "netmail", Display: "netmail - FTN point-to-point mail"},
+					{Value: "v3net", Display: "v3net - V3Net networked message area"},
 				}
 			},
 		},
@@ -173,6 +178,20 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 				Get:         func() string { return a.Network },
 				Set:         func(val string) error { a.Network = val; return nil },
 				LookupItems: func() []LookupItem { return m.buildFTNNetworkLookupItems() },
+			},
+		)
+	case "v3net":
+		fields = append(fields,
+			fieldDef{
+				Label: "Network", Help: "V3Net network name (e.g. felonynet)", Type: ftLookup, Col: 3, Row: 14, Width: 32,
+				Get:         func() string { return a.Network },
+				Set:         func(val string) error { a.Network = val; return nil },
+				LookupItems: func() []LookupItem { return m.buildV3NetNetworkLookupItems() },
+			},
+			fieldDef{
+				Label: "Echo Tag", Help: "V3Net area tag on the hub (e.g. fel.general)", Type: ftString, Col: 3, Row: 15, Width: 34,
+				Get: func() string { return a.EchoTag },
+				Set: func(val string) error { a.EchoTag = val; return nil },
 			},
 		)
 	}
