@@ -147,3 +147,8 @@ func (h *Hub) Close() error {
 func (h *Hub) Subscribers() *SubscriberStore {
 	return h.subscribers
 }
+
+// NALStore returns the NAL store (used for in-process seeding at startup).
+func (h *Hub) NALStore() *NALStore {
+	return h.nalStore
+}
