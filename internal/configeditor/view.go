@@ -37,11 +37,6 @@ func (m Model) View() string {
 	return m.viewTopMenu()
 }
 
-// viewV3NetWizard renders the V3Net setup wizard. Implemented in view_v3net_wizard.go.
-func (m Model) viewV3NetWizard() string {
-	return "V3Net Setup Wizard"
-}
-
 // globalHeaderLine returns the persistent global header shown on every screen.
 func (m Model) globalHeaderLine() string {
 	title := centerText("-- ViSiON/3 Configuration Editor v1.0 --", m.width)
