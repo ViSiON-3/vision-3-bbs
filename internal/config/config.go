@@ -884,8 +884,10 @@ type V3NetConfig struct {
 	KeystorePath string            `json:"keystorePath"` // Path to ed25519 keypair file
 	DedupDBPath  string            `json:"dedupDbPath"`  // Path to dedup SQLite database
 	RegistryURL  string            `json:"registryUrl"`  // Central registry URL (optional)
-	Hub          V3NetHubConfig    `json:"hub,omitempty"`
-	Leaves       []V3NetLeafConfig `json:"leaves,omitempty"`
+	// ConfigPath is the configs directory path. Set at runtime, not persisted.
+	ConfigPath string            `json:"-"`
+	Hub        V3NetHubConfig    `json:"hub,omitempty"`
+	Leaves     []V3NetLeafConfig `json:"leaves,omitempty"`
 }
 
 // V3NetHubConfig configures this node as a V3Net hub.
@@ -896,8 +898,9 @@ type V3NetHubConfig struct {
 	TLSCert     string            `json:"tlsCert,omitempty"`
 	TLSKey      string            `json:"tlsKey,omitempty"`
 	DataDir     string            `json:"dataDir"`
-	AutoApprove bool              `json:"autoApprove"`
-	Networks    []V3NetHubNetwork `json:"networks,omitempty"`
+	AutoApprove  bool            `json:"autoApprove"`
+	Networks     []V3NetHubNetwork `json:"networks,omitempty"`
+	InitialAreas []V3NetHubArea    `json:"initialAreas,omitempty"`
 }
 
 // ListenAddr returns the host:port string for net.Listen / http.Server.
@@ -913,6 +916,13 @@ func (c *V3NetHubConfig) ListenAddr() string {
 type V3NetHubNetwork struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+// V3NetHubArea is an area spec written by the setup wizard and consumed
+// once at hub startup to seed the initial NAL.
+type V3NetHubArea struct {
+	Tag  string `json:"tag"`
+	Name string `json:"name"`
 }
 
 // V3NetLeafConfig configures a subscription to a V3Net network.

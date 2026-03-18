@@ -1796,6 +1796,9 @@ func main() {
 	if v3netCfgErr != nil {
 		log.Printf("ERROR: Failed to load V3Net config: %v", v3netCfgErr)
 	}
+	if v3netCfgErr == nil {
+		v3netConfig.ConfigPath = rootConfigPath
+	}
 
 	// Start V3Net networking service if enabled
 	if v3netCfgErr == nil && v3netConfig.Enabled {
