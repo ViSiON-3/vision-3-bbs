@@ -151,7 +151,8 @@ func (m Model) viewHubAutoApproveStep() string {
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
 	boxH := 6
-	extraV := maxInt(0, m.height-boxH-3)
+	// -4: header(1) + help line(1) + bgLine spacer(1) + help bar(1)
+	extraV := maxInt(0, m.height-boxH-4)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -202,10 +203,16 @@ func (m Model) viewHubAutoApproveStep() string {
 
 	helpText := "Yes = nodes join instantly (testing only)  /  No = manual approval (recommended)"
 	if m.message != "" {
-		b.WriteString(flashMessageStyle.Render(" " + padRight(m.message, m.width-1)))
+		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1))))
 	} else {
-		b.WriteString(editInfoLabelStyle.Render(padRight("  "+helpText, m.width)))
+		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1))))
 	}
+	b.WriteByte('\n')
+	b.WriteString(bgLine)
 	b.WriteByte('\n')
 	b.WriteString(helpBarStyle.Render(centerText("Space/Y/N Toggle  |  Enter Confirm  |  ESC Back", m.width)))
 	return b.String()
@@ -295,8 +302,9 @@ func (m Model) viewHubAreasStep() string {
 }
 
 // viewWizardInputBox renders a generic single-field wizard step box.
-// Help text and notices appear below the box in a full-width solid-blue line,
-// matching the record-editor's field help pattern.
+// Help text and notices appear below the box using the same pattern as
+// renderFieldHelpLine: bgFill(padL) + editInfoLabelStyle centered to boxW+1
+// + bgFill(padR+1), followed by a bgLine spacer, then the help bar.
 func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 	var b strings.Builder
 	b.WriteString(m.globalHeaderLine())
@@ -305,7 +313,8 @@ func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
 	boxH := 6 // top border + title + blank + input + blank + bottom border
-	extraV := maxInt(0, m.height-boxH-3)
+	// -4: header(1) + help line(1) + bgLine spacer(1) + help bar(1)
+	extraV := maxInt(0, m.height-boxH-4)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -347,18 +356,25 @@ func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 		b.WriteByte('\n')
 	}
 
-	// Info line: flash message takes priority, then notice, then help text.
+	// Help line — mirrors renderFieldHelpLine: centered to boxW+1, bgFill on sides.
+	// Priority: flash message > notice > help text > blank fill.
 	infoText := helpText
 	if notice != "" {
 		infoText = notice
 	}
 	if m.message != "" {
-		b.WriteString(flashMessageStyle.Render(" " + padRight(m.message, m.width-1)))
+		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1))))
 	} else if infoText != "" {
-		b.WriteString(editInfoLabelStyle.Render(padRight("  "+infoText, m.width)))
+		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+			editInfoLabelStyle.Render(centerText(infoText, boxW+1)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1))))
 	} else {
 		b.WriteString(bgLine)
 	}
+	b.WriteByte('\n')
+	b.WriteString(bgLine)
 	b.WriteByte('\n')
 	b.WriteString(helpBarStyle.Render(centerText("Enter Confirm  |  ESC Back", m.width)))
 	return b.String()
