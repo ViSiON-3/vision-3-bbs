@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/hub"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/registry"
 )
@@ -41,6 +43,89 @@ type Service struct {
 	// BBSName and BBSHost are sent in subscribe requests.
 	BBSName string
 	BBSHost string
+}
+
+// hubAutoInit performs idempotent hub initialization steps:
+// 1. Creates the hub data directory.
+// 2. Self-registers the hub node as an active subscriber for each network.
+// 3. Seeds the initial NAL from cfg.Hub.InitialAreas if none exists.
+func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
+	// Step 1: ensure data dir exists.
+	if err := os.MkdirAll(cfg.Hub.DataDir, 0755); err != nil {
+		slog.Warn("v3net: could not create hub data dir", "path", cfg.Hub.DataDir, "error", err)
+	}
+
+	// Step 2: self-register the hub node for each network.
+	for _, n := range cfg.Hub.Networks {
+		sub := hub.Subscriber{
+			NodeID:    ks.NodeID(),
+			Network:   n.Name,
+			PubKeyB64: ks.PubKeyBase64(),
+			BBSName:   "hub",
+			BBSHost:   "",
+			Status:    "active",
+		}
+		if _, err := h.Subscribers().Add(sub); err != nil {
+			slog.Warn("v3net: hub self-registration failed", "network", n.Name, "error", err)
+		} else {
+			slog.Info("v3net: hub self-registered", "node_id", ks.NodeID(), "network", n.Name)
+		}
+	}
+
+	// Step 3: seed NAL from InitialAreas if no NAL exists yet.
+	if len(cfg.Hub.InitialAreas) == 0 {
+		return
+	}
+	for _, n := range cfg.Hub.Networks {
+		existing, err := h.NALStore().Get(n.Name)
+		if err != nil {
+			slog.Warn("v3net: could not check NAL for seeding", "network", n.Name, "error", err)
+			continue
+		}
+		if existing != nil {
+			continue // NAL already exists — skip seeding.
+		}
+
+		var areas []protocol.Area
+		for _, a := range cfg.Hub.InitialAreas {
+			areas = append(areas, protocol.Area{
+				Tag:              a.Tag,
+				Name:             a.Name,
+				Language:         "en",
+				ManagerNodeID:    ks.NodeID(),
+				ManagerPubKeyB64: ks.PubKeyBase64(),
+				Access:           protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+				Policy: protocol.AreaPolicy{
+					MaxBodyBytes: 64000,
+					AllowANSI:    true,
+				},
+			})
+		}
+
+		nalDoc := &protocol.NAL{
+			V3NetNAL: "1.0",
+			Network:  n.Name,
+			Areas:    areas,
+		}
+		if err := nal.Sign(nalDoc, ks); err != nil {
+			slog.Error("v3net: could not sign initial NAL", "network", n.Name, "error", err)
+			continue
+		}
+		if err := h.NALStore().Put(n.Name, nalDoc); err != nil {
+			slog.Error("v3net: could not store initial NAL", "network", n.Name, "error", err)
+			continue
+		}
+		slog.Info("v3net: seeded initial NAL", "network", n.Name, "areas", len(areas))
+	}
+
+	// Clear initialAreas from the saved config file so we don't re-seed.
+	updatedCfg := cfg
+	updatedCfg.Hub.InitialAreas = nil
+	if cfg.ConfigPath != "" {
+		if err := config.SaveV3NetConfig(cfg.ConfigPath, updatedCfg); err != nil {
+			slog.Warn("v3net: could not remove initialAreas from config after seeding", "error", err)
+		}
+	}
 }
 
 // New creates a V3Net service from the given config. Call Start to begin operations.
@@ -73,6 +158,11 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 				Description: n.Description,
 			})
 		}
+		// Create data dir before hub.New opens the SQLite database.
+		if err := os.MkdirAll(cfg.Hub.DataDir, 0755); err != nil {
+			ix.Close()
+			return nil, fmt.Errorf("v3net: create hub data dir: %w", err)
+		}
 		h, err := hub.New(hub.Config{
 			ListenAddr:  cfg.Hub.ListenAddr(),
 			TLSCertFile: cfg.Hub.TLSCert,
@@ -86,6 +176,7 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 			ix.Close()
 			return nil, fmt.Errorf("v3net: create hub: %w", err)
 		}
+		hubAutoInit(cfg, h, ks)
 		s.hub = h
 	}
 
@@ -221,6 +312,11 @@ func (s *Service) LeafNetworks() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// Hub returns the hub instance, or nil if no hub is configured.
+func (s *Service) Hub() *hub.Hub {
+	return s.hub
 }
 
 // RegisterArea associates a message area ID with a V3Net network name.
