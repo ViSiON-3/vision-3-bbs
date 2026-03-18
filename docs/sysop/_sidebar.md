@@ -83,6 +83,7 @@
 * [Config Editor](configuration/configuration.md#configuration-editor-tui)
 * [Event Scheduler](advanced/event-scheduler.md)
 * [String Editor](advanced/string-editor.md)
+* [V3Net Bootstrap](advanced/v3net-bootstrap.md)
 * [Encoding](advanced/encoding.md)
 
 * **HOW-TO GUIDES**

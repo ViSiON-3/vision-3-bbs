@@ -1,0 +1,100 @@
+# V3Net Bootstrap Tool
+
+> **Experimental — Development Only.** V3Net is under active development and
+> is not yet ready for production use. APIs, configuration, and wire formats
+> may change without notice.
+
+`v3net-bootstrap` is a developer/hub-operator utility that creates and publishes
+the initial Network Area List (NAL) for a new V3Net hub. It is not built by
+`build.sh` — run it with `go run` when needed.
+
+## When to Use
+
+Run this tool once when standing up a **new hub** to seed its NAL with the initial
+set of message areas. Leaf nodes that join later receive the NAL automatically
+from the hub; they do not need this tool.
+
+## Usage
+
+```bash
+go run ./cmd/v3net-bootstrap \
+  -keystore <path>   \
+  -hub      <url>    \
+  -network  <name>   \
+  -areas    <specs>
+```
+
+### Flags
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `-keystore` | Yes | Path to the hub's Ed25519 keystore file (e.g. `data/v3net.key`). The file must already exist — generate it by starting the BBS with V3Net enabled at least once. |
+| `-hub` | No | Base URL of the hub. Defaults to `http://localhost:8765`. |
+| `-network` | Yes | Network name to bootstrap (e.g. `felonynet`). Must match a network entry in the hub's `v3net.json`. |
+| `-areas` | Yes | Comma-separated list of `tag:Name` pairs defining the areas to include in the NAL. |
+
+### Area Spec Format
+
+Each area is specified as `tag:Name`, where `tag` is the short lowercase area
+identifier and `Name` is the human-readable display name:
+
+```
+fel.general:FelonyNet General,fel.art:FelonyNet Art
+```
+
+Areas are created with these defaults:
+
+- Language: `en`
+- Access mode: open
+- Max message body: 64 000 bytes
+- ANSI allowed: yes
+- Manager: the hub node (from the keystore)
+
+## Example
+
+```bash
+go run ./cmd/v3net-bootstrap \
+  -keystore data/v3net.key \
+  -hub      http://localhost:8765 \
+  -network  felonynet \
+  -areas    "fel.general:FelonyNet General,fel.art:FelonyNet Art"
+```
+
+Expected output on success:
+
+```
+Node ID: a3f9e1b2c4d5e6f7
+Signed NAL: network=felonynet, areas=2, updated=Mon, 17 Mar 2026 00:00:00 UTC
+Response: 200 {"status":"ok"}
+NAL published successfully!
+```
+
+## Prerequisites
+
+1. The hub must be running and reachable at the `-hub` URL.
+2. The hub must have the network listed in its `hub.networks[]` configuration (see [V3Net Configuration](../configuration/v3net-config.md#hub-network-entry-hubnetworks)).
+3. The keystore file must exist. Start the BBS with `"enabled": true` and a valid `keystorePath` to auto-generate it.
+
+## How It Works
+
+The tool:
+
+1. Loads the hub's Ed25519 keystore and derives the node ID and public key.
+2. Constructs a NAL (`protocol.NAL`) containing the specified areas, with the hub node set as manager of each area.
+3. Signs the NAL using `nal.Sign`.
+4. POSTs the signed NAL to `POST /v3net/v1/{network}/nal` on the hub, with a signed `X-V3Net-Signature` request header for authentication.
+
+## Build
+
+This tool is intentionally excluded from `build.sh`. To build a standalone binary:
+
+```bash
+go build -o v3net-bootstrap ./cmd/v3net-bootstrap
+```
+
+The compiled binary is listed in `.gitignore` and should not be committed.
+
+## Related Documentation
+
+- [V3Net Configuration](../configuration/v3net-config.md) — hub and leaf setup
+- [V3Net Networking](../messages/v3net.md) — how V3Net works from a sysop perspective
