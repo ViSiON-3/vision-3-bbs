@@ -50,8 +50,8 @@ func (m Model) viewV3NetSetupFork() string {
 	b.WriteByte('\n')
 
 	forkItems := []string{
-		"  [J]  Join an existing network  (leaf node)  ",
-		"  [H]  Host your own network     (hub operator)",
+		"  1.  Join an existing network  (leaf node)  ",
+		"  2.  Host your own network     (hub operator)",
 	}
 	for i, item := range forkItems {
 		var styled string
