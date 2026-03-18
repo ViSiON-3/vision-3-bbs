@@ -2,7 +2,7 @@
     "TITLE": "V3Net Menu",
     "CLR": true,
     "USEPROMPT": true,
-    "PROMPT1": "|15V3Net",
+    "PROMPT1": "|15ViSiON/3 Network",
     "PROMPT2": "|08[|15V3Net|08] |07Command |08->|15 ",
     "FALLBACK": "",
     "ACS": "S255",
