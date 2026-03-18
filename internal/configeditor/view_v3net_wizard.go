@@ -86,11 +86,11 @@ func (m Model) viewV3NetSetupFork() string {
 
 func (m Model) viewLeafWizardStep() string {
 	titles := []string{
-		"Step 1 of 5 — Hub URL",
-		"Step 2 of 5 — Network Name",
-		"Step 3 of 5 — Board Tag",
-		"Step 4 of 5 — Poll Interval",
-		"Step 5 of 5 — Origin Line",
+		"Leaf Setup — Step 1 of 5 — Hub URL",
+		"Leaf Setup — Step 2 of 5 — Network",
+		"Leaf Setup — Step 3 of 5 — Board Tag",
+		"Leaf Setup — Step 4 of 5 — Poll Interval",
+		"Leaf Setup — Step 5 of 5 — Origin",
 	}
 	helps := []string{
 		"URL of the V3Net hub (e.g. https://hub.felonynet.org)",
@@ -113,26 +113,22 @@ func (m Model) viewLeafWizardStep() string {
 		notice = m.wizard.fetchError
 	}
 
-	return m.viewWizardInputBox("Join a Network — "+title, help, notice)
+	return m.viewWizardInputBox(title, help, notice)
 }
 
 func (m Model) viewHubWizardStep() string {
 	switch m.wizard.step {
 	case hubStepNetwork:
-		subField := "Network Name"
+		title := "Hub Setup — Step 1 of 4 — Network Name"
 		helpText := "Short lowercase alphanumeric identifier (e.g. felonynet)"
 		if m.wizard.areaAdding {
-			subField = "Description"
+			title = "Hub Setup — Step 1 of 4 — Description"
 			helpText = "Human-readable description shown to subscribers"
 		}
-		return m.viewWizardInputBox(
-			"Host a Network — Step 1 of 4 — "+subField,
-			helpText,
-			"",
-		)
+		return m.viewWizardInputBox(title, helpText, "")
 	case hubStepPort:
 		return m.viewWizardInputBox(
-			"Host a Network — Step 2 of 4 — Listen Port",
+			"Hub Setup — Step 2 of 4 — Listen Port",
 			"TCP port for the hub server (default: 8765)",
 			"",
 		)
@@ -142,9 +138,9 @@ func (m Model) viewHubWizardStep() string {
 			current = "Y (Yes)"
 		}
 		return m.viewWizardInputBox(
-			"Host a Network — Step 3 of 4 — Auto-Approve",
-			fmt.Sprintf("Auto-approve new nodes? Currently: %s   Press Y or N, then Enter", current),
-			"Yes = nodes join instantly (testing only)  /  No = sysop approves each node",
+			"Hub Setup — Step 3 of 4 — Auto-Approve",
+			fmt.Sprintf("Currently: %s   Press Y or N, then Enter", current),
+			"Yes = nodes join instantly (testing only)  /  No = manual approval",
 		)
 	case hubStepAreas:
 		return m.viewHubAreasStep()
@@ -185,7 +181,7 @@ func (m Model) viewHubAreasStep() string {
 	b.WriteString(border(menuBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
 	b.WriteByte('\n')
 	b.WriteString(border(menuBorderStyle.Render("│") +
-		menuHeaderStyle.Render(centerText("Host a Network — Step 4 of 4 — Initial Areas", boxW)) +
+		menuHeaderStyle.Render(centerText("Hub Setup — Step 4 of 4 — Initial Areas", boxW)) +
 		menuBorderStyle.Render("│")))
 	b.WriteByte('\n')
 
