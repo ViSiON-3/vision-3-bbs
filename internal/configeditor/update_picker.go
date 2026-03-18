@@ -48,6 +48,15 @@ func (m Model) updateLookupPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyEnter:
 		selected := m.pickerItems[m.pickerCursor]
+		// When returning to the V3Net wizard, wire the selection directly into
+		// the wizard networkName field rather than through the generic field mechanism.
+		if m.pickerReturnMode == modeV3NetWizardStep {
+			m.wizard.networkName = selected.Value
+			m.textInput.SetValue(selected.Value)
+			m.textInput.Focus()
+			m.mode = m.pickerReturnMode
+			return m, nil
+		}
 		var fields []fieldDef
 		if m.pickerReturnMode == modeRecordEdit {
 			fields = m.recordFields

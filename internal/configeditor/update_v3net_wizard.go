@@ -250,7 +250,7 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	for _, l := range m.configs.V3Net.Leaves {
 		if l.HubURL == m.wizard.hubURL && l.Network == m.wizard.networkName {
 			m.message = "Already subscribed to this network on this hub"
-			m.mode = modeV3NetSetupFork
+			m.mode = modeV3NetWizardStep
 			return m, nil
 		}
 	}
