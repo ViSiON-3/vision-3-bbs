@@ -99,8 +99,9 @@ func (m Model) updateHubStepAutoApprove(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
 		m.wizard.step = hubStepAreas
-		m.textInput.Reset()
 		return m, nil
+	case tea.KeySpace:
+		m.wizard.autoApprove = !m.wizard.autoApprove
 	case tea.KeyRunes:
 		switch strings.ToLower(string(msg.Runes)) {
 		case "y":

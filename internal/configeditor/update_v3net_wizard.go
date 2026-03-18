@@ -49,35 +49,64 @@ func (m Model) updateV3NetSetupFork(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEscape:
 		m.mode = modeTopMenu
 		return m, nil
+	case tea.KeyUp:
+		if m.wizard.forkCursor > 0 {
+			m.wizard.forkCursor--
+		}
+	case tea.KeyDown:
+		if m.wizard.forkCursor < 1 {
+			m.wizard.forkCursor++
+		}
+	case tea.KeyEnter:
+		if m.wizard.forkCursor == 1 {
+			return m.enterHubWizard()
+		}
+		return m.enterLeafWizard()
 	case tea.KeyRunes:
 		switch strings.ToLower(string(msg.Runes)) {
 		case "j":
-			var boardName string
-			if m.configs != nil {
-				boardName = m.configs.Server.BoardName
-			}
-			m.wizard = wizardState{
-				flow:         "leaf",
-				step:         0,
-				pollInterval: "5m",
-				origin:       boardName,
-			}
-			m.mode = modeV3NetWizardStep
-			m.textInput.Width = 56 // boxW(60) - "  > "(4)
-			m.textInput.Reset()
-			m.textInput.Focus()
+			m.wizard.forkCursor = 0
+			return m.enterLeafWizard()
 		case "h":
-			m.wizard = wizardState{
-				flow: "hub",
-				step: 0,
-				port: "8765",
-			}
-			m.mode = modeV3NetWizardStep
-			m.textInput.Width = 56 // boxW(60) - "  > "(4)
-			m.textInput.Reset()
-			m.textInput.Focus()
+			m.wizard.forkCursor = 1
+			return m.enterHubWizard()
 		}
 	}
+	return m, nil
+}
+
+func (m Model) enterLeafWizard() (tea.Model, tea.Cmd) {
+	var boardName string
+	if m.configs != nil {
+		boardName = m.configs.Server.BoardName
+	}
+	forkCursor := m.wizard.forkCursor
+	m.wizard = wizardState{
+		flow:         "leaf",
+		step:         0,
+		pollInterval: "5m",
+		origin:       boardName,
+		forkCursor:   forkCursor,
+	}
+	m.mode = modeV3NetWizardStep
+	m.textInput.Width = 56 // boxW(60) - "  > "(4)
+	m.textInput.Reset()
+	m.textInput.Focus()
+	return m, nil
+}
+
+func (m Model) enterHubWizard() (tea.Model, tea.Cmd) {
+	forkCursor := m.wizard.forkCursor
+	m.wizard = wizardState{
+		flow:       "hub",
+		step:       0,
+		port:       "8765",
+		forkCursor: forkCursor,
+	}
+	m.mode = modeV3NetWizardStep
+	m.textInput.Width = 56 // boxW(60) - "  > "(4)
+	m.textInput.Reset()
+	m.textInput.Focus()
 	return m, nil
 }
 

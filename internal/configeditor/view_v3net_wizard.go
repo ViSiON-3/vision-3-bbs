@@ -23,7 +23,7 @@ func (m Model) viewV3NetSetupFork() string {
 
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 52
-	boxH := 8
+	boxH := 6
 	extraV := maxInt(0, m.height-boxH-3)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
@@ -49,22 +49,22 @@ func (m Model) viewV3NetSetupFork() string {
 	b.WriteString(pad(menuBorderStyle.Render("│") + menuHeaderStyle.Render(strings.Repeat(" ", boxW)) + menuBorderStyle.Render("│")))
 	b.WriteByte('\n')
 
-	items := []string{
-		"  [J]  Join an existing network  (leaf node)",
+	forkItems := []string{
+		"  [J]  Join an existing network  (leaf node)  ",
 		"  [H]  Host your own network     (hub operator)",
 	}
-	for _, item := range items {
-		b.WriteString(pad(menuBorderStyle.Render("│") +
-			menuItemStyle.Render(padRight(item, boxW)) +
-			menuBorderStyle.Render("│")))
+	for i, item := range forkItems {
+		var styled string
+		if i == m.wizard.forkCursor {
+			styled = menuHighlightStyle.Render(padRight(item, boxW))
+		} else {
+			styled = menuItemStyle.Render(padRight(item, boxW))
+		}
+		b.WriteString(pad(menuBorderStyle.Render("│") + styled + menuBorderStyle.Render("│")))
 		b.WriteByte('\n')
 	}
 
 	b.WriteString(pad(menuBorderStyle.Render("│") + menuHeaderStyle.Render(strings.Repeat(" ", boxW)) + menuBorderStyle.Render("│")))
-	b.WriteByte('\n')
-	b.WriteString(pad(menuBorderStyle.Render("│") +
-		editInfoLabelStyle.Render(padRight("  ESC — Back", boxW)) +
-		menuBorderStyle.Render("│")))
 	b.WriteByte('\n')
 	b.WriteString(pad(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
@@ -80,7 +80,7 @@ func (m Model) viewV3NetSetupFork() string {
 		b.WriteString(bgLine)
 	}
 	b.WriteByte('\n')
-	b.WriteString(helpBarStyle.Render(centerText("J/H Select  |  ESC Back", m.width)))
+	b.WriteString(helpBarStyle.Render(centerText("Up/Down Move  |  J/H Select  |  Enter Confirm  |  ESC Back", m.width)))
 	return b.String()
 }
 
@@ -133,19 +133,82 @@ func (m Model) viewHubWizardStep() string {
 			"",
 		)
 	case hubStepAutoApprove:
-		current := "N (No)"
-		if m.wizard.autoApprove {
-			current = "Y (Yes)"
-		}
-		return m.viewWizardInputBox(
-			"Hub Setup — Step 3 of 4 — Auto-Approve",
-			fmt.Sprintf("Currently: %s   Press Y or N, then Enter", current),
-			"Yes = nodes join instantly (testing only)  /  No = manual approval",
-		)
+		return m.viewHubAutoApproveStep()
 	case hubStepAreas:
 		return m.viewHubAreasStep()
 	}
 	return ""
+}
+
+// viewHubAutoApproveStep renders the auto-approve step as a canonical Y/N
+// toggle field (fieldLabelStyle label + fieldEditStyle value with ░ fill),
+// matching the record editor's ftYesNo field pattern.
+func (m Model) viewHubAutoApproveStep() string {
+	var b strings.Builder
+	b.WriteString(m.globalHeaderLine())
+	b.WriteByte('\n')
+
+	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
+	boxW := 60
+	boxH := 6
+	extraV := maxInt(0, m.height-boxH-3)
+	topPad := extraV / 2
+	bottomPad := extraV - topPad
+
+	for i := 0; i < topPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	padL := maxInt(0, (m.width-boxW-2)/2)
+	padR := maxInt(0, m.width-padL-boxW-2)
+	border := func(s string) string {
+		return bgFillStyle.Render(strings.Repeat("░", padL)) + s +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+	}
+
+	// Field row: label (18 chars) + value (42 chars) = 60 = boxW.
+	const labelW = 18
+	const valueW = 42 // boxW - labelW
+	labelStr := fieldLabelStyle.Render(padRight("  Auto-Approve  : ", labelW))
+	fill := strings.Repeat(string(fieldFillChar), maxInt(0, valueW-1))
+	valueStr := fieldEditStyle.Render(padRight(boolToYN(m.wizard.autoApprove)+fill, valueW))
+
+	b.WriteString(border(editBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
+	b.WriteByte('\n')
+	b.WriteString(border(editBorderStyle.Render("│") +
+		menuHeaderStyle.Render(centerText("Hub Setup — Step 3 of 4 — Auto-Approve", boxW)) +
+		editBorderStyle.Render("│")))
+	b.WriteByte('\n')
+	b.WriteString(border(editBorderStyle.Render("│") +
+		editInfoLabelStyle.Render(strings.Repeat(" ", boxW)) +
+		editBorderStyle.Render("│")))
+	b.WriteByte('\n')
+	b.WriteString(border(editBorderStyle.Render("│") +
+		labelStr + valueStr +
+		editBorderStyle.Render("│")))
+	b.WriteByte('\n')
+	b.WriteString(border(editBorderStyle.Render("│") +
+		editInfoLabelStyle.Render(strings.Repeat(" ", boxW)) +
+		editBorderStyle.Render("│")))
+	b.WriteByte('\n')
+	b.WriteString(border(editBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
+	b.WriteByte('\n')
+
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	helpText := "Yes = nodes join instantly (testing only)  /  No = manual approval (recommended)"
+	if m.message != "" {
+		b.WriteString(flashMessageStyle.Render(" " + padRight(m.message, m.width-1)))
+	} else {
+		b.WriteString(editInfoLabelStyle.Render(padRight("  "+helpText, m.width)))
+	}
+	b.WriteByte('\n')
+	b.WriteString(helpBarStyle.Render(centerText("Space/Y/N Toggle  |  Enter Confirm  |  ESC Back", m.width)))
+	return b.String()
 }
 
 func (m Model) viewHubAreasStep() string {
@@ -232,6 +295,8 @@ func (m Model) viewHubAreasStep() string {
 }
 
 // viewWizardInputBox renders a generic single-field wizard step box.
+// Help text and notices appear below the box in a full-width solid-blue line,
+// matching the record-editor's field help pattern.
 func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 	var b strings.Builder
 	b.WriteString(m.globalHeaderLine())
@@ -239,10 +304,7 @@ func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
-	boxH := 6
-	if notice != "" {
-		boxH = 7
-	}
+	boxH := 6 // top border + title + blank + input + blank + bottom border
 	extraV := maxInt(0, m.height-boxH-3)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
@@ -266,21 +328,13 @@ func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
 	b.WriteString(border(editBorderStyle.Render("│") +
-		editInfoLabelStyle.Render(padRight("  "+helpText, boxW)) +
+		editInfoLabelStyle.Render(strings.Repeat(" ", boxW)) +
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
 	b.WriteString(border(editBorderStyle.Render("│") +
 		fieldDisplayStyle.Width(boxW).Render("  > "+m.textInput.View()) +
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
-
-	if notice != "" {
-		b.WriteString(border(editBorderStyle.Render("│") +
-			editInfoLabelStyle.Render(padRight("  "+notice, boxW)) +
-			editBorderStyle.Render("│")))
-		b.WriteByte('\n')
-	}
-
 	b.WriteString(border(editBorderStyle.Render("│") +
 		editInfoLabelStyle.Render(strings.Repeat(" ", boxW)) +
 		editBorderStyle.Render("│")))
@@ -293,8 +347,15 @@ func (m Model) viewWizardInputBox(title, helpText, notice string) string {
 		b.WriteByte('\n')
 	}
 
+	// Info line: flash message takes priority, then notice, then help text.
+	infoText := helpText
+	if notice != "" {
+		infoText = notice
+	}
 	if m.message != "" {
 		b.WriteString(flashMessageStyle.Render(" " + padRight(m.message, m.width-1)))
+	} else if infoText != "" {
+		b.WriteString(editInfoLabelStyle.Render(padRight("  "+infoText, m.width)))
 	} else {
 		b.WriteString(bgLine)
 	}

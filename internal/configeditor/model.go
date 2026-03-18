@@ -55,8 +55,9 @@ type wizardArea struct {
 
 // wizardState holds all transient state for the V3Net setup wizard.
 type wizardState struct {
-	flow string // "leaf" or "hub"
-	step int    // current step index (0-based)
+	flow       string // "leaf" or "hub"
+	step       int    // current step index (0-based)
+	forkCursor int    // 0=leaf, 1=hub (lightbar position on fork screen)
 
 	// Leaf wizard fields (steps 0–4)
 	hubURL       string
