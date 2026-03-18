@@ -19,21 +19,21 @@ const (
 type editorMode int
 
 const (
-	modeTopMenu        editorMode = iota // Top-level menu
-	modeSysConfigMenu                    // System Configuration inner menu
-	modeSysConfigEdit                    // System config field navigation
-	modeSysConfigField                   // System config field editing (textinput active)
-	modeRecordList                       // Scrollable record list
-	modeRecordEdit                       // Single record field navigation
-	modeRecordField                      // Single record field editing
-	modeExitConfirm                      // Unsaved changes exit confirm
-	modeSaveConfirm                      // Confirm save
-	modeHelp                             // Help screen overlay
-	modeDeleteConfirm                    // Confirm delete record
-	modeLookupPicker                     // Lookup picker popup
-	modeRecordReorder                    // Reorder mode (move record to new position)
-	modeV3NetSetupFork                   // V3Net setup fork screen (leaf or hub)
-	modeV3NetWizardStep                  // Active wizard step
+	modeTopMenu         editorMode = iota // Top-level menu
+	modeSysConfigMenu                     // System Configuration inner menu
+	modeSysConfigEdit                     // System config field navigation
+	modeSysConfigField                    // System config field editing (textinput active)
+	modeRecordList                        // Scrollable record list
+	modeRecordEdit                        // Single record field navigation
+	modeRecordField                       // Single record field editing
+	modeExitConfirm                       // Unsaved changes exit confirm
+	modeSaveConfirm                       // Confirm save
+	modeHelp                              // Help screen overlay
+	modeDeleteConfirm                     // Confirm delete record
+	modeLookupPicker                      // Lookup picker popup
+	modeRecordReorder                     // Reorder mode (move record to new position)
+	modeV3NetSetupFork                    // V3Net setup fork screen (leaf or hub)
+	modeV3NetWizardStep                   // Active wizard step
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -67,15 +67,15 @@ type wizardState struct {
 	fetchError   string // set if auto-fetch failed
 
 	// Hub wizard fields (steps 0–3)
-	netName     string
-	netDesc     string
-	port        string
-	autoApprove bool
-	areas       []wizardArea
+	netName      string
+	netDesc      string
+	port         string
+	autoApprove  bool
+	areas        []wizardArea
 	areaEditTag  string
 	areaEditName string
-	areaAdding  bool // true when the area tag/name sub-form is open
-	areaCursor  int  // highlighted area in the area list
+	areaAdding   bool // true when the area tag/name sub-form is open
+	areaCursor   int  // highlighted area in the area list
 }
 
 // Model is the BubbleTea model for the config editor TUI.
