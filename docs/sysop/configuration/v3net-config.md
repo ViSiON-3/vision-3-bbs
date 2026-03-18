@@ -1,5 +1,10 @@
 # V3Net Configuration
 
+> **Experimental — Development Only.** V3Net is under active development and
+> is not yet ready for production use. APIs, configuration, and wire formats
+> may change without notice. Use it only if you are testing or contributing
+> to V3Net development. Do not rely on it for a live BBS.
+
 V3Net is ViSiON/3's native inter-BBS message networking protocol. It uses REST+SSE over HTTPS with Ed25519 cryptographic authentication. Configuration is stored in `configs/v3net.json`.
 
 If the file does not exist, V3Net is disabled by default.
@@ -18,6 +23,56 @@ To join an existing network like FelonyNet, see the [FelonyNet guide](../../felo
 | `keystorePath` | string | `""` | Path to the Ed25519 keypair file. If the file does not exist, a new keypair is generated automatically on first start. Example: `"data/v3net.key"` |
 | `dedupDbPath` | string | `""` | Path to the SQLite database used for message deduplication. Prevents the same message from being imported twice. Example: `"data/v3net_dedup.sqlite"` |
 | `registryUrl` | string | `""` | URL of a V3Net network registry (JSON). Used by the BBS menu to list available networks. Optional — leave blank if you know the hub URL already. |
+
+### Network Registry
+
+The `registryUrl` field points to a public JSON file that lists known V3Net
+networks and their hub URLs — a directory of available networks your BBS can
+join. The default registry is hosted at:
+
+```
+https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json
+```
+
+The registry is fetched (and cached for 1 hour) when a sysop opens the
+**N — Network Registry** option from the V3Net menu. It displays each
+network's name, description, and hub URL, and marks networks you are
+already subscribed to.
+
+**Registry format:**
+
+```json
+{
+  "v3net_registry": "1.0",
+  "updated": "2026-03-17",
+  "networks": [
+    {
+      "name": "felonynet",
+      "description": "Official ViSiON/3 BBS message network",
+      "hub_url": "https://hub.felonynet.example.com/v3net",
+      "hub_node_id": "a3f9e1b2c4d5e6f7"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Short lowercase network identifier (must match the hub's network name) |
+| `description` | Human-readable summary shown in the registry browser |
+| `hub_url` | Base URL of the hub's V3Net endpoint |
+| `hub_node_id` | 16-character hex node ID of the hub |
+
+**Adding your network to the registry:** Submit a pull request to the
+[v3net-registry](https://github.com/ViSiON-3/v3net-registry) repository
+adding your network entry to `registry.json`. Your hub must be publicly
+reachable and running before submission.
+
+You can also host your own private registry by setting `registryUrl` to any
+URL that serves the same JSON format. Leave the field blank to disable the
+registry browser.
+
+---
 
 ### Example (Minimal Leaf)
 

@@ -1,5 +1,10 @@
 # V3Net Message Areas
 
+> **Experimental — Development Only.** V3Net is under active development and
+> is not yet ready for production use. APIs, configuration, and wire formats
+> may change without notice. Use it only if you are testing or contributing
+> to V3Net development. Do not rely on it for a live BBS.
+
 V3Net areas are message areas that are networked using the V3Net protocol. Messages posted locally are relayed to the hub and distributed to all subscribed nodes. Messages posted on other nodes arrive via polling and SSE (Server-Sent Events).
 
 ## How V3Net Areas Differ from Other Types
@@ -72,6 +77,7 @@ V3Net provides several menu screens accessible to sysops and users:
 | `V3NETSTATUS` | Shows V3Net connection status, node ID, and subscribed networks |
 | `V3NETAREAS` | Browse and manage area subscriptions from the NAL |
 | `V3NETPROPOSE` | Submit a new area proposal to the network coordinator |
+| `V3NETREGISTRY` | Browse the public network registry to discover available networks |
 | `V3NETCOORD` | Coordinator panel for approving/rejecting proposals (coordinator only) |
 | `V3NETACCESS` | View and manage area access requests (coordinator only) |
 
