@@ -32,6 +32,8 @@ const (
 	modeDeleteConfirm                    // Confirm delete record
 	modeLookupPicker                     // Lookup picker popup
 	modeRecordReorder                    // Reorder mode (move record to new position)
+	modeV3NetSetupFork                   // V3Net setup fork screen (leaf or hub)
+	modeV3NetWizardStep                  // Active wizard step
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -43,6 +45,37 @@ type topMenuItem struct {
 // sysConfigMenuItem defines an entry in the system config inner menu.
 type sysConfigMenuItem struct {
 	Label string
+}
+
+// wizardArea is a single area entry in the hub setup wizard.
+type wizardArea struct {
+	Tag  string
+	Name string
+}
+
+// wizardState holds all transient state for the V3Net setup wizard.
+type wizardState struct {
+	flow string // "leaf" or "hub"
+	step int    // current step index (0-based)
+
+	// Leaf wizard fields (steps 0–4)
+	hubURL       string
+	networkName  string
+	boardTag     string
+	pollInterval string
+	origin       string
+	fetchError   string // set if auto-fetch failed
+
+	// Hub wizard fields (steps 0–3)
+	netName     string
+	netDesc     string
+	port        string
+	autoApprove bool
+	areas       []wizardArea
+	areaEditTag  string
+	areaEditName string
+	areaAdding  bool // true when the area tag/name sub-form is open
+	areaCursor  int  // highlighted area in the area list
 }
 
 // Model is the BubbleTea model for the config editor TUI.
@@ -90,6 +123,9 @@ type Model struct {
 	// Confirm dialog
 	confirmYes bool
 
+	// V3Net setup wizard state
+	wizard wizardState
+
 	// Terminal
 	width   int
 	height  int
@@ -124,6 +160,7 @@ func New(configPath string) (Model, error) {
 		{"B", "Login Sequence"},
 		{"C", "V3Net Subscriptions"},
 		{"D", "V3Net Networks"},
+		{"E", "V3Net Setup"},
 		{"Q", "Quit Program"},
 	}
 
@@ -170,6 +207,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case fetchNetworksMsg:
+		return m.handleFetchNetworksMsg(msg)
+
 	case tea.KeyMsg:
 		switch m.mode {
 		case modeTopMenu:
@@ -194,6 +234,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateLookupPicker(msg)
 		case modeHelp:
 			return m.updateHelp(msg)
+		case modeV3NetSetupFork:
+			return m.updateV3NetSetupFork(msg)
+		case modeV3NetWizardStep:
+			return m.updateV3NetWizardStep(msg)
 		}
 	}
 	return m, nil
@@ -243,7 +287,11 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeSysConfigMenu
 		m.sysMenuCursor = 0
 		return m, nil
-	case 13: // Quit
+	case 13: // V3Net Setup (E)
+		m.wizard = wizardState{}
+		m.mode = modeV3NetSetupFork
+		return m, nil
+	case 14: // Quit (was 13, shifted by E insertion)
 		return m.tryExit()
 	default:
 		// Items 1-9 are record list editors

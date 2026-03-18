@@ -31,8 +31,15 @@ func (m Model) View() string {
 		result := m.viewRecordList()
 		return m.overlayConfirmDialog(result, "-- Delete Record --",
 			"Delete this record? ")
+	case modeV3NetSetupFork, modeV3NetWizardStep:
+		return m.viewV3NetWizard()
 	}
 	return m.viewTopMenu()
+}
+
+// viewV3NetWizard renders the V3Net setup wizard. Implemented in view_v3net_wizard.go.
+func (m Model) viewV3NetWizard() string {
+	return "V3Net Setup Wizard"
 }
 
 // globalHeaderLine returns the persistent global header shown on every screen.
