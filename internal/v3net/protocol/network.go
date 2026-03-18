@@ -29,11 +29,10 @@ type NetworkSummary struct {
 
 // RegistryEntry is a network entry from the central V3Net registry.
 type RegistryEntry struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	HubURL      string   `json:"hub_url"`
-	HubNodeID   string   `json:"hub_node_id"`
-	Tags        []string `json:"tags"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	HubURL      string `json:"hub_url"`
+	HubNodeID   string `json:"hub_node_id"`
 }
 
 // Registry is the top-level structure of the V3Net registry JSON.

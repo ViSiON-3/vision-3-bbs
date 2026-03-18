@@ -17,8 +17,8 @@
     "auto_join": true
   },
   {
-    "id": 5,
-    "position": 5,
+    "id": 2,
+    "position": 2,
     "tag": "PRIVMAIL",
     "name": "Private Mail",
     "description": "Private user-to-user mail",
@@ -31,22 +31,6 @@
     "area_type": "local",
     "max_messages": 0,
     "max_age": 0,
-    "auto_join": true
-  },
-  {
-    "id": 10,
-    "position": 10,
-    "tag": "fel.general",
-    "name": "FelonyNet General",
-    "description": "FelonyNet general discussion",
-    "acs_read": "s10",
-    "acs_write": "s20",
-    "allow_anonymous": false,
-    "conference_id": 2,
-    "base_path": "msgbases/net_felonynet_general",
-    "area_type": "v3net",
-    "network": "felonynet",
-    "echo_tag": "fel.general",
     "auto_join": true
   }
 ]

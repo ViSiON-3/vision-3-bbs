@@ -15,8 +15,7 @@ const testRegistryJSON = `{
 			"name": "felonynet",
 			"description": "General discussion.",
 			"hub_url": "https://bbs.felonynet.org",
-			"hub_node_id": "a3f9e1b2c4d5e6f7",
-			"tags": ["general", "tech"]
+			"hub_node_id": "a3f9e1b2c4d5e6f7"
 		}
 	]
 }`

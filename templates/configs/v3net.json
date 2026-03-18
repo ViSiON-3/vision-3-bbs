@@ -11,12 +11,5 @@
     "autoApprove": false,
     "networks": []
   },
-  "leaves": [
-    {
-      "hubUrl": "http://localhost:8765",
-      "network": "felonynet",
-      "board": "fel.general",
-      "pollInterval": "5m"
-    }
-  ]
+  "leaves": []
 }
