@@ -9,6 +9,23 @@ V3Net is ViSiON/3's native inter-BBS message networking protocol. It uses REST+S
 
 If the file does not exist, V3Net is disabled by default.
 
+## Setup Wizard
+
+The easiest way to configure V3Net is the guided setup wizard in the TUI config editor:
+
+```
+./config  →  E — V3Net Setup
+```
+
+The wizard offers two paths:
+
+- **J — Join an existing network** (leaf node) — walks you through hub URL, network name (auto-fetched), board tag, poll interval, and origin line. Writes a `leaves[]` entry and saves.
+- **H — Host your own network** (hub operator) — walks you through network name and description, listen port, auto-approve setting, and initial message areas. Saves the full hub config; the BBS auto-initialises the hub data directory and seeds the NAL on first start.
+
+After the wizard saves, restart the BBS to activate the configuration.
+
+---
+
 ## Quick Start
 
 To join an existing network like FelonyNet, see the [FelonyNet guide](../../felonynet.md). This page documents every configuration field in detail.
@@ -113,6 +130,7 @@ Enable the hub section to host your own V3Net network. Most sysops only need lea
 | `dataDir` | string | `""` | Directory for hub data (SQLite database, NAL files). Example: `"data/v3net_hub"` |
 | `autoApprove` | bool | `false` | When `true`, new subscriber registrations and area proposals are approved automatically. Recommended for testing; disable for production networks. |
 | `networks` | array | `[]` | List of networks hosted by this hub. See below. |
+| `initialAreas` | array | `[]` | Area specs written by the setup wizard. Consumed once on first hub start to seed the initial NAL, then removed automatically. See below. |
 
 ### Hub Network Entry (`hub.networks[]`)
 
@@ -120,6 +138,25 @@ Enable the hub section to host your own V3Net network. Most sysops only need lea
 |-------|------|-------------|
 | `name` | string | Short lowercase network identifier (e.g. `"felonynet"`). Must be unique per hub. |
 | `description` | string | Human-readable description shown to subscribers. |
+
+### Hub Initial Areas (`hub.initialAreas[]`)
+
+Written by the setup wizard. On first hub start, if no NAL exists for a network, the BBS builds, signs, and stores a NAL from these entries, then removes `initialAreas` from the config file. You do not need to manage this field manually — the wizard handles it.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag` | string | Area tag (e.g. `"fel.general"`). Must match `^[a-z0-9]{1,8}\.[a-z0-9-]{1,24}$`. |
+| `name` | string | Human-readable area name (e.g. `"FelonyNet General"`). |
+
+### Hub Startup Auto-Init
+
+When the hub starts for the first time, ViSiON/3 automatically:
+
+1. Creates the `dataDir` directory if it does not exist.
+2. Registers the hub's own node as an active subscriber for each network (idempotent — safe on every restart).
+3. Seeds the initial NAL from `initialAreas` if no NAL exists yet, then clears `initialAreas` from the config file.
+
+This means you do not need to run any bootstrap commands after completing the setup wizard — just start the BBS.
 
 ### Example (Hub + Leaf)
 
@@ -186,10 +223,11 @@ Each entry in the `leaves` array subscribes your BBS to one network on one hub. 
 
 ## Configuration Editor
 
-V3Net settings can also be edited through the TUI configuration editor (`./config`). The editor provides dedicated screens for:
+V3Net settings can be managed through the TUI configuration editor (`./config`). The editor provides:
 
-- **V3Net Leaf Subscriptions** — add, edit, and remove leaf entries with field-by-field editing (Hub URL, Network, Board, Poll Interval, Origin)
-- **V3Net Hub Networks** — add, edit, and remove hosted network definitions (Name, Description)
+- **E — V3Net Setup** — guided setup wizard for first-time leaf or hub configuration (recommended starting point)
+- **C — V3Net Subscriptions** — add, edit, and remove leaf entries with field-by-field editing (Hub URL, Network, Board, Poll Interval, Origin)
+- **D — V3Net Hub Networks** — add, edit, and remove hosted network definitions (Name, Description)
 
 ---
 

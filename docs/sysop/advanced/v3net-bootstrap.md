@@ -4,15 +4,21 @@
 > is not yet ready for production use. APIs, configuration, and wire formats
 > may change without notice.
 
-`v3net-bootstrap` is a developer/hub-operator utility that creates and publishes
-the initial Network Area List (NAL) for a new V3Net hub. It is not built by
+`v3net-bootstrap` is a developer utility that manually creates and publishes
+the initial Network Area List (NAL) for a V3Net hub. It is not built by
 `build.sh` — run it with `go run` when needed.
+
+> **Superseded for normal use.** The `./config` setup wizard (option `E — V3Net Setup`) and hub startup auto-init handle NAL seeding automatically. Use this tool only when you need to publish a NAL outside of the normal setup flow (e.g. disaster recovery, scripted environments).
 
 ## When to Use
 
-Run this tool once when standing up a **new hub** to seed its NAL with the initial
-set of message areas. Leaf nodes that join later receive the NAL automatically
-from the hub; they do not need this tool.
+The `./config` wizard writes `initialAreas` to `v3net.json` and the BBS seeds the NAL automatically on first start. You only need `v3net-bootstrap` if:
+
+- You are bypassing the wizard and setting up a hub via direct JSON editing.
+- You need to re-seed a NAL after a keystore change (disaster recovery).
+- You are scripting hub setup in an automated environment without the TUI.
+
+Leaf nodes do not need this tool.
 
 ## Usage
 

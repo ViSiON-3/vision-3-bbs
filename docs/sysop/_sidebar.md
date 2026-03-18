@@ -17,6 +17,7 @@
 * [Conferences](configuration/configuration.md#conferencesjson)
 * [Events](configuration/configuration.md#eventsjson)
 * [V3Net](configuration/v3net-config.md)
+* [V3Net Setup Wizard](configuration/v3net-config.md#setup-wizard)
 * [Menus](configuration/configuration.md#menu-configuration)
 * [Theme](configuration/configuration.md#theme-configuration)
 * [Oneliners](configuration/configuration.md#onelinersjson)
