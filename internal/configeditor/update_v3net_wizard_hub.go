@@ -1,12 +1,14 @@
 package configeditor
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -56,6 +58,7 @@ func (m Model) updateHubStepNetwork(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.wizard.netName = val
 			m.wizard.areaAdding = true // now editing description
+			m.textInput.CharLimit = 200
 			m.textInput.SetValue(m.wizard.netDesc)
 			m.textInput.Focus()
 		} else {
@@ -63,6 +66,7 @@ func (m Model) updateHubStepNetwork(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.wizard.netDesc = strings.TrimSpace(m.wizard.netDesc)
 			m.wizard.areaAdding = false
 			m.wizard.step = hubStepPort
+			m.textInput.CharLimit = 80
 			m.textInput.SetValue(m.wizard.port)
 			m.textInput.Focus()
 		}
@@ -222,9 +226,74 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 		},
 		InitialAreas: initialAreas,
 	}
+
+	// Create local message areas for each initial hub area.
+	m.createHubMessageAreas(m.wizard.netName, m.wizard.areas)
+
+	// Create a self-leaf subscription so the hub's own BBS
+	// participates in the network (syncs messages via localhost).
+	m.addSelfLeaf(m.wizard.netName, port)
+
 	m.dirty = true
 	m.saveAll()
-	m.message = "Saved — start the BBS to initialize your hub and seed the NAL."
+	m.message = "Hub saved. Start BBS to initialize."
 	m.mode = modeTopMenu
 	return m, nil
+}
+
+// createHubMessageAreas adds a v3net message area for each initial hub area
+// that does not already exist in the message area list.
+func (m *Model) createHubMessageAreas(network string, areas []wizardArea) {
+	existing := make(map[string]bool)
+	for _, a := range m.configs.MsgAreas {
+		existing[a.Tag] = true
+	}
+
+	for _, a := range areas {
+		if existing[a.Tag] {
+			continue
+		}
+
+		newID := 1
+		maxPos := 0
+		for _, ma := range m.configs.MsgAreas {
+			if ma.ID >= newID {
+				newID = ma.ID + 1
+			}
+			if ma.Position > maxPos {
+				maxPos = ma.Position
+			}
+		}
+
+		m.configs.MsgAreas = append(m.configs.MsgAreas, message.MessageArea{
+			ID:       newID,
+			Position: maxPos + 1,
+			Tag:      a.Tag,
+			Name:     a.Name,
+			AreaType: "v3net",
+			Network:  network,
+			EchoTag:  a.Tag,
+			AutoJoin: true,
+			ACSRead:  "s10",
+			ACSWrite: "s20",
+			BasePath: fmt.Sprintf("msgbases/area_%d", newID),
+		})
+	}
+}
+
+// addSelfLeaf appends a leaf subscription to the hub's own network
+// via localhost, unless one already exists.
+func (m *Model) addSelfLeaf(network string, port int) {
+	hubURL := fmt.Sprintf("http://localhost:%d", port)
+	for _, l := range m.configs.V3Net.Leaves {
+		if l.Network == network && l.HubURL == hubURL {
+			return
+		}
+	}
+	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, config.V3NetLeafConfig{
+		HubURL:       hubURL,
+		Network:      network,
+		Board:        network,
+		PollInterval: "5m",
+	})
 }

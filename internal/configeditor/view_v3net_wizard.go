@@ -171,9 +171,12 @@ func (m Model) viewHubAutoApproveStep() string {
 	// Field row: label (18 chars) + value (42 chars) = 60 = boxW.
 	const labelW = 18
 	const valueW = 42 // boxW - labelW
+	const editW = 3   // canonical ftYesNo: Width(1) + 2
 	labelStr := fieldLabelStyle.Render(padRight("  Auto-Approve  : ", labelW))
-	fill := strings.Repeat(string(fieldFillChar), maxInt(0, valueW-1))
-	valueStr := fieldEditStyle.Render(padRight(boolToYN(m.wizard.autoApprove)+fill, valueW))
+	fill := strings.Repeat(string(fieldFillChar), editW-1)
+	editStr := fieldEditStyle.Render(boolToYN(m.wizard.autoApprove) + fill)
+	rest := fieldDisplayStyle.Render(strings.Repeat(" ", maxInt(0, valueW-editW)))
+	valueStr := editStr + rest
 
 	b.WriteString(border(editBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
 	b.WriteByte('\n')
@@ -201,7 +204,7 @@ func (m Model) viewHubAutoApproveStep() string {
 		b.WriteByte('\n')
 	}
 
-	helpText := "Yes = nodes join instantly (testing only)  /  No = manual approval (recommended)"
+	helpText := "Y = auto-join (testing only) / N = manual approval"
 	if m.message != "" {
 		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
@@ -225,9 +228,20 @@ func (m Model) viewHubAreasStep() string {
 
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
-	listH := maxInt(3, len(m.wizard.areas)+1)
-	boxH := listH + 8
-	extraV := maxInt(0, m.height-boxH-3)
+
+	// Content rows inside the box (between title and bottom border).
+	var contentRows int
+	if m.wizard.areaAdding {
+		contentRows = 2 // prompt + input
+	} else if len(m.wizard.areas) == 0 {
+		contentRows = 1 // "(no areas yet …)"
+	} else {
+		contentRows = len(m.wizard.areas)
+	}
+	// Box: top border(1) + title(1) + blank(1) + content + blank(1) + bottom border(1)
+	boxH := contentRows + 5
+	// -4: header(1) + help line(1) + bgLine spacer(1) + help bar(1)
+	extraV := maxInt(0, m.height-boxH-4)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -243,16 +257,20 @@ func (m Model) viewHubAreasStep() string {
 			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
 	}
 	row := func(content string) string {
-		return border(menuBorderStyle.Render("│") +
-			menuItemStyle.Render(padRight(content, boxW)) +
-			menuBorderStyle.Render("│"))
+		return border(editBorderStyle.Render("│") +
+			fieldDisplayStyle.Width(boxW).Render(content) +
+			editBorderStyle.Render("│"))
 	}
 
-	b.WriteString(border(menuBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
+	b.WriteString(border(editBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
 	b.WriteByte('\n')
-	b.WriteString(border(menuBorderStyle.Render("│") +
+	b.WriteString(border(editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText("Hub Setup — Step 4 of 4 — Initial Areas", boxW)) +
-		menuBorderStyle.Render("│")))
+		editBorderStyle.Render("│")))
+	b.WriteByte('\n')
+	b.WriteString(border(editBorderStyle.Render("│") +
+		editInfoLabelStyle.Render(strings.Repeat(" ", boxW)) +
+		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
 
 	if m.wizard.areaAdding {
@@ -262,7 +280,9 @@ func (m Model) viewHubAreasStep() string {
 			b.WriteString(row(fmt.Sprintf("  Tag: %s  Name:", m.wizard.areaEditTag)))
 		}
 		b.WriteByte('\n')
-		b.WriteString(row("  > " + m.textInput.View()))
+		b.WriteString(border(editBorderStyle.Render("│") +
+			fieldDisplayStyle.Width(boxW).Render("  > "+m.textInput.View()) +
+			editBorderStyle.Render("│")))
 		b.WriteByte('\n')
 	} else {
 		if len(m.wizard.areas) == 0 {
@@ -279,11 +299,11 @@ func (m Model) viewHubAreasStep() string {
 		}
 	}
 
-	b.WriteString(border(menuBorderStyle.Render("│") + menuHeaderStyle.Render(strings.Repeat(" ", boxW)) + menuBorderStyle.Render("│")))
+	b.WriteString(border(editBorderStyle.Render("│") +
+		editInfoLabelStyle.Render(strings.Repeat(" ", boxW)) +
+		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
-	b.WriteString(row("  A Add area  D Delete  Enter Confirm  ESC Back"))
-	b.WriteByte('\n')
-	b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
+	b.WriteString(border(editBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
 
 	for i := 0; i < bottomPad; i++ {
@@ -291,11 +311,21 @@ func (m Model) viewHubAreasStep() string {
 		b.WriteByte('\n')
 	}
 
-	if m.message != "" {
-		b.WriteString(flashMessageStyle.Render(" " + padRight(m.message, m.width-1)))
-	} else {
-		b.WriteString(bgLine)
+	helpText := "A Add area  |  D Delete  |  Enter Confirm  |  ESC Back"
+	if m.wizard.areaAdding {
+		helpText = "Enter Confirm  |  ESC Cancel"
 	}
+	if m.message != "" {
+		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1))))
+	} else {
+		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1))))
+	}
+	b.WriteByte('\n')
+	b.WriteString(bgLine)
 	b.WriteByte('\n')
 	b.WriteString(helpBarStyle.Render(centerText("A Add  D Delete  Enter Confirm  ESC Back", m.width)))
 	return b.String()

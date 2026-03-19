@@ -144,7 +144,7 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	m.configs.V3Net.Enabled = true
 	m.dirty = true
 	m.saveAll()
-	m.message = "Saved — restart the BBS to activate."
+	m.message = "Leaf saved. Restart BBS to activate."
 	m.mode = modeTopMenu
 	return m, nil
 }
