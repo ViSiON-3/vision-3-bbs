@@ -28,7 +28,7 @@ After the wizard saves, restart the BBS to activate the configuration.
 
 ## Quick Start
 
-To join an existing network like FelonyNet, see the [FelonyNet guide](../../felonynet.md). This page documents every configuration field in detail.
+To join an existing network like FelonyNet, see the [FelonyNet guide](felonynet.md). This page documents every configuration field in detail.
 
 ## Configuration File
 
@@ -255,7 +255,7 @@ From this screen you can:
 - **[E] Export** the seed phrase to a file
 - **[R] Recover** a key from a previously saved seed phrase
 
-For full details, see [V3Net Key Recovery](../reference/v3net-recovery.md).
+For full details, see [V3Net Key Recovery](recovery.md).
 
 ---
 
@@ -268,13 +268,13 @@ For full details, see [V3Net Key Recovery](../reference/v3net-recovery.md).
 | `data/v3net_dedup.sqlite` | Message deduplication database |
 | `data/v3net_hub/` | Hub data directory (SQLite DB, NAL files) |
 
-The keypair file is critical — it is your node's identity on the network. **Back up your recovery seed phrase** via `./config > V3Net > Node Identity > [E]`. See [V3Net Key Recovery](../reference/v3net-recovery.md).
+The keypair file is critical — it is your node's identity on the network. **Back up your recovery seed phrase** via `./config > V3Net > Node Identity > [E]`. See [V3Net Key Recovery](recovery.md).
 
 ---
 
 ## Related Documentation
 
-- [Joining FelonyNet](../../felonynet.md) — step-by-step guide for the FelonyNet network
-- [Network Area List (NAL)](../../v3net-nal.md) — area subscriptions, access modes, and proposals
+- [Joining FelonyNet](felonynet.md) — step-by-step guide for the FelonyNet network
+- [Network Area List (NAL)](nal.md) — area subscriptions, access modes, and proposals
 - [Message Areas](../messages/message-areas.md) — configuring local JAM message bases
-- [V3Net Message Areas](../messages/v3net.md) — how V3Net areas differ from local and FTN areas
+- [V3Net Message Areas](message-areas.md) — how V3Net areas differ from local and FTN areas

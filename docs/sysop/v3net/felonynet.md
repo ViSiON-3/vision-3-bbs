@@ -41,7 +41,7 @@ must re-register with all hubs.
 
 > **Important:** After your first V3Net startup, back up your recovery seed
 > phrase immediately. Run `./config > V3Net > Node Identity > [E]` to export
-> it to a file. See [docs/sysop/reference/v3net-recovery.md](docs/sysop/reference/v3net-recovery.md)
+> it to a file. See [V3Net Key Recovery](recovery.md)
 > for full details.
 
 ### 2. Create a Message Area
@@ -116,7 +116,7 @@ Any FelonyNet sysop can propose a new message area. From the Area Subscriptions
 screen, press **P** to open the proposal form. The FelonyNet coordinator reviews
 proposals and adds approved areas to the signed NAL.
 
-For full details on area management, see [V3Net NAL documentation](v3net-nal.md).
+For full details on area management, see [V3Net NAL documentation](nal.md).
 
 ## How It Works
 

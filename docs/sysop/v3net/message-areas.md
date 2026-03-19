@@ -62,7 +62,7 @@ V3Net messages in JAM bases look like standard echomail messages with a few addi
 
 ## Area Proposals
 
-Users and sysops can propose new areas for a network. See the [NAL documentation](../../v3net-nal.md) for details on:
+Users and sysops can propose new areas for a network. See the [NAL documentation](nal.md) for details on:
 
 - Proposing new areas
 - Access modes (open, approval, closed)
@@ -85,8 +85,8 @@ These commands are configured in your menu `.CFG` files. The default V3Net menu 
 
 ## Related Documentation
 
-- [V3Net Configuration](../configuration/v3net-config.md) — field-by-field configuration reference
-- [Joining FelonyNet](../../felonynet.md) — step-by-step guide
-- [Network Area List (NAL)](../../v3net-nal.md) — area management and access control
-- [Message Areas](message-areas.md) — general message area configuration
+- [V3Net Configuration](configuration.md) — field-by-field configuration reference
+- [Joining FelonyNet](felonynet.md) — step-by-step guide
+- [Network Area List (NAL)](nal.md) — area management and access control
+- [Message Areas](../messages/message-areas.md) — general message area configuration
 - [Header Placeholders](placeholders.md) — `@I@` (network name) and `@O@` (node ID) codes

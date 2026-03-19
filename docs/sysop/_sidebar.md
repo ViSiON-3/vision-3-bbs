@@ -16,8 +16,8 @@
 * [Message Areas](configuration/configuration.md#message_areasjson)
 * [Conferences](configuration/configuration.md#conferencesjson)
 * [Events](configuration/configuration.md#eventsjson)
-* [V3Net](configuration/v3net-config.md)
-* [V3Net Setup Wizard](configuration/v3net-config.md#setup-wizard)
+* [V3Net](v3net/configuration.md)
+* [V3Net Setup Wizard](v3net/configuration.md#setup-wizard)
 * [Menus](configuration/configuration.md#menu-configuration)
 * [Theme](configuration/configuration.md#theme-configuration)
 * [Oneliners](configuration/configuration.md#onelinersjson)
@@ -57,7 +57,7 @@
 * [Tosser (v3mail)](messages/ftn-echomail.md#tosser-internal--v3mail)
 * [Mailer (binkd)](messages/ftn-echomail.md#mailer-external--binkd)
 * [JAM Echomail](messages/jam-echomail.md)
-* [V3Net Networking](messages/v3net.md)
+* [V3Net Networking](v3net/message-areas.md)
 * [V3Mail](messages/v3mail.md)
 * [Auto-Signature](messages/autosig.md)
 * [Header Placeholders](messages/placeholders.md)
@@ -84,7 +84,7 @@
 * [Config Editor](configuration/configuration.md#configuration-editor-tui)
 * [Event Scheduler](advanced/event-scheduler.md)
 * [String Editor](advanced/string-editor.md)
-* [V3Net Bootstrap](advanced/v3net-bootstrap.md)
+* [V3Net Bootstrap](v3net/bootstrap.md)
 * [Encoding](advanced/encoding.md)
 
 * **HOW-TO GUIDES**
