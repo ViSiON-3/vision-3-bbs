@@ -36,6 +36,7 @@ const (
 	modeWizardForm                        // Wizard form field navigation
 	modeWizardField                       // Wizard form field editing (textinput active)
 	modeV3NetWizardStep                   // Hub areas sub-form
+	modeV3NetIdentity                     // V3Net Node Identity screen
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -145,6 +146,12 @@ type Model struct {
 	wizard       *wizardState // pointer so field closures survive value-receiver copies
 	wizardFields []fieldDef   // fields for wizard form
 	wizardTitle  string       // title for wizard form box
+
+	// V3Net Node Identity screen state
+	identitySubState      int // 0=main, 1=showPhrase, 2=exportPrompt, 3=recoverInput, 4=recoverConfirm
+	identityPhrase        string
+	identityRecoverInput  string
+	identityRecoverNodeID string
 
 	// Terminal
 	width   int
@@ -256,6 +263,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateWizardField(msg)
 		case modeV3NetWizardStep:
 			return m.updateV3NetWizardStep(msg)
+		case modeV3NetIdentity:
+			return m.updateV3NetIdentity(msg)
 		}
 	}
 	return m, nil
@@ -324,6 +333,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 	case 3: // V3Net Networking
 		m.catMenuTitle = "ViSiON/3 Networking (V3Net)"
 		m.catMenuItems = []categoryMenuItem{
+			{Label: "Node Identity", Mode: modeV3NetIdentity},
 			{Label: "Subscriptions", RecordType: "v3netleaf"},
 			{Label: "Networks", RecordType: "v3nethub"},
 		}

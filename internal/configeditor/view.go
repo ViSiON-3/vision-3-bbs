@@ -37,6 +37,8 @@ func (m Model) View() string {
 		return m.viewWizardForm()
 	case modeV3NetWizardStep:
 		return m.viewV3NetWizard()
+	case modeV3NetIdentity:
+		return m.viewV3NetIdentity()
 	}
 	return m.viewTopMenu()
 }
