@@ -42,8 +42,9 @@ func (m Model) viewSeedInterstitial() string {
 
 	helpText := "[E] Export to file   [C] Continue"
 
-	contentRows := len(contentLines)
-	extraV := maxInt(0, m.height-contentRows-10)
+	// Box: top border + title + empty + content + empty + bottom border
+	boxH := len(contentLines) + 5
+	extraV := maxInt(0, m.height-boxH-3)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -96,20 +97,22 @@ func (m Model) viewSeedInterstitial() string {
 		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
 	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
-
+	// Message line directly below box
 	if m.message != "" {
-		b.WriteString(bgFillStyle.Render(centerText(m.message, m.width)))
+		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+		b.WriteString(msgLine)
 	} else {
 		b.WriteString(bgLine)
 	}
 	b.WriteByte('\n')
 
-	b.WriteString(bgLine)
-	b.WriteByte('\n')
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
 	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
 
 	return b.String()
@@ -179,11 +182,15 @@ func (m Model) viewV3NetIdentity() string {
 			contentLines = []string{
 				fmt.Sprintf("  Error: %v", err),
 			}
+			helpText = "R - Recover  |  Q - Return"
 		} else if ks == nil {
 			contentLines = []string{
 				"  No V3Net identity configured.",
 				"  Set up a leaf subscription or hub network to generate one.",
+				"",
+				"  [R] Recover identity from seed phrase",
 			}
+			helpText = "R - Recover  |  Q - Return"
 		} else {
 			path := m.configs.V3Net.KeystorePath
 			if path == "" {
@@ -198,13 +205,15 @@ func (m Model) viewV3NetIdentity() string {
 				"  [E] Export recovery seed phrase to file",
 				"  [R] Recover identity from seed phrase",
 			}
+			helpText = "S - Show  |  E - Export  |  R - Recover  |  Q - Return"
 		}
-		helpText = "S - Show  |  E - Export  |  R - Recover  |  Q - Return"
 	}
 
 	// Render the box.
-	contentRows := len(contentLines)
-	extraV := maxInt(0, m.height-contentRows-10)
+	// Box: top border + title + empty + content + empty + bottom border
+	boxH := len(contentLines) + 5
+	// Vertical centering: -3 for global header, message line, help bar
+	extraV := maxInt(0, m.height-boxH-3)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -262,21 +271,22 @@ func (m Model) viewV3NetIdentity() string {
 		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
 	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
-
-	// Message line
+	// Message line (directly below box, matching category menu layout)
 	if m.message != "" {
-		b.WriteString(bgFillStyle.Render(centerText(m.message, m.width)))
+		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+		b.WriteString(msgLine)
 	} else {
 		b.WriteString(bgLine)
 	}
 	b.WriteByte('\n')
 
-	b.WriteString(bgLine)
-	b.WriteByte('\n')
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
 	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
 
 	return b.String()
