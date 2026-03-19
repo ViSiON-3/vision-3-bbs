@@ -120,7 +120,7 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isNew, err := h.messages.Store(msg.MsgUUID, network, string(data))
+	isNew, err := h.messages.Store(msg.MsgUUID, network, msg.AreaTag, string(data))
 	if err != nil {
 		slog.Error("store message", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)

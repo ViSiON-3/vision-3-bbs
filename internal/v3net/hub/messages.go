@@ -10,10 +10,12 @@ CREATE TABLE IF NOT EXISTS messages (
 	id          INTEGER PRIMARY KEY AUTOINCREMENT,
 	msg_uuid    TEXT UNIQUE NOT NULL,
 	network     TEXT NOT NULL,
+	area_tag    TEXT NOT NULL,
 	data        TEXT NOT NULL,
 	received_at DATETIME DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_messages_network ON messages(network, id);
+CREATE INDEX IF NOT EXISTS idx_messages_area ON messages(network, area_tag, id);
 `
 
 // MessageStore handles SQLite-backed message persistence for the hub.
@@ -26,14 +28,18 @@ func NewMessageStore(db *sql.DB) (*MessageStore, error) {
 	if _, err := db.Exec(messagesSchema); err != nil {
 		return nil, fmt.Errorf("hub: create messages table: %w", err)
 	}
+	// Migration: add area_tag column to existing databases.
+	db.Exec("ALTER TABLE messages ADD COLUMN area_tag TEXT NOT NULL DEFAULT ''")
+	// Migration: add composite index for area filtering.
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_messages_area ON messages(network, area_tag, id)")
 	return &MessageStore{db: db}, nil
 }
 
 // Store inserts a message. Returns false if the msg_uuid already exists (dedup).
-func (ms *MessageStore) Store(msgUUID, network, data string) (bool, error) {
+func (ms *MessageStore) Store(msgUUID, network, areaTag, data string) (bool, error) {
 	res, err := ms.db.Exec(
-		"INSERT OR IGNORE INTO messages (msg_uuid, network, data) VALUES (?, ?, ?)",
-		msgUUID, network, data,
+		"INSERT OR IGNORE INTO messages (msg_uuid, network, area_tag, data) VALUES (?, ?, ?, ?)",
+		msgUUID, network, areaTag, data,
 	)
 	if err != nil {
 		return false, fmt.Errorf("hub: store message: %w", err)
