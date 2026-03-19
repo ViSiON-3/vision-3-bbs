@@ -10,6 +10,8 @@ func (m Model) View() string {
 	switch m.mode {
 	case modeTopMenu:
 		return m.viewTopMenu()
+	case modeCategoryMenu:
+		return m.viewCategoryMenu()
 	case modeSysConfigMenu:
 		return m.viewSysConfigMenu()
 	case modeSysConfigEdit, modeSysConfigField:
@@ -31,8 +33,12 @@ func (m Model) View() string {
 		result := m.viewRecordList()
 		return m.overlayConfirmDialog(result, "-- Delete Record --",
 			"Delete this record? ")
-	case modeV3NetSetupFork, modeV3NetWizardStep:
+	case modeWizardForm, modeWizardField:
+		return m.viewWizardForm()
+	case modeV3NetWizardStep:
 		return m.viewV3NetWizard()
+	case modeV3NetIdentity:
+		return m.viewV3NetIdentity()
 	}
 	return m.viewTopMenu()
 }

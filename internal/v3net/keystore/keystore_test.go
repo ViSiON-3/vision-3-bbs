@@ -12,7 +12,7 @@ func TestLoad_GeneratesNewKeypair(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.key")
 
-	ks, err := Load(path)
+	ks, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -45,12 +45,12 @@ func TestLoad_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.key")
 
-	ks1, err := Load(path)
+	ks1, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("first Load failed: %v", err)
 	}
 
-	ks2, err := Load(path)
+	ks2, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("second Load failed: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestNodeID_DerivedFromPubKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.key")
 
-	ks, err := Load(path)
+	ks, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestSign_VerifiesCorrectly(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.key")
 
-	ks, err := Load(path)
+	ks, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestSign_RejectsTamperedData(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.key")
 
-	ks, err := Load(path)
+	ks, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestVerify_RejectsInvalidSignature(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.key")
 
-	ks, err := Load(path)
+	ks, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -157,3 +157,4 @@ func TestVerify_RejectsInvalidSignature(t *testing.T) {
 		t.Error("Verify should reject invalid base64 signature")
 	}
 }
+

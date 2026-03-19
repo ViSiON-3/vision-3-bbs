@@ -61,7 +61,7 @@ func setupIntegration(t *testing.T) (
 	dir := t.TempDir()
 
 	// Create hub.
-	hubKS, err := keystore.Load(filepath.Join(dir, "hub.key"))
+	hubKS, _, err := keystore.Load(filepath.Join(dir, "hub.key"))
 	if err != nil {
 		t.Fatalf("load hub keystore: %v", err)
 	}
@@ -86,7 +86,7 @@ func setupIntegration(t *testing.T) (
 	t.Cleanup(ts.Close)
 
 	// Create leaf keystore and register with hub.
-	leafKS, err = keystore.Load(filepath.Join(dir, "leaf.key"))
+	leafKS, _, err = keystore.Load(filepath.Join(dir, "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
 	}

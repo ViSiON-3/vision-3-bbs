@@ -31,8 +31,9 @@ New to ViSiON/3? Start here:
 | [Files](files/file-areas.md) | File areas, transfers, bulk import |
 | [Doors](doors/doors.md) | External programs, dropfile generation |
 | [Networking](networking/ssh.md) | SSH and Telnet servers |
+| [V3Net](v3net/configuration.md) | Native inter-BBS networking, FelonyNet, key recovery |
 | [Advanced](advanced/event-scheduler.md) | Scheduler, string editor, encoding |
-| [Reference](reference/architecture.md) | Architecture, API, developer guide |
+| [Reference](reference/architecture.md) | Architecture, technical reference, API, developer guide |
 
 ---
 

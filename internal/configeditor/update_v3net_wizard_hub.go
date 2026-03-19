@@ -1,114 +1,33 @@
 package configeditor
 
 import (
+	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
-const (
-	hubStepNetwork     = 0
-	hubStepPort        = 1
-	hubStepAutoApprove = 2
-	hubStepAreas       = 3
-)
+// hubStepAreas is the only step constant still used (for the areas sub-form).
+const hubStepAreas = 3
 
+// updateHubWizardStep handles the hub areas sub-form (the only remaining
+// modeV3NetWizardStep usage). All other hub fields are now in the wizard form.
 func (m Model) updateHubWizardStep(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Escape returns to the wizard form (not the fork screen).
 	if msg.Type == tea.KeyEscape && !m.wizard.areaAdding {
-		m.mode = modeV3NetSetupFork
+		m.wizardFields = m.fieldsHubWizard()
+		m.mode = modeWizardForm
 		return m, nil
 	}
 
-	switch m.wizard.step {
-	case hubStepNetwork:
-		return m.updateHubStepNetwork(msg)
-	case hubStepPort:
-		return m.updateHubStepPort(msg)
-	case hubStepAutoApprove:
-		return m.updateHubStepAutoApprove(msg)
-	case hubStepAreas:
+	if m.wizard.step == hubStepAreas {
 		return m.updateHubStepAreas(msg)
-	}
-	return m, nil
-}
-
-func (m Model) updateHubStepNetwork(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// This step has two sub-fields: name (textInput) then description.
-	// We track which sub-field with wizard.areaAdding (repurposed: false=name, true=desc).
-	if msg.Type == tea.KeyEnter {
-		if !m.wizard.areaAdding {
-			// Committing name.
-			val := strings.TrimSpace(m.wizard.netName)
-			if val == "" {
-				m.message = "Network name cannot be empty"
-				return m, nil
-			}
-			// Validate: lowercase alphanumeric only.
-			for _, c := range val {
-				if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
-					m.message = "Network name must be lowercase alphanumeric only"
-					return m, nil
-				}
-			}
-			m.wizard.netName = val
-			m.wizard.areaAdding = true // now editing description
-			m.textInput.SetValue(m.wizard.netDesc)
-			m.textInput.Focus()
-		} else {
-			// Committing description.
-			m.wizard.netDesc = strings.TrimSpace(m.wizard.netDesc)
-			m.wizard.areaAdding = false
-			m.wizard.step = hubStepPort
-			m.textInput.SetValue(m.wizard.port)
-			m.textInput.Focus()
-		}
-		return m, nil
-	}
-	m = m.updateWizardTextInput(msg)
-	if !m.wizard.areaAdding {
-		m.wizard.netName = m.textInput.Value()
-	} else {
-		m.wizard.netDesc = m.textInput.Value()
-	}
-	return m, nil
-}
-
-func (m Model) updateHubStepPort(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyEnter {
-		val := strings.TrimSpace(m.wizard.port)
-		p, err := strconv.Atoi(val)
-		if err != nil || p < 1 || p > 65535 {
-			m.message = "Port must be a number between 1 and 65535"
-			return m, nil
-		}
-		m.wizard.port = val
-		m.wizard.step = hubStepAutoApprove
-		m.textInput.Reset()
-		return m, nil
-	}
-	m = m.updateWizardTextInput(msg)
-	m.wizard.port = m.textInput.Value()
-	return m, nil
-}
-
-func (m Model) updateHubStepAutoApprove(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
-		m.wizard.step = hubStepAreas
-		return m, nil
-	case tea.KeySpace:
-		m.wizard.autoApprove = !m.wizard.autoApprove
-	case tea.KeyRunes:
-		switch strings.ToLower(string(msg.Runes)) {
-		case "y":
-			m.wizard.autoApprove = true
-		case "n":
-			m.wizard.autoApprove = false
-		}
 	}
 	return m, nil
 }
@@ -121,11 +40,10 @@ func (m Model) updateHubStepAreas(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.Type {
 	case tea.KeyEnter:
-		if len(m.wizard.areas) == 0 {
-			m.message = "At least one area is required"
-			return m, nil
-		}
-		return m.confirmHubWizard()
+		// Return to wizard form; save happens via S key there.
+		m.wizardFields = m.fieldsHubWizard()
+		m.mode = modeWizardForm
+		return m, nil
 	case tea.KeyUp:
 		if m.wizard.areaCursor > 0 {
 			m.wizard.areaCursor--
@@ -197,13 +115,25 @@ func (m Model) updateHubAreaSubForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// confirmHubWizard creates the hub network configuration and saves.
 func (m Model) confirmHubWizard() (Model, tea.Cmd) {
-	port, _ := strconv.Atoi(m.wizard.port) // Safe: port was validated in updateHubStepPort.
+	port, err := strconv.Atoi(m.wizard.port)
+	if err != nil {
+		m.message = fmt.Sprintf("Invalid hub port: %v", err)
+		return m, nil
+	}
 
 	var initialAreas []config.V3NetHubArea
 	for _, a := range m.wizard.areas {
 		initialAreas = append(initialAreas, config.V3NetHubArea{Tag: a.Tag, Name: a.Name})
 	}
+
+	path := m.configs.V3Net.KeystorePath
+	if path == "" {
+		path = "data/v3net.key"
+	}
+	_, statErr := os.Stat(path)
+	m.keyExistedBeforeSave = statErr == nil
 
 	m.configs.V3Net.Enabled = true
 	if m.configs.V3Net.KeystorePath == "" {
@@ -222,9 +152,91 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 		},
 		InitialAreas: initialAreas,
 	}
+
+	// Create local message areas for each initial hub area.
+	m.createHubMessageAreas(m.wizard.netName, m.wizard.areas)
+
+	// Create a self-leaf subscription so the hub's own BBS
+	// participates in the network (syncs messages via localhost).
+	m.addSelfLeaf(m.wizard.netName, port)
+
 	m.dirty = true
 	m.saveAll()
-	m.message = "Saved — start the BBS to initialize your hub and seed the NAL."
-	m.mode = modeTopMenu
+	if strings.HasPrefix(m.message, "SAVE ERROR") {
+		return m, nil
+	}
+	m.message = "Hub saved. Start BBS to initialize."
+	m.recordCursor = len(m.configs.V3Net.Hub.Networks) - 1
+	m.recordScroll = 0
+	if !m.keyExistedBeforeSave {
+		ks, err := m.loadOrCreateIdentityKeystore()
+		if err == nil && ks != nil {
+			if phrase, err := ks.Mnemonic(); err == nil {
+				m.showSeedInterstitial = true
+				m.seedInterstitialPhrase = phrase
+				m.seedInterstitialNodeID = ks.NodeID()
+				return m, nil
+			}
+		}
+	}
+	m.mode = modeRecordList
 	return m, nil
+}
+
+// createHubMessageAreas adds a v3net message area for each initial hub area
+// that does not already exist in the message area list.
+func (m *Model) createHubMessageAreas(network string, areas []wizardArea) {
+	existing := make(map[string]bool)
+	for _, a := range m.configs.MsgAreas {
+		existing[a.Tag] = true
+	}
+
+	for _, a := range areas {
+		if existing[a.Tag] {
+			continue
+		}
+
+		newID := 1
+		maxPos := 0
+		for _, ma := range m.configs.MsgAreas {
+			if ma.ID >= newID {
+				newID = ma.ID + 1
+			}
+			if ma.Position > maxPos {
+				maxPos = ma.Position
+			}
+		}
+
+		m.configs.MsgAreas = append(m.configs.MsgAreas, message.MessageArea{
+			ID:       newID,
+			Position: maxPos + 1,
+			Tag:      a.Tag,
+			Name:     a.Name,
+			AreaType: "v3net",
+			Network:  network,
+			EchoTag:  a.Tag,
+			AutoJoin: true,
+			ACSRead:  "s10",
+			ACSWrite: "s20",
+			BasePath: fmt.Sprintf("msgbases/area_%d", newID),
+		})
+		existing[a.Tag] = true
+	}
+}
+
+// addSelfLeaf appends a leaf subscription to the hub's own network
+// via localhost, unless one already exists.
+func (m *Model) addSelfLeaf(network string, port int) {
+	hubURL := fmt.Sprintf("http://localhost:%d", port)
+	for _, l := range m.configs.V3Net.Leaves {
+		if l.Network == network && l.HubURL == hubURL {
+			return
+		}
+	}
+	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, config.V3NetLeafConfig{
+		HubURL:       hubURL,
+		Network:      network,
+		Board:        network,
+		PollInterval: "5m",
+	})
 }

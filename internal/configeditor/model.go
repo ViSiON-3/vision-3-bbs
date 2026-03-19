@@ -32,14 +32,24 @@ const (
 	modeDeleteConfirm                     // Confirm delete record
 	modeLookupPicker                      // Lookup picker popup
 	modeRecordReorder                     // Reorder mode (move record to new position)
-	modeV3NetSetupFork                    // V3Net setup fork screen (leaf or hub)
-	modeV3NetWizardStep                   // Active wizard step
+	modeCategoryMenu                      // Generic category sub-menu
+	modeWizardForm                        // Wizard form field navigation
+	modeWizardField                       // Wizard form field editing (textinput active)
+	modeV3NetWizardStep                   // Hub areas sub-form
+	modeV3NetIdentity                     // V3Net Node Identity screen
 )
 
 // topMenuItem defines an entry in the top-level menu.
 type topMenuItem struct {
 	Key   string // Display key (1-9, A, Q)
 	Label string // Display label
+}
+
+// categoryMenuItem defines an entry in a generic category sub-menu.
+type categoryMenuItem struct {
+	Label      string     // Display label
+	RecordType string     // If non-empty, opens record list for this type
+	Mode       editorMode // If non-zero, transitions to this mode instead
 }
 
 // sysConfigMenuItem defines an entry in the system config inner menu.
@@ -55,11 +65,10 @@ type wizardArea struct {
 
 // wizardState holds all transient state for the V3Net setup wizard.
 type wizardState struct {
-	flow       string // "leaf" or "hub"
-	step       int    // current step index (0-based)
-	forkCursor int    // 0=leaf, 1=hub (lightbar position on fork screen)
+	flow string // "leaf" or "hub"
+	step int    // current step index (hub areas sub-form only)
 
-	// Leaf wizard fields (steps 0–4)
+	// Leaf wizard fields
 	hubURL       string
 	networkName  string
 	boardTag     string
@@ -90,6 +99,15 @@ type Model struct {
 	// Top menu state
 	topCursor int
 	topItems  []topMenuItem
+
+	// Category sub-menu state
+	catMenuTitle  string
+	catMenuItems  []categoryMenuItem
+	catMenuCursor int
+
+	// Back-navigation: where Escape in record list / wizard returns to.
+	// Zero means modeTopMenu (default for items opened directly from top menu).
+	returnMode editorMode
 
 	// System config inner menu
 	sysMenuCursor int
@@ -125,7 +143,21 @@ type Model struct {
 	confirmYes bool
 
 	// V3Net setup wizard state
-	wizard wizardState
+	wizard       *wizardState // pointer so field closures survive value-receiver copies
+	wizardFields []fieldDef   // fields for wizard form
+	wizardTitle  string       // title for wizard form box
+
+	// V3Net Node Identity screen state
+	identitySubState      int // 0=main, 1=showPhrase, 2=exportPrompt, 3=recoverInput, 4=recoverConfirm
+	identityPhrase        string
+	identityRecoverInput  string
+	identityRecoverNodeID string
+
+	// Seed phrase interstitial (shown after first-time wizard save)
+	showSeedInterstitial   bool
+	seedInterstitialPhrase string
+	seedInterstitialNodeID string
+	keyExistedBeforeSave   bool
 
 	// Terminal
 	width   int
@@ -149,19 +181,12 @@ func New(configPath string) (Model, error) {
 
 	topItems := []topMenuItem{
 		{"1", "System Configuration"},
-		{"2", "Message Areas"},
-		{"3", "File Areas"},
-		{"4", "Conferences"},
-		{"5", "Door Programs"},
+		{"2", "BBS Areas & Conferences"},
+		{"3", "Echomail Networking"},
+		{"4", "ViSiON/3 Networking (V3Net)"},
+		{"5", "Programs & Protocols"},
 		{"6", "Event Scheduler"},
-		{"7", "Echomail Networks"},
-		{"8", "Echomail Links"},
-		{"9", "Transfer Protocols"},
-		{"A", "Archivers"},
-		{"B", "Login Sequence"},
-		{"C", "V3Net Subscriptions"},
-		{"D", "V3Net Networks"},
-		{"E", "V3Net Setup"},
+		{"7", "Login Sequence"},
 		{"Q", "Quit Program"},
 	}
 
@@ -183,6 +208,7 @@ func New(configPath string) (Model, error) {
 		topItems:     topItems,
 		sysMenuItems: sysMenuItems,
 		textInput:    ti,
+		wizard:       &wizardState{},
 		width:        minWidth,
 		height:       minHeight,
 		mode:         modeTopMenu,
@@ -215,6 +241,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.mode {
 		case modeTopMenu:
 			return m.updateTopMenu(msg)
+		case modeCategoryMenu:
+			return m.updateCategoryMenu(msg)
 		case modeSysConfigMenu:
 			return m.updateSysConfigMenu(msg)
 		case modeSysConfigEdit:
@@ -235,10 +263,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateLookupPicker(msg)
 		case modeHelp:
 			return m.updateHelp(msg)
-		case modeV3NetSetupFork:
-			return m.updateV3NetSetupFork(msg)
+		case modeWizardForm:
+			return m.updateWizardForm(msg)
+		case modeWizardField:
+			return m.updateWizardField(msg)
 		case modeV3NetWizardStep:
 			return m.updateV3NetWizardStep(msg)
+		case modeV3NetIdentity:
+			return m.updateV3NetIdentity(msg)
 		}
 	}
 	return m, nil
@@ -277,33 +309,86 @@ func (m Model) updateTopMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
-	recordTypes := []string{
-		"", "msgarea", "filearea", "conference", "door",
-		"event", "ftn", "ftnlink", "protocol", "archiver", "login",
-		"v3netleaf", "v3nethub",
-	}
-
 	switch m.topCursor {
 	case 0: // System Configuration
 		m.mode = modeSysConfigMenu
 		m.sysMenuCursor = 0
 		return m, nil
-	case 13: // V3Net Setup (E)
-		m.wizard = wizardState{}
-		m.mode = modeV3NetSetupFork
-		return m, nil
-	case 14: // Quit (was 13, shifted by E insertion)
-		return m.tryExit()
-	default:
-		// Items 1-9 are record list editors
-		if m.topCursor > 0 && m.topCursor < len(recordTypes) {
-			m.recordType = recordTypes[m.topCursor]
-			m.recordCursor = 0
-			m.recordScroll = 0
-			m.mode = modeRecordList
+
+	case 1: // BBS Areas & Conferences
+		m.catMenuTitle = "BBS Areas & Conferences"
+		m.catMenuItems = []categoryMenuItem{
+			{Label: "Message Areas", RecordType: "msgarea"},
+			{Label: "File Areas", RecordType: "filearea"},
+			{Label: "Conferences", RecordType: "conference"},
 		}
+		m.catMenuCursor = 0
+		m.mode = modeCategoryMenu
 		return m, nil
+
+	case 2: // Echomail Networking
+		m.catMenuTitle = "Echomail Networking"
+		m.catMenuItems = []categoryMenuItem{
+			{Label: "Echomail Networks", RecordType: "ftn"},
+			{Label: "Echomail Links", RecordType: "ftnlink"},
+		}
+		m.catMenuCursor = 0
+		m.mode = modeCategoryMenu
+		return m, nil
+
+	case 3: // V3Net Networking
+		m.catMenuTitle = "ViSiON/3 Networking (V3Net)"
+		m.catMenuItems = []categoryMenuItem{
+			{Label: "Node Identity", Mode: modeV3NetIdentity},
+			{Label: "Subscriptions", RecordType: "v3netleaf"},
+			{Label: "Networks", RecordType: "v3nethub"},
+		}
+		m.catMenuCursor = 0
+		m.mode = modeCategoryMenu
+		return m, nil
+
+	case 4: // Programs & Protocols
+		m.catMenuTitle = "Programs & Protocols"
+		m.catMenuItems = []categoryMenuItem{
+			{Label: "Door Programs", RecordType: "door"},
+			{Label: "Transfer Protocols", RecordType: "protocol"},
+			{Label: "Archivers", RecordType: "archiver"},
+		}
+		m.catMenuCursor = 0
+		m.mode = modeCategoryMenu
+		return m, nil
+
+	case 5: // Event Scheduler (direct)
+		m.recordType = "event"
+		m.recordCursor = 0
+		m.recordScroll = 0
+		m.returnMode = modeTopMenu
+		m.mode = modeRecordList
+		return m, nil
+
+	case 6: // Login Sequence (direct)
+		m.recordType = "login"
+		m.recordCursor = 0
+		m.recordScroll = 0
+		m.returnMode = modeTopMenu
+		m.mode = modeRecordList
+		return m, nil
+
+	case 7: // Quit
+		return m.tryExit()
 	}
+	return m, nil
+}
+
+// backMode returns the mode to navigate back to. If returnMode is set, it is
+// used (and cleared); otherwise falls back to the top menu.
+func (m *Model) backMode() editorMode {
+	if m.returnMode != 0 {
+		mode := m.returnMode
+		m.returnMode = 0
+		return mode
+	}
+	return modeTopMenu
 }
 
 func (m Model) tryExit() (Model, tea.Cmd) {

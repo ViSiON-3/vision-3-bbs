@@ -1,6 +1,6 @@
 # Technical Reference
 
-This document covers implementation patterns and subsystem details beyond what's in `docs/sysop/reference/architecture.md`.
+This document covers implementation patterns and subsystem details beyond what's in [Architecture](architecture.md).
 
 ## File Area System
 

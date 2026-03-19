@@ -1,0 +1,301 @@
+package configeditor
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+func (m Model) viewSeedInterstitial() string {
+	var b strings.Builder
+	b.WriteString(m.globalHeaderLine())
+	b.WriteByte('\n')
+
+	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
+	boxW := 60
+	title := "V3Net Node Identity Created"
+	var contentLines []string
+
+	contentLines = append(contentLines,
+		fmt.Sprintf("  Node ID: %s", m.seedInterstitialNodeID),
+		"",
+		"  Your recovery seed phrase:",
+		"",
+	)
+
+	words := strings.Split(m.seedInterstitialPhrase, " ")
+	if len(words) == 24 {
+		for row := 0; row < 8; row++ {
+			contentLines = append(contentLines, fmt.Sprintf(
+				"  %2d. %-12s  %2d. %-12s  %2d. %-12s",
+				row+1, words[row], row+9, words[row+8],
+				row+17, words[row+16],
+			))
+		}
+	}
+
+	contentLines = append(contentLines,
+		"",
+		"  Write down these 24 words and store them safely.",
+		"  This phrase can restore your node identity if your",
+		"  key file is ever lost.",
+	)
+
+	helpText := "[E] Export to file   [C] Continue"
+
+	// Box: top border + title + empty + content + empty + bottom border
+	boxH := len(contentLines) + 5
+	extraV := maxInt(0, m.height-boxH-3)
+	topPad := extraV / 2
+	bottomPad := extraV - topPad
+
+	for i := 0; i < topPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	padL := maxInt(0, (m.width-boxW-2)/2)
+	padR := maxInt(0, m.width-padL-boxW-2)
+
+	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
+		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteByte('\n')
+
+	titleLine := editBorderStyle.Render("│") +
+		menuHeaderStyle.Render(centerText(title, boxW)) +
+		editBorderStyle.Render("│")
+	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + titleLine +
+		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteByte('\n')
+
+	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		editBorderStyle.Render("│") +
+		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
+		editBorderStyle.Render("│") +
+		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+	b.WriteString(emptyLine)
+	b.WriteByte('\n')
+
+	for _, line := range contentLines {
+		padded := line
+		if lipgloss.Width(padded) > boxW {
+			padded = truncateToDisplayWidth(padded, boxW)
+		}
+		if lipgloss.Width(padded) < boxW {
+			padded += strings.Repeat(" ", boxW-lipgloss.Width(padded))
+		}
+		row := bgFillStyle.Render(strings.Repeat("░", padL)) +
+			editBorderStyle.Render("│") +
+			fieldDisplayStyle.Render(padded) +
+			editBorderStyle.Render("│") +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+		b.WriteString(row)
+		b.WriteByte('\n')
+	}
+
+	b.WriteString(emptyLine)
+	b.WriteByte('\n')
+	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
+		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteByte('\n')
+
+	// Message line directly below box
+	if m.message != "" {
+		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+		b.WriteString(msgLine)
+	} else {
+		b.WriteString(bgLine)
+	}
+	b.WriteByte('\n')
+
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
+
+	return b.String()
+}
+
+// viewV3NetIdentity renders the Node Identity screen and all sub-states.
+func (m Model) viewV3NetIdentity() string {
+	var b strings.Builder
+	b.WriteString(m.globalHeaderLine())
+	b.WriteByte('\n')
+
+	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
+	boxW := 60
+
+	// Build content lines based on sub-state.
+	var title string
+	var contentLines []string
+	var helpText string
+
+	switch m.identitySubState {
+	case identityShowPhrase:
+		title = "Recovery Seed Phrase"
+		words := strings.Split(m.identityPhrase, " ")
+		if len(words) == 24 {
+			for row := 0; row < 8; row++ {
+				contentLines = append(contentLines, fmt.Sprintf(
+					"  %2d. %-12s  %2d. %-12s  %2d. %-12s",
+					row+1, words[row], row+9, words[row+8],
+					row+17, words[row+16],
+				))
+			}
+		}
+		contentLines = append(contentLines, "")
+		contentLines = append(contentLines, "  Press any key to return")
+		helpText = "Any key - Return"
+
+	case identityExportPrompt:
+		title = "Export Recovery Phrase"
+		contentLines = []string{
+			"  Export to file: " + m.textInput.View(),
+		}
+		helpText = "Enter - Save  |  ESC - Cancel"
+
+	case identityRecoverInput:
+		title = "Recover Identity"
+		contentLines = []string{
+			"  Enter your 24-word recovery phrase:",
+			"",
+			"  " + m.textInput.View(),
+		}
+		helpText = "Enter - Submit  |  ESC - Cancel"
+
+	case identityRecoverConfirm:
+		title = "Confirm Recovery"
+		contentLines = []string{
+			fmt.Sprintf("  Node ID will become: %s", m.identityRecoverNodeID),
+			"",
+			"  This will replace your current key file.",
+			"  Continue? [Y/N]",
+		}
+		helpText = "Y - Confirm  |  N - Cancel"
+
+	default: // identityMain
+		title = "V3Net Node Identity"
+		ks, err := m.loadIdentityKeystore()
+		if err != nil {
+			contentLines = []string{
+				fmt.Sprintf("  Error: %v", err),
+			}
+			helpText = "R - Recover  |  Q - Return"
+		} else if ks == nil {
+			contentLines = []string{
+				"  No V3Net identity configured.",
+				"  Set up a leaf subscription or hub network to generate one.",
+				"",
+				"  [R] Recover identity from seed phrase",
+			}
+			helpText = "R - Recover  |  Q - Return"
+		} else {
+			path := m.configs.V3Net.KeystorePath
+			if path == "" {
+				path = "data/v3net.key"
+			}
+			contentLines = []string{
+				fmt.Sprintf("  Node ID:    %s", ks.NodeID()),
+				fmt.Sprintf("  Public Key: %s", ks.PubKeyBase64()),
+				fmt.Sprintf("  Key File:   %s", path),
+				"",
+				"  [S] Show recovery seed phrase",
+				"  [E] Export recovery seed phrase to file",
+				"  [R] Recover identity from seed phrase",
+			}
+			helpText = "S - Show  |  E - Export  |  R - Recover  |  Q - Return"
+		}
+	}
+
+	// Render the box.
+	// Box: top border + title + empty + content + empty + bottom border
+	boxH := len(contentLines) + 5
+	// Vertical centering: -3 for global header, message line, help bar
+	extraV := maxInt(0, m.height-boxH-3)
+	topPad := extraV / 2
+	bottomPad := extraV - topPad
+
+	for i := 0; i < topPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	padL := maxInt(0, (m.width-boxW-2)/2)
+	padR := maxInt(0, m.width-padL-boxW-2)
+
+	// Top border
+	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
+		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteByte('\n')
+
+	// Title
+	titleLine := editBorderStyle.Render("│") +
+		menuHeaderStyle.Render(centerText(title, boxW)) +
+		editBorderStyle.Render("│")
+	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + titleLine +
+		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteByte('\n')
+
+	// Empty line
+	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		editBorderStyle.Render("│") +
+		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
+		editBorderStyle.Render("│") +
+		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+	b.WriteString(emptyLine)
+	b.WriteByte('\n')
+
+	// Content lines
+	for _, line := range contentLines {
+		padded := line
+		if lipgloss.Width(padded) > boxW {
+			padded = truncateToDisplayWidth(padded, boxW)
+		}
+		if lipgloss.Width(padded) < boxW {
+			padded += strings.Repeat(" ", boxW-lipgloss.Width(padded))
+		}
+		row := bgFillStyle.Render(strings.Repeat("░", padL)) +
+			editBorderStyle.Render("│") +
+			fieldDisplayStyle.Render(padded) +
+			editBorderStyle.Render("│") +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+		b.WriteString(row)
+		b.WriteByte('\n')
+	}
+
+	// Empty line + bottom border
+	b.WriteString(emptyLine)
+	b.WriteByte('\n')
+	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
+		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteByte('\n')
+
+	// Message line (directly below box, matching category menu layout)
+	if m.message != "" {
+		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+		b.WriteString(msgLine)
+	} else {
+		b.WriteString(bgLine)
+	}
+	b.WriteByte('\n')
+
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
+
+	return b.String()
+}

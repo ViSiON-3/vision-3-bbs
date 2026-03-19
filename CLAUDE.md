@@ -47,7 +47,7 @@ clarification before proceeding.
 
 ### Pattern & Tech Stack Awareness
 
-- Reference `README.md` and `docs/technical.md` to understand and utilize existing patterns and technologies.
+- Reference `README.md` and `docs/sysop/reference/technical.md` to understand and utilize existing patterns and technologies.
 - Exhaust options using existing implementations before proposing new patterns or libraries.
 - Check `go.mod` before adding any dependency. If an equivalent library is already present, use it.
 
@@ -167,8 +167,8 @@ clarification before proceeding.
 ## Documentation Maintenance
 
 - If code changes impact architecture, technical decisions, or established
-  patterns, update the relevant documentation (`README.md`, `docs/architecture.md`,
-  `docs/technical.md`).
+  patterns, update the relevant documentation (`README.md`, `docs/sysop/reference/architecture.md`,
+  `docs/sysop/reference/technical.md`).
 - If a new subsystem is added that warrants its own agent instructions, create
   `internal/{subsystem}/CLAUDE.md` and add a row to the Sub-Agent Instructions
   table at the top of this file.
