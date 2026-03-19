@@ -34,8 +34,10 @@ func (m Model) updateSeedInterstitial(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := strings.ToUpper(msg.String())
 	switch key {
 	case "E":
-		ks, _ := m.loadIdentityKeystore()
-		if ks != nil {
+		ks, err := m.loadIdentityKeystore()
+		if err != nil {
+			m.message = fmt.Sprintf("Export error: %v", err)
+		} else if ks != nil {
 			if err := m.writeRecoveryFile("v3net-recovery.txt", ks); err != nil {
 				m.message = fmt.Sprintf("Export error: %v", err)
 			} else {

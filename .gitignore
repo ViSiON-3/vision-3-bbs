@@ -41,6 +41,7 @@ go.work.sum
 /cmd/vision3/vision3
 /cmd/ansitest/ansitest
 /cmd/v3net-bootstrap/v3net-bootstrap
+/v3net-bootstrap
 /v3mail
 /helper
 /menuedit

@@ -93,5 +93,6 @@
 
 * **REFERENCE**
 * [Architecture](reference/architecture.md)
+* [Technical Reference](reference/technical.md)
 * [API Reference](reference/api-reference.md)
 * [Developer Guide](reference/developer-guide.md)
