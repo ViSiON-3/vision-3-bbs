@@ -3,6 +3,7 @@ package configeditor
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,20 +29,41 @@ func (m Model) loadIdentityKeystore() (*keystore.Keystore, error) {
 	return ks, nil
 }
 
+// loadOrCreateIdentityKeystore loads or generates the keystore. Unlike
+// loadIdentityKeystore, this creates a new keypair when the file is absent
+// (used after first-time wizard saves to show the seed interstitial).
+func (m Model) loadOrCreateIdentityKeystore() (*keystore.Keystore, error) {
+	path := m.configs.V3Net.KeystorePath
+	if path == "" {
+		path = "data/v3net.key"
+	}
+	ks, _, err := keystore.Load(path)
+	if err != nil {
+		return nil, fmt.Errorf("key file: %w", err)
+	}
+	return ks, nil
+}
+
 // updateSeedInterstitial handles the seed phrase interstitial shown after
 // first-time wizard save.
 func (m Model) updateSeedInterstitial(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := strings.ToUpper(msg.String())
 	switch key {
 	case "E":
-		ks, err := m.loadIdentityKeystore()
-		if err != nil {
-			m.message = fmt.Sprintf("Export error: %v", err)
-		} else if ks != nil {
-			if err := m.writeRecoveryFile("v3net-recovery.txt", ks); err != nil {
+		exportPath := "v3net-recovery.txt"
+		if _, statErr := os.Stat(exportPath); statErr == nil {
+			m.message = fmt.Sprintf("File %q already exists — use the Identity screen to export", exportPath)
+		} else {
+			ks, err := m.loadIdentityKeystore()
+			if err != nil {
 				m.message = fmt.Sprintf("Export error: %v", err)
-			} else {
-				m.message = "Saved to v3net-recovery.txt — move off-server and delete the local copy"
+			} else if ks != nil {
+				if err := m.writeRecoveryFile(exportPath, ks); err != nil {
+					m.message = fmt.Sprintf("Export error: %v", err)
+				} else {
+					absPath, _ := filepath.Abs(exportPath)
+					m.message = fmt.Sprintf("Saved to %s — move off-server and delete the local copy", absPath)
+				}
 			}
 		}
 		m.showSeedInterstitial = false
@@ -88,5 +110,35 @@ func (m Model) writeRecoveryFile(path string, ks *keystore.Keystore) error {
 	b.WriteString("\nStore this file safely and delete it from this server.\n")
 	b.WriteString("Anyone with these words can impersonate your BBS node.\n")
 
-	return os.WriteFile(path, []byte(b.String()), 0600)
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".v3net-recovery-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	if _, err := tmp.WriteString(b.String()); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("rename %s -> %s: %w", tmpName, path, err)
+	}
+	return nil
 }

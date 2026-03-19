@@ -117,7 +117,11 @@ func (m Model) updateHubAreaSubForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // confirmHubWizard creates the hub network configuration and saves.
 func (m Model) confirmHubWizard() (Model, tea.Cmd) {
-	port, _ := strconv.Atoi(m.wizard.port) // Safe: validated by field Set.
+	port, err := strconv.Atoi(m.wizard.port)
+	if err != nil {
+		m.message = fmt.Sprintf("Invalid hub port: %v", err)
+		return m, nil
+	}
 
 	var initialAreas []config.V3NetHubArea
 	for _, a := range m.wizard.areas {
@@ -165,7 +169,7 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 	m.recordCursor = len(m.configs.V3Net.Hub.Networks) - 1
 	m.recordScroll = 0
 	if !m.keyExistedBeforeSave {
-		ks, err := m.loadIdentityKeystore()
+		ks, err := m.loadOrCreateIdentityKeystore()
 		if err == nil && ks != nil {
 			if phrase, err := ks.Mnemonic(); err == nil {
 				m.showSeedInterstitial = true

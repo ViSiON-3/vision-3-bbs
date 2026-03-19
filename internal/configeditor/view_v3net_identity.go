@@ -3,6 +3,8 @@ package configeditor
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) viewSeedInterstitial() string {
@@ -78,8 +80,11 @@ func (m Model) viewSeedInterstitial() string {
 
 	for _, line := range contentLines {
 		padded := line
-		if len(padded) < boxW {
-			padded += strings.Repeat(" ", boxW-len(padded))
+		if lipgloss.Width(padded) > boxW {
+			padded = truncateToDisplayWidth(padded, boxW)
+		}
+		if lipgloss.Width(padded) < boxW {
+			padded += strings.Repeat(" ", boxW-lipgloss.Width(padded))
 		}
 		row := bgFillStyle.Render(strings.Repeat("░", padL)) +
 			editBorderStyle.Render("│") +
@@ -251,8 +256,11 @@ func (m Model) viewV3NetIdentity() string {
 	// Content lines
 	for _, line := range contentLines {
 		padded := line
-		if len(padded) < boxW {
-			padded += strings.Repeat(" ", boxW-len(padded))
+		if lipgloss.Width(padded) > boxW {
+			padded = truncateToDisplayWidth(padded, boxW)
+		}
+		if lipgloss.Width(padded) < boxW {
+			padded += strings.Repeat(" ", boxW-lipgloss.Width(padded))
 		}
 		row := bgFillStyle.Render(strings.Repeat("░", padL)) +
 			editBorderStyle.Render("│") +

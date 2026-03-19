@@ -259,7 +259,7 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	m.recordCursor = len(m.configs.V3Net.Leaves) - 1
 	m.recordScroll = 0
 	if !m.keyExistedBeforeSave {
-		ks, err := m.loadIdentityKeystore()
+		ks, err := m.loadOrCreateIdentityKeystore()
 		if err == nil && ks != nil {
 			if phrase, err := ks.Mnemonic(); err == nil {
 				m.showSeedInterstitial = true

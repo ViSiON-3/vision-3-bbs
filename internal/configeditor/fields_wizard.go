@@ -163,6 +163,7 @@ func (m *Model) validateHubWizard() error {
 		}
 	}
 	// Validate area tags.
+	seen := make(map[string]bool)
 	for _, a := range m.wizard.areas {
 		if err := protocol.ValidateAreaTag(a.Tag); err != nil {
 			return fmt.Errorf("area %q: %v", a.Tag, err)
@@ -170,6 +171,10 @@ func (m *Model) validateHubWizard() error {
 		if a.Name == "" {
 			return fmt.Errorf("area %q: name cannot be empty", a.Tag)
 		}
+		if seen[a.Tag] {
+			return fmt.Errorf("area %q: duplicate tag", a.Tag)
+		}
+		seen[a.Tag] = true
 	}
 	return nil
 }

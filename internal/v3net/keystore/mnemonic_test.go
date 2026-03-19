@@ -35,24 +35,17 @@ func TestMnemonic_RoundTrip(t *testing.T) {
 }
 
 func TestMnemonic_ChecksumValidation(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "test.key")
-	ks, _, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load failed: %v", err)
-	}
-	phrase, err := ks.Mnemonic()
-	if err != nil {
-		t.Fatalf("Mnemonic failed: %v", err)
-	}
-	words := strings.Split(phrase, " ")
-	if words[0] == "abandon" {
-		words[0] = "ability"
-	} else {
-		words[0] = "abandon"
-	}
+	// Use a fixed BIP39 test vector (all-zero seed) and corrupt the last word
+	// which carries the checksum bits, guaranteeing an invalid checksum.
+	valid := "abandon abandon abandon abandon abandon abandon abandon abandon " +
+		"abandon abandon abandon abandon abandon abandon abandon abandon " +
+		"abandon abandon abandon abandon abandon abandon abandon art"
+	words := strings.Split(valid, " ")
+	// "art" is the correct final word for all-zero seed; replace with "zoo"
+	// which has a different index and will always fail the checksum.
+	words[23] = "zoo"
 	tampered := strings.Join(words, " ")
-	_, err = FromMnemonic(tampered)
+	_, err := FromMnemonic(tampered)
 	if err == nil {
 		t.Error("expected checksum error for tampered mnemonic")
 	}
@@ -225,7 +218,10 @@ func TestRecoverToFile_Permissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
-	phrase, _ := ks.Mnemonic()
+	phrase, err := ks.Mnemonic()
+	if err != nil {
+		t.Fatalf("Mnemonic failed: %v", err)
+	}
 	_, err = RecoverToFile(phrase, path)
 	if err != nil {
 		t.Fatalf("RecoverToFile failed: %v", err)

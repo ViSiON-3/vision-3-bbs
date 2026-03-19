@@ -68,12 +68,6 @@ func (m Model) updateIdentityMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = "No V3Net key file found — run the V3Net setup wizard first, or use [R]ecover"
 			return m, nil
 		}
-		phrase, err := ks.Mnemonic()
-		if err != nil {
-			m.message = fmt.Sprintf("Error: %v", err)
-			return m, nil
-		}
-		m.identityPhrase = phrase
 		m.identitySubState = identityExportPrompt
 		m.textInput.SetValue("v3net-recovery.txt")
 		m.textInput.CharLimit = 80
@@ -154,7 +148,6 @@ func (m Model) updateIdentityExportPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		m.message = fmt.Sprintf("Saved to %s — move off-server and delete the local copy", path)
 		m.identitySubState = identityMain
-		m.identityPhrase = ""
 		return m, nil
 
 	case tea.KeyEscape:
