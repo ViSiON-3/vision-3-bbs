@@ -132,7 +132,9 @@ func (m Model) viewRecordList() string {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  P - Position  |  ESC - Return"
 	} else if m.recordType == "ftn" {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  G - Global  |  ESC - Return"
-	} else if m.recordType == "ftnlink" || m.recordType == "v3netleaf" {
+	} else if m.recordType == "v3netleaf" || m.recordType == "v3nethub" {
+		helpStr = "Enter - Edit  |  I - New (Wizard)  |  D - Delete  |  ESC - Return"
+	} else if m.recordType == "ftnlink" {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  ESC - Return"
 	} else {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  ESC - Return"

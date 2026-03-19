@@ -49,6 +49,9 @@ tmp/
 
 # Config files (contain site-specific settings, FTN addresses, passwords)
 /configs/*.json
+
+# Test-generated config artifacts in configeditor package
+internal/configeditor/*.json
 /configs/*.txt
 
 # FTN NA (nodelist area) files — site-specific, not tracked in git

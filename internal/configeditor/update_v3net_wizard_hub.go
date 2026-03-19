@@ -12,107 +12,21 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
-const (
-	hubStepNetwork     = 0
-	hubStepPort        = 1
-	hubStepAutoApprove = 2
-	hubStepAreas       = 3
-)
+// hubStepAreas is the only step constant still used (for the areas sub-form).
+const hubStepAreas = 3
 
+// updateHubWizardStep handles the hub areas sub-form (the only remaining
+// modeV3NetWizardStep usage). All other hub fields are now in the wizard form.
 func (m Model) updateHubWizardStep(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Escape returns to the wizard form (not the fork screen).
 	if msg.Type == tea.KeyEscape && !m.wizard.areaAdding {
-		m.mode = modeV3NetSetupFork
+		m.wizardFields = m.fieldsHubWizard()
+		m.mode = modeWizardForm
 		return m, nil
 	}
 
-	switch m.wizard.step {
-	case hubStepNetwork:
-		return m.updateHubStepNetwork(msg)
-	case hubStepPort:
-		return m.updateHubStepPort(msg)
-	case hubStepAutoApprove:
-		return m.updateHubStepAutoApprove(msg)
-	case hubStepAreas:
+	if m.wizard.step == hubStepAreas {
 		return m.updateHubStepAreas(msg)
-	}
-	return m, nil
-}
-
-func (m Model) updateHubStepNetwork(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// This step has two sub-fields: name (textInput) then description.
-	// We track which sub-field with wizard.areaAdding (repurposed: false=name, true=desc).
-	if msg.Type == tea.KeyEnter {
-		if !m.wizard.areaAdding {
-			// Committing name.
-			val := strings.TrimSpace(m.wizard.netName)
-			if val == "" {
-				m.message = "Network name cannot be empty"
-				return m, nil
-			}
-			// Validate: lowercase alphanumeric only.
-			for _, c := range val {
-				if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
-					m.message = "Network name must be lowercase alphanumeric only"
-					return m, nil
-				}
-			}
-			m.wizard.netName = val
-			m.wizard.areaAdding = true // now editing description
-			m.textInput.CharLimit = 200
-			m.textInput.SetValue(m.wizard.netDesc)
-			m.textInput.Focus()
-		} else {
-			// Committing description.
-			m.wizard.netDesc = strings.TrimSpace(m.wizard.netDesc)
-			m.wizard.areaAdding = false
-			m.wizard.step = hubStepPort
-			m.textInput.CharLimit = 80
-			m.textInput.SetValue(m.wizard.port)
-			m.textInput.Focus()
-		}
-		return m, nil
-	}
-	m = m.updateWizardTextInput(msg)
-	if !m.wizard.areaAdding {
-		m.wizard.netName = m.textInput.Value()
-	} else {
-		m.wizard.netDesc = m.textInput.Value()
-	}
-	return m, nil
-}
-
-func (m Model) updateHubStepPort(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyEnter {
-		val := strings.TrimSpace(m.wizard.port)
-		p, err := strconv.Atoi(val)
-		if err != nil || p < 1 || p > 65535 {
-			m.message = "Port must be a number between 1 and 65535"
-			return m, nil
-		}
-		m.wizard.port = val
-		m.wizard.step = hubStepAutoApprove
-		m.textInput.Reset()
-		return m, nil
-	}
-	m = m.updateWizardTextInput(msg)
-	m.wizard.port = m.textInput.Value()
-	return m, nil
-}
-
-func (m Model) updateHubStepAutoApprove(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
-		m.wizard.step = hubStepAreas
-		return m, nil
-	case tea.KeySpace:
-		m.wizard.autoApprove = !m.wizard.autoApprove
-	case tea.KeyRunes:
-		switch strings.ToLower(string(msg.Runes)) {
-		case "y":
-			m.wizard.autoApprove = true
-		case "n":
-			m.wizard.autoApprove = false
-		}
 	}
 	return m, nil
 }
@@ -125,11 +39,10 @@ func (m Model) updateHubStepAreas(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.Type {
 	case tea.KeyEnter:
-		if len(m.wizard.areas) == 0 {
-			m.message = "At least one area is required"
-			return m, nil
-		}
-		return m.confirmHubWizard()
+		// Return to wizard form; save happens via S key there.
+		m.wizardFields = m.fieldsHubWizard()
+		m.mode = modeWizardForm
+		return m, nil
 	case tea.KeyUp:
 		if m.wizard.areaCursor > 0 {
 			m.wizard.areaCursor--
@@ -201,8 +114,9 @@ func (m Model) updateHubAreaSubForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// confirmHubWizard creates the hub network configuration and saves.
 func (m Model) confirmHubWizard() (Model, tea.Cmd) {
-	port, _ := strconv.Atoi(m.wizard.port) // Safe: port was validated in updateHubStepPort.
+	port, _ := strconv.Atoi(m.wizard.port) // Safe: validated by field Set.
 
 	var initialAreas []config.V3NetHubArea
 	for _, a := range m.wizard.areas {
@@ -237,7 +151,9 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 	m.dirty = true
 	m.saveAll()
 	m.message = "Hub saved. Start BBS to initialize."
-	m.mode = modeTopMenu
+	m.recordCursor = len(m.configs.V3Net.Hub.Networks) - 1
+	m.recordScroll = 0
+	m.mode = modeRecordList
 	return m, nil
 }
 

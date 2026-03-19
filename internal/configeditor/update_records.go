@@ -53,11 +53,18 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyEscape:
-		m.mode = modeTopMenu
+		m.mode = m.backMode()
 		return m, nil
 	default:
 		switch msg.String() {
 		case "i", "I", "insert":
+			// V3Net records launch their setup wizard instead of raw insert.
+			if m.recordType == "v3netleaf" {
+				return m.enterLeafWizard()
+			}
+			if m.recordType == "v3nethub" {
+				return m.enterHubWizard()
+			}
 			m.insertRecord()
 			m.dirty = true
 			// For ftnlink the new link is appended to the first (sorted) network,

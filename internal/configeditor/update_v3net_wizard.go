@@ -42,80 +42,42 @@ func fetchHubNetworks(hubURL string) tea.Cmd {
 	}
 }
 
-// --- Fork screen ---
-
-func (m Model) updateV3NetSetupFork(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEscape:
-		m.mode = modeTopMenu
-		return m, nil
-	case tea.KeyUp:
-		if m.wizard.forkCursor > 0 {
-			m.wizard.forkCursor--
-		}
-	case tea.KeyDown:
-		if m.wizard.forkCursor < 1 {
-			m.wizard.forkCursor++
-		}
-	case tea.KeyEnter:
-		if m.wizard.forkCursor == 1 {
-			return m.enterHubWizard()
-		}
-		return m.enterLeafWizard()
-	case tea.KeyRunes:
-		switch strings.ToLower(string(msg.Runes)) {
-		case "j":
-			m.wizard.forkCursor = 0
-			return m.enterLeafWizard()
-		case "h":
-			m.wizard.forkCursor = 1
-			return m.enterHubWizard()
-		}
-	}
-	return m, nil
-}
-
+// enterLeafWizard opens the leaf setup wizard form.
 func (m Model) enterLeafWizard() (tea.Model, tea.Cmd) {
 	var boardName string
 	if m.configs != nil {
 		boardName = m.configs.Server.BoardName
 	}
-	forkCursor := m.wizard.forkCursor
-	m.wizard = wizardState{
+	m.wizard = &wizardState{
 		flow:         "leaf",
-		step:         0,
 		pollInterval: "5m",
 		origin:       boardName,
-		forkCursor:   forkCursor,
 	}
-	m.mode = modeV3NetWizardStep
-	m.textInput.Width = 56 // boxW(60) - "  > "(4)
-	m.textInput.Reset()
-	m.textInput.Focus()
+	m.wizardTitle = "Leaf Setup — Join a Network"
+	m.wizardFields = m.fieldsLeafWizard()
+	m.editField = 0
+	m.fieldScroll = 0
+	m.mode = modeWizardForm
 	return m, nil
 }
 
+// enterHubWizard opens the hub setup wizard form.
 func (m Model) enterHubWizard() (tea.Model, tea.Cmd) {
-	forkCursor := m.wizard.forkCursor
-	m.wizard = wizardState{
-		flow:       "hub",
-		step:       0,
-		port:       "8765",
-		forkCursor: forkCursor,
+	m.wizard = &wizardState{
+		flow: "hub",
+		port: "8765",
 	}
-	m.mode = modeV3NetWizardStep
-	m.textInput.Width = 56 // boxW(60) - "  > "(4)
-	m.textInput.Reset()
-	m.textInput.Focus()
+	m.wizardTitle = "Hub Setup — Host a Network"
+	m.wizardFields = m.fieldsHubWizard()
+	m.editField = 0
+	m.fieldScroll = 0
+	m.mode = modeWizardForm
 	return m, nil
 }
 
-// --- Wizard step dispatcher ---
-
+// updateV3NetWizardStep handles the hub areas sub-form
+// (the only remaining modeV3NetWizardStep usage).
 func (m Model) updateV3NetWizardStep(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.wizard.flow == "leaf" {
-		return m.updateLeafWizardStep(msg)
-	}
 	return m.updateHubWizardStep(msg)
 }
 
@@ -131,14 +93,12 @@ func (m Model) updateWizardTextInput(msg tea.KeyMsg) Model {
 func (m Model) handleFetchNetworksMsg(msg fetchNetworksMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil || len(msg.names) == 0 {
 		m.wizard.fetchError = "(could not reach hub — enter network name manually)"
-		m.textInput.Reset()
-		m.textInput.Focus()
+		m.message = m.wizard.fetchError
 		return m, nil
 	}
 	if len(msg.names) == 1 {
 		m.wizard.networkName = msg.names[0]
-		m.textInput.SetValue(msg.names[0])
-		m.textInput.Focus()
+		m.message = "Auto-detected network: " + msg.names[0]
 		return m, nil
 	}
 	// Multiple networks — show picker.
@@ -149,7 +109,7 @@ func (m Model) handleFetchNetworksMsg(msg fetchNetworksMsg) (tea.Model, tea.Cmd)
 	m.pickerItems = items
 	m.pickerCursor = 0
 	m.pickerScroll = 0
-	m.pickerReturnMode = modeV3NetWizardStep
+	m.pickerReturnMode = modeWizardForm
 	m.mode = modeLookupPicker
 	return m, nil
 }
