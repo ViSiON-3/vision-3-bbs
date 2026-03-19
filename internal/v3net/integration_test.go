@@ -327,6 +327,109 @@ func TestIntegration_ChatEvent(t *testing.T) {
 	}
 }
 
+func TestIntegration_AreaFilteredPolling(t *testing.T) {
+	h, ts, l, _, hubKS, _, writer := setupIntegration(t)
+
+	// Post a message to gen.general via leaf 1.
+	msg := protocol.Message{
+		V3Net: "1.0", Network: "testnet", AreaTag: "gen.general",
+		MsgUUID:     "880e8400-e29b-41d4-a716-446655440010",
+		ThreadUUID:  "880e8400-e29b-41d4-a716-446655440010",
+		OriginNode:  "test.example.net", OriginBoard: "General",
+		From: "Tester", To: "All", Subject: "Area filtered test",
+		DateUTC: "2026-03-16T04:20:00Z", Body: "Should be received.",
+		Kludges: map[string]any{},
+	}
+	if err := l.SendMessage(msg); err != nil {
+		t.Fatalf("SendMessage gen.general: %v", err)
+	}
+
+	// Update NAL to include gen.coding.
+	updatedNAL := &protocol.NAL{
+		V3NetNAL: "1.0", Network: "testnet",
+		CoordNodeID: hubKS.NodeID(), CoordPubKeyB64: hubKS.PubKeyBase64(),
+		Areas: []protocol.Area{
+			{
+				Tag: "gen.general", Name: "General", Language: "en",
+				ManagerNodeID: hubKS.NodeID(), ManagerPubKeyB64: hubKS.PubKeyBase64(),
+				Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+				Policy: protocol.AreaPolicy{MaxBodyBytes: 65536, AllowANSI: true},
+			},
+			{
+				Tag: "gen.coding", Name: "Coding", Language: "en",
+				ManagerNodeID: hubKS.NodeID(), ManagerPubKeyB64: hubKS.PubKeyBase64(),
+				Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+				Policy: protocol.AreaPolicy{MaxBodyBytes: 65536, AllowANSI: true},
+			},
+		},
+	}
+	if err := nal.Sign(updatedNAL, hubKS); err != nil {
+		t.Fatalf("sign updated NAL: %v", err)
+	}
+	if err := h.NALStore().Put("testnet", updatedNAL); err != nil {
+		t.Fatalf("put updated NAL: %v", err)
+	}
+
+	// Register leaf 2 subscribed to gen.coding.
+	leaf2KS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf2.key"))
+	if err != nil {
+		t.Fatalf("load leaf2 keystore: %v", err)
+	}
+	registerBody2, _ := json.Marshal(protocol.SubscribeRequest{
+		Network: "testnet", NodeID: leaf2KS.NodeID(),
+		PubKeyB64: leaf2KS.PubKeyBase64(),
+		BBSName: "Leaf 2 BBS", BBSHost: "leaf2.example.net",
+		AreaTags: []string{"gen.coding"},
+	})
+	resp2, _ := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
+		bytes.NewReader(registerBody2))
+	resp2.Body.Close()
+
+	// Create leaf 2 instance and post a gen.coding message.
+	leaf2Writer := &testJAMWriter{}
+	leaf2Dedup, _ := dedup.Open(filepath.Join(t.TempDir(), "dedup2.sqlite"))
+	t.Cleanup(func() { leaf2Dedup.Close() })
+	l2 := leaf.New(leaf.Config{
+		HubURL:       ts.URL,
+		Network:      "testnet",
+		AreaTags:     []string{"gen.coding"},
+		PollInterval: 50 * time.Millisecond,
+		Keystore:     leaf2KS,
+		DedupIndex:   leaf2Dedup,
+		JAMWriter:    leaf2Writer,
+	})
+
+	codingMsg := protocol.Message{
+		V3Net: "1.0", Network: "testnet", AreaTag: "gen.coding",
+		MsgUUID:     "990e8400-e29b-41d4-a716-446655440011",
+		ThreadUUID:  "990e8400-e29b-41d4-a716-446655440011",
+		OriginNode:  "leaf2.example.net", OriginBoard: "Coding",
+		From: "Leaf2 User", To: "All", Subject: "Coding msg",
+		DateUTC: "2026-03-16T04:20:00Z", Body: "Should NOT be received by leaf 1.",
+		Kludges: map[string]any{},
+	}
+	if err := l2.SendMessage(codingMsg); err != nil {
+		t.Fatalf("SendMessage gen.coding: %v", err)
+	}
+
+	// Poll with leaf 1 (gen.general only).
+	ctx := context.Background()
+	count, err := l.Poll(ctx)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 message from poll (gen.general only), got %d", count)
+	}
+	if writer.count() != 1 {
+		t.Fatalf("expected 1 JAM write, got %d", writer.count())
+	}
+	got := writer.get(0)
+	if got.AreaTag != "gen.general" {
+		t.Errorf("expected area_tag gen.general, got %q", got.AreaTag)
+	}
+}
+
 func TestIntegration_PresenceEvents(t *testing.T) {
 	_, _, l, _, _, _, _ := setupIntegration(t)
 
