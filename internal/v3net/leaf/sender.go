@@ -23,6 +23,7 @@ func (l *Leaf) subscribe(ctx context.Context) error {
 		PubKeyB64: l.cfg.Keystore.PubKeyBase64(),
 		BBSName:   l.cfg.BBSName,
 		BBSHost:   l.cfg.BBSHost,
+		AreaTags:  l.cfg.AreaTags,
 	}
 	data, err := json.Marshal(req)
 	if err != nil {
