@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // storedKey is the on-disk JSON format for the keypair.
@@ -71,6 +72,10 @@ func generate(path string) (*Keystore, bool, error) {
 	return ks, true, nil
 }
 
+// save writes the keypair atomically: write to a temp file in the same
+// directory, then rename over the target path. This prevents corruption
+// if the process crashes mid-write and ensures 0600 permissions even
+// when overwriting an existing file.
 func (ks *Keystore) save(path string) error {
 	sk := storedKey{
 		PrivKeyB64: base64.StdEncoding.EncodeToString(ks.privKey),
@@ -80,8 +85,36 @@ func (ks *Keystore) save(path string) error {
 	if err != nil {
 		return fmt.Errorf("keystore: marshal: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("keystore: write %s: %w", path, err)
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".v3net-key-*.tmp")
+	if err != nil {
+		return fmt.Errorf("keystore: create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("keystore: chmod temp file: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("keystore: write temp file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("keystore: sync temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("keystore: close temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("keystore: rename %s -> %s: %w", tmpName, path, err)
 	}
 	return nil
 }

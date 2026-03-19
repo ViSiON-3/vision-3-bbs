@@ -24,11 +24,11 @@ func (m Model) viewSeedInterstitial() string {
 
 	words := strings.Split(m.seedInterstitialPhrase, " ")
 	if len(words) == 24 {
-		for row := 0; row < 6; row++ {
+		for row := 0; row < 8; row++ {
 			contentLines = append(contentLines, fmt.Sprintf(
-				"  %2d. %-12s %2d. %-12s %2d. %-12s %2d. %-12s",
-				row+1, words[row], row+7, words[row+6],
-				row+13, words[row+12], row+19, words[row+18],
+				"  %2d. %-12s  %2d. %-12s  %2d. %-12s",
+				row+1, words[row], row+9, words[row+8],
+				row+17, words[row+16],
 			))
 		}
 	}
@@ -137,11 +137,11 @@ func (m Model) viewV3NetIdentity() string {
 		title = "Recovery Seed Phrase"
 		words := strings.Split(m.identityPhrase, " ")
 		if len(words) == 24 {
-			for row := 0; row < 6; row++ {
+			for row := 0; row < 8; row++ {
 				contentLines = append(contentLines, fmt.Sprintf(
-					"  %2d. %-12s %2d. %-12s %2d. %-12s %2d. %-12s",
-					row+1, words[row], row+7, words[row+6],
-					row+13, words[row+12], row+19, words[row+18],
+					"  %2d. %-12s  %2d. %-12s  %2d. %-12s",
+					row+1, words[row], row+9, words[row+8],
+					row+17, words[row+16],
 				))
 			}
 		}

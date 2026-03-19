@@ -38,9 +38,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	ks, _, err := keystore.Load(*keystorePath)
+	ks, created, err := keystore.Load(*keystorePath)
 	if err != nil {
 		log.Fatalf("load keystore: %v", err)
+	}
+	if created {
+		log.Fatalf("keystore not found at %q; refusing to bootstrap with a newly generated identity", *keystorePath)
 	}
 	fmt.Printf("Node ID: %s\n", ks.NodeID())
 

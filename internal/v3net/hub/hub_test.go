@@ -218,7 +218,10 @@ func TestDuplicatePostReturns200(t *testing.T) {
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
 
-	leafKS, _, _ := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
 	registerLeaf(t, ts, leafKS)
 
 	msgJSON := `{
@@ -269,7 +272,10 @@ func TestSSEReceivesNewMessageEvent(t *testing.T) {
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
 
-	leafKS, _, _ := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
 	registerLeaf(t, ts, leafKS)
 
 	// Subscribe to the broadcaster directly to avoid HTTP SSE timing issues.
@@ -313,7 +319,10 @@ func TestSSEHTTPStream(t *testing.T) {
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
 
-	leafKS, _, _ := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
 	registerLeaf(t, ts, leafKS)
 
 	// Connect SSE via HTTP.
@@ -364,7 +373,10 @@ func TestPresence_LogonLogoff(t *testing.T) {
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
 
-	leafKS, _, _ := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
 	registerLeaf(t, ts, leafKS)
 
 	// Subscribe to broadcaster to receive events.
@@ -419,7 +431,10 @@ func TestPresence_InvalidType(t *testing.T) {
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
 
-	leafKS, _, _ := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
 	registerLeaf(t, ts, leafKS)
 
 	badJSON := `{"type":"invalid","handle":"Test"}`
@@ -439,7 +454,10 @@ func TestChat_RateLimited(t *testing.T) {
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
 
-	leafKS, _, _ := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
 	registerLeaf(t, ts, leafKS)
 
 	chatJSON := `{"from":"Tester","text":"hello"}`

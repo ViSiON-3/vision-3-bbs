@@ -158,6 +158,9 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 
 	m.dirty = true
 	m.saveAll()
+	if strings.HasPrefix(m.message, "SAVE ERROR") {
+		return m, nil
+	}
 	m.message = "Hub saved. Start BBS to initialize."
 	m.recordCursor = len(m.configs.V3Net.Hub.Networks) - 1
 	m.recordScroll = 0
@@ -213,6 +216,7 @@ func (m *Model) createHubMessageAreas(network string, areas []wizardArea) {
 			ACSWrite: "s20",
 			BasePath: fmt.Sprintf("msgbases/area_%d", newID),
 		})
+		existing[a.Tag] = true
 	}
 }
 

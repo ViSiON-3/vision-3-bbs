@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -135,6 +136,12 @@ func (m Model) updateIdentityExportPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if ks == nil {
 			m.message = "No V3Net key file found — run the V3Net setup wizard first, or use [R]ecover"
+			m.identitySubState = identityMain
+			return m, nil
+		}
+
+		if _, statErr := os.Stat(path); statErr == nil {
+			m.message = fmt.Sprintf("File %q already exists — choose a different name", path)
 			m.identitySubState = identityMain
 			return m, nil
 		}
