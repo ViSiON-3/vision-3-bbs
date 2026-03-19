@@ -57,6 +57,12 @@ func (m *Message) Validate() error {
 	if m.ParentUUID != nil && !uuidRe.MatchString(*m.ParentUUID) {
 		return fmt.Errorf("invalid parent_uuid: %q", *m.ParentUUID)
 	}
+	if m.OriginNode == "" {
+		return fmt.Errorf("origin_node must not be empty")
+	}
+	if m.OriginBoard == "" {
+		return fmt.Errorf("origin_board must not be empty")
+	}
 	if _, err := time.Parse(time.RFC3339, m.DateUTC); err != nil {
 		return fmt.Errorf("invalid date_utc: %w", err)
 	}

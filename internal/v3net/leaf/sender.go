@@ -61,45 +61,61 @@ func (l *Leaf) subscribe(ctx context.Context) error {
 
 // SendMessage signs and POSTs a message to the hub.
 func (l *Leaf) SendMessage(msg protocol.Message) error {
+	return l.SendMessageCtx(context.Background(), msg)
+}
+
+// SendMessageCtx signs and POSTs a message to the hub with context.
+func (l *Leaf) SendMessageCtx(ctx context.Context, msg protocol.Message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("leaf: marshal message: %w", err)
 	}
 	path := fmt.Sprintf("/v3net/v1/%s/messages", l.cfg.Network)
-	return l.signedPost(path, data)
+	return l.signedPostCtx(ctx, path, data)
 }
 
 // SendChat sends an inter-BBS chat message to the hub.
 func (l *Leaf) SendChat(text, handle string) error {
+	return l.SendChatCtx(context.Background(), text, handle)
+}
+
+// SendChatCtx sends an inter-BBS chat message to the hub with context.
+func (l *Leaf) SendChatCtx(ctx context.Context, text, handle string) error {
 	data, err := json.Marshal(protocol.ChatRequest{From: handle, Text: text})
 	if err != nil {
 		return fmt.Errorf("leaf: marshal chat: %w", err)
 	}
 	path := fmt.Sprintf("/v3net/v1/%s/chat", l.cfg.Network)
-	return l.signedPost(path, data)
+	return l.signedPostCtx(ctx, path, data)
 }
 
 // SendLogon notifies the hub of a user logon.
 func (l *Leaf) SendLogon(handle string) error {
-	return l.sendPresence(protocol.EventLogon, handle)
+	return l.sendPresenceCtx(context.Background(), protocol.EventLogon, handle)
+}
+
+// SendLogonCtx notifies the hub of a user logon with context.
+func (l *Leaf) SendLogonCtx(ctx context.Context, handle string) error {
+	return l.sendPresenceCtx(ctx, protocol.EventLogon, handle)
 }
 
 // SendLogoff notifies the hub of a user logoff.
 func (l *Leaf) SendLogoff(handle string) error {
-	return l.sendPresence(protocol.EventLogoff, handle)
+	return l.sendPresenceCtx(context.Background(), protocol.EventLogoff, handle)
 }
 
-func (l *Leaf) sendPresence(eventType, handle string) error {
+// SendLogoffCtx notifies the hub of a user logoff with context.
+func (l *Leaf) SendLogoffCtx(ctx context.Context, handle string) error {
+	return l.sendPresenceCtx(ctx, protocol.EventLogoff, handle)
+}
+
+func (l *Leaf) sendPresenceCtx(ctx context.Context, eventType, handle string) error {
 	data, err := json.Marshal(protocol.PresenceRequest{Type: eventType, Handle: handle})
 	if err != nil {
 		return fmt.Errorf("leaf: marshal presence: %w", err)
 	}
 	path := fmt.Sprintf("/v3net/v1/%s/presence", l.cfg.Network)
-	return l.signedPost(path, data)
-}
-
-func (l *Leaf) signedPost(path string, body []byte) error {
-	return l.signedPostCtx(context.Background(), path, body)
+	return l.signedPostCtx(ctx, path, data)
 }
 
 func (l *Leaf) signedPostCtx(ctx context.Context, path string, body []byte) error {

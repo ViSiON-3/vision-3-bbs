@@ -1,13 +1,13 @@
 package v3net
 
 import (
+	"crypto/rand"
 	"fmt"
 	"runtime"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
-	"github.com/google/uuid"
 )
 
 // BuildWireMessage constructs a V3Net protocol message from local post data.
@@ -40,5 +40,10 @@ func DefaultTearline() string {
 }
 
 func newUUID() string {
-	return uuid.New().String()
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }

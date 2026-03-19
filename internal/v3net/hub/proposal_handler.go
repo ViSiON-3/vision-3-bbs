@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -349,7 +350,7 @@ func (h *Hub) handleApproveProposal(w http.ResponseWriter, r *http.Request) {
 
 	// Parse optional overrides (empty body is fine — overrides are optional).
 	var overrides protocol.ProposalApproveRequest
-	if err := json.NewDecoder(r.Body).Decode(&overrides); err != nil && err.Error() != "EOF" {
+	if err := json.NewDecoder(r.Body).Decode(&overrides); err != nil && !errors.Is(err, io.EOF) {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
@@ -400,7 +401,7 @@ func (h *Hub) handleRejectProposal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req protocol.ProposalRejectRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}

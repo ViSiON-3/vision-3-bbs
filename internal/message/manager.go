@@ -633,6 +633,59 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 	return msgNum, err
 }
 
+// AddMessageWithDate is like AddMessage but uses the provided timestamp instead
+// of time.Now(). Used by V3Net to preserve the original authored date.
+func (mm *MessageManager) AddMessageWithDate(areaID int, from, to, subject, body, replyToMsgID string, dateTime time.Time) (int, error) {
+	b, area, err := mm.openBase(areaID)
+	if err != nil {
+		return 0, err
+	}
+
+	jamBody := body
+	if mm.BodyTransform != nil {
+		jamBody = mm.BodyTransform(areaID, body)
+	}
+
+	msg := jam.NewMessage()
+	msg.From = from
+	msg.To = to
+	msg.Subject = subject
+	msg.Text = jamBody
+	msg.DateTime = dateTime
+
+	if replyToMsgID != "" {
+		msg.ReplyID = replyToMsgID
+	}
+
+	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
+
+	if msgType.IsNetmail() {
+		name, addr := splitNetmailTo(to)
+		msg.To = name
+		if addr != "" {
+			msg.DestAddr = addr
+		}
+	}
+
+	var msgNum int
+	if msgType.IsEchomail() || msgType.IsNetmail() {
+		msg.OrigAddr = area.OriginAddr
+		msgNum, err = b.WriteMessageExt(msg, msgType, area.EchoTag, mm.boardName, mm.tearlineForNetwork(area.Network))
+	} else {
+		msgNum, err = b.WriteMessage(msg)
+	}
+
+	b.Close()
+
+	if err == nil {
+		mm.invalidateThreadIndex(areaID)
+		if mm.OnMessagePosted != nil {
+			mm.OnMessagePosted(area, msgNum, from, to, subject, body)
+		}
+	}
+	return msgNum, err
+}
+
 // AddPrivateMessage creates and writes a new private message to the specified area.
 // It sets the MSG_PRIVATE flag on the message to indicate it's private user-to-user mail.
 // For netmail areas, "user@zone:net/node" in the To field is automatically split

@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -124,12 +123,7 @@ func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network s
 			if !ok {
 				return
 			}
-			data, err := json.Marshal(json.RawMessage(ev.Data))
-			if err != nil {
-				slog.Error("marshal SSE event data", "error", err)
-				continue
-			}
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, data)
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, ev.Data)
 			flusher.Flush()
 		}
 	}

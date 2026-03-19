@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ type Keystore struct {
 // a new keypair was generated.
 func Load(path string) (*Keystore, bool, error) {
 	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return generate(path)
 	}
 	if err != nil {

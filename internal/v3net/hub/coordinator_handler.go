@@ -102,12 +102,12 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the pending transfer.
-	var newNodeID, newPubKeyB64, storedToken string
+	// Look up the pending transfer. Tokens expire after 24 hours.
+	var newNodeID, newPubKeyB64, storedToken, createdAt string
 	err := h.db.QueryRow(
-		`SELECT new_node_id, new_pubkey_b64, token FROM coordinator_transfers WHERE network = ?`,
+		`SELECT new_node_id, new_pubkey_b64, token, created_at FROM coordinator_transfers WHERE network = ?`,
 		network,
-	).Scan(&newNodeID, &newPubKeyB64, &storedToken)
+	).Scan(&newNodeID, &newPubKeyB64, &storedToken, &createdAt)
 	if err == sql.ErrNoRows {
 		http.Error(w, `{"error":"no pending transfer"}`, http.StatusNotFound)
 		return
@@ -118,12 +118,19 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if nodeID != newNodeID {
-		http.Error(w, `{"error":"this transfer is not for your node"}`, http.StatusForbidden)
-		return
+	// Enforce 24-hour TTL on transfer tokens.
+	if t, parseErr := time.Parse("2006-01-02 15:04:05", createdAt); parseErr == nil {
+		if time.Since(t) > 24*time.Hour {
+			h.db.Exec("DELETE FROM coordinator_transfers WHERE network = ?", network)
+			http.Error(w, `{"error":"transfer token expired"}`, http.StatusGone)
+			return
+		}
 	}
-	if req.Token != storedToken {
-		http.Error(w, `{"error":"invalid transfer token"}`, http.StatusUnauthorized)
+
+	// Use the same error message for both mismatches to avoid leaking
+	// information about pending transfers and their targets.
+	if nodeID != newNodeID || req.Token != storedToken {
+		http.Error(w, `{"error":"invalid transfer credentials"}`, http.StatusForbidden)
 		return
 	}
 

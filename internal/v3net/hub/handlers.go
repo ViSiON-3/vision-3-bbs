@@ -1,6 +1,9 @@
 package hub
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -235,6 +238,19 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate that node_id is the correct derivation of the submitted public key.
+	pubKeyBytes, err := base64.StdEncoding.DecodeString(req.PubKeyB64)
+	if err != nil || len(pubKeyBytes) != 32 {
+		http.Error(w, `{"error":"invalid pubkey_b64"}`, http.StatusUnprocessableEntity)
+		return
+	}
+	h256 := sha256.Sum256(pubKeyBytes)
+	expectedNodeID := hex.EncodeToString(h256[:8])
+	if req.NodeID != expectedNodeID {
+		http.Error(w, `{"error":"node_id does not match pubkey_b64"}`, http.StatusUnprocessableEntity)
+		return
+	}
+
 	status := "pending"
 	if h.cfg.AutoApprove {
 		status = "active"
@@ -257,6 +273,11 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If area_tags are provided, process area subscriptions.
+	// Only process area subscriptions for active network subscribers.
+	if len(req.AreaTags) > 0 && actualStatus != "active" {
+		writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
+		return
+	}
 	if len(req.AreaTags) > 0 {
 		currentNAL, nalErr := h.nalStore.Get(req.Network)
 		if nalErr != nil || currentNAL == nil {

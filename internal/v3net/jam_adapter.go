@@ -30,14 +30,13 @@ func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 	// Append tearline and origin so users can see where the message came from.
 	body = AppendV3NetOrigin(body, msg.Tearline, msg.Origin, msg.OriginNode)
 
-	// Parse the date for the message.
+	// Parse the wire date so JAM stores the original authored timestamp.
 	dateUTC, err := time.Parse(time.RFC3339, msg.DateUTC)
 	if err != nil {
 		return 0, fmt.Errorf("v3net jam: parse date: %w", err)
 	}
-	_ = dateUTC // AddMessage uses current time; the wire date is in the kludge
 
-	msgNum, err := a.mgr.AddMessage(a.areaID, msg.From, msg.To, msg.Subject, body, "")
+	msgNum, err := a.mgr.AddMessageWithDate(a.areaID, msg.From, msg.To, msg.Subject, body, "", dateUTC)
 	if err != nil {
 		return 0, fmt.Errorf("v3net jam: write message: %w", err)
 	}
