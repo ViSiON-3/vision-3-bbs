@@ -333,9 +333,9 @@ func TestIntegration_AreaFilteredPolling(t *testing.T) {
 	// Post a message to gen.general via leaf 1.
 	msg := protocol.Message{
 		V3Net: "1.0", Network: "testnet", AreaTag: "gen.general",
-		MsgUUID:     "880e8400-e29b-41d4-a716-446655440010",
-		ThreadUUID:  "880e8400-e29b-41d4-a716-446655440010",
-		OriginNode:  "test.example.net", OriginBoard: "General",
+		MsgUUID:    "880e8400-e29b-41d4-a716-446655440010",
+		ThreadUUID: "880e8400-e29b-41d4-a716-446655440010",
+		OriginNode: "test.example.net", OriginBoard: "General",
 		From: "Tester", To: "All", Subject: "Area filtered test",
 		DateUTC: "2026-03-16T04:20:00Z", Body: "Should be received.",
 		Kludges: map[string]any{},
@@ -378,7 +378,7 @@ func TestIntegration_AreaFilteredPolling(t *testing.T) {
 	registerBody2, _ := json.Marshal(protocol.SubscribeRequest{
 		Network: "testnet", NodeID: leaf2KS.NodeID(),
 		PubKeyB64: leaf2KS.PubKeyBase64(),
-		BBSName: "Leaf 2 BBS", BBSHost: "leaf2.example.net",
+		BBSName:   "Leaf 2 BBS", BBSHost: "leaf2.example.net",
 		AreaTags: []string{"gen.coding"},
 	})
 	resp2, _ := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
@@ -401,9 +401,9 @@ func TestIntegration_AreaFilteredPolling(t *testing.T) {
 
 	codingMsg := protocol.Message{
 		V3Net: "1.0", Network: "testnet", AreaTag: "gen.coding",
-		MsgUUID:     "990e8400-e29b-41d4-a716-446655440011",
-		ThreadUUID:  "990e8400-e29b-41d4-a716-446655440011",
-		OriginNode:  "leaf2.example.net", OriginBoard: "Coding",
+		MsgUUID:    "990e8400-e29b-41d4-a716-446655440011",
+		ThreadUUID: "990e8400-e29b-41d4-a716-446655440011",
+		OriginNode: "leaf2.example.net", OriginBoard: "Coding",
 		From: "Leaf2 User", To: "All", Subject: "Coding msg",
 		DateUTC: "2026-03-16T04:20:00Z", Body: "Should NOT be received by leaf 1.",
 		Kludges: map[string]any{},
