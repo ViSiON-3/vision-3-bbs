@@ -19,6 +19,7 @@ const MaxBodyBytes = 32768
 type Message struct {
 	V3Net       string         `json:"v3net"`
 	Network     string         `json:"network"`
+	AreaTag     string         `json:"area_tag"`
 	MsgUUID     string         `json:"msg_uuid"`
 	ThreadUUID  string         `json:"thread_uuid"`
 	ParentUUID  *string        `json:"parent_uuid"`
@@ -47,6 +48,9 @@ func (m *Message) Validate() error {
 	}
 	if !networkRe.MatchString(m.Network) {
 		return fmt.Errorf("invalid network name: %q", m.Network)
+	}
+	if !AreaTagRegexp.MatchString(m.AreaTag) {
+		return fmt.Errorf("invalid area_tag: %q", m.AreaTag)
 	}
 	if !uuidRe.MatchString(m.MsgUUID) {
 		return fmt.Errorf("invalid msg_uuid: %q", m.MsgUUID)

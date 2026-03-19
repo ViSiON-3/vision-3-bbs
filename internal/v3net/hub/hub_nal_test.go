@@ -287,6 +287,7 @@ func TestGetMessages_Pagination(t *testing.T) {
 		msgJSON := fmt.Sprintf(`{
 			"v3net":"1.0",
 			"network":"testnet",
+			"area_tag":"gen.general",
 			"msg_uuid":%q,
 			"thread_uuid":%q,
 			"origin_node":"test.example.net",

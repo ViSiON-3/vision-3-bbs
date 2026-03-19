@@ -163,6 +163,7 @@ func TestPostAndGetMessage(t *testing.T) {
 	msg := protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     "550e8400-e29b-41d4-a716-446655440000",
 		ThreadUUID:  "550e8400-e29b-41d4-a716-446655440000",
 		OriginNode:  "test.example.net",
@@ -227,6 +228,7 @@ func TestDuplicatePostReturns200(t *testing.T) {
 	msgJSON := `{
 		"v3net": "1.0",
 		"network": "testnet",
+		"area_tag": "gen.general",
 		"msg_uuid": "550e8400-e29b-41d4-a716-446655440000",
 		"thread_uuid": "550e8400-e29b-41d4-a716-446655440000",
 		"origin_node": "test.example.net",
@@ -286,6 +288,7 @@ func TestSSEReceivesNewMessageEvent(t *testing.T) {
 	msgJSON := `{
 		"v3net": "1.0",
 		"network": "testnet",
+		"area_tag": "gen.general",
 		"msg_uuid": "660e8400-e29b-41d4-a716-446655440001",
 		"thread_uuid": "660e8400-e29b-41d4-a716-446655440001",
 		"origin_node": "test.example.net",

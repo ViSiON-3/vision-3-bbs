@@ -9,6 +9,7 @@ func validMessage() Message {
 	return Message{
 		V3Net:       "1.0",
 		Network:     "felonynet",
+		AreaTag:     "fel.general",
 		MsgUUID:     "550e8400-e29b-41d4-a716-446655440000",
 		ThreadUUID:  "550e8400-e29b-41d4-a716-446655440000",
 		ParentUUID:  nil,
@@ -75,6 +76,16 @@ func TestValidate_InvalidFields(t *testing.T) {
 			name:    "network with spaces",
 			modify:  func(m *Message) { m.Network = "my net" },
 			wantErr: "invalid network name",
+		},
+		{
+			name:    "empty area_tag",
+			modify:  func(m *Message) { m.AreaTag = "" },
+			wantErr: "invalid area_tag",
+		},
+		{
+			name:    "invalid area_tag format",
+			modify:  func(m *Message) { m.AreaTag = "INVALID" },
+			wantErr: "invalid area_tag",
 		},
 		{
 			name:    "invalid msg_uuid",

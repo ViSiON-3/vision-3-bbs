@@ -137,6 +137,7 @@ func TestIntegration_PostAndPoll(t *testing.T) {
 	msg := protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     "550e8400-e29b-41d4-a716-446655440000",
 		ThreadUUID:  "550e8400-e29b-41d4-a716-446655440000",
 		OriginNode:  "test.example.net",
@@ -181,6 +182,7 @@ func TestIntegration_DedupPreventsDoubleWrite(t *testing.T) {
 	msg := protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     "660e8400-e29b-41d4-a716-446655440001",
 		ThreadUUID:  "660e8400-e29b-41d4-a716-446655440001",
 		OriginNode:  "test.example.net",
@@ -244,6 +246,7 @@ func TestIntegration_SSEReceivesEvents(t *testing.T) {
 	msg := protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     "770e8400-e29b-41d4-a716-446655440002",
 		ThreadUUID:  "770e8400-e29b-41d4-a716-446655440002",
 		OriginNode:  "test.example.net",
