@@ -45,7 +45,7 @@ func (m Model) updateIdentityMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if ks == nil {
-			m.message = "No V3Net key file found"
+			m.message = "No V3Net key file found — run the V3Net setup wizard first, or use [R]ecover"
 			return m, nil
 		}
 		phrase, err := ks.Mnemonic()
@@ -64,7 +64,7 @@ func (m Model) updateIdentityMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if ks == nil {
-			m.message = "No V3Net key file found"
+			m.message = "No V3Net key file found — run the V3Net setup wizard first, or use [R]ecover"
 			return m, nil
 		}
 		phrase, err := ks.Mnemonic()
@@ -134,7 +134,7 @@ func (m Model) updateIdentityExportPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if ks == nil {
-			m.message = "No V3Net key file found"
+			m.message = "No V3Net key file found — run the V3Net setup wizard first, or use [R]ecover"
 			m.identitySubState = identityMain
 			return m, nil
 		}
