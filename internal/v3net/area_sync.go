@@ -16,35 +16,37 @@ import (
 func SyncAreas(leaves []config.V3NetLeafConfig, mgr *message.MessageManager, confMgr *conference.ConferenceManager) int {
 	created := 0
 	for _, lcfg := range leaves {
-		if lcfg.Board == "" {
-			continue
-		}
-		if _, ok := mgr.GetAreaByTag(lcfg.Board); ok {
-			continue
-		}
+		for _, board := range lcfg.Boards {
+			if board == "" {
+				continue
+			}
+			if _, ok := mgr.GetAreaByTag(board); ok {
+				continue
+			}
 
-		area := message.MessageArea{
-			Tag:          lcfg.Board,
-			Name:         areaNameFromTag(lcfg.Board, lcfg.Network),
-			AreaType:     "v3net",
-			Network:      lcfg.Network,
-			EchoTag:      lcfg.Board,
-			ConferenceID: inferConferenceID(mgr, confMgr, lcfg.Network),
-			AutoJoin:     true,
-			ACSRead:      "s10",
-			ACSWrite:     "s20",
-		}
+			area := message.MessageArea{
+				Tag:          board,
+				Name:         areaNameFromTag(board, lcfg.Network),
+				AreaType:     "v3net",
+				Network:      lcfg.Network,
+				EchoTag:      board,
+				ConferenceID: inferConferenceID(mgr, confMgr, lcfg.Network),
+				AutoJoin:     true,
+				ACSRead:      "s10",
+				ACSWrite:     "s20",
+			}
 
-		id, err := mgr.AddArea(area)
-		if err != nil {
-			slog.Error("v3net: auto-create area failed",
-				"tag", lcfg.Board, "network", lcfg.Network, "error", err)
-			continue
+			id, err := mgr.AddArea(area)
+			if err != nil {
+				slog.Error("v3net: auto-create area failed",
+					"tag", board, "network", lcfg.Network, "error", err)
+				continue
+			}
+			slog.Info("v3net: auto-created message area",
+				"id", id, "tag", board, "network", lcfg.Network,
+				"conference_id", area.ConferenceID)
+			created++
 		}
-		slog.Info("v3net: auto-created message area",
-			"id", id, "tag", lcfg.Board, "network", lcfg.Network,
-			"conference_id", area.ConferenceID)
-		created++
 	}
 	return created
 }

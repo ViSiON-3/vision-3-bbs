@@ -244,7 +244,7 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	leaf := config.V3NetLeafConfig{
 		HubURL:       m.wizard.hubURL,
 		Network:      m.wizard.networkName,
-		Board:        m.wizard.boardTag,
+		Boards:       []string{m.wizard.boardTag},
 		PollInterval: m.wizard.pollInterval,
 		Origin:       m.wizard.origin,
 	}

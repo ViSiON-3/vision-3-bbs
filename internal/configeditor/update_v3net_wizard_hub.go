@@ -236,7 +236,7 @@ func (m *Model) addSelfLeaf(network string, port int) {
 	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, config.V3NetLeafConfig{
 		HubURL:       hubURL,
 		Network:      network,
-		Board:        network,
+		Boards:       []string{network},
 		PollInterval: "5m",
 	})
 }

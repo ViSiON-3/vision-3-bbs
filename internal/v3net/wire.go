@@ -11,13 +11,15 @@ import (
 )
 
 // BuildWireMessage constructs a V3Net protocol message from local post data.
+// The areaTag parameter is the V3Net area tag (e.g. "gen.general").
 // The origin parameter is the user-defined origin line text (e.g. "My Cool BBS").
 // The tearline is always the standard ViSiON/3 software identifier.
-func BuildWireMessage(network, originNode, originBoard, from, to, subject, body, origin string) protocol.Message {
+func BuildWireMessage(network, areaTag, originNode, originBoard, from, to, subject, body, origin string) protocol.Message {
 	uuid := newUUID()
 	return protocol.Message{
 		V3Net:       protocol.ProtocolVersion,
 		Network:     network,
+		AreaTag:     areaTag,
 		MsgUUID:     uuid,
 		ThreadUUID:  uuid,
 		ParentUUID:  nil,

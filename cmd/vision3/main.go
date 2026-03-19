@@ -1821,23 +1821,25 @@ func main() {
 			v3netAreaMap := make(map[int]v3netAreaInfo) // area ID → network info
 			nodeID := svc.NodeID()
 			for _, lcfg := range v3netConfig.Leaves {
-				area, ok := messageMgr.GetAreaByTag(lcfg.Board)
-				if !ok {
-					log.Printf("WARN: V3Net leaf %q: message area %q not found, skipping", lcfg.Network, lcfg.Board)
-					continue
-				}
-				writer := v3net.NewJAMAdapter(messageMgr, area.ID)
-				if err := v3netService.AddLeaf(lcfg, writer, nil); err != nil {
-					log.Printf("ERROR: V3Net leaf %q: %v", lcfg.Network, err)
-					continue
-				}
-				// Default origin to BBS name if not configured.
+				router := v3net.NewJAMRouter()
 				origin := lcfg.Origin
 				if origin == "" {
 					origin = serverConfig.BoardName
 				}
-				v3netAreaMap[area.ID] = v3netAreaInfo{Network: lcfg.Network, Origin: origin}
-				svc.RegisterArea(area.ID, lcfg.Network)
+				for _, tag := range lcfg.Boards {
+					area, ok := messageMgr.GetAreaByTag(tag)
+					if !ok {
+						log.Printf("WARN: V3Net leaf %q: message area %q not found, skipping", lcfg.Network, tag)
+						continue
+					}
+					router.Add(tag, v3net.NewJAMAdapter(messageMgr, area.ID))
+					v3netAreaMap[area.ID] = v3netAreaInfo{Network: lcfg.Network, Origin: origin}
+					svc.RegisterArea(area.ID, lcfg.Network)
+				}
+				if err := v3netService.AddLeaf(lcfg, router, nil); err != nil {
+					log.Printf("ERROR: V3Net leaf %q: %v", lcfg.Network, err)
+					continue
+				}
 			}
 
 			// Append tearline/origin to local JAM copy for V3Net areas so
@@ -1866,7 +1868,7 @@ func main() {
 				if strings.HasPrefix(body, "\x01V3NETUUID: ") {
 					return
 				}
-				msg := v3net.BuildWireMessage(info.Network, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, info.Origin)
+				msg := v3net.BuildWireMessage(info.Network, area.Tag, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, info.Origin)
 				if err := svc.SendMessage(info.Network, msg); err != nil {
 					log.Printf("ERROR: V3Net: failed to send message to %s: %v", info.Network, err)
 					return
