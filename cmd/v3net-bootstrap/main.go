@@ -38,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ks, err := keystore.Load(*keystorePath)
+	ks, _, err := keystore.Load(*keystorePath)
 	if err != nil {
 		log.Fatalf("load keystore: %v", err)
 	}

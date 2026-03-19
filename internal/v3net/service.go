@@ -127,7 +127,7 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 
 // New creates a V3Net service from the given config. Call Start to begin operations.
 func New(cfg config.V3NetConfig) (*Service, error) {
-	ks, err := keystore.Load(cfg.KeystorePath)
+	ks, _, err := keystore.Load(cfg.KeystorePath)
 	if err != nil {
 		return nil, fmt.Errorf("v3net: load keystore: %w", err)
 	}

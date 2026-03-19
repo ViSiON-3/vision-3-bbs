@@ -45,7 +45,7 @@ type mockHub struct {
 
 func newMockHub(t *testing.T, messages []protocol.Message) (*httptest.Server, *keystore.Keystore) {
 	t.Helper()
-	hubKS, err := keystore.Load(filepath.Join(t.TempDir(), "hub.key"))
+	hubKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "hub.key"))
 	if err != nil {
 		t.Fatalf("load hub keystore: %v", err)
 	}
@@ -102,7 +102,7 @@ func setupLeaf(t *testing.T, hubURL string, writer JAMWriter) (*Leaf, *dedup.Ind
 	t.Helper()
 	dir := t.TempDir()
 
-	ks, err := keystore.Load(filepath.Join(dir, "leaf.key"))
+	ks, _, err := keystore.Load(filepath.Join(dir, "leaf.key"))
 	if err != nil {
 		t.Fatalf("load keystore: %v", err)
 	}

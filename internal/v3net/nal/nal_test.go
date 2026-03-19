@@ -17,7 +17,7 @@ import (
 func testKeystore(t *testing.T) *keystore.Keystore {
 	t.Helper()
 	dir := t.TempDir()
-	ks, err := keystore.Load(filepath.Join(dir, "test.key"))
+	ks, _, err := keystore.Load(filepath.Join(dir, "test.key"))
 	if err != nil {
 		t.Fatalf("load keystore: %v", err)
 	}

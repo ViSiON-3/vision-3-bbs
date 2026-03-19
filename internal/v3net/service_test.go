@@ -15,7 +15,7 @@ func TestHubAutoInit_DataDirCreated(t *testing.T) {
 	hubDataDir := filepath.Join(dir, "data", "v3net_hub")
 	keystorePath := filepath.Join(dir, "v3net.key")
 
-	if _, err := keystore.Load(keystorePath); err != nil {
+	if _, _, err := keystore.Load(keystorePath); err != nil {
 		t.Fatal(err)
 	}
 
@@ -46,7 +46,7 @@ func TestHubAutoInit_SelfRegistered(t *testing.T) {
 	dir := t.TempDir()
 	keystorePath := filepath.Join(dir, "v3net.key")
 
-	ks, err := keystore.Load(keystorePath)
+	ks, _, err := keystore.Load(keystorePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestHubAutoInit_NALSeeded(t *testing.T) {
 	dir := t.TempDir()
 	keystorePath := filepath.Join(dir, "v3net.key")
 
-	if _, err := keystore.Load(keystorePath); err != nil {
+	if _, _, err := keystore.Load(keystorePath); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,7 +124,7 @@ func TestHubAutoInit_NALSeedIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	keystorePath := filepath.Join(dir, "v3net.key")
 
-	if _, err := keystore.Load(keystorePath); err != nil {
+	if _, _, err := keystore.Load(keystorePath); err != nil {
 		t.Fatal(err)
 	}
 
