@@ -30,9 +30,16 @@ func NewMessageStore(db *sql.DB) (*MessageStore, error) {
 		return nil, fmt.Errorf("hub: create messages table: %w", err)
 	}
 	// Migration: add area_tag column to existing databases.
-	db.Exec("ALTER TABLE messages ADD COLUMN area_tag TEXT NOT NULL DEFAULT ''")
+	if _, err := db.Exec("ALTER TABLE messages ADD COLUMN area_tag TEXT NOT NULL DEFAULT ''"); err != nil {
+		// Ignore "duplicate column" — migration already applied.
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return nil, fmt.Errorf("hub: migrate add area_tag column: %w", err)
+		}
+	}
 	// Migration: add composite index for area filtering.
-	db.Exec("CREATE INDEX IF NOT EXISTS idx_messages_area ON messages(network, area_tag, id)")
+	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_messages_area ON messages(network, area_tag, id)"); err != nil {
+		return nil, fmt.Errorf("hub: migrate create area index: %w", err)
+	}
 	return &MessageStore{db: db}, nil
 }
 

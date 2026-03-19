@@ -78,7 +78,13 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 				if val == "" {
 					l.Boards = nil
 				} else {
-					l.Boards = strings.Split(val, ",")
+					var boards []string
+				for _, part := range strings.Split(val, ",") {
+					if tag := strings.TrimSpace(part); tag != "" {
+						boards = append(boards, tag)
+					}
+				}
+				l.Boards = boards
 				}
 				return nil
 			},

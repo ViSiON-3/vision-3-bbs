@@ -173,11 +173,19 @@ func TestCoordAccept_WrongNode(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var transferResp map[string]any
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST transfer expected 200, got %d", resp.StatusCode)
+	}
+	var transferResp struct {
+		Token string `json:"token"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&transferResp); err != nil {
 		t.Fatalf("decode transfer response: %v", err)
 	}
-	token := transferResp["token"].(string)
+	if transferResp.Token == "" {
+		t.Fatal("expected non-empty token")
+	}
+	token := transferResp.Token
 
 	// Attempt accept as third keystore (wrong node).
 	acceptBody := fmt.Sprintf(`{"token":%q}`, token)

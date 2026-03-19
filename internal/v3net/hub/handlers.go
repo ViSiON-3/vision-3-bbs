@@ -129,7 +129,12 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Enforce NAL-based area access control.
 	currentNAL, nalErr := h.nalStore.Get(network)
-	if nalErr != nil || currentNAL == nil {
+	if nalErr != nil {
+		slog.Error("get NAL for post", "network", network, "error", nalErr)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if currentNAL == nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "no NAL published for this network"})
 		return
 	}
@@ -321,8 +326,13 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.AreaTags) > 0 {
 		currentNAL, nalErr := h.nalStore.Get(req.Network)
-		if nalErr != nil || currentNAL == nil {
-			// No NAL available — return basic response without area status.
+		if nalErr != nil {
+			slog.Error("get NAL for subscribe", "network", req.Network, "error", nalErr)
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			return
+		}
+		if currentNAL == nil {
+			// No NAL published yet — return basic response without area status.
 			writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
 			return
 		}

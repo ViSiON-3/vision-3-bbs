@@ -1826,6 +1826,7 @@ func main() {
 				if origin == "" {
 					origin = serverConfig.BoardName
 				}
+				var resolvedBoards []string
 				for _, tag := range lcfg.Boards {
 					area, ok := messageMgr.GetAreaByTag(tag)
 					if !ok {
@@ -1833,10 +1834,17 @@ func main() {
 						continue
 					}
 					router.Add(tag, v3net.NewJAMAdapter(messageMgr, area.ID))
+					resolvedBoards = append(resolvedBoards, tag)
 					v3netAreaMap[area.ID] = v3netAreaInfo{Network: lcfg.Network, Origin: origin}
 					svc.RegisterArea(area.ID, lcfg.Network)
 				}
-				if err := v3netService.AddLeaf(lcfg, router, nil); err != nil {
+				if len(resolvedBoards) == 0 {
+					log.Printf("WARN: V3Net leaf %q: no resolvable boards, skipping", lcfg.Network)
+					continue
+				}
+				leafCfg := lcfg
+				leafCfg.Boards = resolvedBoards
+				if err := v3netService.AddLeaf(leafCfg, router, nil); err != nil {
 					log.Printf("ERROR: V3Net leaf %q: %v", lcfg.Network, err)
 					continue
 				}

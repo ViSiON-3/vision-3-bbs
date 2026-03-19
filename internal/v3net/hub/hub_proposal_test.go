@@ -204,6 +204,9 @@ func TestListProposals_CoordinatorOnly(t *testing.T) {
 		t.Fatalf("POST propose: %v", err)
 	}
 	propResp.Body.Close()
+	if propResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST propose expected 200, got %d", propResp.StatusCode)
+	}
 
 	// (a) GET proposals as non-coordinator leaf -> 403.
 	listReq := signedRequest(t, leafKS, "GET", ts.URL+"/v3net/v1/testnet/areas/proposals", "")

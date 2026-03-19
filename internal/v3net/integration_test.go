@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"sync"
@@ -375,19 +376,31 @@ func TestIntegration_AreaFilteredPolling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load leaf2 keystore: %v", err)
 	}
-	registerBody2, _ := json.Marshal(protocol.SubscribeRequest{
+	registerBody2, err := json.Marshal(protocol.SubscribeRequest{
 		Network: "testnet", NodeID: leaf2KS.NodeID(),
 		PubKeyB64: leaf2KS.PubKeyBase64(),
 		BBSName:   "Leaf 2 BBS", BBSHost: "leaf2.example.net",
 		AreaTags: []string{"gen.coding"},
 	})
-	resp2, _ := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
+	if err != nil {
+		t.Fatalf("marshal leaf2 subscribe: %v", err)
+	}
+	resp2, err := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
 		bytes.NewReader(registerBody2))
+	if err != nil {
+		t.Fatalf("subscribe leaf2: %v", err)
+	}
 	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("subscribe leaf2 expected 200, got %d", resp2.StatusCode)
+	}
 
 	// Create leaf 2 instance and post a gen.coding message.
 	leaf2Writer := &testJAMWriter{}
-	leaf2Dedup, _ := dedup.Open(filepath.Join(t.TempDir(), "dedup2.sqlite"))
+	leaf2Dedup, err := dedup.Open(filepath.Join(t.TempDir(), "dedup2.sqlite"))
+	if err != nil {
+		t.Fatalf("open leaf2 dedup: %v", err)
+	}
 	t.Cleanup(func() { leaf2Dedup.Close() })
 	l2 := leaf.New(leaf.Config{
 		HubURL:       ts.URL,
