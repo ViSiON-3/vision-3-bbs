@@ -249,6 +249,30 @@ func (m Model) loadIdentityKeystore() (*keystore.Keystore, error) {
 	return ks, nil
 }
 
+func (m Model) updateSeedInterstitial(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := strings.ToUpper(msg.String())
+	switch key {
+	case "E":
+		ks, _ := m.loadIdentityKeystore()
+		if ks != nil {
+			if err := m.writeRecoveryFile("v3net-recovery.txt", ks); err != nil {
+				m.message = fmt.Sprintf("Export error: %v", err)
+			} else {
+				m.message = "Saved to v3net-recovery.txt — move off-server and delete the local copy"
+			}
+		}
+		m.showSeedInterstitial = false
+		m.seedInterstitialPhrase = ""
+		m.mode = modeRecordList
+		return m, nil
+	default:
+		m.showSeedInterstitial = false
+		m.seedInterstitialPhrase = ""
+		m.mode = modeRecordList
+		return m, nil
+	}
+}
+
 // writeRecoveryFile writes the seed phrase export file.
 func (m Model) writeRecoveryFile(path string, ks *keystore.Keystore) error {
 	phrase, err := ks.Mnemonic()

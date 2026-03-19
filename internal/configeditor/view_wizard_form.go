@@ -8,6 +8,10 @@ import (
 
 // viewWizardForm renders the wizard form with all fields visible.
 func (m Model) viewWizardForm() string {
+	if m.showSeedInterstitial {
+		return m.viewSeedInterstitial()
+	}
+
 	var b strings.Builder
 
 	// Global header

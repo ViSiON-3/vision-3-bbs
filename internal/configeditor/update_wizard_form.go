@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,9 @@ import (
 // --- Wizard Form Mode (field navigation) ---
 
 func (m Model) updateWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.showSeedInterstitial {
+		return m.updateSeedInterstitial(msg)
+	}
 	if len(m.wizardFields) == 0 {
 		if msg.Type == tea.KeyEscape {
 			m.mode = modeRecordList
@@ -230,6 +234,13 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 		}
 	}
 
+	path := m.configs.V3Net.KeystorePath
+	if path == "" {
+		path = "data/v3net.key"
+	}
+	_, statErr := os.Stat(path)
+	m.keyExistedBeforeSave = statErr == nil
+
 	leaf := config.V3NetLeafConfig{
 		HubURL:       m.wizard.hubURL,
 		Network:      m.wizard.networkName,
@@ -247,6 +258,17 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	m.message = "Leaf saved. Restart BBS to activate."
 	m.recordCursor = len(m.configs.V3Net.Leaves) - 1
 	m.recordScroll = 0
+	if !m.keyExistedBeforeSave {
+		ks, err := m.loadIdentityKeystore()
+		if err == nil && ks != nil {
+			if phrase, err := ks.Mnemonic(); err == nil {
+				m.showSeedInterstitial = true
+				m.seedInterstitialPhrase = phrase
+				m.seedInterstitialNodeID = ks.NodeID()
+				return m, nil
+			}
+		}
+	}
 	m.mode = modeRecordList
 	return m, nil
 }

@@ -153,6 +153,12 @@ type Model struct {
 	identityRecoverInput  string
 	identityRecoverNodeID string
 
+	// Seed phrase interstitial (shown after first-time wizard save)
+	showSeedInterstitial   bool
+	seedInterstitialPhrase string
+	seedInterstitialNodeID string
+	keyExistedBeforeSave   bool
+
 	// Terminal
 	width   int
 	height  int

@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -123,6 +124,13 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 		initialAreas = append(initialAreas, config.V3NetHubArea{Tag: a.Tag, Name: a.Name})
 	}
 
+	path := m.configs.V3Net.KeystorePath
+	if path == "" {
+		path = "data/v3net.key"
+	}
+	_, statErr := os.Stat(path)
+	m.keyExistedBeforeSave = statErr == nil
+
 	m.configs.V3Net.Enabled = true
 	if m.configs.V3Net.KeystorePath == "" {
 		m.configs.V3Net.KeystorePath = "data/v3net.key"
@@ -153,6 +161,17 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 	m.message = "Hub saved. Start BBS to initialize."
 	m.recordCursor = len(m.configs.V3Net.Hub.Networks) - 1
 	m.recordScroll = 0
+	if !m.keyExistedBeforeSave {
+		ks, err := m.loadIdentityKeystore()
+		if err == nil && ks != nil {
+			if phrase, err := ks.Mnemonic(); err == nil {
+				m.showSeedInterstitial = true
+				m.seedInterstitialPhrase = phrase
+				m.seedInterstitialNodeID = ks.NodeID()
+				return m, nil
+			}
+		}
+	}
 	m.mode = modeRecordList
 	return m, nil
 }
