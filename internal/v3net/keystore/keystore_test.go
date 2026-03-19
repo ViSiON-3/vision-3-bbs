@@ -311,3 +311,61 @@ func TestMnemonic_BIP39Vector(t *testing.T) {
 		}
 	}
 }
+
+func TestRecoverToFile_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	ks, _, err := Load(filepath.Join(dir, "original.key"))
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	phrase, err := ks.Mnemonic()
+	if err != nil {
+		t.Fatalf("Mnemonic failed: %v", err)
+	}
+	recoveredPath := filepath.Join(dir, "recovered.key")
+	recovered, err := RecoverToFile(phrase, recoveredPath)
+	if err != nil {
+		t.Fatalf("RecoverToFile failed: %v", err)
+	}
+	if ks.NodeID() != recovered.NodeID() {
+		t.Errorf("node IDs differ: %q vs %q", ks.NodeID(), recovered.NodeID())
+	}
+	loaded, _, err := Load(recoveredPath)
+	if err != nil {
+		t.Fatalf("Load recovered file failed: %v", err)
+	}
+	if ks.NodeID() != loaded.NodeID() {
+		t.Errorf("loaded node ID differs: %q vs %q", ks.NodeID(), loaded.NodeID())
+	}
+}
+
+func TestRecoverToFile_Overwrites(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.key")
+	ks1, _, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	ks2, _, err := Load(filepath.Join(dir, "other.key"))
+	if err != nil {
+		t.Fatalf("Load other failed: %v", err)
+	}
+	phrase2, err := ks2.Mnemonic()
+	if err != nil {
+		t.Fatalf("Mnemonic failed: %v", err)
+	}
+	_, err = RecoverToFile(phrase2, path)
+	if err != nil {
+		t.Fatalf("RecoverToFile failed: %v", err)
+	}
+	loaded, _, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load overwritten failed: %v", err)
+	}
+	if loaded.NodeID() != ks2.NodeID() {
+		t.Errorf("expected node ID %q, got %q", ks2.NodeID(), loaded.NodeID())
+	}
+	if loaded.NodeID() == ks1.NodeID() {
+		t.Error("overwritten file still has the original key")
+	}
+}
