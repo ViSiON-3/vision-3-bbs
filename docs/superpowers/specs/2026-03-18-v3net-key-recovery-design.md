@@ -54,7 +54,7 @@ The bit-manipulation logic for encoding/decoding lives in a separate file to kee
 func encodeMnemonic(seed []byte) (string, error)
 
 // decodeMnemonic converts a 24-word BIP39 phrase back to a 32-byte seed.
-// Input is normalized: trimmed, lowercased, multiple spaces collapsed.
+// Input is normalized: trimmed, lowercased, tabs and multiple spaces collapsed to single spaces.
 func decodeMnemonic(mnemonic string) ([]byte, error)
 ```
 
@@ -74,7 +74,9 @@ func FromMnemonic(mnemonic string) (*Keystore, error)
 
 // RecoverToFile reconstructs a keypair from a mnemonic and saves it
 // to the given path with mode 0600. Overwrites any existing file at path.
-// The caller is responsible for confirming overwrite with the user.
+// The caller is responsible for overwrite confirmation and path validation
+// (e.g., rejecting directory traversal). This function only validates the
+// mnemonic and writes the file.
 func RecoverToFile(mnemonic, path string) (*Keystore, error)
 ```
 
@@ -119,7 +121,7 @@ No interactive prompt at startup — the BBS may be running headless.
 
 The V3Net category menu gains a new first item:
 
-1. **Node Identity** (new)
+1. **Node Identity** (new) — uses `Mode: modeV3NetIdentity` (not `RecordType`)
 2. Subscriptions (leaf)
 3. Networks (hub)
 
@@ -166,7 +168,7 @@ Store this file safely and delete it from this server.
 Anyone with these words can impersonate your BBS node.
 ```
 
-After writing, shows confirmation: "Saved to v3net-recovery.txt — move this file off-server and delete the local copy."
+After writing, shows confirmation: "Saved to v3net-recovery.txt — move this file off-server and delete the local copy." On write failure (permission denied, disk full, invalid path), display the error and return to the identity screen.
 
 **[R] Recover from seed phrase**: Text input for 24 words (space-separated, case-insensitive). Input is normalized before parsing: trimmed, lowercased, tabs and multiple spaces collapsed to single spaces. On submit:
 
