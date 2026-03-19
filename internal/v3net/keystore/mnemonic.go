@@ -79,11 +79,5 @@ func place11Bits(data []byte, bitOffset, val int) {
 }
 
 func collapseWhitespace(s string) string {
-	s = strings.ReplaceAll(s, "\t", " ")
-	s = strings.ReplaceAll(s, "\r", " ")
-	s = strings.ReplaceAll(s, "\n", " ")
-	for strings.Contains(s, "  ") {
-		s = strings.ReplaceAll(s, "  ", " ")
-	}
-	return strings.TrimSpace(s)
+	return strings.Join(strings.Fields(s), " ")
 }
