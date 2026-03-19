@@ -26,7 +26,7 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 
 		path := fmt.Sprintf("/v3net/v1/%s/messages?since=%s&limit=100", l.cfg.Network, cursor)
-		resp, err := l.signedGet(path)
+		resp, err := l.signedGetCtx(ctx, path)
 		if err != nil {
 			return total, fmt.Errorf("leaf: fetch messages: %w", err)
 		}
@@ -47,6 +47,15 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 
 		for _, msg := range messages {
+			if err := msg.Validate(); err != nil {
+				slog.Warn("leaf: invalid message from hub, skipping", "uuid", msg.MsgUUID, "error", err)
+				cursor = msg.MsgUUID
+				continue
+			}
+			if msg.NeedsTruncation() {
+				msg.Truncate()
+			}
+
 			seen, err := l.cfg.DedupIndex.Seen(msg.MsgUUID)
 			if err != nil {
 				return total, fmt.Errorf("leaf: dedup check: %w", err)

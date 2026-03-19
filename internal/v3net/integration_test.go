@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/hub"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -54,6 +56,7 @@ func setupIntegration(t *testing.T) (
 	ts *httptest.Server,
 	l *leaf.Leaf,
 	leafKS *keystore.Keystore,
+	hubKS *keystore.Keystore,
 	dedupIx *dedup.Index,
 	writer *testJAMWriter,
 ) {
@@ -85,7 +88,30 @@ func setupIntegration(t *testing.T) (
 	ts = httptest.NewServer(h.Mux())
 	t.Cleanup(ts.Close)
 
-	// Create leaf keystore and register with hub.
+	// Seed NAL so POST enforcement and GET filtering work.
+	hubNAL := &protocol.NAL{
+		V3NetNAL:       "1.0",
+		Network:        "testnet",
+		CoordNodeID:    hubKS.NodeID(),
+		CoordPubKeyB64: hubKS.PubKeyBase64(),
+		Areas: []protocol.Area{{
+			Tag:              "gen.general",
+			Name:             "General",
+			Language:         "en",
+			ManagerNodeID:    hubKS.NodeID(),
+			ManagerPubKeyB64: hubKS.PubKeyBase64(),
+			Access:           protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+			Policy:           protocol.AreaPolicy{MaxBodyBytes: 65536, AllowANSI: true},
+		}},
+	}
+	if err := nal.Sign(hubNAL, hubKS); err != nil {
+		t.Fatalf("sign hub NAL: %v", err)
+	}
+	if err := h.NALStore().Put("testnet", hubNAL); err != nil {
+		t.Fatalf("seed hub NAL: %v", err)
+	}
+
+	// Create leaf keystore and register with hub (including area subscription).
 	leafKS, _, err = keystore.Load(filepath.Join(dir, "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
@@ -97,6 +123,7 @@ func setupIntegration(t *testing.T) (
 		PubKeyB64: leafKS.PubKeyBase64(),
 		BBSName:   "Integration Test BBS",
 		BBSHost:   "test.example.net",
+		AreaTags:  []string{"gen.general"},
 	})
 	resp, err := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
 		bytes.NewReader(registerBody))
@@ -131,12 +158,13 @@ func setupIntegration(t *testing.T) (
 }
 
 func TestIntegration_PostAndPoll(t *testing.T) {
-	_, _, l, _, _, writer := setupIntegration(t)
+	_, _, l, _, _, _, writer := setupIntegration(t)
 
 	// Leaf sends a message to the hub.
 	msg := protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     "550e8400-e29b-41d4-a716-446655440000",
 		ThreadUUID:  "550e8400-e29b-41d4-a716-446655440000",
 		OriginNode:  "test.example.net",
@@ -176,11 +204,12 @@ func TestIntegration_PostAndPoll(t *testing.T) {
 }
 
 func TestIntegration_DedupPreventsDoubleWrite(t *testing.T) {
-	_, _, l, _, _, writer := setupIntegration(t)
+	_, _, l, _, _, _, writer := setupIntegration(t)
 
 	msg := protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     "660e8400-e29b-41d4-a716-446655440001",
 		ThreadUUID:  "660e8400-e29b-41d4-a716-446655440001",
 		OriginNode:  "test.example.net",
@@ -224,7 +253,7 @@ func TestIntegration_DedupPreventsDoubleWrite(t *testing.T) {
 }
 
 func TestIntegration_SSEReceivesEvents(t *testing.T) {
-	_, _, l, _, _, _ := setupIntegration(t)
+	_, _, l, _, _, _, _ := setupIntegration(t)
 
 	events := make(chan protocol.Event, 10)
 	l.SetOnEvent(func(ev protocol.Event) {
@@ -244,6 +273,7 @@ func TestIntegration_SSEReceivesEvents(t *testing.T) {
 	msg := protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     "770e8400-e29b-41d4-a716-446655440002",
 		ThreadUUID:  "770e8400-e29b-41d4-a716-446655440002",
 		OriginNode:  "test.example.net",
@@ -271,7 +301,7 @@ func TestIntegration_SSEReceivesEvents(t *testing.T) {
 }
 
 func TestIntegration_ChatEvent(t *testing.T) {
-	_, _, l, _, _, _ := setupIntegration(t)
+	_, _, l, _, _, _, _ := setupIntegration(t)
 
 	events := make(chan protocol.Event, 10)
 	l.SetOnEvent(func(ev protocol.Event) {
@@ -298,8 +328,123 @@ func TestIntegration_ChatEvent(t *testing.T) {
 	}
 }
 
+func TestIntegration_AreaFilteredPolling(t *testing.T) {
+	h, ts, l, _, hubKS, _, writer := setupIntegration(t)
+
+	// Post a message to gen.general via leaf 1.
+	msg := protocol.Message{
+		V3Net: "1.0", Network: "testnet", AreaTag: "gen.general",
+		MsgUUID:    "880e8400-e29b-41d4-a716-446655440010",
+		ThreadUUID: "880e8400-e29b-41d4-a716-446655440010",
+		OriginNode: "test.example.net", OriginBoard: "General",
+		From: "Tester", To: "All", Subject: "Area filtered test",
+		DateUTC: "2026-03-16T04:20:00Z", Body: "Should be received.",
+		Kludges: map[string]any{},
+	}
+	if err := l.SendMessage(msg); err != nil {
+		t.Fatalf("SendMessage gen.general: %v", err)
+	}
+
+	// Update NAL to include gen.coding.
+	updatedNAL := &protocol.NAL{
+		V3NetNAL: "1.0", Network: "testnet",
+		CoordNodeID: hubKS.NodeID(), CoordPubKeyB64: hubKS.PubKeyBase64(),
+		Areas: []protocol.Area{
+			{
+				Tag: "gen.general", Name: "General", Language: "en",
+				ManagerNodeID: hubKS.NodeID(), ManagerPubKeyB64: hubKS.PubKeyBase64(),
+				Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+				Policy: protocol.AreaPolicy{MaxBodyBytes: 65536, AllowANSI: true},
+			},
+			{
+				Tag: "gen.coding", Name: "Coding", Language: "en",
+				ManagerNodeID: hubKS.NodeID(), ManagerPubKeyB64: hubKS.PubKeyBase64(),
+				Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+				Policy: protocol.AreaPolicy{MaxBodyBytes: 65536, AllowANSI: true},
+			},
+		},
+	}
+	if err := nal.Sign(updatedNAL, hubKS); err != nil {
+		t.Fatalf("sign updated NAL: %v", err)
+	}
+	if err := h.NALStore().Put("testnet", updatedNAL); err != nil {
+		t.Fatalf("put updated NAL: %v", err)
+	}
+
+	// Register leaf 2 subscribed to gen.coding.
+	leaf2KS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf2.key"))
+	if err != nil {
+		t.Fatalf("load leaf2 keystore: %v", err)
+	}
+	registerBody2, err := json.Marshal(protocol.SubscribeRequest{
+		Network: "testnet", NodeID: leaf2KS.NodeID(),
+		PubKeyB64: leaf2KS.PubKeyBase64(),
+		BBSName:   "Leaf 2 BBS", BBSHost: "leaf2.example.net",
+		AreaTags: []string{"gen.coding"},
+	})
+	if err != nil {
+		t.Fatalf("marshal leaf2 subscribe: %v", err)
+	}
+	resp2, err := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
+		bytes.NewReader(registerBody2))
+	if err != nil {
+		t.Fatalf("subscribe leaf2: %v", err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("subscribe leaf2 expected 200, got %d", resp2.StatusCode)
+	}
+
+	// Create leaf 2 instance and post a gen.coding message.
+	leaf2Writer := &testJAMWriter{}
+	leaf2Dedup, err := dedup.Open(filepath.Join(t.TempDir(), "dedup2.sqlite"))
+	if err != nil {
+		t.Fatalf("open leaf2 dedup: %v", err)
+	}
+	t.Cleanup(func() { leaf2Dedup.Close() })
+	l2 := leaf.New(leaf.Config{
+		HubURL:       ts.URL,
+		Network:      "testnet",
+		AreaTags:     []string{"gen.coding"},
+		PollInterval: 50 * time.Millisecond,
+		Keystore:     leaf2KS,
+		DedupIndex:   leaf2Dedup,
+		JAMWriter:    leaf2Writer,
+	})
+
+	codingMsg := protocol.Message{
+		V3Net: "1.0", Network: "testnet", AreaTag: "gen.coding",
+		MsgUUID:    "990e8400-e29b-41d4-a716-446655440011",
+		ThreadUUID: "990e8400-e29b-41d4-a716-446655440011",
+		OriginNode: "leaf2.example.net", OriginBoard: "Coding",
+		From: "Leaf2 User", To: "All", Subject: "Coding msg",
+		DateUTC: "2026-03-16T04:20:00Z", Body: "Should NOT be received by leaf 1.",
+		Kludges: map[string]any{},
+	}
+	if err := l2.SendMessage(codingMsg); err != nil {
+		t.Fatalf("SendMessage gen.coding: %v", err)
+	}
+
+	// Poll with leaf 1 (gen.general only).
+	ctx := context.Background()
+	count, err := l.Poll(ctx)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 message from poll (gen.general only), got %d", count)
+	}
+	if writer.count() != 1 {
+		t.Fatalf("expected 1 JAM write, got %d", writer.count())
+	}
+	got := writer.get(0)
+	if got.AreaTag != "gen.general" {
+		t.Errorf("expected area_tag gen.general, got %q", got.AreaTag)
+	}
+}
+
 func TestIntegration_PresenceEvents(t *testing.T) {
-	_, _, l, _, _, _ := setupIntegration(t)
+	_, _, l, _, _, _, _ := setupIntegration(t)
 
 	events := make(chan protocol.Event, 10)
 	l.SetOnEvent(func(ev protocol.Event) {

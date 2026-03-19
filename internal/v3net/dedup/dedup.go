@@ -28,6 +28,11 @@ func Open(path string) (*Index, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dedup: open %s: %w", path, err)
 	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("dedup: configure pragmas: %w", err)
+	}
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("dedup: create schema: %w", err)
@@ -68,7 +73,7 @@ func (ix *Index) MarkSeen(msgUUID, network string, localMsgNum *int64) error {
 func (ix *Index) LastSeen(network string) (string, error) {
 	var uuid string
 	err := ix.db.QueryRow(
-		"SELECT msg_uuid FROM seen_messages WHERE network = ? ORDER BY seen_at DESC, rowid DESC LIMIT 1",
+		"SELECT msg_uuid FROM seen_messages WHERE network = ? ORDER BY rowid DESC LIMIT 1",
 		network,
 	).Scan(&uuid)
 	if err == sql.ErrNoRows {

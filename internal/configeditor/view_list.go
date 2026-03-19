@@ -278,7 +278,14 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 	case "v3netleaf":
 		if idx < len(m.configs.V3Net.Leaves) {
 			l := m.configs.V3Net.Leaves[idx]
-			content = fmt.Sprintf(" %3d  %-30s %-14s %s", idx+1, padRight(l.HubURL, 30), padRight(l.Network, 14), l.Board)
+			boards := ""
+			if len(l.Boards) > 0 {
+				boards = l.Boards[0]
+				if len(l.Boards) > 1 {
+					boards += fmt.Sprintf(" (+%d)", len(l.Boards)-1)
+				}
+			}
+			content = fmt.Sprintf(" %3d  %-30s %-14s %s", idx+1, padRight(l.HubURL, 30), padRight(l.Network, 14), boards)
 		}
 	case "v3nethub":
 		if idx < len(m.configs.V3Net.Hub.Networks) {

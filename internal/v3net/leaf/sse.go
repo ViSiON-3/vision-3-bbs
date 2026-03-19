@@ -66,6 +66,7 @@ func (l *Leaf) connectSSE(ctx context.Context) error {
 	slog.Info("leaf: SSE connected", "network", l.cfg.Network)
 
 	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 4096), 1<<20) // 1MB max token size
 	var eventType string
 
 	for scanner.Scan() {

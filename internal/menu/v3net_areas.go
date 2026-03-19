@@ -59,7 +59,9 @@ func runV3NetAreas(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, _ *u
 	// Build set of subscribed board tags per network.
 	subSet := make(map[string]bool) // "network:board" → true
 	for _, lcfg := range v3cfg.Leaves {
-		subSet[lcfg.Network+":"+lcfg.Board] = true
+		for _, board := range lcfg.Boards {
+			subSet[lcfg.Network+":"+board] = true
+		}
 	}
 
 	// Fetch NAL for each network and build entry list.
@@ -338,17 +340,28 @@ func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hub
 
 	// Check if already subscribed.
 	for _, l := range cfg.Leaves {
-		if l.Network == network && l.Board == area.Tag {
+		if l.Network == network && containsBoard(l.Boards, area.Tag) {
 			return nil
 		}
 	}
 
-	cfg.Leaves = append(cfg.Leaves, config.V3NetLeafConfig{
-		HubURL:       hubURL,
-		Network:      network,
-		Board:        area.Tag,
-		PollInterval: "5m",
-	})
+	// Append to existing leaf for this network, or create a new one.
+	found := false
+	for i, l := range cfg.Leaves {
+		if l.Network == network {
+			cfg.Leaves[i].Boards = append(cfg.Leaves[i].Boards, area.Tag)
+			found = true
+			break
+		}
+	}
+	if !found {
+		cfg.Leaves = append(cfg.Leaves, config.V3NetLeafConfig{
+			HubURL:       hubURL,
+			Network:      network,
+			Boards:       []string{area.Tag},
+			PollInterval: "5m",
+		})
+	}
 
 	if err := config.SaveV3NetConfig(configPath, cfg); err != nil {
 		return fmt.Errorf("save v3net.json: %w", err)
@@ -384,23 +397,43 @@ func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hub
 	return nil
 }
 
-// v3netUnsubscribe removes a leaf config entry. Does not delete the message area.
+// v3netUnsubscribe removes a board tag from the leaf config entry for the given
+// network. Removes the entire leaf entry if it has no remaining boards.
+// Does not delete the message area.
 func v3netUnsubscribe(configPath, network, tag string) error {
 	cfg, err := config.LoadV3NetConfig(configPath)
 	if err != nil {
 		return err
 	}
 
-	filtered := cfg.Leaves[:0]
-	for _, l := range cfg.Leaves {
-		if l.Network == network && l.Board == tag {
-			continue
+	for i, l := range cfg.Leaves {
+		if l.Network == network {
+			var filtered []string
+			for _, b := range l.Boards {
+				if b != tag {
+					filtered = append(filtered, b)
+				}
+			}
+			if len(filtered) == 0 {
+				cfg.Leaves = append(cfg.Leaves[:i], cfg.Leaves[i+1:]...)
+			} else {
+				cfg.Leaves[i].Boards = filtered
+			}
+			break
 		}
-		filtered = append(filtered, l)
 	}
-	cfg.Leaves = filtered
 
 	return config.SaveV3NetConfig(configPath, cfg)
+}
+
+// containsBoard reports whether boards contains the given tag.
+func containsBoard(boards []string, tag string) bool {
+	for _, b := range boards {
+		if b == tag {
+			return true
+		}
+	}
+	return false
 }
 
 // v3netAreasShowMessage displays a single message with a pause prompt.

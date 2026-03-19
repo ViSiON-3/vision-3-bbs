@@ -233,10 +233,14 @@ func (m *Model) addSelfLeaf(network string, port int) {
 			return
 		}
 	}
+	boards := make([]string, 0, len(m.wizard.areas))
+	for _, a := range m.wizard.areas {
+		boards = append(boards, a.Tag)
+	}
 	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, config.V3NetLeafConfig{
 		HubURL:       hubURL,
 		Network:      network,
-		Board:        network,
+		Boards:       boards,
 		PollInterval: "5m",
 	})
 }

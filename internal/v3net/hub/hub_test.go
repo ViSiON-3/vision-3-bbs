@@ -148,21 +148,24 @@ func TestUnauthenticatedRequestReturns401(t *testing.T) {
 }
 
 func TestPostAndGetMessage(t *testing.T) {
-	h, _ := setupTestHub(t)
+	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
+
+	seedTestNAL(t, h, hubKS)
 
 	// Register a leaf node.
 	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
 	}
-	registerLeaf(t, ts, leafKS)
+	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
 	// POST a message.
 	msg := protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     "550e8400-e29b-41d4-a716-446655440000",
 		ThreadUUID:  "550e8400-e29b-41d4-a716-446655440000",
 		OriginNode:  "test.example.net",
@@ -214,19 +217,22 @@ func TestPostAndGetMessage(t *testing.T) {
 }
 
 func TestDuplicatePostReturns200(t *testing.T) {
-	h, _ := setupTestHub(t)
+	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
+
+	seedTestNAL(t, h, hubKS)
 
 	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
 	}
-	registerLeaf(t, ts, leafKS)
+	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
 	msgJSON := `{
 		"v3net": "1.0",
 		"network": "testnet",
+		"area_tag": "gen.general",
 		"msg_uuid": "550e8400-e29b-41d4-a716-446655440000",
 		"thread_uuid": "550e8400-e29b-41d4-a716-446655440000",
 		"origin_node": "test.example.net",
@@ -268,15 +274,17 @@ func TestDuplicatePostReturns200(t *testing.T) {
 }
 
 func TestSSEReceivesNewMessageEvent(t *testing.T) {
-	h, _ := setupTestHub(t)
+	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
+
+	seedTestNAL(t, h, hubKS)
 
 	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
 	}
-	registerLeaf(t, ts, leafKS)
+	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
 	// Subscribe to the broadcaster directly to avoid HTTP SSE timing issues.
 	ch, cancel := h.broadcaster.Subscribe("testnet")
@@ -286,6 +294,7 @@ func TestSSEReceivesNewMessageEvent(t *testing.T) {
 	msgJSON := `{
 		"v3net": "1.0",
 		"network": "testnet",
+		"area_tag": "gen.general",
 		"msg_uuid": "660e8400-e29b-41d4-a716-446655440001",
 		"thread_uuid": "660e8400-e29b-41d4-a716-446655440001",
 		"origin_node": "test.example.net",

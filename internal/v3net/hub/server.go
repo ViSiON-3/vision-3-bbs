@@ -62,9 +62,9 @@ func (h *Hub) newMux() http.Handler {
 				h.handlePropose(w, r)
 			case strings.HasSuffix(path, "/areas/proposals") && r.Method == http.MethodGet:
 				h.handleListProposals(w, r)
-			case strings.HasSuffix(path, "/approve") && strings.Contains(path, "/proposals/") && r.Method == http.MethodPost:
+			case matchProposalActionPath(path, "approve") && r.Method == http.MethodPost:
 				h.handleApproveProposal(w, r)
-			case strings.HasSuffix(path, "/reject") && strings.Contains(path, "/proposals/") && r.Method == http.MethodPost:
+			case matchProposalActionPath(path, "reject") && r.Method == http.MethodPost:
 				h.handleRejectProposal(w, r)
 
 			// Area access management.
@@ -95,6 +95,24 @@ func (h *Hub) newMux() http.Handler {
 }
 
 // matchAreaAccessPath checks if a path matches /v3net/v1/{network}/areas/{tag}/{suffix}.
+// Requires the path segments to be exactly: v3net/v1/{network}/areas/{tag}/{suffix-segments...}
 func (h *Hub) matchAreaAccessPath(path, suffix string) bool {
-	return strings.Contains(path, "/areas/") && strings.HasSuffix(path, suffix)
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	// v3net/v1/{network}/areas/{tag}/access[/sub]
+	if len(parts) < 6 || parts[3] != "areas" {
+		return false
+	}
+	// Reconstruct the tail after the tag (parts[5:])
+	tail := "/" + strings.Join(parts[5:], "/")
+	return tail == suffix
+}
+
+// matchProposalActionPath checks if a path matches /v3net/v1/{network}/areas/proposals/{id}/{action}.
+func matchProposalActionPath(path, action string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	// v3net/v1/{network}/areas/proposals/{id}/{action}
+	if len(parts) != 7 {
+		return false
+	}
+	return parts[3] == "areas" && parts[4] == "proposals" && parts[6] == action
 }

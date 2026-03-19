@@ -129,6 +129,7 @@ func testMessage(uuid string) protocol.Message {
 	return protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
+		AreaTag:     "gen.general",
 		MsgUUID:     uuid,
 		ThreadUUID:  uuid,
 		OriginNode:  "test.example.net",

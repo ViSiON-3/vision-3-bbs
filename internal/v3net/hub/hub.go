@@ -37,6 +37,11 @@ func New(cfg Config) (*Hub, error) {
 	if err != nil {
 		return nil, fmt.Errorf("hub: open database: %w", err)
 	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("hub: configure pragmas: %w", err)
+	}
 
 	subscribers, err := NewSubscriberStore(db)
 	if err != nil {

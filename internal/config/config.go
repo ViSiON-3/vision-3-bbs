@@ -927,11 +927,11 @@ type V3NetHubArea struct {
 
 // V3NetLeafConfig configures a subscription to a V3Net network.
 type V3NetLeafConfig struct {
-	HubURL       string `json:"hubUrl"`
-	Network      string `json:"network"`
-	Board        string `json:"board"`            // Local message area tag to write received messages
-	PollInterval string `json:"pollInterval"`     // Duration string (e.g., "5m")
-	Origin       string `json:"origin,omitempty"` // Origin line text (e.g. "My Cool BBS - bbs.example.com")
+	HubURL       string   `json:"hubUrl"`
+	Network      string   `json:"network"`
+	Boards       []string `json:"boards"`           // Local message area tags to write received messages
+	PollInterval string   `json:"pollInterval"`     // Duration string (e.g., "5m")
+	Origin       string   `json:"origin,omitempty"` // Origin line text (e.g. "My Cool BBS - bbs.example.com")
 }
 
 // EventConfig defines a scheduled event configuration

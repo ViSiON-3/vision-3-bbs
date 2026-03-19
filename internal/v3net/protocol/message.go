@@ -19,6 +19,7 @@ const MaxBodyBytes = 32768
 type Message struct {
 	V3Net       string         `json:"v3net"`
 	Network     string         `json:"network"`
+	AreaTag     string         `json:"area_tag"`
 	MsgUUID     string         `json:"msg_uuid"`
 	ThreadUUID  string         `json:"thread_uuid"`
 	ParentUUID  *string        `json:"parent_uuid"`
@@ -48,6 +49,9 @@ func (m *Message) Validate() error {
 	if !networkRe.MatchString(m.Network) {
 		return fmt.Errorf("invalid network name: %q", m.Network)
 	}
+	if !AreaTagRegexp.MatchString(m.AreaTag) {
+		return fmt.Errorf("invalid area_tag: %q", m.AreaTag)
+	}
 	if !uuidRe.MatchString(m.MsgUUID) {
 		return fmt.Errorf("invalid msg_uuid: %q", m.MsgUUID)
 	}
@@ -56,6 +60,12 @@ func (m *Message) Validate() error {
 	}
 	if m.ParentUUID != nil && !uuidRe.MatchString(*m.ParentUUID) {
 		return fmt.Errorf("invalid parent_uuid: %q", *m.ParentUUID)
+	}
+	if m.OriginNode == "" {
+		return fmt.Errorf("origin_node must not be empty")
+	}
+	if m.OriginBoard == "" {
+		return fmt.Errorf("origin_board must not be empty")
 	}
 	if _, err := time.Parse(time.RFC3339, m.DateUTC); err != nil {
 		return fmt.Errorf("invalid date_utc: %w", err)

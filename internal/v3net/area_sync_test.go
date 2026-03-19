@@ -33,9 +33,9 @@ func TestSyncAreasCreatesMissing(t *testing.T) {
 	defer mgr.Close()
 
 	leaves := []config.V3NetLeafConfig{
-		{HubURL: "https://hub.example.com", Network: "felonynet", Board: "FELGEN"},
-		{HubURL: "https://hub.example.com", Network: "felonynet", Board: "GENERAL"}, // already exists
-		{HubURL: "https://hub.example.com", Network: "felonynet", Board: "FELTECH"},
+		{HubURL: "https://hub.example.com", Network: "felonynet", Boards: []string{"FELGEN"}},
+		{HubURL: "https://hub.example.com", Network: "felonynet", Boards: []string{"GENERAL"}}, // already exists
+		{HubURL: "https://hub.example.com", Network: "felonynet", Boards: []string{"FELTECH"}},
 	}
 
 	created := SyncAreas(leaves, mgr, nil)

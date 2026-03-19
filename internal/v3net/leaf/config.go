@@ -14,6 +14,7 @@ import (
 type Config struct {
 	HubURL       string
 	Network      string
+	AreaTags     []string // V3Net area tags to subscribe to
 	PollInterval time.Duration
 	Keystore     *keystore.Keystore
 	DedupIndex   *dedup.Index

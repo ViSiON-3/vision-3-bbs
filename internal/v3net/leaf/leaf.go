@@ -74,9 +74,23 @@ func (l *Leaf) Start(ctx context.Context) {
 	slog.Info("leaf: starting", "network", l.cfg.Network, "hub", l.cfg.HubURL)
 
 	// Subscribe to the hub (bootstrap — no auth required).
-	if err := l.subscribe(ctx); err != nil {
-		slog.Error("leaf: subscribe failed", "network", l.cfg.Network, "error", err)
-		return
+	// Retry with exponential backoff if the hub is temporarily unreachable.
+	subscribeBackoff := 5 * time.Second
+	for {
+		if err := l.subscribe(ctx); err != nil {
+			slog.Warn("leaf: subscribe failed, retrying", "network", l.cfg.Network, "error", err, "retry_in", subscribeBackoff)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(subscribeBackoff):
+			}
+			subscribeBackoff *= 2
+			if subscribeBackoff > 5*time.Minute {
+				subscribeBackoff = 5 * time.Minute
+			}
+			continue
+		}
+		break
 	}
 	slog.Info("leaf: subscribed to hub", "network", l.cfg.Network, "hub", l.cfg.HubURL)
 

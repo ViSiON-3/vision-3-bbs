@@ -276,41 +276,41 @@ func (c *Cache) FetchAndVerify(ctx context.Context, url, network string) (*proto
 	// Check if cache is fresh.
 	c.mu.RLock()
 	e := c.entries[network]
-	c.mu.RUnlock()
-
 	if e != nil && time.Since(e.fetchedAt) < c.ttl {
+		c.mu.RUnlock()
 		return e.nal, nil
 	}
+	c.mu.RUnlock()
 
 	// Fetch and verify.
 	n, err := Fetch(ctx, url)
 	if err != nil {
-		if e != nil {
-			slog.Warn("nal: fetch failed, returning stale cache", "network", network, "error", err)
-			return e.nal, nil
-		}
-		return nil, fmt.Errorf("nal: fetch %s: %w", network, err)
+		return c.staleOrError(network, fmt.Errorf("nal: fetch %s: %w", network, err))
 	}
 
 	if err := Verify(n); err != nil {
-		if e != nil {
-			slog.Warn("nal: verification failed, returning stale cache", "network", network, "error", err)
-			return e.nal, nil
-		}
-		return nil, fmt.Errorf("nal: verify %s: %w", network, err)
+		return c.staleOrError(network, fmt.Errorf("nal: verify %s: %w", network, err))
 	}
 
 	if n.Network != network {
-		err := fmt.Errorf("nal: network mismatch: got %q want %q", n.Network, network)
-		if e != nil {
-			slog.Warn("nal: network mismatch, returning stale cache", "network", network, "error", err)
-			return e.nal, nil
-		}
-		return nil, err
+		return c.staleOrError(network, fmt.Errorf("nal: network mismatch: got %q want %q", n.Network, network))
 	}
 
 	c.Put(network, n)
 	return n, nil
+}
+
+// staleOrError returns the stale cached NAL if available, otherwise the error.
+// Re-reads the cache under lock to avoid using a stale pointer captured earlier.
+func (c *Cache) staleOrError(network string, err error) (*protocol.NAL, error) {
+	c.mu.RLock()
+	e := c.entries[network]
+	c.mu.RUnlock()
+	if e != nil {
+		slog.Warn("nal: returning stale cache", "network", network, "error", err)
+		return e.nal, nil
+	}
+	return nil, err
 }
 
 // Area returns the area with the given tag from the cached NAL.

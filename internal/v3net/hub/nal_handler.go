@@ -120,10 +120,18 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"only the coordinator may update the NAL"}`, http.StatusForbidden)
 		return
 	}
-	// For initial NAL creation, verify the submitted CoordNodeID matches the sender.
-	if existing == nil && n.CoordNodeID != nodeID {
-		http.Error(w, `{"error":"coordinator node ID must match sender"}`, http.StatusBadRequest)
-		return
+	// For initial NAL creation, only the hub itself may bootstrap the coordinator role.
+	// This prevents any subscriber from claiming coordinator authority.
+	if existing == nil {
+		hubNodeID := h.cfg.Keystore.NodeID()
+		if nodeID != hubNodeID {
+			http.Error(w, `{"error":"only the hub operator may create the initial NAL"}`, http.StatusForbidden)
+			return
+		}
+		if n.CoordNodeID != nodeID {
+			http.Error(w, `{"error":"coordinator node ID must match sender for initial NAL"}`, http.StatusBadRequest)
+			return
+		}
 	}
 
 	if err := nal.Verify(&n); err != nil {
