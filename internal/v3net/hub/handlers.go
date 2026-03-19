@@ -56,8 +56,10 @@ func (h *Hub) handleNetworkInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetMessages returns messages newer than a cursor (auth required).
+// Results are filtered to the node's actively subscribed areas.
 func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
+	nodeID := r.Header.Get(headerNodeID)
 	since := r.URL.Query().Get("since")
 	limit := 100
 	if l := r.URL.Query().Get("limit"); l != "" {
@@ -66,7 +68,21 @@ func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	results, hasMore, err := h.messages.Fetch(network, since, limit)
+	// Collect the node's actively subscribed area tags.
+	allSubs, err := h.areaSubscriptions.ListForNode(nodeID, network)
+	if err != nil {
+		slog.Error("list area subscriptions", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	var areaTags []string
+	for _, s := range allSubs {
+		if s.Status == "active" {
+			areaTags = append(areaTags, s.Tag)
+		}
+	}
+
+	results, hasMore, err := h.messages.Fetch(network, since, limit, areaTags)
 	if err != nil {
 		slog.Error("fetch messages", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
@@ -93,6 +109,7 @@ func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 // handlePostMessage accepts a new message from a leaf node (auth required).
 func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
+	nodeID := r.Header.Get(headerNodeID)
 
 	var msg protocol.Message
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
@@ -107,6 +124,30 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 
 	if msg.Network != network {
 		http.Error(w, `{"error":"network mismatch"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Enforce NAL-based area access control.
+	currentNAL, nalErr := h.nalStore.Get(network)
+	if nalErr != nil || currentNAL == nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "no NAL published for this network"})
+		return
+	}
+
+	area := currentNAL.FindArea(msg.AreaTag)
+	if area == nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "unknown area_tag: " + msg.AreaTag})
+		return
+	}
+
+	active, err := h.areaSubscriptions.IsActive(nodeID, network, msg.AreaTag)
+	if err != nil {
+		slog.Error("check area subscription", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if !active {
+		http.Error(w, `{"error":"area access denied"}`, http.StatusForbidden)
 		return
 	}
 

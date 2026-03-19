@@ -148,16 +148,18 @@ func TestUnauthenticatedRequestReturns401(t *testing.T) {
 }
 
 func TestPostAndGetMessage(t *testing.T) {
-	h, _ := setupTestHub(t)
+	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
+
+	seedTestNAL(t, h, hubKS)
 
 	// Register a leaf node.
 	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
 	}
-	registerLeaf(t, ts, leafKS)
+	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
 	// POST a message.
 	msg := protocol.Message{
@@ -215,15 +217,17 @@ func TestPostAndGetMessage(t *testing.T) {
 }
 
 func TestDuplicatePostReturns200(t *testing.T) {
-	h, _ := setupTestHub(t)
+	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
+
+	seedTestNAL(t, h, hubKS)
 
 	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
 	}
-	registerLeaf(t, ts, leafKS)
+	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
 	msgJSON := `{
 		"v3net": "1.0",
@@ -270,15 +274,17 @@ func TestDuplicatePostReturns200(t *testing.T) {
 }
 
 func TestSSEReceivesNewMessageEvent(t *testing.T) {
-	h, _ := setupTestHub(t)
+	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
+
+	seedTestNAL(t, h, hubKS)
 
 	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
 	}
-	registerLeaf(t, ts, leafKS)
+	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
 	// Subscribe to the broadcaster directly to avoid HTTP SSE timing issues.
 	ch, cancel := h.broadcaster.Subscribe("testnet")

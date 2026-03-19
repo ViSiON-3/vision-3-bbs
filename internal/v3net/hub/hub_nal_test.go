@@ -267,15 +267,17 @@ func TestAuthClockSkew_Rejected(t *testing.T) {
 }
 
 func TestGetMessages_Pagination(t *testing.T) {
-	h, _ := setupTestHub(t)
+	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
+
+	seedTestNAL(t, h, hubKS)
 
 	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
 	}
-	registerLeaf(t, ts, leafKS)
+	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
 	// Post 3 messages with unique UUIDs.
 	uuids := []string{

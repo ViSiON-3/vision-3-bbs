@@ -14,6 +14,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/hub"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -54,6 +55,7 @@ func setupIntegration(t *testing.T) (
 	ts *httptest.Server,
 	l *leaf.Leaf,
 	leafKS *keystore.Keystore,
+	hubKS *keystore.Keystore,
 	dedupIx *dedup.Index,
 	writer *testJAMWriter,
 ) {
@@ -85,7 +87,30 @@ func setupIntegration(t *testing.T) (
 	ts = httptest.NewServer(h.Mux())
 	t.Cleanup(ts.Close)
 
-	// Create leaf keystore and register with hub.
+	// Seed NAL so POST enforcement and GET filtering work.
+	hubNAL := &protocol.NAL{
+		V3NetNAL:       "1.0",
+		Network:        "testnet",
+		CoordNodeID:    hubKS.NodeID(),
+		CoordPubKeyB64: hubKS.PubKeyBase64(),
+		Areas: []protocol.Area{{
+			Tag:              "gen.general",
+			Name:             "General",
+			Language:         "en",
+			ManagerNodeID:    hubKS.NodeID(),
+			ManagerPubKeyB64: hubKS.PubKeyBase64(),
+			Access:           protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+			Policy:           protocol.AreaPolicy{MaxBodyBytes: 65536, AllowANSI: true},
+		}},
+	}
+	if err := nal.Sign(hubNAL, hubKS); err != nil {
+		t.Fatalf("sign hub NAL: %v", err)
+	}
+	if err := h.NALStore().Put("testnet", hubNAL); err != nil {
+		t.Fatalf("seed hub NAL: %v", err)
+	}
+
+	// Create leaf keystore and register with hub (including area subscription).
 	leafKS, _, err = keystore.Load(filepath.Join(dir, "leaf.key"))
 	if err != nil {
 		t.Fatalf("load leaf keystore: %v", err)
@@ -97,6 +122,7 @@ func setupIntegration(t *testing.T) (
 		PubKeyB64: leafKS.PubKeyBase64(),
 		BBSName:   "Integration Test BBS",
 		BBSHost:   "test.example.net",
+		AreaTags:  []string{"gen.general"},
 	})
 	resp, err := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
 		bytes.NewReader(registerBody))
@@ -131,7 +157,7 @@ func setupIntegration(t *testing.T) (
 }
 
 func TestIntegration_PostAndPoll(t *testing.T) {
-	_, _, l, _, _, writer := setupIntegration(t)
+	_, _, l, _, _, _, writer := setupIntegration(t)
 
 	// Leaf sends a message to the hub.
 	msg := protocol.Message{
@@ -177,7 +203,7 @@ func TestIntegration_PostAndPoll(t *testing.T) {
 }
 
 func TestIntegration_DedupPreventsDoubleWrite(t *testing.T) {
-	_, _, l, _, _, writer := setupIntegration(t)
+	_, _, l, _, _, _, writer := setupIntegration(t)
 
 	msg := protocol.Message{
 		V3Net:       "1.0",
@@ -226,7 +252,7 @@ func TestIntegration_DedupPreventsDoubleWrite(t *testing.T) {
 }
 
 func TestIntegration_SSEReceivesEvents(t *testing.T) {
-	_, _, l, _, _, _ := setupIntegration(t)
+	_, _, l, _, _, _, _ := setupIntegration(t)
 
 	events := make(chan protocol.Event, 10)
 	l.SetOnEvent(func(ev protocol.Event) {
@@ -274,7 +300,7 @@ func TestIntegration_SSEReceivesEvents(t *testing.T) {
 }
 
 func TestIntegration_ChatEvent(t *testing.T) {
-	_, _, l, _, _, _ := setupIntegration(t)
+	_, _, l, _, _, _, _ := setupIntegration(t)
 
 	events := make(chan protocol.Event, 10)
 	l.SetOnEvent(func(ev protocol.Event) {
@@ -302,7 +328,7 @@ func TestIntegration_ChatEvent(t *testing.T) {
 }
 
 func TestIntegration_PresenceEvents(t *testing.T) {
-	_, _, l, _, _, _ := setupIntegration(t)
+	_, _, l, _, _, _, _ := setupIntegration(t)
 
 	events := make(chan protocol.Event, 10)
 	l.SetOnEvent(func(ev protocol.Event) {
