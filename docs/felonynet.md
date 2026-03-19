@@ -39,6 +39,11 @@ On first start, Vision/3 generates an Ed25519 keypair at `keystorePath` and
 derives your permanent node ID from it. **Back up this file** — if lost, you
 must re-register with all hubs.
 
+> **Important:** After your first V3Net startup, back up your recovery seed
+> phrase immediately. Run `./config > V3Net > Node Identity > [E]` to export
+> it to a file. See [docs/sysop/reference/v3net-recovery.md](docs/sysop/reference/v3net-recovery.md)
+> for full details.
+
 ### 2. Create a Message Area
 
 Add a local message area for FelonyNet messages. In your message area
@@ -199,5 +204,7 @@ doesn't match any configured message area. Check your message area tags.
 `leaf: poll failed` warnings in the log. Verify your node is approved (hub may
 require manual approval).
 
-**Lost keypair** — If `data/v3net.key` is deleted, a new identity is generated
-on next start. You must re-subscribe to all hubs since your node ID changes.
+**Lost keypair** — If you have your 24-word recovery seed phrase, use
+`./config > V3Net > Node Identity > [R]` to restore your identity. If you have
+lost both the key file and the seed phrase, a new identity is generated on next
+start and you must re-subscribe to all hubs.

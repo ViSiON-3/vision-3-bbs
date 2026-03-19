@@ -397,6 +397,19 @@ Keypair storage format: a JSON file containing:
 Both fields are base64 standard encoding of the raw 64-byte private key and
 32-byte public key respectively. Use `os.WriteFile` with mode `0600`.
 
+### Mnemonic Recovery (added post-Phase 2)
+
+The keystore supports BIP39 mnemonic encoding for key recovery. The 32-byte
+ed25519 seed is encoded as 24 words from the standard BIP39 English word list
+(embedded in `wordlist.go`, no external dependency).
+
+- `Mnemonic() (string, error)` — encode current key as 24 words
+- `FromMnemonic(phrase string) (*Keystore, error)` — decode and reconstruct
+- `RecoverToFile(phrase, path string) (*Keystore, error)` — decode and save
+
+`Load()` returns `(ks *Keystore, created bool, err error)` to signal new key
+generation. No protocol changes — recovery restores the identical keypair.
+
 ---
 
 ### Phase 3 — Deduplication Index (`internal/dedup/`)

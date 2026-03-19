@@ -231,6 +231,34 @@ V3Net settings can be managed through the TUI configuration editor (`./config`).
 
 ---
 
+## Node Identity
+
+Your V3Net node identity is an Ed25519 keypair. The node ID (a 16-character hex
+string) is derived from the public key and serves as your permanent identity on
+all networks.
+
+The key file is stored at the path configured in `keystorePath` (default:
+`data/v3net.key`). If it doesn't exist, it is generated automatically on first
+V3Net startup.
+
+### Backing Up Your Identity
+
+A 24-word recovery seed phrase can restore your keypair if the key file is lost.
+Access it through the config editor:
+
+```
+./config  →  V3Net  →  Node Identity
+```
+
+From this screen you can:
+- **[S] Show** the seed phrase on screen
+- **[E] Export** the seed phrase to a file
+- **[R] Recover** a key from a previously saved seed phrase
+
+For full details, see [V3Net Key Recovery](../reference/v3net-recovery.md).
+
+---
+
 ## File Locations
 
 | File | Purpose |
@@ -240,7 +268,7 @@ V3Net settings can be managed through the TUI configuration editor (`./config`).
 | `data/v3net_dedup.sqlite` | Message deduplication database |
 | `data/v3net_hub/` | Hub data directory (SQLite DB, NAL files) |
 
-The keypair file is critical — it is your node's identity on the network. **Back it up.** If lost, you will need to re-register with every hub.
+The keypair file is critical — it is your node's identity on the network. **Back up your recovery seed phrase** via `./config > V3Net > Node Identity > [E]`. See [V3Net Key Recovery](../reference/v3net-recovery.md).
 
 ---
 
