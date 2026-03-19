@@ -45,27 +45,58 @@ Contents: A `var wordlist = [2048]string{...}` array and a reverse lookup `map[s
 
 ## Keystore API Changes
 
-**File**: `internal/v3net/keystore/keystore.go`
+### Mnemonic encoding/decoding: `internal/v3net/keystore/mnemonic.go`
 
-New exported functions:
+The bit-manipulation logic for encoding/decoding lives in a separate file to keep `keystore.go` under the 300-line limit. Low-level functions are unexported; the public API is thin wrappers on `keystore.go`.
+
+```go
+// encodeMnemonic converts a 32-byte seed to a 24-word BIP39 phrase.
+func encodeMnemonic(seed []byte) (string, error)
+
+// decodeMnemonic converts a 24-word BIP39 phrase back to a 32-byte seed.
+// Input is normalized: trimmed, lowercased, multiple spaces collapsed.
+func decodeMnemonic(mnemonic string) ([]byte, error)
+```
+
+### Public API: `internal/v3net/keystore/keystore.go`
 
 ```go
 // Mnemonic returns the 24-word BIP39 recovery phrase for this keypair.
 // The phrase is computed on-the-fly from the private key seed and is
-// never stored on disk.
+// never stored on disk. Never log the return value.
 func (ks *Keystore) Mnemonic() (string, error)
 
 // FromMnemonic reconstructs a Keystore from a 24-word BIP39 phrase.
+// Input is case-insensitive and tolerant of extra whitespace.
 // Returns an error if the word count is wrong, any word is not in
 // the word list, or the checksum fails. Does not write to disk.
 func FromMnemonic(mnemonic string) (*Keystore, error)
 
 // RecoverToFile reconstructs a keypair from a mnemonic and saves it
-// to the given path with mode 0600. Overwrites any existing file.
+// to the given path with mode 0600. Overwrites any existing file at path.
+// The caller is responsible for confirming overwrite with the user.
 func RecoverToFile(mnemonic, path string) (*Keystore, error)
 ```
 
-Existing functions (`Load`, `generate`, `NodeID`, `Sign`, etc.) are unchanged. The on-disk key file format is unchanged.
+### Load signal for new key: `internal/v3net/keystore/keystore.go`
+
+`Load` gains a second return value to signal whether the key was newly generated:
+
+```go
+// Load reads a keypair from path. If the file does not exist, a new
+// keypair is generated and saved with mode 0600. The boolean return
+// indicates whether a new key was created (true) or an existing key
+// was loaded (false).
+func Load(path string) (ks *Keystore, created bool, err error)
+```
+
+All existing callers of `Load` are updated to accept the new return value. The `created` flag drives both the startup log warning and the config TUI wizard interstitial.
+
+Existing functions (`generate`, `NodeID`, `Sign`, etc.) are unchanged. The on-disk key file format is unchanged.
+
+### Security note
+
+The mnemonic string and seed bytes are sensitive material. They must never be logged, stored in persistent struct fields, or written to disk except via the explicit `[E]` export flow. `Mnemonic()` computes on-the-fly; `FromMnemonic()` discards the phrase after deriving the keypair.
 
 ## BBS Startup Behavior
 
@@ -94,7 +125,7 @@ The V3Net category menu gains a new first item:
 
 ### Node Identity Screen
 
-A read-only info screen (not a form):
+Introduces a new `modeV3NetIdentity` editor mode in `model.go`. This is a read-only info screen (not a form) with key-driven actions — a novel pattern distinct from both record-edit and wizard modes. Sub-states (showing seed phrase, export path prompt, recovery input, confirmation dialog) are tracked via a local state field in the update handler, not separate top-level modes.
 
 ```
 +-------------------------------------------------------+
@@ -115,7 +146,7 @@ If no key exists yet: "No V3Net identity configured. Set up a leaf subscription 
 
 **[S] Show seed phrase**: Replaces screen content with numbered 24-word grid (4 columns of 6). Press any key to return.
 
-**[E] Export to file**: Prompts for file path (default: `v3net-recovery.txt`). Writes:
+**[E] Export to file**: Prompts for file path (default: `v3net-recovery.txt`). Path validation: reject paths containing `..` (no directory traversal), warn and confirm if the file already exists. Writes:
 
 ```
 V3Net Recovery Seed Phrase
@@ -137,13 +168,14 @@ Anyone with these words can impersonate your BBS node.
 
 After writing, shows confirmation: "Saved to v3net-recovery.txt — move this file off-server and delete the local copy."
 
-**[R] Recover from seed phrase**: Text input for 24 words (space-separated, case-insensitive). On submit:
+**[R] Recover from seed phrase**: Text input for 24 words (space-separated, case-insensitive). Input is normalized before parsing: trimmed, lowercased, tabs and multiple spaces collapsed to single spaces. On submit:
 
 1. Validate mnemonic (word count, all words in word list, checksum)
 2. Derive keypair, show resulting node ID
 3. If a key file already exists: "This will replace your current key file. Node ID will become: a3f9e1b2c4d5e6f7. Continue? [Y/N]"
 4. If no key exists: confirm and save
 5. On confirm: write key file, reload keystore
+6. Show notice: "Restart the BBS for the recovered identity to take effect." (The config editor and BBS run as separate processes.)
 
 ### First-Run Wizard Interstitial
 
@@ -214,6 +246,8 @@ Additions to `internal/v3net/keystore/keystore_test.go`:
 | `TestMnemonic_CaseInsensitive` | Uppercase/mixed-case input decodes to same key |
 | `TestRecoverToFile_RoundTrip` | Recover to temp path, `Load()` that path, assert same `node_id` |
 | `TestRecoverToFile_Overwrites` | Existing key file at path is replaced, new key matches mnemonic |
+| `TestMnemonic_BIP39Vector` | Hardcoded known seed/mnemonic pair from BIP39 test vectors verifies bit-ordering correctness |
+| `TestMnemonic_InputNormalization` | Extra spaces, tabs, trailing newlines, mixed case all decode correctly |
 
 No integration test changes — recovery is entirely within the keystore package. Protocol, hub, and leaf are unaffected.
 
@@ -241,9 +275,10 @@ Sysop-facing, plain language:
 
 | File | Change |
 |---|---|
-| `internal/v3net/keystore/keystore.go` | Add `Mnemonic()`, `FromMnemonic()`, `RecoverToFile()` |
+| `internal/v3net/keystore/keystore.go` | Add `Mnemonic()`, `FromMnemonic()`, `RecoverToFile()`; change `Load` to return `created bool` |
+| `internal/v3net/keystore/mnemonic.go` | New — `encodeMnemonic()`, `decodeMnemonic()` bit-manipulation logic |
 | `internal/v3net/keystore/wordlist.go` | New — BIP39 2048-word list + reverse map |
-| `internal/v3net/keystore/keystore_test.go` | 7 new test cases |
+| `internal/v3net/keystore/keystore_test.go` | 9 new test cases |
 | `internal/v3net/service.go` | Log warning on first key creation |
 | `internal/configeditor/model.go` | Add Node Identity to V3Net category menu |
 | `internal/configeditor/view_v3net_identity.go` | New — Node Identity screen rendering |
