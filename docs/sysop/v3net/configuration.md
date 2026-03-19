@@ -11,16 +11,17 @@ If the file does not exist, V3Net is disabled by default.
 
 ## Setup Wizard
 
-The easiest way to configure V3Net is the guided setup wizard in the TUI config editor:
+The easiest way to configure V3Net is the guided setup wizard in the TUI config editor. From the top menu:
 
 ```
-./config  →  E — V3Net Setup
+./config  →  4 — ViSiON/3 Networking (V3Net)  →  Subscriptions  →  [I]nsert
+./config  →  4 — ViSiON/3 Networking (V3Net)  →  Networks       →  [I]nsert
 ```
 
-The wizard offers two paths:
+When you press **[I]** (Insert) on either record list, a guided wizard launches instead of raw field editing:
 
-- **J — Join an existing network** (leaf node) — walks you through hub URL, network name (auto-fetched), board tag, poll interval, and origin line. Writes a `leaves[]` entry and saves.
-- **H — Host your own network** (hub operator) — walks you through network name and description, listen port, auto-approve setting, and initial message areas. Saves the full hub config; the BBS auto-initialises the hub data directory and seeds the NAL on first start.
+- **Subscriptions → [I]nsert** opens **"Leaf Setup — Join a Network"** — walks you through hub URL, network name, board tag, poll interval, and origin line. Writes a `leaves[]` entry and saves.
+- **Networks → [I]nsert** opens **"Hub Setup — Host a Network"** — walks you through network name, description, listen port, auto-approve setting, and initial message areas. Saves the full hub config; the BBS auto-initialises the hub data directory and seeds the NAL on first start.
 
 After the wizard saves, restart the BBS to activate the configuration.
 
@@ -223,11 +224,43 @@ Each entry in the `leaves` array subscribes your BBS to one network on one hub. 
 
 ## Configuration Editor
 
-V3Net settings can be managed through the TUI configuration editor (`./config`). The editor provides:
+V3Net settings are spread across two areas of the TUI configuration editor (`./config`):
 
-- **E — V3Net Setup** — guided setup wizard for first-time leaf or hub configuration (recommended starting point)
-- **C — V3Net Subscriptions** — add, edit, and remove leaf entries with field-by-field editing (Hub URL, Network, Board, Poll Interval, Origin)
-- **D — V3Net Hub Networks** — add, edit, and remove hosted network definitions (Name, Description)
+### V3Net Category Menu
+
+From the top menu, select **4 — ViSiON/3 Networking (V3Net)**. This opens a sub-menu with three options:
+
+| Item | Description |
+|------|-------------|
+| **Node Identity** | View your node ID and public key. Show, export, or recover your seed phrase. |
+| **Subscriptions** | Add, edit, and remove leaf entries (Hub URL, Network, Board, Poll Interval, Origin). Press **[I]** to launch the leaf setup wizard. |
+| **Networks** | Add, edit, and remove hosted network definitions (Name, Description). Press **[I]** to launch the hub setup wizard. |
+
+### System-Level V3Net Settings
+
+Global V3Net settings and hub server parameters live in the system configuration screens:
+
+```
+./config  →  1 — System Configuration  →  Server Setup
+```
+
+This screen contains:
+
+| Field | Description |
+|-------|-------------|
+| V3Net | Master enable/disable for V3Net |
+| Keystore Path | Path to Ed25519 keypair file |
+| Dedup DB Path | Path to deduplication SQLite database |
+| Registry URL | Central V3Net registry URL (optional) |
+| V3Net Hub | Enable/disable the hub server |
+| Hub Host | Listen address (blank = all interfaces) |
+| Hub Port | Listen port (default: 8765) |
+| Hub TLS Cert | Path to TLS certificate (blank for plain HTTP) |
+| Hub TLS Key | Path to TLS private key |
+| Hub Data Dir | Hub data storage directory |
+| Auto Approve | Automatically approve new leaf subscriptions |
+
+For details on the Hub TLS fields, see [Hub TLS Setup](hub-tls.md).
 
 ---
 
@@ -247,7 +280,7 @@ A 24-word recovery seed phrase can restore your keypair if the key file is lost.
 Access it through the config editor:
 
 ```
-./config  →  V3Net  →  Node Identity
+./config  →  4 — ViSiON/3 Networking (V3Net)  →  Node Identity
 ```
 
 From this screen you can:
@@ -268,7 +301,7 @@ For full details, see [V3Net Key Recovery](recovery.md).
 | `data/v3net_dedup.sqlite` | Message deduplication database |
 | `data/v3net_hub/` | Hub data directory (SQLite DB, NAL files) |
 
-The keypair file is critical — it is your node's identity on the network. **Back up your recovery seed phrase** via `./config > V3Net > Node Identity > [E]`. See [V3Net Key Recovery](recovery.md).
+The keypair file is critical — it is your node's identity on the network. **Back up your recovery seed phrase** via `./config → 4 → Node Identity → [E]`. See [V3Net Key Recovery](recovery.md).
 
 ---
 

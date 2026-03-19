@@ -181,12 +181,14 @@ func New(configPath string) (Model, error) {
 
 	topItems := []topMenuItem{
 		{"1", "System Configuration"},
-		{"2", "BBS Areas & Conferences"},
+		{"2", "Areas and Conferences"},
 		{"3", "Echomail Networking"},
 		{"4", "ViSiON/3 Networking (V3Net)"},
-		{"5", "Programs & Protocols"},
-		{"6", "Event Scheduler"},
-		{"7", "Login Sequence"},
+		{"5", "Door Programs"},
+		{"6", "Transfer Protocols"},
+		{"7", "Archivers"},
+		{"8", "Event Scheduler"},
+		{"9", "Login Sequence"},
 		{"Q", "Quit Program"},
 	}
 
@@ -315,8 +317,8 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.sysMenuCursor = 0
 		return m, nil
 
-	case 1: // BBS Areas & Conferences
-		m.catMenuTitle = "BBS Areas & Conferences"
+	case 1: // Areas and Conferences
+		m.catMenuTitle = "Areas and Conferences"
 		m.catMenuItems = []categoryMenuItem{
 			{Label: "Message Areas", RecordType: "msgarea"},
 			{Label: "File Areas", RecordType: "filearea"},
@@ -347,18 +349,31 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeCategoryMenu
 		return m, nil
 
-	case 4: // Programs & Protocols
-		m.catMenuTitle = "Programs & Protocols"
-		m.catMenuItems = []categoryMenuItem{
-			{Label: "Door Programs", RecordType: "door"},
-			{Label: "Transfer Protocols", RecordType: "protocol"},
-			{Label: "Archivers", RecordType: "archiver"},
-		}
-		m.catMenuCursor = 0
-		m.mode = modeCategoryMenu
+	case 4: // Door Programs (direct)
+		m.recordType = "door"
+		m.recordCursor = 0
+		m.recordScroll = 0
+		m.returnMode = modeTopMenu
+		m.mode = modeRecordList
 		return m, nil
 
-	case 5: // Event Scheduler (direct)
+	case 5: // Transfer Protocols (direct)
+		m.recordType = "protocol"
+		m.recordCursor = 0
+		m.recordScroll = 0
+		m.returnMode = modeTopMenu
+		m.mode = modeRecordList
+		return m, nil
+
+	case 6: // Archivers (direct)
+		m.recordType = "archiver"
+		m.recordCursor = 0
+		m.recordScroll = 0
+		m.returnMode = modeTopMenu
+		m.mode = modeRecordList
+		return m, nil
+
+	case 7: // Event Scheduler (direct)
 		m.recordType = "event"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -366,7 +381,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 6: // Login Sequence (direct)
+	case 8: // Login Sequence (direct)
 		m.recordType = "login"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -374,7 +389,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 7: // Quit
+	case 9: // Quit
 		return m.tryExit()
 	}
 	return m, nil
