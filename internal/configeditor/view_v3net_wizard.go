@@ -117,6 +117,6 @@ func (m Model) viewHubAreasStep() string {
 	b.WriteByte('\n')
 	b.WriteString(bgLine)
 	b.WriteByte('\n')
-	b.WriteString(helpBarStyle.Render(centerText("A Add  D Delete  Enter Done  ESC Back", m.width)))
+	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
 	return b.String()
 }

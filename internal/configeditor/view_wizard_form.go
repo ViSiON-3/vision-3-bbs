@@ -114,14 +114,16 @@ func (m Model) viewWizardForm() string {
 
 // renderWizardRow renders a single row of wizard form fields.
 func (m Model) renderWizardRow(row, boxW int) string {
-	var fieldStr string
+	var parts []string
 
 	for i, f := range m.wizardFields {
 		if f.Row != row {
 			continue
 		}
-		fieldStr = m.renderWizardField(i, f)
+		parts = append(parts, m.renderWizardField(i, f))
 	}
+
+	fieldStr := strings.Join(parts, "  ")
 
 	if fieldStr == "" {
 		return fieldDisplayStyle.Render(strings.Repeat(" ", boxW))

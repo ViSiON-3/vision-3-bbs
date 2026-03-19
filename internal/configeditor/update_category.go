@@ -14,13 +14,19 @@ func (m Model) updateCategoryMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.catMenuCursor--
 		}
 	case tea.KeyDown:
-		if m.catMenuCursor < len(m.catMenuItems)-1 {
+		last := len(m.catMenuItems) - 1
+		if last >= 0 && m.catMenuCursor < last {
 			m.catMenuCursor++
 		}
 	case tea.KeyHome:
 		m.catMenuCursor = 0
 	case tea.KeyEnd:
-		m.catMenuCursor = len(m.catMenuItems) - 1
+		last := len(m.catMenuItems) - 1
+		if last < 0 {
+			m.catMenuCursor = 0
+		} else {
+			m.catMenuCursor = last
+		}
 	case tea.KeyEnter:
 		return m.selectCategoryMenuItem()
 	case tea.KeyEscape:

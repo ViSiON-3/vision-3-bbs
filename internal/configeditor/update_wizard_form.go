@@ -241,6 +241,9 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	m.configs.V3Net.Enabled = true
 	m.dirty = true
 	m.saveAll()
+	if strings.HasPrefix(m.message, "SAVE ERROR") {
+		return m, nil
+	}
 	m.message = "Leaf saved. Restart BBS to activate."
 	m.recordCursor = len(m.configs.V3Net.Leaves) - 1
 	m.recordScroll = 0
