@@ -141,7 +141,7 @@ When the user presses Space to subscribe to an area:
 
 ```go
 func subscribeToAreas(hubURL, network string, areaTags []string,
-    ks *keystore.Keystore, bbsName, bbsHost string) tea.Cmd
+    nodeID, pubKeyB64, bbsName, bbsHost string) tea.Cmd
 ```
 
 Returns a `subscribeAreasMsg` with `[]protocol.AreaSubscriptionStatus`.

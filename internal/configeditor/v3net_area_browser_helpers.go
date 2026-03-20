@@ -115,6 +115,9 @@ func (m Model) exitAreaBrowser() (tea.Model, tea.Cmd) {
 			m.createBrowserMessageAreas()
 			m.dirty = true
 			m.saveAll()
+			if strings.HasPrefix(m.message, "SAVE ERROR") {
+				return m, nil
+			}
 			m.recordFields = m.buildRecordFields()
 		}
 	}
