@@ -111,5 +111,15 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			Get: func() string { return l.Origin },
 			Set: func(val string) error { l.Origin = val; return nil },
 		},
+		{
+			Label: "Browse Areas", Help: "Press Enter to browse and subscribe to hub areas", Type: ftDisplay, Col: 3, Row: 7, Width: 49,
+			Get: func() string {
+				n := len(l.Boards)
+				if n == 0 {
+					return "(none — press Enter to browse)"
+				}
+				return fmt.Sprintf("%d area(s) subscribed — Enter to manage", n)
+			},
+		},
 	}
 }

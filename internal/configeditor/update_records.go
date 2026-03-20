@@ -211,6 +211,13 @@ func (m Model) updateRecordEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m.enterHubAreaManager(netName)
 				}
 			}
+			// V3Net leaf "Browse Areas" field opens the area browser.
+			if m.recordType == "v3netleaf" && f.Label == "Browse Areas" {
+				if m.recordEditIdx >= 0 && m.recordEditIdx < len(m.configs.V3Net.Leaves) {
+					leaf := m.configs.V3Net.Leaves[m.recordEditIdx]
+					return m.enterAreaBrowser(leaf.HubURL, leaf.Network, modeRecordEdit)
+				}
+			}
 			m.editField = m.nextRecordEditableField(1)
 			m.clampFieldScroll(m.recordFields)
 			return m, nil
