@@ -174,17 +174,17 @@ from `viewV3NetHubAreas`:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    Area Browser — felonynet                         │
-│   TAG                 NAME              STATUS     LOCAL BOARD      │
+│                    Area Browser — felonynet                          │
+│   TAG                NAME              STATUS     LOCAL BOARD        │
 │  ──────────────────────────────────────────────────────────────────  │
-│   [x] fel.general     General           ACTIVE     FelonyNet General│
-│   [ ] fel.phreaking   Phreaking                                    │
-│   [ ] fel.art         ANSI/ASCII Art                               │
-│   [ ] fel.wanted      Wanted                                       │
-│                                                                    │
-│                                                                    │
+│  [x] fel.general     General           ACTIVE     FelonyNet General  │
+│  [ ] fel.phreaking   Phreaking                                       │
+│  [ ] fel.art         ANSI/ASCII Art                                  │
+│  [ ] fel.wanted      Wanted                                          │
+│                                                                      │
+│                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
- Space - Subscribe/Unsubscribe | E - Edit Board Name | M - Manual | ESC - Done
+   Space - Sub/Unsub | E - Edit Board Name | M - Manual | ESC - Done
 ```
 
 - `[x]`/`[ ]` checkbox reflects `Subscribed` state
