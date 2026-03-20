@@ -38,15 +38,18 @@ func (m *Model) fieldsLeafWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Board Tag", Help: "Local message area tag prefix for received messages", Type: ftString, Col: 3, Row: 3, Width: 30,
-			Get: func() string { return w.boardTag },
-			Set: func(val string) error {
-				val = strings.TrimSpace(val)
-				if val == "" {
-					return fmt.Errorf("cannot be empty")
+			Label: "Areas", Help: "Press Enter to browse and subscribe to network areas", Type: ftDisplay, Col: 3, Row: 3, Width: 45,
+			Get: func() string {
+				n := 0
+				for _, a := range w.selectedAreas {
+					if a.Subscribed {
+						n++
+					}
 				}
-				w.boardTag = val
-				return nil
+				if n == 0 {
+					return "(none — press Enter to browse)"
+				}
+				return fmt.Sprintf("%d area(s) selected", n)
 			},
 		},
 		{

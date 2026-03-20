@@ -39,6 +39,18 @@ func (m Model) updateWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeV3NetWizardStep
 			return m, nil
 		}
+		// Leaf wizard "Areas" field opens the area browser.
+		if f.Type == ftDisplay && m.wizard.flow == "leaf" && f.Label == "Areas" {
+			if m.wizard.hubURL == "" {
+				m.message = "Enter a Hub URL first"
+				return m, nil
+			}
+			if m.wizard.networkName == "" {
+				m.message = "Enter a Network name first"
+				return m, nil
+			}
+			return m.enterAreaBrowser(m.wizard.hubURL, m.wizard.networkName, modeWizardForm)
+		}
 		if f.Type == ftDisplay {
 			m.editField = m.nextWizardEditableField(1)
 			m.clampFieldScroll(m.wizardFields)
@@ -246,16 +258,32 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	_, statErr := os.Stat(path)
 	m.keyExistedBeforeSave = statErr == nil
 
+	// Build boards from selected areas.
+	var boards []string
+	for _, a := range m.wizard.selectedAreas {
+		if a.Subscribed {
+			boards = append(boards, a.Tag)
+		}
+	}
+
 	leaf := config.V3NetLeafConfig{
 		HubURL:       m.wizard.hubURL,
 		Network:      m.wizard.networkName,
-		Boards:       []string{m.wizard.boardTag},
+		Boards:       boards,
 		PollInterval: m.wizard.pollInterval,
 		Origin:       m.wizard.origin,
 	}
 	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, leaf)
 	m.configs.V3Net.Enabled = true
 	m.dirty = true
+	m.saveAll()
+	// Create MsgAreas for selected areas.
+	for _, a := range m.wizard.selectedAreas {
+		if !a.Subscribed {
+			continue
+		}
+		m.createBrowserMsgAreaIfNeeded(a.Tag, a.LocalBoard, m.wizard.networkName)
+	}
 	m.saveAll()
 	if strings.HasPrefix(m.message, "SAVE ERROR") {
 		return m, nil
@@ -289,7 +317,7 @@ func (m Model) wizardHasData() bool {
 			m.wizard.port != "8765" || len(m.wizard.areas) > 0
 	case "leaf":
 		return m.wizard.hubURL != "" || m.wizard.networkName != "" ||
-			m.wizard.boardTag != ""
+			len(m.wizard.selectedAreas) > 0
 	}
 	return false
 }
@@ -331,6 +359,16 @@ func (m Model) submitWizardForm() (Model, tea.Cmd) {
 	case "leaf":
 		if err := m.validateLeafWizard(); err != nil {
 			m.message = err.Error()
+			return m, nil
+		}
+		subscribed := 0
+		for _, a := range m.wizard.selectedAreas {
+			if a.Subscribed {
+				subscribed++
+			}
+		}
+		if subscribed == 0 {
+			m.message = "Select at least one area to subscribe to"
 			return m, nil
 		}
 		return m.confirmLeafWizard()

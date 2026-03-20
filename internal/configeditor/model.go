@@ -92,7 +92,6 @@ type wizardState struct {
 	// Leaf wizard fields
 	hubURL       string
 	networkName  string
-	boardTag     string
 	pollInterval string
 	origin       string
 	fetchError   string // set if auto-fetch failed
