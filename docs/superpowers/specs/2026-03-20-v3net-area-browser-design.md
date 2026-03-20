@@ -73,7 +73,19 @@ and fires the NAL fetch command.
 
 On wizard completion (`confirmLeafWizard`), the `Boards` slice in the saved
 `V3NetLeafConfig` is populated from `wizard.selectedAreas` where
-`Subscribed == true`, and a `MsgArea` entry is created for each.
+`Subscribed == true`. Each entry in `Boards` is the **NAL area tag** (e.g.
+`fel.general`). The leaf runtime resolves area tags to local JAM bases via
+`MsgArea.EchoTag` matching. A `MsgArea` entry is created for each selected
+area.
+
+`validateLeafWizard()` must also be updated: since the "Board Tag" field is
+replaced with an `ftDisplay` field (no `Set`), add an explicit check that
+`len(wizard.selectedAreas) > 0` in `submitWizardForm()` before calling
+`confirmLeafWizard()`, analogous to the existing hub wizard guard
+`len(m.wizard.areas) == 0`.
+
+`wizardHasData()` must be updated: the `"leaf"` branch should check
+`len(m.wizard.selectedAreas) > 0` instead of `m.wizard.boardTag != ""`.
 
 ### B) Leaf Subscription Edit View
 
@@ -86,6 +98,10 @@ as `Subscribed: true`.
 Both entry points set `areaBrowserHub`, `areaBrowserNetwork`, pre-populate
 the items list, then transition to `modeV3NetAreaBrowser`.
 
+**Return path:** Before transitioning, set `returnMode` to `modeWizardForm`
+(wizard entry) or `modeRecordEdit` (edit view entry). On ESC in the
+browser, restore this mode via `m.backMode()`.
+
 ## NAL Fetch
 
 A new `tea.Cmd` function:
@@ -96,6 +112,12 @@ func fetchHubNAL(hubURL, network string) tea.Cmd
 
 Makes `GET /v3net/v1/{network}/nal` (unauthenticated — public endpoint).
 Returns a `fetchNALMsg` containing parsed `[]protocol.Area` or an error.
+
+**NAL signature verification** is out of scope for the config editor. The
+NAL is used here only for area discovery (names, tags, descriptions) — not
+for access control decisions. The leaf runtime verifies NAL signatures when
+it connects at startup. This is an acceptable trade-off to avoid importing
+the full `nal` package into the config editor.
 
 On success, the browser merges fetched areas with any already-subscribed
 local boards, producing the `areaBrowserAreas` list. On failure, sets
@@ -109,8 +131,11 @@ When the user presses Space to subscribe to an area:
    `loadOrCreateIdentityKeystore()` (same as seed phrase interstitial).
 2. If this is the first keystore creation, the seed phrase interstitial is
    shown before proceeding.
-3. A `tea.Cmd` fires `POST /v3net/v1/subscribe` with the selected area tags,
-   using the keystore for signing, plus the BBS name/host from server config.
+3. A `tea.Cmd` fires `POST /v3net/v1/subscribe` with the selected area tags.
+   The keystore is needed to populate `node_id` and `pubkey_b64` in the
+   request body — **the subscribe endpoint is unauthenticated** (it is the
+   bootstrap step), so no HTTP signing headers are sent. This matches the
+   existing `leaf.subscribe()` pattern in `leaf/sender.go`.
 4. The response's per-area `[]AreaSubscriptionStatus` updates each item's
    `Status` field in the browser.
 
@@ -166,7 +191,10 @@ from `viewV3NetHubAreas`:
 - Loading state: centered "Fetching areas..." message
 - Error state: error text + `R` retry + `M` manual
 - Manual mode: replaces list with text input for comma-separated tags
-- `E` on subscribed area: one-field text input to rename local board
+- `E` on subscribed area: one-field text input to rename local board,
+  guarded by an `areaBrowserEditing bool` flag on Model (similar to
+  `wizard.areaAdding`). While editing, key events are routed to the
+  textInput; ESC or Enter exits back to the browser list.
 
 ## MsgArea Auto-Creation
 
@@ -182,6 +210,7 @@ On browser exit (ESC), for each newly subscribed area, create a
 
 | Field | Value |
 |---|---|
+| `Tag` | Area tag (e.g. `fel.general`) — matches `EchoTag`, used for dedup |
 | `Name` | Local board name |
 | `AreaType` | `"v3net"` |
 | `Network` | Network name |
@@ -202,7 +231,9 @@ corresponding MsgArea `Name`.
 ### Saving
 
 Changes persist on browser exit. The leaf's `Boards` slice is rebuilt from
-all `Subscribed: true` items. `dirty` is set and `saveAll()` is called.
+all `Subscribed: true` items — each entry is the NAL area tag (e.g.
+`fel.general`). The leaf runtime maps these to local JAM bases by matching
+`MsgArea.EchoTag`. `dirty` is set and `saveAll()` is called.
 
 ## File Changes
 
@@ -217,10 +248,10 @@ all `Subscribed: true` items. `dirty` is set and `saveAll()` is called.
 
 | File | Change |
 |---|---|
-| `model.go` | Add `modeV3NetAreaBrowser`, `areaBrowserItem` type, browser state fields |
+| `model.go` | Add `modeV3NetAreaBrowser`, `areaBrowserItem` type, browser state fields, `areaBrowserEditing bool` |
 | `fields_wizard.go` | Replace "Board Tag" with "Areas" `ftDisplay` field; add `selectedAreas` to `wizardState` |
 | `fields_v3net.go` | Add "Browse Areas" `ftDisplay` field to `fieldsV3NetLeaf()` |
-| `update_wizard_form.go` | Handle Enter on "Areas" field; update `confirmLeafWizard()` to use `selectedAreas` |
+| `update_wizard_form.go` | Handle Enter on "Areas" field; update `confirmLeafWizard()` to use `selectedAreas`; update `wizardHasData()` to check `selectedAreas`; add `selectedAreas` length guard in `submitWizardForm()` |
 | `update.go` | Route `modeV3NetAreaBrowser`; handle `fetchNALMsg` and `subscribeAreasMsg` |
 | `view.go` | Route `modeV3NetAreaBrowser` to view function |
 
