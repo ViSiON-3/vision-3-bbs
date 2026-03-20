@@ -301,6 +301,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fetchNetworksMsg:
 		return m.handleFetchNetworksMsg(msg)
 
+	case fetchNALMsg:
+		return m.handleFetchNALMsg(msg)
+
+	case subscribeAreasMsg:
+		return m.handleSubscribeAreasMsg(msg)
+
 	case tea.KeyMsg:
 		switch m.mode {
 		case modeTopMenu:
@@ -347,6 +353,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateNavSaveConfirm(msg)
 		case modeWizardExitConfirm:
 			return m.updateWizardExitConfirm(msg)
+		case modeV3NetAreaBrowser:
+			return m.updateV3NetAreaBrowser(msg)
 		}
 	}
 	return m, nil
