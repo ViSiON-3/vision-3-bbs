@@ -145,6 +145,8 @@ func subscribeToAreas(hubURL, network string, areaTags []string,
 ```
 
 Returns a `subscribeAreasMsg` with `[]protocol.AreaSubscriptionStatus`.
+The response must be decoded as `protocol.SubscribeWithAreasResponse` (not
+`SubscribeResponse`) to access the per-area `Areas` slice.
 
 ### Unsubscribe
 
