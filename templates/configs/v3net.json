@@ -11,5 +11,12 @@
     "autoApprove": false,
     "networks": []
   },
-  "leaves": []
+  "leaves": [
+    {
+      "hubUrl": "https://felonynet.org",
+      "network": "felonynet",
+      "boards": [],
+      "pollInterval": "5m"
+    }
+  ]
 }

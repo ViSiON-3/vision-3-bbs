@@ -62,7 +62,7 @@ Add a `leaves` entry pointing to the FelonyNet hub:
     "dedupDbPath": "data/v3net_dedup.sqlite",
     "leaves": [
       {
-        "hubUrl": "https://hub.felonynet.org",
+        "hubUrl": "https://felonynet.org",
         "network": "felonynet",
         "board": "FELONYNET_GENERAL",
         "pollInterval": "5m"
@@ -188,8 +188,8 @@ your network entry:
   "name": "felonynet",
   "description": "General discussion. No warrants required.",
   "hub_url": "https://hub.felonynet.org",
-  "hub_node_id": "a3f9e1b2c4d5e6f7",
-  "tags": ["general", "tech", "bbs"]
+  "hub_node_id": "22819c83e045cd1e",
+  "area_tags": ["fn.general", "fn.testing", "fn.vision3"]
 }
 ```
 

@@ -68,7 +68,7 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 
 	return []fieldDef{
 		{
-			Label: "Hub URL", Help: "URL of the V3Net hub (e.g. https://hub.felonynet.org)", Type: ftString, Col: 3, Row: 1, Width: 49,
+			Label: "Hub URL", Help: "URL of the V3Net hub (e.g. https://felonynet.org)", Type: ftString, Col: 3, Row: 1, Width: 49,
 			Get: func() string { return l.HubURL },
 			Set: func(val string) error { l.HubURL = val; return nil },
 		},
@@ -107,7 +107,7 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			Set: func(val string) error { l.PollInterval = val; return nil },
 		},
 		{
-			Label: "Origin", Help: "Origin line identifying your BBS on this network (e.g. My Cool BBS - bbs.example.com)", Type: ftString, Col: 3, Row: 5, Width: 49,
+			Label: "Origin", Help: "Origin line identifying your BBS", Type: ftString, Col: 3, Row: 5, Width: 49,
 			Get: func() string { return l.Origin },
 			Set: func(val string) error { l.Origin = val; return nil },
 		},

@@ -46,7 +46,7 @@ func (m Model) viewSeedInterstitial() string {
 
 	// Box: top border + title + empty + content + empty + bottom border
 	boxH := len(contentLines) + 5
-	extraV := maxInt(0, m.height-boxH-3)
+	extraV := maxInt(0, m.height-boxH-4)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -102,7 +102,12 @@ func (m Model) viewSeedInterstitial() string {
 		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
 	b.WriteByte('\n')
 
-	// Message line directly below box
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	// Help row (message or blank).
 	if m.message != "" {
 		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
@@ -113,10 +118,8 @@ func (m Model) viewSeedInterstitial() string {
 	}
 	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
+	b.WriteString(bgLine)
+	b.WriteByte('\n')
 
 	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
 
@@ -217,8 +220,8 @@ func (m Model) viewV3NetIdentity() string {
 	// Render the box.
 	// Box: top border + title + empty + content + empty + bottom border
 	boxH := len(contentLines) + 5
-	// Vertical centering: -3 for global header, message line, help bar
-	extraV := maxInt(0, m.height-boxH-3)
+	// Vertical centering: -4 for global header, message line, bgLine spacer, help bar
+	extraV := maxInt(0, m.height-boxH-4)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -279,7 +282,12 @@ func (m Model) viewV3NetIdentity() string {
 		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
 	b.WriteByte('\n')
 
-	// Message line (directly below box, matching category menu layout)
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	// Help row (message or blank).
 	if m.message != "" {
 		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
@@ -290,10 +298,8 @@ func (m Model) viewV3NetIdentity() string {
 	}
 	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
+	b.WriteString(bgLine)
+	b.WriteByte('\n')
 
 	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
 

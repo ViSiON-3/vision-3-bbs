@@ -19,8 +19,8 @@ func (m Model) viewV3NetHubAreas() string {
 	indices := m.hubNetworkAreaIndices()
 	total := len(indices)
 
-	// Fixed rows: header(1) + border(1) + title(1) + colheader(1) + sep(1) + list + border(1) + msg(1) + help(1)
-	fixedRows := listVisible + 8
+	// Fixed rows: header(1) + border(1) + title(1) + colheader(1) + sep(1) + list + border(1) + msg(1) + bgLine(1) + help(1)
+	fixedRows := listVisible + 9
 	extraV := maxInt(0, m.height-fixedRows)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
@@ -102,7 +102,12 @@ func (m Model) viewV3NetHubAreas() string {
 	b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
 
-	// Message line.
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	// Help row (message or blank).
 	if m.message != "" {
 		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
@@ -113,10 +118,8 @@ func (m Model) viewV3NetHubAreas() string {
 	}
 	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
+	b.WriteString(bgLine)
+	b.WriteByte('\n')
 
 	helpStr := "I - Insert  |  E - Edit  |  D - Delete  |  S - Save  |  ESC/Q - Return"
 	if total == 0 {
@@ -144,7 +147,7 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 	boxW := 60
 	boxH := 9 // top + title + blank + fields(4) + blank + bottom
 
-	extraV := maxInt(0, m.height-boxH-3)
+	extraV := maxInt(0, m.height-boxH-4)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -198,6 +201,12 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 	b.WriteString(border(editBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
 
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	// Help row (message or blank).
 	if m.message != "" {
 		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
@@ -208,10 +217,8 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 	}
 	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
+	b.WriteString(bgLine)
+	b.WriteByte('\n')
 
 	helpStr := "Enter - Next Field / Confirm  |  ESC - Cancel"
 	b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))

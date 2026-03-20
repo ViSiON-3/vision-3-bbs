@@ -67,8 +67,8 @@ already subscribed to.
     {
       "name": "felonynet",
       "description": "Official ViSiON/3 BBS message network",
-      "hub_url": "https://hub.felonynet.example.com/v3net",
-      "hub_node_id": "a3f9e1b2c4d5e6f7"
+      "hub_url": "https://hub.felonynet.org",
+      "hub_node_id": "22819c83e045cd1e"
     }
   ]
 }
@@ -105,7 +105,7 @@ registry browser.
   },
   "leaves": [
     {
-      "hubUrl": "https://hub.felonynet.org",
+      "hubUrl": "https://felonynet.org",
       "network": "felonynet",
       "board": "fel.general",
       "pollInterval": "5m",
@@ -192,7 +192,7 @@ Each entry in the `leaves` array subscribes your BBS to one network on one hub. 
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `hubUrl` | string | — | Full URL of the hub (e.g. `"https://hub.felonynet.org"`). Required. |
+| `hubUrl` | string | — | Full URL of the hub (e.g. `"https://felonynet.org"`). Required. |
 | `network` | string | — | Network name to subscribe to. Must match a network hosted by the hub. Required. |
 | `board` | string | `""` | Local message area tag prefix for received messages. When the hub has multiple areas, each area creates a local message area with this prefix. |
 | `pollInterval` | string | `"5m"` | How often to poll the hub for new messages. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. Shorter intervals mean faster delivery but more hub traffic. |
@@ -204,7 +204,7 @@ Each entry in the `leaves` array subscribes your BBS to one network on one hub. 
 {
   "leaves": [
     {
-      "hubUrl": "https://hub.felonynet.org",
+      "hubUrl": "https://felonynet.org",
       "network": "felonynet",
       "board": "fel.general",
       "pollInterval": "5m",
