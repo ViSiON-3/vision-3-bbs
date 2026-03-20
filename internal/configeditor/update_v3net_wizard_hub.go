@@ -56,10 +56,28 @@ func (m Model) updateHubStepAreas(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch strings.ToUpper(string(msg.Runes)) {
 		case "A":
 			m.wizard.areaAdding = true
+			m.wizard.areaEditField = 0
+			m.wizard.areaEditIdx = -1
 			m.wizard.areaEditTag = ""
 			m.wizard.areaEditName = ""
 			m.textInput.Reset()
+			m.textInput.Width = 30
+			m.textInput.CharLimit = 40
 			m.textInput.Focus()
+		case "E":
+			if len(m.wizard.areas) > 0 {
+				i := m.wizard.areaCursor
+				m.wizard.areaAdding = true
+				m.wizard.areaEditField = 0
+				m.wizard.areaEditIdx = i
+				m.wizard.areaEditTag = m.wizard.areas[i].Tag
+				m.wizard.areaEditName = m.wizard.areas[i].Name
+				m.textInput.SetValue(m.wizard.areas[i].Tag)
+				m.textInput.Width = 30
+				m.textInput.CharLimit = 40
+				m.textInput.CursorEnd()
+				m.textInput.Focus()
+			}
 		case "D":
 			if len(m.wizard.areas) > 0 {
 				i := m.wizard.areaCursor
@@ -74,45 +92,64 @@ func (m Model) updateHubStepAreas(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateHubAreaSubForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyEscape {
+	switch msg.Type {
+	case tea.KeyEscape:
 		m.wizard.areaAdding = false
 		m.textInput.Reset()
+		m.message = ""
 		return m, nil
-	}
-	if msg.Type == tea.KeyEnter {
+
+	case tea.KeyEnter, tea.KeyTab, tea.KeyDown:
 		val := strings.TrimSpace(m.textInput.Value())
-		if m.wizard.areaEditTag == "" {
-			// Committing tag.
+		if m.wizard.areaEditField == 0 {
+			// Validate tag, advance to name.
 			if err := protocol.ValidateAreaTag(val); err != nil {
 				m.message = err.Error()
 				return m, nil
 			}
 			m.wizard.areaEditTag = val
-			m.textInput.Reset()
+			m.wizard.areaEditField = 1
+			m.textInput.SetValue(m.wizard.areaEditName)
+			m.textInput.CursorEnd()
 			m.textInput.Focus()
+			m.message = ""
 			return m, nil
 		}
-		// Committing name.
+		// Name field — validate and save area.
 		if val == "" {
 			m.message = "Area name cannot be empty"
 			return m, nil
 		}
-		m.wizard.areas = append(m.wizard.areas, wizardArea{
-			Tag:  m.wizard.areaEditTag,
-			Name: val,
-		})
-		m.wizard.areaCursor = len(m.wizard.areas) - 1
+		area := wizardArea{Tag: m.wizard.areaEditTag, Name: val}
+		if m.wizard.areaEditIdx >= 0 {
+			m.wizard.areas[m.wizard.areaEditIdx] = area
+			m.wizard.areaCursor = m.wizard.areaEditIdx
+		} else {
+			m.wizard.areas = append(m.wizard.areas, area)
+			m.wizard.areaCursor = len(m.wizard.areas) - 1
+		}
 		m.wizard.areaAdding = false
 		m.wizard.areaEditTag = ""
 		m.wizard.areaEditName = ""
 		m.textInput.Reset()
+		m.message = ""
+		return m, nil
+
+	case tea.KeyUp, tea.KeyShiftTab:
+		if m.wizard.areaEditField == 1 {
+			m.wizard.areaEditName = strings.TrimSpace(m.textInput.Value())
+			m.wizard.areaEditField = 0
+			m.textInput.SetValue(m.wizard.areaEditTag)
+			m.textInput.CursorEnd()
+			m.textInput.Focus()
+			return m, nil
+		}
+		return m, nil
+
+	default:
+		m = m.updateWizardTextInput(msg)
 		return m, nil
 	}
-	m = m.updateWizardTextInput(msg)
-	if m.wizard.areaEditTag != "" {
-		m.wizard.areaEditName = m.textInput.Value()
-	}
-	return m, nil
 }
 
 // confirmHubWizard creates the hub network configuration and saves.

@@ -53,6 +53,11 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyEscape:
+		// V3Net hub/leaf lists prompt to save before leaving.
+		if m.recordType == "v3nethub" || m.recordType == "v3netleaf" {
+			dest := m.backMode()
+			return m.promptNavSave(dest)
+		}
 		m.mode = m.backMode()
 		return m, nil
 	default:
@@ -92,6 +97,11 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if total > 0 {
 				m.mode = modeDeleteConfirm
 				m.confirmYes = false
+			}
+			return m, nil
+		case "s", "S":
+			if (m.recordType == "v3nethub" || m.recordType == "v3netleaf") && m.dirty {
+				m.saveAll()
 			}
 			return m, nil
 		case "p", "P":
@@ -194,6 +204,13 @@ func (m Model) updateRecordEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyTab, tea.KeyEnter:
 		f := m.recordFields[m.editField]
 		if f.Type == ftDisplay {
+			// V3Net hub network "Areas" field opens the area manager.
+			if m.recordType == "v3nethub" && f.Label == "Areas" {
+				if m.recordEditIdx >= 0 && m.recordEditIdx < len(m.configs.V3Net.Hub.Networks) {
+					netName := m.configs.V3Net.Hub.Networks[m.recordEditIdx].Name
+					return m.enterHubAreaManager(netName)
+				}
+			}
 			m.editField = m.nextRecordEditableField(1)
 			m.clampFieldScroll(m.recordFields)
 			return m, nil
@@ -220,6 +237,10 @@ func (m Model) updateRecordEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clampFieldScroll(m.recordFields)
 
 	case tea.KeyEscape:
+		// V3Net hub/leaf edits prompt to save before leaving.
+		if m.recordType == "v3nethub" || m.recordType == "v3netleaf" {
+			return m.promptNavSave(modeRecordList)
+		}
 		m.mode = modeRecordList
 		return m, nil
 

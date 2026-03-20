@@ -13,6 +13,14 @@ func (m *Model) fieldsV3NetHubNetwork() []fieldDef {
 	}
 	n := &m.configs.V3Net.Hub.Networks[idx]
 
+	// Count v3net message areas belonging to this network.
+	areaCount := 0
+	for _, a := range m.configs.MsgAreas {
+		if a.AreaType == "v3net" && a.Network == n.Name {
+			areaCount++
+		}
+	}
+
 	return []fieldDef{
 		{
 			Label: "Network Name", Help: "Short lowercase network identifier (e.g. felonynet)", Type: ftString, Col: 3, Row: 1, Width: 32,
@@ -29,6 +37,10 @@ func (m *Model) fieldsV3NetHubNetwork() []fieldDef {
 			Label: "Description", Help: "Human-readable description of this network", Type: ftString, Col: 3, Row: 2, Width: 49,
 			Get: func() string { return n.Description },
 			Set: func(val string) error { n.Description = val; return nil },
+		},
+		{
+			Label: "Areas", Help: "Press Enter to manage network message areas (delete, rename)", Type: ftDisplay, Col: 3, Row: 4, Width: 32,
+			Get: func() string { return fmt.Sprintf("%d area(s) — Enter to manage", areaCount) },
 		},
 	}
 }
@@ -79,12 +91,12 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 					l.Boards = nil
 				} else {
 					var boards []string
-				for _, part := range strings.Split(val, ",") {
-					if tag := strings.TrimSpace(part); tag != "" {
-						boards = append(boards, tag)
+					for _, part := range strings.Split(val, ",") {
+						if tag := strings.TrimSpace(part); tag != "" {
+							boards = append(boards, tag)
+						}
 					}
-				}
-				l.Boards = boards
+					l.Boards = boards
 				}
 				return nil
 			},

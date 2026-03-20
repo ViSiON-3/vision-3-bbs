@@ -3,6 +3,8 @@ package configeditor
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // viewV3NetWizard renders the hub areas sub-form (the only remaining
@@ -64,16 +66,31 @@ func (m Model) viewHubAreasStep() string {
 	b.WriteByte('\n')
 
 	if m.wizard.areaAdding {
-		if m.wizard.areaEditTag == "" {
-			b.WriteString(row("  Tag (e.g. net.general):"))
-		} else {
-			b.WriteString(row(fmt.Sprintf("  Tag: %s  Name:", m.wizard.areaEditTag)))
+		for _, af := range []struct {
+			label string
+			value string
+			idx   int
+		}{
+			{"Tag", m.wizard.areaEditTag, 0},
+			{"Name", m.wizard.areaEditName, 1},
+		} {
+			labelStr := fieldLabelStyle.Render(padRight(af.label, 16) + " : ")
+			var valueStr string
+			if af.idx == m.wizard.areaEditField {
+				valueStr = m.textInput.View()
+			} else {
+				valueStr = fieldDisplayStyle.Render(padRight(af.value, 30))
+			}
+			content := labelStr + valueStr
+			padBefore := 2
+			cw := lipgloss.Width(content)
+			padAfter := maxInt(0, boxW-padBefore-cw)
+			rowStr := fieldDisplayStyle.Render(strings.Repeat(" ", padBefore)) +
+				content +
+				fieldDisplayStyle.Render(strings.Repeat(" ", padAfter))
+			b.WriteString(border(editBorderStyle.Render("│") + rowStr + editBorderStyle.Render("│")))
+			b.WriteByte('\n')
 		}
-		b.WriteByte('\n')
-		b.WriteString(border(editBorderStyle.Render("│") +
-			fieldDisplayStyle.Width(boxW).Render("  > "+m.textInput.View()) +
-			editBorderStyle.Render("│")))
-		b.WriteByte('\n')
 	} else {
 		if len(m.wizard.areas) == 0 {
 			b.WriteString(row("  (no areas yet — press A to add)"))
@@ -101,7 +118,7 @@ func (m Model) viewHubAreasStep() string {
 		b.WriteByte('\n')
 	}
 
-	helpText := "A Add area  |  D Delete  |  Enter Done  |  ESC Back"
+	helpText := "A Add  |  E Edit  |  D Delete  |  Enter Done  |  ESC Back"
 	if m.wizard.areaAdding {
 		helpText = "Enter Confirm  |  ESC Cancel"
 	}

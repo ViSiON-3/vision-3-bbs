@@ -117,7 +117,7 @@ func (m *Model) fieldsHubWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Auto-Approve", Help: "Auto-approve new leaf connections (Y = testing only / N = manual)", Type: ftYesNo, Col: 3, Row: 4, Width: 1,
+			Label: "Auto-Approve", Help: "Auto-approve new leaf connections", Type: ftYesNo, Col: 3, Row: 4, Width: 1,
 			Get: func() string { return boolToYN(w.autoApprove) },
 			Set: func(val string) error {
 				w.autoApprove = ynToBool(val)

@@ -19,24 +19,31 @@ const (
 type editorMode int
 
 const (
-	modeTopMenu         editorMode = iota // Top-level menu
-	modeSysConfigMenu                     // System Configuration inner menu
-	modeSysConfigEdit                     // System config field navigation
-	modeSysConfigField                    // System config field editing (textinput active)
-	modeRecordList                        // Scrollable record list
-	modeRecordEdit                        // Single record field navigation
-	modeRecordField                       // Single record field editing
-	modeExitConfirm                       // Unsaved changes exit confirm
-	modeSaveConfirm                       // Confirm save
-	modeHelp                              // Help screen overlay
-	modeDeleteConfirm                     // Confirm delete record
-	modeLookupPicker                      // Lookup picker popup
-	modeRecordReorder                     // Reorder mode (move record to new position)
-	modeCategoryMenu                      // Generic category sub-menu
-	modeWizardForm                        // Wizard form field navigation
-	modeWizardField                       // Wizard form field editing (textinput active)
-	modeV3NetWizardStep                   // Hub areas sub-form
-	modeV3NetIdentity                     // V3Net Node Identity screen
+	modeTopMenu                editorMode = iota // Top-level menu
+	modeSysConfigMenu                            // System Configuration inner menu
+	modeSysConfigEdit                            // System config field navigation
+	modeSysConfigField                           // System config field editing (textinput active)
+	modeRecordList                               // Scrollable record list
+	modeRecordEdit                               // Single record field navigation
+	modeRecordField                              // Single record field editing
+	modeExitConfirm                              // Unsaved changes exit confirm
+	modeSaveConfirm                              // Confirm save
+	modeHelp                                     // Help screen overlay
+	modeDeleteConfirm                            // Confirm delete record
+	modeLookupPicker                             // Lookup picker popup
+	modeRecordReorder                            // Reorder mode (move record to new position)
+	modeCategoryMenu                             // Generic category sub-menu
+	modeWizardForm                               // Wizard form field navigation
+	modeWizardField                              // Wizard form field editing (textinput active)
+	modeV3NetWizardStep                          // Hub areas sub-form
+	modeV3NetIdentity                            // V3Net Node Identity screen
+	modeV3NetHubAreas                            // Hub area management list
+	modeV3NetAreaDeleteConfirm                   // Confirm area removal from config
+	modeV3NetAreaDeleteJAM                       // Confirm JAM file deletion
+	modeV3NetAreaRename                          // Rename area form
+	modeV3NetAreaRenameJAM                       // Confirm JAM base path rename
+	modeNavSaveConfirm                           // Save-and-continue confirm (does not quit)
+	modeWizardExitConfirm                        // Wizard discard/save confirm
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -77,15 +84,17 @@ type wizardState struct {
 	fetchError   string // set if auto-fetch failed
 
 	// Hub wizard fields (steps 0–3)
-	netName      string
-	netDesc      string
-	port         string
-	autoApprove  bool
-	areas        []wizardArea
-	areaEditTag  string
-	areaEditName string
-	areaAdding   bool // true when the area tag/name sub-form is open
-	areaCursor   int  // highlighted area in the area list
+	netName       string
+	netDesc       string
+	port          string
+	autoApprove   bool
+	areas         []wizardArea
+	areaEditTag   string
+	areaEditName  string
+	areaAdding    bool // true when the area form is open
+	areaCursor    int  // highlighted area in the area list
+	areaEditField int  // active field in area form (0=tag, 1=name)
+	areaEditIdx   int  // -1=adding new, >=0=editing existing area
 }
 
 // Model is the BubbleTea model for the config editor TUI.
@@ -140,7 +149,9 @@ type Model struct {
 	pickerReturnMode editorMode   // mode to return to on cancel/select
 
 	// Confirm dialog
-	confirmYes bool
+	confirmYes         bool
+	navSaveDestMode   editorMode // where to go on Yes or No
+	navSaveSourceMode editorMode // where to return on ESC (cancel)
 
 	// V3Net setup wizard state
 	wizard       *wizardState // pointer so field closures survive value-receiver copies
@@ -152,6 +163,15 @@ type Model struct {
 	identityPhrase        string
 	identityRecoverInput  string
 	identityRecoverNodeID string
+
+	// V3Net hub area management state
+	hubAreaNetwork    string // network name for filtering areas
+	hubAreaCursor     int
+	hubAreaScroll     int
+	hubAreaTargetIdx  int    // MsgAreas index of area being deleted/renamed
+	hubAreaRenameStep int    // 0=name, 1=basepath
+	hubAreaNewName    string // pending rename value
+	hubAreaNewBase    string // pending base path rename value
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool
@@ -273,6 +293,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateV3NetWizardStep(msg)
 		case modeV3NetIdentity:
 			return m.updateV3NetIdentity(msg)
+		case modeV3NetHubAreas:
+			return m.updateV3NetHubAreas(msg)
+		case modeV3NetAreaDeleteConfirm, modeV3NetAreaDeleteJAM:
+			return m.updateV3NetAreaDelete(msg)
+		case modeV3NetAreaRename, modeV3NetAreaRenameJAM:
+			return m.updateV3NetAreaRename(msg)
+		case modeNavSaveConfirm:
+			return m.updateNavSaveConfirm(msg)
+		case modeWizardExitConfirm:
+			return m.updateWizardExitConfirm(msg)
 		}
 	}
 	return m, nil
@@ -427,10 +457,7 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.rejectConfirm()
 	case tea.KeyEscape:
-		// Save confirmation requires an explicit yes/no choice
-		if m.mode != modeExitConfirm {
-			return m.rejectConfirm()
-		}
+		return m.cancelConfirm()
 	default:
 		switch msg.String() {
 		case "y", "Y":
@@ -441,6 +468,22 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// cancelConfirm handles ESC on any confirm dialog — returns to the screen
+// behind the dialog without taking action.
+func (m Model) cancelConfirm() (Model, tea.Cmd) {
+	switch m.mode {
+	case modeExitConfirm:
+		m.mode = modeTopMenu
+		return m, nil
+	case modeDeleteConfirm:
+		m.mode = modeRecordList
+		return m, nil
+	default:
+		m.mode = modeTopMenu
+		return m, nil
+	}
 }
 
 func (m Model) rejectConfirm() (Model, tea.Cmd) {
@@ -468,6 +511,54 @@ func (m Model) executeConfirm() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.mode = modeTopMenu
+	return m, nil
+}
+
+// --- Navigation Save Confirm ---
+
+// promptNavSave shows a save-and-continue dialog. If not dirty, navigates
+// directly to dest. Otherwise shows the confirmation overlay.
+// source is the mode to return to if the user presses ESC (cancel).
+func (m Model) promptNavSave(dest editorMode) (Model, tea.Cmd) {
+	if !m.dirty {
+		m.mode = dest
+		return m, nil
+	}
+	m.navSaveDestMode = dest
+	m.navSaveSourceMode = m.mode
+	m.confirmYes = true
+	m.mode = modeNavSaveConfirm
+	return m, nil
+}
+
+func (m Model) updateNavSaveConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyLeft, tea.KeyRight:
+		m.confirmYes = !m.confirmYes
+	case tea.KeyEnter:
+		if m.confirmYes {
+			m.saveAll()
+			m.mode = m.navSaveDestMode
+			return m, nil
+		}
+		// No — navigate away without saving.
+		m.mode = m.navSaveDestMode
+		return m, nil
+	case tea.KeyEscape:
+		// Cancel — return to where the user was.
+		m.mode = m.navSaveSourceMode
+		return m, nil
+	default:
+		switch msg.String() {
+		case "y", "Y":
+			m.saveAll()
+			m.mode = m.navSaveDestMode
+			return m, nil
+		case "n", "N":
+			m.mode = m.navSaveDestMode
+			return m, nil
+		}
+	}
 	return m, nil
 }
 

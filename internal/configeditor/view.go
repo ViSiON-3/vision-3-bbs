@@ -39,6 +39,28 @@ func (m Model) View() string {
 		return m.viewV3NetWizard()
 	case modeV3NetIdentity:
 		return m.viewV3NetIdentity()
+	case modeNavSaveConfirm:
+		return m.viewNavSaveConfirm()
+	case modeWizardExitConfirm:
+		bg := m.viewWizardForm()
+		return m.overlayConfirmDialog(bg, "-- Unsaved Wizard --",
+			"Save before leaving?")
+	case modeV3NetHubAreas:
+		return m.viewV3NetHubAreas()
+	case modeV3NetAreaDeleteConfirm:
+		bg := m.viewV3NetHubAreas()
+		return m.overlayConfirmDialog(bg, "-- Remove Area --",
+			"Remove this area from message area config?")
+	case modeV3NetAreaDeleteJAM:
+		bg := m.viewV3NetHubAreas()
+		return m.overlayConfirmDialog(bg, "-- Delete JAM Files --",
+			"Delete JAM message base files? (DESTRUCTIVE)")
+	case modeV3NetAreaRename:
+		return m.viewV3NetAreaRename()
+	case modeV3NetAreaRenameJAM:
+		bg := m.viewV3NetAreaRename()
+		return m.overlayConfirmDialog(bg, "-- Rename JAM Files --",
+			"Rename JAM base path on disk?")
 	}
 	return m.viewTopMenu()
 }
@@ -272,4 +294,25 @@ func (m Model) viewSysConfigMenu() string {
 	b.WriteString(helpBarStyle.Render(helpText))
 
 	return b.String()
+}
+
+// viewNavSaveConfirm renders the save-and-continue dialog over the appropriate
+// background screen.
+func (m Model) viewNavSaveConfirm() string {
+	// Render the background based on where we came from.
+	var bg string
+	switch m.navSaveSourceMode {
+	case modeV3NetHubAreas:
+		bg = m.viewV3NetHubAreas()
+	case modeRecordEdit, modeRecordField:
+		bg = m.viewRecordEdit()
+	case modeRecordList:
+		bg = m.viewRecordList()
+	case modeCategoryMenu:
+		bg = m.viewCategoryMenu()
+	default:
+		bg = m.viewTopMenu()
+	}
+	return m.overlayConfirmDialog(bg, "-- Unsaved Changes --",
+		"Save changes before leaving?")
 }

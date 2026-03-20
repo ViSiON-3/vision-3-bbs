@@ -62,6 +62,11 @@ func (m Model) updateWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clampFieldScroll(m.wizardFields)
 
 	case tea.KeyEscape:
+		if m.wizardHasData() {
+			m.confirmYes = true
+			m.mode = modeWizardExitConfirm
+			return m, nil
+		}
 		m.mode = modeRecordList
 		return m, nil
 
@@ -270,6 +275,53 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 		}
 	}
 	m.mode = modeRecordList
+	return m, nil
+}
+
+// wizardHasData returns true if any wizard field has been filled in.
+func (m Model) wizardHasData() bool {
+	if m.wizard == nil {
+		return false
+	}
+	switch m.wizard.flow {
+	case "hub":
+		return m.wizard.netName != "" || m.wizard.netDesc != "" ||
+			m.wizard.port != "8765" || len(m.wizard.areas) > 0
+	case "leaf":
+		return m.wizard.hubURL != "" || m.wizard.networkName != "" ||
+			m.wizard.boardTag != ""
+	}
+	return false
+}
+
+// updateWizardExitConfirm handles the wizard save/discard dialog.
+func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyLeft, tea.KeyRight:
+		m.confirmYes = !m.confirmYes
+	case tea.KeyEnter:
+		if m.confirmYes {
+			// Attempt to validate and save the wizard.
+			m.mode = modeWizardForm
+			return m.submitWizardForm()
+		}
+		// Discard — return to record list.
+		m.mode = modeRecordList
+		return m, nil
+	case tea.KeyEscape:
+		// Cancel — stay on wizard form.
+		m.mode = modeWizardForm
+		return m, nil
+	default:
+		switch msg.String() {
+		case "y", "Y":
+			m.mode = modeWizardForm
+			return m.submitWizardForm()
+		case "n", "N":
+			m.mode = modeRecordList
+			return m, nil
+		}
+	}
 	return m, nil
 }
 

@@ -9,7 +9,7 @@ func (m Model) overlayConfirmDialog(background, title, question string) string {
 	lines := strings.Split(background, "\n")
 
 	dialogW := 62
-	dialogH := 7
+	dialogH := 8
 	startRow := (m.height - dialogH) / 2
 	startCol := (m.width - dialogW) / 2
 	if startRow < 0 {
@@ -65,7 +65,14 @@ func (m Model) overlayConfirmDialog(background, title, question string) string {
 		dialogTextStyle.Render(strings.Repeat(" ", maxInt(0, dialogW-2-btnPad-btnVisW))) +
 		side
 
-	dialogLines := []string{border, titleLine, emptyLine, questionLine, emptyLine, buttonLine, borderBot}
+	// ESC hint line
+	escHint := "ESC - Cancel"
+	escPad := (dialogW - 2 - len(escHint)) / 2
+	escLine := side +
+		dialogTextStyle.Render(strings.Repeat(" ", maxInt(0, escPad))+escHint+strings.Repeat(" ", maxInt(0, dialogW-2-escPad-len(escHint)))) +
+		side
+
+	dialogLines := []string{border, titleLine, emptyLine, questionLine, emptyLine, buttonLine, escLine, borderBot}
 
 	// Overlay dialog on background, preserving content on both sides
 	endCol := startCol + dialogW
