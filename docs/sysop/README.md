@@ -13,13 +13,15 @@ Welcome, SysOp. This wiki covers everything you need to install, configure, and 
 New to ViSiON/3? Start here:
 
 1. **[Installation](getting-started/installation.md)** — download a pre-built release, or build from source
-2. **[Docker Deployment](getting-started/docker.md)** — containerized setup (recommended)
+2. **[Docker Deployment](getting-started/docker.md)** — containerized setup 
 3. **[Configuration Guide](configuration/configuration.md)** — configure your BBS
 4. **[Security](configuration/security.md)** — harden your installation
 
 ---
 
 ## Documentation Sections
+
+SysOp documentation is available at [Online Wiki](https://vision3bbs.com/sysop/).
 
 | Section | What's Covered |
 |---------|----------------|
