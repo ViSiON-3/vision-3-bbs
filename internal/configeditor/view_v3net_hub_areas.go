@@ -3,6 +3,8 @@ package configeditor
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // viewV3NetHubAreas renders the hub area management list.
@@ -102,7 +104,10 @@ func (m Model) viewV3NetHubAreas() string {
 
 	// Message line.
 	if m.message != "" {
-		b.WriteString(border(flashMessageStyle.Render(" " + padRight(m.message, boxW))))
+		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+		b.WriteString(msgLine)
 	} else {
 		b.WriteString(bgLine)
 	}
@@ -113,24 +118,31 @@ func (m Model) viewV3NetHubAreas() string {
 		b.WriteByte('\n')
 	}
 
-	helpStr := "D - Delete  |  R - Rename  |  S - Save  |  ESC/Q - Return"
+	helpStr := "I - Insert  |  E - Edit  |  D - Delete  |  S - Save  |  ESC/Q - Return"
 	if total == 0 {
-		helpStr = "(no areas)  |  S - Save  |  ESC/Q - Return"
+		helpStr = "I - Insert  |  S - Save  |  ESC/Q - Return"
 	}
 	b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))
 
 	return b.String()
 }
 
-// viewV3NetAreaRename renders the area rename form.
-func (m Model) viewV3NetAreaRename() string {
+// areaFormField describes one field in the insert/edit area form.
+type areaFormField struct {
+	label string
+	value string
+	step  int
+}
+
+// viewV3NetAreaForm renders a centered form box used by both insert and edit views.
+func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeStep int) string {
 	var b strings.Builder
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
 
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
-	boxH := 7 // top + title + blank + name + basepath + blank + bottom
+	boxH := 9 // top + title + blank + fields(4) + blank + bottom
 
 	extraV := maxInt(0, m.height-boxH-3)
 	topPad := extraV / 2
@@ -156,36 +168,28 @@ func (m Model) viewV3NetAreaRename() string {
 	b.WriteString(border(editBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
 	b.WriteByte('\n')
 	b.WriteString(border(editBorderStyle.Render("│") +
-		menuHeaderStyle.Render(centerText("Rename Area", boxW)) +
+		menuHeaderStyle.Render(centerText(title, boxW)) +
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
 	b.WriteString(row(strings.Repeat(" ", boxW)))
 	b.WriteByte('\n')
 
-	fields := []struct {
-		label string
-		value string
-		step  int
-	}{
-		{"Name", m.hubAreaNewName, 0},
-		{"Base Path", m.hubAreaNewBase, 1},
-	}
-
 	for _, f := range fields {
 		labelStr := fieldLabelStyle.Render(padRight(f.label, 12) + " : ")
 		var valueStr string
-		if f.step == m.hubAreaRenameStep {
+		if f.step == activeStep {
 			valueStr = m.textInput.View()
 		} else {
-			valueStr = fieldDisplayStyle.Render(padRight(f.value, 40))
+			valueStr = fieldDisplayStyle.Render(padRight(f.value, 30))
 		}
-		content := "  " + labelStr + valueStr
-		// Pad to box width.
-		vis := approximateVisibleLen(content)
-		if vis < boxW {
-			content += strings.Repeat(" ", boxW-vis)
-		}
-		b.WriteString(border(editBorderStyle.Render("│") + content + editBorderStyle.Render("│")))
+		content := labelStr + valueStr
+		padBefore := 2
+		cw := lipgloss.Width(content)
+		padAfter := maxInt(0, boxW-padBefore-cw)
+		rowStr := fieldDisplayStyle.Render(strings.Repeat(" ", padBefore)) +
+			content +
+			fieldDisplayStyle.Render(strings.Repeat(" ", padAfter))
+		b.WriteString(border(editBorderStyle.Render("│") + rowStr + editBorderStyle.Render("│")))
 		b.WriteByte('\n')
 	}
 
@@ -194,9 +198,11 @@ func (m Model) viewV3NetAreaRename() string {
 	b.WriteString(border(editBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
 
-	// Message line.
 	if m.message != "" {
-		b.WriteString(border(flashMessageStyle.Render(" " + padRight(m.message, boxW))))
+		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+		b.WriteString(msgLine)
 	} else {
 		b.WriteString(bgLine)
 	}
@@ -211,4 +217,24 @@ func (m Model) viewV3NetAreaRename() string {
 	b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))
 
 	return b.String()
+}
+
+// viewV3NetAreaInsert renders the area insert form.
+func (m Model) viewV3NetAreaInsert() string {
+	return m.viewV3NetAreaForm("Insert Area", []areaFormField{
+		{"Tag", m.hubAreaInsertTag, 0},
+		{"Name", m.hubAreaInsertName, 1},
+		{"Description", m.hubAreaInsertDesc, 2},
+		{"Local Path", m.hubAreaInsertBase, 3},
+	}, m.hubAreaInsertStep)
+}
+
+// viewV3NetAreaRename renders the area edit form.
+func (m Model) viewV3NetAreaRename() string {
+	return m.viewV3NetAreaForm("Edit Area", []areaFormField{
+		{"Tag", m.hubAreaEditTag, 0},
+		{"Name", m.hubAreaEditName, 1},
+		{"Description", m.hubAreaEditDesc, 2},
+		{"Local Path", m.hubAreaEditBase, 3},
+	}, m.hubAreaEditStep)
 }

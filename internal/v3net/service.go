@@ -88,6 +88,7 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 			areas = append(areas, protocol.Area{
 				Tag:              a.Tag,
 				Name:             a.Name,
+				Description:      a.Description,
 				Language:         "en",
 				ManagerNodeID:    ks.NodeID(),
 				ManagerPubKeyB64: ks.PubKeyBase64(),

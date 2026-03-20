@@ -55,6 +55,8 @@ func (m Model) View() string {
 		bg := m.viewV3NetHubAreas()
 		return m.overlayConfirmDialog(bg, "-- Delete JAM Files --",
 			"Delete JAM message base files? (DESTRUCTIVE)")
+	case modeV3NetAreaInsert:
+		return m.viewV3NetAreaInsert()
 	case modeV3NetAreaRename:
 		return m.viewV3NetAreaRename()
 	case modeV3NetAreaRenameJAM:

@@ -24,7 +24,7 @@ func (m Model) viewHubAreasStep() string {
 	// Content rows inside the box (between title and bottom border).
 	var contentRows int
 	if m.wizard.areaAdding {
-		contentRows = 2 // prompt + input
+		contentRows = 3 // tag + name + description
 	} else if len(m.wizard.areas) == 0 {
 		contentRows = 1 // "(no areas yet …)"
 	} else {
@@ -73,6 +73,7 @@ func (m Model) viewHubAreasStep() string {
 		}{
 			{"Tag", m.wizard.areaEditTag, 0},
 			{"Name", m.wizard.areaEditName, 1},
+			{"Description", m.wizard.areaEditDesc, 2},
 		} {
 			labelStr := fieldLabelStyle.Render(padRight(af.label, 16) + " : ")
 			var valueStr string

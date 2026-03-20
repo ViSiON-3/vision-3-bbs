@@ -42,6 +42,7 @@ const (
 	modeV3NetAreaDeleteJAM                       // Confirm JAM file deletion
 	modeV3NetAreaRename                          // Rename area form
 	modeV3NetAreaRenameJAM                       // Confirm JAM base path rename
+	modeV3NetAreaInsert                          // Insert new area form
 	modeNavSaveConfirm                           // Save-and-continue confirm (does not quit)
 	modeWizardExitConfirm                        // Wizard discard/save confirm
 )
@@ -66,8 +67,10 @@ type sysConfigMenuItem struct {
 
 // wizardArea is a single area entry in the hub setup wizard.
 type wizardArea struct {
-	Tag  string
-	Name string
+	Tag         string
+	Name        string
+	Description string
+	BasePath    string
 }
 
 // wizardState holds all transient state for the V3Net setup wizard.
@@ -91,9 +94,10 @@ type wizardState struct {
 	areas         []wizardArea
 	areaEditTag   string
 	areaEditName  string
+	areaEditDesc  string
 	areaAdding    bool // true when the area form is open
 	areaCursor    int  // highlighted area in the area list
-	areaEditField int  // active field in area form (0=tag, 1=name)
+	areaEditField int  // active field in area form (0=tag, 1=name, 2=desc)
 	areaEditIdx   int  // -1=adding new, >=0=editing existing area
 }
 
@@ -165,13 +169,26 @@ type Model struct {
 	identityRecoverNodeID string
 
 	// V3Net hub area management state
-	hubAreaNetwork    string // network name for filtering areas
-	hubAreaCursor     int
-	hubAreaScroll     int
-	hubAreaTargetIdx  int    // MsgAreas index of area being deleted/renamed
-	hubAreaRenameStep int    // 0=name, 1=basepath
-	hubAreaNewName    string // pending rename value
-	hubAreaNewBase    string // pending base path rename value
+	hubAreaNetwork  string // network name for filtering areas
+	hubAreaCursor   int
+	hubAreaScroll   int
+	hubAreaTargetIdx int // MsgAreas index of area being edited/deleted
+
+	// Edit form state (0=tag, 1=name, 2=desc, 3=basepath)
+	hubAreaEditStep int
+	hubAreaEditTag  string
+	hubAreaEditName string
+	hubAreaEditDesc string
+	hubAreaEditBase string
+	hubAreaOldTag   string // original tag before editing (for self-leaf sync)
+	hubAreaOldBase  string // original base path (for JAM rename detection)
+
+	// Insert form state (0=tag, 1=name, 2=desc, 3=basepath)
+	hubAreaInsertStep int
+	hubAreaInsertTag  string
+	hubAreaInsertName string
+	hubAreaInsertDesc string
+	hubAreaInsertBase string
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool
@@ -297,6 +314,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateV3NetHubAreas(msg)
 		case modeV3NetAreaDeleteConfirm, modeV3NetAreaDeleteJAM:
 			return m.updateV3NetAreaDelete(msg)
+		case modeV3NetAreaInsert:
+			return m.updateV3NetAreaInsert(msg)
 		case modeV3NetAreaRename, modeV3NetAreaRenameJAM:
 			return m.updateV3NetAreaRename(msg)
 		case modeNavSaveConfirm:

@@ -60,6 +60,7 @@ func (m Model) updateHubStepAreas(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.wizard.areaEditIdx = -1
 			m.wizard.areaEditTag = ""
 			m.wizard.areaEditName = ""
+			m.wizard.areaEditDesc = ""
 			m.textInput.Reset()
 			m.textInput.Width = 30
 			m.textInput.CharLimit = 40
@@ -72,6 +73,7 @@ func (m Model) updateHubStepAreas(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.wizard.areaEditIdx = i
 				m.wizard.areaEditTag = m.wizard.areas[i].Tag
 				m.wizard.areaEditName = m.wizard.areas[i].Name
+				m.wizard.areaEditDesc = m.wizard.areas[i].Description
 				m.textInput.SetValue(m.wizard.areas[i].Tag)
 				m.textInput.Width = 30
 				m.textInput.CharLimit = 40
@@ -101,7 +103,8 @@ func (m Model) updateHubAreaSubForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyEnter, tea.KeyTab, tea.KeyDown:
 		val := strings.TrimSpace(m.textInput.Value())
-		if m.wizard.areaEditField == 0 {
+		switch m.wizard.areaEditField {
+		case 0:
 			// Validate tag, advance to name.
 			if err := protocol.ValidateAreaTag(val); err != nil {
 				m.message = err.Error()
@@ -114,32 +117,53 @@ func (m Model) updateHubAreaSubForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textInput.Focus()
 			m.message = ""
 			return m, nil
-		}
-		// Name field — validate and save area.
-		if val == "" {
-			m.message = "Area name cannot be empty"
+		case 1:
+			// Name field — validate and advance to description.
+			if val == "" {
+				m.message = "Area name cannot be empty"
+				return m, nil
+			}
+			m.wizard.areaEditName = val
+			m.wizard.areaEditField = 2
+			m.textInput.SetValue(m.wizard.areaEditDesc)
+			m.textInput.CursorEnd()
+			m.textInput.Focus()
+			m.message = ""
+			return m, nil
+		case 2:
+			// Description field (optional) — save area.
+			m.wizard.areaEditDesc = val
+			area := wizardArea{Tag: m.wizard.areaEditTag, Name: m.wizard.areaEditName, Description: val}
+			if m.wizard.areaEditIdx >= 0 {
+				m.wizard.areas[m.wizard.areaEditIdx] = area
+				m.wizard.areaCursor = m.wizard.areaEditIdx
+			} else {
+				m.wizard.areas = append(m.wizard.areas, area)
+				m.wizard.areaCursor = len(m.wizard.areas) - 1
+			}
+			m.wizard.areaAdding = false
+			m.wizard.areaEditTag = ""
+			m.wizard.areaEditName = ""
+			m.wizard.areaEditDesc = ""
+			m.textInput.Reset()
+			m.message = ""
 			return m, nil
 		}
-		area := wizardArea{Tag: m.wizard.areaEditTag, Name: val}
-		if m.wizard.areaEditIdx >= 0 {
-			m.wizard.areas[m.wizard.areaEditIdx] = area
-			m.wizard.areaCursor = m.wizard.areaEditIdx
-		} else {
-			m.wizard.areas = append(m.wizard.areas, area)
-			m.wizard.areaCursor = len(m.wizard.areas) - 1
-		}
-		m.wizard.areaAdding = false
-		m.wizard.areaEditTag = ""
-		m.wizard.areaEditName = ""
-		m.textInput.Reset()
-		m.message = ""
 		return m, nil
 
 	case tea.KeyUp, tea.KeyShiftTab:
-		if m.wizard.areaEditField == 1 {
+		switch m.wizard.areaEditField {
+		case 1:
 			m.wizard.areaEditName = strings.TrimSpace(m.textInput.Value())
 			m.wizard.areaEditField = 0
 			m.textInput.SetValue(m.wizard.areaEditTag)
+			m.textInput.CursorEnd()
+			m.textInput.Focus()
+			return m, nil
+		case 2:
+			m.wizard.areaEditDesc = strings.TrimSpace(m.textInput.Value())
+			m.wizard.areaEditField = 1
+			m.textInput.SetValue(m.wizard.areaEditName)
 			m.textInput.CursorEnd()
 			m.textInput.Focus()
 			return m, nil
@@ -162,7 +186,7 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 
 	var initialAreas []config.V3NetHubArea
 	for _, a := range m.wizard.areas {
-		initialAreas = append(initialAreas, config.V3NetHubArea{Tag: a.Tag, Name: a.Name})
+		initialAreas = append(initialAreas, config.V3NetHubArea{Tag: a.Tag, Name: a.Name, Description: a.Description})
 	}
 
 	path := m.configs.V3Net.KeystorePath
@@ -244,18 +268,24 @@ func (m *Model) createHubMessageAreas(network string, areas []wizardArea) {
 			}
 		}
 
+		basePath := a.BasePath
+		if basePath == "" {
+			basePath = "msgbases/" + a.Tag
+		}
+
 		m.configs.MsgAreas = append(m.configs.MsgAreas, message.MessageArea{
-			ID:       newID,
-			Position: maxPos + 1,
-			Tag:      a.Tag,
-			Name:     a.Name,
-			AreaType: "v3net",
-			Network:  network,
-			EchoTag:  a.Tag,
-			AutoJoin: true,
-			ACSRead:  "s10",
-			ACSWrite: "s20",
-			BasePath: fmt.Sprintf("msgbases/area_%d", newID),
+			ID:          newID,
+			Position:    maxPos + 1,
+			Tag:         a.Tag,
+			Name:        a.Name,
+			Description: a.Description,
+			AreaType:    "v3net",
+			Network:     network,
+			EchoTag:     a.Tag,
+			AutoJoin:    true,
+			ACSRead:     "s10",
+			ACSWrite:    "s20",
+			BasePath:    basePath,
 		})
 		existing[a.Tag] = true
 	}

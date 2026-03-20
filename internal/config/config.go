@@ -921,8 +921,9 @@ type V3NetHubNetwork struct {
 // V3NetHubArea is an area spec written by the setup wizard and consumed
 // once at hub startup to seed the initial NAL.
 type V3NetHubArea struct {
-	Tag  string `json:"tag"`
-	Name string `json:"name"`
+	Tag         string `json:"tag"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 // V3NetLeafConfig configures a subscription to a V3Net network.

@@ -84,7 +84,7 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			},
 		},
 		{
-			Label: "Boards", Help: "Comma-separated local message area tags to receive messages (e.g. fel.general,fel.tech)", Type: ftString, Col: 3, Row: 3, Width: 49,
+			Label: "Boards", Help: "Comma-separated area tags (e.g. fel.general,fel.tech)", Type: ftString, Col: 3, Row: 3, Width: 49,
 			Get: func() string { return strings.Join(l.Boards, ",") },
 			Set: func(val string) error {
 				if val == "" {
