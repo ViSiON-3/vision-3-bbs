@@ -45,6 +45,7 @@ const (
 	modeV3NetAreaInsert                          // Insert new area form
 	modeNavSaveConfirm                           // Save-and-continue confirm (does not quit)
 	modeWizardExitConfirm                        // Wizard discard/save confirm
+	modeV3NetAreaBrowser                         // Area browser (NAL fetch + subscribe)
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -73,6 +74,16 @@ type wizardArea struct {
 	BasePath    string
 }
 
+// areaBrowserItem represents one area in the NAL area browser.
+type areaBrowserItem struct {
+	Tag         string // NAL area tag (e.g. "fel.general")
+	Name        string // Display name (e.g. "General")
+	Description string
+	Status      string // "", "ACTIVE", "PENDING", "DENIED"
+	Subscribed  bool   // toggled by Space
+	LocalBoard  string // auto-generated or user-edited local board name
+}
+
 // wizardState holds all transient state for the V3Net setup wizard.
 type wizardState struct {
 	flow string // "leaf" or "hub"
@@ -85,6 +96,8 @@ type wizardState struct {
 	pollInterval string
 	origin       string
 	fetchError   string // set if auto-fetch failed
+
+	selectedAreas []areaBrowserItem // areas selected during wizard flow
 
 	// Hub wizard fields (steps 0–3)
 	netName       string
@@ -189,6 +202,18 @@ type Model struct {
 	hubAreaInsertName string
 	hubAreaInsertDesc string
 	hubAreaInsertBase string
+
+	// V3Net area browser state
+	areaBrowserHub      string            // hub URL being browsed
+	areaBrowserNetwork  string            // network name
+	areaBrowserAreas    []areaBrowserItem // fetched areas with status
+	areaBrowserCursor   int               // highlighted row
+	areaBrowserScroll   int               // scroll offset
+	areaBrowserLoading  bool              // true while NAL fetch in flight
+	areaBrowserError    string            // error from fetch/subscribe
+	areaBrowserManual   bool              // true when in manual fallback mode
+	areaBrowserEditing  bool              // true when editing local board name
+	areaBrowserReturn   editorMode        // mode to return to on ESC
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool
