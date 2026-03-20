@@ -165,7 +165,7 @@ type Model struct {
 	pickerReturnMode editorMode   // mode to return to on cancel/select
 
 	// Confirm dialog
-	confirmYes         bool
+	confirmYes        bool
 	navSaveDestMode   editorMode // where to go on Yes or No
 	navSaveSourceMode editorMode // where to return on ESC (cancel)
 
@@ -181,9 +181,9 @@ type Model struct {
 	identityRecoverNodeID string
 
 	// V3Net hub area management state
-	hubAreaNetwork  string // network name for filtering areas
-	hubAreaCursor   int
-	hubAreaScroll   int
+	hubAreaNetwork   string // network name for filtering areas
+	hubAreaCursor    int
+	hubAreaScroll    int
 	hubAreaTargetIdx int // MsgAreas index of area being edited/deleted
 
 	// Edit form state (0=tag, 1=name, 2=desc, 3=basepath)
@@ -203,16 +203,16 @@ type Model struct {
 	hubAreaInsertBase string
 
 	// V3Net area browser state
-	areaBrowserHub      string            // hub URL being browsed
-	areaBrowserNetwork  string            // network name
-	areaBrowserAreas    []areaBrowserItem // fetched areas with status
-	areaBrowserCursor   int               // highlighted row
-	areaBrowserScroll   int               // scroll offset
-	areaBrowserLoading  bool              // true while NAL fetch in flight
-	areaBrowserError    string            // error from fetch/subscribe
-	areaBrowserManual   bool              // true when in manual fallback mode
-	areaBrowserEditing  bool              // true when editing local board name
-	areaBrowserReturn   editorMode        // mode to return to on ESC
+	areaBrowserHub     string            // hub URL being browsed
+	areaBrowserNetwork string            // network name
+	areaBrowserAreas   []areaBrowserItem // fetched areas with status
+	areaBrowserCursor  int               // highlighted row
+	areaBrowserScroll  int               // scroll offset
+	areaBrowserLoading bool              // true while NAL fetch in flight
+	areaBrowserError   string            // error from fetch/subscribe
+	areaBrowserManual  bool              // true when in manual fallback mode
+	areaBrowserEditing bool              // true when editing local board name
+	areaBrowserReturn  editorMode        // mode to return to on ESC
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool

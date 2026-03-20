@@ -92,7 +92,9 @@ func TestLeafWizardForm_ValidSubmit(t *testing.T) {
 	m := newLeafWizardModel()
 	m.wizard.hubURL = "https://hub.example.com"
 	m.wizard.networkName = "testnet"
-	m.wizard.boardTag = "testnet"
+	m.wizard.selectedAreas = []areaBrowserItem{
+		{Tag: "test.general", Name: "General", Subscribed: true, LocalBoard: "Testnet General"},
+	}
 	m.wizard.pollInterval = "5m"
 	m.wizardFields = m.fieldsLeafWizard()
 	result, _ := m.updateWizardForm(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
