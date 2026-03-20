@@ -63,6 +63,8 @@ func (m Model) View() string {
 		bg := m.viewV3NetAreaRename()
 		return m.overlayConfirmDialog(bg, "-- Rename JAM Files --",
 			"Rename JAM base path on disk?")
+	case modeV3NetAreaBrowser:
+		return m.viewV3NetAreaBrowser()
 	}
 	return m.viewTopMenu()
 }
