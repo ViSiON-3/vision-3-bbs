@@ -187,7 +187,7 @@ your network entry:
 {
   "name": "felonynet",
   "description": "General discussion. No warrants required.",
-  "hub_url": "https://hub.felonynet.org",
+  "hub_url": "https://felonynet.org",
   "hub_node_id": "22819c83e045cd1e",
   "area_tags": ["fn.general", "fn.testing", "fn.vision3"]
 }

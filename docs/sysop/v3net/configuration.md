@@ -67,7 +67,7 @@ already subscribed to.
     {
       "name": "felonynet",
       "description": "Official ViSiON/3 BBS message network",
-      "hub_url": "https://hub.felonynet.org",
+      "hub_url": "https://felonynet.org",
       "hub_node_id": "22819c83e045cd1e"
     }
   ]
@@ -213,8 +213,8 @@ Each entry in the `leaves` array subscribes your BBS to one network on one hub. 
     {
       "hubUrl": "https://hub.retronet.io",
       "network": "retronet",
-      "board": "retro.general",
-      "pollInterval": "10m"
+      "board": "ret.general",
+      "pollInterval": "5m"
     }
   ]
 }

@@ -5,7 +5,7 @@
     {
       "name": "felonynet",
       "description": "Official ViSiON/3 BBS message network",
-      "hub_url": "https://hub.felonynet.org",
+      "hub_url": "https://felonynet.org",
       "hub_node_id": "22819c83e045cd1e"
     }
   ]
