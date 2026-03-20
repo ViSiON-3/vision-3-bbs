@@ -13,7 +13,7 @@ func (m Model) viewV3NetAreaBrowser() string {
 
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 70
-	listVisible := 10
+	listVisible := areaBrowserListVisible
 	total := len(m.areaBrowserAreas)
 
 	// Fixed rows: header(1) + border(1) + title(1) + colheader(1) + sep(1)
