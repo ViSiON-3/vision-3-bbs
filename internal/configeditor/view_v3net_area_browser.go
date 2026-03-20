@@ -69,10 +69,6 @@ func (m Model) viewV3NetAreaBrowser() string {
 		return b.String()
 	}
 
-	if m.areaBrowserManual {
-		return m.viewAreaBrowserManual()
-	}
-
 	if m.areaBrowserError != "" && total == 0 {
 		b.WriteString(border(menuBorderStyle.Render("│") +
 			flashMessageStyle.Render(padRight(" "+m.areaBrowserError, boxW)) +
@@ -92,7 +88,7 @@ func (m Model) viewV3NetAreaBrowser() string {
 		}
 		b.WriteString(bgLine)
 		b.WriteByte('\n')
-		helpStr := "R - Retry  |  M - Manual Entry  |  ESC - Back"
+		helpStr := "R - Retry  |  ESC - Back"
 		b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))
 		return b.String()
 	}
@@ -180,73 +176,9 @@ func (m Model) viewV3NetAreaBrowser() string {
 	}
 
 	// Help bar.
-	var helpStr string
-	if m.areaBrowserEditing {
-		helpStr = "Enter - Save  |  ESC - Cancel"
-	} else {
-		helpStr = "Space - Subscribe/Unsubscribe  |  E - Edit Board Name  |  M - Manual  |  ESC - Done"
-	}
+	helpStr := "Space - Subscribe/Unsubscribe  |  ESC - Done"
 	b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))
 
 	return b.String()
 }
 
-// viewAreaBrowserManual renders the manual text entry mode.
-func (m Model) viewAreaBrowserManual() string {
-	var b strings.Builder
-	b.WriteString(m.globalHeaderLine())
-	b.WriteByte('\n')
-
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
-	boxW := 70
-
-	extraV := maxInt(0, m.height-10)
-	topPad := extraV / 2
-	bottomPad := extraV - topPad
-
-	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
-
-	padL := maxInt(0, (m.width-boxW-2)/2)
-	padR := maxInt(0, m.width-padL-boxW-2)
-
-	border := func(s string) string {
-		return bgFillStyle.Render(strings.Repeat("░", padL)) + s +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-	}
-
-	row := func(content string) string {
-		return border(editBorderStyle.Render("│") +
-			fieldDisplayStyle.Width(boxW).Render(content) +
-			editBorderStyle.Render("│"))
-	}
-
-	b.WriteString(border(editBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
-	b.WriteByte('\n')
-	b.WriteString(border(editBorderStyle.Render("│") +
-		menuHeaderStyle.Render(centerText("Manual Area Entry", boxW)) +
-		editBorderStyle.Render("│")))
-	b.WriteByte('\n')
-	b.WriteString(row(strings.Repeat(" ", boxW)))
-	b.WriteByte('\n')
-	b.WriteString(row("  Enter comma-separated area tags (e.g. fel.general,fel.tech):"))
-	b.WriteByte('\n')
-	b.WriteString(row("  " + m.textInput.View()))
-	b.WriteByte('\n')
-	b.WriteString(row(strings.Repeat(" ", boxW)))
-	b.WriteByte('\n')
-	b.WriteString(border(editBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
-	b.WriteByte('\n')
-
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
-
-	helpStr := "Enter - Apply  |  ESC - Cancel"
-	b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))
-
-	return b.String()
-}

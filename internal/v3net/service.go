@@ -69,7 +69,9 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 		}
 	}
 
-	// Step 2: seed NAL from InitialAreas if no NAL exists yet.
+	// Step 2: merge InitialAreas into the NAL. If no NAL exists, create one.
+	// If a NAL already exists, only add areas not already present — this lets
+	// new areas be added to initialAreas after the hub has been running.
 	if len(cfg.Hub.InitialAreas) == 0 {
 		return
 	}
@@ -79,13 +81,21 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 			slog.Warn("v3net: could not check NAL for seeding", "network", n.Name, "error", err)
 			continue
 		}
-		if existing != nil {
-			continue // NAL already exists — skip seeding.
+
+		nalDoc := existing
+		if nalDoc == nil {
+			nalDoc = &protocol.NAL{
+				V3NetNAL: "1.0",
+				Network:  n.Name,
+			}
 		}
 
-		var areas []protocol.Area
+		added := 0
 		for _, a := range cfg.Hub.InitialAreas {
-			areas = append(areas, protocol.Area{
+			if nalDoc.FindArea(a.Tag) != nil {
+				continue // already in NAL
+			}
+			nalDoc.Areas = append(nalDoc.Areas, protocol.Area{
 				Tag:              a.Tag,
 				Name:             a.Name,
 				Description:      a.Description,
@@ -98,13 +108,13 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 					AllowANSI:    true,
 				},
 			})
+			added++
 		}
 
-		nalDoc := &protocol.NAL{
-			V3NetNAL: "1.0",
-			Network:  n.Name,
-			Areas:    areas,
+		if added == 0 {
+			continue // nothing new to add
 		}
+
 		if err := nal.Sign(nalDoc, ks); err != nil {
 			slog.Error("v3net: could not sign initial NAL", "network", n.Name, "error", err)
 			continue
@@ -113,7 +123,7 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 			slog.Error("v3net: could not store initial NAL", "network", n.Name, "error", err)
 			continue
 		}
-		slog.Info("v3net: seeded initial NAL", "network", n.Name, "areas", len(areas))
+		slog.Info("v3net: merged initial areas into NAL", "network", n.Name, "added", added, "total", len(nalDoc.Areas))
 	}
 
 	// Clear initialAreas from the saved config file so we don't re-seed.

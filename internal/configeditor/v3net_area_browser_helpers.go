@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -64,6 +65,9 @@ func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 			Description: a.Description,
 			Subscribed:  subscribed[a.Tag],
 		}
+		if subscribed[a.Tag] {
+			item.Status = "SUB"
+		}
 		if name, ok := localNames[a.Tag]; ok {
 			item.LocalBoard = name
 		} else if item.Subscribed {
@@ -93,7 +97,9 @@ func (m Model) handleSubscribeAreasMsg(msg subscribeAreasMsg) (tea.Model, tea.Cm
 			m.areaBrowserAreas[i].Status = st
 		}
 	}
-	m.message = "Subscription updated"
+	if m.mode == modeV3NetAreaBrowser {
+		m.message = "Subscription updated"
+	}
 	return m, nil
 }
 
@@ -136,6 +142,21 @@ func (m *Model) createBrowserMessageAreas() {
 	}
 }
 
+// sanitizeTag strips path separators, traversal sequences, reserved
+// characters, and null bytes from a tag so it is safe to use as a
+// filesystem path component.
+func sanitizeTag(tag string) string {
+	s := strings.TrimSpace(tag)
+	// Remove null bytes.
+	s = strings.ReplaceAll(s, "\x00", "")
+	// Remove path separators and reserved characters.
+	for _, c := range []string{"/", "\\", ":", "..", "<", ">", "|", "*", "?"} {
+		s = strings.ReplaceAll(s, c, "")
+	}
+	s = strings.TrimSpace(s)
+	return s
+}
+
 // createBrowserMsgAreaIfNeeded creates a single MsgArea if one doesn't already
 // exist with the given EchoTag.
 func (m *Model) createBrowserMsgAreaIfNeeded(tag, name, network string) {
@@ -154,6 +175,10 @@ func (m *Model) createBrowserMsgAreaIfNeeded(tag, name, network string) {
 			maxPos = ma.Position
 		}
 	}
+	safeName := sanitizeTag(tag)
+	if safeName == "" {
+		safeName = fmt.Sprintf("unnamed_%d", newID)
+	}
 	m.configs.MsgAreas = append(m.configs.MsgAreas, message.MessageArea{
 		ID:       newID,
 		Position: maxPos + 1,
@@ -165,7 +190,7 @@ func (m *Model) createBrowserMsgAreaIfNeeded(tag, name, network string) {
 		AutoJoin: true,
 		ACSRead:  "s10",
 		ACSWrite: "s20",
-		BasePath: "msgbases/" + tag,
+		BasePath: filepath.Join("msgbases", safeName),
 	})
 }
 
@@ -188,8 +213,6 @@ func (m Model) enterAreaBrowser(hubURL, network string, returnMode editorMode) (
 	m.areaBrowserScroll = 0
 	m.areaBrowserLoading = true
 	m.areaBrowserError = ""
-	m.areaBrowserManual = false
-	m.areaBrowserEditing = false
 	m.areaBrowserReturn = returnMode
 	m.message = ""
 	m.mode = modeV3NetAreaBrowser
