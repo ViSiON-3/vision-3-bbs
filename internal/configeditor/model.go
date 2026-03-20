@@ -45,6 +45,7 @@ const (
 	modeV3NetAreaInsert                          // Insert new area form
 	modeNavSaveConfirm                           // Save-and-continue confirm (does not quit)
 	modeWizardExitConfirm                        // Wizard discard/save confirm
+	modeV3NetAreaBrowser                         // Area browser (NAL fetch + subscribe)
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -73,6 +74,16 @@ type wizardArea struct {
 	BasePath    string
 }
 
+// areaBrowserItem represents one area in the NAL area browser.
+type areaBrowserItem struct {
+	Tag         string // NAL area tag (e.g. "fel.general")
+	Name        string // Display name (e.g. "General")
+	Description string
+	Status      string // "", "ACTIVE", "PENDING", "DENIED"
+	Subscribed  bool   // toggled by Space
+	LocalBoard  string // auto-generated or user-edited local board name
+}
+
 // wizardState holds all transient state for the V3Net setup wizard.
 type wizardState struct {
 	flow string // "leaf" or "hub"
@@ -81,10 +92,11 @@ type wizardState struct {
 	// Leaf wizard fields
 	hubURL       string
 	networkName  string
-	boardTag     string
 	pollInterval string
 	origin       string
 	fetchError   string // set if auto-fetch failed
+
+	selectedAreas []areaBrowserItem // areas selected during wizard flow
 
 	// Hub wizard fields (steps 0–3)
 	netName       string
@@ -153,7 +165,7 @@ type Model struct {
 	pickerReturnMode editorMode   // mode to return to on cancel/select
 
 	// Confirm dialog
-	confirmYes         bool
+	confirmYes        bool
 	navSaveDestMode   editorMode // where to go on Yes or No
 	navSaveSourceMode editorMode // where to return on ESC (cancel)
 
@@ -169,9 +181,9 @@ type Model struct {
 	identityRecoverNodeID string
 
 	// V3Net hub area management state
-	hubAreaNetwork  string // network name for filtering areas
-	hubAreaCursor   int
-	hubAreaScroll   int
+	hubAreaNetwork   string // network name for filtering areas
+	hubAreaCursor    int
+	hubAreaScroll    int
 	hubAreaTargetIdx int // MsgAreas index of area being edited/deleted
 
 	// Edit form state (0=tag, 1=name, 2=desc, 3=basepath)
@@ -189,6 +201,16 @@ type Model struct {
 	hubAreaInsertName string
 	hubAreaInsertDesc string
 	hubAreaInsertBase string
+
+	// V3Net area browser state
+	areaBrowserHub     string            // hub URL being browsed
+	areaBrowserNetwork string            // network name
+	areaBrowserAreas   []areaBrowserItem // fetched areas with status
+	areaBrowserCursor  int               // highlighted row
+	areaBrowserScroll  int               // scroll offset
+	areaBrowserLoading bool              // true while NAL fetch in flight
+	areaBrowserError   string            // error from fetch/subscribe
+	areaBrowserReturn editorMode // mode to return to on ESC
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool
@@ -276,53 +298,72 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fetchNetworksMsg:
 		return m.handleFetchNetworksMsg(msg)
 
+	case fetchNALMsg:
+		return m.handleFetchNALMsg(msg)
+
+	case subscribeAreasMsg:
+		return m.handleSubscribeAreasMsg(msg)
+
 	case tea.KeyMsg:
+		prevMode := m.mode
+		var result tea.Model
+		var cmd tea.Cmd
 		switch m.mode {
 		case modeTopMenu:
-			return m.updateTopMenu(msg)
+			result, cmd = m.updateTopMenu(msg)
 		case modeCategoryMenu:
-			return m.updateCategoryMenu(msg)
+			result, cmd = m.updateCategoryMenu(msg)
 		case modeSysConfigMenu:
-			return m.updateSysConfigMenu(msg)
+			result, cmd = m.updateSysConfigMenu(msg)
 		case modeSysConfigEdit:
-			return m.updateSysConfigEdit(msg)
+			result, cmd = m.updateSysConfigEdit(msg)
 		case modeSysConfigField:
-			return m.updateSysConfigField(msg)
+			result, cmd = m.updateSysConfigField(msg)
 		case modeRecordList:
-			return m.updateRecordList(msg)
+			result, cmd = m.updateRecordList(msg)
 		case modeRecordReorder:
-			return m.updateRecordReorder(msg)
+			result, cmd = m.updateRecordReorder(msg)
 		case modeRecordEdit:
-			return m.updateRecordEdit(msg)
+			result, cmd = m.updateRecordEdit(msg)
 		case modeRecordField:
-			return m.updateRecordField(msg)
+			result, cmd = m.updateRecordField(msg)
 		case modeExitConfirm, modeSaveConfirm, modeDeleteConfirm:
-			return m.updateConfirm(msg)
+			result, cmd = m.updateConfirm(msg)
 		case modeLookupPicker:
-			return m.updateLookupPicker(msg)
+			result, cmd = m.updateLookupPicker(msg)
 		case modeHelp:
-			return m.updateHelp(msg)
+			result, cmd = m.updateHelp(msg)
 		case modeWizardForm:
-			return m.updateWizardForm(msg)
+			result, cmd = m.updateWizardForm(msg)
 		case modeWizardField:
-			return m.updateWizardField(msg)
+			result, cmd = m.updateWizardField(msg)
 		case modeV3NetWizardStep:
-			return m.updateV3NetWizardStep(msg)
+			result, cmd = m.updateV3NetWizardStep(msg)
 		case modeV3NetIdentity:
-			return m.updateV3NetIdentity(msg)
+			result, cmd = m.updateV3NetIdentity(msg)
 		case modeV3NetHubAreas:
-			return m.updateV3NetHubAreas(msg)
+			result, cmd = m.updateV3NetHubAreas(msg)
 		case modeV3NetAreaDeleteConfirm, modeV3NetAreaDeleteJAM:
-			return m.updateV3NetAreaDelete(msg)
+			result, cmd = m.updateV3NetAreaDelete(msg)
 		case modeV3NetAreaInsert:
-			return m.updateV3NetAreaInsert(msg)
+			result, cmd = m.updateV3NetAreaInsert(msg)
 		case modeV3NetAreaRename, modeV3NetAreaRenameJAM:
-			return m.updateV3NetAreaRename(msg)
+			result, cmd = m.updateV3NetAreaRename(msg)
 		case modeNavSaveConfirm:
-			return m.updateNavSaveConfirm(msg)
+			result, cmd = m.updateNavSaveConfirm(msg)
 		case modeWizardExitConfirm:
-			return m.updateWizardExitConfirm(msg)
+			result, cmd = m.updateWizardExitConfirm(msg)
+		case modeV3NetAreaBrowser:
+			result, cmd = m.updateV3NetAreaBrowser(msg)
+		default:
+			return m, nil
 		}
+		// Clear non-error flash messages when navigating to a different screen.
+		if nm, ok := result.(Model); ok && nm.mode != prevMode && !strings.HasPrefix(nm.message, "SAVE ERROR") {
+			nm.message = ""
+			return nm, cmd
+		}
+		return result, cmd
 	}
 	return m, nil
 }
