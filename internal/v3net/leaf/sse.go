@@ -53,7 +53,7 @@ func (l *Leaf) runSSE(ctx context.Context) {
 
 func (l *Leaf) connectSSE(ctx context.Context) error {
 	path := fmt.Sprintf("/v3net/v1/%s/events", l.cfg.Network)
-	resp, err := l.signedGetCtx(ctx, path)
+	resp, err := l.signedGetSSE(ctx, path)
 	if err != nil {
 		return fmt.Errorf("SSE connect: %w", err)
 	}

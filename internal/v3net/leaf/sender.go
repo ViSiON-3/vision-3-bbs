@@ -182,6 +182,14 @@ func (l *Leaf) signedGet(path string) (*http.Response, error) {
 }
 
 func (l *Leaf) signedGetCtx(ctx context.Context, path string) (*http.Response, error) {
+	return l.signedGetWith(ctx, path, l.client)
+}
+
+func (l *Leaf) signedGetSSE(ctx context.Context, path string) (*http.Response, error) {
+	return l.signedGetWith(ctx, path, l.sseClient)
+}
+
+func (l *Leaf) signedGetWith(ctx context.Context, path string, c *http.Client) (*http.Response, error) {
 	url := l.cfg.HubURL + path
 	emptyHash := sha256.Sum256(nil)
 	bodySHA := hex.EncodeToString(emptyHash[:])
@@ -200,5 +208,5 @@ func (l *Leaf) signedGetCtx(ctx context.Context, path string) (*http.Response, e
 	req.Header.Set("X-V3Net-Node-ID", l.cfg.Keystore.NodeID())
 	req.Header.Set("X-V3Net-Signature", sig)
 
-	return l.client.Do(req)
+	return c.Do(req)
 }
