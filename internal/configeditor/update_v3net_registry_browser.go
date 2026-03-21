@@ -96,7 +96,7 @@ func (m Model) handleFetchRegistryMsg(msg fetchRegistryMsg) (tea.Model, tea.Cmd)
 		if errors.As(msg.err, &urlErr) {
 			cause = urlErr.Err
 		}
-		m.regBrowserError = fmt.Sprintf("Could not fetch registry: %v", cause)
+		m.regBrowserError = fmt.Sprintf("Could not fetch registry: %v", sanitizeRegistryField(cause.Error()))
 		return m, nil
 	}
 	m.regBrowserError = ""

@@ -89,8 +89,12 @@ func (m Model) viewRegistryBrowser() string {
 	}
 
 	if m.regBrowserError != "" && total == 0 {
+		errText := " " + m.regBrowserError
+		if len([]rune(errText)) > boxW {
+			errText = string([]rune(errText)[:boxW-3]) + "..."
+		}
 		b.WriteString(border(menuBorderStyle.Render("│") +
-			flashMessageStyle.Render(padRight(" "+m.regBrowserError, boxW)) +
+			flashMessageStyle.Render(padRight(errText, boxW)) +
 			menuBorderStyle.Render("│")))
 		b.WriteByte('\n')
 		for i := 0; i < listVisible+1; i++ {

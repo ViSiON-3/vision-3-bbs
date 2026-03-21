@@ -213,7 +213,7 @@ type Model struct {
 	areaBrowserScroll  int               // scroll offset
 	areaBrowserLoading bool              // true while NAL fetch in flight
 	areaBrowserError   string            // error from fetch/subscribe
-	areaBrowserReturn editorMode // mode to return to on ESC
+	areaBrowserReturn  editorMode // mode to return to on ESC
 
 	// V3Net registry browser state
 	regBrowserEntries []protocol.RegistryEntry // fetched networks

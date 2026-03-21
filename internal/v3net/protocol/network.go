@@ -153,6 +153,8 @@ type AreaSubscriptionStatus struct {
 }
 
 // SubscribeWithAreasResponse is the response when area_tags are provided.
+// Status is the network-level subscription status (e.g. "active", "pending").
+// Areas contains per-area subscription statuses; may be empty if no areas were processed.
 type SubscribeWithAreasResponse struct {
 	OK     bool                     `json:"ok"`
 	Status string                   `json:"status"`
