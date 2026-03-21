@@ -74,7 +74,12 @@ func (m Model) viewRecordList() string {
 
 		var rowContent string
 		if idx < 0 || idx >= total {
-			rowContent = menuItemStyle.Render(strings.Repeat(" ", boxW))
+			if row == 0 && total == 0 && m.recordType == "v3nethub" {
+				hint := " Only operators running their own hub/network will have entries here."
+				rowContent = menuItemStyle.Render(padRight(hint, boxW))
+			} else {
+				rowContent = menuItemStyle.Render(strings.Repeat(" ", boxW))
+			}
 		} else {
 			content := m.renderRecordRow(idx, boxW)
 			switch {
@@ -173,7 +178,7 @@ func (m Model) recordTypeTitle() string {
 	case "v3netleaf":
 		return "V3Net Subscriptions"
 	case "v3nethub":
-		return "V3Net Networks"
+		return "V3Net Hosted Networks"
 	}
 	return "Records"
 }

@@ -451,7 +451,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.catMenuItems = []categoryMenuItem{
 			{Label: "Node Identity", Mode: modeV3NetIdentity},
 			{Label: "Subscriptions", RecordType: "v3netleaf"},
-			{Label: "Networks", RecordType: "v3nethub"},
+			{Label: "Hosted Networks", RecordType: "v3nethub"},
 		}
 		m.catMenuCursor = 0
 		m.mode = modeCategoryMenu
