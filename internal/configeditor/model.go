@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 const (
@@ -46,6 +48,7 @@ const (
 	modeNavSaveConfirm                           // Save-and-continue confirm (does not quit)
 	modeWizardExitConfirm                        // Wizard discard/save confirm
 	modeV3NetAreaBrowser                         // Area browser (NAL fetch + subscribe)
+	modeRegistryBrowser                          // Registry browser (discover networks)
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -210,7 +213,17 @@ type Model struct {
 	areaBrowserScroll  int               // scroll offset
 	areaBrowserLoading bool              // true while NAL fetch in flight
 	areaBrowserError   string            // error from fetch/subscribe
-	areaBrowserReturn editorMode // mode to return to on ESC
+	areaBrowserReturn  editorMode // mode to return to on ESC
+
+	// V3Net registry browser state
+	regBrowserEntries []protocol.RegistryEntry // fetched networks
+	regBrowserCursor  int                      // highlighted row
+	regBrowserScroll  int                      // scroll offset
+	regBrowserLoading   bool                     // true while fetch in flight
+	regBrowserCancel    context.CancelFunc        // cancels the in-flight fetch
+	regBrowserRequestID uint64                    // monotonic; stale responses are ignored
+	regBrowserError     string                   // error from fetch
+	regBrowserReturn    editorMode               // mode to return to on ESC
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool
@@ -304,6 +317,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subscribeAreasMsg:
 		return m.handleSubscribeAreasMsg(msg)
 
+	case fetchRegistryMsg:
+		return m.handleFetchRegistryMsg(msg)
+
 	case tea.KeyMsg:
 		prevMode := m.mode
 		var result tea.Model
@@ -355,6 +371,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateWizardExitConfirm(msg)
 		case modeV3NetAreaBrowser:
 			result, cmd = m.updateV3NetAreaBrowser(msg)
+		case modeRegistryBrowser:
+			result, cmd = m.updateRegistryBrowser(msg)
 		default:
 			return m, nil
 		}

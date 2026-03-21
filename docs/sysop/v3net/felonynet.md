@@ -10,6 +10,8 @@ not affect your existing FTN configuration.
 > may change without notice. Use it only if you are testing or contributing
 > to V3Net development. Do not rely on it for a live BBS.
 
+> **Security note:** TLS encrypts traffic in transit. Messages are stored unencrypted on disk at both leaf and hub nodes. FelonyNet is a public network — treat everything you post as public and permanent. See [Security Considerations](configuration.md#security-considerations) for full details.
+
 ## What You Get
 
 - **Message networking** — public message areas synced across all member BBSes
@@ -64,12 +66,27 @@ From the main config menu, open the V3Net networking section:
 Enter - Select  |  ESC/Q - Return
 ```
 
-Select **2. Subscriptions**, then press **I** to launch the **Leaf Setup Wizard**:
+Select **2. Subscriptions**, then press **B** to open the **Network Registry**:
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                        Network Registry                              │
+│  Network        Description                    Hub URL               │
+│──────────────────────────────────────────────────────────────────────│
+│  felonynet      Official ViSiON/3 BBS network  https://felonynet.org │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+Enter - Select  |  ESC - Back
+```
+
+Select **felonynet** and press **Enter**. The **Leaf Setup Wizard** opens with
+the Hub URL and Network pre-filled:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                     Leaf Setup — Join a Network                      │
 │                                                                      │
+│  Registry        : (press Enter to browse available networks)        │
 │  Hub URL         : https://felonynet.org                             │
 │  Network         : felonynet                                         │
 │  Areas           : (none — press Enter to browse)                    │
@@ -81,15 +98,16 @@ Select **2. Subscriptions**, then press **I** to launch the **Leaf Setup Wizard*
 Enter - Edit  |  S - Save  |  ESC - Back
 ```
 
-Fill in the fields:
+Fill in any remaining fields:
 
 | Field | Value |
 |-------|-------|
-| Hub URL | `https://felonynet.org` |
-| Network | `felonynet` |
 | Areas | Press **Enter** to open the area browser and subscribe |
 | Poll Interval | `5m` (minimum enforced by hub is 60s) |
 | Origin | Your BBS name and address, e.g. `My BBS - bbs.example.com` |
+
+> **Tip:** You can also press **I** on the Subscriptions screen to open a blank
+> wizard and type the Hub URL and Network manually.
 
 Press **Enter** on **Areas** to open the area browser and choose which FelonyNet
 areas to subscribe to:

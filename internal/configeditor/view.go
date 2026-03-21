@@ -65,6 +65,8 @@ func (m Model) View() string {
 			"Rename JAM base path on disk?")
 	case modeV3NetAreaBrowser:
 		return m.viewV3NetAreaBrowser()
+	case modeRegistryBrowser:
+		return m.viewRegistryBrowser()
 	}
 	return m.viewTopMenu()
 }

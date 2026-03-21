@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -20,6 +21,9 @@ const cacheTTL = 1 * time.Hour
 
 // httpTimeout is the maximum time allowed for a registry fetch.
 const httpTimeout = 30 * time.Second
+
+// maxRegistryBytes caps the response body size to prevent memory exhaustion.
+const maxRegistryBytes = 1 << 20 // 1 MB
 
 type cacheEntry struct {
 	networks  []protocol.RegistryEntry
@@ -79,8 +83,16 @@ func fetchRemote(ctx context.Context, url string) ([]protocol.RegistryEntry, err
 		return nil, fmt.Errorf("GET %s returned %d", url, resp.StatusCode)
 	}
 
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRegistryBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read registry: %w", err)
+	}
+	if len(body) > maxRegistryBytes {
+		return nil, fmt.Errorf("registry: response too large (max %d bytes)", maxRegistryBytes)
+	}
+
 	var reg protocol.Registry
-	if err := json.NewDecoder(resp.Body).Decode(&reg); err != nil {
+	if err := json.Unmarshal(body, &reg); err != nil {
 		return nil, fmt.Errorf("decode registry: %w", err)
 	}
 

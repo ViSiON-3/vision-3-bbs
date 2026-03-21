@@ -3,18 +3,33 @@ package configeditor
 import (
 	"fmt"
 	"strings"
+	"unicode"
 )
 
-// viewV3NetAreaBrowser renders the area browser screen.
-func (m Model) viewV3NetAreaBrowser() string {
+// regBrowserListVisible is the number of visible rows in the registry list.
+const regBrowserListVisible = 10
+
+// sanitizeRegistryField strips control characters from untrusted registry
+// data to prevent ANSI/OSC escape injection in the TUI.
+func sanitizeRegistryField(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// viewRegistryBrowser renders the registry browser screen.
+func (m Model) viewRegistryBrowser() string {
 	var b strings.Builder
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
 
 	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 70
-	listVisible := areaBrowserListVisible
-	total := len(m.areaBrowserAreas)
+	listVisible := regBrowserListVisible
+	total := len(m.regBrowserEntries)
 
 	// Fixed rows: header(1) + border(1) + title(1) + colheader(1) + sep(1)
 	//           + list(10) + border(1) + msg(1) + bgLine(1) + help(1)
@@ -41,16 +56,16 @@ func (m Model) viewV3NetAreaBrowser() string {
 	b.WriteByte('\n')
 
 	// Title.
-	title := fmt.Sprintf("Area Browser — %s", m.areaBrowserNetwork)
+	title := "Network Registry"
 	b.WriteString(border(menuBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(title, boxW)) +
 		menuBorderStyle.Render("│")))
 	b.WriteByte('\n')
 
 	// Handle special states.
-	if m.areaBrowserLoading {
+	if m.regBrowserLoading {
 		b.WriteString(border(menuBorderStyle.Render("│") +
-			menuItemStyle.Render(centerText("Fetching areas...", boxW)) +
+			menuItemStyle.Render(centerText("Fetching registry...", boxW)) +
 			menuBorderStyle.Render("│")))
 		b.WriteByte('\n')
 		for i := 0; i < listVisible+1; i++ {
@@ -61,7 +76,7 @@ func (m Model) viewV3NetAreaBrowser() string {
 		}
 		b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 		b.WriteByte('\n')
-		for i := 0; i < bottomPad+1; i++ {
+		for i := 0; i < bottomPad; i++ {
 			b.WriteString(bgLine)
 			b.WriteByte('\n')
 		}
@@ -73,8 +88,8 @@ func (m Model) viewV3NetAreaBrowser() string {
 		return b.String()
 	}
 
-	if m.areaBrowserError != "" && total == 0 {
-		errText := " " + m.areaBrowserError
+	if m.regBrowserError != "" && total == 0 {
+		errText := " " + m.regBrowserError
 		if len([]rune(errText)) > boxW {
 			errText = string([]rune(errText)[:boxW-3]) + "..."
 		}
@@ -90,7 +105,7 @@ func (m Model) viewV3NetAreaBrowser() string {
 		}
 		b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 		b.WriteByte('\n')
-		for i := 0; i < bottomPad+1; i++ {
+		for i := 0; i < bottomPad; i++ {
 			b.WriteString(bgLine)
 			b.WriteByte('\n')
 		}
@@ -104,7 +119,7 @@ func (m Model) viewV3NetAreaBrowser() string {
 	}
 
 	// Column header.
-	colHeader := fmt.Sprintf("   %-4s %-16s %-16s %-8s %s", " ", "Tag", "Name", "Status", "Local Board")
+	colHeader := fmt.Sprintf("  %-14s %-28s %s", "Network", "Description", "Hub URL")
 	b.WriteString(border(menuBorderStyle.Render("│") +
 		menuHeaderStyle.Render(padRight(colHeader, boxW)) +
 		menuBorderStyle.Render("│")))
@@ -118,31 +133,24 @@ func (m Model) viewV3NetAreaBrowser() string {
 
 	// List rows.
 	for row := 0; row < listVisible; row++ {
-		visIdx := m.areaBrowserScroll + row
+		visIdx := m.regBrowserScroll + row
 		var content string
 
 		if visIdx >= 0 && visIdx < total {
-			a := m.areaBrowserAreas[visIdx]
-			check := "[ ]"
-			if a.Subscribed {
-				check = "[x]"
+			e := m.regBrowserEntries[visIdx]
+			subscribed := m.isLeafSubscribed(e.Name)
+			tag := "  "
+			if subscribed {
+				tag = "* "
 			}
-			tag := padRight(a.Tag, 16)
-			if len(tag) > 16 {
-				tag = tag[:16]
+			name := padRight(sanitizeRegistryField(e.Name), 14)
+			desc := padRight(sanitizeRegistryField(e.Description), 28)
+			hubURL := sanitizeRegistryField(e.HubURL)
+			maxURL := boxW - 14 - 28 - 6
+			if runeLen := len([]rune(hubURL)); runeLen > maxURL {
+				hubURL = string([]rune(hubURL)[:maxURL])
 			}
-			name := padRight(a.Name, 16)
-			if len(name) > 16 {
-				name = name[:16]
-			}
-			status := padRight(a.Status, 8)
-			localBoard := a.LocalBoard
-			maxBoard := boxW - 4 - 16 - 16 - 8 - 5
-			if len(localBoard) > maxBoard {
-				localBoard = localBoard[:maxBoard]
-			}
-			content = fmt.Sprintf("   %s %-16s %-16s %-8s %s",
-				check, tag, name, status, localBoard)
+			content = fmt.Sprintf("%s%-14s %-28s %s", tag, name, desc, hubURL)
 		}
 
 		if content == "" {
@@ -155,7 +163,7 @@ func (m Model) viewV3NetAreaBrowser() string {
 		}
 
 		var styled string
-		if visIdx == m.areaBrowserCursor {
+		if visIdx == m.regBrowserCursor {
 			styled = menuHighlightStyle.Render(content)
 		} else {
 			styled = menuItemStyle.Render(content)
@@ -189,9 +197,8 @@ func (m Model) viewV3NetAreaBrowser() string {
 	b.WriteByte('\n')
 
 	// Help bar.
-	helpStr := "Space - Subscribe/Unsubscribe  |  ESC - Done"
+	helpStr := "Enter - Select  |  ESC - Back  |  * = subscribed"
 	b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))
 
 	return b.String()
 }
-

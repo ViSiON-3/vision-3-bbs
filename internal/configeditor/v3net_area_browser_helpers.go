@@ -1,12 +1,15 @@
 package configeditor
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
@@ -29,7 +32,12 @@ func defaultLocalBoardName(network, areaName string) string {
 func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 	m.areaBrowserLoading = false
 	if msg.err != nil {
-		m.areaBrowserError = fmt.Sprintf("Could not fetch areas: %v", msg.err)
+		cause := msg.err
+		var urlErr *url.Error
+		if errors.As(msg.err, &urlErr) {
+			cause = urlErr.Err
+		}
+		m.areaBrowserError = fmt.Sprintf("Could not fetch areas: %v", cause)
 		return m, nil
 	}
 
@@ -179,19 +187,53 @@ func (m *Model) createBrowserMsgAreaIfNeeded(tag, name, network string) {
 	if safeName == "" {
 		safeName = fmt.Sprintf("unnamed_%d", newID)
 	}
+	confID := m.findOrCreateNetworkConference(network)
 	m.configs.MsgAreas = append(m.configs.MsgAreas, message.MessageArea{
-		ID:       newID,
-		Position: maxPos + 1,
-		Tag:      tag,
-		Name:     name,
-		AreaType: "v3net",
-		Network:  network,
-		EchoTag:  tag,
-		AutoJoin: true,
-		ACSRead:  "s10",
-		ACSWrite: "s20",
-		BasePath: filepath.Join("msgbases", safeName),
+		ID:           newID,
+		Position:     maxPos + 1,
+		Tag:          tag,
+		Name:         name,
+		AreaType:     "v3net",
+		Network:      network,
+		EchoTag:      tag,
+		AutoJoin:     true,
+		ACSRead:      "s10",
+		ACSWrite:     "s20",
+		BasePath:     filepath.Join("msgbases", safeName),
+		ConferenceID: confID,
 	})
+}
+
+// findOrCreateNetworkConference returns the conference ID for a V3Net network,
+// creating one if none exists. It looks for an existing conference whose tag
+// matches the uppercase network name.
+func (m *Model) findOrCreateNetworkConference(network string) int {
+	upperNet := strings.ToUpper(network)
+	for _, c := range m.configs.Conferences {
+		if strings.ToUpper(c.Tag) == upperNet {
+			return c.ID
+		}
+	}
+	// Create a new conference for this network.
+	newID := 1
+	maxPos := 0
+	for _, c := range m.configs.Conferences {
+		if c.ID >= newID {
+			newID = c.ID + 1
+		}
+		if c.Position > maxPos {
+			maxPos = c.Position
+		}
+	}
+	m.configs.Conferences = append(m.configs.Conferences, conference.Conference{
+		ID:          newID,
+		Position:    maxPos + 1,
+		Tag:         upperNet,
+		Name:        network,
+		Description: network + " message network",
+		ACS:         "s10",
+	})
+	return newID
 }
 
 // clampAreaBrowserScroll ensures the cursor is visible in the list window.

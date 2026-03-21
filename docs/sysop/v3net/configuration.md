@@ -101,15 +101,17 @@ Enter - Select  |  ESC/Q - Return
 │   1  https://felonynet.org            felonynet      fn.general      │
 │                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
-Enter - Edit  |  I - New (Wizard)  |  D - Delete  |  S - Save  |  ESC - Return
+Enter - Edit  |  I - New (Wizard)  |  B - Registry  |  D - Delete  |  S - Save  |  ESC - Return
 ```
 
-Press **I** to open the **Leaf Setup Wizard**:
+Press **B** to open the **Network Registry** and browse available networks, or
+press **I** to open the **Leaf Setup Wizard** manually:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                     Leaf Setup — Join a Network                      │
 │                                                                      │
+│  Registry        : (press Enter to browse available networks)        │
 │  Hub URL         : https://felonynet.org                             │
 │  Network         : felonynet                                         │
 │  Areas           : (none — press Enter to browse)                    │
@@ -123,6 +125,7 @@ Enter - Edit  |  S - Save  |  ESC - Back
 
 | Field | Description |
 |-------|-------------|
+| **Registry** | Opens the network registry browser. Selecting a network fills in Hub URL and Network automatically. |
 | **Hub URL** | Full URL of the hub (e.g. `https://felonynet.org`) |
 | **Network** | Network name to subscribe to (e.g. `felonynet`) |
 | **Areas** | Press **Enter** to open the area browser and choose which areas to subscribe to |
@@ -209,6 +212,26 @@ See [V3Net Key Recovery](v3net/recovery.md) for full details.
 | `data/v3net.key` | Ed25519 keypair (auto-generated on first V3Net start) |
 | `data/v3net_dedup.sqlite` | Message deduplication database |
 | `data/v3net_hub/` | Hub data directory (SQLite DB, NAL files) |
+
+---
+
+## Security Considerations
+
+**TLS protects the wire, not the disk.** Enabling HTTPS encrypts traffic between leaf nodes and the hub. It does not encrypt data at rest. The following files are stored in plaintext:
+
+- `data/v3net_dedup.sqlite` — deduplication database containing message content
+- `data/v3net_hub/` — hub database (hub nodes only), fully readable by the hub operator and anyone with server access
+- Local message base files — JAM or squish files written when messages are imported into boards
+
+Restrict file permissions appropriately and consider the security of any backup systems that touch these paths.
+
+**Protect your private key.** `data/v3net.key` and any exported seed phrase files should be readable only by the BBS process user (`chmod 600`). A compromised key allows an attacker to impersonate your node on all V3Net networks. Do not include the key file in unencrypted backups or commit it to version control.
+
+**Hub operators can read all traffic.** V3Net is a federated public message network. TLS secures the connection to the hub, but the hub stores and forwards messages in plaintext. The hub sysop — and anyone with access to the hub server — can read all messages routed through it. This is the same trust model as FidoNet echomail and similar networks.
+
+**Auto-approve.** Setting `Auto Approve: Y` allows any node to subscribe to your hub and propose new areas without review. Appropriate for open public networks; set it to `N` and manually approve nodes for curated or private networks.
+
+**Public areas are public.** Messages posted to networked areas are replicated to every subscribed node and stored indefinitely on each. Do not post sensitive information in public message areas.
 
 ---
 

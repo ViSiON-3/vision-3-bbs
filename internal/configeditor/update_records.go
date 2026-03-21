@@ -104,6 +104,11 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.saveAll()
 			}
 			return m, nil
+		case "b", "B":
+			if m.recordType == "v3netleaf" {
+				return m.enterRegistryBrowserForLeafList()
+			}
+			return m, nil
 		case "p", "P":
 			if total > 0 && m.recordTypeSupportsReorder() {
 				m.reorderSourceIdx = m.recordCursor

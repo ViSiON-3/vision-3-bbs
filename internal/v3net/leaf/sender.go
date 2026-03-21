@@ -48,7 +48,7 @@ func (l *Leaf) subscribe(ctx context.Context) error {
 		return fmt.Errorf("leaf: subscribe returned %d: %s", resp.StatusCode, string(body))
 	}
 
-	var sr protocol.SubscribeResponse
+	var sr protocol.SubscribeWithAreasResponse
 	if err := json.Unmarshal(body, &sr); err != nil {
 		return fmt.Errorf("leaf: parse subscribe response: %w", err)
 	}
