@@ -17,6 +17,7 @@ The feature is inspired by uMRC (Multi-Relay Chat) in functionality: ephemeral n
 
 - Replace `internal/chat` with a new multi-room chat system
 - Network-wide rooms: all BBSes on the same V3Net network share the same room space
+- Support multiple V3Net networks: user selects which network to chat on at entry
 - Ephemeral rooms: created on first join, deleted when last user leaves
 - Default "lobby" room all users auto-join
 - Room topics settable by any user
@@ -37,9 +38,31 @@ The feature is inspired by uMRC (Multi-Relay Chat) in functionality: ephemeral n
 
 ## Architecture
 
+### Network Selection
+
+When a user invokes `CHAT`, the menu handler determines which `ChatService` to connect to:
+
+- **No V3Net networks configured** → connect to `local.ChatService` directly, no picker shown.
+- **Exactly one V3Net network configured** → connect to that network's `leaf.ChatSession` directly, no picker shown.
+- **Multiple V3Net networks configured** → show a network picker before entering chat:
+
+```
+Chat Networks
+─────────────
+ 1. FelonyNet       (42 users online)
+ 2. RetroNet        (8 users online)
+ 3. Local           (this BBS only)
+
+Select network [1]:
+```
+
+User counts are fetched from each hub's `GET rooms` endpoint (summed across all active rooms) at picker display time. If a hub is unreachable its entry is shown as "(unavailable)" and cannot be selected. "Local" is always available as the last option.
+
+Once a network is selected the chat experience is scoped entirely to that network. A "lobby" on FelonyNet is completely separate from a "lobby" on RetroNet — there is no cross-network room merging.
+
 ### Two Modes, One Interface
 
-The chat system is driven by a `ChatService` interface. Mode is selected once at startup: if V3Net is configured and the hub is reachable, a `leaf.ChatSession` satisfies the interface. If V3Net is not configured, a `local.ChatService` does. If V3Net is configured but the hub is unreachable at startup, an error is shown and the BBS falls back to local mode for that session.
+The chat system is driven by a `ChatService` interface. Each network's `leaf.ChatSession` satisfies the interface independently. If V3Net is configured but the selected hub is unreachable, an error is shown and the user is returned to the network picker (or local mode if no other option).
 
 ```
 ┌─────────────────────────────────┐
@@ -433,11 +456,12 @@ Retains the existing ANSI split-screen layout: scroll region for messages, input
 
 #### Entry flow
 
-1. Connect to `ChatService`
-2. Fetch `Rooms()` — display room list with topics and user counts
-3. User picks a room or presses Enter to auto-join "lobby"
-4. Call `Join(room)` — response includes room list and last 50 messages of history
-5. Render history in scroll region, then start live chat loop
+1. If multiple networks configured: show network picker; user selects network (or local)
+2. Connect to `ChatService` for the selected network
+3. Fetch `Rooms()` — display room list with topics and user counts
+4. User picks a room or presses Enter to auto-join "lobby"
+5. Call `Join(room)` — response includes room list, user list, and last 50 messages of history
+6. Render history in scroll region, then start live chat loop
 
 #### Chat loop
 
@@ -479,7 +503,8 @@ chatJoinMsg, chatLeaveMsg, chatTopicMsg, chatReconnecting, chatReconnected
 
 | Scenario                          | Behavior                                                                 |
 |-----------------------------------|--------------------------------------------------------------------------|
-| Hub unreachable at startup        | Show error message; fall back to local mode for this session             |
+| Hub unreachable at network picker | Show "(unavailable)" for that network; cannot be selected               |
+| Hub unreachable after selection   | Show error; return user to network picker                                |
 | SSE drops mid-chat                | Leaf reconnects with existing backoff; show "reconnecting…" inline; re-join room on restore; re-render history |
 | Hub rejects post (rate limit etc) | Show inline error in scroll region; do not drop user                     |
 | Private message to unknown node   | Hub returns 404; show "user not found" inline                            |
