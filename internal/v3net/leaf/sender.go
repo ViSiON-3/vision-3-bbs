@@ -184,6 +184,9 @@ func (l *Leaf) get(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s: status %d", path, resp.StatusCode)
+	}
 	return io.ReadAll(resp.Body)
 }
 

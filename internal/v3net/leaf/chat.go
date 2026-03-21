@@ -87,6 +87,7 @@ type ChatSession struct {
 	currentUsers []string
 	events       chan chat.ChatEvent
 	mu           sync.Mutex
+	closed       bool
 }
 
 // deliver converts a protocol.Event into a chat.ChatEvent and sends it
@@ -121,6 +122,12 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 		json.Unmarshal(ev.Data, &p)
 		ce = chat.ChatEvent{Type: chat.TypeTopic, Topic: &chat.ChatTopic{Room: p.Room, Topic: p.Topic, SetBy: p.SetBy}}
 	default:
+		return
+	}
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
 		return
 	}
 	select {
@@ -188,9 +195,11 @@ func (s *ChatSession) Leave(room string) error {
 	body, _ := json.Marshal(protocol.ChatLeaveRequest{Room: room, Handle: s.handle})
 	err := s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/leave", s.leaf.cfg.Network), body)
-	s.mu.Lock()
-	s.currentRoom = ""
-	s.mu.Unlock()
+	if err == nil {
+		s.mu.Lock()
+		s.currentRoom = ""
+		s.mu.Unlock()
+	}
 	return err
 }
 
@@ -257,6 +266,13 @@ func (s *ChatSession) Users() []string {
 func (s *ChatSession) Events() <-chan chat.ChatEvent { return s.events }
 
 func (s *ChatSession) Close() error {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.closed = true
+	s.mu.Unlock()
 	s.leaf.chatSessions.deregister(s.handle)
 	close(s.events)
 	return nil
