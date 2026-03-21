@@ -53,10 +53,8 @@ func NewChatHistoryStore(db *sql.DB, retentionDays int) (*ChatHistoryStore, erro
 		retentionDays: retentionDays,
 	}
 
-	// Prune old messages on startup.
-	if err := store.prune(); err != nil {
-		return nil, fmt.Errorf("hub: prune chat history: %w", err)
-	}
+	// Prune old messages on startup (fire-and-forget).
+	store.prune()
 
 	return store, nil
 }
@@ -137,22 +135,17 @@ func (chs *ChatHistoryStore) RoomHistory(network, room string, limit int) ([]pro
 }
 
 // prune deletes messages older than retentionDays from both chat history tables.
-func (chs *ChatHistoryStore) prune() error {
+// Errors are silently discarded; this is a best-effort cleanup operation.
+func (chs *ChatHistoryStore) prune() {
 	cutoff := time.Now().UTC().AddDate(0, 0, -chs.retentionDays)
 
-	if _, err := chs.db.Exec(
+	_, _ = chs.db.Exec(
 		"DELETE FROM chat_history WHERE created_at < ?",
 		cutoff,
-	); err != nil {
-		return fmt.Errorf("hub: prune chat_history: %w", err)
-	}
+	)
 
-	if _, err := chs.db.Exec(
+	_, _ = chs.db.Exec(
 		"DELETE FROM chat_private_history WHERE created_at < ?",
 		cutoff,
-	); err != nil {
-		return fmt.Errorf("hub: prune chat_private_history: %w", err)
-	}
-
-	return nil
+	)
 }
