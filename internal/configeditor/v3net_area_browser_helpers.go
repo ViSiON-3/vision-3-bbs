@@ -1,7 +1,9 @@
 package configeditor
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -30,7 +32,12 @@ func defaultLocalBoardName(network, areaName string) string {
 func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 	m.areaBrowserLoading = false
 	if msg.err != nil {
-		m.areaBrowserError = fmt.Sprintf("Could not fetch areas: %v", msg.err)
+		cause := msg.err
+		var urlErr *url.Error
+		if errors.As(msg.err, &urlErr) {
+			cause = urlErr.Err
+		}
+		m.areaBrowserError = fmt.Sprintf("Could not fetch areas: %v", cause)
 		return m, nil
 	}
 

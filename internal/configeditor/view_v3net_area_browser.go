@@ -74,8 +74,12 @@ func (m Model) viewV3NetAreaBrowser() string {
 	}
 
 	if m.areaBrowserError != "" && total == 0 {
+		errText := " " + m.areaBrowserError
+		if len([]rune(errText)) > boxW {
+			errText = string([]rune(errText)[:boxW-3]) + "..."
+		}
 		b.WriteString(border(menuBorderStyle.Render("│") +
-			flashMessageStyle.Render(padRight(" "+m.areaBrowserError, boxW)) +
+			flashMessageStyle.Render(padRight(errText, boxW)) +
 			menuBorderStyle.Render("│")))
 		b.WriteByte('\n')
 		for i := 0; i < listVisible+1; i++ {
