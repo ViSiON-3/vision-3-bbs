@@ -221,6 +221,16 @@ type StringsConfig struct {
 	ChatSystemPrefix  string `json:"chatSystemPrefix"`
 	ChatMessageFormat string `json:"chatMessageFormat"`
 
+	ChatNetworkPickerHeader string `json:"chatNetworkPickerHeader"`
+	ChatNetworkPickerEntry  string `json:"chatNetworkPickerEntry"`
+	ChatRoomListHeader      string `json:"chatRoomListHeader"`
+	ChatRoomListEntry       string `json:"chatRoomListEntry"`
+	ChatPrivateMsgFormat    string `json:"chatPrivateMsgFormat"`
+	ChatJoinMsg             string `json:"chatJoinMsg"`
+	ChatLeaveMsg            string `json:"chatLeaveMsg"`
+	ChatTopicMsg            string `json:"chatTopicMsg"`
+	ChatReconnected         string `json:"chatReconnected"`
+
 	// Page strings (V3-specific)
 	PageOnlineNodesHeader string `json:"pageOnlineNodesHeader"`
 	PageNodeListEntry     string `json:"pageNodeListEntry"`
@@ -928,11 +938,12 @@ type V3NetHubArea struct {
 
 // V3NetLeafConfig configures a subscription to a V3Net network.
 type V3NetLeafConfig struct {
-	HubURL       string   `json:"hubUrl"`
-	Network      string   `json:"network"`
-	Boards       []string `json:"boards"`           // Local message area tags to write received messages
-	PollInterval string   `json:"pollInterval"`     // Duration string (e.g., "5m")
-	Origin       string   `json:"origin,omitempty"` // Origin line text (e.g. "My Cool BBS - bbs.example.com")
+	HubURL         string   `json:"hubUrl"`
+	Network        string   `json:"network"`
+	Boards         []string `json:"boards"`                    // Local message area tags to write received messages
+	PollInterval   string   `json:"pollInterval"`              // Duration string (e.g., "5m")
+	Origin         string   `json:"origin,omitempty"`          // Origin line text (e.g. "My Cool BBS - bbs.example.com")
+	TLSSkipVerify  bool     `json:"tlsSkipVerify,omitempty"`   // Skip TLS certificate verification (for self-signed certs)
 }
 
 // EventConfig defines a scheduled event configuration

@@ -2,6 +2,7 @@ package leaf
 
 import (
 	"context"
+	"crypto/tls"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -29,11 +30,21 @@ func New(cfg Config) *Leaf {
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = DefaultPollInterval
 	}
+
+	var transport http.RoundTripper
+	if cfg.TLSSkipVerify {
+		slog.Warn("leaf: TLS certificate verification disabled — node auth still secured by ed25519 signatures",
+			"network", cfg.Network, "hub", cfg.HubURL)
+		transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // sysop-configured for self-signed hub certs
+		}
+	}
+
 	l := &Leaf{
 		cfg:       cfg,
-		client:    &http.Client{Timeout: 10 * time.Second},
-		sseClient: &http.Client{},
-		nalCache:  nal.NewCache(1 * time.Hour),
+		client:    &http.Client{Timeout: 10 * time.Second, Transport: transport},
+		sseClient: &http.Client{Transport: transport},
+		nalCache:  nal.NewCache(1*time.Hour, &http.Client{Timeout: 30 * time.Second, Transport: transport}),
 	}
 	if cfg.OnEvent != nil {
 		l.eventCb.Store(cfg.OnEvent)
@@ -46,6 +57,9 @@ func New(cfg Config) *Leaf {
 func (l *Leaf) HubURL() string {
 	return l.cfg.HubURL
 }
+
+// Network returns the V3Net network name this leaf is subscribed to.
+func (l *Leaf) Network() string { return l.cfg.Network }
 
 // Poll runs a single poll cycle. Exported for integration testing.
 func (l *Leaf) Poll(ctx context.Context) (int, error) {

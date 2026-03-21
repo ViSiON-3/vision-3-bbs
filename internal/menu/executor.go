@@ -24,7 +24,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -223,14 +222,14 @@ type MenuExecutor struct {
 	IPLockoutCheck  IPLockoutChecker              // IP-based authentication lockout checker
 	LoginSequence   []config.LoginItem            // Configurable login sequence from login.json
 	SessionRegistry *session.SessionRegistry      // Session registry for who's online
-	ChatRoom        *chat.ChatRoom                // Global teleconference chat room
+	ChatLeaves      ChatLeafProvider              // V3Net chat leaf provider (nil = local only)
 	Protocols       []transfer.ProtocolConfig     // Loaded transfer protocol configurations
 	V3NetStatus     V3NetStatusProvider           // V3Net service status (nil if disabled)
 	configMu        sync.RWMutex                  // Mutex for thread-safe config updates
 }
 
 // NewExecutor creates a new MenuExecutor.
-func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners []string, doorRegistry map[string]config.DoorConfig, loadedStrings config.StringsConfig, theme config.ThemeConfig, serverCfg config.ServerConfig, msgMgr *message.MessageManager, fileMgr *file.FileManager, confMgr *conference.ConferenceManager, ipLockoutCheck IPLockoutChecker, loginSequence []config.LoginItem, sessionRegistry *session.SessionRegistry, chatRoom *chat.ChatRoom, protocols []transfer.ProtocolConfig) *MenuExecutor {
+func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners []string, doorRegistry map[string]config.DoorConfig, loadedStrings config.StringsConfig, theme config.ThemeConfig, serverCfg config.ServerConfig, msgMgr *message.MessageManager, fileMgr *file.FileManager, confMgr *conference.ConferenceManager, ipLockoutCheck IPLockoutChecker, loginSequence []config.LoginItem, sessionRegistry *session.SessionRegistry, protocols []transfer.ProtocolConfig) *MenuExecutor {
 
 	// Initialize the run registry
 	runRegistry := make(map[string]RunnableFunc) // Use local RunnableFunc
@@ -253,7 +252,6 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 		IPLockoutCheck:  ipLockoutCheck,
 		LoginSequence:   loginSequence,
 		SessionRegistry: sessionRegistry,
-		ChatRoom:        chatRoom,
 		Protocols:       protocols,
 	}
 }
