@@ -205,40 +205,6 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleChat accepts an inter-BBS chat message (auth required).
-// Rate limited to 1 message per second per node.
-func (h *Hub) handleChat(w http.ResponseWriter, r *http.Request) {
-	nodeID := r.Header.Get(headerNodeID)
-	if !h.chatLimiter.Allow(nodeID) {
-		http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
-		return
-	}
-
-	network := extractNetwork(r.URL.Path)
-
-	var req protocol.ChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
-
-	sub := h.subscribers.Get(nodeID, network)
-	nodeName := ""
-	if sub != nil {
-		nodeName = sub.BBSHost
-	}
-
-	ev, _ := protocol.NewEvent(protocol.EventChat, protocol.ChatPayload{
-		From:      req.From,
-		Node:      nodeName,
-		Text:      req.Text,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-	})
-	h.broadcaster.Publish(network, ev)
-
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
 // handlePresence accepts a logon/logoff notification (auth required).
 func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)

@@ -54,8 +54,6 @@ func (h *Hub) newMux() http.Handler {
 				h.handlePostMessage(w, r)
 			case strings.HasSuffix(path, "/events") && r.Method == http.MethodGet:
 				h.handleEvents(w, r)
-			case strings.HasSuffix(path, "/chat") && r.Method == http.MethodPost:
-				h.handleChat(w, r)
 			case strings.HasSuffix(path, "/chat/rooms/join") && r.Method == http.MethodPost:
 				h.handleChatJoin(w, r, network)
 			case strings.HasSuffix(path, "/chat/rooms/leave") && r.Method == http.MethodPost:

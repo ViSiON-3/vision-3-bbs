@@ -2,6 +2,7 @@ package hub
 
 import (
 	"encoding/json"
+	"sort"
 	"sync"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -109,6 +110,7 @@ func (cr *chatRooms) RoomList() []protocol.ProtoChatRoomInfo {
 			UserCount: count,
 		})
 	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	return list
 }
 
