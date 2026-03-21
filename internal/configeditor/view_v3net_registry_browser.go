@@ -140,17 +140,11 @@ func (m Model) viewRegistryBrowser() string {
 				tag = "* "
 			}
 			name := padRight(sanitizeRegistryField(e.Name), 14)
-			if len(name) > 14 {
-				name = name[:14]
-			}
 			desc := padRight(sanitizeRegistryField(e.Description), 28)
-			if len(desc) > 28 {
-				desc = desc[:28]
-			}
 			hubURL := sanitizeRegistryField(e.HubURL)
 			maxURL := boxW - 14 - 28 - 6
-			if len(hubURL) > maxURL {
-				hubURL = hubURL[:maxURL]
+			if runeLen := len([]rune(hubURL)); runeLen > maxURL {
+				hubURL = string([]rune(hubURL)[:maxURL])
 			}
 			content = fmt.Sprintf("%s%-14s %-28s %s", tag, name, desc, hubURL)
 		}

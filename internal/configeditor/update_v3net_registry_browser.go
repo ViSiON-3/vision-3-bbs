@@ -2,6 +2,9 @@ package configeditor
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/url"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -88,7 +91,12 @@ func (m Model) handleFetchRegistryMsg(msg fetchRegistryMsg) (tea.Model, tea.Cmd)
 		m.regBrowserCancel = nil
 	}
 	if msg.err != nil {
-		m.regBrowserError = msg.err.Error()
+		cause := msg.err
+		var urlErr *url.Error
+		if errors.As(msg.err, &urlErr) {
+			cause = urlErr.Err
+		}
+		m.regBrowserError = fmt.Sprintf("Could not fetch registry: %v", cause)
 		return m, nil
 	}
 	m.regBrowserError = ""

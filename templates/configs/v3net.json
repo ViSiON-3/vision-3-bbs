@@ -13,7 +13,7 @@
   },
   "leaves": [
     {
-      "hubUrl": "http://felonynet.org",
+      "hubUrl": "https://felonynet.org",
       "network": "felonynet",
       "boards": [],
       "pollInterval": "5m"
