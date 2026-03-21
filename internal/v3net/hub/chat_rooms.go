@@ -156,3 +156,30 @@ func broadcastChatEvent(b *Broadcaster, network, eventType string, payload any) 
 	data, _ := json.Marshal(payload)
 	b.Publish(network, protocol.Event{Type: eventType, Data: data})
 }
+
+// HandleForNode returns the first handle that nodeID has in room, or "".
+func (cr *chatRooms) HandleForNode(room, nodeID string) string {
+	cr.mu.RLock()
+	defer cr.mu.RUnlock()
+	rs := cr.rooms[room]
+	if rs == nil {
+		return ""
+	}
+	handles := rs.members[nodeID]
+	if len(handles) == 0 {
+		return ""
+	}
+	return handles[0]
+}
+
+// AnyHandleForNode returns any handle that nodeID has across any room, or "".
+func (cr *chatRooms) AnyHandleForNode(nodeID string) string {
+	cr.mu.RLock()
+	defer cr.mu.RUnlock()
+	for _, rs := range cr.rooms {
+		if handles := rs.members[nodeID]; len(handles) > 0 {
+			return handles[0]
+		}
+	}
+	return ""
+}

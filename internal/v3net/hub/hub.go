@@ -28,6 +28,8 @@ type Hub struct {
 	accessRequests    *AccessRequestStore
 	areaSubscriptions *AreaSubscriptionStore
 	coordTransfers    *CoordTransferStore
+	chatStore         *ChatHistoryStore
+	chatRooms         *chatRooms
 }
 
 // New creates a new Hub with the given configuration.
@@ -85,6 +87,12 @@ func New(cfg Config) (*Hub, error) {
 		return nil, err
 	}
 
+	chatStore, err := NewChatHistoryStore(db, 7)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	h := &Hub{
 		cfg:               cfg,
 		db:                db,
@@ -97,6 +105,8 @@ func New(cfg Config) (*Hub, error) {
 		accessRequests:    accessReqs,
 		areaSubscriptions: areaSubs,
 		coordTransfers:    coordTransfers,
+		chatStore:         chatStore,
+		chatRooms:         newChatRooms(),
 	}
 
 	h.server = &http.Server{

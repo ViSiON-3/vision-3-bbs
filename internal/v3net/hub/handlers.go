@@ -189,7 +189,20 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 // handleEvents serves the SSE event stream (auth required).
 func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
+	nodeID := r.Header.Get(headerNodeID)
 	h.broadcaster.ServeSSE(w, r, network)
+	// ServeSSE blocks until the client disconnects.
+	// Clean up chat room presence for the disconnected node.
+	removed := h.chatRooms.HandleDisconnect(nodeID)
+	sub := h.subscribers.Get(nodeID, network)
+	bbsName := nodeID
+	if sub != nil && sub.BBSName != "" {
+		bbsName = sub.BBSName
+	}
+	for _, pair := range removed {
+		broadcastChatEvent(h.broadcaster, network, protocol.EventChatLeave,
+			protocol.ChatLeavePayload{Room: pair[0], Handle: pair[1], BBS: bbsName})
+	}
 }
 
 // handleChat accepts an inter-BBS chat message (auth required).
