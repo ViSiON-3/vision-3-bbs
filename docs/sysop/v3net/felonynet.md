@@ -64,7 +64,7 @@ Add a `leaves` entry pointing to the FelonyNet hub:
       {
         "hubUrl": "https://felonynet.org",
         "network": "felonynet",
-        "board": "FELONYNET_GENERAL",
+        "boards": ["fn.general"],
         "pollInterval": "5m"
       }
     ]
@@ -76,7 +76,7 @@ Add a `leaves` entry pointing to the FelonyNet hub:
 |-------|-------------|
 | `hubUrl` | The FelonyNet hub URL |
 | `network` | Must be `felonynet` |
-| `board` | Your local message area tag |
+| `boards` | Local message area tags (array of area tag strings) |
 | `pollInterval` | How often to poll for new messages (minimum 60s enforced by hub) |
 
 ### 4. Restart Vision/3
@@ -188,8 +188,7 @@ your network entry:
   "name": "felonynet",
   "description": "General discussion. No warrants required.",
   "hub_url": "https://felonynet.org",
-  "hub_node_id": "22819c83e045cd1e",
-  "area_tags": ["fn.general", "fn.testing", "fn.vision3"]
+  "hub_node_id": "22819c83e045cd1e"
 }
 ```
 
@@ -197,8 +196,8 @@ your network entry:
 
 **"V3Net networking disabled"** — `v3net.enabled` is `false` in config.json.
 
-**"message area not found, skipping"** — The `board` tag in your leaf config
-doesn't match any configured message area. Check your message area tags.
+**"message area not found, skipping"** — A tag in your `boards` array doesn't
+match any configured message area. Check your message area tags.
 
 **No messages arriving** — Check that the hub URL is reachable. Look for
 `leaf: poll failed` warnings in the log. Verify your node is approved (hub may

@@ -338,8 +338,7 @@ Format:
       "name": "felonynet",
       "description": "General discussion. No warrants required.",
       "hub_url": "https://felonynet.org",
-      "hub_node_id": "a3f9e1b2c4d5e6f7",
-      "area_tags": ["fn.general", "fn.testing", "fn.vision3"]
+      "hub_node_id": "a3f9e1b2c4d5e6f7"
     }
   ]
 }

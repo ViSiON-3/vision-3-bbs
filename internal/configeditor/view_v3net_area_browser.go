@@ -86,7 +86,7 @@ func (m Model) viewV3NetAreaBrowser() string {
 		}
 		b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 		b.WriteByte('\n')
-		for i := 0; i < bottomPad; i++ {
+		for i := 0; i < bottomPad+1; i++ {
 			b.WriteString(bgLine)
 			b.WriteByte('\n')
 		}
