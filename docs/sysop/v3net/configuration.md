@@ -29,7 +29,7 @@ After the wizard saves, restart the BBS to activate the configuration.
 
 ## Quick Start
 
-To join an existing network like FelonyNet, see the [FelonyNet guide](felonynet.md). This page documents every configuration field in detail.
+To join an existing network like FelonyNet, see the [FelonyNet guide](v3net/felonynet.md). This page documents every configuration field in detail.
 
 ## Configuration File
 
@@ -260,7 +260,7 @@ This screen contains:
 | Hub Data Dir | Hub data storage directory |
 | Auto Approve | Automatically approve new leaf subscriptions |
 
-For details on the Hub TLS fields, see [Hub TLS Setup](hub-tls.md).
+For details on the Hub TLS fields, see [Hub TLS Setup](v3net/hub-tls.md).
 
 ---
 
@@ -301,13 +301,13 @@ For full details, see [V3Net Key Recovery](recovery.md).
 | `data/v3net_dedup.sqlite` | Message deduplication database |
 | `data/v3net_hub/` | Hub data directory (SQLite DB, NAL files) |
 
-The keypair file is critical — it is your node's identity on the network. **Back up your recovery seed phrase** via `./config → 4 → Node Identity → [E]`. See [V3Net Key Recovery](recovery.md).
+The keypair file is critical — it is your node's identity on the network. **Back up your recovery seed phrase** via `./config → 4 → Node Identity → [E]`. See [V3Net Key Recovery](v3net/recovery.md).
 
 ---
 
 ## Related Documentation
 
-- [Joining FelonyNet](felonynet.md) — step-by-step guide for the FelonyNet network
-- [Network Area List (NAL)](nal.md) — area subscriptions, access modes, and proposals
-- [Message Areas](../messages/message-areas.md) — configuring local JAM message bases
-- [V3Net Message Areas](message-areas.md) — how V3Net areas differ from local and FTN areas
+- [Joining FelonyNet](v3net/felonynet.md) — step-by-step guide for the FelonyNet network
+- [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, and proposals
+- [Message Areas](messages/message-areas.md) — configuring local JAM message bases
+- [V3Net Message Areas](v3net/message-areas.md) — how V3Net areas differ from local and FTN areas

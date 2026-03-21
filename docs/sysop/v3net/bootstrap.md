@@ -78,7 +78,7 @@ NAL published successfully!
 ## Prerequisites
 
 1. The hub must be running and reachable at the `-hub` URL.
-2. The hub must have the network listed in its `hub.networks[]` configuration (see [V3Net Configuration](configuration.md#hub-network-entry-hubnetworks)).
+2. The hub must have the network listed in its `hub.networks[]` configuration (see [V3Net Configuration](v3net/configuration.md#hub-network-entry-hubnetworks)).
 3. The keystore file must exist. Start the BBS with `"enabled": true` and a valid `keystorePath` to auto-generate it.
 
 ## How It Works
@@ -102,5 +102,5 @@ The compiled binary is listed in `.gitignore` and should not be committed.
 
 ## Related Documentation
 
-- [V3Net Configuration](configuration.md) — hub and leaf setup
-- [V3Net Networking](message-areas.md) — how V3Net works from a sysop perspective
+- [V3Net Configuration](v3net/configuration.md) — hub and leaf setup
+- [V3Net Networking](v3net/message-areas.md) — how V3Net works from a sysop perspective
