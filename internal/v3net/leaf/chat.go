@@ -1,13 +1,18 @@
 package leaf
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"sync"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
+
+var _ chat.ChatService = (*ChatSession)(nil)
 
 // chatSessionRegistry tracks active ChatSessions on this leaf.
 type chatSessionRegistry struct {
@@ -140,4 +145,119 @@ func removeString(ss []string, s string) []string {
 		}
 	}
 	return out
+}
+
+func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, error) {
+	room, err := chat.NormalizeRoom(room)
+	if err != nil {
+		return nil, nil, err
+	}
+	body, _ := json.Marshal(protocol.ChatJoinRequest{Room: room, Handle: s.handle})
+	resp, err := s.leaf.signedPostWithResponse(context.Background(),
+		fmt.Sprintf("/v3net/v1/%s/chat/rooms/join", s.leaf.cfg.Network), body)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	var joinResp protocol.ChatJoinResponse
+	if err := json.Unmarshal(respBytes, &joinResp); err != nil {
+		return nil, nil, err
+	}
+	s.mu.Lock()
+	s.currentRoom = room
+	s.currentUsers = joinResp.Users
+	s.mu.Unlock()
+
+	rooms := make([]chat.RoomInfo, len(joinResp.Rooms))
+	for i, r := range joinResp.Rooms {
+		rooms[i] = chat.RoomInfo{Name: r.Name, Topic: r.Topic, UserCount: r.UserCount}
+	}
+	msgs := make([]chat.ChatMessage, len(joinResp.History))
+	for i, m := range joinResp.History {
+		msgs[i] = *protoMsgToDomain(m)
+		msgs[i].Room = room
+	}
+	return rooms, msgs, nil
+}
+
+func (s *ChatSession) Leave(room string) error {
+	body, _ := json.Marshal(protocol.ChatLeaveRequest{Room: room, Handle: s.handle})
+	err := s.leaf.signedPostCtx(context.Background(),
+		fmt.Sprintf("/v3net/v1/%s/chat/rooms/leave", s.leaf.cfg.Network), body)
+	s.mu.Lock()
+	s.currentRoom = ""
+	s.mu.Unlock()
+	return err
+}
+
+func (s *ChatSession) Post(room, text string) error {
+	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text})
+	return s.leaf.signedPostCtx(context.Background(),
+		fmt.Sprintf("/v3net/v1/%s/chat/rooms/post", s.leaf.cfg.Network), body)
+}
+
+func (s *ChatSession) Private(handle, node, text string) error {
+	body, _ := json.Marshal(protocol.ChatPrivateRequest{ToHandle: handle, ToNode: node, Text: text})
+	return s.leaf.signedPostCtx(context.Background(),
+		fmt.Sprintf("/v3net/v1/%s/chat/rooms/private", s.leaf.cfg.Network), body)
+}
+
+func (s *ChatSession) SetTopic(room, topic string) error {
+	body, _ := json.Marshal(protocol.ChatTopicRequest{Room: room, Topic: topic})
+	return s.leaf.signedPostCtx(context.Background(),
+		fmt.Sprintf("/v3net/v1/%s/chat/rooms/topic", s.leaf.cfg.Network), body)
+}
+
+func (s *ChatSession) Rooms() ([]chat.RoomInfo, error) {
+	data, err := s.leaf.get(fmt.Sprintf("/v3net/v1/%s/chat/rooms", s.leaf.cfg.Network))
+	if err != nil {
+		return nil, err
+	}
+	var protoRooms []protocol.ProtoChatRoomInfo
+	if err := json.Unmarshal(data, &protoRooms); err != nil {
+		return nil, err
+	}
+	rooms := make([]chat.RoomInfo, len(protoRooms))
+	for i, r := range protoRooms {
+		rooms[i] = chat.RoomInfo{Name: r.Name, Topic: r.Topic, UserCount: r.UserCount}
+	}
+	return rooms, nil
+}
+
+func (s *ChatSession) History(room string, limit int) ([]chat.ChatMessage, error) {
+	url := fmt.Sprintf("/v3net/v1/%s/chat/rooms/%s/history?limit=%d",
+		s.leaf.cfg.Network, room, limit)
+	data, err := s.leaf.get(url)
+	if err != nil {
+		return nil, err
+	}
+	var protoMsgs []protocol.ChatMsgPayload
+	if err := json.Unmarshal(data, &protoMsgs); err != nil {
+		return nil, err
+	}
+	msgs := make([]chat.ChatMessage, len(protoMsgs))
+	for i, m := range protoMsgs {
+		msgs[i] = *protoMsgToDomain(m)
+	}
+	return msgs, nil
+}
+
+func (s *ChatSession) Users() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.currentUsers))
+	copy(out, s.currentUsers)
+	return out
+}
+
+func (s *ChatSession) Events() <-chan chat.ChatEvent { return s.events }
+
+func (s *ChatSession) Close() error {
+	s.leaf.chatSessions.deregister(s.handle)
+	close(s.events)
+	return nil
 }

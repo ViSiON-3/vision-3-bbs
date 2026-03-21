@@ -177,6 +177,16 @@ func (l *Leaf) signedPostWithResponse(ctx context.Context, path string, body []b
 	return l.client.Do(req)
 }
 
+// get performs an unauthenticated GET and returns the response body.
+func (l *Leaf) get(path string) ([]byte, error) {
+	resp, err := http.Get(l.cfg.HubURL + path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
+
 func (l *Leaf) signedGet(path string) (*http.Response, error) {
 	return l.signedGetCtx(context.Background(), path)
 }
