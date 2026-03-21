@@ -64,6 +64,7 @@ func (l *Leaf) connectSSE(ctx context.Context) error {
 	}
 
 	slog.Info("leaf: SSE connected", "network", l.cfg.Network)
+	l.chatSessions.notifyReconnect()
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 4096), 1<<20) // 1MB max token size
@@ -89,6 +90,7 @@ func (l *Leaf) connectSSE(ctx context.Context) error {
 					Data: json.RawMessage(data),
 				}
 				l.onEvent(ev)
+				l.chatSessions.dispatch(ev)
 			}
 			eventType = ""
 			continue

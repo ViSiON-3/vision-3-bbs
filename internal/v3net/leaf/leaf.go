@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
@@ -15,11 +16,12 @@ import (
 // Leaf is a V3Net leaf client that polls a hub for messages and maintains
 // an SSE connection for real-time events.
 type Leaf struct {
-	cfg       Config
-	client    *http.Client // short-timeout client for polling/subscribe
-	sseClient *http.Client // no timeout — SSE streams are long-lived; context handles cancellation
-	eventCb   atomic.Value // stores func(protocol.Event)
-	nalCache  *nal.Cache
+	cfg          Config
+	client       *http.Client // short-timeout client for polling/subscribe
+	sseClient    *http.Client // no timeout — SSE streams are long-lived; context handles cancellation
+	eventCb      atomic.Value // stores func(protocol.Event)
+	nalCache     *nal.Cache
+	chatSessions *chatSessionRegistry
 }
 
 // New creates a new Leaf with the given configuration.
@@ -36,6 +38,7 @@ func New(cfg Config) *Leaf {
 	if cfg.OnEvent != nil {
 		l.eventCb.Store(cfg.OnEvent)
 	}
+	l.chatSessions = newChatSessionRegistry()
 	return l
 }
 
@@ -70,6 +73,17 @@ func (l *Leaf) onEvent(ev protocol.Event) {
 func (l *Leaf) Close() {
 	l.client.CloseIdleConnections()
 	l.sseClient.CloseIdleConnections()
+}
+
+// NewChatSession creates a ChatSession for handle and registers it on this leaf.
+func (l *Leaf) NewChatSession(handle string) *ChatSession {
+	s := &ChatSession{
+		leaf:   l,
+		handle: handle,
+		events: make(chan chat.ChatEvent, 64),
+	}
+	l.chatSessions.register(s)
+	return s
 }
 
 // Start begins the polling and SSE goroutines. Blocks until ctx is cancelled.
