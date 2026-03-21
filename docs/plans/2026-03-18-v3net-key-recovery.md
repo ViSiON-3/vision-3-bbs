@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go stdlib only (`crypto/ed25519`, `crypto/sha256`, `crypto/rand`). BIP39 English word list embedded as Go source. BubbleTea TUI framework (already in use).
 
-**Spec:** `docs/superpowers/specs/2026-03-18-v3net-key-recovery-design.md`
+**Spec:** `docs/specs/2026-03-18-v3net-key-recovery-design.md`
 
 ---
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go, Bubble Tea (charmbracelet/bubbletea), lipgloss, net/http, encoding/json
 
-**Spec:** `docs/superpowers/specs/2026-03-20-v3net-area-browser-design.md`
+**Spec:** `docs/specs/2026-03-20-v3net-area-browser-design.md`
 
 ---
 
