@@ -318,13 +318,18 @@ func TestIntegration_ChatEvent(t *testing.T) {
 		t.Fatalf("SendChat: %v", err)
 	}
 
-	select {
-	case ev := <-events:
-		if ev.Type != "chat" {
-			t.Errorf("expected chat event, got %q", ev.Type)
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case ev := <-events:
+			if ev.Type == protocol.EventChatMessage {
+				return // success
+			}
+			// Ignore other events (e.g. chat_join) and keep waiting.
+		case <-deadline:
+			t.Error("timed out waiting for chat_message event")
+			return
 		}
-	case <-time.After(3 * time.Second):
-		t.Error("timed out waiting for chat event")
 	}
 }
 

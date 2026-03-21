@@ -81,13 +81,38 @@ func (l *Leaf) SendChat(text, handle string) error {
 }
 
 // SendChatCtx sends an inter-BBS chat message to the hub with context.
+// It joins the lobby room first, then posts the message.
 func (l *Leaf) SendChatCtx(ctx context.Context, text, handle string) error {
-	data, err := json.Marshal(protocol.ChatRequest{From: handle, Text: text})
+	joinData, err := json.Marshal(protocol.ChatJoinRequest{Room: "lobby", Handle: handle})
 	if err != nil {
-		return fmt.Errorf("leaf: marshal chat: %w", err)
+		return fmt.Errorf("leaf: marshal chat join: %w", err)
 	}
-	path := fmt.Sprintf("/v3net/v1/%s/chat", l.cfg.Network)
-	return l.signedPostCtx(ctx, path, data)
+	joinPath := fmt.Sprintf("/v3net/v1/%s/chat/rooms/join", l.cfg.Network)
+	joinResp, err := l.signedPostWithResponse(ctx, joinPath, joinData)
+	if err != nil {
+		return fmt.Errorf("leaf: chat join: %w", err)
+	}
+	io.Copy(io.Discard, joinResp.Body)
+	joinResp.Body.Close()
+	if joinResp.StatusCode/100 != 2 {
+		return fmt.Errorf("leaf: chat join returned %d", joinResp.StatusCode)
+	}
+
+	postData, err := json.Marshal(protocol.ChatPostRequest{Room: "lobby", Text: text})
+	if err != nil {
+		return fmt.Errorf("leaf: marshal chat post: %w", err)
+	}
+	postPath := fmt.Sprintf("/v3net/v1/%s/chat/rooms/post", l.cfg.Network)
+	postResp, err := l.signedPostWithResponse(ctx, postPath, postData)
+	if err != nil {
+		return fmt.Errorf("leaf: chat post: %w", err)
+	}
+	io.Copy(io.Discard, postResp.Body)
+	postResp.Body.Close()
+	if postResp.StatusCode/100 != 2 {
+		return fmt.Errorf("leaf: chat post returned %d", postResp.StatusCode)
+	}
+	return nil
 }
 
 // SendLogon notifies the hub of a user logon.
