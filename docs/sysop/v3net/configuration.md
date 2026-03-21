@@ -5,290 +5,142 @@
 > may change without notice. Use it only if you are testing or contributing
 > to V3Net development. Do not rely on it for a live BBS.
 
-V3Net is ViSiON/3's native inter-BBS message networking protocol. It uses REST+SSE over HTTPS with Ed25519 cryptographic authentication. Configuration is stored in `configs/v3net.json`.
+V3Net settings live in two places in the TUI config editor (`./config`):
 
-If the file does not exist, V3Net is disabled by default.
+- **System Configuration → Server Setup** — master enable/disable, file paths, and hub server settings
+- **ViSiON/3 Networking (V3Net)** — subscriptions (leaf setup), hosted networks (hub setup), and node identity
 
-## Setup Wizard
-
-The easiest way to configure V3Net is the guided setup wizard in the TUI config editor. From the top menu:
-
-```
-./config  →  4 — ViSiON/3 Networking (V3Net)  →  Subscriptions  →  [I]nsert
-./config  →  4 — ViSiON/3 Networking (V3Net)  →  Networks       →  [I]nsert
-```
-
-When you press **[I]** (Insert) on either record list, a guided wizard launches instead of raw field editing:
-
-- **Subscriptions → [I]nsert** opens **"Leaf Setup — Join a Network"** — walks you through hub URL, network name, board tag, poll interval, and origin line. Writes a `leaves[]` entry and saves.
-- **Networks → [I]nsert** opens **"Hub Setup — Host a Network"** — walks you through network name, description, listen port, auto-approve setting, and initial message areas. Saves the full hub config; the BBS auto-initialises the hub data directory and seeds the NAL on first start.
-
-After the wizard saves, restart the BBS to activate the configuration.
+> For a step-by-step guide to joining FelonyNet specifically, see
+> [Joining FelonyNet](v3net/felonynet.md).
 
 ---
 
-## Quick Start
-
-To join an existing network like FelonyNet, see the [FelonyNet guide](v3net/felonynet.md). This page documents every configuration field in detail.
-
-## Configuration File
-
-### Top-Level Fields
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `enabled` | bool | `false` | Master switch. Set to `true` to activate V3Net on startup. |
-| `keystorePath` | string | `""` | Path to the Ed25519 keypair file. If the file does not exist, a new keypair is generated automatically on first start. Example: `"data/v3net.key"` |
-| `dedupDbPath` | string | `""` | Path to the SQLite database used for message deduplication. Prevents the same message from being imported twice. Example: `"data/v3net_dedup.sqlite"` |
-| `registryUrl` | string | `""` | URL of a V3Net network registry (JSON). Used by the BBS menu to list available networks. Optional — leave blank if you know the hub URL already. |
-
-### Network Registry
-
-The `registryUrl` field points to a public JSON file that lists known V3Net
-networks and their hub URLs — a directory of available networks your BBS can
-join. The default registry is hosted at:
-
-```
-https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json
-```
-
-The registry is fetched (and cached for 1 hour) when a sysop opens the
-**N — Network Registry** option from the V3Net menu. It displays each
-network's name, description, and hub URL, and marks networks you are
-already subscribed to.
-
-**Registry format:**
-
-```json
-{
-  "v3net_registry": "1.0",
-  "updated": "2026-03-17",
-  "networks": [
-    {
-      "name": "felonynet",
-      "description": "Official ViSiON/3 BBS message network",
-      "hub_url": "https://felonynet.org",
-      "hub_node_id": "22819c83e045cd1e"
-    }
-  ]
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `name` | Short lowercase network identifier (must match the hub's network name) |
-| `description` | Human-readable summary shown in the registry browser |
-| `hub_url` | Base URL of the hub's V3Net endpoint |
-| `hub_node_id` | 16-character hex node ID of the hub |
-
-**Adding your network to the registry:** Submit a pull request to the
-[v3net-registry](https://github.com/ViSiON-3/v3net-registry) repository
-adding your network entry to `registry.json`. Your hub must be publicly
-reachable and running before submission.
-
-You can also host your own private registry by setting `registryUrl` to any
-URL that serves the same JSON format. Leave the field blank to disable the
-registry browser.
-
----
-
-### Example (Minimal Leaf)
-
-```json
-{
-  "enabled": true,
-  "keystorePath": "data/v3net.key",
-  "dedupDbPath": "data/v3net_dedup.sqlite",
-  "registryUrl": "https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json",
-  "hub": {
-    "enabled": false
-  },
-  "leaves": [
-    {
-      "hubUrl": "https://felonynet.org",
-      "network": "felonynet",
-      "board": "fel.general",
-      "pollInterval": "5m",
-      "origin": "My Cool BBS - bbs.example.com"
-    }
-  ]
-}
-```
-
----
-
-## Hub Configuration (`hub` Object)
-
-Enable the hub section to host your own V3Net network. Most sysops only need leaf configuration to join an existing network.
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `enabled` | bool | `false` | Set to `true` to start the hub server. |
-| `host` | string | `""` | Listen address. Blank means all interfaces (`0.0.0.0`). Set to `127.0.0.1` if behind a reverse proxy. |
-| `port` | int | `8765` | TCP port for the hub HTTP(S) server. |
-| `tlsCert` | string | `""` | Path to TLS certificate file (PEM). If both `tlsCert` and `tlsKey` are set, the hub serves HTTPS. |
-| `tlsKey` | string | `""` | Path to TLS private key file (PEM). |
-| `dataDir` | string | `""` | Directory for hub data (SQLite database, NAL files). Example: `"data/v3net_hub"` |
-| `autoApprove` | bool | `false` | When `true`, new subscriber registrations and area proposals are approved automatically. Recommended for testing; disable for production networks. |
-| `networks` | array | `[]` | List of networks hosted by this hub. See below. |
-| `initialAreas` | array | `[]` | Area specs written by the setup wizard. Consumed once on first hub start to seed the initial NAL, then removed automatically. See below. |
-
-### Hub Network Entry (`hub.networks[]`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Short lowercase network identifier (e.g. `"felonynet"`). Must be unique per hub. |
-| `description` | string | Human-readable description shown to subscribers. |
-
-### Hub Initial Areas (`hub.initialAreas[]`)
-
-Written by the setup wizard. On first hub start, if no NAL exists for a network, the BBS builds, signs, and stores a NAL from these entries, then removes `initialAreas` from the config file. You do not need to manage this field manually — the wizard handles it.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `tag` | string | Area tag (e.g. `"fel.general"`). Must match `^[a-z0-9]{1,8}\.[a-z0-9-]{1,24}$`. |
-| `name` | string | Human-readable area name (e.g. `"FelonyNet General"`). |
-
-### Hub Startup Auto-Init
-
-When the hub starts for the first time, ViSiON/3 automatically:
-
-1. Creates the `dataDir` directory if it does not exist.
-2. Registers the hub's own node as an active subscriber for each network (idempotent — safe on every restart).
-3. Seeds the initial NAL from `initialAreas` if no NAL exists yet, then clears `initialAreas` from the config file.
-
-This means you do not need to run any bootstrap commands after completing the setup wizard — just start the BBS.
-
-### Example (Hub + Leaf)
-
-```json
-{
-  "enabled": true,
-  "keystorePath": "data/v3net.key",
-  "dedupDbPath": "data/v3net_dedup.sqlite",
-  "hub": {
-    "enabled": true,
-    "port": 8765,
-    "tlsCert": "/etc/letsencrypt/live/hub.example.com/fullchain.pem",
-    "tlsKey": "/etc/letsencrypt/live/hub.example.com/privkey.pem",
-    "dataDir": "data/v3net_hub",
-    "autoApprove": false,
-    "networks": [
-      {
-        "name": "mynet",
-        "description": "My BBS Network"
-      }
-    ]
-  },
-  "leaves": []
-}
-```
-
----
-
-## Leaf Configuration (`leaves` Array)
-
-Each entry in the `leaves` array subscribes your BBS to one network on one hub. You can subscribe to multiple networks by adding multiple leaf entries.
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `hubUrl` | string | — | Full URL of the hub (e.g. `"https://felonynet.org"`). Required. |
-| `network` | string | — | Network name to subscribe to. Must match a network hosted by the hub. Required. |
-| `boards` | array | `[]` | Local message area tags for received messages. List the area tags you want to receive messages from (e.g. `["fn.general", "fn.tech"]`). |
-| `pollInterval` | string | `"5m"` | How often to poll the hub for new messages. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. Shorter intervals mean faster delivery but more hub traffic. |
-| `origin` | string | BBS name | Origin line text appended to locally-posted messages. Identifies your BBS to readers on other nodes. If blank, falls back to the BBS name from `config.json`. |
-
-### Multiple Network Example
-
-```json
-{
-  "leaves": [
-    {
-      "hubUrl": "https://felonynet.org",
-      "network": "felonynet",
-      "boards": ["fn.general", "fn.tech"],
-      "pollInterval": "5m",
-      "origin": "My BBS - bbs.example.com"
-    },
-    {
-      "hubUrl": "https://hub.retronet.io",
-      "network": "retronet",
-      "boards": ["ret.general"],
-      "pollInterval": "5m"
-    }
-  ]
-}
-```
-
----
-
-## Configuration Editor
-
-V3Net settings are spread across two areas of the TUI configuration editor (`./config`):
-
-### V3Net Category Menu
-
-From the top menu, select **4 — ViSiON/3 Networking (V3Net)**. This opens a sub-menu with three options:
-
-| Item | Description |
-|------|-------------|
-| **Node Identity** | View your node ID and public key. Show, export, or recover your seed phrase. |
-| **Subscriptions** | Add, edit, and remove leaf entries (Hub URL, Network, Board, Poll Interval, Origin). Press **[I]** to launch the leaf setup wizard. |
-| **Networks** | Add, edit, and remove hosted network definitions (Name, Description). Press **[I]** to launch the hub setup wizard. |
-
-### System-Level V3Net Settings
-
-Global V3Net settings and hub server parameters live in the system configuration screens:
+## System Configuration — Server Setup
 
 ```
 ./config  →  1 — System Configuration  →  Server Setup
 ```
 
-This screen contains:
+Scroll down to the **V3Net** section. This is where you enable V3Net and set the
+global paths and hub server parameters.
+
+![V3Net fields in System Configuration → Server Setup](images/v3net/system-settings.png)
 
 | Field | Description |
 |-------|-------------|
-| V3Net | Master enable/disable for V3Net |
-| Keystore Path | Path to Ed25519 keypair file |
-| Dedup DB Path | Path to deduplication SQLite database |
-| Registry URL | Central V3Net registry URL (optional) |
-| V3Net Hub | Enable/disable the hub server |
-| Hub Host | Listen address (blank = all interfaces) |
-| Hub Port | Listen port (default: 8765) |
-| Hub TLS Cert | Path to TLS certificate (blank for plain HTTP) |
-| Hub TLS Key | Path to TLS private key |
-| Hub Data Dir | Hub data storage directory |
-| Auto Approve | Automatically approve new leaf subscriptions |
+| **V3Net** | Master on/off switch. Set to `Y` to activate V3Net on startup. |
+| **Keystore Path** | Path to the Ed25519 keypair file. Auto-generated on first start if absent. Recommended: `data/v3net.key` |
+| **Dedup DB Path** | Path to the SQLite message deduplication database. Recommended: `data/v3net_dedup.sqlite` |
+| **Registry URL** | Central registry URL for network discovery. Leave blank to disable the registry browser. Default: `https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json` |
+| **V3Net Hub** | Enable the built-in hub server. Only needed if you are hosting your own network. |
+| **Hub Host** | Listen address for the hub. Blank means all interfaces. Set to `127.0.0.1` if behind a reverse proxy. |
+| **Hub Port** | Listen port for the hub HTTP(S) server. Default: `8765`. |
+| **Hub TLS Cert** | Path to TLS certificate (PEM). Leave blank to use plain HTTP or if TLS is terminated at a proxy. |
+| **Hub TLS Key** | Path to TLS private key (PEM). Must match the certificate. |
+| **Hub Data Dir** | Directory for hub database and NAL files. Recommended: `data/v3net_hub` |
+| **Auto Approve** | When `Y`, new leaf subscriptions and area proposals are approved automatically. Useful for testing; leave `N` for production networks. |
 
-For details on the Hub TLS fields, see [Hub TLS Setup](v3net/hub-tls.md).
+Press **[S] Save** after making changes.
+
+---
+
+## V3Net Networking Menu
+
+```
+./config  →  4 — ViSiON/3 Networking (V3Net)
+```
+
+This menu has three items:
+
+![V3Net networking menu](images/v3net/networking-menu.png)
+
+| Item | Description |
+|------|-------------|
+| **Node Identity** | View your node ID and public key; show, export, or recover your seed phrase. |
+| **Subscriptions** | Add, edit, and remove leaf entries (connections to remote hubs). Press **[I]** to launch the guided leaf setup wizard. |
+| **Networks** | Add, edit, and remove hosted network definitions (only needed if running a hub). Press **[I]** to launch the guided hub setup wizard. |
+
+---
+
+## Subscriptions (Joining a Network)
+
+```
+./config  →  4 — ViSiON/3 Networking (V3Net)  →  Subscriptions
+```
+
+Each subscription connects your BBS as a leaf node to one network on one hub.
+You can add multiple subscriptions for different networks.
+
+![Subscriptions list](images/v3net/subscriptions-list.png)
+
+Press **[I] Insert** to open the **Leaf Setup Wizard**. It walks you through:
+
+1. Hub URL (e.g. `https://felonynet.org`)
+2. Network name (e.g. `felonynet`)
+3. Board tag prefix (used when message areas auto-create from the NAL)
+4. Poll interval (how often to check for new messages; default `5m`)
+5. Origin line (your BBS name/address, appended to outbound messages)
+
+![Leaf setup wizard](images/v3net/leaf-wizard-hub-url.png)
+
+Press **[E] Edit** on an existing subscription to change its settings.
+Press **[D] Delete** to remove a subscription.
+
+---
+
+## Hosting a Hub
+
+```
+./config  →  4 — ViSiON/3 Networking (V3Net)  →  Networks
+```
+
+To host your own V3Net network, you need two things:
+
+1. Enable the hub server in **System Configuration → Server Setup** (set **V3Net Hub** to `Y` and fill in **Hub Port** and **Hub Data Dir**)
+2. Define at least one network in **Networks**
+
+Press **[I] Insert** to open the **Hub Setup Wizard**. It walks you through:
+
+1. Network name (short lowercase identifier, e.g. `mynet`)
+2. Description (shown to subscribers)
+3. Initial message areas to seed the NAL (tag and display name for each area)
+
+![Hub setup wizard](images/v3net/hub-wizard.png)
+
+After saving and restarting, the BBS automatically:
+- Creates the data directory
+- Registers the hub as an active subscriber for its own networks
+- Seeds the initial NAL from the areas you defined
+
+You do not need to run any bootstrap tools — the BBS handles it on first start.
+
+For TLS setup, see [V3Net Hub TLS Setup](v3net/hub-tls.md).
 
 ---
 
 ## Node Identity
 
-Your V3Net node identity is an Ed25519 keypair. The node ID (a 16-character hex
-string) is derived from the public key and serves as your permanent identity on
-all networks.
-
-The key file is stored at the path configured in `keystorePath` (default:
-`data/v3net.key`). If it doesn't exist, it is generated automatically on first
-V3Net startup.
-
-### Backing Up Your Identity
-
-A 24-word recovery seed phrase can restore your keypair if the key file is lost.
-Access it through the config editor:
-
 ```
 ./config  →  4 — ViSiON/3 Networking (V3Net)  →  Node Identity
 ```
 
-From this screen you can:
-- **[S] Show** the seed phrase on screen
-- **[E] Export** the seed phrase to a file
-- **[R] Recover** a key from a previously saved seed phrase
+Your V3Net node identity is an Ed25519 keypair. The 16-character hex node ID
+derived from it is your permanent identity on all networks.
 
-For full details, see [V3Net Key Recovery](recovery.md).
+![Node identity screen](images/v3net/node-identity.png)
+
+From this screen you can:
+
+| Key | Action |
+|-----|--------|
+| **[S] Show** | Display the 24-word recovery seed phrase on screen |
+| **[E] Export** | Write the seed phrase to a file (mode 0600) |
+| **[R] Recover** | Restore a keypair from a previously saved seed phrase |
+
+**Back up your seed phrase immediately after first startup.** If you lose
+both the key file and the seed phrase, your node identity is permanently gone.
+
+See [V3Net Key Recovery](v3net/recovery.md) for full details.
 
 ---
 
@@ -296,18 +148,17 @@ For full details, see [V3Net Key Recovery](recovery.md).
 
 | File | Purpose |
 |------|---------|
-| `configs/v3net.json` | Main configuration file |
-| `data/v3net.key` | Ed25519 keypair (auto-generated) |
+| `configs/v3net.json` | Generated by the config editor — do not edit manually unless necessary |
+| `data/v3net.key` | Ed25519 keypair (auto-generated on first V3Net start) |
 | `data/v3net_dedup.sqlite` | Message deduplication database |
 | `data/v3net_hub/` | Hub data directory (SQLite DB, NAL files) |
-
-The keypair file is critical — it is your node's identity on the network. **Back up your recovery seed phrase** via `./config → 4 → Node Identity → [E]`. See [V3Net Key Recovery](v3net/recovery.md).
 
 ---
 
 ## Related Documentation
 
-- [Joining FelonyNet](v3net/felonynet.md) — step-by-step guide for the FelonyNet network
+- [Joining FelonyNet](v3net/felonynet.md) — step-by-step walkthrough for the FelonyNet network
 - [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, and proposals
-- [Message Areas](messages/message-areas.md) — configuring local JAM message bases
-- [V3Net Message Areas](v3net/message-areas.md) — how V3Net areas differ from local and FTN areas
+- [V3Net Hub TLS Setup](v3net/hub-tls.md) — enabling HTTPS on a hub
+- [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
+- [Manual Configuration Reference](v3net/manual-config.md) — JSON field reference for `v3net.json`

@@ -1,9 +1,14 @@
-# FelonyNet
+# Joining FelonyNet
 
 FelonyNet is a general-purpose public BBS message network running on **V3Net**,
-Vision/3's native REST+SSE networking protocol. It coexists alongside
+ViSiON/3's native REST+SSE networking protocol. It coexists alongside
 FTN-based echomail networks (FidoNet, fsxNet, etc.) — joining FelonyNet does
 not affect your existing FTN configuration.
+
+> **Experimental — Development Only.** V3Net is under active development and
+> is not yet ready for production use. APIs, configuration, and wire formats
+> may change without notice. Use it only if you are testing or contributing
+> to V3Net development. Do not rely on it for a live BBS.
 
 ## What You Get
 
@@ -12,74 +17,123 @@ not affect your existing FTN configuration.
 - **Inter-BBS chat** — chat with users on other nodes in real time
 - **Zero mailer software** — no FrontDoor, Binkd, or nodelist management
 - **Firewall-friendly** — outbound HTTPS only (leaf nodes never need open ports)
-- **5-minute setup** — add a config block and restart
+- **5-minute setup** — a few screens in the config editor and a restart
 
 ## Requirements
 
-- Vision/3 BBS (any version with V3Net support)
+- ViSiON/3 BBS (any version with V3Net support)
 - Outbound HTTPS access to the FelonyNet hub
 
-## Joining as a Leaf Node
+---
 
-### 1. Enable V3Net
+## Step 1: Enable V3Net
 
-In your `configs/config.json`, set the `v3net` section:
+Open the config editor and go to the system settings screen:
 
-```json
-{
-  "v3net": {
-    "enabled": true,
-    "keystorePath": "data/v3net.key",
-    "dedupDbPath": "data/v3net_dedup.sqlite"
-  }
-}
+```
+./config  →  1 — System Configuration  →  Server Setup
 ```
 
-On first start, Vision/3 generates an Ed25519 keypair at `keystorePath` and
-derives your permanent node ID from it. **Back up this file** — if lost, you
-must re-register with all hubs.
+Scroll down to the V3Net section and set the following fields:
 
-> **Important:** After your first V3Net startup, back up your recovery seed
-> phrase immediately. Run `./config > V3Net > Node Identity > [E]` to export
-> it to a file. See [V3Net Key Recovery](v3net/recovery.md)
-> for full details.
+| Field | Value |
+|-------|-------|
+| V3Net | `Y` (enabled) |
+| Keystore Path | `data/v3net.key` |
+| Dedup DB Path | `data/v3net_dedup.sqlite` |
+| Registry URL | `https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json` |
 
-### 2. Create a Message Area
+![V3Net system settings screen](images/v3net/system-settings.png)
 
-Add a local message area for FelonyNet messages. In your message area
-configuration, create an area with a tag like `FELONYNET_GENERAL` (the exact
-tag is up to you — it maps to the network in the leaf config below).
+Press **[S] Save** when done.
 
-### 3. Add the Leaf Subscription
+> On first start, ViSiON/3 generates an Ed25519 keypair at the keystore path and
+> derives your permanent node ID from it.
 
-Add a `leaves` entry pointing to the FelonyNet hub:
+---
 
-```json
-{
-  "v3net": {
-    "enabled": true,
-    "keystorePath": "data/v3net.key",
-    "dedupDbPath": "data/v3net_dedup.sqlite",
-    "leaves": [
-      {
-        "hubUrl": "https://felonynet.org",
-        "network": "felonynet",
-        "boards": ["fn.general"],
-        "pollInterval": "5m"
-      }
-    ]
-  }
-}
+## Step 2: Add the FelonyNet Subscription
+
+From the main config menu, go to the V3Net networking section:
+
+```
+./config  →  4 — ViSiON/3 Networking (V3Net)  →  Subscriptions
 ```
 
-| Field | Description |
-|-------|-------------|
-| `hubUrl` | The FelonyNet hub URL |
-| `network` | Must be `felonynet` |
-| `boards` | Local message area tags (array of area tag strings) |
-| `pollInterval` | How often to poll for new messages (minimum 60s enforced by hub) |
+![V3Net subscriptions list (empty)](images/v3net/subscriptions-empty.png)
 
-### 4. Restart Vision/3
+Press **[I] Insert** to launch the **Leaf Setup Wizard**.
+
+### Wizard Screen 1 — Hub URL
+
+Enter the FelonyNet hub address:
+
+```
+Hub URL: https://felonynet.org
+```
+
+![Leaf wizard: hub URL](images/v3net/leaf-wizard-hub-url.png)
+
+Press **Enter** to continue.
+
+### Wizard Screen 2 — Network & Board
+
+| Field | Value |
+|-------|-------|
+| Network | `felonynet` |
+| Board Tag | A short prefix for local area tags (e.g. `fn`) |
+
+![Leaf wizard: network and board tag](images/v3net/leaf-wizard-network.png)
+
+The board tag becomes the prefix for local message area names when areas
+auto-create from the NAL. Press **Enter** to continue.
+
+### Wizard Screen 3 — Poll Interval & Origin
+
+| Field | Value |
+|-------|-------|
+| Poll Interval | `5m` (5 minutes — minimum enforced by hub is 60s) |
+| Origin Line | Your BBS name and address, e.g. `My BBS - bbs.example.com` |
+
+![Leaf wizard: poll interval and origin](images/v3net/leaf-wizard-origin.png)
+
+The origin line identifies your BBS to readers on other nodes. Press **[S] Save**.
+
+![Leaf wizard complete — subscription saved](images/v3net/subscriptions-saved.png)
+
+---
+
+## Step 3: Back Up Your Identity
+
+Your node ID is derived from an Ed25519 keypair. If you lose this key and have
+no backup, you must re-register with all hubs from scratch.
+
+**Do this now, before your first restart:**
+
+```
+./config  →  4 — ViSiON/3 Networking (V3Net)  →  Node Identity  →  [E] Export
+```
+
+![Node identity screen](images/v3net/node-identity.png)
+
+Enter a file path (default: `v3net-recovery.txt`). Move that file off-server
+immediately — password manager, encrypted USB, or printed copy in a safe place.
+
+See [V3Net Key Recovery](v3net/recovery.md) for full details.
+
+---
+
+## Step 4: Restart the BBS
+
+Exit the config editor and restart:
+
+```bash
+# If running as a service
+systemctl restart vision3
+
+# If running manually
+./vision3
+```
 
 On startup you should see:
 
@@ -87,123 +141,65 @@ On startup you should see:
 INFO: V3Net service started (node_id=a3f9e1b2c4d5e6f7, hub=false, leaves=1)
 ```
 
-Your node automatically subscribes to the hub on first connection. If the hub
-uses auto-approve (FelonyNet does), you start receiving messages immediately.
+Your node automatically subscribes to the FelonyNet hub on first connection.
+FelonyNet uses auto-approve, so you start receiving messages immediately.
 
-### 5. Verify
+---
 
-From the sysop admin menu, press `3` for **V3Net Status** to confirm your node
-ID, subscription count, and network list.
+## Step 5: Subscribe to Areas
 
-## Area Subscriptions
+From the BBS sysop menu, select **V3Net > Area Subscriptions** (or run the
+`V3NETAREAS` menu command). You'll see all areas FelonyNet offers:
 
-FelonyNet uses the **Network Area List (NAL)** to define its message areas.
-Each area has a tag (e.g., `fel.general`), a name, and an access mode.
+![V3Net area browser](images/v3net/area-browser.png)
 
-### Subscribing to Areas
-
-From the sysop menu, go to **V3Net > Area Subscriptions** to see all available
-areas on FelonyNet. Press **Space** to subscribe, **E** to set the local message
-base name for an area.
+- Press **Space** to subscribe or unsubscribe to an area
+- Press **E** to set the local message base name for that area
+- Status shows `ACTIVE` (subscribed), `PENDING` (awaiting approval), or blank
 
 Most FelonyNet areas use **open** access — subscribe and you're in immediately.
-Some specialized areas may use **approval** mode, where the area manager reviews
-your subscription request first.
 
-### Proposing New Areas
+---
 
-Any FelonyNet sysop can propose a new message area. From the Area Subscriptions
-screen, press **P** to open the proposal form. The FelonyNet coordinator reviews
-proposals and adds approved areas to the signed NAL.
+## Step 6: Verify
 
-For full details on area management, see [V3Net NAL documentation](v3net/nal.md).
+From the sysop admin menu, run the **V3Net Status** screen (`V3NETSTATUS`) to
+confirm your node ID, subscription count, and connected networks:
 
-## How It Works
+![V3Net status screen](images/v3net/status-screen.png)
 
-1. **Polling**: Your leaf node polls the hub every `pollInterval` for new
-   messages. Messages are deduplicated by UUID — you never get duplicates even
-   if you poll the same range twice.
-
-2. **SSE Events**: A persistent Server-Sent Events connection delivers
-   real-time notifications: new messages, logon/logoff, and inter-BBS chat.
-
-3. **Posting**: When a user posts to your FelonyNet message area, Vision/3
-   automatically forwards the message to the hub, which distributes it to all
-   other subscribers.
-
-4. **Authentication**: Every request is signed with your node's Ed25519 key.
-   No passwords, no tokens to rotate.
-
-## Hosting a Hub
-
-If you want to run your own V3Net network (not FelonyNet), you can enable hub
-mode on your BBS:
-
-```json
-{
-  "v3net": {
-    "enabled": true,
-    "keystorePath": "data/v3net.key",
-    "dedupDbPath": "data/v3net_dedup.sqlite",
-    "hub": {
-      "enabled": true,
-      "listenAddr": ":8765",
-      "dataDir": "data/v3net_hub",
-      "autoApprove": true,
-      "networks": [
-        {
-          "name": "mynetwork",
-          "description": "My private BBS network"
-        }
-      ]
-    }
-  }
-}
-```
-
-The hub serves:
-- REST API for message exchange on the configured port
-- SSE event stream for real-time notifications
-- Subscriber management (auto-approve or manual approval)
-
-Hub requirements:
-- An open inbound port (the `listenAddr` port)
-- TLS recommended for production (set `tlsCert` and `tlsKey`), or terminate
-  TLS at a reverse proxy
-
-## Registry
-
-The V3Net central registry at
-`https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json`
-lists public networks. Vision/3 caches the registry for 1 hour and uses it for
-network discovery. The registry is optional — you can connect to any hub
-directly by URL.
-
-To list your network in the registry, submit a PR to the
-[v3net-registry](https://github.com/ViSiON-3/v3net-registry) repository with
-your network entry:
-
-```json
-{
-  "name": "felonynet",
-  "description": "General discussion. No warrants required.",
-  "hub_url": "https://felonynet.org",
-  "hub_node_id": "22819c83e045cd1e"
-}
-```
+---
 
 ## Troubleshooting
 
-**"V3Net networking disabled"** — `v3net.enabled` is `false` in config.json.
+**"V3Net networking disabled"** — V3Net is not enabled. Go back to Step 1 and
+make sure **V3Net** is set to `Y` in System Configuration → Server Setup.
 
-**"message area not found, skipping"** — A tag in your `boards` array doesn't
-match any configured message area. Check your message area tags.
+**"message area not found, skipping"** — A board tag in your subscription
+doesn't match any configured message area. Check your area tags in the
+Message Areas config screen.
 
-**No messages arriving** — Check that the hub URL is reachable. Look for
-`leaf: poll failed` warnings in the log. Verify your node is approved (hub may
-require manual approval).
+**No messages arriving** — Check that `felonynet.org` is reachable from your
+server. Look for `leaf: poll failed` in the log. Verify your node is approved
+(check V3Net Status).
 
-**Lost keypair** — If you have your 24-word recovery seed phrase, use
-`./config > V3Net > Node Identity > [R]` to restore your identity. If you have
-lost both the key file and the seed phrase, a new identity is generated on next
-start and you must re-subscribe to all hubs.
+**Lost keypair** — If you have your 24-word recovery seed phrase, restore it
+via `./config → 4 → Node Identity → [R] Recover`. If you have lost both the
+key file and the seed phrase, a new identity is generated on next start and
+you must re-subscribe to all hubs from scratch.
+
+---
+
+## Hosting Your Own Network
+
+If you want to run your own V3Net hub (not FelonyNet), see the
+[V3Net Configuration](v3net/configuration.md#hosting-a-hub) guide.
+
+---
+
+## Related Documentation
+
+- [V3Net Configuration](v3net/configuration.md) — all V3Net config screens in the TUI
+- [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, proposals
+- [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
+- [Manual Configuration Reference](v3net/manual-config.md) — direct JSON editing
