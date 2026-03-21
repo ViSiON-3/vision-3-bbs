@@ -3,10 +3,22 @@ package configeditor
 import (
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 // regBrowserListVisible is the number of visible rows in the registry list.
 const regBrowserListVisible = 10
+
+// sanitizeRegistryField strips control characters from untrusted registry
+// data to prevent ANSI/OSC escape injection in the TUI.
+func sanitizeRegistryField(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
 
 // viewRegistryBrowser renders the registry browser screen.
 func (m Model) viewRegistryBrowser() string {
@@ -64,7 +76,7 @@ func (m Model) viewRegistryBrowser() string {
 		}
 		b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 		b.WriteByte('\n')
-		for i := 0; i < bottomPad+1; i++ {
+		for i := 0; i < bottomPad; i++ {
 			b.WriteString(bgLine)
 			b.WriteByte('\n')
 		}
@@ -89,7 +101,7 @@ func (m Model) viewRegistryBrowser() string {
 		}
 		b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 		b.WriteByte('\n')
-		for i := 0; i < bottomPad+1; i++ {
+		for i := 0; i < bottomPad; i++ {
 			b.WriteString(bgLine)
 			b.WriteByte('\n')
 		}
@@ -127,15 +139,15 @@ func (m Model) viewRegistryBrowser() string {
 			if subscribed {
 				tag = "* "
 			}
-			name := padRight(e.Name, 14)
+			name := padRight(sanitizeRegistryField(e.Name), 14)
 			if len(name) > 14 {
 				name = name[:14]
 			}
-			desc := padRight(e.Description, 28)
+			desc := padRight(sanitizeRegistryField(e.Description), 28)
 			if len(desc) > 28 {
 				desc = desc[:28]
 			}
-			hubURL := e.HubURL
+			hubURL := sanitizeRegistryField(e.HubURL)
 			maxURL := boxW - 14 - 28 - 6
 			if len(hubURL) > maxURL {
 				hubURL = hubURL[:maxURL]

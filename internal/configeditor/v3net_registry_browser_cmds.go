@@ -11,14 +11,15 @@ import (
 
 // fetchRegistryMsg is the result of fetching the V3Net network registry.
 type fetchRegistryMsg struct {
-	entries []protocol.RegistryEntry
-	err     error
+	requestID uint64
+	entries   []protocol.RegistryEntry
+	err       error
 }
 
 // fetchRegistry returns a tea.Cmd that fetches the V3Net network registry.
-func fetchRegistry(url string) tea.Cmd {
+func fetchRegistry(ctx context.Context, requestID uint64, url string) tea.Cmd {
 	return func() tea.Msg {
-		entries, err := registry.Fetch(context.Background(), url)
-		return fetchRegistryMsg{entries: entries, err: err}
+		entries, err := registry.Fetch(ctx, url)
+		return fetchRegistryMsg{requestID: requestID, entries: entries, err: err}
 	}
 }

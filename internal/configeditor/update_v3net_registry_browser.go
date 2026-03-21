@@ -1,6 +1,9 @@
 package configeditor
 
 import (
+	"context"
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -11,6 +14,10 @@ import (
 func (m Model) updateRegistryBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.regBrowserLoading {
 		if msg.Type == tea.KeyEscape {
+			if m.regBrowserCancel != nil {
+				m.regBrowserCancel()
+				m.regBrowserCancel = nil
+			}
 			m.regBrowserLoading = false
 			m.mode = m.regBrowserReturn
 		}
@@ -71,7 +78,15 @@ func (m Model) updateRegistryBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleFetchRegistryMsg processes the result of a registry fetch.
 func (m Model) handleFetchRegistryMsg(msg fetchRegistryMsg) (tea.Model, tea.Cmd) {
+	// Ignore stale responses from a previous (cancelled or retried) fetch.
+	if msg.requestID != m.regBrowserRequestID {
+		return m, nil
+	}
 	m.regBrowserLoading = false
+	if m.regBrowserCancel != nil {
+		m.regBrowserCancel()
+		m.regBrowserCancel = nil
+	}
 	if msg.err != nil {
 		m.regBrowserError = msg.err.Error()
 		return m, nil
@@ -88,15 +103,22 @@ func (m Model) enterRegistryBrowser(returnMode editorMode) (tea.Model, tea.Cmd) 
 	if m.configs != nil && m.configs.V3Net.RegistryURL != "" {
 		url = m.configs.V3Net.RegistryURL
 	}
+	// Cancel any previous in-flight fetch.
+	if m.regBrowserCancel != nil {
+		m.regBrowserCancel()
+	}
+	m.regBrowserRequestID++
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	m.regBrowserEntries = nil
 	m.regBrowserCursor = 0
 	m.regBrowserScroll = 0
 	m.regBrowserLoading = true
+	m.regBrowserCancel = cancel
 	m.regBrowserError = ""
 	m.regBrowserReturn = returnMode
 	m.message = ""
 	m.mode = modeRegistryBrowser
-	return m, fetchRegistry(url)
+	return m, fetchRegistry(ctx, m.regBrowserRequestID, url)
 }
 
 // selectRegistryEntry fills the wizard fields from a selected registry entry

@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -218,9 +219,11 @@ type Model struct {
 	regBrowserEntries []protocol.RegistryEntry // fetched networks
 	regBrowserCursor  int                      // highlighted row
 	regBrowserScroll  int                      // scroll offset
-	regBrowserLoading bool                     // true while fetch in flight
-	regBrowserError   string                   // error from fetch
-	regBrowserReturn  editorMode               // mode to return to on ESC
+	regBrowserLoading   bool                     // true while fetch in flight
+	regBrowserCancel    context.CancelFunc        // cancels the in-flight fetch
+	regBrowserRequestID uint64                    // monotonic; stale responses are ignored
+	regBrowserError     string                   // error from fetch
+	regBrowserReturn    editorMode               // mode to return to on ESC
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool
