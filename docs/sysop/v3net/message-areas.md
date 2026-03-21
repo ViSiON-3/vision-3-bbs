@@ -37,11 +37,19 @@ V3Net areas are message areas that are networked using the V3Net protocol. Messa
 
 ## Creating V3Net Areas
 
-V3Net areas are created automatically when your BBS subscribes to network areas via the NAL (Network Area List). You can also create them manually:
+V3Net areas are created automatically when your BBS subscribes to network areas
+via the NAL (Network Area List). After subscribing to a network, go to
+**V3Net > Area Subscriptions** and press **Space** on any area — the local
+message base is created for you.
 
-1. Add a message area in `configs/message_areas.json` or via the config editor
-2. Set the area's `tag` to match the network area tag
-3. Add a leaf subscription in `configs/v3net.json` with the `board` field matching the tag prefix
+You can also create areas manually through the config editor:
+
+```
+./config  →  Message Areas  →  [I] Insert
+```
+
+Set the area's **Tag** to match the network area tag (e.g. `fn.general`), then
+add a leaf subscription via **V3Net → Subscriptions** with the same board tag.
 
 ### Area Auto-Creation
 
@@ -89,4 +97,4 @@ These commands are configured in your menu `.CFG` files. The default V3Net menu 
 - [Joining FelonyNet](felonynet.md) — step-by-step guide
 - [Network Area List (NAL)](nal.md) — area management and access control
 - [Message Areas](../messages/message-areas.md) — general message area configuration
-- [Header Placeholders](placeholders.md) — `@I@` (network name) and `@O@` (node ID) codes
+- [Header Placeholders](../messages/placeholders.md) — `@I@` (network name) and `@O@` (node ID) codes
