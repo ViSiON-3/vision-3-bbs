@@ -47,6 +47,10 @@ func (m Model) updateRegistryBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		entry := m.regBrowserEntries[m.regBrowserCursor]
+		if m.isLeafSubscribed(entry.Name) {
+			m.message = "Already subscribed to " + entry.Name
+			return m, nil
+		}
 		return m.selectRegistryEntry(entry)
 
 	case tea.KeyEscape:
@@ -134,6 +138,20 @@ func (m Model) selectRegistryEntry(entry protocol.RegistryEntry) (tea.Model, tea
 // subscription list. On selection it creates a pre-filled leaf wizard.
 func (m Model) enterRegistryBrowserForLeafList() (tea.Model, tea.Cmd) {
 	return m.enterRegistryBrowser(modeRecordList)
+}
+
+// isLeafSubscribed returns true if a leaf subscription already exists for the
+// given network name.
+func (m Model) isLeafSubscribed(network string) bool {
+	if m.configs == nil {
+		return false
+	}
+	for _, l := range m.configs.V3Net.Leaves {
+		if l.Network == network {
+			return true
+		}
+	}
+	return false
 }
 
 // clampRegBrowserScroll ensures the cursor is visible in the registry list.

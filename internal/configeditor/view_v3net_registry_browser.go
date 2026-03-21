@@ -103,7 +103,7 @@ func (m Model) viewRegistryBrowser() string {
 	}
 
 	// Column header.
-	colHeader := fmt.Sprintf("  %-14s %-30s %s", "Network", "Description", "Hub URL")
+	colHeader := fmt.Sprintf("  %-14s %-28s %s", "Network", "Description", "Hub URL")
 	b.WriteString(border(menuBorderStyle.Render("│") +
 		menuHeaderStyle.Render(padRight(colHeader, boxW)) +
 		menuBorderStyle.Render("│")))
@@ -122,20 +122,25 @@ func (m Model) viewRegistryBrowser() string {
 
 		if visIdx >= 0 && visIdx < total {
 			e := m.regBrowserEntries[visIdx]
+			subscribed := m.isLeafSubscribed(e.Name)
+			tag := "  "
+			if subscribed {
+				tag = "* "
+			}
 			name := padRight(e.Name, 14)
 			if len(name) > 14 {
 				name = name[:14]
 			}
-			desc := padRight(e.Description, 30)
-			if len(desc) > 30 {
-				desc = desc[:30]
+			desc := padRight(e.Description, 28)
+			if len(desc) > 28 {
+				desc = desc[:28]
 			}
 			hubURL := e.HubURL
-			maxURL := boxW - 14 - 30 - 4
+			maxURL := boxW - 14 - 28 - 6
 			if len(hubURL) > maxURL {
 				hubURL = hubURL[:maxURL]
 			}
-			content = fmt.Sprintf("  %-14s %-30s %s", name, desc, hubURL)
+			content = fmt.Sprintf("%s%-14s %-28s %s", tag, name, desc, hubURL)
 		}
 
 		if content == "" {
@@ -182,7 +187,7 @@ func (m Model) viewRegistryBrowser() string {
 	b.WriteByte('\n')
 
 	// Help bar.
-	helpStr := "Enter - Select  |  ESC - Back"
+	helpStr := "Enter - Select  |  ESC - Back  |  * = subscribed"
 	b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))
 
 	return b.String()
