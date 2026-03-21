@@ -28,78 +28,110 @@ not affect your existing FTN configuration.
 
 ## Step 1: Enable V3Net
 
-Open the config editor and go to the system settings screen:
+Open the config editor and navigate to the system settings:
 
 ```
-./config  →  1 — System Configuration  →  Server Setup
+./config  →  1 — System Configuration  →  2. Server Setup
 ```
 
-Scroll down to the V3Net section and set the following fields:
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                           Server Setup                               │
+│                                                                      │
+│  ...                                                                 │
+│  V3Net           : Y                                                 │
+│  Keystore Path   : data/v3net.key                                    │
+│  Dedup DB Path   : data/v3net_dedup.sqlite                           │
+│  Registry URL    : https://raw.githubusercontent.com/...             │
+│                                                                      │
+│  V3Net Hub       : N                                                 │
+│  Hub Host        :                                                   │
+│  Hub Port        : 8765                                              │
+│  Hub TLS Cert    :                                                   │
+│  Hub TLS Key     :                                                   │
+│  Hub Data Dir    :                                                   │
+│  Auto Approve    : N                                                 │
+│                                                                      │
+│                          Screen 2 of 8                               │
+└──────────────────────────────────────────────────────────────────────┘
+Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
+```
 
-| Field | Value |
-|-------|-------|
-| V3Net | `Y` (enabled) |
-| Keystore Path | `data/v3net.key` |
-| Dedup DB Path | `data/v3net_dedup.sqlite` |
-| Registry URL | `https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json` |
+Set **V3Net** to `Y`, and fill in the **Keystore Path** and **Dedup DB Path**.
+Press **S** to save.
 
-![V3Net system settings screen](images/v3net/system-settings.png)
-
-Press **[S] Save** when done.
-
-> On first start, ViSiON/3 generates an Ed25519 keypair at the keystore path and
-> derives your permanent node ID from it.
+> On first start with V3Net enabled, ViSiON/3 generates an Ed25519 keypair at
+> the keystore path and derives your permanent node ID from it.
 
 ---
 
 ## Step 2: Add the FelonyNet Subscription
 
-From the main config menu, go to the V3Net networking section:
+From the main config menu, open the V3Net networking section:
 
 ```
-./config  →  4 — ViSiON/3 Networking (V3Net)  →  Subscriptions
+./config  →  4 — ViSiON/3 Networking (V3Net)
 ```
 
-![V3Net subscriptions list (empty)](images/v3net/subscriptions-empty.png)
+```
+┌──────────────────────────────────────┐
+│    ViSiON/3 Networking (V3Net)       │
+│                                      │
+│  1. Node Identity                    │
+│  2. Subscriptions                    │
+│  3. Networks                         │
+│  Q. Return                           │
+│                                      │
+└──────────────────────────────────────┘
+Enter - Select  |  ESC/Q - Return
+```
 
-Press **[I] Insert** to launch the **Leaf Setup Wizard**.
-
-### Wizard Screen 1 — Hub URL
-
-Enter the FelonyNet hub address:
+Select **2. Subscriptions**, then press **I** to launch the **Leaf Setup Wizard**:
 
 ```
-Hub URL: https://felonynet.org
+┌──────────────────────────────────────────────────────────────────────┐
+│                     Leaf Setup — Join a Network                      │
+│                                                                      │
+│  Hub URL         : https://felonynet.org                             │
+│  Network         : felonynet                                         │
+│  Areas           : (none — press Enter to browse)                    │
+│  Poll Interval   : 5m                                                │
+│  Origin          : My BBS - bbs.example.com                          │
+│                                                                      │
+│                         S - Save  |  ESC - Cancel                    │
+└──────────────────────────────────────────────────────────────────────┘
+Enter - Edit  |  S - Save  |  ESC - Back
 ```
 
-![Leaf wizard: hub URL](images/v3net/leaf-wizard-hub-url.png)
-
-Press **Enter** to continue.
-
-### Wizard Screen 2 — Network & Board
+Fill in the fields:
 
 | Field | Value |
 |-------|-------|
+| Hub URL | `https://felonynet.org` |
 | Network | `felonynet` |
-| Board Tag | A short prefix for local area tags (e.g. `fn`) |
+| Areas | Press **Enter** to open the area browser and subscribe |
+| Poll Interval | `5m` (minimum enforced by hub is 60s) |
+| Origin | Your BBS name and address, e.g. `My BBS - bbs.example.com` |
 
-![Leaf wizard: network and board tag](images/v3net/leaf-wizard-network.png)
+Press **Enter** on **Areas** to open the area browser and choose which FelonyNet
+areas to subscribe to:
 
-The board tag becomes the prefix for local message area names when areas
-auto-create from the NAL. Press **Enter** to continue.
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                      Area Browser — felonynet                        │
+│      Tag             Name             Status   Local Board           │
+│──────────────────────────────────────────────────────────────────────│
+│  [ ] fel.general     General                                         │
+│  [ ] fel.phreaking   Phreaking                                       │
+│  [ ] fel.art         ANSI/ASCII Art                                  │
+│  [ ] fel.tech        Tech Talk                                       │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+Space - Subscribe/Unsubscribe  |  ESC - Done
+```
 
-### Wizard Screen 3 — Poll Interval & Origin
-
-| Field | Value |
-|-------|-------|
-| Poll Interval | `5m` (5 minutes — minimum enforced by hub is 60s) |
-| Origin Line | Your BBS name and address, e.g. `My BBS - bbs.example.com` |
-
-![Leaf wizard: poll interval and origin](images/v3net/leaf-wizard-origin.png)
-
-The origin line identifies your BBS to readers on other nodes. Press **[S] Save**.
-
-![Leaf wizard complete — subscription saved](images/v3net/subscriptions-saved.png)
+Press **Space** to subscribe to each area you want. Press **ESC** when done,
+then press **S** to save the subscription.
 
 ---
 
@@ -108,16 +140,30 @@ The origin line identifies your BBS to readers on other nodes. Press **[S] Save*
 Your node ID is derived from an Ed25519 keypair. If you lose this key and have
 no backup, you must re-register with all hubs from scratch.
 
-**Do this now, before your first restart:**
+**Do this before your first restart:**
 
 ```
-./config  →  4 — ViSiON/3 Networking (V3Net)  →  Node Identity  →  [E] Export
+./config  →  4 — ViSiON/3 Networking (V3Net)  →  1. Node Identity
 ```
 
-![Node identity screen](images/v3net/node-identity.png)
+```
+┌────────────────────────────────────────────────────────────┐
+│                    V3Net Node Identity                     │
+│                                                            │
+│  Node ID:    a3f9e1b2c4d5e6f7                              │
+│  Public Key: MCowBQYDK2VdAyEA...                           │
+│  Key File:   data/v3net.key                                │
+│                                                            │
+│  [S] Show recovery seed phrase                             │
+│  [E] Export recovery seed phrase to file                   │
+│  [R] Recover identity from seed phrase                     │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+S - Show  |  E - Export  |  R - Recover  |  Q - Return
+```
 
-Enter a file path (default: `v3net-recovery.txt`). Move that file off-server
-immediately — password manager, encrypted USB, or printed copy in a safe place.
+Press **E** to export the seed phrase to a file. Move that file off-server
+immediately — password manager, encrypted USB, or printed copy in a safe.
 
 See [V3Net Key Recovery](v3net/recovery.md) for full details.
 
@@ -135,7 +181,7 @@ systemctl restart vision3
 ./vision3
 ```
 
-On startup you should see:
+On startup you should see a log line like:
 
 ```
 INFO: V3Net service started (node_id=a3f9e1b2c4d5e6f7, hub=false, leaves=1)
@@ -146,53 +192,29 @@ FelonyNet uses auto-approve, so you start receiving messages immediately.
 
 ---
 
-## Step 5: Subscribe to Areas
-
-From the BBS sysop menu, select **V3Net > Area Subscriptions** (or run the
-`V3NETAREAS` menu command). You'll see all areas FelonyNet offers:
-
-![V3Net area browser](images/v3net/area-browser.png)
-
-- Press **Space** to subscribe or unsubscribe to an area
-- Press **E** to set the local message base name for that area
-- Status shows `ACTIVE` (subscribed), `PENDING` (awaiting approval), or blank
-
-Most FelonyNet areas use **open** access — subscribe and you're in immediately.
-
----
-
-## Step 6: Verify
-
-From the sysop admin menu, run the **V3Net Status** screen (`V3NETSTATUS`) to
-confirm your node ID, subscription count, and connected networks:
-
-![V3Net status screen](images/v3net/status-screen.png)
-
----
-
 ## Troubleshooting
 
 **"V3Net networking disabled"** — V3Net is not enabled. Go back to Step 1 and
-make sure **V3Net** is set to `Y` in System Configuration → Server Setup.
+set **V3Net** to `Y` in System Configuration → Server Setup.
 
-**"message area not found, skipping"** — A board tag in your subscription
-doesn't match any configured message area. Check your area tags in the
-Message Areas config screen.
+**"message area not found, skipping"** — A subscribed area doesn't match any
+local message base. Open the area browser (edit the subscription → Areas) and
+verify the local board mapping.
 
-**No messages arriving** — Check that `felonynet.org` is reachable from your
-server. Look for `leaf: poll failed` in the log. Verify your node is approved
-(check V3Net Status).
+**No messages arriving** — Check that `felonynet.org` is reachable. Look for
+`leaf: poll failed` warnings in the log. Verify your node is approved by
+checking the V3Net Status screen (`V3NETSTATUS`).
 
 **Lost keypair** — If you have your 24-word recovery seed phrase, restore it
 via `./config → 4 → Node Identity → [R] Recover`. If you have lost both the
 key file and the seed phrase, a new identity is generated on next start and
-you must re-subscribe to all hubs from scratch.
+you must re-subscribe to all hubs.
 
 ---
 
 ## Hosting Your Own Network
 
-If you want to run your own V3Net hub (not FelonyNet), see the
+To run your own V3Net hub (not FelonyNet), see the
 [V3Net Configuration](v3net/configuration.md#hosting-a-hub) guide.
 
 ---

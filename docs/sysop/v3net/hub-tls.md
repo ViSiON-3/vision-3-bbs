@@ -179,16 +179,26 @@ Once you have your certificate files, enter the paths in the TUI config editor:
 ./config  →  1 — System Configuration  →  Server Setup
 ```
 
-Scroll to the V3Net hub fields and set:
+Scroll to the V3Net hub fields and set **Hub TLS Cert** and **Hub TLS Key**:
 
 ```
-Hub TLS Cert     : /path/to/fullchain.pem
-Hub TLS Key      : /path/to/privkey.pem
+┌──────────────────────────────────────────────────────────────────────┐
+│                           Server Setup                               │
+│                                                                      │
+│  V3Net Hub       : Y                                                 │
+│  Hub Host        :                                                   │
+│  Hub Port        : 8765                                              │
+│  Hub TLS Cert    : /etc/letsencrypt/live/hub.example.com/fullcha...  │
+│  Hub TLS Key     : /etc/letsencrypt/live/hub.example.com/privkey...  │
+│  Hub Data Dir    : data/v3net_hub                                    │
+│  Auto Approve    : N                                                 │
+│                                                                      │
+│                          Screen 2 of 8                               │
+└──────────────────────────────────────────────────────────────────────┘
+Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 ```
 
-![Hub TLS cert and key fields in Server Setup](images/v3net/hub-tls-fields.png)
-
-Press **[S] Save**, then restart the BBS to activate the change. On startup the hub logs:
+Press **S** to save, then restart the BBS to activate the change. On startup the hub logs:
 
 ```
 v3net hub starting addr=:8765
