@@ -57,9 +57,6 @@ Open the config editor and navigate to the system settings:
 Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 ```
 
-Set **V3Net** to `Y`, and fill in the **Keystore Path** and **Dedup DB Path**.
-Press **S** to save.
-
 > On first start with V3Net enabled, ViSiON/3 generates an Ed25519 keypair at
 > the keystore path and derives your permanent node ID from it.
 
