@@ -17,8 +17,8 @@ func (m Model) viewV3NetAreaBrowser() string {
 	total := len(m.areaBrowserAreas)
 
 	// Fixed rows: header(1) + border(1) + title(1) + colheader(1) + sep(1)
-	//           + list(10) + border(1) + msg(1) + help(1)
-	fixedRows := listVisible + 8
+	//           + list(10) + border(1) + msg(1) + bgLine(1) + help(1)
+	fixedRows := listVisible + 9
 	extraV := maxInt(0, m.height-fixedRows)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
@@ -61,10 +61,14 @@ func (m Model) viewV3NetAreaBrowser() string {
 		}
 		b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 		b.WriteByte('\n')
-		for i := 0; i < bottomPad+2; i++ {
+		for i := 0; i < bottomPad+1; i++ {
 			b.WriteString(bgLine)
 			b.WriteByte('\n')
 		}
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
 		b.WriteString(helpBarStyle.Render(centerText("ESC - Cancel", m.width)))
 		return b.String()
 	}
@@ -82,10 +86,12 @@ func (m Model) viewV3NetAreaBrowser() string {
 		}
 		b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 		b.WriteByte('\n')
-		for i := 0; i < bottomPad; i++ {
+		for i := 0; i < bottomPad+1; i++ {
 			b.WriteString(bgLine)
 			b.WriteByte('\n')
 		}
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
 		b.WriteString(bgLine)
 		b.WriteByte('\n')
 		helpStr := "R - Retry  |  ESC - Back"
@@ -159,7 +165,12 @@ func (m Model) viewV3NetAreaBrowser() string {
 	b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
 
-	// Message line.
+	for i := 0; i < bottomPad; i++ {
+		b.WriteString(bgLine)
+		b.WriteByte('\n')
+	}
+
+	// Help row (message or blank).
 	if m.message != "" {
 		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
@@ -170,10 +181,8 @@ func (m Model) viewV3NetAreaBrowser() string {
 	}
 	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
+	b.WriteString(bgLine)
+	b.WriteByte('\n')
 
 	// Help bar.
 	helpStr := "Space - Subscribe/Unsubscribe  |  ESC - Done"

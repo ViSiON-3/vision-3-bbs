@@ -488,7 +488,7 @@ data_dir     = "data/v3net_hub"
 auto_approve = true
 
 [[v3net.leaf]]
-hub_url       = "https://bbs.felonynet.org"
+hub_url       = "https://felonynet.org"
 network       = "felonynet"
 board         = "FelonyNet General"
 poll_interval = "5m"

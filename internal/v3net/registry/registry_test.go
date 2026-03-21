@@ -14,7 +14,7 @@ const testRegistryJSON = `{
 		{
 			"name": "felonynet",
 			"description": "General discussion.",
-			"hub_url": "https://bbs.felonynet.org",
+			"hub_url": "https://felonynet.org",
 			"hub_node_id": "a3f9e1b2c4d5e6f7"
 		}
 	]
@@ -39,7 +39,7 @@ func TestFetch_Success(t *testing.T) {
 	if networks[0].Name != "felonynet" {
 		t.Errorf("expected felonynet, got %q", networks[0].Name)
 	}
-	if networks[0].HubURL != "https://bbs.felonynet.org" {
+	if networks[0].HubURL != "https://felonynet.org" {
 		t.Errorf("unexpected hub URL: %q", networks[0].HubURL)
 	}
 }

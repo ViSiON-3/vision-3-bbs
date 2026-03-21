@@ -66,7 +66,7 @@ func (m *Model) fieldsLeafWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Origin", Help: "Origin line identifying your BBS — leave blank to use BBS name", Type: ftString, Col: 3, Row: 5, Width: 45,
+			Label: "Origin", Help: "Leave blank to use BBS name", Type: ftString, Col: 3, Row: 5, Width: 45,
 			Get: func() string { return w.origin },
 			Set: func(val string) error {
 				w.origin = strings.TrimSpace(val)

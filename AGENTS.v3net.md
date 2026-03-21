@@ -337,9 +337,8 @@ Format:
     {
       "name": "felonynet",
       "description": "General discussion. No warrants required.",
-      "hub_url": "https://bbs.felonynet.org",
-      "hub_node_id": "a3f9e1b2c4d5e6f7",
-      "tags": ["general", "tech", "bbs"]
+      "hub_url": "https://felonynet.org",
+      "hub_node_id": "a3f9e1b2c4d5e6f7"
     }
   ]
 }
@@ -1046,7 +1045,7 @@ writing any code here. Specifically understand:
 
    # One [[v3net.leaf]] block per subscribed network
    [[v3net.leaf]]
-   hub_url      = "https://bbs.felonynet.org"
+   hub_url      = "https://felonynet.org"
    network      = "felonynet"
    board        = "FelonyNet General"   # local JAM message base name
    poll_interval = "5m"

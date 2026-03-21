@@ -1465,11 +1465,11 @@ This adds the wizard infrastructure to the model: two new modes, the `wizardStat
           "Step 5 of 5 — Origin Line",
       }
       helps := []string{
-          "URL of the V3Net hub (e.g. https://hub.felonynet.org)",
+          "URL of the V3Net hub (e.g. https://felonynet.org)",
           "Network name to subscribe to (e.g. felonynet)",
           "Local message area tag prefix for received messages",
           "How often to poll for new messages (e.g. 5m, 30s, 1h)",
-          "Origin line identifying your BBS — leave blank to use BBS name",
+          "Leave blank to use BBS name",
       }
       title := "Leaf Setup"
       if m.wizard.step < len(titles) {
