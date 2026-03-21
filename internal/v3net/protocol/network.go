@@ -154,8 +154,9 @@ type AreaSubscriptionStatus struct {
 
 // SubscribeWithAreasResponse is the response when area_tags are provided.
 type SubscribeWithAreasResponse struct {
-	OK    bool                     `json:"ok"`
-	Areas []AreaSubscriptionStatus `json:"areas,omitempty"`
+	OK     bool                     `json:"ok"`
+	Status string                   `json:"status"`
+	Areas  []AreaSubscriptionStatus `json:"areas,omitempty"`
 }
 
 // CoordTransferRequest is the body of POST /coordinator/transfer.

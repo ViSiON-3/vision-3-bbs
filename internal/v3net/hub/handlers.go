@@ -405,8 +405,9 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 
 		writeJSON(w, http.StatusOK, protocol.SubscribeWithAreasResponse{
-			OK:    true,
-			Areas: areaStatuses,
+			OK:     true,
+			Status: actualStatus,
+			Areas:  areaStatuses,
 		})
 		return
 	}
