@@ -121,14 +121,15 @@ func (s *LocalChatService) Leave(room string) error {
 }
 
 func (s *LocalChatService) Post(room, text string) error {
+	now := time.Now().UTC()
 	_, err := s.db.Exec(
 		`INSERT INTO chat_history(room,from_handle,text,created_at) VALUES(?,?,?,?)`,
-		room, s.handle, text, time.Now().UTC(),
+		room, s.handle, text, now,
 	)
 	if err != nil {
 		return err
 	}
-	msg := ChatMessage{Room: room, Handle: s.handle, Text: text, Timestamp: time.Now()}
+	msg := ChatMessage{Room: room, Handle: s.handle, Text: text, Timestamp: now}
 	broadcastLocalEvent(room, s.handle, ChatEvent{Type: TypeMessage, Message: &msg})
 	return nil
 }
