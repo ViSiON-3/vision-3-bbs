@@ -34,28 +34,9 @@ Open the config editor and navigate to the system settings:
 ./config  →  1 — System Configuration  →  2. Server Setup
 ```
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                           Server Setup                               │
-│                                                                      │
-│  ...                                                                 │
-│  V3Net           : Y                                                 │
-│  Keystore Path   : data/v3net.key                                    │
-│  Dedup DB Path   : data/v3net_dedup.sqlite                           │
-│  Registry URL    : https://raw.githubusercontent.com/...             │
-│                                                                      │
-│  V3Net Hub       : N                                                 │
-│  Hub Host        :                                                   │
-│  Hub Port        : 8765                                              │
-│  Hub TLS Cert    :                                                   │
-│  Hub TLS Key     :                                                   │
-│  Hub Data Dir    :                                                   │
-│  Auto Approve    : N                                                 │
-│                                                                      │
-│                          Screen 2 of 8                               │
-└──────────────────────────────────────────────────────────────────────┘
-Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
-```
+Set **V3Net** to `Y` and press **S** to save. The keystore path, dedup DB path,
+and registry URL are pre-configured with sensible defaults — you don't need to
+change them.
 
 > On first start with V3Net enabled, ViSiON/3 generates an Ed25519 keypair at
 > the keystore path and derives your permanent node ID from it.
