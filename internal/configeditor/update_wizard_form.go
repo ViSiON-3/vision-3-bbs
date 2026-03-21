@@ -39,6 +39,10 @@ func (m Model) updateWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeV3NetWizardStep
 			return m, nil
 		}
+		// Leaf wizard "Registry" field opens the registry browser.
+		if f.Type == ftDisplay && m.wizard.flow == "leaf" && f.Label == "Registry" {
+			return m.enterRegistryBrowser(modeWizardForm)
+		}
 		// Leaf wizard "Areas" field opens the area browser.
 		if f.Type == ftDisplay && m.wizard.flow == "leaf" && f.Label == "Areas" {
 			if m.wizard.hubURL == "" {

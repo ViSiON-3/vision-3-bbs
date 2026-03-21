@@ -14,7 +14,11 @@ func (m *Model) fieldsLeafWizard() []fieldDef {
 	w := m.wizard
 	return []fieldDef{
 		{
-			Label: "Hub URL", Help: "URL of the V3Net hub (e.g. https://hub.example.org)", Type: ftString, Col: 3, Row: 1, Width: 45,
+			Label: "Registry", Help: "Press Enter to browse known networks", Type: ftDisplay, Col: 3, Row: 1, Width: 45,
+			Get: func() string { return "(press Enter to browse available networks)" },
+		},
+		{
+			Label: "Hub URL", Help: "URL of the V3Net hub (e.g. https://hub.example.org)", Type: ftString, Col: 3, Row: 2, Width: 45,
 			Get: func() string { return w.hubURL },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -26,7 +30,7 @@ func (m *Model) fieldsLeafWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Network", Help: "Network name to subscribe to (e.g. felonynet)", Type: ftString, Col: 3, Row: 2, Width: 30,
+			Label: "Network", Help: "Network name to subscribe to (e.g. felonynet)", Type: ftString, Col: 3, Row: 3, Width: 30,
 			Get: func() string { return w.networkName },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -38,7 +42,7 @@ func (m *Model) fieldsLeafWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Areas", Help: "Press Enter to browse and subscribe to network areas", Type: ftDisplay, Col: 3, Row: 3, Width: 45,
+			Label: "Areas", Help: "Press Enter to browse and subscribe to network areas", Type: ftDisplay, Col: 3, Row: 4, Width: 45,
 			Get: func() string {
 				n := 0
 				for _, a := range w.selectedAreas {
@@ -53,7 +57,7 @@ func (m *Model) fieldsLeafWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Poll Interval", Help: "How often to poll for new messages (e.g. 5m, 30s, 1h)", Type: ftString, Col: 3, Row: 4, Width: 10,
+			Label: "Poll Interval", Help: "How often to poll for new messages (e.g. 5m, 30s, 1h)", Type: ftString, Col: 3, Row: 5, Width: 10,
 			Get: func() string { return w.pollInterval },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -66,7 +70,7 @@ func (m *Model) fieldsLeafWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Origin", Help: "Leave blank to use BBS name", Type: ftString, Col: 3, Row: 5, Width: 45,
+			Label: "Origin", Help: "Leave blank to use BBS name", Type: ftString, Col: 3, Row: 6, Width: 45,
 			Get: func() string { return w.origin },
 			Set: func(val string) error {
 				w.origin = strings.TrimSpace(val)

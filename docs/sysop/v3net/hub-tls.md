@@ -13,6 +13,13 @@ The V3Net hub uses a standard HTTP server for its WebSocket transport. By
 default it listens on plain HTTP. When both `tlsCert` and `tlsKey` are set
 in the hub configuration, the server switches to HTTPS automatically.
 
+> **TLS covers the wire only.** Enabling HTTPS prevents eavesdropping on
+> connections between leaf nodes and your hub. It does not encrypt messages
+> stored in the hub database — hub operators have full read access to all
+> messages in plaintext. See
+> [Security Considerations](configuration.md#security-considerations) for
+> the full picture.
+
 You have two options:
 
 | Approach | Best For |
