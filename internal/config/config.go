@@ -868,6 +868,9 @@ type ServerConfig struct {
 	// When exceeded, the transfer process is killed and the session returns to the BBS.
 	TransferTimeoutMinutes int `json:"transferTimeoutMinutes"`
 
+	// DataDir is the runtime data directory (set by main at startup, not from JSON).
+	DataDir string `json:"-"`
+
 	// Number of days to retain soft-deleted user accounts before they are eligible
 	// for permanent purge. 0 = purge immediately; -1 = never purge automatically.
 	DeletedUserRetentionDays int `json:"deletedUserRetentionDays"`

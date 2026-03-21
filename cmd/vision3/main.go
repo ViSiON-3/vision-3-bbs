@@ -1744,6 +1744,7 @@ func main() {
 	}
 
 	// Initialize MenuExecutor with new paths, loaded theme, server config, message manager, and connection tracker
+	serverConfig.DataDir = dataPath
 	menuExecutor = menu.NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath, oneliners, loadedDoors, loadedStrings, loadedTheme, serverConfig, messageMgr, fileMgr, confMgr, connectionTracker, loginSequence, sessionRegistry, loadedProtocols)
 
 	// Initialize configuration file watcher for hot reload

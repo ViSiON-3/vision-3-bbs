@@ -33,18 +33,19 @@ type ChatLeafInfo struct {
 // If exactly one leaf is configured, uses it directly.
 // If multiple leaves exist, falls back to local (network picker is future work).
 func pickChatService(e *MenuExecutor, handle string) (chat.ChatService, error) {
+	dbPath := e.ServerCfg.DataDir + "/chat.db"
 	if e.ChatLeaves == nil {
-		return chat.NewLocalChatService(handle, e.RootConfigPath+"/chat.db")
+		return chat.NewLocalChatService(handle, dbPath)
 	}
 	leaves := e.ChatLeaves.ActiveChatLeaves()
 	if len(leaves) == 0 {
-		return chat.NewLocalChatService(handle, e.RootConfigPath+"/chat.db")
+		return chat.NewLocalChatService(handle, dbPath)
 	}
 	if len(leaves) == 1 {
 		return leaves[0].NewSession(handle), nil
 	}
 	// Multiple leaves: fall back to local for now (network picker is future work).
-	return chat.NewLocalChatService(handle, e.RootConfigPath+"/chat.db")
+	return chat.NewLocalChatService(handle, dbPath)
 }
 
 func runChat(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
