@@ -1,8 +1,8 @@
 # V3Net Manual Configuration Reference
 
 > **Most sysops should use the TUI config editor (`./config`) rather than editing
-> JSON directly.** See [V3Net Configuration](v3net/configuration.md) for the
-> TUI walkthrough, or [Joining FelonyNet](v3net/felonynet.md) for a step-by-step
+> JSON directly.** See [V3Net Configuration](configuration.md) for the
+> TUI walkthrough, or [Joining FelonyNet](felonynet.md) for a step-by-step
 > setup guide.
 
 This page documents every field in `configs/v3net.json` for advanced users who
@@ -182,6 +182,6 @@ To add your network to the public registry, submit a PR to the
 
 ## Related Documentation
 
-- [V3Net Configuration](v3net/configuration.md) — TUI walkthrough for all config screens
-- [Joining FelonyNet](v3net/felonynet.md) — step-by-step TUI guide
-- [V3Net Hub TLS Setup](v3net/hub-tls.md) — TLS certificate setup
+- [V3Net Configuration](configuration.md) — TUI walkthrough for all config screens
+- [Joining FelonyNet](felonynet.md) — step-by-step TUI guide
+- [V3Net Hub TLS Setup](hub-tls.md) — TLS certificate setup
