@@ -10,7 +10,7 @@ not affect your existing FTN configuration.
 > may change without notice. Use it only if you are testing or contributing
 > to V3Net development. Do not rely on it for a live BBS.
 
-> **Security note:** All messages and NALs are signed with Ed25519 keys, preventing impersonation and forgery regardless of transport. Messages are stored unencrypted on disk at both leaf and hub nodes. FelonyNet is a public network — treat everything you post as public and permanent. See [Security Considerations](configuration.md#security-considerations) for full details.
+> **Security note:** All messages and NALs are signed with Ed25519 keys, preventing impersonation and forgery. However, traffic between leaf nodes and the hub is **unencrypted on the wire** (plain HTTP) — signatures guarantee authenticity, not confidentiality. Messages are also stored unencrypted on disk at both leaf and hub nodes. FelonyNet is a public network — treat everything you post as public and permanent. See [Security Considerations](configuration.md#security-considerations) for full details.
 
 ## What You Get
 

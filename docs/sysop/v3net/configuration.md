@@ -239,6 +239,5 @@ Restrict file permissions appropriately and consider the security of any backup 
 
 - [Joining FelonyNet](v3net/felonynet.md) — step-by-step walkthrough for the FelonyNet network
 - [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, and proposals
-- [V3Net Hub TLS Setup](v3net/hub-tls.md) — enabling HTTPS on a hub
 - [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
 - [Manual Configuration Reference](v3net/manual-config.md) — JSON field reference for `v3net.json`
