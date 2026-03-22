@@ -189,41 +189,20 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 // handleEvents serves the SSE event stream (auth required).
 func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
-	h.broadcaster.ServeSSE(w, r, network)
-}
-
-// handleChat accepts an inter-BBS chat message (auth required).
-// Rate limited to 1 message per second per node.
-func (h *Hub) handleChat(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.Header.Get(headerNodeID)
-	if !h.chatLimiter.Allow(nodeID) {
-		http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
-		return
-	}
-
-	network := extractNetwork(r.URL.Path)
-
-	var req protocol.ChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
-
+	h.broadcaster.ServeSSE(w, r, network)
+	// ServeSSE blocks until the client disconnects.
+	// Clean up chat room presence for the disconnected node.
+	removed := h.chatRooms.HandleDisconnect(network, nodeID)
 	sub := h.subscribers.Get(nodeID, network)
-	nodeName := ""
-	if sub != nil {
-		nodeName = sub.BBSHost
+	bbsName := nodeID
+	if sub != nil && sub.BBSName != "" {
+		bbsName = sub.BBSName
 	}
-
-	ev, _ := protocol.NewEvent(protocol.EventChat, protocol.ChatPayload{
-		From:      req.From,
-		Node:      nodeName,
-		Text:      req.Text,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-	})
-	h.broadcaster.Publish(network, ev)
-
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	for _, pair := range removed {
+		broadcastChatEvent(h.broadcaster, network, protocol.EventChatLeave,
+			protocol.ChatLeavePayload{Room: pair[0], Handle: pair[1], BBS: bbsName})
+	}
 }
 
 // handlePresence accepts a logon/logoff notification (auth required).

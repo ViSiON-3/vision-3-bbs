@@ -93,11 +93,11 @@ type wizardState struct {
 	step int    // current step index (hub areas sub-form only)
 
 	// Leaf wizard fields
-	hubURL       string
-	networkName  string
-	pollInterval string
-	origin       string
-	fetchError   string // set if auto-fetch failed
+	hubURL        string
+	networkName   string
+	pollInterval  string
+	origin        string
+	fetchError    string // set if auto-fetch failed
 
 	selectedAreas []areaBrowserItem // areas selected during wizard flow
 
@@ -206,14 +206,14 @@ type Model struct {
 	hubAreaInsertBase string
 
 	// V3Net area browser state
-	areaBrowserHub     string            // hub URL being browsed
-	areaBrowserNetwork string            // network name
-	areaBrowserAreas   []areaBrowserItem // fetched areas with status
-	areaBrowserCursor  int               // highlighted row
-	areaBrowserScroll  int               // scroll offset
-	areaBrowserLoading bool              // true while NAL fetch in flight
-	areaBrowserError   string            // error from fetch/subscribe
-	areaBrowserReturn  editorMode // mode to return to on ESC
+	areaBrowserHub        string            // hub URL being browsed
+	areaBrowserNetwork    string            // network name
+	areaBrowserAreas      []areaBrowserItem // fetched areas with status
+	areaBrowserCursor     int               // highlighted row
+	areaBrowserScroll     int               // scroll offset
+	areaBrowserLoading    bool              // true while NAL fetch in flight
+	areaBrowserError      string            // error from fetch/subscribe
+	areaBrowserReturn     editorMode        // mode to return to on ESC
 
 	// V3Net registry browser state
 	regBrowserEntries []protocol.RegistryEntry // fetched networks

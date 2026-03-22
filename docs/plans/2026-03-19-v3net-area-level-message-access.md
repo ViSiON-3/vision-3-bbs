@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go stdlib, SQLite (modernc.org/sqlite), ed25519 auth, existing hub/leaf/protocol packages.
 
-**Spec:** `docs/plans/2026-03-19-v3net-area-level-message-access-design.md`
+**Spec:** `docs/specs/2026-03-19-v3net-area-level-message-access-design.md`
 
 ---
 

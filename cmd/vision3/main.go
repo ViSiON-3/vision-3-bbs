@@ -1733,9 +1733,6 @@ func main() {
 	// Initialize session registry for who's online tracking
 	sessionRegistry = session.NewSessionRegistry()
 
-	// Initialize global chat room for teleconference
-	chatRoom := chat.NewChatRoom(100)
-
 	// Load transfer protocol configuration
 	var loadedProtocols []transfer.ProtocolConfig
 	protocolsPath := filepath.Join(rootConfigPath, "protocols.json")
@@ -1747,7 +1744,8 @@ func main() {
 	}
 
 	// Initialize MenuExecutor with new paths, loaded theme, server config, message manager, and connection tracker
-	menuExecutor = menu.NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath, oneliners, loadedDoors, loadedStrings, loadedTheme, serverConfig, messageMgr, fileMgr, confMgr, connectionTracker, loginSequence, sessionRegistry, chatRoom, loadedProtocols)
+	serverConfig.DataDir = dataPath
+	menuExecutor = menu.NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath, oneliners, loadedDoors, loadedStrings, loadedTheme, serverConfig, messageMgr, fileMgr, confMgr, connectionTracker, loginSequence, sessionRegistry, loadedProtocols)
 
 	// Initialize configuration file watcher for hot reload
 	var serverConfigMu sync.RWMutex
@@ -1896,6 +1894,7 @@ func main() {
 
 			go v3netService.Start(v3netCtx)
 			menuExecutor.V3NetStatus = v3netService
+			menuExecutor.ChatLeaves = v3netChatProvider(v3netService)
 			log.Printf("INFO: V3Net service started (node_id=%s, hub=%v, leaves=%d)",
 				v3netService.NodeID(), v3netService.HubActive(), v3netService.LeafCount())
 		}
@@ -2244,4 +2243,27 @@ func sendEnv(s *SessionAdapter, name, value string) {
 	} else {
 		// log.Printf("Node ?: Sent env request: %s=%s", name, value)
 	}
+}
+
+// v3netChatProvider creates a menu.ChatLeafProvider from the V3Net service.
+func v3netChatProvider(svc *v3net.Service) menu.ChatLeafProvider {
+	return &chatLeafAdapter{svc: svc}
+}
+
+type chatLeafAdapter struct {
+	svc *v3net.Service
+}
+
+func (a *chatLeafAdapter) ActiveChatLeaves() []menu.ChatLeafInfo {
+	var infos []menu.ChatLeafInfo
+	for _, l := range a.svc.Leaves() {
+		lCopy := l // capture for closure
+		infos = append(infos, menu.ChatLeafInfo{
+			NetworkName: lCopy.Network(),
+			NewSession: func(handle string) chat.ChatService {
+				return lCopy.NewChatSession(handle)
+			},
+		})
+	}
+	return infos
 }

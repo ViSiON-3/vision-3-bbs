@@ -32,8 +32,6 @@ V3Net settings live in two places in the TUI config editor (`./config`):
 │  V3Net Hub       : N                                                 │
 │  Hub Host        :                                                   │
 │  Hub Port        : 8765                                              │
-│  Hub TLS Cert    :                                                   │
-│  Hub TLS Key     :                                                   │
 │  Hub Data Dir    :                                                   │
 │  Auto Approve    : N                                                 │
 │                                                                      │
@@ -50,9 +48,7 @@ Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 | **Registry URL** | Central registry URL for network discovery. Default: `https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json` |
 | **V3Net Hub** | Enable the built-in hub server (`Y`/`N`). Only needed if you are hosting your own network. |
 | **Hub Host** | Listen address for the hub. Blank means all interfaces. Set to `127.0.0.1` if behind a reverse proxy. |
-| **Hub Port** | Listen port for the hub HTTP(S) server. Default: `8765`. |
-| **Hub TLS Cert** | Path to TLS certificate (PEM). Leave blank to use plain HTTP or if TLS is terminated at a proxy. |
-| **Hub TLS Key** | Path to TLS private key (PEM). Must match the certificate. |
+| **Hub Port** | Listen port for the hub HTTP server. Default: `8765`. |
 | **Hub Data Dir** | Directory for hub database and NAL files. Recommended: `data/v3net_hub` |
 | **Auto Approve** | When `Y`, new leaf subscriptions and area proposals are approved automatically. |
 
@@ -98,7 +94,7 @@ Enter - Select  |  ESC/Q - Return
 │                        V3Net Subscriptions                           │
 │   #  Hub URL                          Network        Board           │
 │──────────────────────────────────────────────────────────────────────│
-│   1  https://felonynet.org            felonynet      fn.general      │
+│   1  http://felonynet.org:8765       felonynet      fn.general      │
 │                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
 Enter - Edit  |  I - New (Wizard)  |  B - Registry  |  D - Delete  |  S - Save  |  ESC - Return
@@ -112,7 +108,7 @@ press **I** to open the **Leaf Setup Wizard** manually:
 │                     Leaf Setup — Join a Network                      │
 │                                                                      │
 │  Registry        : (press Enter to browse available networks)        │
-│  Hub URL         : https://felonynet.org                             │
+│  Hub URL         : http://felonynet.org:8765                         │
 │  Network         : felonynet                                         │
 │  Areas           : (none — press Enter to browse)                    │
 │  Poll Interval   : 5m                                                │
@@ -126,7 +122,7 @@ Enter - Edit  |  S - Save  |  ESC - Back
 | Field | Description |
 |-------|-------------|
 | **Registry** | Opens the network registry browser. Selecting a network fills in Hub URL and Network automatically. |
-| **Hub URL** | Full URL of the hub (e.g. `https://felonynet.org`) |
+| **Hub URL** | Full URL of the hub (e.g. `http://felonynet.org:8765`) |
 | **Network** | Network name to subscribe to (e.g. `felonynet`) |
 | **Areas** | Press **Enter** to open the area browser and choose which areas to subscribe to |
 | **Poll Interval** | How often to check for new messages. Accepts Go durations: `30s`, `5m`, `1h` |
@@ -170,7 +166,9 @@ the initial NAL. After saving and restarting, the BBS automatically creates
 the data directory, registers the hub, and builds the NAL — no additional
 bootstrap steps needed.
 
-For TLS setup, see [V3Net Hub TLS Setup](v3net/hub-tls.md).
+If you need transport encryption, place a reverse proxy (nginx, Caddy) with a
+valid CA-signed certificate in front of the hub. The hub itself always serves
+plain HTTP.
 
 ---
 
@@ -217,7 +215,9 @@ See [V3Net Key Recovery](v3net/recovery.md) for full details.
 
 ## Security Considerations
 
-**TLS protects the wire, not the disk.** Enabling HTTPS encrypts traffic between leaf nodes and the hub. It does not encrypt data at rest. The following files are stored in plaintext:
+**Ed25519 signatures are the security foundation.** Every message and NAL is signed with the originating node's Ed25519 private key and verified by recipients. This prevents impersonation and message forgery regardless of the transport layer. The hub serves plain HTTP — transport encryption is not required for authentication or integrity.
+
+**Transport encryption is optional.** The hub serves plain HTTP by default. If you need to encrypt traffic in transit (e.g. for private mail), place a reverse proxy with a valid CA-signed certificate in front of the hub. Note that data is still stored in plaintext at rest:
 
 - `data/v3net_dedup.sqlite` — deduplication database containing message content
 - `data/v3net_hub/` — hub database (hub nodes only), fully readable by the hub operator and anyone with server access
@@ -227,7 +227,7 @@ Restrict file permissions appropriately and consider the security of any backup 
 
 **Protect your private key.** `data/v3net.key` and any exported seed phrase files should be readable only by the BBS process user (`chmod 600`). A compromised key allows an attacker to impersonate your node on all V3Net networks. Do not include the key file in unencrypted backups or commit it to version control.
 
-**Hub operators can read all traffic.** V3Net is a federated public message network. TLS secures the connection to the hub, but the hub stores and forwards messages in plaintext. The hub sysop — and anyone with access to the hub server — can read all messages routed through it. This is the same trust model as FidoNet echomail and similar networks.
+**Hub operators can read all traffic.** V3Net is a federated public message network. The hub stores and forwards messages in plaintext. The hub sysop — and anyone with access to the hub server — can read all messages routed through it. This is the same trust model as FidoNet echomail and similar networks.
 
 **Auto-approve.** Setting `Auto Approve: Y` allows any node to subscribe to your hub and propose new areas without review. Appropriate for open public networks; set it to `N` and manually approve nodes for curated or private networks.
 
@@ -239,6 +239,5 @@ Restrict file permissions appropriately and consider the security of any backup 
 
 - [Joining FelonyNet](v3net/felonynet.md) — step-by-step walkthrough for the FelonyNet network
 - [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, and proposals
-- [V3Net Hub TLS Setup](v3net/hub-tls.md) — enabling HTTPS on a hub
 - [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
 - [Manual Configuration Reference](v3net/manual-config.md) — JSON field reference for `v3net.json`

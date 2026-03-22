@@ -207,7 +207,7 @@ func TestCacheFetchAndVerify(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cache := NewCache(1 * time.Hour)
+	cache := NewCache(1*time.Hour, nil)
 	ctx := context.Background()
 
 	got, err := cache.FetchAndVerify(ctx, srv.URL, "testnet")
@@ -227,7 +227,7 @@ func TestCacheReturnsStaleOnFetchFailure(t *testing.T) {
 	}
 
 	// Pre-populate cache.
-	cache := NewCache(0) // TTL=0 so it's always "expired"
+	cache := NewCache(0, nil) // TTL=0 so it's always "expired"
 	cache.Put("testnet", n)
 
 	// Use a server that returns 500 to trigger fetch failure quickly.
@@ -252,7 +252,7 @@ func TestCacheAreaAndNodeAllowed(t *testing.T) {
 		t.Fatalf("sign: %v", err)
 	}
 
-	cache := NewCache(1 * time.Hour)
+	cache := NewCache(1*time.Hour, nil)
 	cache.Put("testnet", n)
 
 	// Area lookup.
@@ -296,7 +296,7 @@ func TestFetchFromServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := Fetch(context.Background(), srv.URL)
+	got, err := Fetch(context.Background(), srv.URL, nil)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}

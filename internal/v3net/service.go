@@ -180,8 +180,6 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 		}
 		h, err := hub.New(hub.Config{
 			ListenAddr:  cfg.Hub.ListenAddr(),
-			TLSCertFile: cfg.Hub.TLSCert,
-			TLSKeyFile:  cfg.Hub.TLSKey,
 			DataDir:     cfg.Hub.DataDir,
 			Keystore:    ks,
 			AutoApprove: cfg.Hub.AutoApprove,
@@ -210,16 +208,16 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 	}
 
 	l := leaf.New(leaf.Config{
-		HubURL:       lcfg.HubURL,
-		Network:      lcfg.Network,
-		AreaTags:     lcfg.Boards,
-		PollInterval: interval,
-		Keystore:     s.ks,
-		DedupIndex:   s.dedupIdx,
-		JAMWriter:    writer,
-		OnEvent:      onEvent,
-		BBSName:      s.BBSName,
-		BBSHost:      s.BBSHost,
+		HubURL:        lcfg.HubURL,
+		Network:       lcfg.Network,
+		AreaTags:      lcfg.Boards,
+		PollInterval:  interval,
+		Keystore:      s.ks,
+		DedupIndex:    s.dedupIdx,
+		JAMWriter:     writer,
+		OnEvent:       onEvent,
+		BBSName:       s.BBSName,
+		BBSHost:       s.BBSHost,
 	})
 
 	s.leaves = append(s.leaves, l)
@@ -333,6 +331,11 @@ func (s *Service) LeafNetworks() []string {
 // Hub returns the hub instance, or nil if no hub is configured.
 func (s *Service) Hub() *hub.Hub {
 	return s.hub
+}
+
+// Leaves returns all configured leaf clients (read-only after Start).
+func (s *Service) Leaves() []*leaf.Leaf {
+	return s.leaves
 }
 
 // RegisterArea associates a message area ID with a V3Net network name.

@@ -221,6 +221,16 @@ type StringsConfig struct {
 	ChatSystemPrefix  string `json:"chatSystemPrefix"`
 	ChatMessageFormat string `json:"chatMessageFormat"`
 
+	ChatNetworkPickerHeader string `json:"chatNetworkPickerHeader"`
+	ChatNetworkPickerEntry  string `json:"chatNetworkPickerEntry"`
+	ChatRoomListHeader      string `json:"chatRoomListHeader"`
+	ChatRoomListEntry       string `json:"chatRoomListEntry"`
+	ChatPrivateMsgFormat    string `json:"chatPrivateMsgFormat"`
+	ChatJoinMsg             string `json:"chatJoinMsg"`
+	ChatLeaveMsg            string `json:"chatLeaveMsg"`
+	ChatTopicMsg            string `json:"chatTopicMsg"`
+	ChatReconnected         string `json:"chatReconnected"`
+
 	// Page strings (V3-specific)
 	PageOnlineNodesHeader string `json:"pageOnlineNodesHeader"`
 	PageNodeListEntry     string `json:"pageNodeListEntry"`
@@ -858,6 +868,9 @@ type ServerConfig struct {
 	// When exceeded, the transfer process is killed and the session returns to the BBS.
 	TransferTimeoutMinutes int `json:"transferTimeoutMinutes"`
 
+	// DataDir is the runtime data directory (set by main at startup, not from JSON).
+	DataDir string `json:"-"`
+
 	// Number of days to retain soft-deleted user accounts before they are eligible
 	// for permanent purge. 0 = purge immediately; -1 = never purge automatically.
 	DeletedUserRetentionDays int `json:"deletedUserRetentionDays"`
@@ -895,8 +908,6 @@ type V3NetHubConfig struct {
 	Enabled      bool              `json:"enabled"`
 	Host         string            `json:"host"` // Listen host (blank = all interfaces)
 	Port         int               `json:"port"` // Listen port (default: 8765)
-	TLSCert      string            `json:"tlsCert,omitempty"`
-	TLSKey       string            `json:"tlsKey,omitempty"`
 	DataDir      string            `json:"dataDir"`
 	AutoApprove  bool              `json:"autoApprove"`
 	Networks     []V3NetHubNetwork `json:"networks,omitempty"`
@@ -928,11 +939,11 @@ type V3NetHubArea struct {
 
 // V3NetLeafConfig configures a subscription to a V3Net network.
 type V3NetLeafConfig struct {
-	HubURL       string   `json:"hubUrl"`
-	Network      string   `json:"network"`
-	Boards       []string `json:"boards"`           // Local message area tags to write received messages
-	PollInterval string   `json:"pollInterval"`     // Duration string (e.g., "5m")
-	Origin       string   `json:"origin,omitempty"` // Origin line text (e.g. "My Cool BBS - bbs.example.com")
+	HubURL         string   `json:"hubUrl"`
+	Network        string   `json:"network"`
+	Boards         []string `json:"boards"`                    // Local message area tags to write received messages
+	PollInterval   string   `json:"pollInterval"`              // Duration string (e.g., "5m")
+	Origin         string   `json:"origin,omitempty"`          // Origin line text (e.g. "My Cool BBS - bbs.example.com")
 }
 
 // EventConfig defines a scheduled event configuration

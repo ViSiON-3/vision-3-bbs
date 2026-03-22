@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go, SSH terminal I/O, pipe-code ANSI rendering, JSON persistence
 
-**Spec:** `docs/superpowers/specs/2026-03-10-file-area-completion-design.md`
+**Spec:** `docs/specs/2026-03-10-file-area-completion-design.md`
 
 **Linear Epic:** VIS-90
 

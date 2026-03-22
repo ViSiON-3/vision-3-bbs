@@ -271,11 +271,11 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	}
 
 	leaf := config.V3NetLeafConfig{
-		HubURL:       m.wizard.hubURL,
-		Network:      m.wizard.networkName,
-		Boards:       boards,
-		PollInterval: m.wizard.pollInterval,
-		Origin:       m.wizard.origin,
+		HubURL:        m.wizard.hubURL,
+		Network:       m.wizard.networkName,
+		Boards:        boards,
+		PollInterval:  m.wizard.pollInterval,
+		Origin:        m.wizard.origin,
 	}
 	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, leaf)
 	m.configs.V3Net.Enabled = true

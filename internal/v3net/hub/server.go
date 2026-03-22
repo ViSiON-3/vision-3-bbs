@@ -30,6 +30,12 @@ func (h *Hub) newMux() http.Handler {
 		case strings.HasPrefix(path, "/v3net/") && strings.HasSuffix(path, "/nal") && r.Method == http.MethodGet:
 			h.handleGetNAL(w, r)
 			return
+		case strings.HasPrefix(path, "/v3net/v1/") && strings.HasSuffix(path, "/chat/rooms") && r.Method == http.MethodGet:
+			h.handleChatRooms(w, r, extractNetwork(r.URL.Path))
+			return
+		case strings.HasPrefix(path, "/v3net/v1/") && strings.Contains(path, "/chat/rooms/") && strings.HasSuffix(path, "/history") && r.Method == http.MethodGet:
+			h.handleChatHistory(w, r, extractNetwork(r.URL.Path))
+			return
 		}
 
 		// All other /v3net/v1/{network}/* routes require auth.
@@ -48,8 +54,16 @@ func (h *Hub) newMux() http.Handler {
 				h.handlePostMessage(w, r)
 			case strings.HasSuffix(path, "/events") && r.Method == http.MethodGet:
 				h.handleEvents(w, r)
-			case strings.HasSuffix(path, "/chat") && r.Method == http.MethodPost:
-				h.handleChat(w, r)
+			case strings.HasSuffix(path, "/chat/rooms/join") && r.Method == http.MethodPost:
+				h.handleChatJoin(w, r, network)
+			case strings.HasSuffix(path, "/chat/rooms/leave") && r.Method == http.MethodPost:
+				h.handleChatLeave(w, r, network)
+			case strings.HasSuffix(path, "/chat/rooms/post") && r.Method == http.MethodPost:
+				h.handleChatPost(w, r, network)
+			case strings.HasSuffix(path, "/chat/rooms/private") && r.Method == http.MethodPost:
+				h.handleChatPrivate(w, r, network)
+			case strings.HasSuffix(path, "/chat/rooms/topic") && r.Method == http.MethodPost:
+				h.handleChatTopic(w, r, network)
 			case strings.HasSuffix(path, "/presence") && r.Method == http.MethodPost:
 				h.handlePresence(w, r)
 

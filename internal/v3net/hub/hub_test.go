@@ -469,21 +469,33 @@ func TestChat_RateLimited(t *testing.T) {
 	}
 	registerLeaf(t, ts, leafKS)
 
-	chatJSON := `{"from":"Tester","text":"hello"}`
+	// Join the lobby room first.
+	joinJSON := `{"room":"lobby","handle":"ratelimituser"}`
+	joinReq := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/chat/rooms/join", joinJSON)
+	joinResp, err := http.DefaultClient.Do(joinReq)
+	if err != nil {
+		t.Fatalf("POST join: %v", err)
+	}
+	joinResp.Body.Close()
+	if joinResp.StatusCode != http.StatusOK {
+		t.Fatalf("join expected 200, got %d", joinResp.StatusCode)
+	}
+
+	postJSON := `{"room":"lobby","text":"msg"}`
 
 	// First request should succeed.
-	req1 := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/chat", chatJSON)
+	req1 := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/chat/rooms/post", postJSON)
 	resp1, err := http.DefaultClient.Do(req1)
 	if err != nil {
 		t.Fatalf("POST chat 1: %v", err)
 	}
 	resp1.Body.Close()
-	if resp1.StatusCode != http.StatusOK {
-		t.Fatalf("first chat expected 200, got %d", resp1.StatusCode)
+	if resp1.StatusCode != http.StatusNoContent {
+		t.Fatalf("first chat expected 204, got %d", resp1.StatusCode)
 	}
 
 	// Second request immediately should be rate limited.
-	req2 := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/chat", chatJSON)
+	req2 := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/chat/rooms/post", postJSON)
 	resp2, err := http.DefaultClient.Do(req2)
 	if err != nil {
 		t.Fatalf("POST chat 2: %v", err)

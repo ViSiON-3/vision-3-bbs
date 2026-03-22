@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go stdlib, BubbleTea (`github.com/charmbracelet/bubbletea`), SQLite (`modernc.org/sqlite`), `internal/v3net/*`, `internal/configeditor/*`, `internal/config`.
 
-**Spec:** `docs/superpowers/specs/2026-03-17-v3net-setup-wizard-design.md`
+**Spec:** `docs/specs/2026-03-17-v3net-setup-wizard-design.md`
 
 ---
 

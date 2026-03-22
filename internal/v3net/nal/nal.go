@@ -199,13 +199,16 @@ func Verify(n *protocol.NAL) error {
 }
 
 // Fetch retrieves a NAL from a hub's /nal endpoint. Does not verify.
-func Fetch(ctx context.Context, url string) (*protocol.NAL, error) {
+func Fetch(ctx context.Context, url string, client *http.Client) (*protocol.NAL, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("nal: create request: %w", err)
 	}
 
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("nal: fetch: %w", err)
 	}
@@ -236,6 +239,7 @@ type Cache struct {
 	mu      sync.RWMutex
 	entries map[string]*cacheEntry // network → entry
 	ttl     time.Duration
+	client  *http.Client
 }
 
 type cacheEntry struct {
@@ -244,10 +248,11 @@ type cacheEntry struct {
 }
 
 // NewCache creates a new NAL cache with the given TTL.
-func NewCache(ttl time.Duration) *Cache {
+func NewCache(ttl time.Duration, client *http.Client) *Cache {
 	return &Cache{
 		entries: make(map[string]*cacheEntry),
 		ttl:     ttl,
+		client:  client,
 	}
 }
 
@@ -283,7 +288,7 @@ func (c *Cache) FetchAndVerify(ctx context.Context, url, network string) (*proto
 	c.mu.RUnlock()
 
 	// Fetch and verify.
-	n, err := Fetch(ctx, url)
+	n, err := Fetch(ctx, url, c.client)
 	if err != nil {
 		return c.staleOrError(network, fmt.Errorf("nal: fetch %s: %w", network, err))
 	}

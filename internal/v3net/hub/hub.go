@@ -28,6 +28,8 @@ type Hub struct {
 	accessRequests    *AccessRequestStore
 	areaSubscriptions *AreaSubscriptionStore
 	coordTransfers    *CoordTransferStore
+	chatStore         *ChatHistoryStore
+	chatRooms         *chatRooms
 }
 
 // New creates a new Hub with the given configuration.
@@ -85,6 +87,12 @@ func New(cfg Config) (*Hub, error) {
 		return nil, err
 	}
 
+	chatStore, err := NewChatHistoryStore(db, 7)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	h := &Hub{
 		cfg:               cfg,
 		db:                db,
@@ -97,6 +105,8 @@ func New(cfg Config) (*Hub, error) {
 		accessRequests:    accessReqs,
 		areaSubscriptions: areaSubs,
 		coordTransfers:    coordTransfers,
+		chatStore:         chatStore,
+		chatRooms:         newChatRooms(),
 	}
 
 	h.server = &http.Server{
@@ -111,6 +121,7 @@ func New(cfg Config) (*Hub, error) {
 // context is cancelled or the server encounters a fatal error.
 func (h *Hub) Start(ctx context.Context) error {
 	go h.broadcaster.StartPing(ctx)
+	h.chatStore.StartPruner(ctx)
 
 	go func() {
 		<-ctx.Done()
@@ -119,12 +130,7 @@ func (h *Hub) Start(ctx context.Context) error {
 
 	slog.Info("v3net hub starting", "addr", h.cfg.ListenAddr)
 
-	var err error
-	if h.cfg.TLSCertFile != "" && h.cfg.TLSKeyFile != "" {
-		err = h.server.ListenAndServeTLS(h.cfg.TLSCertFile, h.cfg.TLSKeyFile)
-	} else {
-		err = h.server.ListenAndServe()
-	}
+	err := h.server.ListenAndServe()
 
 	if err == http.ErrServerClosed {
 		return nil
