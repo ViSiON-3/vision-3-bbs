@@ -38,8 +38,11 @@ func fetchHubNAL(hubURL, network string) tea.Cmd {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
 			detail := strings.TrimSpace(string(body))
+			if readErr != nil && detail == "" {
+				detail = fmt.Sprintf("(failed to read error body: %v)", readErr)
+			}
 			if detail == "" {
 				detail = "(no body)"
 			}
