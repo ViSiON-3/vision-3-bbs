@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"sync"
 	"time"
 
@@ -166,6 +167,9 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 		return nil, nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("join chat: hub returned status %d", resp.StatusCode)
+	}
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, nil, err
