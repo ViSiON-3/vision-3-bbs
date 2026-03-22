@@ -24,17 +24,19 @@ var (
 // backoff on disconnect.
 func (l *Leaf) runSSE(ctx context.Context) {
 	attempt := 0
+	hasConnected := false
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 
-		err := l.connectSSE(ctx)
+		err := l.connectSSE(ctx, hasConnected)
 		if ctx.Err() != nil {
 			return
 		}
 
 		if err == nil {
+			hasConnected = true
 			attempt = 0
 		} else {
 			slog.Warn("leaf: SSE disconnected", "network", l.cfg.Network, "error", err)
@@ -51,7 +53,7 @@ func (l *Leaf) runSSE(ctx context.Context) {
 	}
 }
 
-func (l *Leaf) connectSSE(ctx context.Context) error {
+func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	path := fmt.Sprintf("/v3net/v1/%s/events", l.cfg.Network)
 	resp, err := l.signedGetSSE(ctx, path)
 	if err != nil {
@@ -64,7 +66,9 @@ func (l *Leaf) connectSSE(ctx context.Context) error {
 	}
 
 	slog.Info("leaf: SSE connected", "network", l.cfg.Network)
-	l.chatSessions.notifyReconnect()
+	if reconnect {
+		l.chatSessions.notifyReconnect()
+	}
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 4096), 1<<20) // 1MB max token size
