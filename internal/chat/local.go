@@ -135,14 +135,15 @@ func (s *LocalChatService) Post(room, text string) error {
 }
 
 func (s *LocalChatService) Private(handle, _ string, text string) error {
+	now := time.Now().UTC()
 	_, err := s.db.Exec(
 		`INSERT INTO chat_private_history(from_handle,to_handle,text,created_at) VALUES(?,?,?,?)`,
-		s.handle, handle, text, time.Now().UTC(),
+		s.handle, handle, text, now,
 	)
 	if err != nil {
 		return err
 	}
-	msg := ChatMessage{Handle: s.handle, Text: text, Timestamp: time.Now()}
+	msg := ChatMessage{Handle: s.handle, Text: text, Timestamp: now}
 	sharedMu.RLock()
 	for _, rs := range sharedRooms {
 		if target, ok := rs.sessions[handle]; ok {
