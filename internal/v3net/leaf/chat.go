@@ -71,10 +71,14 @@ func (r *chatSessionRegistry) notifyReconnect() {
 	defer r.mu.RUnlock()
 	ev := chat.ChatEvent{Type: chat.TypeSystem, Reconnect: true, Text: "reconnected"}
 	for _, s := range r.sessions {
-		select {
-		case s.events <- ev:
-		default:
+		s.mu.Lock()
+		if !s.closed {
+			select {
+			case s.events <- ev:
+			default:
+			}
 		}
+		s.mu.Unlock()
 	}
 }
 
@@ -125,15 +129,13 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 		return
 	}
 	s.mu.Lock()
-	closed := s.closed
+	if !s.closed {
+		select {
+		case s.events <- ce:
+		default:
+		}
+	}
 	s.mu.Unlock()
-	if closed {
-		return
-	}
-	select {
-	case s.events <- ce:
-	default:
-	}
 }
 
 func protoMsgToDomain(p protocol.ChatMsgPayload) *chat.ChatMessage {
@@ -275,8 +277,8 @@ func (s *ChatSession) Close() error {
 		return nil
 	}
 	s.closed = true
+	close(s.events)
 	s.mu.Unlock()
 	s.leaf.chatSessions.deregister(s.handle)
-	close(s.events)
 	return nil
 }
