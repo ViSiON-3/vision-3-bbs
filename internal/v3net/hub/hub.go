@@ -121,6 +121,7 @@ func New(cfg Config) (*Hub, error) {
 // context is cancelled or the server encounters a fatal error.
 func (h *Hub) Start(ctx context.Context) error {
 	go h.broadcaster.StartPing(ctx)
+	h.chatStore.StartPruner(ctx)
 
 	go func() {
 		<-ctx.Done()

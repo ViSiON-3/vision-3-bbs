@@ -1,8 +1,10 @@
 package hub
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -44,6 +46,10 @@ type ChatHistoryStore struct {
 
 // NewChatHistoryStore initializes the chat history tables and returns a store.
 func NewChatHistoryStore(db *sql.DB, retentionDays int) (*ChatHistoryStore, error) {
+	if retentionDays <= 0 {
+		return nil, fmt.Errorf("hub: retentionDays must be > 0, got %d", retentionDays)
+	}
+
 	if _, err := db.Exec(chatSchema); err != nil {
 		return nil, fmt.Errorf("hub: create chat history tables: %w", err)
 	}
@@ -52,9 +58,6 @@ func NewChatHistoryStore(db *sql.DB, retentionDays int) (*ChatHistoryStore, erro
 		db:            db,
 		retentionDays: retentionDays,
 	}
-
-	// Prune old messages on startup (fire-and-forget).
-	store.prune()
 
 	return store, nil
 }
@@ -135,17 +138,36 @@ func (chs *ChatHistoryStore) RoomHistory(network, room string, limit int) ([]pro
 }
 
 // prune deletes messages older than retentionDays from both chat history tables.
-// Errors are silently discarded; this is a best-effort cleanup operation.
-func (chs *ChatHistoryStore) prune() {
+func (chs *ChatHistoryStore) prune() error {
 	cutoff := time.Now().UTC().AddDate(0, 0, -chs.retentionDays)
+	if _, err := chs.db.Exec("DELETE FROM chat_history WHERE created_at < ?", cutoff); err != nil {
+		return fmt.Errorf("hub: prune chat_history: %w", err)
+	}
+	if _, err := chs.db.Exec("DELETE FROM chat_private_history WHERE created_at < ?", cutoff); err != nil {
+		return fmt.Errorf("hub: prune chat_private_history: %w", err)
+	}
+	return nil
+}
 
-	_, _ = chs.db.Exec(
-		"DELETE FROM chat_history WHERE created_at < ?",
-		cutoff,
-	)
-
-	_, _ = chs.db.Exec(
-		"DELETE FROM chat_private_history WHERE created_at < ?",
-		cutoff,
-	)
+// StartPruner runs a background goroutine that prunes old messages daily.
+// It stops when ctx is cancelled.
+func (chs *ChatHistoryStore) StartPruner(ctx context.Context) {
+	go func() {
+		// Run once at startup.
+		if err := chs.prune(); err != nil {
+			slog.Error("hub: chat history prune", "error", err)
+		}
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := chs.prune(); err != nil {
+					slog.Error("hub: chat history prune", "error", err)
+				}
+			}
+		}
+	}()
 }

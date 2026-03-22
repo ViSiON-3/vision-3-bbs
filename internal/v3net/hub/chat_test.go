@@ -2,11 +2,13 @@ package hub
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -161,6 +163,27 @@ func TestChatNetworkIsolation(t *testing.T) {
 	}
 }
 
+func TestChatStoreRetentionDaysValidation(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	_, err = NewChatHistoryStore(db, 0)
+	if err == nil {
+		t.Error("expected error for retentionDays=0")
+	}
+	_, err = NewChatHistoryStore(db, -1)
+	if err == nil {
+		t.Error("expected error for retentionDays=-1")
+	}
+	store, err := NewChatHistoryStore(db, 7)
+	if err != nil {
+		t.Errorf("unexpected error for retentionDays=7: %v", err)
+	}
+	_ = store
+}
+
 func TestChatNotJoined(t *testing.T) {
 	h, _ := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
@@ -183,5 +206,64 @@ func TestChatNotJoined(t *testing.T) {
 
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("expected 403 for unjoined post, got %d", resp.StatusCode)
+	}
+}
+
+func TestChatStorePrune(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	store, err := NewChatHistoryStore(db, 7)
+	if err != nil {
+		t.Fatalf("NewChatHistoryStore: %v", err)
+	}
+
+	now := time.Now().UTC()
+	old := now.AddDate(0, 0, -8) // 8 days ago — older than 7-day retention
+	recent := now.AddDate(0, 0, -1) // 1 day ago — within retention
+
+	// Insert into chat_history.
+	if _, err := db.Exec(
+		`INSERT INTO chat_history (network,room,from_handle,from_node,from_bbs,text,created_at) VALUES (?,?,?,?,?,?,?)`,
+		"net", "lobby", "alice", "node1", "bbs1", "old msg", old,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO chat_history (network,room,from_handle,from_node,from_bbs,text,created_at) VALUES (?,?,?,?,?,?,?)`,
+		"net", "lobby", "alice", "node1", "bbs1", "recent msg", recent,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert into chat_private_history.
+	if _, err := db.Exec(
+		`INSERT INTO chat_private_history (network,from_handle,from_node,to_handle,to_node,text,created_at) VALUES (?,?,?,?,?,?,?)`,
+		"net", "alice", "node1", "bob", "node2", "old private", old,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO chat_private_history (network,from_handle,from_node,to_handle,to_node,text,created_at) VALUES (?,?,?,?,?,?,?)`,
+		"net", "alice", "node1", "bob", "node2", "recent private", recent,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.prune(); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+
+	var count int
+	db.QueryRow(`SELECT COUNT(*) FROM chat_history`).Scan(&count)
+	if count != 1 {
+		t.Errorf("expected 1 row in chat_history after prune, got %d", count)
+	}
+	db.QueryRow(`SELECT COUNT(*) FROM chat_private_history`).Scan(&count)
+	if count != 1 {
+		t.Errorf("expected 1 row in chat_private_history after prune, got %d", count)
 	}
 }
