@@ -18,10 +18,11 @@ var _ chat.ChatService = (*ChatSession)(nil)
 type chatSessionRegistry struct {
 	mu       sync.RWMutex
 	sessions map[string]*ChatSession // handle → session
+	nodeID   string
 }
 
-func newChatSessionRegistry() *chatSessionRegistry {
-	return &chatSessionRegistry{sessions: make(map[string]*ChatSession)}
+func newChatSessionRegistry(nodeID string) *chatSessionRegistry {
+	return &chatSessionRegistry{sessions: make(map[string]*ChatSession), nodeID: nodeID}
 }
 
 func (r *chatSessionRegistry) register(s *ChatSession) {
@@ -57,6 +58,9 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 	case protocol.EventChatPrivate:
 		var msg protocol.ChatMsgPayload
 		json.Unmarshal(ev.Data, &msg)
+		if msg.ToNode != "" && msg.ToNode != r.nodeID {
+			return
+		}
 		for _, s := range r.sessions {
 			if s.handle == msg.ToHandle {
 				s.deliver(ev)

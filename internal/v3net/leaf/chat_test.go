@@ -10,7 +10,7 @@ import (
 )
 
 func TestDispatch_ChatMessage_DeliveredToCorrectRoom(t *testing.T) {
-	reg := newChatSessionRegistry()
+	reg := newChatSessionRegistry("testnode")
 
 	alice := &ChatSession{handle: "alice", currentRoom: "lobby", events: make(chan chat.ChatEvent, 4)}
 	bob := &ChatSession{handle: "bob", currentRoom: "offtopic", events: make(chan chat.ChatEvent, 4)}
@@ -41,14 +41,14 @@ func TestDispatch_ChatMessage_DeliveredToCorrectRoom(t *testing.T) {
 }
 
 func TestDispatch_Private_DeliveredToTarget(t *testing.T) {
-	reg := newChatSessionRegistry()
+	reg := newChatSessionRegistry("testnode")
 	alice := &ChatSession{handle: "alice", currentRoom: "lobby", events: make(chan chat.ChatEvent, 4)}
 	bob := &ChatSession{handle: "bob", currentRoom: "lobby", events: make(chan chat.ChatEvent, 4)}
 	reg.register(alice)
 	reg.register(bob)
 
 	payload, _ := json.Marshal(protocol.ChatMsgPayload{
-		ToHandle: "alice", ToNode: "anynode",
+		ToHandle: "alice", ToNode: "testnode",
 		FromHandle: "bob", Text: "psst",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	})

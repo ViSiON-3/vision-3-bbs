@@ -39,7 +39,7 @@ func New(cfg Config) *Leaf {
 	if cfg.OnEvent != nil {
 		l.eventCb.Store(cfg.OnEvent)
 	}
-	l.chatSessions = newChatSessionRegistry()
+	l.chatSessions = newChatSessionRegistry(cfg.Keystore.NodeID())
 	return l
 }
 
