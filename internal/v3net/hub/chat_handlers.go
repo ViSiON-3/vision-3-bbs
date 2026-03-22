@@ -197,6 +197,9 @@ func (h *Hub) handleChatHistory(w http.ResponseWriter, r *http.Request, network 
 	limit := 50
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > 200 {
+				n = 200
+			}
 			limit = n
 		}
 	}

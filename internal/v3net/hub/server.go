@@ -30,10 +30,10 @@ func (h *Hub) newMux() http.Handler {
 		case strings.HasPrefix(path, "/v3net/") && strings.HasSuffix(path, "/nal") && r.Method == http.MethodGet:
 			h.handleGetNAL(w, r)
 			return
-		case strings.HasSuffix(path, "/chat/rooms") && r.Method == http.MethodGet:
+		case strings.HasPrefix(path, "/v3net/v1/") && strings.HasSuffix(path, "/chat/rooms") && r.Method == http.MethodGet:
 			h.handleChatRooms(w, r, extractNetwork(r.URL.Path))
 			return
-		case strings.Contains(path, "/chat/rooms/") && strings.HasSuffix(path, "/history") && r.Method == http.MethodGet:
+		case strings.HasPrefix(path, "/v3net/v1/") && strings.Contains(path, "/chat/rooms/") && strings.HasSuffix(path, "/history") && r.Method == http.MethodGet:
 			h.handleChatHistory(w, r, extractNetwork(r.URL.Path))
 			return
 		}
