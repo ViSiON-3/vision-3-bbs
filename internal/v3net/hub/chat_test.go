@@ -129,6 +129,38 @@ func TestChatRoomListPublic(t *testing.T) {
 	_ = rooms
 }
 
+func TestChatNetworkIsolation(t *testing.T) {
+	h, _ := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+
+	ks1, _, _ := keystore.Load(filepath.Join(t.TempDir(), "leaf1.key"))
+	_, _, _ = keystore.Load(filepath.Join(t.TempDir(), "leaf2.key"))
+	registerLeaf(t, ts, ks1)
+	// ks2 on "testnet2" — hub may not know this network, so join directly to chatRooms
+	// Instead: test via chatRooms directly
+	cr := newChatRooms()
+	cr.Join("testnet", "lobby", "node1", "alice")
+	cr.Join("testnet2", "lobby", "node2", "bob")
+
+	rooms1 := cr.RoomList("testnet")
+	rooms2 := cr.RoomList("testnet2")
+
+	if len(rooms1) != 1 || rooms1[0].UserCount != 1 {
+		t.Errorf("testnet should have 1 user in lobby, got %+v", rooms1)
+	}
+	if len(rooms2) != 1 || rooms2[0].UserCount != 1 {
+		t.Errorf("testnet2 should have 1 user in lobby, got %+v", rooms2)
+	}
+
+	// Disconnect node1 from testnet; node2 in testnet2 should be unaffected.
+	cr.HandleDisconnect("testnet", "node1")
+	rooms2After := cr.RoomList("testnet2")
+	if len(rooms2After) != 1 {
+		t.Errorf("testnet2 lobby should still have 1 user after testnet disconnect, got %+v", rooms2After)
+	}
+}
+
 func TestChatNotJoined(t *testing.T) {
 	h, _ := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())

@@ -193,7 +193,7 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	h.broadcaster.ServeSSE(w, r, network)
 	// ServeSSE blocks until the client disconnects.
 	// Clean up chat room presence for the disconnected node.
-	removed := h.chatRooms.HandleDisconnect(nodeID)
+	removed := h.chatRooms.HandleDisconnect(network, nodeID)
 	sub := h.subscribers.Get(nodeID, network)
 	bbsName := nodeID
 	if sub != nil && sub.BBSName != "" {

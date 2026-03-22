@@ -13,41 +13,53 @@ type roomState struct {
 	members map[string][]string // nodeID → []handle
 }
 
-// chatRooms is the in-memory ephemeral room registry.
+// chatRooms is the in-memory ephemeral room registry, scoped per network.
 type chatRooms struct {
-	mu    sync.RWMutex
-	rooms map[string]*roomState // room name → state
+	mu       sync.RWMutex
+	networks map[string]map[string]*roomState // network → room → state
 }
 
 func newChatRooms() *chatRooms {
-	return &chatRooms{rooms: make(map[string]*roomState)}
+	return &chatRooms{networks: make(map[string]map[string]*roomState)}
 }
 
-// Join adds handle@nodeID to room, creating the room if needed.
-// Returns the current user list for that room.
-func (cr *chatRooms) Join(room, nodeID, handle string) []string {
+// roomsFor returns the room map for network, creating it if needed.
+// Caller must hold mu (write lock).
+func (cr *chatRooms) roomsFor(network string) map[string]*roomState {
+	rooms := cr.networks[network]
+	if rooms == nil {
+		rooms = make(map[string]*roomState)
+		cr.networks[network] = rooms
+	}
+	return rooms
+}
+
+func (cr *chatRooms) Join(network, room, nodeID, handle string) []string {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
-	rs := cr.rooms[room]
+	rooms := cr.roomsFor(network)
+	rs := rooms[room]
 	if rs == nil {
 		rs = &roomState{members: make(map[string][]string)}
-		cr.rooms[room] = rs
+		rooms[room] = rs
 	}
-	// Avoid duplicate handles for the same node.
 	for _, h := range rs.members[nodeID] {
 		if h == handle {
-			return cr.usersLocked(room)
+			return cr.usersLocked(network, room)
 		}
 	}
 	rs.members[nodeID] = append(rs.members[nodeID], handle)
-	return cr.usersLocked(room)
+	return cr.usersLocked(network, room)
 }
 
-// Leave removes handle@nodeID from room. Deletes room if empty.
-func (cr *chatRooms) Leave(room, nodeID, handle string) {
+func (cr *chatRooms) Leave(network, room, nodeID, handle string) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
-	rs := cr.rooms[room]
+	rooms := cr.networks[network]
+	if rooms == nil {
+		return
+	}
+	rs := rooms[room]
 	if rs == nil {
 		return
 	}
@@ -62,27 +74,33 @@ func (cr *chatRooms) Leave(room, nodeID, handle string) {
 		delete(rs.members, nodeID)
 	}
 	if len(rs.members) == 0 {
-		delete(cr.rooms, room)
+		delete(rooms, room)
+		if len(rooms) == 0 {
+			delete(cr.networks, network)
+		}
 	}
 }
 
-// SetTopic updates the topic for room (creates room if needed).
-func (cr *chatRooms) SetTopic(room, topic string) {
+func (cr *chatRooms) SetTopic(network, room, topic string) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
-	rs := cr.rooms[room]
+	rooms := cr.roomsFor(network)
+	rs := rooms[room]
 	if rs == nil {
 		rs = &roomState{members: make(map[string][]string)}
-		cr.rooms[room] = rs
+		rooms[room] = rs
 	}
 	rs.topic = topic
 }
 
-// IsJoined reports whether handle@nodeID is in room.
-func (cr *chatRooms) IsJoined(room, nodeID, handle string) bool {
+func (cr *chatRooms) IsJoined(network, room, nodeID, handle string) bool {
 	cr.mu.RLock()
 	defer cr.mu.RUnlock()
-	rs := cr.rooms[room]
+	rooms := cr.networks[network]
+	if rooms == nil {
+		return false
+	}
+	rs := rooms[room]
 	if rs == nil {
 		return false
 	}
@@ -94,12 +112,12 @@ func (cr *chatRooms) IsJoined(room, nodeID, handle string) bool {
 	return false
 }
 
-// RoomList returns all active rooms sorted by name.
-func (cr *chatRooms) RoomList() []protocol.ProtoChatRoomInfo {
+func (cr *chatRooms) RoomList(network string) []protocol.ProtoChatRoomInfo {
 	cr.mu.RLock()
 	defer cr.mu.RUnlock()
+	rooms := cr.networks[network]
 	var list []protocol.ProtoChatRoomInfo
-	for name, rs := range cr.rooms {
+	for name, rs := range rooms {
 		count := 0
 		for _, handles := range rs.members {
 			count += len(handles)
@@ -114,16 +132,18 @@ func (cr *chatRooms) RoomList() []protocol.ProtoChatRoomInfo {
 	return list
 }
 
-// Users returns all handles currently in room.
-func (cr *chatRooms) Users(room string) []string {
+func (cr *chatRooms) Users(network, room string) []string {
 	cr.mu.RLock()
 	defer cr.mu.RUnlock()
-	return cr.usersLocked(room)
+	return cr.usersLocked(network, room)
 }
 
-// usersLocked returns handles in room; caller must hold mu.
-func (cr *chatRooms) usersLocked(room string) []string {
-	rs := cr.rooms[room]
+func (cr *chatRooms) usersLocked(network, room string) []string {
+	rooms := cr.networks[network]
+	if rooms == nil {
+		return nil
+	}
+	rs := rooms[room]
 	if rs == nil {
 		return nil
 	}
@@ -134,21 +154,25 @@ func (cr *chatRooms) usersLocked(room string) []string {
 	return out
 }
 
-// HandleDisconnect removes all handles for nodeID from all rooms.
-// Returns a slice of (room, handle) pairs that were removed so the
-// caller can broadcast chat_leave events.
-func (cr *chatRooms) HandleDisconnect(nodeID string) [][2]string {
+func (cr *chatRooms) HandleDisconnect(network, nodeID string) [][2]string {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
+	rooms := cr.networks[network]
+	if rooms == nil {
+		return nil
+	}
 	var removed [][2]string
-	for roomName, rs := range cr.rooms {
+	for roomName, rs := range rooms {
 		for _, handle := range rs.members[nodeID] {
 			removed = append(removed, [2]string{roomName, handle})
 		}
 		delete(rs.members, nodeID)
 		if len(rs.members) == 0 {
-			delete(cr.rooms, roomName)
+			delete(rooms, roomName)
 		}
+	}
+	if len(rooms) == 0 {
+		delete(cr.networks, network)
 	}
 	return removed
 }
@@ -159,11 +183,14 @@ func broadcastChatEvent(b *Broadcaster, network, eventType string, payload any) 
 	b.Publish(network, protocol.Event{Type: eventType, Data: data})
 }
 
-// HandleForNode returns the first handle that nodeID has in room, or "".
-func (cr *chatRooms) HandleForNode(room, nodeID string) string {
+func (cr *chatRooms) HandleForNode(network, room, nodeID string) string {
 	cr.mu.RLock()
 	defer cr.mu.RUnlock()
-	rs := cr.rooms[room]
+	rooms := cr.networks[network]
+	if rooms == nil {
+		return ""
+	}
+	rs := rooms[room]
 	if rs == nil {
 		return ""
 	}
@@ -174,11 +201,11 @@ func (cr *chatRooms) HandleForNode(room, nodeID string) string {
 	return handles[0]
 }
 
-// AnyHandleForNode returns any handle that nodeID has across any room, or "".
-func (cr *chatRooms) AnyHandleForNode(nodeID string) string {
+func (cr *chatRooms) AnyHandleForNode(network, nodeID string) string {
 	cr.mu.RLock()
 	defer cr.mu.RUnlock()
-	for _, rs := range cr.rooms {
+	rooms := cr.networks[network]
+	for _, rs := range rooms {
 		if handles := rs.members[nodeID]; len(handles) > 0 {
 			return handles[0]
 		}

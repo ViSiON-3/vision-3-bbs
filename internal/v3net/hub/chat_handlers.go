@@ -31,7 +31,7 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 		return
 	}
 
-	users := h.chatRooms.Join(room, nodeID, req.Handle)
+	users := h.chatRooms.Join(network, room, nodeID, req.Handle)
 
 	broadcastChatEvent(h.broadcaster, network, protocol.EventChatJoin, protocol.ChatJoinPayload{
 		Room: room, Handle: req.Handle, BBS: bbsName,
@@ -39,7 +39,7 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 
 	history, _ := h.chatStore.RoomHistory(network, room, 50)
 	resp := protocol.ChatJoinResponse{
-		Rooms:   h.chatRooms.RoomList(),
+		Rooms:   h.chatRooms.RoomList(network),
 		History: history,
 		Users:   users,
 	}
@@ -63,7 +63,7 @@ func (h *Hub) handleChatLeave(w http.ResponseWriter, r *http.Request, network st
 		return
 	}
 
-	h.chatRooms.Leave(room, nodeID, req.Handle)
+	h.chatRooms.Leave(network, room, nodeID, req.Handle)
 	broadcastChatEvent(h.broadcaster, network, protocol.EventChatLeave, protocol.ChatLeavePayload{
 		Room: room, Handle: req.Handle, BBS: bbsName,
 	})
@@ -90,7 +90,7 @@ func (h *Hub) handleChatPost(w http.ResponseWriter, r *http.Request, network str
 		return
 	}
 
-	handle := h.chatRooms.HandleForNode(room, nodeID)
+	handle := h.chatRooms.HandleForNode(network, room, nodeID)
 	if handle == "" {
 		jsonError(w, "not joined to room", http.StatusForbidden)
 		return
@@ -131,7 +131,7 @@ func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network 
 		return
 	}
 
-	fromHandle := h.chatRooms.AnyHandleForNode(nodeID)
+	fromHandle := h.chatRooms.AnyHandleForNode(network, nodeID)
 	if fromHandle == "" {
 		fromHandle = bbsName
 	}
@@ -162,13 +162,13 @@ func (h *Hub) handleChatTopic(w http.ResponseWriter, r *http.Request, network st
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	handle := h.chatRooms.HandleForNode(room, nodeID)
+	handle := h.chatRooms.HandleForNode(network, room, nodeID)
 	if handle == "" {
 		jsonError(w, "not joined to room", http.StatusForbidden)
 		return
 	}
 
-	h.chatRooms.SetTopic(room, req.Topic)
+	h.chatRooms.SetTopic(network, room, req.Topic)
 	broadcastChatEvent(h.broadcaster, network, protocol.EventChatTopic, protocol.ChatTopicPayload{
 		Room: room, Topic: req.Topic, SetBy: handle,
 	})
@@ -176,9 +176,9 @@ func (h *Hub) handleChatTopic(w http.ResponseWriter, r *http.Request, network st
 }
 
 // handleChatRooms: GET /v3net/v1/{network}/chat/rooms  (no auth required)
-func (h *Hub) handleChatRooms(w http.ResponseWriter, r *http.Request, _ string) {
+func (h *Hub) handleChatRooms(w http.ResponseWriter, r *http.Request, network string) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(h.chatRooms.RoomList())
+	json.NewEncoder(w).Encode(h.chatRooms.RoomList(network))
 }
 
 // handleChatHistory: GET /v3net/v1/{network}/chat/rooms/{room}/history  (no auth)
