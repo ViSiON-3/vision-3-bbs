@@ -68,3 +68,51 @@ func TestDispatch_Private_DeliveredToTarget(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 	}
 }
+
+func TestDispatch_Private_WrongNode_NotDelivered(t *testing.T) {
+	reg := newChatSessionRegistry("mynode")
+	s := &ChatSession{
+		handle: "alice",
+		events: make(chan chat.ChatEvent, 1),
+	}
+	reg.register(s)
+
+	payload, _ := json.Marshal(protocol.ChatMsgPayload{
+		ToHandle: "alice",
+		ToNode:   "othernode", // different node — should NOT be delivered
+		Text:     "secret",
+	})
+	reg.dispatch(protocol.Event{Type: protocol.EventChatPrivate, Data: payload})
+
+	select {
+	case <-s.events:
+		t.Error("expected no event to be delivered for wrong ToNode")
+	default:
+		// correct — nothing delivered
+	}
+}
+
+func TestDispatch_Private_EmptyToNode_Delivered(t *testing.T) {
+	reg := newChatSessionRegistry("mynode")
+	s := &ChatSession{
+		handle: "alice",
+		events: make(chan chat.ChatEvent, 1),
+	}
+	reg.register(s)
+
+	payload, _ := json.Marshal(protocol.ChatMsgPayload{
+		ToHandle: "alice",
+		ToNode:   "", // empty — should be delivered to all nodes
+		Text:     "broadcast-private",
+	})
+	reg.dispatch(protocol.Event{Type: protocol.EventChatPrivate, Data: payload})
+
+	select {
+	case ev := <-s.events:
+		if ev.Type != chat.TypePrivate {
+			t.Errorf("expected TypePrivate, got %v", ev.Type)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("expected event to be delivered for empty ToNode")
+	}
+}

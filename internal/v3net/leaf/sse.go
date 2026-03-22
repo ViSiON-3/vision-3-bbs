@@ -24,27 +24,25 @@ var (
 // backoff on disconnect.
 func (l *Leaf) runSSE(ctx context.Context) {
 	attempt := 0
-	hasConnected := false
+	firstConnect := true
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-
-		err := l.connectSSE(ctx, hasConnected)
+		reconnect := !firstConnect
+		err := l.connectSSE(ctx, reconnect)
+		firstConnect = false
 		if ctx.Err() != nil {
 			return
 		}
-
-		if err == nil {
-			hasConnected = true
-			attempt = 0
-		} else {
+		if err != nil {
 			slog.Warn("leaf: SSE disconnected", "network", l.cfg.Network, "error", err)
 			attempt++
+		} else {
+			attempt = 0
 		}
 		delay := backoff(attempt)
 		slog.Info("leaf: SSE reconnecting", "network", l.cfg.Network, "delay", delay)
-
 		select {
 		case <-ctx.Done():
 			return
