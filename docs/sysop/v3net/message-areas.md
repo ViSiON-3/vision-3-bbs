@@ -15,7 +15,7 @@ V3Net areas are message areas that are networked using the V3Net protocol. Messa
 | Authentication | N/A | Packet passwords | Ed25519 signatures |
 | Area discovery | Manual | AREAS.BBS | NAL (Network Area List) |
 | Message dedup | N/A | MSGID CRC | UUID-based SQLite index |
-| Transport | N/A | .PKT files via binkd | HTTPS (JSON) |
+| Transport | N/A | .PKT files via binkd | HTTP (JSON) |
 | Real-time delivery | No | Polling only | SSE push + polling |
 
 ## How Messages Flow

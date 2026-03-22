@@ -72,7 +72,7 @@ The system is designed as a single Go application that listens for incoming SSH 
    * JSON-based dupe database with automatic purge
 
 9. **V3Net Networking (`internal/v3net/`)**
-   * Native inter-BBS message networking using REST+SSE over HTTPS
+   * Native inter-BBS message networking using REST+SSE over HTTP (ed25519 signatures provide authentication)
    * **Service** (`service.go`) — top-level orchestrator that wires keystore, dedup, hub, and leaf components; manages area-to-network mapping
    * **Hub** (`hub/`) — HTTP server with SSE broadcaster, subscriber management, message storage, NAL store, area proposals, access requests, coordinator transfers; SQLite-backed
    * **Leaf** (`leaf/`) — client that subscribes to a hub, polls for messages, maintains an SSE connection for real-time events, and sends locally-posted messages

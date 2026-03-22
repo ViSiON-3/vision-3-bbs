@@ -663,8 +663,6 @@ type V3NetConfig struct {
 type V3NetHubConfig struct {
     Enabled     bool
     ListenAddr  string
-    TLSCert     string
-    TLSKey      string
     DataDir     string
     AutoApprove bool
     Networks    []V3NetHubNetwork

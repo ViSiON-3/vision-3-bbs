@@ -10,7 +10,7 @@ not affect your existing FTN configuration.
 > may change without notice. Use it only if you are testing or contributing
 > to V3Net development. Do not rely on it for a live BBS.
 
-> **Security note:** TLS encrypts traffic in transit. Messages are stored unencrypted on disk at both leaf and hub nodes. FelonyNet is a public network — treat everything you post as public and permanent. See [Security Considerations](configuration.md#security-considerations) for full details.
+> **Security note:** All messages and NALs are signed with Ed25519 keys, preventing impersonation and forgery regardless of transport. Messages are stored unencrypted on disk at both leaf and hub nodes. FelonyNet is a public network — treat everything you post as public and permanent. See [Security Considerations](configuration.md#security-considerations) for full details.
 
 ## What You Get
 
@@ -18,13 +18,13 @@ not affect your existing FTN configuration.
 - **Real-time events** — see who logs on/off across the network instantly
 - **Inter-BBS chat** — chat with users on other nodes in real time
 - **Zero mailer software** — no FrontDoor, Binkd, or nodelist management
-- **Firewall-friendly** — outbound HTTPS only (leaf nodes never need open ports)
+- **Firewall-friendly** — outbound HTTP only (leaf nodes never need open ports)
 - **5-minute setup** — a few screens in the config editor and a restart
 
 ## Requirements
 
 - ViSiON/3 BBS (any version with V3Net support)
-- Outbound HTTPS access to the FelonyNet hub
+- Outbound HTTP access to the FelonyNet hub
 
 ---
 
@@ -73,7 +73,7 @@ Select **2. Subscriptions**, then press **B** to open the **Network Registry**:
 │                        Network Registry                              │
 │  Network        Description                    Hub URL               │
 │──────────────────────────────────────────────────────────────────────│
-│  felonynet      Official ViSiON/3 BBS network  https://felonynet.org │
+│  felonynet      Official ViSiON/3 BBS network  http://felonynet.org:8765 │
 │                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
 Enter - Select  |  ESC - Back
@@ -87,7 +87,7 @@ the Hub URL and Network pre-filled:
 │                     Leaf Setup — Join a Network                      │
 │                                                                      │
 │  Registry        : (press Enter to browse available networks)        │
-│  Hub URL         : https://felonynet.org                             │
+│  Hub URL         : http://felonynet.org:8765                         │
 │  Network         : felonynet                                         │
 │  Areas           : (none — press Enter to browse)                    │
 │  Poll Interval   : 5m                                                │
