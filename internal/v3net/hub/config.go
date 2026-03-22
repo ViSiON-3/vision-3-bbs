@@ -8,8 +8,6 @@ import (
 // Config holds hub server configuration.
 type Config struct {
 	ListenAddr  string
-	TLSCertFile string
-	TLSKeyFile  string
 	DataDir     string
 	Keystore    *keystore.Keystore
 	AutoApprove bool

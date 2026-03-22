@@ -245,22 +245,12 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Hub TLS Cert", Help: "Path to TLS certificate (blank for plain HTTP)", Type: ftString, Col: 3, Row: 18, Width: 40,
-			Get: func() string { return hub.TLSCert },
-			Set: func(val string) error { hub.TLSCert = val; return nil },
-		},
-		{
-			Label: "Hub TLS Key", Help: "Path to TLS private key", Type: ftString, Col: 3, Row: 19, Width: 40,
-			Get: func() string { return hub.TLSKey },
-			Set: func(val string) error { hub.TLSKey = val; return nil },
-		},
-		{
-			Label: "Hub Data Dir", Help: "Hub data storage directory", Type: ftString, Col: 3, Row: 20, Width: 40,
+			Label: "Hub Data Dir", Help: "Hub data storage directory", Type: ftString, Col: 3, Row: 18, Width: 40,
 			Get: func() string { return hub.DataDir },
 			Set: func(val string) error { hub.DataDir = val; return nil },
 		},
 		{
-			Label: "Auto Approve", Help: "Automatically approve new leaf subscriptions", Type: ftYesNo, Col: 3, Row: 21, Width: 1,
+			Label: "Auto Approve", Help: "Automatically approve new leaf subscriptions", Type: ftYesNo, Col: 3, Row: 19, Width: 1,
 			Get: func() string { return boolToYN(hub.AutoApprove) },
 			Set: func(val string) error { hub.AutoApprove = ynToBool(val); return nil },
 		},

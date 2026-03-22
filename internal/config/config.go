@@ -908,8 +908,6 @@ type V3NetHubConfig struct {
 	Enabled      bool              `json:"enabled"`
 	Host         string            `json:"host"` // Listen host (blank = all interfaces)
 	Port         int               `json:"port"` // Listen port (default: 8765)
-	TLSCert      string            `json:"tlsCert,omitempty"`
-	TLSKey       string            `json:"tlsKey,omitempty"`
 	DataDir      string            `json:"dataDir"`
 	AutoApprove  bool              `json:"autoApprove"`
 	Networks     []V3NetHubNetwork `json:"networks,omitempty"`

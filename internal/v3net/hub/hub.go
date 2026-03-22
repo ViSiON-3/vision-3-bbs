@@ -129,12 +129,7 @@ func (h *Hub) Start(ctx context.Context) error {
 
 	slog.Info("v3net hub starting", "addr", h.cfg.ListenAddr)
 
-	var err error
-	if h.cfg.TLSCertFile != "" && h.cfg.TLSKeyFile != "" {
-		err = h.server.ListenAndServeTLS(h.cfg.TLSCertFile, h.cfg.TLSKeyFile)
-	} else {
-		err = h.server.ListenAndServe()
-	}
+	err := h.server.ListenAndServe()
 
 	if err == http.ErrServerClosed {
 		return nil
