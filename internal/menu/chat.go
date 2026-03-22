@@ -105,7 +105,7 @@ func runChat(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManage
 		terminalio.WriteProcessedBytes(s, []byte(ansi.RestoreCursor()), outputMode)
 	}
 
-	// Select chat backend
+	// Select chat backend, falling back to local if the network backend fails.
 	svc, err := pickChatService(e, handle)
 	if err != nil {
 		log.Printf("ERROR: Node %d: failed to create chat service: %v", nodeNumber, err)
@@ -116,9 +116,21 @@ func runChat(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManage
 	currentRoom := "lobby"
 	_, history, err := svc.Join(currentRoom)
 	if err != nil {
-		log.Printf("ERROR: Node %d: chat join lobby: %v", nodeNumber, err)
+		// Network backend unavailable (e.g. hub doesn't support chat yet) — fall back to local.
+		log.Printf("INFO: Node %d: chat join failed (%v), falling back to local chat", nodeNumber, err)
 		svc.Close() //nolint:errcheck
-		return nil, "", nil
+		dbPath := e.ServerCfg.DataDir + "/chat.db"
+		svc, err = chat.NewLocalChatService(handle, dbPath)
+		if err != nil {
+			log.Printf("ERROR: Node %d: local chat fallback failed: %v", nodeNumber, err)
+			return nil, "", nil
+		}
+		_, history, err = svc.Join(currentRoom)
+		if err != nil {
+			log.Printf("ERROR: Node %d: local chat join failed: %v", nodeNumber, err)
+			svc.Close() //nolint:errcheck
+			return nil, "", nil
+		}
 	}
 
 	// Show recent history
