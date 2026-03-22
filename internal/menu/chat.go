@@ -133,7 +133,8 @@ func runChat(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManage
 		}
 	}
 
-	// Show recent history
+	// Show room join notice, then history
+	writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Joined room: "+currentRoom+" — /rooms /join /msg /users /topic /q"))
 	for _, msg := range history {
 		writeChatLine(formatChatMessage(msg, e.LoadedStrings.ChatSystemPrefix, e.LoadedStrings.ChatMessageFormat))
 	}
