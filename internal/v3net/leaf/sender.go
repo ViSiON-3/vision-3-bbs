@@ -210,7 +210,7 @@ func (l *Leaf) get(path string) ([]byte, error) {
 	}
 	resp, err := l.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("leaf: GET %s: %w", path, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
