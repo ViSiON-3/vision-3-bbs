@@ -60,19 +60,19 @@ func chatSelectService(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		}
 		netName = "Local"
 	default:
-		svc, netName, err = chatNetworkPicker(s, terminal, handle, dbPath, leaves, outputMode, wt)
+		svc, netName, err = chatNetworkPicker(e, s, terminal, handle, dbPath, leaves, outputMode, wt)
 		if err != nil || svc == nil {
 			return nil, "", "", err
 		}
 	}
 
-	room := chatRoomPicker(svc, s, terminal, wt)
+	room := chatRoomPicker(e, svc, s, terminal, wt)
 	return svc, room, netName, nil
 }
 
 // chatNetworkPicker displays a numbered network list, probes each for user
 // counts (2 s timeout), and returns the ChatService for the selected network.
-func chatNetworkPicker(s ssh.Session, terminal *term.Terminal, handle, dbPath string, leaves []ChatLeafInfo, outputMode ansi.OutputMode, wt func(string)) (chat.ChatService, string, error) {
+func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, handle, dbPath string, leaves []ChatLeafInfo, outputMode ansi.OutputMode, wt func(string)) (chat.ChatService, string, error) {
 	type netInfo struct {
 		name    string
 		users   int
@@ -112,17 +112,18 @@ func chatNetworkPicker(s ssh.Session, terminal *term.Terminal, handle, dbPath st
 	wg.Wait()
 	nets[len(leaves)] = netInfo{name: "Local", users: -1, avail: true, isLocal: true}
 
-	wt("\r\n|15Chat Networks|07\r\n")
-	wt("|08────────────────────────────────────────|07\r\n")
+	wt("\r\n" + e.LoadedStrings.ChatNetworkPickerHeader + "\r\n")
 	for i, net := range nets {
+		var status string
 		switch {
 		case !net.avail:
-			wt(fmt.Sprintf("|08 %d.|07 %-20s |08(unavailable)|07\r\n", i+1, net.name))
+			status = "unavailable"
 		case net.isLocal:
-			wt(fmt.Sprintf("|08 %d.|07 %-20s |08(this BBS only)|07\r\n", i+1, net.name))
+			status = "this BBS only"
 		default:
-			wt(fmt.Sprintf("|08 %d.|07 %-20s |08(%d users online)|07\r\n", i+1, net.name, net.users))
+			status = fmt.Sprintf("%d users online", net.users)
 		}
+		wt(fmt.Sprintf(e.LoadedStrings.ChatNetworkPickerEntry+"\r\n", i+1, net.name, status))
 	}
 	wt("\r\n")
 	wt("|07Select network |08[|071|08]|07: ")
@@ -155,20 +156,19 @@ func chatNetworkPicker(s ssh.Session, terminal *term.Terminal, handle, dbPath st
 
 // chatRoomPicker fetches the current room list and lets the user pick one.
 // Returns "lobby" if no rooms exist yet or the user presses Enter.
-func chatRoomPicker(svc chat.ChatService, s ssh.Session, terminal *term.Terminal, wt func(string)) string {
+func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, terminal *term.Terminal, wt func(string)) string {
 	rooms, err := svc.Rooms()
 	if err != nil || len(rooms) == 0 {
 		return "lobby"
 	}
 
-	wt("\r\n|15Available Rooms|07\r\n")
-	wt("|08────────────────────────────────────────|07\r\n")
-	for i, r := range rooms {
+	wt("\r\n" + e.LoadedStrings.ChatRoomListHeader + "\r\n")
+	for _, r := range rooms {
 		topic := r.Topic
 		if topic == "" {
 			topic = "|08no topic|07"
 		}
-		wt(fmt.Sprintf("|08 %d.|07 %-15s |08(%d)|07 %s\r\n", i+1, r.Name, r.UserCount, topic))
+		wt(fmt.Sprintf(e.LoadedStrings.ChatRoomListEntry+"\r\n", r.Name, r.UserCount, topic))
 	}
 	wt("\r\n")
 	wt("|07Select room |08[|07lobby|08]|07: ")
@@ -739,7 +739,15 @@ func runChat(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManage
 			rest := strings.TrimSpace(trimmed[5:])
 			parts := strings.SplitN(rest, " ", 2)
 			if len(parts) == 2 {
-				if msgErr := svc.Private(parts[0], "", parts[1]); msgErr != nil {
+				target := strings.TrimSpace(parts[0])
+				message := parts[1]
+				toHandle := target
+				toNode := ""
+				if atIdx := strings.Index(target, "@"); atIdx > 0 && atIdx < len(target)-1 {
+					toHandle = target[:atIdx]
+					toNode = target[atIdx+1:]
+				}
+				if msgErr := svc.Private(toHandle, toNode, message); msgErr != nil {
 					writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Could not send private message: "+msgErr.Error()))
 				}
 			}
