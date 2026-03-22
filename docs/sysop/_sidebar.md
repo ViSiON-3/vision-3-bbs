@@ -59,6 +59,7 @@
 * [Mailer (binkd)](messages/ftn-echomail.md#mailer-external--binkd)
 * [JAM Echomail](messages/jam-echomail.md)
 * [V3Net Networking](v3net/message-areas.md)
+* [V3Net Chat](v3net/chat.md)
 * [V3Net Hub TLS](v3net/hub-tls.md)
 * [V3Mail](messages/v3mail.md)
 * [Auto-Signature](messages/autosig.md)

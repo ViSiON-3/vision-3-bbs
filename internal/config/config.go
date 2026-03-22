@@ -946,7 +946,6 @@ type V3NetLeafConfig struct {
 	Boards         []string `json:"boards"`                    // Local message area tags to write received messages
 	PollInterval   string   `json:"pollInterval"`              // Duration string (e.g., "5m")
 	Origin         string   `json:"origin,omitempty"`          // Origin line text (e.g. "My Cool BBS - bbs.example.com")
-	TLSSkipVerify  bool     `json:"tlsSkipVerify,omitempty"`   // Skip TLS certificate verification (for self-signed certs)
 }
 
 // EventConfig defines a scheduled event configuration

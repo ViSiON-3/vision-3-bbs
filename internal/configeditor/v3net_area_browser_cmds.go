@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -37,7 +38,12 @@ func fetchHubNAL(hubURL, network string) tea.Cmd {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return fetchNALMsg{err: fmt.Errorf("hub returned status %d", resp.StatusCode)}
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			detail := strings.TrimSpace(string(body))
+			if detail == "" {
+				detail = "(no body)"
+			}
+			return fetchNALMsg{err: fmt.Errorf("hub returned status %d: %s", resp.StatusCode, detail)}
 		}
 		var nal protocol.NAL
 		if err := json.NewDecoder(resp.Body).Decode(&nal); err != nil {

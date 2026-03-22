@@ -16,7 +16,7 @@ import (
 // FetchNAL fetches and verifies the NAL for this leaf's network from the hub.
 func (l *Leaf) FetchNAL(ctx context.Context) (*protocol.NAL, error) {
 	url := l.cfg.HubURL + fmt.Sprintf("/v3net/v1/%s/nal", l.cfg.Network)
-	n, err := nal.Fetch(ctx, url)
+	n, err := nal.Fetch(ctx, url, l.client)
 	if err != nil {
 		return nil, fmt.Errorf("leaf: fetch NAL: %w", err)
 	}

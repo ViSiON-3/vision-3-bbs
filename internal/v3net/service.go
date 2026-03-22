@@ -220,7 +220,6 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		OnEvent:       onEvent,
 		BBSName:       s.BBSName,
 		BBSHost:       s.BBSHost,
-		TLSSkipVerify: lcfg.TLSSkipVerify,
 	})
 
 	s.leaves = append(s.leaves, l)
