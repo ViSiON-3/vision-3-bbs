@@ -171,7 +171,7 @@ func (l *Leaf) signedPostCtx(ctx context.Context, path string, body []byte) erro
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("leaf: POST %s returned %d", path, resp.StatusCode)
 	}
 	return nil
@@ -204,7 +204,11 @@ func (l *Leaf) signedPostWithResponse(ctx context.Context, path string, body []b
 
 // get performs an unauthenticated GET and returns the response body.
 func (l *Leaf) get(path string) ([]byte, error) {
-	resp, err := http.Get(l.cfg.HubURL + path)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, l.cfg.HubURL+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("leaf: create GET request: %w", err)
+	}
+	resp, err := l.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
