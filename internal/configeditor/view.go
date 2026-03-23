@@ -43,6 +43,9 @@ func (m Model) View() string {
 		return m.viewNavSaveConfirm()
 	case modeWizardExitConfirm:
 		bg := m.viewWizardForm()
+		if m.ftnWizard != nil && m.ftnWizard.hasData() {
+			bg = m.viewFTNWizardForm()
+		}
 		return m.overlayConfirmDialog(bg, "-- Unsaved Wizard --",
 			"Save before leaving?")
 	case modeV3NetHubAreas:
@@ -67,6 +70,12 @@ func (m Model) View() string {
 		return m.viewV3NetAreaBrowser()
 	case modeRegistryBrowser:
 		return m.viewRegistryBrowser()
+	case modeFTNWizardForm, modeFTNWizardField:
+		return m.viewFTNWizardForm()
+	case modeFTNNetworkBrowser:
+		return m.viewFTNNetworkBrowser()
+	case modeFTNAreaBrowser, modeFTNAreaDownloading:
+		return m.viewFTNAreaBrowser()
 	}
 	return m.viewTopMenu()
 }

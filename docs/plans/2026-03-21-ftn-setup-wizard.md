@@ -1,7 +1,7 @@
 # FTN Setup Wizard — Design Plan
 
 **Date**: 2026-03-21
-**Status**: Draft
+**Status**: Implemented
 **Scope**: New "FTN Setup Wizard" within the `./config` TUI under "Echomail and Networking"
 
 ---

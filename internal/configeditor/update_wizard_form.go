@@ -328,29 +328,42 @@ func (m Model) wizardHasData() bool {
 
 // updateWizardExitConfirm handles the wizard save/discard dialog.
 func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Determine if this is the FTN wizard or V3Net wizard.
+	isFTN := m.ftnWizard != nil && m.ftnWizard.hasData()
+
+	formMode := modeWizardForm
+	discardMode := editorMode(modeRecordList)
+	if isFTN {
+		formMode = modeFTNWizardForm
+		discardMode = modeCategoryMenu
+	}
+
 	switch msg.Type {
 	case tea.KeyLeft, tea.KeyRight:
 		m.confirmYes = !m.confirmYes
 	case tea.KeyEnter:
 		if m.confirmYes {
-			// Attempt to validate and save the wizard.
-			m.mode = modeWizardForm
+			m.mode = formMode
+			if isFTN {
+				return m.submitFTNWizardForm()
+			}
 			return m.submitWizardForm()
 		}
-		// Discard — return to record list.
-		m.mode = modeRecordList
+		m.mode = discardMode
 		return m, nil
 	case tea.KeyEscape:
-		// Cancel — stay on wizard form.
-		m.mode = modeWizardForm
+		m.mode = formMode
 		return m, nil
 	default:
 		switch msg.String() {
 		case "y", "Y":
-			m.mode = modeWizardForm
+			m.mode = formMode
+			if isFTN {
+				return m.submitFTNWizardForm()
+			}
 			return m.submitWizardForm()
 		case "n", "N":
-			m.mode = modeRecordList
+			m.mode = discardMode
 			return m, nil
 		}
 	}

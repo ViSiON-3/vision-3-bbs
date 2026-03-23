@@ -37,25 +37,15 @@
       "enabled": false
     },
     {
-      "id": "example_binkd_poll_simple",
-      "name": "Example: Simple Binkd Poll",
+      "id": "echomail_poll_hub",
+      "name": "Poll Hub (21:4/100)",
       "schedule": "*/15 * * * *",
-      "comment": "Simple binkd poll every 15 minutes (polls all configured nodes). Adjust paths for your system.",
-      "command": "/usr/local/bin/binkd",
-      "args": ["-p"],
-      "working_directory": "{BBS_ROOT}",
-      "timeout_seconds": 300,
-      "enabled": false
-    },
-    {
-      "id": "example_binkd_poll_specific",
-      "name": "Example: Binkd Poll Specific Node",
-      "schedule": "*/30 * * * *",
-      "comment": "Poll a specific node every 30 minutes. Update command path, node address, and config path for your setup.",
-      "command": "/usr/local/bin/binkd",
+      "comment": "Poll your upstream hub for new echomail every 15 minutes. Change the node address and config path to match your setup.",
+      "command": "{BBS_ROOT}/bin/binkd",
       "args": [
+        "-p",
         "-P",
-        "21:4/100@fsxnet",
+        "fsxnet@21:4/100",
         "{BBS_ROOT}/data/ftn/binkd.conf"
       ],
       "working_directory": "{BBS_ROOT}",
@@ -63,10 +53,10 @@
       "enabled": false
     },
     {
-      "id": "example_v3mail_toss",
-      "name": "Example: Toss Echomail (v3mail)",
-      "schedule": "@hourly",
-      "comment": "Toss inbound FTN bundles and .PKT files into JAM message bases every hour. Requires ftn.json to be configured.",
+      "id": "echomail_toss",
+      "name": "Toss Echomail",
+      "schedule": "1,16,31,46 * * * *",
+      "comment": "Toss inbound FTN bundles and .PKT files into JAM message bases. Runs 1 minute after each poll to allow transfers to complete.",
       "command": "{BBS_ROOT}/v3mail",
       "args": [
         "toss",
@@ -80,10 +70,10 @@
       "enabled": false
     },
     {
-      "id": "example_v3mail_scan",
-      "name": "Example: Scan Echomail (v3mail)",
+      "id": "echomail_scan",
+      "name": "Scan Echomail",
       "schedule": "*/5 * * * *",
-      "comment": "Scan JAM bases for new outgoing echomail every 5 minutes and create outbound .PKT files. Uses a persistent high-water mark so only new messages are exported each run.",
+      "comment": "Scan JAM bases for new outgoing echomail and create outbound .PKT files. Uses a persistent high-water mark so only new messages are exported each run.",
       "command": "{BBS_ROOT}/v3mail",
       "args": [
         "scan",
@@ -97,10 +87,10 @@
       "enabled": false
     },
     {
-      "id": "example_v3mail_ftn_pack",
-      "name": "Example: Pack Echomail Bundles (v3mail)",
+      "id": "echomail_pack",
+      "name": "Pack Echomail Bundles",
       "schedule": "2,7,12,17,22,27,32,37,42,47,52,57 * * * *",
-      "comment": "Pack outbound .PKT files into ZIP bundles for binkd to transmit. Runs 2 minutes after scan to ensure packets are ready. BSO day-of-week naming convention.",
+      "comment": "Pack outbound .PKT files into ZIP bundles for binkd to transmit. Runs 2 minutes after each scan to ensure packets are ready.",
       "command": "{BBS_ROOT}/v3mail",
       "args": [
         "ftn-pack",

@@ -242,7 +242,7 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			},
 		},
 		{
-			Label: "Packet Password", Help: "Packet password for this link (max 8 chars)", Type: ftString, Col: 3, Row: 3, Width: 8,
+			Label: "Packet Password", Help: "Packet password for this link (max 8 chars)", Type: ftString, Col: 3, Row: 3, Width: 20, Masked: true,
 			Get: func() string { return linkPtr.PacketPassword },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -255,17 +255,22 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			},
 		},
 		{
-			Label: "Areafix Password", Help: "Password for AreaFix netmail (subject line)", Type: ftString, Col: 3, Row: 4, Width: 20,
+			Label: "Session Password", Help: "BinkP session/connection password", Type: ftString, Col: 3, Row: 4, Width: 20, Masked: true,
+			Get: func() string { return linkPtr.SessionPassword },
+			Set: func(val string) error { linkPtr.SessionPassword = val; save(); return nil },
+		},
+		{
+			Label: "Areafix Password", Help: "Password for AreaFix netmail (subject line)", Type: ftString, Col: 3, Row: 5, Width: 20, Masked: true,
 			Get: func() string { return linkPtr.AreafixPassword },
 			Set: func(val string) error { linkPtr.AreafixPassword = val; save(); return nil },
 		},
 		{
-			Label: "Name", Help: "Descriptive name for this link (e.g. FSXNet Hub)", Type: ftString, Col: 3, Row: 5, Width: 40,
+			Label: "Name", Help: "Descriptive name for this link (e.g. FSXNet Hub)", Type: ftString, Col: 3, Row: 6, Width: 40,
 			Get: func() string { return linkPtr.Name },
 			Set: func(val string) error { linkPtr.Name = val; save(); return nil },
 		},
 		{
-			Label: "Flavour", Help: "Delivery flavour: Normal, Crash, Hold, Direct", Type: ftLookup, Col: 3, Row: 6, Width: 10,
+			Label: "Flavour", Help: "Delivery flavour: Normal, Crash, Hold, Direct", Type: ftLookup, Col: 3, Row: 7, Width: 10,
 			Get: func() string {
 				if linkPtr.Flavour == "" {
 					return "Normal"

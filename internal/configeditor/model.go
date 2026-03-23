@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -49,6 +50,11 @@ const (
 	modeWizardExitConfirm                        // Wizard discard/save confirm
 	modeV3NetAreaBrowser                         // Area browser (NAL fetch + subscribe)
 	modeRegistryBrowser                          // Registry browser (discover networks)
+	modeFTNWizardForm                            // FTN wizard form navigation
+	modeFTNWizardField                           // FTN wizard field editing (textinput active)
+	modeFTNNetworkBrowser                        // Known FTN network list with info panel
+	modeFTNAreaBrowser                           // FTN echo area selection from downloaded echolist
+	modeFTNAreaDownloading                       // Progress state while downloading echolist
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -225,6 +231,23 @@ type Model struct {
 	regBrowserError     string                   // error from fetch
 	regBrowserReturn    editorMode               // mode to return to on ESC
 
+	// FTN setup wizard state
+	ftnWizard       *ftnWizardState // pointer so field closures survive value-receiver copies
+	ftnWizardFields []fieldDef      // fields for FTN wizard form
+
+	// FTN network browser state
+	ftnNetBrowserEntries []ftn.RegistryNetwork // loaded from embedded registry
+	ftnNetBrowserCursor  int
+	ftnNetBrowserScroll  int
+
+	// FTN area browser state
+	ftnAreaBrowserAreas    []ftn.EchoArea // parsed from downloaded echolist
+	ftnAreaBrowserSelected []bool         // parallel array, true = subscribed
+	ftnAreaBrowserCursor   int
+	ftnAreaBrowserScroll   int
+	ftnAreaBrowserLoading  bool
+	ftnAreaBrowserError    string
+
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool
 	seedInterstitialPhrase string
@@ -320,6 +343,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fetchRegistryMsg:
 		return m.handleFetchRegistryMsg(msg)
 
+	case ftnEcholistMsg:
+		return m.handleFTNEcholistMsg(msg)
+
 	case tea.KeyMsg:
 		prevMode := m.mode
 		var result tea.Model
@@ -373,6 +399,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateV3NetAreaBrowser(msg)
 		case modeRegistryBrowser:
 			result, cmd = m.updateRegistryBrowser(msg)
+		case modeFTNWizardForm:
+			result, cmd = m.updateFTNWizardForm(msg)
+		case modeFTNWizardField:
+			result, cmd = m.updateFTNWizardField(msg)
+		case modeFTNNetworkBrowser:
+			result, cmd = m.updateFTNNetworkBrowser(msg)
+		case modeFTNAreaBrowser:
+			result, cmd = m.updateFTNAreaBrowser(msg)
+		case modeFTNAreaDownloading:
+			result, cmd = m.updateFTNAreaDownloading(msg)
 		default:
 			return m, nil
 		}
@@ -441,6 +477,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.catMenuItems = []categoryMenuItem{
 			{Label: "Echomail Networks", RecordType: "ftn"},
 			{Label: "Echomail Links", RecordType: "ftnlink"},
+			{Label: "FTN Setup Wizard", Mode: modeFTNWizardForm},
 		}
 		m.catMenuCursor = 0
 		m.mode = modeCategoryMenu

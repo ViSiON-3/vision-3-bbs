@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 //go:embed registry.json
@@ -37,6 +39,24 @@ func LoadRegistry() ([]RegistryNetwork, error) {
 	var networks []RegistryNetwork
 	if err := json.Unmarshal(registryJSON, &networks); err != nil {
 		return nil, fmt.Errorf("parsing embedded FTN registry: %w", err)
+	}
+	return networks, nil
+}
+
+// LoadOverrideRegistry loads an optional sysop-provided ftn_networks.json
+// from the given config directory. Returns nil (no error) if the file does
+// not exist.
+func LoadOverrideRegistry(configPath string) ([]RegistryNetwork, error) {
+	data, err := os.ReadFile(filepath.Join(configPath, "ftn_networks.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading ftn_networks.json: %w", err)
+	}
+	var networks []RegistryNetwork
+	if err := json.Unmarshal(data, &networks); err != nil {
+		return nil, fmt.Errorf("parsing ftn_networks.json: %w", err)
 	}
 	return networks, nil
 }

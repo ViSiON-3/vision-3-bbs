@@ -2,12 +2,14 @@ package configeditor
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 )
@@ -45,6 +47,24 @@ func (m *Model) saveAll() {
 	if err := saveFTNConfig(m.configPath, m.configs.FTN); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
+	}
+	// Sync BBS identity and link passwords to binkd.conf (best-effort).
+	{
+		bbsRoot := filepath.Join(m.configPath, "..")
+		binkdPath := filepath.Join(bbsRoot, "data", "ftn", "binkd.conf")
+		identity := ftn.BinkdIdentity{
+			BoardName: m.configs.Server.BoardName,
+			SysopName: m.configs.Server.SysOpName,
+			Location:  m.configs.Server.BBSLocation,
+		}
+		links := make(map[string]string)
+		for netKey, nc := range m.configs.FTN.Networks {
+			for _, lnk := range nc.Links {
+				addr := fmt.Sprintf("%s@%s", lnk.Address, netKey)
+				links[addr] = lnk.SessionPassword
+			}
+		}
+		_ = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal
 	}
 	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
