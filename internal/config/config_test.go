@@ -313,6 +313,36 @@ func TestLoadFTNConfig_ValidFile(t *testing.T) {
 	}
 }
 
+// TestLoadFTNConfig_TosserEnabledMissingPaths is a regression test for issue #15.
+// LoadFTNConfig must succeed even when internal_tosser_enabled is true but the
+// global FTN paths are blank, so the config editor can open and let the sysop
+// correct the misconfiguration. ValidateFTNConfig is the appropriate place for
+// the runtime path check.
+func TestLoadFTNConfig_TosserEnabledMissingPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := FTNConfig{
+		// Global paths intentionally blank — simulates post-first-run incomplete config.
+		Networks: map[string]FTNNetworkConfig{
+			"fsxnet": {InternalTosserEnabled: true, OwnAddress: "21:3/110"},
+		},
+	}
+	data, _ := json.Marshal(cfg)
+	os.WriteFile(filepath.Join(tmpDir, "ftn.json"), data, 0644)
+
+	result, err := LoadFTNConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadFTNConfig must not fail with incomplete paths (issue #15): %v", err)
+	}
+	if !result.Networks["fsxnet"].InternalTosserEnabled {
+		t.Error("expected InternalTosserEnabled to be preserved after load")
+	}
+
+	// ValidateFTNConfig should catch the missing paths at runtime.
+	if err := ValidateFTNConfig(result); err == nil {
+		t.Error("ValidateFTNConfig should reject config with tosser enabled but no paths set")
+	}
+}
+
 func TestValidateFTNConfig(t *testing.T) {
 	makeNet := func(enabled bool) map[string]FTNNetworkConfig {
 		return map[string]FTNNetworkConfig{
