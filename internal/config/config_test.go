@@ -350,6 +350,20 @@ func TestValidateFTNConfig(t *testing.T) {
 	if err := ValidateFTNConfig(missing); err == nil {
 		t.Error("expected error when outbound_path is missing")
 	}
+
+	// Tosser enabled, missing binkd_outbound_path: should fail.
+	missing = full
+	missing.BinkdOutboundPath = ""
+	if err := ValidateFTNConfig(missing); err == nil {
+		t.Error("expected error when binkd_outbound_path is missing")
+	}
+
+	// Tosser enabled, missing temp_path: should fail.
+	missing = full
+	missing.TempPath = ""
+	if err := ValidateFTNConfig(missing); err == nil {
+		t.Error("expected error when temp_path is missing")
+	}
 }
 
 func TestFTNLinkConfig_LegacyPasswordMigration(t *testing.T) {

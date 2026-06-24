@@ -1009,26 +1009,30 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 // network that has internal_tosser_enabled=true. Call this before starting the
 // tosser, not during editing, so the config editor can open an incomplete config.
 func ValidateFTNConfig(cfg FTNConfig) error {
-	for name, net := range cfg.Networks {
-		if !net.InternalTosserEnabled {
-			continue
+	tosserEnabled := false
+	for _, net := range cfg.Networks {
+		if net.InternalTosserEnabled {
+			tosserEnabled = true
+			break
 		}
-		type requiredPath struct {
-			field string
-			value string
+	}
+	if !tosserEnabled {
+		return nil
+	}
+	type requiredPath struct {
+		field string
+		value string
+	}
+	required := []requiredPath{
+		{"inbound_path", cfg.InboundPath},
+		{"outbound_path", cfg.OutboundPath},
+		{"binkd_outbound_path", cfg.BinkdOutboundPath},
+		{"temp_path", cfg.TempPath},
+	}
+	for _, r := range required {
+		if strings.TrimSpace(r.value) == "" {
+			return fmt.Errorf("ftn.json: %q is required when internal_tosser_enabled is true", r.field)
 		}
-		required := []requiredPath{
-			{"inbound_path", cfg.InboundPath},
-			{"outbound_path", cfg.OutboundPath},
-			{"binkd_outbound_path", cfg.BinkdOutboundPath},
-			{"temp_path", cfg.TempPath},
-		}
-		for _, r := range required {
-			if strings.TrimSpace(r.value) == "" {
-				return fmt.Errorf("ftn.json: %q is required when internal_tosser_enabled is true (network %q)", r.field, name)
-			}
-		}
-		break // All required paths are global; only need to check once.
 	}
 	return nil
 }
