@@ -212,6 +212,9 @@ func loadFTNDeps(configDir, dataDir string) (config.FTNConfig, *message.MessageM
 	if err != nil {
 		return config.FTNConfig{}, nil, nil, fmt.Errorf("load ftn config: %w", err)
 	}
+	if err := config.ValidateFTNConfig(ftnCfg); err != nil {
+		return config.FTNConfig{}, nil, nil, fmt.Errorf("ftn config invalid: %w", err)
+	}
 
 	// BBS root = directory containing the data folder (for resolving relative FTN paths)
 	absData, err := filepath.Abs(dataDir)

@@ -1071,26 +1071,39 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	}
 	log.Printf("INFO: Loaded FTN configuration: %d network(s), %d with internal tosser enabled", len(config.Networks), enabledCount)
 
-	// Validate required global path fields when any network has the internal tosser enabled.
-	if enabledCount > 0 {
-		type requiredPath struct {
-			field string
-			value string
-		}
-		required := []requiredPath{
-			{"inbound_path", config.InboundPath},
-			{"outbound_path", config.OutboundPath},
-			{"binkd_outbound_path", config.BinkdOutboundPath},
-			{"temp_path", config.TempPath},
-		}
-		for _, r := range required {
-			if strings.TrimSpace(r.value) == "" {
-				return defaultConfig, fmt.Errorf("ftn.json: %q is required when internal_tosser_enabled is true", r.field)
-			}
+	return config, nil
+}
+
+// ValidateFTNConfig checks that all required global path fields are set for any
+// network that has internal_tosser_enabled=true. Call this before starting the
+// tosser, not during editing, so the config editor can open an incomplete config.
+func ValidateFTNConfig(cfg FTNConfig) error {
+	tosserEnabled := false
+	for _, net := range cfg.Networks {
+		if net.InternalTosserEnabled {
+			tosserEnabled = true
+			break
 		}
 	}
-
-	return config, nil
+	if !tosserEnabled {
+		return nil
+	}
+	type requiredPath struct {
+		field string
+		value string
+	}
+	required := []requiredPath{
+		{"inbound_path", cfg.InboundPath},
+		{"outbound_path", cfg.OutboundPath},
+		{"binkd_outbound_path", cfg.BinkdOutboundPath},
+		{"temp_path", cfg.TempPath},
+	}
+	for _, r := range required {
+		if strings.TrimSpace(r.value) == "" {
+			return fmt.Errorf("ftn.json: %q is required when internal_tosser_enabled is true", r.field)
+		}
+	}
+	return nil
 }
 
 // LoadV3NetConfig loads V3Net networking configuration from v3net.json.

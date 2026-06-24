@@ -313,6 +313,89 @@ func TestLoadFTNConfig_ValidFile(t *testing.T) {
 	}
 }
 
+// TestLoadFTNConfig_TosserEnabledMissingPaths is a regression test for issue #15.
+// LoadFTNConfig must succeed even when internal_tosser_enabled is true but the
+// global FTN paths are blank, so the config editor can open and let the sysop
+// correct the misconfiguration. ValidateFTNConfig is the appropriate place for
+// the runtime path check.
+func TestLoadFTNConfig_TosserEnabledMissingPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := FTNConfig{
+		// Global paths intentionally blank — simulates post-first-run incomplete config.
+		Networks: map[string]FTNNetworkConfig{
+			"fsxnet": {InternalTosserEnabled: true, OwnAddress: "21:3/110"},
+		},
+	}
+	data, _ := json.Marshal(cfg)
+	os.WriteFile(filepath.Join(tmpDir, "ftn.json"), data, 0644)
+
+	result, err := LoadFTNConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadFTNConfig must not fail with incomplete paths (issue #15): %v", err)
+	}
+	if !result.Networks["fsxnet"].InternalTosserEnabled {
+		t.Error("expected InternalTosserEnabled to be preserved after load")
+	}
+
+	// ValidateFTNConfig should catch the missing paths at runtime.
+	if err := ValidateFTNConfig(result); err == nil {
+		t.Error("ValidateFTNConfig should reject config with tosser enabled but no paths set")
+	}
+}
+
+func TestValidateFTNConfig(t *testing.T) {
+	makeNet := func(enabled bool) map[string]FTNNetworkConfig {
+		return map[string]FTNNetworkConfig{
+			"fsxnet": {InternalTosserEnabled: enabled},
+		}
+	}
+
+	// No tosser enabled: no paths required.
+	if err := ValidateFTNConfig(FTNConfig{Networks: makeNet(false)}); err != nil {
+		t.Errorf("expected no error with tosser disabled, got: %v", err)
+	}
+
+	// Tosser enabled, all paths set: should pass.
+	full := FTNConfig{
+		InboundPath:       "data/ftn/in",
+		OutboundPath:      "data/ftn/out",
+		BinkdOutboundPath: "data/ftn/binkd",
+		TempPath:          "data/ftn/temp",
+		Networks:          makeNet(true),
+	}
+	if err := ValidateFTNConfig(full); err != nil {
+		t.Errorf("expected no error with all paths set, got: %v", err)
+	}
+
+	// Tosser enabled, missing inbound_path: should fail.
+	missing := full
+	missing.InboundPath = ""
+	if err := ValidateFTNConfig(missing); err == nil {
+		t.Error("expected error when inbound_path is missing")
+	}
+
+	// Tosser enabled, missing outbound_path: should fail.
+	missing = full
+	missing.OutboundPath = ""
+	if err := ValidateFTNConfig(missing); err == nil {
+		t.Error("expected error when outbound_path is missing")
+	}
+
+	// Tosser enabled, missing binkd_outbound_path: should fail.
+	missing = full
+	missing.BinkdOutboundPath = ""
+	if err := ValidateFTNConfig(missing); err == nil {
+		t.Error("expected error when binkd_outbound_path is missing")
+	}
+
+	// Tosser enabled, missing temp_path: should fail.
+	missing = full
+	missing.TempPath = ""
+	if err := ValidateFTNConfig(missing); err == nil {
+		t.Error("expected error when temp_path is missing")
+	}
+}
+
 func TestFTNLinkConfig_LegacyPasswordMigration(t *testing.T) {
 	// Legacy config uses "password"; new config uses "packet_password".
 	// When packet_password is absent (omitted), the legacy password should be used.
