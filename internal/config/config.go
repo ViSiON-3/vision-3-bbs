@@ -1002,26 +1002,35 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	}
 	log.Printf("INFO: Loaded FTN configuration: %d network(s), %d with internal tosser enabled", len(config.Networks), enabledCount)
 
-	// Validate required global path fields when any network has the internal tosser enabled.
-	if enabledCount > 0 {
+	return config, nil
+}
+
+// ValidateFTNConfig checks that all required global path fields are set for any
+// network that has internal_tosser_enabled=true. Call this before starting the
+// tosser, not during editing, so the config editor can open an incomplete config.
+func ValidateFTNConfig(cfg FTNConfig) error {
+	for name, net := range cfg.Networks {
+		if !net.InternalTosserEnabled {
+			continue
+		}
 		type requiredPath struct {
 			field string
 			value string
 		}
 		required := []requiredPath{
-			{"inbound_path", config.InboundPath},
-			{"outbound_path", config.OutboundPath},
-			{"binkd_outbound_path", config.BinkdOutboundPath},
-			{"temp_path", config.TempPath},
+			{"inbound_path", cfg.InboundPath},
+			{"outbound_path", cfg.OutboundPath},
+			{"binkd_outbound_path", cfg.BinkdOutboundPath},
+			{"temp_path", cfg.TempPath},
 		}
 		for _, r := range required {
 			if strings.TrimSpace(r.value) == "" {
-				return defaultConfig, fmt.Errorf("ftn.json: %q is required when internal_tosser_enabled is true", r.field)
+				return fmt.Errorf("ftn.json: %q is required when internal_tosser_enabled is true (network %q)", r.field, name)
 			}
 		}
+		break // All required paths are global; only need to check once.
 	}
-
-	return config, nil
+	return nil
 }
 
 // SaveServerConfig writes the ServerConfig back to config.json in the given configPath directory.

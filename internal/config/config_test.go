@@ -313,6 +313,45 @@ func TestLoadFTNConfig_ValidFile(t *testing.T) {
 	}
 }
 
+func TestValidateFTNConfig(t *testing.T) {
+	makeNet := func(enabled bool) map[string]FTNNetworkConfig {
+		return map[string]FTNNetworkConfig{
+			"fsxnet": {InternalTosserEnabled: enabled},
+		}
+	}
+
+	// No tosser enabled: no paths required.
+	if err := ValidateFTNConfig(FTNConfig{Networks: makeNet(false)}); err != nil {
+		t.Errorf("expected no error with tosser disabled, got: %v", err)
+	}
+
+	// Tosser enabled, all paths set: should pass.
+	full := FTNConfig{
+		InboundPath:       "data/ftn/in",
+		OutboundPath:      "data/ftn/out",
+		BinkdOutboundPath: "data/ftn/binkd",
+		TempPath:          "data/ftn/temp",
+		Networks:          makeNet(true),
+	}
+	if err := ValidateFTNConfig(full); err != nil {
+		t.Errorf("expected no error with all paths set, got: %v", err)
+	}
+
+	// Tosser enabled, missing inbound_path: should fail.
+	missing := full
+	missing.InboundPath = ""
+	if err := ValidateFTNConfig(missing); err == nil {
+		t.Error("expected error when inbound_path is missing")
+	}
+
+	// Tosser enabled, missing outbound_path: should fail.
+	missing = full
+	missing.OutboundPath = ""
+	if err := ValidateFTNConfig(missing); err == nil {
+		t.Error("expected error when outbound_path is missing")
+	}
+}
+
 func TestFTNLinkConfig_LegacyPasswordMigration(t *testing.T) {
 	// Legacy config uses "password"; new config uses "packet_password".
 	// When packet_password is absent (omitted), the legacy password should be used.
