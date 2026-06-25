@@ -1,6 +1,6 @@
 # ViSiON/3 BBS Software
 
-![ViSiON/3](ViSiON3.png)
+![ViSiON/3](docs/ViSiON3.png)
 
 ## Overview
 
