@@ -70,11 +70,13 @@ then go to **Echomail Networking → FTN Setup Wizard**. The wizard walks you th
    (`backbone.na`) and lets you check the areas you want to carry.
 4. **Save** — it then creates everything for you:
    - the network and uplink in `configs/ftn.json`
-   - a conference and a message area for each selected echo
+   - a single conference for the network, plus one message area per selected echo
    - a netmail area for the network
-   - a matching `data/ftn/binkd.conf` (identity, domains, and hub node)
+   - a matching `data/ftn/binkd.conf` (identity, domains, your FTN address,
+     mailer/inbound/outbound paths, and the hub node)
 
-After saving, initialize the message bases and test the connection (see
+After saving, **restart the BBS** so the new `ftn.json` settings take effect,
+then initialize the message bases and test the connection (see
 [Step 7](#step-7-initialize-message-bases) and [Step 8](#step-8-test-the-connection)).
 
 > Identity fields and link passwords are also re-synced to `binkd.conf` whenever
