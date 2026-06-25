@@ -67,13 +67,10 @@ func (m Model) viewFTNNetworkBrowser() string {
 			net := m.ftnNetBrowserEntries[visIdx]
 			zone := fmt.Sprintf("%5d", net.Zone)
 			name := padRight(net.Name, 12)
-			if len(name) > 12 {
-				name = name[:12]
-			}
 			descW := boxW - 5 - 2 - 12 - 2 - 2
 			desc := net.Description
-			if len(desc) > descW {
-				desc = desc[:descW-3] + "..."
+			if truncateToDisplayWidth(desc, descW) != desc {
+				desc = truncateToDisplayWidth(desc, descW-3) + "..."
 			}
 
 			// Mark already-configured networks.

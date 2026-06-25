@@ -45,7 +45,7 @@
       "args": [
         "-p",
         "-P",
-        "fsxnet@21:4/100",
+        "21:4/100@fsxnet",
         "{BBS_ROOT}/data/ftn/binkd.conf"
       ],
       "working_directory": "{BBS_ROOT}",

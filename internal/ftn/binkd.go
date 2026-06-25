@@ -122,7 +122,7 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 		pwd,
 	))
 
-	return os.WriteFile(confPath, []byte(out.String()), 0644)
+	return writeFileAtomic(confPath, out.String(), 0644)
 }
 
 // nodeExists checks whether a node address is already defined in the config.
@@ -408,6 +408,38 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]str
 	if !changed {
 		return nil
 	}
-	return os.WriteFile(confPath, []byte(out.String()), 0644)
+	return writeFileAtomic(confPath, out.String(), 0644)
+}
+
+// writeFileAtomic creates the parent directory if needed and writes content via
+// a temp file + rename, so callers never see a partial/empty binkd.conf and
+// fresh installs (where data/ftn doesn't exist yet) don't fail.
+func writeFileAtomic(path, content string, perm os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating dir for %s: %w", path, err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp.*")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.WriteString(content); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("closing %s: %w", path, err)
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("chmod %s: %w", path, err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("installing %s: %w", path, err)
+	}
+	return nil
 }
 

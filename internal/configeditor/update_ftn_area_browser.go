@@ -21,6 +21,12 @@ func (m Model) updateFTNAreaDownloading(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleFTNEcholistMsg processes the echolist download result.
 func (m Model) handleFTNEcholistMsg(msg ftnEcholistMsg) (tea.Model, tea.Cmd) {
+	// If the user pressed ESC during the download they've already returned to
+	// the wizard form; drop this late result instead of yanking them into the
+	// area browser.
+	if m.mode != modeFTNAreaDownloading {
+		return m, nil
+	}
 	m.ftnAreaBrowserLoading = false
 
 	if msg.err != nil {

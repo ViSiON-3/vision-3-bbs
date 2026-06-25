@@ -112,13 +112,10 @@ func (m Model) viewFTNAreaBrowser() string {
 				check = "[x]"
 			}
 			tag := padRight(a.Tag, 16)
-			if len(tag) > 16 {
-				tag = tag[:16]
-			}
 			descW := boxW - 4 - 16 - 2
 			desc := a.Description
-			if len(desc) > descW {
-				desc = desc[:descW-3] + "..."
+			if truncateToDisplayWidth(desc, descW) != desc {
+				desc = truncateToDisplayWidth(desc, descW-3) + "..."
 			}
 			content = fmt.Sprintf("   %s %-16s %s", check, tag, desc)
 		}

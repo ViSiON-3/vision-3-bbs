@@ -242,7 +242,7 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			},
 		},
 		{
-			Label: "Packet Password", Help: "Packet password for this link (max 8 chars)", Type: ftString, Col: 3, Row: 3, Width: 20, Masked: true,
+			Label: "Packet Password", Help: "Packet password for this link (max 8 chars)", Type: ftString, Col: 3, Row: 3, Width: 10, Masked: true,
 			Get: func() string { return linkPtr.PacketPassword },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
