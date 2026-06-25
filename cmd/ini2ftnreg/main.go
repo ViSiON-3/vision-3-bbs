@@ -42,6 +42,7 @@ type Network struct {
 	AreaManager      string   `json:"area_manager,omitempty"`
 }
 
+// main converts a Synchronet init-fidonet.ini file into the embedded FTN registry JSON.
 func main() {
 	inPath := flag.String("in", "", "path to init-fidonet.ini")
 	outPath := flag.String("out", "", "path to write registry.json")
@@ -77,6 +78,7 @@ func main() {
 	fmt.Printf("Wrote %d networks to %s\n", len(networks), *outPath)
 }
 
+// parseINI parses a Synchronet init-fidonet.ini file into a slice of Networks.
 func parseINI(path string) (networks []Network, err error) {
 	f, err := os.Open(path)
 	if err != nil {

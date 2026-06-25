@@ -442,4 +442,3 @@ func writeFileAtomic(path, content string, perm os.FileMode) error {
 	}
 	return nil
 }
-

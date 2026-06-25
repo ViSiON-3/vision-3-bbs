@@ -89,6 +89,7 @@ func (m *Model) saveAll() {
 
 // --- Record count and helpers ---
 
+// recordCount returns the number of records in the active list editor.
 func (m Model) recordCount() int {
 	switch m.recordType {
 	case "msgarea":
@@ -119,10 +120,12 @@ func (m Model) recordCount() int {
 	return 0
 }
 
+// recordListVisible returns how many record rows fit in the list viewport.
 func (m Model) recordListVisible() int {
 	return 13
 }
 
+// insertRecord appends a new blank record to the active list and selects it.
 func (m *Model) insertRecord() {
 	switch m.recordType {
 	case "msgarea":
@@ -252,6 +255,7 @@ func (m *Model) insertRecord() {
 	}
 }
 
+// deleteRecord removes the currently selected record from the active list.
 func (m *Model) deleteRecord() {
 	idx := m.recordCursor
 	switch m.recordType {
