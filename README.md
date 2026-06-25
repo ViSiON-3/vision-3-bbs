@@ -174,6 +174,12 @@ Pre-built releases are available for all major platforms. Linux x86_64 is the pr
 
 ```text
 vision-3-bbs/
+├── setup.sh / .ps1 / .bat  # One-time setup: SSH host key, configs, dirs, build binaries
+├── build.sh / .ps1 / .bat  # Build all ViSiON/3 binaries
+├── dev-setup.sh            # Developer environment bootstrap
+├── Dockerfile              # Container image build
+├── docker-compose.yml      # Container orchestration
+├── docker-entrypoint.sh    # Container startup script
 ├── cmd/
 │   ├── ansitest/           # ANSI color test utility
 │   ├── config/             # TUI system configuration editor
