@@ -133,10 +133,6 @@ clarification before proceeding.
 - **Fix the Root Cause**: Prioritize fixing the underlying issue rather than masking it.
 - Check application logs for errors, warnings, or relevant information.
 - Use the project's established logging framework (`slog`) with structured logging.
-- Check the `fixes/` directory for documented solutions to similar past issues
-  before deep-diving.
-- Document complex fixes in `fixes/` with a descriptive `.md` file detailing
-  the problem, investigation steps, and solution.
 
 ---
 
