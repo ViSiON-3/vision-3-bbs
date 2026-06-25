@@ -46,9 +46,11 @@ func (m Model) handleFTNEcholistMsg(msg ftnEcholistMsg) (tea.Model, tea.Cmd) {
 		m.ftnWizard.selectedAreas = make([]bool, len(msg.areas))
 	}
 
-	// Copy to browser state.
+	// Copy to browser state. selectedAreas must be a distinct copy so that
+	// toggling in the browser and then pressing ESC discards the changes
+	// (confirm writes the browser selection back to the wizard explicitly).
 	m.ftnAreaBrowserAreas = m.ftnWizard.availableAreas
-	m.ftnAreaBrowserSelected = m.ftnWizard.selectedAreas
+	m.ftnAreaBrowserSelected = append([]bool(nil), m.ftnWizard.selectedAreas...)
 	m.ftnAreaBrowserCursor = 0
 	m.ftnAreaBrowserScroll = 0
 	m.ftnAreaBrowserError = ""

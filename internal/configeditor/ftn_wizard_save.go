@@ -100,7 +100,9 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		}
 		area := w.availableAreas[i]
 		areaTag := strings.ToLower(netKey + "_" + strings.ToLower(area.Tag))
-		basePath := filepath.Join("msgbases", "fn."+strings.ToLower(area.Tag))
+		// Scope the msgbase dir by network too, so two networks carrying the
+		// same echo tag don't share (and cross-contaminate) one message base.
+		basePath := filepath.Join("msgbases", "fn."+strings.ToLower(netKey)+"_"+strings.ToLower(area.Tag))
 
 		desc := area.Description
 		if desc == "" {

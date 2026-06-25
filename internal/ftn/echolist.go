@@ -103,7 +103,15 @@ func DownloadEcholist(ctx context.Context, url string) ([]EchoArea, error) {
 		return nil, fmt.Errorf("echolist download returned status %d", resp.StatusCode)
 	}
 
-	// Limit to 2MB to prevent abuse.
-	limited := io.LimitReader(resp.Body, 2*1024*1024)
-	return ParseEcholist(limited)
+	// Limit to 2MB to prevent abuse; error rather than silently truncate so we
+	// never parse a half-downloaded echolist as if it were complete.
+	const maxEcholist = 2 * 1024 * 1024
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxEcholist+1))
+	if err != nil {
+		return nil, fmt.Errorf("reading echolist: %w", err)
+	}
+	if len(data) > maxEcholist {
+		return nil, fmt.Errorf("echolist exceeds %d-byte limit", maxEcholist)
+	}
+	return ParseEcholist(strings.NewReader(string(data)))
 }

@@ -77,14 +77,17 @@ func main() {
 	fmt.Printf("Wrote %d networks to %s\n", len(networks), *outPath)
 }
 
-func parseINI(path string) ([]Network, error) {
+func parseINI(path string) (networks []Network, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); err == nil && cerr != nil {
+			err = fmt.Errorf("closing %s: %w", path, cerr)
+		}
+	}()
 
-	var networks []Network
 	var current *Network
 
 	scanner := bufio.NewScanner(f)

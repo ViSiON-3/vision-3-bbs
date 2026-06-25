@@ -122,7 +122,7 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 		pwd,
 	))
 
-	return writeFileAtomic(confPath, out.String(), 0644)
+	return writeFileAtomic(confPath, out.String(), 0600)
 }
 
 // nodeExists checks whether a node address is already defined in the config.
@@ -408,7 +408,7 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]str
 	if !changed {
 		return nil
 	}
-	return writeFileAtomic(confPath, out.String(), 0644)
+	return writeFileAtomic(confPath, out.String(), 0600)
 }
 
 // writeFileAtomic creates the parent directory if needed and writes content via
