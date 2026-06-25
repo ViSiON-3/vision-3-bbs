@@ -18,7 +18,7 @@ take precedence over general guidelines for their scope.
 
 | Subsystem                         | File              | Design Plan                                      |
 | --------------------------------- | ----------------- | ------------------------------------------------ |
-| V3Net (native message networking) | `internal/v3net/CLAUDE.md` | `docs/plans/2026-03-16-v3net-protocol-design.md` |
+| V3Net (native message networking) | `internal/v3net/CLAUDE.md` | `docs-internal/plans/2026-03-16-v3net-protocol-design.md` |
 
 If a task touches a subsystem with a sub-agent file, read that file first,
 then return here for general coding standards.
