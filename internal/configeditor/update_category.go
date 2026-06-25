@@ -59,6 +59,10 @@ func (m Model) selectCategoryMenuItem() (Model, tea.Cmd) {
 	// If the item specifies a special mode, transition to it.
 	if item.Mode != 0 {
 		m.returnMode = modeCategoryMenu
+		// FTN wizard needs initialization before entering.
+		if item.Mode == modeFTNWizardForm {
+			return m.enterFTNWizard()
+		}
 		m.mode = item.Mode
 		return m, nil
 	}

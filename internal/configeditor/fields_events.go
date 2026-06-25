@@ -82,12 +82,24 @@ func (m *Model) fieldsEvent() []fieldDef {
 			Set: func(val string) error { e.Command = val; return nil },
 		},
 		{
-			Label: "Working Dir", Help: "Directory to run the command in", Type: ftString, Col: 3, Row: 4, Width: 45,
+			Label: "Args", Help: "Arguments (JSON array, e.g. [\"--config\",\"configs\"])", Type: ftString, Col: 3, Row: 4, Width: 45,
+			Get: func() string { return joinArgs(e.Args) },
+			Set: func(val string) error {
+				args, err := splitArgs(val)
+				if err != nil {
+					return err
+				}
+				e.Args = args
+				return nil
+			},
+		},
+		{
+			Label: "Working Dir", Help: "Directory to run the command in", Type: ftString, Col: 3, Row: 5, Width: 45,
 			Get: func() string { return e.WorkingDirectory },
 			Set: func(val string) error { e.WorkingDirectory = val; return nil },
 		},
 		{
-			Label: "Timeout (sec)", Help: "Kill after this many seconds (0=no limit)", Type: ftInteger, Col: 3, Row: 5, Width: 6, Min: 0, Max: 999999,
+			Label: "Timeout (sec)", Help: "Kill after this many seconds (0=no limit)", Type: ftInteger, Col: 3, Row: 6, Width: 6, Min: 0, Max: 999999,
 			Get: func() string { return strconv.Itoa(e.TimeoutSeconds) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -99,17 +111,17 @@ func (m *Model) fieldsEvent() []fieldDef {
 			},
 		},
 		{
-			Label: "Enabled", Help: "Enable or disable this event", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
+			Label: "Enabled", Help: "Enable or disable this event", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
 			Get: func() string { return boolToYN(e.Enabled) },
 			Set: func(val string) error { e.Enabled = ynToBool(val); return nil },
 		},
 		{
-			Label: "Run At Start", Help: "Run when the BBS starts", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
+			Label: "Run At Start", Help: "Run when the BBS starts", Type: ftYesNo, Col: 3, Row: 8, Width: 1,
 			Get: func() string { return boolToYN(e.RunAtStartup) },
 			Set: func(val string) error { e.RunAtStartup = ynToBool(val); return nil },
 		},
 		{
-			Label: "Run After", Help: "Run after this event completes", Type: ftLookup, Col: 3, Row: 8, Width: 20,
+			Label: "Run After", Help: "Run after this event completes", Type: ftLookup, Col: 3, Row: 9, Width: 20,
 			Get: func() string {
 				if e.RunAfter == "" {
 					return "(none)"
@@ -141,7 +153,7 @@ func (m *Model) fieldsEvent() []fieldDef {
 			},
 		},
 		{
-			Label: "Delay After", Help: "Seconds to wait after dependent event", Type: ftInteger, Col: 3, Row: 9, Width: 6, Min: 0, Max: 999999,
+			Label: "Delay After", Help: "Seconds to wait after dependent event", Type: ftInteger, Col: 3, Row: 10, Width: 6, Min: 0, Max: 999999,
 			Get: func() string { return strconv.Itoa(e.DelayAfterSeconds) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)

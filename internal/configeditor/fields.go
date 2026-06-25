@@ -33,10 +33,19 @@ type fieldDef struct {
 	Width       int       // Input field width
 	Min         int       // Minimum value (for ftInteger)
 	Max         int       // Maximum value (for ftInteger)
+	Masked      bool      // Show '*' characters when not actively editing
 	Get         func() string
 	Set         func(val string) error
 	AfterSet    func(m *Model, val string) // called after Set succeeds, on the current model
 	LookupItems func() []LookupItem        // provider for ftLookup
+}
+
+// maskValue replaces each rune in s with '*'.
+func maskValue(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.Repeat("*", utf8.RuneCountInString(s))
 }
 
 // boolToYN converts a bool to "Y" or "N".

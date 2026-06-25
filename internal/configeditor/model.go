@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -49,6 +50,11 @@ const (
 	modeWizardExitConfirm                        // Wizard discard/save confirm
 	modeV3NetAreaBrowser                         // Area browser (NAL fetch + subscribe)
 	modeRegistryBrowser                          // Registry browser (discover networks)
+	modeFTNWizardForm                            // FTN wizard form navigation
+	modeFTNWizardField                           // FTN wizard field editing (textinput active)
+	modeFTNNetworkBrowser                        // Known FTN network list with info panel
+	modeFTNAreaBrowser                           // FTN echo area selection from downloaded echolist
+	modeFTNAreaDownloading                       // Progress state while downloading echolist
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -93,11 +99,11 @@ type wizardState struct {
 	step int    // current step index (hub areas sub-form only)
 
 	// Leaf wizard fields
-	hubURL        string
-	networkName   string
-	pollInterval  string
-	origin        string
-	fetchError    string // set if auto-fetch failed
+	hubURL       string
+	networkName  string
+	pollInterval string
+	origin       string
+	fetchError   string // set if auto-fetch failed
 
 	selectedAreas []areaBrowserItem // areas selected during wizard flow
 
@@ -206,24 +212,41 @@ type Model struct {
 	hubAreaInsertBase string
 
 	// V3Net area browser state
-	areaBrowserHub        string            // hub URL being browsed
-	areaBrowserNetwork    string            // network name
-	areaBrowserAreas      []areaBrowserItem // fetched areas with status
-	areaBrowserCursor     int               // highlighted row
-	areaBrowserScroll     int               // scroll offset
-	areaBrowserLoading    bool              // true while NAL fetch in flight
-	areaBrowserError      string            // error from fetch/subscribe
-	areaBrowserReturn     editorMode        // mode to return to on ESC
+	areaBrowserHub     string            // hub URL being browsed
+	areaBrowserNetwork string            // network name
+	areaBrowserAreas   []areaBrowserItem // fetched areas with status
+	areaBrowserCursor  int               // highlighted row
+	areaBrowserScroll  int               // scroll offset
+	areaBrowserLoading bool              // true while NAL fetch in flight
+	areaBrowserError   string            // error from fetch/subscribe
+	areaBrowserReturn  editorMode        // mode to return to on ESC
 
 	// V3Net registry browser state
-	regBrowserEntries []protocol.RegistryEntry // fetched networks
-	regBrowserCursor  int                      // highlighted row
-	regBrowserScroll  int                      // scroll offset
+	regBrowserEntries   []protocol.RegistryEntry // fetched networks
+	regBrowserCursor    int                      // highlighted row
+	regBrowserScroll    int                      // scroll offset
 	regBrowserLoading   bool                     // true while fetch in flight
-	regBrowserCancel    context.CancelFunc        // cancels the in-flight fetch
-	regBrowserRequestID uint64                    // monotonic; stale responses are ignored
+	regBrowserCancel    context.CancelFunc       // cancels the in-flight fetch
+	regBrowserRequestID uint64                   // monotonic; stale responses are ignored
 	regBrowserError     string                   // error from fetch
 	regBrowserReturn    editorMode               // mode to return to on ESC
+
+	// FTN setup wizard state
+	ftnWizard       *ftnWizardState // pointer so field closures survive value-receiver copies
+	ftnWizardFields []fieldDef      // fields for FTN wizard form
+
+	// FTN network browser state
+	ftnNetBrowserEntries []ftn.RegistryNetwork // loaded from embedded registry
+	ftnNetBrowserCursor  int
+	ftnNetBrowserScroll  int
+
+	// FTN area browser state
+	ftnAreaBrowserAreas    []ftn.EchoArea // parsed from downloaded echolist
+	ftnAreaBrowserSelected []bool         // parallel array, true = subscribed
+	ftnAreaBrowserCursor   int
+	ftnAreaBrowserScroll   int
+	ftnAreaBrowserLoading  bool
+	ftnAreaBrowserError    string
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool
@@ -320,6 +343,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fetchRegistryMsg:
 		return m.handleFetchRegistryMsg(msg)
 
+	case ftnEcholistMsg:
+		return m.handleFTNEcholistMsg(msg)
+
 	case tea.KeyMsg:
 		prevMode := m.mode
 		var result tea.Model
@@ -373,6 +399,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateV3NetAreaBrowser(msg)
 		case modeRegistryBrowser:
 			result, cmd = m.updateRegistryBrowser(msg)
+		case modeFTNWizardForm:
+			result, cmd = m.updateFTNWizardForm(msg)
+		case modeFTNWizardField:
+			result, cmd = m.updateFTNWizardField(msg)
+		case modeFTNNetworkBrowser:
+			result, cmd = m.updateFTNNetworkBrowser(msg)
+		case modeFTNAreaBrowser:
+			result, cmd = m.updateFTNAreaBrowser(msg)
+		case modeFTNAreaDownloading:
+			result, cmd = m.updateFTNAreaDownloading(msg)
 		default:
 			return m, nil
 		}
@@ -388,6 +424,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // --- Top Menu Mode ---
 
+// updateTopMenu handles key events in the top-level category menu.
 func (m Model) updateTopMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyUp:
@@ -418,6 +455,7 @@ func (m Model) updateTopMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// selectTopMenuItem activates the currently highlighted top-menu item.
 func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 	switch m.topCursor {
 	case 0: // System Configuration
@@ -441,6 +479,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.catMenuItems = []categoryMenuItem{
 			{Label: "Echomail Networks", RecordType: "ftn"},
 			{Label: "Echomail Links", RecordType: "ftnlink"},
+			{Label: "FTN Setup Wizard", Mode: modeFTNWizardForm},
 		}
 		m.catMenuCursor = 0
 		m.mode = modeCategoryMenu
@@ -514,6 +553,7 @@ func (m *Model) backMode() editorMode {
 	return modeTopMenu
 }
 
+// tryExit begins the exit flow, prompting to save first if there are unsaved changes.
 func (m Model) tryExit() (Model, tea.Cmd) {
 	if m.dirty {
 		m.mode = modeExitConfirm
@@ -525,6 +565,7 @@ func (m Model) tryExit() (Model, tea.Cmd) {
 
 // --- Confirm Dialog ---
 
+// updateConfirm handles key events in the generic confirmation dialog.
 func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyLeft, tea.KeyRight:
@@ -564,6 +605,7 @@ func (m Model) cancelConfirm() (Model, tea.Cmd) {
 	}
 }
 
+// rejectConfirm dismisses the confirmation dialog without running its action.
 func (m Model) rejectConfirm() (Model, tea.Cmd) {
 	switch m.mode {
 	case modeExitConfirm:
@@ -577,6 +619,7 @@ func (m Model) rejectConfirm() (Model, tea.Cmd) {
 	}
 }
 
+// executeConfirm runs the action associated with the active confirmation dialog.
 func (m Model) executeConfirm() (Model, tea.Cmd) {
 	switch m.mode {
 	case modeExitConfirm, modeSaveConfirm:
@@ -609,6 +652,7 @@ func (m Model) promptNavSave(dest editorMode) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// updateNavSaveConfirm handles key events in the save-before-navigating prompt.
 func (m Model) updateNavSaveConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyLeft, tea.KeyRight:
@@ -642,6 +686,7 @@ func (m Model) updateNavSaveConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // --- Help Mode ---
 
+// updateHelp handles key events while the help overlay is shown.
 func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.mode = modeTopMenu
 	return m, nil

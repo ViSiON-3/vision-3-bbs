@@ -1,7 +1,7 @@
 # FTN Setup Wizard — Design Plan
 
 **Date**: 2026-03-21
-**Status**: Draft
+**Status**: Implemented
 **Scope**: New "FTN Setup Wizard" within the `./config` TUI under "Echomail and Networking"
 
 ---
@@ -127,21 +127,21 @@ entry point — selecting a network pre-fills most other fields.
 
 **Field Details:**
 
-| # | Field | Type | Pre-fill | Notes |
-|---|-------|------|----------|-------|
-| 1 | **Network** | ftDisplay (action) | — | Opens network browser (new mode). On select, pre-fills fields 2–9 from registry |
-| 2 | **Description** | ftDisplay (read-only) | from registry | Shows network blurb |
-| 3 | **Coordinator** | ftDisplay (read-only) | from registry | Name + email |
-| 4 | **Info** | ftDisplay (read-only) | from registry | URL |
-| 5 | **Your Address** | ftString | zone:net/node format | Validates FTN address format. Zone pre-filled from network |
-| 6 | **Hub Address** | ftString | from registry `addr` | Validates FTN address format |
-| 7 | **Hub Hostname** | ftString | from registry `host` | Hostname or IP |
-| 8 | **Hub BinkP Port** | ftInteger | from registry `port` or 24554 | 1–65535 |
-| 9 | **Areafix Password** | ftString | — | Required. Case-insensitive |
-| 10 | **Session Password** | ftString | — | Required. BinkP session password |
-| 11 | **Packet Password** | ftString | — | Optional. Max 8 chars |
-| 12 | **Origin Line** | ftString | "{BBS name} - {hostname}" | Shown in echomail origin lines |
-| 13 | **Echo Areas** | ftDisplay (action) | — | Opens area browser. Shows "N areas selected" after selection |
+| #   | Field                | Type                  | Pre-fill                      | Notes                                                                           |
+| --- | -------------------- | --------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| 1   | **Network**          | ftDisplay (action)    | —                             | Opens network browser (new mode). On select, pre-fills fields 2–9 from registry |
+| 2   | **Description**      | ftDisplay (read-only) | from registry                 | Shows network blurb                                                             |
+| 3   | **Coordinator**      | ftDisplay (read-only) | from registry                 | Name + email                                                                    |
+| 4   | **Info**             | ftDisplay (read-only) | from registry                 | URL                                                                             |
+| 5   | **Your Address**     | ftString              | zone:net/node format          | Validates FTN address format. Zone pre-filled from network                      |
+| 6   | **Hub Address**      | ftString              | from registry `addr`          | Validates FTN address format                                                    |
+| 7   | **Hub Hostname**     | ftString              | from registry `host`          | Hostname or IP                                                                  |
+| 8   | **Hub BinkP Port**   | ftInteger             | from registry `port` or 24554 | 1–65535                                                                         |
+| 9   | **Areafix Password** | ftString              | —                             | Required. Case-insensitive                                                      |
+| 10  | **Session Password** | ftString              | —                             | Required. BinkP session password                                                |
+| 11  | **Packet Password**  | ftString              | —                             | Optional. Max 8 chars                                                           |
+| 12  | **Origin Line**      | ftString              | "{BBS name} - {hostname}"     | Shown in echomail origin lines                                                  |
+| 13  | **Echo Areas**       | ftDisplay (action)    | —                             | Opens area browser. Shows "N areas selected" after selection                    |
 
 #### Step 2: Network Browser (Sub-Screen)
 
@@ -365,6 +365,76 @@ Convert init-fidonet.ini to JSON format:
 This ships with the binary via `embed.FS`. Can be overridden by a local
 `configs/ftn_networks.json` file if sysops want to add custom entries.
 
+### 3.6 Release Bundle Considerations
+
+The network registry (`internal/ftn/registry.json`) is compiled into the
+`config` binary via Go's `//go:embed` directive. Because `build_all.sh`
+builds all Go binaries from `VISION3_SRC` with `go build ./cmd/config/`,
+the registry data is automatically included via the embed.
+
+#### Automated INI → JSON Conversion
+
+Synchronet's `exec/init-fidonet.ini` is the upstream source of truth and is
+actively maintained by the Synchronet community. Rather than converting it
+once and letting it go stale, `build_all.sh` will **regenerate
+`internal/ftn/registry.json` from the latest `init-fidonet.ini` on every
+build** that includes Go compilation.
+
+`build_all.sh` already clones/pulls the Synchronet repo into `$SYNC_SRC`
+(for sexyz and door JS libraries), so the INI file is available at
+`$SYNC_SRC/exec/init-fidonet.ini`. The conversion flow:
+
+1. A standalone Go tool `cmd/ini2ftnreg/main.go` reads `init-fidonet.ini`
+   and writes `registry.json` (the same JSON format described in §3.5).
+2. In `build_all.sh`, a new `generate_ftn_registry()` function runs
+   **before** `build_go()`:
+   ```bash
+   generate_ftn_registry() {
+     ensure_sync_src
+     ensure_vision3_src
+     local ini="$SYNC_SRC/exec/init-fidonet.ini"
+     local out="$VISION3_SRC/internal/ftn/registry.json"
+     if [[ ! -f "$ini" ]]; then
+       info "init-fidonet.ini not found — keeping existing registry.json"
+       return 0
+     fi
+     info "Generating FTN network registry from init-fidonet.ini"
+     (cd "$VISION3_SRC" && go run ./cmd/ini2ftnreg/ -in "$ini" -out "$out")
+     ok "registry.json updated ($(wc -l < "$out") lines)"
+   }
+   ```
+3. The main pipeline calls `generate_ftn_registry` before `build_go`:
+   ```bash
+   $DO_GO && generate_ftn_registry
+   $DO_GO && build_go
+   ```
+
+This ensures every release build picks up the latest community-maintained
+network data without manual intervention. If `init-fidonet.ini` is missing
+(e.g. `SYNC_SRC` not configured), the converter is skipped and the existing
+committed `registry.json` is used as a fallback.
+
+The converter tool is a build-time utility only — it is not included in
+release bundles (it is not listed in the `GO_BINS` array).
+
+#### Optional Sysop Override
+
+To allow sysops to add custom networks or update entries without rebuilding,
+the wizard falls back to `configs/ftn_networks.json` at runtime. A seed copy
+of this file should be added to `templates/configs/ftn_networks.json` in the
+vision-3-bbs repo. The existing `copy_full_bundle_content()` function in
+`build_all.sh` already copies all `templates/configs/*.json` files into the
+bundle's `configs/` directory, so the override file will be included in
+release bundles automatically.
+
+#### Summary of Bundle Touchpoints
+
+| Artifact                              | How it reaches the bundle                                | `build_all.sh` change needed?                                |
+| ------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
+| `internal/ftn/registry.json`          | Regenerated from `init-fidonet.ini`, then `//go:embed`'d | Yes — add `generate_ftn_registry()` step before `build_go()` |
+| `cmd/ini2ftnreg/`                     | Build-time tool only; runs via `go run` during build     | Yes — called by `generate_ftn_registry()`                    |
+| `templates/configs/ftn_networks.json` | Copied by `copy_full_bundle_content()`                   | No — existing `*.json` glob covers it                        |
+
 ---
 
 ## 4. Implementation Plan
@@ -373,42 +443,44 @@ This ships with the binary via `embed.FS`. Can be overridden by a local
 
 Files to create/modify:
 
-| File | Purpose |
-|------|---------|
-| `internal/ftn/registry.go` | Embedded network registry + loader |
-| `internal/ftn/registry.json` | JSON network database (converted from init-fidonet.ini) |
-| `internal/ftn/echolist.go` | Backbone.NA parser + HTTP downloader |
-| `internal/ftn/binkd.go` | Binkd.conf node management |
-| `internal/ftn/address.go` | FTN address parsing/validation (zone:net/node.point) |
-| `internal/ftn/registry_test.go` | Registry loading tests |
-| `internal/ftn/echolist_test.go` | Parser tests with sample data |
-| `internal/ftn/address_test.go` | Address validation tests |
+| File                                  | Purpose                                                      |
+| ------------------------------------- | ------------------------------------------------------------ |
+| `cmd/ini2ftnreg/main.go`              | Build-time tool: converts init-fidonet.ini → registry.json   |
+| `internal/ftn/registry.go`            | Embedded network registry + loader                           |
+| `internal/ftn/registry.json`          | JSON network database (auto-generated from init-fidonet.ini) |
+| `templates/configs/ftn_networks.json` | Seed override file for sysop customization (ships in bundle) |
+| `internal/ftn/echolist.go`            | Backbone.NA parser + HTTP downloader                         |
+| `internal/ftn/binkd.go`               | Binkd.conf node management                                   |
+| `internal/ftn/address.go`             | FTN address parsing/validation (zone:net/node.point)         |
+| `internal/ftn/registry_test.go`       | Registry loading tests                                       |
+| `internal/ftn/echolist_test.go`       | Parser tests with sample data                                |
+| `internal/ftn/address_test.go`        | Address validation tests                                     |
 
 ### Phase 2: Config Editor Integration
 
 Files to create/modify:
 
-| File | Purpose |
-|------|---------|
-| `internal/configeditor/model.go` | Add new modes, add wizard menu item under Echomail |
-| `internal/configeditor/ftn_wizard_state.go` | FTN wizard transient state struct |
-| `internal/configeditor/fields_ftn_wizard.go` | Wizard field definitions |
-| `internal/configeditor/update_ftn_wizard.go` | Wizard form update handler |
-| `internal/configeditor/update_ftn_network_browser.go` | Network browser update handler |
-| `internal/configeditor/update_ftn_area_browser.go` | Echo area browser update handler |
-| `internal/configeditor/view_ftn_wizard.go` | Wizard form view rendering |
-| `internal/configeditor/view_ftn_network_browser.go` | Network browser view |
-| `internal/configeditor/view_ftn_area_browser.go` | Area browser view |
-| `internal/configeditor/ftn_wizard_cmds.go` | BubbleTea Cmds for async HTTP fetches |
-| `internal/configeditor/view.go` | Add mode→view dispatch entries |
-| `internal/configeditor/update.go` | Add mode→update dispatch entries |
+| File                                                  | Purpose                                            |
+| ----------------------------------------------------- | -------------------------------------------------- |
+| `internal/configeditor/model.go`                      | Add new modes, add wizard menu item under Echomail |
+| `internal/configeditor/ftn_wizard_state.go`           | FTN wizard transient state struct                  |
+| `internal/configeditor/fields_ftn_wizard.go`          | Wizard field definitions                           |
+| `internal/configeditor/update_ftn_wizard.go`          | Wizard form update handler                         |
+| `internal/configeditor/update_ftn_network_browser.go` | Network browser update handler                     |
+| `internal/configeditor/update_ftn_area_browser.go`    | Echo area browser update handler                   |
+| `internal/configeditor/view_ftn_wizard.go`            | Wizard form view rendering                         |
+| `internal/configeditor/view_ftn_network_browser.go`   | Network browser view                               |
+| `internal/configeditor/view_ftn_area_browser.go`      | Area browser view                                  |
+| `internal/configeditor/ftn_wizard_cmds.go`            | BubbleTea Cmds for async HTTP fetches              |
+| `internal/configeditor/view.go`                       | Add mode→view dispatch entries                     |
+| `internal/configeditor/update.go`                     | Add mode→update dispatch entries                   |
 
 ### Phase 3: Save Logic
 
 Files to modify:
 
-| File | Purpose |
-|------|---------|
+| File                                       | Purpose                                                      |
+| ------------------------------------------ | ------------------------------------------------------------ |
 | `internal/configeditor/ftn_wizard_save.go` | Atomic save: FTN network + link + conference + areas + binkd |
 
 ### Phase 4: Testing & Polish
@@ -502,21 +574,21 @@ type ftnWizardState struct {
 
 ## 7. Key Differences from Synchronet
 
-| Aspect | Synchronet | Vision/3 |
-|--------|-----------|----------|
-| **UI** | Scrolling text prompts, no back-nav | TUI wizard form with arrow-key navigation |
-| **Network DB** | INI file read at runtime | Embedded JSON, ships with binary |
-| **Area Selection** | Downloads entire list, sends %+ALL | Browse & cherry-pick individual areas |
-| **Config Output** | sbbsecho.ini (proprietary) | ftn.json + message_areas.json + binkd.conf |
-| **Area Creation** | Runs external SCFG import command | Direct atomic JSON config update |
-| **Conference** | Creates "message group" separately | Auto-creates conference for network |
-| **Netmail Area** | Not explicitly created | Auto-creates netmail area per network |
-| **Validation** | Post-hoc, error-on-fail | Real-time field validation |
-| **Back Navigation** | Can't go back, must restart | Full ESC/arrow navigation |
-| **Progress** | Print statements | Visual progress for downloads |
-| **Error Recovery** | Retry prompts scattered | Centralized error display, retry option |
-| **Binkd** | Uses its own BinkIT mailer | Updates existing binkd.conf |
-| **Node Application** | Sends netmail to coordinator | Not in scope (sysops get address externally) |
+| Aspect               | Synchronet                          | Vision/3                                     |
+| -------------------- | ----------------------------------- | -------------------------------------------- |
+| **UI**               | Scrolling text prompts, no back-nav | TUI wizard form with arrow-key navigation    |
+| **Network DB**       | INI file read at runtime            | Embedded JSON, ships with binary             |
+| **Area Selection**   | Downloads entire list, sends %+ALL  | Browse & cherry-pick individual areas        |
+| **Config Output**    | sbbsecho.ini (proprietary)          | ftn.json + message_areas.json + binkd.conf   |
+| **Area Creation**    | Runs external SCFG import command   | Direct atomic JSON config update             |
+| **Conference**       | Creates "message group" separately  | Auto-creates conference for network          |
+| **Netmail Area**     | Not explicitly created              | Auto-creates netmail area per network        |
+| **Validation**       | Post-hoc, error-on-fail             | Real-time field validation                   |
+| **Back Navigation**  | Can't go back, must restart         | Full ESC/arrow navigation                    |
+| **Progress**         | Print statements                    | Visual progress for downloads                |
+| **Error Recovery**   | Retry prompts scattered             | Centralized error display, retry option      |
+| **Binkd**            | Uses its own BinkIT mailer          | Updates existing binkd.conf                  |
+| **Node Application** | Sends netmail to coordinator        | Not in scope (sysops get address externally) |
 
 ---
 

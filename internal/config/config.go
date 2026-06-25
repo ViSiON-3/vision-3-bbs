@@ -775,11 +775,12 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 // Echo area routing is derived from message_areas.json (areas where Network matches),
 // not stored per-link. The Message Areas TUI is the canonical place to manage subscriptions.
 type FTNLinkConfig struct {
-	Address         string `json:"address"`                    // e.g., "21:1/100"
-	PacketPassword  string `json:"packet_password"`            // Packet password (formerly "password")
-	AreafixPassword string `json:"areafix_password,omitempty"` // Password for AreaFix netmail (subject line)
-	Name            string `json:"name"`                       // Human-readable name
-	Flavour         string `json:"flavour,omitempty"`          // Delivery flavour: Normal (default), Crash, Hold, Direct
+	Address         string `json:"address"`                     // e.g., "21:1/100"
+	PacketPassword  string `json:"packet_password"`             // Packet password (formerly "password")
+	SessionPassword string `json:"session_password,omitempty"`  // BinkP session/connection password
+	AreafixPassword string `json:"areafix_password,omitempty"`  // Password for AreaFix netmail (subject line)
+	Name            string `json:"name"`                        // Human-readable name
+	Flavour         string `json:"flavour,omitempty"`           // Delivery flavour: Normal (default), Crash, Hold, Direct
 }
 
 // UnmarshalJSON supports backward compatibility: "password" is read into PacketPassword
@@ -788,6 +789,7 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 	var r struct {
 		Address         string  `json:"address"`
 		PacketPassword  *string `json:"packet_password"`
+		SessionPassword string  `json:"session_password,omitempty"`
 		AreafixPassword string  `json:"areafix_password,omitempty"`
 		Name            string  `json:"name"`
 		Flavour         string  `json:"flavour,omitempty"`
@@ -797,6 +799,7 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	c.Address = r.Address
+	c.SessionPassword = r.SessionPassword
 	c.AreafixPassword = r.AreafixPassword
 	c.Name = r.Name
 	c.Flavour = r.Flavour
@@ -836,6 +839,7 @@ type FTNConfig struct {
 type ServerConfig struct {
 	BoardName           string `json:"boardName"`
 	SysOpName           string `json:"sysOpName"`
+	BBSLocation         string `json:"bbsLocation,omitempty"`
 	Timezone            string `json:"timezone,omitempty"`
 	SysOpLevel          int    `json:"sysOpLevel"`
 	CoSysOpLevel        int    `json:"coSysOpLevel"`

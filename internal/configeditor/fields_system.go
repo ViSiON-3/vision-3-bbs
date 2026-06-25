@@ -112,7 +112,12 @@ func sysFieldsRegistration(cfg *config.ServerConfig) []fieldDef {
 			Set: func(val string) error { cfg.SysOpName = val; return nil },
 		},
 		{
-			Label: "Timezone", Help: "IANA timezone", Type: ftLookup, Col: 3, Row: 3, Width: 30,
+			Label: "BBS Location", Help: "Geographic location (e.g. Auckland, NZ)", Type: ftString, Col: 3, Row: 3, Width: 40,
+			Get: func() string { return cfg.BBSLocation },
+			Set: func(val string) error { cfg.BBSLocation = val; return nil },
+		},
+		{
+			Label: "Timezone", Help: "IANA timezone", Type: ftLookup, Col: 3, Row: 4, Width: 30,
 			Get: func() string { return cfg.Timezone },
 			Set: func(val string) error { cfg.Timezone = val; return nil },
 			LookupItems: func() []LookupItem {

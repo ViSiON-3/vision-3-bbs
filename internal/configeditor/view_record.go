@@ -296,21 +296,28 @@ func (m Model) renderRecordField(fieldIdx int, f fieldDef) (string, int) {
 		return fieldLabelStyle.Render(label) + m.textInput.View(), rawW
 	}
 
-	displayValue := padRight(value, f.Width)
+	// Mask password fields when not actively editing.
+	displayVal := value
+	if f.Masked {
+		displayVal = maskValue(value)
+	}
+	displayValue := padRight(displayVal, f.Width)
 
 	if isActive && m.mode == modeRecordEdit {
-		// For Y/N and integer fields, add padding space so fill characters are visible
+		// Ensure at least 1 fill character is always visible so the user
+		// can see the field is highlighted/selected.
 		effectiveWidth := f.Width
 		if f.Type == ftYesNo || f.Type == ftInteger {
 			effectiveWidth = f.Width + 2 // Add space for visual padding
 		}
 
 		// Truncate using display-width-aware method to handle multi-byte UTF-8 safely
-		v := truncateToDisplayWidth(value, effectiveWidth)
+		v := truncateToDisplayWidth(displayVal, effectiveWidth)
 
-		// Calculate fill based on display width
+		// Calculate fill based on display width — guarantee at least 1 fill char
 		vWidth := lipgloss.Width(v)
-		fillStr := strings.Repeat(string(fieldFillChar), maxInt(0, effectiveWidth-vWidth))
+		fillCount := maxInt(1, effectiveWidth-vWidth)
+		fillStr := strings.Repeat(string(fieldFillChar), fillCount)
 
 		return fieldLabelStyle.Render(label) + fieldEditStyle.Render(v+fillStr), rawW
 	}

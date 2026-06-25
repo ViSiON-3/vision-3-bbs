@@ -14,6 +14,7 @@ import (
 
 // --- Wizard Form Mode (field navigation) ---
 
+// updateWizardForm handles key events on the wizard form, including field navigation.
 func (m Model) updateWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.showSeedInterstitial {
 		return m.updateSeedInterstitial(msg)
@@ -101,6 +102,7 @@ func (m Model) updateWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // --- Wizard Form Field Editing Mode ---
 
+// updateWizardField handles key events while editing a single wizard field.
 func (m Model) updateWizardField(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	f := m.wizardFields[m.editField]
 
@@ -172,6 +174,7 @@ func (m Model) updateWizardField(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// nextWizardEditableField returns the index of the next editable field in the given direction.
 func (m Model) nextWizardEditableField(dir int) int {
 	n := len(m.wizardFields)
 	if n == 0 {
@@ -186,6 +189,7 @@ func (m Model) nextWizardEditableField(dir int) int {
 	return idx
 }
 
+// toggleWizardYesNo flips the value of a boolean (yes/no) wizard field.
 func (m *Model) toggleWizardYesNo(f fieldDef) {
 	if f.Get != nil && f.Set != nil {
 		if f.Get() == "Y" {
@@ -197,6 +201,7 @@ func (m *Model) toggleWizardYesNo(f fieldDef) {
 	}
 }
 
+// startWizardFieldEdit enters edit mode for the currently selected wizard field.
 func (m Model) startWizardFieldEdit() (Model, tea.Cmd) {
 	f := m.wizardFields[m.editField]
 	if f.Type == ftDisplay {
@@ -216,6 +221,7 @@ func (m Model) startWizardFieldEdit() (Model, tea.Cmd) {
 	return m, textinput.Blink
 }
 
+// applyWizardFieldValue validates and stores the edited value for a wizard field.
 func (m *Model) applyWizardFieldValue(f fieldDef) error {
 	val := m.textInput.Value()
 
@@ -271,11 +277,11 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	}
 
 	leaf := config.V3NetLeafConfig{
-		HubURL:        m.wizard.hubURL,
-		Network:       m.wizard.networkName,
-		Boards:        boards,
-		PollInterval:  m.wizard.pollInterval,
-		Origin:        m.wizard.origin,
+		HubURL:       m.wizard.hubURL,
+		Network:      m.wizard.networkName,
+		Boards:       boards,
+		PollInterval: m.wizard.pollInterval,
+		Origin:       m.wizard.origin,
 	}
 	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, leaf)
 	m.configs.V3Net.Enabled = true
@@ -328,29 +334,42 @@ func (m Model) wizardHasData() bool {
 
 // updateWizardExitConfirm handles the wizard save/discard dialog.
 func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Determine if this is the FTN wizard or V3Net wizard.
+	isFTN := m.ftnWizard != nil && m.ftnWizard.hasData()
+
+	formMode := modeWizardForm
+	discardMode := editorMode(modeRecordList)
+	if isFTN {
+		formMode = modeFTNWizardForm
+		discardMode = modeCategoryMenu
+	}
+
 	switch msg.Type {
 	case tea.KeyLeft, tea.KeyRight:
 		m.confirmYes = !m.confirmYes
 	case tea.KeyEnter:
 		if m.confirmYes {
-			// Attempt to validate and save the wizard.
-			m.mode = modeWizardForm
+			m.mode = formMode
+			if isFTN {
+				return m.submitFTNWizardForm()
+			}
 			return m.submitWizardForm()
 		}
-		// Discard — return to record list.
-		m.mode = modeRecordList
+		m.mode = discardMode
 		return m, nil
 	case tea.KeyEscape:
-		// Cancel — stay on wizard form.
-		m.mode = modeWizardForm
+		m.mode = formMode
 		return m, nil
 	default:
 		switch msg.String() {
 		case "y", "Y":
-			m.mode = modeWizardForm
+			m.mode = formMode
+			if isFTN {
+				return m.submitFTNWizardForm()
+			}
 			return m.submitWizardForm()
 		case "n", "N":
-			m.mode = modeRecordList
+			m.mode = discardMode
 			return m, nil
 		}
 	}
