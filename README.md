@@ -253,8 +253,10 @@ vision-3-bbs/
 ├── third_party/            # Modified third-party packages (tracked in git)
 ├── ziplab/                 # ZipLab support data files
 ├── docs/                   # GitHub Pages website (vision3bbs.com)
-│   ├── plans/              # Development plan documents
-│   └── sysop/              # Sysop documentation
+│   └── sysop/              # Sysop documentation (published)
+└── docs-internal/          # Internal dev docs (not published to the site)
+    ├── plans/              # Development & implementation plans
+    └── specs/              # Design specifications
 ```
 
 ## Setup & Installation
