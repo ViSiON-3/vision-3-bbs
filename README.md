@@ -1,6 +1,6 @@
 # ViSiON/3 BBS Software
 
-![ViSiON/3](ViSiON3.png)
+![ViSiON/3](docs/ViSiON3.png)
 
 ## Overview
 
@@ -174,6 +174,12 @@ Pre-built releases are available for all major platforms. Linux x86_64 is the pr
 
 ```text
 vision-3-bbs/
+├── setup.sh / .ps1 / .bat  # One-time setup: SSH host key, configs, dirs, build binaries
+├── build.sh / .ps1 / .bat  # Build all ViSiON/3 binaries
+├── dev-setup.sh            # Developer environment bootstrap
+├── Dockerfile              # Container image build
+├── docker-compose.yml      # Container orchestration
+├── docker-entrypoint.sh    # Container startup script
 ├── cmd/
 │   ├── ansitest/           # ANSI color test utility
 │   ├── config/             # TUI system configuration editor
@@ -253,8 +259,10 @@ vision-3-bbs/
 ├── third_party/            # Modified third-party packages (tracked in git)
 ├── ziplab/                 # ZipLab support data files
 ├── docs/                   # GitHub Pages website (vision3bbs.com)
-│   ├── plans/              # Development plan documents
-│   └── sysop/              # Sysop documentation
+│   └── sysop/              # Sysop documentation (published)
+└── docs-internal/          # Internal dev docs (not published to the site)
+    ├── plans/              # Development & implementation plans
+    └── specs/              # Design specifications
 ```
 
 ## Setup & Installation

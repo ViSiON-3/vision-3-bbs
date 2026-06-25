@@ -18,7 +18,7 @@ take precedence over general guidelines for their scope.
 
 | Subsystem                         | File              | Design Plan                                      |
 | --------------------------------- | ----------------- | ------------------------------------------------ |
-| V3Net (native message networking) | `AGENTS.v3net.md` | `docs/plans/2026-03-16-v3net-protocol-design.md` |
+| V3Net (native message networking) | `internal/v3net/CLAUDE.md` | `docs-internal/plans/2026-03-16-v3net-protocol-design.md` |
 
 If a task touches a subsystem with a sub-agent file, read that file first,
 then return here for general coding standards.
@@ -32,7 +32,7 @@ then return here for general coding standards.
 Always check for and review relevant project documentation before starting any task:
 
 - `README.md` — Project overview, setup, patterns, technology stack
-- `docs/sysop/reference/architecture.md ` — System architecture, component relationships
+- `docs/sysop/reference/architecture.md` — System architecture, component relationships
 - `docs/sysop/reference/api-reference.md` — API reference
 
 
@@ -41,9 +41,9 @@ clarification before proceeding.
 
 ### Architecture Adherence
 
-- Understand and respect module boundaries, data flow, system interfaces, and component dependencies outlined in `docs/architecture.md`.
+- Understand and respect module boundaries, data flow, system interfaces, and component dependencies outlined in `docs/sysop/reference/architecture.md`.
 - Validate that changes comply with the established architecture. Warn and propose compliant solutions if a violation is detected.
-- When adding a new subsystem, update `docs/architecture.md` to reflect it.
+- When adding a new subsystem, update `docs/sysop/reference/architecture.md` to reflect it.
 
 ### Pattern & Tech Stack Awareness
 
@@ -58,7 +58,7 @@ clarification before proceeding.
 ### Before Starting Any Significant Task
 
 1. Read the relevant sub-agent file if one exists (see Sub-Agent Instructions above).
-2. Read `docs/architecture.md` and any relevant `docs/` files.
+2. Read `docs/sysop/reference/architecture.md` and any relevant `docs/` files.
 3. Scan the existing codebase for related patterns — do not reinvent what exists.
 4. **Identify Impact**: Determine affected components, dependencies, and potential side effects.
 5. **Plan**: Outline the steps. Tackle one logical change or file at a time.
@@ -133,10 +133,6 @@ clarification before proceeding.
 - **Fix the Root Cause**: Prioritize fixing the underlying issue rather than masking it.
 - Check application logs for errors, warnings, or relevant information.
 - Use the project's established logging framework (`slog`) with structured logging.
-- Check the `fixes/` directory for documented solutions to similar past issues
-  before deep-diving.
-- Document complex fixes in `fixes/` with a descriptive `.md` file detailing
-  the problem, investigation steps, and solution.
 
 ---
 
