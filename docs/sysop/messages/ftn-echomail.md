@@ -30,7 +30,7 @@ Vision/3 releases include a pre-built **binkd** binary in `bin/` and example con
 
 - binkd source: <https://github.com/pgul/binkd>
 
-Configured via `data/ftn/binkd.conf` (or your mailer's own config format). This is not managed by the TUI editor — see [Step 4](#step-4-configure-your-mailer-binkd-example) for setup.
+Configured via `data/ftn/binkd.conf` (or your mailer's own config format). The [FTN Setup Wizard](#quick-setup-ftn-setup-wizard-recommended) generates and updates `binkd.conf` for you; you can also edit it by hand — see [Step 4](#step-4-configure-your-mailer-binkd-example) for the manual setup.
 
 ### How It Works
 
@@ -48,6 +48,42 @@ Your Hub <--binkd--> secure_in/ --v3mail toss--> JAM bases <-- Vision/3 --> User
 5. **v3mail scan** creates outbound `.pkt` files from new JAM messages
 6. **v3mail ftn-pack** bundles the `.pkt` files into ZIP archives
 7. **binkd** picks up the outbound bundles and delivers them to your hub
+
+## Quick Setup: FTN Setup Wizard (Recommended)
+
+The fastest way to join an FTN network is the built-in **FTN Setup Wizard** in
+the configuration editor — it automates almost everything described in the
+manual steps below. Launch it with:
+
+```bash
+./config
+```
+
+then go to **Echomail Networking → FTN Setup Wizard**. The wizard walks you through:
+
+1. **Pick a network** — choose from a built-in registry of known FTN networks
+   (fsxNet, FidoNet, etc.). Selecting one pre-fills the hub address, hostname,
+   BinkP port, and coordinator details.
+2. **Enter your details** — your FTN address (validated), AreaFix / session /
+   packet passwords, and origin line.
+3. **Select echo areas** — the wizard downloads the network's echo list
+   (`backbone.na`) and lets you check the areas you want to carry.
+4. **Save** — it then creates everything for you:
+   - the network and uplink in `configs/ftn.json`
+   - a single conference for the network, plus one message area per selected echo
+   - a netmail area for the network
+   - a matching `data/ftn/binkd.conf` (identity, domains, your FTN address,
+     mailer/inbound/outbound paths, and the hub node)
+
+After saving, **restart the BBS** so the new `ftn.json` settings take effect,
+then initialize the message bases and test the connection (see
+[Step 7](#step-7-initialize-message-bases) and [Step 8](#step-8-test-the-connection)).
+
+> Identity fields and link passwords are also re-synced to `binkd.conf` whenever
+> you save from the config editor.
+
+For networks **not** in the registry — or to understand exactly what the wizard
+configures — follow the manual steps below.
 
 ## Prerequisites
 
@@ -91,7 +127,11 @@ vision3/
 └── helper                 # Setup utility
 ```
 
-## Step-by-Step Setup
+## Step-by-Step Setup (Manual / Advanced)
+
+> Most sysops can use the [FTN Setup Wizard](#quick-setup-ftn-setup-wizard-recommended)
+> instead of the steps below. Follow this manual path for networks not in the
+> wizard's registry, for custom topologies, or to understand each piece.
 
 ### Step 1: Create FTN Directories
 

@@ -124,6 +124,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | V3 Scripting Engine           | ✅ Working | goja-based JavaScript runtime for native V3 script doors                                                            |
 | **Networking/FTN**            |           |                                                                                                                     |
 | FTN Echomail/Netmail          | ✅ Working | JAM-backed, tosser, import/export, dupe checking                                                                    |
+| FTN Setup Wizard              | ✅ Working | Guided setup in `./config`: pick network, download echo list, auto-create areas + `binkd.conf`                     |
 | **Community Features**        |           |                                                                                                                     |
 | Voting System                 | ✅ Working | Voting booths, mandatory topics, SysOp management                                                                   |
 | News System                   | ✅ Working | SysOp-managed news items, auto-display on login                                                                     |
