@@ -4,37 +4,45 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// DOS CGA color palette mapped to ANSI 256-color indices.
-// These are the standard 16 DOS colors (0-15).
+// DOS CGA/VGA color palette as explicit truecolor hex values.
+//
+// These are the canonical IBM VGA RGB values for the standard 16 DOS colors.
+// We pin them to explicit hex (rather than ANSI palette indices 0-15) so the
+// editor renders the same regardless of the host terminal's color theme. Most
+// Mac terminal themes map ANSI "blue" to a bright, low-contrast shade, which
+// washed out the white/yellow-on-blue UI; the authentic VGA navy (#0000AA)
+// restores the intended contrast. lipgloss renders these as truecolor where
+// available and degrades to the fixed 256-color cube otherwise — in both cases
+// independent of the user's 16-color theme.
 var dosColors = [16]string{
-	"0",  // 0:  Black
-	"4",  // 1:  Blue (DOS blue = ANSI 4)
-	"2",  // 2:  Green
-	"6",  // 3:  Cyan (DOS cyan = ANSI 6)
-	"1",  // 4:  Red (DOS red = ANSI 1)
-	"5",  // 5:  Magenta
-	"3",  // 6:  Brown/Yellow (DOS brown = ANSI 3)
-	"7",  // 7:  Light Gray
-	"8",  // 8:  Dark Gray
-	"12", // 9:  Light Blue (DOS light blue = ANSI 12)
-	"10", // 10: Light Green
-	"14", // 11: Light Cyan (DOS light cyan = ANSI 14)
-	"9",  // 12: Light Red (DOS light red = ANSI 9)
-	"13", // 13: Light Magenta
-	"11", // 14: Yellow (DOS yellow = ANSI 11)
-	"15", // 15: White
+	"#000000", // 0:  Black
+	"#0000AA", // 1:  Blue
+	"#00AA00", // 2:  Green
+	"#00AAAA", // 3:  Cyan
+	"#AA0000", // 4:  Red
+	"#AA00AA", // 5:  Magenta
+	"#AA5500", // 6:  Brown
+	"#AAAAAA", // 7:  Light Gray
+	"#555555", // 8:  Dark Gray
+	"#5555FF", // 9:  Light Blue
+	"#55FF55", // 10: Light Green
+	"#55FFFF", // 11: Light Cyan
+	"#FF5555", // 12: Light Red
+	"#FF55FF", // 13: Light Magenta
+	"#FFFF55", // 14: Yellow
+	"#FFFFFF", // 15: White
 }
 
-// DOS CGA background colors mapped to ANSI 256-color indices.
+// DOS CGA/VGA background colors (the low 8 colors usable as a background).
 var dosBgColors = [8]string{
-	"0", // 0: Black BG
-	"4", // 1: Blue BG
-	"2", // 2: Green BG
-	"6", // 3: Cyan BG
-	"1", // 4: Red BG
-	"5", // 5: Magenta BG
-	"3", // 6: Brown BG
-	"7", // 7: Light Gray BG
+	"#000000", // 0: Black BG
+	"#0000AA", // 1: Blue BG
+	"#00AA00", // 2: Green BG
+	"#00AAAA", // 3: Cyan BG
+	"#AA0000", // 4: Red BG
+	"#AA00AA", // 5: Magenta BG
+	"#AA5500", // 6: Brown BG
+	"#AAAAAA", // 7: Light Gray BG
 }
 
 // dosStyle creates a lipgloss style from a DOS TextAttr byte (bg*16 + fg).
@@ -57,11 +65,11 @@ func dosColor(bg, fg int) lipgloss.Style {
 // --- Global header bar (white text on dark gray bg) ---
 var globalHeaderBarStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color(dosColors[15])).
-	Background(lipgloss.Color("8")).
+	Background(lipgloss.Color(dosColors[8])).
 	Bold(true)
 
 // --- Title/Status bars ---
-var titleBarStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color("8"))
+var titleBarStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color(dosColors[8]))
 
 // --- Background fill ---
 // Fill_Screen('░',7,1) → gray on blue
@@ -108,7 +116,7 @@ var helpBoxStyle = dosColor(4, 15)
 var helpTitleStyle = dosColor(4, 14)
 
 // --- Bottom help bar ---
-var helpBarStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color("8"))
+var helpBarStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color(dosColors[8]))
 
 // --- Flash message ---
 var flashMessageStyle = lipgloss.NewStyle().
