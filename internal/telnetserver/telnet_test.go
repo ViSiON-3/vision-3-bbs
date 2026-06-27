@@ -189,6 +189,7 @@ func TestProcessNegotiationBytes_DetectsWillTermType(t *testing.T) {
 func TestNegotiate_SendsExpectedOptions(t *testing.T) {
 	server, client := net.Pipe()
 	tc := NewTelnetConn(server)
+	t.Cleanup(func() { _ = tc.Close(); _ = client.Close() })
 
 	done := make(chan error, 1)
 	go func() { done <- tc.Negotiate() }()
@@ -247,8 +248,8 @@ func TestSetReadInterrupt_UnblocksRead(t *testing.T) {
 	// net.Pipe honors read deadlines, so it can exercise the interrupt path that
 	// fakeConn (non-blocking) cannot.
 	server, client := net.Pipe()
-	defer client.Close()
 	tc := NewTelnetConn(server)
+	t.Cleanup(func() { _ = tc.Close(); _ = client.Close() })
 
 	type result struct {
 		n   int

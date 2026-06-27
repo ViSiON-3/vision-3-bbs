@@ -14,6 +14,7 @@ func TestAdapter_PtyReflectsTermAndSize(t *testing.T) {
 	drainRead(t, tc)
 
 	a := NewTelnetSessionAdapter(tc)
+	t.Cleanup(func() { _ = a.Close() }) // stop the winCh forwarding goroutine
 	pty, winCh, ok := a.Pty()
 	if !ok {
 		t.Fatal("Pty() ok = false, want true")
@@ -38,6 +39,7 @@ func TestAdapter_ReadWriteDelegate(t *testing.T) {
 	fc := newFakeConn([]byte("input"))
 	tc := NewTelnetConn(fc)
 	a := NewTelnetSessionAdapter(tc)
+	t.Cleanup(func() { _ = a.Close() }) // stop the winCh forwarding goroutine
 
 	b := make([]byte, 16)
 	n, _ := a.Read(b)
@@ -57,6 +59,7 @@ func TestAdapter_NAWSForwardedToWindowChannel(t *testing.T) {
 	in := []byte{IAC, SB, OptNAWS, 0, 70, 0, 24, IAC, SE}
 	tc := NewTelnetConn(newFakeConn(in))
 	a := NewTelnetSessionAdapter(tc)
+	t.Cleanup(func() { _ = a.Close() }) // stop the winCh forwarding goroutine
 
 	_, winCh, _ := a.Pty()
 	<-winCh // drain the initial 80x25 window
@@ -81,6 +84,7 @@ func TestAdapter_NAWSForwardedToWindowChannel(t *testing.T) {
 func TestSessionContext_SetValueAndFallback(t *testing.T) {
 	tc := NewTelnetConn(newFakeConn(nil))
 	a := NewTelnetSessionAdapter(tc)
+	t.Cleanup(func() { _ = a.Close() }) // stop the winCh forwarding goroutine
 	ctx := a.Context()
 
 	ctx.SetValue("key", "value")
