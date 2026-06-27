@@ -234,7 +234,7 @@ func TestRunInfoFormRequired_ValidatedUserSkipped(t *testing.T) {
 		Validated: true,
 	}
 
-	result, nextCmd, err := runInfoFormRequired(e, nil, nil, nil, validatedUser, 1, time.Time{}, "", 0, 80, 25)
+	result, nextCmd, err := runInfoFormRequired(&cmdCtx{e: e, currentUser: validatedUser, nodeNumber: 1, sessionStartTime: time.Time{}, outputMode: 0, termWidth: 80, termHeight: 25}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestRunInfoFormRequired_NilUserSkipped(t *testing.T) {
 		RootConfigPath: "/nonexistent/path",
 	}
 
-	result, nextCmd, err := runInfoFormRequired(e, nil, nil, nil, nil, 1, time.Time{}, "", 0, 80, 25)
+	result, nextCmd, err := runInfoFormRequired(&cmdCtx{e: e, nodeNumber: 1, sessionStartTime: time.Time{}, outputMode: 0, termWidth: 80, termHeight: 25}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -6,10 +6,6 @@ import (
 	"io"
 	"log"
 	"strings"
-	"time"
-
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -18,7 +14,17 @@ import (
 
 // runSearchFiles prompts for a search string, searches filenames and descriptions
 // across all file areas (respecting ACS), and displays paginated results.
-func runSearchFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running SEARCH_FILES", nodeNumber)
 
 	if currentUser == nil {

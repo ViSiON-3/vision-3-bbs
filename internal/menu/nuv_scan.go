@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -19,10 +19,15 @@ import (
 // and AccessLevel >= NUVUseLevel), and there are pending candidates they
 // haven't voted on yet, notify them and offer a quick-scan.
 // Mapped to login command "CHECKNUV".
-func runCheckNUV(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runCheckNUV(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	cfg := e.GetServerConfig()
 	if !cfg.UseNUV || currentUser == nil {
@@ -87,10 +92,16 @@ func runCheckNUV(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runNUVScan lets the current user vote on all pending NUV candidates they
 // haven't voted on. Mapped to menu command "SCANNUV".
-func runNUVScan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runNUVScan(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	cfg := e.GetServerConfig()
 	if !cfg.UseNUV {
@@ -129,10 +140,16 @@ func runNUVScan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 // runNUVList displays all current NUV candidates with their vote tallies.
 // Mapped to menu command "LISTNUV". SysOp-level; no UseNUV guard so the
 // queue is always inspectable regardless of whether NUV is currently enabled.
-func runNUVList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	nuvMu.Lock()
 	nd, err := loadNUVData(e.RootConfigPath)

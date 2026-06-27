@@ -39,10 +39,17 @@ func (e *MenuExecutor) displaySponsorHeader(terminal *term.Terminal, menuRec *Me
 //  2. Gate via CanAccessSponsorMenu.
 //  3. Display SPONSORM.ANS header.
 //  4. Command loop (Enter required): E=Edit Area, [/]=Navigate Areas, P=Position, Q=Quit.
-func runSponsorMenu(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User,
-	nodeNumber int, sessionStartTime time.Time, args string,
-	outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return nil, "", nil
@@ -104,8 +111,7 @@ func runSponsorMenu(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		switch cmd {
 		case "E":
-			updated, next, runErr := runSponsorEditArea(e, s, terminal, userManager,
-				currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+			updated, next, runErr := runSponsorEditArea(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 			if runErr != nil {
 				if errors.Is(runErr, io.EOF) {
 					return nil, "LOGOFF", io.EOF
@@ -324,15 +330,20 @@ func allowAnonEqual(a, b *bool) bool {
 // are editable except ID (which is immutable).
 //
 // Key map: T=Tag N=Name D=Description R=ACS Read W=ACS Write S=Sponsor
-//   M=Max Msgs G=Max Age A=Allow Anon L=Real Name Only J=Auto Join
-//   C=Conf ID B=Base Path Y=Area Type E=Echo Tag O=Origin K=Network
-//   [/]=Prev/Next area (co-sysop+) Q=Save ESC=Cancel
+//
+//	M=Max Msgs G=Max Age A=Allow Anon L=Real Name Only J=Auto Join
+//	C=Conf ID B=Base Path Y=Area Type E=Echo Tag O=Origin K=Network
+//	[/]=Prev/Next area (co-sysop+) Q=Save ESC=Cancel
 //
 // The Sponsor field is validated against the user database. Enter "-" to clear.
-func runSponsorEditArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User,
-	nodeNumber int, sessionStartTime time.Time, args string,
-	outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
 
 	if currentUser == nil {
 		return nil, "", nil

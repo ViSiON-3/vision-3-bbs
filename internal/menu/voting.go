@@ -9,12 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -239,10 +238,14 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runVoteOnMandatory forces the user to vote on any mandatory topics they haven't voted on.
 // Intended for use in the login sequence via VOTEMANDATORY.
-func runVoteOnMandatory(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runVoteOnMandatory(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -264,10 +267,15 @@ func runVoteOnMandatory(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 }
 
 // runVote presents the full voting booths interface.
-func runVote(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runVote(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	log.Printf("DEBUG: Node %d: Running VOTE for user %s", nodeNumber, currentUser.Handle)
 	isSysOp := e.isCoSysOpOrAbove(currentUser)

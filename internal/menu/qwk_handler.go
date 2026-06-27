@@ -12,9 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
-
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -42,7 +39,14 @@ func qwkBBSID(boardName string) string {
 }
 
 // runQWKDownload builds and sends a QWK mail packet to the user.
-func runQWKDownload(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	log.Printf("DEBUG: Node %d: Running QWKDOWNLOAD", nodeNumber)
 
 	if currentUser == nil {
@@ -226,7 +230,16 @@ func runQWKDownload(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 }
 
 // runQWKUpload receives and processes a QWK REP packet from the user.
-func runQWKUpload(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	log.Printf("DEBUG: Node %d: Running QWKUPLOAD", nodeNumber)
 
 	if currentUser == nil {

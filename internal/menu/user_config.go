@@ -69,7 +69,16 @@ func runCfgToggle(
 	return currentUser, "", nil
 }
 
-func runCfgHotKeys(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgHotKeys(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	return runCfgToggle(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode,
 		"Hot Keys",
 		func(u *user.User) bool { return u.HotKeys },
@@ -77,7 +86,16 @@ func runCfgHotKeys(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	)
 }
 
-func runCfgMorePrompts(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgMorePrompts(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	return runCfgToggle(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode,
 		"More Prompts",
 		func(u *user.User) bool { return u.MorePrompts },
@@ -85,8 +103,15 @@ func runCfgMorePrompts(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 	)
 }
 
+func runCfgScreenWidth(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
 
-func runCfgScreenWidth(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -131,7 +156,15 @@ func runCfgScreenWidth(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 	return currentUser, "", nil
 }
 
-func runCfgScreenHeight(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgScreenHeight(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -176,7 +209,14 @@ func runCfgScreenHeight(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	return currentUser, "", nil
 }
 
-func runCfgTermType(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgTermType(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -252,7 +292,15 @@ func runCfgStringInput(
 	return currentUser, "", nil
 }
 
-func runCfgRealName(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgRealName(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	return runCfgStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
 		"Real Name", 40,
 		func(u *user.User) string { return u.RealName },
@@ -260,7 +308,15 @@ func runCfgRealName(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 	)
 }
 
-func runCfgNote(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgNote(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	return runCfgStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
 		"User Note", 35,
 		func(u *user.User) string { return u.PrivateNote },
@@ -268,7 +324,17 @@ func runCfgNote(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMan
 	)
 }
 
-func runCfgPassword(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -326,7 +392,15 @@ func runCfgPassword(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 
 var colorSlotNames = [7]string{"Prompt", "Input", "Text", "Stat", "Text2", "Stat2", "Bar"}
 
-func runCfgColor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgColor(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -385,7 +459,16 @@ func runCfgColor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 	return currentUser, "", nil
 }
 
-func runCfgViewConfig(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgViewConfig(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -438,7 +521,7 @@ func runCfgViewConfig(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 		fmt.Sprintf(e.LoadedStrings.CfgViewScreenWidth, width),
 		fmt.Sprintf(e.LoadedStrings.CfgViewScreenHeight, height),
 		fmt.Sprintf(e.LoadedStrings.CfgViewTermType, strings.ToUpper(outMode)),
-fmt.Sprintf(e.LoadedStrings.CfgViewHotKeys, boolStr(currentUser.HotKeys)),
+		fmt.Sprintf(e.LoadedStrings.CfgViewHotKeys, boolStr(currentUser.HotKeys)),
 		fmt.Sprintf(e.LoadedStrings.CfgViewMorePrompts, boolStr(currentUser.MorePrompts)),
 		fmt.Sprintf(e.LoadedStrings.CfgViewFileListMode, fileListModeDisplay(currentUser.FileListingMode)),
 		fmt.Sprintf(e.LoadedStrings.CfgViewMsgHeader, currentUser.MsgHdr),
@@ -490,7 +573,14 @@ fmt.Sprintf(e.LoadedStrings.CfgViewHotKeys, boolStr(currentUser.HotKeys)),
 	return currentUser, "", nil
 }
 
-func runCfgFileListMode(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgFileListMode(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -517,7 +607,14 @@ func runCfgFileListMode(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 // maxAutoSigLines is the maximum number of lines allowed in an auto-signature.
 const maxAutoSigLines = 5
 
-func runCfgAutoSig(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -623,7 +720,15 @@ func runCfgAutoSig(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 	}
 }
 
-func runCfgFileColumns(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -701,7 +806,15 @@ func runCfgFileColumns(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 	}
 }
 
-func runCfgCustomPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runCfgCustomPrompt(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
