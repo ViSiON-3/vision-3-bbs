@@ -4,16 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/file"
-	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
-	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
-	"github.com/gliderlabs/ssh"
-	"github.com/google/uuid"
-	"golang.org/x/term"
 	"io"
 	"log"
 	"os"
@@ -22,6 +12,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
+	"github.com/gliderlabs/ssh"
+	"github.com/google/uuid"
+	"golang.org/x/term"
 )
 
 // scanDirectoryFiles returns a map of filename -> file size for all files in a directory,

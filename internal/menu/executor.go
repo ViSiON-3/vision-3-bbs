@@ -24,7 +24,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"

@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"io"
 	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func replaceWhoOnlineToken(line, token, value string) string {

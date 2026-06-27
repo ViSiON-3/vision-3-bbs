@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"io"
 	"log"
 	"os"
@@ -14,6 +11,10 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func truncateRunes(value string, max int) string {

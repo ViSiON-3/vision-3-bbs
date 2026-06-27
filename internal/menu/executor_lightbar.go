@@ -5,11 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
 	"io"
 	"log"
 	"os"
@@ -18,6 +13,12 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/gliderlabs/ssh"
+	"golang.org/x/term"
 )
 
 // colorCodeToAnsi converts a DOS-style color code (0-255) to ANSI escape sequence.

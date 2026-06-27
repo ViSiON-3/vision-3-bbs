@@ -3,14 +3,6 @@ package menu
 import (
 	"errors"
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
-	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
-	"github.com/ViSiON-3/vision-3-bbs/internal/message"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
 	"io"
 	"log"
 	"os"
@@ -18,6 +10,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
+	"golang.org/x/term"
 )
 
 // runListMessageAreas displays a list of message areas using templates, then pauses.
