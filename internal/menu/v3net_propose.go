@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/gliderlabs/ssh"
 	term "golang.org/x/term"
@@ -29,7 +28,15 @@ type proposeField struct {
 // accessModes is the cycle list for the Access Mode field.
 var accessModes = []string{"open", "approval", "closed"}
 
-func runV3NetPropose(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, _ *user.UserMgr, currentUser *user.User, _ int, _ time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runV3NetPropose(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	if currentUser == nil || e.V3NetStatus == nil {
 		return nil, "", nil
 	}

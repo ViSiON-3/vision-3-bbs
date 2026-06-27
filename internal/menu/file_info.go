@@ -8,9 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
-
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -19,7 +16,16 @@ import (
 // runShowFileInfo prompts for a filename, looks it up in the current file area,
 // and displays full metadata (filename, size, date, uploader, download count,
 // description, area name).
-func runShowFileInfo(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running SHOWFILEINFO", nodeNumber)
 
 	if currentUser == nil {

@@ -15,22 +15,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"golang.org/x/term"
 )
 
 // RumorRecord represents a single rumor entry.
 // Simplified from V2's RumorRec — title dropped in favor of text-only graffiti wall.
 type RumorRecord struct {
 	ID       int       `json:"id"`
-	Author   string    `json:"author"`              // Displayed author (may be anonymous)
-	RealUser string    `json:"real_user"`           // Actual handle (V2: Author2); legacy entries may contain old username
-	UserID   int       `json:"user_id,omitempty"`   // Stable owner ID for ownership checks (0 = legacy record)
-	Text     string    `json:"text"`                // Rumor text
-	PostedAt time.Time `json:"posted_at"`           // When posted
-	MinLevel int       `json:"min_level"`           // Minimum access level to view
+	Author   string    `json:"author"`            // Displayed author (may be anonymous)
+	RealUser string    `json:"real_user"`         // Actual handle (V2: Author2); legacy entries may contain old username
+	UserID   int       `json:"user_id,omitempty"` // Stable owner ID for ownership checks (0 = legacy record)
+	Text     string    `json:"text"`              // Rumor text
+	PostedAt time.Time `json:"posted_at"`         // When posted
+	MinLevel int       `json:"min_level"`         // Minimum access level to view
 }
 
 // rumorsData holds all rumors with a NextID counter.
@@ -167,10 +165,15 @@ func getRandomRumorText(rootConfigPath string, userLevel int) string {
 
 // runRumorsList displays all visible rumors.
 // Maps to V2's ListRumors procedure (simplified — no Stats/Both modes).
-func runRumorsList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -215,10 +218,15 @@ func runRumorsList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runRumorsAdd lets users post a new rumor.
 // Maps to V2's AddRumor procedure.
-func runRumorsAdd(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -356,10 +364,16 @@ func runRumorsAdd(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runRumorsDelete lets users delete their own rumors; sysops can delete any.
 // Maps to V2's DeleteRumor procedure.
-func runRumorsDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -494,10 +508,13 @@ func runRumorsDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runRumorsSearch searches rumors by text or author.
 // Maps to V2's SearchForText procedure.
-func runRumorsSearch(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runRumorsSearch(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -560,10 +577,15 @@ func runRumorsSearch(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runRumorsNewscan shows rumors posted since the user's last login.
 // Maps to V2's RumorsNewscan procedure.
-func runRumorsNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runRumorsNewscan(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -612,10 +634,12 @@ func runRumorsNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runRandomRumor displays a random rumor at login (V2: randomrumor from MAINR2.PAS).
 // Intended for use in the login sequence.
-func runRandomRumor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runRandomRumor(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	terminal := c.terminal
+	currentUser := c.currentUser
+	outputMode := c.outputMode
+	termWidth := c.termWidth
 
 	if currentUser == nil {
 		return currentUser, "", nil
