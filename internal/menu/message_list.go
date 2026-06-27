@@ -625,10 +625,19 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 				th = 24
 			}
 
+			// The reader navigates by real area message number, so it needs the
+			// area's actual message count as its upper bound — not len(entries),
+			// which is smaller when the list is filtered (e.g. PRIVMAIL) or has
+			// gaps, and would make the reader exit immediately for high msgNums.
+			areaMsgCount, countErr := e.MessageMgr.GetMessageCountForArea(currentAreaID)
+			if countErr != nil || areaMsgCount < selectedMsg {
+				areaMsgCount = selectedMsg
+			}
+
 			// Call message reader
 			_, nextAction, err := runMessageReader(e, s, terminal, userManager,
 				currentUser, nodeNumber, sessionStartTime, outputMode,
-				selectedMsg, state.TotalMessages, false, tw, th, msgFilter)
+				selectedMsg, areaMsgCount, false, tw, th, msgFilter)
 
 			if err != nil {
 				log.Printf("ERROR: Node %d: Message reader error: %v", nodeNumber, err)

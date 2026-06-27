@@ -141,6 +141,37 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// the msgFilter skip so "previous" keeps moving backward past hidden messages.
 	navDir := 1
 
+	// When a msgFilter is active (e.g. PRIVMAIL), next/prev navigation must move
+	// between visible messages only. These helpers locate the adjacent visible
+	// message so the reader can show the usual first/last prompt at the edges
+	// instead of falling off the end and dropping back to the menu.
+	msgVisible := func(n int) bool {
+		if n < 1 || n > totalMsgCount {
+			return false
+		}
+		m, err := e.MessageMgr.GetMessage(currentAreaID, n)
+		if err != nil || m.IsDeleted {
+			return false
+		}
+		return msgFilter == nil || msgFilter(m)
+	}
+	nextVisible := func(from int) int {
+		for n := from + 1; n <= totalMsgCount; n++ {
+			if msgVisible(n) {
+				return n
+			}
+		}
+		return 0
+	}
+	prevVisible := func(from int) int {
+		for n := from - 1; n >= 1; n-- {
+			if msgVisible(n) {
+				return n
+			}
+		}
+		return 0
+	}
+
 readerLoop:
 	for {
 		if currentMsgNum > totalMsgCount || currentMsgNum < 1 {
@@ -471,8 +502,17 @@ readerLoop:
 			// Handle the selected command
 			switch selectedKey {
 			case 'N': // Next message
+				navDir = 1
+				if msgFilter != nil {
+					if nxt := nextVisible(currentMsgNum); nxt > 0 {
+						currentMsgNum = nxt
+						break scrollLoop
+					}
+					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgEndOfMessages)), outputMode)
+					time.Sleep(500 * time.Millisecond)
+					break readerLoop
+				}
 				if currentMsgNum < totalMsgCount {
-					navDir = 1
 					currentMsgNum++
 					break scrollLoop // Exit scroll loop to load next message
 				} else {
@@ -505,8 +545,19 @@ readerLoop:
 				continue
 
 			case 'S': // Prev - go back one message
+				navDir = -1
+				if msgFilter != nil {
+					if prv := prevVisible(currentMsgNum); prv > 0 {
+						currentMsgNum = prv
+						break scrollLoop
+					}
+					// Already at the first visible message: stay put.
+					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgFirstMessage)), outputMode)
+					time.Sleep(500 * time.Millisecond)
+					needsRedraw = true
+					continue
+				}
 				if currentMsgNum > 1 {
-					navDir = -1
 					currentMsgNum--
 					break scrollLoop
 				} else {

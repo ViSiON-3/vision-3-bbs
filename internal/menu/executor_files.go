@@ -651,7 +651,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	// Check Read ACS for the file area
 	area, exists := e.FileMgr.GetAreaByID(currentAreaID)
 	if !exists {
-		log.Printf("WARN: Node %d: User %s denied read access to file area %d (%s): area not found", nodeNumber, currentUser.Handle, currentAreaID, currentAreaTag)
+		log.Printf("WARN: Node %d: User %s: current file area %d (%s) not found (stale/invalid area id)", nodeNumber, currentUser.Handle, currentAreaID, currentAreaTag)
 		return nil, "", nil // Return to menu
 	}
 	if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
