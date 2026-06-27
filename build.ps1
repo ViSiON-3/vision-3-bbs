@@ -28,7 +28,7 @@ $env:GOARCH = "386"
 
 $targets = @(
     @{ Cmd = "vision3"; Desc = "BBS server" },
-    @{ Cmd = "helper"; Desc = "helper process" },
+    @{ Cmd = "helper"; Desc = "command line utils" },
     @{ Cmd = "v3mail"; Desc = "mail processor" },
     @{ Cmd = "strings"; Desc = "strings editor" },
     @{ Cmd = "ue"; Desc = "user editor" },

@@ -209,4 +209,4 @@ The BBS loads metadata at startup. Restart the BBS process after importing files
 
 ### Permission errors during import
 
-Ensure the helper process has read access to the source directory and write access to the target area directory (`data/files/{area-path}/`).
+Ensure the helper command line utility has read access to the source directory and write access to the target area directory (`data/files/{area-path}/`).
