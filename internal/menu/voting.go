@@ -277,6 +277,10 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
+	if currentUser == nil {
+		return nil, "", nil
+	}
+
 	log.Printf("DEBUG: Node %d: Running VOTE for user %s", nodeNumber, currentUser.Handle)
 	isSysOp := e.isCoSysOpOrAbove(currentUser)
 

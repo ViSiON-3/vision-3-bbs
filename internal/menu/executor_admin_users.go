@@ -465,7 +465,10 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 			oldValue,
 			fmt.Sprintf("%v", newValue),
 		)
-		_ = userManager.LogAdminActivity(logEntry) // Log errors but don't fail the save.
+		if logErr := userManager.LogAdminActivity(logEntry); logErr != nil {
+			// Don't fail the save, but make the audit gap observable.
+			log.Printf("ERROR: admin audit log write failed for user %d field %s: %v", target.ID, fieldName, logErr)
+		}
 	}
 
 	return fmt.Sprintf("|10Changes saved for %s.|07", target.Handle), true
@@ -1757,7 +1760,7 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	log.Printf("DEBUG: Node %d: Running PURGEUSERS", nodeNumber)
 
-	if currentUser == nil {
+	if currentUser == nil || userManager == nil {
 		msg := "\r\n|01Error: You must be logged in to purge users.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)

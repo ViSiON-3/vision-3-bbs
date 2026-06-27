@@ -235,7 +235,12 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 		buf.WriteString("\r\n")
 	}
 
-	terminalio.WriteProcessedBytes(terminal, buf.Bytes(), outputMode)
+	if err := terminalio.WriteProcessedBytes(terminal, buf.Bytes(), outputMode); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, "LOGOFF", io.EOF
+		}
+		return nil, "", err
+	}
 
 	pausePrompt := e.LoadedStrings.PauseString
 	if pausePrompt == "" {
