@@ -8,8 +8,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
 	"io"
 	"log"
 	"os"
@@ -22,7 +20,17 @@ import (
 )
 
 // runLastCallers displays the last callers list using templates.
-func runLastCallers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running LASTCALLERS", nodeNumber)
 
 	// Parse optional caller count argument (e.g., RUN:LASTCALLERS 10)

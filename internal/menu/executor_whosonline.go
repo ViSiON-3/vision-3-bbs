@@ -7,8 +7,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
 	"io"
 	"log"
 	"path/filepath"
@@ -39,7 +37,18 @@ func replaceWhoOnlineToken(line, token, value string) string {
 // runLoginWhosOnline prompts the user with a YES/NO lightbar asking if they want
 // to view users on other nodes. If YES, it displays the Who's Online screen.
 // Skips the prompt entirely if no other visible users are on other nodes.
-func runLoginWhosOnline(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runLoginWhosOnline(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running WHOISONLINE from login sequence", nodeNumber)
 
 	// Check if there are any other visible users on other nodes before prompting
@@ -89,10 +98,19 @@ func runLoginWhosOnline(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// User said YES - show the who's online display
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-	return runWhoIsOnline(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+	return runWhoIsOnline(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 }
 
-func runWhoIsOnline(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running WHOISONLINE", nodeNumber)
 
 	topPath := filepath.Join(e.MenuSetPath, "templates", "WHOONLN.TOP")

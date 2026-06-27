@@ -21,7 +21,15 @@ import (
 )
 
 // runListMessageAreas displays a list of message areas using templates, then pauses.
-func runListMessageAreas(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runListMessageAreas(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	log.Printf("DEBUG: Node %d: Running LISTMSGAR", nodeNumber)
 
 	// Filter to current conference if user is logged in, otherwise show all
@@ -61,7 +69,18 @@ func runListMessageAreas(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 // It is a RunnableFunc-compatible wrapper; use runComposeMessageWithIH when a
 // shared InputHandler is available to prevent the editor goroutine from consuming
 // bytes after the editor exits.
-func runComposeMessage(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runComposeMessage(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	return runComposeMessageWithIH(e, s, getSessionIH(s), terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
 }
 
@@ -362,7 +381,18 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 }
 
 // runPromptAndComposeMessage lists areas, prompts for selection, checks permissions, and calls runComposeMessage.
-func runPromptAndComposeMessage(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running runPromptAndComposeMessage", nodeNumber)
 
 	if currentUser == nil {
@@ -503,12 +533,23 @@ func runPromptAndComposeMessage(e *MenuExecutor, s ssh.Session, terminal *term.T
 
 	// 4. Call runComposeMessage with the selected Area Tag
 	// Pass the area tag as the argument string
-	return runComposeMessage(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, selectedArea.Tag, outputMode, termWidth, termHeight)
+	return runComposeMessage(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, selectedArea.Tag)
 }
 
 // runReadMsgs handles reading messages from the user's current area.
 // Delegates to runMessageReader which uses Pascal-style MSGHDR templates and lightbar navigation.
-func runReadMsgs(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running READMSGS", nodeNumber)
 
 	if currentUser == nil {
@@ -535,7 +576,7 @@ func runReadMsgs(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 		if _, statErr := os.Stat(selPath); statErr == nil {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Please select a message header style.|07\r\n")), outputMode)
 			time.Sleep(500 * time.Millisecond)
-			runGetHeaderType(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, "", outputMode, termWidth, termHeight)
+			runGetHeaderType(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 		}
 	}
 
@@ -614,7 +655,18 @@ func runReadMsgs(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMa
 }
 
 // runNewscan handles the message newscan with Pascal-style GetScanType setup and multi-area flow.
-func runNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runNewscan(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running NEWSCAN for user %s", nodeNumber, currentUser.Handle)
 
 	// Refresh user from the in-process manager so we pick up any newscan
@@ -656,7 +708,16 @@ func sanitizeControlChars(s string) string {
 }
 
 // runSelectMessageArea displays message areas and prompts the user to select one.
-func runSelectMessageArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	log.Printf("DEBUG: Node %d: Running SELECTMSGAREA", nodeNumber)
 
 	if currentUser == nil {
@@ -828,7 +889,17 @@ func runSelectMessageArea(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 // runSendPrivateMail handles sending private mail to another user.
 // It validates the recipient exists and sets the MSG_PRIVATE flag.
-func runSendPrivateMail(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running SENDPRIVMAIL", nodeNumber)
 
 	if currentUser == nil {
@@ -1011,7 +1082,18 @@ func runSendPrivateMail(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runReadPrivateMail handles reading private mail for the current user.
 // It filters messages to only show those addressed to the current user with MSG_PRIVATE flag.
-func runReadPrivateMail(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running READPRIVMAIL", nodeNumber)
 
 	if currentUser == nil {
@@ -1134,7 +1216,18 @@ func runReadPrivateMail(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runListPrivateMail handles listing private mail for the current user.
 // It temporarily switches to the PRIVMAIL area and calls the standard list function.
-func runListPrivateMail(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runListPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running LISTPRIVMAIL", nodeNumber)
 
 	if currentUser == nil {
@@ -1161,7 +1254,7 @@ func runListPrivateMail(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	currentUser.CurrentMessageAreaTag = privmailArea.Tag
 
 	// Call standard list function
-	updatedUser, nextMenu, err := runListMsgs(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+	updatedUser, nextMenu, err := runListMsgs(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 
 	// Restore original area
 	if updatedUser != nil {

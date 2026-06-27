@@ -21,7 +21,17 @@ import (
 
 // runAuthenticate handles the RUN:AUTHENTICATE command.
 // Update signature to return three values
-func runAuthenticate(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	// If already logged in, maybe show an error or just return?
 	if currentUser != nil {
 		log.Printf("WARN: Node %d: User %s tried to run AUTHENTICATE while already logged in.", nodeNumber, currentUser.Handle)
@@ -421,7 +431,13 @@ func readPasswordSecurely(s ssh.Session, terminal *term.Terminal, outputMode ans
 }
 
 // runNewMailScan checks for new private mail and displays a count to the user.
-func runNewMailScan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -496,7 +512,13 @@ func runNewMailScan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, use
 
 // runLoginDisplayFile displays an ANSI file during the login sequence.
 // The filename is passed via the args parameter (from LoginItem.Data).
-func runLoginDisplayFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runLoginDisplayFile(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	filename := strings.TrimSpace(args)
 	if filename == "" {
 		log.Printf("WARN: Node %d: DISPLAYFILE called with no filename", nodeNumber)
@@ -517,7 +539,11 @@ func runLoginDisplayFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 // runLoginDoor executes a script/program during the login sequence.
 // The script path is passed via the args parameter (from LoginItem.Data).
 // The node number is passed as the first argument to the script.
-func runLoginDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
+	s := c.s
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+
 	scriptPath := strings.TrimSpace(args)
 	if scriptPath == "" {
 		log.Printf("WARN: Node %d: RUNDOOR called with no script path", nodeNumber)
@@ -548,7 +574,16 @@ func runLoginDoor(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userM
 
 // runFastLogin presents the FASTLOGN menu inline during the login sequence.
 // Returns a GOTO action if the user chooses to skip/jump, or empty string to continue.
-func runFastLogin(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running FASTLOGIN inline for user %s", nodeNumber, currentUser.Handle)
 
 	// Load FASTLOGN menu definition (.MNU) for CLR/CLS + prompt behavior
@@ -763,7 +798,7 @@ func (e *MenuExecutor) loginPausePrompt(s ssh.Session, terminal *term.Terminal, 
 // RunLoginSequence is the exported entry point for running the login sequence from main.go.
 // Returns the next menu name to enter (e.g., "MAIN") or "LOGOFF".
 func (e *MenuExecutor) RunLoginSequence(s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode, termWidth int, termHeight int) (string, error) {
-	_, nextAction, err := runFullLoginSequence(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, "", outputMode, termWidth, termHeight)
+	_, nextAction, err := runFullLoginSequence(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 	if err != nil {
 		return "LOGOFF", err
 	}
@@ -778,12 +813,23 @@ func (e *MenuExecutor) RunLoginSequence(s ssh.Session, terminal *term.Terminal, 
 }
 
 // runFullLoginSequence executes the configurable login sequence from login.json.
-func runFullLoginSequence(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	loginSequence := e.GetLoginSequence()
 	log.Printf("INFO: Node %d: Running FULL_LOGIN_SEQUENCE for user %s (%d items configured)", nodeNumber, currentUser.Handle, len(loginSequence))
 
 	// Build dispatch map for login item commands
-	type loginHandler func(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error)
+	type loginHandler func(c *cmdCtx, args string) (*user.User, string, error)
 
 	handlers := map[string]loginHandler{
 		"LASTCALLS":        runLastCallers,
@@ -828,7 +874,7 @@ func runFullLoginSequence(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 			// Call the DOOR: handler from RunRegistry
 			if doorFunc, exists := e.RunRegistry["DOOR:"]; exists {
-				updatedUser, nextAction, err = doorFunc(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, doorName, outputMode, termWidth, termHeight)
+				updatedUser, nextAction, err = doorFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, doorName)
 				if updatedUser != nil {
 					currentUser = updatedUser
 				}
@@ -850,7 +896,7 @@ func runFullLoginSequence(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 				itemArgs = item.Data
 			}
 
-			updatedUser, nextAction, err = handler(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, itemArgs, outputMode, termWidth, termHeight)
+			updatedUser, nextAction, err = handler(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, itemArgs)
 			if updatedUser != nil {
 				currentUser = updatedUser
 			}

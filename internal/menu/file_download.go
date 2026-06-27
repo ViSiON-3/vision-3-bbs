@@ -18,7 +18,14 @@ import (
 )
 
 // runClearBatch empties the user's tagged-file batch queue.
-func runClearBatch(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runClearBatch(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -252,7 +259,16 @@ func (e *MenuExecutor) downloadLoop(
 }
 
 // runDownloadFile prompts the user for a filename and enters the download loop.
-func runDownloadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runDownloadFile(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -293,7 +309,16 @@ func runDownloadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 
 // runBatchDownload transfers the user's already-tagged batch files.
 // Download ACS is re-validated per-area at transfer time.
-func runBatchDownload(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runBatchDownload(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}

@@ -7,8 +7,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio" // <-- Added import
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
 	"io"
 	"log"
 	"os"
@@ -299,7 +297,16 @@ func saveOnelinerRecords(onelinerPath string, records []onelinerRecord) error {
 }
 
 // runOneliners displays the oneliners using templates.
-func runOneliners(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running ONELINER", nodeNumber)
 
 	onelinerPath := filepath.Join("data", "oneliners.json")

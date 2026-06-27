@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -100,10 +99,15 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 
 // runPrintNews displays news items new since last login (or Always-flagged items).
 // Maps to V2's PrintNews(0, True) called at login.
-func runPrintNews(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -145,10 +149,16 @@ func runPrintNews(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runListNews presents all visible news items in a list and lets users read them.
 // Maps to V2's PrintNews(0, False) — show all regardless of date.
-func runListNews(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	if currentUser == nil {
 		return currentUser, "", nil
 	}

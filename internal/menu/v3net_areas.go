@@ -29,7 +29,15 @@ type v3netAreaEntry struct {
 	subscribed bool
 }
 
-func runV3NetAreas(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, _ *user.UserMgr, currentUser *user.User, _ int, _ time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	if currentUser == nil || e.V3NetStatus == nil {
 		return nil, "", nil
 	}

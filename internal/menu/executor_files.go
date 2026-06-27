@@ -216,7 +216,16 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 }
 
 // runUploadFile is the RunnableFunc wrapper for UPLOADFILE menu commands.
-func runUploadFile(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runUploadFile(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to upload files.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -574,12 +583,34 @@ func fileColumnEnabled(u *user.User, col string, extended bool) bool {
 }
 
 // runListFilesExtended displays a file listing with all columns visible regardless of user config.
-func runListFilesExtended(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
-	return runListFiles(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, "EXTENDED", outputMode, termWidth, termHeight)
+func runListFilesExtended(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
+	return runListFiles(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "EXTENDED")
 }
 
 // runListFiles displays a paginated list of files in the current file area.
-func runListFiles(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	extendedMode := false
 	for _, tok := range strings.Fields(args) {
 		if strings.EqualFold(tok, "EXTENDED") {
@@ -1336,7 +1367,17 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 }
 
 // runListFileAreas displays a list of file areas using templates.
-func runListFileAreas(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runListFileAreas(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running LISTFILEAR", nodeNumber)
 
 	if currentUser == nil {
@@ -1380,7 +1421,18 @@ func runListFileAreas(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 
 // runSelectFileAreaDispatch checks the user/server fileListingMode setting and
 // dispatches to either the lightbar or classic text-mode file area selector.
-func runSelectFileAreaDispatch(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runSelectFileAreaDispatch(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	mode := ""
 	if currentUser != nil {
 		mode = currentUser.FileListingMode
@@ -1389,14 +1441,23 @@ func runSelectFileAreaDispatch(e *MenuExecutor, s ssh.Session, terminal *term.Te
 		mode = e.ServerCfg.FileListingMode
 	}
 	if strings.EqualFold(mode, "classic") {
-		return runSelectFileArea(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+		return runSelectFileArea(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 	}
-	return runSelectFileAreaLightbar(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+	return runSelectFileAreaLightbar(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 }
 
 // runSelectFileArea prompts the user for a file area tag and changes the current user's
 // active file area if valid and accessible (classic text-mode).
-func runSelectFileArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	log.Printf("DEBUG: Node %d: Running SELECTFILEAREA", nodeNumber)
 
 	if currentUser == nil {

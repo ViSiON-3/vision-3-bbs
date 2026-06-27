@@ -188,7 +188,16 @@ func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, termin
 const chatContPrefix = "|08      \xC0|07 "
 const chatContPrefixLen = 8
 
-func runChat(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runChat(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -231,7 +240,7 @@ func runChat(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManage
 	//   Row height      : input prompt (last row; safe because chatReadLine never writes \n there)
 	const chatHeaderRows = 5
 	chatTop := chatHeaderRows + 1 // row 6
-	scrollBottom := height - 3   // last row of chat scroll region
+	scrollBottom := height - 3    // last row of chat scroll region
 	if scrollBottom < chatTop {
 		scrollBottom = chatTop
 	}

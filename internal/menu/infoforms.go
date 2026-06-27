@@ -26,9 +26,9 @@ import (
 // InfoFormConfig holds sysop-configured infoform settings.
 // Maps to V2's Cfg.InfoformStr[1..5], Cfg.Infoformlvl[1..5], Cfg.RequiredForms.
 type InfoFormConfig struct {
-	Descriptions [5]string `json:"descriptions"` // Form descriptions (V2: InfoformStr)
-	MinLevels    [5]int    `json:"min_levels"`    // Minimum access level per form (V2: Infoformlvl)
-	RequiredForms string   `json:"required_forms"` // Which forms are required, e.g. "15" = forms 1 and 5
+	Descriptions  [5]string `json:"descriptions"`   // Form descriptions (V2: InfoformStr)
+	MinLevels     [5]int    `json:"min_levels"`     // Minimum access level per form (V2: Infoformlvl)
+	RequiredForms string    `json:"required_forms"` // Which forms are required, e.g. "15" = forms 1 and 5
 }
 
 // InfoFormResponse holds a user's completed answers for a specific form.
@@ -70,8 +70,8 @@ func loadInfoFormConfig(rootConfigPath string) (*InfoFormConfig, error) {
 		if os.IsNotExist(err) {
 			// Return defaults matching V2 (CONFIG.PAS:73-78)
 			return &InfoFormConfig{
-				Descriptions: [5]string{"New User Application", "", "", "", ""},
-				MinLevels:    [5]int{0, 0, 0, 0, 0},
+				Descriptions:  [5]string{"New User Application", "", "", "", ""},
+				MinLevels:     [5]int{0, 0, 0, 0, 0},
 				RequiredForms: "",
 			}, nil
 		}
@@ -275,10 +275,15 @@ func parseTemplateFile(rootConfigPath string, formNum int) (*parsedTemplate, err
 
 // runInfoForms is the main infoforms menu — lists available forms and lets users fill/view them.
 // Maps to V2's Infoforms procedure in RUMORS.PAS:117-210.
-func runInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -691,10 +696,14 @@ func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runInfoFormView lets a user view their own completed forms.
 // Maps to V2's ShowInfoForms call pattern.
-func runInfoFormView(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runInfoFormView(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -722,10 +731,15 @@ func runInfoFormView(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runInfoFormHunt lets sysops browse all users' completed forms.
 // Maps to V2's InfoFormHunt in MAINMENU.PAS:1161.
-func runInfoFormHunt(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runInfoFormHunt(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -808,10 +822,15 @@ func runInfoFormHunt(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runInfoFormRequired checks and forces required forms during login sequence.
 // Maps to V2's GETLOGIN.PAS:1592 required forms enforcement.
-func runInfoFormRequired(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runInfoFormRequired(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -858,10 +877,16 @@ func runInfoFormRequired(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 
 // runInfoFormNuke lets sysops delete all form responses for a specific user.
 // Maps to V2's nuke all infoforms (MAINMENU.PAS:1580-1592).
-func runInfoFormNuke(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runInfoFormNuke(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil

@@ -7,19 +7,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
-	term "golang.org/x/term"
-
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/registry"
 )
 
-func runV3NetRegistry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	_ *user.UserMgr, currentUser *user.User, _ int, _ time.Time, _ string,
-	outputMode ansi.OutputMode, termWidth int, termHeight int,
-) (*user.User, string, error) {
+func runV3NetRegistry(c *cmdCtx, _ string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	if currentUser == nil {
 		return nil, "", nil
 	}

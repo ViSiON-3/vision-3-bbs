@@ -10,21 +10,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"golang.org/x/term"
 )
 
 // runSelectFileAreaLightbar is the lightbar version of runSelectFileArea.
 // It mirrors runSelectMessageAreaLightbar exactly, adapted for file areas.
-func runSelectFileAreaLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User,
-	nodeNumber int, sessionStartTime time.Time, args string,
-	outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	log.Printf("DEBUG: Node %d: Running SELECTFILEAREA (lightbar)", nodeNumber)
 
@@ -55,7 +60,7 @@ func runSelectFileAreaLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Te
 
 	if errTop != nil || errMid != nil {
 		log.Printf("WARN: Node %d: FILEAREA templates unavailable (%v/%v), using text mode", nodeNumber, errTop, errMid)
-		return runSelectFileArea(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+		return runSelectFileArea(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 	}
 
 	processedMidTemplate := string(ansi.ReplacePipeCodes(midBytes))

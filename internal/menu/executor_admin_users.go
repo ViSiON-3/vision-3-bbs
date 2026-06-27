@@ -22,7 +22,16 @@ import (
 )
 
 // runListUsers displays a list of users, sorted alphabetically.
-func runListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running LISTUSERS", nodeNumber)
 
 	// 1. Load Templates (Corrected filenames)
@@ -321,7 +330,18 @@ func adminUserLightbarBrowser(s ssh.Session, terminal *term.Terminal, users []*u
 	}
 }
 
-func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runAdminListUsers(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	adminCursorHidden := e.hideCursorIfNeeded(terminal, outputMode, cursorHideContextDefault)
 	if adminCursorHidden {
 		defer e.showCursorIfHidden(terminal, outputMode, adminCursorHidden)
@@ -1152,7 +1172,15 @@ func runAdminListUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 }
 
 // runPendingValidationNotice notifies SysOps when users are awaiting validation.
-func runPendingValidationNotice(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runPendingValidationNotice(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	if currentUser == nil || userManager == nil {
 		return nil, "", nil
 	}
@@ -1177,7 +1205,15 @@ func runPendingValidationNotice(e *MenuExecutor, s ssh.Session, terminal *term.T
 }
 
 // runAdminToggleAllowNewUsers toggles the allowNewUsers config flag and persists it to config.json.
-func runAdminToggleAllowNewUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runAdminToggleAllowNewUsers(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -1211,7 +1247,18 @@ func runAdminToggleAllowNewUsers(e *MenuExecutor, s ssh.Session, terminal *term.
 }
 
 // runValidateUser shows a lightbar-style pending user list with details and validates on Enter.
-func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runValidateUser(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running VALIDATEUSER", nodeNumber)
 
 	validateCursorHidden := e.hideCursorIfNeeded(terminal, outputMode, cursorHideContextDefault)
@@ -2081,7 +2128,18 @@ func runValidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 }
 
 // runNewUserValidation checks for unvalidated users and prompts to review them.
-func runNewUserValidation(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runNewUserValidation(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running NEWUSERVAL", nodeNumber)
 
 	if currentUser == nil {
@@ -2132,7 +2190,7 @@ func runNewUserValidation(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	if answer {
 		// User said Yes - launch validate user
-		return runValidateUser(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+		return runValidateUser(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 	}
 
 	// User said No - continue
@@ -2140,7 +2198,18 @@ func runNewUserValidation(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 }
 
 // runUnvalidateUser removes validation status from a user account.
-func runUnvalidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runUnvalidateUser(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running UNVALIDATEUSER", nodeNumber)
 
 	if currentUser == nil {
@@ -2237,7 +2306,18 @@ func runUnvalidateUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 }
 
 // runBanUser quickly bans a user by setting access level to 0 and validation to false.
-func runBanUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running BANUSER", nodeNumber)
 
 	if currentUser == nil {
@@ -2348,7 +2428,18 @@ func runBanUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userMan
 }
 
 // runDeleteUser soft-deletes a user by setting DeletedUser=true and recording the deletion timestamp.
-func runDeleteUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runDeleteUser(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running DELETEUSER", nodeNumber)
 
 	if currentUser == nil {
@@ -2461,7 +2552,18 @@ func runDeleteUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, user
 
 // runPurgeUsers permanently removes soft-deleted users that have exceeded the
 // configured retention period (deletedUserRetentionDays in config.json).
-func runPurgeUsers(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running PURGEUSERS", nodeNumber)
 
 	if currentUser == nil {

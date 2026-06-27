@@ -20,7 +20,14 @@ import (
 // runEditFileRecord implements the EDITFILERECORD sysop command for reviewing
 // uploaded files one at a time with actions to change description, rename,
 // delete, move, skip, or quit.
-func runEditFileRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if currentUser == nil || e.FileMgr == nil {
 		return currentUser, "", nil
 	}

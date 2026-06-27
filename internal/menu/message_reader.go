@@ -16,13 +16,13 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -513,8 +513,7 @@ readerLoop:
 				continue
 
 			case 'L': // List messages in current area
-				updatedUser, nextAction, listErr := runListMsgs(e, s, terminal, userManager, currentUser,
-					nodeNumber, sessionStartTime, "", outputMode, termWidth, termHeight)
+				updatedUser, nextAction, listErr := runListMsgs(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 				if updatedUser != nil {
 					currentUser = updatedUser
 				}
@@ -1291,9 +1290,16 @@ func discoverMessageHeaders(templatesPath string) ([]MessageHeaderTemplate, erro
 
 // runGetHeaderType allows the user to select a message header style (unlimited templates via lightbar).
 // Discovers all MSGHDR.*.ans templates dynamically and presents them in a lightbar menu.
-func runGetHeaderType(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return nil, "", nil

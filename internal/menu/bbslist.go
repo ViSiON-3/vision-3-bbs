@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -26,17 +26,17 @@ import (
 // with hostname + separate ports for telnet/SSH, plus web URL.
 type BBSListing struct {
 	ID          int       `json:"id"`
-	Name        string    `json:"name"`         // BBS name (V2: Name/Mstr)
-	Sysop       string    `json:"sysop"`        // SysOp name
-	Address     string    `json:"address"`      // Hostname or IP (V2: Phone)
-	TelnetPort  string    `json:"telnet_port"`  // Telnet port (blank = none)
-	SSHPort     string    `json:"ssh_port"`     // SSH port (blank = none)
-	Web         string    `json:"web"`          // Web URL
-	Software    string    `json:"software"`     // BBS software (V2: Ware/Sstr)
-	Description string    `json:"description"`  // Extended description
-	AddedBy     string    `json:"added_by"`     // Username who added it (V2: Leftby)
+	Name        string    `json:"name"`        // BBS name (V2: Name/Mstr)
+	Sysop       string    `json:"sysop"`       // SysOp name
+	Address     string    `json:"address"`     // Hostname or IP (V2: Phone)
+	TelnetPort  string    `json:"telnet_port"` // Telnet port (blank = none)
+	SSHPort     string    `json:"ssh_port"`    // SSH port (blank = none)
+	Web         string    `json:"web"`         // Web URL
+	Software    string    `json:"software"`    // BBS software (V2: Ware/Sstr)
+	Description string    `json:"description"` // Extended description
+	AddedBy     string    `json:"added_by"`    // Username who added it (V2: Leftby)
 	AddedDate   time.Time `json:"added_date"`
-	Verified    bool      `json:"verified"`     // SysOp-verified flag
+	Verified    bool      `json:"verified"` // SysOp-verified flag
 }
 
 // bbsListData holds all BBS listings.
@@ -124,10 +124,15 @@ func bbsListConnectionSummary(entry *BBSListing) string {
 // runBBSList displays BBS listings in a split-panel lightbar interface.
 // Left panel: scrollable BBS name list with highlight bar.
 // Right panel: details for the currently selected entry.
-func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -164,15 +169,15 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	// Layout constants.
-	const headerRows = 2   // title + separator
-	const hintRows = 2     // separator + hint line
-	leftPanelWidth := 30   // BBS name list width
+	const headerRows = 2 // title + separator
+	const hintRows = 2   // separator + hint line
+	leftPanelWidth := 30 // BBS name list width
 	if termWidth < 60 {
 		leftPanelWidth = termWidth / 2
 	}
 	rightPanelCol := leftPanelWidth + 1 // 1-indexed column where right panel starts
 	rightPanelWidth := termWidth - leftPanelWidth
-	listStartRow := headerRows + 1      // first row of BBS list items
+	listStartRow := headerRows + 1 // first row of BBS list items
 	separatorRow := termHeight - 1
 	hintRow := termHeight
 	visibleRows := separatorRow - listStartRow
@@ -557,10 +562,13 @@ func runBBSList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runBBSListAdd prompts the user to add a new BBS listing.
 // Maps to V2's AddBBS procedure (BBSLIST.PAS lines 68-113).
-func runBBSListAdd(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -820,10 +828,13 @@ func bbsListEditEntry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // runBBSListEdit allows a user to edit their own BBS listing (or any if sysop).
 // Maps to V2's ChangeBBS procedure with ownership check.
-func runBBSListEdit(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runBBSListEdit(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -903,10 +914,15 @@ func runBBSListEdit(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 }
 
 // runBBSListDelete allows a co-sysop or above to delete a BBS listing.
-func runBBSListDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runBBSListDelete(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -981,10 +997,12 @@ func runBBSListDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 }
 
 // runBBSListVerify allows a sysop to toggle the verified flag on a listing.
-func runBBSListVerify(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runBBSListVerify(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	outputMode := c.outputMode
 
 	if currentUser == nil {
 		return currentUser, "", nil

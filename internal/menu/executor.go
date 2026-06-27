@@ -190,7 +190,22 @@ type IPLockoutChecker interface {
 
 // RunnableFunc defines the signature for functions executable via RUN:
 // Returns: authenticatedUser, nextAction (e.g., "GOTO:MENU"), err
-type RunnableFunc func(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (authenticatedUser *user.User, nextAction string, err error)
+// cmdCtx bundles the per-invocation context shared by every RunnableFunc,
+// replacing an 11-parameter signature that was repeated across ~140 handlers.
+type cmdCtx struct {
+	e                *MenuExecutor
+	s                ssh.Session
+	terminal         *term.Terminal
+	userManager      *user.UserMgr
+	currentUser      *user.User
+	nodeNumber       int
+	sessionStartTime time.Time
+	outputMode       ansi.OutputMode
+	termWidth        int
+	termHeight       int
+}
+
+type RunnableFunc func(c *cmdCtx, args string) (authenticatedUser *user.User, nextAction string, err error)
 
 // AutoRunTracker definition removed, using the one from types.go
 
@@ -431,7 +446,13 @@ func (e *MenuExecutor) setUserFileConference(u *user.User, conferenceID int) {
 // registerPlaceholderRunnables adds dummy functions for testing
 func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use local RunnableFunc
 	// Keep READMAIL as a placeholder for now
-	registry["READMAIL"] = func(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+	registry["READMAIL"] = func(c *cmdCtx, args string) (*user.User, string, error) {
+		e := c.e
+		terminal := c.terminal
+		currentUser := c.currentUser
+		nodeNumber := c.nodeNumber
+		outputMode := c.outputMode
+
 		if currentUser == nil {
 			log.Printf("WARN: Node %d: READMAIL called without logged in user.", nodeNumber)
 			msg := e.LoadedStrings.ExecReadmailLogin
@@ -452,7 +473,18 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 	}
 
 	// Register DOOR handler — delegates to door_handler.go
-	registry["DOOR:"] = func(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, doorName string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+	registry["DOOR:"] = func(c *cmdCtx, doorName string) (*user.User, string, error) {
+		e := c.e
+		s := c.s
+		terminal := c.terminal
+		userManager := c.userManager
+		currentUser := c.currentUser
+		nodeNumber := c.nodeNumber
+		sessionStartTime := c.sessionStartTime
+		outputMode := c.outputMode
+		termWidth := c.termWidth
+		termHeight := c.termHeight
+
 		if currentUser == nil {
 			log.Printf("WARN: Node %d: DOOR:%s called without logged in user.", nodeNumber, doorName)
 			msg := e.LoadedStrings.ExecDoorLogin
@@ -650,12 +682,29 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["V3NETREGISTRY"] = runV3NetRegistry             // V3Net network registry browser
 }
 
-func runPlaceholderCommand(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runPlaceholderCommand(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	e.showUndefinedMenuInput(terminal, outputMode, nodeNumber)
 	return currentUser, "", nil
 }
 
-func runMainLogoffCommand(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runMainLogoffCommand(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	prompt := e.LoadedStrings.LogOffStr
 	if prompt == "" {
 		prompt = "\r\n|07Log off now? @"
@@ -673,10 +722,16 @@ func runMainLogoffCommand(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		return currentUser, "", nil
 	}
 
-	return runImmediateLogoffCommand(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, args, outputMode, termWidth, termHeight)
+	return runImmediateLogoffCommand(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 }
 
-func runImmediateLogoffCommand(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runImmediateLogoffCommand(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+
 	if displayErr := e.displayFile(terminal, "GOODBYE.ANS", outputMode); displayErr != nil {
 		log.Printf("WARN: Node %d: Failed to display GOODBYE.ANS before logoff: %v", nodeNumber, displayErr)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecGoodbye)), outputMode)
@@ -687,7 +742,17 @@ func runImmediateLogoffCommand(e *MenuExecutor, s ssh.Session, terminal *term.Te
 }
 
 // runShowStats displays the user statistics screen (YOURSTAT.ANS).
-func runShowStats(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	if currentUser == nil {
 		log.Printf("WARN: Node %d: SHOWSTATS called without logged in user.", nodeNumber)
 		msg := e.LoadedStrings.ExecStatsLogin
@@ -1674,7 +1739,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 		if runnableFunc, exists := e.RunRegistry[runTarget]; exists {
 			log.Printf("DEBUG: Node %d: Calling registered function for RUN:%s", nodeNumber, runTarget)
 			// RunnableFunc now returns user, nextActionString, error
-			authUser, nextActionStr, runErr := runnableFunc(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, runArgs, outputMode, termWidth, termHeight)
+			authUser, nextActionStr, runErr := runnableFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, runArgs)
 			if runErr != nil {
 				if errors.Is(runErr, io.EOF) {
 					log.Printf("INFO: Node %d: User disconnected during RUN:%s execution.", nodeNumber, runTarget)
@@ -1724,7 +1789,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 		log.Printf("INFO: Executing DOOR action: '%s'", doorTarget)
 		if doorFunc, exists := e.RunRegistry["DOOR:"]; exists {
 			// DOOR runnable returns user, "", error
-			userResultDoor, nextActionStrDoor, doorErr := doorFunc(e, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, doorTarget, outputMode, termWidth, termHeight)
+			userResultDoor, nextActionStrDoor, doorErr := doorFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, doorTarget)
 			if doorErr != nil {
 				if errors.Is(doorErr, io.EOF) {
 					log.Printf("INFO: Node %d: User disconnected during DOOR:%s execution.", nodeNumber, doorTarget)
@@ -2240,7 +2305,15 @@ var ansiBg = map[int]int{
 }
 
 // runShowVersion displays configured version information.
-func runShowVersion(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runShowVersion(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	nodeNumber := c.nodeNumber
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
+
 	log.Printf("DEBUG: Node %d: Running SHOWVERSION", nodeNumber)
 
 	versionTemplate := e.LoadedStrings.ExecVersionString

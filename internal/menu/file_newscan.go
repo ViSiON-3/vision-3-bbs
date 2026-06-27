@@ -11,9 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
-	"golang.org/x/term"
-
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
@@ -22,10 +19,16 @@ import (
 )
 
 // runFileNewscan scans file areas for files uploaded since the user's last login.
-func runFileNewscan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode,
-	termWidth int, termHeight int) (*user.User, string, error) {
+func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -176,9 +179,17 @@ type fileAreaListItem struct {
 }
 
 // runFileNewscanConfig allows users to tag/untag file areas for their personal file newscan.
-func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
-	sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
+func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	userManager := c.userManager
+	currentUser := c.currentUser
+	nodeNumber := c.nodeNumber
+	sessionStartTime := c.sessionStartTime
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanConfigLoginRequired)), outputMode)
@@ -208,10 +219,18 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		ai, aj := allAreas[i], allAreas[j]
 		ci, oki := confPosMap[ai.ConferenceID]
 		cj, okj := confPosMap[aj.ConferenceID]
-		if !oki || ci <= 0 { ci = 1<<31 - 1 }
-		if !okj || cj <= 0 { cj = 1<<31 - 1 }
-		if ci != cj { return ci < cj }
-		if ai.ConferenceID != aj.ConferenceID { return ai.ConferenceID < aj.ConferenceID }
+		if !oki || ci <= 0 {
+			ci = 1<<31 - 1
+		}
+		if !okj || cj <= 0 {
+			cj = 1<<31 - 1
+		}
+		if ci != cj {
+			return ci < cj
+		}
+		if ai.ConferenceID != aj.ConferenceID {
+			return ai.ConferenceID < aj.ConferenceID
+		}
 		return ai.ID < aj.ID
 	})
 
@@ -219,11 +238,15 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	currentConfID := -1
 	for i := range allAreas {
 		area := &allAreas[i]
-		if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) { continue }
+		if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
+			continue
+		}
 		if area.ConferenceID != currentConfID {
 			currentConfID = area.ConferenceID
 			confName := confNameMap[area.ConferenceID]
-			if confName == "" { confName = "General" }
+			if confName == "" {
+				confName = "General"
+			}
 			accessibleAreas = append(accessibleAreas, fileAreaListItem{confName: confName, isHeader: true})
 		}
 		accessibleAreas = append(accessibleAreas, fileAreaListItem{area: area, confName: confNameMap[area.ConferenceID]})
@@ -241,27 +264,43 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	}
 
 	currentIdx := 0
-	for currentIdx < len(accessibleAreas) && accessibleAreas[currentIdx].isHeader { currentIdx++ }
+	for currentIdx < len(accessibleAreas) && accessibleAreas[currentIdx].isHeader {
+		currentIdx++
+	}
 
-	if termHeight <= 0 { termHeight = currentUser.ScreenHeight }
-	if termHeight <= 0 { termHeight = 24 }
-	if termWidth <= 0 { termWidth = currentUser.ScreenWidth }
-	if termWidth <= 0 { termWidth = 80 }
+	if termHeight <= 0 {
+		termHeight = currentUser.ScreenHeight
+	}
+	if termHeight <= 0 {
+		termHeight = 24
+	}
+	if termWidth <= 0 {
+		termWidth = currentUser.ScreenWidth
+	}
+	if termWidth <= 0 {
+		termWidth = 80
+	}
 
 	contentWidth := 48
 	leftPadding := (termWidth - contentWidth) / 2
-	if leftPadding < 0 { leftPadding = 0 }
+	if leftPadding < 0 {
+		leftPadding = 0
+	}
 
 	headerLines := 6
 	availableRows := termHeight - headerLines - 3
-	if availableRows < 5 { availableRows = 5 }
+	if availableRows < 5 {
+		availableRows = 5
+	}
 
 	viewportOffset := 0
 	previousIdx := -1
 	previousViewportOffset := 0
 
 	padRight := func(s string, width int) string {
-		if len(s) >= width { return s }
+		if len(s) >= width {
+			return s
+		}
 		return s + strings.Repeat(" ", width-len(s))
 	}
 
@@ -271,20 +310,34 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			return fmt.Sprintf("%s\x1b[0;96m %s\x1b[0m", paddingStr, item.confName)
 		}
 		prefix := "   "
-		if selected { prefix = " > " }
+		if selected {
+			prefix = " > "
+		}
 		statusIcon := " "
-		if tagged { statusIcon = "\xFB" }
+		if tagged {
+			statusIcon = "\xFB"
+		}
 		colorSeq := "\x1b[37m"
-		if selected { colorSeq = "\x1b[97;46m" }
+		if selected {
+			colorSeq = "\x1b[97;46m"
+		}
 		areaName := item.area.Name
-		if len(areaName) > 40 { areaName = areaName[:37] + "..." }
+		if len(areaName) > 40 {
+			areaName = areaName[:37] + "..."
+		}
 		var b strings.Builder
 		b.WriteString(paddingStr)
 		b.WriteString(colorSeq)
 		b.WriteString(prefix)
 		b.WriteString(padRight(areaName, 40))
 		b.WriteString(" [")
-		if tagged { b.WriteString("\x1b[96m"); b.WriteString(statusIcon); b.WriteString(colorSeq) } else { b.WriteString(statusIcon) }
+		if tagged {
+			b.WriteString("\x1b[96m")
+			b.WriteString(statusIcon)
+			b.WriteString(colorSeq)
+		} else {
+			b.WriteString(statusIcon)
+		}
 		b.WriteString("] \x1b[0m")
 		return b.String()
 	}
@@ -292,25 +345,39 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	adjustViewport := func() {
 		if currentIdx < viewportOffset {
 			viewportOffset = currentIdx
-			if currentIdx > 0 && accessibleAreas[currentIdx-1].isHeader { viewportOffset = currentIdx - 1 }
+			if currentIdx > 0 && accessibleAreas[currentIdx-1].isHeader {
+				viewportOffset = currentIdx - 1
+			}
 		}
-		if currentIdx >= viewportOffset+availableRows { viewportOffset = currentIdx - availableRows + 1 }
-		if viewportOffset < 0 { viewportOffset = 0 }
+		if currentIdx >= viewportOffset+availableRows {
+			viewportOffset = currentIdx - availableRows + 1
+		}
+		if viewportOffset < 0 {
+			viewportOffset = 0
+		}
 		maxOffset := len(accessibleAreas) - availableRows
-		if maxOffset < 0 { maxOffset = 0 }
-		if viewportOffset > maxOffset { viewportOffset = maxOffset }
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if viewportOffset > maxOffset {
+			viewportOffset = maxOffset
+		}
 	}
 
 	drawItems := func() {
 		itemStartLine := headerLines + 2
 		terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H", itemStartLine)), outputMode)
 		endIdx := viewportOffset + availableRows
-		if endIdx > len(accessibleAreas) { endIdx = len(accessibleAreas) }
+		if endIdx > len(accessibleAreas) {
+			endIdx = len(accessibleAreas)
+		}
 		lineNum := 0
 		for i := viewportOffset; i < endIdx && lineNum < availableRows; i++ {
 			item := accessibleAreas[i]
 			tagged := false
-			if !item.isHeader && item.area != nil { tagged = taggedMap[item.area.Tag] }
+			if !item.isHeader && item.area != nil {
+				tagged = taggedMap[item.area.Tag]
+			}
 			terminalio.WriteProcessedBytes(terminal, []byte("\x1b[2K"), outputMode)
 			line := formatAreaLine(item, i == currentIdx, tagged)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line+"\r\n")), outputMode)
@@ -333,7 +400,9 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 				terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H\x1b[2K", itemStartLine+ln)), outputMode)
 				item := accessibleAreas[idx]
 				tagged := false
-				if !item.isHeader && item.area != nil { tagged = taggedMap[item.area.Tag] }
+				if !item.isHeader && item.area != nil {
+					tagged = taggedMap[item.area.Tag]
+				}
 				line := formatAreaLine(item, idx == currentIdx, tagged)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 			}
@@ -360,7 +429,15 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	findNextSelectable := func(startIdx int, direction int) int {
 		idx := startIdx
-		for { idx += direction; if idx < 0 || idx >= len(accessibleAreas) { return startIdx }; if !accessibleAreas[idx].isHeader { return idx } }
+		for {
+			idx += direction
+			if idx < 0 || idx >= len(accessibleAreas) {
+				return startIdx
+			}
+			if !accessibleAreas[idx].isHeader {
+				return idx
+			}
+		}
 	}
 
 	terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25l"), outputMode)
@@ -373,43 +450,92 @@ func runFileNewscanConfig(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H", footerLine)), outputMode)
 	footerText := "\x1b[36mSPACE\x1b[93m:\x1b[37mToggle  \x1b[36mA\x1b[93m:\x1b[37mAll  \x1b[36mN\x1b[93m:\x1b[37mNone  \x1b[36mESC\x1b[93m:\x1b[37mExit\x1b[0m"
 	footerPadding := (termWidth - 34) / 2
-	if footerPadding > 0 { terminalio.WriteProcessedBytes(terminal, []byte(strings.Repeat(" ", footerPadding)), outputMode) }
+	if footerPadding > 0 {
+		terminalio.WriteProcessedBytes(terminal, []byte(strings.Repeat(" ", footerPadding)), outputMode)
+	}
 	terminalio.WriteProcessedBytes(terminal, []byte(footerText), outputMode)
 
 	for {
 		key, err := sessionIH.ReadKey()
 		if err != nil {
-			if errors.Is(err, io.EOF) { return nil, "LOGOFF", io.EOF }
+			if errors.Is(err, io.EOF) {
+				return nil, "LOGOFF", io.EOF
+			}
 			return nil, "", err
 		}
 		switch key {
 		case editor.KeyArrowUp, editor.KeyCtrlE:
-			if n := findNextSelectable(currentIdx, -1); n != currentIdx { currentIdx = n; adjustViewport(); smartRedraw() }
+			if n := findNextSelectable(currentIdx, -1); n != currentIdx {
+				currentIdx = n
+				adjustViewport()
+				smartRedraw()
+			}
 		case editor.KeyArrowDown, editor.KeyCtrlX:
-			if n := findNextSelectable(currentIdx, 1); n != currentIdx { currentIdx = n; adjustViewport(); smartRedraw() }
+			if n := findNextSelectable(currentIdx, 1); n != currentIdx {
+				currentIdx = n
+				adjustViewport()
+				smartRedraw()
+			}
 		case editor.KeyPageUp, editor.KeyCtrlR:
-			n := currentIdx; for m := 0; m < availableRows && n > 0; m++ { t := findNextSelectable(n, -1); if t == n { break }; n = t }
-			if n != currentIdx { currentIdx = n; adjustViewport(); drawItems(); previousIdx = currentIdx; previousViewportOffset = viewportOffset }
+			n := currentIdx
+			for m := 0; m < availableRows && n > 0; m++ {
+				t := findNextSelectable(n, -1)
+				if t == n {
+					break
+				}
+				n = t
+			}
+			if n != currentIdx {
+				currentIdx = n
+				adjustViewport()
+				drawItems()
+				previousIdx = currentIdx
+				previousViewportOffset = viewportOffset
+			}
 		case editor.KeyPageDown:
-			n := currentIdx; for m := 0; m < availableRows && n < len(accessibleAreas)-1; m++ { t := findNextSelectable(n, 1); if t == n { break }; n = t }
-			if n != currentIdx { currentIdx = n; adjustViewport(); drawItems(); previousIdx = currentIdx; previousViewportOffset = viewportOffset }
+			n := currentIdx
+			for m := 0; m < availableRows && n < len(accessibleAreas)-1; m++ {
+				t := findNextSelectable(n, 1)
+				if t == n {
+					break
+				}
+				n = t
+			}
+			if n != currentIdx {
+				currentIdx = n
+				adjustViewport()
+				drawItems()
+				previousIdx = currentIdx
+				previousViewportOffset = viewportOffset
+			}
 		case ' ', editor.KeyEnter:
 			if !accessibleAreas[currentIdx].isHeader {
 				area := accessibleAreas[currentIdx].area
-				if taggedMap[area.Tag] { delete(taggedMap, area.Tag) } else { taggedMap[area.Tag] = true }
+				if taggedMap[area.Tag] {
+					delete(taggedMap, area.Tag)
+				} else {
+					taggedMap[area.Tag] = true
+				}
 				ln := currentIdx - viewportOffset
 				terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H\x1b[2K", headerLines+2+ln)), outputMode)
 				line := formatAreaLine(accessibleAreas[currentIdx], true, taggedMap[area.Tag])
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 			}
 		case 'A', 'a':
-			for _, item := range accessibleAreas { if !item.isHeader { taggedMap[item.area.Tag] = true } }
+			for _, item := range accessibleAreas {
+				if !item.isHeader {
+					taggedMap[item.area.Tag] = true
+				}
+			}
 			drawItems()
 		case 'N', 'n':
-			taggedMap = make(map[string]bool); drawItems()
+			taggedMap = make(map[string]bool)
+			drawItems()
 		case editor.KeyEsc, 'Q', 'q':
 			var taggedTags []string
-			for tag := range taggedMap { taggedTags = append(taggedTags, tag) }
+			for tag := range taggedMap {
+				taggedTags = append(taggedTags, tag)
+			}
 			currentUser.TaggedFileAreaTags = taggedTags
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			if err := userManager.UpdateUser(currentUser); err != nil {
