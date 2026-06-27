@@ -806,7 +806,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		return renderActionBar()
 	}
 
-	readFieldInput := func(fieldLabel string, currentValue string, maxLen int) (string, error) {
+	readFieldInput := func(fieldLabel string, currentValue string, maxLen int, mask bool) (string, error) {
 		if adminCursorHidden {
 			_ = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h"), outputMode)
 			defer terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25l"), outputMode)
@@ -824,13 +824,21 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			return "", err
 		}
 
-		// Show current value
-		if err := terminalio.WriteProcessedBytes(terminal, []byte(currentValue), outputMode); err != nil {
-			return "", err
-		}
-
 		input := []rune(currentValue)
 		cursorIdx := len(input)
+
+		// display renders the editable buffer, masking it for secret fields.
+		display := func() string {
+			if mask {
+				return strings.Repeat("*", len(input))
+			}
+			return string(input)
+		}
+
+		// Show current value
+		if err := terminalio.WriteProcessedBytes(terminal, []byte(display()), outputMode); err != nil {
+			return "", err
+		}
 
 		for {
 			key, readErr := ih.ReadKey()
@@ -847,7 +855,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 				if cursorIdx > 0 {
 					input = append(input[:cursorIdx-1], input[cursorIdx:]...)
 					cursorIdx--
-					if err := writeAt(statusRow, 1, prompt+string(input)+"  "); err != nil {
+					if err := writeAt(statusRow, 1, prompt+display()+"  "); err != nil {
 						return "", err
 					}
 					cmd := fmt.Sprintf("\x1b[%d;%dH", statusRow, cursorPos+cursorIdx)
@@ -860,7 +868,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 					r := rune(key)
 					input = append(input[:cursorIdx], append([]rune{r}, input[cursorIdx:]...)...)
 					cursorIdx++
-					if err := writeAt(statusRow, 1, prompt+string(input)); err != nil {
+					if err := writeAt(statusRow, 1, prompt+display()); err != nil {
 						return "", err
 					}
 					cmd := fmt.Sprintf("\x1b[%d;%dH", statusRow, cursorPos+cursorIdx)
@@ -977,7 +985,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 		case 'a', 'A':
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("Handle", sel.Handle, 30); editErr == nil {
+			if newVal, editErr := readFieldInput("Handle", sel.Handle, 30, false); editErr == nil {
 				trimmedHandle := strings.TrimSpace(newVal)
 				if trimmedHandle != sel.Handle {
 					pendingChanges["handle"] = trimmedHandle
@@ -996,7 +1004,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		case 'b', 'B':
 			// Edit Real Name field
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("Real Name", sel.RealName, 50); editErr == nil {
+			if newVal, editErr := readFieldInput("Real Name", sel.RealName, 50, false); editErr == nil {
 				if newVal != sel.RealName {
 					pendingChanges["realname"] = newVal
 					statusMessage = "|10Field marked for update.|07"
@@ -1013,7 +1021,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 		case 'c', 'C':
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("Group/Location", sel.GroupLocation, 30); editErr == nil {
+			if newVal, editErr := readFieldInput("Group/Location", sel.GroupLocation, 30, false); editErr == nil {
 				if newVal != sel.GroupLocation {
 					pendingChanges["grouploc"] = newVal
 					statusMessage = "|10Field marked for update.|07"
@@ -1030,7 +1038,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 		case 'd', 'D':
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("Note", sel.PrivateNote, 50); editErr == nil {
+			if newVal, editErr := readFieldInput("Note", sel.PrivateNote, 50, false); editErr == nil {
 				if newVal != sel.PrivateNote {
 					pendingChanges["note"] = newVal
 					statusMessage = "|10Field marked for update.|07"
@@ -1047,7 +1055,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 		case 'e', 'E':
 			sel := users[selectedIndex]
-			if newVal, editErr := readFieldInput("Flags", sel.Flags, 20); editErr == nil {
+			if newVal, editErr := readFieldInput("Flags", sel.Flags, 20, false); editErr == nil {
 				if newVal != sel.Flags {
 					pendingChanges["flags"] = newVal
 					statusMessage = "|10Field marked for update.|07"
@@ -1065,7 +1073,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		case 'f', 'F':
 			sel := users[selectedIndex]
 			levelStr := fmt.Sprintf("%d", sel.AccessLevel)
-			if newVal, editErr := readFieldInput("Level", levelStr, 3); editErr == nil {
+			if newVal, editErr := readFieldInput("Level", levelStr, 3, false); editErr == nil {
 				if level, parseErr := strconv.Atoi(newVal); parseErr == nil {
 					// Protect User #1 from level reduction
 					if sel.ID == 1 && level < e.ServerCfg.SysOpLevel {
@@ -1114,7 +1122,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 		case 'p', 'P':
 			// Change password
-			if newPassword, editErr := readFieldInput("New Password", "", 50); editErr == nil {
+			if newPassword, editErr := readFieldInput("New Password", "", 50, true); editErr == nil {
 				if newPassword != "" {
 					pendingChanges["password"] = newPassword
 					statusMessage = "|10Password marked for update.|07"
@@ -1194,12 +1202,14 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		case '\r', '\n':
 			// Enter/Return pressed - do nothing (removed help text display)
 		case editor.KeyArrowUp:
-			if !cfg.pendingOnly || len(pendingChanges) == 0 {
+			// Block navigation while edits are staged (matches j/k handling) so
+			// a subsequent Save can't apply pendingChanges to a different user.
+			if len(pendingChanges) == 0 {
 				moveUp()
 				refresh = true
 			}
 		case editor.KeyArrowDown:
-			if !cfg.pendingOnly || len(pendingChanges) == 0 {
+			if len(pendingChanges) == 0 {
 				moveDown()
 				refresh = true
 			}

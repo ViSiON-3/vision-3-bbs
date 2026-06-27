@@ -21,7 +21,6 @@ import (
 )
 
 // runAuthenticate handles the RUN:AUTHENTICATE command.
-// Update signature to return three values
 func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -728,6 +727,13 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 			default:
 				if key >= 32 && key < 127 {
 					keyStr := strings.ToUpper(string(rune(key)))
+					if key == int('/') {
+						// Read second key for two-character CFG commands like /G,
+						// matching the non-lightbar fallback path below.
+						if nextKey, nextErr := ih.ReadKey(); nextErr == nil && nextKey >= 32 && nextKey < 127 {
+							keyStr = "/" + strings.ToUpper(string(rune(nextKey)))
+						}
+					}
 					for i, opt := range lightbarOptions {
 						if keyStr == opt.HotKey {
 							prev := selectedIndex
