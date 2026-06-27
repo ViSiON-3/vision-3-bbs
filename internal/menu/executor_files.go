@@ -512,6 +512,16 @@ func (e *MenuExecutor) runUploadFiles(
 
 		// Move file from incoming to target directory
 		finalPath := filepath.Join(targetDir, nf.name)
+		// Guard against clobbering a file that exists on disk but is absent from
+		// the metadata duplicate check above: os.Rename would overwrite it.
+		if _, statErr := os.Stat(finalPath); statErr == nil {
+			log.Printf("WARN: Node %d: Upload rejected, '%s' already exists on disk (not in metadata)", nodeNumber, nf.name)
+			duplicateCount++
+			os.Remove(incomingPath)
+			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
+			continue
+		}
 		if moveErr := os.Rename(incomingPath, finalPath); moveErr != nil {
 			log.Printf("ERROR: Node %d: Failed to move %s to area: %v", nodeNumber, nf.name, moveErr)
 			errMsg := fmt.Sprintf("\r\n|01Failed to accept '%s'.|07\r\n", nf.name)
