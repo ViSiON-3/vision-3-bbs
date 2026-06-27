@@ -46,14 +46,22 @@ var msgReaderOptions = []MsgLightbarOption{
 // LoColor 4 (dark red) distinguishes it from regular options.
 var msgReaderDeleteOption = MsgLightbarOption{Label: " Delete ", HotKey: 'D', LoColor: 4}
 
+// msgOwnershipFilter reports whether a message may be shown to the current user.
+// A nil filter means no filtering (all non-deleted messages are visible); a
+// non-nil filter is used for areas like PRIVMAIL where a user may only see their
+// own messages, regardless of how navigation arrives at a message number.
+type msgOwnershipFilter func(*message.DisplayMessage) bool
+
 // runMessageReader is the core message reading loop matching Pascal's Scanboard + Readcurbul.
 // It displays messages using MSGHDR.<n> templates with DataFile substitution,
 // shows a 10-option lightbar for navigation, and handles single-key input.
+// When msgFilter is non-nil, messages it rejects are skipped (in the direction of
+// the last navigation command) and never rendered.
 func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	sessionStartTime time.Time, outputMode ansi.OutputMode,
 	startMsg int, totalMsgCount int, isNewScan bool,
-	termWidth int, termHeight int) (*user.User, string, error) {
+	termWidth int, termHeight int, msgFilter msgOwnershipFilter) (*user.User, string, error) {
 
 	currentAreaID := currentUser.CurrentMessageAreaID
 	currentAreaTag := currentUser.CurrentMessageAreaTag
@@ -129,6 +137,9 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	currentMsgNum := startMsg
 	quitNewscan := false
+	// navDir is the direction (+1/-1) of the last navigation command; it steers
+	// the msgFilter skip so "previous" keeps moving backward past hidden messages.
+	navDir := 1
 
 readerLoop:
 	for {
@@ -149,6 +160,14 @@ readerLoop:
 		// Skip deleted messages
 		if currentMsg.IsDeleted {
 			currentMsgNum++
+			continue
+		}
+
+		// Ownership boundary (e.g. PRIVMAIL): never render a message the filter
+		// rejects, regardless of how navigation reached this number. Skip in the
+		// direction of the last navigation command so prev/next stay intuitive.
+		if msgFilter != nil && !msgFilter(currentMsg) {
+			currentMsgNum += navDir
 			continue
 		}
 
@@ -453,6 +472,7 @@ readerLoop:
 			switch selectedKey {
 			case 'N': // Next message
 				if currentMsgNum < totalMsgCount {
+					navDir = 1
 					currentMsgNum++
 					break scrollLoop // Exit scroll loop to load next message
 				} else {
@@ -486,6 +506,7 @@ readerLoop:
 
 			case 'S': // Prev - go back one message
 				if currentMsgNum > 1 {
+					navDir = -1
 					currentMsgNum--
 					break scrollLoop
 				} else {
@@ -496,12 +517,14 @@ readerLoop:
 				}
 
 			case 'T': // Thread
+				navDir = 1
 				handleThread(reader, e, terminal, outputMode, currentAreaID,
 					&currentMsgNum, totalMsgCount, currentMsg.Subject)
 				// Exit scroll loop to load new message if thread changed it
 				break scrollLoop
 
 			case 'J': // Jump to message number
+				navDir = 1
 				handleJump(reader, terminal, outputMode, &currentMsgNum, totalMsgCount, e.LoadedStrings.MsgJumpPrompt, e.LoadedStrings.MsgInvalidMsgNum)
 				// Exit scroll loop to load new message
 				break scrollLoop
@@ -513,7 +536,7 @@ readerLoop:
 				continue
 
 			case 'L': // List messages in current area
-				updatedUser, nextAction, listErr := runListMsgs(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
+				updatedUser, nextAction, listErr := runListMsgsFiltered(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "", msgFilter)
 				if updatedUser != nil {
 					currentUser = updatedUser
 				}
