@@ -1483,10 +1483,11 @@ func runUnvalidateUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	targetUser.Validated = false
-
-	if updateErr := userManager.UpdateUser(targetUser); updateErr != nil {
-		msg := fmt.Sprintf("\r\n\r\n|01Failed to update user: %v|07", updateErr)
+	// Route through the shared save path for optimistic locking, audit logging,
+	// and User #1 protection.
+	orig := map[int]time.Time{targetUser.ID: targetUser.UpdatedAt}
+	if statusMsg, saved := e.applyPendingUserChanges(userManager, currentUser, targetUser, map[string]interface{}{"validated": false}, orig); !saved {
+		msg := "\r\n\r\n" + statusMsg
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
 			if errors.Is(pauseErr, io.EOF) {
@@ -1494,7 +1495,7 @@ func runUnvalidateUser(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			return nil, "", pauseErr
 		}
-		return nil, "", updateErr
+		return nil, "", nil
 	}
 
 	success := fmt.Sprintf("\r\n\r\n|10User set to unvalidated: |15%s|10.|07", targetUser.Handle)
@@ -1604,11 +1605,10 @@ func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	targetUser.Validated = false
-	targetUser.AccessLevel = 0
-
-	if updateErr := userManager.UpdateUser(targetUser); updateErr != nil {
-		msg := fmt.Sprintf("\r\n\r\n|01Failed to update user: %v|07", updateErr)
+	// Route through the shared save path for optimistic locking and audit logging.
+	orig := map[int]time.Time{targetUser.ID: targetUser.UpdatedAt}
+	if statusMsg, saved := e.applyPendingUserChanges(userManager, currentUser, targetUser, map[string]interface{}{"validated": false, "level": 0}, orig); !saved {
+		msg := "\r\n\r\n" + statusMsg
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
 			if errors.Is(pauseErr, io.EOF) {
@@ -1616,7 +1616,7 @@ func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			return nil, "", pauseErr
 		}
-		return nil, "", updateErr
+		return nil, "", nil
 	}
 
 	success := fmt.Sprintf("\r\n\r\n|10User banned: |15%s|10 (level 0, unvalidated).|07", targetUser.Handle)
@@ -1726,12 +1726,11 @@ func runDeleteUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	targetUser.DeletedUser = true
-	now := time.Now()
-	targetUser.DeletedAt = &now
-
-	if updateErr := userManager.UpdateUser(targetUser); updateErr != nil {
-		msg := fmt.Sprintf("\r\n\r\n|01Failed to update user: %v|07", updateErr)
+	// Route through the shared save path for optimistic locking and audit logging
+	// (applyPendingUserChanges sets DeletedAt when "deleted" is true).
+	orig := map[int]time.Time{targetUser.ID: targetUser.UpdatedAt}
+	if statusMsg, saved := e.applyPendingUserChanges(userManager, currentUser, targetUser, map[string]interface{}{"deleted": true}, orig); !saved {
+		msg := "\r\n\r\n" + statusMsg
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
 			if errors.Is(pauseErr, io.EOF) {
@@ -1739,7 +1738,7 @@ func runDeleteUser(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			return nil, "", pauseErr
 		}
-		return nil, "", updateErr
+		return nil, "", nil
 	}
 
 	success := fmt.Sprintf("\r\n\r\n|10User deleted: |15%s|10 (soft delete - data preserved).|07", targetUser.Handle)
