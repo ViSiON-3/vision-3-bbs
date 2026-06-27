@@ -82,7 +82,7 @@ func calculatePagination(total, perPage, currentPage int) (start, end int) {
 }
 
 // buildMessageList fetches message metadata from the current area
-func buildMessageList(msgMgr *message.MessageManager, areaID int, username string) ([]MessageListEntry, int, error) {
+func buildMessageList(msgMgr *message.MessageManager, areaID int, username string, msgFilter msgOwnershipFilter) ([]MessageListEntry, int, error) {
 	// Get total message count for area
 	totalCount, err := msgMgr.GetMessageCountForArea(areaID)
 	if err != nil {
@@ -108,6 +108,11 @@ func buildMessageList(msgMgr *message.MessageManager, areaID int, username strin
 		if err != nil {
 			// Skip deleted or unreadable messages
 			log.Printf("WARN: Failed to read message %d in area %d: %v", msgNum, areaID, err)
+			continue
+		}
+
+		// Ownership boundary (e.g. PRIVMAIL): omit messages the user can't see.
+		if msgFilter != nil && !msgFilter(msg) {
 			continue
 		}
 
@@ -481,8 +486,15 @@ func runMessageListNavigation(ih *editor.InputHandler, state *MessageListState) 
 	}
 }
 
-// runListMsgs is the main entry point for the message list command
+// runListMsgs is the main entry point for the message list command.
 func runListMsgs(c *cmdCtx, args string) (*user.User, string, error) {
+	return runListMsgsFiltered(c, args, nil)
+}
+
+// runListMsgsFiltered lists messages in the current area. When msgFilter is
+// non-nil (e.g. PRIVMAIL), only messages it accepts are listed, and the filter
+// is propagated to the reader when a message is opened.
+func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (*user.User, string, error) {
 	e := c.e
 	s := c.s
 	terminal := c.terminal
@@ -526,7 +538,7 @@ func runListMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Build message list
-	entries, lastRead, err := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle)
+	entries, lastRead, err := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
 	if err != nil {
 		log.Printf("ERROR: Node %d: Failed to build message list: %v", nodeNumber, err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgListLoadError)), outputMode)
@@ -613,10 +625,19 @@ func runListMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 				th = 24
 			}
 
+			// The reader navigates by real area message number, so it needs the
+			// area's actual message count as its upper bound — not len(entries),
+			// which is smaller when the list is filtered (e.g. PRIVMAIL) or has
+			// gaps, and would make the reader exit immediately for high msgNums.
+			areaMsgCount, countErr := e.MessageMgr.GetMessageCountForArea(currentAreaID)
+			if countErr != nil || areaMsgCount < selectedMsg {
+				areaMsgCount = selectedMsg
+			}
+
 			// Call message reader
 			_, nextAction, err := runMessageReader(e, s, terminal, userManager,
 				currentUser, nodeNumber, sessionStartTime, outputMode,
-				selectedMsg, state.TotalMessages, false, tw, th)
+				selectedMsg, areaMsgCount, false, tw, th, msgFilter)
 
 			if err != nil {
 				log.Printf("ERROR: Node %d: Message reader error: %v", nodeNumber, err)
@@ -629,7 +650,7 @@ func runListMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 			// Rebuild list to pick up posted/deleted messages and updated lastread markers
-			newEntries, newLastRead, rebuildErr := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle)
+			newEntries, newLastRead, rebuildErr := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
 			if rebuildErr != nil {
 				log.Printf("ERROR: Node %d: Failed to rebuild message list: %v", nodeNumber, rebuildErr)
 			} else {

@@ -334,7 +334,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		}
 
 		_, action, readErr := runMessageReader(e, s, terminal, userManager, currentUser,
-			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th)
+			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, nil)
 		if readErr != nil || action == "LOGOFF" {
 			return nil, "LOGOFF", readErr
 		}
@@ -486,7 +486,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		// Read messages in this area
 		_, action, readErr := runMessageReader(e, s, terminal, userManager, currentUser,
-			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th)
+			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, nil)
 		if readErr != nil || action == "LOGOFF" {
 			return nil, "LOGOFF", readErr
 		}

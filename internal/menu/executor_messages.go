@@ -652,7 +652,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Delegate to the new message reader with MSGHDR templates and lightbar
 	return runMessageReader(e, s, terminal, userManager, currentUser, nodeNumber,
-		sessionStartTime, outputMode, currentMsgNum, totalMessageCount, false, tw, th)
+		sessionStartTime, outputMode, currentMsgNum, totalMessageCount, false, tw, th, nil)
 }
 
 // runNewscan handles the message newscan with Pascal-style GetScanType setup and multi-area flow.
@@ -1081,6 +1081,16 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	return nil, "", nil
 }
 
+// ownPrivateMailFilter returns a msgOwnershipFilter that accepts only private
+// messages addressed to handle (case-insensitive). It is the single source of
+// truth for "may this user see this PRIVMAIL message" used by both the reader
+// and the list, so navigation can never surface another user's mail.
+func ownPrivateMailFilter(handle string) msgOwnershipFilter {
+	return func(m *message.DisplayMessage) bool {
+		return m.IsPrivate && strings.EqualFold(m.To, handle)
+	}
+}
+
 // runReadPrivateMail handles reading private mail for the current user.
 // It filters messages to only show those addressed to the current user with MSG_PRIVATE flag.
 func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
@@ -1201,8 +1211,10 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Call message reader with the filtered list
+	// Constrain the reader to the current user's own private messages so that
+	// next/prev/jump navigation can never reveal another user's mail.
 	updatedUser, nextMenu, err := runMessageReader(e, s, terminal, userManager, currentUser, nodeNumber,
-		sessionStartTime, outputMode, startMsgNum, totalMessages, false, tw, th)
+		sessionStartTime, outputMode, startMsgNum, totalMessages, false, tw, th, ownPrivateMailFilter(currentUser.Handle))
 
 	// Restore original area
 	if updatedUser != nil {
@@ -1254,8 +1266,9 @@ func runListPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	currentUser.CurrentMessageAreaID = privmailArea.ID
 	currentUser.CurrentMessageAreaTag = privmailArea.Tag
 
-	// Call standard list function
-	updatedUser, nextMenu, err := runListMsgs(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
+	// List only the current user's own private mail (filtered both in the list
+	// and in the reader it opens).
+	updatedUser, nextMenu, err := runListMsgsFiltered(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args, ownPrivateMailFilter(currentUser.Handle))
 
 	// Restore original area
 	if updatedUser != nil {

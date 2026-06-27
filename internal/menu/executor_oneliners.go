@@ -55,13 +55,13 @@ func pipeCodeLenAt(value string, index int) int {
 		}
 	}
 
-	// 4-char forms: |B0..|B9, |B10..|B15
+	// Background forms: |B0..|B9 (3 chars), |B10..|B15 (4 chars)
 	if index+2 < len(value) {
 		if (value[index+1] == 'B' || value[index+1] == 'b') && (value[index+2] >= '0' && value[index+2] <= '9') {
 			if index+3 < len(value) && (value[index+3] >= '0' && value[index+3] <= '9') {
-				return 5 // |B10..|B15 (validated loosely)
+				return 4 // |B10..|B15 (validated loosely)
 			}
-			return 4 // |B0..|B9
+			return 3 // |B0..|B9
 		}
 	}
 

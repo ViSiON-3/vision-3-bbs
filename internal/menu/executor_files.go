@@ -512,6 +512,16 @@ func (e *MenuExecutor) runUploadFiles(
 
 		// Move file from incoming to target directory
 		finalPath := filepath.Join(targetDir, nf.name)
+		// Guard against clobbering a file that exists on disk but is absent from
+		// the metadata duplicate check above: os.Rename would overwrite it.
+		if _, statErr := os.Stat(finalPath); statErr == nil {
+			log.Printf("WARN: Node %d: Upload rejected, '%s' already exists on disk (not in metadata)", nodeNumber, nf.name)
+			duplicateCount++
+			os.Remove(incomingPath)
+			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
+			continue
+		}
 		if moveErr := os.Rename(incomingPath, finalPath); moveErr != nil {
 			log.Printf("ERROR: Node %d: Failed to move %s to area: %v", nodeNumber, nf.name, moveErr)
 			errMsg := fmt.Sprintf("\r\n|01Failed to accept '%s'.|07\r\n", nf.name)
@@ -650,7 +660,11 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Check Read ACS for the file area
 	area, exists := e.FileMgr.GetAreaByID(currentAreaID)
-	if !exists || !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
+	if !exists {
+		log.Printf("WARN: Node %d: User %s: current file area %d (%s) not found (stale/invalid area id)", nodeNumber, currentUser.Handle, currentAreaID, currentAreaTag)
+		return nil, "", nil // Return to menu
+	}
+	if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
 		log.Printf("WARN: Node %d: User %s denied read access to file area %d (%s) due to ACS '%s'", nodeNumber, currentUser.Handle, currentAreaID, currentAreaTag, area.ACSList)
 		// Display error message
 		return nil, "", nil // Return to menu
