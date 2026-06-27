@@ -8,12 +8,13 @@ import (
 //
 // These are the canonical IBM VGA RGB values for the standard 16 DOS colors.
 // We pin them to explicit hex (rather than ANSI palette indices 0-15) so the
-// editor renders the same regardless of the host terminal's color theme. Most
-// Mac terminal themes map ANSI "blue" to a bright, low-contrast shade, which
-// washed out the white/yellow-on-blue UI; the authentic VGA navy (#0000AA)
-// restores the intended contrast. lipgloss renders these as truecolor where
-// available and degrades to the fixed 256-color cube otherwise — in both cases
-// independent of the user's 16-color theme.
+// editor targets the VGA palette instead of the host terminal's themed ANSI
+// slots. Most Mac terminal themes map ANSI "blue" to a bright, low-contrast
+// shade, which washed out the white/yellow-on-blue UI; the authentic VGA navy
+// (#0000AA) restores the intended contrast. lipgloss renders these as
+// truecolor where available and degrades to the fixed 256-color cube
+// otherwise, which preserves the palette on modern terminals more reliably
+// than themed 16-color ANSI slots.
 var dosColors = [16]string{
 	"#000000", // 0:  Black
 	"#0000AA", // 1:  Blue
@@ -33,25 +34,13 @@ var dosColors = [16]string{
 	"#FFFFFF", // 15: White
 }
 
-// DOS CGA/VGA background colors (the low 8 colors usable as a background).
-var dosBgColors = [8]string{
-	"#000000", // 0: Black BG
-	"#0000AA", // 1: Blue BG
-	"#00AA00", // 2: Green BG
-	"#00AAAA", // 3: Cyan BG
-	"#AA0000", // 4: Red BG
-	"#AA00AA", // 5: Magenta BG
-	"#AA5500", // 6: Brown BG
-	"#AAAAAA", // 7: Light Gray BG
-}
-
 // dosStyle creates a lipgloss style from a DOS TextAttr byte (bg*16 + fg).
 func dosStyle(attr byte) lipgloss.Style {
 	fg := attr & 0x0F
 	bg := (attr >> 4) & 0x07
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(dosColors[fg])).
-		Background(lipgloss.Color(dosBgColors[bg]))
+		Background(lipgloss.Color(dosColors[bg]))
 }
 
 // dosColor creates a lipgloss style from separate DOS bg, fg values
@@ -59,7 +48,7 @@ func dosStyle(attr byte) lipgloss.Style {
 func dosColor(bg, fg int) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(dosColors[fg&0x0F])).
-		Background(lipgloss.Color(dosBgColors[bg&0x07]))
+		Background(lipgloss.Color(dosColors[bg&0x07]))
 }
 
 // --- Global header bar (white text on dark gray bg) ---
