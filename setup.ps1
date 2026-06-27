@@ -264,7 +264,7 @@ Write-Host "Building ViSiON/3..."
 $buildFailed = $false
 @(
     @{ Name = "vision3"; Desc = "BBS server" },
-    @{ Name = "helper"; Desc = "helper process" },
+    @{ Name = "helper"; Desc = "command line utils" },
     @{ Name = "v3mail"; Desc = "mail processor" },
     @{ Name = "strings"; Desc = "strings editor" },
     @{ Name = "ue"; Desc = "user editor" },

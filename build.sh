@@ -35,7 +35,7 @@ if ! go build -o vision3 ./cmd/vision3; then echo "Build failed (vision3)!"; exi
 BUILT+=("  vision3   — BBS server")
 
 if ! go build -o helper ./cmd/helper; then echo "Build failed (helper)!"; exit 1; fi
-BUILT+=("  helper    — helper process")
+BUILT+=("  helper    — command line utils")
 
 if ! go build -o v3mail ./cmd/v3mail; then echo "Build failed (v3mail)!"; exit 1; fi
 BUILT+=("  v3mail    — mail processor")
