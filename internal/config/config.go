@@ -922,7 +922,7 @@ type LoggingConfig struct {
 	Cache     bool   `json:"cache"`     // buffer writes in an 8KB cache (default true)
 	Type      int    `json:"type"`      // 0=none 1=size 2=daily (default 0)
 	MaxFiles  int    `json:"maxFiles"`  // retained backups (type 1) / days (type 2)
-	MaxSizeKB int    `json:"maxSizeKb"` // rotate threshold in KB (type 1)
+	MaxSizeKB int    `json:"maxSizeKB"` // rotate threshold in KB (type 1)
 }
 
 // Normalize fills empty strings with defaults and clamps numeric fields to safe

@@ -29,6 +29,7 @@ func readJSONLines(t *testing.T, path string) []map[string]any {
 	defer f.Close()
 	var out []map[string]any
 	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(strings.TrimSpace(string(line))) == 0 {
@@ -39,6 +40,9 @@ func readJSONLines(t *testing.T, path string) []map[string]any {
 			t.Fatalf("line is not JSON: %v (%q)", err, string(line))
 		}
 		out = append(out, m)
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan %s: %v", path, err)
 	}
 	return out
 }

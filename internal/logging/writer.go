@@ -22,7 +22,9 @@ const (
 	dateLayout = "2006-01-02"
 )
 
-// errClosed is returned by Write/Flush after the writer has been closed.
+// errClosed is returned by Write after the writer has been closed. Flush is
+// intentionally a no-op once closed (so the background ticker cannot race a
+// concurrent Close), so it does not return this error.
 var errClosed = errors.New("logging: writer closed")
 
 // rollingWriter is a mutex-guarded io.WriteCloser implementing the three Mystic
@@ -108,10 +110,13 @@ func (w *rollingWriter) currentPath() string {
 // openCurrent opens (creating if needed) the current target file for append and
 // initializes the cache and size/day tracking.
 func (w *rollingWriter) openCurrent() error {
+	day := w.day
+	path := w.basePath()
 	if w.logType == config.LogTypeDaily {
-		w.day = w.now().Format(dateLayout)
+		day = w.now().Format(dateLayout)
+		path = w.datedPath(day)
 	}
-	f, err := os.OpenFile(w.currentPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
@@ -122,6 +127,11 @@ func (w *rollingWriter) openCurrent() error {
 	}
 	w.f = f
 	w.size = fi.Size()
+	// Only advance w.day once the new dated file is open: if the open fails, a
+	// later write must still attempt the rotation rather than assume success.
+	if w.logType == config.LogTypeDaily {
+		w.day = day
+	}
 	if w.cache {
 		w.bw = bufio.NewWriterSize(f, cacheBufSize)
 	} else {
@@ -198,14 +208,17 @@ func (w *rollingWriter) rotateDaily() error {
 	return nil
 }
 
-// pruneDaily removes dated log files whose date is more than maxFiles days
-// before today. Errors are ignored: pruning is best-effort housekeeping.
+// pruneDaily removes dated log files older than the retention window, keeping
+// exactly maxFiles days including today. Errors are ignored: pruning is
+// best-effort housekeeping.
 func (w *rollingWriter) pruneDaily() {
 	matches, err := filepath.Glob(filepath.Join(w.dir, w.stem+".*"+w.ext))
 	if err != nil {
 		return
 	}
-	cutoff := w.now().AddDate(0, 0, -w.maxFiles)
+	n := w.now()
+	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, n.Location())
+	cutoff := today.AddDate(0, 0, -(w.maxFiles - 1))
 	for _, m := range matches {
 		name := filepath.Base(m)
 		datePart := strings.TrimSuffix(strings.TrimPrefix(name, w.stem+"."), w.ext)
@@ -225,11 +238,17 @@ func (w *rollingWriter) rotateSize() error {
 	if err := w.closeCurrent(); err != nil {
 		return err
 	}
-	os.Remove(w.backupPath(w.maxFiles)) // discard the oldest
-	for i := w.maxFiles - 1; i >= 1; i-- {
-		os.Rename(w.backupPath(i), w.backupPath(i+1))
+	if err := os.Remove(w.backupPath(w.maxFiles)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
-	os.Rename(w.basePath(), w.backupPath(1))
+	for i := w.maxFiles - 1; i >= 1; i-- {
+		if err := os.Rename(w.backupPath(i), w.backupPath(i+1)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	if err := os.Rename(w.basePath(), w.backupPath(1)); err != nil {
+		return err
+	}
 	return w.openCurrent()
 }
 

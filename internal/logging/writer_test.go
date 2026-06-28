@@ -183,6 +183,30 @@ func TestWriter_Daily_KeepsRecentFiles(t *testing.T) {
 	}
 }
 
+func TestWriter_Daily_KeepsExactlyMaxFilesDays(t *testing.T) {
+	dir := t.TempDir()
+	clk := &fakeClock{t: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}
+	cfg := config.LoggingConfig{Dir: dir, Type: config.LogTypeDaily, Cache: false, MaxFiles: 2}
+	w := newWriter(t, cfg, "vision3.log", clk)
+
+	// Write on three consecutive days; with MaxFiles=2 only the two most
+	// recent dated files (including today) should survive.
+	w.Write([]byte("d1\n"))
+	clk.advance(24 * time.Hour)
+	w.Write([]byte("d2\n"))
+	clk.advance(24 * time.Hour)
+	w.Write([]byte("d3\n"))
+
+	if _, err := os.Stat(filepath.Join(dir, "vision3.2026-01-01.log")); !os.IsNotExist(err) {
+		t.Error("day1 should be pruned (only MaxFiles=2 days kept incl. today)")
+	}
+	for _, day := range []string{"2026-01-02", "2026-01-03"} {
+		if _, err := os.Stat(filepath.Join(dir, "vision3."+day+".log")); err != nil {
+			t.Errorf("%s should survive: %v", day, err)
+		}
+	}
+}
+
 func TestWriter_WriteAfterCloseErrors(t *testing.T) {
 	dir := t.TempDir()
 	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
