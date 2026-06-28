@@ -25,6 +25,13 @@ func newTestSession(input string) *testSession {
 func (ts *testSession) Read(p []byte) (int, error)  { return ts.in.Read(p) }
 func (ts *testSession) Write(p []byte) (int, error) { return ts.out.Write(p) }
 
+// Pty reports no PTY, so functions under test fall back to their default
+// dimensions (typically 80x24). Returning false avoids the nil-interface panic
+// the embedded ssh.Session would otherwise cause.
+func (ts *testSession) Pty() (ssh.Pty, <-chan ssh.Window, bool) {
+	return ssh.Pty{}, nil, false
+}
+
 // output returns everything written to the session so far.
 func (ts *testSession) output() string { return ts.out.String() }
 
