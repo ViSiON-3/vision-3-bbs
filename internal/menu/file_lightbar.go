@@ -1051,18 +1051,21 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					}
 					log.Printf("ERROR: Node %d: Protocol selection error: %v", lb.nodeNumber, protoErr)
 					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), lb.outputMode)
-					failCount = len(filesToDownload)
+					failCount += len(filesToDownload)
 				} else if !protoOK {
 					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Download cancelled.|07\r\n")), lb.outputMode)
 				} else {
-					successCount, failCount = lb.e.runTransferSend(lb.s, lb.terminal, proto, filesToDownload, fileIDsToDownload, lb.outputMode, lb.nodeNumber)
+					sentCount, sendFails := lb.e.runTransferSend(lb.s, lb.terminal, proto, filesToDownload, fileIDsToDownload, lb.outputMode, lb.nodeNumber)
+					successCount = sentCount
+					failCount += sendFails
 					lb.ih = getSessionIH(lb.s)
 				}
 				time.Sleep(1 * time.Second)
 			} else {
 				log.Printf("WARN: Node %d: No valid file paths found for tagged files.", lb.nodeNumber)
 				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Could not find any of the marked files on the server.|07\r\n")), lb.outputMode)
-				failCount = len(lb.currentUser.TaggedFileIDs)
+				// failCount already equals the number of missing files (every
+				// tagged ID incremented it in the collection loop above).
 			}
 
 			// Clear tags, update download count, and save.
@@ -1267,6 +1270,30 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				continue
 			}
 			newPath := filepath.Join(filepath.Dir(oldPath), newName)
+			// Guard against clobbering an untracked file already on disk at the
+			// target path (the duplicate check above only consults DB records).
+			// os.SameFile permits a case-only rename of the same file on a
+			// case-insensitive filesystem. A stat error other than "not exist"
+			// (e.g. a permission/IO fault) means we cannot prove the target is
+			// safe to overwrite, so refuse rather than risk a clobber.
+			newInfo, statErr := os.Stat(newPath)
+			switch {
+			case statErr == nil:
+				oldInfo, oldStatErr := os.Stat(oldPath)
+				if oldStatErr != nil || !os.SameFile(oldInfo, newInfo) {
+					log.Printf("ERROR: Node %d: Rename target %s already exists on disk.", lb.nodeNumber, newPath)
+					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01A file with that name already exists.|07\r\n")), lb.outputMode)
+					time.Sleep(1 * time.Second)
+					needFullRedraw = true
+					continue
+				}
+			case !errors.Is(statErr, os.ErrNotExist):
+				log.Printf("ERROR: Node %d: Cannot stat rename target %s: %v", lb.nodeNumber, newPath, statErr)
+				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Rename failed.|07\r\n")), lb.outputMode)
+				time.Sleep(1 * time.Second)
+				needFullRedraw = true
+				continue
+			}
 			if renErr := os.Rename(oldPath, newPath); renErr != nil {
 				log.Printf("ERROR: Node %d: Failed to rename %s to %s: %v", lb.nodeNumber, rec.Filename, newName, renErr)
 				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Rename failed.|07\r\n")), lb.outputMode)
