@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -61,8 +62,9 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	// Truncate user note if too long (max 25 characters for display)
 	const maxUserNoteLen = 25
 	truncatedNote := userNoteToUse
-	if len(userNoteToUse) > maxUserNoteLen {
-		truncatedNote = userNoteToUse[:maxUserNoteLen-3] + "..."
+	if utf8.RuneCountInString(userNoteToUse) > maxUserNoteLen {
+		r := []rune(userNoteToUse)
+		truncatedNote = string(r[:maxUserNoteLen-3]) + "..."
 	}
 
 	// Build From field with user note and/or network address.
@@ -172,16 +174,21 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 func buildNameWithAddr(name, addr string) string {
 	const maxLen = 45
 	suffix := " (" + addr + ")"
-	combined := name + suffix
-	if len(combined) <= maxLen {
-		return combined
+	if utf8.RuneCountInString(name)+utf8.RuneCountInString(suffix) <= maxLen {
+		return name + suffix
 	}
-	// Truncate name to fit, preserving the address suffix
-	nameMax := maxLen - len(suffix)
+	// Truncate name (by rune) to fit, preserving the address suffix. Clamp to the
+	// name's rune length so a short multi-byte name can't trigger an out-of-range
+	// or UTF-8-splitting slice.
+	nameMax := maxLen - utf8.RuneCountInString(suffix)
 	if nameMax < 3 {
 		nameMax = 3
 	}
-	return name[:nameMax] + suffix
+	r := []rune(name)
+	if nameMax > len(r) {
+		nameMax = len(r)
+	}
+	return string(r[:nameMax]) + suffix
 }
 
 // buildAutoWidths calculates the maximum display width for each placeholder code.

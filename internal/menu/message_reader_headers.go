@@ -356,12 +356,12 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 			if pickYes {
-				// User selected this header - save preference
-				currentUser.MsgHdr = templateNum
-				if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
-					log.Printf("ERROR: Node %d: Failed to save user after header selection: %v", nodeNumber, saveErr)
+				// User selected this header - save preference. On failure, stay in
+				// the selection flow rather than exit as if the save succeeded.
+				if saveHeaderSelection(userManager, currentUser, templateNum, nodeNumber) != nil {
+					redrawAll()
+					continue
 				}
-				log.Printf("INFO: Node %d: User %s selected header style %d", nodeNumber, currentUser.Handle, templateNum)
 				break
 			}
 
@@ -374,11 +374,10 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		if key == ' ' {
 			opt := options[selectedIndex]
 			templateNum, _ := strconv.Atoi(opt.ReturnValue)
-			currentUser.MsgHdr = templateNum
-			if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
-				log.Printf("ERROR: Node %d: Failed to save user after header selection: %v", nodeNumber, saveErr)
+			if saveHeaderSelection(userManager, currentUser, templateNum, nodeNumber) != nil {
+				redrawAll()
+				continue
 			}
-			log.Printf("INFO: Node %d: User %s selected header style %d", nodeNumber, currentUser.Handle, templateNum)
 			break
 		}
 
@@ -401,4 +400,20 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	return nil, "", nil
+}
+
+// saveHeaderSelection persists the user's chosen message-header template. If the
+// save fails it reverts the in-memory MsgHdr so it stays consistent with disk,
+// logs the error, and returns it (callers stay in the selection flow instead of
+// exiting as if the preference was saved).
+func saveHeaderSelection(userManager *user.UserMgr, u *user.User, templateNum, nodeNumber int) error {
+	prev := u.MsgHdr
+	u.MsgHdr = templateNum
+	if err := userManager.UpdateUser(u); err != nil {
+		u.MsgHdr = prev
+		log.Printf("ERROR: Node %d: Failed to save header selection for %s: %v", nodeNumber, u.Handle, err)
+		return err
+	}
+	log.Printf("INFO: Node %d: User %s selected header style %d", nodeNumber, u.Handle, templateNum)
+	return nil
 }
