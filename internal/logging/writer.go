@@ -99,14 +99,6 @@ func (w *rollingWriter) datedPath(day string) string {
 	return filepath.Join(w.dir, w.stem+"."+day+w.ext)
 }
 
-// currentPath returns the path the writer should currently be appending to.
-func (w *rollingWriter) currentPath() string {
-	if w.logType == config.LogTypeDaily {
-		return w.datedPath(w.day)
-	}
-	return w.basePath()
-}
-
 // openCurrent opens (creating if needed) the current target file for append and
 // initializes the cache and size/day tracking.
 func (w *rollingWriter) openCurrent() error {
