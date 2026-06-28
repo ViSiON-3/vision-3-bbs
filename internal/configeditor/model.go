@@ -296,6 +296,7 @@ func New(configPath string) (Model, error) {
 		{"IP Blocklist/Allowlist"},
 		{"New User Voting (NUV)"},
 		{"DOS Emulation"},
+		{"Logging"},
 	}
 
 	return Model{
