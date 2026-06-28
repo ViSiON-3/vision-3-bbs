@@ -36,13 +36,20 @@ func Init(cfg config.LoggingConfig, defaultFile string, console bool) (*slog.Log
 		return nil, nil, err
 	}
 
-	var out io.Writer = w
+	// slog non-error records may sit in the cache (flushed by the ticker, on
+	// Close, and on Error via flushHandler). The stdlib-log bridge, however,
+	// never reaches flushHandler, so a bridged log.Fatalf would lose its final
+	// line on the immediate os.Exit; route the bridge through flushWriter so
+	// every bridged line is flushed as it is written.
+	var slogOut io.Writer = w
+	bridgeOut := io.Writer(flushWriter{w})
 	if console {
-		out = io.MultiWriter(w, os.Stderr)
+		slogOut = io.MultiWriter(w, os.Stderr)
+		bridgeOut = io.MultiWriter(flushWriter{w}, os.Stderr)
 	}
 
 	handler := &flushHandler{
-		Handler: slog.NewJSONHandler(out, &slog.HandlerOptions{Level: level}),
+		Handler: slog.NewJSONHandler(slogOut, &slog.HandlerOptions{Level: level}),
 		w:       w,
 	}
 	logger := slog.New(handler)
@@ -50,7 +57,7 @@ func Init(cfg config.LoggingConfig, defaultFile string, console bool) (*slog.Log
 
 	// Bridge stdlib log so not-yet-migrated log.Printf calls reach the same
 	// destination(s) as slog.
-	log.SetOutput(out)
+	log.SetOutput(bridgeOut)
 
 	if levelErr != nil {
 		logger.Warn("invalid log level; defaulting to INFO", "configured", cfg.Level)
@@ -61,6 +68,20 @@ func Init(cfg config.LoggingConfig, defaultFile string, console bool) (*slog.Log
 		return w.Close()
 	}
 	return logger, closeFn, nil
+}
+
+// flushWriter writes to the rolling writer and flushes its cache after every
+// write. It backs the stdlib-log bridge so a log.Fatalf line survives the
+// immediate os.Exit that follows it (bridged writes bypass flushHandler). When
+// caching is disabled, Flush is a no-op, so this adds no cost.
+type flushWriter struct {
+	w *rollingWriter
+}
+
+func (fw flushWriter) Write(p []byte) (int, error) {
+	n, err := fw.w.Write(p)
+	_ = fw.w.Flush()
+	return n, err
 }
 
 // flushHandler wraps a slog.Handler so that Error-level records flush the

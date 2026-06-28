@@ -167,11 +167,36 @@ func TestInit_BridgesStdlibLog(t *testing.T) {
 	}
 
 	// After close, the bridge is removed so stdlib log no longer targets the
-	// (now closed) writer.
+	// (now closed) writer — it is restored to os.Stderr.
 	if err := closeFn(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	if log.Writer() == nil {
-		t.Error("close should have restored a non-nil stdlib log output")
+	if log.Writer() != os.Stderr {
+		t.Error("close should have restored stdlib log output to os.Stderr")
+	}
+}
+
+// TestInit_BridgeFlushesWithCache verifies the crash-safety fix: with caching
+// enabled, a bridged stdlib log line is flushed to disk immediately rather than
+// sitting in the cache (where an os.Exit from log.Fatalf would lose it).
+func TestInit_BridgeFlushesWithCache(t *testing.T) {
+	withDefaultRestored(t)
+	prevOut := log.Writer()
+	t.Cleanup(func() { log.SetOutput(prevOut) })
+
+	dir := t.TempDir()
+	cfg := config.LoggingConfig{Dir: dir, Level: "INFO", Cache: true, Type: config.LogTypeNone}
+	_, closeFn, err := Init(cfg, "vision3.log", false)
+	if err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { closeFn() })
+
+	log.Printf("fatal-ish line")
+
+	// No Flush()/Close() call here: the bridge must have flushed on write.
+	data, _ := os.ReadFile(filepath.Join(dir, "vision3.log"))
+	if !strings.Contains(string(data), "fatal-ish line") {
+		t.Errorf("bridged write should be flushed immediately with cache on; file=%q", data)
 	}
 }

@@ -34,6 +34,8 @@ func main() {
 	cfg, _ := config.LoadServerConfig("configs")
 	if _, closeLog, err := logging.Init(cfg.Logging, "v3mail.log", true); err == nil {
 		defer closeLog()
+	} else {
+		fmt.Fprintf(os.Stderr, "WARN: failed to initialize logging: %v\n", err)
 	}
 
 	if len(os.Args) < 2 {
