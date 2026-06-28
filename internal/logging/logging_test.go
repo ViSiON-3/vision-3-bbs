@@ -3,6 +3,7 @@ package logging
 import (
 	"bufio"
 	"encoding/json"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -52,7 +53,7 @@ func TestInit_HonorsLevelFiltering(t *testing.T) {
 	dir := t.TempDir()
 	cfg := config.LoggingConfig{Dir: dir, Level: "WARN", Cache: false, Type: config.LogTypeNone}
 
-	logger, closeFn, err := Init(cfg, "vision3.log")
+	logger, closeFn, err := Init(cfg, "vision3.log", false)
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestInit_ErrorFlushesCache(t *testing.T) {
 	dir := t.TempDir()
 	cfg := config.LoggingConfig{Dir: dir, Level: "DEBUG", Cache: true, Type: config.LogTypeNone}
 
-	logger, closeFn, err := Init(cfg, "vision3.log")
+	logger, closeFn, err := Init(cfg, "vision3.log", false)
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestInit_InvalidLevelFallsBackToInfo(t *testing.T) {
 	dir := t.TempDir()
 	cfg := config.LoggingConfig{Dir: dir, Level: "bogus", Cache: false, Type: config.LogTypeNone}
 
-	logger, closeFn, err := Init(cfg, "vision3.log")
+	logger, closeFn, err := Init(cfg, "vision3.log", false)
 	if err != nil {
 		t.Fatalf("Init should not fail on bad level: %v", err)
 	}
@@ -141,5 +142,36 @@ func TestInit_InvalidLevelFallsBackToInfo(t *testing.T) {
 	}
 	if sawDebug {
 		t.Error("DEBUG record should be dropped at the INFO fallback level")
+	}
+}
+
+func TestInit_BridgesStdlibLog(t *testing.T) {
+	withDefaultRestored(t)
+	prevFlags := log.Flags()
+	prevOut := log.Writer()
+	t.Cleanup(func() { log.SetFlags(prevFlags); log.SetOutput(prevOut) })
+
+	dir := t.TempDir()
+	cfg := config.LoggingConfig{Dir: dir, Level: "INFO", Cache: false, Type: config.LogTypeNone}
+	_, closeFn, err := Init(cfg, "vision3.log", false)
+	if err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	// A not-yet-migrated stdlib log call must land in the rolling file.
+	log.Printf("legacy line %d", 7)
+
+	data, _ := os.ReadFile(filepath.Join(dir, "vision3.log"))
+	if !strings.Contains(string(data), "legacy line 7") {
+		t.Errorf("bridged log.Printf output not found in log file; got %q", data)
+	}
+
+	// After close, the bridge is removed so stdlib log no longer targets the
+	// (now closed) writer.
+	if err := closeFn(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if log.Writer() == nil {
+		t.Error("close should have restored a non-nil stdlib log output")
 	}
 }

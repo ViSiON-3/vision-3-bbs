@@ -29,6 +29,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
@@ -1478,10 +1479,11 @@ func sessionHandler(s ssh.Session) {
 		}
 	} else if authenticatedUser.PreferredEncoding != "" {
 		// User has saved encoding preference - apply it
-		if authenticatedUser.PreferredEncoding == "cp437" {
+		switch authenticatedUser.PreferredEncoding {
+		case "cp437":
 			effectiveMode = ansi.OutputModeCP437
 			log.Printf("Node %d: Using saved encoding preference: CP437", nodeID)
-		} else if authenticatedUser.PreferredEncoding == "utf8" {
+		case "utf8":
 			effectiveMode = ansi.OutputModeUTF8
 			log.Printf("Node %d: Using saved encoding preference: UTF-8", nodeID)
 		}
@@ -1582,11 +1584,6 @@ func main() {
 	}
 	log.Printf("INFO: Output mode set to: %s", outputModeFlag)
 
-	log.SetOutput(os.Stderr) // Ensure logs go to stderr
-	log.Println("INFO: Starting ViSiON/3 BBS Server (using crypto/ssh)...")
-
-	// REMOVED if colorTestMode block
-
 	// --- Run Normal BBS Server --- //
 	var err error
 	fmt.Println("Starting ViSiON/3 BBS...") // Changed startup message
@@ -1601,32 +1598,28 @@ func main() {
 	rootAssetsPath := filepath.Join(basePath, "assets") // Keep this path definition for now
 	dataPath := filepath.Join(basePath, "data")         // For user data, logs, etc.
 	userDataPath := filepath.Join(dataPath, "users")
-	logFilePath := filepath.Join(dataPath, "logs", "vision3.log") // Example log path
 
 	// Pre-flight: ensure setup has been run and all required files/dirs exist
 	if !runPreflight(basePath) {
 		os.Exit(1)
 	}
 
-	// Ensure data directories exist (optional, depends on usage)
-	// os.MkdirAll(userDataPath, 0755)
-	os.MkdirAll(filepath.Dir(logFilePath), 0755) // Ensure the log directory exists
-
-	// Setup Logging (example - adapt to your logging package if different)
-	logFile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Printf("WARN: Failed to open log file %s: %v. Logging to stderr.", logFilePath, err)
-	} else {
-		log.SetOutput(io.MultiWriter(os.Stderr, logFile)) // Log to both file and stderr
-		log.Printf("INFO: Logging to file: %s", logFilePath)
-		defer logFile.Close()
-	}
-
-	// Load server configuration
+	// Load server configuration (needed before logging init, which reads the
+	// shared logging settings from it).
 	serverConfig, err := config.LoadServerConfig(rootConfigPath)
 	if err != nil {
 		log.Fatalf("Failed to load server configuration: %v", err)
 	}
+
+	// Initialize logging: a configurable rolling file plus console echo. This
+	// also bridges stdlib log.Printf to the same destinations until Phase B
+	// migrates those call sites to slog.
+	_, closeLog, err := logging.Init(serverConfig.Logging, "vision3.log", true)
+	if err != nil {
+		log.Fatalf("Failed to initialize logging: %v", err)
+	}
+	defer closeLog()
+	log.Println("INFO: Starting ViSiON/3 BBS Server (using crypto/ssh)...")
 
 	// Initialize connection tracker with configured limits and IP filter file paths
 	// This will load the initial lists and start watching for file changes
