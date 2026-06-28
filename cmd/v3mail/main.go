@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
@@ -27,14 +27,15 @@ type areaConfig struct {
 }
 
 func main() {
-	// Set up logging to both stderr and data/logs/v3mail.log
-	logDir := filepath.Join("data", "logs")
-	os.MkdirAll(logDir, 0755)
-	logPath := filepath.Join(logDir, "v3mail.log")
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err == nil {
-		log.SetOutput(io.MultiWriter(os.Stderr, logFile))
-		defer logFile.Close()
+	// Initialize logging from the shared config (rolling file + console echo).
+	// This also bridges stdlib log.Printf until Phase B migrates call sites to
+	// slog. LoadServerConfig returns defaults when configs/config.json is
+	// absent, and a logging-init failure leaves the stdlib default (stderr).
+	cfg, _ := config.LoadServerConfig("configs")
+	if _, closeLog, err := logging.Init(cfg.Logging, "v3mail.log", true); err == nil {
+		defer closeLog()
+	} else {
+		fmt.Fprintf(os.Stderr, "WARN: failed to initialize logging: %v\n", err)
 	}
 
 	if len(os.Args) < 2 {

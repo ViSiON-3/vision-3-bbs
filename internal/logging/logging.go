@@ -2,20 +2,31 @@ package logging
 
 import (
 	"context"
+	"io"
+	"log"
 	"log/slog"
+	"os"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 // Init builds the rolling writer for cfg, wraps it in a JSON slog handler at the
 // configured level, installs it as slog.Default, and returns the logger plus a
-// close function the caller should defer (it flushes the cache and closes the
-// file). defaultFile is the binary-specific log filename (e.g. "vision3.log");
-// all other settings come from cfg.
+// close function the caller should defer (it flushes the cache, closes the
+// file, and restores the stdlib log output). defaultFile is the binary-specific
+// log filename (e.g. "vision3.log"); all other settings come from cfg.
+//
+// When console is true the logger (and the bridged stdlib log) also echo to
+// stderr, preserving live console visibility alongside the rolling file.
+//
+// Init also redirects the stdlib log package to the same destination so that
+// call sites not yet migrated to slog still land in the rolling file (and
+// console). This legacy bridge keeps Phase A behavior-preserving until the
+// Phase B slog migration converts those call sites.
 //
 // An unrecognized cfg.Level does not fail startup: Init falls back to INFO and
 // logs a warning through the freshly installed logger.
-func Init(cfg config.LoggingConfig, defaultFile string) (*slog.Logger, func() error, error) {
+func Init(cfg config.LoggingConfig, defaultFile string, console bool) (*slog.Logger, func() error, error) {
 	cfg.Normalize()
 
 	level, levelErr := ParseLevel(cfg.Level)
@@ -25,18 +36,52 @@ func Init(cfg config.LoggingConfig, defaultFile string) (*slog.Logger, func() er
 		return nil, nil, err
 	}
 
+	// slog non-error records may sit in the cache (flushed by the ticker, on
+	// Close, and on Error via flushHandler). The stdlib-log bridge, however,
+	// never reaches flushHandler, so a bridged log.Fatalf would lose its final
+	// line on the immediate os.Exit; route the bridge through flushWriter so
+	// every bridged line is flushed as it is written.
+	var slogOut io.Writer = w
+	bridgeOut := io.Writer(flushWriter{w})
+	if console {
+		slogOut = io.MultiWriter(w, os.Stderr)
+		bridgeOut = io.MultiWriter(flushWriter{w}, os.Stderr)
+	}
+
 	handler := &flushHandler{
-		Handler: slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level}),
+		Handler: slog.NewJSONHandler(slogOut, &slog.HandlerOptions{Level: level}),
 		w:       w,
 	}
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
+	// Bridge stdlib log so not-yet-migrated log.Printf calls reach the same
+	// destination(s) as slog.
+	log.SetOutput(bridgeOut)
+
 	if levelErr != nil {
 		logger.Warn("invalid log level; defaulting to INFO", "configured", cfg.Level)
 	}
 
-	return logger, w.Close, nil
+	closeFn := func() error {
+		log.SetOutput(os.Stderr)
+		return w.Close()
+	}
+	return logger, closeFn, nil
+}
+
+// flushWriter writes to the rolling writer and flushes its cache after every
+// write. It backs the stdlib-log bridge so a log.Fatalf line survives the
+// immediate os.Exit that follows it (bridged writes bypass flushHandler). When
+// caching is disabled, Flush is a no-op, so this adds no cost.
+type flushWriter struct {
+	w *rollingWriter
+}
+
+func (fw flushWriter) Write(p []byte) (int, error) {
+	n, err := fw.w.Write(p)
+	_ = fw.w.Flush()
+	return n, err
 }
 
 // flushHandler wraps a slog.Handler so that Error-level records flush the
