@@ -25,12 +25,11 @@ func convertSubsToCP437(subs map[byte]string) map[byte]string {
 func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, totalMsgs int, userLevel int, includeNoteInFrom bool, replyCount int, confName string, areaName string, msgMgr *message.MessageManager, areaID int, userMgr *user.UserMgr, nodeNumber int, v3netStatus V3NetStatusProvider) map[byte]string {
 	// Import jam constants
 	const (
-		msgTypeLocal = 0x00800000
-		msgTypeEcho  = 0x01000000
-		msgTypeNet   = 0x02000000
-		msgPrivate   = 0x00000004
-		msgRead      = 0x00000008
-		msgSent      = 0x00000010
+		msgTypeEcho = 0x01000000
+		msgTypeNet  = 0x02000000
+		msgPrivate  = 0x00000004
+		msgRead     = 0x00000008
+		msgSent     = 0x00000010
 	)
 
 	// Build message status flags (also used for note display)

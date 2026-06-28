@@ -170,8 +170,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	// behavior is consistent with other lightbars.
 	sessionIH := getSessionIH(s)
 
-	const maxVisibleItems = 15 // Maximum items visible in lightbar (Y=6 to Y=20)
-	selectedIndex := 0         // Currently highlighted option
+	selectedIndex := 0 // Currently highlighted option
 
 	// Helper to draw one lightbar option using BAR file attributes
 	drawOption := func(idx int, highlighted bool) {
