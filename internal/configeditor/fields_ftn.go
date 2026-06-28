@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,8 +74,8 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 		},
 		{
 			Label: "Tosser Enabled", Help: "Enable built-in echomail tosser", Type: ftYesNo, Col: 3, Row: 3, Width: 1,
-			Get: func() string { return boolToYN(netPtr.InternalTosserEnabled) },
-			Set: func(val string) error { netPtr.InternalTosserEnabled = ynToBool(val); save(); return nil },
+			Get: func() string { return uitext.BoolToYN(netPtr.InternalTosserEnabled) },
+			Set: func(val string) error { netPtr.InternalTosserEnabled = uitext.YNToBool(val); save(); return nil },
 		},
 		{
 			Label: "Poll Seconds", Help: "Seconds between inbound directory polls", Type: ftInteger, Col: 3, Row: 4, Width: 6, Min: 0, Max: 999999,

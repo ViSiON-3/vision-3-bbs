@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strconv"
 	"strings"
 )
@@ -136,13 +137,13 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 		},
 		{
 			Label: "Auto Join", Help: "Automatically join new users to this area", Type: ftYesNo, Col: 3, Row: 12, Width: 1,
-			Get: func() string { return boolToYN(a.AutoJoin) },
-			Set: func(val string) error { a.AutoJoin = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(a.AutoJoin) },
+			Set: func(val string) error { a.AutoJoin = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Real Name Only", Help: "Require real name for posts (no aliases)", Type: ftYesNo, Col: 3, Row: 13, Width: 1,
-			Get: func() string { return boolToYN(a.RealNameOnly) },
-			Set: func(val string) error { a.RealNameOnly = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(a.RealNameOnly) },
+			Set: func(val string) error { a.RealNameOnly = uitext.YNToBool(val); return nil },
 		},
 	}
 

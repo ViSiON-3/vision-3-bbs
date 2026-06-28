@@ -3,6 +3,7 @@ package configeditor
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"log"
 	"strconv"
 	"strings"
@@ -109,18 +110,18 @@ func (m *Model) fieldsProtocol() []fieldDef {
 		},
 		{
 			Label: "Batch Send", Help: "Supports sending multiple files at once", Type: ftYesNo, Col: 3, Row: 8, Width: 1,
-			Get: func() string { return boolToYN(p.BatchSend) },
-			Set: func(val string) error { p.BatchSend = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(p.BatchSend) },
+			Set: func(val string) error { p.BatchSend = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Use PTY", Help: "Allocate PTY for protocol I/O", Type: ftYesNo, Col: 3, Row: 9, Width: 1,
-			Get: func() string { return boolToYN(p.UsePTY) },
-			Set: func(val string) error { p.UsePTY = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(p.UsePTY) },
+			Set: func(val string) error { p.UsePTY = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Default", Help: "Set as the default transfer protocol", Type: ftYesNo, Col: 3, Row: 10, Width: 1,
-			Get: func() string { return boolToYN(p.Default) },
-			Set: func(val string) error { p.Default = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(p.Default) },
+			Set: func(val string) error { p.Default = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Conn Type", Help: "Connection filter: ssh, telnet, or blank=all", Type: ftString, Col: 3, Row: 11, Width: 10,
@@ -160,13 +161,13 @@ func (m *Model) fieldsArchiver() []fieldDef {
 		},
 		{
 			Label: "Native", Help: "Use Go native implementation (no external cmd)", Type: ftYesNo, Col: 3, Row: 5, Width: 1,
-			Get: func() string { return boolToYN(a.Native) },
-			Set: func(val string) error { a.Native = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(a.Native) },
+			Set: func(val string) error { a.Native = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Enabled", Help: "Enable or disable this archiver", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
-			Get: func() string { return boolToYN(a.Enabled) },
-			Set: func(val string) error { a.Enabled = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(a.Enabled) },
+			Set: func(val string) error { a.Enabled = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Pack Cmd", Help: "Command to create archives", Type: ftString, Col: 3, Row: 7, Width: 30,
@@ -293,13 +294,13 @@ func (m *Model) fieldsLogin() []fieldDef {
 		},
 		{
 			Label: "Clear Screen", Help: "Clear screen before this step", Type: ftYesNo, Col: 3, Row: 3, Width: 1,
-			Get: func() string { return boolToYN(l.ClearScreen) },
-			Set: func(val string) error { l.ClearScreen = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(l.ClearScreen) },
+			Set: func(val string) error { l.ClearScreen = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Pause After", Help: "Wait for keypress after this step", Type: ftYesNo, Col: 3, Row: 4, Width: 1,
-			Get: func() string { return boolToYN(l.PauseAfter) },
-			Set: func(val string) error { l.PauseAfter = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(l.PauseAfter) },
+			Set: func(val string) error { l.PauseAfter = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Sec Level", Help: "Minimum security level to show this step (0=all)", Type: ftInteger, Col: 3, Row: 5, Width: 3, Min: 0, Max: 255,

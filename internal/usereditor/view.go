@@ -2,6 +2,7 @@ package usereditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -264,7 +265,7 @@ func (m Model) renderUserRow(idx int, isHighlight bool, boxW int) string {
 		dataCols = padRight(u.GroupLocation, 19)
 	case 3:
 		dataCols = padRight(fmt.Sprintf("%d", u.MessagesPosted), 8) +
-			padRight(boolToYN(u.Validated), 11)
+			padRight(uitext.BoolToYN(u.Validated), 11)
 	case 4:
 		dataCols = padRight(formatDate(u.LastLogin), 11) +
 			padRight(formatTimeOnly(u.LastLogin), 8)

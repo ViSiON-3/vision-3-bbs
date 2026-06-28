@@ -2,6 +2,7 @@ package menueditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strconv"
 	"strings"
 
@@ -19,14 +20,14 @@ const (
 
 // fieldDef defines a single editable field on an edit screen.
 type fieldDef struct {
-	Label  string    // Display label (e.g. "Clear Screen")
-	Type   fieldType
-	Row    int // Row position (y) relative to box interior top
-	Width  int // Input field width
-	GetM   func(d *MenuData) string
-	SetM   func(d *MenuData, val string) error
-	GetC   func(d *CmdData) string
-	SetC   func(d *CmdData, val string) error
+	Label string // Display label (e.g. "Clear Screen")
+	Type  fieldType
+	Row   int // Row position (y) relative to box interior top
+	Width int // Input field width
+	GetM  func(d *MenuData) string
+	SetM  func(d *MenuData, val string) error
+	GetC  func(d *CmdData) string
+	SetC  func(d *CmdData, val string) error
 	// Render, if non-nil, renders the display value with pipe-code translation.
 	// Called only in the normal (non-active) display path; active/edit paths
 	// always show the raw value so the user can see what they're editing.
@@ -44,13 +45,13 @@ func menuFields() []fieldDef {
 		},
 		{
 			Label: "Clear Screen   ", Type: ftYesNo, Row: 4, Width: 1,
-			GetM: func(d *MenuData) string { return boolToYN(d.CLR) },
-			SetM: func(d *MenuData, val string) error { d.CLR = ynToBool(val); return nil },
+			GetM: func(d *MenuData) string { return uitext.BoolToYN(d.CLR) },
+			SetM: func(d *MenuData, val string) error { d.CLR = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Use Prompt     ", Type: ftYesNo, Row: 5, Width: 1,
-			GetM: func(d *MenuData) string { return boolToYN(d.UsePrompt) },
-			SetM: func(d *MenuData, val string) error { d.UsePrompt = ynToBool(val); return nil },
+			GetM: func(d *MenuData) string { return uitext.BoolToYN(d.UsePrompt) },
+			SetM: func(d *MenuData, val string) error { d.UsePrompt = uitext.YNToBool(val); return nil },
 		},
 		{
 			// Max width: boxW(74) - lpad(2) - labelLen(17) = 55
@@ -124,8 +125,8 @@ func menuFields() []fieldDef {
 		},
 		{
 			Label: "Force HotKey   ", Type: ftYesNo, Row: 15, Width: 1,
-			GetM: func(d *MenuData) string { return boolToYN(d.ForceHotKey) },
-			SetM: func(d *MenuData, val string) error { d.ForceHotKey = ynToBool(val); return nil },
+			GetM: func(d *MenuData) string { return uitext.BoolToYN(d.ForceHotKey) },
+			SetM: func(d *MenuData, val string) error { d.ForceHotKey = uitext.YNToBool(val); return nil },
 		},
 	}
 }
@@ -156,8 +157,8 @@ func cmdFields() []fieldDef {
 		},
 		{
 			Label: "Hidden?        ", Type: ftYesNo, Row: 7, Width: 1,
-			GetC: func(d *CmdData) string { return boolToYN(d.Hidden) },
-			SetC: func(d *CmdData, val string) error { d.Hidden = ynToBool(val); return nil },
+			GetC: func(d *CmdData) string { return uitext.BoolToYN(d.Hidden) },
+			SetC: func(d *CmdData, val string) error { d.Hidden = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Auto Run       ", Type: ftString, Row: 8, Width: 30,
@@ -165,19 +166,6 @@ func cmdFields() []fieldDef {
 			SetC: func(d *CmdData, val string) error { d.AutoRun = val; return nil },
 		},
 	}
-}
-
-// boolToYN converts a bool to "Y" or "N".
-func boolToYN(b bool) string {
-	if b {
-		return "Y"
-	}
-	return "N"
-}
-
-// ynToBool converts "Y"/"y" to true, anything else to false.
-func ynToBool(s string) bool {
-	return strings.ToUpper(s) == "Y"
 }
 
 // padRight pads a string to width with spaces, truncating if longer.
@@ -196,9 +184,3 @@ func centerText(s string, width int) string {
 	pad := (width - len(s)) / 2
 	return strings.Repeat(" ", pad) + s + strings.Repeat(" ", width-pad-len(s))
 }
-
-// intFieldLabel returns a formatted label with colon for field display.
-func intFieldLabel(label string) string {
-	return fmt.Sprintf("%s : ", label)
-}
-
