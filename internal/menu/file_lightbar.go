@@ -1273,8 +1273,12 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			// Guard against clobbering an untracked file already on disk at the
 			// target path (the duplicate check above only consults DB records).
 			// os.SameFile permits a case-only rename of the same file on a
-			// case-insensitive filesystem.
-			if newInfo, statErr := os.Stat(newPath); statErr == nil {
+			// case-insensitive filesystem. A stat error other than "not exist"
+			// (e.g. a permission/IO fault) means we cannot prove the target is
+			// safe to overwrite, so refuse rather than risk a clobber.
+			newInfo, statErr := os.Stat(newPath)
+			switch {
+			case statErr == nil:
 				oldInfo, oldStatErr := os.Stat(oldPath)
 				if oldStatErr != nil || !os.SameFile(oldInfo, newInfo) {
 					log.Printf("ERROR: Node %d: Rename target %s already exists on disk.", lb.nodeNumber, newPath)
@@ -1283,6 +1287,12 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					needFullRedraw = true
 					continue
 				}
+			case !errors.Is(statErr, os.ErrNotExist):
+				log.Printf("ERROR: Node %d: Cannot stat rename target %s: %v", lb.nodeNumber, newPath, statErr)
+				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Rename failed.|07\r\n")), lb.outputMode)
+				time.Sleep(1 * time.Second)
+				needFullRedraw = true
+				continue
 			}
 			if renErr := os.Rename(oldPath, newPath); renErr != nil {
 				log.Printf("ERROR: Node %d: Failed to rename %s to %s: %v", lb.nodeNumber, rec.Filename, newName, renErr)
