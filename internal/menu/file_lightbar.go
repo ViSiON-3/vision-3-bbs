@@ -469,8 +469,8 @@ func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) 
 
 	fileNumStr := fmt.Sprintf("%3d", idx+1)
 	name := fileRec.Filename
-	if len(name) > 12 {
-		name = name[:12]
+	if r := []rune(name); len(r) > 12 {
+		name = string(r[:12])
 	}
 	fileNameStr := fmt.Sprintf("%-12s", name)
 	dateStr := fileRec.UploadedAt.Format("01/02/06")
@@ -631,7 +631,11 @@ func (lb *fileLightbar) renderFileArea() error {
 }
 
 func (lb *fileLightbar) renderSeparator() error {
-	sep := "\xfa" + strings.Repeat("\xc4", lb.termWidth-2) + "\xfa"
+	dashes := lb.termWidth - 2
+	if dashes < 0 {
+		dashes = 0
+	}
+	sep := "\xfa" + strings.Repeat("\xc4", dashes) + "\xfa"
 	sepLine := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte("|08"+sep+"|07")))
 	return terminalio.WriteProcessedBytes(lb.terminal, []byte(sepLine), lb.outputMode)
 }
