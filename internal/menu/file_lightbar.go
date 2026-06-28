@@ -24,7 +24,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
 )
 
-
 // fileListPlaceholderRegex matches @FPAGE@, @FTOTAL@, @FCONFPATH@ with optional alignment and width.
 // Modifier: | (0x7C) or │ (CP437 0xB3, common in ANSI art) followed by L/R/C — matches message-header format.
 // Groups: 1=code (FPAGE|FTOTAL|FCONFPATH), 2=modifier (L|R|C), 3=:N digits, 4=# sequence
@@ -111,82 +110,9 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	cmdIndex := 0
 	ih := getSessionIH(s)
 
-	// Build command bar entries from BAR file or defaults.
-	type cmdEntry struct {
-		label          string
-		hotkey         string
-		highlightColor string
-		regularColor   string
-	}
-
-	var cmdEntries []cmdEntry
-	if len(cmdBarOptions) > 0 {
-		for _, opt := range cmdBarOptions {
-			cmdEntries = append(cmdEntries, cmdEntry{
-				label:          opt.Text,
-				hotkey:         strings.ToLower(opt.HotKey),
-				highlightColor: colorCodeToAnsi(opt.HighlightColor),
-				regularColor:   colorCodeToAnsi(opt.RegularColor),
-			})
-		}
-	} else {
-		// Default entries using theme colors.
-		defHi := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
-		defLo := colorCodeToAnsi(e.Theme.YesNoRegularColor)
-		defaults := []struct {
-			label  string
-			hotkey string
-		}{
-			{"Mark", " "},
-			{"Info", "i"},
-			{"View", "v"},
-			{"Download", "d"},
-			{"Upload", "u"},
-			{"Quit", "q"},
-		}
-		for _, d := range defaults {
-			cmdEntries = append(cmdEntries, cmdEntry{
-				label:          d.label,
-				hotkey:         d.hotkey,
-				highlightColor: defHi,
-				regularColor:   defLo,
-			})
-		}
-	}
-
-	// Build sysop-only entries (toggled with * key).
-	isSysop := e.isCoSysOpOrAbove(currentUser)
-	var sysopEntries []cmdEntry
-	if isSysop {
-		defHiSysop := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
-		defLoSysop := colorCodeToAnsi(e.Theme.YesNoRegularColor)
-		sysopCmds := []struct {
-			label  string
-			hotkey string
-		}{
-			{"Edit", "e"},
-			{"Kill", "k"},
-			{"Move", "m"},
-			{"Rename", "r"},
-		}
-		for _, d := range sysopCmds {
-			sysopEntries = append(sysopEntries, cmdEntry{
-				label:          d.label,
-				hotkey:         d.hotkey,
-				highlightColor: defHiSysop,
-				regularColor:   defLoSysop,
-			})
-		}
-	}
-	userEntries := make([]cmdEntry, len(cmdEntries))
-	copy(userEntries, cmdEntries)
+	// Build command bar entries (user bar, sysop bar) and the file-row highlight.
+	cmdEntries, sysopEntries, userEntries, hiColorSeq, isSysop := buildFileListCmdBar(e, currentUser, cmdBarOptions, hiBarOptions)
 	showSysopBar := false
-
-	// Highlight colors for file rows.
-	hiColorSeq := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
-	if len(hiBarOptions) > 0 {
-		hiColorSeq = colorCodeToAnsi(hiBarOptions[0].HighlightColor)
-	}
 
 	// Determine terminal dimensions.
 	termHeight := 24
@@ -233,16 +159,6 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 			}
 		}
 		return false
-	}
-
-	formatSize := func(size int64) string {
-		if size < 1024 {
-			return fmt.Sprintf("%dB", size)
-		}
-		if size < 10*1024*1024 {
-			return fmt.Sprintf("%dk", size/1024)
-		}
-		return fmt.Sprintf("%dM", size/(1024*1024))
 	}
 
 	// stripAnsi removes all ANSI escape sequences from a string.
@@ -431,7 +347,7 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		}
 		fileNameStr := fmt.Sprintf("%-12s", name)
 		dateStr := fileRec.UploadedAt.Format("01/02/06")
-		sizeStr := fmt.Sprintf("%5s", formatSize(fileRec.Size))
+		sizeStr := fmt.Sprintf("%5s", compactFileSize(fileRec.Size))
 
 		markStr := " "
 		if isFileTagged(fileRec.ID) {
@@ -887,7 +803,7 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 				_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
 				d1 := fmt.Sprintf("|15Filename  : |07%s\r\n", sel.Filename)
-				d2 := fmt.Sprintf("|15Size      : |07%s\r\n", formatSize(sel.Size))
+				d2 := fmt.Sprintf("|15Size      : |07%s\r\n", compactFileSize(sel.Size))
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(d1)), outputMode)
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(d2)), outputMode)
 
