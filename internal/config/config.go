@@ -775,12 +775,12 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 // Echo area routing is derived from message_areas.json (areas where Network matches),
 // not stored per-link. The Message Areas TUI is the canonical place to manage subscriptions.
 type FTNLinkConfig struct {
-	Address         string `json:"address"`                     // e.g., "21:1/100"
-	PacketPassword  string `json:"packet_password"`             // Packet password (formerly "password")
-	SessionPassword string `json:"session_password,omitempty"`  // BinkP session/connection password
-	AreafixPassword string `json:"areafix_password,omitempty"`  // Password for AreaFix netmail (subject line)
-	Name            string `json:"name"`                        // Human-readable name
-	Flavour         string `json:"flavour,omitempty"`           // Delivery flavour: Normal (default), Crash, Hold, Direct
+	Address         string `json:"address"`                    // e.g., "21:1/100"
+	PacketPassword  string `json:"packet_password"`            // Packet password (formerly "password")
+	SessionPassword string `json:"session_password,omitempty"` // BinkP session/connection password
+	AreafixPassword string `json:"areafix_password,omitempty"` // Password for AreaFix netmail (subject line)
+	Name            string `json:"name"`                       // Human-readable name
+	Flavour         string `json:"flavour,omitempty"`          // Delivery flavour: Normal (default), Crash, Hold, Direct
 }
 
 // UnmarshalJSON supports backward compatibility: "password" is read into PacketPassword
@@ -893,6 +893,59 @@ type ServerConfig struct {
 	// DOS emulation — system-wide dosemu2 settings for DOS door games.
 	DosemuPath string `json:"dosemuPath,omitempty"` // Path to dosemu2 binary (default: /usr/libexec/dosemu2/dosemu2.bin)
 
+	// Logging configuration (file location, level, caching, rolling). Shared by
+	// all binaries; each supplies its own default log filename in code.
+	Logging LoggingConfig `json:"logging"`
+}
+
+// Log rolling types persisted in LoggingConfig.Type.
+const (
+	LogTypeNone  = 0 // append to a single file indefinitely
+	LogTypeSize  = 1 // roll by size, keeping MaxFiles numbered backups
+	LogTypeDaily = 2 // roll daily, keeping MaxFiles days of dated files
+)
+
+// Default logging values, applied when the "logging" key is absent or a field
+// is left at its zero value.
+const (
+	DefaultLogDir       = "data/logs"
+	DefaultLogLevel     = "INFO"
+	DefaultLogMaxFiles  = 5
+	DefaultLogMaxSizeKB = 1024 // 1 MB
+)
+
+// LoggingConfig controls log file location, minimum level, write caching, and
+// rolling behavior. It is persisted under the "logging" key in config.json.
+type LoggingConfig struct {
+	Dir       string `json:"dir"`       // directory for log files (default "data/logs")
+	Level     string `json:"level"`     // DEBUG|INFO|WARN|ERROR minimum level (default INFO)
+	Cache     bool   `json:"cache"`     // buffer writes in an 8KB cache (default true)
+	Type      int    `json:"type"`      // 0=none 1=size 2=daily (default 0)
+	MaxFiles  int    `json:"maxFiles"`  // retained backups (type 1) / days (type 2)
+	MaxSizeKB int    `json:"maxSizeKb"` // rotate threshold in KB (type 1)
+}
+
+// Normalize fills empty strings with defaults and clamps numeric fields to safe
+// lower bounds so a config typo (e.g. MaxSizeKB=0) cannot cause immediate log
+// loss or rotate-on-every-write. The level string is validated separately by
+// the logging package at Init time.
+func (c *LoggingConfig) Normalize() {
+	if strings.TrimSpace(c.Dir) == "" {
+		c.Dir = DefaultLogDir
+	}
+	if strings.TrimSpace(c.Level) == "" {
+		c.Level = DefaultLogLevel
+	}
+	// MaxFiles bounds the number of retained backups (type 1) or days (type 2);
+	// it must be positive whenever rolling is enabled.
+	if c.Type != LogTypeNone && c.MaxFiles < 1 {
+		c.MaxFiles = DefaultLogMaxFiles
+	}
+	// MaxSizeKB only applies to size-based rolling; a non-positive threshold
+	// would rotate on every write.
+	if c.Type == LogTypeSize && c.MaxSizeKB < 1 {
+		c.MaxSizeKB = DefaultLogMaxSizeKB
+	}
 }
 
 // V3NetConfig holds V3Net networking configuration.
@@ -943,11 +996,11 @@ type V3NetHubArea struct {
 
 // V3NetLeafConfig configures a subscription to a V3Net network.
 type V3NetLeafConfig struct {
-	HubURL         string   `json:"hubUrl"`
-	Network        string   `json:"network"`
-	Boards         []string `json:"boards"`                    // Local message area tags to write received messages
-	PollInterval   string   `json:"pollInterval"`              // Duration string (e.g., "5m")
-	Origin         string   `json:"origin,omitempty"`          // Origin line text (e.g. "My Cool BBS - bbs.example.com")
+	HubURL       string   `json:"hubUrl"`
+	Network      string   `json:"network"`
+	Boards       []string `json:"boards"`           // Local message area tags to write received messages
+	PollInterval string   `json:"pollInterval"`     // Duration string (e.g., "5m")
+	Origin       string   `json:"origin,omitempty"` // Origin line text (e.g. "My Cool BBS - bbs.example.com")
 }
 
 // EventConfig defines a scheduled event configuration
@@ -1012,6 +1065,14 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		NUVKill:                   false,
 		NUVLevel:                  25,
 		NUVForm:                   1,
+		Logging: LoggingConfig{
+			Dir:       DefaultLogDir,
+			Level:     DefaultLogLevel,
+			Cache:     true,
+			Type:      LogTypeNone,
+			MaxFiles:  DefaultLogMaxFiles,
+			MaxSizeKB: DefaultLogMaxSizeKB,
+		},
 	}
 
 	data, err := os.ReadFile(filePath)

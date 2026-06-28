@@ -451,6 +451,98 @@ func TestLoadServerConfig_PartialOverlayPreservesDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadServerConfig_LoggingDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	// config.json with no "logging" key — back-compat: defaults must apply.
+	data, _ := json.Marshal(map[string]interface{}{"boardName": "X"})
+	os.WriteFile(filepath.Join(tmpDir, "config.json"), data, 0644)
+
+	result, err := LoadServerConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	lg := result.Logging
+	if lg.Dir != DefaultLogDir {
+		t.Errorf("Dir = %q, want %q", lg.Dir, DefaultLogDir)
+	}
+	if lg.Level != DefaultLogLevel {
+		t.Errorf("Level = %q, want %q", lg.Level, DefaultLogLevel)
+	}
+	if !lg.Cache {
+		t.Error("Cache should default to true")
+	}
+	if lg.Type != LogTypeNone {
+		t.Errorf("Type = %d, want %d", lg.Type, LogTypeNone)
+	}
+	if lg.MaxFiles != DefaultLogMaxFiles || lg.MaxSizeKB != DefaultLogMaxSizeKB {
+		t.Errorf("MaxFiles/MaxSizeKB = %d/%d, want %d/%d", lg.MaxFiles, lg.MaxSizeKB, DefaultLogMaxFiles, DefaultLogMaxSizeKB)
+	}
+}
+
+func TestLoadServerConfig_LoggingPartialOverlay(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Only override level; sibling logging fields keep their defaults.
+	data, _ := json.Marshal(map[string]interface{}{
+		"logging": map[string]interface{}{"level": "DEBUG"},
+	})
+	os.WriteFile(filepath.Join(tmpDir, "config.json"), data, 0644)
+
+	result, err := LoadServerConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Logging.Level != "DEBUG" {
+		t.Errorf("Level = %q, want DEBUG", result.Logging.Level)
+	}
+	if result.Logging.Dir != DefaultLogDir {
+		t.Errorf("Dir = %q, want default %q (partial overlay should preserve siblings)", result.Logging.Dir, DefaultLogDir)
+	}
+}
+
+func TestLoggingConfig_Normalize(t *testing.T) {
+	t.Run("empty strings get defaults", func(t *testing.T) {
+		c := LoggingConfig{}
+		c.Normalize()
+		if c.Dir != DefaultLogDir || c.Level != DefaultLogLevel {
+			t.Errorf("Dir/Level = %q/%q, want %q/%q", c.Dir, c.Level, DefaultLogDir, DefaultLogLevel)
+		}
+	})
+	t.Run("size type clamps non-positive MaxFiles and MaxSizeKB", func(t *testing.T) {
+		c := LoggingConfig{Type: LogTypeSize, MaxFiles: 0, MaxSizeKB: 0}
+		c.Normalize()
+		if c.MaxFiles != DefaultLogMaxFiles {
+			t.Errorf("MaxFiles = %d, want clamped to %d", c.MaxFiles, DefaultLogMaxFiles)
+		}
+		if c.MaxSizeKB != DefaultLogMaxSizeKB {
+			t.Errorf("MaxSizeKB = %d, want clamped to %d", c.MaxSizeKB, DefaultLogMaxSizeKB)
+		}
+	})
+	t.Run("daily type clamps MaxFiles but leaves MaxSizeKB", func(t *testing.T) {
+		c := LoggingConfig{Type: LogTypeDaily, MaxFiles: -3, MaxSizeKB: 0}
+		c.Normalize()
+		if c.MaxFiles != DefaultLogMaxFiles {
+			t.Errorf("MaxFiles = %d, want clamped to %d", c.MaxFiles, DefaultLogMaxFiles)
+		}
+		if c.MaxSizeKB != 0 {
+			t.Errorf("MaxSizeKB = %d, want left at 0 (not used by daily type)", c.MaxSizeKB)
+		}
+	})
+	t.Run("none type leaves numeric fields untouched", func(t *testing.T) {
+		c := LoggingConfig{Type: LogTypeNone, MaxFiles: 0, MaxSizeKB: 0}
+		c.Normalize()
+		if c.MaxFiles != 0 || c.MaxSizeKB != 0 {
+			t.Errorf("none type should not clamp; got MaxFiles=%d MaxSizeKB=%d", c.MaxFiles, c.MaxSizeKB)
+		}
+	})
+	t.Run("valid values preserved", func(t *testing.T) {
+		c := LoggingConfig{Dir: "/var/log/bbs", Level: "WARN", Type: LogTypeSize, MaxFiles: 10, MaxSizeKB: 512}
+		c.Normalize()
+		if c.Dir != "/var/log/bbs" || c.Level != "WARN" || c.MaxFiles != 10 || c.MaxSizeKB != 512 {
+			t.Errorf("valid config mutated: %+v", c)
+		}
+	})
+}
+
 func TestLoadStrings_ValidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := map[string]interface{}{
