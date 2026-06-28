@@ -15,18 +15,6 @@ func TestMaskValue(t *testing.T) {
 	}
 }
 
-func TestBoolYN(t *testing.T) {
-	if boolToYN(true) != "Y" || boolToYN(false) != "N" {
-		t.Error("boolToYN wrong")
-	}
-	if !ynToBool("Y") || !ynToBool("y") {
-		t.Error("ynToBool should accept Y/y")
-	}
-	if ynToBool("N") || ynToBool("yes") || ynToBool("") {
-		t.Error("ynToBool should only accept exactly Y/y")
-	}
-}
-
 func TestPadRightLeft_RuneAware(t *testing.T) {
 	if got := padRight("ab", 5); got != "ab   " {
 		t.Errorf("padRight short = %q", got)
@@ -53,11 +41,5 @@ func TestCenterText(t *testing.T) {
 	}
 	if got := centerText("toolong", 3); got != "toolong" {
 		t.Errorf("centerText overflow = %q, want toolong", got)
-	}
-}
-
-func TestIntFieldLabel(t *testing.T) {
-	if got := intFieldLabel("Port"); got != "Port : " {
-		t.Errorf("intFieldLabel = %q, want %q", got, "Port : ")
 	}
 }

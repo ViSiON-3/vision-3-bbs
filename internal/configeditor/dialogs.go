@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
 )
 
@@ -143,56 +144,11 @@ func (m Model) overlayHelpScreen(background string) string {
 
 // padToCol truncates or pads a line to reach a specific column.
 func padToCol(line string, col int) string {
-	vis := approximateVisibleLen(line)
+	vis := uitext.ApproximateVisibleLen(line)
 	if vis >= col {
-		return truncateToVisual(line, col)
+		return uitext.TruncateToVisual(line, col)
 	}
 	return line + strings.Repeat(" ", col-vis)
-}
-
-// truncateToVisual truncates a string to n visible characters, preserving ANSI.
-func truncateToVisual(s string, n int) string {
-	var b strings.Builder
-	inEsc := false
-	count := 0
-	for _, r := range s {
-		if count >= n && !inEsc {
-			break
-		}
-		b.WriteRune(r)
-		if r == '\x1b' {
-			inEsc = true
-			continue
-		}
-		if inEsc {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEsc = false
-			}
-			continue
-		}
-		count++
-	}
-	return b.String()
-}
-
-// approximateVisibleLen estimates the visible length of a styled string.
-func approximateVisibleLen(s string) int {
-	inEsc := false
-	count := 0
-	for _, r := range s {
-		if r == '\x1b' {
-			inEsc = true
-			continue
-		}
-		if inEsc {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEsc = false
-			}
-			continue
-		}
-		count++
-	}
-	return count
 }
 
 // skipToCol returns everything from visible column n onward.

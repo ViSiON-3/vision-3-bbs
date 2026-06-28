@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"regexp"
 	"strconv"
 	"strings"
@@ -112,13 +113,13 @@ func (m *Model) fieldsEvent() []fieldDef {
 		},
 		{
 			Label: "Enabled", Help: "Enable or disable this event", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
-			Get: func() string { return boolToYN(e.Enabled) },
-			Set: func(val string) error { e.Enabled = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(e.Enabled) },
+			Set: func(val string) error { e.Enabled = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Run At Start", Help: "Run when the BBS starts", Type: ftYesNo, Col: 3, Row: 8, Width: 1,
-			Get: func() string { return boolToYN(e.RunAtStartup) },
-			Set: func(val string) error { e.RunAtStartup = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(e.RunAtStartup) },
+			Set: func(val string) error { e.RunAtStartup = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Run After", Help: "Run after this event completes", Type: ftLookup, Col: 3, Row: 9, Width: 20,

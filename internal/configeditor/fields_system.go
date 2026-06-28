@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strconv"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -154,8 +155,8 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 	return []fieldDef{
 		{
 			Label: "SSH Enabled", Help: "Enable SSH server", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
-			Get: func() string { return boolToYN(cfg.SSHEnabled) },
-			Set: func(val string) error { cfg.SSHEnabled = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(cfg.SSHEnabled) },
+			Set: func(val string) error { cfg.SSHEnabled = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "SSH Host", Help: "Listen address (blank=all interfaces)", Type: ftString, Col: 3, Row: 2, Width: 20,
@@ -176,13 +177,13 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 		},
 		{
 			Label: "Legacy SSH", Help: "Allow legacy algorithms for older clients", Type: ftYesNo, Col: 3, Row: 4, Width: 1,
-			Get: func() string { return boolToYN(cfg.LegacySSHAlgorithms) },
-			Set: func(val string) error { cfg.LegacySSHAlgorithms = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(cfg.LegacySSHAlgorithms) },
+			Set: func(val string) error { cfg.LegacySSHAlgorithms = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Telnet Enabled", Help: "Enable Telnet server", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
-			Get: func() string { return boolToYN(cfg.TelnetEnabled) },
-			Set: func(val string) error { cfg.TelnetEnabled = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(cfg.TelnetEnabled) },
+			Set: func(val string) error { cfg.TelnetEnabled = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Telnet Host", Help: "Listen address (blank=all interfaces)", Type: ftString, Col: 3, Row: 7, Width: 20,
@@ -203,8 +204,8 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 		},
 		{
 			Label: "V3Net", Help: "Enable V3Net networking", Type: ftYesNo, Col: 3, Row: 10, Width: 1,
-			Get: func() string { return boolToYN(v3.Enabled) },
-			Set: func(val string) error { v3.Enabled = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(v3.Enabled) },
+			Set: func(val string) error { v3.Enabled = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Keystore Path", Help: "Path to Ed25519 keypair file", Type: ftString, Col: 3, Row: 11, Width: 40,
@@ -223,8 +224,8 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 		},
 		{
 			Label: "V3Net Hub", Help: "Run a V3Net hub server on this node", Type: ftYesNo, Col: 3, Row: 15, Width: 1,
-			Get: func() string { return boolToYN(hub.Enabled) },
-			Set: func(val string) error { hub.Enabled = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(hub.Enabled) },
+			Set: func(val string) error { hub.Enabled = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Hub Host", Help: "Hub listen address (blank=all interfaces)", Type: ftString, Col: 3, Row: 16, Width: 20,
@@ -256,8 +257,8 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 		},
 		{
 			Label: "Auto Approve", Help: "Automatically approve new leaf subscriptions", Type: ftYesNo, Col: 3, Row: 19, Width: 1,
-			Get: func() string { return boolToYN(hub.AutoApprove) },
-			Set: func(val string) error { hub.AutoApprove = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(hub.AutoApprove) },
+			Set: func(val string) error { hub.AutoApprove = uitext.YNToBool(val); return nil },
 		},
 	}
 }
@@ -435,8 +436,8 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 	return []fieldDef{
 		{
 			Label: "Allow New Users", Help: "Allow new user registration", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
-			Get: func() string { return boolToYN(cfg.AllowNewUsers) },
-			Set: func(val string) error { cfg.AllowNewUsers = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(cfg.AllowNewUsers) },
+			Set: func(val string) error { cfg.AllowNewUsers = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "File List Mode", Help: "File listing style", Type: ftLookup, Col: 3, Row: 2, Width: 15,
@@ -485,13 +486,13 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 	return []fieldDef{
 		{
 			Label: "Use NUV", Help: "Enable New User Voting system", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
-			Get: func() string { return boolToYN(cfg.UseNUV) },
-			Set: func(val string) error { cfg.UseNUV = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(cfg.UseNUV) },
+			Set: func(val string) error { cfg.UseNUV = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Auto Add NUV", Help: "Automatically queue new registrations for voting", Type: ftYesNo, Col: 3, Row: 2, Width: 1,
-			Get: func() string { return boolToYN(cfg.AutoAddNUV) },
-			Set: func(val string) error { cfg.AutoAddNUV = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(cfg.AutoAddNUV) },
+			Set: func(val string) error { cfg.AutoAddNUV = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "NUV Use Level", Help: "Minimum access level required to vote", Type: ftInteger, Col: 3, Row: 3, Width: 3, Min: 0, Max: 255,
@@ -531,13 +532,13 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 		},
 		{
 			Label: "NUV Validate", Help: "Auto-validate user when yes threshold reached", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
-			Get: func() string { return boolToYN(cfg.NUVValidate) },
-			Set: func(val string) error { cfg.NUVValidate = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(cfg.NUVValidate) },
+			Set: func(val string) error { cfg.NUVValidate = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "NUV Kill", Help: "Auto-delete user when no threshold reached", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
-			Get: func() string { return boolToYN(cfg.NUVKill) },
-			Set: func(val string) error { cfg.NUVKill = ynToBool(val); return nil },
+			Get: func() string { return uitext.BoolToYN(cfg.NUVKill) },
+			Set: func(val string) error { cfg.NUVKill = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "NUV Level", Help: "Access level assigned to auto-validated NUV users", Type: ftInteger, Col: 3, Row: 8, Width: 3, Min: 0, Max: 255,

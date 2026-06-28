@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"sort"
 	"strconv"
 	"strings"
@@ -324,8 +325,8 @@ func (m *Model) fieldsDoor() []fieldDef {
 	row++
 	fields = append(fields, fieldDef{
 		Label: "Single Instance", Help: "Only allow one node to run this door at a time", Type: ftYesNo, Col: 3, Row: row, Width: 1,
-		Get: func() string { return boolToYN(dPtr.SingleInstance) },
-		Set: func(val string) error { dPtr.SingleInstance = ynToBool(val); save(); return nil },
+		Get: func() string { return uitext.BoolToYN(dPtr.SingleInstance) },
+		Set: func(val string) error { dPtr.SingleInstance = uitext.YNToBool(val); save(); return nil },
 	})
 
 	if !isSyncJS(dPtr) && !isV3Script(dPtr) {
@@ -427,14 +428,14 @@ func (m *Model) fieldsDoor() []fieldDef {
 		row++
 		fields = append(fields, fieldDef{
 			Label: "Raw Terminal", Help: "Allocate PTY for raw terminal I/O", Type: ftYesNo, Col: 3, Row: row, Width: 1,
-			Get: func() string { return boolToYN(dPtr.RequiresRawTerminal) },
-			Set: func(val string) error { dPtr.RequiresRawTerminal = ynToBool(val); save(); return nil },
+			Get: func() string { return uitext.BoolToYN(dPtr.RequiresRawTerminal) },
+			Set: func(val string) error { dPtr.RequiresRawTerminal = uitext.YNToBool(val); save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{
 			Label: "Use Shell", Help: "Wrap command in /bin/sh -c (Linux) or cmd /c (Windows)", Type: ftYesNo, Col: 3, Row: row, Width: 1,
-			Get: func() string { return boolToYN(dPtr.UseShell) },
-			Set: func(val string) error { dPtr.UseShell = ynToBool(val); save(); return nil },
+			Get: func() string { return uitext.BoolToYN(dPtr.UseShell) },
+			Set: func(val string) error { dPtr.UseShell = uitext.YNToBool(val); save(); return nil },
 		})
 	}
 

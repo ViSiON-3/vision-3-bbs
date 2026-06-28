@@ -1,7 +1,6 @@
 package configeditor
 
 import (
-	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -48,19 +47,6 @@ func maskValue(s string) string {
 	return strings.Repeat("*", utf8.RuneCountInString(s))
 }
 
-// boolToYN converts a bool to "Y" or "N".
-func boolToYN(b bool) string {
-	if b {
-		return "Y"
-	}
-	return "N"
-}
-
-// ynToBool converts "Y"/"y" to true, anything else to false.
-func ynToBool(s string) bool {
-	return strings.ToUpper(s) == "Y"
-}
-
 // padRight pads a string to width with spaces, truncating if longer.
 func padRight(s string, width int) string {
 	runes := []rune(s)
@@ -77,11 +63,6 @@ func padLeft(s string, width int) string {
 		return string(runes[:width])
 	}
 	return strings.Repeat(" ", width-len(runes)) + s
-}
-
-// intFieldLabel returns a formatted label with colon for field display.
-func intFieldLabel(label string) string {
-	return fmt.Sprintf("%s : ", label)
 }
 
 // centerText centers a string within a given width using visual (rune) width.

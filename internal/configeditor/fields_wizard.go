@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strconv"
 	"strings"
 	"time"
@@ -125,9 +126,9 @@ func (m *Model) fieldsHubWizard() []fieldDef {
 		},
 		{
 			Label: "Auto-Approve", Help: "Auto-approve new leaf connections", Type: ftYesNo, Col: 3, Row: 4, Width: 1,
-			Get: func() string { return boolToYN(w.autoApprove) },
+			Get: func() string { return uitext.BoolToYN(w.autoApprove) },
 			Set: func(val string) error {
-				w.autoApprove = ynToBool(val)
+				w.autoApprove = uitext.YNToBool(val)
 				return nil
 			},
 		},

@@ -2,6 +2,7 @@ package usereditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,15 +25,15 @@ const (
 
 // fieldDef defines a single editable field on the edit screen.
 type fieldDef struct {
-	Label   string    // Display label (e.g., "User Handle")
-	Type    fieldType // Edit type
-	Col     int       // Column position (x) — 3 for left, 50 for right
-	Row     int       // Row position (y) — relative to edit area top
-	Width   int       // Input field width
-	Min     int       // Minimum value (for ftInteger)
-	Max     int       // Maximum value (for ftInteger)
-	Get     func(u *user.User) string
-	Set     func(u *user.User, val string) error
+	Label string    // Display label (e.g., "User Handle")
+	Type  fieldType // Edit type
+	Col   int       // Column position (x) — 3 for left, 50 for right
+	Row   int       // Row position (y) — relative to edit area top
+	Width int       // Input field width
+	Min   int       // Minimum value (for ftInteger)
+	Max   int       // Maximum value (for ftInteger)
+	Get   func(u *user.User) string
+	Set   func(u *user.User, val string) error
 }
 
 // editFields returns the ordered list of editable fields.
@@ -131,18 +132,18 @@ func editFields() []fieldDef {
 		// Right column (x=50, rows 4-16)
 		{
 			Label: "Validated", Type: ftYesNo, Col: 50, Row: 4, Width: 1,
-			Get: func(u *user.User) string { return boolToYN(u.Validated) },
-			Set: func(u *user.User, val string) error { u.Validated = ynToBool(val); return nil },
+			Get: func(u *user.User) string { return uitext.BoolToYN(u.Validated) },
+			Set: func(u *user.User, val string) error { u.Validated = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Hot Keys", Type: ftYesNo, Col: 50, Row: 5, Width: 1,
-			Get: func(u *user.User) string { return boolToYN(u.HotKeys) },
-			Set: func(u *user.User, val string) error { u.HotKeys = ynToBool(val); return nil },
+			Get: func(u *user.User) string { return uitext.BoolToYN(u.HotKeys) },
+			Set: func(u *user.User, val string) error { u.HotKeys = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "More Prompts", Type: ftYesNo, Col: 50, Row: 6, Width: 1,
-			Get: func(u *user.User) string { return boolToYN(u.MorePrompts) },
-			Set: func(u *user.User, val string) error { u.MorePrompts = ynToBool(val); return nil },
+			Get: func(u *user.User) string { return uitext.BoolToYN(u.MorePrompts) },
+			Set: func(u *user.User, val string) error { u.MorePrompts = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Screen Width", Type: ftInteger, Col: 50, Row: 7, Width: 3, Min: 40, Max: 200,
@@ -202,7 +203,7 @@ func editFields() []fieldDef {
 		},
 		{
 			Label: "Deleted User", Type: ftDisplay, Col: 50, Row: 12, Width: 1,
-			Get: func(u *user.User) string { return boolToYN(u.DeletedUser) },
+			Get: func(u *user.User) string { return uitext.BoolToYN(u.DeletedUser) },
 		},
 		{
 			Label: "Deleted At", Type: ftDisplay, Col: 50, Row: 13, Width: 16,
@@ -252,19 +253,6 @@ func editFields() []fieldDef {
 			Get: func(u *user.User) string { return formatTime(u.LastBulletinRead) },
 		},
 	}
-}
-
-// boolToYN converts a bool to "Y" or "N".
-func boolToYN(b bool) string {
-	if b {
-		return "Y"
-	}
-	return "N"
-}
-
-// ynToBool converts "Y"/"y" to true, anything else to false.
-func ynToBool(s string) bool {
-	return strings.ToUpper(s) == "Y"
 }
 
 // formatTime formats a time for display in the editor (compact to fit right column).
@@ -324,9 +312,4 @@ func padLeft(s string, width int) string {
 		return s[:width]
 	}
 	return strings.Repeat(" ", width-len(s)) + s
-}
-
-// intFieldLabel returns a formatted label with colon for field display.
-func intFieldLabel(label string) string {
-	return fmt.Sprintf("%s : ", label)
 }

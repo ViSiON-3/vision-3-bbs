@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
 )
 
@@ -245,14 +246,14 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 	case "event":
 		if idx < len(m.configs.Events.Events) {
 			e := m.configs.Events.Events[idx]
-			content = fmt.Sprintf(" %3d  %-56s %s", idx+1, padRight(e.Name, 56), boolToYN(e.Enabled))
+			content = fmt.Sprintf(" %3d  %-56s %s", idx+1, padRight(e.Name, 56), uitext.BoolToYN(e.Enabled))
 		}
 	case "ftn":
 		keys := m.ftnNetworkKeys()
 		if idx < len(keys) {
 			k := keys[idx]
 			n := m.configs.FTN.Networks[k]
-			content = fmt.Sprintf("  %-22s %-28s %s", padRight(k, 22), padRight(n.OwnAddress, 28), boolToYN(n.InternalTosserEnabled))
+			content = fmt.Sprintf("  %-22s %-28s %s", padRight(k, 22), padRight(n.OwnAddress, 28), uitext.BoolToYN(n.InternalTosserEnabled))
 		}
 	case "ftnlink":
 		refs := m.ftnAllLinkRefs()
@@ -275,7 +276,7 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 	case "archiver":
 		if idx < len(m.configs.Archivers.Archivers) {
 			a := m.configs.Archivers.Archivers[idx]
-			content = fmt.Sprintf("  %-6s  %-20s %-8s %s", padRight(a.ID, 6), padRight(a.Name, 20), padRight(a.Extension, 8), boolToYN(a.Enabled))
+			content = fmt.Sprintf("  %-6s  %-20s %-8s %s", padRight(a.ID, 6), padRight(a.Name, 20), padRight(a.Extension, 8), uitext.BoolToYN(a.Enabled))
 		}
 	case "login":
 		if idx < len(m.configs.LoginSeq) {

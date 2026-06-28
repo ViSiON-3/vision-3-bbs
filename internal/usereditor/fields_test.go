@@ -5,18 +5,6 @@ import (
 	"time"
 )
 
-func TestBoolYNRoundTrip(t *testing.T) {
-	if boolToYN(true) != "Y" || boolToYN(false) != "N" {
-		t.Errorf("boolToYN: got %q/%q", boolToYN(true), boolToYN(false))
-	}
-	if !ynToBool("Y") || !ynToBool("y") {
-		t.Error("ynToBool should accept Y/y")
-	}
-	if ynToBool("N") || ynToBool("") || ynToBool("yes") {
-		t.Error("ynToBool should only accept exactly Y/y")
-	}
-}
-
 func TestTimeFormatters(t *testing.T) {
 	zero := time.Time{}
 	if got := formatTime(zero); got != "Never" {
@@ -53,11 +41,5 @@ func TestPadRightLeft(t *testing.T) {
 	}
 	if got := padLeft("abcdef", 3); got != "abc" {
 		t.Errorf("padLeft truncate = %q, want abc", got)
-	}
-}
-
-func TestIntFieldLabel(t *testing.T) {
-	if got := intFieldLabel("Level"); got != "Level : " {
-		t.Errorf("intFieldLabel = %q, want %q", got, "Level : ")
 	}
 }
