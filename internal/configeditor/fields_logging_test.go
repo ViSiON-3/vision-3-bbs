@@ -97,6 +97,12 @@ func TestSysFieldsLogging_RollingTypeLabelMapping(t *testing.T) {
 	if got := len(rt.LookupItems()); got != 3 {
 		t.Errorf("expected 3 rolling-type options, got %d", got)
 	}
+
+	// An unmapped/hand-edited type falls back to "None" rather than blank.
+	cfg.Logging.Type = 99
+	if got := rt.Get(); got != "None" {
+		t.Errorf("unmapped type Get = %q, want None fallback", got)
+	}
 }
 
 func TestBuildSysFields_LoggingScreenWired(t *testing.T) {

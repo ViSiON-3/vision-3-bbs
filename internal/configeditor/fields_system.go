@@ -580,23 +580,46 @@ func sysFieldsDOS(cfg *config.ServerConfig) []fieldDef {
 	}
 }
 
-// logTypeLabels maps the persisted LoggingConfig.Type to the word shown in the
-// TUI lookup; logLabelToType is the inverse used when a value is picked.
-var logTypeLabels = map[int]string{
-	config.LogTypeNone:  "None",
-	config.LogTypeSize:  "Size",
-	config.LogTypeDaily: "Daily",
+// logRollingTypes is the single source of truth for the Rolling Type lookup:
+// the persisted LoggingConfig.Type, the short label shown in the form, and the
+// picker description. logTypeToLabel / logLabelToType convert against it.
+var logRollingTypes = []struct {
+	typ     int
+	label   string
+	display string
+}{
+	{config.LogTypeNone, "None", "None - single file, no rotation"},
+	{config.LogTypeSize, "Size", "Size - rotate at Max Size KB, keep Max Files"},
+	{config.LogTypeDaily, "Daily", "Daily - new file per day, keep Max Files days"},
+}
+
+// logTypeToLabel maps a persisted type to its label, falling back to "None" for
+// an unmapped/hand-edited value (the rolling writer treats unknown types as
+// no-rotation, so "None" is the consistent display).
+func logTypeToLabel(typ int) string {
+	for _, t := range logRollingTypes {
+		if t.typ == typ {
+			return t.label
+		}
+	}
+	return "None"
 }
 
 func logLabelToType(label string) int {
-	switch label {
-	case "Size":
-		return config.LogTypeSize
-	case "Daily":
-		return config.LogTypeDaily
-	default:
-		return config.LogTypeNone
+	for _, t := range logRollingTypes {
+		if t.label == label {
+			return t.typ
+		}
 	}
+	return config.LogTypeNone
+}
+
+func logRollingTypeItems() []LookupItem {
+	items := make([]LookupItem, len(logRollingTypes))
+	for i, t := range logRollingTypes {
+		items[i] = LookupItem{Value: t.label, Display: t.display}
+	}
+	return items
 }
 
 // sysFieldsLogging returns fields for the Logging sub-screen.
@@ -604,7 +627,7 @@ func sysFieldsLogging(cfg *config.ServerConfig) []fieldDef {
 	lg := &cfg.Logging
 	return []fieldDef{
 		{
-			Label: "Log Directory", Help: "Directory for log files (relative to BBS root)", Type: ftString, Col: 3, Row: 1, Width: 40,
+			Label: "Log Directory", Help: "Directory for log files (absolute, or relative to BBS root)", Type: ftString, Col: 3, Row: 1, Width: 40,
 			Get: func() string { return lg.Dir },
 			Set: func(val string) error { lg.Dir = val; return nil },
 		},
@@ -623,15 +646,9 @@ func sysFieldsLogging(cfg *config.ServerConfig) []fieldDef {
 		},
 		{
 			Label: "Rolling Type", Help: "How log files are rotated", Type: ftLookup, Col: 3, Row: 3, Width: 8,
-			Get: func() string { return logTypeLabels[lg.Type] },
-			Set: func(val string) error { lg.Type = logLabelToType(val); return nil },
-			LookupItems: func() []LookupItem {
-				return []LookupItem{
-					{Value: "None", Display: "None - single file, no rotation"},
-					{Value: "Size", Display: "Size - rotate at Max Size KB, keep Max Files"},
-					{Value: "Daily", Display: "Daily - new file per day, keep Max Files days"},
-				}
-			},
+			Get:         func() string { return logTypeToLabel(lg.Type) },
+			Set:         func(val string) error { lg.Type = logLabelToType(val); return nil },
+			LookupItems: logRollingTypeItems,
 		},
 		{
 			Label: "Cache Writes", Help: "Buffer writes in an 8KB cache (flushed on errors/exit)", Type: ftYesNo, Col: 3, Row: 4, Width: 1,
