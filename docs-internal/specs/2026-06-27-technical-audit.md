@@ -113,11 +113,17 @@ direct deps are imported. Usage spread:
 
 ## Prioritized Action List
 
-1. 🔴 **Decompose `executor.go`** via a command-context struct + domain file
-   splits (kills the 94× signature repetition as a side effect).
-2. 🔴 **Add tests to network-facing & data-mutating untested packages**:
-   `sshserver`, `telnetserver`, `usereditor`, then `configeditor`.
-3. 🟠 **Document the dual-scripting-engine decision** and the `third_party` patch
-   provenance.
+1. ✅ **Decompose `executor.go`** via a command-context struct + domain file
+   splits (kills the 94× signature repetition as a side effect). *Done: split
+   into domain files, `cmdCtx` struct introduced, the two ~800-line user-editor
+   functions consolidated, plus the pre-existing bugs the refactor surfaced.*
+2. ✅ **Add tests to network-facing & data-mutating untested packages**:
+   `sshserver`, `telnetserver`, `usereditor`, `configeditor`. *Done: all four
+   now have coverage of their unit-testable logic.*
+3. ✅ **Document the dual-scripting-engine decision** and the `third_party` patch
+   provenance. *Done: see [`docs-internal/decisions/0001-dual-javascript-engines.md`](../decisions/0001-dual-javascript-engines.md)
+   and [`third_party/README.md`](../../third_party/README.md).*
 4. 🟠 **Split the remaining 1K+ `menu` files** as they're touched (opportunistic,
-   not a campaign).
+   not a campaign). *In progress: shared TUI helpers extracted into
+   `internal/uitext`. Still large: `message_reader.go`, `file_lightbar.go`,
+   `door_handler.go`, `message_scan.go`, and `runUserEditor`'s render closures.*
