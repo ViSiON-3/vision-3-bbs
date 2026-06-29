@@ -185,7 +185,3 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-
-// View is a minimal stub so the model satisfies tea.Model for Task 11.
-// Task 12 (view.go) will delete this stub and provide the full implementation.
-func (m Model) View() string { return "" }
