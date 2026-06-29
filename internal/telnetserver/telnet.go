@@ -277,7 +277,7 @@ func (tc *TelnetConn) handleSubnegotiation() {
 				tc.termTypeMu.Lock()
 				tc.termType = t
 				tc.termTypeMu.Unlock()
-				slog.Info("telnet TERM_TYPE", "term", t)
+				slog.Info("telnet terminal type", "term", t)
 			}
 		}
 	}
@@ -530,7 +530,7 @@ func (tc *TelnetConn) DetectTerminalSize() (width, height int, method string) {
 	tc.height = 25
 	tc.sizeMu.Unlock()
 
-	slog.Info("telnet terminal size using defaults (80x25)")
+	slog.Info("telnet terminal size using defaults", "width", 80, "height", 25)
 	return 80, 25, "DEFAULT"
 }
 

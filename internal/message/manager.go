@@ -96,7 +96,7 @@ func NewMessageManager(dataPath, configPath, boardName string, networkTearlines 
 		}
 	}
 
-	slog.Info("message manager initialized", "areas", len(mm.areasByID))
+	slog.Info("message manager initialized", "count", len(mm.areasByID))
 	return mm, nil
 }
 

@@ -615,7 +615,7 @@ func (um *UserMgr) AddCallRecord(record CallRecord) {
 
 	// Save the updated history *while still holding the lock*
 	if err := um.saveCallHistoryLocked(); err != nil {
-		slog.Error("failed to save call history after adding record", "user_id", record.UserID, "error", err)
+		slog.Error("failed to save call history after adding record", "id", record.UserID, "error", err)
 		// Maybe try to rollback the append? Less critical than user add.
 	}
 }
