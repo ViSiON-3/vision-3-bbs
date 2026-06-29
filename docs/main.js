@@ -353,7 +353,6 @@ function runDialerSequence(splash) {
 
     function startSequence() {
         splash.removeEventListener('click', clickHandler);
-        splash.removeEventListener('keydown', keyHandler);
         splash.style.cursor = 'default';
         unlockAudioPool();
         runDialerSequence(splash);
@@ -363,15 +362,7 @@ function runDialerSequence(splash) {
         startSequence();
     }
 
-    function keyHandler(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            startSequence();
-        }
-    }
-
     splash.addEventListener('click', clickHandler);
-    splash.addEventListener('keydown', keyHandler);
 
     var skipBtn = document.getElementById('telix-skip');
     if (skipBtn) {
