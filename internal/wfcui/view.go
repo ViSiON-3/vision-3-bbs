@@ -205,9 +205,6 @@ func (m Model) renderCmdBar(st colorSet, width int) string {
 	return bar
 }
 
-// detailsView is a temporary forwarder; Task 13 replaces this with the real implementation.
-func (m Model) detailsView() string { return m.listView() }
-
 // formatUptime converts seconds to "Xd Xh Xm" string.
 func formatUptime(secs int64) string {
 	if secs <= 0 {

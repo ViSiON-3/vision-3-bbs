@@ -45,6 +45,7 @@ type Model struct {
 	width    int
 	height   int
 	lastErr  error
+	showLogs bool
 }
 
 // New builds a Model. client may be nil in tests that drive Update directly.
@@ -158,30 +159,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
-	}
-	return m, nil
-}
-
-// handleKey is a minimal stub so the package compiles for Task 11.
-// Task 13 (keys.go) will delete this stub and provide the full implementation.
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyDown:
-		if m.snapshot != nil && m.selected < len(m.snapshot.Nodes)-1 {
-			m.selected++
-		}
-	case tea.KeyUp:
-		if m.selected > 0 {
-			m.selected--
-		}
-	case tea.KeyEnter:
-		if m.mode == modeList {
-			m.mode = modeDetails
-		}
-	case tea.KeyEsc:
-		if m.mode == modeDetails {
-			m.mode = modeList
-		}
 	}
 	return m, nil
 }
