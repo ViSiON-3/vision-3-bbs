@@ -23,6 +23,7 @@
 * [Theme](configuration/configuration.md#theme-configuration)
 * [Oneliners](configuration/configuration.md#onelinersjson)
 * [SSH Host Keys](configuration/configuration.md#ssh-host-keys)
+* [Logging](configuration/configuration.md#logging)
 * [Security](configuration/security.md)
 
 * **MENU SYSTEM**

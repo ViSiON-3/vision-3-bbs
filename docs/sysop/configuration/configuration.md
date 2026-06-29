@@ -359,7 +359,15 @@ General BBS configuration settings.
   "ipAllowlistPath": "",
   "maxFailedLogins": 5,
   "lockoutMinutes": 30,
-  "dosemuPath": ""
+  "dosemuPath": "",
+  "logging": {
+    "dir": "data/logs",
+    "level": "INFO",
+    "cache": true,
+    "type": 0,
+    "maxFiles": 5,
+    "maxSizeKB": 1024
+  }
 }
 ```
 
@@ -417,6 +425,17 @@ See [New User Voting](users/nuv.md) for full details.
 
 See [Door Programs](doors/doors.md#running-dos-doors) for full DOS door setup documentation.
 
+**Logging:**
+
+- `logging.dir` - Directory for log files (default: `data/logs`)
+- `logging.level` - Minimum log level written: `DEBUG`, `INFO`, `WARN`, or `ERROR` (default: `INFO`)
+- `logging.cache` - Buffer writes in an 8 KB in-memory cache; flushed on errors and shutdown (default: `true`)
+- `logging.type` - Log rotation mode: `0` = none, `1` = size-based, `2` = daily (default: `0`)
+- `logging.maxFiles` - For size mode: number of numbered backups to keep. For daily mode: days of dated files to retain (default: `5`)
+- `logging.maxSizeKB` - Rotation threshold in KB; only used when `type` is `1` (default: `1024`)
+
+See [Logging](#logging) for full details and examples.
+
 **Timezone behavior:**
 
 - Last Callers time fields use `config.json` `timezone` first.
@@ -468,6 +487,96 @@ Both blocklist and allowlist files use the same format:
 ```
 
 Leave paths empty (`""`) to disable the feature.
+
+## Logging
+
+> *Use the [Configuration Editor](#configuration-editor-tui) (System Configuration → Logging) to manage logging settings interactively. The JSON structure below is for reference or manual editing.*
+
+ViSiON/3 writes structured JSON logs (one object per line) to a configurable directory. All settings live under the `"logging"` key in `configs/config.json` and are shared by every binary (`vision3`, `v3mail`). If the key is absent, defaults are applied automatically so existing installs continue to work unchanged.
+
+### TUI: System Configuration → Logging
+
+Open the configuration editor (`./config`), choose **System Configuration**, then navigate to **Logging** (sub-screen 8).
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| Log Directory | Directory for log files (absolute or relative to BBS root) | `data/logs` |
+| Min Level | Minimum severity written: `DEBUG` / `INFO` / `WARN` / `ERROR` | `INFO` |
+| Rolling Type | Rotation mode (see below) | `None` |
+| Cache Writes | Buffer writes in an 8 KB cache; flushed on errors and clean exit | `Yes` |
+| Max Files | Numbered backups (Size mode) or days of files to keep (Daily mode) | `5` |
+| Max Size KB | File size in KB that triggers a rotation (Size mode only) | `1024` |
+
+### Log Levels
+
+| Level | What is written |
+|-------|----------------|
+| `DEBUG` | Everything — detailed trace output; use only for troubleshooting |
+| `INFO` | Normal operation messages (recommended for production) |
+| `WARN` | Warnings and errors only |
+| `ERROR` | Errors only — quietest setting |
+
+### Rolling Types
+
+| Type | Behaviour |
+|------|-----------|
+| `None` (0) | Single file, no rotation — grows indefinitely. Simple; fine for low-traffic systems |
+| `Size` (1) | Rotates when the file reaches **Max Size KB**. Old files shift: `vision3.log → vision3.log.1 → … → vision3.log.N`. Files beyond **Max Files** are deleted |
+| `Daily` (2) | Opens a new dated file each calendar day (`vision3.YYYY-MM-DD.log`). Files older than **Max Files** days are pruned |
+
+### Write Caching
+
+When **Cache Writes** is enabled (the default), log lines are held in an 8 KB in-memory buffer before being flushed to disk. This reduces I/O on busy systems. The cache is flushed automatically:
+
+- On every `ERROR`-level record (so critical messages are never lost on crash)
+- On clean shutdown (`vision3` exit or SIGTERM)
+- On a background ticker (approximately every 5 seconds)
+
+Set to `No` to write every line through immediately. Useful during active debugging when you are `tail -f`-ing the log file.
+
+### JSON Example
+
+```json
+{
+  "logging": {
+    "dir": "data/logs",
+    "level": "INFO",
+    "cache": true,
+    "type": 1,
+    "maxFiles": 7,
+    "maxSizeKB": 2048
+  }
+}
+```
+
+This example uses Size rolling: the log rotates at 2 MB and keeps seven numbered backups.
+
+### Log File Locations
+
+Each binary writes to its own file within the configured directory:
+
+| Binary | Log file |
+|--------|----------|
+| `vision3` | `<dir>/vision3.log` |
+| `v3mail` | `<dir>/v3mail.log` |
+
+The directory is created automatically if it does not exist.
+
+### Log Format
+
+Every line is a JSON object. Example:
+
+```json
+{"time":"2026-06-29T14:23:01Z","level":"INFO","msg":"user logged in","node":1,"handle":"AcidBurn"}
+```
+
+Fields present on every record:
+
+- `time` — RFC 3339 UTC timestamp
+- `level` — `DEBUG`, `INFO`, `WARN`, or `ERROR`
+- `msg` — short lowercase description of the event
+
+Additional structured attributes (node, user, error, etc.) vary by event.
 
 ## message_areas.json
 
