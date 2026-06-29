@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt" // Import bcrypt
+	"golang.org/x/crypto/ssh"
 )
 
 // Predefined errors for user management
@@ -781,4 +782,36 @@ func (um *UserMgr) PurgeDeletedUsers(retentionDays int) ([]PurgeResult, error) {
 	}
 	slog.Info("purged soft-deleted user accounts", "count", len(purged))
 	return purged, nil
+}
+
+// FindByAuthorizedKey returns the user whose registered PublicKeys include a
+// key matching the given marshaled wire bytes (ssh.PublicKey.Marshal()).
+// Matching is by exact key bytes; access-level authorization is enforced by
+// the caller, not here.
+func (um *UserMgr) FindByAuthorizedKey(marshaled []byte) (*User, bool) {
+	um.mu.RLock()
+	defer um.mu.RUnlock()
+	for _, u := range um.users { // um.users is map[string]*User
+		for _, line := range u.PublicKeys {
+			pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+			if err != nil {
+				continue
+			}
+			if string(pub.Marshal()) == string(marshaled) {
+				return u, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// NewUserMgrForTest builds a UserMgr seeded with the given users, keyed by
+// handle. Exported so tests in other packages (e.g. cmd/vision3) can seed a
+// manager without touching the JSON load path.
+func NewUserMgrForTest(users ...*User) *UserMgr {
+	m := &UserMgr{users: make(map[string]*User, len(users))}
+	for _, u := range users {
+		m.users[u.Handle] = u
+	}
+	return m
 }

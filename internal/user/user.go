@@ -16,12 +16,13 @@ type LoginEvent struct {
 
 // User represents a user account.
 type User struct {
-	ID               int       `json:"id"` // Added User ID for ACS 'U' check
+	ID               int       `json:"id"`           // Added User ID for ACS 'U' check
 	PasswordHash     string    `json:"passwordHash"` // Changed from []byte to string
 	Handle           string    `json:"handle"`
 	LegacyUsername   string    `json:"username,omitempty"` // Migration only: used during load when Handle is absent; cleared on save
 	AccessLevel      int       `json:"accessLevel"`
-	Flags            string    `json:"flags"` // Added Flags string for ACS 'F' check (e.g., "XYZ")
+	Flags            string    `json:"flags"`                // Added Flags string for ACS 'F' check (e.g., "XYZ")
+	PublicKeys       []string  `json:"publicKeys,omitempty"` // OpenSSH authorized_keys lines authorized for WFC admin
 	LastLogin        time.Time `json:"lastLogin"`
 	TimesCalled      int       `json:"timesCalled"` // Used for E (NumLogons)
 	LastBulletinRead time.Time `json:"lastBulletinRead"`
@@ -29,22 +30,22 @@ type User struct {
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"` // For optimistic locking - tracks last modification
 	Validated        bool      `json:"validated"`
-	FilePoints       int       `json:"filePoints"`    // Added for P
-	NumUploads       int       `json:"numUploads"`    // Added for E
-	NumDownloads     int       `json:"numDownloads,omitempty"` // Download count for ACS 'B' ratio
+	FilePoints       int       `json:"filePoints"`               // Added for P
+	NumUploads       int       `json:"numUploads"`               // Added for E
+	NumDownloads     int       `json:"numDownloads,omitempty"`   // Download count for ACS 'B' ratio
 	MessagesPosted   int       `json:"messagesPosted,omitempty"` // Number of messages posted by user
 	// NumLogons is TimesCalled
 	TimeLimit   int    `json:"timeLimit"`   // Added for T (in minutes)
 	PrivateNote string `json:"privateNote"` // Added for Z
 	// Conference tracking for ACS codes C (message conference) and X (file conference)
-	CurrentMsgConferenceID   int    `json:"current_msg_conference_id,omitempty"`
-	CurrentMsgConferenceTag  string `json:"current_msg_conference_tag,omitempty"`
-	CurrentFileConferenceID  int    `json:"current_file_conference_id,omitempty"`
-	CurrentFileConferenceTag string `json:"current_file_conference_tag,omitempty"`
-	GroupLocation         string         `json:"group_location,omitempty"`           // Added Group / Location field
-	CurrentMessageAreaID  int            `json:"current_message_area_id,omitempty"`  // Added for default area tracking
-	CurrentMessageAreaTag string         `json:"current_message_area_tag,omitempty"` // Added for default area tracking
-	LastReadMessageIDs    map[int]string `json:"last_read_message_ids,omitempty"`    // Map AreaID -> Last Read Message UUID string
+	CurrentMsgConferenceID   int            `json:"current_msg_conference_id,omitempty"`
+	CurrentMsgConferenceTag  string         `json:"current_msg_conference_tag,omitempty"`
+	CurrentFileConferenceID  int            `json:"current_file_conference_id,omitempty"`
+	CurrentFileConferenceTag string         `json:"current_file_conference_tag,omitempty"`
+	GroupLocation            string         `json:"group_location,omitempty"`           // Added Group / Location field
+	CurrentMessageAreaID     int            `json:"current_message_area_id,omitempty"`  // Added for default area tracking
+	CurrentMessageAreaTag    string         `json:"current_message_area_tag,omitempty"` // Added for default area tracking
+	LastReadMessageIDs       map[int]string `json:"last_read_message_ids,omitempty"`    // Map AreaID -> Last Read Message UUID string
 
 	// File System Related
 	CurrentFileAreaID  int         `json:"current_file_area_id,omitempty"`  // Added for default file area tracking
@@ -76,8 +77,8 @@ type User struct {
 		Uploader    bool `json:"uploader"`
 		Description bool `json:"description"`
 	} `json:"file_list_columns,omitempty"`
-	AutoSignature   string `json:"autoSignature,omitempty"`   // Auto-signature appended to messages (max 5 lines)
-	Colors           [7]int `json:"colors,omitempty"`
+	AutoSignature string `json:"autoSignature,omitempty"` // Auto-signature appended to messages (max 5 lines)
+	Colors        [7]int `json:"colors,omitempty"`
 
 	// Soft Delete (user marked as deleted but data preserved)
 	DeletedUser bool       `json:"deletedUser,omitempty"` // True if user is soft-deleted
