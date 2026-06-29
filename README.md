@@ -4,7 +4,7 @@
 
 ## Overview
 
-This project is a work-in-progress refactor and modernization of the classic ViSiON/2 BBS software. The goal is to recreate the core functionality of the classic BBS experience using modern technologies. 
+This project is a work-in-progress refactor and modernization of the classic ViSiON/2 BBS software. The goal is to recreate the core functionality of the classic BBS experience using modern technologies.
 
 There's detailed SysOp documentation [here](https://vision3bbs.com/sysop/#/).
 

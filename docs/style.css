@@ -668,10 +668,14 @@ section:nth-of-type(even) {
     transition: color 0.15s;
 }
 
-.telix-skip:hover,
+.telix-skip:hover {
+    color: #ffff55;
+}
+
 .telix-skip:focus-visible {
     color: #ffff55;
-    outline: none;
+    outline: 1px solid #ffff55;
+    outline-offset: 2px;
 }
 
 .telix-splash.hidden {
