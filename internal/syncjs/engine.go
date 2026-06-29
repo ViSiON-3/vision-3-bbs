@@ -115,7 +115,7 @@ func (eng *Engine) Close() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					slog.Warn("SyncJS exit handler panic", "panic", r)
+					slog.Warn("exit handler panic", "panic", r)
 				}
 			}()
 			eng.exitHandlers[i](goja.Undefined())
@@ -126,7 +126,7 @@ func (eng *Engine) Close() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					slog.Warn("SyncJS exit code eval panic", "panic", r)
+					slog.Warn("exit code eval panic", "panic", r)
 				}
 			}()
 			eng.vm.RunString(eng.exitCodes[i])
@@ -145,7 +145,7 @@ func (eng *Engine) Close() {
 		select {
 		case <-eng.copierDone:
 		case <-time.After(2 * time.Second):
-			slog.Warn("SyncJS copier goroutine did not exit within 2s; proceeding with cleanup")
+			slog.Warn("copier goroutine did not exit within 2s; proceeding with cleanup")
 		}
 	}
 	if eng.pipeReader != nil {

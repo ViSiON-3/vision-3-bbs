@@ -1017,7 +1017,7 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 						break
 					} else {
 						// Invalid character in sequence, break parsing for this sequence
-						slog.Warn("invalid char in ANSI sequence", "char", char, "index", j)
+						slog.Warn("invalid char in ANSI sequence", "char", fmt.Sprintf("0x%X", char), "index", j)
 						terminatorIndex = j - 1 // Treat previous char as end? Or handle differently?
 						break
 					}
@@ -1270,16 +1270,18 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 							// Double letter |XX placeholder
 							placeholderCode := string(content[i+1 : i+3])
 							result.FieldCoords[placeholderCode] = struct{ X, Y int }{X: currentX, Y: currentY}
-							result.FieldColors[placeholderCode] = buildColorSequence()
-							slog.Debug("recorded placeholder coord", "code", placeholderCode, "x", currentX, "y", currentY, "color", buildColorSequence())
+							color := buildColorSequence()
+							result.FieldColors[placeholderCode] = color
+							slog.Debug("recorded placeholder coord", "code", placeholderCode, "x", currentX, "y", currentY, "color", color)
 							consumed = 3
 							pipeCodeFound = true
 						} else {
 							// Single letter |X placeholder
 							placeholderCode := string(content[i+1 : i+2])
 							result.FieldCoords[placeholderCode] = struct{ X, Y int }{X: currentX, Y: currentY}
-							result.FieldColors[placeholderCode] = buildColorSequence()
-							slog.Debug("recorded placeholder coord", "code", placeholderCode, "x", currentX, "y", currentY, "color", buildColorSequence())
+							color := buildColorSequence()
+							result.FieldColors[placeholderCode] = color
+							slog.Debug("recorded placeholder coord", "code", placeholderCode, "x", currentX, "y", currentY, "color", color)
 							consumed = 2
 							pipeCodeFound = true
 						}
@@ -1333,8 +1335,9 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 			if i+2 < len(content) && content[i+1] >= 'A' && content[i+1] <= 'Z' && content[i+2] >= 'A' && content[i+2] <= 'Z' {
 				code := string(content[i+1 : i+3])
 				result.FieldCoords[code] = struct{ X, Y int }{X: currentX, Y: currentY}
-				result.FieldColors[code] = buildColorSequence()
-				slog.Debug("found coord code", "code", code, "x", currentX, "y", currentY, "color", buildColorSequence())
+				color := buildColorSequence()
+				result.FieldColors[code] = color
+				slog.Debug("found coord code", "code", code, "x", currentX, "y", currentY, "color", color)
 				consumed = 3 // Consume ~XX, write nothing
 			} else {
 				// Invalid ~ sequence, write literally
