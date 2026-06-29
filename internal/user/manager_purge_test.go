@@ -14,8 +14,8 @@ func setupPurgeTestManager(t *testing.T) (*UserMgr, time.Time) {
 	t.Helper()
 	tmpDir := t.TempDir()
 
-	longAgo := time.Now().AddDate(0, 0, -60)   // 60 days ago — past any reasonable retention
-	recently := time.Now().AddDate(0, 0, -5)   // 5 days ago — within a 30-day retention window
+	longAgo := time.Now().AddDate(0, 0, -60) // 60 days ago — past any reasonable retention
+	recently := time.Now().AddDate(0, 0, -5) // 5 days ago — within a 30-day retention window
 
 	users := []User{
 		{ID: 1, Handle: "SysOp", AccessLevel: 255},

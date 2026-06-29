@@ -679,13 +679,13 @@ func TestLogAdminActivity_WritesFile(t *testing.T) {
 
 	entry := AdminActivityLog{
 		AdminHandle:  "sysop",
-		AdminID:       1,
-		TargetUserID:  2,
-		TargetHandle:  "Bob",
-		Action:        "EDIT_USER",
-		FieldName:     "accessLevel",
-		OldValue:      "10",
-		NewValue:      "50",
+		AdminID:      1,
+		TargetUserID: 2,
+		TargetHandle: "Bob",
+		Action:       "EDIT_USER",
+		FieldName:    "accessLevel",
+		OldValue:     "10",
+		NewValue:     "50",
 	}
 
 	if err := um.LogAdminActivity(entry); err != nil {

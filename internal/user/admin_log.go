@@ -10,17 +10,17 @@ import "time"
 // - Implement appropriate data retention policies per GDPR/CCPA requirements
 // - Consider redacting or hashing sensitive fields for audit purposes
 type AdminActivityLog struct {
-	ID            int       `json:"id"`
-	Timestamp     time.Time `json:"timestamp"`
+	ID           int       `json:"id"`
+	Timestamp    time.Time `json:"timestamp"`
 	AdminHandle  string    `json:"adminUsername"` // Admin who made the change (JSON key kept for backward compat)
-	AdminID       int       `json:"adminId"`       // Admin user ID
-	TargetUserID  int       `json:"targetUserId"`  // User being modified
-	TargetHandle  string    `json:"targetHandle"`  // Handle of user being modified
-	Action        string    `json:"action"`        // Type of action (e.g., "EDIT_USER", "BAN_USER", "DELETE_USER")
-	FieldName     string    `json:"fieldName"`     // Field that was changed (for edits)
-	OldValue      string    `json:"oldValue"`      // Previous value - may contain PII
-	NewValue      string    `json:"newValue"`      // New value - may contain PII
-	Notes         string    `json:"notes"`         // Optional notes/reason
+	AdminID      int       `json:"adminId"`       // Admin user ID
+	TargetUserID int       `json:"targetUserId"`  // User being modified
+	TargetHandle string    `json:"targetHandle"`  // Handle of user being modified
+	Action       string    `json:"action"`        // Type of action (e.g., "EDIT_USER", "BAN_USER", "DELETE_USER")
+	FieldName    string    `json:"fieldName"`     // Field that was changed (for edits)
+	OldValue     string    `json:"oldValue"`      // Previous value - may contain PII
+	NewValue     string    `json:"newValue"`      // New value - may contain PII
+	Notes        string    `json:"notes"`         // Optional notes/reason
 }
 
 // AdminActivityLogEntry creates a formatted log entry for a single field change
@@ -28,12 +28,12 @@ func AdminActivityLogEntry(adminHandle string, adminID int, targetUserID int, ta
 	return AdminActivityLog{
 		Timestamp:    time.Now().UTC(),
 		AdminHandle:  adminHandle,
-		AdminID:       adminID,
-		TargetUserID:  targetUserID,
-		TargetHandle:  targetHandle,
-		Action:        "EDIT_USER",
-		FieldName:     fieldName,
-		OldValue:      oldValue,
-		NewValue:      newValue,
+		AdminID:      adminID,
+		TargetUserID: targetUserID,
+		TargetHandle: targetHandle,
+		Action:       "EDIT_USER",
+		FieldName:    fieldName,
+		OldValue:     oldValue,
+		NewValue:     newValue,
 	}
 }
