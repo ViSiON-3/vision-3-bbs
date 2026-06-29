@@ -89,7 +89,7 @@ command -v ssh-keygen >/dev/null 2>&1 || fail "ssh-keygen is not installed"
 mkdir -p "$TARGET"
 
 # ── Build binaries first ─────────────────────────────────────────
-BINARIES=(vision3 helper v3mail strings ue config menuedit)
+BINARIES=(vision3 helper v3mail strings ue config menuedit wfc)
 
 info "Building binaries..."
 for bin in "${BINARIES[@]}"; do

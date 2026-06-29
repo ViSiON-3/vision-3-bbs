@@ -310,7 +310,7 @@ See [Docker Deployment Guide](docs/sysop/getting-started/docker.md) for detailed
     .\setup.ps1         # Windows (PowerShell)
     ```
 
-    `setup.sh` will generate SSH host keys, copy template configs to `configs/`, create the required directory structure, and build all binaries (`vision3`, `helper`, `v3mail`, `strings`, `ue`, `config`, `menuedit`).
+    `setup.sh` will generate SSH host keys, copy template configs to `configs/`, create the required directory structure, and build all binaries (`vision3`, `helper`, `v3mail`, `strings`, `ue`, `config`, `menuedit`, `wfc`).
 
 2. **Configure your BBS:**
     ```bash
