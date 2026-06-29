@@ -53,7 +53,7 @@ func New(client admin.AdminClient, opts Options) Model {
 	if opts.MaxEvents <= 0 {
 		opts.MaxEvents = 200
 	}
-	return Model{client: client, opts: opts, mode: modeList}
+	return Model{client: client, opts: opts, mode: modeList, showLogs: true}
 }
 
 // Init kicks off the first snapshot fetch and event subscription.

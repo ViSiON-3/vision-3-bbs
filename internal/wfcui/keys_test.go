@@ -86,6 +86,8 @@ func TestDetailsViewShowsNodeFields(t *testing.T) {
 		"192.168.1.42:2323",
 		"MAIN",
 		"reading messages",
+		"3", // NodeID
+		"0", // AccessLevel (default zero value)
 	}
 	for _, want := range checks {
 		if !strings.Contains(got, want) {
@@ -99,24 +101,91 @@ func TestDetailsViewShowsNodeFields(t *testing.T) {
 }
 
 // TestHandleKeyLTogglesShowLogs verifies L toggles the showLogs field.
+// showLogs defaults to true (event feed is visible on startup).
 func TestHandleKeyLTogglesShowLogs(t *testing.T) {
 	m := New(nil, Options{MaxEvents: 10})
 	m.width, m.height = 100, 30
 
-	if m.showLogs {
-		t.Fatal("showLogs should start false")
+	if !m.showLogs {
+		t.Fatal("showLogs should start true (event feed visible by default)")
 	}
 
 	mi, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	m = mi.(Model)
-	if !m.showLogs {
-		t.Fatal("showLogs should be true after pressing l")
+	if m.showLogs {
+		t.Fatal("showLogs should be false after pressing l")
 	}
 
 	mi, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	m = mi.(Model)
-	if m.showLogs {
-		t.Fatal("showLogs should be false after pressing l again")
+	if !m.showLogs {
+		t.Fatal("showLogs should be true after pressing l again")
+	}
+}
+
+// TestShowLogsTogglesEventFeedInView verifies the event feed appears/disappears in rendered output.
+func TestShowLogsTogglesEventFeedInView(t *testing.T) {
+	m := makeModel(Options{NoColor: true, ASCII: true}, 100, 30)
+	m.mode = modeList
+	m.snapshot = &admin.SystemSnapshot{
+		SystemName: "TestBBS",
+		Time:       time.Now(),
+		Nodes:      []admin.NodeState{},
+	}
+	m.events = []admin.Event{
+		{
+			Time:    time.Now(),
+			Type:    admin.EventCallerConnected,
+			NodeID:  1,
+			Handle:  "TestUser",
+			Message: "unique-event-marker",
+		},
+	}
+
+	// showLogs defaults true — event text must appear.
+	m.showLogs = true
+	gotWithLogs := m.View()
+	if !strings.Contains(gotWithLogs, "unique-event-marker") {
+		t.Errorf("showLogs=true: event text missing from view; got:\n%s", gotWithLogs)
+	}
+
+	// Toggle off — event text must NOT appear.
+	m.showLogs = false
+	gotWithoutLogs := m.View()
+	if strings.Contains(gotWithoutLogs, "unique-event-marker") {
+		t.Errorf("showLogs=false: event text should be hidden; got:\n%s", gotWithoutLogs)
+	}
+}
+
+// TestEnterWithNilSnapshotStaysInList verifies Enter does not enter details when snapshot is nil.
+func TestEnterWithNilSnapshotStaysInList(t *testing.T) {
+	m := New(nil, Options{MaxEvents: 10})
+	m.width, m.height = 100, 30
+	m.mode = modeList
+	m.snapshot = nil
+
+	mi, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mi.(Model)
+	if m.mode != modeList {
+		t.Fatalf("expected modeList after Enter with nil snapshot, got %v", m.mode)
+	}
+}
+
+// TestEnterWithEmptyNodesStaysInList verifies Enter does not enter details when there are no nodes.
+func TestEnterWithEmptyNodesStaysInList(t *testing.T) {
+	m := New(nil, Options{MaxEvents: 10})
+	m.width, m.height = 100, 30
+	m.mode = modeList
+	m.snapshot = &admin.SystemSnapshot{
+		SystemName: "TestBBS",
+		Time:       time.Now(),
+		Nodes:      []admin.NodeState{},
+	}
+
+	mi, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mi.(Model)
+	if m.mode != modeList {
+		t.Fatalf("expected modeList after Enter with zero nodes, got %v", m.mode)
 	}
 }
 

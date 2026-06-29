@@ -54,18 +54,13 @@ func (m Model) listView() string {
 	b := borderSet(m.opts.ASCII)
 
 	// Total available height: subtract header (1) + border rows (2 each section) + cmdbar (1).
-	// Sections: header row, node table (bordered), event feed (bordered), cmd bar.
+	// Sections: header row, node table (bordered), event feed (bordered, optional), cmd bar.
 	// Layout: header=1, nodeTable bordered = uses ~40% of remaining, events = rest, cmdbar=1.
 	headerHeight := 1
 	cmdBarHeight := 1
 	innerH := m.height - headerHeight - cmdBarHeight
 	if innerH < 4 {
 		innerH = 4
-	}
-	nodeTableH := innerH / 2
-	eventFeedH := innerH - nodeTableH
-	if eventFeedH < 2 {
-		eventFeedH = 2
 	}
 
 	w := m.width
@@ -76,26 +71,49 @@ func (m Model) listView() string {
 	// --- Header ---
 	headerLine := m.renderHeader(st)
 
-	// --- Node table ---
-	nodeLines := m.renderNodeTable(st, w-2, nodeTableH-2)
-	nodeBox := lipgloss.NewStyle().
-		Border(b).
-		BorderForeground(lipgloss.Color("4")).
-		Width(w - 2).
-		Render(strings.Join(nodeLines, "\n"))
+	var sections []string
+	sections = append(sections, headerLine)
 
-	// --- Event feed ---
-	eventLines := m.renderEventFeed(st, w-2, eventFeedH-2)
-	eventBox := lipgloss.NewStyle().
-		Border(b).
-		BorderForeground(lipgloss.Color("4")).
-		Width(w - 2).
-		Render(strings.Join(eventLines, "\n"))
+	if m.showLogs {
+		nodeTableH := innerH / 2
+		eventFeedH := innerH - nodeTableH
+		if eventFeedH < 2 {
+			eventFeedH = 2
+		}
+
+		// --- Node table ---
+		nodeLines := m.renderNodeTable(st, w-2, nodeTableH-2)
+		nodeBox := lipgloss.NewStyle().
+			Border(b).
+			BorderForeground(lipgloss.Color("4")).
+			Width(w - 2).
+			Render(strings.Join(nodeLines, "\n"))
+		sections = append(sections, nodeBox)
+
+		// --- Event feed ---
+		eventLines := m.renderEventFeed(st, w-2, eventFeedH-2)
+		eventBox := lipgloss.NewStyle().
+			Border(b).
+			BorderForeground(lipgloss.Color("4")).
+			Width(w - 2).
+			Render(strings.Join(eventLines, "\n"))
+		sections = append(sections, eventBox)
+	} else {
+		// Logs hidden: give the full inner height to the node table.
+		nodeLines := m.renderNodeTable(st, w-2, innerH-2)
+		nodeBox := lipgloss.NewStyle().
+			Border(b).
+			BorderForeground(lipgloss.Color("4")).
+			Width(w - 2).
+			Render(strings.Join(nodeLines, "\n"))
+		sections = append(sections, nodeBox)
+	}
 
 	// --- Command bar ---
 	cmdBar := m.renderCmdBar(st, w)
+	sections = append(sections, cmdBar)
 
-	return strings.Join([]string{headerLine, nodeBox, eventBox, cmdBar}, "\n")
+	return strings.Join(sections, "\n")
 }
 
 // renderHeader returns a single header line with system info.
@@ -198,7 +216,7 @@ func (m Model) renderCmdBar(st colorSet, width int) string {
 	case modeDetails:
 		keys = "[ESC] back   [q] quit"
 	default:
-		keys = "[↑/↓] select   [ENTER] details   [r] refresh   [q] quit"
+		keys = "[↑/↓] select   [ENTER] details   [L] logs   [r] refresh   [q] quit"
 	}
 	bar := st.cmdBar.Render(keys)
 	_ = width // reserved for padding

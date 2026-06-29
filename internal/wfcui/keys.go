@@ -43,7 +43,7 @@ func (m Model) handleKeyList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selected--
 		}
 	case tea.KeyEnter:
-		if m.mode == modeList {
+		if m.mode == modeList && m.snapshot != nil && len(m.snapshot.Nodes) > 0 {
 			m.mode = modeDetails
 		}
 	case tea.KeyRunes:
