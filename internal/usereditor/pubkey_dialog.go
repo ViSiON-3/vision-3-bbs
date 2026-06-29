@@ -10,7 +10,7 @@ import (
 
 // editingUser returns a pointer to the user currently being edited.
 // All key dialog operations must go through this helper.
-func (m *Model) editingUser() *user.User {
+func (m Model) editingUser() *user.User {
 	return m.users[m.editIndex]
 }
 
@@ -61,26 +61,6 @@ func (m Model) overlayKeyListDialog(background string) string {
 	lines := strings.Split(background, "\n")
 
 	dialogW := 72
-	listH := 8 // max keys shown
-	if n := len(keys); n < listH {
-		listH = n
-	}
-	// Header (title + empty + warn?) + list rows + footer
-	headerRows := 2
-	if unparseable > 0 {
-		headerRows = 3
-	}
-	footerRows := 2                                    // empty + footer instructions
-	dialogH := 1 + headerRows + listH + footerRows + 1 // border top + content + border bot
-
-	startRow := (m.height - dialogH) / 2
-	startCol := (m.width - dialogW) / 2
-	if startRow < 0 {
-		startRow = 0
-	}
-	if startCol < 0 {
-		startCol = 0
-	}
 
 	border := dialogBorderStyle.Render("╔" + strings.Repeat("═", dialogW-2) + "╗")
 	borderBot := dialogBorderStyle.Render("╚" + strings.Repeat("═", dialogW-2) + "╝")
@@ -119,7 +99,12 @@ func (m Model) overlayKeyListDialog(background string) string {
 	} else {
 		// Column widths: type (13) + fingerprint (47) + comment (rest)
 		inner := dialogW - 2
-		for i, k := range keys {
+		// Limit to 8 visible keys
+		visible := keys
+		if len(visible) > 8 {
+			visible = visible[:8]
+		}
+		for i, k := range visible {
 			fp := padRight(k.Fingerprint, 47)
 			typ := padRight(k.Type, 13)
 			cmt := k.Comment
@@ -143,10 +128,33 @@ func (m Model) overlayKeyListDialog(background string) string {
 		}
 	}
 
-	dialogLines = append(dialogLines, emptyLine)
+	// Error line: show last error from delete (or empty line)
+	if m.keyDialogErr != "" {
+		innerW := dialogW - 2
+		errText := m.keyDialogErr
+		if len(errText) > innerW {
+			errText = errText[:innerW]
+		}
+		errLine := side + dialogTextStyle.Render(errText+strings.Repeat(" ", max(0, innerW-len(errText)))) + side
+		dialogLines = append(dialogLines, errLine)
+	} else {
+		dialogLines = append(dialogLines, emptyLine)
+	}
+
 	footerText := "[A]dd  [D]elete selected  [Esc] back"
 	dialogLines = append(dialogLines, mkLine(footerText))
 	dialogLines = append(dialogLines, borderBot)
+
+	// Derive dialogH from actual built lines so centering is always exact.
+	dialogH := len(dialogLines)
+	startRow := (m.height - dialogH) / 2
+	startCol := (m.width - dialogW) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	if startCol < 0 {
+		startCol = 0
+	}
 
 	endCol := startCol + dialogW
 	for i, dl := range dialogLines {

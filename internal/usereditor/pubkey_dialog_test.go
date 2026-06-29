@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -97,6 +98,68 @@ func TestKeyDialogDelete(t *testing.T) {
 	// Deleting when empty must error
 	if err := m.keyDialogDelete("1"); err == nil {
 		t.Fatal("expected error deleting from empty list, got nil")
+	}
+}
+
+// TestUpdateDispatchKeyAdd verifies that the Update method correctly routes
+// modeKeyAdd Enter key events through to keyDialogAdd, returning to modeKeyList
+// with the key added to the user.
+func TestUpdateDispatchKeyAdd(t *testing.T) {
+	goodKey := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILyFECUpFcGnHIkwAWL3AMrv1bJXGnCKjdN9zXYfRUAo testcomment"
+
+	u := &user.User{Handle: "dispatch-test"}
+	m := newTestModelEditing(u)
+	m.openKeyDialog()
+
+	// Transition to modeKeyAdd as the real "A" keypress does
+	m.mode = modeKeyAdd
+	m.keyDialogErr = ""
+	m.textInput.SetValue(goodKey)
+	m.textInput.EchoMode = textinput.EchoNormal
+	m.textInput.CharLimit = 512
+	m.textInput.Width = 68
+	m.textInput.Focus()
+
+	// Send Enter through the Update dispatch
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	got, ok := result.(Model)
+	if !ok {
+		t.Fatal("Update must return a Model")
+	}
+
+	if got.mode != modeKeyList {
+		t.Fatalf("expected modeKeyList after successful add, got mode %v", got.mode)
+	}
+	if len(got.editingUser().PublicKeys) != 1 {
+		t.Fatalf("expected 1 key after add via Update, got %d", len(got.editingUser().PublicKeys))
+	}
+}
+
+// TestUpdateDispatchKeyListDelete verifies that the Update method correctly routes
+// modeKeyList "D" key events through to keyDialogDelete.
+func TestUpdateDispatchKeyListDelete(t *testing.T) {
+	goodKey := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILyFECUpFcGnHIkwAWL3AMrv1bJXGnCKjdN9zXYfRUAo testcomment"
+
+	u := &user.User{Handle: "dispatch-delete-test"}
+	m := newTestModelEditing(u)
+	m.openKeyDialog()
+	if err := m.keyDialogAdd(goodKey); err != nil {
+		t.Fatalf("setup add failed: %v", err)
+	}
+	m.keySelected = 0
+
+	// Send "d" through the Update dispatch while in modeKeyList
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	got, ok := result.(Model)
+	if !ok {
+		t.Fatal("Update must return a Model")
+	}
+
+	if got.mode != modeKeyList {
+		t.Fatalf("expected to stay in modeKeyList after delete, got mode %v", got.mode)
+	}
+	if len(got.editingUser().PublicKeys) != 0 {
+		t.Fatalf("expected 0 keys after delete via Update, got %d", len(got.editingUser().PublicKeys))
 	}
 }
 
