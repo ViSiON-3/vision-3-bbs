@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// timeNow is overridable in tests; defaults to time.Now.
+var timeNow = time.Now
+
 // ServerConfig configures an admin Server.
 type ServerConfig struct {
 	Reg        RegistrySource
