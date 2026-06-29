@@ -103,11 +103,11 @@ func (s *Scheduler) executeEvent(ctx context.Context, event config.EventConfig) 
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			result.Success = false
 			result.ExitCode = -1
-			slog.Error("event timed out", "id", event.ID, "name", event.Name, "timeout_s", event.TimeoutSeconds)
+			slog.Error("event timed out", "id", event.ID, "name", event.Name, "timeout_s", event.TimeoutSeconds, "error", err)
 		} else if exitErr, ok := err.(*exec.ExitError); ok {
 			result.Success = false
 			result.ExitCode = exitErr.ExitCode()
-			slog.Error("event failed", "id", event.ID, "name", event.Name, "exit_code", result.ExitCode)
+			slog.Error("event failed", "id", event.ID, "name", event.Name, "exit_code", result.ExitCode, "error", err)
 			if result.ErrorOutput != "" {
 				slog.Error("event stderr", "id", event.ID, "stderr", result.ErrorOutput)
 			}

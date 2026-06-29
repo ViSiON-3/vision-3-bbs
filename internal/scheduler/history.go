@@ -119,6 +119,6 @@ func (s *Scheduler) updateHistory(result EventResult) {
 		h.FailureCount++
 	}
 
-	slog.Debug("updated event history", "event", result.EventID, "status", h.LastStatus,
+	slog.Debug("updated event history", "id", result.EventID, "status", h.LastStatus,
 		"duration_ms", h.LastDuration, "runs", h.RunCount, "success", h.SuccessCount, "failures", h.FailureCount)
 }
