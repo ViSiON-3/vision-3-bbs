@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 )
@@ -63,13 +63,13 @@ func parseREPMessages(data []byte) ([]REPMessage, error) {
 		blkStr := strings.TrimSpace(string(header[116:122]))
 		numBlocks, err := strconv.Atoi(blkStr)
 		if err != nil || numBlocks < 1 {
-			log.Printf("WARN: QWK REP: invalid block count %q at offset %d", blkStr, pos)
+			slog.Warn("QWK REP: invalid block count", "value", blkStr, "offset", pos)
 			break
 		}
 
 		totalBytes := numBlocks * BlockSize
 		if pos+totalBytes > len(data) {
-			log.Printf("WARN: QWK REP: message extends past end of data at offset %d", pos)
+			slog.Warn("QWK REP: message extends past end of data", "offset", pos)
 			break
 		}
 
@@ -94,7 +94,7 @@ func parseREPMessages(data []byte) ([]REPMessage, error) {
 		pos += totalBytes
 	}
 
-	log.Printf("INFO: QWK REP: parsed %d messages", len(messages))
+	slog.Info("QWK REP: parsed messages", "count", len(messages))
 	return messages, nil
 }
 

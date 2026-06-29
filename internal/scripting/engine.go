@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -106,7 +106,7 @@ func (eng *Engine) Run(scriptPath string) error {
 		return fmt.Errorf("reading script %s: %w", scriptPath, err)
 	}
 
-	log.Printf("INFO: V3Script: Running %s for node %d", scriptPath, eng.session.NodeNumber)
+	slog.Info("V3Script: running script", "path", scriptPath, "node", eng.session.NodeNumber)
 
 	_, err = eng.vm.RunScript(scriptPath, string(data))
 	if err != nil {
@@ -136,7 +136,7 @@ func (eng *Engine) Close() {
 		select {
 		case <-eng.copierDone:
 		case <-time.After(2 * time.Second):
-			log.Printf("WARN: V3Script: copier goroutine did not exit within 2s; proceeding with cleanup")
+			slog.Warn("V3Script: copier goroutine did not exit within 2s; proceeding with cleanup")
 		}
 	}
 	if eng.pipeReader != nil {

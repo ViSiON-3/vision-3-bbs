@@ -3,10 +3,11 @@ package configeditor
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
 // joinArgs converts an array of arguments into a JSON-encoded string.
@@ -19,7 +20,7 @@ func joinArgs(args []string) string {
 	// Encode as JSON array for lossless round-trip
 	data, err := json.Marshal(args)
 	if err != nil {
-		log.Printf("WARN: Failed to encode args as JSON: %v", err)
+		slog.Warn("failed to encode args as JSON", "error", err)
 		return ""
 	}
 	return string(data)

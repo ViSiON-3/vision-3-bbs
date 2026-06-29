@@ -3,7 +3,7 @@ package conference
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,7 +19,7 @@ type Conference struct {
 	Tag         string `json:"tag"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	ACS         string `json:"acs"` // ACS string — who can see/enter this conference
+	ACS         string `json:"acs"`                       // ACS string — who can see/enter this conference
 	AllowAnon   *bool  `json:"allow_anonymous,omitempty"` // Optional: allow anonymous posts (nil defaults to true)
 }
 
@@ -42,13 +42,13 @@ func NewConferenceManager(configPath string) (*ConferenceManager, error) {
 
 	if err := cm.loadConferences(); err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: %s not found. Starting with no conferences.", conferencesFile)
+			slog.Info("conferences file not found; starting with none", "file", conferencesFile)
 			return cm, nil
 		}
 		return nil, fmt.Errorf("failed to load conferences: %w", err)
 	}
 
-	log.Printf("INFO: ConferenceManager initialized. Loaded %d conferences.", len(cm.conferencesByID))
+	slog.Info("conference manager initialized", "count", len(cm.conferencesByID))
 	return cm, nil
 }
 
@@ -60,7 +60,7 @@ func (cm *ConferenceManager) loadConferences() error {
 	}
 
 	if len(data) == 0 {
-		log.Printf("INFO: %s is empty. No conferences loaded.", cm.configPath)
+		slog.Info("conferences file is empty; none loaded", "path", cm.configPath)
 		return nil
 	}
 
@@ -80,16 +80,16 @@ func (cm *ConferenceManager) loadConferences() error {
 			continue
 		}
 		if _, exists := cm.conferencesByID[conf.ID]; exists {
-			log.Printf("WARN: Duplicate conference ID %d in %s. Skipping.", conf.ID, cm.configPath)
+			slog.Warn("duplicate conference ID; skipping", "id", conf.ID, "path", cm.configPath)
 			continue
 		}
 		if _, exists := cm.conferencesByTag[conf.Tag]; exists {
-			log.Printf("WARN: Duplicate conference Tag '%s' in %s. Skipping.", conf.Tag, cm.configPath)
+			slog.Warn("duplicate conference tag; skipping", "tag", conf.Tag, "path", cm.configPath)
 			continue
 		}
 		cm.conferencesByID[conf.ID] = conf
 		cm.conferencesByTag[conf.Tag] = conf
-		log.Printf("TRACE: Loaded conference ID %d, Tag '%s', Name '%s'", conf.ID, conf.Tag, conf.Name)
+		slog.Debug("loaded conference", "id", conf.ID, "tag", conf.Tag, "name", conf.Name)
 	}
 
 	// Migration: assign positions to any conferences that have Position <= 0.
@@ -118,7 +118,7 @@ func (cm *ConferenceManager) loadConferences() error {
 			maxPos++
 			conf.Position = maxPos
 		}
-		log.Printf("INFO: Auto-assigned positions to %d conferences (migration)", len(sorted))
+		slog.Info("auto-assigned conference positions (migration)", "count", len(sorted))
 	}
 
 	return nil
