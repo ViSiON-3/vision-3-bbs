@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Module path: `github.com/ViSiON-3/vision-3-bbs`.
-- Pure Go, **no CGO**. Must `go build` for: `windows/386`, `windows/amd64`, `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/amd64`.
+- Pure Go, **no CGO**. Must `go build` for: `windows/386`, `windows/amd64`, `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`.
 - Logging: stdlib `log/slog` only. Audit every admin session open/close and command.
 - TUI stack: `github.com/charmbracelet/bubbletea` + `lipgloss` (already in `go.mod`). Do not add other TUI libs.
 - Keep files under 300 lines; Go file names `snake_case`.
