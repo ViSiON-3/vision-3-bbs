@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -289,7 +289,7 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running INFOFORMS for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running INFOFORMS", "node", nodeNumber, "handle", currentUser.Handle)
 
 	infoformsMu.Lock()
 	cfg, err := loadInfoFormConfig(e.RootConfigPath)
@@ -515,12 +515,12 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	infoformsMu.Unlock()
 
 	if saveErr != nil {
-		log.Printf("ERROR: Node %d: Failed to save infoform response: %v", nodeNumber, saveErr)
+		slog.Error("failed to save infoform response", "node", nodeNumber, "error", saveErr)
 		wv(terminal, "\r\n|04Error saving your form.\r\n", outputMode)
 		return
 	}
 
-	log.Printf("INFO: Node %d: %s completed infoform #%d", nodeNumber, currentUser.Handle, formNum)
+	slog.Info("completed infoform", "node", nodeNumber, "handle", currentUser.Handle, "form", formNum)
 	wv(terminal, "\r\n|10Form completed!\r\n", outputMode)
 }
 
@@ -846,7 +846,7 @@ func runInfoFormRequired(c *cmdCtx, args string) (*user.User, string, error) {
 	cfg, err := loadInfoFormConfig(e.RootConfigPath)
 	infoformsMu.Unlock()
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to load infoforms config in required check: %v", nodeNumber, err)
+		slog.Error("failed to load infoforms config in required check", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -865,8 +865,8 @@ func runInfoFormRequired(c *cmdCtx, args string) (*user.User, string, error) {
 		fillInfoForm(e, s, terminal, outputMode, nodeNumber, currentUser, formNum, termWidth, termHeight)
 		// Re-check: if form still not completed (save failed, user disconnected, etc.), block login
 		if !hasCompletedForm(e.RootConfigPath, currentUser.ID, formNum) {
-			log.Printf("WARN: Node %d: Required infoform #%d not completed by %s, blocking login",
-				nodeNumber, formNum, currentUser.Handle)
+			slog.Warn("required infoform not completed, blocking login",
+				"node", nodeNumber, "form", formNum, "handle", currentUser.Handle)
 			wv(terminal, fmt.Sprintf("\r\n|04Required form #%d was not completed. Disconnecting.\r\n", formNum), outputMode)
 			return currentUser, "LOGOFF", nil
 		}
@@ -929,6 +929,6 @@ func runInfoFormNuke(c *cmdCtx, args string) (*user.User, string, error) {
 	infoformsMu.Unlock()
 
 	wv(terminal, "\r\n|10All infoforms deleted.\r\n", outputMode)
-	log.Printf("INFO: Node %d: SysOp %s nuked infoforms for user %s", nodeNumber, currentUser.Handle, targetUser.Handle)
+	slog.Info("sysop nuked infoforms for user", "node", nodeNumber, "handle", currentUser.Handle, "target", targetUser.Handle)
 	return currentUser, "", nil
 }

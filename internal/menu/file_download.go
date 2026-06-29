@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -41,7 +41,7 @@ func runClearBatch(c *cmdCtx, args string) (*user.User, string, error) {
 	currentUser.TaggedFileIDs = nil
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to update user after clearing batch queue: %v", nodeNumber, err)
+		slog.Error("failed to update user after clearing batch queue", "node", nodeNumber, "error", err)
 		currentUser.TaggedFileIDs = oldTagged
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SaveUserError)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -49,7 +49,7 @@ func runClearBatch(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.BatchClearedFormat, count))), outputMode)
-	log.Printf("INFO: Node %d: User %s cleared %d file(s) from batch queue", nodeNumber, currentUser.Handle, count)
+	slog.Info("cleared files from batch queue", "node", nodeNumber, "handle", currentUser.Handle, "count", count)
 	time.Sleep(1 * time.Second)
 
 	return currentUser, "", nil
@@ -121,12 +121,12 @@ func (e *MenuExecutor) downloadLoop(
 		}
 		currentUser.TaggedFileIDs = append(currentUser.TaggedFileIDs, rec.ID)
 		if err := userManager.UpdateUser(currentUser); err != nil {
-			log.Printf("ERROR: Node %d: Failed to persist tagged file: %v", nodeNumber, err)
+			slog.Error("failed to persist tagged file", "node", nodeNumber, "error", err)
 			currentUser.TaggedFileIDs = currentUser.TaggedFileIDs[:len(currentUser.TaggedFileIDs)-1]
 			return false
 		}
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.AddedToBatchFormat, rec.Filename))), outputMode)
-		log.Printf("INFO: Node %d: User %s tagged file %s (%s)", nodeNumber, currentUser.Handle, rec.ID, rec.Filename)
+		slog.Info("tagged file", "node", nodeNumber, "handle", currentUser.Handle, "id", rec.ID, "file", rec.Filename)
 		return true
 	}
 
@@ -193,22 +193,22 @@ func (e *MenuExecutor) downloadLoop(
 		for _, id := range currentUser.TaggedFileIDs {
 			rec, err := e.FileMgr.GetFileRecordByID(id)
 			if err != nil {
-				log.Printf("WARN: Node %d: Could not find record for file %s: %v", nodeNumber, id, err)
+				slog.Warn("could not find record for file", "node", nodeNumber, "id", id, "error", err)
 				continue
 			}
 			area, ok := e.FileMgr.GetAreaByID(rec.AreaID)
 			if !ok {
-				log.Printf("WARN: Node %d: Area %d not found for file %s", nodeNumber, rec.AreaID, id)
+				slog.Warn("area not found for file", "node", nodeNumber, "area", rec.AreaID, "id", id)
 				continue
 			}
 			if area.ACSDownload != "" && !checkACS(area.ACSDownload, currentUser, s, terminal, sessionStartTime) {
-				log.Printf("WARN: Node %d: User %s no longer authorized to download from area %d (%s), skipping file %s",
-					nodeNumber, currentUser.Handle, area.ID, area.Name, id)
+				slog.Warn("user no longer authorized to download from area, skipping file",
+					"node", nodeNumber, "handle", currentUser.Handle, "area", area.ID, "name", area.Name, "id", id)
 				continue
 			}
 			p, err := e.FileMgr.GetFilePath(id)
 			if err != nil {
-				log.Printf("WARN: Node %d: Could not resolve path for file %s: %v", nodeNumber, id, err)
+				slog.Warn("could not resolve path for file", "node", nodeNumber, "id", id, "error", err)
 				continue
 			}
 			paths = append(paths, p)
@@ -219,7 +219,7 @@ func (e *MenuExecutor) downloadLoop(
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FilesResolveError)), outputMode)
 			currentUser.TaggedFileIDs = nil
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to persist cleared batch: %v", nodeNumber, err)
+				slog.Error("failed to persist cleared batch", "node", nodeNumber, "error", err)
 			}
 			time.Sleep(2 * time.Second)
 			return currentUser, nil
@@ -231,7 +231,7 @@ func (e *MenuExecutor) downloadLoop(
 			if errors.Is(err, io.EOF) {
 				return currentUser, err
 			}
-			log.Printf("ERROR: Node %d: Protocol selection error: %v", nodeNumber, err)
+			slog.Error("protocol selection error", "node", nodeNumber, "error", err)
 			return currentUser, nil
 		}
 		if !ok {
@@ -247,11 +247,11 @@ func (e *MenuExecutor) downloadLoop(
 		currentUser.NumDownloads += successCount
 
 		if err := userManager.UpdateUser(currentUser); err != nil {
-			log.Printf("ERROR: Node %d: Failed to update user after download: %v", nodeNumber, err)
+			slog.Error("failed to update user after download", "node", nodeNumber, "error", err)
 		}
 
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.DownloadFinishedFormat, successCount, failCount))), outputMode)
-		log.Printf("INFO: Node %d: User %s download complete — success=%d fail=%d", nodeNumber, currentUser.Handle, successCount, failCount)
+		slog.Info("download complete", "node", nodeNumber, "handle", currentUser.Handle, "success", successCount, "fail", failCount)
 		time.Sleep(2 * time.Second)
 
 		return currentUser, nil
@@ -297,7 +297,7 @@ func runDownloadFile(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Node %d: downloadLoop error: %v", nodeNumber, err)
+		slog.Error("download loop error", "node", nodeNumber, "error", err)
 		if updatedUser != nil {
 			return updatedUser, "", nil
 		}
@@ -334,7 +334,7 @@ func runBatchDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Node %d: downloadLoop error: %v", nodeNumber, err)
+		slog.Error("download loop error", "node", nodeNumber, "error", err)
 		if updatedUser != nil {
 			return updatedUser, "", nil
 		}

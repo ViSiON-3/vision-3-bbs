@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -179,7 +179,7 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running RUMORSLIST for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running RUMORSLIST", "node", nodeNumber, "handle", currentUser.Handle)
 
 	// Clear screen before listing
 	wv(terminal, "\x1b[2J\x1b[H", outputMode)
@@ -232,7 +232,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running RUMORSADD for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running RUMORSADD", "node", nodeNumber, "handle", currentUser.Handle)
 
 	userLevel := currentUser.AccessLevel
 	anonName := rumorAnonName(e)
@@ -347,7 +347,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	rumorsMu.Unlock()
 
 	if saveErr != nil {
-		log.Printf("ERROR: Node %d: Failed to save rumor: %v", nodeNumber, saveErr)
+		slog.Error("failed to save rumor", "node", nodeNumber, "error", saveErr)
 		wv(terminal, "\r\n|04Error saving rumor.\r\n", outputMode)
 		return currentUser, "", nil
 	}
@@ -358,7 +358,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	wv(terminal, "\r\n"+addedMsg+"\r\n", outputMode)
 	time.Sleep(1 * time.Second)
-	log.Printf("INFO: Node %d: %s added rumor #%d", nodeNumber, currentUser.Handle, newRumor.ID)
+	slog.Info("rumor added", "node", nodeNumber, "handle", currentUser.Handle, "id", newRumor.ID)
 	return currentUser, "", nil
 }
 
@@ -379,7 +379,7 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running RUMORSDELETE for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running RUMORSDELETE", "node", nodeNumber, "handle", currentUser.Handle)
 
 	isSysop := currentUser.AccessLevel >= 255
 	userLevel := currentUser.AccessLevel
@@ -496,13 +496,13 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 	rumorsMu.Unlock()
 
 	if saveErr != nil {
-		log.Printf("ERROR: Node %d: Failed to delete rumor #%d: %v", nodeNumber, num, saveErr)
+		slog.Error("failed to delete rumor", "node", nodeNumber, "id", num, "error", saveErr)
 		wv(terminal, "\r\n|04Error deleting rumor.\r\n", outputMode)
 		return currentUser, "", nil
 	}
 
 	wv(terminal, "\r\n|10Rumor deleted.\r\n", outputMode)
-	log.Printf("INFO: Node %d: %s deleted rumor #%d", nodeNumber, currentUser.Handle, num)
+	slog.Info("rumor deleted", "node", nodeNumber, "handle", currentUser.Handle, "id", num)
 	return currentUser, "", nil
 }
 
@@ -520,7 +520,7 @@ func runRumorsSearch(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running RUMORSSEARCH for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running RUMORSSEARCH", "node", nodeNumber, "handle", currentUser.Handle)
 
 	isSysop := currentUser.AccessLevel >= 255
 	userLevel := currentUser.AccessLevel
@@ -591,7 +591,7 @@ func runRumorsNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running RUMORSNEWSCAN for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running RUMORSNEWSCAN", "node", nodeNumber, "handle", currentUser.Handle)
 
 	// Clear screen before newscan
 	wv(terminal, "\x1b[2J\x1b[H", outputMode)

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -397,7 +397,7 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 		terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H", row)), outputMode)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	}
-	log.Printf("INFO: Node %d: Idle timeout after %d minutes, disconnecting", nodeNumber, e.GetServerConfig().SessionIdleTimeoutMinutes)
+	slog.Info("idle timeout, disconnecting", "node", nodeNumber, "minutes", e.GetServerConfig().SessionIdleTimeoutMinutes)
 }
 
 // remoteIPFromSession extracts the IP address from an SSH session's remote address,
@@ -416,7 +416,7 @@ func (e *MenuExecutor) showUndefinedMenuInput(terminal *term.Terminal, outputMod
 	errMsg := e.LoadedStrings.ExecUnknownCommand
 	processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
 	if wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode); wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing unknown command message: %v", nodeNumber, wErr)
+		slog.Error("failed writing unknown command message", "node", nodeNumber, "error", wErr)
 	}
 	time.Sleep(500 * time.Millisecond)
 }
@@ -454,11 +454,11 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		outputMode := c.outputMode
 
 		if currentUser == nil {
-			log.Printf("WARN: Node %d: READMAIL called without logged in user.", nodeNumber)
+			slog.Warn("readmail called without logged in user", "node", nodeNumber)
 			msg := e.LoadedStrings.ExecReadmailLogin
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing READMAIL error message: %v", wErr)
+				slog.Error("failed writing readmail error message", "error", wErr)
 			}
 			time.Sleep(1 * time.Second)
 			return nil, "", nil // No user change, no next action, no error
@@ -466,7 +466,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		msg := fmt.Sprintf(e.LoadedStrings.ExecReadmailPlaceholder, currentUser.Handle)
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Failed writing READMAIL placeholder message: %v", wErr)
+			slog.Error("failed writing readmail placeholder message", "error", wErr)
 		}
 		time.Sleep(500 * time.Millisecond)
 		return nil, "", nil // No user change, no next action, no error
@@ -486,32 +486,31 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		termHeight := c.termHeight
 
 		if currentUser == nil {
-			log.Printf("WARN: Node %d: DOOR:%s called without logged in user.", nodeNumber, doorName)
+			slog.Warn("door called without logged in user", "node", nodeNumber, "door", doorName)
 			msg := e.LoadedStrings.ExecDoorLogin
 			wErr := terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing DOOR error message (not logged in): %v", wErr)
+				slog.Error("failed writing door error message (not logged in)", "error", wErr)
 			}
 			return nil, "", nil
 		}
-		log.Printf("INFO: Node %d: User %s attempting to run door: %s", nodeNumber, currentUser.Handle, doorName)
+		slog.Info("user attempting to run door", "node", nodeNumber, "handle", currentUser.Handle, "door", doorName)
 
 		// Look up door configuration
 		doorConfig, exists := e.GetDoorConfig(strings.ToUpper(doorName))
 		if !exists {
-			log.Printf("WARN: Door configuration not found for '%s'", doorName)
+			slog.Warn("door configuration not found", "door", doorName)
 			errMsg := fmt.Sprintf(e.LoadedStrings.ExecDoorNotConfigured, doorName)
 			wErr := terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing DOOR error message (not configured) to stderr: %v", wErr)
+				slog.Error("failed writing door error message (not configured) to stderr", "error", wErr)
 			}
 			return nil, "", nil
 		}
 
 		// Check per-door access level
 		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
-			log.Printf("WARN: Node %d: User %s (level %d) denied access to door %s (requires %d)",
-				nodeNumber, currentUser.Handle, currentUser.AccessLevel, doorName, doorConfig.MinAccessLevel)
+			slog.Warn("user denied access to door", "node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", doorName, "requires", doorConfig.MinAccessLevel)
 			errFmt := e.LoadedStrings.DoorAccessDenied
 			if strings.TrimSpace(errFmt) == "" {
 				errFmt = "\r\n|14Access denied to door: |11%s|07\r\n"
@@ -519,7 +518,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			errMsg := fmt.Sprintf(errFmt, doorName)
 			wErr := terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing door access denied message: %v", wErr)
+				slog.Error("failed writing door access denied message", "error", wErr)
 			}
 			time.Sleep(1 * time.Second)
 			return nil, "", nil
@@ -545,7 +544,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 
 		if cmdErr != nil {
 			if errors.Is(cmdErr, ErrDoorBusy) {
-				log.Printf("INFO: Node %d: Door %s is busy for user %s", nodeNumber, doorName, currentUser.Handle)
+				slog.Info("door is busy", "node", nodeNumber, "door", doorName, "handle", currentUser.Handle)
 				busyFmt := e.LoadedStrings.DoorBusyFormat
 				if strings.TrimSpace(busyFmt) == "" {
 					busyFmt = "\r\n|14Door is currently in use: |11%s|07\r\n"
@@ -554,12 +553,12 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 				terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
 				time.Sleep(1 * time.Second)
 			} else {
-				log.Printf("ERROR: Node %d: Door execution failed for user %s, door %s: %v", nodeNumber, currentUser.Handle, doorName, cmdErr)
+				slog.Error("door execution failed", "node", nodeNumber, "handle", currentUser.Handle, "door", doorName, "error", cmdErr)
 				doorErrorMessage(ctx, fmt.Sprintf("Error running external program '%s': %v", doorName, cmdErr))
 				time.Sleep(2 * time.Second)
 			}
 		} else {
-			log.Printf("INFO: Node %d: Door completed for user %s, door %s", nodeNumber, currentUser.Handle, doorName)
+			slog.Info("door completed", "node", nodeNumber, "handle", currentUser.Handle, "door", doorName)
 		}
 
 		return nil, "", nil
@@ -733,7 +732,7 @@ func runImmediateLogoffCommand(c *cmdCtx, args string) (*user.User, string, erro
 	outputMode := c.outputMode
 
 	if displayErr := e.displayFile(terminal, "GOODBYE.ANS", outputMode); displayErr != nil {
-		log.Printf("WARN: Node %d: Failed to display GOODBYE.ANS before logoff: %v", nodeNumber, displayErr)
+		slog.Warn("failed to display GOODBYE.ANS before logoff", "node", nodeNumber, "error", displayErr)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecGoodbye)), outputMode)
 	}
 
@@ -754,11 +753,11 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	termHeight := c.termHeight
 
 	if currentUser == nil {
-		log.Printf("WARN: Node %d: SHOWSTATS called without logged in user.", nodeNumber)
+		slog.Warn("showstats called without logged in user", "node", nodeNumber)
 		msg := e.LoadedStrings.ExecStatsLogin
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Failed writing SHOWSTATS error message: %v", wErr)
+			slog.Error("failed writing showstats error message", "error", wErr)
 		}
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Updated return
@@ -769,11 +768,11 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	fullAnsPath := filepath.Join(e.MenuSetPath, "ansi", ansFilename)
 	rawAnsiContent, readErr := ansi.GetAnsiFileContent(fullAnsPath)
 	if readErr != nil {
-		log.Printf("ERROR: Node %d: Failed to read %s for SHOWSTATS: %v", nodeNumber, fullAnsPath, readErr)
+		slog.Error("failed to read file for showstats", "node", nodeNumber, "path", fullAnsPath, "error", readErr)
 		msg := fmt.Sprintf(e.LoadedStrings.ExecStatsError, ansFilename)
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Failed writing SHOWSTATS file read error message: %v", wErr)
+			slog.Error("failed writing showstats file read error message", "error", wErr)
 		}
 		time.Sleep(1 * time.Second)
 		return nil, "", fmt.Errorf("failed to read %s: %w", ansFilename, readErr) // Updated return
@@ -801,7 +800,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Branch based on output mode to preserve encoding correctness
-	log.Printf("DEBUG: Node %d: SHOWSTATS outputMode = %v", nodeNumber, outputMode)
+	slog.Debug("showstats output mode", "node", nodeNumber, "outputMode", outputMode)
 	var statsDisplayBytes []byte
 	if outputMode == ansi.OutputModeUTF8 {
 		// UTF-8 mode: Convert CP437→UTF-8 first, then substitute placeholders
@@ -823,7 +822,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	wErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if wErr != nil {
 		// Log error but continue if possible
-		log.Printf("ERROR: Node %d: Failed clearing screen for SHOWSTATS: %v", nodeNumber, wErr)
+		slog.Error("failed clearing screen for showstats", "node", nodeNumber, "error", wErr)
 	}
 	// For CP437 mode with raw ANSI content, write bytes directly to avoid UTF-8 decode artifacts
 	if outputMode == ansi.OutputModeCP437 {
@@ -832,7 +831,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		wErr = terminalio.WriteProcessedBytes(terminal, statsDisplayBytes, outputMode)
 	}
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing processed YOURSTAT.ANS: %v", nodeNumber, wErr)
+		slog.Error("failed writing processed YOURSTAT.ANS", "node", nodeNumber, "error", wErr)
 		return nil, "", wErr // Updated return
 	}
 
@@ -842,14 +841,14 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
 	}
 
-	log.Printf("DEBUG: Node %d: Displaying SHOWSTATS pause prompt (centered)", nodeNumber)
+	slog.Debug("displaying showstats pause prompt (centered)", "node", nodeNumber)
 	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("INFO: Node %d: User disconnected during SHOWSTATS pause.", nodeNumber)
+			slog.Info("user disconnected during showstats pause", "node", nodeNumber)
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Failed during SHOWSTATS pause: %v", err)
+		slog.Error("failed during showstats pause", "error", err)
 		return nil, "", err
 	}
 	return nil, "", nil // Updated return (Success)
@@ -897,9 +896,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	defer resetSessionIH(s)
 
 	if currentUser != nil {
-		log.Printf("DEBUG: Running menu for user %s (Level: %d)", currentUser.Handle, currentUser.AccessLevel)
+		slog.Debug("running menu for user", "handle", currentUser.Handle, "level", currentUser.AccessLevel)
 	} else {
-		log.Printf("DEBUG: Running menu for potentially unauthenticated user (login phase)")
+		slog.Debug("running menu for potentially unauthenticated user (login phase)")
 	}
 
 	// Apply the session-level idle timeout to the shared InputHandler.
@@ -909,7 +908,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	getSessionIH(s).SetSessionIdleTimeout(e.idleTimeout(currentUser))
 
 	for {
-		log.Printf("INFO: Running menu: %s (Previous: %s) for Node %d", currentMenuName, previousMenuName, nodeNumber)
+		slog.Info("running menu", "menu", currentMenuName, "previous", previousMenuName, "node", nodeNumber)
 
 		var userInput string // Declare userInput here (Keep this one)
 		// Removed authenticatedUserResult declaration from here
@@ -954,12 +953,12 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		var ansiProcessResult ansi.ProcessAnsiResult
 		var processErr error
 		if readErr != nil {
-			log.Printf("ERROR: Failed to read ANSI file %s: %v", ansFilename, readErr)
+			slog.Error("failed to read ANSI file", "file", ansFilename, "error", readErr)
 			// Display error message to user (using new helper)
 			errMsg := fmt.Sprintf("\r\n|01Error reading screen file: %s|07\r\n", ansFilename)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing screen read error: %v", wErr)
+				slog.Error("failed writing screen read error", "error", wErr)
 			}
 			// Reading the screen file is critical, return error
 			return "", nil, fmt.Errorf("failed to read screen file %s: %w", ansFilename, readErr)
@@ -969,7 +968,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Use CP437 mode to keep raw bytes for coordinate tracking, then convert based on outputMode
 		ansiProcessResult, processErr = ansi.ProcessAnsiAndExtractCoords(rawAnsiContent, ansi.OutputModeCP437)
 		if processErr != nil {
-			log.Printf("ERROR: Failed to process ANSI file %s: %v. Display may be incorrect.", ansFilename, processErr)
+			slog.Error("failed to process ANSI file, display may be incorrect", "file", ansFilename, "error", processErr)
 			// Processing error is also critical, return error
 			return "", nil, fmt.Errorf("failed to process screen file %s: %w", ansFilename, processErr)
 		}
@@ -984,7 +983,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// --- SPECIAL HANDLING FOR LOGIN MENU INTERACTION ---
 		if currentMenuName == "LOGIN" {
 			if currentUser != nil {
-				log.Printf("WARN: Attempting to run LOGIN menu for already authenticated user %s. Skipping login, going to MAIN.", currentUser.Handle)
+				slog.Warn("attempting to run LOGIN menu for already authenticated user, skipping login, going to MAIN", "handle", currentUser.Handle)
 
 				// Set default message area if not already set (e.g., SSH auto-login)
 				if currentUser.CurrentMessageAreaID == 0 && e.MessageMgr != nil {
@@ -1013,7 +1012,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				// Persist defaults
 				if userManager != nil {
 					if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
-						log.Printf("ERROR: Failed to save user default area selections: %v", saveErr)
+						slog.Error("failed to save user default area selections", "error", saveErr)
 					}
 				}
 
@@ -1031,8 +1030,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				lines := bytes.Split(displayBytes, []byte("\n"))
 				if len(lines) > termHeight {
 					displayBytes = bytes.Join(lines[:termHeight], []byte("\n"))
-					log.Printf("DEBUG: Truncated LOGIN.ANS from %d to %d lines for %d-row terminal",
-						len(lines), termHeight, termHeight)
+					slog.Debug("truncated LOGIN.ANS to fit terminal", "from", len(lines), "to", termHeight, "rows", termHeight)
 				}
 			}
 			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
@@ -1045,7 +1043,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				wErr = terminalio.WriteProcessedBytes(terminal, displayBytes, outputMode)
 			}
 			if wErr != nil {
-				log.Printf("ERROR: Failed to write processed LOGIN.ANS bytes to terminal: %v", wErr)
+				slog.Error("failed to write processed LOGIN.ANS bytes to terminal", "error", wErr)
 				return "", nil, fmt.Errorf("failed to display LOGIN.ANS: %w", wErr)
 			}
 
@@ -1055,25 +1053,25 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			// Process result of login attempt
 			if loginErr != nil {
 				if errors.Is(loginErr, io.EOF) {
-					log.Printf("INFO: User disconnected during login prompt.")
+					slog.Info("user disconnected during login prompt")
 					return "LOGOFF", nil, nil // Signal logoff
 				}
-				log.Printf("ERROR: Error during login prompt handling: %v", loginErr)
+				slog.Error("error during login prompt handling", "error", loginErr)
 				return "", nil, loginErr // Propagate critical error
 			}
 
 			if authenticatedUserResult != nil {
-				log.Printf("INFO: Login successful for user %s. Proceeding based on LOGIN menu config.", authenticatedUserResult.Handle)
+				slog.Info("login successful, proceeding based on LOGIN menu config", "handle", authenticatedUserResult.Handle)
 				currentUser = authenticatedUserResult // Update the user for this Run context
 
 				// --- Update user's terminal dimensions from detected size ---
 				if termWidth > 0 && termHeight > 0 {
 					currentUser.ScreenWidth = termWidth
 					currentUser.ScreenHeight = termHeight
-					log.Printf("INFO: Updated user %s screen preferences to %dx%d", currentUser.Handle, termWidth, termHeight)
+					slog.Info("updated user screen preferences", "handle", currentUser.Handle, "width", termWidth, "height", termHeight)
 					if userManager != nil {
 						if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
-							log.Printf("ERROR: Failed to save user screen preferences: %v", saveErr)
+							slog.Error("failed to save user screen preferences", "error", saveErr)
 						}
 					}
 				}
@@ -1081,67 +1079,63 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				// --- BEGIN Set Default Message Area (only if not already set from saved prefs) ---
 				if currentUser.CurrentMessageAreaID == 0 && e.MessageMgr != nil {
 					allAreas := e.MessageMgr.ListAreas() // Already sorted by Position
-					log.Printf("DEBUG: Found %d message areas for user %s.", len(allAreas), currentUser.Handle)
+					slog.Debug("found message areas for user", "count", len(allAreas), "handle", currentUser.Handle)
 					foundDefaultArea := false
 					for _, area := range allAreas {
 						// Check if user has read access to this area
 						if checkACS(area.ACSRead, currentUser, s, terminal, sessionStartTime) {
-							log.Printf("INFO: Setting default message area for user %s to Area ID %d (%s)", currentUser.Handle, area.ID, area.Tag)
+							slog.Info("setting default message area for user", "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
 							currentUser.CurrentMessageAreaID = area.ID
 							currentUser.CurrentMessageAreaTag = area.Tag
 							e.setUserMsgConference(currentUser, area.ConferenceID)
 							foundDefaultArea = true
 							break // Found the first accessible area
 						} else {
-							log.Printf("TRACE: User %s denied read access to Area ID %d (%s) based on ACS '%s'", currentUser.Handle, area.ID, area.Tag, area.ACSRead)
+							slog.Debug("user denied read access to message area", "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag, "acs", area.ACSRead)
 						}
 					}
 					if !foundDefaultArea {
-						log.Printf("WARN: User %s has no access to any message areas.", currentUser.Handle)
+						slog.Warn("user has no access to any message areas", "handle", currentUser.Handle)
 						currentUser.CurrentMessageAreaID = 0
 						currentUser.CurrentMessageAreaTag = ""
 					}
 				} else if currentUser.CurrentMessageAreaID != 0 {
-					log.Printf("INFO: User %s has saved message area %d (%s), conference %d (%s)",
-						currentUser.Handle, currentUser.CurrentMessageAreaID, currentUser.CurrentMessageAreaTag,
-						currentUser.CurrentMsgConferenceID, currentUser.CurrentMsgConferenceTag)
+					slog.Info("user has saved message area", "handle", currentUser.Handle, "id", currentUser.CurrentMessageAreaID, "tag", currentUser.CurrentMessageAreaTag, "conferenceID", currentUser.CurrentMsgConferenceID, "conferenceTag", currentUser.CurrentMsgConferenceTag)
 				}
 				// --- END Set Default Message Area ---
 
 				// --- BEGIN Set Default File Area (only if not already set from saved prefs) ---
 				if currentUser.CurrentFileAreaID == 0 && e.FileMgr != nil {
 					allFileAreas := e.FileMgr.ListAreas() // Assumes ListAreas is sorted by ID
-					log.Printf("DEBUG: Found %d file areas for user %s.", len(allFileAreas), currentUser.Handle)
+					slog.Debug("found file areas for user", "count", len(allFileAreas), "handle", currentUser.Handle)
 					foundDefaultFileArea := false
 					for _, area := range allFileAreas {
 						// Check if user has list access to this area
 						if checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) { // Use ACSList
-							log.Printf("INFO: Setting default file area for user %s to Area ID %d (%s)", currentUser.Handle, area.ID, area.Tag)
+							slog.Info("setting default file area for user", "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
 							currentUser.CurrentFileAreaID = area.ID
 							currentUser.CurrentFileAreaTag = area.Tag
 							e.setUserFileConference(currentUser, area.ConferenceID)
 							foundDefaultFileArea = true
 							break // Found the first accessible area
 						} else {
-							log.Printf("TRACE: User %s denied list access to File Area ID %d (%s) based on ACS '%s'", currentUser.Handle, area.ID, area.Tag, area.ACSList)
+							slog.Debug("user denied list access to file area", "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag, "acs", area.ACSList)
 						}
 					}
 					if !foundDefaultFileArea {
-						log.Printf("WARN: User %s has no access to any file areas.", currentUser.Handle)
+						slog.Warn("user has no access to any file areas", "handle", currentUser.Handle)
 						currentUser.CurrentFileAreaID = 0
 						currentUser.CurrentFileAreaTag = ""
 					}
 				} else if currentUser.CurrentFileAreaID != 0 {
-					log.Printf("INFO: User %s has saved file area %d (%s), conference %d (%s)",
-						currentUser.Handle, currentUser.CurrentFileAreaID, currentUser.CurrentFileAreaTag,
-						currentUser.CurrentFileConferenceID, currentUser.CurrentFileConferenceTag)
+					slog.Info("user has saved file area", "handle", currentUser.Handle, "id", currentUser.CurrentFileAreaID, "tag", currentUser.CurrentFileAreaTag, "conferenceID", currentUser.CurrentFileConferenceID, "conferenceTag", currentUser.CurrentFileConferenceTag)
 				}
 				// --- END Set Default File Area ---
 
 				// Persist default area/conference selections to disk
 				if userManager != nil {
 					if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
-						log.Printf("ERROR: Failed to save user default area selections: %v", saveErr)
+						slog.Error("failed to save user default area selections", "error", saveErr)
 					}
 				}
 
@@ -1150,7 +1144,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				loginCfgPath := filepath.Join(e.MenuSetPath, "cfg") // Use correct path structure
 				loginCommands, loadCmdErr := LoadCommands("LOGIN", loginCfgPath)
 				if loadCmdErr != nil {
-					log.Printf("CRITICAL: Failed to load LOGIN.CFG (%s) after successful authentication: %v", filepath.Join(loginCfgPath, "LOGIN.CFG"), loadCmdErr)
+					slog.Error("failed to load LOGIN.CFG after successful authentication", "path", filepath.Join(loginCfgPath, "LOGIN.CFG"), "error", loadCmdErr)
 					// Return an error? Or try to default to MAIN?
 					return "LOGOFF", currentUser, fmt.Errorf("failed loading LOGIN.CFG post-auth") // Logoff user on critical error
 				}
@@ -1166,22 +1160,22 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 						if checkACS(cmd.ACS, currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
 							nextAction = cmd.Command
 							foundDefault = true
-							log.Printf("DEBUG: Found default command in LOGIN.CFG after auth: %s", nextAction)
+							slog.Debug("found default command in LOGIN.CFG after auth", "command", nextAction)
 							break // Found the relevant default command (e.g., GOTO:MAIN)
 						} else {
-							log.Printf("WARN: User %s denied default command '%s' in LOGIN.CFG due to ACS '%s'", currentUser.Handle, cmd.Command, cmd.ACS)
+							slog.Warn("user denied default command in LOGIN.CFG", "handle", currentUser.Handle, "command", cmd.Command, "acs", cmd.ACS)
 						}
 					}
 				}
 
 				if !foundDefault {
-					log.Printf("CRITICAL: No accessible default command ('') found in LOGIN.CFG for user %s. Logging off.", currentUser.Handle)
+					slog.Error("no accessible default command found in LOGIN.CFG, logging off", "handle", currentUser.Handle)
 					return "LOGOFF", currentUser, fmt.Errorf("no accessible default command found in LOGIN.CFG")
 				}
 				// -- Return the next action AND the authenticated user --
 				return nextAction, currentUser, nil
 			} else { // authenticatedUserResult == nil
-				log.Printf("INFO: Login failed. Redisplaying LOGIN menu.")
+				slog.Info("login failed, redisplaying LOGIN menu")
 				continue // Restart loop for LOGIN
 			}
 		} // --- END SPECIAL LOGIN INTERACTION BLOCK ---
@@ -1196,9 +1190,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			// Use new helper for error message
 			wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing menu load error message: %v", wErr)
+				slog.Error("failed writing menu load error message", "error", wErr)
 			}
-			log.Printf("ERROR: %s", errMsg)
+			slog.Error(errMsg)
 			return "", nil, fmt.Errorf("failed to load menu %s: %w", currentMenuName, err)
 		}
 
@@ -1206,7 +1200,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		menuCfgPath := filepath.Join(e.MenuSetPath, "cfg") // Use correct path structure for CFG
 		commands, err := LoadCommands(currentMenuName, menuCfgPath)
 		if err != nil {
-			log.Printf("WARN: Failed to load commands for menu %s: %v", currentMenuName, err)
+			slog.Warn("failed to load commands for menu", "menu", currentMenuName, "error", err)
 			commands = []CommandRecord{} // Use empty slice
 		}
 
@@ -1228,28 +1222,28 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Check Menu Password if required
 		menuPassword := menuRec.Password
 		if menuPassword != "" {
-			log.Printf("DEBUG: Menu '%s' requires password.", currentMenuName)
+			slog.Debug("menu requires password", "menu", currentMenuName)
 			passwordOk := false
 			for i := 0; i < 3; i++ { // Allow 3 attempts
 				prompt := fmt.Sprintf(e.LoadedStrings.ExecMenuPasswordPrompt, currentMenuName, i+1)
 				processedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
 				wErr := terminalio.WriteProcessedBytes(terminal, processedPrompt, outputMode)
 				if wErr != nil {
-					log.Printf("ERROR: Node %d: Failed writing menu password prompt: %v", nodeNumber, wErr)
+					slog.Error("failed writing menu password prompt", "node", nodeNumber, "error", wErr)
 				}
 
 				// Use our helper for secure input reading (using ssh.Session 's')
 				inputPassword, err := readPasswordSecurely(s, terminal, outputMode)
 				if err != nil {
 					if errors.Is(err, io.EOF) {
-						log.Printf("INFO: User disconnected during menu password entry for '%s'", currentMenuName)
+						slog.Info("user disconnected during menu password entry", "menu", currentMenuName)
 						return "LOGOFF", nil, nil // Signal logoff
 					}
 					if errors.Is(err, errInputAborted) { // Check for specific error
-						log.Printf("INFO: User interrupted password entry for menu '%s'", currentMenuName)
+						slog.Info("user interrupted password entry for menu", "menu", currentMenuName)
 						return "LOGOFF", nil, nil // Signal logoff
 					}
-					log.Printf("ERROR: Failed to read password input securely: %v", err)
+					slog.Error("failed to read password input securely", "error", err)
 					return "", nil, fmt.Errorf("failed reading password: %w", err)
 				}
 				if inputPassword == menuPassword {
@@ -1257,23 +1251,23 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					// Use new helper for feedback message
 					wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecPasswordAccepted)), outputMode)
 					if wErr != nil {
-						log.Printf("ERROR: Failed writing password accepted message: %v", wErr)
+						slog.Error("failed writing password accepted message", "error", wErr)
 					}
 					break
 				} else {
 					// Use new helper for feedback message
 					wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecIncorrectPassword)), outputMode)
 					if wErr != nil {
-						log.Printf("ERROR: Failed writing incorrect password message: %v", wErr)
+						slog.Error("failed writing incorrect password message", "error", wErr)
 					}
 				}
 			}
 			if !passwordOk {
-				log.Printf("WARN: User failed password entry for menu '%s' (User: %v)", currentMenuName, currentUser)
+				slog.Warn("user failed password entry for menu", "menu", currentMenuName, "user", currentUser)
 				// Use new helper for feedback message
 				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecTooManyAttempts)), outputMode)
 				if wErr != nil {
-					log.Printf("ERROR: Failed writing too many attempts message: %v", wErr)
+					slog.Error("failed writing too many attempts message", "error", wErr)
 				}
 				time.Sleep(1 * time.Second)
 				return "LOGOFF", nil, nil // Signal logoff after too many failures
@@ -1283,13 +1277,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Check Menu ACS before proceeding
 		menuACS := menuRec.ACS
 		if !checkACS(menuACS, currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
-			log.Printf("INFO: User denied access to menu '%s' due to ACS: %s (User: %v)", currentMenuName, menuACS, currentUser)
+			slog.Info("user denied access to menu", "menu", currentMenuName, "acs", menuACS, "user", currentUser)
 			errMsg := e.LoadedStrings.ExecAccessDenied
 			processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
 			// Use new helper for error message
 			wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing ACS denied message: %v", wErr)
+				slog.Error("failed writing ACS denied message", "error", wErr)
 			}
 			time.Sleep(1 * time.Second) // Brief pause
 			return "LOGOFF", nil, nil   // Signal logoff
@@ -1302,11 +1296,11 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				autoRunKey := fmt.Sprintf("%s:%s", currentMenuName, cmd.Command) // Unique key per menu/command
 
 				if cmd.Keys == "//" && autoRunLog[autoRunKey] {
-					log.Printf("DEBUG: Skipping already executed run-once command: %s", autoRunKey)
+					slog.Debug("skipping already executed run-once command", "command", autoRunKey)
 					continue // Skip if already run
 				}
 				if checkACS(cmd.ACS, currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
-					log.Printf("INFO: Executing AutoRun command (%s): %s (ACS: %s)", cmd.Keys, cmd.Command, cmd.ACS)
+					slog.Info("executing autorun command", "keys", cmd.Keys, "command", cmd.Command, "acs", cmd.ACS)
 
 					if cmd.Keys == "//" {
 						autoRunLog[autoRunKey] = true
@@ -1328,7 +1322,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 						}
 					}
 				} else {
-					log.Printf("DEBUG: AutoRun command (%s) %s denied by ACS: %s", cmd.Keys, cmd.Command, cmd.ACS)
+					slog.Debug("autorun command denied by ACS", "keys", cmd.Keys, "command", cmd.Command, "acs", cmd.ACS)
 				}
 			}
 		}
@@ -1353,8 +1347,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				lines := bytes.Split(displayBytes, []byte("\n"))
 				if len(lines) > termHeight {
 					displayBytes = bytes.Join(lines[:termHeight], []byte("\n"))
-					log.Printf("DEBUG: Truncated %s.ANS from %d to %d lines for %d-row terminal",
-						currentMenuName, len(lines), termHeight, termHeight)
+					slog.Debug("truncated menu ANSI to fit terminal", "menu", currentMenuName, "from", len(lines), "to", termHeight, "rows", termHeight)
 				}
 			}
 			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
@@ -1365,7 +1358,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				wErr = terminalio.WriteProcessedBytes(terminal, displayBytes, outputMode)
 			}
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing ANSI screen for %s: %v", currentMenuName, wErr)
+				slog.Error("failed writing ANSI screen", "menu", currentMenuName, "error", wErr)
 				return "", nil, fmt.Errorf("failed displaying screen: %w", wErr)
 			}
 		}
@@ -1380,15 +1373,15 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 		// 4. Determine Input Mode / Method
 		if isLightbarMenu {
-			log.Printf("DEBUG: Entering Lightbar input mode for %s", currentMenuName)
+			slog.Debug("entering lightbar input mode", "menu", currentMenuName)
 
 			// Load lightbar options from the config directory
 			lightbarOptions, loadErr := loadLightbarOptions(currentMenuName, e)
 			if loadErr != nil {
-				log.Printf("ERROR: Failed to load lightbar options for %s: %v", currentMenuName, loadErr)
+				slog.Error("failed to load lightbar options", "menu", currentMenuName, "error", loadErr)
 				isLightbarMenu = false
 			} else if len(lightbarOptions) == 0 {
-				log.Printf("WARN: No valid lightbar options loaded for %s", currentMenuName)
+				slog.Warn("no valid lightbar options loaded", "menu", currentMenuName)
 				isLightbarMenu = false
 			}
 
@@ -1400,7 +1393,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				selectedIndex := 0
 				drawErr := drawLightbarMenu(terminal, ansBackgroundBytes, lightbarOptions, selectedIndex, outputMode, false)
 				if drawErr != nil {
-					log.Printf("ERROR: Failed to draw lightbar menu for %s: %v", currentMenuName, drawErr)
+					slog.Error("failed to draw lightbar menu", "menu", currentMenuName, "error", drawErr)
 					e.showCursorIfHidden(terminal, outputMode, cursorHidden)
 					isLightbarMenu = false
 				} else {
@@ -1418,17 +1411,17 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 						if err != nil {
 							e.showCursorIfHidden(terminal, outputMode, cursorHidden)
 							if errors.Is(err, io.EOF) {
-								log.Printf("INFO: User disconnected during lightbar input for %s", currentMenuName)
+								slog.Info("user disconnected during lightbar input", "menu", currentMenuName)
 								return "LOGOFF", nil, nil
 							}
 							if errors.Is(err, editor.ErrIdleTimeout) {
 								e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
 								return "LOGOFF", nil, nil
 							}
-							log.Printf("ERROR: Failed to read lightbar input for menu %s: %v", currentMenuName, err)
+							slog.Error("failed to read lightbar input", "menu", currentMenuName, "error", err)
 							return "", nil, fmt.Errorf("failed reading lightbar input: %w", err)
 						}
-						log.Printf("DEBUG: Lightbar input key: %d", key)
+						slog.Debug("lightbar input key", "key", key)
 
 						switch key {
 						case editor.KeyArrowUp:
@@ -1501,7 +1494,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 							// Control chars and other special codes are ignored
 						}
 					}
-					log.Printf("DEBUG: Processed Lightbar input as: '%s'", lightbarResult)
+					slog.Debug("processed lightbar input", "result", lightbarResult)
 					e.showCursorIfHidden(terminal, outputMode, cursorHidden)
 					// Set userInput to lightbar result if a selection was made
 					if lightbarResult != "" {
@@ -1521,66 +1514,66 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					}
 				} else {
 					// Log message remains the same, but the condition causing it is now just UsePrompt==false
-					log.Printf("DEBUG: Skipping prompt display for %s (UsePrompt: %t, Prompt1 empty: %t)", currentMenuName, menuRec.GetUsePrompt(), menuRec.Prompt1 == "")
+					slog.Debug("skipping prompt display", "menu", currentMenuName, "usePrompt", menuRec.GetUsePrompt(), "prompt1Empty", menuRec.Prompt1 == "")
 				}
 
 				// Read User Input Line via shared InputHandler to avoid reader races.
 				input, err := readLineFromSessionIH(s, terminal)
 				if err != nil {
 					if err == io.EOF {
-						log.Printf("INFO: User disconnected during menu input for %s", currentMenuName)
+						slog.Info("user disconnected during menu input", "menu", currentMenuName)
 						return "LOGOFF", nil, nil // Signal logoff
 					}
-					log.Printf("ERROR: Failed to read input for menu %s: %v", currentMenuName, err)
+					slog.Error("failed to read input for menu", "menu", currentMenuName, "error", err)
 					return "", nil, fmt.Errorf("failed reading input: %w", err)
 				}
 				userInput = strings.ToUpper(strings.TrimSpace(input))
-				log.Printf("DEBUG: User input: '%s'", userInput)
+				slog.Debug("user input", "input", userInput)
 			}
 		} else {
 			// --- Standard Menu Input Handling ---
 			e.deliverPendingPages(terminal, nodeNumber, outputMode)
 			// Display Prompt (Skip if USEPROMPT is false)
-			log.Printf("DEBUG: Checking prompt display for menu: %s. UsePrompt=%t", currentMenuName, menuRec.GetUsePrompt())
+			slog.Debug("checking prompt display for menu", "menu", currentMenuName, "usePrompt", menuRec.GetUsePrompt())
 			if menuRec.GetUsePrompt() { // Condition changed: Only check UsePrompt
-				log.Printf("DEBUG: Calling displayPrompt for menu: %s", currentMenuName)
+				slog.Debug("calling displayPrompt for menu", "menu", currentMenuName)
 				err = e.displayPrompt(terminal, menuRec, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, outputMode, currentAreaName) // Pass currentAreaName
-				log.Printf("DEBUG: Returned from displayPrompt for menu: %s. Error: %v", currentMenuName, err)
+				slog.Debug("returned from displayPrompt for menu", "menu", currentMenuName, "error", err)
 				if err != nil {
 					return "", nil, err // Propagate the error
 				}
 			} else {
 				// Log message remains the same, but the condition causing it is now just UsePrompt==false
-				log.Printf("DEBUG: Skipping prompt display for %s (UsePrompt: %t, Prompt1 empty: %t)", currentMenuName, menuRec.GetUsePrompt(), menuRec.Prompt1 == "")
+				slog.Debug("skipping prompt display", "menu", currentMenuName, "usePrompt", menuRec.GetUsePrompt(), "prompt1Empty", menuRec.Prompt1 == "")
 			}
 
 			// Read User Input Line via shared InputHandler to avoid reader races.
 			input, err := readLineFromSessionIH(s, terminal)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					log.Printf("INFO: User disconnected during menu input for %s", currentMenuName)
+					slog.Info("user disconnected during menu input", "menu", currentMenuName)
 					return "LOGOFF", nil, nil
 				}
 				if errors.Is(err, editor.ErrIdleTimeout) {
 					e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
 					return "LOGOFF", nil, nil
 				}
-				log.Printf("ERROR: Failed to read input for menu %s: %v", currentMenuName, err)
+				slog.Error("failed to read input for menu", "menu", currentMenuName, "error", err)
 				return "", nil, fmt.Errorf("failed reading input: %w", err)
 			}
 			userInput = strings.ToUpper(strings.TrimSpace(input))
-			log.Printf("DEBUG: User input: '%s'", userInput)
+			slog.Debug("user input", "input", userInput)
 
 			// --- Special Input Handling (^P, ##) ---
 			if userInput == "\x10" || userInput == "^P" { // Ctrl+P is ASCII 16 (\x10)
 				if previousMenuName != "" {
-					log.Printf("DEBUG: User entered ^P, going back to previous menu: %s", previousMenuName)
+					slog.Debug("user entered ^P, going back to previous menu", "previous", previousMenuName)
 					temp := currentMenuName
 					currentMenuName = previousMenuName
 					previousMenuName = temp // Update previous in case they go back again
 					continue                // Go directly to the previous menu loop iteration
 				} else {
-					log.Printf("DEBUG: User entered ^P, but no previous menu recorded.")
+					slog.Debug("user entered ^P, but no previous menu recorded")
 					continue // Re-display current menu prompt
 				}
 			}
@@ -1606,9 +1599,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				cmdACS := cmdRec.ACS
 				if !checkACS(cmdACS, currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
 					if currentUser != nil {
-						log.Printf("DEBUG: User '%s' does not meet ACS '%s' for command key(s) '%s'", currentUser.Handle, cmdACS, cmdRec.Keys)
+						slog.Debug("user does not meet ACS for command keys", "handle", currentUser.Handle, "acs", cmdACS, "keys", cmdRec.Keys)
 					} else {
-						log.Printf("DEBUG: Unauthenticated user does not meet ACS '%s' for command key(s) '%s'", cmdACS, cmdRec.Keys)
+						slog.Debug("unauthenticated user does not meet ACS for command keys", "acs", cmdACS, "keys", cmdRec.Keys)
 					}
 					continue // Skip this command if ACS check fails
 				}
@@ -1619,7 +1612,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					if key == "^M" && userInput == "" {
 						nextAction = cmdRec.Command
 						matchedNodeActivity = cmdRec.NodeActivity
-						log.Printf("DEBUG: Matched ^M (Enter/default) to command action: '%s'", nextAction)
+						slog.Debug("matched ^M (enter/default) to command action", "command", nextAction)
 						matched = true
 						break
 					}
@@ -1627,7 +1620,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					if key != "" && userInput != "" && userInput == key {
 						nextAction = cmdRec.Command
 						matchedNodeActivity = cmdRec.NodeActivity
-						log.Printf("DEBUG: Matched key '%s' to command action: '%s'", key, nextAction)
+						slog.Debug("matched key to command action", "key", key, "command", nextAction)
 						matched = true
 						break
 					}
@@ -1645,7 +1638,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 							// forwards it to the RUN: handler via runArgs.
 							nextAction = cmdRec.Command + " " + userInput
 							matchedNodeActivity = cmdRec.NodeActivity
-							log.Printf("DEBUG: Matched ## (numeric wildcard, input='%s') to command action: '%s'", userInput, nextAction)
+							slog.Debug("matched ## numeric wildcard to command action", "input", userInput, "command", nextAction)
 							matched = true
 							break
 						}
@@ -1691,10 +1684,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				}
 				continue // Re-display current menu prompt
 			}
-			log.Printf("WARN: Unhandled action type '%s' after executing command '%s'", nextActionType, nextAction)
+			slog.Warn("unhandled action type after executing command", "actionType", nextActionType, "command", nextAction)
 			continue
 		} else {
-			log.Printf("DEBUG: Input '%s' did not match any commands in menu %s", userInput, currentMenuName)
+			slog.Debug("input did not match any commands in menu", "input", userInput, "menu", currentMenuName)
 
 			// If it was a lightbar menu and input was ignored (userInput == ""), just loop again
 			if isLightbarMenu {
@@ -1708,7 +1701,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 			fallbackMenu := menuRec.Fallback
 			if fallbackMenu != "" {
-				log.Printf("INFO: No command match, using fallback menu: %s", fallbackMenu)
+				slog.Info("no command match, using fallback menu", "menu", fallbackMenu)
 				previousMenuName = currentMenuName // Store current before going to fallback
 				currentMenuName = strings.ToUpper(fallbackMenu)
 				continue
@@ -1734,72 +1727,72 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 		if len(parts) > 1 {
 			runArgs = parts[1]
 		}
-		log.Printf("INFO: Executing RUN action: Target='%s' Args='%s'", runTarget, runArgs)
+		slog.Info("executing RUN action", "target", runTarget, "args", runArgs)
 
 		if runnableFunc, exists := e.RunRegistry[runTarget]; exists {
-			log.Printf("DEBUG: Node %d: Calling registered function for RUN:%s", nodeNumber, runTarget)
+			slog.Debug("calling registered function for RUN", "node", nodeNumber, "target", runTarget)
 			// RunnableFunc now returns user, nextActionString, error
 			authUser, nextActionStr, runErr := runnableFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, runArgs)
 			if runErr != nil {
 				if errors.Is(runErr, io.EOF) {
-					log.Printf("INFO: Node %d: User disconnected during RUN:%s execution.", nodeNumber, runTarget)
+					slog.Info("user disconnected during RUN execution", "node", nodeNumber, "target", runTarget)
 					return "LOGOFF", "", nil, nil
 				}
 				if errors.Is(runErr, editor.ErrIdleTimeout) {
 					e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
 					return "LOGOFF", "", nil, nil
 				}
-				log.Printf("ERROR: RUN:%s function failed: %v", runTarget, runErr)
+				slog.Error("RUN function failed", "target", runTarget, "error", runErr)
 				errMsg := fmt.Sprintf(e.LoadedStrings.ExecRunCommandError, runTarget, runErr)
 				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 				if wErr != nil {
-					log.Printf("ERROR: Failed writing RUN command error message: %v", wErr)
+					slog.Error("failed writing RUN command error message", "error", wErr)
 				}
 				time.Sleep(1 * time.Second)
 				// Assign the potentially updated user before returning
 				userResult = authUser                     // Capture potential user changes (like from AUTHENTICATE)
 				return "CONTINUE", "", userResult, runErr // Continue but report error?
 			}
-			log.Printf("DEBUG: RUN:%s function completed.", runTarget)
+			slog.Debug("RUN function completed", "target", runTarget)
 
 			// Check if the runnable function returned a specific next action
 			if strings.HasPrefix(nextActionStr, "GOTO:") {
 				nextMenu = strings.ToUpper(strings.TrimPrefix(nextActionStr, "GOTO:"))
-				log.Printf("DEBUG: RUN:%s requested GOTO:%s", runTarget, nextMenu)
+				slog.Debug("RUN requested GOTO", "target", runTarget, "menu", nextMenu)
 				return "GOTO", nextMenu, authUser, nil
 			} else if nextActionStr == "LOGOFF" {
-				log.Printf("DEBUG: RUN:%s requested LOGOFF", runTarget)
+				slog.Debug("RUN requested LOGOFF", "target", runTarget)
 				return "LOGOFF", "", authUser, nil
 			}
 
 			// Default action for RUN is CONTINUE
 			return "CONTINUE", "", authUser, nil
 		} else {
-			log.Printf("WARN: No internal function registered for RUN:%s", runTarget)
+			slog.Warn("no internal function registered for RUN", "target", runTarget)
 			msg := fmt.Sprintf(e.LoadedStrings.ExecRunCommandNotFound, runTarget)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing missing RUN command message: %v", wErr)
+				slog.Error("failed writing missing RUN command message", "error", wErr)
 			}
 			time.Sleep(1 * time.Second)
 			return "CONTINUE", "", currentUser, nil
 		}
 	} else if strings.HasPrefix(action, "DOOR:") {
 		doorTarget := strings.TrimPrefix(action, "DOOR:")
-		log.Printf("INFO: Executing DOOR action: '%s'", doorTarget)
+		slog.Info("executing DOOR action", "door", doorTarget)
 		if doorFunc, exists := e.RunRegistry["DOOR:"]; exists {
 			// DOOR runnable returns user, "", error
 			userResultDoor, nextActionStrDoor, doorErr := doorFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, doorTarget)
 			if doorErr != nil {
 				if errors.Is(doorErr, io.EOF) {
-					log.Printf("INFO: Node %d: User disconnected during DOOR:%s execution.", nodeNumber, doorTarget)
+					slog.Info("user disconnected during DOOR execution", "node", nodeNumber, "door", doorTarget)
 					return "LOGOFF", "", nil, nil
 				}
-				log.Printf("ERROR: DOOR:%s execution failed: %v", doorTarget, doorErr)
+				slog.Error("DOOR execution failed", "door", doorTarget, "error", doorErr)
 				errMsg := fmt.Sprintf(e.LoadedStrings.ExecRunDoorError, doorTarget, doorErr)
 				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 				if wErr != nil {
-					log.Printf("ERROR: Failed writing DOOR command error message: %v", wErr)
+					slog.Error("failed writing DOOR command error message", "error", wErr)
 				}
 				time.Sleep(1 * time.Second)
 				// Assign potential user result before returning
@@ -1808,17 +1801,17 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			}
 			// Handle potential LOGOFF request from DOOR runnable (though currently returns "")
 			if nextActionStrDoor == "LOGOFF" {
-				log.Printf("DEBUG: DOOR:%s requested LOGOFF", doorTarget)
+				slog.Debug("DOOR requested LOGOFF", "door", doorTarget)
 				return "LOGOFF", "", userResultDoor, nil
 			}
-			log.Printf("DEBUG: DOOR:%s completed.", doorTarget)
+			slog.Debug("DOOR completed", "door", doorTarget)
 			return "CONTINUE", "", userResultDoor, nil // Default CONTINUE after door
 		} else {
-			log.Printf("CRITICAL: DOOR: function not registered!")
+			slog.Error("DOOR function not registered")
 			return "CONTINUE", "", currentUser, nil
 		}
 	} else {
-		log.Printf("WARN: Unhandled command action type in executeCommandAction: %s", action)
+		slog.Warn("unhandled command action type in executeCommandAction", "action", action)
 		return "CONTINUE", "", currentUser, nil
 	}
 }
@@ -1986,11 +1979,11 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 	// Read ANSI content via helper (strips SAUCE metadata)
 	data, err := ansi.GetAnsiFileContent(filePath)
 	if err != nil {
-		log.Printf("ERROR: Failed to read ANSI file %s: %v", filePath, err)
+		slog.Error("failed to read ANSI file", "path", filePath, "error", err)
 		errMsg := fmt.Sprintf(e.LoadedStrings.ExecFileLoadError, filename)
 		writeErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if writeErr != nil {
-			log.Printf("ERROR: Failed writing displayFile error message: %v", writeErr)
+			slog.Error("failed writing displayFile error message", "error", writeErr)
 			return fmt.Errorf("read: %w; write error: %w", err, writeErr)
 		}
 		return err
@@ -2015,7 +2008,7 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 		writeErr = terminalio.WriteProcessedBytes(terminal, data, outputMode)
 	}
 	if writeErr != nil {
-		log.Printf("ERROR: Failed to write ANSI file %s: %v", filePath, writeErr)
+		slog.Error("failed to write ANSI file", "path", filePath, "error", writeErr)
 		return writeErr
 	}
 
@@ -2034,7 +2027,7 @@ func (e *MenuExecutor) deliverPendingPages(terminal *term.Terminal, nodeNumber i
 	pages := sess.DrainPages()
 	for _, page := range pages {
 		if err := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+page+"\r\n")), outputMode); err != nil {
-			log.Printf("ERROR: Node %d: failed to deliver page: %v", nodeNumber, err)
+			slog.Error("failed to deliver page", "node", nodeNumber, "error", err)
 			return
 		}
 	}
@@ -2073,12 +2066,12 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		if e.LoadedStrings.DefPrompt != "" { // Use loaded strings
 			promptString = e.LoadedStrings.DefPrompt
 		} else {
-			log.Printf("WARN: Default prompt (DefPrompt) is empty in config/strings.json and menu prompt fields are empty for menu %s. No prompt will be displayed.", currentMenuName)
+			slog.Warn("default prompt empty and menu prompt fields empty, no prompt will be displayed", "menu", currentMenuName)
 			return nil // Explicitly return nil if no prompt string can be determined
 		}
 	}
 
-	log.Printf("DEBUG: Displaying menu prompt for: %s", currentMenuName)
+	slog.Debug("displaying menu prompt", "menu", currentMenuName)
 
 	newUsersStatus := "NO"
 	if e.GetServerConfig().AllowNewUsers {
@@ -2194,7 +2187,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 
 	processedPrompt, err := e.processFileIncludes(substitutedPrompt, 0) // Pass 'e'
 	if err != nil {
-		log.Printf("ERROR: Failed processing file includes in prompt for menu %s: %v", currentMenuName, err)
+		slog.Error("failed processing file includes in prompt", "menu", currentMenuName, "error", err)
 
 		// Use RootAssetsPath for global assets if needed, or MenuSetPath for set-specific
 		// pausePrompt := e.LoadedStrings.PauseString // This comes from global strings
@@ -2235,7 +2228,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 	// 5. Write the final processed bytes using the terminal's standard Write (Reverted)
 	err = terminalio.WriteProcessedBytes(terminal, finalBuf.Bytes(), outputMode)
 	if err != nil {
-		log.Printf("ERROR: Failed writing processed prompt for menu %s: %v", currentMenuName, err)
+		slog.Error("failed writing processed prompt", "menu", currentMenuName, "error", err)
 		return err
 	}
 
@@ -2247,7 +2240,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 func (e *MenuExecutor) processFileIncludes(prompt string, depth int) (string, error) {
 	const maxDepth = 5 // Limit recursion depth
 	if depth > maxDepth {
-		log.Printf("WARN: Exceeded maximum file inclusion depth (%d). Stopping processing.", maxDepth)
+		slog.Warn("exceeded maximum file inclusion depth, stopping processing", "maxDepth", maxDepth)
 		return prompt, nil
 	}
 
@@ -2259,10 +2252,10 @@ func (e *MenuExecutor) processFileIncludes(prompt string, depth int) (string, er
 		// Look for included file in MenuSetPath/ansi
 		filePath := filepath.Join(e.MenuSetPath, "ansi", fileName)
 
-		log.Printf("DEBUG: Including file in prompt: %s (Depth: %d)", filePath, depth)
+		slog.Debug("including file in prompt", "path", filePath, "depth", depth)
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Printf("WARN: Failed to read included file '%s': %v. Skipping inclusion.", filePath, err)
+			slog.Warn("failed to read included file, skipping inclusion", "path", filePath, "error", err)
 			return ""
 		}
 		return string(data)
@@ -2314,7 +2307,7 @@ func runShowVersion(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running SHOWVERSION", nodeNumber)
+	slog.Debug("running showversion", "node", nodeNumber)
 
 	versionTemplate := e.LoadedStrings.ExecVersionString
 	versionString := versionTemplate
@@ -2327,25 +2320,25 @@ func runShowVersion(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n\r\n"), outputMode)         // Add some spacing
 	wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(versionString)), outputMode)
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing SHOWVERSION output: %v", nodeNumber, wErr)
+		slog.Error("failed writing showversion output", "node", nodeNumber, "error", wErr)
 		// Don't return error, just log it
 	}
 
 	// Wait for Enter
 	pausePrompt := e.LoadedStrings.PauseString // Use configured pause string
 	if pausePrompt == "" {
-		log.Printf("WARN: Node %d: PauseString is empty in config/strings.json. No pause prompt will be shown for SHOWVERSION.", nodeNumber)
+		slog.Warn("pausestring empty, no pause prompt will be shown for showversion", "node", nodeNumber)
 		// Don't use a hardcoded fallback. If it's empty, it's empty.
 	} else {
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode) // Add newline before pause
-		log.Printf("DEBUG: Node %d: Displaying SHOWVERSION pause prompt (centered)", nodeNumber)
+		slog.Debug("displaying showversion pause prompt (centered)", "node", nodeNumber)
 		err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected during SHOWVERSION pause.", nodeNumber)
+				slog.Info("user disconnected during showversion pause", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
-			log.Printf("ERROR: Node %d: Failed during SHOWVERSION pause: %v", nodeNumber, err)
+			slog.Error("failed during showversion pause", "node", nodeNumber, "error", err)
 			return nil, "", err
 		}
 	}

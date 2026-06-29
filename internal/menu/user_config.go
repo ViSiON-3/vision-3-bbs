@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -50,7 +50,7 @@ func runCfgToggle(
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
 		setter(currentUser, original)
-		log.Printf("ERROR: Node %d: Failed to save %s: %v", nodeNumber, fieldName, err)
+		slog.Error("failed to save field", "node", nodeNumber, "name", fieldName, "error", err)
 		msg := fmt.Sprintf(e.LoadedStrings.CfgSaveError, fieldName)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -146,7 +146,7 @@ func runCfgScreenWidth(c *cmdCtx, args string) (*user.User, string, error) {
 
 	currentUser.ScreenWidth = val
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save screen width: %v", nodeNumber, err)
+		slog.Error("failed to save screen width", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -199,7 +199,7 @@ func runCfgScreenHeight(c *cmdCtx, args string) (*user.User, string, error) {
 
 	currentUser.ScreenHeight = val
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save screen height: %v", nodeNumber, err)
+		slog.Error("failed to save screen height", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -233,7 +233,7 @@ func runCfgTermType(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save terminal type: %v", nodeNumber, err)
+		slog.Error("failed to save terminal type", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -282,7 +282,7 @@ func runCfgStringInput(
 
 	setter(currentUser, input)
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save %s: %v", nodeNumber, fieldName, err)
+		slog.Error("failed to save field", "node", nodeNumber, "name", fieldName, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -374,13 +374,13 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 	// Hash and save
 	hashed, err := bcrypt.GenerateFromPassword([]byte(newPw), bcrypt.DefaultCost)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to hash new password: %v", nodeNumber, err)
+		slog.Error("failed to hash new password", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
 	currentUser.PasswordHash = string(hashed)
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save password: %v", nodeNumber, err)
+		slog.Error("failed to save password", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -449,7 +449,7 @@ func runCfgColor(c *cmdCtx, args string) (*user.User, string, error) {
 
 	currentUser.Colors[slot] = val
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save color: %v", nodeNumber, err)
+		slog.Error("failed to save color", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -478,11 +478,11 @@ func runCfgViewConfig(c *cmdCtx, args string) (*user.User, string, error) {
 
 	topBytes, err := os.ReadFile(topPath)
 	if err != nil && !os.IsNotExist(err) {
-		log.Printf("WARN: Node %d: Failed to read %s: %v", nodeNumber, topPath, err)
+		slog.Warn("failed to read template", "node", nodeNumber, "path", topPath, "error", err)
 	}
 	botBytes, err := os.ReadFile(botPath)
 	if err != nil && !os.IsNotExist(err) {
-		log.Printf("WARN: Node %d: Failed to read %s: %v", nodeNumber, botPath, err)
+		slog.Warn("failed to read template", "node", nodeNumber, "path", botPath, "error", err)
 	}
 
 	topBytes = stripSauceMetadata(topBytes)
@@ -594,7 +594,7 @@ func runCfgFileListMode(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
 		currentUser.FileListingMode = originalMode
-		log.Printf("ERROR: Node %d: Failed to save file listing mode: %v", nodeNumber, err)
+		slog.Error("failed to save file listing mode", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -670,7 +670,7 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
 			if edErr != nil {
-				log.Printf("ERROR: Node %d: Editor failed for auto-sig: %v", nodeNumber, edErr)
+				slog.Error("editor failed for auto-sig", "node", nodeNumber, "error", edErr)
 				return currentUser, "", nil
 			}
 			if !saved {
@@ -694,7 +694,7 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 
 			currentUser.AutoSignature = body
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to save auto-signature: %v", nodeNumber, err)
+				slog.Error("failed to save auto-signature", "node", nodeNumber, "error", err)
 				return currentUser, "", nil
 			}
 			if body == "" {
@@ -710,7 +710,7 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 			} else {
 				currentUser.AutoSignature = ""
 				if err := userManager.UpdateUser(currentUser); err != nil {
-					log.Printf("ERROR: Node %d: Failed to delete auto-signature: %v", nodeNumber, err)
+					slog.Error("failed to delete auto-signature", "node", nodeNumber, "error", err)
 					return currentUser, "", nil
 				}
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|03Auto-Signature has been deleted.|07\r\n")), outputMode)
@@ -773,7 +773,7 @@ func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
 		input = strings.TrimSpace(strings.ToUpper(input))
 		if input == "" || input == "Q" {
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to save file column preferences: %v", nodeNumber, err)
+				slog.Error("failed to save file column preferences", "node", nodeNumber, "error", err)
 			}
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.CfgFileColumnsSaved)), outputMode)
 			time.Sleep(500 * time.Millisecond)

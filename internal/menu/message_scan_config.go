@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -492,7 +492,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to save newscan config: %v", nodeNumber, err)
+				slog.Error("failed to save newscan config", "node", nodeNumber, "error", err)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanConfigError)), outputMode)
 			} else {
 				msg := fmt.Sprintf(e.LoadedStrings.ScanConfigSaved, len(taggedTags))

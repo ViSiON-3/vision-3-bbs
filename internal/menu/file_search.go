@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -25,7 +25,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running SEARCH_FILES", nodeNumber)
+	slog.Debug("running SEARCH_FILES", "node", nodeNumber)
 
 	if currentUser == nil {
 		return nil, "", nil
@@ -52,10 +52,10 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: SEARCH_FILES query=%q", nodeNumber, query)
+	slog.Debug("search files query", "node", nodeNumber, "query", query)
 
 	results := e.FileMgr.SearchFiles(query)
-	log.Printf("DEBUG: Node %d: SEARCH_FILES raw results=%d", nodeNumber, len(results))
+	slog.Debug("search files raw results", "node", nodeNumber, "count", len(results))
 
 	// Filter by area ACS and build display lines
 	type searchResult struct {

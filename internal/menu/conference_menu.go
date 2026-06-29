@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -33,7 +33,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 	sessionStartTime := c.sessionStartTime
 	outputMode := c.outputMode
 
-	log.Printf("DEBUG: Node %d: Running CHANGEMSGCONF", nodeNumber)
+	slog.Debug("running CHANGEMSGCONF", "node", nodeNumber)
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfLoginRequired)), outputMode)
@@ -139,7 +139,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 		}
 
 		if err := userManager.UpdateUser(currentUser); err != nil {
-			log.Printf("ERROR: Node %d: Failed to save user after conference change: %v", nodeNumber, err)
+			slog.Error("failed to save user after conference change", "node", nodeNumber, "error", err)
 		}
 
 		// Display confirmation
@@ -153,8 +153,8 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(joinedMsg)), outputMode)
 		time.Sleep(1 * time.Second)
 
-		log.Printf("INFO: Node %d: User %s changed to conference %d (%s), area: %s",
-			nodeNumber, currentUser.Handle, confID, conf.Tag, currentUser.CurrentMessageAreaTag)
+		slog.Info("user changed conference",
+			"node", nodeNumber, "handle", currentUser.Handle, "id", confID, "tag", conf.Tag, "area", currentUser.CurrentMessageAreaTag)
 
 		return currentUser, "", nil
 	}
@@ -194,7 +194,7 @@ func navigateMsgArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	if !forward {
 		direction = "PREVMSGAREA"
 	}
-	log.Printf("DEBUG: Node %d: Running %s", nodeNumber, direction)
+	slog.Debug("running menu command", "node", nodeNumber, "command", direction)
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfNavLoginRequired)), outputMode)
@@ -235,13 +235,13 @@ func navigateMsgArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	currentUser.CurrentMessageAreaTag = newArea.Tag
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save user after area change: %v", nodeNumber, err)
+		slog.Error("failed to save user after area change", "node", nodeNumber, "error", err)
 	}
 
 	msg := fmt.Sprintf(e.LoadedStrings.ConfCurrentAreaFormat, newArea.Name, newArea.Tag)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 
-	log.Printf("INFO: Node %d: User %s navigated to area %d (%s)", nodeNumber, currentUser.Handle, newArea.ID, newArea.Tag)
+	slog.Info("user navigated to area", "node", nodeNumber, "handle", currentUser.Handle, "id", newArea.ID, "tag", newArea.Tag)
 
 	return currentUser, "", nil
 }
@@ -255,7 +255,7 @@ func displayConferenceList(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 	botBytes, errBot := readTemplateFile(filepath.Join(templateDir, "MSGCONF.BOT"))
 
 	if errTop != nil || errMid != nil || errBot != nil {
-		log.Printf("ERROR: Node %d: Failed to load MSGCONF templates: TOP(%v), MID(%v), BOT(%v)", nodeNumber, errTop, errMid, errBot)
+		slog.Error("failed to load MSGCONF templates", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfTemplateError)), outputMode)
 		return nil, fmt.Errorf("failed loading MSGCONF templates")
 	}
@@ -304,7 +304,7 @@ func displayConferenceList(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 // displayMessageAreaListFiltered is like displayMessageAreaList but filters to a single conference.
 // If filterConfID is -1, all conferences are shown (same as unfiltered behavior).
 func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, currentUser *user.User, outputMode ansi.OutputMode, nodeNumber int, sessionStartTime time.Time, filterConfID int) ([]*message.MessageArea, error) {
-	log.Printf("DEBUG: Node %d: Displaying message area list (filtered, confID=%d)", nodeNumber, filterConfID)
+	slog.Debug("displaying message area list (filtered)", "node", nodeNumber, "confID", filterConfID)
 
 	templateDir := filepath.Join(e.MenuSetPath, "templates")
 	topTemplateBytes, errTop := readTemplateFile(filepath.Join(templateDir, "MSGAREA.TOP"))
@@ -312,7 +312,7 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 	botTemplateBytes, errBot := readTemplateFile(filepath.Join(templateDir, "MSGAREA.BOT"))
 
 	if errTop != nil || errMid != nil || errBot != nil {
-		log.Printf("ERROR: Node %d: Failed to load MSGAREA template files: TOP(%v), MID(%v), BOT(%v)", nodeNumber, errTop, errMid, errBot)
+		slog.Error("failed to load MSGAREA template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfAreaTemplateError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, fmt.Errorf("failed loading MSGAREA templates")
@@ -473,7 +473,7 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	if !forward {
 		direction = "PREVMSGCONF"
 	}
-	log.Printf("DEBUG: Node %d: Running %s", nodeNumber, direction)
+	slog.Debug("running menu command", "node", nodeNumber, "command", direction)
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfNavLoginRequired)), outputMode)
@@ -533,7 +533,7 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	}
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save user after conference change: %v", nodeNumber, err)
+		slog.Error("failed to save user after conference change", "node", nodeNumber, "error", err)
 	}
 
 	msg := e.LoadedStrings.ConfCurrentConfFormat
@@ -543,7 +543,7 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	formatted := fmt.Sprintf(msg, newConf.Name, newConf.Tag)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(formatted)), outputMode)
 
-	log.Printf("INFO: Node %d: User %s navigated to conference %d (%s)", nodeNumber, currentUser.Handle, newConf.ID, newConf.Tag)
+	slog.Info("user navigated to conference", "node", nodeNumber, "handle", currentUser.Handle, "id", newConf.ID, "tag", newConf.Tag)
 
 	return currentUser, "", nil
 }

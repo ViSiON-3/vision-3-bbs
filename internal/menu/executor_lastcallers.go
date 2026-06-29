@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -32,7 +32,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running LASTCALLERS", nodeNumber)
+	slog.Debug("running LASTCALLERS", "node", nodeNumber)
 
 	// Parse optional caller count argument (e.g., RUN:LASTCALLERS 10)
 	callerLimit := 10
@@ -52,7 +52,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	botTemplateBytes, errBot := readTemplateFile(botTemplatePath)
 
 	if errTop != nil || errMid != nil || errBot != nil {
-		log.Printf("ERROR: Node %d: Failed to load one or more LASTCALL template files: TOP(%v), MID(%v), BOT(%v)", nodeNumber, errTop, errMid, errBot)
+		slog.Error("failed to load LASTCALL template files", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := e.LoadedStrings.ExecLastcallTemplateErr
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -118,7 +118,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if len(lastCallers) == 0 {
 		// Optional: Handle empty state. The template might handle this.
-		log.Printf("DEBUG: Node %d: No last callers to display.", nodeNumber)
+		slog.Debug("no last callers to display", "node", nodeNumber)
 		// If templates don't handle empty, add a message here.
 	} else {
 		// Iterate through call records and format using processed LASTCALL.MID
@@ -167,7 +167,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	// 4. Clear screen and display the assembled content
 	writeErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if writeErr != nil {
-		log.Printf("ERROR: Node %d: Failed clearing screen for LASTCALLERS: %v", nodeNumber, writeErr)
+		slog.Error("failed clearing screen for LASTCALLERS", "node", nodeNumber, "error", writeErr)
 		return nil, "", writeErr
 	}
 
@@ -181,7 +181,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 		wErr = terminalio.WriteProcessedBytes(terminal, processedContent, outputMode)
 	}
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing LASTCALLERS output: %v", nodeNumber, wErr)
+		slog.Error("failed writing LASTCALLERS output", "node", nodeNumber, "error", wErr)
 		return nil, "", wErr
 	}
 
@@ -191,14 +191,14 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
 	}
 
-	log.Printf("DEBUG: Node %d: Displaying LASTCALLERS pause prompt (centered)", nodeNumber)
+	slog.Debug("displaying LASTCALLERS pause prompt (centered)", "node", nodeNumber)
 	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("INFO: Node %d: User disconnected during LASTCALLERS pause.", nodeNumber)
+			slog.Info("user disconnected during LASTCALLERS pause", "node", nodeNumber)
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Node %d: Failed during LASTCALLERS pause: %v", nodeNumber, err)
+		slog.Error("failed during LASTCALLERS pause", "node", nodeNumber, "error", err)
 		return nil, "", err
 	}
 

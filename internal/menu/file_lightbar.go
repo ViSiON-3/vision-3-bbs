@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -421,7 +421,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				}
 				lb.currentUser.TaggedFileIDs = newTaggedIDs
 				if err := lb.userManager.UpdateUser(lb.currentUser); err != nil {
-					log.Printf("ERROR: Node %d: Failed to save user after tag toggle: %v", lb.nodeNumber, err)
+					slog.Error("failed to save user after tag toggle", "node", lb.nodeNumber, "error", err)
 				}
 				// Redraw just the toggled row to show/hide the mark.
 				if row, h := lb.screenRowForFile(lb.selectedIndex); row >= 0 {
@@ -479,7 +479,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				sel := &lb.allFiles[lb.selectedIndex]
 				filePath, pathErr := lb.e.FileMgr.GetFilePath(sel.ID)
 				if pathErr != nil {
-					log.Printf("ERROR: Node %d: Failed to get path for file %s: %v", lb.nodeNumber, sel.ID, pathErr)
+					slog.Error("failed to get path for file", "node", lb.nodeNumber, "id", sel.ID, "error", pathErr)
 					continue
 				}
 				// Show cursor for the viewer.
@@ -519,7 +519,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				if errors.Is(promptErr, io.EOF) {
 					return nil, "LOGOFF", io.EOF
 				}
-				log.Printf("ERROR: Node %d: Error getting download confirmation: %v", lb.nodeNumber, promptErr)
+				slog.Error("error getting download confirmation", "node", lb.nodeNumber, "error", promptErr)
 				_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
 				needFullRedraw = true
 				continue
@@ -531,7 +531,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				continue
 			}
 
-			log.Printf("INFO: Node %d: User %s starting download of %d files.", lb.nodeNumber, lb.currentUser.Handle, len(lb.currentUser.TaggedFileIDs))
+			slog.Info("starting download", "node", lb.nodeNumber, "handle", lb.currentUser.Handle, "count", len(lb.currentUser.TaggedFileIDs))
 			// Clear the screen before the download process begins.
 			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[2J\x1b[H"), lb.outputMode)
 			_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("|07Preparing download...\r\n")), lb.outputMode)
@@ -545,16 +545,16 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			for _, fileID := range lb.currentUser.TaggedFileIDs {
 				fp, pathErr := lb.e.FileMgr.GetFilePath(fileID)
 				if pathErr != nil {
-					log.Printf("ERROR: Node %d: Failed to get path for file ID %s: %v", lb.nodeNumber, fileID, pathErr)
+					slog.Error("failed to get path for file ID", "node", lb.nodeNumber, "id", fileID, "error", pathErr)
 					failCount++
 					continue
 				}
 				if _, statErr := os.Stat(fp); os.IsNotExist(statErr) {
-					log.Printf("ERROR: Node %d: File path %s for ID %s does not exist.", lb.nodeNumber, fp, fileID)
+					slog.Error("file path for ID does not exist", "node", lb.nodeNumber, "path", fp, "id", fileID)
 					failCount++
 					continue
 				} else if statErr != nil {
-					log.Printf("ERROR: Node %d: Error stating file path %s for ID %s: %v", lb.nodeNumber, fp, fileID, statErr)
+					slog.Error("error stating file path for ID", "node", lb.nodeNumber, "path", fp, "id", fileID, "error", statErr)
 					failCount++
 					continue
 				}
@@ -563,7 +563,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			}
 
 			if len(filesToDownload) > 0 {
-				log.Printf("INFO: Node %d: Initiating transfer for %d file(s)", lb.nodeNumber, len(filesToDownload))
+				slog.Info("initiating transfer", "node", lb.nodeNumber, "count", len(filesToDownload))
 
 				// Use protocol selection (respects connection type - SSH vs Telnet)
 				proto, protoOK, protoErr := lb.e.selectTransferProtocol(lb.s, lb.terminal, lb.outputMode)
@@ -571,7 +571,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					if errors.Is(protoErr, io.EOF) {
 						return nil, "LOGOFF", io.EOF
 					}
-					log.Printf("ERROR: Node %d: Protocol selection error: %v", lb.nodeNumber, protoErr)
+					slog.Error("protocol selection error", "node", lb.nodeNumber, "error", protoErr)
 					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), lb.outputMode)
 					failCount += len(filesToDownload)
 				} else if !protoOK {
@@ -584,7 +584,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				}
 				time.Sleep(1 * time.Second)
 			} else {
-				log.Printf("WARN: Node %d: No valid file paths found for tagged files.", lb.nodeNumber)
+				slog.Warn("no valid file paths found for tagged files", "node", lb.nodeNumber)
 				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Could not find any of the marked files on the server.|07\r\n")), lb.outputMode)
 				// failCount already equals the number of missing files (every
 				// tagged ID incremented it in the collection loop above).
@@ -594,7 +594,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			lb.currentUser.TaggedFileIDs = nil
 			lb.currentUser.NumDownloads += successCount
 			if saveErr := lb.userManager.UpdateUser(lb.currentUser); saveErr != nil {
-				log.Printf("ERROR: Node %d: Failed to save user data after download: %v", lb.nodeNumber, saveErr)
+				slog.Error("failed to save user data after download", "node", lb.nodeNumber, "error", saveErr)
 			}
 
 			statusMsg := fmt.Sprintf("|07Download finished. Success: %d, Failed: %d.|07\r\n", successCount, failCount)
@@ -613,7 +613,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
 			uploadErr := lb.e.runUploadFiles(lb.s, lb.terminal, lb.currentUser, lb.userManager, lb.currentAreaID, lb.currentAreaTag, lb.outputMode, lb.nodeNumber, lb.sessionStartTime)
 			if uploadErr != nil {
-				log.Printf("ERROR: Node %d: Upload error: %v", lb.nodeNumber, uploadErr)
+				slog.Error("upload error", "node", lb.nodeNumber, "error", uploadErr)
 			}
 			// runUploadFiles calls resetSessionIH/getSessionIH internally,
 			// so the local ih is now stale — refresh it.
@@ -640,7 +640,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
 			if readErr == nil && newDesc != "" {
 				if updErr := lb.e.FileMgr.UpdateFileDescription(rec.ID, newDesc); updErr != nil {
-					log.Printf("ERROR: Node %d: Failed to update description for %s: %v", lb.nodeNumber, rec.Filename, updErr)
+					slog.Error("failed to update description", "node", lb.nodeNumber, "file", rec.Filename, "error", updErr)
 				} else {
 					lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 				}
@@ -669,9 +669,9 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			}
 			if proceed {
 				if delErr := lb.e.FileMgr.DeleteFileRecord(rec.ID, true); delErr != nil {
-					log.Printf("ERROR: Node %d: Failed to delete file %s: %v", lb.nodeNumber, rec.Filename, delErr)
+					slog.Error("failed to delete file", "node", lb.nodeNumber, "file", rec.Filename, "error", delErr)
 				} else {
-					log.Printf("INFO: Node %d: Sysop deleted file '%s' from area %d.", lb.nodeNumber, rec.Filename, lb.currentAreaID)
+					slog.Info("sysop deleted file from area", "node", lb.nodeNumber, "file", rec.Filename, "area", lb.currentAreaID)
 					// Remove from user's tag list so stale IDs don't reach batch download.
 					filtered := lb.currentUser.TaggedFileIDs[:0]
 					for _, tid := range lb.currentUser.TaggedFileIDs {
@@ -737,9 +737,9 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			}
 			if proceed {
 				if mvErr := lb.e.FileMgr.MoveFileRecord(rec.ID, targetAreaID); mvErr != nil {
-					log.Printf("ERROR: Node %d: Failed to move file %s to area %d: %v", lb.nodeNumber, rec.Filename, targetAreaID, mvErr)
+					slog.Error("failed to move file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "error", mvErr)
 				} else {
-					log.Printf("INFO: Node %d: Sysop moved file '%s' to area %d (%s).", lb.nodeNumber, rec.Filename, targetAreaID, targetArea.Tag)
+					slog.Info("sysop moved file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "tag", targetArea.Tag)
 					lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 					if lb.selectedIndex >= len(lb.allFiles) && len(lb.allFiles) > 0 {
 						lb.selectedIndex = len(lb.allFiles) - 1
@@ -787,7 +787,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			}
 			oldPath, pathErr := lb.e.FileMgr.GetFilePath(rec.ID)
 			if pathErr != nil {
-				log.Printf("ERROR: Node %d: Failed to resolve path for %s: %v", lb.nodeNumber, rec.Filename, pathErr)
+				slog.Error("failed to resolve path", "node", lb.nodeNumber, "file", rec.Filename, "error", pathErr)
 				needFullRedraw = true
 				continue
 			}
@@ -803,21 +803,21 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			case statErr == nil:
 				oldInfo, oldStatErr := os.Stat(oldPath)
 				if oldStatErr != nil || !os.SameFile(oldInfo, newInfo) {
-					log.Printf("ERROR: Node %d: Rename target %s already exists on disk.", lb.nodeNumber, newPath)
+					slog.Error("rename target already exists on disk", "node", lb.nodeNumber, "path", newPath)
 					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01A file with that name already exists.|07\r\n")), lb.outputMode)
 					time.Sleep(1 * time.Second)
 					needFullRedraw = true
 					continue
 				}
 			case !errors.Is(statErr, os.ErrNotExist):
-				log.Printf("ERROR: Node %d: Cannot stat rename target %s: %v", lb.nodeNumber, newPath, statErr)
+				slog.Error("cannot stat rename target", "node", lb.nodeNumber, "path", newPath, "error", statErr)
 				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Rename failed.|07\r\n")), lb.outputMode)
 				time.Sleep(1 * time.Second)
 				needFullRedraw = true
 				continue
 			}
 			if renErr := os.Rename(oldPath, newPath); renErr != nil {
-				log.Printf("ERROR: Node %d: Failed to rename %s to %s: %v", lb.nodeNumber, rec.Filename, newName, renErr)
+				slog.Error("failed to rename file", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "error", renErr)
 				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Rename failed.|07\r\n")), lb.outputMode)
 				time.Sleep(1 * time.Second)
 				needFullRedraw = true
@@ -826,12 +826,12 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			if updErr := lb.e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
 				r.Filename = newName
 			}); updErr != nil {
-				log.Printf("ERROR: Node %d: Failed to update record for %s: %v", lb.nodeNumber, newName, updErr)
+				slog.Error("failed to update record", "node", lb.nodeNumber, "file", newName, "error", updErr)
 				if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
-					log.Printf("ERROR: Node %d: Rollback rename failed for %s: %v (disk/DB inconsistent)", lb.nodeNumber, newName, rollbackErr)
+					slog.Error("rollback rename failed (disk/DB inconsistent)", "node", lb.nodeNumber, "file", newName, "error", rollbackErr)
 				}
 			} else {
-				log.Printf("INFO: Node %d: Sysop renamed file '%s' to '%s' in area %d.", lb.nodeNumber, rec.Filename, newName, lb.currentAreaID)
+				slog.Info("sysop renamed file in area", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "area", lb.currentAreaID)
 				lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 			}
 			needFullRedraw = true

@@ -3,7 +3,7 @@ package menu
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -202,7 +202,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			if freshIdx >= 0 {
 				fresh.Topics[freshIdx].Options = append(fresh.Topics[freshIdx].Options, strings.TrimSpace(choice))
 				if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
-					log.Printf("ERROR: Failed to save voting data after adding choice: %v", saveErr)
+					slog.Error("failed to save voting data after adding choice", "error", saveErr)
 					votingMu.Unlock()
 					wv(terminal, "|04Error saving choice.\r\n", outputMode)
 					return false
@@ -223,7 +223,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	updated, saveErr := voteRecordVote(e.RootConfigPath, topicIdx, n-1, currentUser.Handle)
 	if saveErr != nil {
-		log.Printf("ERROR: Node vote save failed: %v", saveErr)
+		slog.Error("vote save failed", "error", saveErr)
 		wv(terminal, "\r\n|04Error saving vote.\r\n", outputMode)
 		return false
 	}
@@ -281,7 +281,7 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running VOTE for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running VOTE", "node", nodeNumber, "handle", currentUser.Handle)
 	isSysOp := e.isCoSysOpOrAbove(currentUser)
 
 	votingMu.Lock()
@@ -372,7 +372,7 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 					if freshIdx >= 0 {
 						fresh.Topics = append(fresh.Topics[:freshIdx], fresh.Topics[freshIdx+1:]...)
 						if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
-							log.Printf("ERROR: Failed to save voting data after topic deletion: %v", saveErr)
+							slog.Error("failed to save voting data after topic deletion", "error", saveErr)
 						} else {
 							vd = fresh
 							curIdx = freshIdx
@@ -449,7 +449,7 @@ func voteAddTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		t.ID = len(fresh.Topics) + 1
 		fresh.Topics = append(fresh.Topics, t)
 		if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
-			log.Printf("ERROR: Failed to save voting data after topic creation: %v", saveErr)
+			slog.Error("failed to save voting data after topic creation", "error", saveErr)
 		} else {
 			vd = fresh
 		}

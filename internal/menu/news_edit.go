@@ -2,7 +2,7 @@ package menu
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +29,7 @@ func runEditNews(c *cmdCtx, args string) (*user.User, string, error) {
 	if !e.isCoSysOpOrAbove(currentUser) {
 		return currentUser, "", nil
 	}
-	log.Printf("DEBUG: Node %d: Running EDITNEWS (sysop) for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running EDITNEWS (sysop)", "node", nodeNumber, "handle", currentUser.Handle)
 
 	for {
 		terminalio.WriteProcessedBytes(terminal, []byte("\x1b[2J\x1b[H"), outputMode)
@@ -148,7 +148,7 @@ func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	fresh, loadErr := loadNewsData(e.RootConfigPath)
 	if loadErr != nil {
 		newsMu.Unlock()
-		log.Printf("ERROR: Failed to load news data before add: %v", loadErr)
+		slog.Error("failed to load news data before add", "error", loadErr)
 		wv(terminal, "|04Error adding news item.\r\n", outputMode)
 		return
 	}
@@ -166,7 +166,7 @@ func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	saveErr := saveNewsData(e.RootConfigPath, fresh)
 	newsMu.Unlock()
 	if saveErr != nil {
-		log.Printf("ERROR: Failed to save news data after add: %v", saveErr)
+		slog.Error("failed to save news data after add", "error", saveErr)
 		wv(terminal, "|04Error saving news item.\r\n", outputMode)
 		return
 	}
@@ -202,7 +202,7 @@ func newsDeleteItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	fresh, loadErr := loadNewsData(e.RootConfigPath)
 	if loadErr != nil {
 		newsMu.Unlock()
-		log.Printf("ERROR: Failed to load news data before delete: %v", loadErr)
+		slog.Error("failed to load news data before delete", "error", loadErr)
 		wv(terminal, "|04Error deleting news item.\r\n", outputMode)
 		return
 	}
@@ -215,7 +215,7 @@ func newsDeleteItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	saveErr := saveNewsData(e.RootConfigPath, fresh)
 	newsMu.Unlock()
 	if saveErr != nil {
-		log.Printf("ERROR: Failed to save news data after delete: %v", saveErr)
+		slog.Error("failed to save news data after delete", "error", saveErr)
 		wv(terminal, "|04Error deleting news item.\r\n", outputMode)
 		return
 	}
@@ -265,7 +265,7 @@ func newsEditItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			fresh, loadErr := loadNewsData(e.RootConfigPath)
 			if loadErr != nil {
 				newsMu.Unlock()
-				log.Printf("ERROR: Failed to load news data before edit save: %v", loadErr)
+				slog.Error("failed to load news data before edit save", "error", loadErr)
 				wv(terminal, "|04Error saving news item.\r\n", outputMode)
 				return
 			}
@@ -278,7 +278,7 @@ func newsEditItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			saveErr := saveNewsData(e.RootConfigPath, fresh)
 			newsMu.Unlock()
 			if saveErr != nil {
-				log.Printf("ERROR: Failed to save news data after edit: %v", saveErr)
+				slog.Error("failed to save news data after edit", "error", saveErr)
 				wv(terminal, "|04Error saving news item.\r\n", outputMode)
 				return
 			}

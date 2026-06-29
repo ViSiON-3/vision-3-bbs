@@ -3,7 +3,7 @@ package menu
 import (
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -31,7 +31,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running SELECTFILEAREA (lightbar)", nodeNumber)
+	slog.Debug("running SELECTFILEAREA (lightbar)", "node", nodeNumber)
 
 	// Resolve terminal dimensions: prefer passed values, then user prefs, then defaults.
 	if termWidth <= 0 && currentUser != nil {
@@ -59,7 +59,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 	midBytes, errMid := readTemplateFile(filepath.Join(templateDir, "FILEAREA.MID"))
 
 	if errTop != nil || errMid != nil {
-		log.Printf("WARN: Node %d: FILEAREA templates unavailable (%v/%v), using text mode", nodeNumber, errTop, errMid)
+		slog.Warn("FILEAREA templates unavailable, using text mode", "node", nodeNumber, "errTop", errTop, "errMid", errMid)
 		return runSelectFileArea(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 	}
 
@@ -117,7 +117,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 	// Load optional highlight BAR file (FILEAREAHI.BAR) — same pattern as MSGAREAHI.BAR.
 	hiBarOptions, hiBarErr := loadBarFile("FILEAREAHI", e)
 	if hiBarErr != nil {
-		log.Printf("WARN: Node %d: Failed to load FILEAREAHI.BAR: %v", nodeNumber, hiBarErr)
+		slog.Warn("failed to load FILEAREAHI.BAR", "node", nodeNumber, "error", hiBarErr)
 	}
 
 	// Measure header rows using the same pipeline as renderTop so the count
@@ -387,7 +387,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 			currentUser.CurrentFileAreaTag = area.Tag
 			e.setUserFileConference(currentUser, area.ConferenceID)
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to save user after file area change: %v", nodeNumber, err)
+				slog.Error("failed to save user after file area change", "node", nodeNumber, "error", err)
 			}
 
 			confirmMsg := "|08[ |15" + area.Name + " |08] |15Area Joined!|07"
@@ -395,8 +395,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 			_ = terminalio.WriteProcessedBytes(terminal, []byte(hintLine), outputMode)
 			time.Sleep(1 * time.Second)
 
-			log.Printf("INFO: Node %d: User %s changed file area to ID %d ('%s')",
-				nodeNumber, currentUser.Handle, area.ID, area.Tag)
+			slog.Info("user changed file area", "node", nodeNumber, "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
 			return currentUser, "", nil
 
 		case editor.KeyEsc:

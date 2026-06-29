@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,7 +44,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		}
 		defer func() {
 			if err := os.RemoveAll(nodeDir); err != nil {
-				log.Printf("WARN: Failed to remove node dropfile dir %s: %v", nodeDir, err)
+				slog.Warn("failed to remove node dropfile dir", "dir", nodeDir, "error", err)
 			}
 		}()
 		dropfileDir = nodeDir
@@ -54,7 +54,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 	if dropfileTypeUpper == "DOOR.SYS" || dropfileTypeUpper == "CHAIN.TXT" || dropfileTypeUpper == "DOOR32.SYS" || dropfileTypeUpper == "DORINFO1.DEF" {
 		dropfilePath = filepath.Join(dropfileDir, dropfileTypeUpper)
-		log.Printf("INFO: Generating %s dropfile at: %s", dropfileTypeUpper, dropfilePath)
+		slog.Info("generating dropfile", "type", dropfileTypeUpper, "path", dropfilePath)
 
 		// Use full-format dropfile generators (standard BBS formats)
 		var genErr error
@@ -70,18 +70,18 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		}
 
 		if genErr != nil {
-			log.Printf("ERROR: Failed to write dropfile %s: %v", dropfilePath, genErr)
+			slog.Error("failed to write dropfile", "path", dropfilePath, "error", genErr)
 			errMsg := fmt.Sprintf(ctx.Executor.LoadedStrings.DoorDropfileError, ctx.DoorName)
 			if wErr := terminalio.WriteProcessedBytes(ctx.Session.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), ctx.OutputMode); wErr != nil {
-				log.Printf("ERROR: Failed writing dropfile creation error message: %v", wErr)
+				slog.Error("failed writing dropfile creation error message", "error", wErr)
 			}
 			return genErr
 		}
 
 		defer func() {
-			log.Printf("DEBUG: Cleaning up dropfile: %s", dropfilePath)
+			slog.Debug("cleaning up dropfile", "path", dropfilePath)
 			if err := os.Remove(dropfilePath); err != nil {
-				log.Printf("WARN: Failed to remove dropfile %s: %v", dropfilePath, err)
+				slog.Warn("failed to remove dropfile", "path", dropfilePath, "error", err)
 			}
 		}()
 	}
@@ -128,14 +128,14 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		// Use exec "$0" "$@" to preserve argument boundaries and prevent injection
 		shellArgs := append([]string{"-c", `exec "$0" "$@"`, doorCommand}, substitutedArgs...)
 		cmd = exec.Command("/bin/sh", shellArgs...)
-		log.Printf("DEBUG: Node %d: Using shell execution for %q with %d arg(s)", ctx.NodeNumber, doorCommand, len(substitutedArgs))
+		slog.Debug("using shell execution", "node", ctx.NodeNumber, "command", doorCommand, "argCount", len(substitutedArgs))
 	} else {
 		cmd = exec.Command(doorCommand, substitutedArgs...)
 	}
 
 	if doorConfig.WorkingDirectory != "" {
 		cmd.Dir = doorConfig.WorkingDirectory
-		log.Printf("DEBUG: Setting working directory for door '%s' to '%s'", ctx.DoorName, cmd.Dir)
+		slog.Debug("setting working directory for door", "door", ctx.DoorName, "dir", cmd.Dir)
 	}
 
 	// Set environment variables
@@ -181,14 +181,14 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		}
 	}
 	cmd.Env = append(filteredEnv, fmt.Sprintf("LINES=%d", screenHeight), fmt.Sprintf("COLUMNS=%d", screenWidth))
-	log.Printf("DEBUG: Node %d: Set door env LINES=%d COLUMNS=%d", ctx.NodeNumber, screenHeight, screenWidth)
+	slog.Debug("set door env LINES/COLUMNS", "node", ctx.NodeNumber, "lines", screenHeight, "columns", screenWidth)
 
 	// Execute command
 	_, winChOrig, isPty := ctx.Session.Pty()
 	var cmdErr error
 
 	if doorConfig.RequiresRawTerminal && isPty {
-		log.Printf("INFO: Node %d: Starting door '%s' with PTY/Raw mode", ctx.NodeNumber, ctx.DoorName)
+		slog.Info("starting door with PTY/Raw mode", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 		// Set PTY size from user's saved preferences - BEFORE starting the command
 		doorScreenHeight := uint16(25) // default
@@ -200,7 +200,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			doorScreenWidth = uint16(ctx.User.ScreenWidth)
 		}
 		doorSize := &pty.Winsize{Rows: doorScreenHeight, Cols: doorScreenWidth}
-		log.Printf("DEBUG: Node %d: Starting door with PTY size %dx%d (from user preferences)", ctx.NodeNumber, doorScreenWidth, doorScreenHeight)
+		slog.Debug("starting door with PTY size from user preferences", "node", ctx.NodeNumber, "width", doorScreenWidth, "height", doorScreenHeight)
 
 		ptmx, err := pty.StartWithSize(cmd, doorSize)
 		if err != nil {
@@ -219,8 +219,8 @@ func executeNativeDoor(ctx *DoorCtx) error {
 						if !ok {
 							return
 						}
-						log.Printf("DEBUG: Node %d: Ignoring SSH resize event %dx%d (keeping user preference %dx%d)",
-							ctx.NodeNumber, win.Width, win.Height, doorScreenWidth, doorScreenHeight)
+						slog.Debug("ignoring SSH resize event, keeping user preference",
+							"node", ctx.NodeNumber, "width", win.Width, "height", win.Height, "prefWidth", doorScreenWidth, "prefHeight", doorScreenHeight)
 					case <-resizeStop:
 						return
 					}
@@ -230,9 +230,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			fd := int(ptmx.Fd())
 			originalState, err := term.MakeRaw(fd)
 			if err != nil {
-				log.Printf("WARN: Node %d: Failed to put PTY into raw mode for door '%s': %v.", ctx.NodeNumber, ctx.DoorName, err)
+				slog.Warn("failed to put PTY into raw mode for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 			} else {
-				log.Printf("DEBUG: Node %d: PTY set to raw mode for door '%s'.", ctx.NodeNumber, ctx.DoorName)
+				slog.Debug("PTY set to raw mode for door", "node", ctx.NodeNumber, "door", ctx.DoorName)
 			}
 			needsRestore := (err == nil)
 
@@ -257,9 +257,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 					// "read interrupted" is expected when we close readInterrupt during shutdown
 					if strings.Contains(err.Error(), "read interrupted") {
-						log.Printf("DEBUG: Node %d: Input goroutine interrupted for door '%s' (expected during shutdown)", ctx.NodeNumber, ctx.DoorName)
+						slog.Debug("input goroutine interrupted for door (expected during shutdown)", "node", ctx.NodeNumber, "door", ctx.DoorName)
 					} else {
-						log.Printf("WARN: Node %d: Error copying session stdin to PTY for door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+						slog.Warn("error copying session stdin to PTY for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 					}
 				}
 			}()
@@ -269,9 +269,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 					// "input/output error" on PTY is expected when closing during active read
 					if strings.Contains(err.Error(), "input/output error") {
-						log.Printf("DEBUG: Node %d: Output goroutine I/O error for door '%s' (expected during shutdown)", ctx.NodeNumber, ctx.DoorName)
+						slog.Debug("output goroutine I/O error for door (expected during shutdown)", "node", ctx.NodeNumber, "door", ctx.DoorName)
 					} else {
-						log.Printf("WARN: Node %d: Error copying PTY stdout to session for door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+						slog.Warn("error copying PTY stdout to session for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 					}
 				}
 			}()
@@ -279,7 +279,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			// Wait for door to exit, then cleanly shut down I/O goroutines
 			cmdErr = cmd.Wait()
 			close(resizeStop)
-			log.Printf("DEBUG: Node %d: Door '%s' process exited", ctx.NodeNumber, ctx.DoorName)
+			slog.Debug("door process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 			// Interrupt the input goroutine's blocked Read() so it exits without
 			// consuming the user's next keypress, then restore PTY state and close.
@@ -290,9 +290,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 			// Restore PTY state before closing the file descriptor
 			if needsRestore {
-				log.Printf("DEBUG: Node %d: Restoring PTY mode after door '%s'.", ctx.NodeNumber, ctx.DoorName)
+				slog.Debug("restoring PTY mode after door", "node", ctx.NodeNumber, "door", ctx.DoorName)
 				if err := term.Restore(fd, originalState); err != nil {
-					log.Printf("ERROR: Node %d: Failed to restore PTY state after door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+					slog.Error("failed to restore PTY state after door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 				}
 			}
 
@@ -302,7 +302,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	} else if strings.ToUpper(doorConfig.IOMode) == "SOCKET" {
 		// Socket I/O: create a Unix socketpair and pass one end to the door as FD 3.
 		// The other end is bridged bidirectionally to the BBS session.
-		log.Printf("INFO: Node %d: Starting door '%s' with Socket I/O mode", ctx.NodeNumber, ctx.DoorName)
+		slog.Info("starting door with Socket I/O mode", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 		fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 		if err != nil {
@@ -340,7 +340,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 					_, err := io.Copy(bbsSock, ctx.Session)
 					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 						if !strings.Contains(err.Error(), "read interrupted") {
-							log.Printf("WARN: Node %d: Socket I/O input error for door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+							slog.Warn("socket I/O input error for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 						}
 					}
 				}()
@@ -348,12 +348,12 @@ func executeNativeDoor(ctx *DoorCtx) error {
 					defer close(outputDone)
 					_, err := io.Copy(ctx.Session, bbsSock)
 					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
-						log.Printf("WARN: Node %d: Socket I/O output error for door '%s': %v", ctx.NodeNumber, ctx.DoorName, err)
+						slog.Warn("socket I/O output error for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 					}
 				}()
 
 				cmdErr = cmd.Wait()
-				log.Printf("DEBUG: Node %d: Door '%s' (socket I/O) process exited", ctx.NodeNumber, ctx.DoorName)
+				slog.Debug("door (socket I/O) process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 				close(readInterrupt)
 				if hasInterrupt {
@@ -365,9 +365,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		}
 	} else {
 		if doorConfig.RequiresRawTerminal && !isPty {
-			log.Printf("WARN: Node %d: Door '%s' requires raw terminal, but no PTY was allocated.", ctx.NodeNumber, ctx.DoorName)
+			slog.Warn("door requires raw terminal, but no PTY was allocated", "node", ctx.NodeNumber, "door", ctx.DoorName)
 		}
-		log.Printf("INFO: Node %d: Starting door '%s' with standard I/O redirection", ctx.NodeNumber, ctx.DoorName)
+		slog.Info("starting door with standard I/O redirection", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 		cmd.Stdout = ctx.Session
 		cmd.Stderr = ctx.Session

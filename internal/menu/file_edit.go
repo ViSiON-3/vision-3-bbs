@@ -2,7 +2,7 @@ package menu
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,7 +128,7 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 					r.Reviewed = true
 				})
 				if updateErr != nil {
-					log.Printf("ERROR: Node %d: Failed to mark file %s as reviewed: %v", nodeNumber, rec.Filename, updateErr)
+					slog.Error("failed to mark file as reviewed", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 				} else {
 					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SysopReviewMarked+"\r\n")), outputMode)
 				}
@@ -186,7 +186,7 @@ func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Te
 		r.Description = newDesc
 	})
 	if updateErr != nil {
-		log.Printf("ERROR: Node %d: Failed to update description for %s: %v", nodeNumber, rec.Filename, updateErr)
+		slog.Error("failed to update description", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 	}
 	return nil
 }
@@ -212,7 +212,7 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 
 	oldPath, pathErr := e.FileMgr.GetFilePath(rec.ID)
 	if pathErr != nil {
-		log.Printf("ERROR: Node %d: Failed to get file path for %s: %v", nodeNumber, rec.Filename, pathErr)
+		slog.Error("failed to get file path", "node", nodeNumber, "file", rec.Filename, "error", pathErr)
 		return nil
 	}
 
@@ -220,7 +220,7 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 	newPath := filepath.Join(dir, safeName)
 
 	if renameErr := os.Rename(oldPath, newPath); renameErr != nil {
-		log.Printf("ERROR: Node %d: Failed to rename %s to %s: %v", nodeNumber, oldPath, newPath, renameErr)
+		slog.Error("failed to rename file", "node", nodeNumber, "from", oldPath, "to", newPath, "error", renameErr)
 		return nil
 	}
 
@@ -228,9 +228,9 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		r.Filename = safeName
 	})
 	if updateErr != nil {
-		log.Printf("ERROR: Node %d: Failed to update filename record for %s: %v", nodeNumber, rec.Filename, updateErr)
+		slog.Error("failed to update filename record", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 		if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
-			log.Printf("ERROR: Node %d: Rollback rename failed %s -> %s: %v (disk/DB inconsistent)", nodeNumber, newPath, oldPath, rollbackErr)
+			slog.Error("rollback rename failed (disk/DB inconsistent)", "node", nodeNumber, "from", newPath, "to", oldPath, "error", rollbackErr)
 		}
 		return nil
 	}
@@ -252,7 +252,7 @@ func editFileDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 
 	delErr := e.FileMgr.DeleteFileRecord(rec.ID, true)
 	if delErr != nil {
-		log.Printf("ERROR: Node %d: Failed to delete file %s: %v", nodeNumber, rec.Filename, delErr)
+		slog.Error("failed to delete file", "node", nodeNumber, "file", rec.Filename, "error", delErr)
 		return false, nil
 	}
 	return true, nil
@@ -304,7 +304,7 @@ func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec f
 
 	moveErr := e.FileMgr.MoveFileRecord(rec.ID, targetID)
 	if moveErr != nil {
-		log.Printf("ERROR: Node %d: Failed to move file %s to area %d: %v", nodeNumber, rec.Filename, targetID, moveErr)
+		slog.Error("failed to move file to area", "node", nodeNumber, "file", rec.Filename, "area", targetID, "error", moveErr)
 	}
 	return nil
 }

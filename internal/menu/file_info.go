@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -26,7 +26,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running SHOWFILEINFO", nodeNumber)
+	slog.Debug("running SHOWFILEINFO", "node", nodeNumber)
 
 	if currentUser == nil {
 		return nil, "", nil
