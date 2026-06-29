@@ -122,7 +122,7 @@ Configuration files are split between two directories:
 
 ## strings.json
 
-> *Use the [String Editor](advanced/string-editor.md) (`./strings`) to edit display strings interactively. It is a Go reimplementation of the original Vision/2 `STRINGS.EXE` utility. The JSON structure below is for reference or manual editing.*
+> *Use the [String Editor](advanced/string-editor.md) (`./strings`) to edit display strings interactively. It is a Go reimplementation of the original Vision/2 `STRINGS.EXE` utility. The JSON structure below is for reference.*
 
 This file contains all the customizable text strings displayed by the BBS. You can modify these to personalize your system.
 
@@ -187,7 +187,7 @@ The strings support pipe color codes:
 
 ## doors.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 5 — Door Programs) to manage door settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (section 5 — Door Programs) to manage door settings interactively. The JSON structure below is for reference.*
 
 Configures external door programs that can be launched from the BBS. The file contains an array of door configurations. See the [Door Programs Guide](doors/doors.md) for full documentation including DOS door setup, FOSSIL drivers, and dosemu2 configuration.
 
@@ -518,7 +518,7 @@ Leave paths empty (`""`) to disable the feature.
 
 ## Logging
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (System Configuration → Logging) to manage logging settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (System Configuration → Logging) to manage logging settings interactively. The JSON structure below is for reference.*
 
 ViSiON/3 writes structured JSON logs (one object per line) to a configurable directory. All settings live under the `"logging"` key in `configs/config.json` and are shared by every binary (`vision3`, `v3mail`). If the key is absent, defaults are applied automatically so existing installs continue to work unchanged.
 

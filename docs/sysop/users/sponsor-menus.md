@@ -22,7 +22,9 @@ All other users are silently refused — the `%` key does nothing for them, and 
 
 ## Configuring a Sponsor
 
-Set the `"sponsor"` field in `configs/message_areas.json` to the user's handle:
+The easiest way is from within the BBS: enter the Sponsor Menu for the area (`%` from Messages Menu) and press `E` → `S` to set the Sponsor field. See [Edit Area Screen](#edit-area-screen) below.
+
+Alternatively, set the `"sponsor"` field directly in `configs/message_areas.json`:
 
 ```json
 {
@@ -39,8 +41,6 @@ Set the `"sponsor"` field in `configs/message_areas.json` to the user's handle:
 ```
 
 The handle comparison is **case-insensitive** — `"techguru"`, `"TechGuru"`, and `"TECHGURU"` all match a user whose handle is `TechGuru`.
-
-The sponsor can also be set from within the BBS via the Edit Area screen (see below).
 
 ## Using the Sponsor Menu
 
