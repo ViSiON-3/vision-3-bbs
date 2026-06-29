@@ -106,6 +106,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | NUV (New User Verification)   | ✅ Working | Voting-based approval system for new user accounts                                                                  |
 | Info Forms                    | ✅ Working | Up to 5 configurable forms; required form enforcement on login; user fill/view; SysOp browse and management         |
 | TUI User Editor (`ue`)        | ✅ Working | Full-screen terminal user management                                                                                |
+| WFC Sysop Console (`wfc`)     | ✅ Working | Remote read-only monitor of live nodes/callers + event feed over SSH ([guide](docs/sysop/how-to-guides/wfc-console.md)) |
 | **Menus**                     |           |                                                                                                                     |
 | Menu System                   | ✅ Working | `.MNU`, `.CFG`, `.ANS` files, ACS evaluation, password protection                                                   |
 | TUI Menu Editor (`menuedit`)  | ✅ Working | Full-screen menu configuration editor                                                                               |
