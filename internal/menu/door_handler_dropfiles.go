@@ -2,7 +2,7 @@ package menu
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -88,7 +88,7 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 // generateDoorSys writes a full 52-line PCBoard DOOR.SYS file.
 func generateDoorSys(ctx *DoorCtx, dir string) error {
 	path := filepath.Join(dir, "DOOR.SYS")
-	log.Printf("INFO: Generating DOOR.SYS at: %s", path)
+	slog.Info("generating DOOR.SYS", "path", path)
 
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	timeLeftSecs := ctx.TimeLeftMin * 60
@@ -161,7 +161,7 @@ func generateDoorSys(ctx *DoorCtx, dir string) error {
 // generateDoor32Sys writes an 11-line DOOR32.SYS file.
 func generateDoor32Sys(ctx *DoorCtx, dir string) error {
 	path := filepath.Join(dir, "DOOR32.SYS")
-	log.Printf("INFO: Generating DOOR32.SYS at: %s", path)
+	slog.Info("generating DOOR32.SYS", "path", path)
 
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	crlf := "\r\n"
@@ -185,7 +185,7 @@ func generateDoor32Sys(ctx *DoorCtx, dir string) error {
 // generateDorInfo writes a 13-line DORINFO1.DEF file.
 func generateDorInfo(ctx *DoorCtx, dir string) error {
 	path := filepath.Join(dir, "DORINFO1.DEF")
-	log.Printf("INFO: Generating DORINFO1.DEF at: %s", path)
+	slog.Info("generating DORINFO1.DEF", "path", path)
 
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	crlf := "\r\n"
@@ -226,7 +226,7 @@ func generateDorInfo(ctx *DoorCtx, dir string) error {
 // generateChainTxt writes a CHAIN.TXT file (WWIV format).
 func generateChainTxt(ctx *DoorCtx, dir string) error {
 	path := filepath.Join(dir, "CHAIN.TXT")
-	log.Printf("INFO: Generating CHAIN.TXT at: %s", path)
+	slog.Info("generating CHAIN.TXT", "path", path)
 
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	timeLeftSecs := ctx.TimeLeftMin * 60
@@ -296,7 +296,7 @@ func generateAllDropfiles(ctx *DoorCtx, dir string) error {
 		return fmt.Errorf("failed to generate CHAIN.TXT: %w", err)
 	}
 
-	log.Printf("INFO: All dropfiles generated in %s", dir)
+	slog.Info("all dropfiles generated", "dir", dir)
 	return nil
 }
 
@@ -306,8 +306,8 @@ func cleanupDropfiles(dir string) {
 	for _, f := range files {
 		path := filepath.Join(dir, f)
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			log.Printf("WARN: Failed to remove %s: %v", path, err)
+			slog.Warn("failed to remove dropfile", "path", path, "error", err)
 		}
 	}
-	log.Printf("DEBUG: Cleaned up dropfiles in %s", dir)
+	slog.Debug("cleaned up dropfiles", "dir", dir)
 }

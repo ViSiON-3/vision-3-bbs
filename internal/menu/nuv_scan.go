@@ -2,7 +2,7 @@ package menu
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -119,7 +119,7 @@ func runNUVScan(c *cmdCtx, args string) (*user.User, string, error) {
 	nd, err := loadNUVData(e.RootConfigPath)
 	nuvMu.Unlock()
 	if err != nil {
-		log.Printf("WARN: Node %d: SCANNUV: load error: %v", nodeNumber, err)
+		slog.Warn("SCANNUV load error", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -155,7 +155,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 	nd, err := loadNUVData(e.RootConfigPath)
 	nuvMu.Unlock()
 	if err != nil {
-		log.Printf("WARN: Node %d: LISTNUV: load error: %v", nodeNumber, err)
+		slog.Warn("LISTNUV load error", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -242,12 +242,12 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			nd.Candidates = append(nd.Candidates[:num-1], nd.Candidates[num:]...)
 			if err := saveNUVData(e.RootConfigPath, nd); err != nil {
 				nuvMu.Unlock()
-				log.Printf("ERROR: NUV: failed to save after removing '%s': %v", removed.Handle, err)
+				slog.Error("failed to save after removing candidate", "handle", removed.Handle, "error", err)
 				wv(terminal, "|12Failed to save changes.\r\n", outputMode)
 				continue
 			}
 			nuvMu.Unlock()
-			log.Printf("INFO: NUV: SysOp %s removed candidate '%s' from queue", currentUser.Handle, removed.Handle)
+			slog.Info("sysop removed candidate from queue", "handle", currentUser.Handle, "candidate", removed.Handle)
 			wv(terminal, fmt.Sprintf("|10Removed '%s' from queue.\r\n", removed.Handle), outputMode)
 
 		case key == 'V' || key == 'v':

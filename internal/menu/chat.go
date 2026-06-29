@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -249,7 +249,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// Network and room selection — runs in normal terminal mode before full-screen UI.
 	svc, selectedRoom, selectedNetwork, err := chatSelectService(e, s, terminal, handle, outputMode)
 	if err != nil {
-		log.Printf("ERROR: Node %d: chat setup failed: %v", nodeNumber, err)
+		slog.Error("chat setup failed", "node", nodeNumber, "error", err)
 		return nil, "", nil
 	}
 	if svc == nil {
@@ -378,18 +378,18 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	_, history, err := svc.Join(currentRoom)
 	if err != nil {
-		log.Printf("INFO: Node %d: chat join failed (%v), falling back to local chat", nodeNumber, err)
+		slog.Info("chat join failed, falling back to local chat", "node", nodeNumber, "error", err)
 		svc.Close() //nolint:errcheck
 		dbPath := e.ServerCfg.DataDir + "/chat.db"
 		var localErr error
 		svc, localErr = chat.NewLocalChatService(handle, dbPath)
 		if localErr != nil {
-			log.Printf("ERROR: Node %d: local chat fallback failed: %v", nodeNumber, localErr)
+			slog.Error("local chat fallback failed", "node", nodeNumber, "error", localErr)
 			return nil, "", nil
 		}
 		_, history, err = svc.Join(currentRoom)
 		if err != nil {
-			log.Printf("ERROR: Node %d: local chat join failed: %v", nodeNumber, err)
+			slog.Error("local chat join failed", "node", nodeNumber, "error", err)
 			svc.Close() //nolint:errcheck
 			return nil, "", nil
 		}
@@ -477,7 +477,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				terminal.SetPrompt("")
 				return nil, "LOGOFF", io.EOF
 			}
-			log.Printf("ERROR: Node %d: Chat input error: %v", nodeNumber, err)
+			slog.Error("chat input error", "node", nodeNumber, "error", err)
 			break
 		}
 
@@ -607,7 +607,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 			if err != nil || newSvc == nil {
-				log.Printf("ERROR: Node %d: /network reconnect failed: %v", nodeNumber, err)
+				slog.Error("/network reconnect failed", "node", nodeNumber, "error", err)
 				rawWrite([]byte("\x1B[r"))
 				return nil, "", nil
 			}

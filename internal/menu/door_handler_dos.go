@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,7 +33,7 @@ func dosDropfileName(dropfileType string) string {
 
 // writeBatchFile generates EXTERNAL.BAT for dosemu2 execution.
 func writeBatchFile(ctx *DoorCtx, batchPath string) error {
-	log.Printf("INFO: Writing batch file: %s", batchPath)
+	slog.Info("writing batch file", "path", batchPath)
 	crlf := "\r\n"
 
 	var b strings.Builder
@@ -87,7 +87,7 @@ func writeBatchFile(ctx *DoorCtx, batchPath string) error {
 // writeDosemurc generates a per-node dosemurc config file that points
 // $_hdimage at the correct drive_c path and allows lredir to the node dir.
 func writeDosemurc(ctx *DoorCtx, rcPath, driveCPath, nodePath string) error {
-	log.Printf("INFO: Writing dosemurc: %s (drive_c=%s)", rcPath, driveCPath)
+	slog.Info("writing dosemurc", "path", rcPath, "driveC", driveCPath)
 
 	// Start from the user's custom config if one exists, otherwise use defaults
 	baseConfig := ctx.Config.DosemuConfig
@@ -227,7 +227,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 		"-o", logPath,
 	)
 
-	log.Printf("INFO: Node %d: Launching DOS door '%s' via dosemu2: %s %v", ctx.NodeNumber, ctx.DoorName, dosemuPath, args)
+	slog.Info("launching DOS door via dosemu2", "node", ctx.NodeNumber, "door", ctx.DoorName, "path", dosemuPath, "args", args)
 
 	cmd := exec.Command(dosemuPath, args...)
 	cmd.Dir = driveCPath
@@ -282,7 +282,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 		defer close(inputDone)
 		_, err := io.Copy(ptmx, ctx.Session)
 		if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
-			log.Printf("WARN: Node %d: Error copying session stdin to dosemu PTY: %v", ctx.NodeNumber, err)
+			slog.Warn("error copying session stdin to dosemu PTY", "node", ctx.NodeNumber, "error", err)
 		}
 	}()
 	go func() {
@@ -294,7 +294,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 			// the door starts. Door output (via FOSSIL → COM1 → PTY) contains
 			// ANSI escape codes. Gate on the first ESC (0x1B) byte to suppress
 			// boot text while forwarding all door output.
-			log.Printf("DEBUG: Node %d: FOSSIL mode — gating boot text until first ESC byte", ctx.NodeNumber)
+			slog.Debug("FOSSIL mode — gating boot text until first ESC byte", "node", ctx.NodeNumber)
 			var accum []byte
 			gated := true
 			for {
@@ -306,10 +306,10 @@ func executeDOSDoor(ctx *DoorCtx) error {
 							gated = false
 							ctx.Session.Write(accum[idx:])
 							accum = nil
-							log.Printf("DEBUG: Node %d: FOSSIL boot text gate opened (ESC byte at offset %d)", ctx.NodeNumber, idx)
+							slog.Debug("FOSSIL boot text gate opened", "node", ctx.NodeNumber, "offset", idx)
 						}
 						if gated && len(accum) > 32768 {
-							log.Printf("WARN: Node %d: FOSSIL gate: no ESC after 32KB, flushing", ctx.NodeNumber)
+							slog.Warn("FOSSIL gate: no ESC after 32KB, flushing", "node", ctx.NodeNumber)
 							gated = false
 							ctx.Session.Write(accum)
 							accum = nil
@@ -320,10 +320,10 @@ func executeDOSDoor(ctx *DoorCtx) error {
 				}
 				if err != nil {
 					if gated && len(accum) > 0 {
-						log.Printf("WARN: Node %d: FOSSIL boot text gate never opened. Accumulated %d bytes", ctx.NodeNumber, len(accum))
+						slog.Warn("FOSSIL boot text gate never opened", "node", ctx.NodeNumber, "bytes", len(accum))
 					}
 					if err != io.EOF && !errors.Is(err, os.ErrClosed) {
-						log.Printf("WARN: Node %d: Error copying dosemu PTY to session: %v", ctx.NodeNumber, err)
+						slog.Warn("error copying dosemu PTY to session", "node", ctx.NodeNumber, "error", err)
 					}
 					return
 				}
@@ -345,11 +345,11 @@ func executeDOSDoor(ctx *DoorCtx) error {
 						gated = false
 						ctx.Session.Write(accum[idx:])
 						accum = nil
-						log.Printf("DEBUG: Node %d: DOS boot text gate opened (clear screen detected)", ctx.NodeNumber)
+						slog.Debug("DOS boot text gate opened (clear screen detected)", "node", ctx.NodeNumber)
 					}
 					// Safety: if we've accumulated too much without finding cls, flush it
 					if gated && len(accum) > 32768 {
-						log.Printf("WARN: Node %d: Clear screen not found after 32KB, flushing", ctx.NodeNumber)
+						slog.Warn("clear screen not found after 32KB, flushing", "node", ctx.NodeNumber)
 						gated = false
 						ctx.Session.Write(accum)
 						accum = nil
@@ -360,10 +360,10 @@ func executeDOSDoor(ctx *DoorCtx) error {
 			}
 			if err != nil {
 				if gated && len(accum) > 0 {
-					log.Printf("WARN: Node %d: DOS boot text gate never opened. Accumulated %d bytes. First 200: %q", ctx.NodeNumber, len(accum), accum[:min(200, len(accum))])
+					slog.Warn("DOS boot text gate never opened", "node", ctx.NodeNumber, "bytes", len(accum), "first200", accum[:min(200, len(accum))])
 				}
 				if err != io.EOF && !errors.Is(err, os.ErrClosed) {
-					log.Printf("WARN: Node %d: Error copying dosemu PTY to session: %v", ctx.NodeNumber, err)
+					slog.Warn("error copying dosemu PTY to session", "node", ctx.NodeNumber, "error", err)
 				}
 				return
 			}
@@ -372,7 +372,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 
 	// Wait for dosemu to exit, then cleanly shut down I/O goroutines
 	cmdErr := cmd.Wait()
-	log.Printf("DEBUG: Node %d: dosemu2 process exited for door '%s'", ctx.NodeNumber, ctx.DoorName)
+	slog.Debug("dosemu2 process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 	// Interrupt the input goroutine's blocked Read() so it exits without
 	// consuming the user's next keypress, then close the PTY.
@@ -384,9 +384,9 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	<-outputDone
 
 	if cmdErr != nil {
-		log.Printf("ERROR: Node %d: DOS door '%s' failed: %v", ctx.NodeNumber, ctx.DoorName, cmdErr)
+		slog.Error("DOS door failed", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", cmdErr)
 	} else {
-		log.Printf("INFO: Node %d: DOS door '%s' completed successfully", ctx.NodeNumber, ctx.DoorName)
+		slog.Info("DOS door completed successfully", "node", ctx.NodeNumber, "door", ctx.DoorName)
 	}
 
 	// Run cleanup while dropfiles/node dirs still exist (before deferred cleanup fires)

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -34,12 +35,12 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// If already logged in, maybe show an error or just return?
 	if currentUser != nil {
-		log.Printf("WARN: Node %d: User %s tried to run AUTHENTICATE while already logged in.", nodeNumber, currentUser.Handle)
+		slog.Warn("user tried to run AUTHENTICATE while already logged in", "node", nodeNumber, "handle", currentUser.Handle)
 		msg := e.LoadedStrings.ExecAlreadyLoggedIn
 		// Use WriteProcessedBytes
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Failed writing already logged in message: %v", wErr)
+			slog.Error("failed writing already logged in message", "error", wErr)
 		}
 		time.Sleep(1 * time.Second) // Pause after failed attempt
 		return nil, "", nil         // No user change, no error
@@ -56,13 +57,13 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	// Use WriteProcessedBytes for prompt
 	wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(usernamePrompt)), outputMode)
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing username prompt: %v", nodeNumber, wErr)
+		slog.Error("failed writing username prompt", "node", nodeNumber, "error", wErr)
 		// Continue anyway?
 	}
 	usernameInput, err := readLineFromSessionIHAllowAbort(s, terminal)
 	if err != nil {
 		if err == io.EOF {
-			log.Printf("INFO: Node %d: User disconnected during username input.", nodeNumber)
+			slog.Info("user disconnected during username input", "node", nodeNumber)
 			// Return an error that signals disconnection to the main loop
 			return nil, "LOGOFF", io.EOF // Signal logoff
 		}
@@ -76,7 +77,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			return nil, "", nil
 		}
-		log.Printf("ERROR: Node %d: Failed to read username input: %v", nodeNumber, err)
+		slog.Error("failed to read username input", "node", nodeNumber, "error", err)
 		return nil, "", fmt.Errorf("failed reading username: %w", err) // Critical error
 	}
 	username := strings.TrimSpace(usernameInput)
@@ -86,13 +87,13 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Check if user wants to apply as a new user
 	if strings.EqualFold(username, "new") {
-		log.Printf("INFO: Node %d: User typed 'new' in AUTHENTICATE - starting new user application", nodeNumber)
+		slog.Info("user typed 'new' in AUTHENTICATE - starting new user application", "node", nodeNumber)
 		newUserErr := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 		if newUserErr != nil {
 			if errors.Is(newUserErr, io.EOF) {
 				return nil, "LOGOFF", io.EOF
 			}
-			log.Printf("ERROR: Node %d: New user application error: %v", nodeNumber, newUserErr)
+			slog.Error("new user application error", "node", nodeNumber, "error", newUserErr)
 		}
 		return nil, "", nil // Return to LOGIN screen after signup
 	}
@@ -102,16 +103,16 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	passwordPrompt := e.LoadedStrings.ExecPasswordPrompt
 	wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(passwordPrompt)), outputMode)
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing password prompt: %v", nodeNumber, wErr)
+		slog.Error("failed writing password prompt", "node", nodeNumber, "error", wErr)
 	}
 	password, err := readPasswordSecurely(s, terminal, outputMode)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("INFO: Node %d: User disconnected during password input.", nodeNumber)
+			slog.Info("user disconnected during password input", "node", nodeNumber)
 			return nil, "LOGOFF", io.EOF // Signal logoff
 		}
 		if errors.Is(err, errInputAborted) {
-			log.Printf("INFO: Node %d: User pressed ESC during password entry.", nodeNumber)
+			slog.Info("user pressed ESC during password entry", "node", nodeNumber)
 			abort, confirmErr := e.confirmAbortLogin(s, terminal, outputMode, nodeNumber, termWidth, termHeight)
 			if confirmErr != nil {
 				return nil, "", confirmErr
@@ -121,7 +122,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			return nil, "", nil
 		}
-		log.Printf("ERROR: Node %d: Failed to read password securely: %v", nodeNumber, err)
+		slog.Error("failed to read password securely", "node", nodeNumber, "error", err)
 		return nil, "", fmt.Errorf("failed reading password: %w", err) // Critical error
 	}
 
@@ -132,14 +133,14 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	if e.IPLockoutCheck != nil {
 		isLocked, lockedUntil, attempts := e.IPLockoutCheck.IsIPLockedOut(remoteIP)
 		if isLocked {
-			log.Printf("SECURITY: Node %d: Login attempt from locked IP %s (locked until %s, %d attempts)",
-				nodeNumber, remoteIP, lockedUntil.Format("2006-01-02 15:04:05"), attempts)
+			logging.Security("login attempt from locked IP",
+				"node", nodeNumber, "ip", remoteIP, "locked_until", lockedUntil.Format("2006-01-02 15:04:05"), "attempts", attempts)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
 			minutesLeft := int(time.Until(lockedUntil).Minutes()) + 1
 			errMsg := fmt.Sprintf(e.LoadedStrings.ExecIPLockout, minutesLeft)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing IP lockout message: %v", wErr)
+				slog.Error("failed writing IP lockout message", "error", wErr)
 			}
 			time.Sleep(2 * time.Second)
 			return nil, "", nil
@@ -147,16 +148,16 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Attempt Authentication via UserManager
-	log.Printf("DEBUG: Node %d: Attempting authentication for user: %s from IP: %s", nodeNumber, username, remoteIP)
+	slog.Debug("attempting authentication", "node", nodeNumber, "handle", username, "ip", remoteIP)
 	authUser, authenticated := userManager.Authenticate(username, password)
 	if !authenticated {
-		log.Printf("WARN: Node %d: Failed authentication attempt for user: %s from IP: %s", nodeNumber, username, remoteIP)
+		slog.Warn("failed authentication attempt", "node", nodeNumber, "handle", username, "ip", remoteIP)
 
 		// Record failed login attempt for this IP
 		if e.IPLockoutCheck != nil {
 			wasLocked := e.IPLockoutCheck.RecordFailedLoginAttempt(remoteIP)
 			if wasLocked {
-				log.Printf("SECURITY: Node %d: IP %s has been locked out after too many failed attempts", nodeNumber, remoteIP)
+				logging.Security("IP locked out after too many failed attempts", "node", nodeNumber, "ip", remoteIP)
 			}
 		}
 
@@ -166,7 +167,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 		// Use WriteProcessedBytes
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Failed writing login incorrect message: %v", wErr)
+			slog.Error("failed writing login incorrect message", "error", wErr)
 		}
 		time.Sleep(1 * time.Second) // Pause after failed attempt
 		return nil, "", nil         // Failed auth, but not a critical error. Let LOGIN menu handle retries.
@@ -178,25 +179,24 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get thread-safe config snapshot
 	cfg := e.GetServerConfig()
 	if cfg.LogonLevel > 0 && authUser.AccessLevel < cfg.LogonLevel {
-		log.Printf("INFO: Node %d: Login denied for user '%s' - insufficient access level (has %d, needs %d)",
-			nodeNumber, username, authUser.AccessLevel, cfg.LogonLevel)
+		slog.Info("login denied - insufficient access level", "node", nodeNumber, "handle", username, "has", authUser.AccessLevel, "needs", cfg.LogonLevel)
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
 		errMsg := e.LoadedStrings.ExecAccessDenied
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Failed writing access denied message: %v", wErr)
+			slog.Error("failed writing access denied message", "error", wErr)
 		}
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Insufficient level, treat as failed login
 	}
 
 	// Authentication Successful!
-	log.Printf("INFO: Node %d: User '%s' authenticated successfully via RUN:AUTHENTICATE", nodeNumber, authUser.Handle)
+	slog.Info("user authenticated successfully via RUN:AUTHENTICATE", "node", nodeNumber, "handle", authUser.Handle)
 
 	// Clear failed login attempts for this IP
 	if e.IPLockoutCheck != nil {
 		e.IPLockoutCheck.ClearFailedLoginAttempts(remoteIP)
-		log.Printf("DEBUG: Node %d: Cleared failed login attempts for IP %s", nodeNumber, remoteIP)
+		slog.Debug("cleared failed login attempts", "node", nodeNumber, "ip", remoteIP)
 	}
 
 	// Display success message (optional) - Move cursor first
@@ -216,12 +216,12 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 	userCoord, userOk := coords["P"] // Use 'P' for Handle/Name field based on LOGIN.ANS
 	passCoord, passOk := coords["O"] // Use 'O' for Password field based on LOGIN.ANS
 
-	log.Printf("DEBUG: LOGIN Coords Received - P: %+v (Ok: %t), O: %+v (Ok: %t)", userCoord, userOk, passCoord, passOk)
+	slog.Debug("login coords received", "p", userCoord, "pOk", userOk, "o", passCoord, "oOk", passOk)
 
 	if !userOk || !passOk {
-		log.Printf("CRITICAL: LOGIN.ANS is missing required coordinate codes P or O.")
+		slog.Error("LOGIN.ANS is missing required coordinate codes P or O")
 		if wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecLoginCriticalError)), outputMode); wErr != nil {
-			log.Printf("ERROR: Failed writing critical login configuration message: %v", wErr)
+			slog.Error("failed writing critical login configuration message", "error", wErr)
 		}
 		time.Sleep(2 * time.Second)
 		return nil, fmt.Errorf("missing login coordinates P/O in LOGIN.ANS")
@@ -229,7 +229,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 
 	// No Y offset needed — ANSI display is truncated to termHeight rows,
 	// preventing scrolling, so extracted coordinates are accurate as-is
-	log.Printf("DEBUG: Node %d: Login prompt coords P=(%d,%d) O=(%d,%d) termHeight=%d", nodeNumber, userCoord.X, userCoord.Y, passCoord.X, passCoord.Y, termHeight)
+	slog.Debug("login prompt coords", "node", nodeNumber, "pX", userCoord.X, "pY", userCoord.Y, "oX", passCoord.X, "oY", passCoord.Y, "termHeight", termHeight)
 
 	errorRow := passCoord.Y + 2 // Error message row below password
 	if errorRow <= userCoord.Y || errorRow <= passCoord.Y {
@@ -259,24 +259,24 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 			}
 			return nil, nil
 		}
-		log.Printf("ERROR: Node %d: Failed to read username input: %v", nodeNumber, err)
+		slog.Error("failed to read username input", "node", nodeNumber, "error", err)
 		return nil, fmt.Errorf("failed reading username: %w", err)
 	}
 	username := strings.TrimSpace(usernameInput)
 	if username == "" {
-		log.Printf("DEBUG: Node %d: Empty username entered.", nodeNumber)
+		slog.Debug("empty username entered", "node", nodeNumber)
 		return nil, nil // Return nil user, nil error to signal retry LOGIN
 	}
 
 	// Check if user wants to apply as a new user
 	if strings.EqualFold(username, "new") {
-		log.Printf("INFO: Node %d: User typed 'new' - starting new user application", nodeNumber)
+		slog.Info("user typed 'new' - starting new user application", "node", nodeNumber)
 		err := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil, io.EOF
 			}
-			log.Printf("ERROR: Node %d: New user application error: %v", nodeNumber, err)
+			slog.Error("new user application error", "node", nodeNumber, "error", err)
 		}
 		return nil, nil // Return to LOGIN screen after signup
 	}
@@ -295,7 +295,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 			return nil, io.EOF // Signal disconnection
 		}
 		if errors.Is(err, errInputAborted) { // ESC/Ctrl+C
-			log.Printf("INFO: Node %d: User pressed ESC during password entry.", nodeNumber)
+			slog.Info("user pressed ESC during password entry", "node", nodeNumber)
 			abort, confirmErr := e.confirmAbortLogin(s, terminal, outputMode, nodeNumber, termWidth, termHeight)
 			if confirmErr != nil {
 				return nil, confirmErr
@@ -305,7 +305,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 			}
 			return nil, nil
 		}
-		log.Printf("ERROR: Node %d: Failed to read password securely: %v", nodeNumber, err)
+		slog.Error("failed to read password securely", "node", nodeNumber, "error", err)
 		return nil, fmt.Errorf("failed reading password: %w", err)
 	}
 
@@ -316,14 +316,14 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 	if e.IPLockoutCheck != nil {
 		isLocked, lockedUntil, attempts := e.IPLockoutCheck.IsIPLockedOut(remoteIP)
 		if isLocked {
-			log.Printf("SECURITY: Node %d: Login attempt from locked IP %s (locked until %s, %d attempts)",
-				nodeNumber, remoteIP, lockedUntil.Format("2006-01-02 15:04:05"), attempts)
+			logging.Security("login attempt from locked IP",
+				"node", nodeNumber, "ip", remoteIP, "locked_until", lockedUntil.Format("2006-01-02 15:04:05"), "attempts", attempts)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
 			minutesLeft := int(time.Until(lockedUntil).Minutes()) + 1
 			errMsg := fmt.Sprintf(e.LoadedStrings.ExecIPLockout, minutesLeft)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Failed writing IP lockout message: %v", wErr)
+				slog.Error("failed writing IP lockout message", "error", wErr)
 			}
 			time.Sleep(2 * time.Second)
 			return nil, nil
@@ -331,16 +331,16 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 	}
 
 	// Attempt Authentication via UserManager
-	log.Printf("DEBUG: Node %d: Attempting authentication for user: %s from IP: %s", nodeNumber, username, remoteIP)
+	slog.Debug("attempting authentication", "node", nodeNumber, "handle", username, "ip", remoteIP)
 	authUser, authenticated := userManager.Authenticate(username, password)
 	if !authenticated {
-		log.Printf("WARN: Node %d: Failed authentication attempt for user: %s from IP: %s", nodeNumber, username, remoteIP)
+		slog.Warn("failed authentication attempt", "node", nodeNumber, "handle", username, "ip", remoteIP)
 
 		// Record failed login attempt for this IP
 		if e.IPLockoutCheck != nil {
 			wasLocked := e.IPLockoutCheck.RecordFailedLoginAttempt(remoteIP)
 			if wasLocked {
-				log.Printf("SECURITY: Node %d: IP %s has been locked out after too many failed attempts", nodeNumber, remoteIP)
+				logging.Security("IP locked out after too many failed attempts", "node", nodeNumber, "ip", remoteIP)
 			}
 		}
 
@@ -349,7 +349,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		// Use WriteProcessedBytes with the passed outputMode
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Failed writing login incorrect message: %v", wErr)
+			slog.Error("failed writing login incorrect message", "error", wErr)
 		}
 		time.Sleep(1 * time.Second) // Pause after failed attempt
 		return nil, nil             // Failed auth, but not a critical error. Let LOGIN menu handle retries.
@@ -361,24 +361,23 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 	// Get thread-safe config snapshot
 	cfg := e.GetServerConfig()
 	if cfg.LogonLevel > 0 && authUser.AccessLevel < cfg.LogonLevel {
-		log.Printf("INFO: Node %d: Login denied for user '%s' - insufficient access level (has %d, needs %d)",
-			nodeNumber, username, authUser.AccessLevel, cfg.LogonLevel)
+		slog.Info("login denied - insufficient access level", "node", nodeNumber, "handle", username, "has", authUser.AccessLevel, "needs", cfg.LogonLevel)
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
 		errMsg := e.LoadedStrings.ExecAccessDenied
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Failed writing access denied message: %v", wErr)
+			slog.Error("failed writing access denied message", "error", wErr)
 		}
 		time.Sleep(1 * time.Second)
 		return nil, nil // Insufficient level, treat as failed login
 	}
 
-	log.Printf("INFO: Node %d: User '%s' authenticated successfully via LOGIN prompt", nodeNumber, authUser.Handle)
+	slog.Info("user authenticated successfully via LOGIN prompt", "node", nodeNumber, "handle", authUser.Handle)
 
 	// Clear failed login attempts for this IP
 	if e.IPLockoutCheck != nil {
 		e.IPLockoutCheck.ClearFailedLoginAttempts(remoteIP)
-		log.Printf("DEBUG: Node %d: Cleared failed login attempts for IP %s", nodeNumber, remoteIP)
+		slog.Debug("cleared failed login attempts", "node", nodeNumber, "ip", remoteIP)
 	}
 
 	return authUser, nil // Success!
@@ -396,7 +395,7 @@ func readPasswordSecurely(s ssh.Session, terminal *term.Terminal, outputMode ans
 		key, err := ih.ReadKey()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Println("DEBUG: EOF received during secure password read.")
+				slog.Debug("EOF received during secure password read")
 			}
 			return "", err
 		}
@@ -409,7 +408,7 @@ func readPasswordSecurely(s ssh.Session, terminal *term.Terminal, outputMode ans
 			if len(password) > 0 {
 				password = password[:len(password)-1]
 				if err := terminalio.WriteProcessedBytes(terminal, []byte("\b \b"), outputMode); err != nil {
-					log.Printf("WARN: Failed to write backspace sequence: %v", err)
+					slog.Warn("failed to write backspace sequence", "error", err)
 				}
 			}
 		case 3: // Ctrl+C
@@ -423,7 +422,7 @@ func readPasswordSecurely(s ssh.Session, terminal *term.Terminal, outputMode ans
 				password = append(password, rune(key))
 				byteBuf[0] = '*'
 				if err := terminalio.WriteProcessedBytes(terminal, byteBuf[:], outputMode); err != nil {
-					log.Printf("WARN: Failed to write asterisk: %v", err)
+					slog.Warn("failed to write asterisk", "error", err)
 				}
 			}
 		}
@@ -442,24 +441,24 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running NMAILSCAN for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running NMAILSCAN", "node", nodeNumber, "handle", currentUser.Handle)
 
 	if e.MessageMgr == nil {
-		log.Printf("WARN: Node %d: MessageMgr not available for NMAILSCAN", nodeNumber)
+		slog.Warn("MessageMgr not available for NMAILSCAN", "node", nodeNumber)
 		return currentUser, "", nil
 	}
 
 	// Get PRIVMAIL area
 	privmailArea, exists := e.MessageMgr.GetAreaByTag("PRIVMAIL")
 	if !exists {
-		log.Printf("DEBUG: Node %d: PRIVMAIL area not configured, skipping mail scan", nodeNumber)
+		slog.Debug("PRIVMAIL area not configured, skipping mail scan", "node", nodeNumber)
 		return currentUser, "", nil
 	}
 
 	// Get JAM base for PRIVMAIL area
 	base, err := e.MessageMgr.GetBase(privmailArea.ID)
 	if err != nil {
-		log.Printf("WARN: Node %d: JAM base not open for PRIVMAIL area: %v", nodeNumber, err)
+		slog.Warn("JAM base not open for PRIVMAIL area", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 	defer base.Close()
@@ -467,7 +466,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get total message count
 	totalMessages, err := e.MessageMgr.GetMessageCountForArea(privmailArea.ID)
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to get message count for PRIVMAIL: %v", nodeNumber, err)
+		slog.Warn("failed to get message count for PRIVMAIL", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -480,7 +479,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get lastread pointer for this user
 	lastRead, err := e.MessageMgr.GetLastRead(privmailArea.ID, currentUser.Handle)
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to get lastread for PRIVMAIL: %v", nodeNumber, err)
+		slog.Warn("failed to get lastread for PRIVMAIL", "node", nodeNumber, "error", err)
 		lastRead = 0
 	}
 
@@ -521,15 +520,15 @@ func runLoginDisplayFile(c *cmdCtx, args string) (*user.User, string, error) {
 
 	filename := strings.TrimSpace(args)
 	if filename == "" {
-		log.Printf("WARN: Node %d: DISPLAYFILE called with no filename", nodeNumber)
+		slog.Warn("DISPLAYFILE called with no filename", "node", nodeNumber)
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running DISPLAYFILE for %s", nodeNumber, filename)
+	slog.Debug("running DISPLAYFILE", "node", nodeNumber, "file", filename)
 
 	err := e.displayFile(terminal, filename, outputMode)
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to display file %s: %v", nodeNumber, filename, err)
+		slog.Warn("failed to display file", "node", nodeNumber, "file", filename, "error", err)
 		// Non-fatal - continue login sequence even if file is missing
 	}
 
@@ -546,15 +545,15 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 
 	scriptPath := strings.TrimSpace(args)
 	if scriptPath == "" {
-		log.Printf("WARN: Node %d: RUNDOOR called with no script path", nodeNumber)
+		slog.Warn("RUNDOOR called with no script path", "node", nodeNumber)
 		return currentUser, "", nil
 	}
 
-	log.Printf("INFO: Node %d: Running login door script: %s", nodeNumber, scriptPath)
+	slog.Info("running login door script", "node", nodeNumber, "path", scriptPath)
 
 	// Verify script exists
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		log.Printf("WARN: Node %d: Login door script not found: %s", nodeNumber, scriptPath)
+		slog.Warn("login door script not found", "node", nodeNumber, "path", scriptPath)
 		return currentUser, "", nil
 	}
 
@@ -565,7 +564,7 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 	cmd.Stderr = s.Stderr()
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("WARN: Node %d: Login door script %s exited with error: %v", nodeNumber, scriptPath, err)
+		slog.Warn("login door script exited with error", "node", nodeNumber, "path", scriptPath, "error", err)
 		// Non-fatal - continue login sequence
 	}
 
@@ -584,14 +583,14 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 	outputMode := c.outputMode
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running FASTLOGIN inline for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running FASTLOGIN inline", "node", nodeNumber, "handle", currentUser.Handle)
 
 	// Load FASTLOGN menu definition (.MNU) for CLR/CLS + prompt behavior
 	var fastlognMenu *MenuRecord
 	menuMnuPath := filepath.Join(e.MenuSetPath, "mnu")
 	loadedMenu, menuErr := LoadMenu("FASTLOGN", menuMnuPath)
 	if menuErr != nil {
-		log.Printf("WARN: Node %d: Failed to load FASTLOGN.MNU: %v", nodeNumber, menuErr)
+		slog.Warn("failed to load FASTLOGN.MNU", "node", nodeNumber, "error", menuErr)
 	} else {
 		fastlognMenu = loadedMenu
 	}
@@ -599,7 +598,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 	renderFastLoginScreen := func() {
 		clearFirst := fastlognMenu != nil && fastlognMenu.GetClrScrBefore()
 		if displayErr := e.displayFile(terminal, "FASTLOGN.ANS", outputMode, clearFirst); displayErr != nil {
-			log.Printf("WARN: Node %d: Failed to display FASTLOGN.ANS: %v", nodeNumber, displayErr)
+			slog.Warn("failed to display FASTLOGN.ANS", "node", nodeNumber, "error", displayErr)
 		}
 
 		if fastlognMenu != nil && fastlognMenu.GetUsePrompt() {
@@ -621,7 +620,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 	cfgPath := filepath.Join(e.MenuSetPath, "cfg")
 	commands, err := LoadCommands("FASTLOGN", cfgPath)
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to load FASTLOGN.CFG: %v", nodeNumber, err)
+		slog.Warn("failed to load FASTLOGN.CFG", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -633,7 +632,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 	isLightbar := barLoadErr == nil && len(lightbarOptions) > 0
 	if barLoadErr != nil {
 		if _, statErr := os.Stat(barPath); statErr == nil {
-			log.Printf("WARN: Node %d: BAR file exists but failed to load: %v", nodeNumber, barLoadErr)
+			slog.Warn("BAR file exists but failed to load", "node", nodeNumber, "error", barLoadErr)
 		}
 	}
 
@@ -657,13 +656,13 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 			if cmd.Command == "RUN:FULL_LOGIN_SEQUENCE" {
-				log.Printf("DEBUG: Node %d: FASTLOGIN - user chose to continue full sequence", nodeNumber)
+				slog.Debug("FASTLOGIN - user chose to continue full sequence", "node", nodeNumber)
 				terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 				return currentUser, "", nil, true
 			}
 			if strings.HasPrefix(cmd.Command, "GOTO:") {
 				nextMenu := strings.ToUpper(strings.TrimPrefix(cmd.Command, "GOTO:"))
-				log.Printf("DEBUG: Node %d: FASTLOGIN - user chose GOTO:%s", nodeNumber, nextMenu)
+				slog.Debug("FASTLOGIN - user chose GOTO", "node", nodeNumber, "menu", nextMenu)
 				terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 				return currentUser, "GOTO:" + nextMenu, nil, true
 			}
@@ -682,7 +681,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 	ih := getSessionIH(s)
 
 	if isLightbar {
-		log.Printf("DEBUG: Node %d: FASTLOGIN using lightbar mode (%d options)", nodeNumber, len(lightbarOptions))
+		slog.Debug("FASTLOGIN using lightbar mode", "node", nodeNumber, "count", len(lightbarOptions))
 		selectedIndex := 0
 		_ = drawLightbarMenu(terminal, nil, lightbarOptions, selectedIndex, outputMode, false)
 
@@ -833,7 +832,7 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 	termHeight := c.termHeight
 
 	loginSequence := e.GetLoginSequence()
-	log.Printf("INFO: Node %d: Running FULL_LOGIN_SEQUENCE for user %s (%d items configured)", nodeNumber, currentUser.Handle, len(loginSequence))
+	slog.Info("running FULL_LOGIN_SEQUENCE", "node", nodeNumber, "handle", currentUser.Handle, "count", len(loginSequence))
 
 	// Build dispatch map for login item commands
 	type loginHandler func(c *cmdCtx, args string) (*user.User, string, error)
@@ -858,12 +857,11 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 	for i, item := range loginSequence {
 		// Check security level requirement
 		if item.SecLevel > 0 && currentUser.AccessLevel < item.SecLevel {
-			log.Printf("DEBUG: Node %d: Skipping login item %d (%s) - user level %d < required %d",
-				nodeNumber, i+1, item.Command, currentUser.AccessLevel, item.SecLevel)
+			slog.Debug("skipping login item - insufficient user level", "node", nodeNumber, "item", i+1, "command", item.Command, "level", currentUser.AccessLevel, "required", item.SecLevel)
 			continue
 		}
 
-		log.Printf("DEBUG: Node %d: Executing login item %d/%d: %s", nodeNumber, i+1, len(loginSequence), item.Command)
+		slog.Debug("executing login item", "node", nodeNumber, "item", i+1, "count", len(loginSequence), "command", item.Command)
 
 		// Clear screen if requested
 		if item.ClearScreen {
@@ -877,7 +875,7 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 		if strings.HasPrefix(item.Command, "DOOR:") {
 			// Extract door name and execute via DOOR: handler
 			doorName := strings.TrimPrefix(item.Command, "DOOR:")
-			log.Printf("INFO: Node %d: Executing door '%s' from login sequence", nodeNumber, doorName)
+			slog.Info("executing door from login sequence", "node", nodeNumber, "door", doorName)
 
 			// Call the DOOR: handler from RunRegistry
 			if doorFunc, exists := e.RunRegistry["DOOR:"]; exists {
@@ -886,14 +884,14 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 					currentUser = updatedUser
 				}
 			} else {
-				log.Printf("ERROR: Node %d: DOOR: handler not registered", nodeNumber)
+				slog.Error("DOOR: handler not registered", "node", nodeNumber)
 				continue
 			}
 		} else {
 			// Look up and execute the handler from the local handlers map
 			handler, exists := handlers[item.Command]
 			if !exists {
-				log.Printf("WARN: Node %d: Unknown login sequence command: %s", nodeNumber, item.Command)
+				slog.Warn("unknown login sequence command", "node", nodeNumber, "command", item.Command)
 				continue
 			}
 
@@ -909,7 +907,7 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		}
 		if err != nil {
-			log.Printf("ERROR: Node %d: Error during login item %s: %v", nodeNumber, item.Command, err)
+			slog.Error("error during login item", "node", nodeNumber, "command", item.Command, "error", err)
 			if errors.Is(err, io.EOF) {
 				return nil, "LOGOFF", io.EOF
 			}
@@ -921,7 +919,7 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 			return nil, "LOGOFF", nil
 		}
 		if strings.HasPrefix(nextAction, "GOTO:") {
-			log.Printf("DEBUG: Node %d: Login sequence interrupted by %s -> %s", nodeNumber, item.Command, nextAction)
+			slog.Debug("login sequence interrupted", "node", nodeNumber, "command", item.Command, "action", nextAction)
 			return currentUser, nextAction, nil
 		}
 
@@ -936,7 +934,7 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Sequence completed - transition to MAIN menu
-	log.Printf("DEBUG: Node %d: FULL_LOGIN_SEQUENCE completed. Transitioning to MAIN.", nodeNumber)
+	slog.Debug("FULL_LOGIN_SEQUENCE completed, transitioning to MAIN", "node", nodeNumber)
 	return currentUser, "GOTO:MAIN", nil
 }
 

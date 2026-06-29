@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -308,7 +308,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running ONELINER", nodeNumber)
+	slog.Debug("running ONELINER", "node", nodeNumber)
 
 	onelinerPath := filepath.Join("data", "oneliners.json")
 
@@ -317,12 +317,12 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 	loadedOneLiners, loadErr := loadOnelinerRecords(onelinerPath)
 	onelinerMutex.Unlock()
 	if loadErr != nil {
-		log.Printf("ERROR: Failed loading oneliners from %s: %v", onelinerPath, loadErr)
+		slog.Error("failed loading oneliners", "path", onelinerPath, "error", loadErr)
 		currentOneLiners = []onelinerRecord{}
 	} else {
 		currentOneLiners = loadedOneLiners
 	}
-	log.Printf("DEBUG: Loaded %d oneliners from %s", len(currentOneLiners), onelinerPath)
+	slog.Debug("loaded oneliners", "count", len(currentOneLiners), "path", onelinerPath)
 
 	numLiners := len(currentOneLiners)
 	maxLinesToShow := oneLinerMaxDisplay
@@ -340,7 +340,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 	midTemplateBytes, errMid := readTemplateFile(midTemplatePath)
 	botTemplateBytes, errBot := readTemplateFile(botTemplatePath)
 	if errTop != nil || errMid != nil || errBot != nil {
-		log.Printf("ERROR: Node %d: Failed to load one or more ONELINER template files: TOP(%v), MID(%v), BOT(%v)", nodeNumber, errTop, errMid, errBot)
+		slog.Error("failed to load one or more ONELINER template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
 		msg := e.LoadedStrings.ExecOnelinerTemplateErr
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
@@ -364,12 +364,12 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 
 	wErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed clearing screen for ONELINER: %v", nodeNumber, wErr)
+		slog.Error("failed clearing screen for ONELINER", "node", nodeNumber, "error", wErr)
 	}
 
 	wErr = terminalio.WriteProcessedBytes(terminal, processedTopTemplate, outputMode)
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing ONELINER top template: %v", nodeNumber, wErr)
+		slog.Error("failed writing ONELINER top template", "node", nodeNumber, "error", wErr)
 		return nil, "", wErr
 	}
 
@@ -380,7 +380,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 		lineBytes := ansi.ReplacePipeCodes([]byte(line))
 		wErr = terminalio.WriteProcessedBytes(terminal, lineBytes, outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Node %d: Failed writing empty oneliner state: %v", nodeNumber, wErr)
+			slog.Error("failed writing empty oneliner state", "node", nodeNumber, "error", wErr)
 			return nil, "", wErr
 		}
 	} else {
@@ -401,7 +401,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 			lineBytes := ansi.ReplacePipeCodes([]byte(line))
 			wErr = terminalio.WriteProcessedBytes(terminal, lineBytes, outputMode)
 			if wErr != nil {
-				log.Printf("ERROR: Node %d: Failed writing oneliner line %d: %v", nodeNumber, i, wErr)
+				slog.Error("failed writing oneliner line", "node", nodeNumber, "line", i, "error", wErr)
 				return nil, "", wErr
 			}
 		}
@@ -409,13 +409,13 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 
 	wErr = terminalio.WriteProcessedBytes(terminal, processedBotTemplate, outputMode)
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing ONELINER bottom template: %v", nodeNumber, wErr)
+		slog.Error("failed writing ONELINER bottom template", "node", nodeNumber, "error", wErr)
 		return nil, "", wErr
 	}
 	// --- Ask to Add New One ---
 	askPrompt := e.LoadedStrings.AskOneLiner
 	if askPrompt == "" {
-		log.Printf("ERROR: Required string 'AskOneLiner' is missing or empty in strings configuration.")
+		slog.Error("required string 'AskOneLiner' is missing or empty in strings configuration")
 		return nil, "", fmt.Errorf("missing AskOneLiner string in configuration")
 	}
 
@@ -425,18 +425,18 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 		posCmd := fmt.Sprintf("\x1b[%d;1H", lastRow)
 		wErr = terminalio.WriteProcessedBytes(terminal, []byte(posCmd), outputMode)
 		if wErr != nil {
-			log.Printf("WARN: Node %d: Failed positioning cursor for ONELINER ask prompt: %v", nodeNumber, wErr)
+			slog.Warn("failed positioning cursor for ONELINER ask prompt", "node", nodeNumber, "error", wErr)
 		}
 	}
 
-	log.Printf("DEBUG: Node %d: Calling promptYesNo for ONELINER add prompt", nodeNumber)
+	slog.Debug("calling promptYesNo for ONELINER add prompt", "node", nodeNumber)
 	addYes, err := e.PromptYesNo(s, terminal, askPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("INFO: Node %d: User disconnected during ONELINER add prompt.", nodeNumber)
+			slog.Info("user disconnected during ONELINER add prompt", "node", nodeNumber)
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Failed getting Yes/No input for ONELINER add: %v", err)
+		slog.Error("failed getting Yes/No input for ONELINER add", "error", err)
 		return nil, "", err
 	}
 
@@ -451,15 +451,15 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 			// Start anonymous prompt at column 1 to avoid inherited indentation.
 			wErr = terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Node %d: Failed to clear line before ONELINER anonymous prompt: %v", nodeNumber, wErr)
+				slog.Warn("failed to clear line before ONELINER anonymous prompt", "node", nodeNumber, "error", wErr)
 			}
 			anonYes, anonErr := e.PromptYesNo(s, terminal, anonPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 			if anonErr != nil {
 				if errors.Is(anonErr, io.EOF) {
-					log.Printf("INFO: Node %d: User disconnected during ONELINER anonymous prompt.", nodeNumber)
+					slog.Info("user disconnected during ONELINER anonymous prompt", "node", nodeNumber)
 					return nil, "LOGOFF", io.EOF
 				}
-				log.Printf("WARN: Node %d: Failed anonymous prompt for ONELINER: %v", nodeNumber, anonErr)
+				slog.Warn("failed anonymous prompt for ONELINER", "node", nodeNumber, "error", anonErr)
 			} else {
 				isAnonymous = anonYes
 			}
@@ -467,7 +467,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 
 		enterPrompt := e.LoadedStrings.EnterOneLiner
 		if enterPrompt == "" {
-			log.Printf("ERROR: Required string 'EnterOneLiner' is missing or empty in strings configuration.")
+			slog.Error("required string 'EnterOneLiner' is missing or empty in strings configuration")
 			return nil, "", fmt.Errorf("missing EnterOneLiner string in configuration")
 		}
 
@@ -510,36 +510,35 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 			legendPosCmd := fmt.Sprintf("\x1b[%d;1H", legendRow)
 			wErr = terminalio.WriteProcessedBytes(terminal, []byte(legendPosCmd), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Node %d: Failed positioning ONELINER legend row: %v", nodeNumber, wErr)
+				slog.Warn("failed positioning ONELINER legend row", "node", nodeNumber, "error", wErr)
 			}
 
 			legendBytes := ansi.ReplacePipeCodes([]byte(legendText))
 			wErr = terminalio.WriteProcessedBytes(terminal, legendBytes, outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Node %d: Failed writing ONELINER legend: %v", nodeNumber, wErr)
+				slog.Warn("failed writing ONELINER legend", "node", nodeNumber, "error", wErr)
 			}
 
 			wErr = terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H", inputRow)), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Node %d: Failed restoring ONELINER input row after legend: %v", nodeNumber, wErr)
+				slog.Warn("failed restoring ONELINER input row after legend", "node", nodeNumber, "error", wErr)
 			}
 		}
 
-		// Log hex bytes before writing
 		enterPromptBytes := ansi.ReplacePipeCodes([]byte(enterPrompt))
-		log.Printf("DEBUG: Node %d: Writing ONELINER enter prompt bytes (hex): %x", nodeNumber, enterPromptBytes)
+		slog.Debug("writing oneliner enter prompt bytes", "node", nodeNumber, "bytes", fmt.Sprintf("%X", enterPromptBytes))
 		wErr = terminalio.WriteProcessedBytes(terminal, enterPromptBytes, outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Node %d: Failed writing EnterOneLiner prompt: %v", nodeNumber, wErr)
+			slog.Error("failed writing EnterOneLiner prompt", "node", nodeNumber, "error", wErr)
 		}
 
 		newOneliner, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected while entering oneliner.", nodeNumber)
+				slog.Info("user disconnected while entering oneliner", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
-			log.Printf("ERROR: Failed reading new oneliner input: %v", err)
+			slog.Error("failed reading new oneliner input", "error", err)
 			return nil, "", err
 		}
 		newOneliner = truncateOnelinerPreservePipeCodes(newOneliner, oneLinerMaxLength)
@@ -570,7 +569,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 			onelinerMutex.Lock()
 			latestOneLiners, latestErr := loadOnelinerRecords(onelinerPath)
 			if latestErr != nil {
-				log.Printf("WARN: Node %d: Failed reloading oneliners before save: %v", nodeNumber, latestErr)
+				slog.Warn("failed reloading oneliners before save", "node", nodeNumber, "error", latestErr)
 				latestOneLiners = currentOneLiners
 			}
 			latestOneLiners = append(latestOneLiners, entry)
@@ -578,11 +577,11 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 			onelinerMutex.Unlock()
 
 			if saveErr != nil {
-				log.Printf("ERROR: Node %d: Failed to write updated oneliners JSON to %s: %v", nodeNumber, onelinerPath, saveErr)
+				slog.Error("failed to write updated oneliners JSON", "node", nodeNumber, "path", onelinerPath, "error", saveErr)
 				msg := e.LoadedStrings.ExecOnelinerWriteError
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			} else {
-				log.Printf("INFO: Node %d: Successfully saved updated oneliners to %s", nodeNumber, onelinerPath)
+				slog.Info("successfully saved updated oneliners", "node", nodeNumber, "path", onelinerPath)
 				msg := e.LoadedStrings.ExecOnelinerAdded
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(500 * time.Millisecond)

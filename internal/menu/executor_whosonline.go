@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -50,7 +50,7 @@ func runLoginWhosOnline(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running WHOISONLINE from login sequence", nodeNumber)
+	slog.Debug("running WHOISONLINE from login sequence", "node", nodeNumber)
 
 	// Check if there are any other visible users on other nodes before prompting
 	if e.SessionRegistry != nil {
@@ -75,7 +75,7 @@ func runLoginWhosOnline(c *cmdCtx, args string) (*user.User, string, error) {
 			otherVisible++
 		}
 		if otherVisible == 0 {
-			log.Printf("DEBUG: Node %d: No other visible users online, skipping WHOISONLINE prompt", nodeNumber)
+			slog.Debug("no other visible users online, skipping WHOISONLINE prompt", "node", nodeNumber)
 			return currentUser, "", nil
 		}
 	}
@@ -86,12 +86,12 @@ func runLoginWhosOnline(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Node %d: Failed during WHOISONLINE YES/NO prompt: %v", nodeNumber, err)
+		slog.Error("failed during WHOISONLINE YES/NO prompt", "node", nodeNumber, "error", err)
 		return currentUser, "", nil // Non-fatal, skip
 	}
 
 	if !result {
-		log.Printf("DEBUG: Node %d: User declined to view who's online", nodeNumber)
+		slog.Debug("user declined to view who's online", "node", nodeNumber)
 		// Write a newline to move past the prompt
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		return currentUser, "", nil
@@ -112,7 +112,7 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running WHOISONLINE", nodeNumber)
+	slog.Debug("running WHOISONLINE", "node", nodeNumber)
 
 	topPath := filepath.Join(e.MenuSetPath, "templates", "WHOONLN.TOP")
 	midPath := filepath.Join(e.MenuSetPath, "templates", "WHOONLN.MID")
@@ -123,7 +123,7 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 	botBytes, errBot := readTemplateFile(botPath)
 
 	if errTop != nil || errMid != nil || errBot != nil {
-		log.Printf("ERROR: Node %d: Failed to load WHOONLN templates: TOP(%v), MID(%v), BOT(%v)", nodeNumber, errTop, errMid, errBot)
+		slog.Error("failed to load WHOONLN templates", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := "\r\n|01Error loading Who's Online templates.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -142,7 +142,7 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 	processedBot := string(ansi.ReplacePipeCodes(botBytes))
 
 	if e.SessionRegistry == nil {
-		log.Printf("ERROR: Node %d: SessionRegistry is nil", nodeNumber)
+		slog.Error("session registry is nil", "node", nodeNumber)
 		msg := "\r\n|01Who's Online is unavailable.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -249,10 +249,10 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("INFO: Node %d: User disconnected during WHOISONLINE pause.", nodeNumber)
+			slog.Info("user disconnected during WHOISONLINE pause", "node", nodeNumber)
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Node %d: Failed during WHOISONLINE pause: %v", nodeNumber, err)
+		slog.Error("failed during WHOISONLINE pause", "node", nodeNumber, "error", err)
 		return nil, "", err
 	}
 

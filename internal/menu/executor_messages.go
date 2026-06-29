@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,7 +31,7 @@ func runListMessageAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	sessionStartTime := c.sessionStartTime
 	outputMode := c.outputMode
 
-	log.Printf("DEBUG: Node %d: Running LISTMSGAR", nodeNumber)
+	slog.Debug("running LISTMSGAR", "node", nodeNumber)
 
 	// Filter to current conference if user is logged in, otherwise show all
 	filterConfID := -1
@@ -89,7 +89,7 @@ func runComposeMessage(c *cmdCtx, args string) (*user.User, string, error) {
 // ih is an optional pre-created *InputHandler shared with the caller's reader loop;
 // pass nil to create a new one inside the editor.
 func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, args string, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
-	log.Printf("DEBUG: Node %d: Running COMPOSEMSG with args: %s", nodeNumber, args)
+	slog.Debug("running COMPOSEMSG", "node", nodeNumber, "args", args)
 
 	// 1. Determine Target Area
 	var areaTag string
@@ -99,7 +99,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if args == "" {
 		// No args provided, use current user's area
 		if currentUser == nil {
-			log.Printf("WARN: Node %d: COMPOSEMSG called without user and without args.", nodeNumber)
+			slog.Warn("COMPOSEMSG called without user and without args", "node", nodeNumber)
 			msg := "\r\n|01Error: Not logged in and no area specified.|07\r\n"
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil { /* Log? */
@@ -108,7 +108,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 			return nil, "", nil // Return to menu
 		}
 		if currentUser.CurrentMessageAreaTag == "" || currentUser.CurrentMessageAreaID <= 0 {
-			log.Printf("WARN: Node %d: COMPOSEMSG called by %s, but no current message area is set.", nodeNumber, currentUser.Handle)
+			slog.Warn("COMPOSEMSG called but no current message area is set", "node", nodeNumber, "handle", currentUser.Handle)
 			msg := "\r\n|01Error: No current message area selected.|07\r\n"
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil { /* Log? */
@@ -117,18 +117,18 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 			return nil, "", nil // Return to menu
 		}
 		areaTag = currentUser.CurrentMessageAreaTag
-		log.Printf("INFO: Node %d: COMPOSEMSG using current user area tag: %s", nodeNumber, areaTag)
+		slog.Info("COMPOSEMSG using current user area tag", "node", nodeNumber, "tag", areaTag)
 		area, exists = e.MessageMgr.GetAreaByTag(areaTag)
 	} else {
 		// Args provided, use args as the area tag
-		log.Printf("INFO: Node %d: COMPOSEMSG using provided area tag in args: %s", nodeNumber, args)
+		slog.Info("COMPOSEMSG using provided area tag in args", "node", nodeNumber, "tag", args)
 		areaTag = args
 		area, exists = e.MessageMgr.GetAreaByTag(areaTag)
 	}
 
 	// Common checks after determining areaTag/area
 	if !exists {
-		log.Printf("ERROR: Node %d: COMPOSEMSG called with invalid Area Tag: %s", nodeNumber, areaTag)
+		slog.Error("COMPOSEMSG called with invalid area tag", "node", nodeNumber, "tag", areaTag)
 		msg := fmt.Sprintf("\r\n|01Invalid message area: %s|07\r\n", areaTag)
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -139,7 +139,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	// Check user logged in (required for ACS check and posting)
 	if currentUser == nil {
-		log.Printf("WARN: Node %d: COMPOSEMSG reached ACS check without logged in user (Area: %s).", nodeNumber, areaTag)
+		slog.Warn("COMPOSEMSG reached ACS check without logged in user", "node", nodeNumber, "tag", areaTag)
 		msg := "\r\n|01Error: You must be logged in to post messages.|07\r\n"
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -150,7 +150,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	// Check ACSWrite permission for the area and currentUser
 	if !checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime) {
-		log.Printf("WARN: Node %d: User %s denied post access to area %s (%s)", nodeNumber, currentUser.Handle, area.Tag, area.ACSWrite)
+		slog.Warn("user denied post access to area", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag, "acs", area.ACSWrite)
 		// TODO: Display user-friendly error message (e.g., Access Denied String)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Return to menu, not an error
@@ -166,7 +166,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 	wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(titlePrompt)), outputMode)
 	if wErr != nil {
-		log.Printf("WARN: Node %d: Failed to write title prompt: %v", nodeNumber, wErr)
+		slog.Warn("failed to write title prompt", "node", nodeNumber, "error", wErr)
 	}
 
 	var subject string
@@ -175,7 +175,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		subject, err = styledInput(terminal, s, outputMode, 30, "")
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected during title input.", nodeNumber)
+				slog.Info("user disconnected during title input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
 			if errors.Is(err, errInputAborted) {
@@ -192,11 +192,11 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 				// No — re-show prompt and retry
 				wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(titlePrompt)), outputMode)
 				if wErr != nil {
-					log.Printf("WARN: Node %d: Failed to rewrite title prompt: %v", nodeNumber, wErr)
+					slog.Warn("failed to rewrite title prompt", "node", nodeNumber, "error", wErr)
 				}
 				continue
 			}
-			log.Printf("ERROR: Node %d: Failed reading title input: %v", nodeNumber, err)
+			slog.Error("failed reading title input", "node", nodeNumber, "error", err)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading title.\r\n"), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil // Return to menu
@@ -208,7 +208,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|01Subject is required.|07\r\n")), outputMode)
 		wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(titlePrompt)), outputMode)
 		if wErr != nil {
-			log.Printf("WARN: Node %d: Failed to rewrite title prompt: %v", nodeNumber, wErr)
+			slog.Warn("failed to rewrite title prompt", "node", nodeNumber, "error", wErr)
 		}
 	}
 
@@ -221,12 +221,12 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	for {
 		wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(toPrompt)), outputMode)
 		if wErr != nil {
-			log.Printf("WARN: Node %d: Failed to write 'to' prompt: %v", nodeNumber, wErr)
+			slog.Warn("failed to write 'to' prompt", "node", nodeNumber, "error", wErr)
 		}
 		toUser, err = styledInput(terminal, s, outputMode, 24, "All")
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected during 'to' input.", nodeNumber)
+				slog.Info("user disconnected during 'to' input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
 			if errors.Is(err, errInputAborted) {
@@ -242,7 +242,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 				}
 				continue // No — re-show prompt and retry
 			}
-			log.Printf("ERROR: Node %d: Failed reading 'to' input: %v", nodeNumber, err)
+			slog.Error("failed reading 'to' input", "node", nodeNumber, "error", err)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading recipient.\r\n"), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil
@@ -280,10 +280,10 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		isAnon, err := e.PromptYesNo(s, terminal, anonPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected during anonymous input.", nodeNumber)
+				slog.Info("user disconnected during anonymous input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
-			log.Printf("ERROR: Node %d: Failed reading anonymous input: %v", nodeNumber, err)
+			slog.Error("failed reading anonymous input", "node", nodeNumber, "error", err)
 			isAnon = false
 		}
 		isAnonymous = isAnon
@@ -304,7 +304,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 
 	// 6. Call the Editor
-	log.Printf("DEBUG: Node %d: Clearing screen before calling editor.RunEditor", nodeNumber)
+	slog.Debug("clearing screen before calling editor", "node", nodeNumber)
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode) // Clear screen before editor
 
 	// Build editor context for FSEDITOR.ANS header placeholders
@@ -326,10 +326,10 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	// No quote data for new messages
 	body, saved, err := editor.RunEditorWithMetadata("", s, s, outputMode, subject, toUser, fromName, isAnonymous, "", "", "", "", false, nil, ih, editorCtx)
-	log.Printf("DEBUG: Node %d: editor.RunEditorWithMetadata returned. Error: %v, Saved: %v, Body length: %d", nodeNumber, err, saved, len(body))
+	slog.Debug("editor returned", "node", nodeNumber, "error", err, "saved", saved, "length", len(body))
 
 	if err != nil {
-		log.Printf("ERROR: Node %d: Editor failed for user %s: %v", nodeNumber, currentUser.Handle, err)
+		slog.Error("editor failed", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		return nil, "", fmt.Errorf("editor error: %w", err)
 	}
 
@@ -337,14 +337,14 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
 	if !saved {
-		log.Printf("INFO: Node %d: User %s aborted message composition for area %s.", nodeNumber, currentUser.Handle, area.Tag)
+		slog.Info("user aborted message composition", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nMessage aborted.\r\n"), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Return to current menu
 	}
 
 	if strings.TrimSpace(body) == "" {
-		log.Printf("INFO: Node %d: User %s saved empty message for area %s.", nodeNumber, currentUser.Handle, area.Tag)
+		slog.Info("user saved empty message", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nMessage body empty. Aborting post.\r\n"), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Return to current menu
@@ -359,7 +359,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	msgNum, err := e.MessageMgr.AddMessage(area.ID, fromName, toUser, subject, body, "")
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to save message from user %s to area %s: %v", nodeNumber, currentUser.Handle, area.Tag, err)
+		slog.Error("failed to save message", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag, "error", err)
 		errorMsg := ansi.ReplacePipeCodes([]byte("\r\n|01Error saving message!|07\r\n"))
 		terminalio.WriteProcessedBytes(terminal, errorMsg, outputMode)
 		time.Sleep(2 * time.Second)
@@ -369,11 +369,11 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	// 8. Update user message counter
 	currentUser.MessagesPosted++
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to update MessagesPosted for user %s: %v", nodeNumber, currentUser.Handle, err)
+		slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 	}
 
 	// 9. Confirmation
-	log.Printf("INFO: Node %d: User %s successfully posted message #%d to area %s", nodeNumber, currentUser.Handle, msgNum, area.Tag)
+	slog.Info("user posted message", "node", nodeNumber, "handle", currentUser.Handle, "num", msgNum, "tag", area.Tag)
 	confirmMsg := ansi.ReplacePipeCodes([]byte("\r\n|02Message Posted!|07\r\n"))
 	terminalio.WriteProcessedBytes(terminal, confirmMsg, outputMode)
 	time.Sleep(1 * time.Second)
@@ -394,15 +394,15 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running runPromptAndComposeMessage", nodeNumber)
+	slog.Debug("running runPromptAndComposeMessage", "node", nodeNumber)
 
 	if currentUser == nil {
-		log.Printf("WARN: Node %d: runPromptAndComposeMessage called without logged in user.", nodeNumber)
+		slog.Warn("runPromptAndComposeMessage called without logged in user", "node", nodeNumber)
 		// Display user-friendly error
 		msg := "\r\n|01Error: You must be logged in to post messages.|07\r\n"
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Node %d: Failed writing login required message: %v", nodeNumber, wErr)
+			slog.Error("failed writing login required message", "node", nodeNumber, "error", wErr)
 		}
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Return to menu
@@ -422,7 +422,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 	botTemplateBytes, errBot := readTemplateFile(botTemplatePath) // Load BOT template
 
 	if errTop != nil || errMid != nil || errBot != nil { // Check BOT error too
-		log.Printf("ERROR: Node %d: Failed to load one or more MSGAREA template files for prompt: TOP(%v), MID(%v), BOT(%v)", nodeNumber, errTop, errMid, errBot)
+		slog.Error("failed to load one or more MSGAREA template files for prompt", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := "\r\n|01Error loading Message Area screen templates.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -439,7 +439,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 	terminalio.WriteProcessedBytes(terminal, processedTopTemplate, outputMode)       // Write TOP
 
 	if len(areas) == 0 {
-		log.Printf("DEBUG: Node %d: No message areas available to post in.", nodeNumber)
+		slog.Debug("no message areas available to post in", "node", nodeNumber)
 		noAreasMsg := ansi.ReplacePipeCodes([]byte("\r\n|07No message areas available.|07\r\n"))
 		terminalio.WriteProcessedBytes(terminal, noAreasMsg, outputMode)
 		time.Sleep(1 * time.Second)
@@ -468,25 +468,25 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 
 	// 2. Prompt for Area Selection
 	prompt := "\r\n|07Enter Area # or Tag to Post In (or Enter to cancel): |15"
-	log.Printf("DEBUG: Node %d: Writing prompt for message area selection bytes (hex): %x", nodeNumber, ansi.ReplacePipeCodes([]byte(prompt)))
+	slog.Debug("writing prompt for message area selection", "node", nodeNumber, "bytes", fmt.Sprintf("%x", ansi.ReplacePipeCodes([]byte(prompt))))
 	wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 	if wErr != nil {
-		log.Printf("WARN: Node %d: Failed to write area selection prompt: %v", nodeNumber, wErr)
+		slog.Warn("failed to write area selection prompt", "node", nodeNumber, "error", wErr)
 	}
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("INFO: Node %d: User disconnected during area selection.", nodeNumber)
+			slog.Info("user disconnected during area selection", "node", nodeNumber)
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Node %d: Failed reading area selection input: %v", nodeNumber, err)
+		slog.Error("failed reading area selection input", "node", nodeNumber, "error", err)
 		return nil, "", fmt.Errorf("failed reading area selection: %w", err)
 	}
 
 	selectedAreaStr := strings.TrimSpace(input)
 	if selectedAreaStr == "" {
-		log.Printf("INFO: Node %d: User cancelled message posting.", nodeNumber)
+		slog.Info("user cancelled message posting", "node", nodeNumber)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nPost cancelled.\r\n"), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return nil, "", nil // Return to current menu
@@ -510,7 +510,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 	}
 
 	if !foundArea {
-		log.Printf("WARN: Node %d: Invalid area selection '%s' by user %s.", nodeNumber, selectedAreaStr, currentUser.Handle)
+		slog.Warn("invalid area selection", "node", nodeNumber, "selection", selectedAreaStr, "handle", currentUser.Handle)
 		// TODO: Use configurable string
 		msg := fmt.Sprintf("\r\n|01Invalid area: %s|07\r\n", selectedAreaStr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -521,7 +521,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 
 	// Check write permission
 	if !checkACS(selectedArea.ACSWrite, currentUser, s, terminal, sessionStartTime) {
-		log.Printf("WARN: Node %d: User %s denied post access to selected area %s (%s)", nodeNumber, currentUser.Handle, selectedArea.Tag, selectedArea.ACSWrite)
+		slog.Warn("user denied post access to selected area", "node", nodeNumber, "handle", currentUser.Handle, "tag", selectedArea.Tag, "acs", selectedArea.ACSWrite)
 		// TODO: Use configurable string for access denied
 		msg := fmt.Sprintf("\r\n|01Access denied to post in area: %s|07\r\n", selectedArea.Name)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -530,7 +530,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 		return nil, "", nil // Return to menu
 	}
 
-	log.Printf("INFO: Node %d: User %s selected area %s (%s) to post in.", nodeNumber, currentUser.Handle, selectedArea.Name, selectedArea.Tag)
+	slog.Info("user selected area to post in", "node", nodeNumber, "handle", currentUser.Handle, "name", selectedArea.Name, "tag", selectedArea.Tag)
 
 	// 4. Call runComposeMessage with the selected Area Tag
 	// Pass the area tag as the argument string
@@ -551,7 +551,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running READMSGS", nodeNumber)
+	slog.Debug("running READMSGS", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to read messages.|07\r\n"
@@ -668,7 +668,7 @@ func runNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running NEWSCAN for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running NEWSCAN", "node", nodeNumber, "handle", currentUser.Handle)
 
 	// Refresh user from the in-process manager so we pick up any newscan
 	// setting changes saved during this session (e.g. tagged areas modified
@@ -719,7 +719,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 	sessionStartTime := c.sessionStartTime
 	outputMode := c.outputMode
 
-	log.Printf("DEBUG: Node %d: Running SELECTMSGAREA", nodeNumber)
+	slog.Debug("running SELECTMSGAREA", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to select a message area.|07\r\n"
@@ -871,7 +871,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 		e.setUserMsgConference(currentUser, area.ConferenceID)
 
 		if err := userManager.UpdateUser(currentUser); err != nil {
-			log.Printf("ERROR: Node %d: Failed to save user data after updating message area: %v", nodeNumber, err)
+			slog.Error("failed to save user data after updating message area", "node", nodeNumber, "error", err)
 			msg := "\r\n|01Error: Could not save area selection.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
@@ -879,7 +879,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
-		log.Printf("INFO: Node %d: User %s changed message area to ID %d ('%s')", nodeNumber, currentUser.Handle, area.ID, area.Tag)
+		slog.Info("user changed message area", "node", nodeNumber, "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
 		msg := fmt.Sprintf("\r\n|07Current message area set to: |15%s|07\r\n", area.Name)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -901,7 +901,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running SENDPRIVMAIL", nodeNumber)
+	slog.Debug("running SENDPRIVMAIL", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to send private mail.|07\r\n"
@@ -913,7 +913,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get PRIVMAIL area
 	privmailArea, exists := e.MessageMgr.GetAreaByTag("PRIVMAIL")
 	if !exists {
-		log.Printf("ERROR: Node %d: PRIVMAIL area not found", nodeNumber)
+		slog.Error("PRIVMAIL area not found", "node", nodeNumber)
 		msg := "\r\n|01Error: Private mail area not configured.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -927,13 +927,13 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	for {
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(recipientPrompt)), outputMode)
 		if wErr != nil {
-			log.Printf("WARN: Node %d: Failed to write recipient prompt: %v", nodeNumber, wErr)
+			slog.Warn("failed to write recipient prompt", "node", nodeNumber, "error", wErr)
 		}
 		var inputErr error
 		recipient, inputErr = styledInput(terminal, s, outputMode, 24, "")
 		if inputErr != nil {
 			if errors.Is(inputErr, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected during recipient input.", nodeNumber)
+				slog.Info("user disconnected during recipient input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
 			if errors.Is(inputErr, errInputAborted) {
@@ -949,7 +949,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 				continue // No — re-show prompt and retry
 			}
-			log.Printf("ERROR: Node %d: Failed reading recipient input: %v", nodeNumber, inputErr)
+			slog.Error("failed reading recipient input", "node", nodeNumber, "error", inputErr)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading recipient.\r\n"), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil
@@ -978,13 +978,13 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	var subject string
 	for {
 		if wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(titlePrompt)), outputMode); wErr != nil {
-			log.Printf("WARN: Node %d: Failed to write subject prompt: %v", nodeNumber, wErr)
+			slog.Warn("failed to write subject prompt", "node", nodeNumber, "error", wErr)
 		}
 		var inputErr error
 		subject, inputErr = styledInput(terminal, s, outputMode, 30, "")
 		if inputErr != nil {
 			if errors.Is(inputErr, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected during subject input.", nodeNumber)
+				slog.Info("user disconnected during subject input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
 			if errors.Is(inputErr, errInputAborted) {
@@ -1000,7 +1000,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 				continue // No — re-show prompt and retry
 			}
-			log.Printf("ERROR: Node %d: Failed reading subject input: %v", nodeNumber, inputErr)
+			slog.Error("failed reading subject input", "node", nodeNumber, "error", inputErr)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading subject.\r\n"), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil
@@ -1013,7 +1013,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Launch editor
-	log.Printf("DEBUG: Node %d: Clearing screen before calling editor for private mail", nodeNumber)
+	slog.Debug("clearing screen before calling editor for private mail", "node", nodeNumber)
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
 	// Launch editor for private mail (no anonymous option for private mail)
@@ -1027,10 +1027,10 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		ConfArea:   "Private Mail",
 	}
 	body, saved, err := editor.RunEditorWithMetadata("", s, s, outputMode, subject, recipientUser.Handle, currentUser.Handle, false, "", "", "", "", false, nil, nil, privEditorCtx)
-	log.Printf("DEBUG: Node %d: editor.RunEditorWithMetadata returned. Error: %v, Saved: %v, Body length: %d", nodeNumber, err, saved, len(body))
+	slog.Debug("editor returned", "node", nodeNumber, "error", err, "saved", saved, "length", len(body))
 
 	if err != nil {
-		log.Printf("ERROR: Node %d: Editor failed for user %s: %v", nodeNumber, currentUser.Handle, err)
+		slog.Error("editor failed", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		return nil, "", fmt.Errorf("editor error: %w", err)
 	}
 
@@ -1038,14 +1038,14 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
 	if !saved {
-		log.Printf("INFO: Node %d: User %s aborted private mail composition.", nodeNumber, currentUser.Handle)
+		slog.Info("user aborted private mail composition", "node", nodeNumber, "handle", currentUser.Handle)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nMessage aborted.\r\n"), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if strings.TrimSpace(body) == "" {
-		log.Printf("INFO: Node %d: User %s saved empty private mail.", nodeNumber, currentUser.Handle)
+		slog.Info("user saved empty private mail", "node", nodeNumber, "handle", currentUser.Handle)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nMessage body empty. Aborting.\r\n"), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
@@ -1059,7 +1059,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// Save the private message with MSG_PRIVATE flag
 	msgNum, err := e.MessageMgr.AddPrivateMessage(privmailArea.ID, currentUser.Handle, recipientUser.Handle, subject, body, "")
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to save private message from user %s to %s: %v", nodeNumber, currentUser.Handle, recipientUser.Handle, err)
+		slog.Error("failed to save private message", "node", nodeNumber, "handle", currentUser.Handle, "recipient", recipientUser.Handle, "error", err)
 		errorMsg := ansi.ReplacePipeCodes([]byte("\r\n|01Error saving private message!|07\r\n"))
 		terminalio.WriteProcessedBytes(terminal, errorMsg, outputMode)
 		time.Sleep(2 * time.Second)
@@ -1069,11 +1069,11 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// Update user message counter
 	currentUser.MessagesPosted++
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to update MessagesPosted for user %s: %v", nodeNumber, currentUser.Handle, err)
+		slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 	}
 
 	// Confirmation
-	log.Printf("INFO: Node %d: User %s successfully sent private message #%d to %s", nodeNumber, currentUser.Handle, msgNum, recipientUser.Handle)
+	slog.Info("user sent private message", "node", nodeNumber, "handle", currentUser.Handle, "num", msgNum, "recipient", recipientUser.Handle)
 	confirmMsg := ansi.ReplacePipeCodes([]byte(fmt.Sprintf("\r\n|02Private message sent to %s!|07\r\n", recipientUser.Handle)))
 	terminalio.WriteProcessedBytes(terminal, confirmMsg, outputMode)
 	time.Sleep(1 * time.Second)
@@ -1105,7 +1105,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running READPRIVMAIL", nodeNumber)
+	slog.Debug("running READPRIVMAIL", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to read private mail.|07\r\n"
@@ -1117,7 +1117,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get PRIVMAIL area
 	privmailArea, exists := e.MessageMgr.GetAreaByTag("PRIVMAIL")
 	if !exists {
-		log.Printf("ERROR: Node %d: PRIVMAIL area not found", nodeNumber)
+		slog.Error("PRIVMAIL area not found", "node", nodeNumber)
 		msg := "\r\n|01Error: Private mail area not configured.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -1127,7 +1127,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get JAM base for PRIVMAIL area
 	base, err := e.MessageMgr.GetBase(privmailArea.ID)
 	if err != nil {
-		log.Printf("ERROR: Node %d: JAM base not open for PRIVMAIL area: %v", nodeNumber, err)
+		slog.Error("JAM base not open for PRIVMAIL area", "node", nodeNumber, "error", err)
 		msg := "\r\n|01Error: Private mail base not available.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -1138,7 +1138,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get total message count
 	totalMessages, err := e.MessageMgr.GetMessageCountForArea(privmailArea.ID)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to get message count for PRIVMAIL: %v", nodeNumber, err)
+		slog.Error("failed to get message count for PRIVMAIL", "node", nodeNumber, "error", err)
 		msg := "\r\n|01Error loading private mail.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -1158,7 +1158,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	for msgNum := 1; msgNum <= totalMessages; msgNum++ {
 		msg, err := base.ReadMessage(msgNum)
 		if err != nil {
-			log.Printf("WARN: Node %d: Failed to read message #%d in PRIVMAIL: %v", nodeNumber, msgNum, err)
+			slog.Warn("failed to read message in PRIVMAIL", "node", nodeNumber, "msg", msgNum, "error", err)
 			continue
 		}
 
@@ -1241,7 +1241,7 @@ func runListPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running LISTPRIVMAIL", nodeNumber)
+	slog.Debug("running LISTPRIVMAIL", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to list private mail.|07\r\n"
@@ -1253,7 +1253,7 @@ func runListPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get PRIVMAIL area
 	privmailArea, exists := e.MessageMgr.GetAreaByTag("PRIVMAIL")
 	if !exists {
-		log.Printf("ERROR: Node %d: PRIVMAIL area not found", nodeNumber)
+		slog.Error("PRIVMAIL area not found", "node", nodeNumber)
 		msg := "\r\n|01Error: Private mail area not configured.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)

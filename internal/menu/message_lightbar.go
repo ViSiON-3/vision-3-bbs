@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 	"unicode"
 
@@ -262,7 +262,7 @@ func promptSingleChar(reader *bufio.Reader, terminal *term.Terminal, prompt stri
 	processedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
 	wErr := terminalio.WriteProcessedBytes(terminal, processedPrompt, outputMode)
 	if wErr != nil {
-		log.Printf("ERROR: Failed writing prompt: %v", wErr)
+		slog.Error("failed writing prompt", "error", wErr)
 	}
 
 	r, err := readSingleKey(reader)

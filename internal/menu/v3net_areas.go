@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -43,7 +43,7 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	svc := e.V3NetStatus
-	log.Printf("DEBUG: V3NetAreas: termWidth=%d termHeight=%d outputMode=%d", termWidth, termHeight, outputMode)
+	slog.Debug("rendering v3net areas", "termWidth", termWidth, "termHeight", termHeight, "outputMode", outputMode)
 
 	// Determine which networks to show.
 	var networks []string

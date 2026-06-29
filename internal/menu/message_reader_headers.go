@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -58,7 +58,7 @@ func discoverMessageHeaders(templatesPath string) ([]MessageHeaderTemplate, erro
 
 		num, err := extractHeaderNumber(base)
 		if err != nil {
-			log.Printf("WARN: Skipping malformed header filename: %s (error: %v)", base, err)
+			slog.Warn("skipping malformed header filename", "file", base, "error", err)
 			continue
 		}
 
@@ -103,7 +103,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	// Load lightbar options from MSGHDR.BAR
 	options, err := loadLightbarOptions("MSGHDR", e)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to load MSGHDR.BAR: %v", nodeNumber, err)
+		slog.Error("failed to load MSGHDR.BAR", "node", nodeNumber, "error", err)
 		msg := "\r\n|01Error loading MSGHDR.BAR!|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -111,7 +111,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(options) == 0 {
-		log.Printf("ERROR: Node %d: No options in MSGHDR.BAR", nodeNumber)
+		slog.Error("no options in MSGHDR.BAR", "node", nodeNumber)
 		msg := "\r\n|01No message header options found!|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -125,14 +125,14 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		// Parse template number from return value (not hotkey, since 10+ use letters)
 		templateNum, parseErr := strconv.Atoi(opt.ReturnValue)
 		if parseErr != nil {
-			log.Printf("WARN: Invalid return value in MSGHDR.BAR: %s", opt.ReturnValue)
+			slog.Warn("invalid return value in MSGHDR.BAR", "value", opt.ReturnValue)
 			continue
 		}
 
 		// Verify template file exists
 		templateFile := filepath.Join(templatesPath, fmt.Sprintf("MSGHDR.%d.ans", templateNum))
 		if _, statErr := os.Stat(templateFile); statErr != nil {
-			log.Printf("WARN: Template file not found: MSGHDR.%d.ans", templateNum)
+			slog.Warn("template file not found", "file", fmt.Sprintf("MSGHDR.%d.ans", templateNum))
 			continue
 		}
 
@@ -140,7 +140,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(validOptions) == 0 {
-		log.Printf("ERROR: Node %d: No valid message header templates found", nodeNumber)
+		slog.Error("no valid message header templates found", "node", nodeNumber)
 		msg := "\r\n|01No valid message header templates!|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -148,13 +148,13 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	options = validOptions
-	log.Printf("INFO: Node %d: Loaded %d message header options from BAR file", nodeNumber, len(options))
+	slog.Info("loaded message header options from BAR file", "node", nodeNumber, "count", len(options))
 
 	// Display the header selection ANSI screen
 	selectionPath := filepath.Join(e.MenuSetPath, "templates", "message_headers", "MSGHDR.ANS")
 	selectionBytes, err := ansi.GetAnsiFileContent(selectionPath)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to load MSGHDR.ANS: %v", nodeNumber, err)
+		slog.Error("failed to load MSGHDR.ANS", "node", nodeNumber, "error", err)
 		msg := "\r\n|01MSGHDR.ANS not found! Please notify SysOp.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
@@ -298,7 +298,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 			// Preview with sample data
 			hdrBytes, readErr := ansi.GetAnsiFileContent(hdrPath)
 			if readErr != nil {
-				log.Printf("ERROR: Node %d: Failed to read header file MSGHDR.%d.ans: %v", nodeNumber, templateNum, readErr)
+				slog.Error("failed to read header file", "node", nodeNumber, "file", fmt.Sprintf("MSGHDR.%d.ans", templateNum), "error", readErr)
 				continue
 			}
 			hdrBytes = bytes.TrimRight(hdrBytes, "\r\n ")
@@ -411,9 +411,9 @@ func saveHeaderSelection(userManager *user.UserMgr, u *user.User, templateNum, n
 	u.MsgHdr = templateNum
 	if err := userManager.UpdateUser(u); err != nil {
 		u.MsgHdr = prev
-		log.Printf("ERROR: Node %d: Failed to save header selection for %s: %v", nodeNumber, u.Handle, err)
+		slog.Error("failed to save header selection", "node", nodeNumber, "handle", u.Handle, "error", err)
 		return err
 	}
-	log.Printf("INFO: Node %d: User %s selected header style %d", nodeNumber, u.Handle, templateNum)
+	slog.Info("user selected header style", "node", nodeNumber, "handle", u.Handle, "style", templateNum)
 	return nil
 }

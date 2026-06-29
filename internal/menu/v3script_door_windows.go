@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
@@ -76,8 +76,8 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 
 	eng := scripting.NewEngine(engineCtx, session, cfg, providers)
 
-	log.Printf("INFO: Node %d: Starting V3 script '%s' (script: %s)",
-		ctx.NodeNumber, ctx.DoorName, ctx.Config.Script)
+	slog.Info("starting V3 script",
+		"node", ctx.NodeNumber, "door", ctx.DoorName, "script", ctx.Config.Script)
 
 	runErr := eng.Run(cfg.Script)
 
@@ -88,16 +88,16 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 
 	if runErr != nil {
 		if errors.Is(runErr, scripting.ErrDisconnect) {
-			log.Printf("INFO: Node %d: User disconnected from V3 script '%s'",
-				ctx.NodeNumber, ctx.DoorName)
+			slog.Info("user disconnected from V3 script",
+				"node", ctx.NodeNumber, "door", ctx.DoorName)
 			return nil
 		}
-		log.Printf("ERROR: Node %d: V3 script '%s' error: %v",
-			ctx.NodeNumber, ctx.DoorName, runErr)
+		slog.Error("V3 script error",
+			"node", ctx.NodeNumber, "door", ctx.DoorName, "error", runErr)
 		return runErr
 	}
 
-	log.Printf("INFO: Node %d: V3 script '%s' completed normally",
-		ctx.NodeNumber, ctx.DoorName)
+	slog.Info("V3 script completed normally",
+		"node", ctx.NodeNumber, "door", ctx.DoorName)
 	return nil
 }

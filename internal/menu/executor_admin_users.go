@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -33,7 +33,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running LISTUSERS", nodeNumber)
+	slog.Debug("running LISTUSERS", "node", nodeNumber)
 
 	// 1. Load Templates (Corrected filenames)
 	topTemplatePath := filepath.Join(e.MenuSetPath, "templates", "USERLIST.TOP")
@@ -45,7 +45,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	botTemplateBytes, errBot := readTemplateFile(botTemplatePath)
 
 	if errTop != nil || errMid != nil || errBot != nil {
-		log.Printf("ERROR: Node %d: Failed to load one or more USERLIST template files: TOP(%v), MID(%v), BOT(%v)", nodeNumber, errTop, errMid, errBot)
+		slog.Error("failed to load USERLIST template files", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := e.LoadedStrings.ExecUserlistTemplateErr
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -77,7 +77,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if len(users) == 0 {
 		// Optional: Handle empty state. The template might handle this.
-		log.Printf("DEBUG: Node %d: No users to display.", nodeNumber)
+		slog.Debug("no users to display", "node", nodeNumber)
 		// If templates don't handle empty, add a message here.
 	} else {
 		// Iterate through user records and format using processed USERLIST.MID
@@ -109,20 +109,20 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 			line = strings.ReplaceAll(line, "|GL", groupLocation) // Use |GL for Group/Location (Replaces |UN)
 			line = strings.ReplaceAll(line, "|LV", level)         // Use |LV for Level
 
-			log.Printf("DEBUG: About to write line for user %s: %q", handle, line)
+			slog.Debug("about to write line for user", "handle", handle, "line", line)
 			outputBuffer.WriteString(line) // Add the fully substituted and processed line
-			log.Printf("DEBUG: Wrote line. Buffer size now: %d", outputBuffer.Len())
+			slog.Debug("wrote line", "bufferSize", outputBuffer.Len())
 		}
 	}
 
-	log.Printf("DEBUG: Finished user loop. Total buffer size before BOT: %d", outputBuffer.Len())
+	slog.Debug("finished user loop", "bufferSize", outputBuffer.Len())
 	outputBuffer.Write(processedBotTemplate) // Write processed bottom template
-	log.Printf("DEBUG: Added BOT template. Final buffer size: %d", outputBuffer.Len())
+	slog.Debug("added BOT template", "bufferSize", outputBuffer.Len())
 
 	// 4. Clear screen and display the assembled content
 	writeErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if writeErr != nil {
-		log.Printf("ERROR: Node %d: Failed clearing screen for USERLIST: %v", nodeNumber, writeErr)
+		slog.Error("failed clearing screen for USERLIST", "node", nodeNumber, "error", writeErr)
 		return nil, "", writeErr
 	}
 
@@ -135,7 +135,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 		wErr = terminalio.WriteProcessedBytes(terminal, processedContent, outputMode)
 	}
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing USERLIST output: %v", nodeNumber, wErr)
+		slog.Error("failed writing USERLIST output", "node", nodeNumber, "error", wErr)
 		return nil, "", wErr
 	}
 
@@ -145,14 +145,14 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
 	}
 
-	log.Printf("DEBUG: Node %d: Displaying USERLIST pause prompt (centered)", nodeNumber)
+	slog.Debug("displaying USERLIST pause prompt", "node", nodeNumber)
 	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("INFO: Node %d: User disconnected during USERLIST pause.", nodeNumber)
+			slog.Info("user disconnected during USERLIST pause", "node", nodeNumber)
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Node %d: Failed during USERLIST pause: %v", nodeNumber, err)
+		slog.Error("failed during USERLIST pause", "node", nodeNumber, "error", err)
 		return nil, "", err
 	}
 
@@ -467,7 +467,7 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 		)
 		if logErr := userManager.LogAdminActivity(logEntry); logErr != nil {
 			// Don't fail the save, but make the audit gap observable.
-			log.Printf("ERROR: admin audit log write failed for user %d field %s: %v", target.ID, fieldName, logErr)
+			slog.Error("admin audit log write failed", "id", target.ID, "field", fieldName, "error", logErr)
 		}
 	}
 
@@ -500,7 +500,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 	termHeight := c.termHeight
 
 	if cfg.logLabel != "" {
-		log.Printf("DEBUG: Node %d: Running %s", nodeNumber, cfg.logLabel)
+		slog.Debug("running command", "node", nodeNumber, "label", cfg.logLabel)
 	}
 
 	adminCursorHidden := e.hideCursorIfNeeded(terminal, outputMode, cursorHideContextDefault)
@@ -1301,7 +1301,7 @@ func runAdminToggleAllowNewUsers(c *cmdCtx, args string) (*user.User, string, er
 	cfg.AllowNewUsers = !cfg.AllowNewUsers
 
 	if err := config.SaveServerConfig(e.RootConfigPath, cfg); err != nil {
-		log.Printf("ERROR: Node %d: Failed to save config after toggling allowNewUsers: %v", nodeNumber, err)
+		slog.Error("failed to save config after toggling allowNewUsers", "node", nodeNumber, "error", err)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error saving config.|07\r\n")), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
@@ -1344,7 +1344,7 @@ func runNewUserValidation(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running NEWUSERVAL", nodeNumber)
+	slog.Debug("running NEWUSERVAL", "node", nodeNumber)
 
 	if currentUser == nil {
 		return nil, "", nil
@@ -1414,7 +1414,7 @@ func runUnvalidateUser(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running UNVALIDATEUSER", nodeNumber)
+	slog.Debug("running UNVALIDATEUSER", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to modify users.|07\r\n"
@@ -1523,7 +1523,7 @@ func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running BANUSER", nodeNumber)
+	slog.Debug("running BANUSER", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to modify users.|07\r\n"
@@ -1644,7 +1644,7 @@ func runDeleteUser(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running DELETEUSER", nodeNumber)
+	slog.Debug("running DELETEUSER", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to delete users.|07\r\n"
@@ -1767,7 +1767,7 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running PURGEUSERS", nodeNumber)
+	slog.Debug("running PURGEUSERS", "node", nodeNumber)
 
 	if currentUser == nil || userManager == nil {
 		msg := "\r\n|01Error: You must be logged in to purge users.|07\r\n"

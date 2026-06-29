@@ -3,7 +3,7 @@ package menu
 import (
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,7 +28,7 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running CHANGEMSGCONF (lightbar)", nodeNumber)
+	slog.Debug("running CHANGEMSGCONF (lightbar)", "node", nodeNumber)
 
 	// Resolve terminal dimensions: prefer passed values, then user prefs, then defaults.
 	if termWidth <= 0 && currentUser != nil {
@@ -61,7 +61,7 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 	midBytes, errMid := readTemplateFile(filepath.Join(templateDir, "MSGCONF.MID"))
 
 	if errTop != nil || errMid != nil {
-		log.Printf("WARN: Node %d: MSGCONF templates unavailable (%v/%v), using text mode", nodeNumber, errTop, errMid)
+		slog.Warn("MSGCONF templates unavailable, using text mode", "node", nodeNumber, "topError", errTop, "midError", errMid)
 		return runChangeMsgConference(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 	}
 
@@ -103,7 +103,7 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 	// Load optional highlight BAR file (MSGCONFHI.BAR) — same pattern as FILELISTHI.BAR.
 	hiBarOptions, hiBarErr := loadBarFile("MSGCONFHI", e)
 	if hiBarErr != nil {
-		log.Printf("WARN: Node %d: Failed to load MSGCONFHI.BAR: %v", nodeNumber, hiBarErr)
+		slog.Warn("failed to load MSGCONFHI.BAR", "node", nodeNumber, "error", hiBarErr)
 	}
 
 	// Measure header rows using the same pipeline as renderTop.
@@ -349,7 +349,7 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 			}
 
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to save user after conference change: %v", nodeNumber, err)
+				slog.Error("failed to save user after conference change", "node", nodeNumber, "error", err)
 			}
 
 			confName := chosen.name
@@ -364,8 +364,8 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 			_ = terminalio.WriteProcessedBytes(terminal, []byte(hintLine), outputMode)
 			time.Sleep(1 * time.Second)
 
-			log.Printf("INFO: Node %d: User %s changed to conference %d (%s), area: %s",
-				nodeNumber, currentUser.Handle, chosen.id, confTag, currentUser.CurrentMessageAreaTag)
+			slog.Info("user changed conference",
+				"node", nodeNumber, "handle", currentUser.Handle, "id", chosen.id, "tag", confTag, "area", currentUser.CurrentMessageAreaTag)
 			return currentUser, "", nil
 
 		case editor.KeyEsc:

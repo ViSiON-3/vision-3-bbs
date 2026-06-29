@@ -3,7 +3,7 @@ package menu
 import (
 	"bytes"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,11 +36,11 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 
 	topBytes, err := readTemplateFile(topPath)
 	if err != nil && !os.IsNotExist(err) {
-		log.Printf("WARN: Node %d: Failed to read %s: %v", nodeNumber, topPath, err)
+		slog.Warn("failed to read template", "node", nodeNumber, "path", topPath, "error", err)
 	}
 	botBytes, err := readTemplateFile(botPath)
 	if err != nil && !os.IsNotExist(err) {
-		log.Printf("WARN: Node %d: Failed to read %s: %v", nodeNumber, botPath, err)
+		slog.Warn("failed to read template", "node", nodeNumber, "path", botPath, "error", err)
 	}
 
 	topBytes = stripSauceMetadata(topBytes)

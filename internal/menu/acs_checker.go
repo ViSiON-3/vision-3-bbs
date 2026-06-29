@@ -2,7 +2,7 @@ package menu
 
 import (
 	"fmt" // Added for errors
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -78,7 +78,7 @@ func tokenizeACS(acsString string) ([]token, error) {
 				flushCondition() // Flush the completed condition
 			} else {
 				// If it doesn't start with a letter/number/allowed symbol, but isn't whitespace or an operator/paren, it's unexpected.
-				log.Printf("WARN: Ignoring unexpected character '%c' during ACS tokenization", r)
+				slog.Warn("ignoring unexpected character during ACS tokenization", "char", string(r))
 				// Consider returning an error instead? For now, just ignore.
 				// return nil, fmt.Errorf("unexpected character '%c' in ACS string", r)
 			}
@@ -86,7 +86,7 @@ func tokenizeACS(acsString string) ([]token, error) {
 	}
 	flushCondition() // Add any trailing condition
 
-	log.Printf("DEBUG: Tokenized ACS '%s' -> %v", acsString, tokens) // Log tokens
+	slog.Debug("tokenized ACS", "acs", acsString, "tokens", tokens) // Log tokens
 	return tokens, nil
 }
 
@@ -149,7 +149,7 @@ func infixToRPN(tokens []token) ([]token, error) {
 		outputQueue = append(outputQueue, op)
 		operatorStack = operatorStack[:len(operatorStack)-1]
 	}
-	log.Printf("DEBUG: RPN Output Queue: %v", outputQueue) // Log RPN
+	slog.Debug("RPN output queue", "queue", outputQueue) // Log RPN
 	return outputQueue, nil
 }
 
@@ -213,49 +213,49 @@ func CheckUserACS(acsString string, u *user.User) bool {
 // checkACS evaluates a ViSiON/2 Access Control String (ACS) against user credentials.
 // Returns true if the user meets the ACS requirements, false otherwise.
 func checkACS(acsString string, u *user.User, s ssh.Session, terminal *term.Terminal, startTime time.Time) bool {
-	// log.Printf("DEBUG: [checkACS] Received ACS: '%s' (Length: %d)", acsString, len(acsString))
+	// slog.Debug("checkACS received ACS", "acs", acsString, "length", len(acsString))
 
 	if acsString == "" {
-		// log.Printf("DEBUG: [checkACS] Empty ACS string. Allowing access.")
+		// slog.Debug("checkACS empty ACS string, allowing access")
 		return true // No ACS defined, always allow
 	}
 
 	// Handle '*' wildcard explicitly *before* tokenization
 	if acsString == "*" { // <--- Check 2: Wildcard allows
-		// log.Printf("DEBUG: [checkACS] Wildcard '*' matched. Allowing access.")
+		// slog.Debug("checkACS wildcard '*' matched, allowing access")
 		return true
 	}
 
 	// Check if user is authenticated
 	if u == nil {
-		// log.Printf("DEBUG: [checkACS] Unauthenticated user ('%s'). Denying access.", acsString)
+		// slog.Debug("checkACS unauthenticated user, denying access", "acs", acsString)
 		return false // Unauthenticated users cannot pass non-empty, non-wildcard ACS
 	}
 
-	log.Printf("DEBUG: Checking ACS: '%s' for user '%s' (Level: %d, Flags: '%s', ID: %d, Validated: %t)", acsString, u.Handle, u.AccessLevel, u.Flags, u.ID, u.Validated)
+	slog.Debug("checking ACS", "acs", acsString, "handle", u.Handle, "level", u.AccessLevel, "flags", u.Flags, "id", u.ID, "validated", u.Validated)
 
 	// 1. Tokenize
 	tokens, err := tokenizeACS(acsString)
 	if err != nil {
-		log.Printf("ERROR: Failed to tokenize ACS string '%s': %v", acsString, err)
+		slog.Error("failed to tokenize ACS string", "acs", acsString, "error", err)
 		return false // Fail on tokenization error
 	}
 
 	// 2. Convert to RPN
 	rpnQueue, err := infixToRPN(tokens)
 	if err != nil {
-		log.Printf("ERROR: Failed to convert ACS string '%s' to RPN: %v", acsString, err)
+		slog.Error("failed to convert ACS string to RPN", "acs", acsString, "error", err)
 		return false // Fail on RPN conversion error
 	}
 
 	// 3. Evaluate RPN
 	result, err := evaluateRPN(rpnQueue, u, s, terminal, startTime)
 	if err != nil {
-		log.Printf("ERROR: Failed to evaluate RPN for ACS string '%s': %v", acsString, err)
+		slog.Error("failed to evaluate RPN for ACS string", "acs", acsString, "error", err)
 		return false // Fail on evaluation error
 	}
 
-	log.Printf("DEBUG: ACS Check Result for '%s': %t", acsString, result)
+	slog.Debug("ACS check result", "acs", acsString, "result", result)
 	return result
 }
 
@@ -266,7 +266,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	// Negation handling removed - done in evaluateRPN
 
 	if len(condition) == 0 {
-		log.Printf("WARN: Empty condition encountered in ACS string after tokenization")
+		slog.Warn("empty condition encountered in ACS string after tokenization")
 		return false // Treat empty condition as failing
 	}
 
@@ -290,7 +290,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	case "S": // Security Level >= value
 		level, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid level value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid level value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			result = u.AccessLevel >= level
@@ -303,7 +303,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 			addr := s.RemoteAddr().String()
 			isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
 			result = (network == "pipe" || network == "unix" || isLoopback)
-			log.Printf("DEBUG: ACS 'L' check: Network='%s', Addr='%s', IsLoopback=%t -> %t", network, addr, isLoopback, result)
+			slog.Debug("ACS 'L' check", "network", network, "addr", addr, "isLoopback", isLoopback, "result", result)
 		}
 	case "A": // ANSI graphics supported
 		if s == nil {
@@ -311,11 +311,11 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 		} else {
 			_, _, isPty := s.Pty()
 			result = isPty
-			log.Printf("DEBUG: ACS 'A' check: isPty=%t -> %t", isPty, result)
+			slog.Debug("ACS 'A' check", "isPty", isPty, "result", result)
 		}
 	case "F": // Flag is set
 		if len(value) != 1 {
-			log.Printf("WARN: Invalid flag value in ACS condition '%s': Flag must be single character", condition)
+			slog.Warn("invalid flag value in ACS condition: flag must be single character", "condition", condition)
 			result = false
 		} else {
 			result = strings.Contains(strings.ToUpper(u.Flags), strings.ToUpper(value))
@@ -323,7 +323,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	case "U": // User ID == value
 		id, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid user ID value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid user ID value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			result = u.ID == id
@@ -333,7 +333,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	case "D": // File download level >= value (Using AccessLevel for now)
 		level, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid level value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid level value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			// TODO: Confirm if this should be AccessLevel or a separate FileLevel
@@ -342,7 +342,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	case "E": // Post/Call Ratio >= value (Uploads / Calls)
 		pcrThreshold, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid PCR value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid PCR value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			numLogons := u.TimesCalled
@@ -351,13 +351,13 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 			} else {
 				userPCR := (float64(u.NumUploads) / float64(numLogons)) * 100
 				result = int(userPCR) >= pcrThreshold
-				log.Printf("DEBUG: ACS 'E' check: Uploads=%d, Calls=%d, PCR=%f, Threshold=%d -> %t", u.NumUploads, numLogons, userPCR, pcrThreshold, result)
+				slog.Debug("ACS 'E' check", "uploads", u.NumUploads, "calls", numLogons, "pcr", userPCR, "threshold", pcrThreshold, "result", result)
 			}
 		}
 	case "H": // Current Hour == value
 		hour, err := strconv.Atoi(value)
 		if err != nil || hour < 0 || hour > 23 {
-			log.Printf("WARN: Invalid hour value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid hour value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			result = time.Now().Hour() == hour
@@ -365,7 +365,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	case "P": // File Points >= value
 		points, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid points value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid points value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			result = u.FilePoints >= points
@@ -373,24 +373,24 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	case "T": // Time Left >= value (minutes)
 		minutesLeftThreshold, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid time left value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid time left value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			if u.TimeLimit <= 0 {
-				log.Printf("DEBUG: ACS 'T' check: User has no time limit (TimeLimit=%d), passing.", u.TimeLimit)
+				slog.Debug("ACS 'T' check: user has no time limit, passing", "timeLimit", u.TimeLimit)
 				result = true
 			} else {
 				elapsedSeconds := time.Since(startTime).Seconds()
 				timeLeftSeconds := float64(u.TimeLimit*60) - elapsedSeconds
 				thresholdSeconds := float64(minutesLeftThreshold * 60)
 				result = timeLeftSeconds >= thresholdSeconds
-				log.Printf("DEBUG: ACS 'T' check: Limit=%dm, Elapsed=%.fs, Left=%.fs, Threshold=%ds -> %t", u.TimeLimit, elapsedSeconds, timeLeftSeconds, int(thresholdSeconds), result)
+				slog.Debug("ACS 'T' check", "limitMin", u.TimeLimit, "elapsedSec", elapsedSeconds, "leftSec", timeLeftSeconds, "thresholdSec", int(thresholdSeconds), "result", result)
 			}
 		}
 	case "W": // Day of Week == value (0=Sun, 1=Mon, ... 6=Sat)
 		day, err := strconv.Atoi(value)
 		if err != nil || day < 0 || day > 6 {
-			log.Printf("WARN: Invalid day of week value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid day of week value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			result = int(time.Now().Weekday()) == day
@@ -400,7 +400,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	case "Y": // Within Time Range hh:mm/hh:mm
 		parts := strings.Split(value, "/")
 		if len(parts) != 2 {
-			log.Printf("WARN: Invalid time range format in ACS condition '%s': Expected hh:mm/hh:mm", condition)
+			slog.Warn("invalid time range format in ACS condition: expected hh:mm/hh:mm", "condition", condition)
 			result = false
 		} else {
 			startTimeStr := parts[0]
@@ -411,7 +411,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 			endTime, errEnd := time.Parse(layout, endTimeStr)
 
 			if errStart != nil || errEnd != nil {
-				log.Printf("WARN: Invalid time format in ACS time range '%s': %v / %v", value, errStart, errEnd)
+				slog.Warn("invalid time format in ACS time range", "value", value, "startError", errStart, "endError", errEnd)
 				result = false
 			} else {
 				startDateTime := time.Date(now.Year(), now.Month(), now.Day(), startTime.Hour(), startTime.Minute(), 0, 0, now.Location())
@@ -421,13 +421,13 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 				} else {
 					result = (now.After(startDateTime) || now.Equal(startDateTime)) && (now.Before(endDateTime) || now.Equal(endDateTime))
 				}
-				log.Printf("DEBUG: ACS 'Y' check: Range='%s' Start=%s End=%s Now=%s -> %t", value, startDateTime, endDateTime, now, result)
+				slog.Debug("ACS 'Y' check", "range", value, "start", startDateTime, "end", endDateTime, "now", now, "result", result)
 			}
 		}
 	case "B": // Upload/Download ratio >= value (as percentage)
 		ratioThreshold, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid ratio value in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid ratio value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			if u.NumDownloads <= 0 {
@@ -437,29 +437,29 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 				ratio := (float64(u.NumUploads) / float64(u.NumDownloads)) * 100
 				result = int(ratio) >= ratioThreshold
 			}
-			log.Printf("DEBUG: ACS 'B' check: Uploads=%d, Downloads=%d, Threshold=%d%% -> %t", u.NumUploads, u.NumDownloads, ratioThreshold, result)
+			slog.Debug("ACS 'B' check", "uploads", u.NumUploads, "downloads", u.NumDownloads, "threshold", ratioThreshold, "result", result)
 		}
 	case "C": // Message Conference == value
 		confID, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid conference ID in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid conference ID in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			result = u.CurrentMsgConferenceID == confID
 		}
 	case "I": // Internet access flag — user has flag "I" set
 		result = strings.Contains(strings.ToUpper(u.Flags), "I")
-		log.Printf("DEBUG: ACS 'I' check: Flags=%q -> %t", u.Flags, result)
+		slog.Debug("ACS 'I' check", "flags", u.Flags, "result", result)
 	case "X": // File Conference == value
 		confID, err := strconv.Atoi(value)
 		if err != nil {
-			log.Printf("WARN: Invalid conference ID in ACS condition '%s': %v", condition, err)
+			slog.Warn("invalid conference ID in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
 			result = u.CurrentFileConferenceID == confID
 		}
 	default:
-		log.Printf("WARN: Unknown ACS code '%s' in condition '%s'", code, condition)
+		slog.Warn("unknown ACS code in condition", "code", code, "condition", condition)
 		result = false
 	}
 

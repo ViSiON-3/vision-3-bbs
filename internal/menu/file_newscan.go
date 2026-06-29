@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -34,8 +34,8 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("INFO: Node %d: FILE_NEWSCAN for user %s (last login: %s, args: %q)",
-		nodeNumber, currentUser.Handle, currentUser.LastLogin.Format(time.RFC3339), args)
+	slog.Info("file newscan", "node", nodeNumber, "handle", currentUser.Handle,
+		"last_login", currentUser.LastLogin.Format(time.RFC3339), "args", args)
 
 	since := currentUser.LastLogin
 
@@ -539,7 +539,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 			currentUser.TaggedFileAreaTags = taggedTags
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to save file newscan config: %v", nodeNumber, err)
+				slog.Error("failed to save file newscan config", "node", nodeNumber, "error", err)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanConfigError)), outputMode)
 			} else {
 				msg := fmt.Sprintf(e.LoadedStrings.FileNewscanConfigSaved, len(taggedTags))

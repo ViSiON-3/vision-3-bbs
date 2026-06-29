@@ -2,7 +2,7 @@ package menu
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -96,7 +96,7 @@ func buildMessageList(msgMgr *message.MessageManager, areaID int, username strin
 	// Get lastread pointer
 	lastRead, err := msgMgr.GetLastRead(areaID, username)
 	if err != nil {
-		log.Printf("WARN: Failed to get lastread for area %d, user %s: %v", areaID, username, err)
+		slog.Warn("failed to get lastread", "area", areaID, "handle", username, "error", err)
 		lastRead = 0 // Default to all unread
 	}
 
@@ -107,7 +107,7 @@ func buildMessageList(msgMgr *message.MessageManager, areaID int, username strin
 		msg, err := msgMgr.GetMessage(areaID, msgNum)
 		if err != nil {
 			// Skip deleted or unreadable messages
-			log.Printf("WARN: Failed to read message %d in area %d: %v", msgNum, areaID, err)
+			slog.Warn("failed to read message", "msg", msgNum, "area", areaID, "error", err)
 			continue
 		}
 
@@ -507,7 +507,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 
 	// Validate user is logged in
 	if currentUser == nil {
-		log.Printf("WARN: Node %d: LISTMSGS called without logged in user.", nodeNumber)
+		slog.Warn("LISTMSGS called without logged in user", "node", nodeNumber)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgListLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
@@ -540,7 +540,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	// Build message list
 	entries, lastRead, err := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to build message list: %v", nodeNumber, err)
+		slog.Error("failed to build message list", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgListLoadError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
@@ -596,7 +596,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 
 	// Draw initial screen
 	if err := drawMessageListScreen(terminal, state, area.Name, confName, outputMode); err != nil {
-		log.Printf("ERROR: Node %d: Failed to draw message list: %v", nodeNumber, err)
+		slog.Error("failed to draw message list", "node", nodeNumber, "error", err)
 		return currentUser, "", err
 	}
 
@@ -606,7 +606,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 		// Handle navigation
 		action, selectedMsg, err := runMessageListNavigation(sessionIH, state)
 		if err != nil {
-			log.Printf("ERROR: Node %d: Navigation error: %v", nodeNumber, err)
+			slog.Error("navigation error", "node", nodeNumber, "error", err)
 			return currentUser, "LOGOFF", err
 		}
 
@@ -640,7 +640,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 				selectedMsg, areaMsgCount, false, tw, th, msgFilter)
 
 			if err != nil {
-				log.Printf("ERROR: Node %d: Message reader error: %v", nodeNumber, err)
+				slog.Error("message reader error", "node", nodeNumber, "error", err)
 				return currentUser, "", err
 			}
 
@@ -652,7 +652,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 			// Rebuild list to pick up posted/deleted messages and updated lastread markers
 			newEntries, newLastRead, rebuildErr := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
 			if rebuildErr != nil {
-				log.Printf("ERROR: Node %d: Failed to rebuild message list: %v", nodeNumber, rebuildErr)
+				slog.Error("failed to rebuild message list", "node", nodeNumber, "error", rebuildErr)
 			} else {
 				state.Entries = newEntries
 				state.TotalMessages = len(newEntries)
@@ -686,7 +686,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 
 			// Redraw full screen after returning from reader
 			if err := drawMessageListScreen(terminal, state, area.Name, confName, outputMode); err != nil {
-				log.Printf("ERROR: Node %d: Failed to redraw message list: %v", nodeNumber, err)
+				slog.Error("failed to redraw message list", "node", nodeNumber, "error", err)
 				return currentUser, "", err
 			}
 			previousIndex = state.SelectedIndex // Track highlighted line after redraw
@@ -694,7 +694,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 		case "REFRESH_FULL":
 			// Optimized page refresh (only redraw message lines and page info, no screen clear)
 			if err := refreshPageContent(terminal, state, outputMode); err != nil {
-				log.Printf("ERROR: Node %d: Failed to refresh page content: %v", nodeNumber, err)
+				slog.Error("failed to refresh page content", "node", nodeNumber, "error", err)
 				return currentUser, "", err
 			}
 			previousIndex = state.SelectedIndex // Track highlighted line after redraw

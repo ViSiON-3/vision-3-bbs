@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -109,7 +109,7 @@ func writeCenteredPausePrompt(s ssh.Session, terminal *term.Terminal, pausePromp
 				centerPosBytes := []byte(fmt.Sprintf("\r\x1b[%dC", leftPadding))
 				wErr := terminalio.WriteProcessedBytes(terminal, centerPosBytes, outputMode)
 				if wErr != nil {
-					log.Printf("WARN: Failed positioning for centered pause: %v", wErr)
+					slog.Warn("failed positioning for centered pause", "error", wErr)
 				}
 			}
 		}
@@ -159,15 +159,15 @@ func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, er
 	cfgPath := filepath.Join(e.MenuSetPath, "cfg", cfgFilename)
 	barPath := filepath.Join(e.MenuSetPath, "bar", barFilename)
 
-	log.Printf("DEBUG: Loading CFG: %s", cfgPath)
-	log.Printf("DEBUG: Loading BAR: %s", barPath)
+	slog.Debug("loading CFG", "path", cfgPath)
+	slog.Debug("loading BAR", "path", barPath)
 
 	// Load commands from CFG file using the proper JSON loader
 	commandsByHotkey := make(map[string]string)
 	configPath := filepath.Join(e.MenuSetPath, "cfg")
 	commands, err := LoadCommands(menuName, configPath)
 	if err != nil {
-		log.Printf("WARN: Failed to load CFG file %s: %v", cfgPath, err)
+		slog.Warn("failed to load CFG file", "path", cfgPath, "error", err)
 	} else {
 		// Build hotkey -> command mapping for validation
 		for _, cmd := range commands {
@@ -195,14 +195,14 @@ func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, er
 		// Parse record in format: X,Y,HiLitedColor,RegularColor,HotKey,ReturnValue,HiLitedString // NEW Format
 		parts := strings.SplitN(line, ",", 7) // Split into 7 parts
 		if len(parts) != 7 {                  // Check for 7 parts
-			log.Printf("WARN: Malformed BAR line (expected 7 fields): %s", line)
+			slog.Warn("malformed BAR line (expected 7 fields)", "line", line)
 			continue
 		}
 
 		x, xerr := strconv.Atoi(strings.TrimSpace(parts[0]))
 		y, yerr := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if xerr != nil || yerr != nil {
-			log.Printf("WARN: Invalid coordinates in BAR line: %s", line)
+			slog.Warn("invalid coordinates in BAR line", "line", line)
 			continue
 		}
 
@@ -210,7 +210,7 @@ func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, er
 		highlightColor, hcErr := strconv.Atoi(strings.TrimSpace(parts[2]))
 		regularColor, rcErr := strconv.Atoi(strings.TrimSpace(parts[3]))
 		if hcErr != nil || rcErr != nil {
-			log.Printf("WARN: Invalid color codes in BAR line: %s", line)
+			slog.Warn("invalid color codes in BAR line", "line", line)
 			// Default colors? Or skip?
 			highlightColor = 7 // Default: White on Black (inverse)
 			regularColor = 15  // Default: Bright White on Black
@@ -222,7 +222,7 @@ func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, er
 
 		// Verify the hotkey maps to a command
 		if _, exists := commandsByHotkey[hotkey]; !exists {
-			log.Printf("WARN: Hotkey '%s' in BAR file has no matching command in CFG", hotkey)
+			slog.Warn("hotkey in BAR file has no matching command in CFG", "hotkey", hotkey)
 		}
 
 		options = append(options, LightbarOption{
@@ -263,21 +263,21 @@ func loadBarFile(barName string, e *MenuExecutor) ([]LightbarOption, error) {
 
 		parts := strings.SplitN(line, ",", 7)
 		if len(parts) != 7 {
-			log.Printf("WARN: Malformed BAR line in %s (expected 7 fields): %s", barName, line)
+			slog.Warn("malformed BAR line (expected 7 fields)", "bar", barName, "line", line)
 			continue
 		}
 
 		x, xerr := strconv.Atoi(strings.TrimSpace(parts[0]))
 		y, yerr := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if xerr != nil || yerr != nil {
-			log.Printf("WARN: Invalid coordinates in BAR line (%s): %s", barName, line)
+			slog.Warn("invalid coordinates in BAR line", "bar", barName, "line", line)
 			continue
 		}
 
 		highlightColor, hcErr := strconv.Atoi(strings.TrimSpace(parts[2]))
 		regularColor, rcErr := strconv.Atoi(strings.TrimSpace(parts[3]))
 		if hcErr != nil || rcErr != nil {
-			log.Printf("WARN: Invalid color codes in BAR line (%s): %s", barName, line)
+			slog.Warn("invalid color codes in BAR line", "bar", barName, "line", line)
 			highlightColor = 7
 			regularColor = 15
 		}
@@ -373,7 +373,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 	// Use termHeight from user preferences instead of reading from PTY
 	if termHeight > 0 {
 		// --- Inline Lightbar Logic (prints at current cursor position) ---
-		log.Printf("DEBUG: Terminal height known (%d) from user preferences, using inline lightbar prompt.", termHeight)
+		slog.Debug("terminal height known from user preferences, using inline lightbar prompt", "height", termHeight)
 
 		// NOTE: We intentionally do NOT hide the cursor (\x1b[?25l) here.
 		// On iOS, MuffinTerm ties the software keyboard to cursor visibility —
@@ -397,10 +397,10 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 
 		// Write the prompt text inline
 		promptDisplayBytes := ansi.ReplacePipeCodes([]byte(promptText))
-		log.Printf("DEBUG: Node %d: Writing prompt text bytes (hex): %x", nodeNumber, promptDisplayBytes)
+		slog.Debug("writing prompt text bytes", "node", nodeNumber, "bytes", promptDisplayBytes)
 		err := terminalio.WriteStringCP437(terminal, promptDisplayBytes, outputMode)
 		if err != nil {
-			log.Printf("ERROR: Node %d: Failed writing Yes/No prompt text (lightbar mode): %v", nodeNumber, err)
+			slog.Error("failed writing Yes/No prompt text (lightbar mode)", "node", nodeNumber, "error", err)
 			return false, fmt.Errorf("failed writing prompt text: %w", err)
 		}
 
@@ -408,7 +408,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 		spacingBytes := []byte(strings.Repeat(" ", yesNoSpacing))
 		wErr := terminalio.WriteProcessedBytes(terminal, spacingBytes, outputMode)
 		if wErr != nil {
-			log.Printf("WARN: Failed writing spacing: %v", wErr)
+			slog.Warn("failed writing spacing", "error", wErr)
 		}
 
 		// Total visible width of the options area (used for cursor-backward repositioning).
@@ -430,7 +430,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 				// Move cursor back to the start of the options area
 				wErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.CursorBackward(optionsWidth)), outputMode)
 				if wErr != nil {
-					log.Printf("WARN: Failed moving cursor backward: %v", wErr)
+					slog.Warn("failed moving cursor backward", "error", wErr)
 				}
 			}
 			firstDraw = false
@@ -438,7 +438,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 			// Clear from cursor to end of line to remove old options
 			wErr := terminalio.WriteProcessedBytes(terminal, []byte("\x1b[K"), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Failed clearing old options: %v", wErr)
+				slog.Warn("failed clearing old options", "error", wErr)
 			}
 
 			// Draw No option
@@ -449,21 +449,21 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 			noColorBytes := []byte(colorCodeToAnsi(noColorCode))
 			wErr = terminalio.WriteProcessedBytes(terminal, noColorBytes, outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Failed setting No color: %v", wErr)
+				slog.Warn("failed setting No color", "error", wErr)
 			}
 			wErr = terminalio.WriteProcessedBytes(terminal, []byte(noOptionText), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Failed writing No option: %v", wErr)
+				slog.Warn("failed writing No option", "error", wErr)
 			}
 			wErr = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[0m"), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Failed resetting attributes: %v", wErr)
+				slog.Warn("failed resetting attributes", "error", wErr)
 			}
 
 			// Add spacing between options
 			wErr = terminalio.WriteProcessedBytes(terminal, []byte(strings.Repeat(" ", optionSpacing)), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Failed writing option spacing: %v", wErr)
+				slog.Warn("failed writing option spacing", "error", wErr)
 			}
 
 			// Draw Yes option
@@ -474,15 +474,15 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 			yesColorBytes := []byte(colorCodeToAnsi(yesColorCode))
 			wErr = terminalio.WriteProcessedBytes(terminal, yesColorBytes, outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Failed setting Yes color: %v", wErr)
+				slog.Warn("failed setting Yes color", "error", wErr)
 			}
 			wErr = terminalio.WriteProcessedBytes(terminal, []byte(yesOptionText), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Failed writing Yes option: %v", wErr)
+				slog.Warn("failed writing Yes option", "error", wErr)
 			}
 			wErr = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[0m"), outputMode)
 			if wErr != nil {
-				log.Printf("WARN: Failed resetting attributes: %v", wErr)
+				slog.Warn("failed resetting attributes", "error", wErr)
 			}
 		}
 
@@ -531,7 +531,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 				}
 				wErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.CursorBackward(optionsWidth)+"\x1b[K"+selectedLabel+"\r\n"), outputMode)
 				if wErr != nil {
-					log.Printf("WARN: Failed writing selection result: %v", wErr)
+					slog.Warn("failed writing selection result", "error", wErr)
 				}
 				return result, nil
 			}
@@ -545,7 +545,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 
 	} else {
 		// --- Text Input Fallback (if terminal height is unknown) ---
-		log.Printf("DEBUG: Terminal height unknown, using text fallback for Yes/No prompt.")
+		slog.Debug("terminal height unknown, using text fallback for Yes/No prompt")
 
 		// Construct the simple text prompt
 		yesNoHint := "[y/N]"
@@ -557,13 +557,13 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 		// Write the prompt after one blank row: newline + blank line, then prompt.
 		wErr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n\r\n"), outputMode)
 		if wErr != nil {
-			log.Printf("WARN: Failed writing fallback pre-prompt spacing: %v", wErr)
+			slog.Warn("failed writing fallback pre-prompt spacing", "error", wErr)
 		}
 
 		processedPromptBytes := ansi.ReplacePipeCodes([]byte(fullPrompt))
 		err := terminalio.WriteStringCP437(terminal, processedPromptBytes, outputMode)
 		if err != nil {
-			log.Printf("ERROR: Node %d: Failed writing Yes/No prompt text (fallback mode): %v", nodeNumber, err) // Use nodeNumber
+			slog.Error("failed writing Yes/No prompt text (fallback mode)", "node", nodeNumber, "error", err) // Use nodeNumber
 			return false, fmt.Errorf("failed writing fallback prompt text: %w", err)
 		}
 
@@ -573,7 +573,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 			// Clean up line on error using WriteProcessedBytes
 			wErr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode) // Assuming CRLF is enough cleanup here
 			if wErr != nil {
-				log.Printf("WARN: Failed writing CRLF on read error: %v", wErr)
+				slog.Warn("failed writing CRLF on read error", "error", wErr)
 			}
 
 			if errors.Is(err, io.EOF) {
@@ -729,7 +729,7 @@ func writeProcessedStringWithManualEncoding(terminal *term.Terminal, processedBy
 					i++
 					// Basic protection
 					if i-start > 30 {
-						log.Printf("WARN: [writeProcessedString] Potential runaway ANSI sequence encountered.")
+						slog.Warn("potential runaway ANSI sequence encountered")
 						break
 					}
 				}

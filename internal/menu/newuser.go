@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -77,12 +77,12 @@ func (e *MenuExecutor) handleNewUserApplication(
 	termWidth int,
 	termHeight int,
 ) error {
-	log.Printf("INFO: Node %d: Starting new user application", nodeNumber)
+	slog.Info("starting new user application", "node", nodeNumber)
 
 	// Check if new user registration is allowed
 	serverCfg := e.GetServerConfig()
 	if !serverCfg.AllowNewUsers {
-		log.Printf("INFO: Node %d: New user registration is disabled", nodeNumber)
+		slog.Info("new user registration is disabled", "node", nodeNumber)
 		closedMsg := e.LoadedStrings.NewUsersClosedStr
 		if closedMsg == "" {
 			closedMsg = "\r\n|12This BBS is not accepting new users at this time.|07\r\n"
@@ -107,11 +107,11 @@ func (e *MenuExecutor) handleNewUserApplication(
 		if errors.Is(err, io.EOF) {
 			return io.EOF
 		}
-		log.Printf("ERROR: Node %d: Error during apply prompt: %v", nodeNumber, err)
+		slog.Error("error during apply prompt", "node", nodeNumber, "error", err)
 		return err
 	}
 	if !applyYes {
-		log.Printf("INFO: Node %d: User declined new user application", nodeNumber)
+		slog.Info("user declined new user application", "node", nodeNumber)
 		return nil
 	}
 
@@ -120,7 +120,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 
 	// 2. Display NEWUSER.ANS welcome screen with pause
 	if err := e.displayNewUserScreen(terminal, outputMode, nodeNumber); err != nil {
-		log.Printf("WARN: Node %d: Failed to display NEWUSER.ANS: %v", nodeNumber, err)
+		slog.Warn("failed to display NEWUSER.ANS", "node", nodeNumber, "error", err)
 		// Continue without the screen - not fatal
 	} else {
 		// Pause after displaying the ANS screen (matching Pascal HoldScreen)
@@ -193,7 +193,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		location,
 	)
 	if addErr != nil {
-		log.Printf("ERROR: Node %d: Failed to create new user '%s': %v", nodeNumber, handle, addErr)
+		slog.Error("failed to create new user", "node", nodeNumber, "handle", handle, "error", addErr)
 		errMsg := e.LoadedStrings.NewUserCreationError
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		time.Sleep(2 * time.Second)
@@ -214,15 +214,15 @@ func (e *MenuExecutor) handleNewUserApplication(
 		}
 		if len(autoJoinTags) > 0 {
 			newUser.TaggedMessageAreaTags = autoJoinTags
-			log.Printf("INFO: Node %d: Auto-joining %d message area(s) for new user '%s'", nodeNumber, len(autoJoinTags), handle)
+			slog.Info("auto-joining message areas for new user", "node", nodeNumber, "count", len(autoJoinTags), "handle", handle)
 		}
 	}
 
 	if saveErr := userManager.UpdateUser(newUser); saveErr != nil {
-		log.Printf("ERROR: Node %d: Failed to save user note for '%s': %v", nodeNumber, handle, saveErr)
+		slog.Error("failed to save user note", "node", nodeNumber, "handle", handle, "error", saveErr)
 	}
 
-	log.Printf("INFO: Node %d: New user '%s' created (ID: %d)", nodeNumber, newUser.Handle, newUser.ID)
+	slog.Info("new user created", "node", nodeNumber, "handle", newUser.Handle, "id", newUser.ID)
 
 	// Add to NUV queue if configured.
 	cfg := e.GetServerConfig()
@@ -253,7 +253,7 @@ func (e *MenuExecutor) displayNewUserScreen(terminal *term.Terminal, outputMode 
 	rawContent, err := ansi.GetAnsiFileContent(fullAnsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("DEBUG: Node %d: NEWUSER.ANS not found, skipping display", nodeNumber)
+			slog.Debug("NEWUSER.ANS not found, skipping display", "node", nodeNumber)
 			return nil
 		}
 		return fmt.Errorf("failed to read NEWUSER.ANS: %w", err)
@@ -351,7 +351,7 @@ func (e *MenuExecutor) promptForHandle(
 			continue
 		}
 
-		log.Printf("INFO: Node %d: Handle '%s' accepted for new user application", nodeNumber, handle)
+		slog.Info("handle accepted for new user application", "node", nodeNumber, "handle", handle)
 		return handle, nil
 	}
 
@@ -447,7 +447,7 @@ func (e *MenuExecutor) promptForPassword(
 			continue
 		}
 
-		log.Printf("INFO: Node %d: Password accepted for new user application", nodeNumber)
+		slog.Info("password accepted for new user application", "node", nodeNumber)
 		return password, nil
 	}
 
@@ -511,7 +511,7 @@ func (e *MenuExecutor) promptForRealName(
 			continue
 		}
 
-		log.Printf("INFO: Node %d: Real name '%s' accepted for new user application", nodeNumber, name)
+		slog.Info("real name accepted for new user application", "node", nodeNumber, "name", name)
 		return name, nil
 	}
 

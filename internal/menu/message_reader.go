@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -85,7 +85,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		fmt.Sprintf("MSGHDR.%d.ans", hdrStyle))
 	hdrTemplateBytes, hdrErr := ansi.GetAnsiFileContent(hdrTemplatePath)
 	if hdrErr != nil {
-		log.Printf("ERROR: Node %d: Failed to load MSGHDR.%d.ans: %v", nodeNumber, hdrStyle, hdrErr)
+		slog.Error("failed to load message header", "node", nodeNumber, "file", fmt.Sprintf("MSGHDR.%d.ans", hdrStyle), "error", hdrErr)
 		// Fallback to style 2 (simple text format)
 		hdrTemplatePath = filepath.Join(e.MenuSetPath, "templates", "message_headers", "MSGHDR.2.ans")
 		hdrTemplateBytes, hdrErr = ansi.GetAnsiFileContent(hdrTemplatePath)
@@ -177,8 +177,7 @@ readerLoop:
 		// Load current message
 		currentMsg, msgErr := e.MessageMgr.GetMessage(currentAreaID, currentMsgNum)
 		if msgErr != nil {
-			log.Printf("ERROR: Node %d: Failed to read message %d in area %d: %v",
-				nodeNumber, currentMsgNum, currentAreaID, msgErr)
+			slog.Error("failed to read message", "node", nodeNumber, "msg", currentMsgNum, "area", currentAreaID, "error", msgErr)
 			// Try next message
 			currentMsgNum++
 			continue
@@ -207,7 +206,7 @@ readerLoop:
 		replyCount := 0
 		if e.MessageMgr != nil {
 			if count, err := e.MessageMgr.GetThreadReplyCount(currentAreaID, currentMsg.MsgNum, currentMsg.Subject); err != nil {
-				log.Printf("WARN: Failed to get reply count for area %d msg %d: %v", currentAreaID, currentMsg.MsgNum, err)
+				slog.Warn("failed to get reply count", "area", currentAreaID, "msg", currentMsg.MsgNum, "error", err)
 			} else {
 				replyCount = count
 			}
@@ -291,7 +290,7 @@ readerLoop:
 
 		// Update lastread when first displaying message
 		if lrErr := e.MessageMgr.SetLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
-			log.Printf("ERROR: Node %d: Failed to update last read: %v", nodeNumber, lrErr)
+			slog.Error("failed to update last read", "node", nodeNumber, "error", lrErr)
 		}
 
 		// Inner loop for scrolling and command handling
@@ -424,7 +423,7 @@ readerLoop:
 					if errors.Is(lbErr, io.EOF) {
 						return nil, "LOGOFF", io.EOF
 					}
-					log.Printf("ERROR: Node %d: Lightbar error: %v", nodeNumber, lbErr)
+					slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 					break readerLoop
 				}
 				selectedKey = rune(selKey)
@@ -457,7 +456,7 @@ readerLoop:
 							if errors.Is(lbErr, io.EOF) {
 								return nil, "LOGOFF", io.EOF
 							}
-							log.Printf("ERROR: Node %d: Lightbar error: %v", nodeNumber, lbErr)
+							slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 							break readerLoop
 						}
 						selectedKey = rune(selKey)
@@ -482,7 +481,7 @@ readerLoop:
 						if errors.Is(lbErr, io.EOF) {
 							return nil, "LOGOFF", io.EOF
 						}
-						log.Printf("ERROR: Node %d: Lightbar error: %v", nodeNumber, lbErr)
+						slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 						break readerLoop
 					}
 					selectedKey = rune(selKey)
@@ -604,8 +603,7 @@ readerLoop:
 					continue
 				}
 				if delErr := e.MessageMgr.DeleteMessage(currentAreaID, currentMsg.MsgNum); delErr != nil {
-					log.Printf("ERROR: Node %d: delete message %d area %d: %v",
-						nodeNumber, currentMsg.MsgNum, currentAreaID, delErr)
+					slog.Error("delete message", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", delErr)
 					terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte("\r\n|01Error deleting message.|07\r\n")), outputMode)
 					time.Sleep(1 * time.Second)
@@ -615,8 +613,7 @@ readerLoop:
 				// Pack the base (physically remove deleted messages and
 				// renumber) then rebuild reply threading chains.
 				if packErr := e.MessageMgr.PackAndLinkArea(currentAreaID); packErr != nil {
-					log.Printf("ERROR: Node %d: pack/link area %d after delete: %v",
-						nodeNumber, currentAreaID, packErr)
+					slog.Error("pack/link area after delete", "node", nodeNumber, "area", currentAreaID, "error", packErr)
 				}
 				// Refresh total count after pack renumbered messages
 				newTotal, _ := e.MessageMgr.GetMessageCountForArea(currentAreaID)
@@ -652,7 +649,7 @@ readerLoop:
 	// Update lastread on exit
 	if currentMsgNum >= 1 && currentMsgNum <= totalMsgCount {
 		if lrErr := e.MessageMgr.SetLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
-			log.Printf("ERROR: Node %d: Failed to update last read on exit: %v", nodeNumber, lrErr)
+			slog.Error("failed to update last read on exit", "node", nodeNumber, "error", lrErr)
 		}
 	}
 

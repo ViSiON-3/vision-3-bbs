@@ -3,7 +3,7 @@ package menu
 import (
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -31,7 +31,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running SELECTMSGAREA (lightbar)", nodeNumber)
+	slog.Debug("running SELECTMSGAREA (lightbar)", "node", nodeNumber)
 
 	// Resolve terminal dimensions: prefer passed values, then user prefs, then defaults.
 	if termWidth <= 0 && currentUser != nil {
@@ -59,7 +59,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 	midBytes, errMid := readTemplateFile(filepath.Join(templateDir, "MSGAREA.MID"))
 
 	if errTop != nil || errMid != nil {
-		log.Printf("WARN: Node %d: MSGAREA templates unavailable (%v/%v), using text mode", nodeNumber, errTop, errMid)
+		slog.Warn("MSGAREA templates unavailable, using text mode", "node", nodeNumber, "topError", errTop, "midError", errMid)
 		return runSelectMessageArea(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 	}
 
@@ -116,7 +116,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 	// Load optional highlight BAR file (MSGAREAHI.BAR) — same pattern as FILELISTHI.BAR.
 	hiBarOptions, hiBarErr := loadBarFile("MSGAREAHI", e)
 	if hiBarErr != nil {
-		log.Printf("WARN: Node %d: Failed to load MSGAREAHI.BAR: %v", nodeNumber, hiBarErr)
+		slog.Warn("failed to load MSGAREAHI.BAR", "node", nodeNumber, "error", hiBarErr)
 	}
 
 	// Measure header rows using the same pipeline as renderTop so the count
@@ -370,7 +370,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 			currentUser.CurrentMessageAreaTag = area.Tag
 			e.setUserMsgConference(currentUser, area.ConferenceID)
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to save user after area change: %v", nodeNumber, err)
+				slog.Error("failed to save user after area change", "node", nodeNumber, "error", err)
 			}
 
 			confirmMsg := "|08[ |15" + area.Name + " |08] |15Area Joined!|07"
@@ -378,8 +378,8 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 			_ = terminalio.WriteProcessedBytes(terminal, []byte(hintLine), outputMode)
 			time.Sleep(1 * time.Second)
 
-			log.Printf("INFO: Node %d: User %s changed message area to ID %d ('%s')",
-				nodeNumber, currentUser.Handle, area.ID, area.Tag)
+			slog.Info("user changed message area",
+				"node", nodeNumber, "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
 			return currentUser, "", nil
 
 		case editor.KeyEsc:

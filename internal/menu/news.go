@@ -3,7 +3,7 @@ package menu
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -117,7 +117,7 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 	nd, err := loadNewsData(e.RootConfigPath)
 	newsMu.Unlock()
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to load news data: %v", nodeNumber, err)
+		slog.Warn("failed to load news data", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
@@ -142,7 +142,7 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if shown > 0 {
-		log.Printf("DEBUG: Node %d: Displayed %d news item(s) to %s", nodeNumber, shown, currentUser.Handle)
+		slog.Debug("displayed news items", "node", nodeNumber, "count", shown, "handle", currentUser.Handle)
 	}
 	return currentUser, "", nil
 }
@@ -163,7 +163,7 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running LISTNEWS for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running LISTNEWS", "node", nodeNumber, "handle", currentUser.Handle)
 
 	newsMu.Lock()
 	nd, err := loadNewsData(e.RootConfigPath)

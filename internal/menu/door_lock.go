@@ -3,7 +3,7 @@ package menu
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,7 +66,7 @@ func acquireDoorLock(doorName string, nodeNumber int) error {
 
 	doorLockFiles[key] = f
 	doorLockNodes[key] = nodeNumber
-	log.Printf("DEBUG: Acquired file lock for door %s (node %d, pid %d)", key, nodeNumber, os.Getpid())
+	slog.Debug("acquired file lock for door", "door", key, "node", nodeNumber, "pid", os.Getpid())
 	return nil
 }
 
@@ -87,6 +87,6 @@ func releaseDoorLock(doorName string, nodeNumber int) {
 			delete(doorLockFiles, key)
 		}
 		delete(doorLockNodes, key)
-		log.Printf("DEBUG: Released file lock for door %s (node %d)", key, nodeNumber)
+		slog.Debug("released file lock for door", "door", key, "node", nodeNumber)
 	}
 }

@@ -3,7 +3,7 @@ package menu
 import (
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -113,7 +113,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	pageMsg := fmt.Sprintf(e.LoadedStrings.PageMessageFormat, handle, msgInput)
 	targetSession.AddPage(pageMsg)
 
-	log.Printf("INFO: Node %d (%s) paged Node %d (%d chars)", nodeNumber, handle, targetNodeID, len(msgInput))
+	slog.Info("paged node", "node", nodeNumber, "handle", handle, "target", targetNodeID, "chars", len(msgInput))
 	confirm := fmt.Sprintf(e.LoadedStrings.PageSent, targetNodeID)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(confirm)), outputMode)
 	time.Sleep(500 * time.Millisecond)

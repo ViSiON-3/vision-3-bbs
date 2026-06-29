@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,7 +112,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// Load scan area header template (ANSI art) if available
 	scanHeaderTemplate, headerErr := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "system_header", "HEADER"))
 	if headerErr != nil && !os.IsNotExist(headerErr) {
-		log.Printf("WARN: Node %d: Failed to load scan header template: %v", nodeNumber, headerErr)
+		slog.Warn("failed to load scan header template", "node", nodeNumber, "error", headerErr)
 	}
 
 	// Multi-area scan: iterate through accessible areas
@@ -265,7 +265,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		// Update pointers
 		if scanCfg.UpdatePointers {
 			if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
-				log.Printf("ERROR: Node %d: Failed to save user data during newscan: %v", nodeNumber, saveErr)
+				slog.Error("failed to save user data during newscan", "node", nodeNumber, "error", saveErr)
 			}
 		}
 	}
@@ -278,7 +278,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	currentUser.CurrentMsgConferenceID = origConfID
 	currentUser.CurrentMsgConferenceTag = origConfTag
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		log.Printf("ERROR: Node %d: Failed to restore user area after newscan: %v", nodeNumber, err)
+		slog.Error("failed to restore user area after newscan", "node", nodeNumber, "error", err)
 	}
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanComplete)), outputMode)
@@ -403,7 +403,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 		}
 
 		if setErr := e.MessageMgr.SetLastRead(area.ID, currentUser.Handle, newLastRead); setErr != nil {
-			log.Printf("ERROR: Node %d: Failed to set lastread for area %d: %v", nodeNumber, area.ID, setErr)
+			slog.Error("failed to set lastread", "node", nodeNumber, "area", area.ID, "error", setErr)
 			saveErr = true
 			continue
 		}

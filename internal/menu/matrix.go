@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,11 +36,11 @@ func (e *MenuExecutor) RunMatrixScreen(
 	// Load lightbar options from PDMATRIX.BAR
 	options, err := loadLightbarOptions(menuName, e)
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to load %s.BAR: %v, skipping matrix", nodeNumber, menuName, err)
+		slog.Warn("failed to load BAR file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
 		return "LOGIN", nil
 	}
 	if len(options) == 0 {
-		log.Printf("WARN: Node %d: No options in %s.BAR, skipping matrix", nodeNumber, menuName)
+		slog.Warn("no options in BAR file, skipping matrix", "node", nodeNumber, "menu", menuName)
 		return "LOGIN", nil
 	}
 
@@ -48,7 +48,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 	cfgPath := filepath.Join(e.MenuSetPath, "cfg")
 	commands, err := LoadCommands(menuName, cfgPath)
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to load %s.CFG: %v, skipping matrix", nodeNumber, menuName, err)
+		slog.Warn("failed to load CFG file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
 		return "LOGIN", nil
 	}
 
@@ -63,11 +63,11 @@ func (e *MenuExecutor) RunMatrixScreen(
 	ansPath := filepath.Join(e.MenuSetPath, "ansi", menuName+".ANS")
 	ansBackground, err := ansi.GetAnsiFileContent(ansPath)
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to load %s.ANS: %v, skipping matrix", nodeNumber, menuName, err)
+		slog.Warn("failed to load ANS file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
 		return "LOGIN", nil
 	}
 
-	log.Printf("INFO: Node %d: Displaying pre-login matrix screen (%d options)", nodeNumber, len(options))
+	slog.Info("displaying pre-login matrix screen", "node", nodeNumber, "count", len(options))
 
 	// Ensure cursor is restored when we exit the matrix screen
 	defer func() {
@@ -80,7 +80,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 
 	// Draw the initial screen
 	if err := drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode); err != nil {
-		log.Printf("ERROR: Node %d: Failed to draw matrix screen: %v", nodeNumber, err)
+		slog.Error("failed to draw matrix screen", "node", nodeNumber, "error", err)
 		return "LOGIN", nil
 	}
 
@@ -173,10 +173,10 @@ func (e *MenuExecutor) RunMatrixScreen(
 			hotkey := options[selectedIndex].HotKey
 			action, ok := commandMap[hotkey]
 			if !ok {
-				log.Printf("WARN: Node %d: No command mapped for hotkey '%s'", nodeNumber, hotkey)
+				slog.Warn("no command mapped for hotkey", "node", nodeNumber, "hotkey", hotkey)
 				continue
 			}
-			log.Printf("INFO: Node %d: Matrix selection: %s (%s)", nodeNumber, options[selectedIndex].Text, action)
+			slog.Info("matrix selection", "node", nodeNumber, "text", options[selectedIndex].Text, "action", action)
 
 			result, err := e.processMatrixAction(action, s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 			if err != nil {
@@ -195,7 +195,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 	}
 
 	// Max tries exceeded
-	log.Printf("INFO: Node %d: Matrix max tries exceeded, disconnecting", nodeNumber)
+	slog.Info("matrix max tries exceeded, disconnecting", "node", nodeNumber)
 	return "DISCONNECT", nil
 }
 
@@ -225,7 +225,7 @@ func (e *MenuExecutor) processMatrixAction(
 			if errors.Is(err, io.EOF) {
 				return "DISCONNECT", io.EOF
 			}
-			log.Printf("ERROR: Node %d: New user application error from matrix: %v", nodeNumber, err)
+			slog.Error("new user application error from matrix", "node", nodeNumber, "error", err)
 		}
 		return "MATRIX", nil // Return to matrix after signup
 
@@ -238,7 +238,7 @@ func (e *MenuExecutor) processMatrixAction(
 		return "DISCONNECT", nil
 
 	default:
-		log.Printf("WARN: Node %d: Unknown matrix action: %s", nodeNumber, action)
+		slog.Warn("unknown matrix action", "node", nodeNumber, "action", action)
 		e.showUndefinedMenuInput(terminal, outputMode, nodeNumber)
 		return "MATRIX", nil
 	}
@@ -350,11 +350,11 @@ func (e *MenuExecutor) showPrelogon(s ssh.Session, terminal *term.Terminal, node
 	// Use GetAnsiFileContent to automatically strip SAUCE metadata
 	rawContent, err := ansi.GetAnsiFileContent(candidates[idx])
 	if err != nil {
-		log.Printf("WARN: Node %d: Failed to read prelogon file %s: %v", nodeNumber, candidates[idx], err)
+		slog.Warn("failed to read prelogon file", "node", nodeNumber, "file", candidates[idx], "error", err)
 		return
 	}
 
-	log.Printf("INFO: Node %d: Displaying prelogon screen: %s", nodeNumber, filepath.Base(candidates[idx]))
+	slog.Info("displaying prelogon screen", "node", nodeNumber, "file", filepath.Base(candidates[idx]))
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 	if outputMode == ansi.OutputModeCP437 {

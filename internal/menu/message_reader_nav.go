@@ -3,7 +3,7 @@ package menu
 import (
 	"bufio"
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -53,7 +53,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, s, outputMode, newSubject, currentMsg.To, currentUser.Handle, false,
 		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, replyCtx)
 	if editErr != nil {
-		log.Printf("ERROR: Node %d: Editor failed: %v", nodeNumber, editErr)
+		slog.Error("editor failed", "node", nodeNumber, "error", editErr)
 		terminalio.WriteProcessedBytes(terminal, []byte(e.LoadedStrings.MsgEditorError), outputMode)
 		time.Sleep(2 * time.Second)
 		return ""
@@ -75,13 +75,13 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	_, err := e.MessageMgr.AddMessage(currentAreaID, currentUser.Handle, currentMsg.From,
 		newSubject, replyBody, replyMsgID)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to save reply: %v", nodeNumber, err)
+		slog.Error("failed to save reply", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, []byte(e.LoadedStrings.MsgReplyError), outputMode)
 		time.Sleep(2 * time.Second)
 	} else {
 		currentUser.MessagesPosted++
 		if err := userManager.UpdateUser(currentUser); err != nil {
-			log.Printf("ERROR: Node %d: Failed to update MessagesPosted for user %s: %v", nodeNumber, currentUser.Handle, err)
+			slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte(e.LoadedStrings.MsgReplySuccess), outputMode)
 		time.Sleep(1 * time.Second)

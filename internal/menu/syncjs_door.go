@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -84,8 +84,8 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 
 	eng := syncjs.NewEngine(engineCtx, session, cfg)
 
-	log.Printf("INFO: Node %d: Starting Synchronet JS door '%s' (script: %s)",
-		ctx.NodeNumber, ctx.DoorName, ctx.Config.Script)
+	slog.Info("starting Synchronet JS door",
+		"node", ctx.NodeNumber, "door", ctx.DoorName, "script", ctx.Config.Script)
 
 	runErr := eng.Run(cfg.Script)
 
@@ -96,16 +96,16 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 
 	if runErr != nil {
 		if errors.Is(runErr, syncjs.ErrDisconnect) {
-			log.Printf("INFO: Node %d: User disconnected from JS door '%s'",
-				ctx.NodeNumber, ctx.DoorName)
+			slog.Info("user disconnected from JS door",
+				"node", ctx.NodeNumber, "door", ctx.DoorName)
 			return nil
 		}
-		log.Printf("ERROR: Node %d: JS door '%s' error: %v",
-			ctx.NodeNumber, ctx.DoorName, runErr)
+		slog.Error("JS door error",
+			"node", ctx.NodeNumber, "door", ctx.DoorName, "error", runErr)
 		return runErr
 	}
 
-	log.Printf("INFO: Node %d: Synchronet JS door '%s' completed normally",
-		ctx.NodeNumber, ctx.DoorName)
+	slog.Info("Synchronet JS door completed normally",
+		"node", ctx.NodeNumber, "door", ctx.DoorName)
 	return nil
 }

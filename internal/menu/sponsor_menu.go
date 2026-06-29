@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -25,7 +25,7 @@ func (e *MenuExecutor) displaySponsorHeader(terminal *term.Terminal, menuRec *Me
 		_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	}
 	if err := e.displayFile(terminal, "SPONSORM.ANS", outputMode); err != nil {
-		log.Printf("WARN: Node %d: Failed to display SPONSORM.ANS: %v", nodeNumber, err)
+		slog.Warn("failed to display SPONSORM.ANS", "node", nodeNumber, "error", err)
 	}
 }
 
@@ -72,18 +72,18 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 
 	cfg := e.GetServerConfig()
 	if !CanAccessSponsorMenu(currentUser, area, cfg) {
-		log.Printf("INFO: Node %d: User %s denied sponsor menu for area %s",
-			nodeNumber, currentUser.Handle, area.Tag)
+		slog.Info("user denied sponsor menu for area",
+			"node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag)
 		return currentUser, "", nil
 	}
 
-	log.Printf("INFO: Node %d: User %s entering sponsor menu for area %s",
-		nodeNumber, currentUser.Handle, area.Tag)
+	slog.Info("user entering sponsor menu for area",
+		"node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag)
 
 	menuMnuPath := filepath.Join(e.MenuSetPath, "mnu")
 	menuRec, loadErr := LoadMenu("SPONSORM", menuMnuPath)
 	if loadErr != nil {
-		log.Printf("WARN: Node %d: Failed to load SPONSORM.MNU: %v. Using fallback prompt.", nodeNumber, loadErr)
+		slog.Warn("failed to load SPONSORM.MNU, using fallback prompt", "node", nodeNumber, "error", loadErr)
 		menuRec = nil
 	}
 
@@ -93,7 +93,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 	for {
 		if menuRec != nil && menuRec.GetUsePrompt() {
 			if err := e.displayPrompt(terminal, menuRec, currentUser, userManager, nodeNumber, "SPONSORM", sessionStartTime, outputMode, ""); err != nil {
-				log.Printf("WARN: Node %d: displayPrompt failed for SPONSORM: %v", nodeNumber, err)
+				slog.Warn("displayPrompt failed for SPONSORM", "node", nodeNumber, "error", err)
 			}
 		} else {
 			prompt := fmt.Sprintf("\r\n|15[|14%s|15] Sponsor: |11E|07=Edit  |11P|07=Position  |11[|07/|11]|07=Prev/Next  |11Q|07=Quit: ", area.Tag)
@@ -154,13 +154,13 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				currentUser.CurrentMessageAreaTag = newArea.Tag
 				if userManager != nil {
 					if err := userManager.UpdateUser(currentUser); err != nil {
-						log.Printf("ERROR: Node %d: Failed to save user after sponsor area nav: %v", nodeNumber, err)
+						slog.Error("failed to save user after sponsor area nav", "node", nodeNumber, "error", err)
 					}
 				} else {
-					log.Printf("WARN: Node %d: userManager is nil; sponsor area nav not persisted", nodeNumber)
+					slog.Warn("userManager is nil; sponsor area nav not persisted", "node", nodeNumber)
 				}
 				area = newArea
-				log.Printf("INFO: Node %d: User %s sponsor-navigated to area %d (%s)", nodeNumber, currentUser.Handle, newArea.ID, newArea.Tag)
+				slog.Info("user sponsor-navigated to area", "node", nodeNumber, "handle", currentUser.Handle, "id", newArea.ID, "tag", newArea.Tag)
 				e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber)
 			}
 
@@ -275,21 +275,21 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 
 				// Perform the move within this conference
 				if moveErr := e.MessageMgr.MoveAreaPositionInConference(selectedArea.ID, targetPos); moveErr != nil {
-					log.Printf("ERROR: Node %d: Failed to move area position: %v", nodeNumber, moveErr)
+					slog.Error("failed to move area position", "node", nodeNumber, "error", moveErr)
 					msg := "\r\n|01Error moving area position.|07\r\n"
 					_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 					time.Sleep(1 * time.Second)
 					continue
 				}
 				if saveErr := e.MessageMgr.SaveAreas(); saveErr != nil {
-					log.Printf("ERROR: Node %d: Failed to save areas after reposition: %v", nodeNumber, saveErr)
+					slog.Error("failed to save areas after reposition", "node", nodeNumber, "error", saveErr)
 					msg := "\r\n|01Error saving areas.|07\r\n"
 					_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 					time.Sleep(1 * time.Second)
 					continue
 				}
-				log.Printf("INFO: Node %d: User %s repositioned area %s to position %d in conf %s",
-					nodeNumber, currentUser.Handle, selectedArea.Tag, targetPos, confName)
+				slog.Info("user repositioned area",
+					"node", nodeNumber, "handle", currentUser.Handle, "tag", selectedArea.Tag, "position", targetPos, "conference", confName)
 				// Loop: list will refresh at top of next iteration
 			}
 
@@ -751,17 +751,17 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				switch saveKey {
 				case int('y'), int('Y'):
 					if updateErr := e.MessageMgr.UpdateAreaByID(edited.ID, edited); updateErr != nil {
-						log.Printf("ERROR: Node %d: Failed to update area: %v", nodeNumber, updateErr)
+						slog.Error("failed to update area", "node", nodeNumber, "error", updateErr)
 						msg := "|01Error updating area.|07\r\n"
 						_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 						time.Sleep(1 * time.Second)
 					} else if saveErr := e.MessageMgr.SaveAreas(); saveErr != nil {
-						log.Printf("ERROR: Node %d: Failed to save areas: %v", nodeNumber, saveErr)
+						slog.Error("failed to save areas", "node", nodeNumber, "error", saveErr)
 						msg := "|01Error saving area.|07\r\n"
 						_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 						time.Sleep(1 * time.Second)
 					} else {
-						log.Printf("INFO: Node %d: User %s saved area %s", nodeNumber, currentUser.Handle, edited.Tag)
+						slog.Info("user saved area", "node", nodeNumber, "handle", currentUser.Handle, "tag", edited.Tag)
 						saveMsg := fmt.Sprintf("|02Area |14%s|02 saved.|07\r\n", edited.Tag)
 						_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(saveMsg)), outputMode)
 						time.Sleep(500 * time.Millisecond)
@@ -812,11 +812,11 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			currentUser.CurrentMessageAreaTag = newArea.Tag
 			if userManager != nil {
 				if persistErr := userManager.UpdateUser(currentUser); persistErr != nil {
-					log.Printf("ERROR: Node %d: Failed to persist user after area nav: %v", nodeNumber, persistErr)
+					slog.Error("failed to persist user after area nav", "node", nodeNumber, "error", persistErr)
 				}
 			}
-			log.Printf("INFO: Node %d: User %s editor-navigated to area %d (%s)",
-				nodeNumber, currentUser.Handle, newArea.ID, newArea.Tag)
+			slog.Info("user editor-navigated to area",
+				"node", nodeNumber, "handle", currentUser.Handle, "id", newArea.ID, "tag", newArea.Tag)
 			_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			showFields()
 
@@ -832,7 +832,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				hasPrevArea = true
 			}
 			if updateErr := e.MessageMgr.UpdateAreaByID(edited.ID, edited); updateErr != nil {
-				log.Printf("ERROR: Node %d: Failed to update area: %v", nodeNumber, updateErr)
+				slog.Error("failed to update area", "node", nodeNumber, "error", updateErr)
 				msg := "|01Error updating area — changes may be lost.|07\r\n"
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -840,7 +840,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				return currentUser, "", nil
 			}
 			if saveErr := e.MessageMgr.SaveAreas(); saveErr != nil {
-				log.Printf("ERROR: Node %d: Failed to save areas: %v", nodeNumber, saveErr)
+				slog.Error("failed to save areas", "node", nodeNumber, "error", saveErr)
 				msg := "|01Error saving area — changes may be lost.|07\r\n"
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -850,7 +850,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 					_ = e.MessageMgr.UpdateAreaByID(edited.ID, prevAreaSnapshot)
 				}
 			} else {
-				log.Printf("INFO: Node %d: User %s saved area %s", nodeNumber, currentUser.Handle, edited.Tag)
+				slog.Info("user saved area", "node", nodeNumber, "handle", currentUser.Handle, "tag", edited.Tag)
 				msg := fmt.Sprintf("|02Area |14%s|02 saved.|07\r\n", edited.Tag)
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)

@@ -3,7 +3,7 @@ package menu
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,7 +75,7 @@ func nuvAddCandidate(rootConfigPath, handle string) error {
 	defer nuvMu.Unlock()
 	nd, err := loadNUVData(rootConfigPath)
 	if err != nil {
-		log.Printf("WARN: NUV: failed to load nuv.json: %v", err)
+		slog.Warn("failed to load nuv.json", "error", err)
 		return fmt.Errorf("load nuv data: %w", err)
 	}
 	lower := strings.ToLower(handle)
@@ -89,10 +89,10 @@ func nuvAddCandidate(rootConfigPath, handle string) error {
 		When:   time.Now(),
 	})
 	if err := saveNUVData(rootConfigPath, nd); err != nil {
-		log.Printf("WARN: NUV: failed to save nuv.json: %v", err)
+		slog.Warn("failed to save nuv.json", "error", err)
 		return fmt.Errorf("save nuv data: %w", err)
 	}
-	log.Printf("INFO: NUV: added candidate '%s' to queue", handle)
+	slog.Info("added candidate to queue", "handle", handle)
 	return nil
 }
 
@@ -207,16 +207,16 @@ func nuvApplyThresholds(e *MenuExecutor, nd *NUVData, idx int, userManager *user
 				u.AccessLevel = cfg.NUVLevel
 				u.Validated = true
 				if err := userManager.UpdateUser(u); err != nil {
-					log.Printf("ERROR: NUV: failed to validate user '%s': %v", c.Handle, err)
+					slog.Error("failed to validate user", "handle", c.Handle, "error", err)
 				} else {
-					log.Printf("INFO: NUV: auto-validated '%s' (level %d)", c.Handle, cfg.NUVLevel)
+					slog.Info("auto-validated candidate", "handle", c.Handle, "level", cfg.NUVLevel)
 					shouldRemove = true
 				}
 			} else {
-				log.Printf("ERROR: NUV: user '%s' not found during validation", c.Handle)
+				slog.Error("user not found during validation", "handle", c.Handle)
 			}
 		} else {
-			log.Printf("INFO: NUV: '%s' reached YES threshold — notify SysOp to validate", c.Handle)
+			slog.Info("candidate reached YES threshold — notify SysOp to validate", "handle", c.Handle)
 		}
 		if shouldRemove {
 			nd.Candidates = append(nd.Candidates[:idx], nd.Candidates[idx+1:]...)
@@ -230,13 +230,13 @@ func nuvApplyThresholds(e *MenuExecutor, nd *NUVData, idx int, userManager *user
 			if u, ok := userManager.GetUser(c.Handle); ok {
 				u.DeletedUser = true
 				if err := userManager.UpdateUser(u); err != nil {
-					log.Printf("ERROR: NUV: failed to delete user '%s': %v", c.Handle, err)
+					slog.Error("failed to delete user", "handle", c.Handle, "error", err)
 				} else {
-					log.Printf("INFO: NUV: auto-deleted '%s' (voted off)", c.Handle)
+					slog.Info("auto-deleted candidate (voted off)", "handle", c.Handle)
 				}
 			}
 		} else {
-			log.Printf("INFO: NUV: '%s' reached NO threshold — notify SysOp to delete", c.Handle)
+			slog.Info("candidate reached NO threshold — notify SysOp to delete", "handle", c.Handle)
 		}
 		nd.Candidates = append(nd.Candidates[:idx], nd.Candidates[idx+1:]...)
 		return true
@@ -275,7 +275,7 @@ func nuvPromptComment(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			if vi >= 0 {
 				fresh.Candidates[freshIdx].Votes[vi].Comment = comment
 				if err := saveNUVData(e.RootConfigPath, fresh); err != nil {
-					log.Printf("WARN: NUV: failed to save comment: %v", err)
+					slog.Warn("failed to save comment", "error", err)
 				} else {
 					*nd = *fresh
 				}
@@ -452,7 +452,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 					if castYes {
 						voteStr = "YES"
 					}
-					log.Printf("INFO: NUV: %s voted %s on '%s'", currentUser.Handle, voteStr, c.Handle)
+					slog.Info("user voted on candidate", "handle", currentUser.Handle, "vote", voteStr, "candidate", c.Handle)
 					removed = nuvApplyThresholds(e, nd, idx, userManager)
 					_ = saveNUVData(e.RootConfigPath, nd)
 

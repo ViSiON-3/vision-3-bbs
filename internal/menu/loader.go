@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"log"
+	"log/slog"
 	// "vision3/config" // TODO: Get MenuDir from config
 )
 
@@ -39,12 +39,12 @@ func LoadMenu(menuName string, configPath string) (*MenuRecord, error) {
 // LoadCommands reads a .CFG file (assumed JSON) for the given menu name.
 func LoadCommands(menuName string, configPath string) ([]CommandRecord, error) {
 	filePath := filepath.Join(configPath, menuName+".CFG")
-	log.Printf("DEBUG: Attempting to load command file: %s (menuName='%s', configPath='%s')", filePath, menuName, configPath)
+	slog.Debug("attempting to load command file", "file", filePath, "menu", menuName, "path", configPath)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// It's valid for a menu to have no commands, return empty slice
-			log.Printf("WARN: Command file %s does not exist, menu will have no commands.", filePath)
+			slog.Warn("command file does not exist, menu will have no commands", "file", filePath)
 			return []CommandRecord{}, nil
 		}
 		return nil, fmt.Errorf("failed to read command file %s: %w", filePath, err)
@@ -52,7 +52,7 @@ func LoadCommands(menuName string, configPath string) ([]CommandRecord, error) {
 
 	// Handle empty file case explicitly
 	if len(data) == 0 {
-		log.Printf("DEBUG: Command file %s is empty.", filePath)
+		slog.Debug("command file is empty", "file", filePath)
 		return []CommandRecord{}, nil
 	}
 
@@ -65,7 +65,7 @@ func LoadCommands(menuName string, configPath string) ([]CommandRecord, error) {
 
 	// Optional: Log loaded commands for tracing
 	for _, cmd := range commands {
-		log.Printf("TRACE: Loaded command: Keys='%s', Cmd='%s', ACS='%s', Hidden=%t", cmd.Keys, cmd.Command, cmd.ACS, cmd.Hidden)
+		slog.Debug("loaded command", "keys", cmd.Keys, "command", cmd.Command, "acs", cmd.ACS, "hidden", cmd.Hidden)
 	}
 
 	return commands, nil

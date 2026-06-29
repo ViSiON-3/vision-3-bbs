@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,7 +47,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	nodeNumber := c.nodeNumber
 	outputMode := c.outputMode
 
-	log.Printf("DEBUG: Node %d: Running QWKDOWNLOAD", nodeNumber)
+	slog.Debug("running QWKDOWNLOAD", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in.|07\r\n"
@@ -92,13 +92,13 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		// Get last read for this user in this area
 		lastRead, err := e.MessageMgr.GetLastRead(area.ID, currentUser.Handle)
 		if err != nil {
-			log.Printf("WARN: Node %d: QWK: failed to get lastread for area %d: %v", nodeNumber, area.ID, err)
+			slog.Warn("failed to get lastread for area", "node", nodeNumber, "area", area.ID, "error", err)
 			continue
 		}
 
 		msgCount, err := e.MessageMgr.GetMessageCountForArea(area.ID)
 		if err != nil {
-			log.Printf("WARN: Node %d: QWK: failed to get msg count for area %d: %v", nodeNumber, area.ID, err)
+			slog.Warn("failed to get msg count for area", "node", nodeNumber, "area", area.ID, "error", err)
 			continue
 		}
 
@@ -166,7 +166,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	// Write packet to temp file
 	tmpFile, err := os.CreateTemp("", "qwk-*.zip")
 	if err != nil {
-		log.Printf("ERROR: Node %d: QWK: failed to create temp file: %v", nodeNumber, err)
+		slog.Error("failed to create temp file", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 	tmpPath := tmpFile.Name()
@@ -174,7 +174,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if err := pw.WritePacket(tmpFile); err != nil {
 		tmpFile.Close()
-		log.Printf("ERROR: Node %d: QWK: failed to write packet: %v", nodeNumber, err)
+		slog.Error("failed to write packet", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 	tmpFile.Close()
@@ -182,7 +182,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	// Rename to BBSID.QWK for the transfer
 	qwkPath := filepath.Join(filepath.Dir(tmpPath), bbsID+".QWK")
 	if err := os.Rename(tmpPath, qwkPath); err != nil {
-		log.Printf("ERROR: Node %d: QWK: rename failed: %v", nodeNumber, err)
+		slog.Error("rename failed", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 	defer os.Remove(qwkPath)
@@ -212,14 +212,14 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(sendErr, transfer.ErrBinaryNotFound) {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Transfer program not found!|07\r\n")), outputMode)
 		} else {
-			log.Printf("WARN: Node %d: QWK download transfer failed: %v", nodeNumber, sendErr)
+			slog.Warn("QWK download transfer failed", "node", nodeNumber, "error", sendErr)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Transfer failed.|07\r\n")), outputMode)
 		}
 	} else {
 		// Transfer succeeded — commit the newscan pointer advances.
 		for _, upd := range pendingLastRead {
 			if err := e.MessageMgr.SetLastRead(upd.areaID, currentUser.Handle, upd.msgNum); err != nil {
-				log.Printf("WARN: Node %d: QWK: failed to update lastread for area %d: %v", nodeNumber, upd.areaID, err)
+				slog.Warn("failed to update lastread for area", "node", nodeNumber, "area", upd.areaID, "error", err)
 			}
 		}
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|10QWK packet sent successfully.|07\r\n")), outputMode)
@@ -240,7 +240,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	sessionStartTime := c.sessionStartTime
 	outputMode := c.outputMode
 
-	log.Printf("DEBUG: Node %d: Running QWKUPLOAD", nodeNumber)
+	slog.Debug("running QWKUPLOAD", "node", nodeNumber)
 
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in.|07\r\n"
@@ -268,7 +268,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	// Receive into temp directory
 	incomingDir, err := os.MkdirTemp("", "qwk-rep-*")
 	if err != nil {
-		log.Printf("ERROR: Node %d: QWK: failed to create temp dir: %v", nodeNumber, err)
+		slog.Error("failed to create temp dir", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 	defer os.RemoveAll(incomingDir)
@@ -281,7 +281,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	getSessionIH(s)
 
 	if recvErr != nil && !errors.Is(recvErr, context.Canceled) {
-		log.Printf("WARN: Node %d: QWK REP receive: %v (checking for files anyway)", nodeNumber, recvErr)
+		slog.Warn("QWK REP receive error, checking for files anyway", "node", nodeNumber, "error", recvErr)
 	}
 
 	// Find the .REP file
@@ -295,19 +295,19 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	// Process the REP packet
 	repInfo, err := os.Stat(repPath)
 	if err != nil {
-		log.Printf("ERROR: Node %d: QWK: failed to stat REP: %v", nodeNumber, err)
+		slog.Error("failed to stat REP", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
 	repData, err := os.ReadFile(repPath)
 	if err != nil {
-		log.Printf("ERROR: Node %d: QWK: failed to read REP: %v", nodeNumber, err)
+		slog.Error("failed to read REP", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
 	messages, err := qwk.ReadREP(bytes.NewReader(repData), repInfo.Size(), bbsID)
 	if err != nil {
-		log.Printf("ERROR: Node %d: QWK: failed to parse REP: %v", nodeNumber, err)
+		slog.Error("failed to parse REP", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error reading REP packet.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
 		return currentUser, "", nil
@@ -324,13 +324,13 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	for _, msg := range messages {
 		area, exists := e.MessageMgr.GetAreaByID(msg.Conference)
 		if !exists {
-			log.Printf("WARN: Node %d: QWK REP: unknown conference %d, skipping", nodeNumber, msg.Conference)
+			slog.Warn("unknown conference, skipping", "node", nodeNumber, "conference", msg.Conference)
 			continue
 		}
 
 		// Check write ACS
 		if area.ACSWrite != "" && !checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime) {
-			log.Printf("WARN: Node %d: QWK REP: user lacks write ACS for area %s", nodeNumber, area.Tag)
+			slog.Warn("user lacks write ACS for area", "node", nodeNumber, "tag", area.Tag)
 			continue
 		}
 
@@ -344,7 +344,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		_, err := e.MessageMgr.AddMessage(area.ID, currentUser.Handle, msg.To, msg.Subject, qwkBody, "")
 		if err != nil {
-			log.Printf("ERROR: Node %d: QWK REP: failed to post to area %d: %v", nodeNumber, area.ID, err)
+			slog.Error("failed to post to area", "node", nodeNumber, "area", area.ID, "error", err)
 			continue
 		}
 		posted++
@@ -354,7 +354,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	if posted > 0 && userManager != nil {
 		currentUser.MessagesPosted += posted
 		if updateErr := userManager.UpdateUser(currentUser); updateErr != nil {
-			log.Printf("ERROR: Node %d: QWK: failed to update user stats: %v", nodeNumber, updateErr)
+			slog.Error("failed to update user stats", "node", nodeNumber, "error", updateErr)
 		}
 	}
 

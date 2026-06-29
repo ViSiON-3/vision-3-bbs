@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -85,7 +85,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	filePath, err := e.FileMgr.GetFilePath(record.ID)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to get path for file %s: %v", nodeNumber, record.ID, err)
+		slog.Error("failed to get path for file", "node", nodeNumber, "id", record.ID, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileLocateError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", currentUser, "", nil
@@ -105,7 +105,7 @@ func runViewFile(c *cmdCtx, args string) (*user.User, string, error) {
 	outputMode := c.outputMode
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running VIEW_FILE", nodeNumber)
+	slog.Debug("running VIEW_FILE", "node", nodeNumber)
 
 	record, filePath, retUser, retAction, retErr := promptAndResolveFile(e, s, terminal, currentUser, nodeNumber, "view", outputMode)
 	if record == nil {
@@ -139,7 +139,7 @@ func runTypeTextFile(c *cmdCtx, args string) (*user.User, string, error) {
 	outputMode := c.outputMode
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running TYPE_TEXT_FILE", nodeNumber)
+	slog.Debug("running TYPE_TEXT_FILE", "node", nodeNumber)
 
 	record, filePath, retUser, retAction, retErr := promptAndResolveFile(e, s, terminal, currentUser, nodeNumber, "type", outputMode)
 	if record == nil {
@@ -161,7 +161,7 @@ func runTypeTextFile(c *cmdCtx, args string) (*user.User, string, error) {
 func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, record *file.FileRecord, outputMode ansi.OutputMode, termWidth int, termHeight int) {
 	filePath, err := e.FileMgr.GetFilePath(record.ID)
 	if err != nil {
-		log.Printf("ERROR: Failed to get path for file %s: %v", record.ID, err)
+		slog.Error("failed to get path for file", "id", record.ID, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileLocateError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return
@@ -192,7 +192,7 @@ const maxTextFilePagingBytes = 4 * 1024 * 1024 // 4 MB
 func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode, termHeight int, viewingHeaderFmt string, endOfFile string, morePrompt string, pausePromptStr string, openError string) {
 	fi, statErr := os.Stat(filePath)
 	if statErr == nil && fi.Size() > maxTextFilePagingBytes {
-		log.Printf("WARN: File %s too large for text paging (%d bytes), refusing to load", filePath, fi.Size())
+		slog.Warn("file too large for text paging, refusing to load", "file", filePath, "bytes", fi.Size())
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(openError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return
@@ -200,7 +200,7 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		log.Printf("ERROR: Failed to open file %s: %v", filePath, err)
+		slog.Error("failed to open file", "file", filePath, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(openError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return
@@ -256,7 +256,7 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Printf("WARN: Error reading file %s: %v", filePath, err)
+		slog.Warn("error reading file", "file", filePath, "error", err)
 	}
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(endOfFile)), outputMode)
@@ -314,7 +314,7 @@ func getTerminalSize(s ssh.Session) (int, int) {
 func displayTextWithPaging_toWriter(w io.Writer, filePath string, filename string, termHeight int) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		log.Printf("ERROR: Failed to open file %s: %v", filePath, err)
+		slog.Error("failed to open file", "file", filePath, "error", err)
 		fmt.Fprintf(w, "\r\nError opening file.\r\n")
 		return
 	}
@@ -331,7 +331,7 @@ func displayTextWithPaging_toWriter(w io.Writer, filePath string, filename strin
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Printf("WARN: Error reading file %s: %v", filePath, err)
+		slog.Warn("error reading file", "file", filePath, "error", err)
 	}
 
 	fmt.Fprintf(w, "\r\n--- End of File ---\r\n")

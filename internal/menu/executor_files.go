@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -38,16 +38,16 @@ func scanDirectoryFiles(dir string) (map[string]int64, error) {
 			continue
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
-			log.Printf("WARN: Skipping symlink %s", entry.Name())
+			slog.Warn("skipping symlink", "name", entry.Name())
 			continue
 		}
 		info, err := entry.Info()
 		if err != nil {
-			log.Printf("WARN: Failed to get info for file %s: %v", entry.Name(), err)
+			slog.Warn("failed to get file info", "name", entry.Name(), "error", err)
 			continue
 		}
 		if !info.Mode().IsRegular() {
-			log.Printf("WARN: Skipping non-regular file %s", entry.Name())
+			slog.Warn("skipping non-regular file", "name", entry.Name())
 			continue
 		}
 		files[entry.Name()] = info.Size()
@@ -151,7 +151,7 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 
 	if proto.BatchSend && len(paths) > 1 {
 		// Batch: single transfer session
-		log.Printf("INFO: Node %d: Batch sending %d file(s) via %q: %v", nodeNumber, len(paths), proto.Name, names)
+		slog.Info("batch sending files", "node", nodeNumber, "count", len(paths), "protocol", proto.Name, "names", names)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("\r\n|15Initiating %s batch transfer (%d files)...|07\r\n", proto.Name, len(paths)))), outputMode)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Please start the receive function in your terminal.\r\n")), outputMode)
 
@@ -159,7 +159,7 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 		defer cancel()
 		transferErr := proto.ExecuteSend(ctx, s, paths...)
 		if transferErr != nil {
-			log.Printf("ERROR: Node %d: %q batch send failed: %v", nodeNumber, proto.Name, transferErr)
+			slog.Error("batch send failed", "node", nodeNumber, "protocol", proto.Name, "error", transferErr)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			if errors.Is(transferErr, transfer.ErrBinaryNotFound) {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01File transfer program not found!|07\r\n|07The SysOp needs to install the transfer binary (sexyz).\r\n|07See docs/sysop/files/file-transfer.md for setup instructions.\r\n")), outputMode)
@@ -168,13 +168,13 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 			}
 			return 0, len(paths)
 		}
-		log.Printf("INFO: Node %d: %q batch send completed successfully.", nodeNumber, proto.Name)
+		slog.Info("batch send completed", "node", nodeNumber, "protocol", proto.Name)
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Transfer complete.\r\n")), outputMode)
 		for _, id := range fileIDs {
 			if id != uuid.Nil {
 				if err := e.FileMgr.IncrementDownloadCount(id); err != nil {
-					log.Printf("WARN: Node %d: Failed to increment download count for %s: %v", nodeNumber, id, err)
+					slog.Warn("failed to increment download count", "node", nodeNumber, "fileID", id, "error", err)
 				}
 			}
 		}
@@ -182,7 +182,7 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 	}
 
 	// One-at-a-time
-	log.Printf("INFO: Node %d: Sending %d file(s) one-at-a-time via %q", nodeNumber, len(paths), proto.Name)
+	slog.Info("sending files one-at-a-time", "node", nodeNumber, "count", len(paths), "protocol", proto.Name)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("\r\n|15Initiating %s transfer (%d file(s), one at a time)...|07\r\n", proto.Name, len(paths)))), outputMode)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Prepare your terminal to receive each file.\r\n")), outputMode)
 
@@ -192,7 +192,7 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 		sendErr := proto.ExecuteSend(ctx, s, p)
 		cancel()
 		if sendErr != nil {
-			log.Printf("ERROR: Node %d: %q send failed for %s: %v", nodeNumber, proto.Name, names[i], sendErr)
+			slog.Error("send failed", "node", nodeNumber, "protocol", proto.Name, "name", names[i], "error", sendErr)
 			if errors.Is(sendErr, transfer.ErrBinaryNotFound) {
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01File transfer program not found!|07\r\n|07The SysOp needs to install the transfer binary (sexyz).\r\n|07See docs/sysop/files/file-transfer.md for setup instructions.\r\n")), outputMode)
@@ -203,13 +203,13 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 			failCount++
 			continue
 		}
-		log.Printf("INFO: Node %d: %q sent %s OK", nodeNumber, proto.Name, names[i])
+		slog.Info("file sent", "node", nodeNumber, "protocol", proto.Name, "name", names[i])
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|15[%d/%d]|07 |14%s|07: |02OK|07\r\n", i+1, len(paths), names[i]))), outputMode)
 		successCount++
 		if i < len(fileIDs) && fileIDs[i] != uuid.Nil {
 			if err := e.FileMgr.IncrementDownloadCount(fileIDs[i]); err != nil {
-				log.Printf("WARN: Node %d: Failed to increment download count for %s: %v", nodeNumber, fileIDs[i], err)
+				slog.Warn("failed to increment download count", "node", nodeNumber, "fileID", fileIDs[i], "error", err)
 			}
 		}
 	}
@@ -247,7 +247,7 @@ func runUploadFile(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", err
 		}
-		log.Printf("ERROR: Node %d: Upload failed: %v", nodeNumber, err)
+		slog.Error("upload failed", "node", nodeNumber, "error", err)
 	}
 
 	// Reload user to get updated NumUploads
@@ -269,7 +269,7 @@ func (e *MenuExecutor) runUploadFiles(
 	nodeNumber int,
 	sessionStartTime time.Time,
 ) error {
-	log.Printf("INFO: Node %d: User %s starting upload to area %d (%s)", nodeNumber, currentUser.Handle, currentAreaID, currentAreaTag)
+	slog.Info("user starting upload", "node", nodeNumber, "handle", currentUser.Handle, "area", currentAreaID, "tag", currentAreaTag)
 
 	// 1. Check upload ACS
 	area, areaExists := e.FileMgr.GetAreaByID(currentAreaID)
@@ -278,7 +278,7 @@ func (e *MenuExecutor) runUploadFiles(
 	}
 
 	if area.ACSUpload != "" && !checkACS(area.ACSUpload, currentUser, s, terminal, sessionStartTime) {
-		log.Printf("WARN: Node %d: User %s denied upload access to area %s (ACS: %s)", nodeNumber, currentUser.Handle, currentAreaTag, area.ACSUpload)
+		slog.Warn("user denied upload access", "node", nodeNumber, "handle", currentUser.Handle, "tag", currentAreaTag, "acs", area.ACSUpload)
 		msg := "\r\n|01You do not have permission to upload to this area.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(2 * time.Second)
@@ -305,7 +305,7 @@ func (e *MenuExecutor) runUploadFiles(
 		if errors.Is(protoErr, io.EOF) {
 			return protoErr
 		}
-		log.Printf("ERROR: Node %d: Protocol selection error: %v", nodeNumber, protoErr)
+		slog.Error("protocol selection error", "node", nodeNumber, "error", protoErr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
 		return nil
@@ -332,7 +332,7 @@ func (e *MenuExecutor) runUploadFiles(
 	// 7. Create temp directory for receiving uploads
 	incomingDir, err := os.MkdirTemp(targetDir, ".incoming-*")
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to create incoming directory: %v", nodeNumber, err)
+		slog.Error("failed to create incoming directory", "node", nodeNumber, "error", err)
 		return fmt.Errorf("failed to create incoming directory: %w", err)
 	}
 	defer os.RemoveAll(incomingDir)
@@ -350,11 +350,11 @@ func (e *MenuExecutor) runUploadFiles(
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if transferErr != nil {
 		if errors.Is(transferErr, transfer.ErrBinaryNotFound) {
-			log.Printf("ERROR: Node %d: Transfer binary not found: %v", nodeNumber, transferErr)
+			slog.Error("transfer binary not found", "node", nodeNumber, "error", transferErr)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01File transfer program not found!|07\r\n|07The SysOp needs to install the transfer binary (sexyz).\r\n|07See docs/sysop/files/file-transfer.md for setup instructions.\r\n")), outputMode)
 			return nil
 		}
-		log.Printf("WARN: Node %d: %q receive returned error: %v (checking for partial receives)", nodeNumber, proto.Name, transferErr)
+		slog.Warn("receive returned error, checking for partial receives", "node", nodeNumber, "protocol", proto.Name, "error", transferErr)
 	}
 
 	// 9. Scan received files from temp directory.
@@ -362,7 +362,7 @@ func (e *MenuExecutor) runUploadFiles(
 	// waiting for ZFIN, but may have already received files successfully.
 	receivedFiles, err := scanDirectoryFiles(incomingDir)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to scan incoming directory: %v", nodeNumber, err)
+		slog.Error("failed to scan incoming directory", "node", nodeNumber, "error", err)
 		return nil
 	}
 
@@ -392,7 +392,7 @@ func (e *MenuExecutor) runUploadFiles(
 		return newFiles[i].name < newFiles[j].name
 	})
 
-	log.Printf("INFO: Node %d: Detected %d new file(s) after upload", nodeNumber, len(newFiles))
+	slog.Info("detected new files after upload", "node", nodeNumber, "count", len(newFiles))
 
 	// 9. Process each new file
 	successCount := 0
@@ -401,7 +401,7 @@ func (e *MenuExecutor) runUploadFiles(
 	// Load ZipLab config once for all files
 	zlCfg, zlErr := ziplab.LoadConfig(e.RootConfigPath)
 	if zlErr != nil {
-		log.Printf("WARN: Node %d: Failed to load ZipLab config: %v", nodeNumber, zlErr)
+		slog.Warn("failed to load ziplab config", "node", nodeNumber, "error", zlErr)
 	}
 
 	for _, nf := range newFiles {
@@ -410,7 +410,7 @@ func (e *MenuExecutor) runUploadFiles(
 		// Validate filename (defense in depth — rz -r should prevent this, but be safe)
 		safeName := filepath.Base(nf.name)
 		if safeName != nf.name || safeName == "." || safeName == ".." || strings.Contains(nf.name, "..") || filepath.IsAbs(nf.name) {
-			log.Printf("ERROR: Node %d: Rejected unsafe filename: %s", nodeNumber, nf.name)
+			slog.Error("rejected unsafe filename", "node", nodeNumber, "name", nf.name)
 			os.Remove(incomingPath)
 			errMsg := fmt.Sprintf("\r\n|01'%s' rejected: invalid filename.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
@@ -419,7 +419,7 @@ func (e *MenuExecutor) runUploadFiles(
 
 		// Check for duplicate in metadata
 		if existingNames[strings.ToLower(nf.name)] {
-			log.Printf("WARN: Node %d: Duplicate file rejected: %s", nodeNumber, nf.name)
+			slog.Warn("duplicate file rejected", "node", nodeNumber, "name", nf.name)
 			duplicateCount++
 			os.Remove(incomingPath)
 
@@ -433,7 +433,7 @@ func (e *MenuExecutor) runUploadFiles(
 		filePath := incomingPath
 
 		if zlErr == nil && zlCfg.Enabled && zlCfg.RunOnUpload && zlCfg.IsArchiveSupported(nf.name) {
-			log.Printf("INFO: Node %d: Running ZipLab pipeline on %s", nodeNumber, nf.name)
+			slog.Info("running ziplab pipeline", "node", nodeNumber, "name", nf.name)
 
 			zlBaseDir := filepath.Join(filepath.Dir(e.RootConfigPath), "ziplab")
 			proc := ziplab.NewProcessor(zlCfg, zlBaseDir)
@@ -453,7 +453,7 @@ func (e *MenuExecutor) runUploadFiles(
 			}
 
 			if !result.Success {
-				log.Printf("ERROR: Node %d: ZipLab pipeline failed for %s: %v", nodeNumber, nf.name, result.Error)
+				slog.Error("ziplab pipeline failed", "node", nodeNumber, "name", nf.name, "error", result.Error)
 				errMsg := fmt.Sprintf("\r\n|01ZipLab processing failed for '%s'.|07\r\n", nf.name)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 				time.Sleep(2 * time.Second)
@@ -462,7 +462,7 @@ func (e *MenuExecutor) runUploadFiles(
 
 			if result.Description != "" {
 				description = sanitizeControlChars(strings.TrimRight(result.Description, " \t\r\n"))
-				log.Printf("INFO: Node %d: Using FILE_ID.DIZ description for %s: %q", nodeNumber, nf.name, description)
+				slog.Info("using FILE_ID.DIZ description", "node", nodeNumber, "name", nf.name, "description", description)
 			}
 		}
 
@@ -478,7 +478,7 @@ func (e *MenuExecutor) runUploadFiles(
 				// If the session died (e.g. SSH client disconnected during the
 				// transfer wait), preserve the upload with a default description
 				// rather than LOGOFFing the user mid-file-processing.
-				log.Printf("WARN: Node %d: Session lost during description prompt for %s (%v); using default description", nodeNumber, nf.name, err)
+				slog.Warn("session lost during description prompt, using default description", "node", nodeNumber, "name", nf.name, "error", err)
 				description = "No description"
 			} else {
 				description = sanitizeControlChars(strings.TrimSpace(descInput))
@@ -493,7 +493,7 @@ func (e *MenuExecutor) runUploadFiles(
 
 		// Re-stat file to get post-pipeline size (ZipLab may have modified it)
 		if fi, statErr := os.Stat(incomingPath); statErr != nil {
-			log.Printf("WARN: Node %d: Failed to stat %s after pipeline: %v (using original size)", nodeNumber, nf.name, statErr)
+			slog.Warn("failed to stat file after pipeline, using original size", "node", nodeNumber, "name", nf.name, "error", statErr)
 		} else {
 			nf.size = fi.Size()
 		}
@@ -515,7 +515,7 @@ func (e *MenuExecutor) runUploadFiles(
 		// Guard against clobbering a file that exists on disk but is absent from
 		// the metadata duplicate check above: os.Rename would overwrite it.
 		if _, statErr := os.Stat(finalPath); statErr == nil {
-			log.Printf("WARN: Node %d: Upload rejected, '%s' already exists on disk (not in metadata)", nodeNumber, nf.name)
+			slog.Warn("upload rejected, file already exists on disk", "node", nodeNumber, "name", nf.name)
 			duplicateCount++
 			os.Remove(incomingPath)
 			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
@@ -523,23 +523,23 @@ func (e *MenuExecutor) runUploadFiles(
 			continue
 		}
 		if moveErr := os.Rename(incomingPath, finalPath); moveErr != nil {
-			log.Printf("ERROR: Node %d: Failed to move %s to area: %v", nodeNumber, nf.name, moveErr)
+			slog.Error("failed to move file to area", "node", nodeNumber, "name", nf.name, "error", moveErr)
 			errMsg := fmt.Sprintf("\r\n|01Failed to accept '%s'.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			continue
 		}
 
 		if addErr := e.FileMgr.AddFileRecord(record); addErr != nil {
-			log.Printf("ERROR: Node %d: Failed to add file record for %s: %v", nodeNumber, nf.name, addErr)
+			slog.Error("failed to add file record", "node", nodeNumber, "name", nf.name, "error", addErr)
 			errMsg := fmt.Sprintf("\r\n|01Failed to register '%s'.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if removeErr := os.Remove(finalPath); removeErr != nil {
-				log.Printf("ERROR: Node %d: Failed to clean up orphaned file %s: %v", nodeNumber, nf.name, removeErr)
+				slog.Error("failed to clean up orphaned file", "node", nodeNumber, "name", nf.name, "error", removeErr)
 			}
 			continue
 		}
 
-		log.Printf("INFO: Node %d: Added file record for %s (ID: %s)", nodeNumber, nf.name, record.ID)
+		slog.Info("added file record", "node", nodeNumber, "name", nf.name, "fileID", record.ID)
 		successCount++
 		existingNames[strings.ToLower(nf.name)] = true
 	}
@@ -548,7 +548,7 @@ func (e *MenuExecutor) runUploadFiles(
 	if successCount > 0 {
 		currentUser.NumUploads += successCount
 		if updateErr := userManager.UpdateUser(currentUser); updateErr != nil {
-			log.Printf("ERROR: Node %d: Failed to update user upload count: %v", nodeNumber, updateErr)
+			slog.Error("failed to update user upload count", "node", nodeNumber, "error", updateErr)
 		}
 	}
 
@@ -629,11 +629,11 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			break
 		}
 	}
-	log.Printf("DEBUG: Node %d: Running LISTFILES (extended=%v)", nodeNumber, extendedMode)
+	slog.Debug("running LISTFILES", "node", nodeNumber, "extended", extendedMode)
 
 	// 1. Check User and Current File Area
 	if currentUser == nil {
-		log.Printf("WARN: Node %d: LISTFILES called without logged in user.", nodeNumber)
+		slog.Warn("LISTFILES called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to list files.|07\r\n"
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -647,7 +647,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	currentAreaTag := currentUser.CurrentFileAreaTag
 
 	if currentAreaID <= 0 {
-		log.Printf("WARN: Node %d: User %s has no current file area selected.", nodeNumber, currentUser.Handle)
+		slog.Warn("user has no current file area selected", "node", nodeNumber, "handle", currentUser.Handle)
 		msg := "\r\n|01Error: No file area selected.|07\r\n"
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -656,16 +656,16 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil // Return to menu
 	}
 
-	log.Printf("INFO: Node %d: User %s listing files for Area ID %d (%s)", nodeNumber, currentUser.Handle, currentAreaID, currentAreaTag)
+	slog.Info("user listing files", "node", nodeNumber, "handle", currentUser.Handle, "area", currentAreaID, "tag", currentAreaTag)
 
 	// Check Read ACS for the file area
 	area, exists := e.FileMgr.GetAreaByID(currentAreaID)
 	if !exists {
-		log.Printf("WARN: Node %d: User %s: current file area %d (%s) not found (stale/invalid area id)", nodeNumber, currentUser.Handle, currentAreaID, currentAreaTag)
+		slog.Warn("current file area not found (stale/invalid area id)", "node", nodeNumber, "handle", currentUser.Handle, "area", currentAreaID, "tag", currentAreaTag)
 		return nil, "", nil // Return to menu
 	}
 	if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
-		log.Printf("WARN: Node %d: User %s denied read access to file area %d (%s) due to ACS '%s'", nodeNumber, currentUser.Handle, currentAreaID, currentAreaTag, area.ACSList)
+		slog.Warn("user denied read access to file area", "node", nodeNumber, "handle", currentUser.Handle, "area", currentAreaID, "tag", currentAreaTag, "acs", area.ACSList)
 		// Display error message
 		return nil, "", nil // Return to menu
 	}
@@ -682,7 +682,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		if os.IsNotExist(errBot) {
 			botTemplateBytes = nil
 		} else {
-			log.Printf("ERROR: Node %d: Failed to load FILELIST.BOT template: %v", nodeNumber, errBot)
+			slog.Error("failed to load FILELIST.BOT template", "node", nodeNumber, "error", errBot)
 			msg := "\r\n|01Error loading File List screen templates.|07\r\n"
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil { /* Log? */
@@ -693,7 +693,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if errTop != nil || errMid != nil {
-		log.Printf("ERROR: Node %d: Failed to load FILELIST template files: TOP(%v), MID(%v)", nodeNumber, errTop, errMid)
+		slog.Error("failed to load FILELIST template files", "node", nodeNumber, "topError", errTop, "midError", errMid)
 		msg := "\r\n|01Error loading File List screen templates.|07\r\n"
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -741,13 +741,13 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	if filesPerPage < 1 {
 		filesPerPage = 1 // Ensure at least 1 file can be shown
 	}
-	log.Printf("DEBUG: Node %d: TermHeight=%d, FixedLines=%d, FilesPerPage=%d", nodeNumber, termHeight, fixedLines, filesPerPage)
+	slog.Debug("file list pagination", "node", nodeNumber, "termHeight", termHeight, "fixedLines", fixedLines, "filesPerPage", filesPerPage)
 
 	// --- Get Total File Count ---
 	// TODO: Implement GetFileCountForArea in FileManager
 	totalFiles, err := e.FileMgr.GetFileCountForArea(currentAreaID)
 	if err != nil {
-		log.Printf("ERROR: Node %d: Failed to get file count for area %d: %v", nodeNumber, currentAreaID, err)
+		slog.Error("failed to get file count for area", "node", nodeNumber, "area", currentAreaID, "error", err)
 		msg := fmt.Sprintf("\r\n|01Error retrieving file list for area '%s'.|07\r\n", currentAreaTag)
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -772,7 +772,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		// TODO: Implement GetFilesForAreaPaginated in FileManager
 		filesOnPage, err = e.FileMgr.GetFilesForAreaPaginated(currentAreaID, currentPage, filesPerPage)
 		if err != nil {
-			log.Printf("ERROR: Node %d: Failed to get files for area %d, page %d: %v", nodeNumber, currentAreaID, currentPage, err)
+			slog.Error("failed to get files for area page", "node", nodeNumber, "area", currentAreaID, "page", currentPage, "error", err)
 			msg := fmt.Sprintf("\r\n|01Error retrieving file list page for area '%s'.|07\r\n", currentAreaTag)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil { /* Log? */
@@ -787,11 +787,11 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	// Load optional BAR files for file listing lightbar.
 	cmdBarOptions, cmdBarErr := loadBarFile("FILELISTCMD", e)
 	if cmdBarErr != nil {
-		log.Printf("WARN: Node %d: Failed to load FILELISTCMD.BAR: %v", nodeNumber, cmdBarErr)
+		slog.Warn("failed to load FILELISTCMD.BAR", "node", nodeNumber, "error", cmdBarErr)
 	}
 	hiBarOptions, hiBarErr := loadBarFile("FILELISTHI", e)
 	if hiBarErr != nil {
-		log.Printf("WARN: Node %d: Failed to load FILELISTHI.BAR: %v", nodeNumber, hiBarErr)
+		slog.Warn("failed to load FILELISTHI.BAR", "node", nodeNumber, "error", hiBarErr)
 	}
 
 	// 4. Dispatch based on file listing mode (user pref overrides server default)
@@ -813,18 +813,18 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		// 4.1 Clear Screen
 		writeErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		if writeErr != nil {
-			log.Printf("ERROR: Node %d: Failed clearing screen for LISTFILES: %v", nodeNumber, writeErr)
+			slog.Error("failed clearing screen for LISTFILES", "node", nodeNumber, "error", writeErr)
 		}
 
 		// 4.2 Display Top Template (process @FCONFPATH@, @FTOTAL@, @FPAGE@ placeholders per page)
 		topRendered := ansi.ReplacePipeCodes(processFileListPlaceholders(topTemplateBytes, currentPage, totalPages, totalFiles, fconfpath))
 		wErr := terminalio.WriteProcessedBytes(terminal, topRendered, outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Node %d: Failed writing LISTFILES top template: %v", nodeNumber, wErr)
+			slog.Error("failed writing LISTFILES top template", "node", nodeNumber, "error", wErr)
 		}
 		wErr = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Node %d: Failed writing CRLF after LISTFILES top template: %v", nodeNumber, wErr)
+			slog.Error("failed writing CRLF after LISTFILES top template", "node", nodeNumber, "error", wErr)
 		}
 
 		// 4.3 Display Files on Current Page (using MID template)
@@ -892,11 +892,11 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 
 				wErr = writeProcessedStringWithManualEncoding(terminal, []byte(line), outputMode)
 				if wErr != nil {
-					log.Printf("ERROR: Node %d: Failed writing file list line %d: %v", nodeNumber, i, wErr)
+					slog.Error("failed writing file list line", "node", nodeNumber, "line", i, "error", wErr)
 				}
 				wErr = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 				if wErr != nil {
-					log.Printf("ERROR: Node %d: Failed writing CRLF after file list line %d: %v", nodeNumber, i, wErr)
+					slog.Error("failed writing CRLF after file list line", "node", nodeNumber, "line", i, "error", wErr)
 				}
 
 				prefixLine := processedMidTemplate
@@ -928,7 +928,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		bottomLine = strings.ReplaceAll(bottomLine, "^TOTALPAGES", strconv.Itoa(totalPages))
 		wErr = terminalio.WriteProcessedBytes(terminal, []byte(bottomLine), outputMode)
 		if wErr != nil {
-			log.Printf("ERROR: Node %d: Failed writing LISTFILES bottom template: %v", nodeNumber, wErr)
+			slog.Error("failed writing LISTFILES bottom template", "node", nodeNumber, "error", wErr)
 			// Handle error
 		}
 
@@ -944,10 +944,10 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected during LISTFILES.", nodeNumber)
+				slog.Info("user disconnected during LISTFILES", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
-			log.Printf("ERROR: Node %d: Failed reading LISTFILES input: %v", nodeNumber, err)
+			slog.Error("failed reading LISTFILES input", "node", nodeNumber, "error", err)
 			// Consider retry or exit
 			return nil, "", err
 		}
@@ -963,7 +963,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 				filesOnPage, err = e.FileMgr.GetFilesForAreaPaginated(currentAreaID, currentPage, filesPerPage)
 				if err != nil {
 					// Log error and potentially return or break the loop
-					log.Printf("ERROR: Node %d: Failed to get files for page %d: %v", nodeNumber, currentPage, err)
+					slog.Error("failed to get files for page", "node", nodeNumber, "page", currentPage, "error", err)
 					// Display error message to user?
 					time.Sleep(1 * time.Second)
 				}
@@ -980,7 +980,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 				filesOnPage, err = e.FileMgr.GetFilesForAreaPaginated(currentAreaID, currentPage, filesPerPage)
 				if err != nil {
 					// Log error and potentially return or break the loop
-					log.Printf("ERROR: Node %d: Failed to get files for page %d: %v", nodeNumber, currentPage, err)
+					slog.Error("failed to get files for page", "node", nodeNumber, "page", currentPage, "error", err)
 					// Display error message to user?
 					time.Sleep(1 * time.Second)
 				}
@@ -991,10 +991,10 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			continue // Redraw loop
 		case "Q": // Quit
-			log.Printf("DEBUG: Node %d: User quit LISTFILES.", nodeNumber)
+			slog.Debug("user quit LISTFILES", "node", nodeNumber)
 			return nil, "", nil // Return to FILEM menu
 		case "D": // Download marked files
-			log.Printf("DEBUG: Node %d: User %s initiated Download command in area %d.", nodeNumber, currentUser.Handle, currentAreaID)
+			slog.Debug("user initiated download command", "node", nodeNumber, "handle", currentUser.Handle, "area", currentAreaID)
 
 			// 1. Check if any files are marked
 			if len(currentUser.TaggedFileIDs) == 0 {
@@ -1019,10 +1019,10 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					log.Printf("INFO: Node %d: User disconnected during download confirmation.", nodeNumber)
+					slog.Info("user disconnected during download confirmation", "node", nodeNumber)
 					return nil, "LOGOFF", io.EOF
 				}
-				log.Printf("ERROR: Node %d: Error getting download confirmation: %v", nodeNumber, err)
+				slog.Error("error getting download confirmation", "node", nodeNumber, "error", err)
 				msg := "\r\n|01Error during confirmation.|07\r\n"
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(1 * time.Second)
@@ -1030,7 +1030,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 			if !proceed {
-				log.Printf("DEBUG: Node %d: User cancelled download.", nodeNumber)
+				slog.Debug("user cancelled download", "node", nodeNumber)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Download cancelled.|07")), outputMode)
 				time.Sleep(500 * time.Millisecond)
 				continue // Back to file list
@@ -1042,7 +1042,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 				if errors.Is(protoErr, io.EOF) {
 					return nil, "LOGOFF", protoErr
 				}
-				log.Printf("ERROR: Node %d: Protocol selection error: %v", nodeNumber, protoErr)
+				slog.Error("protocol selection error", "node", nodeNumber, "error", protoErr)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), outputMode)
 				time.Sleep(2 * time.Second)
 				continue
@@ -1064,12 +1064,12 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			for _, fileID := range currentUser.TaggedFileIDs {
 				filePath, pathErr := e.FileMgr.GetFilePath(fileID)
 				if pathErr != nil {
-					log.Printf("ERROR: Node %d: Failed to get path for file ID %s: %v", nodeNumber, fileID, pathErr)
+					slog.Error("failed to get path for file", "node", nodeNumber, "fileID", fileID, "error", pathErr)
 					failCount++
 					continue
 				}
 				if _, statErr := os.Stat(filePath); statErr != nil {
-					log.Printf("ERROR: Node %d: File %s (ID %s) not on disk: %v", nodeNumber, filePath, fileID, statErr)
+					slog.Error("file not on disk", "node", nodeNumber, "path", filePath, "fileID", fileID, "error", statErr)
 					failCount++
 					continue
 				}
@@ -1077,7 +1077,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 			if len(resolved) == 0 {
-				log.Printf("WARN: Node %d: No valid file paths found for tagged files.", nodeNumber)
+				slog.Warn("no valid file paths found for tagged files", "node", nodeNumber)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Could not find any of the marked files on the server.|07\r\n")), outputMode)
 				failCount = len(currentUser.TaggedFileIDs)
 			} else {
@@ -1094,11 +1094,11 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 			// 4. Clear tags, update download count, and save user state
-			log.Printf("DEBUG: Node %d: Clearing %d tagged file IDs for user %s.", nodeNumber, len(currentUser.TaggedFileIDs), currentUser.Handle)
+			slog.Debug("clearing tagged file IDs", "node", nodeNumber, "count", len(currentUser.TaggedFileIDs), "handle", currentUser.Handle)
 			currentUser.TaggedFileIDs = nil // Clear the list
 			currentUser.NumDownloads += successCount
 			if err := userManager.UpdateUser(currentUser); err != nil {
-				log.Printf("ERROR: Node %d: Failed to save user data after download attempt: %v", nodeNumber, err)
+				slog.Error("failed to save user data after download attempt", "node", nodeNumber, "error", err)
 				// Inform user? State might be inconsistent.
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error saving user state after download.|07")), outputMode)
 			}
@@ -1111,13 +1111,13 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			// Go back to the file list (will redraw with cleared marks)
 			continue
 		case "U": // Upload Files
-			log.Printf("DEBUG: Node %d: Upload command entered for area %d (%s)", nodeNumber, currentAreaID, currentAreaTag)
+			slog.Debug("upload command entered", "node", nodeNumber, "area", currentAreaID, "tag", currentAreaTag)
 			uploadErr := e.runUploadFiles(s, terminal, currentUser, userManager, currentAreaID, currentAreaTag, outputMode, nodeNumber, sessionStartTime)
 			if uploadErr != nil {
 				if errors.Is(uploadErr, io.EOF) {
 					return nil, "LOGOFF", uploadErr
 				}
-				log.Printf("ERROR: Node %d: Upload failed: %v", nodeNumber, uploadErr)
+				slog.Error("upload failed", "node", nodeNumber, "error", uploadErr)
 			}
 			// Reload user to get updated NumUploads
 			if reloaded, exists := userManager.GetUser(currentUser.Handle); exists {
@@ -1137,7 +1137,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			filesOnPage, _ = e.FileMgr.GetFilesForAreaPaginated(currentAreaID, currentPage, filesPerPage)
 			continue
 		case "V": // View file
-			log.Printf("DEBUG: Node %d: View command entered in file list", nodeNumber)
+			slog.Debug("view command entered in file list", "node", nodeNumber)
 			viewPrompt := "\r\n|07Enter file # to view (or |15ENTER|07 to cancel): |15"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(viewPrompt)), outputMode)
 			viewInput, viewErr := readLineFromSessionIH(s, terminal)
@@ -1167,7 +1167,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			if e.FileMgr.IsSupportedArchive(fileToView.Filename) {
 				viewFilePath, pathErr := e.FileMgr.GetFilePath(fileToView.ID)
 				if pathErr != nil {
-					log.Printf("ERROR: Node %d: Failed to get path for file %s: %v", nodeNumber, fileToView.ID, pathErr)
+					slog.Error("failed to get path for file", "node", nodeNumber, "fileID", fileToView.ID, "error", pathErr)
 					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error locating file.|07\r\n")), outputMode)
 					time.Sleep(1 * time.Second)
 				} else {
@@ -1180,7 +1180,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			continue
 		case "A": // Area Change (Placeholder/Not implemented here, handled by menu?)
-			log.Printf("DEBUG: Node %d: Area Change command entered (Handled by menu)", nodeNumber)
+			slog.Debug("area change command entered (handled by menu)", "node", nodeNumber)
 			msg := "\r\n|01Use menu options to change area.|07\r\n"
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil { /* Log? */
@@ -1208,21 +1208,21 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 					if !found {
 						// File was not tagged, so add it
 						newTaggedIDs = append(newTaggedIDs, fileToToggle.ID)
-						log.Printf("DEBUG: Node %d: User %s tagged file #%d (ID: %s)", nodeNumber, currentUser.Handle, fileNumToTag, fileToToggle.ID)
+						slog.Debug("user tagged file", "node", nodeNumber, "handle", currentUser.Handle, "fileNum", fileNumToTag, "fileID", fileToToggle.ID)
 					} else {
 						// File was tagged, so we removed it (untagged)
-						log.Printf("DEBUG: Node %d: User %s untagged file #%d (ID: %s)", nodeNumber, currentUser.Handle, fileNumToTag, fileToToggle.ID)
+						slog.Debug("user untagged file", "node", nodeNumber, "handle", currentUser.Handle, "file_num", fileNumToTag, "id", fileToToggle.ID)
 					}
 					currentUser.TaggedFileIDs = newTaggedIDs
 					// No page change needed, loop will redraw with updated marks
 				} else {
 					// Invalid file number for current page
-					log.Printf("DEBUG: Node %d: Invalid file number entered: %d", nodeNumber, fileNumToTag)
+					slog.Debug("invalid file number entered", "node", nodeNumber, "file_num", fileNumToTag)
 					// Optional: Add user feedback message
 				}
 			} else {
 				// Input was not N, P, Q, D, U, V, A, or a valid number - Invalid command
-				log.Printf("DEBUG: Node %d: Invalid command entered in LISTFILES: %s", nodeNumber, upperInput)
+				slog.Debug("invalid command entered in LISTFILES", "node", nodeNumber, "input", upperInput)
 				// Optional: Add user feedback message
 			}
 		} // end switch
@@ -1235,7 +1235,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 // displayFileAreaList is an internal helper to display the list of accessible file areas.
 // It does not include a pause prompt.
 func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, currentUser *user.User, outputMode ansi.OutputMode, nodeNumber int, sessionStartTime time.Time) error {
-	log.Printf("DEBUG: Node %d: Displaying file area list (helper)", nodeNumber)
+	slog.Debug("displaying file area list", "node", nodeNumber)
 
 	// 1. Define Template filenames and paths
 	topTemplateFilename := "FILEAREA.TOP"
@@ -1252,7 +1252,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 	botTemplateBytes, errBot := readTemplateFile(botTemplatePath)
 
 	if errTop != nil || errMid != nil || errBot != nil {
-		log.Printf("ERROR: Node %d: Failed to load one or more FILEAREA template files: TOP(%v), MID(%v), BOT(%v)", nodeNumber, errTop, errMid, errBot)
+		slog.Error("failed to load FILEAREA template files", "node", nodeNumber, "top_error", errTop, "mid_error", errMid, "bot_error", errBot)
 		// Display error message to terminal
 		msg := "\r\n|01Error loading File Area screen templates.|07\r\n"
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -1282,7 +1282,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 	confIDs := make(map[int]bool)
 	for _, area := range areas {
 		if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
-			log.Printf("TRACE: Node %d: User %s denied list access to file area %d (%s) due to ACS '%s'", nodeNumber, currentUser.Handle, area.ID, area.Tag, area.ACSList)
+			slog.Debug("user denied list access to file area due to ACS", "node", nodeNumber, "handle", currentUser.Handle, "area", area.Tag, "acs", area.ACSList)
 			continue
 		}
 		groups[area.ConferenceID] = append(groups[area.ConferenceID], area)
@@ -1335,7 +1335,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 			tag := string(ansi.ReplacePipeCodes([]byte(area.Tag)))
 			fileCount, countErr := e.FileMgr.GetFileCountForArea(area.ID)
 			if countErr != nil {
-				log.Printf("WARN: Node %d: Failed getting file count for area %d (%s): %v", nodeNumber, area.ID, area.Tag, countErr)
+				slog.Warn("failed getting file count for area", "node", nodeNumber, "area", area.Tag, "id", area.ID, "error", countErr)
 				fileCount = 0
 			}
 			fileCountStr := strconv.Itoa(fileCount)
@@ -1352,7 +1352,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 	}
 
 	if areasDisplayed == 0 {
-		log.Printf("DEBUG: Node %d: No accessible file areas to display for user %s.", nodeNumber, currentUser.Handle)
+		slog.Debug("no accessible file areas to display", "node", nodeNumber, "handle", currentUser.Handle)
 		outputBuffer.WriteString("\r\n|07   No accessible file areas found.   \r\n")
 	}
 
@@ -1361,7 +1361,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 	// 6. Clear screen and display the assembled content
 	writeErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if writeErr != nil {
-		log.Printf("ERROR: Node %d: Failed clearing screen for file area list: %v", nodeNumber, writeErr)
+		slog.Error("failed clearing screen for file area list", "node", nodeNumber, "error", writeErr)
 		// Try to continue anyway?
 	}
 
@@ -1374,7 +1374,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 		wErr = terminalio.WriteProcessedBytes(terminal, processedContent, outputMode)
 	}
 	if wErr != nil {
-		log.Printf("ERROR: Node %d: Failed writing file area list output: %v", nodeNumber, wErr)
+		slog.Error("failed writing file area list output", "node", nodeNumber, "error", wErr)
 		return wErr // Return the error from writing
 	}
 
@@ -1393,10 +1393,10 @@ func runListFileAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	log.Printf("DEBUG: Node %d: Running LISTFILEAR", nodeNumber)
+	slog.Debug("running LISTFILEAR", "node", nodeNumber)
 
 	if currentUser == nil {
-		log.Printf("WARN: Node %d: LISTFILEAR called without logged in user.", nodeNumber)
+		slog.Warn("LISTFILEAR called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to list file areas.|07\r\n"
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -1408,7 +1408,7 @@ func runListFileAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	// Call the helper to display the list
 	if err := displayFileAreaList(e, s, terminal, currentUser, outputMode, nodeNumber, sessionStartTime); err != nil {
 		// Error already logged by helper, maybe add context?
-		log.Printf("ERROR: Node %d: Error occurred during displayFileAreaList from runListFileAreas: %v", nodeNumber, err)
+		slog.Error("error occurred during displayFileAreaList", "node", nodeNumber, "error", err)
 		// Need to decide if we still pause or just return.
 		// For now, return the error to prevent pause on failed display.
 		return nil, "", err
@@ -1420,14 +1420,14 @@ func runListFileAreas(c *cmdCtx, args string) (*user.User, string, error) {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
 	}
 
-	log.Printf("DEBUG: Node %d: Displaying LISTFILEAR pause prompt (centered)", nodeNumber)
+	slog.Debug("displaying LISTFILEAR pause prompt", "node", nodeNumber)
 	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("INFO: Node %d: User disconnected during LISTFILEAR pause.", nodeNumber)
+			slog.Info("user disconnected during LISTFILEAR pause", "node", nodeNumber)
 			return nil, "LOGOFF", io.EOF
 		}
-		log.Printf("ERROR: Node %d: Failed during LISTFILEAR pause: %v", nodeNumber, err)
+		slog.Error("failed during LISTFILEAR pause", "node", nodeNumber, "error", err)
 		return nil, "", err
 	}
 
@@ -1473,10 +1473,10 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 	sessionStartTime := c.sessionStartTime
 	outputMode := c.outputMode
 
-	log.Printf("DEBUG: Node %d: Running SELECTFILEAREA", nodeNumber)
+	slog.Debug("running SELECTFILEAREA", "node", nodeNumber)
 
 	if currentUser == nil {
-		log.Printf("WARN: Node %d: SELECTFILEAREA called without logged in user.", nodeNumber)
+		slog.Warn("SELECTFILEAREA called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to select a file area.|07\r\n"
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil { /* Log? */
@@ -1487,7 +1487,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// --- Display the list first --- <--- MODIFIED
 	if err := displayFileAreaList(e, s, terminal, currentUser, outputMode, nodeNumber, sessionStartTime); err != nil {
-		log.Printf("ERROR: Node %d: Failed displaying file area list in SELECTFILEAREA: %v", nodeNumber, err)
+		slog.Error("failed displaying file area list in SELECTFILEAREA", "node", nodeNumber, "error", err)
 		// Don't proceed if the list couldn't be displayed
 		return currentUser, "", err // Return error
 	}
@@ -1509,10 +1509,10 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 		inputTag, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Printf("INFO: Node %d: User disconnected during SELECTFILEAREA prompt.", nodeNumber)
+				slog.Info("user disconnected during SELECTFILEAREA prompt", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
-			log.Printf("ERROR: Node %d: Error reading input for SELECTFILEAREA: %v", nodeNumber, err)
+			slog.Error("error reading input for SELECTFILEAREA", "node", nodeNumber, "error", err)
 			return currentUser, "", err
 		}
 
@@ -1520,7 +1520,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 		upperInput := strings.ToUpper(inputClean)
 
 		if upperInput == "Q" {
-			log.Printf("DEBUG: Node %d: SELECTFILEAREA aborted by user.", nodeNumber)
+			slog.Debug("SELECTFILEAREA aborted by user", "node", nodeNumber)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 			return currentUser, "", nil
 		}
@@ -1530,9 +1530,9 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		if upperInput == "?" {
-			log.Printf("DEBUG: Node %d: User requested file area list again from SELECTFILEAREA.", nodeNumber)
+			slog.Debug("user requested file area list again from SELECTFILEAREA", "node", nodeNumber)
 			if listErr := displayFileAreaList(e, s, terminal, currentUser, outputMode, nodeNumber, sessionStartTime); listErr != nil {
-				log.Printf("ERROR: Node %d: Failed redisplaying file area list: %v", nodeNumber, listErr)
+				slog.Error("failed redisplaying file area list", "node", nodeNumber, "error", listErr)
 			}
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
@@ -1545,14 +1545,14 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 		matched := false
 
 		if inputID, parseErr := strconv.Atoi(inputClean); parseErr == nil {
-			log.Printf("DEBUG: Node %d: User input '%s' parsed as ID %d. Looking up by ID.", nodeNumber, inputClean, inputID)
+			slog.Debug("user input parsed as file area ID", "node", nodeNumber, "input", inputClean, "id", inputID)
 			area, exists = e.FileMgr.GetAreaByID(inputID)
 			if exists {
 				matched = true
 			}
 		}
 		if !matched {
-			log.Printf("DEBUG: Node %d: User input '%s' not an ID. Looking up by Tag '%s'.", nodeNumber, inputClean, upperInput)
+			slog.Debug("user input not an ID, looking up by tag", "node", nodeNumber, "input", inputClean, "tag", upperInput)
 			area, exists = e.FileMgr.GetAreaByTag(upperInput)
 			if exists {
 				matched = true
@@ -1571,7 +1571,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 		// Check ACSList permission
 		if !checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
-			log.Printf("WARN: Node %d: User %s denied access to file area %d ('%s') due to ACS '%s'", nodeNumber, currentUser.Handle, area.ID, area.Tag, area.ACSList)
+			slog.Warn("user denied access to file area due to ACS", "node", nodeNumber, "handle", currentUser.Handle, "area", area.Tag, "acs", area.ACSList)
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
 			msg := fmt.Sprintf("|01Access denied to file area '%s'!|07", area.Tag)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -1588,7 +1588,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 		// Save the user state
 		if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
-			log.Printf("ERROR: Node %d: Failed to save user data after updating file area: %v", nodeNumber, saveErr)
+			slog.Error("failed to save user data after updating file area", "node", nodeNumber, "error", saveErr)
 			currentUser.CurrentFileAreaID = area.ID // revert not needed, just don't show success
 			msg := "\r\n|01Error: Could not save area selection.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -1597,7 +1597,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
-		log.Printf("INFO: Node %d: User %s changed file area to ID %d ('%s')", nodeNumber, currentUser.Handle, area.ID, area.Tag)
+		slog.Info("user changed file area", "node", nodeNumber, "handle", currentUser.Handle, "area", area.Tag, "id", area.ID)
 		msg := fmt.Sprintf("\r\n|07Current file area set to: |15%s|07\r\n", area.Name)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)

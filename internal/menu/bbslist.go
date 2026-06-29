@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -138,7 +138,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running BBSLIST for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running BBSLIST", "node", nodeNumber, "handle", currentUser.Handle)
 
 	// Resolve terminal dimensions.
 	if termWidth <= 0 && currentUser != nil {
@@ -486,7 +486,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 								edited.ID = entryID
 								freshBld.Listings[fi] = edited
 								if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
-									log.Printf("ERROR: Node %d: failed to save BBS list after edit: %v", nodeNumber, saveErr)
+									slog.Error("failed to save BBS list after edit", "node", nodeNumber, "error", saveErr)
 								} else {
 									bld = freshBld
 									selectedIndex = fi
@@ -513,11 +513,11 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 							if fi := findListingIndexByID(freshBld, entryID); fi >= 0 {
 								freshBld.Listings = append(freshBld.Listings[:fi], freshBld.Listings[fi+1:]...)
 								if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
-									log.Printf("ERROR: Node %d: failed to save BBS list after delete: %v", nodeNumber, saveErr)
+									slog.Error("failed to save BBS list after delete", "node", nodeNumber, "error", saveErr)
 								} else {
 									bld = freshBld
-									log.Printf("INFO: Node %d: User %s deleted BBS listing: %s",
-										nodeNumber, currentUser.Handle, entryName)
+									slog.Info("user deleted BBS listing",
+										"node", nodeNumber, "handle", currentUser.Handle, "name", entryName)
 								}
 							}
 						}
@@ -543,12 +543,12 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 								status = "verified"
 							}
 							if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
-								log.Printf("ERROR: Node %d: failed to save BBS list after verify toggle: %v", nodeNumber, saveErr)
+								slog.Error("failed to save BBS list after verify toggle", "node", nodeNumber, "error", saveErr)
 							} else {
 								bld = freshBld
 								selectedIndex = fi
-								log.Printf("INFO: Node %d: User %s toggled BBS listing #%d (%s) to %s",
-									nodeNumber, currentUser.Handle, fi+1, freshBld.Listings[fi].Name, status)
+								slog.Info("user toggled BBS listing verification",
+									"node", nodeNumber, "handle", currentUser.Handle, "id", fi+1, "name", freshBld.Listings[fi].Name, "status", status)
 							}
 						}
 					}
@@ -574,7 +574,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	log.Printf("DEBUG: Node %d: Running BBSLISTADD for user %s", nodeNumber, currentUser.Handle)
+	slog.Debug("running BBSLISTADD", "node", nodeNumber, "handle", currentUser.Handle)
 
 	wv(terminal, ansi.ClearScreen()+"|15Add BBS Listing\r\n", outputMode)
 	wv(terminal, "|08"+strings.Repeat("\xc4", 40)+"\r\n", outputMode)
@@ -706,7 +706,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	bbsListMu.Unlock()
 
 	wv(terminal, "\r\n|10Your entry has been added!\r\n", outputMode)
-	log.Printf("INFO: Node %d: User %s added BBS listing: %s", nodeNumber, currentUser.Handle, name)
+	slog.Info("user added BBS listing", "node", nodeNumber, "handle", currentUser.Handle, "name", name)
 	return currentUser, "", nil
 }
 
@@ -822,7 +822,7 @@ func bbsListEditEntry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	wv(terminal, "\r\n|10Entry updated!\r\n", outputMode)
-	log.Printf("INFO: Node %d: User %s edited BBS listing #%d (%s)", nodeNumber, currentUser.Handle, idx+1, entry.Name)
+	slog.Info("user edited BBS listing", "node", nodeNumber, "handle", currentUser.Handle, "id", idx+1, "name", entry.Name)
 	return entry, true
 }
 
@@ -992,7 +992,7 @@ func runBBSListDelete(c *cmdCtx, args string) (*user.User, string, error) {
 	bbsListMu.Unlock()
 
 	wv(terminal, "\r\n|10Entry deleted.\r\n", outputMode)
-	log.Printf("INFO: Node %d: User %s deleted BBS listing: %s", nodeNumber, currentUser.Handle, entry.Name)
+	slog.Info("user deleted BBS listing", "node", nodeNumber, "handle", currentUser.Handle, "name", entry.Name)
 	return currentUser, "", nil
 }
 
