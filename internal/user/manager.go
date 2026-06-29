@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,11 +22,11 @@ var (
 
 const (
 	userFile         = "users.json"
-	callHistoryFile  = "callhistory.json"  // Filename for call history
-	callNumberFile   = "callnumber.json"   // Filename for the next call number
+	callHistoryFile  = "callhistory.json"    // Filename for call history
+	callNumberFile   = "callnumber.json"     // Filename for the next call number
 	adminLogFile     = "admin_activity.json" // Filename for admin activity log
-	callHistoryLimit = 20                  // Max number of call records to keep
-	adminLogLimit    = 1000                // Max number of admin log entries to keep
+	callHistoryLimit = 20                    // Max number of call records to keep
+	adminLogLimit    = 1000                  // Max number of admin log entries to keep
 )
 
 // StripUTF8BOM returns data with UTF-8 BOM (EF BB BF) removed if present.
@@ -42,13 +42,13 @@ func StripUTF8BOM(data []byte) []byte {
 type UserMgr struct {
 	users          map[string]*User
 	mu             sync.RWMutex
-	path           string // Path to users.json
-	dataPath       string // Path to the data directory (for callhistory.json etc)
-	newUserLevel   int    // Access level assigned to new signups (from config)
-	nextUserID     int    // Added to track the next available user ID
-	callHistory    []CallRecord    // Added slice for call history
-	nextCallNumber uint64          // Added counter for overall calls
-	activeUserIDs  map[int32]bool  // Track which user IDs are currently online
+	path           string         // Path to users.json
+	dataPath       string         // Path to the data directory (for callhistory.json etc)
+	newUserLevel   int            // Access level assigned to new signups (from config)
+	nextUserID     int            // Added to track the next available user ID
+	callHistory    []CallRecord   // Added slice for call history
+	nextCallNumber uint64         // Added counter for overall calls
+	activeUserIDs  map[int32]bool // Track which user IDs are currently online
 }
 
 // NewUserManager creates and initializes a new user manager
@@ -57,7 +57,7 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 		users:        make(map[string]*User),
 		path:         filepath.Join(dataPath, userFile), // userFile path uses dataPath now
 		newUserLevel: 1,                                 // Default to 1, will be overridden by SetNewUserLevel
-		dataPath: dataPath,                          // Store the data path
+		dataPath:     dataPath,                          // Store the data path
 		// LastLogins:  make([]LoginEvent, 0, MaxLastLogins), // Removed LastLogins initialization
 		callHistory:    make([]CallRecord, 0, callHistoryLimit), // Initialize call history
 		nextUserID:     1,                                       // Start user IDs from 1
@@ -70,19 +70,19 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 	// Load call history using the stored dataPath
 	if err := um.loadCallHistory(); err != nil {
 		// Log warning but continue
-		log.Printf("WARN: Failed to load call history: %v", err)
+		slog.Warn("failed to load call history", "error", err)
 	}
 
 	// Load the next call number
 	if err := um.loadNextCallNumber(); err != nil {
 		// Log warning but continue, using the default start value of 1
-		log.Printf("WARN: Failed to load next call number: %v", err)
+		slog.Warn("failed to load next call number", "error", err)
 	}
 
 	if err := um.loadUsers(); err != nil {
 		// If loading fails (e.g., file not found), create default felonius user
 		if os.IsNotExist(err) {
-			log.Println("INFO: users.json not found, creating default felonius user.")
+			slog.Info("users.json not found; creating default felonius user")
 			// Build the fully-initialized bootstrap user and write exactly once,
 			// avoiding a partially-initialized entry on disk if a second save fails.
 			hashedPw, hashErr := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
@@ -111,7 +111,7 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 			if saveErr != nil {
 				return nil, fmt.Errorf("failed to save default felonius user: %w", saveErr)
 			}
-			log.Println("INFO: Default felonius user created (felonius/password).")
+			slog.Info("default felonius user created (felonius/password)")
 			// Determine next user ID after creating the default user
 			um.determineNextUserID()
 			return um, nil // Return successfully after creating default
@@ -155,19 +155,19 @@ func (um *UserMgr) loadUsers() error { // Receiver uses renamed type
 		// Migration: legacy records stored handle in "username"; if Handle is absent use it.
 		if strings.TrimSpace(user.Handle) == "" && user.LegacyUsername != "" {
 			user.Handle = user.LegacyUsername
-			log.Printf("INFO: Migrated legacy username %q to handle for user ID %d.", user.LegacyUsername, user.ID)
+			slog.Info("migrated legacy username to handle", "username", user.LegacyUsername, "id", user.ID)
 		}
 		if strings.TrimSpace(user.Handle) == "" {
-			log.Printf("WARN: Skipping user ID %d with no handle in users.json.", user.ID)
+			slog.Warn("skipping user with no handle", "id", user.ID)
 			continue
 		}
 		lowerHandle := strings.ToLower(user.Handle)
 		if _, exists := um.users[lowerHandle]; exists {
-			log.Printf("WARN: Duplicate handle found in users.json: %s. Skipping subsequent entry.", user.Handle)
+			slog.Warn("duplicate handle; skipping subsequent entry", "handle", user.Handle)
 			continue
 		}
 		um.users[lowerHandle] = user
-		log.Printf("TRACE: Loaded user %s (Group: %s) from JSON.", user.Handle, user.GroupLocation)
+		slog.Debug("loaded user", "handle", user.Handle, "group", user.GroupLocation)
 	}
 
 	// Note: determineNextUserID should be called *after* successful load
@@ -190,7 +190,7 @@ func (um *UserMgr) determineNextUserID() { // Receiver uses renamed type
 
 	um.mu.Lock() // Need write lock to set nextUserID
 	um.nextUserID = maxID + 1
-	log.Printf("DEBUG: Determined next User ID to be %d", um.nextUserID)
+	slog.Debug("determined next user ID", "id", um.nextUserID)
 	um.mu.Unlock()
 }
 
@@ -201,7 +201,7 @@ func (um *UserMgr) loadCallHistory() error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: %s not found, starting with empty call history list.", callHistoryFile)
+			slog.Info("call history file not found; starting empty", "file", callHistoryFile)
 			return nil // Not an error if the file doesn't exist yet
 		}
 		return fmt.Errorf("failed to read %s: %w", callHistoryFile, err)
@@ -226,7 +226,7 @@ func (um *UserMgr) loadCallHistory() error {
 		startIdx := len(um.callHistory) - callHistoryLimit
 		um.callHistory = um.callHistory[startIdx:]
 	}
-	log.Printf("DEBUG: Loaded %d call history records from %s", len(um.callHistory), callHistoryFile)
+	slog.Debug("loaded call history records", "count", len(um.callHistory), "file", callHistoryFile)
 	return nil
 }
 
@@ -236,7 +236,7 @@ func (um *UserMgr) loadNextCallNumber() error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: %s not found, starting call numbers from 1.", callNumberFile)
+			slog.Info("call number file not found; starting from 1", "file", callNumberFile)
 			// Keep the default um.nextCallNumber = 1
 			return nil // Not an error if the file doesn't exist
 		}
@@ -245,7 +245,7 @@ func (um *UserMgr) loadNextCallNumber() error {
 
 	data = StripUTF8BOM(data)
 	if len(data) == 0 {
-		log.Printf("WARN: %s is empty, starting call numbers from 1.", callNumberFile)
+		slog.Warn("call number file is empty; starting from 1", "file", callNumberFile)
 		return nil // Empty file, use default
 	}
 
@@ -253,12 +253,12 @@ func (um *UserMgr) loadNextCallNumber() error {
 	defer um.mu.Unlock()
 	if err := json.Unmarshal(data, &um.nextCallNumber); err != nil {
 		// If unmarshal fails, log and keep the default
-		log.Printf("WARN: Failed to unmarshal %s: %v. Starting call numbers from 1.", callNumberFile, err)
+		slog.Warn("failed to unmarshal call number file; starting from 1", "file", callNumberFile, "error", err)
 		um.nextCallNumber = 1
 		return nil // Don't return error, just use default
 	}
 
-	log.Printf("DEBUG: Loaded next call number %d from %s", um.nextCallNumber, callNumberFile)
+	slog.Debug("loaded next call number", "number", um.nextCallNumber, "file", callNumberFile)
 	return nil
 }
 
@@ -282,7 +282,7 @@ func (um *UserMgr) saveCallHistoryLocked() error {
 	// Also save the next call number (atomically with history? separate file is simpler for now)
 	if err := um.saveNextCallNumberLocked(); err != nil {
 		// Log error but don't fail the history save if number save fails
-		log.Printf("ERROR: Failed to save next call number: %v", err)
+		slog.Error("failed to save next call number", "error", err)
 	}
 
 	return nil
@@ -493,7 +493,7 @@ func (um *UserMgr) Authenticate(handle, password string) (*User, bool) {
 
 	// Save outside the write lock to avoid blocking other user operations
 	if err := um.SaveUsers(); err != nil {
-		log.Printf("ERROR: Failed to save user data after successful login for %s: %v", handle, err)
+		slog.Error("failed to save user data after login", "handle", handle, "error", err)
 	}
 
 	// Return a copy
@@ -580,13 +580,13 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 
 	// Save the updated user list *while still holding the lock*
 	if err := um.saveUsersLocked(); err != nil {
-		log.Printf("ERROR: Failed to save users after adding %s: %v", handle, err)
+		slog.Error("failed to save users after adding user", "handle", handle, "error", err)
 		delete(um.users, lowerHandle)
 		um.nextUserID--
 		return nil, err
 	}
 
-	log.Printf("INFO: Added user %s (ID: %d)", newUser.Handle, newUser.ID)
+	slog.Info("added user", "handle", newUser.Handle, "id", newUser.ID)
 	return newUser, nil
 }
 
@@ -615,7 +615,7 @@ func (um *UserMgr) AddCallRecord(record CallRecord) {
 
 	// Save the updated history *while still holding the lock*
 	if err := um.saveCallHistoryLocked(); err != nil {
-		log.Printf("ERROR: Failed to save call history after adding record for user %d: %v", record.UserID, err)
+		slog.Error("failed to save call history after adding record", "id", record.UserID, "error", err)
 		// Maybe try to rollback the append? Less critical than user add.
 	}
 }
@@ -671,10 +671,10 @@ func (um *UserMgr) SetNewUserLevel(level int) {
 
 	// Validate and clamp to 0-255 range
 	if level < 0 {
-		log.Printf("WARN: invalid newUserLevel %d; clamping to 0", level)
+		slog.Warn("invalid newUserLevel; clamping to 0", "level", level)
 		level = 0
 	} else if level > 255 {
-		log.Printf("WARN: invalid newUserLevel %d; clamping to 255", level)
+		slog.Warn("invalid newUserLevel; clamping to 255", "level", level)
 		level = 255
 	}
 
@@ -686,7 +686,7 @@ func (um *UserMgr) MarkUserOnline(userID int) {
 	um.mu.Lock()
 	defer um.mu.Unlock()
 	um.activeUserIDs[int32(userID)] = true
-	log.Printf("DEBUG: User ID %d marked as ONLINE", userID)
+	slog.Debug("user marked online", "id", userID)
 }
 
 // MarkUserOffline marks a user as offline/disconnected
@@ -694,7 +694,7 @@ func (um *UserMgr) MarkUserOffline(userID int) {
 	um.mu.Lock()
 	defer um.mu.Unlock()
 	delete(um.activeUserIDs, int32(userID))
-	log.Printf("DEBUG: User ID %d marked as OFFLINE", userID)
+	slog.Debug("user marked offline", "id", userID)
 }
 
 // IsUserOnline returns true if the user is currently connected
@@ -779,7 +779,6 @@ func (um *UserMgr) PurgeDeletedUsers(retentionDays int) ([]PurgeResult, error) {
 	for i, c := range candidates {
 		purged[i] = c.result
 	}
-	log.Printf("INFO: Purged %d soft-deleted user account(s)", len(purged))
+	slog.Info("purged soft-deleted user accounts", "count", len(purged))
 	return purged, nil
 }
-
