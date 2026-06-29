@@ -45,6 +45,8 @@ go.work.sum
 /v3mail
 /helper
 /menuedit
+/wfc
+/cmd/wfc/wfc
 tmp/
 .gocache/
 
