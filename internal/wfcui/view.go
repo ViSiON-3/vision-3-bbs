@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
 )
 
 // View renders the full-screen TUI based on the current mode.
@@ -186,9 +184,7 @@ func (m Model) renderEventFeed(st colorSet, width, maxLines int) []string {
 	}
 	for _, ev := range m.events[start:] {
 		ts := ev.Time.Format("15:04:05")
-		msg := fmt.Sprintf("%s  %s  %s", ts, ev.Handle, ev.Message)
 		line := st.eventTime.Render(ts) + "  " + ev.Handle + "  " + ev.Message
-		_ = msg
 		lines = append(lines, line)
 	}
 	_ = width // reserved
@@ -247,14 +243,4 @@ func trimToMax(lines []string, max int) []string {
 		return lines[:max]
 	}
 	return lines
-}
-
-// nodeStatusStyle returns a style appropriate for the given status.
-func nodeStatusStyle(st colorSet, status admin.NodeStatus) lipgloss.Style {
-	switch status {
-	case admin.StatusOnline, admin.StatusInChat, admin.StatusInMenu:
-		return st.statusOn
-	default:
-		return st.statusOff
-	}
 }
