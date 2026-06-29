@@ -91,10 +91,14 @@ func (m Model) viewEditScreen() string {
 	helpText := centerText(helpItems, m.width)
 	b.WriteString(helpBarStyle.Render(helpText))
 
-	// Overlay for password entry
+	// Overlay for password entry and WFC key-manager dialogs
 	result := b.String()
 	if m.mode == modePasswordEntry {
 		result = m.overlayPasswordDialog(result)
+	} else if m.mode == modeKeyList {
+		result = m.overlayKeyListDialog(result)
+	} else if m.mode == modeKeyAdd {
+		result = m.overlayKeyAddDialog(result)
 	} else if m.mode == modeDeleteConfirm {
 		result = m.overlayDeleteDialog(result, u.Handle)
 	} else if m.mode == modePurgeConfirm {

@@ -45,6 +45,8 @@ const (
 	modeInfoAlert                         // Info alert dismissed by any key
 	modePurgeConfirm                      // Confirm purge after delete
 	modeMassPurge                         // Confirm purge all deleted users
+	modeKeyList                           // WFC key-manager: list/delete keys
+	modeKeyAdd                            // WFC key-manager: add a new key
 )
 
 // Model is the BubbleTea model for the user editor TUI.
@@ -85,6 +87,10 @@ type Model struct {
 	alertTitle   string
 	alertMessage string
 	alertReturn  editorMode // mode to return to when dismissed
+
+	// WFC key-manager dialog state
+	keySelected  int    // 0-based index of selected key in modeKeyList
+	keyDialogErr string // last error from keyDialogAdd/keyDialogDelete
 
 	// Terminal
 	width   int
@@ -228,6 +234,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateHelp(msg)
 		case modePasswordEntry:
 			return m.updatePassword(msg)
+		case modeKeyList:
+			return m.updateKeyList(msg)
+		case modeKeyAdd:
+			return m.updateKeyAdd(msg)
 		}
 	}
 	return m, nil
@@ -412,6 +422,11 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyTab, tea.KeyEnter:
 		f := m.fields[m.editField]
 		if f.Type == ftAction {
+			if f.Label == "WFC Keys" {
+				// WFC key-manager dialog
+				m.openKeyDialog()
+				return m, nil
+			}
 			// Password field - enter password entry mode
 			m.mode = modePasswordEntry
 			m.textInput.SetValue("")
@@ -776,6 +791,87 @@ func (m Model) updatePassword(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeEdit
 		return m, nil
 
+	default:
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
+// --- WFC Key-Manager Modes ---
+
+func (m Model) updateKeyList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	keys, _ := m.editingUser().ListPublicKeys()
+
+	switch msg.Type {
+	case tea.KeyUp:
+		if m.keySelected > 0 {
+			m.keySelected--
+		}
+	case tea.KeyDown:
+		if m.keySelected < len(keys)-1 {
+			m.keySelected++
+		}
+	case tea.KeyEscape:
+		m.mode = modeEdit
+		return m, nil
+	default:
+		switch msg.String() {
+		case "a", "A":
+			// Enter add mode
+			m.mode = modeKeyAdd
+			m.keyDialogErr = ""
+			m.textInput.SetValue("")
+			m.textInput.Placeholder = "ssh-ed25519 AAAA... comment"
+			m.textInput.EchoMode = textinput.EchoNormal
+			m.textInput.CharLimit = 512
+			m.textInput.Width = 68
+			m.textInput.Focus()
+			return m, textinput.Blink
+		case "d", "D":
+			if len(keys) == 0 {
+				return m, nil
+			}
+			// Delete the selected key by 1-based index
+			ref := fmt.Sprintf("%d", m.keySelected+1)
+			_ = m.keyDialogDelete(ref)
+			// Clamp selection after delete
+			newKeys, _ := m.editingUser().ListPublicKeys()
+			if m.keySelected >= len(newKeys) && m.keySelected > 0 {
+				m.keySelected = len(newKeys) - 1
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m Model) updateKeyAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		line := strings.TrimSpace(m.textInput.Value())
+		if line == "" {
+			m.textInput.Blur()
+			m.mode = modeKeyList
+			return m, nil
+		}
+		if err := m.keyDialogAdd(line); err != nil {
+			// Stay in modeKeyAdd with error displayed
+			return m, nil
+		}
+		// Success: return to list, select the new key
+		m.textInput.Blur()
+		newKeys, _ := m.editingUser().ListPublicKeys()
+		m.keySelected = len(newKeys) - 1
+		if m.keySelected < 0 {
+			m.keySelected = 0
+		}
+		m.mode = modeKeyList
+		return m, nil
+	case tea.KeyEscape:
+		m.textInput.Blur()
+		m.keyDialogErr = ""
+		m.mode = modeKeyList
+		return m, nil
 	default:
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)

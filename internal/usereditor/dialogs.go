@@ -356,4 +356,3 @@ func (m Model) overlayHelpScreen(background string) string {
 
 	return strings.Join(lines, "\n")
 }
-
