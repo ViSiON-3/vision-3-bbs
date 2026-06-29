@@ -13,63 +13,39 @@ This guide covers security features and best practices for protecting your BBS.
 
 ViSiON/3 includes built-in connection management to prevent resource exhaustion and abuse.
 
-### Configuration Options
+### Configuring Connection Limits
 
-Edit `configs/config.json`:
+Open the config editor and navigate to **System Configuration → Connection Limits** (sub-screen 2):
 
-```json
-{
-  "maxNodes": 10,
-  "maxConnectionsPerIP": 3,
-  "ipBlocklistPath": "configs/blocklist.txt",
-  "ipAllowlistPath": "configs/allowlist.txt"
-}
+```bash
+./config
+# → 1 System Configuration → 2 Connection Limits
 ```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| Max Nodes | 10 | Maximum simultaneous connections. When reached, new connections are rejected with "maximum nodes reached". |
+| Max Per IP | 3 | Maximum concurrent connections from a single IP address. Prevents connection flooding. |
+| Failed Logins | 5 | Failed BBS login attempts from one IP before lockout. Set to 0 to disable. |
+| Lockout Mins | 30 | Duration of IP lockout after failed login threshold is reached. |
+| Idle Timeout | 5 | Minutes before an idle session is disconnected. |
+| Xfer Timeout | 10 | Minutes before a stalled file transfer is aborted. |
+
+To set IP blocklist and allowlist file paths, use **System Configuration → IP Blocklist/Allowlist** (sub-screen 5).
 
 ### Max Nodes
 
 Limits the total number of simultaneous connections to your BBS.
 
-- **Default:** 10
-- **Range:** 1-999 (0 = unlimited, not recommended)
-- **Purpose:** Prevents server overload from too many connections
-
-**Example:**
-
-```json
-{
-  "maxNodes": 5
-}
-```
-
-This allows only 5 users to be connected at the same time. When the limit is reached, new connections receive:
-
-```text
-Connection rejected: maximum nodes reached
-Please try again later.
-```
+- **Default:** 10 — prevents server overload from too many connections
+- When the limit is reached, new connections receive: `Connection rejected: maximum nodes reached`
 
 ### Max Connections Per IP
 
 Limits how many simultaneous connections a single IP address can make.
 
-- **Default:** 3
-- **Range:** 1-99 (0 = unlimited, not recommended)
-- **Purpose:** Prevents connection flooding from a single source
-
-**Example:**
-
-```json
-{
-  "maxConnectionsPerIP": 2
-}
-```
-
-This allows each IP address to maintain up to 2 concurrent connections. Useful for:
-
-- Preventing multi-connection abuse
-- Limiting resource usage per user
-- Mitigating simple DoS attempts
+- **Default:** 3 — prevents connection flooding from a single source
+- Useful for preventing multi-connection abuse and mitigating simple DoS attempts
 
 ## IP Filtering
 
@@ -103,15 +79,7 @@ Block specific IPs or IP ranges from connecting.
    2001:db8::/32
    ```
 
-2. Update `configs/config.json`:
-
-   ```json
-   {
-     "ipBlocklistPath": "configs/blocklist.txt"
-   }
-   ```
-
-3. Restart the BBS
+2. Set the path in `./config` → **System Configuration → IP Blocklist/Allowlist** (sub-screen 5), Blocklist Path field.
 
 **When to use:**
 
@@ -146,15 +114,7 @@ Allow specific IPs to bypass all connection limits.
    2001:db8:admin::/48
    ```
 
-2. Update `configs/config.json`:
-
-   ```json
-   {
-     "ipAllowlistPath": "configs/allowlist.txt"
-   }
-   ```
-
-3. Restart the BBS
+2. Set the path in `./config` → **System Configuration → IP Blocklist/Allowlist** (sub-screen 5), Allowlist Path field.
 
 **When to use:**
 
@@ -264,14 +224,8 @@ Connection requests are evaluated in this order:
 
 #### Example 1: Public BBS with Admin Protection
 
-```json
-{
-  "maxNodes": 20,
-  "maxConnectionsPerIP": 3,
-  "ipBlocklistPath": "configs/blocklist.txt",
-  "ipAllowlistPath": "configs/allowlist.txt"
-}
-```
+In `./config` → System Configuration → Connection Limits: Max Nodes = 20, Max Per IP = 3.
+In System Configuration → IP Blocklist/Allowlist: set both file paths.
 
 `configs/allowlist.txt`:
 
@@ -303,13 +257,8 @@ Connection requests are evaluated in this order:
 
 #### Example 2: Private BBS (Members Only)
 
-```json
-{
-  "maxNodes": 10,
-  "maxConnectionsPerIP": 2,
-  "ipAllowlistPath": "configs/allowlist.txt"
-}
-```
+In `./config` → System Configuration → Connection Limits: Max Nodes = 10, Max Per IP = 2.
+In System Configuration → IP Blocklist/Allowlist: set allowlist path, leave blocklist empty.
 
 `configs/allowlist.txt`:
 
@@ -422,37 +371,26 @@ CIDR mask must be 0-32 for IPv4, 0-128 for IPv6.
 
 ### Security Levels
 
-ViSiON/3 uses numeric security levels for access control:
+ViSiON/3 uses numeric security levels for access control. Configure them in `./config` → **System Configuration → Access Levels** (sub-screen 3):
 
-```json
-{
-  "sysOpLevel": 255,
-  "coSysOpLevel": 250,
-  "logonLevel": 100,
-  "anonymousLevel": 5
-}
-```
-
-- **sysOpLevel (255):** Full system access
-- **coSysOpLevel (250):** Co-SysOp privileges
-- **logonLevel (100):** Standard user after login
-- **anonymousLevel (5):** Guest/unvalidated users
+| Field | Default | Description |
+|-------|---------|-------------|
+| SysOp Level | 255 | Full system access |
+| CoSysOp Level | 250 | Co-SysOp privileges |
+| Invisible Level | 0 | Level at which users are hidden from who's-online (0 = use CoSysOp level) |
+| New User Level | 1 | Level assigned when an account is first created |
+| Regular Level | 10 | Level for validated/regular users |
+| Logon Level | 10 | Level granted on successful login (0 = disabled) |
+| Anonymous Level | 5 | Level for guest/anonymous access (0 = disabled) |
 
 ### Authentication Lockout
 
-Protect against brute-force attacks with automatic **IP-based** lockout after failed login attempts.
+Protect against brute-force attacks with automatic **IP-based** lockout after failed login attempts. Configure in `./config` → **System Configuration → Connection Limits** (sub-screen 2):
 
-**Configuration** (`configs/config.json`):
-
-```json
-{
-  "maxFailedLogins": 5,
-  "lockoutMinutes": 30
-}
-```
-
-- **maxFailedLogins:** Number of failed login attempts from a single IP before lockout (0 = disabled)
-- **lockoutMinutes:** Duration the IP remains locked after threshold is reached
+| Field | Default | Description |
+|-------|---------|-------------|
+| Failed Logins | 5 | Failed BBS login attempts from one IP before lockout (0 = disabled) |
+| Lockout Mins | 30 | Duration the IP remains locked after the threshold is reached |
 
 **How it works:**
 
@@ -556,18 +494,12 @@ The system protects against SSH brute force attempts through:
 
 #### Configuration Example
 
-For a secure public BBS that allows new users:
+For a secure public BBS that allows new users, set these in `./config` → System Configuration → Connection Limits:
 
-```json
-{
-  "maxFailedLogins": 5,
-  "lockoutMinutes": 30,
-  "maxConnectionsPerIP": 3,
-  "maxNodes": 20
-}
-```
+- Failed Logins: **5**, Lockout Mins: **30**
+- Max Per IP: **3**, Max Nodes: **20**
 
-This configuration:
+This:
 - Allows new users to register via SSH
 - Limits each IP to 3 concurrent connections
 - Locks out IPs after 5 failed BBS logins for 30 minutes
@@ -678,13 +610,8 @@ grep "authenticated successfully" data/logs/vision3.log
    PubkeyAuthentication yes
    ```
 
-2. **BBS: Use Non-Standard Port**
-
-   ```json
-   {
-     "sshPort": 2222
-   }
-   ```
+2. **BBS: Use a Non-Standard Port**
+   Change the SSH port in `./config` → **System Configuration → Server Setup** (sub-screen 1), SSH Port field. Default is `2222`.
 
 3. **Limit SSH to Specific IPs**
    Use allowlist for trusted admin IPs.
@@ -751,7 +678,7 @@ iptables -A INPUT -p tcp --dport 2222 -m state --state NEW \
 ## Security Checklist
 
 - [ ] Change default password
-- [ ] Configure maxNodes and maxConnectionsPerIP
+- [ ] Configure maxNodes and maxConnectionsPerIP (System Configuration → Connection Limits)
 - [ ] Set up IP blocklist (if needed)
 - [ ] Set up IP allowlist for admins
 - [ ] Use IP allowlist to restrict host admin SSH access (if running system sshd)

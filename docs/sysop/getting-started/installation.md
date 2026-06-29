@@ -66,14 +66,20 @@ On macOS, the setup script also removes quarantine attributes from the downloade
 
 ## Step 4: Configure Your BBS
 
-Open `configs/config.json` and set at minimum your BBS name, sysop name, and hostname:
+Run the interactive config editor and set at minimum your BBS name, sysop name, location, and server settings:
 
 ```bash
-nano configs/config.json       # Linux/macOS
-notepad configs\config.json    # Windows
+./config          # Linux/macOS
+.\config.exe      # Windows
 ```
 
-See the [Configuration Guide](configuration/configuration.md) for all settings.
+Navigate to **System Configuration** (key 1), then:
+- **BBS Registration** (sub-screen 0) — board name, sysop name, location, timezone
+- **Server Setup** (sub-screen 1) — SSH/Telnet ports and enabled flags
+
+Press **Q** to quit and save when done.
+
+See the [Configuration Guide](configuration/configuration.md) for all available settings.
 
 ## Step 5: Start the BBS
 
@@ -158,7 +164,7 @@ Available output modes:
 
 ### Port Already in Use
 
-Change `"sshPort": 2222` in `configs/config.json` and restart the server.
+Change the SSH port in `./config` → System Configuration → Server Setup (sub-screen 1), then restart the server.
 
 ### Permission Denied
 

@@ -79,7 +79,7 @@ If you prefer not to use Docker Compose:
 
 ViSiON/3 uses a pure-Go SSH implementation (`gliderlabs/ssh`) — no CGO or native libraries required. The Dockerfile:
 
-- Builds all Go binaries: `ViSiON3`, `v3mail`, `helper`, `strings`
+- Builds all Go binaries: `vision3`, `v3mail`, `config`, `strings`, `ue`, `menuedit`, `helper`
 - Copies `bin/sexyz` for ZModem 8k file transfers (works on both SSH and telnet)
 - Copies the static `binkd` binary for FTN mailer support
 
@@ -118,15 +118,31 @@ On first run, the entrypoint script will:
 
 ### Configuration
 
-After first run, edit the configuration files in the `configs/` directory:
+After first run, use the TUI tools to configure your BBS. Run them via `docker exec`:
 
 ```bash
-# Edit main config
-nano configs/config.json
+# Main config editor (BBS name, ports, access levels, networking, etc.)
+docker exec -it vision3-bbs ./config
 
-# Restart to apply changes
+# String editor (display text and prompts)
+docker exec -it vision3-bbs ./strings
+
+# User editor
+docker exec -it vision3-bbs ./ue
+
+# Menu editor
+docker exec -it vision3-bbs ./menuedit
+```
+
+The container's working directory is `/vision3`, which is where `configs/`, `data/`, and `menus/` are mounted — so the TUI tools find your files automatically without extra flags.
+
+After saving changes in the TUI, restart to apply most settings:
+
+```bash
 docker compose restart
 ```
+
+Exception: IP blocklist/allowlist files are watched and reload automatically — no restart needed.
 
 ## Private Mail Setup
 
@@ -237,14 +253,8 @@ For production deployments:
 - Limit exposed ports (only expose 2222)
 - Consider running with a non-root user inside the container
 - Set up firewall rules on the host
-- Configure connection limits in `config.json`:
-  - `maxNodes`: Maximum simultaneous connections (default: 10)
-  - `maxConnectionsPerIP`: Maximum connections per IP address (default: 3)
-  - Set to 0 to disable limits (not recommended for public BBSes)
-- Configure IP filtering (optional):
-  - `ipBlocklistPath`: Path to file containing blocked IPs/CIDR ranges
-  - `ipAllowlistPath`: Path to file containing allowed IPs (bypasses all limits)
-  - File format: one IP or CIDR range per line, # for comments
+- Configure connection limits via `docker exec -it vision3-bbs ./config` → System Configuration → Connection Limits (Max Nodes, Max Per IP, failed login lockout)
+- Configure IP filtering via System Configuration → IP Blocklist/Allowlist (paths to plain-text files with one IP or CIDR per line)
 
 ## Support
 
