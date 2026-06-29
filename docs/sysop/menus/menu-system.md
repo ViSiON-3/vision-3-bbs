@@ -2,7 +2,109 @@
 
 The ViSiON/3 menu system is the core of the BBS user interface. This guide explains how menus work and how to create or modify them.
 
-> **📋 In Development:** A TUI menu editor (`menuedit`) is currently in development. Once complete, it will replace the need to manually edit `.MNU`, `.CFG`, and `.BAR` files. Until then, menus are configured by hand as described in this guide.
+## Menu Editor (`menuedit`)
+
+`menuedit` is the interactive TUI for creating and modifying menus. Run it from your ViSiON/3 directory:
+
+```bash
+./menuedit                            # uses menus/v3 by default
+./menuedit --menus /path/to/menus/v3  # explicit path
+```
+
+The `--menus` path must contain `mnu/` and `cfg/` subdirectories. The BBS does not need to be stopped to run `menuedit`, but changes take effect on next menu load.
+
+### Menu List
+
+The opening screen lists all menus in `menus/v3/mnu/`. Columns show the menu title and its filename pair (`.MNU` / `.CFG`).
+
+| Key | Action |
+|-----|--------|
+| Up / Down / PgUp / PgDn / Home / End | Navigate |
+| Enter | Open Menu Edit for selected menu |
+| F2 | Delete selected menu (removes both `.MNU` and `.CFG`) |
+| F5 | Add new menu (prompts for filename) |
+| F10 | Open Command List for selected menu |
+| Alt-H | Help overlay |
+| Esc | Exit |
+
+### Menu Edit
+
+Edits the 13 properties of a single menu's `.MNU` file:
+
+| Field | Description |
+|-------|-------------|
+| Title | Friendly display name |
+| Clear Screen | Clear screen before displaying this menu |
+| Use Prompt | Whether to show the input prompt |
+| Prompt 1 | Primary prompt (supports pipe codes; renders in color live) |
+| Prompt 2 | Secondary prompt (rarely used) |
+| Fallback Menu | Menu to load when no command matches input |
+| ACS | Access control string; empty = allow all |
+| Password | Password required to enter this menu |
+| Help Menu | Reserved (`HelpMenu` from Pascal `MenuRec`) |
+| Force Help Level | Reserved (`ForceHelpLevel` from Pascal `MenuRec`) |
+| Msg Conference | Reserved (`Mes_Conf` from Pascal `MenuRec`) |
+| File Conference | Reserved (`File_Conf` from Pascal `MenuRec`) |
+| Force Hotkey | Force single-keypress input regardless of user preference |
+
+| Key | Action |
+|-----|--------|
+| Up / Down / Tab | Navigate fields |
+| Enter | Edit field (Y/N fields toggle immediately) |
+| PgUp / PgDn | Save current, go to previous / next menu |
+| F2 | Delete current menu |
+| F5 | Add new menu |
+| F10 | Save current, open Command List |
+| Esc | Save current, return to Menu List |
+
+### Command List
+
+Lists all commands in the selected menu's `.CFG` file. Columns show Node Activity, Keys, and Command.
+
+| Key | Action |
+|-----|--------|
+| Up / Down / PgUp / PgDn / Home / End | Navigate |
+| Enter | Open Command Edit for selected command |
+| F2 | Delete selected command |
+| F5 | Append new empty command |
+| Esc | Save if changed, return to Menu Edit |
+
+### Command Edit
+
+Edits the 6 fields of a single command:
+
+| Field | Description |
+|-------|-------------|
+| Node Activity | Which nodes see this command: `*` (all), `1` (node 1 only), etc. |
+| Keys | Key(s) that trigger the command; space-separate for multiple |
+| Command | Action to execute (see [Command Actions](#command-actions) below) |
+| ACS | Access control string |
+| Hidden | Whether command is hidden from menu display |
+| Auto-Run | Use `//` or `~~` in the Keys field to set auto-run behavior |
+
+| Key | Action |
+|-----|--------|
+| Up / Down / Tab | Navigate fields |
+| Enter | Edit field (Y/N fields toggle immediately) |
+| PgUp / PgDn | Move to previous / next command |
+| F2 | Delete current command |
+| F5 | Append new command |
+| F8 | Abort — discard changes |
+| Esc | Save changes, return to Command List |
+
+### Operations
+
+**Creating a menu:** Press F5 from Menu List or Menu Edit. Enter a name (A-Z, 0-9, underscore, max 8 characters). The editor creates empty `.MNU` and `.CFG` files and opens Menu Edit for the new menu.
+
+**Deleting a menu:** F2 from Menu List or Menu Edit. This removes **both** `.MNU` and `.CFG` files permanently — there is no undo.
+
+**Saving:** Changes are written when you press Esc from an edit screen, navigate with PgUp/PgDn, or press F10 to jump to the Command List.
+
+### Limitations
+
+`.BAR` lightbar files (used by `PDMATRIX` and other lightbar menus) are **not** managed by `menuedit` — they must still be hand-edited. See [Lightbar Menus](#lightbar-menus) for the format.
+
+---
 
 ## Menu System Overview
 
@@ -265,71 +367,14 @@ Control who can access menus and commands:
 
 ## Creating a New Menu
 
-### Step 1: Create Menu Configuration
+1. Run `./menuedit` and press **F5** from the Menu List.
+2. Enter a filename (A-Z, 0-9, underscore, max 8 characters — e.g., `MYMENU`). This becomes `MYMENU.MNU` and `MYMENU.CFG`.
+3. Fill in the Menu Edit fields: set **Title**, adjust **Clear Screen** and **Use Prompt**, write your **Prompt 1** text, and set a **Fallback Menu** (usually `MAIN`).
+4. Press **F10** to open the Command List and add commands with **F5**. For each command, enter the trigger key(s), the action (e.g., `GOTO:MAIN`, `RUN:SHOWSTATS`), and ACS if needed.
+5. Press **Esc** to save and return. Create `menus/v3/ansi/MYMENU.ANS` with your ANSI art separately.
+6. Add a `GOTO:MYMENU` command in another menu (e.g., MAIN) to make the new menu reachable.
 
-Create `menus/v3/mnu/MYMENU.MNU`:
-
-```json
-{
-  "TITLE": "My Menu",
-  "CLR": true,
-  "USEPROMPT": true,
-  "PROMPT1": "|15Select: ",
-  "PROMPT2": "",
-  "FALLBACK": "MAIN",
-  "ACS": "",
-  "PASS": "",
-  "HELPMENU": "",
-  "FORCEHELPLEVEL": 0,
-  "MES_CONF": 0,
-  "FILE_CONF": 0,
-  "FORCEHOTKEY": false
-}
-```
-
-### Step 2: Create Command Definitions
-
-Create `menus/v3/cfg/MYMENU.CFG`:
-
-```json
-[
-  {
-    "KEYS": "1",
-    "CMD": "RUN:OPTION1",
-    "ACS": "*",
-    "HIDDEN": false
-  },
-  {
-    "KEYS": "2",
-    "CMD": "RUN:OPTION2",
-    "ACS": "*",
-    "HIDDEN": false
-  },
-  {
-    "KEYS": "Q",
-    "CMD": "GOTO:MAIN",
-    "ACS": "*",
-    "HIDDEN": false
-  }
-]
-```
-
-### Step 3: Create ANSI Art
-
-Create `menus/v3/ansi/MYMENU.ANS` with your menu design.
-
-### Step 4: Link to Menu
-
-Add a command in another menu to access it:
-
-```json
-{
-  "KEYS": "M",
-  "CMD": "GOTO:MYMENU",
-  "ACS": "*",
-  "HIDDEN": false
-}
-```
+> The JSON file reference is below if you need to understand the format or make bulk changes outside of `menuedit`.
 
 ## Pre-Login Matrix Screen
 

@@ -162,7 +162,12 @@ The editor contains approximately 250 string entries organized by function:
 | 121–140 | File operations (ratios, listings, newscan) |
 | 141–160 | QWK mail, chat, announcements |
 | 161–178 | Advanced file/message operations |
-| 179+ | ViSiON/3 additions (SSH, ANSI, conference, etc.) |
+| 179–200 | ViSiON/3: SSH/ANSI, Door, Matrix/Login |
+| 201–220 | ViSiON/3: Conference, Executor |
+| 221–240 | ViSiON/3: Terminal/Session, File Search, File Info |
+| 241–250+ | ViSiON/3: File Newscan, Sysop File Review, Column Config, Want List |
+
+Reserved entries (keys prefixed with `_`) appear in the list as non-editable rows and are skipped when saving.
 
 ## Building
 

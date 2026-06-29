@@ -281,7 +281,6 @@ User levels can be changed through:
 
 1. **Admin Menu** (in-BBS): Press `G` to edit access level
 2. **User Editor** (`./ue`): Edit the Access Level field
-3. **Manual editing**: Modify `accessLevel` in `data/users/users.json` (not recommended)
 
 When validating a user through the Admin Menu with the `H` key, their level is automatically set to `regularUserLevel`.
 
@@ -341,14 +340,6 @@ Users are added through:
 
 1. New user application (type "new" at login screen)
 2. The `ue` TUI user editor (see [User Editor](users/user-editor.md))
-3. Manual editing of `users.json` (not recommended)
-
-When adding users manually, ensure:
-
-- Unique `id` number
-- Unique `username` (case-insensitive)
-- Unique `handle` (case-insensitive)
-- Valid bcrypt `passwordHash`
 
 ## New User Application
 
@@ -433,18 +424,6 @@ The SysOp can validate users in-BBS from the Admin Menu (`X` from MAIN → `V`).
 SysOp accounts also receive an automatic notification on MAIN menu entry when there are pending unvalidated users.
 
 Regular-user validation level is configurable in `configs/config.json` as `regularUserLevel` (default `10`).
-
-Manual editing of `data/users/users.json` is still supported when the BBS is stopped.
-
-### Modifying Users
-
-To modify a user manually:
-
-1. Stop the BBS
-2. Edit `data/users/users.json`
-3. Update the desired fields
-4. Ensure valid JSON syntax
-5. Restart the BBS
 
 ## Access Control System (ACS)
 
@@ -604,31 +583,13 @@ The access level threshold is driven by `coSysOpLevel` in `configs/config.json` 
 
 ### Resetting a Password
 
-Since passwords are hashed, you cannot recover them. To reset:
-
-**Option 1 — `ue` TUI (recommended):** Run `./ue` from the BBS root, select the user, and use the password reset field. See [User Editor](users/user-editor.md).
-
-**Option 2 — manual JSON edit:**
-
-1. Generate a new bcrypt hash:
-
-```go
-password := "newpassword"
-hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-if err != nil {
-    log.Fatal(err)
-}
-fmt.Println(string(hash))
-```
-
-2. Update the `passwordHash` field in `users.json`
-3. Inform the user of their new password
+Since passwords are hashed, you cannot recover them. To reset: run `./ue`, select the user, navigate to the Password field, and press Enter. Type the new password in the masked dialog. The editor bcrypt-hashes it before saving. See [User Editor](users/user-editor.md).
 
 ### Validating New Users
 
 **Recommended:** use the in-BBS Admin Menu (`X` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `H` to toggle validation status, then `S` to save. See [Admin Menu](users/admin-menu.md) for all key bindings.
 
-**Manual alternative:** change `validated` from `false` to `true` and set appropriate `accessLevel` (typically 10) in `data/users/users.json` while the BBS is stopped.
+**Alternative:** use `./ue`, select the user, and toggle the Validated field to `Y` and set Access Level to 10.
 
 ### Banning Users
 
@@ -645,11 +606,9 @@ The ban feature sets a user's access level to 0 and marks them as unvalidated, p
 
 Note: Pressing `0` toggles the ban status. If a user is already banned (level 0, unvalidated), pressing `0` will unban them by restoring them to the regular user level (default 10) and setting validated to true.
 
-**Option 2: Manual Edit (while BBS is stopped)**
-1. Stop the BBS
-2. Edit `data/users/users.json`
-3. Set `"accessLevel": 0` and `"validated": false`
-4. Restart the BBS
+**Option 2: User Editor (`./ue`)**
+
+Run `./ue`, select the user, edit the Access Level field to `0`, and set Validated to `N`.
 
 **Alternative Methods:**
 1. Add a ban flag (e.g., 'B') and use `!fB` in ACS strings
@@ -681,11 +640,9 @@ The soft-delete feature marks users as deleted without removing their data. This
 
 Note: Pressing `9` toggles the deletion status. If a user is already deleted, pressing `9` will undelete them and clear the deletion timestamp.
 
-**Option 2: Manual Edit (while BBS is stopped)**
-1. Stop the BBS
-2. Edit `data/users/users.json`
-3. Set `"deletedUser": true` and `"deletedAt": "2026-02-14T12:00:00Z"`
-4. Restart the BBS
+**Option 2: User Editor (`./ue`)**
+
+Run `./ue`, navigate to the user, and press **F2** to soft-delete. The editor prompts for confirmation and then immediately offers a purge dialog if you want to remove the account permanently right away.
 
 #### Effects of Soft Delete
 
