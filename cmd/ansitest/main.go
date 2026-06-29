@@ -135,8 +135,8 @@ func testRawBytes(session ssh.Session) {
 }
 
 func testUnicodeEscapes(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 2: Unicode Escape Sequences ===\x1B[0m")
-	fmt.Fprintln(session, "Using Go string literals with Unicode escape sequences...")
+	fmt.Fprintln(session, "\x1B[1;37m=== Test 2: Unicode Characters ===\x1B[0m")
+	fmt.Fprintln(session, "Using Go string literals with embedded Unicode characters...")
 	fmt.Fprintln(session)
 	fmt.Fprint(session, "Unicode:    ")
 	fmt.Fprint(session, "│─┌┐└┘├┤┬┴┼░▒▓█ßþ")

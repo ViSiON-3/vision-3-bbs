@@ -13,6 +13,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -46,6 +48,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %s is not a directory\n", path)
 		os.Exit(1)
 	}
+
+	// Suppress slog output during TUI operation — the alternate-screen terminal
+	// cannot tolerate interleaved log lines.
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	// Create the editor model
 	model, err := configeditor.New(path)
