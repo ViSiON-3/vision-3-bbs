@@ -11,7 +11,7 @@ package archiver
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -252,14 +252,14 @@ func DefaultConfig() Config {
 // config directory. Returns defaults if the file doesn't exist.
 func LoadConfig(configPath string) (Config, error) {
 	filePath := filepath.Join(configPath, "archivers.json")
-	log.Printf("INFO: Loading archivers config from %s", filePath)
+	slog.Info("loading archivers config", "path", filePath)
 
 	cfg := DefaultConfig()
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: archivers.json not found at %s, using defaults", filePath)
+			slog.Info("archivers.json not found; using defaults", "path", filePath)
 			return cfg, nil
 		}
 		return cfg, fmt.Errorf("failed to read archivers config %s: %w", filePath, err)
@@ -269,7 +269,7 @@ func LoadConfig(configPath string) (Config, error) {
 		return Config{}, fmt.Errorf("failed to parse archivers config %s: %w", filePath, err)
 	}
 
-	log.Printf("INFO: Loaded %d archiver definitions from %s", len(cfg.Archivers), filePath)
+	slog.Info("loaded archiver definitions", "count", len(cfg.Archivers), "path", filePath)
 	return cfg, nil
 }
 

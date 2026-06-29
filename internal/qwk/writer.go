@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math"
 	"strings"
 	"time"
@@ -187,7 +187,7 @@ func (pw *PacketWriter) writeMessagesDAT(zw *zip.Writer) (map[int][]byte, []byte
 		return nil, nil, err
 	}
 
-	log.Printf("INFO: QWK packet: %d messages, %d blocks", len(pw.messages), currentBlock-1)
+	slog.Info("QWK packet written", "messages", len(pw.messages), "blocks", currentBlock-1)
 	return ndxData, personalNDX, nil
 }
 

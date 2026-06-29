@@ -7,7 +7,7 @@ package sshserver
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"reflect"
@@ -60,7 +60,7 @@ func NewServer(cfg Config) (*Server, error) {
 		PasswordHandler: cfg.PasswordHandler,
 		Version:         cfg.Version,
 		ConnectionFailedCallback: func(conn net.Conn, err error) {
-			log.Printf("WARN: SSH connection failed from %s: %v", conn.RemoteAddr(), err)
+			slog.Warn("SSH connection failed", "remote", conn.RemoteAddr(), "error", err)
 		},
 	}
 	if cfg.KeyboardInteractiveHandler != nil {
@@ -75,7 +75,7 @@ func NewServer(cfg Config) (*Server, error) {
 	srv.ServerConfigCallback = func(ctx ssh.Context) *gossh.ServerConfig {
 		sc := &gossh.ServerConfig{}
 		if legacy {
-			log.Printf("DEBUG: SSH legacy algorithms enabled for retro BBS client compatibility")
+			slog.Debug("SSH legacy algorithms enabled for retro BBS client compatibility")
 			sc.Config.KeyExchanges = []string{
 				"curve25519-sha256",
 				"curve25519-sha256@libssh.org",
@@ -181,9 +181,9 @@ func WrapSession(s ssh.Session) *BBSSession {
 	// gliderlabs applies when a PTY is accepted.
 	bs.rawCh = extractRawChannel(s)
 	if bs.rawCh != nil {
-		log.Printf("DEBUG: BBSSession: raw channel extracted for binary transfer support")
+		slog.Debug("raw channel extracted for binary transfer support")
 	} else {
-		log.Printf("WARN: BBSSession: could not extract raw channel; binary transfers may be corrupted by CRLF conversion")
+		slog.Warn("could not extract raw channel; binary transfers may be corrupted by CRLF conversion")
 	}
 	return bs
 }
