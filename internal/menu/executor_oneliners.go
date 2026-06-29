@@ -525,9 +525,8 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		}
 
-		// Log hex bytes before writing
 		enterPromptBytes := ansi.ReplacePipeCodes([]byte(enterPrompt))
-		slog.Debug("writing ONELINER enter prompt bytes", "node", nodeNumber, "bytes", enterPromptBytes)
+		slog.Debug("writing oneliner enter prompt bytes", "node", nodeNumber, "bytes", fmt.Sprintf("%X", enterPromptBytes))
 		wErr = terminalio.WriteProcessedBytes(terminal, enterPromptBytes, outputMode)
 		if wErr != nil {
 			slog.Error("failed writing EnterOneLiner prompt", "node", nodeNumber, "error", wErr)

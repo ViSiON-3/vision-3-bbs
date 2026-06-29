@@ -43,7 +43,7 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	svc := e.V3NetStatus
-	slog.Debug("V3NetAreas", "termWidth", termWidth, "termHeight", termHeight, "outputMode", outputMode)
+	slog.Debug("rendering v3net areas", "termWidth", termWidth, "termHeight", termHeight, "outputMode", outputMode)
 
 	// Determine which networks to show.
 	var networks []string

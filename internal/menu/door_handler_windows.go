@@ -477,11 +477,11 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
 				time.Sleep(1 * time.Second)
 			} else {
-				log.Printf("ERROR: Node %d: Door execution failed for user %s, door %s: %v", nodeNumber, currentUser.Handle, upperInput, cmdErr)
+				slog.Error("door execution failed", "node", nodeNumber, "user", currentUser.Handle, "door", upperInput, "error", cmdErr)
 				doorErrorMessage(ctx, fmt.Sprintf("Error running door '%s': %v", upperInput, cmdErr))
 			}
 		} else {
-			log.Printf("INFO: Node %d: Door completed for user %s, door %s", nodeNumber, currentUser.Handle, upperInput)
+			slog.Info("door completed", "node", nodeNumber, "user", currentUser.Handle, "door", upperInput)
 		}
 
 		return currentUser, "", nil
