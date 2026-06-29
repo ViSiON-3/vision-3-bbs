@@ -2,7 +2,7 @@ package syncjs
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -129,7 +129,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		// Synchronet runs the script in a separate thread. Since goja is
 		// single-threaded, we return an input Queue backed by session I/O.
 		if bg, ok := args[0].Export().(bool); ok && bg {
-			log.Printf("INFO: SyncJS: load(true, ...) background thread requested — returning input Queue bridge")
+			slog.Info("SyncJS load(true, ...) background thread requested; returning input Queue bridge")
 			return eng.createInputQueue()
 		}
 
@@ -180,7 +180,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 			// Set a stub on the scope so callers doing scope.X.method() get
 			// a callable stub instead of "cannot read property of undefined".
 			if scope != nil {
-				log.Printf("WARN: SyncJS: require(scope, %q) failed: %v", filename, err)
+				slog.Warn("SyncJS require failed", "filename", filename, "error", err)
 				if symbol != "" {
 					scope.Set(symbol, eng.newStubObject())
 				}
@@ -193,7 +193,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 			val := vm.Get(symbol)
 			if val == nil || goja.IsUndefined(val) {
 				if scope != nil {
-					log.Printf("WARN: SyncJS: require(scope, %q, %q): symbol not found", filename, symbol)
+					slog.Warn("SyncJS require: symbol not found", "filename", filename, "symbol", symbol)
 					scope.Set(symbol, eng.newStubObject())
 					return goja.Undefined()
 				}
@@ -283,7 +283,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 		} else {
 			msg = call.Arguments[0].String()
 		}
-		log.Printf("INFO: SyncJS: %s", msg)
+		slog.Info("SyncJS script log", "message", msg)
 		return goja.Undefined()
 	})
 
@@ -301,7 +301,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	// alert(msg) — alias for log
 	vm.Set("alert", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) > 0 {
-			log.Printf("INFO: SyncJS alert: %s", call.Arguments[0].String())
+			slog.Info("SyncJS alert", "message", call.Arguments[0].String())
 		}
 		return goja.Undefined()
 	})
@@ -642,7 +642,7 @@ func (eng *Engine) resolveFilePath(path string) string {
 		}
 	}
 
-	log.Printf("WARN: SyncJS: resolved file path %q is outside all allowed directories", resolved)
+	slog.Warn("SyncJS resolved file path is outside all allowed directories", "path", resolved)
 	return resolved
 }
 
