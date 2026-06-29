@@ -2,7 +2,7 @@ package tosser
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -11,12 +11,12 @@ import (
 // Call cancel on the context to stop.
 func (t *Tosser) Start(ctx context.Context) {
 	if t.config.PollSeconds <= 0 {
-		log.Printf("INFO: Tosser[%s] polling disabled (poll_interval_seconds=0). Use RunOnce() for manual toss.", t.networkName)
+		slog.Info("polling disabled, use RunOnce for manual toss", "network", t.networkName)
 		return
 	}
 
 	interval := time.Duration(t.config.PollSeconds) * time.Second
-	log.Printf("INFO: Tosser[%s] started. Polling every %v.", t.networkName, interval)
+	slog.Info("tosser started", "network", t.networkName, "interval", interval)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -24,22 +24,20 @@ func (t *Tosser) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("INFO: Tosser[%s] stopping.", t.networkName)
+			slog.Info("tosser stopping", "network", t.networkName)
 			// Save dupe DB on shutdown
 			if err := t.dupeDB.Save(); err != nil {
-				log.Printf("WARN: Tosser[%s] failed to save dupe DB on shutdown: %v", t.networkName, err)
+				slog.Warn("failed to save dupe DB on shutdown", "network", t.networkName, "error", err)
 			}
 			return
 		case <-ticker.C:
 			result := t.RunOnce()
 			if result.PacketsProcessed > 0 || result.MessagesExported > 0 {
-				log.Printf("INFO: Tosser[%s] cycle: imported=%d, exported=%d, dupes=%d, packets=%d",
-					t.networkName, result.MessagesImported, result.MessagesExported,
-					result.DupesSkipped, result.PacketsProcessed)
+				slog.Info("toss cycle complete", "network", t.networkName, "imported", result.MessagesImported, "exported", result.MessagesExported, "dupes", result.DupesSkipped, "packets", result.PacketsProcessed)
 			}
 			if len(result.Errors) > 0 {
 				for _, e := range result.Errors {
-					log.Printf("ERROR: Tosser[%s] cycle: %s", t.networkName, e)
+					slog.Error("toss cycle error", "network", t.networkName, "msg", e)
 				}
 			}
 		}

@@ -3,7 +3,7 @@ package ziplab
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,14 +97,14 @@ func DefaultConfig() Config {
 // Returns defaults if the file doesn't exist.
 func LoadConfig(configPath string) (Config, error) {
 	filePath := filepath.Join(configPath, "ziplab.json")
-	log.Printf("INFO: Loading ZipLab config from %s", filePath)
+	slog.Info("loading ziplab config", "path", filePath)
 
 	cfg := DefaultConfig()
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: ziplab.json not found at %s, using defaults", filePath)
+			slog.Info("ziplab.json not found, using defaults", "path", filePath)
 		} else {
 			return cfg, fmt.Errorf("failed to read ziplab config %s: %w", filePath, err)
 		}
@@ -118,13 +118,12 @@ func LoadConfig(configPath string) (Config, error) {
 	// This ensures all enabled archivers are available to the ZipLab pipeline.
 	arcCfg, arcErr := archiver.LoadConfig(configPath)
 	if arcErr != nil {
-		log.Printf("WARN: Failed to load archivers.json: %v, using ZipLab defaults", arcErr)
+		slog.Warn("failed to load archivers.json, using ziplab defaults", "error", arcErr)
 	} else {
 		cfg.ArchiveTypes = archiverTypesFromConfig(arcCfg)
 	}
 
-	log.Printf("INFO: Loaded ZipLab config: enabled=%v, runOnUpload=%v, scanFailBehavior=%s, archiveTypes=%d",
-		cfg.Enabled, cfg.RunOnUpload, cfg.ScanFailBehavior, len(cfg.ArchiveTypes))
+	slog.Info("loaded ziplab config", "enabled", cfg.Enabled, "runOnUpload", cfg.RunOnUpload, "scanFailBehavior", cfg.ScanFailBehavior, "archiveTypes", len(cfg.ArchiveTypes))
 	return cfg, nil
 }
 

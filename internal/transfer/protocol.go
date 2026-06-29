@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,7 +67,7 @@ func LoadProtocols(path string) ([]ProtocolConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: protocols file not found, using built-in defaults")
+			slog.Info("protocols file not found, using built-in defaults")
 			return defaultProtocols(), nil
 		}
 		return nil, fmt.Errorf("failed to read protocols file %q: %w", path, err)
@@ -125,7 +125,7 @@ func (p *ProtocolConfig) ExecuteSend(ctx context.Context, s ssh.Session, filePat
 
 	cmdPath, err := exec.LookPath(p.SendCmd)
 	if err != nil {
-		log.Printf("ERROR: send command %q not found for protocol %q: %v", p.SendCmd, p.Name, err)
+		slog.Error("send command not found for protocol", "cmd", p.SendCmd, "protocol", p.Name, "error", err)
 		return fmt.Errorf("%w: send command %q not found for protocol %q — see docs/sysop/files/file-transfer.md", ErrBinaryNotFound, p.SendCmd, p.Name)
 	}
 	// Resolve to absolute path so relative binary paths survive any working-directory changes.
@@ -144,7 +144,7 @@ func (p *ProtocolConfig) ExecuteSend(ctx context.Context, s ssh.Session, filePat
 	}
 	cmd := exec.CommandContext(ctx, cmdPath, args...)
 
-	log.Printf("INFO: Protocol %q send: %s %v (pty=%v)", p.Name, cmdPath, args, p.UsePTY)
+	slog.Info("protocol send", "protocol", p.Name, "cmd", cmdPath, "args", args, "pty", p.UsePTY)
 	if p.UsePTY {
 		return RunCommandWithPTY(ctx, s, cmd, 0)
 	}
@@ -164,7 +164,7 @@ func (p *ProtocolConfig) ExecuteReceive(ctx context.Context, s ssh.Session, targ
 
 	cmdPath, err := exec.LookPath(p.RecvCmd)
 	if err != nil {
-		log.Printf("ERROR: recv command %q not found for protocol %q: %v", p.RecvCmd, p.Name, err)
+		slog.Error("recv command not found for protocol", "cmd", p.RecvCmd, "protocol", p.Name, "error", err)
 		return fmt.Errorf("%w: recv command %q not found for protocol %q — see docs/sysop/files/file-transfer.md", ErrBinaryNotFound, p.RecvCmd, p.Name)
 	}
 	// Resolve to absolute path so that cmd.Dir does not break relative binary paths.
@@ -196,7 +196,7 @@ func (p *ProtocolConfig) ExecuteReceive(ctx context.Context, s ssh.Session, targ
 		recvIdleTimeout = 10 * time.Second
 	}
 
-	log.Printf("INFO: Protocol %q receive in %s: %s %v (pty=%v)", p.Name, targetDir, cmdPath, args, p.UsePTY)
+	slog.Info("protocol receive", "protocol", p.Name, "dir", targetDir, "cmd", cmdPath, "args", args, "pty", p.UsePTY)
 	if p.UsePTY {
 		return RunCommandWithPTY(ctx, s, cmd, recvIdleTimeout)
 	}
@@ -274,7 +274,7 @@ func expandArgs(template []string, filePaths []string, targetDir string) ([]stri
 func writeFileList(paths []string) string {
 	f, err := os.CreateTemp("", "sexyz-filelist-*.txt")
 	if err != nil {
-		log.Printf("ERROR: failed to create file list temp file: %v", err)
+		slog.Error("failed to create file list temp file", "error", err)
 		return ""
 	}
 	for _, p := range paths {

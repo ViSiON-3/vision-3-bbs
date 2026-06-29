@@ -2,7 +2,7 @@ package tosser
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,12 +159,12 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 		// Move bad bundle to temp for inspection
 		badPath := filepath.Join(t.paths.TempPath, name)
 		if renErr := os.Rename(path, badPath); renErr != nil {
-			log.Printf("WARN: Failed to move bad bundle %s: %v", path, renErr)
+			slog.Warn("failed to move bad bundle", "path", path, "error", renErr)
 		}
 		return
 	}
 
-	log.Printf("INFO: Unpacked bundle %s: %d .PKT files", name, len(pktPaths))
+	slog.Info("unpacked bundle", "bundle", name, "count", len(pktPaths))
 
 	// tossPktFile handles cleanup of each extracted .PKT (removes on success, moves to temp on error).
 	allSkipped := true
@@ -184,7 +184,7 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 		for _, pktPath := range pktPaths {
 			os.Remove(pktPath)
 		}
-		log.Printf("TRACE: tosser[%s]: skipping foreign bundle %s", t.networkName, name)
+		slog.Debug("skipping foreign bundle", "network", t.networkName, "bundle", name)
 		return
 	}
 
@@ -197,15 +197,15 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 		if err := os.Rename(pktPath, destPath); err != nil {
 			// Do not delete on rename failure — a stranded packet in unpack/ is
 			// recoverable; a deleted packet is not.
-			log.Printf("WARN: tosser[%s]: failed to re-queue skipped packet %s: %v — packet left in unpack dir for manual recovery", t.networkName, filepath.Base(pktPath), err)
+			slog.Warn("failed to re-queue skipped packet, left in unpack dir for manual recovery", "network", t.networkName, "packet", filepath.Base(pktPath), "error", err)
 		} else {
-			log.Printf("TRACE: tosser[%s]: re-queued skipped packet %s to inbound", t.networkName, filepath.Base(pktPath))
+			slog.Debug("re-queued skipped packet to inbound", "network", t.networkName, "packet", filepath.Base(pktPath))
 		}
 	}
 
 	// Remove the bundle itself after processing all packets.
 	if err := os.Remove(path); err != nil {
-		log.Printf("WARN: Failed to remove processed bundle %s: %v", path, err)
+		slog.Warn("failed to remove processed bundle", "path", path, "error", err)
 	}
 }
 
@@ -224,12 +224,12 @@ func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) bool 
 
 	if len(errs) == 0 {
 		if err := os.Remove(path); err != nil {
-			log.Printf("WARN: Failed to remove processed packet %s: %v", path, err)
+			slog.Warn("failed to remove processed packet", "path", path, "error", err)
 		}
 	} else {
 		badPath := filepath.Join(t.paths.TempPath, displayName)
 		if err := os.Rename(path, badPath); err != nil {
-			log.Printf("WARN: Failed to move bad packet %s to %s: %v", path, badPath, err)
+			slog.Warn("failed to move bad packet", "path", path, "dest", badPath, "error", err)
 		}
 	}
 	return false
@@ -254,8 +254,7 @@ func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, sk
 		}
 		// Partial parse: packet is truncated but some messages were read before the
 		// bad offset. Process what we have and treat the truncation as a warning.
-		log.Printf("WARN: tosser[%s]: truncated packet %s (%v) — processing %d message(s) before truncation",
-			t.networkName, filepath.Base(path), err, len(msgs))
+		slog.Warn("truncated packet, processing available messages", "network", t.networkName, "packet", filepath.Base(path), "error", err, "count", len(msgs))
 	}
 
 	// Check if this packet belongs to our network by matching the source address
@@ -266,8 +265,7 @@ func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, sk
 		if pktZone == 0 {
 			pktZone = pktHdr.QOrigZone
 		}
-		log.Printf("TRACE: tosser[%s]: skipping packet %s from unknown link %d:%d/%d",
-			t.networkName, filepath.Base(path), pktZone, pktHdr.OrigNet, pktHdr.OrigNode)
+		slog.Debug("skipping packet from unknown link", "network", t.networkName, "packet", filepath.Base(path), "zone", pktZone, "net", pktHdr.OrigNet, "node", pktHdr.OrigNode)
 		return 0, 0, nil, true
 	}
 
@@ -301,7 +299,7 @@ func (t *Tosser) isPacketFromKnownLink(hdr *ftn.PacketHeader) bool {
 	for _, link := range t.config.Links {
 		addr, err := jam.ParseAddress(link.Address)
 		if err != nil {
-			log.Printf("WARN: tosser[%s]: invalid link address %q: %v", t.networkName, link.Address, err)
+			slog.Warn("invalid link address", "network", t.networkName, "link", link.Address, "error", err)
 			continue
 		}
 		hasValidLink = true
@@ -314,8 +312,7 @@ func (t *Tosser) isPacketFromKnownLink(hdr *ftn.PacketHeader) bool {
 	// If no configured link addresses could be parsed, accept the packet
 	// to avoid silently stalling all inbound processing.
 	if !hasValidLink {
-		log.Printf("WARN: tosser[%s]: no valid link addresses configured; accepting packet from %d:%d/%d",
-			t.networkName, pktZone, hdr.OrigNet, hdr.OrigNode)
+		slog.Warn("no valid link addresses configured, accepting packet", "network", t.networkName, "zone", pktZone, "net", hdr.OrigNet, "node", hdr.OrigNode)
 		return true
 	}
 	return false
@@ -347,19 +344,19 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) e
 			if err := t.writeMsgToArea(t.netmailAreaTag, msg, pktHdr, parsed, msgID); err != nil {
 				return fmt.Errorf("netmail to area %q: %w", t.netmailAreaTag, err)
 			}
-			log.Printf("INFO: Tossed netmail from %s to %s (MSGID: %s)", msg.From, msg.To, msgID)
+			slog.Info("tossed netmail", "from", msg.From, "to", msg.To, "msgid", msgID)
 			return nil
 		}
-		log.Printf("TRACE: Skipping netmail from %s to %s (no netmail area configured for network %s)", msg.From, msg.To, t.networkName)
+		slog.Debug("skipping netmail, no netmail area configured", "from", msg.From, "to", msg.To, "network", t.networkName)
 		return nil
 	}
 
 	// Dupe check (only meaningful if message has a MSGID)
 	if msgID != "" && t.dupeDB.Add(msgID) {
-		log.Printf("TRACE: Dupe MSGID=%s area %s", msgID, parsed.Area)
+		slog.Debug("dupe message", "msgid", msgID, "area", parsed.Area)
 		if t.paths.DupeAreaTag != "" {
 			if err := t.writeMsgToArea(t.paths.DupeAreaTag, msg, pktHdr, parsed, msgID); err != nil {
-				log.Printf("WARN: Dupe area write failed: %v", err)
+				slog.Warn("dupe area write failed", "error", err)
 			}
 		}
 		return errDupe
@@ -377,13 +374,13 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) e
 		}
 	}
 	if !found {
-		log.Printf("WARN: Unknown echo area %q from %s", parsed.Area, msg.From)
+		slog.Warn("unknown echo area", "area", parsed.Area, "from", msg.From)
 		if t.paths.BadAreaTag != "" {
 			if err := t.writeMsgToArea(t.paths.BadAreaTag, msg, pktHdr, parsed, msgID); err != nil {
-				log.Printf("WARN: Bad area write failed for area %q: %v", parsed.Area, err)
+				slog.Warn("bad area write failed", "area", parsed.Area, "error", err)
 				return fmt.Errorf("unknown area %q", parsed.Area)
 			}
-			log.Printf("INFO: Routed unknown area %q message from %s to bad area", parsed.Area, msg.From)
+			slog.Info("routed unknown area message to bad area", "area", parsed.Area, "from", msg.From)
 			return nil // counted as imported
 		}
 		return fmt.Errorf("unknown area %q", parsed.Area)
@@ -476,13 +473,13 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) e
 	if hdr, herr := base.ReadMessageHeader(msgNum); herr == nil {
 		hdr.DateProcessed = uint32(time.Now().Unix())
 		if uerr := base.UpdateMessageHeader(msgNum, hdr); uerr != nil {
-			log.Printf("WARN: toss: failed to mark msg %d as processed in area %s: %v", msgNum, area.Tag, uerr)
+			slog.Warn("failed to mark msg as processed", "msg", msgNum, "area", area.Tag, "error", uerr)
 		}
 	} else {
-		log.Printf("WARN: toss: failed to read header for msg %d in area %s to mark as processed: %v", msgNum, area.Tag, herr)
+		slog.Warn("failed to read header to mark msg as processed", "msg", msgNum, "area", area.Tag, "error", herr)
 	}
 
-	log.Printf("INFO: Tossed message from %s to %s in %s (MSGID: %s)", msg.From, msg.To, parsed.Area, msgID)
+	slog.Info("tossed message", "from", msg.From, "to", msg.To, "area", parsed.Area, "msgid", msgID)
 	return nil
 }
 
@@ -557,10 +554,10 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 	if hdr, herr := base.ReadMessageHeader(msgNum); herr == nil {
 		hdr.DateProcessed = uint32(time.Now().Unix())
 		if uerr := base.UpdateMessageHeader(msgNum, hdr); uerr != nil {
-			log.Printf("WARN: toss: failed to mark routed msg %d in %s as processed: %v", msgNum, areaTag, uerr)
+			slog.Warn("failed to mark routed msg as processed", "msg", msgNum, "area", areaTag, "error", uerr)
 		}
 	} else {
-		log.Printf("WARN: toss: failed to read header for routed msg %d in %s to mark as processed: %v", msgNum, areaTag, herr)
+		slog.Warn("failed to read header for routed msg to mark as processed", "msg", msgNum, "area", areaTag, "error", herr)
 	}
 	return nil
 }

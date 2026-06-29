@@ -2,7 +2,7 @@ package tosser
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,8 +118,7 @@ func (t *Tosser) PackOutbound() PackResult {
 			continue
 		}
 
-		log.Printf("INFO: Pack: created bundle %s with %d packets for link %s",
-			filepath.Base(bundlePath), count, link.Address)
+		slog.Info("created bundle", "bundle", filepath.Base(bundlePath), "count", count, "link", link.Address)
 		result.BundlesCreated++
 		result.PacketsPacked += count
 
@@ -130,14 +129,14 @@ func (t *Tosser) PackOutbound() PackResult {
 
 		// Create BSO flow file (.clo/.hlo) for crash/hold delivery.
 		if err := writeFlowFile(binkdDir, destAddr, link.Flavour, bundlePath); err != nil {
-			log.Printf("WARN: Pack: failed to write flow file for %s: %v", link.Address, err)
+			slog.Warn("failed to write flow file", "link", link.Address, "error", err)
 		}
 	}
 
 	// Remove only the .pkt files that were successfully bundled.
 	for pktPath := range bundledPkts {
 		if err := os.Remove(pktPath); err != nil {
-			log.Printf("WARN: Pack: failed to remove staged pkt %s: %v", pktPath, err)
+			slog.Warn("failed to remove staged pkt", "path", pktPath, "error", err)
 		}
 	}
 
