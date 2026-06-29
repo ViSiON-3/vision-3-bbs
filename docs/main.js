@@ -151,10 +151,29 @@ function buildStatusBar(isOnline) {
         '<span>' + rightContent + '</span>';
 }
 
+// Active audio handles — tracked so skip can stop them
+var activeAudioContext = null;
+var activeModemAudio = null;
+
+function skipSplash(splash) {
+    if (activeModemAudio) {
+        activeModemAudio.pause();
+        activeModemAudio.currentTime = 0;
+    }
+    if (activeAudioContext) {
+        activeAudioContext.close();
+        activeAudioContext = null;
+    }
+    splash.remove();
+    document.body.classList.remove('splash-active');
+    setVisitedCookie();
+}
+
 // Main dialer sequence - chained callbacks for synchronous execution
 function runDialerSequence(splash) {
     var terminal = document.getElementById('telix-terminal');
     var audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    activeAudioContext = audioContext;
     var phoneDigits = '13145673833';
 
     // Resume AudioContext if suspended (iOS Safari)
@@ -167,6 +186,7 @@ function runDialerSequence(splash) {
     if (prompt) prompt.remove();
 
     var modemAudio = audioPool.modem;
+    activeModemAudio = modemAudio;
 
     // Phase 1: Type AT&F, wait for OK
     typeText(terminal, 'AT&F\n', function () {
@@ -317,13 +337,28 @@ function runDialerSequence(splash) {
 
     splash.addEventListener('click', clickHandler);
     splash.addEventListener('keydown', keyHandler);
+
+    var skipBtn = document.getElementById('telix-skip');
+    if (skipBtn) {
+        skipBtn.addEventListener('click', function (e) {
+            e.stopPropagation(); // don't trigger splash clickHandler
+            skipSplash(splash);
+        });
+    }
+
+    document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape') {
+            document.removeEventListener('keydown', escHandler);
+            skipSplash(splash);
+        }
+    });
 })();
 
 /* ---- BBS Menu Keyboard Navigation ---- */
 (function () {
     'use strict';
 
-    var keymap = {
+    var anchorMap = {
         'f': '#features',
         'F': '#features',
         'g': '#get-started',
@@ -332,6 +367,11 @@ function runDialerSequence(splash) {
         'J': '#get-involved',
         'h': '#history',
         'H': '#history'
+    };
+
+    var hrefMap = {
+        'd': '/sysop/',
+        'D': '/sysop/'
     };
 
     document.addEventListener('keydown', function (e) {
@@ -345,7 +385,13 @@ function runDialerSequence(splash) {
             return;
         }
 
-        var section = keymap[e.key];
+        if (hrefMap[e.key]) {
+            e.preventDefault();
+            window.location.href = hrefMap[e.key];
+            return;
+        }
+
+        var section = anchorMap[e.key];
         if (section) {
             e.preventDefault();
             var element = document.querySelector(section);

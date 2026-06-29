@@ -653,6 +653,27 @@ section:nth-of-type(even) {
     justify-content: space-between;
 }
 
+.telix-skip {
+    position: absolute;
+    bottom: 2.5rem; /* sits above the status bar */
+    right: 1rem;
+    font-family: var(--font-dos);
+    font-size: 0.85rem;
+    color: #888888;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    z-index: 1;
+    transition: color 0.15s;
+}
+
+.telix-skip:hover,
+.telix-skip:focus-visible {
+    color: #ffff55;
+    outline: none;
+}
+
 .telix-splash.hidden {
     display: none;
 }
