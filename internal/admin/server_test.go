@@ -53,14 +53,27 @@ func TestServerExecuteRefreshOnly(t *testing.T) {
 // panic that occurred when tick() fanned out to a subscriber channel that was
 // concurrently closed by Subscribe's cancel goroutine. Without the fix this
 // panics under -race; with the fix it passes cleanly.
+//
+// The test seeds fakeRegistry with one active session so that DiffSnapshots
+// produces a menu.changed event on every tick after the first. This means
+// tick() actually reaches the fan-out send path (select { case c <- e: default: })
+// while the cancel goroutine may concurrently close the channel — the exact
+// interleaving the fix guards against.
 func TestSubscribeCancelRace(t *testing.T) {
-	reg := &fakeRegistry{
-		sessions: nil,
+	sess := &session.BbsSession{
+		NodeID:      1,
+		User:        &user.User{Handle: "racer"},
+		CurrentMenu: "MAIN",
+		Activity:    "idle",
 	}
+	reg := &fakeRegistry{sessions: []*session.BbsSession{sess}}
 	srv := NewServer(ServerConfig{
 		Reg: reg, SystemName: "race-test", StartedAt: time.Now(),
 		Refresh: time.Hour, MaxEvents: 10, CallsToday: func() int { return -1 },
 	})
+
+	// Seed prev so the first tick in the goroutine sees a change.
+	srv.tick(time.Now())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := srv.Subscribe(ctx)
@@ -69,11 +82,19 @@ func TestSubscribeCancelRace(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
+		menus := [2]string{"DOORS", "MAIN"}
+		for i := 0; i < 200; i++ {
+			// Mutate under the session's write lock so BuildSnapshot's RLock
+			// sees a consistent value and the race detector stays clean.
+			sess.Mutex.Lock()
+			sess.CurrentMenu = menus[i%2]
+			sess.Mutex.Unlock()
+
 			srv.tick(time.Now())
 		}
 	}()
 
+	// Cancel partway through to race the channel close against the fan-out.
 	cancel()
 	wg.Wait()
 
