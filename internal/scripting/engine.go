@@ -106,7 +106,7 @@ func (eng *Engine) Run(scriptPath string) error {
 		return fmt.Errorf("reading script %s: %w", scriptPath, err)
 	}
 
-	slog.Info("V3Script: running script", "path", scriptPath, "node", eng.session.NodeNumber)
+	slog.Info("running V3 script", "path", scriptPath, "node", eng.session.NodeNumber)
 
 	_, err = eng.vm.RunScript(scriptPath, string(data))
 	if err != nil {
@@ -136,7 +136,7 @@ func (eng *Engine) Close() {
 		select {
 		case <-eng.copierDone:
 		case <-time.After(2 * time.Second):
-			slog.Warn("V3Script: copier goroutine did not exit within 2s; proceeding with cleanup")
+			slog.Warn("V3 script copier goroutine did not exit within 2s; proceeding with cleanup")
 		}
 	}
 	if eng.pipeReader != nil {

@@ -63,13 +63,13 @@ func parseREPMessages(data []byte) ([]REPMessage, error) {
 		blkStr := strings.TrimSpace(string(header[116:122]))
 		numBlocks, err := strconv.Atoi(blkStr)
 		if err != nil || numBlocks < 1 {
-			slog.Warn("QWK REP: invalid block count", "value", blkStr, "offset", pos)
+			slog.Warn("invalid QWK REP block count", "value", blkStr, "offset", pos)
 			break
 		}
 
 		totalBytes := numBlocks * BlockSize
 		if pos+totalBytes > len(data) {
-			slog.Warn("QWK REP: message extends past end of data", "offset", pos)
+			slog.Warn("QWK REP message extends past end of data", "offset", pos)
 			break
 		}
 
@@ -94,7 +94,7 @@ func parseREPMessages(data []byte) ([]REPMessage, error) {
 		pos += totalBytes
 	}
 
-	slog.Info("QWK REP: parsed messages", "count", len(messages))
+	slog.Info("parsed QWK REP messages", "count", len(messages))
 	return messages, nil
 }
 

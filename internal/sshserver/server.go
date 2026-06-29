@@ -181,9 +181,9 @@ func WrapSession(s ssh.Session) *BBSSession {
 	// gliderlabs applies when a PTY is accepted.
 	bs.rawCh = extractRawChannel(s)
 	if bs.rawCh != nil {
-		slog.Debug("BBSSession: raw channel extracted for binary transfer support")
+		slog.Debug("raw channel extracted for binary transfer support")
 	} else {
-		slog.Warn("BBSSession: could not extract raw channel; binary transfers may be corrupted by CRLF conversion")
+		slog.Warn("could not extract raw channel; binary transfers may be corrupted by CRLF conversion")
 	}
 	return bs
 }
