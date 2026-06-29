@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -16,7 +16,7 @@ type sshAuthUserKey struct{}
 // startSSHServer creates, configures, and starts the pure-Go SSH server.
 // Returns a cleanup function to shut down the server.
 func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms bool) (func(), error) {
-	log.Printf("INFO: Configuring SSH server on %s:%d...", sshHost, sshPort)
+	slog.Info("configuring SSH server", "host", sshHost, "port", sshPort)
 
 	server, err := sshserver.NewServer(sshserver.Config{
 		HostKeyPath:         hostKeyPath,
@@ -27,7 +27,7 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 		Version:             "Vision3",
 		PasswordHandler: func(ctx ssh.Context, password string) bool {
 			username := ctx.User()
-			log.Printf("DEBUG: SSH password auth from user=%q addr=%s", username, ctx.RemoteAddr())
+			slog.Debug("SSH password auth", "user", username, "addr", ctx.RemoteAddr())
 
 			// If username matches a known BBS user and password is correct,
 			// stash the authenticated user for auto-login. Otherwise accept
@@ -37,9 +37,9 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 					authedUser, ok := userMgr.Authenticate(username, password)
 					if ok {
 						ctx.SetValue(sshAuthUserKey{}, authedUser)
-						log.Printf("INFO: SSH pre-authenticated known user %q from %s", username, ctx.RemoteAddr())
+						slog.Info("SSH pre-authenticated user", "user", username, "addr", ctx.RemoteAddr())
 					} else {
-						log.Printf("INFO: SSH password mismatch for known user %q from %s, deferring to BBS login", username, ctx.RemoteAddr())
+						slog.Info("SSH password mismatch, deferring to BBS login", "user", username, "addr", ctx.RemoteAddr())
 					}
 				}
 			}
@@ -47,7 +47,7 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 			return true
 		},
 		KeyboardInteractiveHandler: func(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool {
-			log.Printf("DEBUG: SSH keyboard-interactive auth from user=%q addr=%s", ctx.User(), ctx.RemoteAddr())
+			slog.Debug("SSH keyboard-interactive auth", "user", ctx.User(), "addr", ctx.RemoteAddr())
 			return true
 		},
 	})
@@ -63,11 +63,11 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 	// gliderlabs/ssh handles its own accept loop — run in background
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
-			log.Printf("ERROR: SSH server error: %v", err)
+			slog.Error("SSH server error", "error", err)
 		}
 	}()
 
-	log.Printf("INFO: SSH server ready - connect via: ssh <username>@%s -p %d", sshHost, sshPort)
+	slog.Info("SSH server ready", "host", sshHost, "port", sshPort)
 	return cleanup, nil
 }
 func sshSessionHandler(sess ssh.Session) {
@@ -77,7 +77,7 @@ func sshSessionHandler(sess ssh.Session) {
 	// Atomically check limits and register connection
 	canAccept, reason := connectionTracker.TryAccept(wrapped.RemoteAddr())
 	if !canAccept {
-		log.Printf("INFO: Rejecting SSH connection from %s: %s", wrapped.RemoteAddr(), reason)
+		slog.Info("rejecting SSH connection", "addr", wrapped.RemoteAddr(), "reason", reason)
 		fmt.Fprintf(wrapped, "\r\nConnection rejected: %s\r\n", reason)
 		fmt.Fprintf(wrapped, "Please try again later.\r\n")
 		time.Sleep(2 * time.Second)

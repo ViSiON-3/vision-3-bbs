@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,6 +16,7 @@ import (
 
 	// Use the internal ansi package for Cp437ToUnicode
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 )
 
 // --- ANSI Test Code (Moved from cmd/vision3/main.go) ---
@@ -134,11 +135,11 @@ func testRawBytes(session ssh.Session) {
 }
 
 func testUnicodeEscapes(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 2: Unicode Escape Sequences ===\x1B[0m")
-	fmt.Fprintln(session, "Using Go string literals with Unicode escape sequences...")
+	fmt.Fprintln(session, "\x1B[1;37m=== Test 2: Unicode Characters ===\x1B[0m")
+	fmt.Fprintln(session, "Using Go string literals with embedded Unicode characters...")
 	fmt.Fprintln(session)
 	fmt.Fprint(session, "Unicode:    ")
-	fmt.Fprint(session, "\u2502\u2500\u250C\u2510\u2514\u2518\u251C\u2524\u252C\u2534\u253C\u2591\u2592\u2593\u2588\u00DF\u00FE")
+	fmt.Fprint(session, "│─┌┐└┘├┤┬┴┼░▒▓█ßþ")
 	fmt.Fprintln(session)
 	fmt.Fprintln(session)
 }
@@ -397,26 +398,25 @@ func printTerminalInfo(session ssh.Session) {
 func loadHostKey(path string) ssh.Signer {
 	keyBytes, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatalf("FATAL: Failed to read host key %s: %v", path, err)
+		logging.Fatal("failed to read host key", "path", path, "error", err)
 	}
 	signer, err := gossh.ParsePrivateKey(keyBytes)
 	if err != nil {
-		log.Fatalf("FATAL: Failed to parse host key %s: %v", path, err)
+		logging.Fatal("failed to parse host key", "path", path, "error", err)
 	}
-	log.Printf("INFO: Host key loaded successfully from %s", path)
+	slog.Info("host key loaded", "path", path)
 	return signer
 }
 
 func main() {
-	log.SetOutput(os.Stderr)
-	log.Println("INFO: Starting ANSI Test server mode...")
+	slog.Info("starting ANSI test server")
 
 	// Reuse the config path logic, maybe point to ../../configs
 	configPath := filepath.Join("..", "..", "configs") // Path relative to cmd/ansitest
 	hostKeyPath := filepath.Join(configPath, "ssh_host_rsa_key")
-	log.Printf("INFO: Test Server - Attempting to load host key from: %s", hostKeyPath)
+	slog.Info("attempting to load host key", "path", hostKeyPath)
 	if _, err := os.Stat(hostKeyPath); os.IsNotExist(err) {
-		log.Printf("WARN: Host key not found at %s. Server might be inaccessible.", hostKeyPath)
+		slog.Warn("host key not found, server might be inaccessible", "path", hostKeyPath)
 		// Consider generating a temporary key if none exists for pure testing
 	}
 	hostKeySigner := loadHostKey(hostKeyPath)
@@ -431,9 +431,9 @@ func main() {
 
 	server.AddHostKey(hostKeySigner)
 
-	log.Printf("INFO: Starting ANSI Test server on :2223...")
+	slog.Info("starting ANSI test server", "addr", ":2223")
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
-		log.Fatalf("FATAL: Failed to start ANSI Test server: %v", err)
+		logging.Fatal("failed to start ANSI test server", "error", err)
 	}
-	log.Println("INFO: ANSI Test server shut down.")
+	slog.Info("ANSI test server shut down")
 }

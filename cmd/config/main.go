@@ -14,7 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -38,9 +38,6 @@ func main() {
 		path = filepath.Join(cwd, "configs")
 	}
 
-	// Suppress log output from config loaders (they log to default logger)
-	log.SetOutput(io.Discard)
-
 	// Verify the directory exists
 	info, err := os.Stat(path)
 	if err != nil {
@@ -51,6 +48,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %s is not a directory\n", path)
 		os.Exit(1)
 	}
+
+	// Suppress slog output during TUI operation — the alternate-screen terminal
+	// cannot tolerate interleaved log lines.
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	// Create the editor model
 	model, err := configeditor.New(path)
