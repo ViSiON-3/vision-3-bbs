@@ -73,6 +73,14 @@ func wfcAdminSubsystem(sess ssh.Session) {
 		slog.Info("wfc-admin: command", "user", handle, "addr", sess.RemoteAddr(), "cmd", cmd)
 	}
 
+	if adminServer == nil {
+		slog.Warn("wfc-admin: subsystem requested before admin server initialized", "remote", sess.RemoteAddr())
+		fmt.Fprintf(sess, "server not ready\r\n")
+		return
+	}
+
+	// ServeRPC's context governs only the internal subscriber goroutine; connection
+	// lifetime is enforced by the SSH session closing, which unblocks the read loop.
 	if err := admin.ServeRPC(context.Background(), sess, adminServer, audit); err != nil {
 		slog.Info("wfc-admin: session closed", "user", handle, "addr", sess.RemoteAddr(), "reason", err)
 	} else {
