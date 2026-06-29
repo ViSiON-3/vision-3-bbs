@@ -31,6 +31,12 @@ type Config struct {
 	PasswordHandler            func(ctx ssh.Context, password string) bool
 	KeyboardInteractiveHandler func(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool
 	Version                    string // SSH server banner version (default: "Vision3")
+	// PublicKeyHandler, when non-nil, is called to authenticate connecting
+	// clients by their public key. Return true to allow access.
+	PublicKeyHandler func(ctx ssh.Context, key ssh.PublicKey) bool
+	// SubsystemHandlers maps SSH subsystem names (e.g. "wfc-admin") to their
+	// handler functions. Clients may request a subsystem via the SSH protocol.
+	SubsystemHandlers map[string]func(ssh.Session)
 }
 
 // Server wraps a gliderlabs/ssh server.
@@ -65,6 +71,15 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	if cfg.KeyboardInteractiveHandler != nil {
 		srv.KeyboardInteractiveHandler = cfg.KeyboardInteractiveHandler
+	}
+	if cfg.PublicKeyHandler != nil {
+		srv.PublicKeyHandler = cfg.PublicKeyHandler
+	}
+	if len(cfg.SubsystemHandlers) > 0 {
+		srv.SubsystemHandlers = make(map[string]ssh.SubsystemHandler, len(cfg.SubsystemHandlers))
+		for name, h := range cfg.SubsystemHandlers {
+			srv.SubsystemHandlers[name] = ssh.SubsystemHandler(h)
+		}
 	}
 
 	// Configure algorithm suites via ServerConfigCallback.
