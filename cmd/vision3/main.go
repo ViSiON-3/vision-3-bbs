@@ -24,6 +24,7 @@ import (
 	"golang.org/x/term"
 
 	// Local packages (Update paths)
+	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
@@ -1734,6 +1735,18 @@ func main() {
 
 	// Initialize session registry for who's online tracking
 	sessionRegistry = session.NewSessionRegistry()
+
+	// Initialize and start the WFC admin server.
+	adminMinLevel = serverConfig.CoSysOpLevel
+	adminServer = admin.NewServer(admin.ServerConfig{
+		Reg:        sessionRegistry,
+		SystemName: serverConfig.BoardName,
+		StartedAt:  time.Now(),
+		Refresh:    time.Second,
+		MaxEvents:  200,
+		CallsToday: func() int { return -1 },
+	})
+	go adminServer.Run(context.Background())
 
 	// Load transfer protocol configuration
 	var loadedProtocols []transfer.ProtocolConfig
