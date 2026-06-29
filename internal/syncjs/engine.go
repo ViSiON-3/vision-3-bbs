@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -93,7 +93,7 @@ func (eng *Engine) Run(scriptPath string) error {
 	// Set initial exec_dir to the script's directory
 	eng.pushExecDir(filepath.Dir(scriptPath) + string(filepath.Separator))
 
-	log.Printf("INFO: SyncJS: Running script %s for node %d", scriptPath, eng.session.NodeNumber)
+	slog.Info("running SyncJS script", "path", scriptPath, "node", eng.session.NodeNumber)
 
 	_, err = eng.vm.RunScript(scriptPath, stripUseStrict(string(data)))
 	if err != nil {
@@ -115,7 +115,7 @@ func (eng *Engine) Close() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("WARN: SyncJS: exit handler panic: %v", r)
+					slog.Warn("exit handler panic", "panic", r)
 				}
 			}()
 			eng.exitHandlers[i](goja.Undefined())
@@ -126,7 +126,7 @@ func (eng *Engine) Close() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("WARN: SyncJS: exit code eval panic: %v", r)
+					slog.Warn("exit code eval panic", "panic", r)
 				}
 			}()
 			eng.vm.RunString(eng.exitCodes[i])
@@ -145,7 +145,7 @@ func (eng *Engine) Close() {
 		select {
 		case <-eng.copierDone:
 		case <-time.After(2 * time.Second):
-			log.Printf("WARN: SyncJS: copier goroutine did not exit within 2s; proceeding with cleanup")
+			slog.Warn("copier goroutine did not exit within 2s; proceeding with cleanup")
 		}
 	}
 	if eng.pipeReader != nil {
@@ -203,8 +203,8 @@ func (eng *Engine) writeRaw(s string) {
 
 // filterOutputResult holds the filtered output and flags for intercepted sequences.
 type filterOutputResult struct {
-	data    []byte
-	hasDSR  bool // true if \x1b[6n was intercepted (needs synthetic response)
+	data   []byte
+	hasDSR bool // true if \x1b[6n was intercepted (needs synthetic response)
 }
 
 // filterOutputSequences removes or intercepts problematic CSI sequences:

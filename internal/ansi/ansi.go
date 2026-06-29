@@ -3,7 +3,7 @@ package ansi
 import (
 	"bytes"
 	"fmt"
-	"log"
+	"log/slog"
 	"os" // Needed for chcp command
 	"strings"
 	"time"
@@ -213,7 +213,7 @@ var pipeCodeReplacements = map[string]string{
 // It replaces the previous DisplayAnsiFile which incorrectly wrote directly.
 // SAUCE metadata (if present) is automatically stripped from the returned content.
 func GetAnsiFileContent(filename string) ([]byte, error) {
-	log.Printf("DEBUG: Reading ANSI file content for %s", filename)
+	slog.Debug("reading ANSI file content", "filename", filename)
 
 	// Read the file
 	data, err := os.ReadFile(filename)
@@ -250,7 +250,7 @@ func stripSAUCE(data []byte) []byte {
 		return data
 	}
 
-	log.Printf("DEBUG: SAUCE metadata detected, stripping from content")
+	slog.Debug("SAUCE metadata detected; stripping from content")
 
 	// Search backwards from the SAUCE record to find the EOF marker (0x1A)
 	// The EOF marker should be immediately before the SAUCE record,
@@ -269,13 +269,13 @@ func stripSAUCE(data []byte) []byte {
 
 	// If we found the EOF marker, return content up to (but not including) it
 	if eofPos >= 0 {
-		log.Printf("DEBUG: Found EOF marker at position %d, trimming content", eofPos)
+		slog.Debug("found EOF marker; trimming content", "position", eofPos)
 		return data[:eofPos]
 	}
 
 	// If no EOF marker found, just remove the SAUCE record itself
 	// This handles malformed SAUCE or files without the EOF marker
-	log.Printf("DEBUG: No EOF marker found, removing SAUCE record only")
+	slog.Debug("no EOF marker found; removing SAUCE record only")
 	return data[:sauceStart]
 }
 
@@ -902,9 +902,9 @@ func StripAnsi(str string) string {
 
 // ProcessAnsiResult holds the results of processing an ANSI file, including field coordinates.
 type ProcessAnsiResult struct {
-	DisplayBytes []byte                                     // The processed bytes with standard ANSI escapes, ready for display.
-	FieldCoords  map[string]struct{ X, Y int }              // Map of |XX or ~XX codes to their calculated coordinates.
-	FieldColors  map[string]string                          // Map of |XX or ~XX codes to their ANSI color escape sequence at that position.
+	DisplayBytes []byte                        // The processed bytes with standard ANSI escapes, ready for display.
+	FieldCoords  map[string]struct{ X, Y int } // Map of |XX or ~XX codes to their calculated coordinates.
+	FieldColors  map[string]string             // Map of |XX or ~XX codes to their ANSI color escape sequence at that position.
 }
 
 // ProcessAnsiAndExtractCoords processes raw CP437 byte content containing ViSiON/2 codes and ANSI escapes.
@@ -1017,7 +1017,7 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 						break
 					} else {
 						// Invalid character in sequence, break parsing for this sequence
-						log.Printf("WARN: Invalid char 0x%X in ANSI sequence at index %d", char, j)
+						slog.Warn("invalid char in ANSI sequence", "char", fmt.Sprintf("0x%X", char), "index", j)
 						terminatorIndex = j - 1 // Treat previous char as end? Or handle differently?
 						break
 					}
@@ -1127,18 +1127,18 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 						}
 					case 's': // Save cursor position (DEC)
 						// We might need to store this if |P uses it, but handle simple cases first
-						log.Printf("TRACE: Ignoring ANSI Save Cursor (ESC[s)")
+						slog.Debug("ignoring ANSI save cursor (ESC[s)")
 					case 'u': // Restore cursor position (DEC)
 						// We might need to store this if |PP uses it, but handle simple cases first
-						log.Printf("TRACE: Ignoring ANSI Restore Cursor (ESC[u)")
+						slog.Debug("ignoring ANSI restore cursor (ESC[u)")
 						// Add other sequences like J (Erase), K (Erase Line) if needed,
 						// but they usually don't affect cursor position themselves.
 					}
 					// Log the coordinate change for debugging
-					// log.Printf("TRACE: ANSI Seq '%s', new coords (%d, %d)", string(content[start:terminatorIndex+1]), currentX, currentY)
+					// slog.Debug("ANSI seq", "seq", string(content[start:terminatorIndex+1]), "x", currentX, "y", currentY)
 
 				} else {
-					log.Printf("WARN: Incomplete or invalid ANSI CSI sequence starting at index %d", start)
+					slog.Warn("incomplete or invalid ANSI CSI sequence", "index", start)
 					displayBuf.WriteByte(b) // Write only ESC as fallback
 				}
 			} else {
@@ -1257,7 +1257,7 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 							placeholderCode := string(content[i+1 : i+2])
 							result.FieldCoords[placeholderCode] = struct{ X, Y int }{X: currentX, Y: currentY}
 							result.FieldColors[placeholderCode] = buildColorSequence()
-							log.Printf("DEBUG: ProcessAnsi recorded dual-purpose coord '%s' at (%d, %d)", placeholderCode, currentX, currentY)
+							slog.Debug("recorded dual-purpose coord", "code", placeholderCode, "x", currentX, "y", currentY)
 						}
 					}
 				}
@@ -1270,16 +1270,18 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 							// Double letter |XX placeholder
 							placeholderCode := string(content[i+1 : i+3])
 							result.FieldCoords[placeholderCode] = struct{ X, Y int }{X: currentX, Y: currentY}
-							result.FieldColors[placeholderCode] = buildColorSequence()
-							log.Printf("DEBUG: ProcessAnsi recorded placeholder coord '%s' at (%d, %d) with color '%s'", placeholderCode, currentX, currentY, buildColorSequence())
+							color := buildColorSequence()
+							result.FieldColors[placeholderCode] = color
+							slog.Debug("recorded placeholder coord", "code", placeholderCode, "x", currentX, "y", currentY, "color", color)
 							consumed = 3
 							pipeCodeFound = true
 						} else {
 							// Single letter |X placeholder
 							placeholderCode := string(content[i+1 : i+2])
 							result.FieldCoords[placeholderCode] = struct{ X, Y int }{X: currentX, Y: currentY}
-							result.FieldColors[placeholderCode] = buildColorSequence()
-							log.Printf("DEBUG: ProcessAnsi recorded placeholder coord '%s' at (%d, %d) with color '%s'", placeholderCode, currentX, currentY, buildColorSequence())
+							color := buildColorSequence()
+							result.FieldColors[placeholderCode] = color
+							slog.Debug("recorded placeholder coord", "code", placeholderCode, "x", currentX, "y", currentY, "color", color)
 							consumed = 2
 							pipeCodeFound = true
 						}
@@ -1333,8 +1335,9 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 			if i+2 < len(content) && content[i+1] >= 'A' && content[i+1] <= 'Z' && content[i+2] >= 'A' && content[i+2] <= 'Z' {
 				code := string(content[i+1 : i+3])
 				result.FieldCoords[code] = struct{ X, Y int }{X: currentX, Y: currentY}
-				result.FieldColors[code] = buildColorSequence()
-				log.Printf("DEBUG: ProcessAnsi found coord code %s at (%d, %d) with color '%s'", code, currentX, currentY, buildColorSequence())
+				color := buildColorSequence()
+				result.FieldColors[code] = color
+				slog.Debug("found coord code", "code", code, "x", currentX, "y", currentY, "color", color)
 				consumed = 3 // Consume ~XX, write nothing
 			} else {
 				// Invalid ~ sequence, write literally
