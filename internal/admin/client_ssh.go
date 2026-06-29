@@ -1,8 +1,11 @@
 package admin
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"sync"
+	"time"
 
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -37,10 +40,7 @@ type SSHChannelClient struct {
 func (c *SSHChannelClient) Close() error {
 	streamErr := c.StreamClient.Close()
 	connErr := c.conn.Close()
-	if streamErr != nil {
-		return streamErr
-	}
-	return connErr
+	return errors.Join(streamErr, connErr)
 }
 
 // DialSSH connects to the SSH server at cfg.Addr, opens the wfc-admin
@@ -66,6 +66,7 @@ func DialSSH(cfg SSHDialConfig) (*SSHChannelClient, error) {
 			gossh.PublicKeys(cfg.Signer),
 		},
 		HostKeyCallback: hostKeyCallback,
+		Timeout:         10 * time.Second,
 	}
 
 	conn, err := gossh.Dial("tcp", cfg.Addr, clientCfg)
@@ -98,27 +99,26 @@ func DialSSH(cfg SSHDialConfig) (*SSHChannelClient, error) {
 // sshSessionRWC wraps an *gossh.Session, combining its stdin writer and
 // stdout reader into a single io.ReadWriteCloser for the stream protocol.
 type sshSessionRWC struct {
-	sess   *gossh.Session
-	stdin  io.WriteCloser
-	stdout io.Reader
-	opened bool
+	sess    *gossh.Session
+	once    sync.Once
+	stdin   io.WriteCloser
+	stdout  io.Reader
+	openErr error
 }
 
 func (s *sshSessionRWC) ensureOpen() error {
-	if s.opened {
-		return nil
-	}
-	var err error
-	s.stdin, err = s.sess.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("admin: ssh stdin pipe: %w", err)
-	}
-	s.stdout, err = s.sess.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("admin: ssh stdout pipe: %w", err)
-	}
-	s.opened = true
-	return nil
+	s.once.Do(func() {
+		s.stdin, s.openErr = s.sess.StdinPipe()
+		if s.openErr != nil {
+			s.openErr = fmt.Errorf("admin: ssh stdin pipe: %w", s.openErr)
+			return
+		}
+		s.stdout, s.openErr = s.sess.StdoutPipe()
+		if s.openErr != nil {
+			s.openErr = fmt.Errorf("admin: ssh stdout pipe: %w", s.openErr)
+		}
+	})
+	return s.openErr
 }
 
 func (s *sshSessionRWC) Read(p []byte) (int, error) {

@@ -5,11 +5,13 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"net"
+	"os"
 	"testing"
 	"time"
 
 	gliderssh "github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // genEd25519Signer returns a new ephemeral ed25519 signer.
@@ -147,4 +149,102 @@ func TestSSHDialConfig_InsecureIgnoresKnownHosts(t *testing.T) {
 	if snap.SystemName != "InsecureTest" {
 		t.Errorf("SystemName = %q, want %q", snap.SystemName, "InsecureTest")
 	}
+}
+
+// startSSHTestServer sets up a gliderlabs SSH server with the given host signer
+// over the wfc-admin subsystem and returns the listener address.
+func startSSHTestServer(t *testing.T, ctx context.Context, srv *Server, hostSigner gossh.Signer) string {
+	t.Helper()
+	gliderSrv := &gliderssh.Server{
+		HostSigners:      []gliderssh.Signer{hostSigner},
+		PublicKeyHandler: func(_ gliderssh.Context, _ gliderssh.PublicKey) bool { return true },
+		SubsystemHandlers: map[string]gliderssh.SubsystemHandler{
+			"wfc-admin": func(s gliderssh.Session) {
+				_ = ServeRPC(ctx, s, srv, nil)
+			},
+		},
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() { _ = gliderSrv.Serve(ln) }()
+	t.Cleanup(func() { _ = gliderSrv.Close() })
+	return ln.Addr().String()
+}
+
+func TestSSHChannelClient_SecurePath(t *testing.T) {
+	srv := NewServer(ServerConfig{
+		Reg:        &fakeRegistry{},
+		SystemName: "SecureNode",
+		StartedAt:  time.Now(),
+		MaxEvents:  8,
+		CallsToday: func() int { return -1 },
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go srv.Run(ctx)
+
+	hostSigner := genEd25519Signer(t)
+	clientSigner := genEd25519Signer(t)
+	addr := startSSHTestServer(t, ctx, srv, hostSigner)
+
+	// Write a proper known_hosts file for the server's host key.
+	hostPubKey := hostSigner.PublicKey()
+	knownHostsLine := knownhosts.Line([]string{addr}, hostPubKey)
+	tmpFile, err := os.CreateTemp(t.TempDir(), "known_hosts")
+	if err != nil {
+		t.Fatalf("create temp known_hosts: %v", err)
+	}
+	if _, err := tmpFile.WriteString(knownHostsLine + "\n"); err != nil {
+		t.Fatalf("write known_hosts: %v", err)
+	}
+	tmpFile.Close()
+
+	// Positive case: secure dial with a valid known_hosts entry must succeed.
+	t.Run("valid_known_hosts", func(t *testing.T) {
+		client, err := DialSSH(SSHDialConfig{
+			Addr:           addr,
+			User:           "sysop",
+			Signer:         clientSigner,
+			KnownHostsPath: tmpFile.Name(),
+			Insecure:       false,
+		})
+		if err != nil {
+			t.Fatalf("DialSSH (secure): %v", err)
+		}
+		defer client.Close()
+
+		var _ AdminClient = client
+
+		snapCtx, snapCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer snapCancel()
+		snap, err := client.Snapshot(snapCtx)
+		if err != nil {
+			t.Fatalf("Snapshot: %v", err)
+		}
+		if snap.SystemName != "SecureNode" {
+			t.Errorf("SystemName = %q, want %q", snap.SystemName, "SecureNode")
+		}
+	})
+
+	// Negative case: empty known_hosts must cause host key rejection.
+	t.Run("empty_known_hosts_rejected", func(t *testing.T) {
+		emptyFile, err := os.CreateTemp(t.TempDir(), "known_hosts_empty")
+		if err != nil {
+			t.Fatalf("create empty known_hosts: %v", err)
+		}
+		emptyFile.Close()
+
+		_, err = DialSSH(SSHDialConfig{
+			Addr:           addr,
+			User:           "sysop",
+			Signer:         clientSigner,
+			KnownHostsPath: emptyFile.Name(),
+			Insecure:       false,
+		})
+		if err == nil {
+			t.Fatal("DialSSH with empty known_hosts: expected error, got nil")
+		}
+	})
 }
