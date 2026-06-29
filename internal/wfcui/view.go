@@ -2,6 +2,7 @@ package wfcui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -120,7 +121,7 @@ func (m Model) listView() string {
 func (m Model) renderHeader(st colorSet) string {
 	sysName := "ViSiON/3 WFC"
 	activeNodes := 0
-	callsToday := 0
+	callsTodayStr := "—" // em dash: shown before any snapshot arrives
 	uptime := ""
 
 	if m.snapshot != nil {
@@ -128,13 +129,18 @@ func (m Model) renderHeader(st colorSet) string {
 			sysName = m.snapshot.SystemName
 		}
 		activeNodes = m.snapshot.Counters.ActiveNodes
-		callsToday = m.snapshot.Counters.CallsToday
+		// CallsToday uses -1 as a sentinel meaning "unavailable".
+		if m.snapshot.Counters.CallsToday < 0 {
+			callsTodayStr = "—"
+		} else {
+			callsTodayStr = strconv.Itoa(m.snapshot.Counters.CallsToday)
+		}
 		uptime = formatUptime(m.snapshot.UptimeSecs)
 	}
 
 	now := time.Now().Format("15:04:05")
-	header := fmt.Sprintf(" %s  |  Nodes: %d  |  Calls Today: %d  |  Uptime: %s  |  %s",
-		sysName, activeNodes, callsToday, uptime, now)
+	header := fmt.Sprintf(" %s  |  Nodes: %d  |  Calls Today: %s  |  Uptime: %s  |  %s",
+		sysName, activeNodes, callsTodayStr, uptime, now)
 	return st.header.Render(header)
 }
 

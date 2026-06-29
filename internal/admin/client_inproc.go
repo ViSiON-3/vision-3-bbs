@@ -2,11 +2,19 @@ package admin
 
 import "context"
 
-// InProcessClient adapts a *Server to AdminClient for daemon-embedded use
-// (the --wfc local console and the server-side SSH admin TUI). No serialization.
+// InProcessClient adapts a *Server to the AdminClient interface without any
+// network serialization. It is intentional architecture, NOT dead code.
+//
+// Design context: the spec defines two consumer paths for AdminClient —
+// (1) the daemon-embedded local console launched via the --wfc flag, and
+// (2) the server-side SSH admin TUI — both of which run in-process against the
+// daemon and therefore use InProcessClient instead of the gRPC/net transport.
+// These consumers are deferred to a later phase; InProcessClient is the
+// pre-wired adapter that will slot in when that phase lands.
 type InProcessClient struct{ srv *Server }
 
-// NewInProcessClient wraps a running Server.
+// NewInProcessClient wraps a running Server so it can be consumed via the
+// AdminClient interface in-process (no serialization, no network hop).
 func NewInProcessClient(srv *Server) *InProcessClient { return &InProcessClient{srv: srv} }
 
 func (c *InProcessClient) Snapshot(ctx context.Context) (*SystemSnapshot, error) {

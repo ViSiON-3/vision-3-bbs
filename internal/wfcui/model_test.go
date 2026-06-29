@@ -16,7 +16,7 @@ func TestUpdateAppliesSnapshotAndSelection(t *testing.T) {
 	snap := &admin.SystemSnapshot{SystemName: "T", Time: time.Now(), Nodes: []admin.NodeState{
 		{NodeID: 1, Handle: "A"}, {NodeID: 2, Handle: "B"},
 	}}
-	mi, _ := m.Update(snapshotMsg{snap})
+	mi, _ := m.Update(snapshotMsg{snap: snap})
 	m = mi.(Model)
 	if m.snapshot == nil || len(m.snapshot.Nodes) != 2 {
 		t.Fatalf("snapshot not applied: %+v", m.snapshot)
@@ -55,6 +55,36 @@ func TestErrMsgEntersDisconnected(t *testing.T) {
 type errStub struct{}
 
 func (errStub) Error() string { return "boom" }
+
+// TestSnapshotMsgPollRearm verifies that the Update handler only re-arms
+// pollCmd when snapshotMsg.fromPoll is true (the sustaining tick loop), and
+// does NOT spawn a new chain for one-shot fetches (fromPoll=false). This
+// prevents unbounded tea.Tick accumulation when the user presses R or on Init.
+func TestSnapshotMsgPollRearm(t *testing.T) {
+	snap := &admin.SystemSnapshot{SystemName: "T", Time: time.Now()}
+
+	// fromPoll=false (one-shot fetch: Init paint or R-key) — must NOT re-arm.
+	m := New(nil, Options{MaxEvents: 10})
+	_, cmd := m.Update(snapshotMsg{snap: snap, fromPoll: false})
+	if cmd != nil {
+		t.Error("one-shot snapshotMsg (fromPoll=false) must not return a re-arm cmd")
+	}
+
+	// fromPoll=true (tick loop) with nil client — nil client guard must prevent re-arm.
+	_, cmd = m.Update(snapshotMsg{snap: snap, fromPoll: true})
+	if cmd != nil {
+		t.Error("poll snapshotMsg with nil client must not return a re-arm cmd")
+	}
+
+	// fromPoll=true with a real client — must re-arm.
+	srv := admin.NewServer(admin.ServerConfig{})
+	client := admin.NewInProcessClient(srv)
+	m2 := New(client, Options{MaxEvents: 10})
+	_, cmd = m2.Update(snapshotMsg{snap: snap, fromPoll: true})
+	if cmd == nil {
+		t.Error("poll snapshotMsg (fromPoll=true) with non-nil client must return a re-arm cmd")
+	}
+}
 
 func TestWindowSizeModeTooSmall(t *testing.T) {
 	m := New(nil, Options{MaxEvents: 10})
