@@ -26,9 +26,25 @@ regular logins.
 
 ## Enabling access for a sysop
 
-There is not yet a TUI field for this in `ue`, so register your public key
-directly on the account in `data/users/users.json`. Add a `publicKeys` array
-containing your SSH public key line (the contents of e.g. `~/.ssh/id_ed25519.pub`):
+A user can use WFC once their `accessLevel` is ≥ your `coSysOpLevel` (the
+default sysop account is 255) and they have an SSH public key registered. You
+can register keys with the built-in tools — no JSON editing required:
+
+- **In `ue`** — open the user, activate the **WFC Keys** field, then `[A]dd` /
+  `[D]elete` keys. Keys are shown by SHA256 fingerprint + comment.
+- **From the CLI** — `helper users addkey <handle> <keyfile|->`,
+  `helper users listkeys <handle>`, and
+  `helper users delkey <handle> <fingerprint|index>`. For example, to onboard a
+  co-sysop who sent you their `co.pub`:
+  ```bash
+  helper users addkey TheirHandle co.pub
+  ```
+
+Keys are validated with the same SSH library WFC auth uses, so an added key is
+guaranteed usable; duplicates and malformed keys are rejected.
+
+You can still edit `data/users/users.json` by hand if you prefer — add a
+`publicKeys` array of OpenSSH public-key lines:
 
 ```json
 {
@@ -40,12 +56,13 @@ containing your SSH public key line (the contents of e.g. `~/.ssh/id_ed25519.pub
 }
 ```
 
-- `accessLevel` must be ≥ your `coSysOpLevel` (the default sysop account is 255).
-- `publicKeys` may hold more than one key (e.g. one per machine you connect from).
-- Edit the file while convenient; the daemon reads the user record at connect time.
-
 > Keep your **private** key on your own machine only. Only the **public** key
 > (`.pub`) goes into `users.json`.
+
+> **Restart note:** `ue` and `helper` are separate programs that edit
+> `users.json`; the running BBS loads users at startup and does **not**
+> hot-reload that file. After adding or removing a key while the BBS is running,
+> **restart the BBS** for the change to take effect.
 
 ## Building `wfc`
 
