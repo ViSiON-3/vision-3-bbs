@@ -3,7 +3,7 @@ package ziplab
 import (
 	"bufio"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -111,7 +111,7 @@ func ParseNFO(filePath string) (*NFOConfig, error) {
 		// Parse: "1D = 45,10,112,116,███"
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
-			log.Printf("WARN: NFO line %d: invalid format (no '='): %s", lineNum, line)
+			slog.Warn("nfo invalid format (no '=')", "line", lineNum, "content", line)
 			continue
 		}
 
@@ -119,7 +119,7 @@ func ParseNFO(filePath string) (*NFOConfig, error) {
 		value := strings.TrimSpace(parts[1])
 
 		if len(key) < 2 {
-			log.Printf("WARN: NFO line %d: key too short: %s", lineNum, key)
+			slog.Warn("nfo key too short", "line", lineNum, "key", key)
 			continue
 		}
 
@@ -129,7 +129,7 @@ func ParseNFO(filePath string) (*NFOConfig, error) {
 
 		step, err := strconv.Atoi(stepStr)
 		if err != nil {
-			log.Printf("WARN: NFO line %d: invalid step number: %s", lineNum, stepStr)
+			slog.Warn("nfo invalid step number", "line", lineNum, "step", stepStr)
 			continue
 		}
 
@@ -142,35 +142,35 @@ func ParseNFO(filePath string) (*NFOConfig, error) {
 		case "F":
 			status = StatusFail
 		default:
-			log.Printf("WARN: NFO line %d: unknown status '%s'", lineNum, statusChar)
+			slog.Warn("nfo unknown status", "line", lineNum, "status", statusChar)
 			continue
 		}
 
 		// Parse value: X,Y,NormalColor,HiColor,DisplayChars
 		valueParts := strings.SplitN(value, ",", 5)
 		if len(valueParts) < 5 {
-			log.Printf("WARN: NFO line %d: expected 5 comma-separated values, got %d", lineNum, len(valueParts))
+			slog.Warn("nfo expected 5 comma-separated values", "line", lineNum, "count", len(valueParts))
 			continue
 		}
 
 		col, err := strconv.Atoi(strings.TrimSpace(valueParts[0]))
 		if err != nil {
-			log.Printf("WARN: NFO line %d: invalid X coordinate: %s", lineNum, valueParts[0])
+			slog.Warn("nfo invalid X coordinate", "line", lineNum, "value", valueParts[0])
 			continue
 		}
 		row, err := strconv.Atoi(strings.TrimSpace(valueParts[1]))
 		if err != nil {
-			log.Printf("WARN: NFO line %d: invalid Y coordinate: %s", lineNum, valueParts[1])
+			slog.Warn("nfo invalid Y coordinate", "line", lineNum, "value", valueParts[1])
 			continue
 		}
 		normalColor, err := strconv.Atoi(strings.TrimSpace(valueParts[2]))
 		if err != nil {
-			log.Printf("WARN: NFO line %d: invalid normal color: %s", lineNum, valueParts[2])
+			slog.Warn("nfo invalid normal color", "line", lineNum, "value", valueParts[2])
 			continue
 		}
 		hiColor, err := strconv.Atoi(strings.TrimSpace(valueParts[3]))
 		if err != nil {
-			log.Printf("WARN: NFO line %d: invalid hi color: %s", lineNum, valueParts[3])
+			slog.Warn("nfo invalid hi color", "line", lineNum, "value", valueParts[3])
 			continue
 		}
 		displayChars := strings.TrimSpace(valueParts[4])
@@ -190,7 +190,7 @@ func ParseNFO(filePath string) (*NFOConfig, error) {
 		return nil, fmt.Errorf("error reading NFO file %s: %w", filePath, err)
 	}
 
-	log.Printf("DEBUG: Parsed %d NFO entries from %s", len(nfo.Entries), filePath)
+	slog.Debug("parsed nfo entries", "count", len(nfo.Entries), "path", filePath)
 	return nfo, nil
 }
 
@@ -208,8 +208,8 @@ func (n *NFOConfig) MaxRow() int {
 // DOSColorToANSI converts a DOS color attribute (bg*16 + fg) to ANSI components.
 // Returns foreground color (0-15), background color (0-7), and whether bold is needed.
 func DOSColorToANSI(dosAttr int) (fg int, bg int, bold bool) {
-	fg = dosAttr & 0x0F   // Lower 4 bits = foreground (0-15)
+	fg = dosAttr & 0x0F        // Lower 4 bits = foreground (0-15)
 	bg = (dosAttr >> 4) & 0x07 // Bits 4-6 = background (0-7)
-	bold = fg >= 8         // High bit of foreground = bold/bright
+	bold = fg >= 8             // High bit of foreground = bold/bright
 	return fg, bg, bold
 }

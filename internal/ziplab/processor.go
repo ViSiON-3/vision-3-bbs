@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,7 +41,7 @@ func (p *Processor) resolvePath(path string) string {
 // For external formats, it runs the configured test command.
 func (p *Processor) StepTestIntegrity(archivePath string) error {
 	if !p.config.Steps.TestIntegrity.Enabled {
-		log.Printf("INFO: ZipLab step 1 (test integrity) skipped — disabled")
+		slog.Info("step 1 (test integrity) skipped — disabled")
 		return nil
 	}
 
@@ -82,7 +82,7 @@ func (p *Processor) testZipIntegrity(zipPath string) error {
 // Returns the path to the work directory.
 func (p *Processor) StepExtract(archivePath string) (string, error) {
 	if !p.config.Steps.ExtractToTemp.Enabled {
-		log.Printf("INFO: ZipLab step 2 (extract) skipped — disabled")
+		slog.Info("step 2 (extract) skipped — disabled")
 		return "", nil
 	}
 
@@ -165,7 +165,7 @@ func (p *Processor) extractZip(zipPath, destDir string) error {
 // StepVirusScan (Step 3) runs a configurable external virus scanner.
 func (p *Processor) StepVirusScan(workDir string) error {
 	if !p.config.Steps.VirusScan.Enabled {
-		log.Printf("INFO: ZipLab step 3 (virus scan) skipped — disabled")
+		slog.Info("step 3 (virus scan) skipped — disabled")
 		return nil
 	}
 
@@ -178,7 +178,7 @@ func (p *Processor) StepVirusScan(workDir string) error {
 // workDir is used to find FILE_ID.DIZ; archivePath is the ZIP to strip ad files from.
 func (p *Processor) StepRemoveAdsAndDIZ(workDir, archivePath string) (string, error) {
 	if !p.config.Steps.RemoveAds.Enabled {
-		log.Printf("INFO: ZipLab step 5 (remove ads/DIZ) skipped — disabled")
+		slog.Info("step 5 (remove ads/DIZ) skipped — disabled")
 		return "", nil
 	}
 
@@ -198,7 +198,7 @@ func (p *Processor) StepRemoveAdsAndDIZ(workDir, archivePath string) (string, er
 		at, ok := p.config.GetArchiveType(archivePath)
 		if ok && at.Native {
 			if err := p.removeFilesFromZip(archivePath, patterns); err != nil {
-				log.Printf("WARN: failed to remove ad files from archive: %v", err)
+				slog.Warn("failed to remove ad files from archive", "error", err)
 			}
 		}
 	}
@@ -252,7 +252,7 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 	seen := make(map[string]bool)
 	for _, f := range r.File {
 		if shouldRemoveFile(f.Name, patterns) {
-			log.Printf("INFO: removing ad file from archive: %s", f.Name)
+			slog.Info("removing ad file from archive", "file", f.Name)
 			removed++
 			continue
 		}
@@ -324,7 +324,7 @@ func (p *Processor) findAndReadDIZ(workDir string) string {
 
 	data, readErr := os.ReadFile(target)
 	if readErr != nil {
-		log.Printf("WARN: found %s but failed to read: %v", filepath.Base(target), readErr)
+		slog.Warn("found diz file but failed to read", "file", filepath.Base(target), "error", readErr)
 		return ""
 	}
 	return cleanDIZ(string(stripSauceMetadata(data)))
@@ -339,7 +339,7 @@ func (p *Processor) loadRemovePatterns() []string {
 
 	f, err := os.Open(patternsPath)
 	if err != nil {
-		log.Printf("WARN: could not open patterns file %s: %v", patternsPath, err)
+		slog.Warn("could not open patterns file", "path", patternsPath, "error", err)
 		return nil
 	}
 	defer f.Close()
@@ -365,9 +365,9 @@ func (p *Processor) removeMatchingFiles(dir, pattern string) {
 		if !entry.IsDir() && strings.EqualFold(entry.Name(), pattern) {
 			target := filepath.Join(dir, entry.Name())
 			if err := os.Remove(target); err != nil {
-				log.Printf("WARN: failed to remove %s: %v", target, err)
+				slog.Warn("failed to remove ad file", "path", target, "error", err)
 			} else {
-				log.Printf("INFO: removed ad file: %s", entry.Name())
+				slog.Info("removed ad file", "file", entry.Name())
 			}
 		}
 	}
@@ -376,7 +376,7 @@ func (p *Processor) removeMatchingFiles(dir, pattern string) {
 // StepAddComment (Step 6) adds a ZIP comment from the configured comment file.
 func (p *Processor) StepAddComment(archivePath string) error {
 	if !p.config.Steps.AddComment.Enabled {
-		log.Printf("INFO: ZipLab step 6 (add comment) skipped — disabled")
+		slog.Info("step 6 (add comment) skipped — disabled")
 		return nil
 	}
 
@@ -438,7 +438,7 @@ func (p *Processor) setZipComment(zipPath, comment string) (retErr error) {
 // StepIncludeFile (Step 7) adds a file (e.g., BBS.AD) into the archive.
 func (p *Processor) StepIncludeFile(archivePath string) error {
 	if !p.config.Steps.IncludeFile.Enabled {
-		log.Printf("INFO: ZipLab step 7 (include file) skipped — disabled")
+		slog.Info("step 7 (include file) skipped — disabled")
 		return nil
 	}
 

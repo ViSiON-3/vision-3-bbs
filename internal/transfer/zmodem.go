@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,8 +87,7 @@ func adaptiveCopy(dst io.Writer, src io.Reader, backoff *atomic.Int32) (int64, e
 					chunkSize = adaptiveMinChunk
 				}
 				writesAtLevel = 0
-				log.Printf("DEBUG: adaptiveCopy: ZRPOS backoff %d→%d bytes (signal #%d) at %d total bytes",
-					oldChunk, chunkSize, cur, total)
+				slog.Debug("adaptiveCopy ZRPOS backoff", "from", oldChunk, "to", chunkSize, "signal", cur, "total", total)
 			}
 		}
 
@@ -101,7 +100,7 @@ func adaptiveCopy(dst io.Writer, src io.Reader, backoff *atomic.Int32) (int64, e
 				chunkSize = adaptiveMaxChunk
 			}
 			writesAtLevel = 0
-			log.Printf("DEBUG: adaptiveCopy: ramp %d→%d bytes at %d total bytes", oldChunk, chunkSize, total)
+			slog.Debug("adaptiveCopy ramp", "from", oldChunk, "to", chunkSize, "total", total)
 		}
 
 		nr, rerr := src.Read(buf[:chunkSize])
@@ -110,21 +109,20 @@ func adaptiveCopy(dst io.Writer, src io.Reader, backoff *atomic.Int32) (int64, e
 			total += int64(nw)
 			hasher.Write(buf[:nr])
 			if werr != nil {
-				log.Printf("DEBUG: adaptiveCopy: write error after %d bytes: %v", total, werr)
+				slog.Debug("adaptiveCopy write error", "total", total, "error", werr)
 				return total, werr
 			}
 			if nw != nr {
-				log.Printf("DEBUG: adaptiveCopy: short write %d/%d after %d total bytes", nw, nr, total)
+				slog.Debug("adaptiveCopy short write", "wrote", nw, "expected", nr, "total", total)
 				return total, io.ErrShortWrite
 			}
 		}
 		if rerr != nil {
 			if rerr == io.EOF {
-				log.Printf("DEBUG: adaptiveCopy: finished. Bytes=%d ChunkSize=%d SHA256=%x",
-					total, chunkSize, hasher.Sum(nil))
+				slog.Debug("adaptiveCopy finished", "bytes", total, "chunk", chunkSize, "sha256", fmt.Sprintf("%x", hasher.Sum(nil)))
 				return total, nil
 			}
-			log.Printf("DEBUG: adaptiveCopy: read error after %d bytes: %v", total, rerr)
+			slog.Debug("adaptiveCopy read error", "total", total, "error", rerr)
 			return total, rerr
 		}
 	}
@@ -156,7 +154,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	log.Printf("DEBUG: Starting command '%s' in DIRECT (no-PTY) mode", cmd.Path)
+	slog.Debug("starting command in direct (no-PTY) mode", "cmd", cmd.Path)
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -228,8 +226,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 							chunk := combined[i-3 : i+1]
 							if chunk[0] == 0x2a && chunk[1] == 0x18 && chunk[2] == 0x41 {
 								zrposBackoff.Add(1)
-								log.Printf("DEBUG: (%s) ZRPOS binary header detected across boundary at offset %d (backoff #%d)",
-									cmd.Path, total-int64(prevLen)+int64(i), zrposBackoff.Load())
+								slog.Debug("ZRPOS binary header detected across boundary", "cmd", cmd.Path, "offset", total-int64(prevLen)+int64(i), "backoff", zrposBackoff.Load())
 							}
 						}
 						if b == '9' && i >= 5 {
@@ -237,8 +234,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 							if chunk[0] == 0x2a && chunk[1] == 0x2a && chunk[2] == 0x18 &&
 								chunk[3] == 0x42 && chunk[4] == '0' {
 								zrposBackoff.Add(1)
-								log.Printf("DEBUG: (%s) ZRPOS hex header detected across boundary at offset %d (backoff #%d)",
-									cmd.Path, total-int64(prevLen)+int64(i), zrposBackoff.Load())
+								slog.Debug("ZRPOS hex header detected across boundary", "cmd", cmd.Path, "offset", total-int64(prevLen)+int64(i), "backoff", zrposBackoff.Load())
 							}
 						}
 					}
@@ -260,7 +256,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 						canRun++
 						if canRun >= 5 && !killed {
 							killed = true
-							log.Printf("DEBUG: (%s) ZModem CAN abort detected in stdin; killing process", cmd.Path)
+							slog.Debug("ZModem CAN abort detected in stdin, killing process", "cmd", cmd.Path)
 							if cmd.Process != nil {
 								_ = cmd.Process.Kill()
 							}
@@ -280,8 +276,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 						if chunk[0] == 0x2a && chunk[1] == 0x18 && chunk[2] == 0x41 {
 							// Binary ZRPOS header: * ZDLE A ZRPOS
 							zrposBackoff.Add(1)
-							log.Printf("DEBUG: (%s) ZRPOS binary header detected in stdin at offset %d (backoff #%d)",
-								cmd.Path, total+int64(i), zrposBackoff.Load())
+							slog.Debug("ZRPOS binary header detected in stdin", "cmd", cmd.Path, "offset", total+int64(i), "backoff", zrposBackoff.Load())
 						}
 					}
 					if b == '9' && i >= 5 {
@@ -290,8 +285,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 							chunk[3] == 0x42 && chunk[4] == '0' {
 							// Hex ZRPOS header: ** ZDLE B 0 9
 							zrposBackoff.Add(1)
-							log.Printf("DEBUG: (%s) ZRPOS hex header detected in stdin at offset %d (backoff #%d)",
-								cmd.Path, total+int64(i), zrposBackoff.Load())
+							slog.Debug("ZRPOS hex header detected in stdin", "cmd", cmd.Path, "offset", total+int64(i), "backoff", zrposBackoff.Load())
 						}
 					}
 				}
@@ -319,7 +313,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 				break
 			}
 		}
-		log.Printf("DEBUG: (%s) direct stdin copy finished. Bytes: %d, Error: %v", cmd.Path, total, cpErr)
+		slog.Debug("direct stdin copy finished", "cmd", cmd.Path, "bytes", total, "error", cpErr)
 		_ = stdinPipe.Close()
 	}()
 
@@ -334,7 +328,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 			for {
 				select {
 				case <-timer.C:
-					log.Printf("DEBUG: (%s) no client stdin activity for %v; killing process", cmd.Path, stdinIdleTimeout)
+					slog.Debug("no client stdin activity, killing process", "cmd", cmd.Path, "idle", stdinIdleTimeout)
 					if cmd.Process != nil {
 						_ = cmd.Process.Kill()
 					}
@@ -368,13 +362,13 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	go func() {
 		dst := io.Writer(s)
 		if rw, ok := s.(rawBinaryWriter); ok {
-			log.Printf("DEBUG: (%s) using RawWrite for binary-safe output (type=%T)", cmd.Path, s)
+			slog.Debug("using RawWrite for binary-safe output", "cmd", cmd.Path, "type", fmt.Sprintf("%T", s))
 			dst = writeFunc(rw.RawWrite)
 		} else {
-			log.Printf("WARN: (%s) rawBinaryWriter assertion FAILED (type=%T), falling back to session.Write", cmd.Path, s)
+			slog.Warn("rawBinaryWriter assertion failed, falling back to session.Write", "cmd", cmd.Path, "type", fmt.Sprintf("%T", s))
 		}
 		n, cpErr := adaptiveCopy(dst, stdoutPipe, &zrposBackoff)
-		log.Printf("DEBUG: (%s) direct stdout copy finished. Bytes: %d, Error: %v", cmd.Path, n, cpErr)
+		slog.Debug("direct stdout copy finished", "cmd", cmd.Path, "bytes", n, "error", cpErr)
 		outputDone <- cpErr
 	}()
 
@@ -401,7 +395,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		case err := <-waitDone:
 			cmdDone <- cmdResult{waitErr: err, copyErr: copyErr}
 		case <-time.After(postOutputGrace):
-			log.Printf("DEBUG: (%s) process still running %v after output closed; killing", cmd.Path, postOutputGrace)
+			slog.Debug("process still running after output closed, killing", "cmd", cmd.Path, "grace", postOutputGrace)
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
@@ -412,7 +406,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	var cmdErr error
 	select {
 	case <-ctx.Done():
-		log.Printf("DEBUG: (%s) transfer cancelled or timed out, killing process", cmd.Path)
+		slog.Debug("transfer cancelled or timed out, killing process", "cmd", cmd.Path)
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
@@ -422,7 +416,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		select {
 		case <-cmdDone:
 		case <-time.After(5 * time.Second):
-			log.Printf("WARN: (%s) timed out waiting for command goroutine after cancel", cmd.Path)
+			slog.Warn("timed out waiting for command goroutine after cancel", "cmd", cmd.Path)
 		}
 		cmdErr = ctx.Err()
 	case res := <-cmdDone:
@@ -431,7 +425,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 			cmdErr = fmt.Errorf("stdout copy failed: %w", res.copyErr)
 		}
 	}
-	log.Printf("DEBUG: (%s) command finished (direct). Error: %v", cmd.Path, cmdErr)
+	slog.Debug("command finished (direct)", "cmd", cmd.Path, "error", cmdErr)
 
 	// When the transfer ended abnormally (killed or non-zero exit), send a
 	// ZModem abort sequence to the client. This is necessary because after
@@ -449,7 +443,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	if stderrBuf.Len() > 0 {
 		for _, line := range strings.Split(strings.TrimSpace(stderrBuf.String()), "\n") {
 			if line = strings.TrimSpace(line); line != "" {
-				log.Printf("INFO: [%s stderr] %s", filepath.Base(cmd.Path), line)
+				slog.Info("external command stderr", "cmd", filepath.Base(cmd.Path), "line", line)
 			}
 		}
 	}
@@ -468,9 +462,9 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// Wait briefly for the stdin goroutine to notice the closed pipe / interrupt.
 	select {
 	case <-inputDone:
-		log.Printf("DEBUG: (%s) stdin goroutine finished cleanly", cmd.Path)
+		slog.Debug("stdin goroutine finished cleanly", "cmd", cmd.Path)
 	case <-time.After(2 * time.Second):
-		log.Printf("WARN: (%s) stdin goroutine did not finish within 2s, proceeding", cmd.Path)
+		slog.Warn("stdin goroutine did not finish within 2s, proceeding", "cmd", cmd.Path)
 	}
 
 	// CRITICAL: Clear the read interrupt and reset the connection deadline
@@ -526,7 +520,7 @@ func drainSessionInput(s ssh.Session, duration time.Duration) {
 	}
 
 	if totalDrained > 0 {
-		log.Printf("DEBUG: Drained %d leftover bytes from session after transfer", totalDrained)
+		slog.Debug("drained leftover bytes from session after transfer", "bytes", totalDrained)
 	}
 }
 
@@ -542,11 +536,11 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	}
 	ptyReq, winCh, isPty := s.Pty()
 	if !isPty {
-		log.Printf("WARN: No PTY available for session. Falling back to direct mode for %s.", cmd.Path)
+		slog.Warn("no PTY available for session, falling back to direct mode", "cmd", cmd.Path)
 		return RunCommandDirect(ctx, s, cmd, stdinIdleTimeout)
 	}
 
-	log.Printf("DEBUG: Starting command '%s' with PTY", cmd.Path)
+	slog.Debug("starting command with PTY", "cmd", cmd.Path)
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to start pty for command '%s': %w", cmd.Path, err)
@@ -558,13 +552,13 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 		if ptyReq.Window.Width > 0 || ptyReq.Window.Height > 0 {
 			wErr := pty.Setsize(ptmx, &pty.Winsize{Rows: uint16(ptyReq.Window.Height), Cols: uint16(ptyReq.Window.Width)})
 			if wErr != nil {
-				log.Printf("WARN: Failed to set initial pty size: %v", wErr)
+				slog.Warn("failed to set initial PTY size", "error", wErr)
 			}
 		}
 		for win := range winCh {
 			wErr := pty.Setsize(ptmx, &pty.Winsize{Rows: uint16(win.Height), Cols: uint16(win.Width)})
 			if wErr != nil {
-				log.Printf("WARN: Failed to resize pty: %v", wErr)
+				slog.Warn("failed to resize PTY", "error", wErr)
 			}
 		}
 	}()
@@ -574,11 +568,11 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	var restoreTerminal func() = func() {}
 	originalState, err := term.MakeRaw(fd)
 	if err != nil {
-		log.Printf("WARN: Failed to put PTY (fd: %d) into raw mode for command '%s': %v.", fd, cmd.Path, err)
+		slog.Warn("failed to put PTY into raw mode", "fd", fd, "cmd", cmd.Path, "error", err)
 	} else {
 		restoreTerminal = func() {
 			if err := term.Restore(fd, originalState); err != nil {
-				log.Printf("ERROR: Failed to restore terminal state (fd: %d) after command '%s': %v", fd, cmd.Path, err)
+				slog.Error("failed to restore terminal state", "fd", fd, "cmd", cmd.Path, "error", err)
 			}
 		}
 	}
@@ -597,32 +591,32 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	outputDone := make(chan struct{})
 	go func() {
 		defer close(inputDone)
-		log.Printf("DEBUG: (%s) Goroutine: Copying session stdin -> PTY starting...", cmd.Path)
+		slog.Debug("copying session stdin to PTY starting", "cmd", cmd.Path)
 		n, err := io.Copy(ptmx, s)
-		log.Printf("DEBUG: (%s) Goroutine: Copying session stdin -> PTY finished. Bytes: %d, Error: %v", cmd.Path, n, err)
+		slog.Debug("copying session stdin to PTY finished", "cmd", cmd.Path, "bytes", n, "error", err)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EIO) && !errors.Is(err, syscall.EINTR) {
-			log.Printf("WARN: (%s) Error copying session stdin to PTY: %v", cmd.Path, err)
+			slog.Warn("error copying session stdin to PTY", "cmd", cmd.Path, "error", err)
 		}
 	}()
 	go func() {
 		defer close(outputDone)
-		log.Printf("DEBUG: (%s) Goroutine: Copying PTY stdout -> session starting...", cmd.Path)
+		slog.Debug("copying PTY stdout to session starting", "cmd", cmd.Path)
 		n, err := io.Copy(s, ptmx)
-		log.Printf("DEBUG: (%s) Goroutine: Copying PTY stdout -> session finished. Bytes: %d, Error: %v", cmd.Path, n, err)
+		slog.Debug("copying PTY stdout to session finished", "cmd", cmd.Path, "bytes", n, "error", err)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EIO) {
-			log.Printf("WARN: (%s) Error copying PTY stdout to session stdout: %v", cmd.Path, err)
+			slog.Warn("error copying PTY stdout to session", "cmd", cmd.Path, "error", err)
 		}
 	}()
 
 	// Race: ctx cancellation vs normal completion
-	log.Printf("DEBUG: (%s) Waiting for command completion...", cmd.Path)
+	slog.Debug("waiting for command completion", "cmd", cmd.Path)
 	cmdDoneCh := make(chan error, 1)
 	go func() { cmdDoneCh <- cmd.Wait() }()
 
 	var cmdErr error
 	select {
 	case <-ctx.Done():
-		log.Printf("DEBUG: (%s) transfer cancelled or timed out, killing process", cmd.Path)
+		slog.Debug("transfer cancelled or timed out, killing process", "cmd", cmd.Path)
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
@@ -630,7 +624,7 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 		<-cmdDoneCh
 	case cmdErr = <-cmdDoneCh:
 	}
-	log.Printf("DEBUG: (%s) Command finished. Error: %v", cmd.Path, cmdErr)
+	slog.Debug("command finished", "cmd", cmd.Path, "error", cmdErr)
 
 	// Interrupt the input goroutine's blocked Read() so it exits without
 	// consuming the user's next keypress
@@ -657,7 +651,7 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 // filePaths should be absolute paths to the files being sent.
 // ctx controls cancellation and timeout; pass nil for no timeout.
 func ExecuteZmodemSend(ctx context.Context, s ssh.Session, filePaths ...string) error {
-	log.Printf("DEBUG: executeZmodemSend called with files: %v", filePaths)
+	slog.Debug("zmodem send called", "files", filePaths)
 
 	if len(filePaths) == 0 {
 		return fmt.Errorf("no files provided for Zmodem send")
@@ -666,10 +660,10 @@ func ExecuteZmodemSend(ctx context.Context, s ssh.Session, filePaths ...string) 
 	// Check if sz command exists
 	szPath, err := exec.LookPath("sz")
 	if err != nil {
-		log.Printf("ERROR: 'sz' command not found in PATH: %v", err)
+		slog.Error("sz command not found in PATH", "error", err)
 		return fmt.Errorf("'sz' command not found, Zmodem send unavailable")
 	}
-	log.Printf("DEBUG: Found 'sz' command at: %s", szPath)
+	slog.Debug("found sz command", "path", szPath)
 
 	// Construct command: sz [-b] <files...>
 	args := append([]string{"-b"}, filePaths...)
@@ -678,15 +672,15 @@ func ExecuteZmodemSend(ctx context.Context, s ssh.Session, filePaths ...string) 
 	}
 	cmd := exec.CommandContext(ctx, szPath, args...)
 
-	log.Printf("INFO: Executing Zmodem send: %s %v", szPath, args)
+	slog.Info("executing Zmodem send", "cmd", szPath, "args", args)
 	// Execute using the PTY helper
 	err = RunCommandWithPTY(ctx, s, cmd, 0)
 	if err != nil {
-		log.Printf("ERROR: Zmodem send command ('%s') failed: %v", szPath, err)
+		slog.Error("Zmodem send command failed", "cmd", szPath, "error", err)
 		return fmt.Errorf("Zmodem send failed: %w", err)
 	}
 
-	log.Printf("INFO: Zmodem send completed successfully for files: %v", filePaths)
+	slog.Info("Zmodem send completed", "files", filePaths)
 	return nil
 }
 
@@ -695,7 +689,7 @@ func ExecuteZmodemSend(ctx context.Context, s ssh.Session, filePaths ...string) 
 // targetDir should be the absolute path to the directory where received files will be stored.
 // ctx controls cancellation and timeout; pass nil for no timeout.
 func ExecuteZmodemReceive(ctx context.Context, s ssh.Session, targetDir string) error {
-	log.Printf("DEBUG: executeZmodemReceive called for target directory: %s", targetDir)
+	slog.Debug("zmodem receive called", "dir", targetDir)
 
 	// 1. Validate and ensure target directory exists
 	if targetDir == "" {
@@ -714,10 +708,10 @@ func ExecuteZmodemReceive(ctx context.Context, s ssh.Session, targetDir string) 
 	// 2. Check if rz command exists
 	rzPath, err := exec.LookPath("rz")
 	if err != nil {
-		log.Printf("ERROR: 'rz' command not found in PATH: %v", err)
+		slog.Error("rz command not found in PATH", "error", err)
 		return fmt.Errorf("'rz' command not found, Zmodem receive unavailable")
 	}
-	log.Printf("DEBUG: Found 'rz' command at: %s", rzPath)
+	slog.Debug("found rz command", "path", rzPath)
 
 	// 3. Construct command: rz -b -r
 	args := []string{"-b", "-r"} // Binary mode, Restricted mode (prevents path traversal)
@@ -727,14 +721,14 @@ func ExecuteZmodemReceive(ctx context.Context, s ssh.Session, targetDir string) 
 	cmd := exec.CommandContext(ctx, rzPath, args...)
 	cmd.Dir = absTargetDir // Run rz in the target directory
 
-	log.Printf("INFO: Executing Zmodem receive in directory '%s': %s %v", absTargetDir, rzPath, args)
+	slog.Info("executing Zmodem receive", "dir", absTargetDir, "cmd", rzPath, "args", args)
 	// 4. Execute using the PTY helper
 	err = RunCommandWithPTY(ctx, s, cmd, 0)
 	if err != nil {
-		log.Printf("ERROR: Zmodem receive command ('%s') failed: %v", rzPath, err)
+		slog.Error("Zmodem receive command failed", "cmd", rzPath, "error", err)
 		return fmt.Errorf("Zmodem receive failed: %w", err)
 	}
 
-	log.Printf("INFO: Zmodem receive completed successfully into directory: %s", absTargetDir)
+	slog.Info("Zmodem receive completed", "dir", absTargetDir)
 	return nil
 }

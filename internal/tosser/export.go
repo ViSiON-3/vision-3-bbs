@@ -2,7 +2,7 @@ package tosser
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +20,7 @@ func getBaseHWM(base *jam.Base) int {
 	lr, err := base.GetLastRead(ScannerUser)
 	if err != nil {
 		if err != jam.ErrNotFound {
-			log.Printf("WARN: Export: failed to read HWM from .jlr, resetting to 0 (area will be fully re-scanned): %v", err)
+			slog.Warn("failed to read HWM from .jlr, resetting to 0; area will be fully re-scanned", "error", err)
 		}
 		return 0
 	}
@@ -63,14 +63,14 @@ func (t *Tosser) ScanAndExport() TossResult {
 
 		base, err := t.msgMgr.GetBase(area.ID)
 		if err != nil {
-			log.Printf("WARN: Export: cannot get base for area %d (%s): %v", area.ID, area.Tag, err)
+			slog.Warn("cannot get base for area", "area", area.ID, "tag", area.Tag, "error", err)
 			continue
 		}
 		openBases = append(openBases, base)
 
 		count, err := base.GetMessageCount()
 		if err != nil {
-			log.Printf("WARN: Export: cannot get message count for area %d: %v", area.ID, err)
+			slog.Warn("cannot get message count for area", "area", area.ID, "error", err)
 			continue
 		}
 
@@ -91,7 +91,7 @@ func (t *Tosser) ScanAndExport() TossResult {
 				cur := getBaseHWM(base)
 				if msgNum == cur+1 {
 					if err := setBaseHWM(base, msgNum); err != nil {
-						log.Printf("WARN: Export: failed to advance HWM for area %d: %v", area.ID, err)
+						slog.Warn("failed to advance HWM for area", "area", area.ID, "error", err)
 					}
 				}
 				continue
@@ -104,7 +104,7 @@ func (t *Tosser) ScanAndExport() TossResult {
 
 			msg, err := base.ReadMessage(msgNum)
 			if err != nil {
-				log.Printf("WARN: Export: cannot read message %d in area %d: %v", msgNum, area.ID, err)
+				slog.Warn("cannot read message in area", "msg", msgNum, "area", area.ID, "error", err)
 				continue
 			}
 
@@ -142,14 +142,12 @@ func (t *Tosser) ScanAndExport() TossResult {
 		for _, pm := range msgs {
 			pm.hdr.DateProcessed = now
 			if err := pm.base.UpdateMessageHeader(pm.msgNum, pm.hdr); err != nil {
-				log.Printf("WARN: Export: failed to update DateProcessed for msg %d: %v",
-					pm.msgNum, err)
+				slog.Warn("failed to update DateProcessed for msg", "msg", pm.msgNum, "error", err)
 			}
 			// Advance HWM in the base's .jlr so the next scan skips this message
 			if pm.msgNum > getBaseHWM(pm.base) {
 				if err := setBaseHWM(pm.base, pm.msgNum); err != nil {
-					log.Printf("WARN: Export: failed to update HWM for area %d msg %d: %v",
-						pm.area.ID, pm.msgNum, err)
+					slog.Warn("failed to update HWM for area msg", "area", pm.area.ID, "msg", pm.msgNum, "error", err)
 				}
 			}
 		}
@@ -193,14 +191,14 @@ func (t *Tosser) scanAndExportNetmail(result *TossResult) {
 
 		base, err := t.msgMgr.GetBase(area.ID)
 		if err != nil {
-			log.Printf("WARN: NetmailExport: cannot get base for area %d (%s): %v", area.ID, area.Tag, err)
+			slog.Warn("netmail: cannot get base for area", "area", area.ID, "tag", area.Tag, "error", err)
 			continue
 		}
 		openBases = append(openBases, base)
 
 		count, err := base.GetMessageCount()
 		if err != nil {
-			log.Printf("WARN: NetmailExport: cannot get message count for area %d: %v", area.ID, err)
+			slog.Warn("netmail: cannot get message count for area", "area", area.ID, "error", err)
 			continue
 		}
 
@@ -215,7 +213,7 @@ func (t *Tosser) scanAndExportNetmail(result *TossResult) {
 
 			msg, err := base.ReadMessage(msgNum)
 			if err != nil {
-				log.Printf("WARN: NetmailExport: cannot read msg %d in area %s: %v", msgNum, area.Tag, err)
+				slog.Warn("netmail: cannot read msg in area", "msg", msgNum, "area", area.Tag, "error", err)
 				continue
 			}
 
@@ -223,21 +221,21 @@ func (t *Tosser) scanAndExportNetmail(result *TossResult) {
 			destAddrStr := msg.DestAddr
 			if destAddrStr == "" {
 				if len(t.config.Links) == 0 {
-					log.Printf("WARN: NetmailExport: no links for network %s, cannot route msg %d", t.networkName, msgNum)
+					slog.Warn("netmail: no links for network, cannot route msg", "network", t.networkName, "msg", msgNum)
 					continue
 				}
 				destAddrStr = t.config.Links[0].Address
 			}
 			destAddr, err := jam.ParseAddress(destAddrStr)
 			if err != nil {
-				log.Printf("WARN: NetmailExport: invalid dest addr %q for msg %d: %v", destAddrStr, msgNum, err)
+				slog.Warn("netmail: invalid dest addr for msg", "addr", destAddrStr, "msg", msgNum, "error", err)
 				continue
 			}
 
 			// Route to the best link (direct match or hub fallback).
 			link := t.findLinkForNetmail(destAddr)
 			if link == nil {
-				log.Printf("WARN: NetmailExport: no link available for %s, skipping msg %d", destAddrStr, msgNum)
+				slog.Warn("netmail: no link available, skipping msg", "addr", destAddrStr, "msg", msgNum)
 				continue
 			}
 
@@ -264,7 +262,7 @@ func (t *Tosser) scanAndExportNetmail(result *TossResult) {
 		for _, pm := range msgs {
 			pm.hdr.DateProcessed = now
 			if err := pm.base.UpdateMessageHeader(pm.msgNum, pm.hdr); err != nil {
-				log.Printf("WARN: NetmailExport: failed to mark msg %d as processed: %v", pm.msgNum, err)
+				slog.Warn("netmail: failed to mark msg as processed", "msg", pm.msgNum, "error", err)
 			}
 		}
 		result.MessagesExported += exported
@@ -384,11 +382,11 @@ func (t *Tosser) createOutboundNetmailPacket(link *linkConfig, msgs []pendingNet
 	finalName := fmt.Sprintf("%08x.pkt", time.Now().UnixNano()&0xFFFFFFFF)
 	finalPath := filepath.Join(t.paths.OutboundPath, finalName)
 	if err := os.Rename(pktPath, finalPath); err != nil {
-		log.Printf("WARN: NetmailExport: rename %s -> %s failed: %v (temp file kept)", pktPath, finalPath, err)
+		slog.Warn("netmail: rename pkt failed, temp file kept", "from", pktPath, "to", finalPath, "error", err)
 		finalName = filepath.Base(pktPath)
 	}
 
-	log.Printf("INFO: Exported %d netmail(s) to %s for link %s", len(packedMsgs), finalName, link.Address)
+	slog.Info("exported netmails", "count", len(packedMsgs), "file", finalName, "link", link.Address)
 	return len(packedMsgs), nil
 }
 
@@ -504,11 +502,11 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 	finalPath := filepath.Join(t.paths.OutboundPath, finalName)
 	if err := os.Rename(pktPath, finalPath); err != nil {
 		// Temp file is already a valid .pkt, just log the rename failure
-		log.Printf("WARN: Export: rename %s -> %s failed: %v (temp file kept)", pktPath, finalPath, err)
+		slog.Warn("rename pkt failed, temp file kept", "from", pktPath, "to", finalPath, "error", err)
 		finalName = filepath.Base(pktPath)
 	}
 
-	log.Printf("INFO: Exported %d messages to %s for link %s", len(packedMsgs), finalName, link.Address)
+	slog.Info("exported messages", "count", len(packedMsgs), "file", finalName, "link", link.Address)
 	return len(packedMsgs), nil
 }
 

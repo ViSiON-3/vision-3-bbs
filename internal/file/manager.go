@@ -3,7 +3,7 @@ package file
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
+	"github.com/google/uuid"
 )
 
 // FileManager manages file areas and their associated file records.
@@ -36,15 +36,15 @@ func NewFileManager(baseDataPath, baseConfigPath string) (*FileManager, error) {
 		fileRecords: make(map[int][]FileRecord),
 	}
 
-	log.Printf("INFO: Loading file areas from: %s", fm.configPath)
+	slog.Info("loading file areas", "path", fm.configPath)
 	if err := fm.loadAreas(); err != nil {
 		return nil, fmt.Errorf("failed to load file areas: %w", err)
 	}
 
-	log.Printf("INFO: Loading file records from base path: %s", fm.basePath)
+	slog.Info("loading file records", "path", fm.basePath)
 	if err := fm.loadAllFileRecords(); err != nil {
 		// Log error but potentially continue if some areas loaded?
-		log.Printf("ERROR: Failed to load one or more file record sets: %v", err)
+		slog.Error("failed to load one or more file record sets", "error", err)
 		// Decide if this should be fatal. For now, let's allow startup.
 		// return nil, fmt.Errorf("failed to load file records: %w", err)
 	}
@@ -60,11 +60,11 @@ func (fm *FileManager) loadAreas() error {
 	data, err := os.ReadFile(fm.configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("WARN: File areas config %s not found. No file areas loaded.", fm.configPath)
+			slog.Warn("file areas config not found, no file areas loaded", "path", fm.configPath)
 			// Create an empty file?
 			emptyJSON := []byte("[]")
 			if writeErr := os.WriteFile(fm.configPath, emptyJSON, 0644); writeErr != nil {
-				log.Printf("ERROR: Failed to create empty file areas config %s: %v", fm.configPath, writeErr)
+				slog.Error("failed to create empty file areas config", "path", fm.configPath, "error", writeErr)
 			}
 			return nil // Not a fatal error if file doesn't exist initially
 		}
@@ -83,43 +83,43 @@ func (fm *FileManager) loadAreas() error {
 	for i := range areas {
 		area := &areas[i] // Take pointer to the element in the slice
 		if area.ID <= 0 {
-			log.Printf("WARN: Skipping file area with invalid ID <= 0: %+v", area)
+			slog.Warn("skipping file area with invalid ID <= 0", "area", fmt.Sprintf("%+v", area))
 			continue
 		}
 		if area.Tag == "" {
-			log.Printf("WARN: Skipping file area with empty Tag (ID: %d)", area.ID)
+			slog.Warn("skipping file area with empty tag", "id", area.ID)
 			continue
 		}
 		// Ensure path is clean and relative (security measure)
 		area.Path = filepath.Clean(area.Path)
 		if filepath.IsAbs(area.Path) || strings.HasPrefix(area.Path, "..") {
-			log.Printf("WARN: Skipping file area with invalid path (absolute or traversing up): %s (ID: %d)", area.Path, area.ID)
+			slog.Warn("skipping file area with invalid path (absolute or traversing up)", "path", area.Path, "id", area.ID)
 			continue
 		}
 
 		// Ensure area directory exists
 		fullAreaPath := filepath.Join(fm.basePath, area.Path)
 		if err := os.MkdirAll(fullAreaPath, 0755); err != nil {
-			log.Printf("ERROR: Failed to create directory for file area %s (%s): %v. Skipping area.", area.Tag, fullAreaPath, err)
+			slog.Error("failed to create directory for file area, skipping area", "area", area.Tag, "path", fullAreaPath, "error", err)
 			continue
 		}
 
 		ucTag := strings.ToUpper(area.Tag)
 		if _, exists := fm.fileTags[ucTag]; exists {
-			log.Printf("WARN: Duplicate file area Tag '%s' found. Skipping duplicate definition for ID %d.", area.Tag, area.ID)
+			slog.Warn("duplicate file area tag found, skipping duplicate definition", "area", area.Tag, "id", area.ID)
 			continue
 		}
 		if _, exists := fm.fileAreas[area.ID]; exists {
-			log.Printf("WARN: Duplicate file area ID '%d' found. Skipping duplicate definition for Tag %s.", area.ID, area.Tag)
+			slog.Warn("duplicate file area id found, skipping duplicate definition", "id", area.ID, "area", area.Tag)
 			continue
 		}
 
 		fm.fileAreas[area.ID] = area
 		fm.fileTags[ucTag] = area.ID
-		log.Printf("DEBUG: Loaded File Area: ID=%d, Tag=%s, Name=%s, Path=%s", area.ID, area.Tag, area.Name, area.Path)
+		slog.Debug("loaded file area", "id", area.ID, "area", area.Tag, "name", area.Name, "path", area.Path)
 	}
 
-	log.Printf("INFO: Successfully loaded %d file areas.", len(fm.fileAreas))
+	slog.Info("successfully loaded file areas", "count", len(fm.fileAreas))
 	return nil
 }
 
@@ -139,18 +139,18 @@ func (fm *FileManager) loadAllFileRecords() error {
 		data, err := os.ReadFile(metadataPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				log.Printf("DEBUG: Metadata file %s not found for area %s (ID: %d). Assuming no files.", metadataPath, area.Tag, areaID)
+				slog.Debug("metadata file not found for area, assuming no files", "path", metadataPath, "area", area.Tag, "id", areaID)
 				fm.fileRecords[areaID] = []FileRecord{} // Initialize empty slice
 				continue
 			}
-			log.Printf("ERROR: Failed to read metadata file %s for area %s: %v", metadataPath, area.Tag, err)
+			slog.Error("failed to read metadata file for area", "path", metadataPath, "area", area.Tag, "error", err)
 			errorsEncountered = true
 			continue // Skip this area on error
 		}
 
 		var records []FileRecord
 		if err := json.Unmarshal(data, &records); err != nil {
-			log.Printf("ERROR: Failed to parse metadata file %s for area %s: %v", metadataPath, area.Tag, err)
+			slog.Error("failed to parse metadata file for area", "path", metadataPath, "area", area.Tag, "error", err)
 			errorsEncountered = true
 			continue // Skip this area on error
 		}
@@ -158,10 +158,10 @@ func (fm *FileManager) loadAllFileRecords() error {
 		// TODO: Validate records? Ensure filenames exist?
 		fm.fileRecords[areaID] = records
 		totalFilesLoaded += len(records)
-		log.Printf("DEBUG: Loaded %d file records for area %s (ID: %d)", len(records), area.Tag, areaID)
+		slog.Debug("loaded file records for area", "count", len(records), "area", area.Tag, "id", areaID)
 	}
 
-	log.Printf("INFO: Loaded metadata for %d areas, total %d file records.", len(fm.fileAreas), totalFilesLoaded)
+	slog.Info("loaded metadata for areas", "areas", len(fm.fileAreas), "count", totalFilesLoaded)
 	if errorsEncountered {
 		return fmt.Errorf("encountered errors while loading file records")
 	}
@@ -186,7 +186,7 @@ func (fm *FileManager) saveFileRecords(areaID int) error {
 	if !exists {
 		// This might happen if an area was loaded but metadata failed initially
 		// Or if called for a newly created area before any records added.
-		log.Printf("DEBUG: No records found in memory for area ID %d during save. Saving empty list.", areaID)
+		slog.Debug("no records found in memory for area during save, saving empty list", "id", areaID)
 		records = []FileRecord{} // Ensure we save an empty list, not nil
 	}
 
@@ -199,7 +199,7 @@ func (fm *FileManager) saveFileRecords(areaID int) error {
 		return fmt.Errorf("failed to write metadata file %s: %w", metadataPath, err)
 	}
 
-	log.Printf("DEBUG: Saved %d file records for area %s (ID: %d) to %s", len(records), area.Tag, areaID, metadataPath)
+	slog.Debug("saved file records for area", "count", len(records), "area", area.Tag, "id", areaID, "path", metadataPath)
 	return nil
 }
 
@@ -337,7 +337,7 @@ func (fm *FileManager) GetFileCountForArea(areaID int) (int, error) {
 	if !exists {
 		// Area might not exist or simply hasn't had metadata loaded/saved yet.
 		// Returning 0 is appropriate for the caller (runListFiles).
-		log.Printf("DEBUG: GetFileCountForArea called for non-existent or unloaded area ID %d. Returning 0.", areaID)
+		slog.Debug("GetFileCountForArea called for non-existent or unloaded area, returning 0", "id", areaID)
 		return 0, nil
 	}
 
@@ -366,7 +366,7 @@ func (fm *FileManager) GetFilesForAreaPaginated(areaID int, page int, pageSize i
 	defer fm.muFiles.RUnlock()
 
 	if page <= 0 || pageSize <= 0 {
-		log.Printf("WARN: GetFilesForAreaPaginated called with invalid page (%d) or pageSize (%d)", page, pageSize)
+		slog.Warn("GetFilesForAreaPaginated called with invalid page or pageSize", "page", page, "pageSize", pageSize)
 		// Optionally return an error, but returning empty slice might be simpler for the caller
 		return []FileRecord{}, fmt.Errorf("invalid page number or page size")
 	}
@@ -382,7 +382,7 @@ func (fm *FileManager) GetFilesForAreaPaginated(areaID int, page int, pageSize i
 
 	// Check if start index is out of bounds
 	if startIndex >= totalFiles {
-		log.Printf("DEBUG: GetFilesForAreaPaginated requested page %d which is out of bounds (Total: %d, PageSize: %d)", page, totalFiles, pageSize)
+		slog.Debug("GetFilesForAreaPaginated requested page out of bounds", "page", page, "total", totalFiles, "pageSize", pageSize)
 		return []FileRecord{}, nil // Requested page is beyond the last file
 	}
 
@@ -431,7 +431,7 @@ func (fm *FileManager) AddFileRecord(record FileRecord) error {
 	existingRecords := fm.fileRecords[record.AreaID]
 	for _, existing := range existingRecords {
 		if strings.EqualFold(existing.Filename, record.Filename) {
-			log.Printf("WARN: Adding file record with duplicate filename '%s' in area ID %d", record.Filename, record.AreaID)
+			slog.Warn("adding file record with duplicate filename", "file", record.Filename, "area", record.AreaID)
 			break
 		}
 	}
@@ -445,13 +445,13 @@ func (fm *FileManager) AddFileRecord(record FileRecord) error {
 
 	if err != nil {
 		// Attempt to rollback the in-memory addition? Complex.
-		log.Printf("ERROR: Failed to save file records after adding %s to area %d: %v. In-memory state might be inconsistent!", record.Filename, record.AreaID, err)
+		slog.Error("failed to save file records after adding, in-memory state might be inconsistent", "file", record.Filename, "area", record.AreaID, "error", err)
 		// Maybe remove the last added record if save fails?
 		// fm.fileRecords[record.AreaID] = fm.fileRecords[record.AreaID][:len(fm.fileRecords[record.AreaID])-1]
 		return err // Propagate save error
 	}
 
-	log.Printf("INFO: Added file record '%s' (ID: %s) to area %d.", record.Filename, record.ID, record.AreaID)
+	slog.Info("added file record", "file", record.Filename, "id", record.ID, "area", record.AreaID)
 	return nil
 }
 
@@ -490,13 +490,13 @@ searchLoop:
 	fm.muFiles.Lock() // Re-acquire lock before returning
 
 	if err != nil {
-		log.Printf("ERROR: Failed to save file records after incrementing download count for %s (ID: %s): %v. In-memory state might be inconsistent!", filename, fileID, err)
+		slog.Error("failed to save file records after incrementing download count, in-memory state might be inconsistent", "file", filename, "id", fileID, "error", err)
 		// Attempt rollback?
 		// fm.fileRecords[foundAreaID][foundIndex].DownloadCount--
 		return err
 	}
 
-	log.Printf("DEBUG: Incremented download count for file '%s' (ID: %s) to %d.", filename, fileID, newCount)
+	slog.Debug("incremented download count for file", "file", filename, "id", fileID, "count", newCount)
 	return nil
 }
 
@@ -531,11 +531,11 @@ searchLoop:
 	fm.muFiles.Lock()
 
 	if err != nil {
-		log.Printf("ERROR: Failed to save file records after updating %s (ID: %s): %v", filename, fileID, err)
+		slog.Error("failed to save file records after updating", "file", filename, "id", fileID, "error", err)
 		return err
 	}
 
-	log.Printf("DEBUG: Updated file record '%s' (ID: %s).", filename, fileID)
+	slog.Debug("updated file record", "file", filename, "id", fileID)
 	return nil
 }
 
@@ -587,10 +587,10 @@ searchLoop:
 		}
 		fullPath := filepath.Join(absBasePath, area.Path, filepath.Base(foundFilename))
 		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-			log.Printf("WARN: Failed to delete file from disk at %s: %v", fullPath, err)
+			slog.Warn("failed to delete file from disk", "path", fullPath, "error", err)
 			return fmt.Errorf("failed to delete file from disk: %w", err)
 		}
-		log.Printf("INFO: Deleted file from disk: %s", fullPath)
+		slog.Info("deleted file from disk", "path", fullPath)
 	}
 
 	// Remove record from slice and persist.
@@ -602,11 +602,11 @@ searchLoop:
 	fm.muFiles.Lock()
 
 	if saveErr != nil {
-		log.Printf("ERROR: Failed to save file records after deleting %s (ID: %s): %v", foundFilename, fileID, saveErr)
+		slog.Error("failed to save file records after deleting", "file", foundFilename, "id", fileID, "error", saveErr)
 		return saveErr
 	}
 
-	log.Printf("INFO: Deleted file record '%s' (ID: %s) from area %d.", foundFilename, fileID, foundAreaID)
+	slog.Info("deleted file record", "file", foundFilename, "id", fileID, "area", foundAreaID)
 	return nil
 }
 
@@ -684,7 +684,7 @@ searchLoop:
 		// At least one metadata save failed. Roll back the filesystem rename so
 		// the file returns to the source directory and the operation is retryable.
 		if renameBackErr := os.Rename(dstPath, srcPath); renameBackErr != nil {
-			log.Printf("ERROR: Failed to roll back file rename after metadata save failure (%s -> %s): %v", dstPath, srcPath, renameBackErr)
+			slog.Error("failed to roll back file rename after metadata save failure", "from", dstPath, "to", srcPath, "error", renameBackErr)
 		} else {
 			// Restore in-memory state.
 			tgtRecords := fm.fileRecords[targetAreaID]
@@ -696,22 +696,22 @@ searchLoop:
 			// written one side; re-saving corrects any such divergence.
 			fm.muFiles.Unlock()
 			if resaveErr := fm.saveFileRecords(srcAreaID); resaveErr != nil {
-				log.Printf("ERROR: Failed to re-save source area %d during rollback: %v", srcAreaID, resaveErr)
+				slog.Error("failed to re-save source area during rollback", "area", srcAreaID, "error", resaveErr)
 			}
 			if resaveErr := fm.saveFileRecords(targetAreaID); resaveErr != nil {
-				log.Printf("ERROR: Failed to re-save target area %d during rollback: %v", targetAreaID, resaveErr)
+				slog.Error("failed to re-save target area during rollback", "area", targetAreaID, "error", resaveErr)
 			}
 			fm.muFiles.Lock()
 		}
 		if errSrc != nil {
-			log.Printf("ERROR: Failed to save source area %d after moving %s: %v", srcAreaID, safeFilename, errSrc)
+			slog.Error("failed to save source area after moving", "area", srcAreaID, "file", safeFilename, "error", errSrc)
 			return errSrc
 		}
-		log.Printf("ERROR: Failed to save target area %d after moving %s: %v", targetAreaID, safeFilename, errDst)
+		slog.Error("failed to save target area after moving", "area", targetAreaID, "file", safeFilename, "error", errDst)
 		return errDst
 	}
 
-	log.Printf("INFO: Moved file '%s' (ID: %s) from area %d to area %d.", safeFilename, fileID, srcAreaID, targetAreaID)
+	slog.Info("moved file", "file", safeFilename, "id", fileID, "from", srcAreaID, "to", targetAreaID)
 	return nil
 }
 
@@ -804,7 +804,7 @@ func (fm *FileManager) IsSupportedArchive(filename string) bool {
 	// Load the central archiver config. Defaults are used if archivers.json is missing.
 	arcCfg, err := archiver.LoadConfig("configs")
 	if err != nil {
-		log.Printf("WARN: Failed to load archivers config: %v, falling back to .zip only", err)
+		slog.Warn("failed to load archivers config, falling back to .zip only", "error", err)
 		return strings.HasSuffix(strings.ToLower(filename), ".zip")
 	}
 	return arcCfg.IsSupported(filename)

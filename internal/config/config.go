@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -521,22 +521,22 @@ type StringsConfig struct {
 // LoadStrings loads the string configuration from a JSON file.
 func LoadStrings(configPath string) (StringsConfig, error) { // Return the loaded config directly
 	filePath := filepath.Join(configPath, "strings.json")
-	log.Printf("INFO: Loading strings configuration from %s", filePath)
+	slog.Info("loading strings configuration", "path", filePath)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		log.Printf("ERROR: Failed to read strings file %s: %v", filePath, err)
+		slog.Error("failed to read strings file", "path", filePath, "error", err)
 		return StringsConfig{}, fmt.Errorf("failed to read strings file %s: %w", filePath, err)
 	}
 
 	var loadedConfig StringsConfig // Load into a local variable
 	err = json.Unmarshal(data, &loadedConfig)
 	if err != nil {
-		log.Printf("ERROR: Failed to parse strings JSON from %s: %v", filePath, err)
+		slog.Error("failed to parse strings JSON", "path", filePath, "error", err)
 		return StringsConfig{}, fmt.Errorf("failed to parse strings JSON from %s: %w", filePath, err)
 	}
 
 	applyStringDefaults(&loadedConfig)
-	log.Printf("INFO: Successfully loaded strings configuration.")
+	slog.Info("successfully loaded strings configuration")
 	return loadedConfig, nil // Return the loaded struct
 }
 
@@ -666,12 +666,12 @@ type LoginItem struct {
 // If the file is missing, returns a default sequence matching legacy behavior.
 func LoadLoginSequence(configPath string) ([]LoginItem, error) {
 	filePath := filepath.Join(configPath, "login.json")
-	log.Printf("INFO: Loading login sequence from %s", filePath)
+	slog.Info("loading login sequence", "path", filePath)
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: login.json not found at %s, using default login sequence", filePath)
+			slog.Info("login.json not found, using default login sequence", "path", filePath)
 			return defaultLoginSequence(), nil
 		}
 		return nil, fmt.Errorf("failed to read login sequence file %s: %w", filePath, err)
@@ -687,7 +687,7 @@ func LoadLoginSequence(configPath string) ([]LoginItem, error) {
 		items[i].Command = strings.ToUpper(items[i].Command)
 	}
 
-	log.Printf("INFO: Loaded login sequence with %d items", len(items))
+	slog.Info("loaded login sequence", "count", len(items))
 	return items, nil
 }
 
@@ -703,15 +703,15 @@ func defaultLoginSequence() []LoginItem {
 // LoadOneLiners loads oneliner strings from a JSON file.
 func LoadOneLiners(dataPath string) ([]string, error) { // Changed configPath to dataPath for clarity
 	filePath := filepath.Join(dataPath, "oneliners.dat") // Assume loading .dat from data path
-	log.Printf("INFO: Loading oneliners from %s", filePath)
+	slog.Info("loading oneliners", "path", filePath)
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("WARN: oneliners.dat not found at %s. No oneliners loaded.", filePath)
+			slog.Warn("oneliners.dat not found, no oneliners loaded", "path", filePath)
 			return []string{}, nil // Return empty slice, not an error
 		}
-		log.Printf("ERROR: Failed to read oneliners file %s: %v", filePath, err)
+		slog.Error("failed to read oneliners file", "path", filePath, "error", err)
 		return nil, fmt.Errorf("failed to read oneliners file %s: %w", filePath, err)
 	}
 
@@ -725,7 +725,7 @@ func LoadOneLiners(dataPath string) ([]string, error) { // Changed configPath to
 		}
 	}
 
-	log.Printf("INFO: Successfully loaded %d oneliners.", len(oneLiners))
+	slog.Info("loaded oneliners", "count", len(oneLiners))
 	return oneLiners, nil
 }
 
@@ -740,7 +740,7 @@ type ThemeConfig struct {
 // LoadThemeConfig loads theme settings from theme.json within a specific menu set path.
 func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 	filePath := filepath.Join(menuSetPath, "theme.json")
-	log.Printf("INFO: Loading theme configuration from %s", filePath)
+	slog.Info("loading theme configuration", "path", filePath)
 
 	// Default theme settings
 	defaultTheme := ThemeConfig{
@@ -751,10 +751,10 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("WARN: theme.json not found at %s. Using default theme settings.", filePath)
+			slog.Warn("theme.json not found, using default theme settings", "path", filePath)
 			return defaultTheme, nil // Return defaults if file doesn't exist
 		}
-		log.Printf("ERROR: Failed to read theme file %s: %v", filePath, err)
+		slog.Error("failed to read theme file", "path", filePath, "error", err)
 		return defaultTheme, fmt.Errorf("failed to read theme file %s: %w", filePath, err)
 	}
 
@@ -763,11 +763,11 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 	theme = defaultTheme
 	err = json.Unmarshal(data, &theme)
 	if err != nil {
-		log.Printf("ERROR: Failed to parse theme JSON from %s: %v. Using default theme settings.", filePath, err)
+		slog.Error("failed to parse theme JSON, using default theme settings", "path", filePath, "error", err)
 		return defaultTheme, fmt.Errorf("failed to parse theme JSON from %s: %w", filePath, err)
 	}
 
-	log.Printf("INFO: Successfully loaded theme configuration from %s", filePath)
+	slog.Info("loaded theme configuration", "path", filePath)
 	return theme, nil
 }
 
@@ -1029,7 +1029,7 @@ type EventsConfig struct {
 // LoadServerConfig loads the server configuration from config.json
 func LoadServerConfig(configPath string) (ServerConfig, error) {
 	filePath := filepath.Join(configPath, "config.json")
-	log.Printf("INFO: Loading server configuration from %s", filePath)
+	slog.Info("loading server configuration", "path", filePath)
 
 	// Default config values
 	defaultConfig := ServerConfig{
@@ -1078,7 +1078,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("WARN: config.json not found at %s. Using default settings.", filePath)
+			slog.Warn("config.json not found, using default settings", "path", filePath)
 			return defaultConfig, nil
 		}
 		return defaultConfig, fmt.Errorf("failed to read config file %s: %w", filePath, err)
@@ -1089,11 +1089,11 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 	config = defaultConfig
 	err = json.Unmarshal(data, &config)
 	if err != nil {
-		log.Printf("ERROR: Failed to parse config JSON from %s: %v. Using default settings.", filePath, err)
+		slog.Error("failed to parse config JSON, using default settings", "path", filePath, "error", err)
 		return defaultConfig, fmt.Errorf("failed to parse config JSON from %s: %w", filePath, err)
 	}
 
-	log.Printf("INFO: Successfully loaded server configuration from %s", filePath)
+	slog.Info("loaded server configuration", "path", filePath)
 	return config, nil
 }
 
@@ -1101,7 +1101,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 // Returns an empty config (no networks) if the file does not exist.
 func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	filePath := filepath.Join(configPath, "ftn.json")
-	log.Printf("INFO: Loading FTN configuration from %s", filePath)
+	slog.Info("loading FTN configuration", "path", filePath)
 
 	defaultConfig := FTNConfig{
 		Networks: make(map[string]FTNNetworkConfig),
@@ -1110,7 +1110,7 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: ftn.json not found at %s. FTN disabled.", filePath)
+			slog.Info("ftn.json not found, FTN disabled", "path", filePath)
 			return defaultConfig, nil
 		}
 		return defaultConfig, fmt.Errorf("failed to read FTN config file %s: %w", filePath, err)
@@ -1119,7 +1119,7 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	var config FTNConfig
 	err = json.Unmarshal(data, &config)
 	if err != nil {
-		log.Printf("ERROR: Failed to parse FTN config JSON from %s: %v", filePath, err)
+		slog.Error("failed to parse FTN config JSON", "path", filePath, "error", err)
 		return defaultConfig, fmt.Errorf("failed to parse FTN config JSON from %s: %w", filePath, err)
 	}
 
@@ -1131,10 +1131,10 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	for name, net := range config.Networks {
 		if net.InternalTosserEnabled {
 			enabledCount++
-			log.Printf("INFO: FTN network %q internal tosser enabled: address=%s", name, net.OwnAddress)
+			slog.Info("FTN network internal tosser enabled", "network", name, "address", net.OwnAddress)
 		}
 	}
-	log.Printf("INFO: Loaded FTN configuration: %d network(s), %d with internal tosser enabled", len(config.Networks), enabledCount)
+	slog.Info("loaded FTN configuration", "networks", len(config.Networks), "tosserEnabled", enabledCount)
 
 	return config, nil
 }
@@ -1175,14 +1175,14 @@ func ValidateFTNConfig(cfg FTNConfig) error {
 // Returns a disabled config if the file does not exist.
 func LoadV3NetConfig(configPath string) (V3NetConfig, error) {
 	filePath := filepath.Join(configPath, "v3net.json")
-	log.Printf("INFO: Loading V3Net configuration from %s", filePath)
+	slog.Info("loading V3Net configuration", "path", filePath)
 
 	defaultConfig := V3NetConfig{}
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: v3net.json not found at %s. V3Net disabled.", filePath)
+			slog.Info("v3net.json not found, V3Net disabled", "path", filePath)
 			return defaultConfig, nil
 		}
 		return defaultConfig, fmt.Errorf("failed to read V3Net config file %s: %w", filePath, err)
@@ -1190,12 +1190,11 @@ func LoadV3NetConfig(configPath string) (V3NetConfig, error) {
 
 	var cfg V3NetConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		log.Printf("ERROR: Failed to parse V3Net config JSON from %s: %v", filePath, err)
+		slog.Error("failed to parse V3Net config JSON", "path", filePath, "error", err)
 		return defaultConfig, fmt.Errorf("failed to parse V3Net config JSON from %s: %w", filePath, err)
 	}
 
-	log.Printf("INFO: Loaded V3Net configuration: enabled=%v, hub=%v, leaves=%d",
-		cfg.Enabled, cfg.Hub.Enabled, len(cfg.Leaves))
+	slog.Info("loaded V3Net configuration", "enabled", cfg.Enabled, "hub", cfg.Hub.Enabled, "leaves", len(cfg.Leaves))
 
 	return cfg, nil
 }
@@ -1223,14 +1222,14 @@ func SaveServerConfig(configPath string, cfg ServerConfig) error {
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file %s: %w", filePath, err)
 	}
-	log.Printf("INFO: Server configuration saved to %s", filePath)
+	slog.Info("server configuration saved", "path", filePath)
 	return nil
 }
 
 // LoadEventsConfig loads the event scheduler configuration from events.json
 func LoadEventsConfig(configPath string) (EventsConfig, error) {
 	filePath := filepath.Join(configPath, "events.json")
-	log.Printf("INFO: Loading event scheduler configuration from %s", filePath)
+	slog.Info("loading event scheduler configuration", "path", filePath)
 
 	defaultConfig := EventsConfig{
 		Enabled:             false,
@@ -1241,7 +1240,7 @@ func LoadEventsConfig(configPath string) (EventsConfig, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: events.json not found at %s. Event scheduler disabled.", filePath)
+			slog.Info("events.json not found, event scheduler disabled", "path", filePath)
 			return defaultConfig, nil
 		}
 		return defaultConfig, fmt.Errorf("failed to read events config file %s: %w", filePath, err)
@@ -1250,7 +1249,7 @@ func LoadEventsConfig(configPath string) (EventsConfig, error) {
 	var config EventsConfig
 	err = json.Unmarshal(data, &config)
 	if err != nil {
-		log.Printf("ERROR: Failed to parse events config JSON from %s: %v", filePath, err)
+		slog.Error("failed to parse events config JSON", "path", filePath, "error", err)
 		return defaultConfig, fmt.Errorf("failed to parse events config JSON from %s: %w", filePath, err)
 	}
 
@@ -1266,7 +1265,7 @@ func LoadEventsConfig(configPath string) (EventsConfig, error) {
 		}
 	}
 
-	log.Printf("INFO: Loaded event scheduler configuration: %d event(s), %d enabled", len(config.Events), enabledCount)
+	slog.Info("loaded event scheduler configuration", "events", len(config.Events), "enabled", enabledCount)
 
 	return config, nil
 }
@@ -1287,7 +1286,7 @@ func LoadTimezone(configTZ string) *time.Location {
 		if loc, err := time.LoadLocation(tz); err == nil {
 			return loc
 		}
-		log.Printf("WARN: Invalid timezone '%s', trying next source.", tz)
+		slog.Warn("invalid timezone, trying next source", "timezone", tz)
 	}
 	return time.Local
 }

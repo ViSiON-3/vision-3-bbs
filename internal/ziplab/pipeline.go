@@ -3,7 +3,7 @@ package ziplab
 import (
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -52,7 +52,7 @@ func (p *Processor) RunPipeline(archivePath string, statusFn StatusCallback) Pip
 		statusFn = func(StepNumber, Status) {}
 	}
 
-	log.Printf("INFO: ZipLab pipeline starting for %s", archivePath)
+	slog.Info("pipeline starting", "path", archivePath)
 
 	// Step 1: Test Integrity
 	if p.config.Steps.TestIntegrity.Enabled {
@@ -114,7 +114,7 @@ func (p *Processor) RunPipeline(archivePath string, statusFn StatusCallback) Pip
 		result.StepResults = append(result.StepResults, sr)
 		if sr.Error != nil {
 			// Non-fatal — log but continue
-			log.Printf("WARN: ZipLab step 5 had errors: %v", sr.Error)
+			slog.Warn("step 5 had errors", "error", sr.Error)
 		}
 		if diz != "" {
 			result.Description = diz
@@ -129,7 +129,7 @@ func (p *Processor) RunPipeline(archivePath string, statusFn StatusCallback) Pip
 		result.StepResults = append(result.StepResults, sr)
 		if sr.Error != nil {
 			// Non-fatal
-			log.Printf("WARN: ZipLab step 6 had errors: %v", sr.Error)
+			slog.Warn("step 6 had errors", "error", sr.Error)
 		}
 	}
 
@@ -141,12 +141,11 @@ func (p *Processor) RunPipeline(archivePath string, statusFn StatusCallback) Pip
 		result.StepResults = append(result.StepResults, sr)
 		if sr.Error != nil {
 			// Non-fatal
-			log.Printf("WARN: ZipLab step 7 had errors: %v", sr.Error)
+			slog.Warn("step 7 had errors", "error", sr.Error)
 		}
 	}
 
-	log.Printf("INFO: ZipLab pipeline completed for %s: success=%v, description=%q",
-		archivePath, result.Success, result.Description)
+	slog.Info("pipeline completed", "path", archivePath, "success", result.Success, "description", result.Description)
 	return result
 }
 
@@ -180,31 +179,31 @@ func (p *Processor) handleScanFailure(archivePath string) {
 	case "quarantine":
 		if p.config.QuarantinePath != "" {
 			if err := os.MkdirAll(p.config.QuarantinePath, 0755); err != nil {
-				log.Printf("ERROR: Failed to create quarantine directory %s: %v", p.config.QuarantinePath, err)
+				slog.Error("failed to create quarantine directory", "path", p.config.QuarantinePath, "error", err)
 				if rmErr := os.Remove(archivePath); rmErr != nil {
-					log.Printf("ERROR: Failed to remove infected file %s after quarantine dir failure: %v", archivePath, rmErr)
+					slog.Error("failed to remove infected file after quarantine dir failure", "path", archivePath, "error", rmErr)
 				}
 				return
 			}
 			dest := filepath.Join(p.config.QuarantinePath, filepath.Base(archivePath))
 			if err := os.Rename(archivePath, dest); err != nil {
-				log.Printf("ERROR: Failed to quarantine %s: %v", archivePath, err)
+				slog.Error("failed to quarantine file", "path", archivePath, "error", err)
 				if rmErr := os.Remove(archivePath); rmErr != nil {
-					log.Printf("ERROR: Failed to remove infected file %s after quarantine failure: %v", archivePath, rmErr)
+					slog.Error("failed to remove infected file after quarantine failure", "path", archivePath, "error", rmErr)
 				}
 			} else {
-				log.Printf("INFO: Quarantined infected file: %s -> %s", archivePath, dest)
+				slog.Info("quarantined infected file", "path", archivePath, "dest", dest)
 			}
 		} else {
-			log.Printf("WARN: Quarantine path not configured, deleting %s", archivePath)
+			slog.Warn("quarantine path not configured, deleting", "path", archivePath)
 			if rmErr := os.Remove(archivePath); rmErr != nil {
-				log.Printf("ERROR: Failed to remove infected file %s: %v", archivePath, rmErr)
+				slog.Error("failed to remove infected file", "path", archivePath, "error", rmErr)
 			}
 		}
 	default: // "delete"
-		log.Printf("INFO: Deleting infected file: %s", archivePath)
+		slog.Info("deleting infected file", "path", archivePath)
 		if rmErr := os.Remove(archivePath); rmErr != nil {
-			log.Printf("ERROR: Failed to remove infected file %s: %v", archivePath, rmErr)
+			slog.Error("failed to remove infected file", "path", archivePath, "error", rmErr)
 		}
 	}
 }

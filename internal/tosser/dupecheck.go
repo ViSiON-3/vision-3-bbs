@@ -2,7 +2,7 @@ package tosser
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -42,7 +42,7 @@ func NewDupeDB(path string, maxAge time.Duration) (*DupeDB, error) {
 	if len(data) > 0 {
 		var f dupeFile
 		if err := json.Unmarshal(data, &f); err != nil {
-			log.Printf("WARN: Corrupt dupe DB at %s, starting fresh: %v", path, err)
+			slog.Warn("corrupt dupe DB, starting fresh", "path", path, "error", err)
 			return db, nil
 		}
 		if f.Entries != nil {

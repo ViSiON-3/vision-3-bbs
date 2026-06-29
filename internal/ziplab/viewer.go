@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -44,7 +44,6 @@ func sanitizeEntryName(s string) string {
 		return r
 	}, s)
 }
-
 
 // formatArchiveListing opens a ZIP file and writes a numbered, pipe-code-formatted
 // listing to w. Returns the file count and any error opening the archive.
@@ -199,7 +198,7 @@ func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, 
 
 		extractedPath, cleanup, err := extractSingleEntry(filePath, num)
 		if err != nil {
-			log.Printf("ziplab: extraction failed: %v", err)
+			slog.Error("extraction failed", "error", err)
 			msg := "\r\n|01Extraction failed.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			continue
@@ -222,7 +221,7 @@ func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, 
 			cancel()
 		}
 		if sendErr != nil {
-			log.Printf("ziplab: zmodem send failed: %v", sendErr)
+			slog.Error("zmodem send failed", "error", sendErr)
 			msg := "\r\n|01Transfer failed.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		} else {
