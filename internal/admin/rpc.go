@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 )
@@ -10,7 +11,14 @@ import (
 // initial snapshot, then concurrently streams events and answers commands
 // until ctx is cancelled or the stream errors. audit, if non-nil, is called
 // with a short description of each command for slog auditing.
-func ServeRPC(ctx context.Context, rw io.ReadWriter, srv *Server, audit func(string)) error {
+//
+// rw must be closable (e.g. net.Conn or ssh.Session); ServeRPC closes it when
+// the event-streaming goroutine fails so that the outer ReadFrame unblocks.
+func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, audit func(string)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	var writeMu sync.Mutex
 	write := func(f *Frame) error {
 		writeMu.Lock()
@@ -18,19 +26,13 @@ func ServeRPC(ctx context.Context, rw io.ReadWriter, srv *Server, audit func(str
 		return WriteFrame(rw, f)
 	}
 
-	// Wait for the server to have a non-nil snapshot before sending it.
-	// srv.Run ticks once immediately but goroutine scheduling may delay it.
-	var initialSnap *SystemSnapshot
-	for initialSnap == nil {
+	// Ensure the server has a snapshot before sending it.
+	// If srv.Snapshot() is nil (first tick not yet scheduled), force one tick
+	// so the snapshot is guaranteed non-nil on the next read.
+	initialSnap := srv.Snapshot()
+	if initialSnap == nil {
+		srv.tick(timeNow())
 		initialSnap = srv.Snapshot()
-		if initialSnap == nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				// yield and retry
-			}
-		}
 	}
 	if err := write(&Frame{Kind: KindSnapshot, Snapshot: initialSnap}); err != nil {
 		return err
@@ -44,6 +46,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriter, srv *Server, audit func(str
 			ev := e
 			if err := write(&Frame{Kind: KindEvent, Event: &ev}); err != nil {
 				cancel()
+				rw.Close() // unblock the outer ReadFrame
 				return
 			}
 		}
@@ -80,8 +83,9 @@ type StreamClient struct {
 	rwc       io.ReadWriteCloser
 	mu        sync.Mutex
 	snap      *SystemSnapshot
-	snapReady chan struct{} // closed once on first snapshot receipt
+	snapReady chan struct{} // closed exactly once: first snapshot OR readLoop exit
 	snapOnce  sync.Once
+	execMu    sync.Mutex // serialises Execute: one command/response in flight
 	results   chan *Frame
 	events    chan Event
 	closeFn   func() error
@@ -102,6 +106,10 @@ func NewStreamClient(rwc io.ReadWriteCloser) *StreamClient {
 }
 
 func (c *StreamClient) readLoop() {
+	// Always unblock Snapshot() callers when readLoop exits, whether cleanly or
+	// on error — so snapReady is closed exactly once regardless of path.
+	defer c.snapOnce.Do(func() { close(c.snapReady) })
+
 	for {
 		f, err := ReadFrame(c.rwc)
 		if err != nil {
@@ -134,6 +142,7 @@ func (c *StreamClient) readLoop() {
 
 // Snapshot waits for the initial snapshot from the server and returns it.
 // Subsequent calls return the most recently received snapshot immediately.
+// Returns an error if the connection closes before a snapshot is received.
 func (c *StreamClient) Snapshot(ctx context.Context) (*SystemSnapshot, error) {
 	select {
 	case <-c.snapReady:
@@ -142,6 +151,9 @@ func (c *StreamClient) Snapshot(ctx context.Context) (*SystemSnapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.snap == nil {
+		return nil, fmt.Errorf("admin: connection closed before snapshot received")
+	}
 	return c.snap, nil
 }
 
@@ -151,7 +163,11 @@ func (c *StreamClient) Subscribe(ctx context.Context) (<-chan Event, error) {
 }
 
 // Execute sends a command and waits for the result frame from the server.
+// Only one Execute is allowed in flight at a time; concurrent callers queue.
 func (c *StreamClient) Execute(ctx context.Context, cmd AdminCommand) (*Result, error) {
+	c.execMu.Lock()
+	defer c.execMu.Unlock()
+
 	if err := WriteFrame(c.rwc, &Frame{Kind: KindCommand, Command: &cmd}); err != nil {
 		return nil, err
 	}
