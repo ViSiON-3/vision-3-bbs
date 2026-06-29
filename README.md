@@ -4,9 +4,11 @@
 
 ## Overview
 
-This project is a work-in-progress refactor and modernization of the classic ViSiON/2 BBS software, written in Go. The goal is to recreate the core functionality of the classic BBS experience using modern technologies.
+This project is a work-in-progress refactor and modernization of the classic ViSiON/2 BBS software. The goal is to recreate the core functionality of the classic BBS experience using modern technologies.
 
-**Note:** This is currently under active development and is not yet feature-complete.
+There's detailed SysOp documentation [here](https://vision3bbs.com/sysop/#/).
+
+**Note:** This is currently under active development and is not quite feature-complete.
 
 ## Community
 

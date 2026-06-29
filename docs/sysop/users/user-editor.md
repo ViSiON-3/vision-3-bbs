@@ -28,17 +28,19 @@ Displays all users in a scrollable list. Four column views are available, toggle
 | 3 | Messages Posted, Validated |
 | 4 | Last Login Date, Last Login Time |
 
-Users can be tagged with Space for bulk operations (validate, delete).
+Deleted users appear at the bottom of the list below a `--- DELETED USERS ---` separator. Users can be tagged with Space for bulk operations (validate, delete, purge).
 
 ### Field Editor
 
-Press Enter on any user to open the field editor. Displays 27 fields across two columns:
+Press Enter on any user to open the field editor. Displays 29 fields across two columns:
 
 **Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit
 
-**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User, Created At, Updated At, Last Login, Last Bulletin
+**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User (read-only), Deleted At (read-only), Auto Purge (read-only), InfoForms (read-only), Created At, Updated At, Last Login, Last Bulletin
 
 The Password field opens a dialog — new password is bcrypt-hashed before saving.
+
+**Read-only fields:** Deleted User, Deleted At, and Auto Purge reflect the user's current deletion state and purge eligibility. InfoForms shows which infoform responses exist on disk (e.g., `1[x] 2[ ] 3[ ]`).
 
 ---
 
@@ -54,9 +56,11 @@ The Password field opens a dialog — new password is bcrypt-hashed before savin
 | Left / Right | Cycle column views |
 | Space | Toggle tag on current user |
 | Enter | Open field editor |
-| F2 | Delete highlighted user (confirm) |
-| Shift-F2 | Delete all tagged users (confirm) |
+| F2 | Soft-delete highlighted user (confirm); if confirmed, immediately offers purge |
+| Shift-F2 | Soft-delete all tagged users (confirm) |
 | F3 | Toggle alphabetical / numeric sort |
+| F4 | Purge highlighted deleted user (permanent — removes user and infoform files) |
+| Shift-F4 | Purge all deleted users (permanent) |
 | F5 | Auto-validate highlighted user |
 | Shift-F5 | Auto-validate all tagged users |
 | F10 | Tag all users |
@@ -74,8 +78,9 @@ The Password field opens a dialog — new password is bcrypt-hashed before savin
 | Ctrl-End | Jump to last field |
 | PgDn | Save changes + open next user |
 | PgUp | Save changes + open previous user |
-| F2 | Delete current user |
-| F5 | Reset to default values |
+| F2 | Soft-delete / undelete current user |
+| F4 | Purge current user (must already be deleted) |
+| F5 | Auto-validate current user |
 | F10 | Abort (discard changes) |
 | Esc | Save changes + return to list |
 
@@ -104,7 +109,11 @@ Sets standard approval values for a new user:
 
 ### Delete User
 
-Soft-delete: sets `deletedUser=true` and records a `deletedAt` timestamp. The record stays in `users.json` but is flagged as deleted — matching the V3 soft-delete pattern used by the BBS itself.
+Soft-delete (F2): sets `deletedUser=true` and records a `deletedAt` timestamp. After confirming the soft-delete, the editor immediately offers a follow-on purge dialog — press Y to purge on the spot, or N to leave the user in the deleted state for later.
+
+### Purge User
+
+Permanent removal (F4 from list, or F4 from the field editor when the user is already deleted). Purge deletes the user's record from `users.json` and removes any infoform response files (`data/infoforms/responses/<id>_*.json`). Purged user IDs are not recycled. Mass purge via Shift-F4 removes all currently-deleted users at once.
 
 ### Sort Order
 

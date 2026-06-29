@@ -157,7 +157,9 @@ cat data/files/general/metadata.json | python3 -m json.tool | head -20
 ### Setting Up a New File Area with Files
 
 ```bash
-# 1. Add area to configs/file_areas.json (or use existing area)
+# 1. Create the area in ./config → File Areas (key 3), then create the directory
+mkdir -p data/files/utils
+echo '[]' > data/files/utils/metadata.json
 
 # 2. Import files
 ./helper files import --dir ~/bbs-files/utils --area UTILS --uploader "Sysop"

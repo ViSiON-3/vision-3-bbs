@@ -139,34 +139,22 @@ The `LISTFILES` function shows files in current area:
 
 ## Creating a New File Area
 
-1. Create directory structure:
+1. Add the area in `./config` → **File Areas** (key 3). Set the tag, name, description, path, and ACS fields. The editor creates the area in `configs/file_areas.json`.
+
+2. Create the area directory and empty metadata file:
 
 ```bash
 mkdir -p data/files/myarea
-```
-
-1. Add to `configs/file_areas.json`:
-
-```json
-{
-  "id": 2,
-  "tag": "MYAREA",
-  "name": "My File Area",
-  "description": "Description here",
-  "path": "myarea",
-  "acs_list": "",
-  "acs_upload": "s10",
-  "acs_download": ""
-}
-```
-
-1. Create empty metadata file:
-
-```bash
 echo '[]' > data/files/myarea/metadata.json
 ```
 
-1. Restart BBS or reload configuration
+3. Import files with `helper files import` (see [Bulk File Import](files/bulk-import.md)):
+
+```bash
+./helper files import --dir /path/to/files --area MYAREA
+```
+
+4. Restart the BBS (or reload configuration) to make the area visible to users.
 
 ## File Display Templates
 
@@ -271,30 +259,15 @@ This produces: `■ Local > General Files          Files:  1    Page 1 of 1` wit
 
 ## File Management
 
-### Adding Files Manually
+### Adding Files
 
-1. Copy file to area directory:
+Use `helper files import` to bulk-import files into an area. It copies files, extracts `FILE_ID.DIZ` descriptions from archives, generates UUIDs, and updates `metadata.json` automatically:
 
 ```bash
-cp myfile.zip data/files/general/
+./helper files import --dir /path/to/files --area GENERAL --preserve-dates
 ```
 
-1. Update area's `metadata.json`:
-
-```json
-{
-  "id": "44444444-4444-4444-4444-444444444444",
-  "area_id": 1,
-  "filename": "myfile.zip",
-  "description": "My file",
-  "size": 1024,
-  "uploaded_at": "2025-01-01T00:00:00Z",
-  "uploaded_by": "SysOp",
-  "download_count": 0
-}
-```
-
-Note: Generate a unique UUID for the `id` field.
+See [Bulk File Import](files/bulk-import.md) for full documentation including all flags, skip logic, and dry-run support.
 
 ### Removing Files
 
@@ -304,17 +277,7 @@ Note: Generate a unique UUID for the `id` field.
 rm data/files/general/oldfile.zip
 ```
 
-1. Remove entry from `metadata.json`
-
-### Batch Import
-
-Use the `helper files import` command to bulk import files from a directory:
-
-```bash
-./helper files import --dir /path/to/files --area GENERAL --preserve-dates
-```
-
-This automatically copies files, extracts FILE_ID.DIZ descriptions from archives, generates UUIDs, and updates `metadata.json`. See [Bulk File Import](files/bulk-import.md) for full documentation.
+2. Remove the corresponding entry from the area's `metadata.json`.
 
 ## Best Practices
 

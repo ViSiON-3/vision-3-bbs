@@ -122,7 +122,7 @@ function typeText(terminal, text, callback) {
         if (index < text.length) {
             cursor.insertAdjacentText('beforebegin', text[index]);
             index++;
-            setTimeout(typeChar, 30 + Math.random() * 20);
+            trackTimeout(typeChar, 30 + Math.random() * 20);
         } else if (callback) {
             callback();
         }
@@ -151,10 +151,67 @@ function buildStatusBar(isOnline) {
         '<span>' + rightContent + '</span>';
 }
 
+// Active audio handles — tracked so skip can stop them
+var activeAudioContext = null;
+var activeModemAudio = null;
+
+// Pending sequence timers — tracked so skip can cancel them all
+var splashTimers = [];
+
+// Document-level ESC handler — tracked so teardown can always detach it
+var splashEscHandler = null;
+
+function trackTimeout(fn, delay) {
+    var id = setTimeout(fn, delay);
+    splashTimers.push(id);
+    return id;
+}
+
+function trackInterval(fn, delay) {
+    var id = setInterval(fn, delay);
+    splashTimers.push(id);
+    return id;
+}
+
+function clearSplashTimers() {
+    splashTimers.forEach(function (id) {
+        clearTimeout(id);
+        clearInterval(id);
+    });
+    splashTimers = [];
+}
+
+// Tear down the splash: cancel pending timers, stop audio, remove overlay.
+// Safe to call once; subsequent calls are no-ops because the splash is gone.
+function teardownSplash(splash) {
+    clearSplashTimers();
+    if (splashEscHandler) {
+        document.removeEventListener('keydown', splashEscHandler);
+        splashEscHandler = null;
+    }
+    if (activeModemAudio) {
+        activeModemAudio.pause();
+        activeModemAudio.currentTime = 0;
+        activeModemAudio = null;
+    }
+    if (activeAudioContext) {
+        activeAudioContext.close();
+        activeAudioContext = null;
+    }
+    splash.remove();
+    document.body.classList.remove('splash-active');
+    setVisitedCookie();
+}
+
+function skipSplash(splash) {
+    teardownSplash(splash);
+}
+
 // Main dialer sequence - chained callbacks for synchronous execution
 function runDialerSequence(splash) {
     var terminal = document.getElementById('telix-terminal');
     var audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    activeAudioContext = audioContext;
     var phoneDigits = '13145673833';
 
     // Resume AudioContext if suspended (iOS Safari)
@@ -167,23 +224,24 @@ function runDialerSequence(splash) {
     if (prompt) prompt.remove();
 
     var modemAudio = audioPool.modem;
+    activeModemAudio = modemAudio;
 
     // Phase 1: Type AT&F, wait for OK
     typeText(terminal, 'AT&F\n', function () {
         printLine(terminal, 'OK');
 
         // Phase 2: Wait, then type init string
-        setTimeout(function () {
+        trackTimeout(function () {
             typeText(terminal, 'AT&C1&D2&K3&M4&N6\n', function () {
                 printLine(terminal, 'OK');
 
                 // Phase 3: Wait, then type ATDT
-                setTimeout(function () {
+                trackTimeout(function () {
                     var atdtChars = 'ATDT';
                     var atdtIndex = 0;
                     var cursor = terminal.querySelector('.telix-cursor');
 
-                    var atdtInterval = setInterval(function () {
+                    var atdtInterval = trackInterval(function () {
                         if (atdtIndex < atdtChars.length) {
                             cursor.insertAdjacentText('beforebegin', atdtChars[atdtIndex]);
                             atdtIndex++;
@@ -194,13 +252,13 @@ function runDialerSequence(splash) {
                             playPhonePickup();
 
                             // Wait 0.5s, then start dial tone
-                            setTimeout(function () {
+                            trackTimeout(function () {
                                 playDialTone(audioContext, audioContext.currentTime, 1.5);
 
                                 // Phase 4: Type phone number with DTMF
-                                setTimeout(function () {
+                                trackTimeout(function () {
                                     var digitIndex = 0;
-                                    var digitInterval = setInterval(function () {
+                                    var digitInterval = trackInterval(function () {
                                         if (digitIndex < phoneDigits.length) {
                                             var digit = phoneDigits[digitIndex];
                                             cursor.insertAdjacentText('beforebegin', digit);
@@ -216,23 +274,23 @@ function runDialerSequence(splash) {
                                             cursor.insertAdjacentText('beforebegin', '\n');
 
                                             // Phase 5: First ring
-                                            setTimeout(function () {
+                                            trackTimeout(function () {
                                                 playRingTone(audioContext, audioContext.currentTime);
 
                                                 // Phase 6: Wait 4.5s, then second ring
-                                                setTimeout(function () {
+                                                trackTimeout(function () {
                                                     playRingTone(audioContext, audioContext.currentTime);
 
                                                     // Show RING text shortly after second ring starts
-                                                    setTimeout(function () {
+                                                    trackTimeout(function () {
                                                         printLine(terminal, 'RING');
 
                                                     // Phase 7: Wait 1.5s, phone pickup click
-                                                    setTimeout(function () {
+                                                    trackTimeout(function () {
                                                         playPhonePickup();
 
                                                         // Phase 8: Wait 0.5s, then modem screech (plays once, ~5s)
-                                                        setTimeout(function () {
+                                                        trackTimeout(function () {
                                                             // Play screech file once
                                                             if (modemAudio) {
                                                                 modemAudio.currentTime = 0;
@@ -242,18 +300,15 @@ function runDialerSequence(splash) {
                                                             }
 
                                                             // Phase 9: CONNECT after screech finishes (~18.5s)
-                                                            setTimeout(function () {
+                                                            trackTimeout(function () {
                                                                 printLine(terminal, 'CONNECT 14400/ARQ/V32bis/LAPM');
 
                                                                 // Update status bar to ONLINE
                                                                 buildStatusBar(true);
 
                                                                 // Phase 10: Remove overlay after brief pause
-                                                                setTimeout(function () {
-                                                                    audioContext.close();
-                                                                    splash.remove();
-                                                                    document.body.classList.remove('splash-active');
-                                                                    setVisitedCookie();
+                                                                trackTimeout(function () {
+                                                                    teardownSplash(splash);
                                                                 }, 2000);
                                                             }, 18500);
                                                         }, 500);
@@ -298,7 +353,6 @@ function runDialerSequence(splash) {
 
     function startSequence() {
         splash.removeEventListener('click', clickHandler);
-        splash.removeEventListener('keydown', keyHandler);
         splash.style.cursor = 'default';
         unlockAudioPool();
         runDialerSequence(splash);
@@ -308,22 +362,39 @@ function runDialerSequence(splash) {
         startSequence();
     }
 
-    function keyHandler(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            startSequence();
-        }
+    splash.addEventListener('click', clickHandler);
+
+    var skipBtn = document.getElementById('telix-skip');
+    if (skipBtn) {
+        skipBtn.addEventListener('click', function (e) {
+            e.stopPropagation(); // don't trigger splash clickHandler
+            skipSplash(splash);
+        });
+        // Keep Enter/Space on the button from bubbling to the splash's
+        // keyHandler and starting the modem sequence — the native button
+        // click already fires skipSplash.
+        skipBtn.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+            }
+        });
     }
 
-    splash.addEventListener('click', clickHandler);
-    splash.addEventListener('keydown', keyHandler);
+    // Tracked so teardownSplash detaches it on skip OR normal completion,
+    // not just when ESC is pressed.
+    splashEscHandler = function (e) {
+        if (e.key === 'Escape') {
+            skipSplash(splash);
+        }
+    };
+    document.addEventListener('keydown', splashEscHandler);
 })();
 
 /* ---- BBS Menu Keyboard Navigation ---- */
 (function () {
     'use strict';
 
-    var keymap = {
+    var anchorMap = {
         'f': '#features',
         'F': '#features',
         'g': '#get-started',
@@ -334,9 +405,15 @@ function runDialerSequence(splash) {
         'H': '#history'
     };
 
+    var hrefMap = {
+        'd': '/sysop/',
+        'D': '/sysop/'
+    };
+
     document.addEventListener('keydown', function (e) {
-        // Don't hijack if modifier keys are pressed or user is typing
-        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+        // Don't hijack if command/control modifiers are pressed or user is
+        // typing. Shift is allowed so Shift+F (and Caps Lock) still navigate.
+        if (e.ctrlKey || e.metaKey || e.altKey) {
             return;
         }
 
@@ -345,7 +422,13 @@ function runDialerSequence(splash) {
             return;
         }
 
-        var section = keymap[e.key];
+        if (hrefMap[e.key]) {
+            e.preventDefault();
+            window.location.href = hrefMap[e.key];
+            return;
+        }
+
+        var section = anchorMap[e.key];
         if (section) {
             e.preventDefault();
             var element = document.querySelector(section);

@@ -18,38 +18,75 @@ ViSiON/3 includes an interactive TUI configuration editor modeled after ViSiON/2
 
 ### Main Menu
 
-The editor opens to a main menu with sections for each configuration area:
+The editor opens to a main menu. Keys **1**, **2**, **3**, and **4** open sub-menus; the rest go directly to record lists.
 
-| Key | Section | Description |
-|-----|---------|-------------|
-| 1 | System Configuration | BBS name, network, connection limits, access levels, defaults, IP lists |
-| 2 | Message Areas | Message area records with conference grouping |
-| 3 | File Areas | File area records |
-| 4 | Conferences | Conference definitions and ordering |
-| 5 | Door Programs | External door configurations |
-| 6 | Event Scheduler | Automated event definitions |
-| 7 | Echomail Networks | FTN network settings (own address, paths, tosser) |
-| 8 | Echomail Links | FTN hub links (address, packet_password, areafix_password) |
-| 9 | Transfer Protocols | File transfer protocol definitions |
-| A | Archivers | Archive format tool definitions |
-| B | Login Sequence | Login step sequence |
-| Q | Quit Program | Exit the configuration editor |
+| Key | Section | What it covers |
+|-----|---------|----------------|
+| 1 | System Configuration | Opens 9 sub-screens: BBS identity, server setup, connection limits, access levels, default settings, IP lists, NUV, DOS emulation, logging |
+| 2 | Areas and Conferences | Sub-menu: Message Areas, File Areas, Conferences |
+| 3 | Echomail Networking | Sub-menu: Echomail Networks, Echomail Links, FTN Setup Wizard |
+| 4 | ViSiON/3 Networking (V3Net) | Sub-menu: Node Identity, Subscriptions, Hosted Networks |
+| 5 | Door Programs | External door program record list |
+| 6 | Transfer Protocols | File transfer protocol record list |
+| 7 | Archivers | Archive format record list |
+| 8 | Event Scheduler | Automated event record list |
+| 9 | Login Sequence | Login step record list |
+| Q | Quit | Exit (prompts to save if there are unsaved changes) |
+
+### System Configuration Sub-screens
+
+Choosing **System Configuration** (key 1) opens an inner menu with nine numbered sub-screens, all writing to `configs/config.json`. Use Up/Down and Enter (or the sub-screen number) to navigate; Esc returns to the main menu.
+
+| Sub-screen | Name | Fields |
+|------------|------|--------|
+| 0 | BBS Registration | Board Name, SysOp Name, BBS Location, Timezone |
+| 1 | Server Setup | SSH enabled/host/port/legacy-algorithms, Telnet enabled/host/port, V3Net enabled + hub settings |
+| 2 | Connection Limits | Max Nodes, Max Per IP, Failed Logins (0=off), Lockout Minutes, Idle Timeout, Transfer Timeout |
+| 3 | Access Levels | SysOp Level, CoSysOp Level, Invisible Level, New User Level, Regular Level, Logon Level, Anonymous Level |
+| 4 | Default Settings | Allow New Users (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days |
+| 5 | IP Blocklist/Allowlist | Blocklist Path, Allowlist Path |
+| 6 | New User Voting (NUV) | Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
+| 7 | DOS Emulation | DOSemu Path |
+| 8 | Logging | Log Directory, Min Level, Rolling Type, Cache Writes, Max Files, Max Size KB |
+
+**Server Setup (sub-screen 1)** also writes to `configs/v3net.json` for the V3Net fields (keystore path, dedup DB path, registry URL, hub enabled/host/port/data dir/auto-approve).
+
+### Areas and Conferences Sub-menu
+
+| Item | What it edits | File written |
+|------|---------------|--------------|
+| Message Areas | Area tag, name, type (local/echomail/v3net/netmail), ACS, paths, conference, networking fields | `configs/message_areas.json` |
+| File Areas | Area tag, name, description, path, ACS, conference | `configs/file_areas.json` |
+| Conferences | Tag, name, description, ACS, display order | `configs/conferences.json` |
+
+### Echomail Networking Sub-menu
+
+| Item | What it edits |
+|------|---------------|
+| Echomail Networks | Global FTN paths (inbound, outbound, temp, bad/dupe tags) and per-network settings (own address, poll interval, tearline) |
+| Echomail Links | Per-hub link settings (address, packet/session/AreaFix passwords, flavour) |
+| FTN Setup Wizard | Guided flow: downloads a network's echolist, lets you browse and subscribe to areas, then writes `ftn.json`, `message_areas.json`, and `conferences.json` automatically |
+
+### ViSiON/3 Networking (V3Net) Sub-menu
+
+| Item | What it edits |
+|------|---------------|
+| Node Identity | View public key / mnemonic phrase, generate a new keypair, or recover from a seed phrase |
+| Subscriptions | Add/edit hub subscriptions (hub URL, network name, poll interval, origin); includes a V3Net Area Browser and a Registry Browser for discovering networks |
+| Hosted Networks | Manage networks your hub hosts, including their areas (add/edit/delete/rename with optional JAM base operations) |
 
 ### Navigation
 
 | Key | Action |
 |-----|--------|
-| Up/Down | Move highlight |
-| Enter | Select / edit field |
-| I | Insert new record |
-| D | Delete record |
-| P | Reorder record position (supported record types) |
-| PgUp/PgDn | Navigate between records in the field editor |
-| ESC | Return to previous screen |
-
-### Reordering Records
-
-Press **P** in a record list to enter reorder mode. Use Up/Down to choose the new position and Enter to confirm. For message areas, reordering is constrained to within the same conference.
+| Up / Down | Move highlight |
+| Enter | Select / activate field |
+| I | Insert new record (record list screens) |
+| D | Delete record (record list screens) |
+| P | Reorder mode — Up/Down picks new position, Enter confirms |
+| PgUp / PgDn | Previous/Next record from within an edit screen |
+| Home / End | Jump to first/last item |
+| Esc | Return to previous screen (or exit-confirm at top menu) |
 
 ### Saving
 
@@ -85,7 +122,7 @@ Configuration files are split between two directories:
 
 ## strings.json
 
-> *Use the [String Editor](advanced/string-editor.md) (`./strings`) to edit display strings interactively. It is a Go reimplementation of the original Vision/2 `STRINGS.EXE` utility. The JSON structure below is for reference or manual editing.*
+> *Use the [String Editor](advanced/string-editor.md) (`./strings`) to edit display strings interactively. It is a Go reimplementation of the original Vision/2 `STRINGS.EXE` utility. The JSON structure below is for reference.*
 
 This file contains all the customizable text strings displayed by the BBS. You can modify these to personalize your system.
 
@@ -150,7 +187,7 @@ The strings support pipe color codes:
 
 ## doors.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 5 — Door Programs) to manage door settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (section 5 — Door Programs) to manage door settings interactively. The JSON structure below is for reference.*
 
 Configures external door programs that can be launched from the BBS. The file contains an array of door configurations. See the [Door Programs Guide](doors/doors.md) for full documentation including DOS door setup, FOSSIL drivers, and dosemu2 configuration.
 
@@ -224,7 +261,7 @@ Configures external door programs that can be launched from the BBS. The file co
 
 ## archivers.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section A — Archivers) to manage archiver settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (key 7 — Archivers) to manage archiver settings interactively. The JSON structure below is for reference.*
 
 Defines archive formats and the external tools used to pack, unpack, test, and list them. This centralized configuration ensures all subsystems (ZipLab upload pipeline, file area management, archive viewing) use the same archiver definitions, and that different platforms can specify their preferred tool versions.
 
@@ -291,7 +328,7 @@ FTN echomail bundles always use ZIP format (per FidoNet standard practice) and a
 
 ## file_areas.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 3 — File Areas) to manage file area settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (key 2 → File Areas) to manage file area settings interactively. The JSON structure below is for reference.*
 
 Defines file areas available on the BBS. The file contains an array of file area configurations.
 
@@ -335,112 +372,103 @@ Defines file areas available on the BBS. The file contains an array of file area
 
 ## config.json
 
-General BBS configuration settings.
+General BBS configuration. All settings in this file are managed through the **System Configuration** section of `./config` — you should not need to hand-edit it.
 
-### Current Structure
+### TUI Paths
 
-```json
-{
-  "boardName": "PiRATE MiND STATiON",
-  "boardPhoneNumber": "314-567-3833",
-  "timezone": "America/Los_Angeles",
-  "sysOpLevel": 255,
-  "coSysOpLevel": 250,
-  "logonLevel": 100,
-  "sshPort": 2222,
-  "sshHost": "0.0.0.0",
-  "sshEnabled": true,
-  "telnetPort": 2323,
-  "telnetHost": "0.0.0.0",
-  "telnetEnabled": true,
-  "maxNodes": 10,
-  "maxConnectionsPerIP": 3,
-  "ipBlocklistPath": "",
-  "ipAllowlistPath": "",
-  "maxFailedLogins": 5,
-  "lockoutMinutes": 30,
-  "dosemuPath": "",
-  "logging": {
-    "dir": "data/logs",
-    "level": "INFO",
-    "cache": true,
-    "type": 0,
-    "maxFiles": 5,
-    "maxSizeKB": 1024
-  }
-}
-```
+| Setting group | TUI path |
+|---------------|----------|
+| Board name, sysop name, location, timezone | System Configuration → BBS Registration (sub-screen 0) |
+| SSH / Telnet ports and enabled flags | System Configuration → Server Setup (sub-screen 1) |
+| Max nodes, per-IP limits, timeouts | System Configuration → Connection Limits (sub-screen 2) |
+| Access levels (sysop, new user, logon, etc.) | System Configuration → Access Levels (sub-screen 3) |
+| New user registration, file list mode, retention | System Configuration → Default Settings (sub-screen 4) |
+| Blocklist / allowlist file paths | System Configuration → IP Blocklist/Allowlist (sub-screen 5) |
+| NUV voting thresholds and behavior | System Configuration → New User Voting (sub-screen 6) |
+| DOSemu binary path | System Configuration → DOS Emulation (sub-screen 7) |
+| Log directory, level, rotation | System Configuration → Logging (sub-screen 8) |
 
-### General Configuration Field Descriptions
+### Field Reference
 
-**BBS Settings:**
+**BBS Registration:**
 
-- `boardName` - BBS name displayed to users
-- `boardPhoneNumber` - Phone number (historical/display purposes)
-- `timezone` - IANA timezone for display formatting (example: `America/Los_Angeles`)
-- `sysOpLevel` - Security level for SysOp access
-- `coSysOpLevel` - Security level for Co-SysOp access
-- `logonLevel` - Security level granted after successful login
+- `boardName` — BBS name displayed to users (default: `"ViSiON/3 BBS"`)
+- `sysOpName` — Sysop's handle
+- `bbsLocation` — Location string (city/region)
+- `timezone` — IANA timezone for display formatting (e.g., `America/Los_Angeles`). If unset, falls back to `VISION3_TIMEZONE` env var, then `TZ`, then server local time.
 
-**SSH Server:**
+**Server Setup:**
 
-- `sshPort` - Port for SSH connections (default: 2222)
-- `sshHost` - Bind address for SSH listener (default: `0.0.0.0`)
-- `sshEnabled` - Enable or disable the SSH server
+- `sshEnabled` — Enable/disable the SSH server (default: `true`)
+- `sshHost` — Bind address (default: `"0.0.0.0"`)
+- `sshPort` — TCP port (default: `2222`)
+- `legacySSHAlgorithms` — Older SSH algorithms for retro clients like SyncTERM (default: `true`)
+- `telnetEnabled` — Enable/disable the Telnet server (default: `false`)
+- `telnetHost` — Bind address (default: `"0.0.0.0"`)
+- `telnetPort` — TCP port (default: `2323`)
 
-**Telnet Server:**
+**Connection Limits:**
 
-- `telnetPort` - Port for telnet connections (default: 2323)
-- `telnetHost` - Bind address for telnet listener (default: `0.0.0.0`)
-- `telnetEnabled` - Enable or disable the telnet server
+- `maxNodes` — Maximum simultaneous connections (default: `10`)
+- `maxConnectionsPerIP` — Max concurrent connections from one IP (default: `3`)
+- `maxFailedLogins` — Failed BBS logins from an IP before lockout (default: `5`, `0` = disabled)
+- `lockoutMinutes` — Lockout duration in minutes (default: `30`)
+- `sessionIdleTimeoutMinutes` — Idle session cutoff (default: `5`)
+- `transferTimeoutMinutes` — File transfer timeout (default: `10`)
 
-**Connection Security:**
+**Access Levels:**
 
-- `maxNodes` - Maximum simultaneous connections allowed (default: 10, 0 = unlimited)
-- `maxConnectionsPerIP` - Maximum simultaneous connections per IP address (default: 3, 0 = unlimited)
-- `ipBlocklistPath` - Path to IP blocklist file (optional, leave empty to disable)
-- `ipAllowlistPath` - Path to IP allowlist file (optional, leave empty to disable)
+- `sysOpLevel` — Security level for SysOp access (default: `255`)
+- `coSysOpLevel` — Security level for Co-SysOp access (default: `250`)
+- `invisibleLevel` — Level at which a user is invisible in the who's-online list (default: `0`, falls back to `coSysOpLevel`)
+- `newUserLevel` — Level assigned to a brand-new account (default: `1`)
+- `regularUserLevel` — Level for validated/regular users (default: `10`)
+- `logonLevel` — Level granted on successful login (default: `10`)
+- `anonymousLevel` — Level for guest/anonymous access (default: `5`, `0` = disabled)
 
-**Authentication Security:**
+**Default Settings:**
 
-- `maxFailedLogins` - Maximum failed login attempts from a single IP before lockout (default: 5, 0 = disabled)
-- `lockoutMinutes` - Duration of IP lockout in minutes (default: 30)
+- `allowNewUsers` — Accept new user registrations (default: `true`)
+- `fileListingMode` — `""` or `"lightbar"` (default) / `"classic"`
+- `deletedUserRetentionDays` — Days to keep soft-deleted user records before `helper users purge` removes them (default: `30`, `-1` = keep forever)
+
+**IP Blocklist/Allowlist:**
+
+- `ipBlocklistPath` — Path to blocklist file (empty = disabled)
+- `ipAllowlistPath` — Path to allowlist file (empty = disabled)
+
+Both files are plain text: one IP or CIDR range per line, `#` for comments. They are watched for changes and reloaded automatically — no restart required. See [Security Guide](configuration/security.md) for format details.
 
 **New User Voting (NUV):**
 
-- `useNuv` - Enable the NUV system (default: `false`). All NUV commands are silent no-ops when disabled
-- `autoAddNuv` - Automatically add new registrations to the NUV queue (default: `false`)
-- `nuvUseLevel` - Minimum access level required to cast NUV votes (default: `25`)
-- `nuvYesVotes` - YES vote count that triggers the yes threshold (default: `5`)
-- `nuvNoVotes` - NO vote count that triggers the no threshold (default: `5`)
-- `nuvValidate` - If `true`, auto-validate the user when yes threshold is reached; if `false`, log a notice (default: `true`)
-- `nuvKill` - If `true`, auto-soft-delete the user when no threshold is reached; if `false`, log a notice (default: `false`)
-- `nuvLevel` - Access level assigned to auto-validated NUV users (default: `25`)
+- `useNuv` — Enable the NUV system (default: `false`)
+- `autoAddNuv` — Automatically queue new registrations for voting (default: `false`)
+- `nuvUseLevel` — Minimum level to cast votes (default: `25`)
+- `nuvYesVotes` — YES votes needed to trigger the yes threshold (default: `5`)
+- `nuvNoVotes` — NO votes needed to trigger the no threshold (default: `5`)
+- `nuvValidate` — Auto-validate when yes threshold is reached (default: `true`)
+- `nuvKill` — Auto-soft-delete when no threshold is reached (default: `false`)
+- `nuvLevel` — Level assigned to auto-validated users (default: `25`)
+- `nuvForm` — Infoform number shown during NUV registration (default: `1`)
 
 See [New User Voting](users/nuv.md) for full details.
 
 **DOS Emulation:**
 
-- `dosemuPath` - Path to the dosemu2 binary (default: `/usr/libexec/dosemu2/dosemu2.bin`). ViSiON/3 calls the binary directly, bypassing the bash wrapper which mangles backslash arguments. Leave blank to use the default path.
+- `dosemuPath` — Path to the dosemu2 binary. ViSiON/3 calls it directly (bypassing the bash wrapper which mangles backslash arguments). Leave blank to use the default path.
 
 See [Door Programs](doors/doors.md#running-dos-doors) for full DOS door setup documentation.
 
 **Logging:**
 
-- `logging.dir` - Directory for log files (default: `data/logs`)
-- `logging.level` - Minimum log level written: `DEBUG`, `INFO`, `WARN`, or `ERROR` (default: `INFO`)
-- `logging.cache` - Buffer writes in an 8 KB in-memory cache; flushed on errors and shutdown (default: `true`)
-- `logging.type` - Log rotation mode: `0` = none, `1` = size-based, `2` = daily (default: `0`)
-- `logging.maxFiles` - For size mode: number of numbered backups to keep. For daily mode: days of dated files to retain (default: `5`)
-- `logging.maxSizeKB` - Rotation threshold in KB; only used when `type` is `1` (default: `1024`)
+- `logging.dir` — Directory for log files (default: `data/logs`)
+- `logging.level` — Minimum log level: `DEBUG`, `INFO`, `WARN`, or `ERROR` (default: `INFO`)
+- `logging.cache` — Buffer writes in an 8 KB cache; flushed on errors and clean exit (default: `true`)
+- `logging.type` — Rotation mode: `0` = none, `1` = size-based, `2` = daily (default: `0`)
+- `logging.maxFiles` — Numbered backups to keep (size mode) or days of files to retain (daily mode) (default: `5`)
+- `logging.maxSizeKB` — Rotation threshold in KB; size mode only (default: `1024`)
 
 See [Logging](#logging) for full details and examples.
-
-**Timezone behavior:**
-
-- Last Callers time fields use `config.json` `timezone` first.
-- If unset, the app checks environment variables `VISION3_TIMEZONE`, then `TZ`.
-- If none are set or invalid, server local timezone is used.
 
 ### IP Blocklist/Allowlist Files
 
@@ -490,7 +518,7 @@ Leave paths empty (`""`) to disable the feature.
 
 ## Logging
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (System Configuration → Logging) to manage logging settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (System Configuration → Logging) to manage logging settings interactively. The JSON structure below is for reference.*
 
 ViSiON/3 writes structured JSON logs (one object per line) to a configurable directory. All settings live under the `"logging"` key in `configs/config.json` and are shared by every binary (`vision3`, `v3mail`). If the key is absent, defaults are applied automatically so existing installs continue to work unchanged.
 
@@ -580,7 +608,7 @@ Additional structured attributes (node, user, error, etc.) vary by event.
 
 ## message_areas.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 2 — Message Areas) to manage message area settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (key 2 → Message Areas) to manage message area settings interactively. The JSON structure below is for reference.*
 
 Located in the `configs/` directory. Defines message areas available on the BBS.
 
@@ -588,7 +616,7 @@ See [Message Areas Guide](messages/message-areas.md) for detailed configuration.
 
 ## ftn.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 7 — Echomail Networks, section 8 — Echomail Links) to manage FTN settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (key 3 → Echomail Networks / Echomail Links) to manage FTN settings interactively. The JSON structure below is for reference.*
 
 Located in the `configs/` directory. Configures the internal FTN tosser (v3mail) for echomail. Global fields include directory paths (`inbound_path`, `outbound_path`, `binkd_outbound_path`, `temp_path`) and routing tags (`bad_area_tag`, `dupe_area_tag`). Per-network fields include `own_address`, `internal_tosser_enabled`, `poll_interval_seconds`, and `tearline`. Per-link fields include `address`, `packet_password`, `areafix_password`, `name`, and `flavour`.
 
@@ -596,7 +624,7 @@ See [FTN Echomail Guide](messages/ftn-echomail.md) for setup and full field refe
 
 ## conferences.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 4 — Conferences) to manage conference settings interactively. The JSON structure below is for reference or manual editing.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (key 2 → Conferences) to manage conference settings interactively. The JSON structure below is for reference.*
 
 Located in the `configs/` directory. Defines conferences that group message areas and file areas together for organized display.
 
@@ -873,25 +901,17 @@ ssh-keygen -t rsa -f ssh_host_rsa_key -N ""
 
 The BBS will fail to start if the host key is missing.
 
-## Best Practices
-
-1. **Backup Before Editing**: Always backup configuration files before making changes
-2. **Test Changes**: Test configuration changes with a test user account
-3. **Use Valid JSON**: Ensure JSON syntax is valid (use a JSON validator)
-4. **Document Changes**: Keep notes on what you've customized
-
 ## Applying Configuration Changes
 
-Most configuration changes take effect:
+Most configuration changes take effect after a BBS restart. The TUI writes changes to disk when you save; restart `./vision3` to pick them up.
 
-- **Immediately**: String changes, theme changes
-- **On user login**: User-specific settings
-- **On restart**: Door configurations, file areas, general config
+Exceptions that take effect without a restart:
 
-Some changes may require a server restart:
+- **IP blocklist/allowlist files** — watched by the BBS and reloaded automatically on save (no restart needed)
+- **strings.json** — loaded fresh on each display
 
 ```bash
-# Stop the server (Ctrl+C)
-# Start it again
+# Restart the BBS
+# (Ctrl+C to stop, then:)
 ./vision3
 ```

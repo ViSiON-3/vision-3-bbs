@@ -83,7 +83,7 @@ Pressing `Y` immediately starts a scan of unvoted candidates. Pressing `N` conti
 {"command": "CHECKNUV"}
 ```
 
-This is included in the default `configs/login.json`. If upgrading an existing deployment, add this entry manually to your login sequence.
+This is included in the default `configs/login.json`. If upgrading an existing deployment, add it via `./config` → System Configuration → Login Sequence (sub-screen 5).
 
 ---
 

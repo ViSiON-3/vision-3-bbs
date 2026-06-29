@@ -222,21 +222,17 @@ A key difference between the two protocols:
 
 ## Configuration
 
-### config.json
+Telnet settings are managed in `./config` → **System Configuration → Server Setup** (sub-screen 1):
 
-```json
-{
-  "telnetPort": 2323,
-  "telnetHost": "0.0.0.0",
-  "telnetEnabled": true
-}
-```
+| Field | Default | Description |
+|-------|---------|-------------|
+| Telnet Enabled | N | Enable/disable the Telnet server |
+| Telnet Host | `0.0.0.0` | Bind address for the telnet listener |
+| Telnet Port | `2323` | TCP port for telnet connections |
 
-| Field           | Type   | Default   | Description                         |
-| --------------- | ------ | --------- | ----------------------------------- |
-| `telnetPort`    | int    | 2323      | TCP port for telnet connections     |
-| `telnetHost`    | string | `0.0.0.0` | Bind address for telnet listener    |
-| `telnetEnabled` | bool   | true      | Enable or disable the telnet server |
+These write to `configs/config.json` under `telnetEnabled`, `telnetHost`, and `telnetPort`. Telnet is disabled by default — enable it only if you have clients that need it, since telnet transmits all data in cleartext.
+
+> **Note:** The `Current Limitations` section below reflects a snapshot in time. IP filtering is now fully implemented and configured via System Configuration → IP Blocklist/Allowlist.
 
 ### Command-Line Testing
 
@@ -285,9 +281,7 @@ nc localhost 2323
 ## Current Limitations
 
 1. **No Encryption**: Telnet transmits data in cleartext (use SSH for secure access)
-2. **No Rate Limiting**: Should add connection rate limiting
-3. **No IP Filtering**: Should add IP whitelist/blacklist support
-4. **80x25 Cap**: Terminal dimensions are capped to 80x25 for BBS compatibility
+2. **80x25 Cap**: Terminal dimensions are capped to 80x25 for BBS compatibility
 
 ## References
 

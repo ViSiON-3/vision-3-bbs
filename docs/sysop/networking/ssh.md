@@ -16,23 +16,16 @@ Key features:
 
 ## Configuration
 
-SSH settings live in `configs/config.json`:
+SSH settings are managed in `./config` → **System Configuration → Server Setup** (sub-screen 1):
 
-```json
-{
-  "sshPort": 2222,
-  "sshHost": "0.0.0.0",
-  "sshEnabled": true,
-  "legacySSHAlgorithms": false
-}
-```
+| Field | Default | Description |
+|-------|---------|-------------|
+| SSH Enabled | Y | Enable/disable the SSH server |
+| SSH Host | `0.0.0.0` | Interface to bind (all interfaces) |
+| SSH Port | `2222` | TCP port to listen on |
+| Legacy SSH | Y | Enable older SSH algorithms for retro client compatibility (see below) |
 
-### Fields
-
-- `sshPort` — TCP port to listen on (default: `2222`)
-- `sshHost` — Interface to bind (default: `"0.0.0.0"` for all interfaces)
-- `sshEnabled` — Enable/disable the SSH server
-- `legacySSHAlgorithms` — Enable older SSH algorithms for retro client compatibility (see below)
+These settings write to `configs/config.json` under the keys `sshEnabled`, `sshHost`, `sshPort`, and `legacySSHAlgorithms`.
 
 ## SSH Host Keys
 
@@ -70,13 +63,13 @@ Tested and working:
 
 ### Connection Refused
 
-- Check `sshEnabled: true` in `configs/config.json`
+- Check that SSH Enabled is **Y** in `./config` → System Configuration → Server Setup
 - Verify the port is not in use: `netstat -ln | grep 2222`
 - Check that `configs/ssh_host_rsa_key` exists and is readable
 
 ### SyncTERM or Retro Client Fails to Connect
 
-- Enable `legacySSHAlgorithms: true` in `configs/config.json` and restart the BBS
+- Enable Legacy SSH in `./config` → System Configuration → Server Setup, then restart the BBS
 
 ### Authentication Fails
 
