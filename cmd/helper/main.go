@@ -144,6 +144,9 @@ func printUsersHelp(errMsg string) {
 	fmt.Fprintf(w, "  %sUser Subcommands:%s\n", clrBold, clrReset)
 	fmt.Fprintln(w, helpcmd("PURGE", "Permanently remove soft-deleted users past retention"))
 	fmt.Fprintln(w, helpcmd("LIST", "List user accounts (optionally filtered to deleted)"))
+	fmt.Fprintln(w, helpcmd("ADDKEY <handle> <keyfile|->", "Register a WFC SSH public key for a user"))
+	fmt.Fprintln(w, helpcmd("LISTKEYS <handle>", "List a user's WFC public keys (fingerprints)"))
+	fmt.Fprintln(w, helpcmd("DELKEY <handle> <fingerprint|index>", "Remove a WFC public key from a user"))
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "  %sOptions:%s\n", clrBold, clrReset)
 	fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))
@@ -166,6 +169,12 @@ func cmdUsers(args []string) {
 		cmdUsersPurge(args[1:])
 	case "list":
 		cmdUsersList(args[1:])
+	case "addkey":
+		cmdUsersAddKey(args[1:])
+	case "listkeys":
+		cmdUsersListKeys(args[1:])
+	case "delkey":
+		cmdUsersDelKey(args[1:])
 	case "help", "--help", "-h":
 		printUsersHelp("")
 	default:
