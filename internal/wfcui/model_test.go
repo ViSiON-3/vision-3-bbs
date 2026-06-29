@@ -55,3 +55,22 @@ func TestErrMsgEntersDisconnected(t *testing.T) {
 type errStub struct{}
 
 func (errStub) Error() string { return "boom" }
+
+func TestWindowSizeModeTooSmall(t *testing.T) {
+	m := New(nil, Options{MaxEvents: 10})
+	m.width, m.height = 100, 30
+
+	// Small window should enter modeTooSmall.
+	mi, _ := m.Update(tea.WindowSizeMsg{Width: 72, Height: 20})
+	m = mi.(Model)
+	if m.mode != modeTooSmall {
+		t.Fatalf("expected modeTooSmall for small window, got %v", m.mode)
+	}
+
+	// Large window should return to modeList.
+	mi, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = mi.(Model)
+	if m.mode != modeList {
+		t.Fatalf("expected modeList for large window, got %v", m.mode)
+	}
+}

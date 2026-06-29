@@ -39,11 +39,12 @@ type Model struct {
 	opts     Options
 	snapshot *admin.SystemSnapshot
 	events   []admin.Event
+	eventCh  <-chan admin.Event
 	selected int
 	mode     viewMode
 	width    int
 	height   int
-	lastErr  string
+	lastErr  error
 }
 
 // New builds a Model. client may be nil in tests that drive Update directly.
@@ -60,7 +61,7 @@ func (m Model) Init() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return tea.Batch(m.fetchSnapshot(), m.waitEvent())
+	return tea.Batch(m.fetchSnapshot(), m.subscribeCmd())
 }
 
 func (m Model) fetchSnapshot() tea.Cmd {
@@ -74,6 +75,26 @@ func (m Model) fetchSnapshot() tea.Cmd {
 	}
 }
 
+// subscribeCmd calls Subscribe exactly once and returns a subscribedMsg.
+func (m Model) subscribeCmd() tea.Cmd {
+	client := m.client
+	return func() tea.Msg {
+		ch, err := client.Subscribe(context.Background())
+		return subscribedMsg{ch: ch, err: err}
+	}
+}
+
+// waitForEvent reads ONE value from the given channel (subscribe-once pattern).
+func waitForEvent(ch <-chan admin.Event) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return errMsg{context.Canceled}
+		}
+		return eventMsg{ev}
+	}
+}
+
 // pollCmd re-fetches the snapshot after a delay so the screen stays live.
 func pollCmd(client admin.AdminClient, d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg {
@@ -83,21 +104,6 @@ func pollCmd(client admin.AdminClient, d time.Duration) tea.Cmd {
 		}
 		return snapshotMsg{snap}
 	})
-}
-
-func (m Model) waitEvent() tea.Cmd {
-	client := m.client
-	return func() tea.Msg {
-		ch, err := client.Subscribe(context.Background())
-		if err != nil {
-			return errMsg{err}
-		}
-		ev, ok := <-ch
-		if !ok {
-			return errMsg{context.Canceled}
-		}
-		return eventMsg{ev}
-	}
 }
 
 // Update handles messages.
@@ -126,21 +132,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 
+	case subscribedMsg:
+		if msg.err != nil {
+			m.mode = modeDisconnected
+			m.lastErr = msg.err
+			return m, nil
+		}
+		m.eventCh = msg.ch
+		return m, waitForEvent(m.eventCh)
+
 	case eventMsg:
 		m.events = append(m.events, msg.ev)
 		if len(m.events) > m.opts.MaxEvents {
 			m.events = m.events[len(m.events)-m.opts.MaxEvents:]
 		}
-		if m.client != nil {
-			return m, m.waitEvent()
+		if m.eventCh != nil {
+			return m, waitForEvent(m.eventCh)
 		}
 		return m, nil
 
 	case errMsg:
 		m.mode = modeDisconnected
-		if msg.err != nil {
-			m.lastErr = msg.err.Error()
-		}
+		m.lastErr = msg.err
 		return m, nil
 
 	case tea.KeyMsg:
