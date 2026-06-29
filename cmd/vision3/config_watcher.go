@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,15 +51,15 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		watcher.Close()
 		return nil, fmt.Errorf("failed to watch %s: %w", rootConfigPath, err)
 	}
-	log.Printf("INFO: Watching %s for config changes (auto-reload enabled)", rootConfigPath)
+	slog.Info("watching for config changes", "path", rootConfigPath)
 
 	// Watch the menu set path for theme.json
 	themePath := filepath.Join(menuSetPath, "theme.json")
 	if _, err := os.Stat(themePath); err == nil {
 		if err := watcher.Add(themePath); err != nil {
-			log.Printf("WARN: Failed to watch %s: %v", themePath, err)
+			slog.Warn("failed to watch theme path", "path", themePath, "error", err)
 		} else {
-			log.Printf("INFO: Watching %s for theme changes (auto-reload enabled)", themePath)
+			slog.Info("watching for theme changes", "path", themePath)
 		}
 	}
 
@@ -88,7 +88,7 @@ func (cw *ConfigWatcher) Stop() {
 
 	cw.watcher.Close()
 	cw.watcher = nil
-	log.Printf("INFO: Configuration file watcher stopped")
+	slog.Info("configuration file watcher stopped")
 }
 
 // watchLoop handles file system events for configuration files.
@@ -120,10 +120,10 @@ func (cw *ConfigWatcher) watchLoop(w *fsnotify.Watcher) {
 			if !ok {
 				return
 			}
-			log.Printf("ERROR: Config file watcher error: %v", err)
+			slog.Error("config file watcher error", "error", err)
 
 		case <-cw.watcherDone:
-			log.Printf("INFO: Stopping config file watcher")
+			slog.Info("stopping config file watcher")
 			return
 		}
 	}
@@ -132,7 +132,7 @@ func (cw *ConfigWatcher) watchLoop(w *fsnotify.Watcher) {
 // handleConfigChange identifies which config file changed and reloads it.
 func (cw *ConfigWatcher) handleConfigChange(path string) {
 	filename := filepath.Base(path)
-	log.Printf("INFO: Config file change detected: %s", filename)
+	slog.Info("config file change detected", "file", filename)
 
 	switch strings.ToLower(filename) {
 	case "doors.json":
@@ -148,84 +148,84 @@ func (cw *ConfigWatcher) handleConfigChange(path string) {
 	case "events.json":
 		// Events config reload would require restarting the scheduler
 		// For now, just log that a restart is needed
-		log.Printf("WARN: events.json changed - server restart required for changes to take effect")
+		slog.Warn("events.json changed — restart required")
 	case "ftn.json":
 		// FTN config reload would require restarting the message manager
-		log.Printf("WARN: ftn.json changed - server restart required for changes to take effect")
+		slog.Warn("ftn.json changed — restart required")
 	default:
 		// Ignore other files
-		log.Printf("DEBUG: Ignoring change to %s", filename)
+		slog.Debug("ignoring config file change", "file", filename)
 	}
 }
 
 // reloadDoors reloads the door configurations.
 func (cw *ConfigWatcher) reloadDoors() {
-	log.Printf("INFO: Reloading doors.json...")
+	slog.Info("reloading doors.json")
 
 	doorsPath := filepath.Join(cw.rootConfigPath, "doors.json")
 	newDoors, err := config.LoadDoors(doorsPath)
 	if err != nil {
-		log.Printf("ERROR: Failed to reload doors.json: %v", err)
+		slog.Error("failed to reload doors.json", "error", err)
 		return
 	}
 
 	// Update MenuExecutor's DoorRegistry atomically
 	cw.menuExecutor.SetDoorRegistry(newDoors)
-	log.Printf("INFO: doors.json reloaded successfully (%d doors configured)", len(newDoors))
+	slog.Info("doors.json reloaded", "count", len(newDoors))
 }
 
 // reloadLoginSequence reloads the login sequence configuration.
 func (cw *ConfigWatcher) reloadLoginSequence() {
-	log.Printf("INFO: Reloading login.json...")
+	slog.Info("reloading login.json")
 
 	newSequence, err := config.LoadLoginSequence(cw.rootConfigPath)
 	if err != nil {
-		log.Printf("ERROR: Failed to reload login.json: %v", err)
+		slog.Error("failed to reload login.json", "error", err)
 		return
 	}
 
 	// Update MenuExecutor's LoginSequence atomically
 	cw.menuExecutor.SetLoginSequence(newSequence)
-	log.Printf("INFO: login.json reloaded successfully (%d steps)", len(newSequence))
+	slog.Info("login.json reloaded", "steps", len(newSequence))
 }
 
 // reloadStrings reloads the strings configuration.
 func (cw *ConfigWatcher) reloadStrings() {
-	log.Printf("INFO: Reloading strings.json...")
+	slog.Info("reloading strings.json")
 
 	newStrings, err := config.LoadStrings(cw.rootConfigPath)
 	if err != nil {
-		log.Printf("ERROR: Failed to reload strings.json: %v", err)
+		slog.Error("failed to reload strings.json", "error", err)
 		return
 	}
 
 	// Update MenuExecutor's LoadedStrings atomically
 	cw.menuExecutor.SetStrings(newStrings)
-	log.Printf("INFO: strings.json reloaded successfully")
+	slog.Info("strings.json reloaded")
 }
 
 // reloadTheme reloads the theme configuration.
 func (cw *ConfigWatcher) reloadTheme() {
-	log.Printf("INFO: Reloading theme.json...")
+	slog.Info("reloading theme.json")
 
 	newTheme, err := config.LoadThemeConfig(cw.menuSetPath)
 	if err != nil {
-		log.Printf("ERROR: Failed to reload theme.json: %v", err)
+		slog.Error("failed to reload theme.json", "error", err)
 		return
 	}
 
 	// Update MenuExecutor's Theme atomically
 	cw.menuExecutor.SetTheme(newTheme)
-	log.Printf("INFO: theme.json reloaded successfully")
+	slog.Info("theme.json reloaded")
 }
 
 // reloadServerConfig reloads the server configuration.
 func (cw *ConfigWatcher) reloadServerConfig() {
-	log.Printf("INFO: Reloading config.json...")
+	slog.Info("reloading config.json")
 
 	newServerConfig, err := config.LoadServerConfig(cw.rootConfigPath)
 	if err != nil {
-		log.Printf("ERROR: Failed to reload config.json: %v", err)
+		slog.Error("failed to reload config.json", "error", err)
 		return
 	}
 
@@ -245,9 +245,9 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 	// Update UserManager's new user level
 	if cw.userMgr != nil {
 		cw.userMgr.SetNewUserLevel(newServerConfig.NewUserLevel)
-		log.Printf("INFO: Updated new user level to %d", newServerConfig.NewUserLevel)
+		slog.Info("updated new user level", "level", newServerConfig.NewUserLevel)
 	}
 
-	log.Printf("INFO: config.json reloaded successfully")
-	log.Printf("WARN: Some config.json changes (ports, keys, IP limits) require a full restart")
+	slog.Info("config.json reloaded")
+	slog.Warn("some config.json changes require a full restart", "fields", "ports, keys, IP limits")
 }

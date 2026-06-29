@@ -8,7 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -144,7 +144,7 @@ func NewConnectionTracker(maxNodes, maxConnectionsPerIP, maxFailedLogins, lockou
 	if blocklistPath != "" {
 		blocklist, err := LoadIPList(blocklistPath)
 		if err != nil {
-			log.Printf("ERROR: Failed to load initial blocklist: %v", err)
+			slog.Error("failed to load initial blocklist", "error", err)
 		} else {
 			ct.blocklist = blocklist
 		}
@@ -153,7 +153,7 @@ func NewConnectionTracker(maxNodes, maxConnectionsPerIP, maxFailedLogins, lockou
 	if allowlistPath != "" {
 		allowlist, err := LoadIPList(allowlistPath)
 		if err != nil {
-			log.Printf("ERROR: Failed to load initial allowlist: %v", err)
+			slog.Error("failed to load initial allowlist", "error", err)
 		} else {
 			ct.allowlist = allowlist
 		}
@@ -161,7 +161,7 @@ func NewConnectionTracker(maxNodes, maxConnectionsPerIP, maxFailedLogins, lockou
 
 	// Start watching files for changes
 	if err := ct.startWatching(); err != nil {
-		log.Printf("ERROR: Failed to start file watcher: %v", err)
+		slog.Error("failed to start file watcher", "error", err)
 	}
 
 	return ct
@@ -201,7 +201,7 @@ func LoadIPList(filePath string) (*IPList, error) {
 		if strings.Contains(line, "/") {
 			_, network, err := net.ParseCIDR(line)
 			if err != nil {
-				log.Printf("WARN: Invalid CIDR in %s line %d: %s", filePath, lineNum+1, line)
+				slog.Warn("invalid CIDR in IP list", "file", filePath, "line", lineNum+1, "value", line)
 				continue
 			}
 			list.networks = append(list.networks, network)
@@ -209,15 +209,14 @@ func LoadIPList(filePath string) (*IPList, error) {
 			// Individual IP address
 			ip := net.ParseIP(line)
 			if ip == nil {
-				log.Printf("WARN: Invalid IP in %s line %d: %s", filePath, lineNum+1, line)
+				slog.Warn("invalid IP in IP list", "file", filePath, "line", lineNum+1, "value", line)
 				continue
 			}
 			list.ips[ip.String()] = true
 		}
 	}
 
-	log.Printf("INFO: Loaded IP list from %s: %d IPs, %d CIDR ranges",
-		filePath, len(list.ips), len(list.networks))
+	slog.Info("loaded IP list", "file", filePath, "ips", len(list.ips), "cidrs", len(list.networks))
 	return list, nil
 }
 
@@ -262,7 +261,7 @@ func (ct *ConnectionTracker) canAcceptLocked(remoteAddr net.Addr) (bool, string)
 
 	// Check allowlist first - if IP is on allowlist, skip all other checks
 	if ct.allowlist != nil && ct.allowlist.Contains(ip) {
-		log.Printf("DEBUG: IP %s is on allowlist, bypassing all checks", ip)
+		slog.Debug("IP on allowlist, bypassing checks", "ip", ip)
 		return true, ""
 	}
 
@@ -301,8 +300,7 @@ func (ct *ConnectionTracker) TryAccept(remoteAddr net.Addr) (bool, string) {
 	ct.activeConnections[ip]++
 	ct.totalConnections++
 
-	log.Printf("INFO: Connection added from %s. IP count: %d, Total: %d/%d",
-		ip, ct.activeConnections[ip], ct.totalConnections, ct.maxNodes)
+	slog.Info("connection added", "ip", ip, "ip_count", ct.activeConnections[ip], "total", ct.totalConnections, "max", ct.maxNodes)
 	return true, ""
 }
 
@@ -315,8 +313,7 @@ func (ct *ConnectionTracker) AddConnection(remoteAddr net.Addr) {
 	ct.activeConnections[ip]++
 	ct.totalConnections++
 
-	log.Printf("INFO: Connection added from %s. IP count: %d, Total: %d/%d",
-		ip, ct.activeConnections[ip], ct.totalConnections, ct.maxNodes)
+	slog.Info("connection added", "ip", ip, "ip_count", ct.activeConnections[ip], "total", ct.totalConnections, "max", ct.maxNodes)
 }
 
 // RemoveConnection unregisters a connection from the given IP
@@ -336,8 +333,7 @@ func (ct *ConnectionTracker) RemoveConnection(remoteAddr net.Addr) {
 		ct.totalConnections--
 	}
 
-	log.Printf("INFO: Connection removed from %s. IP count: %d, Total: %d/%d",
-		ip, ct.activeConnections[ip], ct.totalConnections, ct.maxNodes)
+	slog.Info("connection removed", "ip", ip, "ip_count", ct.activeConnections[ip], "total", ct.totalConnections, "max", ct.maxNodes)
 }
 
 // GetStats returns current connection statistics
@@ -412,19 +408,20 @@ func (ct *ConnectionTracker) RecordFailedLoginAttempt(ip string) bool {
 	// Check if lockout threshold reached
 	if tracker.Attempts >= ct.maxFailedLogins {
 		tracker.LockedUntil = time.Now().Add(time.Duration(ct.lockoutMinutes) * time.Minute)
-		log.Printf("SECURITY: IP %s locked out after %d failed login attempts. Locked until %s",
-			ip, tracker.Attempts, tracker.LockedUntil.Format(time.RFC3339))
+		logging.Security("IP locked out after failed login attempts",
+			"ip", ip,
+			"attempts", tracker.Attempts,
+			"locked_until", tracker.LockedUntil.Format(time.RFC3339))
 		// Persist to blocklist file outside the lock to avoid deadlock
 		go func() {
 			if err := ct.AppendToBlocklist(ip); err != nil {
-				log.Printf("ERROR: Failed to persist blocked IP %s to blocklist: %v", ip, err)
+				slog.Error("failed to persist blocked IP to blocklist", "ip", ip, "error", err)
 			}
 		}()
 		return true
 	}
 
-	log.Printf("SECURITY: Failed login attempt from IP %s (%d/%d)",
-		ip, tracker.Attempts, ct.maxFailedLogins)
+	logging.Security("failed login attempt", "ip", ip, "attempts", tracker.Attempts, "max", ct.maxFailedLogins)
 	return false
 }
 
@@ -474,7 +471,7 @@ func (ct *ConnectionTracker) AppendToBlocklist(ip string) error {
 	ct.blocklist.ips[normalizedIP] = true
 	ct.mu.Unlock()
 
-	log.Printf("SECURITY: IP %s permanently added to blocklist %s", normalizedIP, ct.blocklistPath)
+	logging.Security("IP permanently added to blocklist", "ip", normalizedIP, "file", ct.blocklistPath)
 	return nil
 }
 
@@ -485,8 +482,7 @@ func (ct *ConnectionTracker) ClearFailedLoginAttempts(ip string) {
 
 	if tracker, exists := ct.failedLogins[ip]; exists {
 		if tracker.Attempts > 0 {
-			log.Printf("INFO: Cleared failed login attempts for IP %s (%d attempts)",
-				ip, tracker.Attempts)
+			slog.Info("cleared failed login attempts", "ip", ip, "attempts", tracker.Attempts)
 		}
 		delete(ct.failedLogins, ip)
 	}
@@ -495,7 +491,7 @@ func (ct *ConnectionTracker) ClearFailedLoginAttempts(ip string) {
 // reloadIPLists reloads the blocklist and allowlist from disk.
 // Both lists are loaded outside the lock and swapped atomically under a single lock.
 func (ct *ConnectionTracker) reloadIPLists() {
-	log.Printf("INFO: Reloading IP filter lists...")
+	slog.Info("reloading IP filter lists")
 
 	// Load both lists outside the lock (I/O can be slow)
 	var newBlocklist, newAllowlist *IPList
@@ -503,7 +499,7 @@ func (ct *ConnectionTracker) reloadIPLists() {
 	if ct.blocklistPath != "" {
 		bl, err := LoadIPList(ct.blocklistPath)
 		if err != nil {
-			log.Printf("ERROR: Failed to reload blocklist from %s: %v", ct.blocklistPath, err)
+			slog.Error("failed to reload blocklist", "file", ct.blocklistPath, "error", err)
 		} else {
 			newBlocklist = bl
 		}
@@ -512,7 +508,7 @@ func (ct *ConnectionTracker) reloadIPLists() {
 	if ct.allowlistPath != "" {
 		al, err := LoadIPList(ct.allowlistPath)
 		if err != nil {
-			log.Printf("ERROR: Failed to reload allowlist from %s: %v", ct.allowlistPath, err)
+			slog.Error("failed to reload allowlist", "file", ct.allowlistPath, "error", err)
 		} else {
 			newAllowlist = al
 		}
@@ -528,14 +524,14 @@ func (ct *ConnectionTracker) reloadIPLists() {
 	}
 	ct.mu.Unlock()
 
-	log.Printf("INFO: IP filter lists reloaded")
+	slog.Info("IP filter lists reloaded")
 }
 
 // startWatching starts watching the IP list files for changes
 func (ct *ConnectionTracker) startWatching() error {
 	// Don't start watcher if no files to watch
 	if ct.blocklistPath == "" && ct.allowlistPath == "" {
-		log.Printf("DEBUG: No IP list files to watch, file watching disabled")
+		slog.Debug("no IP list files to watch, file watching disabled")
 		return nil
 	}
 
@@ -553,22 +549,22 @@ func (ct *ConnectionTracker) startWatching() error {
 		if _, err := os.Stat(ct.blocklistPath); err == nil {
 			filesToWatch = append(filesToWatch, ct.blocklistPath)
 		} else {
-			log.Printf("WARN: Blocklist file %s does not exist, will not watch for changes", ct.blocklistPath)
+			slog.Warn("blocklist file does not exist, not watching", "file", ct.blocklistPath)
 		}
 	}
 	if ct.allowlistPath != "" {
 		if _, err := os.Stat(ct.allowlistPath); err == nil {
 			filesToWatch = append(filesToWatch, ct.allowlistPath)
 		} else {
-			log.Printf("WARN: Allowlist file %s does not exist, will not watch for changes", ct.allowlistPath)
+			slog.Warn("allowlist file does not exist, not watching", "file", ct.allowlistPath)
 		}
 	}
 
 	for _, file := range filesToWatch {
 		if err := ct.watcher.Add(file); err != nil {
-			log.Printf("ERROR: Failed to watch file %s: %v", file, err)
+			slog.Error("failed to watch file", "file", file, "error", err)
 		} else {
-			log.Printf("INFO: Watching %s for changes (auto-reload enabled)", file)
+			slog.Info("watching file for changes", "file", file)
 		}
 	}
 
@@ -593,7 +589,7 @@ func (ct *ConnectionTracker) watchLoop() {
 
 			// Only care about Write and Create events
 			if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
-				log.Printf("DEBUG: File change detected: %s (%s)", event.Name, event.Op)
+				slog.Debug("file change detected", "file", event.Name, "op", event.Op)
 
 				// Reset debounce timer
 				if debounceTimer != nil {
@@ -608,10 +604,10 @@ func (ct *ConnectionTracker) watchLoop() {
 			if !ok {
 				return
 			}
-			log.Printf("ERROR: File watcher error: %v", err)
+			slog.Error("file watcher error", "error", err)
 
 		case <-ct.watcherDone:
-			log.Printf("INFO: Stopping IP list file watcher")
+			slog.Info("stopping IP list file watcher")
 			return
 		}
 	}
@@ -847,9 +843,9 @@ func sessionHandler(s ssh.Session) {
 		sessionID = ctx.SessionID()
 	}
 
-	log.Printf("Node %d: Connection from %s (User: %s, Session ID: %s)", nodeID, remoteAddr, s.User(), sessionID)
-	log.Printf("Node %d: Environment: %v", nodeID, s.Environ())
-	log.Printf("Node %d: Command: %v", nodeID, s.Command())
+	slog.Info("connection from", "node", nodeID, "addr", remoteAddr, "user", s.User(), "session", sessionID)
+	slog.Debug("session environment", "node", nodeID, "env", s.Environ())
+	slog.Debug("session command", "node", nodeID, "command", s.Command())
 
 	// Capture start time and declare authenticatedUser *before* the defer
 	capturedStartTime := time.Now()          // Capture start time close to session start
@@ -859,7 +855,7 @@ func sessionHandler(s ssh.Session) {
 	// Defer removal from active sessions map and logging disconnection
 	// The deferred function now uses a closure to access authenticatedUser
 	defer func(startTime time.Time) {
-		log.Printf("Node %d: Disconnected %s (User: %s)", nodeID, remoteAddr, s.User())
+		slog.Info("disconnected", "node", nodeID, "addr", remoteAddr, "user", s.User())
 		activeSessionsMutex.Lock()
 		delete(activeSessions, s) // Remove using session as key
 		activeSessionsMutex.Unlock()
@@ -874,7 +870,7 @@ func sessionHandler(s ssh.Session) {
 
 		// --- Record Call History ---
 		if authenticatedUser != nil {
-			log.Printf("DEBUG: Node %d: Adding call record for user %s (ID: %d)", nodeID, authenticatedUser.Handle, authenticatedUser.ID)
+			slog.Debug("adding call record", "node", nodeID, "user", authenticatedUser.Handle, "id", authenticatedUser.ID)
 
 			// Mark user as offline
 			userMgr.MarkUserOffline(authenticatedUser.ID)
@@ -901,7 +897,7 @@ func sessionHandler(s ssh.Session) {
 			}
 			userMgr.AddCallRecord(callRec)
 		} else {
-			log.Printf("DEBUG: Node %d: No authenticated user found, skipping call record.", nodeID)
+			slog.Debug("no authenticated user, skipping call record", "node", nodeID)
 		}
 		// ------------------------
 		s.Close() // Ensure the session is closed
@@ -924,16 +920,16 @@ func sessionHandler(s ssh.Session) {
 	termWidth.Store(80)  // Default terminal width
 	termHeight.Store(25) // Default terminal height
 	if isPty {
-		log.Printf("Node %d: PTY Request Accepted: %s", nodeID, ptyReq.Term)
+		slog.Info("PTY request accepted", "node", nodeID, "term", ptyReq.Term)
 		if ptyReq.Window.Width > 0 {
 			termWidth.Store(int32(ptyReq.Window.Width))
 		}
 		if ptyReq.Window.Height > 0 {
 			termHeight.Store(int32(ptyReq.Window.Height))
 		}
-		log.Printf("Node %d: Terminal size from PTY: %dx%d", nodeID, termWidth.Load(), termHeight.Load())
+		slog.Info("terminal size from PTY", "node", nodeID, "width", termWidth.Load(), "height", termHeight.Load())
 	} else {
-		log.Printf("Node %d: No PTY Request received. Proceeding without PTY.", nodeID)
+		slog.Info("no PTY request", "node", nodeID)
 	}
 
 	// --- Determine Output Mode ---
@@ -941,16 +937,16 @@ func sessionHandler(s ssh.Session) {
 	switch outputModeFlag {              // Check the global flag first
 	case "utf8":
 		effectiveMode = ansi.OutputModeUTF8
-		log.Printf("Node %d: Output mode forced to UTF-8 by flag.", nodeID)
+		slog.Info("output mode forced to UTF-8 by flag", "node", nodeID)
 	case "cp437":
 		effectiveMode = ansi.OutputModeCP437
-		log.Printf("Node %d: Output mode forced to CP437 by flag.", nodeID)
+		slog.Info("output mode forced to CP437 by flag", "node", nodeID)
 	case "auto":
 		// Auto mode: Use PTY info if available
 		if isPty {
 			termType := strings.ToLower(ptyReq.Term)
 			termCols := int(termWidth.Load())
-			log.Printf("Node %d: Auto mode detecting based on TERM='%s', cols=%d", nodeID, termType, termCols)
+			slog.Info("auto mode detecting output based on TERM", "node", nodeID, "term", termType, "cols", termCols)
 
 			// Detect retro BBS terminal clients using terminal capabilities
 			isRetroTerminal := false
@@ -960,46 +956,46 @@ func sessionHandler(s ssh.Session) {
 			// that self-identify as xterm; telnet clients now use TERM_TYPE negotiation
 			// and will report their actual type, so this heuristic is SSH-specific)
 			if termType == "ansi-256color-rgb" || (termType == "xterm" && termCols > 80) {
-				log.Printf("Node %d: Detected NetRunner (TERM='%s', cols=%d)", nodeID, termType, termCols)
+				slog.Info("detected NetRunner", "node", nodeID, "term", termType, "cols", termCols)
 				isRetroTerminal = true
 			}
 
 			// SyncTerm: Reports syncterm or sync
 			if termType == "syncterm" || termType == "sync" {
-				log.Printf("Node %d: Detected SyncTerm (TERM='%s')", nodeID, termType)
+				slog.Info("detected SyncTerm", "node", nodeID, "term", termType)
 				isRetroTerminal = true
 			}
 
 			// Magiterm: Reports magiterm
 			if termType == "magiterm" {
-				log.Printf("Node %d: Detected Magiterm (TERM='%s')", nodeID, termType)
+				slog.Info("detected Magiterm", "node", nodeID, "term", termType)
 				isRetroTerminal = true
 			}
 
 			// Other known CP437 terminal types
 			if termType == "ansi" || termType == "scoansi" || termType == "ansi-bbs" ||
 				termType == "netrunner" || strings.HasPrefix(termType, "vt100") {
-				log.Printf("Node %d: Detected CP437 terminal type (TERM='%s')", nodeID, termType)
+				slog.Info("detected CP437 terminal type", "node", nodeID, "term", termType)
 				isRetroTerminal = true
 			}
 
 			if isRetroTerminal {
-				log.Printf("Node %d: Auto mode selecting CP437 output for retro BBS terminal", nodeID)
+				slog.Info("auto mode selecting CP437 for retro BBS terminal", "node", nodeID)
 				effectiveMode = ansi.OutputModeCP437
 			} else {
-				log.Printf("Node %d: Auto mode selecting UTF-8 output for modern terminal (TERM='%s')", nodeID, termType)
+				slog.Info("auto mode selecting UTF-8 for modern terminal", "node", nodeID, "term", termType)
 				effectiveMode = ansi.OutputModeUTF8
 			}
 		} else {
 			// No PTY, safer to default to UTF-8? Or CP437?
 			// Let's default to UTF-8 for non-PTY as it's more common for raw streams.
-			log.Printf("Node %d: Auto mode selecting UTF-8 output (no PTY requested).", nodeID)
+			slog.Info("auto mode selecting UTF-8, no PTY requested", "node", nodeID)
 			effectiveMode = ansi.OutputModeUTF8
 		}
 	}
 
 	// --- Create Terminal ---
-	log.Printf("Node %d: Creating terminal for session", nodeID)
+	slog.Info("creating terminal for session", "node", nodeID)
 	terminal := term.NewTerminal(s, "") // Use session 's' as the R/W source for the terminal
 
 	// Set initial terminal size from PTY request (term.NewTerminal defaults to 80 columns)
@@ -1007,7 +1003,7 @@ func sessionHandler(s ssh.Session) {
 		tw, th := int(termWidth.Load()), int(termHeight.Load())
 		if tw > 0 && th > 0 {
 			_ = terminal.SetSize(tw, th)
-			log.Printf("Node %d: Set terminal size to %dx%d", nodeID, tw, th)
+			slog.Info("set terminal size", "node", nodeID, "width", tw, "height", th)
 		}
 	}
 
@@ -1039,7 +1035,7 @@ func sessionHandler(s ssh.Session) {
 								if pendingResize.Load() {
 									w := int(pendingW.Load())
 									h := int(pendingH.Load())
-									log.Printf("Node %d: Replaying pending resize %dx%d after transfer ended", nodeID, w, h)
+									slog.Debug("replaying pending resize after transfer ended", "node", nodeID, "width", w, "height", h)
 									_ = terminal.SetSize(w, h)
 									pendingResize.Store(false)
 								}
@@ -1051,7 +1047,7 @@ func sessionHandler(s ssh.Session) {
 				})
 			}
 			for win := range winCh {
-				log.Printf("Node %d: Window resize event: %dx%d", nodeID, win.Width, win.Height)
+				slog.Debug("window resize event", "node", nodeID, "width", win.Width, "height", win.Height)
 				if win.Width > 0 {
 					termWidth.Store(int32(win.Width))
 				}
@@ -1063,7 +1059,7 @@ func sessionHandler(s ssh.Session) {
 					// writes ANSI sequences via session.Write() which does CRLF
 					// conversion, corrupting the RawWrite binary data stream.
 					if tc, ok := s.(transferChecker); ok && tc.IsTransferActive() {
-						log.Printf("Node %d: Suppressed terminal.SetSize during active transfer", nodeID)
+						slog.Debug("suppressed terminal.SetSize during active transfer", "node", nodeID)
 						pendingResize.Store(true)
 						pendingW.Store(int32(win.Width))
 						pendingH.Store(int32(win.Height))
@@ -1073,7 +1069,7 @@ func sessionHandler(s ssh.Session) {
 						if pendingResize.Load() {
 							w := int(pendingW.Load())
 							h := int(pendingH.Load())
-							log.Printf("Node %d: Replaying pending resize %dx%d after transfer ended", nodeID, w, h)
+							slog.Debug("replaying pending resize after transfer ended", "node", nodeID, "width", w, "height", h)
 							pendingResize.Store(false)
 							_ = terminal.SetSize(w, h)
 						}
@@ -1086,7 +1082,7 @@ func sessionHandler(s ssh.Session) {
 					}
 				}
 			}
-			log.Printf("Node %d: Window change channel closed.", nodeID)
+			slog.Debug("window change channel closed", "node", nodeID)
 		}()
 	}
 
@@ -1099,21 +1095,21 @@ func sessionHandler(s ssh.Session) {
 		// originalState, err := term.MakeRaw(int(s.Pty().Fd)) // This line is problematic
 		// if err == nil {
 		// 	 defer term.Restore(int(s.Pty().Fd), originalState)
-		// 	 log.Printf("Node %d: Raw mode enabled.", nodeID)
+		// 	 slog.Info("raw mode enabled", "node", nodeID)
 		// } else {
-		// 	 log.Printf("Node %d: Failed to enable raw mode: %v. Proceeding without raw mode.", nodeID, err)
+		// 	 slog.Info("failed to enable raw mode, proceeding without", "node", nodeID, "error", err)
 		// 	 // Continue without raw mode? Some BBS functions might rely on it.
 		// }
-		log.Printf("Node %d: Skipping raw mode attempt (known issue with gliderlabs/ssh on Windows).", nodeID)
+		slog.Debug("skipping raw mode", "node", nodeID, "reason", "known issue with gliderlabs/ssh")
 	} else {
-		log.Printf("Node %d: Skipping raw mode attempt as no PTY was requested.", nodeID)
+		slog.Debug("skipping raw mode, no PTY requested", "node", nodeID)
 	}
 
 	// Encoding and terminal size prompts moved to after authentication
 	// so we can check user's saved preferences and offer to save new settings
 
 	// --- Authentication and Main Loop ---
-	log.Printf("Node %d: Starting BBS logic...", nodeID)
+	slog.Info("starting BBS logic", "node", nodeID)
 	sessionStartTime := time.Now()
 
 	bbsSession = &session.BbsSession{
@@ -1134,7 +1130,7 @@ func sessionHandler(s ssh.Session) {
 	// is correct. Unknown usernames are accepted without verification so the BBS
 	// login menu can handle them.
 	if authedUser, ok := s.Context().Value(sshAuthUserKey{}).(*user.User); ok && authedUser != nil {
-		log.Printf("Node %d: SSH pre-authenticated user '%s' detected", nodeID, authedUser.Handle)
+		slog.Info("SSH pre-authenticated user detected", "node", nodeID, "user", authedUser.Handle)
 		authenticatedUser = authedUser
 		bbsSession.Mutex.Lock()
 		bbsSession.User = authenticatedUser
@@ -1150,11 +1146,11 @@ func sessionHandler(s ssh.Session) {
 	if authenticatedUser == nil {
 		matrixAction, matrixErr := menuExecutor.RunMatrixScreen(s, terminal, userMgr, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
 		if matrixErr != nil {
-			log.Printf("Node %d: Matrix screen error: %v", nodeID, matrixErr)
+			slog.Error("matrix screen error", "node", nodeID, "error", matrixErr)
 			return
 		}
 		if matrixAction == "DISCONNECT" {
-			log.Printf("Node %d: User selected disconnect from matrix screen", nodeID)
+			slog.Info("user selected disconnect from matrix", "node", nodeID)
 			return
 		}
 		// matrixAction == "LOGIN" — proceed to normal login loop
@@ -1163,7 +1159,7 @@ func sessionHandler(s ssh.Session) {
 	// Login Loop
 	for authenticatedUser == nil {
 		if currentMenuName == "" || currentMenuName == "LOGOFF" {
-			log.Printf("Node %d: Login failed or aborted. Terminating session.", nodeID)
+			slog.Info("login failed or aborted", "node", nodeID)
 			msg := loadedStrings.ExecLoginCancelled
 			if msg == "" {
 				msg = "\r\n|01Login cancelled.|07\r\n"
@@ -1180,7 +1176,7 @@ func sessionHandler(s ssh.Session) {
 		nextMenuName, authUser, execErr := menuExecutor.Run(s, terminal, userMgr, nil, currentMenuName, int(nodeID), sessionStartTime, autoRunLog, effectiveMode, "", int(termWidth.Load()), int(termHeight.Load()))
 		if execErr != nil {
 			// Log the error and decide how to proceed
-			log.Printf("Node %d: Error executing menu '%s': %v", nodeID, currentMenuName, execErr)
+			slog.Error("error executing menu", "node", nodeID, "menu", currentMenuName, "error", execErr)
 			// Optionally display an error message to the user
 			fmt.Fprintf(terminal, "\r\nSystem error during menu execution: %v\r\n", execErr)
 			// Maybe force logoff or retry?
@@ -1194,7 +1190,7 @@ func sessionHandler(s ssh.Session) {
 			bbsSession.Mutex.Lock()
 			bbsSession.User = authenticatedUser
 			bbsSession.Mutex.Unlock()
-			log.Printf("Node %d: User '%s' authenticated successfully.", nodeID, authenticatedUser.Handle)
+			slog.Info("user authenticated", "node", nodeID, "user", authenticatedUser.Handle)
 
 			// Mark user as online
 			userMgr.MarkUserOnline(authenticatedUser.ID)
@@ -1218,12 +1214,12 @@ func sessionHandler(s ssh.Session) {
 		}
 	} // End Login Loop
 
-	log.Printf("DEBUG: *** Login Loop Completed ***")
+	slog.Debug("login loop completed")
 
 	// --- Post-Authentication Main Loop ---
 	// Safety check still useful here in case break logic fails somehow
 	if authenticatedUser == nil {
-		log.Printf("ERROR: Node %d: Reached post-auth loop but authenticatedUser is nil. Logging off.", nodeID)
+		slog.Error("reached post-auth loop with nil user", "node", nodeID)
 		return
 	}
 	// Set default message area if not already set (handles both SSH pre-auth and normal login)
@@ -1264,11 +1260,11 @@ func sessionHandler(s ssh.Session) {
 	// Persist defaults only if we actually assigned new values
 	if defaultsChanged {
 		if saveErr := userMgr.UpdateUser(authenticatedUser); saveErr != nil {
-			log.Printf("ERROR: Node %d: Failed to save user default area selections: %v", nodeID, saveErr)
+			slog.Error("failed to save user default area selections", "node", nodeID, "error", saveErr)
 		}
 	}
 
-	log.Printf("Node %d: Entering main loop for authenticated user: %s", nodeID, authenticatedUser.Handle)
+	slog.Info("entering main loop", "node", nodeID, "user", authenticatedUser.Handle)
 
 	// --- Invisible Login Prompt (users at or above invisibleLevel) ---
 	cfg := menuExecutor.GetServerConfig()
@@ -1287,17 +1283,17 @@ func sessionHandler(s ssh.Session) {
 			int(termWidth.Load()), int(termHeight.Load()), false)
 		if invisErr != nil {
 			if errors.Is(invisErr, io.EOF) {
-				log.Printf("Node %d: User disconnected during invisible logon prompt.", nodeID)
+				slog.Info("user disconnected during invisible logon prompt", "node", nodeID)
 				return
 			}
-			log.Printf("WARN: Node %d: Error during invisible logon prompt: %v", nodeID, invisErr)
+			slog.Warn("error during invisible logon prompt", "node", nodeID, "error", invisErr)
 		}
 		// Prompt is "Add this login to Last Caller List?" — Yeah = add (visible), Nah = don't add (invisible).
 		if !invisChoice {
 			bbsSession.Mutex.Lock()
 			bbsSession.Invisible = true
 			bbsSession.Mutex.Unlock()
-			log.Printf("Node %d: User %s logged in as INVISIBLE", nodeID, authenticatedUser.Handle)
+			slog.Info("user logged in as invisible", "node", nodeID, "user", authenticatedUser.Handle)
 		}
 	}
 
@@ -1314,8 +1310,12 @@ func sessionHandler(s ssh.Session) {
 
 		if isPty && (detectedW != authenticatedUser.ScreenWidth || detectedH != authenticatedUser.ScreenHeight) {
 			// Mismatch between detected and stored terminal size — prompt user
-			log.Printf("Node %d: Terminal size mismatch — detected %dx%d, stored %dx%d",
-				nodeID, detectedW, detectedH, authenticatedUser.ScreenWidth, authenticatedUser.ScreenHeight)
+			slog.Info("terminal size mismatch",
+				"node", nodeID,
+				"detected_w", detectedW,
+				"detected_h", detectedH,
+				"stored_w", authenticatedUser.ScreenWidth,
+				"stored_h", authenticatedUser.ScreenHeight)
 			terminal.Write([]byte("\r\n"))
 
 			useNew, promptErr := menuExecutor.PromptYesNo(s, terminal,
@@ -1324,10 +1324,10 @@ func sessionHandler(s ssh.Session) {
 				effectiveMode, int(nodeID), detectedW, detectedH, false)
 			if promptErr != nil {
 				if errors.Is(promptErr, io.EOF) {
-					log.Printf("Node %d: User disconnected during terminal size prompt.", nodeID)
+					slog.Info("user disconnected during terminal size prompt", "node", nodeID)
 					return
 				}
-				log.Printf("WARN: Node %d: Error during terminal size prompt: %v", nodeID, promptErr)
+				slog.Warn("error during terminal size prompt", "node", nodeID, "error", promptErr)
 			}
 
 			if useNew {
@@ -1340,16 +1340,16 @@ func sessionHandler(s ssh.Session) {
 					loadedStrings.TermSizeUpdateDefaultsPrompt,
 					effectiveMode, int(nodeID), detectedW, detectedH, true)
 				if saveErr != nil && errors.Is(saveErr, io.EOF) {
-					log.Printf("Node %d: User disconnected during save-defaults prompt.", nodeID)
+					slog.Info("user disconnected during save-defaults prompt", "node", nodeID)
 					return
 				}
 				if saveDefault {
 					authenticatedUser.ScreenWidth = detectedW
 					authenticatedUser.ScreenHeight = detectedH
 					if err := userMgr.UpdateUser(authenticatedUser); err != nil {
-						log.Printf("WARN: Node %d: Failed to update terminal size: %v", nodeID, err)
+						slog.Warn("failed to update terminal size", "node", nodeID, "error", err)
 					} else {
-						log.Printf("Node %d: Updated default terminal size to %dx%d", nodeID, detectedW, detectedH)
+						slog.Info("updated default terminal size", "node", nodeID, "width", detectedW, "height", detectedH)
 					}
 				}
 			} else {
@@ -1361,8 +1361,12 @@ func sessionHandler(s ssh.Session) {
 			}
 		} else {
 			// Sizes match (or no PTY) — use saved preferences
-			log.Printf("Node %d: Using user's stored terminal size: %dx%d (PTY detected: %dx%d)",
-				nodeID, authenticatedUser.ScreenWidth, authenticatedUser.ScreenHeight, detectedW, detectedH)
+			slog.Info("using stored terminal size",
+				"node", nodeID,
+				"stored_w", authenticatedUser.ScreenWidth,
+				"stored_h", authenticatedUser.ScreenHeight,
+				"pty_w", detectedW,
+				"pty_h", detectedH)
 			effectiveWidth = authenticatedUser.ScreenWidth
 			effectiveHeight = authenticatedUser.ScreenHeight
 			termWidth.Store(int32(effectiveWidth))
@@ -1370,17 +1374,16 @@ func sessionHandler(s ssh.Session) {
 		}
 	} else {
 		// No saved preferences and no manual adjustment - use PTY detected and save for next time
-		log.Printf("Node %d: No stored terminal size, using PTY detected: %dx%d",
-			nodeID, effectiveWidth, effectiveHeight)
+		slog.Info("no stored terminal size, using PTY detected", "node", nodeID, "width", effectiveWidth, "height", effectiveHeight)
 		authenticatedUser.ScreenWidth = effectiveWidth
 		authenticatedUser.ScreenHeight = effectiveHeight
 		if err := userMgr.UpdateUser(authenticatedUser); err != nil {
-			log.Printf("WARN: Node %d: Failed to save user's terminal size: %v", nodeID, err)
+			slog.Warn("failed to save terminal size", "node", nodeID, "error", err)
 		}
 	}
 
 	_ = terminal.SetSize(effectiveWidth, effectiveHeight)
-	log.Printf("Node %d: Effective terminal size for %s: %dx%d", nodeID, authenticatedUser.Handle, effectiveWidth, effectiveHeight)
+	slog.Info("effective terminal size", "node", nodeID, "user", authenticatedUser.Handle, "width", effectiveWidth, "height", effectiveHeight)
 
 	// --- Post-Auth Terminal Setup Prompts ---
 	// If user doesn't have saved preferences, prompt for encoding and terminal size configuration
@@ -1407,13 +1410,13 @@ func sessionHandler(s ssh.Session) {
 			if err == nil {
 				choice = strings.TrimSpace(strings.ToUpper(choice))
 				if choice == "C" || choice == "CP437" {
-					log.Printf("Node %d: User selected CP437 encoding", nodeID)
+					slog.Info("user selected CP437 encoding", "node", nodeID)
 					effectiveMode = ansi.OutputModeCP437
 					authenticatedUser.PreferredEncoding = "cp437"
 					setupChanged = true
 					terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Switched to CP437 encoding for retro BBS experience.\r\n"))
 				} else {
-					log.Printf("Node %d: User selected UTF-8 encoding", nodeID)
+					slog.Info("user selected UTF-8 encoding", "node", nodeID)
 					authenticatedUser.PreferredEncoding = "utf8"
 					setupChanged = true
 					terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Continuing with UTF-8 encoding.\r\n"))
@@ -1434,15 +1437,15 @@ func sessionHandler(s ssh.Session) {
 			heightChoice, heightErr := terminal.ReadLine()
 			if heightErr != nil {
 				if errors.Is(heightErr, io.EOF) {
-					log.Printf("Node %d: User disconnected during height adjustment prompt.", nodeID)
+					slog.Info("user disconnected during height adjustment prompt", "node", nodeID)
 					return
 				}
-				log.Printf("WARN: Node %d: Error during height adjustment prompt: %v", nodeID, heightErr)
+				slog.Warn("error during height adjustment prompt", "node", nodeID, "error", heightErr)
 			} else {
 				heightChoice = strings.TrimSpace(heightChoice)
 				if heightChoice != "" {
 					if adjustedHeight, parseErr := strconv.Atoi(heightChoice); parseErr == nil && adjustedHeight >= 20 && adjustedHeight <= detectedHeight {
-						log.Printf("Node %d: User adjusted terminal height from %d to %d rows", nodeID, detectedHeight, adjustedHeight)
+						slog.Info("user adjusted terminal height", "node", nodeID, "from", detectedHeight, "to", adjustedHeight)
 						effectiveHeight = adjustedHeight
 						termHeight.Store(int32(adjustedHeight))
 						authenticatedUser.ScreenHeight = adjustedHeight
@@ -1463,15 +1466,18 @@ func sessionHandler(s ssh.Session) {
 				saveChoice = strings.TrimSpace(strings.ToUpper(saveChoice))
 				if saveChoice == "" || saveChoice == "Y" || saveChoice == "YES" {
 					if err := userMgr.UpdateUser(authenticatedUser); err != nil {
-						log.Printf("WARN: Node %d: Failed to save user preferences: %v", nodeID, err)
+						slog.Warn("failed to save user preferences", "node", nodeID, "error", err)
 						terminal.Write([]byte("\r\n\x1b[1;33m[WARN]\x1b[0m Failed to save preferences.\r\n"))
 					} else {
-						log.Printf("Node %d: Saved user preferences: encoding=%s, size=%dx%d",
-							nodeID, authenticatedUser.PreferredEncoding, authenticatedUser.ScreenWidth, authenticatedUser.ScreenHeight)
+						slog.Info("saved user preferences",
+							"node", nodeID,
+							"encoding", authenticatedUser.PreferredEncoding,
+							"width", authenticatedUser.ScreenWidth,
+							"height", authenticatedUser.ScreenHeight)
 						terminal.Write([]byte("\r\n\x1b[1;32m[SAVED]\x1b[0m Your preferences have been saved.\r\n"))
 					}
 				} else {
-					log.Printf("Node %d: User declined to save preferences (session-only)", nodeID)
+					slog.Info("user declined to save preferences", "node", nodeID)
 					terminal.Write([]byte("\r\n\x1b[1;36m[INFO]\x1b[0m Settings will be used for this session only.\r\n"))
 				}
 			}
@@ -1482,10 +1488,10 @@ func sessionHandler(s ssh.Session) {
 		switch authenticatedUser.PreferredEncoding {
 		case "cp437":
 			effectiveMode = ansi.OutputModeCP437
-			log.Printf("Node %d: Using saved encoding preference: CP437", nodeID)
+			slog.Info("using saved encoding preference", "node", nodeID, "encoding", "cp437")
 		case "utf8":
 			effectiveMode = ansi.OutputModeUTF8
-			log.Printf("Node %d: Using saved encoding preference: UTF-8", nodeID)
+			slog.Info("using saved encoding preference", "node", nodeID, "encoding", "utf8")
 		}
 	}
 
@@ -1494,10 +1500,10 @@ func sessionHandler(s ssh.Session) {
 	loginNextMenu, loginErr := menuExecutor.RunLoginSequence(s, terminal, userMgr, authenticatedUser, int(nodeID), sessionStartTime, effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
 	if loginErr != nil {
 		if errors.Is(loginErr, io.EOF) {
-			log.Printf("Node %d: User disconnected during login sequence.", nodeID)
+			slog.Info("user disconnected during login sequence", "node", nodeID)
 			return
 		}
-		log.Printf("ERROR: Node %d: Login sequence error: %v", nodeID, loginErr)
+		slog.Error("login sequence error", "node", nodeID, "error", loginErr)
 		if loginNextMenu == "" {
 			currentMenuName = "LOGOFF"
 		} else {
@@ -1514,14 +1520,14 @@ func sessionHandler(s ssh.Session) {
 
 	for {
 		if currentMenuName == "" || currentMenuName == "LOGOFF" {
-			log.Printf("Node %d: User %s selected Logoff or reached end state.", nodeID, authenticatedUser.Handle)
+			slog.Info("user selected logoff", "node", nodeID, "user", authenticatedUser.Handle)
 			fmt.Fprintln(terminal, "\r\nLogging off...")
 			// Add any cleanup tasks before closing the session
 			break // Exit the loop
 		}
 
 		// *** ADD LOGGING HERE ***
-		log.Printf("DEBUG: Node %d: Entering main loop iteration. CurrentMenu: %s, OutputMode: %d", nodeID, currentMenuName, effectiveMode)
+		slog.Debug("entering main loop iteration", "node", nodeID, "menu", currentMenuName, "output_mode", effectiveMode)
 
 		// Update session state for who's online tracking
 		bbsSession.Mutex.Lock()
@@ -1535,7 +1541,7 @@ func sessionHandler(s ssh.Session) {
 		// Pass "" for currentAreaName for now (TODO: Pass actual session area name)
 		nextMenuName, _, execErr := menuExecutor.Run(s, terminal, userMgr, authenticatedUser, currentMenuName, int(nodeID), sessionStartTime, autoRunLog, effectiveMode, "", int(termWidth.Load()), int(termHeight.Load()))
 		if execErr != nil {
-			log.Printf("Node %d: Error executing menu '%s': %v", nodeID, currentMenuName, execErr)
+			slog.Error("error executing menu", "node", nodeID, "menu", currentMenuName, "error", execErr)
 			fmt.Fprintf(terminal, "\r\nSystem error during menu execution: %v\r\n", execErr)
 			// Logoff on error?
 			currentMenuName = "LOGOFF"
@@ -1546,7 +1552,7 @@ func sessionHandler(s ssh.Session) {
 		currentMenuName = nextMenuName
 	}
 
-	log.Printf("Node %d: Session handler finished for %s.", nodeID, authenticatedUser.Handle)
+	slog.Info("session handler finished", "node", nodeID, "user", authenticatedUser.Handle)
 }
 
 // telnetSessionHandler adapts telnet sessions to the existing BBS session handler
@@ -1554,7 +1560,7 @@ func telnetSessionHandler(adapter *telnetserver.TelnetSessionAdapter) {
 	// Atomically check limits and register connection
 	canAccept, reason := connectionTracker.TryAccept(adapter.RemoteAddr())
 	if !canAccept {
-		log.Printf("INFO: Rejecting Telnet connection from %s: %s", adapter.RemoteAddr(), reason)
+		slog.Info("rejecting telnet connection", "addr", adapter.RemoteAddr(), "reason", reason)
 		fmt.Fprintf(adapter, "\r\nConnection rejected: %s\r\n", reason)
 		fmt.Fprintf(adapter, "Please try again later.\r\n")
 		time.Sleep(2 * time.Second) // Brief delay before closing
@@ -1580,9 +1586,9 @@ func main() {
 	// Validate output mode flag
 	outputModeFlag = strings.ToLower(outputModeFlag)
 	if outputModeFlag != "auto" && outputModeFlag != "utf8" && outputModeFlag != "cp437" {
-		log.Fatalf("FATAL: Invalid --output-mode value '%s'. Must be 'auto', 'utf8', or 'cp437'.", outputModeFlag)
+		logging.Fatal("invalid --output-mode value", "value", outputModeFlag, "valid", "auto, utf8, cp437")
 	}
-	log.Printf("INFO: Output mode set to: %s", outputModeFlag)
+	slog.Info("output mode set", "mode", outputModeFlag)
 
 	// --- Run Normal BBS Server --- //
 	var err error
@@ -1591,7 +1597,7 @@ func main() {
 	// Determine base paths
 	basePath, err := os.Getwd() // Or use a more robust method if needed
 	if err != nil {
-		log.Fatalf("Failed to get working directory: %v", err)
+		logging.Fatal("failed to get working directory", "error", err)
 	}
 	menuSetPath := filepath.Join(basePath, "menus", "v3") // Default menu set
 	rootConfigPath := filepath.Join(basePath, "configs")
@@ -1608,7 +1614,7 @@ func main() {
 	// shared logging settings from it).
 	serverConfig, err := config.LoadServerConfig(rootConfigPath)
 	if err != nil {
-		log.Fatalf("Failed to load server configuration: %v", err)
+		logging.Fatal("failed to load server configuration", "error", err)
 	}
 
 	// Initialize logging: a configurable rolling file plus console echo. This
@@ -1616,10 +1622,10 @@ func main() {
 	// migrates those call sites to slog.
 	_, closeLog, err := logging.Init(serverConfig.Logging, "vision3.log", true)
 	if err != nil {
-		log.Fatalf("Failed to initialize logging: %v", err)
+		logging.Fatal("failed to initialize logging", "error", err)
 	}
 	defer closeLog()
-	log.Println("INFO: Starting ViSiON/3 BBS Server (using crypto/ssh)...")
+	slog.Info("starting ViSiON/3 BBS server")
 
 	// Initialize connection tracker with configured limits and IP filter file paths
 	// This will load the initial lists and start watching for file changes
@@ -1633,39 +1639,42 @@ func main() {
 	)
 	defer connectionTracker.StopWatching() // Ensure file watcher is stopped on shutdown
 
-	log.Printf("INFO: Connection security configured - Max Nodes: %d, Max Connections Per IP: %d, Max Failed Logins: %d, Lockout: %d min",
-		serverConfig.MaxNodes, serverConfig.MaxConnectionsPerIP, serverConfig.MaxFailedLogins, serverConfig.LockoutMinutes)
+	slog.Info("connection security configured",
+		"max_nodes", serverConfig.MaxNodes,
+		"max_connections_per_ip", serverConfig.MaxConnectionsPerIP,
+		"max_failed_logins", serverConfig.MaxFailedLogins,
+		"lockout_min", serverConfig.LockoutMinutes)
 
 	// Log IP filter status
 	if serverConfig.IPBlocklistPath != "" {
-		log.Printf("INFO: IP blocklist enabled from %s (auto-reload on file change)", serverConfig.IPBlocklistPath)
+		slog.Info("IP blocklist enabled", "file", serverConfig.IPBlocklistPath)
 	}
 	if serverConfig.IPAllowlistPath != "" {
-		log.Printf("INFO: IP allowlist enabled from %s (auto-reload on file change)", serverConfig.IPAllowlistPath)
+		slog.Info("IP allowlist enabled", "file", serverConfig.IPAllowlistPath)
 	}
 
 	// Load global strings configuration from the new location
 	loadedStrings, err = config.LoadStrings(rootConfigPath)
 	if err != nil {
-		log.Fatalf("Failed to load strings configuration: %v", err)
+		logging.Fatal("failed to load strings configuration", "error", err)
 	}
 
 	// Load theme configuration from the menu set path
 	loadedTheme, err = config.LoadThemeConfig(menuSetPath)
 	if err != nil {
-		log.Printf("WARN: Proceeding with default theme due to error loading %s: %v", filepath.Join(menuSetPath, "theme.json"), err)
+		slog.Warn("proceeding with default theme", "file", filepath.Join(menuSetPath, "theme.json"), "error", err)
 	}
 
 	// Load door configurations from the new location
 	loadedDoors, err := config.LoadDoors(filepath.Join(rootConfigPath, "doors.json")) // Expects full path
 	if err != nil {
-		log.Fatalf("Failed to load door configuration: %v", err)
+		logging.Fatal("failed to load door configuration", "error", err)
 	}
 
 	// Load FTN configuration early so message manager can use per-network tearlines.
 	ftnConfig, ftnErr := config.LoadFTNConfig(rootConfigPath)
 	if ftnErr != nil {
-		log.Printf("ERROR: Failed to load FTN config: %v. Echomail disabled.", ftnErr)
+		slog.Error("failed to load FTN config, echomail disabled", "error", ftnErr)
 	}
 	networkTearlines := make(map[string]string)
 	if ftnErr == nil {
@@ -1683,7 +1692,7 @@ func main() {
 	// Load oneliners (Assuming they are still global for now, adjust if needed)
 	// oneliners, err := config.LoadOneLiners(filepath.Join(dataPath, "oneliners.dat")) // Example path
 	// if err != nil {
-	// 	log.Printf("WARN: Failed to load oneliners: %v", err)
+	// 	slog.Warn("failed to load oneliners", "error", err)
 	// 	oneliners = []string{} // Use empty list if loading fails
 	// }
 	// Initialize oneliners as empty slice since loading is now handled by the runnable
@@ -1692,7 +1701,7 @@ func main() {
 	// Initialize UserManager (using dataPath)
 	userMgr, err = user.NewUserManager(userDataPath) // Pass the directory for users.json
 	if err != nil {
-		log.Fatalf("Failed to initialize user manager: %v", err)
+		logging.Fatal("failed to initialize user manager", "error", err)
 	}
 	// Set the new user level from config
 	userMgr.SetNewUserLevel(serverConfig.NewUserLevel)
@@ -1700,27 +1709,27 @@ func main() {
 	// Initialize MessageManager (areas config from configs/, message data from data/)
 	messageMgr, err = message.NewMessageManager(dataPath, rootConfigPath, serverConfig.BoardName, networkTearlines)
 	if err != nil {
-		log.Fatalf("Failed to initialize message manager: %v", err)
+		logging.Fatal("failed to initialize message manager", "error", err)
 	}
 	defer messageMgr.Close() // Ensure JAM bases are closed on shutdown
 
 	// Initialize FileManager (using dataPath)
 	fileMgr, err = file.NewFileManager(dataPath, rootConfigPath)
 	if err != nil {
-		log.Fatalf("Failed to initialize file manager: %v", err)
+		logging.Fatal("failed to initialize file manager", "error", err)
 	}
 
 	// Initialize ConferenceManager (non-fatal if conferences.json is missing)
 	confMgr, err = conference.NewConferenceManager(rootConfigPath)
 	if err != nil {
-		log.Printf("WARN: Failed to initialize conference manager: %v. Conferences disabled.", err)
+		slog.Warn("failed to initialize conference manager, conferences disabled", "error", err)
 		confMgr = nil
 	}
 
 	// Load login sequence configuration
 	loginSequence, err := config.LoadLoginSequence(rootConfigPath)
 	if err != nil {
-		log.Fatalf("Failed to load login sequence configuration: %v", err)
+		logging.Fatal("failed to load login sequence configuration", "error", err)
 	}
 
 	// Initialize session registry for who's online tracking
@@ -1730,10 +1739,10 @@ func main() {
 	var loadedProtocols []transfer.ProtocolConfig
 	protocolsPath := filepath.Join(rootConfigPath, "protocols.json")
 	if protocols, err := transfer.LoadProtocols(protocolsPath); err != nil {
-		log.Printf("WARN: Failed to load protocols.json: %v. File transfers will be unavailable.", err)
+		slog.Warn("failed to load protocols, file transfers unavailable", "error", err)
 	} else {
 		loadedProtocols = protocols
-		log.Printf("INFO: Loaded %d transfer protocol(s) from %s", len(loadedProtocols), protocolsPath)
+		slog.Info("loaded transfer protocols", "count", len(loadedProtocols), "file", protocolsPath)
 	}
 
 	// Initialize MenuExecutor with new paths, loaded theme, server config, message manager, and connection tracker
@@ -1744,20 +1753,20 @@ func main() {
 	var serverConfigMu sync.RWMutex
 	configWatcher, err := NewConfigWatcher(rootConfigPath, menuSetPath, menuExecutor, userMgr, &serverConfig, &serverConfigMu)
 	if err != nil {
-		log.Printf("WARN: Failed to start config file watcher: %v. Hot reload disabled.", err)
+		slog.Warn("failed to start config file watcher, hot reload disabled", "error", err)
 	} else {
 		defer configWatcher.Stop()
-		log.Printf("INFO: Configuration hot reload enabled for doors.json, login.json, strings.json, theme.json, server.json")
+		slog.Info("configuration hot reload enabled")
 	}
 
 	if ftnErr == nil && len(ftnConfig.Networks) > 0 {
-		log.Printf("INFO: Internal FTN tosser disabled; use v3mail for toss/scan.")
+		slog.Info("internal FTN tosser disabled, use v3mail for toss/scan")
 	}
 
 	// Load event scheduler configuration
 	eventsConfig, eventsErr := config.LoadEventsConfig(rootConfigPath)
 	if eventsErr != nil {
-		log.Printf("WARN: Failed to load events config: %v", eventsErr)
+		slog.Warn("failed to load events config", "error", eventsErr)
 		eventsConfig = config.EventsConfig{Enabled: false}
 	}
 
@@ -1771,21 +1780,21 @@ func main() {
 		schedulerCtx, schedulerCancel = context.WithCancel(context.Background())
 		defer func() {
 			if schedulerCancel != nil {
-				log.Printf("INFO: Shutting down event scheduler...")
+				slog.Info("shutting down event scheduler")
 				schedulerCancel()
 			}
 		}()
 
 		go eventScheduler.Start(schedulerCtx)
-		log.Printf("INFO: Event scheduler started with %d events", len(eventsConfig.Events))
+		slog.Info("event scheduler started", "count", len(eventsConfig.Events))
 	} else {
-		log.Printf("INFO: Event scheduler disabled")
+		slog.Info("event scheduler disabled")
 	}
 
 	// Load V3Net configuration from v3net.json (separate from main config, like ftn.json).
 	v3netConfig, v3netCfgErr := config.LoadV3NetConfig(rootConfigPath)
 	if v3netCfgErr != nil {
-		log.Printf("ERROR: Failed to load V3Net config: %v", v3netCfgErr)
+		slog.Error("failed to load V3Net config", "error", v3netCfgErr)
 	}
 	if v3netCfgErr == nil {
 		v3netConfig.ConfigPath = rootConfigPath
@@ -1795,7 +1804,7 @@ func main() {
 	if v3netCfgErr == nil && v3netConfig.Enabled {
 		svc, v3err := v3net.New(v3netConfig)
 		if v3err != nil {
-			log.Printf("ERROR: V3Net initialization failed: %v", v3err)
+			slog.Error("V3Net initialization failed", "error", v3err)
 		} else {
 			svc.BBSName = serverConfig.BoardName
 			svc.BBSHost = serverConfig.SSHHost
@@ -1821,7 +1830,7 @@ func main() {
 				for _, tag := range lcfg.Boards {
 					area, ok := messageMgr.GetAreaByTag(tag)
 					if !ok {
-						log.Printf("WARN: V3Net leaf %q: message area %q not found, skipping", lcfg.Network, tag)
+						slog.Warn("V3Net leaf: message area not found, skipping", "network", lcfg.Network, "area", tag)
 						continue
 					}
 					router.Add(tag, v3net.NewJAMAdapter(messageMgr, area.ID))
@@ -1830,13 +1839,13 @@ func main() {
 					svc.RegisterArea(area.ID, lcfg.Network)
 				}
 				if len(resolvedBoards) == 0 {
-					log.Printf("WARN: V3Net leaf %q: no resolvable boards, skipping", lcfg.Network)
+					slog.Warn("V3Net leaf: no resolvable boards, skipping", "network", lcfg.Network)
 					continue
 				}
 				leafCfg := lcfg
 				leafCfg.Boards = resolvedBoards
 				if err := v3netService.AddLeaf(leafCfg, router, nil); err != nil {
-					log.Printf("ERROR: V3Net leaf %q: %v", lcfg.Network, err)
+					slog.Error("V3Net leaf error", "network", lcfg.Network, "error", err)
 					continue
 				}
 			}
@@ -1869,18 +1878,18 @@ func main() {
 				}
 				msg := v3net.BuildWireMessage(info.Network, area.Tag, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, info.Origin)
 				if err := svc.SendMessage(info.Network, msg); err != nil {
-					log.Printf("ERROR: V3Net: failed to send message to %s: %v", info.Network, err)
+					slog.Error("V3Net: failed to send message", "network", info.Network, "error", err)
 					return
 				}
 				// Mark the local JAM copy as sent so the reader shows "V3NET SENT".
 				if err := messageMgr.MarkMessageSent(area.ID, msgNum); err != nil {
-					log.Printf("WARN: V3Net: failed to mark message %d as sent: %v", msgNum, err)
+					slog.Warn("V3Net: failed to mark message as sent", "msg", msgNum, "error", err)
 				}
 			}
 
 			v3netCtx, v3netCancel := context.WithCancel(context.Background())
 			defer func() {
-				log.Printf("INFO: Shutting down V3Net service...")
+				slog.Info("shutting down V3Net service")
 				v3netCancel()
 				v3netService.Close()
 			}()
@@ -1888,25 +1897,27 @@ func main() {
 			go v3netService.Start(v3netCtx)
 			menuExecutor.V3NetStatus = v3netService
 			menuExecutor.ChatLeaves = v3netChatProvider(v3netService)
-			log.Printf("INFO: V3Net service started (node_id=%s, hub=%v, leaves=%d)",
-				v3netService.NodeID(), v3netService.HubActive(), v3netService.LeafCount())
+			slog.Info("V3Net service started",
+				"node_id", v3netService.NodeID(),
+				"hub", v3netService.HubActive(),
+				"leaves", v3netService.LeafCount())
 		}
 	} else if v3netCfgErr == nil {
-		log.Printf("INFO: V3Net networking disabled")
+		slog.Info("V3Net networking disabled")
 	}
 
 	// Ensure at least one protocol is enabled
 	if !serverConfig.SSHEnabled && !serverConfig.TelnetEnabled {
-		log.Fatalf("FATAL: Neither SSH nor Telnet is enabled in config. Enable at least one protocol.")
+		logging.Fatal("neither SSH nor Telnet is enabled in config")
 	}
 
 	// Start SSH server if enabled
 	if serverConfig.SSHEnabled {
 		hostKeyPath := filepath.Join(rootConfigPath, "ssh_host_rsa_key")
 		if _, err := os.Stat(hostKeyPath); err != nil {
-			log.Fatalf("FATAL: Host key not found at %s: %v", hostKeyPath, err)
+			logging.Fatal("host key not found", "path", hostKeyPath, "error", err)
 		}
-		log.Printf("INFO: Host key found at %s", hostKeyPath)
+		slog.Info("host key found", "path", hostKeyPath)
 
 		cleanup, err := startSSHServer(
 			hostKeyPath,
@@ -1915,18 +1926,18 @@ func main() {
 			serverConfig.LegacySSHAlgorithms,
 		)
 		if err != nil {
-			log.Fatalf("FATAL: %v", err)
+			logging.Fatal("failed to start SSH server", "error", err)
 		}
 		defer cleanup()
 	} else {
-		log.Printf("INFO: SSH server disabled in config")
+		slog.Info("SSH server disabled")
 	}
 
 	// Start telnet server if enabled
 	if serverConfig.TelnetEnabled {
 		telnetPort := serverConfig.TelnetPort
 		telnetHost := serverConfig.TelnetHost
-		log.Printf("INFO: Configuring telnet server on %s:%d...", telnetHost, telnetPort)
+		slog.Info("configuring telnet server", "host", telnetHost, "port", telnetPort)
 
 		telnetSrv, telnetErr := telnetserver.NewServer(telnetserver.Config{
 			Port:           telnetPort,
@@ -1934,24 +1945,24 @@ func main() {
 			SessionHandler: telnetSessionHandler,
 		})
 		if telnetErr != nil {
-			log.Fatalf("FATAL: Failed to create telnet server: %v", telnetErr)
+			logging.Fatal("failed to create telnet server", "error", telnetErr)
 		}
 		defer telnetSrv.Close()
 
 		go func() {
 			if listenErr := telnetSrv.ListenAndServe(); listenErr != nil {
-				log.Printf("ERROR: Telnet server error: %v", listenErr)
+				slog.Error("telnet server error", "error", listenErr)
 			}
 		}()
 
-		log.Printf("INFO: Telnet server ready - connect via: telnet %s %d", telnetHost, telnetPort)
+		slog.Info("telnet server ready", "host", telnetHost, "port", telnetPort)
 	} else {
-		log.Printf("INFO: Telnet server disabled in config")
+		slog.Info("telnet server disabled")
 	}
 
 	// Block forever — SSH and telnet servers run in background goroutines.
-	// The process exits when the OS terminates it or log.Fatalf fires.
-	log.Printf("INFO: Vision/3 BBS running. Press Ctrl+C to stop.")
+	// The process exits when the OS terminates it or logging.Fatal fires.
+	slog.Info("Vision/3 BBS running")
 	select {}
 
 }
@@ -1999,17 +2010,17 @@ func handleSSHConnection(tcpConn net.Conn, sshConfig *gossh.ServerConfig) {
 	defer tcpConn.Close()
 
 	remoteAddr := tcpConn.RemoteAddr().String()
-	log.Printf("New TCP connection from %s", remoteAddr)
+	slog.Info("new TCP connection", "addr", remoteAddr)
 
 	// Set a deadline for the handshake to prevent hanging connections
 	tcpConn.SetDeadline(time.Now().Add(30 * time.Second))
 
 	// Perform SSH handshake
-	log.Printf("DEBUG: Starting SSH handshake with %s", remoteAddr)
+	slog.Debug("starting SSH handshake", "addr", remoteAddr)
 	sshConn, chans, reqs, err := gossh.NewServerConn(tcpConn, sshConfig)
 	if err != nil {
-		log.Printf("ERROR: SSH handshake failed from %s: %v", remoteAddr, err)
-		log.Printf("DEBUG: This typically means algorithm negotiation failed or client disconnected")
+		slog.Error("SSH handshake failed", "addr", remoteAddr, "error", err)
+		slog.Debug("handshake failure typically means algorithm negotiation failed or client disconnected")
 		return
 	}
 	defer sshConn.Close()
@@ -2017,7 +2028,7 @@ func handleSSHConnection(tcpConn net.Conn, sshConfig *gossh.ServerConfig) {
 	// Clear the handshake deadline so the session doesn't timeout after 30s
 	tcpConn.SetDeadline(time.Time{})
 
-	log.Printf("SSH handshake successful from %s (user: %s)", tcpConn.RemoteAddr(), sshConn.User())
+	slog.Info("SSH handshake successful", "addr", tcpConn.RemoteAddr(), "user", sshConn.User())
 
 	// Discard global requests
 	go gossh.DiscardRequests(reqs)
@@ -2026,14 +2037,14 @@ func handleSSHConnection(tcpConn net.Conn, sshConfig *gossh.ServerConfig) {
 	for newChannel := range chans {
 		if newChannel.ChannelType() != "session" {
 			newChannel.Reject(gossh.UnknownChannelType, "unknown channel type")
-			log.Printf("Rejected channel type: %s", newChannel.ChannelType())
+			slog.Debug("rejected channel type", "type", newChannel.ChannelType())
 			continue
 		}
 
 		// Accept session channel
 		channel, requests, err := newChannel.Accept()
 		if err != nil {
-			log.Printf("Failed to accept channel: %v", err)
+			slog.Error("failed to accept channel", "error", err)
 			continue
 		}
 
@@ -2093,11 +2104,10 @@ func handleSessionChannel(conn *gossh.ServerConn, channel gossh.Channel, request
 				}
 				adapter.ptyMutex.Unlock()
 				req.Reply(true, nil)
-				log.Printf("PTY Request accepted: Term=%s, Width=%d, Height=%d",
-					pty.Term, pty.Window.Width, pty.Window.Height)
+				slog.Info("PTY request accepted", "term", pty.Term, "width", pty.Window.Width, "height", pty.Window.Height)
 			} else {
 				req.Reply(false, nil)
-				log.Printf("PTY Request failed to parse")
+				slog.Warn("PTY request failed to parse")
 			}
 
 		case "window-change":
@@ -2111,7 +2121,7 @@ func handleSessionChannel(conn *gossh.ServerConn, channel gossh.Channel, request
 				}
 				adapter.ptyMutex.Unlock()
 				req.Reply(true, nil)
-				log.Printf("Window change: %dx%d", win.Width, win.Height)
+				slog.Debug("window change", "width", win.Width, "height", win.Height)
 			} else {
 				req.Reply(false, nil)
 			}
@@ -2134,7 +2144,7 @@ func handleSessionChannel(conn *gossh.ServerConn, channel gossh.Channel, request
 		case "shell":
 			req.Reply(true, nil)
 			shellRequested = true
-			log.Printf("Shell request accepted")
+			slog.Info("shell request accepted")
 			// Continue processing requests in background for window-change
 			go func() {
 				for req := range requests {
@@ -2172,7 +2182,7 @@ func handleSessionChannel(conn *gossh.ServerConn, channel gossh.Channel, request
 			}
 			req.Reply(true, nil)
 			shellRequested = true
-			log.Printf("Exec request: %v", adapter.command)
+			slog.Info("exec request", "command", adapter.command)
 			// Background request processing (same as shell)
 			go func() {
 				for req := range requests {
@@ -2205,7 +2215,7 @@ func handleSessionChannel(conn *gossh.ServerConn, channel gossh.Channel, request
 
 	// Channel closed without shell/exec request
 	if !shellRequested {
-		log.Printf("Channel closed without shell/exec request")
+		slog.Debug("channel closed without shell/exec request")
 	}
 }
 
@@ -2213,14 +2223,14 @@ func handleSessionChannel(conn *gossh.ServerConn, channel gossh.Channel, request
 func loadHostKey(path string) gossh.Signer {
 	keyBytes, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatalf("FATAL: Failed to read host key %s: %v", path, err)
+		logging.Fatal("failed to read host key", "path", path, "error", err)
 	}
 	signer, err := gossh.ParsePrivateKey(keyBytes)
 	if err != nil {
-		log.Fatalf("FATAL: Failed to parse host key %s: %v", path, err)
+		logging.Fatal("failed to parse host key", "path", path, "error", err)
 	}
-	log.Printf("INFO: Host key loaded successfully from %s", path)
-	log.Printf("DEBUG: Host key type: %s", signer.PublicKey().Type())
+	slog.Info("host key loaded", "path", path)
+	slog.Debug("host key type", "type", signer.PublicKey().Type())
 	return signer
 }
 
@@ -2234,7 +2244,7 @@ func sendEnv(s *SessionAdapter, name, value string) {
 	if err != nil {
 		// Log quietly
 	} else {
-		// log.Printf("Node ?: Sent env request: %s=%s", name, value)
+		// slog.Debug("sent env request", "name", name, "value", value)
 	}
 }
 

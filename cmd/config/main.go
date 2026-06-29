@@ -13,8 +13,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -37,9 +35,6 @@ func main() {
 		}
 		path = filepath.Join(cwd, "configs")
 	}
-
-	// Suppress log output from config loaders (they log to default logger)
-	log.SetOutput(io.Discard)
 
 	// Verify the directory exists
 	info, err := os.Stat(path)

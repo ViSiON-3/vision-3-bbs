@@ -15,12 +15,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -40,10 +40,10 @@ func main() {
 
 	ks, created, err := keystore.Load(*keystorePath)
 	if err != nil {
-		log.Fatalf("load keystore: %v", err)
+		logging.Fatal("load keystore", "error", err)
 	}
 	if created {
-		log.Fatalf("keystore not found at %q; refusing to bootstrap with a newly generated identity", *keystorePath)
+		logging.Fatal("keystore not found, refusing to bootstrap with a newly generated identity", "path", *keystorePath)
 	}
 	fmt.Printf("Node ID: %s\n", ks.NodeID())
 
@@ -52,7 +52,7 @@ func main() {
 	for _, spec := range strings.Split(*areas, ",") {
 		parts := strings.SplitN(spec, ":", 2)
 		if len(parts) != 2 {
-			log.Fatalf("invalid area spec %q: expected tag:Name", spec)
+			logging.Fatal("invalid area spec", "spec", spec, "expected", "tag:Name")
 		}
 		tag, name := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 		areaList = append(areaList, protocol.Area{
@@ -76,14 +76,14 @@ func main() {
 	}
 
 	if err := nal.Sign(n, ks); err != nil {
-		log.Fatalf("sign NAL: %v", err)
+		logging.Fatal("sign NAL", "error", err)
 	}
 	fmt.Printf("Signed NAL: network=%s, areas=%d, updated=%s\n", n.Network, len(n.Areas), n.Updated)
 
 	// POST to hub.
 	body, err := json.Marshal(n)
 	if err != nil {
-		log.Fatalf("marshal NAL: %v", err)
+		logging.Fatal("marshal NAL", "error", err)
 	}
 
 	path := fmt.Sprintf("/v3net/v1/%s/nal", *network)
@@ -95,12 +95,12 @@ func main() {
 
 	sig, err := ks.Sign("POST", path, dateUTC, bodySHA)
 	if err != nil {
-		log.Fatalf("sign request: %v", err)
+		logging.Fatal("sign request", "error", err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
-		log.Fatalf("create request: %v", err)
+		logging.Fatal("create request", "error", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Date", dateUTC)
@@ -110,7 +110,7 @@ func main() {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("POST NAL: %v", err)
+		logging.Fatal("POST NAL", "error", err)
 	}
 	defer resp.Body.Close()
 
