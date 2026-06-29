@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 )
@@ -13,7 +13,7 @@ func LoadHistory(path string) (map[string]*EventHistory, error) {
 
 	// Check if file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		log.Printf("INFO: Event history file not found at %s, starting with empty history", path)
+		slog.Info("event history file not found; starting with empty history", "path", path)
 		return history, nil
 	}
 
@@ -34,7 +34,7 @@ func LoadHistory(path string) (map[string]*EventHistory, error) {
 		history[historyList[i].EventID] = &historyList[i]
 	}
 
-	log.Printf("INFO: Loaded event history for %d events from %s", len(history), path)
+	slog.Info("loaded event history", "events", len(history), "path", path)
 	return history, nil
 }
 
@@ -84,7 +84,7 @@ func SaveHistory(path string, history map[string]*EventHistory) error {
 		return err
 	}
 
-	log.Printf("DEBUG: Saved event history for %d events to %s", len(history), path)
+	slog.Debug("saved event history", "events", len(history), "path", path)
 	return nil
 }
 
@@ -119,6 +119,6 @@ func (s *Scheduler) updateHistory(result EventResult) {
 		h.FailureCount++
 	}
 
-	log.Printf("DEBUG: Updated history for event '%s': status=%s, duration=%dms, runs=%d, success=%d, failures=%d",
-		result.EventID, h.LastStatus, h.LastDuration, h.RunCount, h.SuccessCount, h.FailureCount)
+	slog.Debug("updated event history", "event", result.EventID, "status", h.LastStatus,
+		"duration_ms", h.LastDuration, "runs", h.RunCount, "success", h.SuccessCount, "failures", h.FailureCount)
 }

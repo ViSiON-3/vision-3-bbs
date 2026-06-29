@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -33,7 +33,7 @@ func NewScheduler(cfg config.EventsConfig, historyPath string) *Scheduler {
 	// Load history
 	history, err := LoadHistory(historyPath)
 	if err != nil {
-		log.Printf("WARN: Failed to load event history from %s: %v", historyPath, err)
+		slog.Warn("failed to load event history", "path", historyPath, "error", err)
 		history = make(map[string]*EventHistory)
 	}
 
@@ -59,7 +59,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	startupCount := 0
 	for _, event := range s.config.Events {
 		if !event.Enabled {
-			log.Printf("DEBUG: Event '%s' (%s) is disabled, skipping", event.ID, event.Name)
+			slog.Debug("event disabled; skipping", "id", event.ID, "name", event.Name)
 			continue
 		}
 
@@ -70,7 +70,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 			s.startupWg.Add(1)
 			go func() {
 				defer s.startupWg.Done()
-				log.Printf("INFO: Startup event '%s' (%s) launching", e.ID, e.Name)
+				slog.Info("startup event launching", "id", e.ID, "name", e.Name)
 				s.executeEventWithConcurrency(e)
 			}()
 		}
@@ -78,31 +78,31 @@ func (s *Scheduler) Start(ctx context.Context) {
 		// Schedule cron events (startup-only events have no schedule)
 		if event.Schedule != "" {
 			if err := s.scheduleEvent(event); err != nil {
-				log.Printf("ERROR: Failed to schedule event '%s' (%s): %v", event.ID, event.Name, err)
+				slog.Error("failed to schedule event", "id", event.ID, "name", event.Name, "error", err)
 			} else {
 				enabledCount++
-				log.Printf("INFO: Event '%s' (%s) scheduled: %s", event.ID, event.Name, event.Schedule)
+				slog.Info("event scheduled", "id", event.ID, "name", event.Name, "schedule", event.Schedule)
 			}
 		} else if !event.RunAtStartup {
-			log.Printf("WARN: Event '%s' (%s) has no schedule and run_at_startup is false, skipping", event.ID, event.Name)
+			slog.Warn("event has no schedule and run_at_startup is false; skipping", "id", event.ID, "name", event.Name)
 		}
 	}
 
 	if enabledCount == 0 && startupCount == 0 {
-		log.Printf("WARN: No enabled events to schedule")
+		slog.Warn("no enabled events to schedule")
 		return
 	}
 
 	// Start the cron scheduler
 	s.cron.Start()
-	log.Printf("INFO: Event scheduler running with %d scheduled + %d startup events (max concurrent: %d)",
-		enabledCount, startupCount, s.config.MaxConcurrentEvents)
+	slog.Info("event scheduler running", "scheduled", enabledCount, "startup", startupCount,
+		"max_concurrent", s.config.MaxConcurrentEvents)
 
 	// Wait for context cancellation
 	<-s.ctx.Done()
 
 	// Graceful shutdown
-	log.Printf("INFO: Event scheduler stopping...")
+	slog.Info("event scheduler stopping")
 	s.Stop()
 }
 
@@ -114,18 +114,18 @@ func (s *Scheduler) Stop() {
 
 		// Wait for running jobs to complete
 		<-cronCtx.Done()
-		log.Printf("INFO: All scheduled events completed")
+		slog.Info("all scheduled events completed")
 	}
 
 	// Wait for startup events to complete
 	s.startupWg.Wait()
-	log.Printf("INFO: All startup events completed")
+	slog.Info("all startup events completed")
 
 	// Save history
 	if err := SaveHistory(s.historyPath, s.history); err != nil {
-		log.Printf("ERROR: Failed to save event history: %v", err)
+		slog.Error("failed to save event history", "error", err)
 	} else {
-		log.Printf("INFO: Event history saved to %s", s.historyPath)
+		slog.Info("event history saved", "path", s.historyPath)
 	}
 }
 
@@ -144,7 +144,7 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 	s.mu.Lock()
 	if s.runningEvents[event.ID] {
 		s.mu.Unlock()
-		log.Printf("WARN: Event '%s' (%s) skipped: already running", event.ID, event.Name)
+		slog.Warn("event skipped: already running", "id", event.ID, "name", event.Name)
 		return
 	}
 
@@ -158,8 +158,8 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 	default:
 		s.mu.Unlock()
 		// At concurrency limit, skip execution
-		log.Printf("WARN: Event '%s' (%s) skipped: max concurrent events reached (%d)",
-			event.ID, event.Name, s.config.MaxConcurrentEvents)
+		slog.Warn("event skipped: max concurrent events reached",
+			"id", event.ID, "name", event.Name, "max_concurrent", s.config.MaxConcurrentEvents)
 		return
 	}
 

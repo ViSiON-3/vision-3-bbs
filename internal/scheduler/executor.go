@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strconv"
@@ -21,7 +21,7 @@ func (s *Scheduler) executeEvent(ctx context.Context, event config.EventConfig) 
 		StartTime: time.Now(),
 	}
 
-	log.Printf("INFO: Event '%s' (%s) started", event.ID, event.Name)
+	slog.Info("event started", "id", event.ID, "name", event.Name)
 
 	// Build substitutions for placeholders
 	substitutions := s.buildSubstitutions(event)
@@ -71,7 +71,7 @@ func (s *Scheduler) executeEvent(ctx context.Context, event config.EventConfig) 
 			workDir = strings.ReplaceAll(workDir, key, val)
 		}
 		cmd.Dir = workDir
-		log.Printf("DEBUG: Event '%s': setting working directory to '%s'", event.ID, cmd.Dir)
+		slog.Debug("setting working directory", "id", event.ID, "dir", cmd.Dir)
 	}
 
 	// Set environment variables
@@ -103,26 +103,26 @@ func (s *Scheduler) executeEvent(ctx context.Context, event config.EventConfig) 
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			result.Success = false
 			result.ExitCode = -1
-			log.Printf("ERROR: Event '%s' (%s) timed out after %ds", event.ID, event.Name, event.TimeoutSeconds)
+			slog.Error("event timed out", "id", event.ID, "name", event.Name, "timeout_s", event.TimeoutSeconds)
 		} else if exitErr, ok := err.(*exec.ExitError); ok {
 			result.Success = false
 			result.ExitCode = exitErr.ExitCode()
-			log.Printf("ERROR: Event '%s' (%s) failed with exit code %d", event.ID, event.Name, result.ExitCode)
+			slog.Error("event failed", "id", event.ID, "name", event.Name, "exit_code", result.ExitCode)
 			if result.ErrorOutput != "" {
-				log.Printf("ERROR: Event '%s' stderr: %s", event.ID, result.ErrorOutput)
+				slog.Error("event stderr", "id", event.ID, "stderr", result.ErrorOutput)
 			}
 		} else {
 			result.Success = false
 			result.ExitCode = -1
-			log.Printf("ERROR: Event '%s' (%s) failed to start: %v", event.ID, event.Name, err)
+			slog.Error("event failed to start", "id", event.ID, "name", event.Name, "error", err)
 		}
 	} else {
 		result.Success = true
 		result.ExitCode = 0
 		duration := result.EndTime.Sub(result.StartTime)
-		log.Printf("INFO: Event '%s' (%s) completed in %.3fs (exit code: 0)", event.ID, event.Name, duration.Seconds())
+		slog.Info("event completed", "id", event.ID, "name", event.Name, "duration_s", duration.Seconds())
 		if result.Output != "" {
-			log.Printf("DEBUG: Event '%s' output: %s", event.ID, result.Output)
+			slog.Debug("event output", "id", event.ID, "output", result.Output)
 		}
 	}
 
@@ -137,7 +137,7 @@ func (s *Scheduler) buildSubstitutions(event config.EventConfig) map[string]stri
 	// This should be the BBS installation root where the binary is running
 	bbsRoot, err := os.Getwd()
 	if err != nil {
-		log.Printf("WARN: Failed to get working directory: %v", err)
+		slog.Warn("failed to get working directory", "error", err)
 		bbsRoot = "."
 	}
 
