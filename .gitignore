@@ -90,6 +90,7 @@ Thumbs.db
 
 # Claude Code (local developer settings)
 .claude/
+.codex/
 
 # Beads runtime data
 .beads/*.pid
