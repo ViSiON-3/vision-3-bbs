@@ -2,7 +2,7 @@ package admin
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -70,20 +70,17 @@ func (s *Server) tick(now time.Time) {
 			s.ring = s.ring[len(s.ring)-s.cfg.MaxEvents:]
 		}
 	}
-	subs := make([]chan Event, 0, len(s.subs))
-	for c := range s.subs {
-		subs = append(subs, c)
-	}
-	s.mu.Unlock()
-
+	// Fan-out while holding the lock so sends cannot race a concurrent close.
+	// Sends are non-blocking, so holding the lock here is bounded and safe.
 	for _, e := range events {
-		for _, c := range subs {
+		for c := range s.subs {
 			select {
 			case c <- e:
 			default: // drop for slow subscribers; ring buffer holds history
 			}
 		}
 	}
+	s.mu.Unlock()
 }
 
 // Snapshot returns the most recent snapshot (nil before the first tick).
@@ -111,8 +108,8 @@ func (s *Server) Subscribe(ctx context.Context) <-chan Event {
 		<-ctx.Done()
 		s.mu.Lock()
 		delete(s.subs, ch)
-		s.mu.Unlock()
 		close(ch)
+		s.mu.Unlock()
 	}()
 	return ch
 }
@@ -124,6 +121,6 @@ func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 		s.tick(time.Now())
 		return &Result{OK: true}, nil
 	default:
-		return nil, errors.New("admin: command not supported in read-only v1: " + string(cmd.Command))
+		return nil, fmt.Errorf("admin: command not supported in read-only v1: %s", cmd.Command)
 	}
 }

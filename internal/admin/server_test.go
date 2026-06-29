@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,5 +46,38 @@ func TestServerExecuteRefreshOnly(t *testing.T) {
 	}
 	if _, err := srv.Execute(AdminCommand{Command: "node.disconnect"}); err == nil {
 		t.Fatal("non-refresh command must be rejected in v1")
+	}
+}
+
+// TestSubscribeCancelRace is a regression test for the send-on-closed-channel
+// panic that occurred when tick() fanned out to a subscriber channel that was
+// concurrently closed by Subscribe's cancel goroutine. Without the fix this
+// panics under -race; with the fix it passes cleanly.
+func TestSubscribeCancelRace(t *testing.T) {
+	reg := &fakeRegistry{
+		sessions: nil,
+	}
+	srv := NewServer(ServerConfig{
+		Reg: reg, SystemName: "race-test", StartedAt: time.Now(),
+		Refresh: time.Hour, MaxEvents: 10, CallsToday: func() int { return -1 },
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := srv.Subscribe(ctx)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			srv.tick(time.Now())
+		}
+	}()
+
+	cancel()
+	wg.Wait()
+
+	// Drain the channel (closed on cancel); must not panic.
+	for range ch {
 	}
 }
