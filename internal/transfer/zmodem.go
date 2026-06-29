@@ -256,7 +256,7 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 						canRun++
 						if canRun >= 5 && !killed {
 							killed = true
-							slog.Debug("ZModem CAN abort detected in stdin, killing process", "cmd", cmd.Path)
+							slog.Debug("zmodem CAN abort detected in stdin, killing process", "cmd", cmd.Path)
 							if cmd.Process != nil {
 								_ = cmd.Process.Kill()
 							}
@@ -672,15 +672,15 @@ func ExecuteZmodemSend(ctx context.Context, s ssh.Session, filePaths ...string) 
 	}
 	cmd := exec.CommandContext(ctx, szPath, args...)
 
-	slog.Info("executing Zmodem send", "cmd", szPath, "args", args)
+	slog.Info("executing zmodem send", "cmd", szPath, "args", args)
 	// Execute using the PTY helper
 	err = RunCommandWithPTY(ctx, s, cmd, 0)
 	if err != nil {
-		slog.Error("Zmodem send command failed", "cmd", szPath, "error", err)
-		return fmt.Errorf("Zmodem send failed: %w", err)
+		slog.Error("zmodem send command failed", "cmd", szPath, "error", err)
+		return fmt.Errorf("zmodem send failed: %w", err)
 	}
 
-	slog.Info("Zmodem send completed", "files", filePaths)
+	slog.Info("zmodem send completed", "files", filePaths)
 	return nil
 }
 
@@ -721,14 +721,14 @@ func ExecuteZmodemReceive(ctx context.Context, s ssh.Session, targetDir string) 
 	cmd := exec.CommandContext(ctx, rzPath, args...)
 	cmd.Dir = absTargetDir // Run rz in the target directory
 
-	slog.Info("executing Zmodem receive", "dir", absTargetDir, "cmd", rzPath, "args", args)
+	slog.Info("executing zmodem receive", "dir", absTargetDir, "cmd", rzPath, "args", args)
 	// 4. Execute using the PTY helper
 	err = RunCommandWithPTY(ctx, s, cmd, 0)
 	if err != nil {
-		slog.Error("Zmodem receive command failed", "cmd", rzPath, "error", err)
-		return fmt.Errorf("Zmodem receive failed: %w", err)
+		slog.Error("zmodem receive command failed", "cmd", rzPath, "error", err)
+		return fmt.Errorf("zmodem receive failed: %w", err)
 	}
 
-	slog.Info("Zmodem receive completed", "dir", absTargetDir)
+	slog.Info("zmodem receive completed", "dir", absTargetDir)
 	return nil
 }

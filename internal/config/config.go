@@ -1131,7 +1131,7 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	for name, net := range config.Networks {
 		if net.InternalTosserEnabled {
 			enabledCount++
-			slog.Info("FTN network internal tosser enabled", "network", name, "address", net.OwnAddress)
+			slog.Info("ftn network internal tosser enabled", "network", name, "address", net.OwnAddress)
 		}
 	}
 	slog.Info("loaded FTN configuration", "networks", len(config.Networks), "tosserEnabled", enabledCount)

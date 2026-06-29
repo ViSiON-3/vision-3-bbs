@@ -337,7 +337,7 @@ func (fm *FileManager) GetFileCountForArea(areaID int) (int, error) {
 	if !exists {
 		// Area might not exist or simply hasn't had metadata loaded/saved yet.
 		// Returning 0 is appropriate for the caller (runListFiles).
-		slog.Debug("GetFileCountForArea called for non-existent or unloaded area, returning 0", "id", areaID)
+		slog.Debug("area not found or unloaded; returning file count 0", "id", areaID)
 		return 0, nil
 	}
 
@@ -366,7 +366,7 @@ func (fm *FileManager) GetFilesForAreaPaginated(areaID int, page int, pageSize i
 	defer fm.muFiles.RUnlock()
 
 	if page <= 0 || pageSize <= 0 {
-		slog.Warn("GetFilesForAreaPaginated called with invalid page or pageSize", "page", page, "pageSize", pageSize)
+		slog.Warn("invalid page or pageSize for paginated file listing", "page", page, "pageSize", pageSize)
 		// Optionally return an error, but returning empty slice might be simpler for the caller
 		return []FileRecord{}, fmt.Errorf("invalid page number or page size")
 	}
@@ -382,7 +382,7 @@ func (fm *FileManager) GetFilesForAreaPaginated(areaID int, page int, pageSize i
 
 	// Check if start index is out of bounds
 	if startIndex >= totalFiles {
-		slog.Debug("GetFilesForAreaPaginated requested page out of bounds", "page", page, "total", totalFiles, "pageSize", pageSize)
+		slog.Debug("requested page out of bounds for file listing", "page", page, "total", totalFiles, "pageSize", pageSize)
 		return []FileRecord{}, nil // Requested page is beyond the last file
 	}
 
