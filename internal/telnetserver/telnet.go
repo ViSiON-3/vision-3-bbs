@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"regexp"
 	"strings"
@@ -54,8 +54,8 @@ const (
 // TelnetConn wraps a net.Conn with telnet protocol awareness.
 // Read() strips IAC commands transparently; Write() escapes 0xFF bytes.
 type TelnetConn struct {
-	conn   net.Conn
-	reader *bufio.Reader
+	conn    net.Conn
+	reader  *bufio.Reader
 	writeMu sync.Mutex // protects writes to conn
 
 	width  int
@@ -197,7 +197,7 @@ func (tc *TelnetConn) processNegotiationBytes(data []byte) {
 
 		case stateWill, stateWont, stateDo, stateDont:
 			// Consume the option byte
-			log.Printf("DEBUG: Telnet negotiation: cmd=%d option=%d", tc.state, b)
+			slog.Debug("telnet negotiation", "cmd", tc.state, "option", b)
 			if tc.state == stateWill && b == OptTermType {
 				tc.willTermType = true
 			}
@@ -243,11 +243,11 @@ func (tc *TelnetConn) handleSubnegotiation() {
 		width := int(tc.sbData[0])<<8 | int(tc.sbData[1])
 		height := int(tc.sbData[2])<<8 | int(tc.sbData[3])
 
-		log.Printf("INFO: Telnet NAWS: %dx%d", width, height)
+		slog.Info("telnet NAWS", "width", width, "height", height)
 
 		// Validate and cap dimensions
 		if width <= 0 || height <= 0 || width > 255 || height > 255 {
-			log.Printf("WARN: Telnet NAWS: invalid dimensions %dx%d, using defaults", width, height)
+			slog.Warn("telnet NAWS invalid dimensions; using defaults", "width", width, "height", height)
 			width = 80
 			height = 25
 		}
@@ -277,7 +277,7 @@ func (tc *TelnetConn) handleSubnegotiation() {
 				tc.termTypeMu.Lock()
 				tc.termType = t
 				tc.termTypeMu.Unlock()
-				log.Printf("INFO: Telnet TERM_TYPE: %s", t)
+				slog.Info("telnet TERM_TYPE", "term", t)
 			}
 		}
 	}
@@ -507,11 +507,11 @@ func (tc *TelnetConn) DetectTerminalSize() (width, height int, method string) {
 		default:
 		}
 
-		log.Printf("INFO: Telnet terminal size detected via ANSI CPR: %dx%d", w, h)
+		slog.Info("telnet terminal size detected via ANSI CPR", "width", w, "height", h)
 		return w, h, "ANSI"
 	}
 	if err != nil {
-		log.Printf("DEBUG: Telnet ANSI CPR detection failed: %v", err)
+		slog.Debug("telnet ANSI CPR detection failed", "error", err)
 	}
 
 	// Step 2: Fall back to NAWS values (already populated by Negotiate)
@@ -520,7 +520,7 @@ func (tc *TelnetConn) DetectTerminalSize() (width, height int, method string) {
 	tc.sizeMu.RUnlock()
 
 	if nawsW > 0 && nawsH > 0 && nawsW <= 80 && nawsH <= 25 {
-		log.Printf("INFO: Telnet terminal size via NAWS: %dx%d", nawsW, nawsH)
+		slog.Info("telnet terminal size via NAWS", "width", nawsW, "height", nawsH)
 		return nawsW, nawsH, "NAWS"
 	}
 
@@ -530,7 +530,7 @@ func (tc *TelnetConn) DetectTerminalSize() (width, height int, method string) {
 	tc.height = 25
 	tc.sizeMu.Unlock()
 
-	log.Printf("INFO: Telnet terminal size using defaults: 80x25")
+	slog.Info("telnet terminal size using defaults (80x25)")
 	return 80, 25, "DEFAULT"
 }
 

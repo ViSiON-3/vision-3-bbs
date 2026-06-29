@@ -2,7 +2,7 @@ package telnetserver
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 )
@@ -52,7 +52,7 @@ func (s *Server) ListenAndServe() error {
 	s.listener = listener
 	s.mu.Unlock()
 
-	log.Printf("INFO: Telnet server listening on %s", addr)
+	slog.Info("telnet server listening", "addr", addr)
 
 	for {
 		conn, err := listener.Accept()
@@ -64,7 +64,7 @@ func (s *Server) ListenAndServe() error {
 			if closed {
 				return nil // Clean shutdown
 			}
-			log.Printf("ERROR: Telnet accept error: %v", err)
+			slog.Error("telnet accept error", "error", err)
 			continue
 		}
 
@@ -75,14 +75,14 @@ func (s *Server) ListenAndServe() error {
 // handleConnection processes a new telnet connection.
 func (s *Server) handleConnection(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
-	log.Printf("INFO: Telnet connection from %s", remoteAddr)
+	slog.Info("telnet connection", "remote", remoteAddr)
 
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("ERROR: Telnet panic handling %s: %v", remoteAddr, r)
+			slog.Error("telnet panic handling connection", "remote", remoteAddr, "panic", r)
 		}
 		conn.Close()
-		log.Printf("INFO: Telnet connection closed from %s", remoteAddr)
+		slog.Info("telnet connection closed", "remote", remoteAddr)
 	}()
 
 	// Create telnet-aware connection wrapper
@@ -90,14 +90,14 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	// Negotiate telnet options (ECHO, SGA, NAWS, etc.)
 	if err := tc.Negotiate(); err != nil {
-		log.Printf("ERROR: Telnet negotiation failed for %s: %v", remoteAddr, err)
+		slog.Error("telnet negotiation failed", "remote", remoteAddr, "error", err)
 		return
 	}
 
 	// Detect actual usable terminal size via ANSI CPR (primary), NAWS (fallback), defaults
 	// CPR detects status bars (e.g., SyncTerm reports 25 via NAWS but only 24 rows usable)
 	w, h, method := tc.DetectTerminalSize()
-	log.Printf("INFO: Telnet session from %s - terminal size: %dx%d (via %s)", remoteAddr, w, h, method)
+	slog.Info("telnet session", "remote", remoteAddr, "width", w, "height", h, "method", method)
 
 	// Create session adapter that implements ssh.Session
 	adapter := NewTelnetSessionAdapter(tc)

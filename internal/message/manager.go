@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -90,13 +90,13 @@ func NewMessageManager(dataPath, configPath, boardName string, networkTearlines 
 
 	if err := mm.loadMessageAreas(); err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("INFO: %s not found. Starting with no message areas.", messageAreaFile)
+			slog.Info("message areas file not found; starting with none", "file", messageAreaFile)
 		} else {
 			return nil, fmt.Errorf("failed to load message areas: %w", err)
 		}
 	}
 
-	log.Printf("INFO: MessageManager initialized. Loaded %d areas.", len(mm.areasByID))
+	slog.Info("message manager initialized", "areas", len(mm.areasByID))
 	return mm, nil
 }
 
@@ -162,7 +162,7 @@ func (mm *MessageManager) loadMessageAreas() error {
 			continue
 		}
 		if _, exists := mm.areasByID[area.ID]; exists {
-			log.Printf("WARN: Duplicate area ID %d, skipping.", area.ID)
+			slog.Warn("duplicate area ID; skipping", "id", area.ID)
 			continue
 		}
 		mm.areasByID[area.ID] = area
@@ -171,7 +171,7 @@ func (mm *MessageManager) loadMessageAreas() error {
 		if area.EchoTag != "" && area.EchoTag != area.Tag {
 			mm.areasByEchoTag[area.EchoTag] = area
 		}
-		log.Printf("TRACE: Loaded area ID %d, Tag '%s', Type '%s'", area.ID, area.Tag, area.AreaType)
+		slog.Debug("loaded area", "id", area.ID, "tag", area.Tag, "type", area.AreaType)
 	}
 
 	// Migration: assign positions to any areas that have Position <= 0.
@@ -200,7 +200,7 @@ func (mm *MessageManager) loadMessageAreas() error {
 			maxPos++
 			area.Position = maxPos
 		}
-		log.Printf("INFO: Auto-assigned positions to %d message areas (migration)", len(sorted))
+		slog.Info("auto-assigned message area positions (migration)", "count", len(sorted))
 	}
 
 	return nil
@@ -340,7 +340,7 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 	}
 	mm.mu.Unlock()
 
-	log.Printf("INFO: Auto-created message area ID %d, Tag %q, Type %q", area.ID, area.Tag, area.AreaType)
+	slog.Info("auto-created message area", "id", area.ID, "tag", area.Tag, "type", area.AreaType)
 
 	if err := mm.SaveAreas(); err != nil {
 		// Rollback in-memory state so it stays consistent with disk.
@@ -351,7 +351,7 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 			delete(mm.areasByEchoTag, area.EchoTag)
 		}
 		mm.mu.Unlock()
-		log.Printf("ERROR: Rolling back area %q after save failure: %v", area.Tag, err)
+		slog.Error("rolling back area after save failure", "tag", area.Tag, "error", err)
 		return 0, fmt.Errorf("save areas after add: %w", err)
 	}
 	return area.ID, nil
@@ -860,7 +860,7 @@ func (mm *MessageManager) buildThreadIndex(b *jam.Base, total int, modCounter ui
 	for i := 1; i <= total; i++ {
 		hdr, err := b.ReadMessageHeader(i)
 		if err != nil {
-			log.Printf("WARN: Failed to read message header %d: %v", i, err)
+			slog.Warn("failed to read message header", "index", i, "error", err)
 			continue
 		}
 		if hdr.Attribute&jam.MsgDeleted != 0 {
@@ -946,7 +946,7 @@ func (mm *MessageManager) buildMSGIDIndex(b *jam.Base, total int, modCounter uin
 	for i := 1; i <= total; i++ {
 		hdr, err := b.ReadMessageHeader(i)
 		if err != nil {
-			log.Printf("WARN: Failed to read message header %d for MSGID index: %v", i, err)
+			slog.Warn("failed to read message header for MSGID index", "index", i, "error", err)
 			continue
 		}
 		if hdr.Attribute&jam.MsgDeleted != 0 {
