@@ -83,6 +83,7 @@
 * **NETWORKING**
 * [SSH Server](networking/ssh.md)
 * [Telnet Server](networking/telnet.md)
+* [WFC Sysop Console](how-to-guides/wfc-console.md)
 
 * **ADVANCED**
 * [Config Editor](configuration/configuration.md#configuration-editor-tui)

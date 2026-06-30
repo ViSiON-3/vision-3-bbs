@@ -199,3 +199,4 @@ This builds all binaries, creates a full BBS directory at the target path, and s
 - Configure [Door Programs](doors/doors.md) if desired
 - Review [File Transfer Protocols](files/file-transfer.md) (sexyz ZModem 8k)
 - Refer to [User Management](users/user-management.md) for managing users
+- Set up the [WFC Sysop Console](how-to-guides/wfc-console.md) to monitor live callers remotely over SSH

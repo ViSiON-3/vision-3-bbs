@@ -59,6 +59,14 @@ Tested and working:
 - **PuTTY**
 - **mRemoteNG**
 
+## Remote Sysop Console (WFC)
+
+The `wfc` Waiting-For-Caller console connects over **this same SSH server** to
+monitor live node/caller activity from your own machine — no extra port to open.
+Sysops are authenticated by SSH public key (CoSysOp level or above). See the
+[WFC Sysop Console](how-to-guides/wfc-console.md) guide for building `wfc`,
+registering a key, and connecting.
+
 ## Troubleshooting
 
 ### Connection Refused
