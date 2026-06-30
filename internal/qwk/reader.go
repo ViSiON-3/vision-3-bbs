@@ -44,6 +44,17 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 			break
 		}
 	}
+	// Fall back: if the named file is absent (packet from a different BBS ID),
+	// accept the first .MSG file found so the caller can inspect the first-block
+	// BBS ID and decide whether to reject it.
+	if msgFile == nil {
+		for _, f := range zr.File {
+			if strings.HasSuffix(strings.ToUpper(f.Name), ".MSG") {
+				msgFile = f
+				break
+			}
+		}
+	}
 	if msgFile == nil {
 		return nil, fmt.Errorf("REP packet missing %s", msgFileName)
 	}
