@@ -31,6 +31,8 @@ type Options struct {
 	NoColor   bool
 	ReadOnly  bool
 	MaxEvents int
+	// Refresh is the poll interval. If zero, defaults to 1 second.
+	Refresh time.Duration
 }
 
 // Model is the WFC TUI model.
@@ -54,6 +56,9 @@ func New(client admin.AdminClient, opts Options) Model {
 	if opts.MaxEvents <= 0 {
 		opts.MaxEvents = 200
 	}
+	if opts.Refresh <= 0 {
+		opts.Refresh = time.Second
+	}
 	return Model{client: client, opts: opts, mode: modeList, showLogs: true}
 }
 
@@ -67,7 +72,7 @@ func (m Model) Init() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return tea.Batch(m.fetchSnapshot(), m.subscribeCmd(), pollCmd(m.client, time.Second))
+	return tea.Batch(m.fetchSnapshot(), m.subscribeCmd(), pollCmd(m.client, m.opts.Refresh))
 }
 
 // fetchSnapshot fetches a snapshot once (fromPoll=false). Used by Init's
@@ -143,7 +148,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// spawn a new chain — doing so would multiply poll goroutines unboundedly.
 		var cmd tea.Cmd
 		if msg.fromPoll && m.client != nil {
-			cmd = pollCmd(m.client, time.Second)
+			cmd = pollCmd(m.client, m.opts.Refresh)
 		}
 		return m, cmd
 

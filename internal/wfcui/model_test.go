@@ -143,6 +143,20 @@ func TestReconnectKeyReturnsBatch(t *testing.T) {
 	}
 }
 
+// TestRefreshOptionDefault verifies that New normalises a zero Refresh to 1s,
+// and that a custom Refresh value is preserved.
+func TestRefreshOptionDefault(t *testing.T) {
+	m := New(nil, Options{MaxEvents: 10})
+	if m.opts.Refresh != time.Second {
+		t.Errorf("zero Refresh: got %v, want %v", m.opts.Refresh, time.Second)
+	}
+
+	m2 := New(nil, Options{MaxEvents: 10, Refresh: 500 * time.Millisecond})
+	if m2.opts.Refresh != 500*time.Millisecond {
+		t.Errorf("custom Refresh: got %v, want %v", m2.opts.Refresh, 500*time.Millisecond)
+	}
+}
+
 func TestWindowSizeModeTooSmall(t *testing.T) {
 	m := New(nil, Options{MaxEvents: 10})
 	m.width, m.height = 100, 30

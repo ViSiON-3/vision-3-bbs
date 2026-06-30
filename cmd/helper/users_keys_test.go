@@ -31,6 +31,57 @@ func makeKeyLine(t *testing.T) string {
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub))) + " co@laptop"
 }
 
+// TestResolveUsersDataPathMissingValue ensures --data with no following value
+// returns an error instead of silently defaulting to "data/users".
+func TestResolveUsersDataPathMissingValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+		wantVal string
+	}{
+		{
+			name:    "--data absent uses default",
+			args:    []string{"Boss", "somefile"},
+			wantErr: false,
+			wantVal: "data/users",
+		},
+		{
+			name:    "--data with value",
+			args:    []string{"--data", "/tmp/users", "Boss"},
+			wantErr: false,
+			wantVal: "/tmp/users",
+		},
+		{
+			name:    "--data trailing (no value)",
+			args:    []string{"Boss", "--data"},
+			wantErr: true,
+		},
+		{
+			name:    "--data followed by another flag",
+			args:    []string{"--data", "--other"},
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := resolveUsersDataPath(tc.args)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("resolveUsersDataPath(%v) = %q, nil; want error", tc.args, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveUsersDataPath(%v) error: %v", tc.args, err)
+			}
+			if got != tc.wantVal {
+				t.Errorf("resolveUsersDataPath(%v) = %q; want %q", tc.args, got, tc.wantVal)
+			}
+		})
+	}
+}
+
 func TestUsersAddAndDelKey(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "users")
 	writeUsersJSON(t, dir)

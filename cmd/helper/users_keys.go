@@ -11,21 +11,30 @@ import (
 
 // resolveUsersDataPath returns the value of a trailing/leading --data flag,
 // defaulting to "data/users" (mirrors cmdUsersList/cmdUsersPurge).
-func resolveUsersDataPath(args []string) string {
+// It returns an error when --data is present but has no following value (i.e.
+// --data is last, or the next argument starts with "--").
+func resolveUsersDataPath(args []string) (string, error) {
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--data" && i+1 < len(args) {
-			return args[i+1]
+		if args[i] == "--data" {
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+				return "", fmt.Errorf("--data requires a value")
+			}
+			return args[i+1], nil
 		}
 	}
-	return "data/users"
+	return "data/users", nil
 }
 
 // stripFlags removes "--data <v>" pairs, leaving positional args.
+// When --data has no value (next arg missing or starts with "--"), the bare
+// --data token is dropped without consuming the next arg.
 func stripFlags(args []string) []string {
 	var out []string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--data" {
-			i++ // skip value
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+				i++ // skip value
+			}
 			continue
 		}
 		out = append(out, args[i])
@@ -48,7 +57,11 @@ func loadUserOrExit(dataPath, handle string) (*user.UserMgr, *user.User) {
 }
 
 func cmdUsersAddKey(args []string) {
-	dataPath := resolveUsersDataPath(args)
+	dataPath, err := resolveUsersDataPath(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	pos := stripFlags(args)
 	if len(pos) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: helper users addkey <handle> <keyfile|->")
@@ -57,14 +70,14 @@ func cmdUsersAddKey(args []string) {
 	handle, src := pos[0], pos[1]
 
 	var raw []byte
-	var err error
+	var readErr error
 	if src == "-" {
-		raw, err = io.ReadAll(os.Stdin)
+		raw, readErr = io.ReadAll(os.Stdin)
 	} else {
-		raw, err = os.ReadFile(src)
+		raw, readErr = os.ReadFile(src)
 	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot read key from %s: %v\n", src, err)
+	if readErr != nil {
+		fmt.Fprintf(os.Stderr, "Error: cannot read key from %s: %v\n", src, readErr)
 		os.Exit(1)
 	}
 
@@ -82,7 +95,11 @@ func cmdUsersAddKey(args []string) {
 }
 
 func cmdUsersListKeys(args []string) {
-	dataPath := resolveUsersDataPath(args)
+	dataPath, err := resolveUsersDataPath(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	pos := stripFlags(args)
 	if len(pos) < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: helper users listkeys <handle>")
@@ -102,7 +119,11 @@ func cmdUsersListKeys(args []string) {
 }
 
 func cmdUsersDelKey(args []string) {
-	dataPath := resolveUsersDataPath(args)
+	dataPath, err := resolveUsersDataPath(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	pos := stripFlags(args)
 	if len(pos) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: helper users delkey <handle> <fingerprint|index>")

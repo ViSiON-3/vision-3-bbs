@@ -12,7 +12,7 @@ type cliFlags struct {
 	ascii bool
 	// noColor disables terminal color output.
 	noColor bool
-	// refresh is the poll interval in milliseconds (reserved; not yet wired).
+	// refresh is the poll interval in milliseconds.
 	refresh int
 	// maxEvents caps the in-memory event ring buffer.
 	maxEvents int
@@ -34,7 +34,7 @@ func registerFlags(fs *flag.FlagSet) *cliFlags {
 	fs.BoolVar(&f.readonly, "readonly", false, "Disable admin commands (view only)")
 	fs.BoolVar(&f.ascii, "ascii", false, "Use ASCII-only characters (no box-drawing)")
 	fs.BoolVar(&f.noColor, "no-color", false, "Disable color output")
-	fs.IntVar(&f.refresh, "refresh", 1000, "Snapshot poll interval in milliseconds (reserved)")
+	fs.IntVar(&f.refresh, "refresh", 1000, "Snapshot poll interval in milliseconds")
 	fs.IntVar(&f.maxEvents, "max-events", 200, "Maximum events to keep in the event log")
 	fs.StringVar(&f.identity, "identity", "", "SSH private key file (default: ~/.ssh/id_ed25519)")
 	fs.StringVar(&f.knownHosts, "known-hosts", "", "SSH known_hosts file (default: ~/.ssh/known_hosts)")

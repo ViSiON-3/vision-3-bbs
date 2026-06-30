@@ -10,9 +10,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	gossh "golang.org/x/crypto/ssh"
@@ -95,6 +97,7 @@ func main() {
 		NoColor:   f.noColor,
 		ReadOnly:  f.readonly,
 		MaxEvents: f.maxEvents,
+		Refresh:   time.Duration(f.refresh) * time.Millisecond,
 	})
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
@@ -135,7 +138,7 @@ func parseConnect(s string) (user, addr string, err error) {
 		return "", "", fmt.Errorf("missing port: use ssh://user@host:port")
 	}
 
-	return u.User.Username(), host + ":" + port, nil
+	return u.User.Username(), net.JoinHostPort(host, port), nil
 }
 
 // loadSigner reads the PEM-encoded private key at path and returns an

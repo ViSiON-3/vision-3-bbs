@@ -265,7 +265,10 @@ if ! go build -o config ./cmd/config; then
     exit 1
 fi
 echo "Building wfc..."
-go build -o wfc ./cmd/wfc
+if ! go build -o wfc ./cmd/wfc; then
+    echo -e "${RED}Build failed (wfc)!${NC}"
+    exit 1
+fi
 
 echo "Initializing JAM bases..."
 ./v3mail stats --all --config configs --data data > /dev/null

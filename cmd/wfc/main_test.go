@@ -44,6 +44,13 @@ func TestParseConnect(t *testing.T) {
 			input:   "",
 			wantErr: true,
 		},
+		{
+			name:     "IPv6 bracketed address",
+			input:    "ssh://sysop@[2001:db8::1]:6023",
+			wantUser: "sysop",
+			wantAddr: "[2001:db8::1]:6023",
+			wantErr:  false,
+		},
 	}
 
 	for _, tc := range tests {
