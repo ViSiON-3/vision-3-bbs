@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 )
 
 // ServeRPC runs the server side of the admin protocol over rw. It sends an
@@ -41,12 +42,46 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, audit fun
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	events := srv.Subscribe(subCtx)
+
+	// A2: when ctx is cancelled, close rw so ReadFrame below unblocks.
+	// Guard with sync.Once because the event goroutine may also close rw on
+	// write error — a second Close is safe on most transports, but Once avoids
+	// any log noise from double-close.
+	var closeOnce sync.Once
+	closeRW := func() { closeOnce.Do(func() { rw.Close() }) }
+	go func() {
+		<-subCtx.Done()
+		closeRW()
+	}()
+
+	// A1: periodically push fresh snapshots so remote clients stay current.
+	refreshInterval := srv.RefreshInterval()
+	if refreshInterval <= 0 {
+		refreshInterval = time.Second
+	}
+	snapTicker := time.NewTicker(refreshInterval)
+	defer snapTicker.Stop()
+	go func() {
+		for {
+			select {
+			case <-subCtx.Done():
+				return
+			case <-snapTicker.C:
+				if err := write(&Frame{Kind: KindSnapshot, Snapshot: srv.Snapshot()}); err != nil {
+					cancel()
+					closeRW()
+					return
+				}
+			}
+		}
+	}()
+
 	go func() {
 		for e := range events {
 			ev := e
 			if err := write(&Frame{Kind: KindEvent, Event: &ev}); err != nil {
 				cancel()
-				rw.Close() // unblock the outer ReadFrame
+				closeRW()
 				return
 			}
 		}
@@ -108,7 +143,10 @@ func NewStreamClient(rwc io.ReadWriteCloser) *StreamClient {
 func (c *StreamClient) readLoop() {
 	// Always unblock Snapshot() callers when readLoop exits, whether cleanly or
 	// on error — so snapReady is closed exactly once regardless of path.
+	// A3: also close results so Execute() callers unblock and return an error
+	// rather than blocking forever after the connection drops.
 	defer c.snapOnce.Do(func() { close(c.snapReady) })
+	defer close(c.results)
 
 	for {
 		f, err := ReadFrame(c.rwc)
@@ -172,7 +210,10 @@ func (c *StreamClient) Execute(ctx context.Context, cmd AdminCommand) (*Result, 
 		return nil, err
 	}
 	select {
-	case f := <-c.results:
+	case f, ok := <-c.results:
+		if !ok {
+			return nil, fmt.Errorf("admin: connection closed")
+		}
 		if f.Kind == KindError {
 			return nil, errFromString(f.Err)
 		}

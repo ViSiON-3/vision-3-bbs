@@ -23,12 +23,16 @@ type ServerConfig struct {
 // Server polls SessionRegistry, keeps the latest snapshot, and fans out
 // diff-synthesized events to subscribers. Read-only; v1 implements no mutations.
 type Server struct {
-	cfg  ServerConfig
-	mu   sync.RWMutex
-	prev *SystemSnapshot
-	ring []Event
-	subs map[chan Event]struct{}
+	cfg    ServerConfig
+	mu     sync.RWMutex
+	tickMu sync.Mutex // serialises tick end-to-end to prevent out-of-order snapshots
+	prev   *SystemSnapshot
+	ring   []Event
+	subs   map[chan Event]struct{}
 }
+
+// RefreshInterval returns the configured polling interval.
+func (s *Server) RefreshInterval() time.Duration { return s.cfg.Refresh }
 
 // NewServer creates a Server. Call Run to start polling, or tick() in tests.
 func NewServer(cfg ServerConfig) *Server {
@@ -57,7 +61,11 @@ func (s *Server) Run(ctx context.Context) {
 }
 
 // tick builds a snapshot, diffs it, stores events, and fans them out.
+// tickMu ensures only one tick runs at a time so snapshots are strictly ordered.
 func (s *Server) tick(now time.Time) {
+	s.tickMu.Lock()
+	defer s.tickMu.Unlock()
+
 	calls := -1
 	if s.cfg.CallsToday != nil {
 		calls = s.cfg.CallsToday()

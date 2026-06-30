@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+// nodeAt is like node() but with an explicit ConnectedAt timestamp.
+func nodeAt(id int, handle, menu, activity string, connectedAt time.Time) NodeState {
+	ns := node(id, handle, menu, activity)
+	ns.ConnectedAt = connectedAt
+	return ns
+}
+
 func node(id int, handle, menu, activity string) NodeState {
 	return NodeState{NodeID: id, Handle: handle, CurrentMenu: menu, Activity: activity}
 }
@@ -39,5 +46,48 @@ func TestDiffNilPrevNoEvents(t *testing.T) {
 	cur := &SystemSnapshot{Nodes: []NodeState{node(1, "Ann", "MAIN", "")}}
 	if got := DiffSnapshots(nil, cur); len(got) != 0 {
 		t.Fatalf("expected no events for nil prev, got %+v", got)
+	}
+}
+
+// TestDiffNodeIDTurnover is a regression test for A5: when a caller disconnects
+// and a new caller connects on the same NodeID between polls, DiffSnapshots must
+// emit a disconnected event for the old handle and a connected event for the new
+// handle, and must NOT emit menu/activity change events misattributed to the
+// prior caller.
+func TestDiffNodeIDTurnover(t *testing.T) {
+	t1 := time.Unix(1700000000, 0).UTC()
+	t2 := t1.Add(5 * time.Minute)
+	now := t2.Add(time.Second)
+
+	prev := &SystemSnapshot{Nodes: []NodeState{nodeAt(1, "OldCaller", "MAIN", "idle", t1)}}
+	cur := &SystemSnapshot{Time: now, Nodes: []NodeState{nodeAt(1, "NewCaller", "DOORS", "chatting", t2)}}
+
+	events := DiffSnapshots(prev, cur)
+
+	var disconnects, connects, menuChanges, activityChanges int
+	var disconnectHandle, connectHandle string
+	for _, e := range events {
+		switch e.Type {
+		case EventCallerDisconnected:
+			disconnects++
+			disconnectHandle = e.Handle
+		case EventCallerConnected:
+			connects++
+			connectHandle = e.Handle
+		case EventMenuChanged:
+			menuChanges++
+		case EventActivityChanged:
+			activityChanges++
+		}
+	}
+
+	if disconnects != 1 || disconnectHandle != "OldCaller" {
+		t.Errorf("expected 1 disconnect for OldCaller, got %d disconnect(s) for %q", disconnects, disconnectHandle)
+	}
+	if connects != 1 || connectHandle != "NewCaller" {
+		t.Errorf("expected 1 connect for NewCaller, got %d connect(s) for %q", connects, connectHandle)
+	}
+	if menuChanges != 0 || activityChanges != 0 {
+		t.Errorf("expected no menu/activity change events for turnover node, got menu=%d activity=%d", menuChanges, activityChanges)
 	}
 }

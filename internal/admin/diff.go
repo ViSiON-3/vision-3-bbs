@@ -21,6 +21,15 @@ func DiffSnapshots(prev, cur *SystemSnapshot) []Event {
 			events = append(events, Event{Time: cur.Time, Type: EventCallerConnected, NodeID: n.NodeID, Handle: n.Handle, Message: "connected"})
 			continue
 		}
+		// Same NodeID but ConnectedAt changed: one caller left and another arrived
+		// on the same node between polls. Emit disconnect (old handle) + connect
+		// (new handle) and skip menu/activity diff for this node to avoid
+		// misattributing changes to the prior caller.
+		if !old.ConnectedAt.IsZero() && !n.ConnectedAt.IsZero() && !old.ConnectedAt.Equal(n.ConnectedAt) {
+			events = append(events, Event{Time: cur.Time, Type: EventCallerDisconnected, NodeID: old.NodeID, Handle: old.Handle, Message: "disconnected"})
+			events = append(events, Event{Time: cur.Time, Type: EventCallerConnected, NodeID: n.NodeID, Handle: n.Handle, Message: "connected"})
+			continue
+		}
 		if old.CurrentMenu != n.CurrentMenu {
 			events = append(events, Event{Time: cur.Time, Type: EventMenuChanged, NodeID: n.NodeID, Handle: n.Handle, Message: n.CurrentMenu})
 		}
