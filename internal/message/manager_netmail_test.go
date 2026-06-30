@@ -13,9 +13,9 @@ func TestSplitNetmailTo(t *testing.T) {
 		{"areafix@3:633/2744", "areafix", "3:633/2744"},
 		{"AreaFix@21:1/100", "AreaFix", "21:1/100"},
 		{"SysOp@3:633/2744.11", "SysOp", "3:633/2744.11"},
-		{"user@example.com", "user@example.com", ""}, // email-like, not FTN
-		{"@3:633/2744", "@3:633/2744", ""},           // no username before @
-		{"J0hn Doe@1:2/3", "J0hn Doe", "1:2/3"},      // space in name
+		{"user@example.com", "user@example.com", ""},  // email-like, not FTN
+		{"@3:633/2744", "@3:633/2744", ""},             // no username before @
+		{"J0hn Doe@1:2/3", "J0hn Doe", "1:2/3"},       // space in name
 		{"", "", ""},
 	}
 

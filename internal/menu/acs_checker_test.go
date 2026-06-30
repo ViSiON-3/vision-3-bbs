@@ -180,8 +180,8 @@ func TestEvaluateRPN_SimpleAnd(t *testing.T) {
 	// true & true = true
 	u := &user.User{AccessLevel: 100, Flags: "A"}
 	rpn := []token{
-		{typ: tokenCondition, value: "S50"}, // 100 >= 50 = true
-		{typ: tokenCondition, value: "FA"},  // flags contain A = true
+		{typ: tokenCondition, value: "S50"},  // 100 >= 50 = true
+		{typ: tokenCondition, value: "FA"},   // flags contain A = true
 		{typ: tokenOperator, value: "&"},
 	}
 	result, err := evaluateRPN(rpn, u, nil, nil, time.Now())
@@ -197,8 +197,8 @@ func TestEvaluateRPN_SimpleAndFalse(t *testing.T) {
 	// true & false = false
 	u := &user.User{AccessLevel: 100, Flags: ""}
 	rpn := []token{
-		{typ: tokenCondition, value: "S50"}, // 100 >= 50 = true
-		{typ: tokenCondition, value: "FA"},  // flags empty = false
+		{typ: tokenCondition, value: "S50"},  // 100 >= 50 = true
+		{typ: tokenCondition, value: "FA"},   // flags empty = false
 		{typ: tokenOperator, value: "&"},
 	}
 	result, err := evaluateRPN(rpn, u, nil, nil, time.Now())
@@ -213,8 +213,8 @@ func TestEvaluateRPN_SimpleAndFalse(t *testing.T) {
 func TestEvaluateRPN_Not(t *testing.T) {
 	u := &user.User{AccessLevel: 100, Validated: true}
 	rpn := []token{
-		{typ: tokenCondition, value: "V"}, // validated = true
-		{typ: tokenOperator, value: "!"},  // !true = false
+		{typ: tokenCondition, value: "V"},   // validated = true
+		{typ: tokenOperator, value: "!"},    // !true = false
 	}
 	result, err := evaluateRPN(rpn, u, nil, nil, time.Now())
 	if err != nil {
@@ -228,8 +228,8 @@ func TestEvaluateRPN_Not(t *testing.T) {
 func TestEvaluateRPN_Or(t *testing.T) {
 	u := &user.User{AccessLevel: 10, Flags: "A"}
 	rpn := []token{
-		{typ: tokenCondition, value: "S50"}, // 10 >= 50 = false
-		{typ: tokenCondition, value: "FA"},  // has flag A = true
+		{typ: tokenCondition, value: "S50"},  // 10 >= 50 = false
+		{typ: tokenCondition, value: "FA"},   // has flag A = true
 		{typ: tokenOperator, value: "|"},
 	}
 	result, err := evaluateRPN(rpn, u, nil, nil, time.Now())
@@ -416,18 +416,18 @@ func TestTokenizeACS_UnexpectedCharacterDropped(t *testing.T) {
 
 func TestEvaluateCondition_BytesRatio(t *testing.T) {
 	tests := []struct {
-		name      string
-		condition string
-		uploads   int
-		downloads int
-		want      bool
+		name       string
+		condition  string
+		uploads    int
+		downloads  int
+		want       bool
 	}{
-		{"ratio meets threshold", "B50", 5, 10, true},        // 50% ratio
-		{"ratio exceeds threshold", "B50", 10, 10, true},     // 100% ratio
-		{"ratio below threshold", "B50", 2, 10, false},       // 20% ratio
-		{"no downloads passes", "B50", 0, 0, true},           // no downloads = always pass
+		{"ratio meets threshold", "B50", 5, 10, true},     // 50% ratio
+		{"ratio exceeds threshold", "B50", 10, 10, true},  // 100% ratio
+		{"ratio below threshold", "B50", 2, 10, false},    // 20% ratio
+		{"no downloads passes", "B50", 0, 0, true},        // no downloads = always pass
 		{"zero uploads with downloads", "B50", 0, 10, false}, // 0% ratio
-		{"threshold zero", "B0", 0, 10, true},                // 0% threshold always passes
+		{"threshold zero", "B0", 0, 10, true},              // 0% threshold always passes
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

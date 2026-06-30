@@ -3,10 +3,10 @@ package menu
 import (
 	"time"
 
+	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -29,8 +29,8 @@ type DoorCtx struct {
 	Session          ssh.Session
 	Terminal         *term.Terminal
 	User             doorUserInfo
-	UserManager      *user.UserMgr // For V3 scripts that need user DB access
-	CurrentUser      *user.User    // Live pointer to current session's user record
+	UserManager      *user.UserMgr   // For V3 scripts that need user DB access
+	CurrentUser      *user.User      // Live pointer to current session's user record
 	NodeNumber       int
 	SessionStartTime time.Time
 	OutputMode       ansi.OutputMode
