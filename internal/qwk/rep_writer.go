@@ -25,7 +25,8 @@ func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 	for i := range spacer {
 		spacer[i] = ' '
 	}
-	copy(spacer, "Produced by ViSiON/3 BBS")
+	// First block carries the destination BBS ID; readers validate it.
+	copy(spacer, strings.ToUpper(bbsID))
 	msgBuf.Write(spacer)
 
 	for _, msg := range msgs {

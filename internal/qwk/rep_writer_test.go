@@ -181,3 +181,18 @@ func TestReadREP_StopsOnBadBlockCount(t *testing.T) {
 		t.Errorf("want 0 messages from corrupt block, got %d", len(out))
 	}
 }
+
+func TestWriteREP_EmitsBBSIDInFirstBlock(t *testing.T) {
+	data := buildREP(t, "vision3", []PacketMessage{
+		{Conference: 1, Number: 1, To: "SysOp", Subject: "Hi",
+			DateTime: time.Date(2026, 3, 5, 10, 0, 0, 0, time.UTC), Body: "reply"},
+	})
+
+	p, err := ReadREPPacket(bytes.NewReader(data), int64(len(data)), "VISION3")
+	if err != nil {
+		t.Fatalf("ReadREPPacket: %v", err)
+	}
+	if p.BBSID != "VISION3" {
+		t.Errorf("first-block BBSID = %q, want VISION3", p.BBSID)
+	}
+}
