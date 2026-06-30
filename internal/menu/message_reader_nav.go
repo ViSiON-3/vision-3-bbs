@@ -72,8 +72,8 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 
 	// Save reply
 	replyMsgID := currentMsg.MsgID
-	_, err := e.MessageMgr.AddMessage(currentAreaID, currentUser.Handle, currentMsg.From,
-		newSubject, replyBody, replyMsgID)
+	_, err := e.MessageMgr.AddReply(currentAreaID, currentUser.Handle, currentMsg.From,
+		newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, []byte(e.LoadedStrings.MsgReplyError), outputMode)
