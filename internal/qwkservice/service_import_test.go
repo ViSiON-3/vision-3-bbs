@@ -206,3 +206,33 @@ func TestImportREP_UnmappedNumberFallsBackToPublic(t *testing.T) {
 		t.Errorf("unmapped number should fall back to GetAreaByID and post public: res=%+v public=%d", res, len(store.posted))
 	}
 }
+
+func TestImportREP_MappedButStaleAreaSkipped(t *testing.T) {
+	// An area exists with ID 7, but the map maps conference 7 to a different,
+	// now-deleted tag ("GONE"). A reply to conference 7 must be skipped, NOT
+	// posted into the ID-7 area via the legacy fallback.
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 7, Tag: "OTHER", Name: "Other"})
+
+	dir := t.TempDir()
+	preMap := `[{"qwk_number":7,"area_tag":"GONE","kind":"public"}]` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "qwk_conferences.json"), []byte(preMap), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep := makeREP(t, "VISION3", []qwk.PacketMessage{
+		{Conference: 7, Number: 1, To: "All", Subject: "Hi", DateTime: time.Now(), Body: "stale-target reply"},
+	})
+
+	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp", dir)
+	res, err := svc.ImportREP(rep, ImportOptions{Handle: "tester"})
+	if err != nil {
+		t.Fatalf("ImportREP: %v", err)
+	}
+	if res.Posted != 0 || res.Skipped != 1 {
+		t.Errorf("mapped-but-stale conference should be skipped, not posted: res=%+v", res)
+	}
+	if len(store.posted) != 0 || len(store.privPosted) != 0 {
+		t.Errorf("nothing should be posted for a stale mapped conference: public=%d priv=%d", len(store.posted), len(store.privPosted))
+	}
+}

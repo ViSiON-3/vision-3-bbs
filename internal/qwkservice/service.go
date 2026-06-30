@@ -213,10 +213,13 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 	return res, nil
 }
 
-// ownsPrivateMessage reports whether a private message belongs to the given
-// user (addressed to or sent by them).
+// ownsPrivateMessage reports whether a message in the private-mail conference
+// belongs to the given user (addressed to or sent by them). It is only called
+// once the conference is known to be private mail, so it gates purely on
+// ownership; an explicit IsPrivate check here would wrongly skip — and stall the
+// last-read pointer on — any conference-0 record lacking the flag.
 func ownsPrivateMessage(msg *message.DisplayMessage, handle string) bool {
-	return msg.IsPrivate && (strings.EqualFold(msg.To, handle) || strings.EqualFold(msg.From, handle))
+	return strings.EqualFold(msg.To, handle) || strings.EqualFold(msg.From, handle)
 }
 
 // CommitExport applies the deferred newscan pointer advances from a successful

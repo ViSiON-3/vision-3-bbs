@@ -1,6 +1,7 @@
 package qwkservice
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -9,6 +10,54 @@ import (
 
 func area(id int, tag string) *message.MessageArea {
 	return &message.MessageArea{ID: id, Tag: tag, Name: tag}
+}
+
+// writeMap writes raw JSON to a temp conference-map file and returns its path.
+func writeMap(t *testing.T, json string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "qwk_conferences.json")
+	if err := os.WriteFile(path, []byte(json), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestConferenceMap_LoadRejectsDuplicateTag(t *testing.T) {
+	path := writeMap(t, `[{"qwk_number":1,"area_tag":"GEN","kind":"public"},{"qwk_number":2,"area_tag":"GEN","kind":"public"}]`)
+	if _, err := LoadConferenceMap(path); err == nil {
+		t.Fatal("expected error for duplicate area_tag")
+	}
+}
+
+func TestConferenceMap_LoadRejectsDuplicateNumber(t *testing.T) {
+	path := writeMap(t, `[{"qwk_number":1,"area_tag":"GEN","kind":"public"},{"qwk_number":1,"area_tag":"TECH","kind":"public"}]`)
+	if _, err := LoadConferenceMap(path); err == nil {
+		t.Fatal("expected error for duplicate qwk_number")
+	}
+}
+
+func TestConferenceMap_LoadRejectsReservedZeroMisuse(t *testing.T) {
+	// Conference 0 assigned to a non-PRIVMAIL area.
+	path := writeMap(t, `[{"qwk_number":0,"area_tag":"GEN","kind":"public"}]`)
+	if _, err := LoadConferenceMap(path); err == nil {
+		t.Fatal("expected error for conference 0 used by a non-PRIVMAIL area")
+	}
+	// PRIVMAIL assigned a non-zero conference.
+	path2 := writeMap(t, `[{"qwk_number":4,"area_tag":"PRIVMAIL","kind":"private_mail"}]`)
+	if _, err := LoadConferenceMap(path2); err == nil {
+		t.Fatal("expected error for PRIVMAIL not at conference 0")
+	}
+}
+
+func TestConferenceMap_LoadAcceptsValidFile(t *testing.T) {
+	path := writeMap(t, `[{"qwk_number":0,"area_tag":"PRIVMAIL","kind":"private_mail"},{"qwk_number":1,"area_tag":"GEN","kind":"public"}]`)
+	m, err := LoadConferenceMap(path)
+	if err != nil {
+		t.Fatalf("valid map should load: %v", err)
+	}
+	if e, ok := m.EntryForNumber(0); !ok || e.AreaTag != "PRIVMAIL" {
+		t.Errorf("expected PRIVMAIL at 0, got %+v ok=%v", e, ok)
+	}
 }
 
 func TestConferenceMap_LoadMissingIsEmpty(t *testing.T) {

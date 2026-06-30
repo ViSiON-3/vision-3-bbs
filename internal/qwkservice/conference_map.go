@@ -71,10 +71,39 @@ func LoadConferenceMap(path string) (*ConferenceMap, error) {
 	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil, fmt.Errorf("parse conference map: %w", err)
 	}
+	if err := validateEntries(entries); err != nil {
+		return nil, fmt.Errorf("conference map: %w", err)
+	}
 	m := newConferenceMap()
 	m.entries = entries
 	m.reindex()
 	return m, nil
+}
+
+// validateEntries rejects a corrupt map: duplicate tags or numbers (which would
+// silently last-write-wins in the indexes and mis-route packets) and any misuse
+// of the reserved private-mail slot. The generator never produces such files,
+// so a violation means the file was tampered with or corrupted.
+func validateEntries(entries []ConferenceMapEntry) error {
+	seenTag := make(map[string]bool, len(entries))
+	seenNum := make(map[int]bool, len(entries))
+	for _, e := range entries {
+		if seenTag[e.AreaTag] {
+			return fmt.Errorf("duplicate area_tag %q", e.AreaTag)
+		}
+		if seenNum[e.QWKNumber] {
+			return fmt.Errorf("duplicate qwk_number %d", e.QWKNumber)
+		}
+		if e.QWKNumber == PrivateMailConference && e.AreaTag != PrivateMailTag {
+			return fmt.Errorf("qwk_number %d is reserved for %s, got %q", PrivateMailConference, PrivateMailTag, e.AreaTag)
+		}
+		if e.AreaTag == PrivateMailTag && e.QWKNumber != PrivateMailConference {
+			return fmt.Errorf("%s must be conference %d, got %d", PrivateMailTag, PrivateMailConference, e.QWKNumber)
+		}
+		seenTag[e.AreaTag] = true
+		seenNum[e.QWKNumber] = true
+	}
+	return nil
 }
 
 // Save writes the map to path atomically (temp file + rename).

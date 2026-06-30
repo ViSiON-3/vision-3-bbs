@@ -90,10 +90,17 @@ func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, err
 // falls back to a direct area-ID lookup and treats the result as public.
 func (s *Service) resolveConference(cm *ConferenceMap, number int) (*message.MessageArea, ConferenceKind, bool) {
 	if entry, ok := cm.EntryForNumber(number); ok {
+		// The number is mapped: the entry's area is its only valid destination.
+		// If that area no longer exists the map is stale; do NOT fall back to a
+		// numeric-ID lookup, which could resolve to an unrelated area and post
+		// the reply into the wrong place.
 		if area, exists := s.store.GetAreaByTag(entry.AreaTag); exists {
 			return area, entry.Kind, true
 		}
+		return nil, KindPublic, false
 	}
+	// Unmapped number: a legacy packet predating the map, whose public numbers
+	// equalled local area IDs. Fall back to a direct area-ID lookup as public.
 	if area, exists := s.store.GetAreaByID(number); exists {
 		return area, KindPublic, true
 	}

@@ -80,7 +80,10 @@ number never changes, so offline readers and saved reply packets keep working
 even if local area IDs are renumbered.
 
 - Public areas are numbered from their local area ID the first time they are
-  exported, then frozen.
+  exported, then frozen. If that number is unavailable — it is reserved for
+  conference 0, or already claimed by another area — the next free positive
+  number is used instead, so an exported conference number may differ from the
+  local area ID.
 - The private-mail area (tag `PRIVMAIL`) is always exported as **conference 0**.
 
 **Private mail is per-user.** A QWK packet only includes private messages
