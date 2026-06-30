@@ -13,6 +13,11 @@ This guide covers security features and best practices for protecting your BBS.
 
 ViSiON/3 includes built-in connection management to prevent resource exhaustion and abuse.
 
+> **Sysop remote console (WFC):** the `wfc` admin console rides the existing SSH
+> server and is gated by per-user SSH **public keys** (CoSysOp level or above) —
+> it adds no new open port and accepts no password. See the
+> [WFC Sysop Console](how-to-guides/wfc-console.md) guide for key registration.
+
 ### Configuring Connection Limits
 
 Open the config editor and navigate to **System Configuration → Connection Limits** (sub-screen 2):
