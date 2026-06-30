@@ -281,7 +281,13 @@ Add deduplication keyed by a packet fingerprint, for example:
 - packet BBS ID
 - SHA-256 of `ID.MSG`
 
-Persist recently seen REP hashes in a small JSON or SQLite store.
+Persist recently seen REP fingerprints in a transactional store. Because a
+mobile client may retry an upload while a prior attempt is still being
+processed, the dedup check-and-record must be atomic. Standardize on SQLite (or
+another store with a real compare-and-set), or, if a flat-file store is used,
+explicitly enforce a single-writer model (e.g. a process-wide mutex plus an
+atomic write-rename) so an overlapping upload cannot race past the check. A bare
+"JSON file" without one of these guarantees is not sufficient.
 
 This prevents accidental double-posting when a mobile client retries an upload.
 
@@ -700,7 +706,10 @@ Suggested implementation:
 
 - hash `ID.MSG`
 - key dedup on `user + bbs_id + hash`
-- persist recent hashes in JSON first; move to SQLite only if scale or concurrency demands it
+- persist recent fingerprints in a store whose check-and-record is atomic
+  (SQLite, or a flat file guarded by a single-writer model — see the REP
+  validation/dedup notes above); the dedup guarantee must hold under
+  overlapping retries, not just sequential uploads
 
 Primary files:
 

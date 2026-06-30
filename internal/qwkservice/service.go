@@ -54,9 +54,12 @@ type LastReadUpdate struct {
 
 // ExportOptions configure a packet build.
 type ExportOptions struct {
-	Handle     string   // user handle (used for PERSONAL.NDX and last-read)
-	TaggedTags []string // area tags to export; empty means "all accessible areas"
-	MaxPerArea int      // per-area message cap; <= 0 uses the default
+	Handle string // user handle (used for PERSONAL.NDX and last-read)
+	// TaggedTags lists the area tags to export. When empty, the service falls
+	// back to every loaded area (ListAreas); note this is not access-filtered —
+	// callers that need ACS enforcement must pre-filter the tags they pass.
+	TaggedTags []string
+	MaxPerArea int // per-area message cap; <= 0 uses the default
 }
 
 // ExportResult is the outcome of BuildPacket.
@@ -81,16 +84,27 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 	pw := qwk.NewPacketWriter(s.bbsID, s.bbsName, s.sysOpName)
 	pw.SetPersonalTo(opts.Handle)
 
-	tags := opts.TaggedTags
-	if len(tags) == 0 {
+	// Resolve the area tags to export. Build a fresh slice (never alias or
+	// append into the caller's TaggedTags backing array) and drop duplicates so
+	// a repeated tag cannot produce duplicate conferences or last-read updates.
+	var tags []string
+	if len(opts.TaggedTags) == 0 {
 		for _, area := range s.store.ListAreas() {
 			tags = append(tags, area.Tag)
 		}
+	} else {
+		tags = append(tags, opts.TaggedTags...)
 	}
 
 	res := &ExportResult{BBSID: s.bbsID}
+	seen := make(map[string]struct{}, len(tags))
 
 	for _, tag := range tags {
+		if _, dup := seen[tag]; dup {
+			continue
+		}
+		seen[tag] = struct{}{}
+
 		area, exists := s.store.GetAreaByTag(tag)
 		if !exists {
 			continue
@@ -196,8 +210,8 @@ type ImportResult struct {
 // routing each message to its conference's area. Unknown areas, unauthorized
 // areas, and post failures are skipped (and counted), so a single bad message
 // does not abort the whole import.
-func (s *Service) ImportREP(data []byte, bbsID string, opts ImportOptions) (*ImportResult, error) {
-	msgs, err := qwk.ReadREP(bytes.NewReader(data), int64(len(data)), bbsID)
+func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, error) {
+	msgs, err := qwk.ReadREP(bytes.NewReader(data), int64(len(data)), s.bbsID)
 	if err != nil {
 		return nil, err
 	}

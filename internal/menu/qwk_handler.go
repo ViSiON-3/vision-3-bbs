@@ -234,7 +234,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// The service owns parsing and posting; the menu supplies the ACS gate and
 	// per-area progress output as callbacks so terminal/UI concerns stay here.
-	importRes, err := svc.ImportREP(repData, bbsID, qwkservice.ImportOptions{
+	importRes, err := svc.ImportREP(repData, qwkservice.ImportOptions{
 		Handle:    currentUser.Handle,
 		Signature: currentUser.AutoSignature,
 		Authorize: func(area *message.MessageArea) bool {

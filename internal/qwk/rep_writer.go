@@ -17,7 +17,6 @@ import (
 // (no HEADERS.DAT or Synchronet extension tags).
 func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 	zw := zip.NewWriter(w)
-	defer zw.Close()
 
 	var msgBuf bytes.Buffer
 
@@ -43,7 +42,13 @@ func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 
 	name := strings.ToUpper(bbsID) + ".MSG"
 	if err := writeZipEntry(zw, name, msgBuf.Bytes()); err != nil {
+		zw.Close()
 		return fmt.Errorf("%s: %w", name, err)
+	}
+	// Close explicitly so a central-directory flush failure is reported rather
+	// than silently producing a truncated archive.
+	if err := zw.Close(); err != nil {
+		return fmt.Errorf("finalize REP archive: %w", err)
 	}
 	return nil
 }
