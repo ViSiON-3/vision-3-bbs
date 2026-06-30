@@ -121,7 +121,10 @@ func TestAddReply_SetsReplyTo(t *testing.T) {
 
 func TestAddReply_AlsoSetsReplyID(t *testing.T) {
 	mm := newReplyTestManager(t)
-	parent, _ := mm.AddMessage(1, "alice", "All", "Topic", "first", "")
+	parent, err := mm.AddMessage(1, "alice", "All", "Topic", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	reply, err := mm.AddReply(1, "bob", "alice", "Re: Topic", "second", "PARENTMSGID", parent)
 	if err != nil {
 		t.Fatal(err)

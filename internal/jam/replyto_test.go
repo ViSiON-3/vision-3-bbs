@@ -47,7 +47,10 @@ func TestWriteMessage_ZeroReplyTo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage: %v", err)
 	}
-	if got.Header != nil && got.Header.ReplyTo != 0 {
+	if got.Header == nil {
+		t.Fatal("Header was nil — message not written")
+	}
+	if got.Header.ReplyTo != 0 {
 		t.Errorf("ReplyTo: want 0, got %d", got.Header.ReplyTo)
 	}
 }

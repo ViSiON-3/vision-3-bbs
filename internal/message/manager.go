@@ -604,6 +604,7 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	if private {
 		msg.Header = &jam.MessageHeader{Attribute: jam.MsgPrivate | jam.MsgLocal}
 	}
+	// replyToNum is a 1-based JAM message number; 0 means "no parent".
 	if replyToNum > 0 {
 		msg.ReplyTo = uint32(replyToNum)
 	}
