@@ -18,9 +18,10 @@ type fakeStore struct {
 	msgs     map[int][]*message.DisplayMessage // areaID -> 1-based messages
 	lastRead map[string]int                    // "areaID/user" -> num
 
-	posted   []postedMessage
-	setReads []setRead
-	addErr   map[int]error // areaID -> error to return from AddMessage
+	posted     []postedMessage
+	privPosted []postedMessage
+	setReads   []setRead
+	addErr     map[int]error // areaID -> error to return from AddMessage
 }
 
 type postedMessage struct {
@@ -92,7 +93,22 @@ func (f *fakeStore) AddMessage(areaID int, from, to, subject, body, replyToMsgID
 	return len(f.posted), nil
 }
 
+func (f *fakeStore) AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
+	if err := f.addErr[areaID]; err != nil {
+		return 0, err
+	}
+	f.privPosted = append(f.privPosted, postedMessage{areaID, from, to, subject, body, replyToMsgID})
+	return len(f.privPosted), nil
+}
+
 func key(areaID int, user string) string { return fmt.Sprintf("%d/%s", areaID, user) }
+
+// newTestService builds a Service backed by the fake store, with the conference
+// map persisted under a per-test temp dir.
+func newTestService(t *testing.T, store *fakeStore) *Service {
+	t.Helper()
+	return New(store, "VISION3", "ViSiON/3 BBS", "SysOp", t.TempDir())
+}
 
 func (f *fakeStore) seed(areaID int, msgs ...*message.DisplayMessage) {
 	f.msgs[areaID] = append(f.msgs[areaID], msgs...)

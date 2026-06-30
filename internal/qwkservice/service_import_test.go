@@ -17,7 +17,7 @@ func TestImportREP_PostsReplies(t *testing.T) {
 		{Conference: 1, Number: 1, From: "tester", To: "SysOp", Subject: "Hi", DateTime: time.Now(), Body: "Reply body"},
 	})
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, err := svc.ImportREP(rep, ImportOptions{Handle: "tester"})
 	if err != nil {
 		t.Fatalf("ImportREP: %v", err)
@@ -40,7 +40,7 @@ func TestImportREP_AppendsSignature(t *testing.T) {
 		{Conference: 1, Number: 1, To: "SysOp", Subject: "Hi", DateTime: time.Now(), Body: "Body"},
 	})
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	_, err := svc.ImportREP(rep, ImportOptions{Handle: "tester", Signature: "-- sig"})
 	if err != nil {
 		t.Fatalf("ImportREP: %v", err)
@@ -57,7 +57,7 @@ func TestImportREP_SkipsUnknownConference(t *testing.T) {
 		{Conference: 99, Number: 1, To: "SysOp", Subject: "Hi", DateTime: time.Now(), Body: "Body"},
 	})
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, _ := svc.ImportREP(rep, ImportOptions{Handle: "tester"})
 	if res.Posted != 0 || res.Skipped != 1 {
 		t.Errorf("want posted=0 skipped=1, got %+v", res)
@@ -71,7 +71,7 @@ func TestImportREP_AuthorizeGate(t *testing.T) {
 		{Conference: 1, Number: 1, To: "SysOp", Subject: "Hi", DateTime: time.Now(), Body: "Body"},
 	})
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, _ := svc.ImportREP(rep, ImportOptions{
 		Handle:    "tester",
 		Authorize: func(*message.MessageArea) bool { return false },
@@ -92,7 +92,7 @@ func TestImportREP_NotifyCalled(t *testing.T) {
 	})
 
 	var notified []string
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	_, err := svc.ImportREP(rep, ImportOptions{
 		Handle: "tester",
 		Notify: func(a *message.MessageArea) { notified = append(notified, a.Name) },
@@ -113,7 +113,7 @@ func TestImportREP_PostErrorCounted(t *testing.T) {
 		{Conference: 1, Number: 1, To: "SysOp", Subject: "Hi", DateTime: time.Now(), Body: "Body"},
 	})
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, err := svc.ImportREP(rep, ImportOptions{Handle: "tester"})
 	if err != nil {
 		t.Fatalf("ImportREP should not fail wholesale on a single post error: %v", err)
@@ -125,7 +125,7 @@ func TestImportREP_PostErrorCounted(t *testing.T) {
 
 func TestImportREP_BadPacketErrors(t *testing.T) {
 	store := newFakeStore()
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	_, err := svc.ImportREP([]byte("not a zip"), ImportOptions{Handle: "tester"})
 	if err == nil {
 		t.Fatal("expected error for a non-zip REP packet")

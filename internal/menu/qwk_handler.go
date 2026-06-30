@@ -57,7 +57,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	bbsID := qwkBBSID(e.ServerCfg.BoardName)
-	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName)
+	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName, e.MessageMgr.DataPath())
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15Building QWK packet...|07\r\n")), outputMode)
 
@@ -230,7 +230,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName)
+	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName, e.MessageMgr.DataPath())
 
 	// The service owns parsing and posting; the menu supplies the ACS gate and
 	// per-area progress output as callbacks so terminal/UI concerns stay here.

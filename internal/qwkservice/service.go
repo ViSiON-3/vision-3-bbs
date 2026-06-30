@@ -8,6 +8,7 @@ package qwkservice
 import (
 	"bytes"
 	"log/slog"
+	"path/filepath"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -29,21 +30,30 @@ type MessageStore interface {
 	GetMessageCountForArea(areaID int) (int, error)
 	GetMessage(areaID, msgNum int) (*message.DisplayMessage, error)
 	AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error)
+	AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error)
 }
 
 // Service orchestrates QWK packet export and REP import for a single BBS
 // identity.
 type Service struct {
-	store     MessageStore
-	bbsID     string
-	bbsName   string
-	sysOpName string
+	store       MessageStore
+	bbsID       string
+	bbsName     string
+	sysOpName   string
+	confMapPath string
 }
 
 // New creates a QWK service. bbsID is the short packet identifier (e.g.
-// "VISION3"); bbsName and sysOpName populate CONTROL.DAT.
-func New(store MessageStore, bbsID, bbsName, sysOpName string) *Service {
-	return &Service{store: store, bbsID: bbsID, bbsName: bbsName, sysOpName: sysOpName}
+// "VISION3"); bbsName and sysOpName populate CONTROL.DAT; dataPath is the base
+// data directory used to persist the stable conference map.
+func New(store MessageStore, bbsID, bbsName, sysOpName, dataPath string) *Service {
+	return &Service{
+		store:       store,
+		bbsID:       bbsID,
+		bbsName:     bbsName,
+		sysOpName:   sysOpName,
+		confMapPath: filepath.Join(dataPath, "qwk_conferences.json"),
+	}
 }
 
 // LastReadUpdate records a pending newscan pointer advance for one area.
