@@ -96,6 +96,11 @@ func (m *ConferenceMap) Save(path string) error {
 		os.Remove(tmpName)
 		return fmt.Errorf("write temp conference map: %w", err)
 	}
+	if err = tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("sync temp conference map: %w", err)
+	}
 	if err = tmp.Close(); err != nil {
 		os.Remove(tmpName)
 		return fmt.Errorf("close temp conference map: %w", err)
