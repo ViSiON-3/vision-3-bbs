@@ -42,6 +42,7 @@ type Service struct {
 	bbsName     string
 	sysOpName   string
 	confMapPath string
+	dedupPath   string
 }
 
 // New creates a QWK service. bbsID is the short packet identifier (e.g.
@@ -54,6 +55,7 @@ func New(store MessageStore, bbsID, bbsName, sysOpName, dataPath string) *Servic
 		bbsName:     bbsName,
 		sysOpName:   sysOpName,
 		confMapPath: filepath.Join(dataPath, "qwk_conferences.json"),
+		dedupPath:   filepath.Join(dataPath, "qwk_dedup.db"),
 	}
 }
 

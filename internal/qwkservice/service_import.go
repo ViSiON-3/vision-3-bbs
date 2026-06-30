@@ -2,7 +2,12 @@ package qwkservice
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -24,18 +29,43 @@ type ImportOptions struct {
 
 // ImportResult summarizes a REP import.
 type ImportResult struct {
-	Posted  int
-	Skipped int
+	Posted    int
+	Skipped   int
+	Duplicate int
 }
+
+// ErrWrongBBS is returned by ImportREP when a REP packet's first-block BBS ID
+// is present and does not match this system's ID.
+var ErrWrongBBS = errors.New("qwk: REP packet addressed to another BBS")
 
 // ImportREP parses a REP packet and posts its replies into the message store,
 // routing each message to its conference's area. Unknown areas, unauthorized
 // areas, and post failures are skipped (and counted), so a single bad message
 // does not abort the whole import.
 func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, error) {
-	msgs, err := qwk.ReadREP(bytes.NewReader(data), int64(len(data)), s.bbsID)
+	packet, err := qwk.ReadREPPacket(bytes.NewReader(data), int64(len(data)), s.bbsID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Lenient destination check: reject only a present, mismatching ID.
+	if packet.BBSID != "" && !strings.EqualFold(packet.BBSID, s.bbsID) {
+		return nil, fmt.Errorf("%w: packet for %q, this is %q", ErrWrongBBS, packet.BBSID, s.bbsID)
+	}
+
+	// Atomically claim this packet's fingerprint before posting so a retried or
+	// concurrent identical upload is detected as a duplicate.
+	dedup, err := openREPDedup(s.dedupPath)
+	if err != nil {
+		return nil, err
+	}
+	defer dedup.Close()
+	isNew, err := dedup.RecordIfNew(opts.Handle, fingerprint(packet.Payload))
+	if err != nil {
+		return nil, err
+	}
+	if !isNew {
+		return &ImportResult{Duplicate: len(packet.Messages)}, nil
 	}
 
 	cm, err := s.loadConfMap()
@@ -43,6 +73,7 @@ func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, err
 		return nil, err
 	}
 
+	msgs := packet.Messages
 	res := &ImportResult{}
 	for _, msg := range msgs {
 		area, kind, ok := s.resolveConference(cm, msg.Conference)
@@ -105,4 +136,10 @@ func (s *Service) resolveConference(cm *ConferenceMap, number int) (*message.Mes
 		return area, KindPublic, true
 	}
 	return nil, KindPublic, false
+}
+
+// fingerprint returns the hex SHA-256 of a REP payload, used as the dedup key.
+func fingerprint(payload []byte) string {
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
 }
