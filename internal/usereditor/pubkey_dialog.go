@@ -18,6 +18,7 @@ func (m Model) editingUser() *user.User {
 func (m *Model) openKeyDialog() {
 	m.mode = modeKeyList
 	m.keySelected = 0
+	m.keyScroll = 0
 	m.keyDialogErr = ""
 }
 
@@ -51,6 +52,16 @@ func (m *Model) keyDialogDelete(ref string) error {
 		m.keySelected = len(keys) - 1
 	}
 	return nil
+}
+
+// truncateRunes truncates s to at most n runes, returning a string of at most n
+// runes (never splitting a multi-byte UTF-8 sequence).
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
 }
 
 // overlayKeyListDialog renders the WFC Keys list overlay over background.
@@ -99,27 +110,40 @@ func (m Model) overlayKeyListDialog(background string) string {
 	} else {
 		// Column widths: type (13) + fingerprint (47) + comment (rest)
 		inner := dialogW - 2
-		// Limit to 8 visible keys
-		visible := keys
-		if len(visible) > 8 {
-			visible = visible[:8]
+		// Maximum rows shown in the scroll window.
+		const maxVisible = 8
+		// Compute the scroll offset: ensure keySelected is always visible.
+		scroll := m.keyScroll
+		if m.keySelected < scroll {
+			scroll = m.keySelected
 		}
-		for i, k := range visible {
+		if m.keySelected >= scroll+maxVisible {
+			scroll = m.keySelected - maxVisible + 1
+		}
+		// Clamp scroll to valid range.
+		if scroll < 0 {
+			scroll = 0
+		}
+		end := scroll + maxVisible
+		if end > len(keys) {
+			end = len(keys)
+		}
+		window := keys[scroll:end]
+		for i, k := range window {
+			absIdx := scroll + i
 			fp := padRight(k.Fingerprint, 47)
 			typ := padRight(k.Type, 13)
-			cmt := k.Comment
 			// Available space after type + fp + 2 spaces separator each
 			avail := inner - 13 - 1 - 47 - 1
 			if avail < 0 {
 				avail = 0
 			}
-			if len(cmt) > avail {
-				cmt = cmt[:avail]
-			}
+			// C3: rune-aware truncation of comment to avoid splitting UTF-8 sequences.
+			cmt := truncateRunes(k.Comment, avail)
 			row := typ + " " + fp + " " + padRight(cmt, avail)
 
 			var rendered string
-			if i == m.keySelected {
+			if absIdx == m.keySelected {
 				rendered = side + buttonActiveStyle.Render(row) + side
 			} else {
 				rendered = side + dialogTextStyle.Render(row) + side
@@ -131,11 +155,10 @@ func (m Model) overlayKeyListDialog(background string) string {
 	// Error line: show last error from delete (or empty line)
 	if m.keyDialogErr != "" {
 		innerW := dialogW - 2
-		errText := m.keyDialogErr
-		if len(errText) > innerW {
-			errText = errText[:innerW]
-		}
-		errLine := side + dialogTextStyle.Render(errText+strings.Repeat(" ", max(0, innerW-len(errText)))) + side
+		// C3: rune-aware truncation of error text.
+		errText := truncateRunes(m.keyDialogErr, innerW)
+		errRunes := []rune(errText)
+		errLine := side + dialogTextStyle.Render(errText+strings.Repeat(" ", max(0, innerW-len(errRunes)))) + side
 		dialogLines = append(dialogLines, errLine)
 	} else {
 		dialogLines = append(dialogLines, emptyLine)
@@ -209,12 +232,10 @@ func (m Model) overlayKeyAddDialog(background string) string {
 	// Error line (blank if no error)
 	var errLine string
 	if m.keyDialogErr != "" {
-		errText := m.keyDialogErr
-		if len(errText) > innerW {
-			errText = errText[:innerW]
-		}
-		pad := 0
-		errLine = side + dialogTextStyle.Render(strings.Repeat(" ", pad)+errText+strings.Repeat(" ", max(0, innerW-pad-len(errText)))) + side
+		// C3: rune-aware truncation to avoid splitting multi-byte UTF-8 sequences.
+		errText := truncateRunes(m.keyDialogErr, innerW)
+		errRunes := []rune(errText)
+		errLine = side + dialogTextStyle.Render(errText+strings.Repeat(" ", max(0, innerW-len(errRunes)))) + side
 	} else {
 		errLine = emptyLine
 	}

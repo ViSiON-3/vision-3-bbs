@@ -96,6 +96,45 @@ func TestRemovePublicKey(t *testing.T) {
 	}
 }
 
+func TestRemovePublicKeyVisibleIndex(t *testing.T) {
+	// User has [corrupt, goodA, goodB]. ListPublicKeys sees index 1=goodA, 2=goodB.
+	// RemovePublicKey("1") must remove goodA (first visible), not the corrupt entry.
+	lA, fpA := makeKey(t, "keyA")
+	lB, fpB := makeKey(t, "keyB")
+	u := &User{PublicKeys: []string{"corrupt-garbage", lA, lB}}
+
+	// Index 1 → goodA
+	info, err := u.RemovePublicKey("1")
+	if err != nil {
+		t.Fatalf("remove index 1: %v", err)
+	}
+	if info.Fingerprint != fpA {
+		t.Fatalf("expected fingerprint of goodA (%s), got %s", fpA, info.Fingerprint)
+	}
+	// Remaining: [corrupt, goodB]
+	if len(u.PublicKeys) != 2 {
+		t.Fatalf("expected 2 remaining, got %d", len(u.PublicKeys))
+	}
+
+	// Index 1 again → goodB (only visible key now)
+	info, err = u.RemovePublicKey("1")
+	if err != nil {
+		t.Fatalf("remove index 1 (second): %v", err)
+	}
+	if info.Fingerprint != fpB {
+		t.Fatalf("expected fingerprint of goodB (%s), got %s", fpB, info.Fingerprint)
+	}
+	// Remaining: [corrupt]
+	if len(u.PublicKeys) != 1 {
+		t.Fatalf("expected 1 remaining, got %d", len(u.PublicKeys))
+	}
+
+	// Index 1 now → out of range (0 visible keys)
+	if _, err := u.RemovePublicKey("1"); err == nil {
+		t.Fatal("expected out-of-range error for index 1 when no visible keys")
+	}
+}
+
 func TestListPublicKeysReportsUnparseable(t *testing.T) {
 	good, _ := makeKey(t, "ok")
 	u := &User{PublicKeys: []string{good, "corrupt-entry"}}

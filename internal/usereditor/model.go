@@ -90,6 +90,7 @@ type Model struct {
 
 	// WFC key-manager dialog state
 	keySelected  int    // 0-based index of selected key in modeKeyList
+	keyScroll    int    // 0-based index of the first visible key in the scroll window
 	keyDialogErr string // last error from keyDialogAdd/keyDialogDelete
 
 	// Terminal

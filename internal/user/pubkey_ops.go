@@ -73,12 +73,23 @@ func (u *User) RemovePublicKey(ref string) (PublicKeyInfo, error) {
 		return PublicKeyInfo{}, fmt.Errorf("no key reference given")
 	}
 	if idx, err := strconv.Atoi(ref); err == nil {
-		if idx < 1 || idx > len(u.PublicKeys) {
-			return PublicKeyInfo{}, fmt.Errorf("key index %d out of range (have %d)", idx, len(u.PublicKeys))
+		// Count only parseable (visible) keys so idx matches ListPublicKeys display.
+		visible := 0
+		for i, line := range u.PublicKeys {
+			_, info, err2 := NormalizeAuthorizedKey(line)
+			if err2 != nil {
+				continue
+			}
+			visible++
+			if visible == idx {
+				u.PublicKeys = append(u.PublicKeys[:i], u.PublicKeys[i+1:]...)
+				return info, nil
+			}
 		}
-		_, info, _ := NormalizeAuthorizedKey(u.PublicKeys[idx-1])
-		u.PublicKeys = append(u.PublicKeys[:idx-1], u.PublicKeys[idx:]...)
-		return info, nil
+		if idx < 1 {
+			return PublicKeyInfo{}, fmt.Errorf("key index %d out of range (have %d)", idx, visible)
+		}
+		return PublicKeyInfo{}, fmt.Errorf("key index %d out of range (have %d)", idx, visible)
 	}
 	matchIdx := -1
 	var matchInfo PublicKeyInfo
