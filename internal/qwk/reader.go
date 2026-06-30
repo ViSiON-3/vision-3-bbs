@@ -56,7 +56,7 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 		}
 	}
 	if msgFile == nil {
-		return nil, fmt.Errorf("REP packet missing %s", msgFileName)
+		return nil, fmt.Errorf("REP packet contains no .MSG file")
 	}
 
 	rc, err := msgFile.Open()

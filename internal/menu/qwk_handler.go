@@ -257,14 +257,14 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	if importRes.Posted+importRes.Skipped == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07REP packet contains no messages.|07\r\n")), outputMode)
+	if importRes.Duplicate > 0 {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07This packet was already uploaded — nothing posted.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
 		return currentUser, "", nil
 	}
 
-	if importRes.Duplicate > 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07This packet was already uploaded — nothing posted.|07\r\n")), outputMode)
+	if importRes.Posted+importRes.Skipped == 0 {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07REP packet contains no messages.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
 		return currentUser, "", nil
 	}
