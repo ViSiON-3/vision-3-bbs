@@ -114,6 +114,32 @@ func TestViewDisconnectedNilErr(t *testing.T) {
 	}
 }
 
+// TestRenderEventFeedTruncatesLongLines verifies that renderEventFeed truncates long
+// Handle+Message lines to fit within the given width, preventing line-wrap.
+func TestRenderEventFeedTruncatesLongLines(t *testing.T) {
+	m := makeModel(Options{NoColor: true, ASCII: true}, 100, 30)
+	m.events = []admin.Event{
+		{
+			Time:    time.Now(),
+			Type:    admin.EventCallerConnected,
+			NodeID:  1,
+			Handle:  strings.Repeat("A", 40),
+			Message: strings.Repeat("B", 200),
+		},
+	}
+
+	feedWidth := 50
+	lines := m.renderEventFeed(newStyles(m.opts), feedWidth, 10)
+	for _, line := range lines {
+		// Strip ANSI codes for length check (NoColor=true means none, but be safe).
+		runes := []rune(line)
+		if len(runes) > feedWidth+20 {
+			// Allow some slack for ANSI sequences, but the visible content must be bounded.
+			t.Errorf("event feed line too long (%d runes > %d+slack): %q", len(runes), feedWidth, line)
+		}
+	}
+}
+
 // TestViewASCIIBorderHasNoBraille verifies ASCII mode doesn't include box-drawing chars.
 func TestViewASCIIBorderHasNoBraille(t *testing.T) {
 	m := makeModel(Options{NoColor: true, ASCII: true}, 100, 30)

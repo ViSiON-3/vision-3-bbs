@@ -50,7 +50,7 @@ func (m Model) handleKeyList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch string(msg.Runes) {
 		case "r", "R":
 			if m.client != nil {
-				return m, m.fetchSnapshot()
+				return m, tea.Batch(m.fetchSnapshot(), m.subscribeCmd())
 			}
 		case "l", "L":
 			m.showLogs = !m.showLogs
@@ -81,7 +81,9 @@ func (m Model) handleKeyDisconnected(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch string(msg.Runes) {
 		case "r", "R":
 			if m.client != nil {
-				return m, m.fetchSnapshot()
+				// Re-subscribe as well as re-fetch: the event channel may be dead.
+				// modeDisconnected is cleared by a subsequent subscribedMsg success.
+				return m, tea.Batch(m.fetchSnapshot(), m.subscribeCmd())
 			}
 			// No client — stay disconnected; nothing to do.
 		}

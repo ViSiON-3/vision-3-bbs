@@ -35,17 +35,18 @@ type Options struct {
 
 // Model is the WFC TUI model.
 type Model struct {
-	client   admin.AdminClient
-	opts     Options
-	snapshot *admin.SystemSnapshot
-	events   []admin.Event
-	eventCh  <-chan admin.Event
-	selected int
-	mode     viewMode
-	width    int
-	height   int
-	lastErr  error
-	showLogs bool
+	client     admin.AdminClient
+	opts       Options
+	snapshot   *admin.SystemSnapshot
+	events     []admin.Event
+	eventCh    <-chan admin.Event
+	selected   int
+	mode       viewMode
+	width      int
+	height     int
+	lastErr    error
+	showLogs   bool
+	subscribed bool // true when an active Subscribe channel is live
 }
 
 // New builds a Model. client may be nil in tests that drive Update directly.
@@ -132,7 +133,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.snapshot != nil && m.selected >= len(m.snapshot.Nodes) {
 			m.selected = max(0, len(m.snapshot.Nodes)-1)
 		}
-		if m.mode == modeDisconnected {
+		// Only clear disconnected when we also have a live subscription channel.
+		// A poll snapshot alone must NOT fake "connected" — the event feed may be dead.
+		if m.mode == modeDisconnected && m.subscribed {
 			m.mode = modeList
 		}
 		// Only re-arm pollCmd when this message came from the poll chain itself.
@@ -146,11 +149,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case subscribedMsg:
 		if msg.err != nil {
+			m.subscribed = false
 			m.mode = modeDisconnected
 			m.lastErr = msg.err
 			return m, nil
 		}
 		m.eventCh = msg.ch
+		m.subscribed = true
+		// Successfully subscribed — if we were disconnected, return to list now.
+		if m.mode == modeDisconnected {
+			m.mode = modeList
+		}
 		return m, waitForEvent(m.eventCh)
 
 	case eventMsg:
@@ -164,6 +173,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case errMsg:
+		m.subscribed = false
 		m.mode = modeDisconnected
 		m.lastErr = msg.err
 		return m, nil

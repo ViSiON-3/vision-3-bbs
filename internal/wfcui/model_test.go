@@ -86,6 +86,63 @@ func TestSnapshotMsgPollRearm(t *testing.T) {
 	}
 }
 
+// TestSubscribedFieldLifecycle verifies the subscribed flag tracks subscription liveness:
+//   - errMsg sets subscribed=false and enters modeDisconnected.
+//   - A poll snapshotMsg does NOT clear modeDisconnected while subscribed=false.
+//   - A successful subscribedMsg sets subscribed=true and returns to modeList.
+func TestSubscribedFieldLifecycle(t *testing.T) {
+	m := New(nil, Options{MaxEvents: 10})
+	m.width, m.height = 100, 30
+	// Start in list mode with a snapshot so we have something to poll.
+	snap := &admin.SystemSnapshot{SystemName: "T", Time: time.Now()}
+	mi, _ := m.Update(snapshotMsg{snap: snap, fromPoll: false})
+	m = mi.(Model)
+
+	// Simulate subscription loss via errMsg → disconnected, subscribed=false.
+	mi, _ = m.Update(errMsg{err: errStub{}})
+	m = mi.(Model)
+	if m.mode != modeDisconnected {
+		t.Fatalf("errMsg: expected modeDisconnected, got %v", m.mode)
+	}
+	if m.subscribed {
+		t.Fatal("errMsg: expected subscribed=false")
+	}
+
+	// A poll snapshot while disconnected and unsubscribed must NOT clear disconnected.
+	mi, _ = m.Update(snapshotMsg{snap: snap, fromPoll: true})
+	m = mi.(Model)
+	if m.mode != modeDisconnected {
+		t.Fatalf("poll snapshot while unsubscribed: expected modeDisconnected, got %v", m.mode)
+	}
+
+	// A successful subscribedMsg must restore subscribed=true and return to modeList.
+	ch := make(chan admin.Event)
+	mi, _ = m.Update(subscribedMsg{ch: ch, err: nil})
+	m = mi.(Model)
+	if !m.subscribed {
+		t.Fatal("subscribedMsg success: expected subscribed=true")
+	}
+	if m.mode != modeList {
+		t.Fatalf("subscribedMsg success: expected modeList, got %v", m.mode)
+	}
+}
+
+// TestReconnectKeyReturnsBatch verifies that pressing R in disconnected mode with
+// a non-nil client returns a non-nil batch cmd (fetchSnapshot + subscribeCmd).
+func TestReconnectKeyReturnsBatch(t *testing.T) {
+	srv := admin.NewServer(admin.ServerConfig{})
+	client := admin.NewInProcessClient(srv)
+	m := New(client, Options{MaxEvents: 10})
+	m.width, m.height = 100, 30
+	m.mode = modeDisconnected
+	m.subscribed = false
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd == nil {
+		t.Fatal("R in disconnected mode with non-nil client must return a non-nil cmd batch")
+	}
+}
+
 func TestWindowSizeModeTooSmall(t *testing.T) {
 	m := New(nil, Options{MaxEvents: 10})
 	m.width, m.height = 100, 30

@@ -54,12 +54,24 @@ func (m Model) listView() string {
 	st := newStyles(m.opts)
 	b := borderSet(m.opts.ASCII)
 
-	// Total available height: subtract header (1) + border rows (2 each section) + cmdbar (1).
-	// Sections: header row, node table (bordered), event feed (bordered, optional), cmd bar.
-	// Layout: header=1, nodeTable bordered = uses ~40% of remaining, events = rest, cmdbar=1.
+	// Total available height: subtract fixed rows so rendered output fits m.height exactly.
+	//
+	// Layout rows:
+	//   header  = 1
+	//   cmdBar  = 1
+	//   section separators from strings.Join("\n"): 2 when logs hidden (header + 1 box),
+	//     3 when logs shown (header + 2 boxes).  Each "\n" between sections costs 1 row.
+	//
+	// innerH is what remains for the box content (including each box's own border rows).
 	headerHeight := 1
 	cmdBarHeight := 1
-	innerH := m.height - headerHeight - cmdBarHeight
+
+	separatorRows := 2 // logs hidden: join("\n") between header, nodeBox, cmdBar = 2 separators
+	if m.showLogs {
+		separatorRows = 3 // logs shown: +1 separator between nodeBox and eventBox
+	}
+
+	innerH := m.height - headerHeight - cmdBarHeight - separatorRows
 	if innerH < 4 {
 		innerH = 4
 	}
@@ -208,10 +220,22 @@ func (m Model) renderEventFeed(st colorSet, width, maxLines int) []string {
 	}
 	for _, ev := range m.events[start:] {
 		ts := ev.Time.Format("15:04:05")
-		line := st.eventTime.Render(ts) + "  " + ev.Handle + "  " + ev.Message
+		// Truncate the handle+message tail to prevent long lines from wrapping and
+		// consuming extra rows beyond maxLines.  tsLen accounts for the timestamp
+		// prefix plus the two two-space separators ("  " each).
+		const tsLen = 8 + 2 // "HH:MM:SS" + two-space separator
+		tail := ev.Handle + "  " + ev.Message
+		tailRunes := []rune(tail)
+		maxTail := width - tsLen
+		if maxTail < 0 {
+			maxTail = 0
+		}
+		if len(tailRunes) > maxTail {
+			tailRunes = tailRunes[:maxTail]
+		}
+		line := st.eventTime.Render(ts) + "  " + string(tailRunes)
 		lines = append(lines, line)
 	}
-	_ = width // reserved
 	return trimToMax(lines, maxLines)
 }
 
