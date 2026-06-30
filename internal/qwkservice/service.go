@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"log/slog"
 	"path/filepath"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -56,6 +57,21 @@ func New(store MessageStore, bbsID, bbsName, sysOpName, dataPath string) *Servic
 	}
 }
 
+// loadConfMap loads the conference map, syncs it against the current areas, and
+// persists it if anything changed.
+func (s *Service) loadConfMap() (*ConferenceMap, error) {
+	cm, err := LoadConferenceMap(s.confMapPath)
+	if err != nil {
+		return nil, err
+	}
+	if cm.Sync(s.store.ListAreas()) {
+		if err := cm.Save(s.confMapPath); err != nil {
+			return nil, err
+		}
+	}
+	return cm, nil
+}
+
 // LastReadUpdate records a pending newscan pointer advance for one area.
 type LastReadUpdate struct {
 	AreaID int
@@ -91,6 +107,11 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 		maxPerArea = defaultMaxPerArea
 	}
 
+	cm, err := s.loadConfMap()
+	if err != nil {
+		return nil, err
+	}
+
 	pw := qwk.NewPacketWriter(s.bbsID, s.bbsName, s.sysOpName)
 	pw.SetPersonalTo(opts.Handle)
 
@@ -120,7 +141,13 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			continue
 		}
 
-		pw.AddConference(area.ID, area.Name)
+		entry, ok := cm.EntryForTag(area.Tag)
+		if !ok {
+			// Sync guarantees an entry for every area; skip defensively.
+			continue
+		}
+		pw.AddConference(entry.QWKNumber, area.Name)
+		isPrivateConf := entry.Kind == KindPrivateMail
 
 		lastRead, err := s.store.GetLastRead(area.ID, opts.Handle)
 		if err != nil {
@@ -144,9 +171,12 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			if msg.IsDeleted {
 				continue
 			}
+			if isPrivateConf && !ownsPrivateMessage(msg, opts.Handle) {
+				continue
+			}
 
 			pw.AddMessage(qwk.PacketMessage{
-				Conference: area.ID,
+				Conference: entry.QWKNumber,
 				Number:     msg.MsgNum,
 				From:       msg.From,
 				To:         msg.To,
@@ -181,6 +211,12 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 	}
 	res.Packet = buf.Bytes()
 	return res, nil
+}
+
+// ownsPrivateMessage reports whether a private message belongs to the given
+// user (addressed to or sent by them).
+func ownsPrivateMessage(msg *message.DisplayMessage, handle string) bool {
+	return msg.IsPrivate && (strings.EqualFold(msg.To, handle) || strings.EqualFold(msg.From, handle))
 }
 
 // CommitExport applies the deferred newscan pointer advances from a successful

@@ -174,6 +174,80 @@ func TestBuildPacket_MaxPerArea(t *testing.T) {
 	}
 }
 
+// hasNDX reports whether the packet zip contains the given per-conference NDX.
+func hasNDX(t *testing.T, packet []byte, name string) bool {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(packet), int64(len(packet)))
+	if err != nil {
+		t.Fatalf("packet not a zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func privMsg(num int, from, to string) *message.DisplayMessage {
+	m := dm(num, from, to, "subj", "body")
+	m.IsPrivate = true
+	return m
+}
+
+func TestBuildPacket_PublicUsesStableNumber(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 5, Tag: "GENERAL", Name: "General"})
+	store.seed(5, dm(1, "a", "All", "s", "b"))
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	// Public area keeps its area.ID (5) as the conference number -> 005.NDX.
+	if !hasNDX(t, res.Packet, "005.NDX") {
+		t.Error("expected public area to export under conference 5 (005.NDX)")
+	}
+}
+
+func TestBuildPacket_PrivateMailUsesConferenceZero(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 3, Tag: "PRIVMAIL", Name: "Private Mail"})
+	store.seed(3, privMsg(1, "someone", "tester"))
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"PRIVMAIL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	if res.MessageCount != 1 {
+		t.Fatalf("MessageCount: want 1, got %d", res.MessageCount)
+	}
+	if !hasNDX(t, res.Packet, "000.NDX") {
+		t.Error("expected PRIVMAIL to export under conference 0 (000.NDX)")
+	}
+}
+
+func TestBuildPacket_PrivateMailFiltersToUser(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 3, Tag: "PRIVMAIL", Name: "Private Mail"})
+	store.seed(3,
+		privMsg(1, "someone", "tester"), // to me -> included
+		privMsg(2, "tester", "friend"),  // from me -> included
+		privMsg(3, "alice", "bob"),      // neither -> excluded
+	)
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"PRIVMAIL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	if res.MessageCount != 2 {
+		t.Errorf("private-mail export should include only the user's own mail: want 2, got %d", res.MessageCount)
+	}
+}
+
 func TestCommitExport_AppliesLastRead(t *testing.T) {
 	store := newFakeStore()
 	svc := newTestService(t, store)
