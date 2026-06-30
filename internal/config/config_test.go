@@ -742,3 +742,41 @@ func TestLoadStrings_NewUsersClosedStr(t *testing.T) {
 		t.Errorf("expected custom NewUsersClosedStr, got %q", result.NewUsersClosedStr)
 	}
 }
+
+func TestServerConfig_QWKID_RoundTrip(t *testing.T) {
+	// Explicit qwkID in config.json loads through.
+	dir := t.TempDir()
+	data, _ := json.Marshal(map[string]interface{}{"qwkID": "VISION3"})
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.QWKID != "VISION3" {
+		t.Errorf("loaded QWKID: want VISION3, got %q", loaded.QWKID)
+	}
+
+	// Absent qwkID defaults to empty.
+	def, err := LoadServerConfig(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if def.QWKID != "" {
+		t.Errorf("default QWKID: want empty, got %q", def.QWKID)
+	}
+
+	// Save then load preserves QWKID.
+	saveDir := t.TempDir()
+	if err := SaveServerConfig(saveDir, ServerConfig{QWKID: "ABC123"}); err != nil {
+		t.Fatal(err)
+	}
+	back, err := LoadServerConfig(saveDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.QWKID != "ABC123" {
+		t.Errorf("round-trip QWKID: want ABC123, got %q", back.QWKID)
+	}
+}

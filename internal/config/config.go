@@ -839,6 +839,7 @@ type FTNConfig struct {
 type ServerConfig struct {
 	BoardName           string `json:"boardName"`
 	SysOpName           string `json:"sysOpName"`
+	QWKID               string `json:"qwkID,omitempty"` // Explicit QWK packet ID; blank = derive from BoardName
 	BBSLocation         string `json:"bbsLocation,omitempty"`
 	Timezone            string `json:"timezone,omitempty"`
 	SysOpLevel          int    `json:"sysOpLevel"`
