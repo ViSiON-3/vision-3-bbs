@@ -91,6 +91,19 @@ addressed to, or sent by, the downloading user — never other users' mail.
 Replies uploaded to conference 0 are posted as private mail, not to a public
 base.
 
+## Upload safety: destination check and duplicate detection
+
+When a `.REP` is uploaded, ViSiON/3 reads the destination BBS ID from the
+packet's first block. If that ID is present and does not match this system, the
+packet is rejected as addressed to another BBS and nothing is posted. Packets
+that omit the ID (some readers leave it blank) are accepted.
+
+Uploads are also de-duplicated: ViSiON/3 records a fingerprint of each imported
+packet in `data/qwk_dedup.db` (a small SQLite database, created automatically).
+Re-uploading the exact same `.REP` — for example after a dropped mobile
+connection — posts nothing the second time and reports the packet as already
+uploaded. Fingerprints are kept per user and pruned after 90 days.
+
 ## Troubleshooting
 
 **User gets "No new messages to download"**
