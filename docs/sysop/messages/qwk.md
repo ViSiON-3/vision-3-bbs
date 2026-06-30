@@ -42,7 +42,7 @@ The menu ANSI art is `menus/v3/ansi/QWKM.ANS`.
 
 The BBS ID is the short identifier (max 8 characters, letters and digits) used for packet filenames (`<ID>.QWK` / `<ID>.REP`) and for the destination check on REP uploads.
 
-Set it explicitly in the config editor (System → Registration → **QWK ID**), or in `configs/config.json` as `qwkID`. Leave it blank to derive it automatically from `BoardName` (alphanumeric only, max 8 characters, uppercased — e.g. `"ViSiON/3 BBS"` → `VISION3B`).
+Set it explicitly in the config editor (System → Registration → **QWK ID**), or in `configs/config.json` as `qwkID`. Leave it blank to derive it automatically from `BoardName` (alphanumeric only, max 8 characters, uppercased — e.g. `"ViSiON/3 BBS"` → `VISION3B`; if nothing valid remains, the system uses `BBS`).
 
 Treat the QWK ID as a **stable identity** — set it once, early. Changing it later re-keys your packets: offline readers will see a different BBS ID, and saved `.QWK`/`.REP` files keyed to the old ID stop matching. Setting an explicit ID also means renaming the board no longer changes the QWK ID.
 
