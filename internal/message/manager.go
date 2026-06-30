@@ -674,6 +674,13 @@ func (mm *MessageManager) AddReply(areaID int, from, to, subject, body, replyToM
 	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false)
 }
 
+// AddPrivateReply is AddReply for private mail: it records the parent pointer
+// while preserving the MSG_PRIVATE flag, so a reply to a private message stays
+// private (and therefore visible to its recipient).
+func (mm *MessageManager) AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), true)
+}
+
 // GetMessage reads a single message by area ID and 1-based message number.
 func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error) {
 	b, _, err := mm.openBase(areaID)

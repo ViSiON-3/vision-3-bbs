@@ -140,3 +140,25 @@ func TestAddReply_AlsoSetsReplyID(t *testing.T) {
 		t.Errorf("ReplyToNum: want %d, got %d", parent, dm.ReplyToNum)
 	}
 }
+
+func TestAddPrivateReply_StaysPrivateAndThreads(t *testing.T) {
+	mm := newReplyTestManager(t) // area 2 is PRIVMAIL
+	parent, err := mm.AddPrivateMessage(2, "alice", "bob", "Topic", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply, err := mm.AddPrivateReply(2, "bob", "alice", "Re: Topic", "second", "", parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dm, err := mm.GetMessage(2, reply)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !dm.IsPrivate {
+		t.Error("AddPrivateReply should keep the reply private")
+	}
+	if dm.ReplyToNum != parent {
+		t.Errorf("ReplyToNum: want %d, got %d", parent, dm.ReplyToNum)
+	}
+}

@@ -70,10 +70,17 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		replyBody = replyBody + "\n\n" + currentUser.AutoSignature
 	}
 
-	// Save reply
+	// Save reply, recording the parent message number for threading. A reply to
+	// a private message stays private so it remains visible to its recipient.
 	replyMsgID := currentMsg.MsgID
-	_, err := e.MessageMgr.AddReply(currentAreaID, currentUser.Handle, currentMsg.From,
-		newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
+	var err error
+	if currentMsg.IsPrivate {
+		_, err = e.MessageMgr.AddPrivateReply(currentAreaID, currentUser.Handle, currentMsg.From,
+			newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
+	} else {
+		_, err = e.MessageMgr.AddReply(currentAreaID, currentUser.Handle, currentMsg.From,
+			newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
+	}
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, []byte(e.LoadedStrings.MsgReplyError), outputMode)
