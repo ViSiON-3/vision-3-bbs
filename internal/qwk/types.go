@@ -20,20 +20,22 @@ type ConferenceInfo struct {
 
 // PacketMessage is a message to be packed into a QWK MESSAGES.DAT.
 type PacketMessage struct {
-	Conference int
-	Number     int // Message number in the base
-	From       string
-	To         string
-	Subject    string
-	DateTime   time.Time
-	Body       string
-	Private    bool
+	Conference    int
+	Number        int // Message number in the base
+	From          string
+	To            string
+	Subject       string
+	DateTime      time.Time
+	Body          string
+	Private       bool
+	ReplyToNumber int // QWK reference: parent message number (0 = none)
 }
 
 // REPMessage is a message extracted from an uploaded REP packet.
 type REPMessage struct {
-	Conference int
-	To         string
-	Subject    string
-	Body       string
+	Conference    int
+	To            string
+	Subject       string
+	Body          string
+	ReplyToNumber int // QWK reference: parent message number (0 = none)
 }

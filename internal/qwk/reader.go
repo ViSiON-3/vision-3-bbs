@@ -129,16 +129,19 @@ func parseREPMessages(data []byte) ([]REPMessage, error) {
 		// Parse fields
 		to := strings.TrimSpace(string(header[21:46]))
 		subject := strings.TrimSpace(string(header[71:96]))
+		refStr := strings.TrimSpace(string(header[108:116]))
+		refNum, _ := strconv.Atoi(refStr) // 0 / unparsable => no parent
 
 		// Extract body (starts after header block)
 		bodyBytes := data[pos+BlockSize : pos+totalBytes]
 		body := decodeQWKBody(bodyBytes)
 
 		messages = append(messages, REPMessage{
-			Conference: confNum,
-			To:         to,
-			Subject:    subject,
-			Body:       body,
+			Conference:    confNum,
+			To:            to,
+			Subject:       subject,
+			Body:          body,
+			ReplyToNumber: refNum,
 		})
 
 		pos += totalBytes

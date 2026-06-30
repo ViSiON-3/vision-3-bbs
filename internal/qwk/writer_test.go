@@ -269,3 +269,15 @@ func TestPacketWriter_BBSID_Truncation(t *testing.T) {
 		t.Errorf("bbsID truncation: want 'LONGERNA', got %q", pw.bbsID)
 	}
 }
+
+func TestFormatMessage_ReplyToNumber(t *testing.T) {
+	data := formatMessage(PacketMessage{
+		Conference: 1, Number: 2, To: "All", Subject: "Re",
+		DateTime: time.Date(2026, 3, 5, 14, 30, 0, 0, time.UTC), Body: "x",
+		ReplyToNumber: 7,
+	})
+	ref := strings.TrimSpace(string(data[108:116]))
+	if ref != "7" {
+		t.Errorf("reference field (108-115): want 7, got %q", ref)
+	}
+}

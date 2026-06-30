@@ -227,8 +227,8 @@ func formatMessage(msg PacketMessage) []byte {
 
 	// Password: positions 96-107 (12 chars) — blank
 
-	// Reference number: positions 108-115 (8 chars)
-	copyPadded(header[108:116], fmt.Sprintf("%8d", 0), 8)
+	// Reference number: positions 108-115 (8 chars) — parent message number.
+	copyPadded(header[108:116], fmt.Sprintf("%8d", msg.ReplyToNumber), 8)
 
 	// Body with QWK line ending (0xE3)
 	body := strings.ReplaceAll(msg.Body, "\r\n", "\xe3")
