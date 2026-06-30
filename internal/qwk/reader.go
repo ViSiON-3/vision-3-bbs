@@ -61,13 +61,13 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 
 	rc, err := msgFile.Open()
 	if err != nil {
-		return nil, fmt.Errorf("failed to open %s: %w", msgFileName, err)
+		return nil, fmt.Errorf("failed to open %s: %w", msgFile.Name, err)
 	}
 	defer rc.Close()
 
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", msgFileName, err)
+		return nil, fmt.Errorf("failed to read %s: %w", msgFile.Name, err)
 	}
 
 	msgs, err := parseREPMessages(data)

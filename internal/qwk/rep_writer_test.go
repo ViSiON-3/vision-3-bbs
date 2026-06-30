@@ -196,3 +196,32 @@ func TestWriteREP_EmitsBBSIDInFirstBlock(t *testing.T) {
 		t.Errorf("first-block BBSID = %q, want VISION3", p.BBSID)
 	}
 }
+
+func TestWriteREP_CapsBBSIDToEightChars(t *testing.T) {
+	// A configured ID longer than the 8-char QWK limit must be truncated for
+	// both the .MSG filename and the first-block ID (matching NewPacketWriter).
+	data := buildREP(t, "LongerName123", []PacketMessage{
+		{Conference: 1, Number: 1, To: "SysOp", Subject: "Hi",
+			DateTime: time.Date(2026, 3, 5, 10, 0, 0, 0, time.UTC), Body: "reply"},
+	})
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	var name string
+	for _, f := range zr.File {
+		name = f.Name
+	}
+	if name != "LONGERNA.MSG" {
+		t.Errorf("REP .MSG filename = %q, want LONGERNA.MSG", name)
+	}
+
+	p, err := ReadREPPacket(bytes.NewReader(data), int64(len(data)), "LONGERNA")
+	if err != nil {
+		t.Fatalf("ReadREPPacket: %v", err)
+	}
+	if p.BBSID != "LONGERNA" {
+		t.Errorf("first-block BBSID = %q, want LONGERNA", p.BBSID)
+	}
+}

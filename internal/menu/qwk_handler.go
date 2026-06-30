@@ -251,8 +251,8 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 			time.Sleep(2 * time.Second)
 			return currentUser, "", nil
 		}
-		slog.Error("failed to parse REP", "node", nodeNumber, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error reading REP packet.|07\r\n")), outputMode)
+		slog.Error("failed to process REP", "node", nodeNumber, "error", err)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error processing REP packet.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
 		return currentUser, "", nil
 	}

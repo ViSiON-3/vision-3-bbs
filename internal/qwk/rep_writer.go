@@ -18,6 +18,13 @@ import (
 func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 	zw := zip.NewWriter(w)
 
+	// Normalize to the QWK BBS-ID form (max 8 chars, upper-case), matching
+	// NewPacketWriter, so the .MSG filename and first-block ID stay standard.
+	bbsID = strings.ToUpper(bbsID)
+	if len(bbsID) > 8 {
+		bbsID = bbsID[:8]
+	}
+
 	var msgBuf bytes.Buffer
 
 	// First block is a spacer, mirroring MESSAGES.DAT. Readers skip it.
@@ -26,7 +33,7 @@ func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 		spacer[i] = ' '
 	}
 	// First block carries the destination BBS ID; readers validate it.
-	copy(spacer, strings.ToUpper(bbsID))
+	copy(spacer, bbsID)
 	msgBuf.Write(spacer)
 
 	for _, msg := range msgs {
@@ -41,7 +48,7 @@ func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 		msgBuf.Write(padded)
 	}
 
-	name := strings.ToUpper(bbsID) + ".MSG"
+	name := bbsID + ".MSG"
 	if err := writeZipEntry(zw, name, msgBuf.Bytes()); err != nil {
 		zw.Close()
 		return fmt.Errorf("%s: %w", name, err)
