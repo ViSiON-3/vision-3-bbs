@@ -458,6 +458,7 @@ func (b *Base) WriteMessage(msg *Message) (int, error) {
 			Attribute:     msg.GetAttribute(),
 		}
 		copy(hdr.Signature[:], Signature)
+		hdr.ReplyTo = msg.ReplyTo
 
 		hdr.Subfields = buildSubfields(msg)
 

@@ -75,6 +75,7 @@ type Message struct {
 	DestAddr string // FidoNet destination address
 	MsgID    string
 	ReplyID  string
+	ReplyTo  uint32 // JAM parent message number (0 = none); written to the header
 	PID      string
 	Flags    string
 	SeenBy   string
