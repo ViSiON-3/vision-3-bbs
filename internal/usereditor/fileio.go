@@ -8,8 +8,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/google/uuid"
 )
 
 // LoadUsers reads users.json and returns the user slice plus the file's mtime.

@@ -128,6 +128,13 @@ func editFields() []fieldDef {
 				return "(set)"
 			},
 		},
+		{
+			Label: "WFC Keys", Type: ftAction, Col: 3, Row: 15, Width: 22,
+			Get: func(u *user.User) string {
+				n := len(u.PublicKeys)
+				return fmt.Sprintf("(%d)", n)
+			},
+		},
 
 		// Right column (x=50, rows 4-16)
 		{

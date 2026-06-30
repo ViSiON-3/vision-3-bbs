@@ -96,7 +96,7 @@ echo
 # macOS: remove quarantine attribute so Gatekeeper doesn't block downloaded binaries
 if [ "$(uname)" = "Darwin" ]; then
     echo "Removing macOS quarantine attributes..."
-    for f in vision3 helper v3mail strings ue config menuedit bin/sexyz bin/binkd; do
+    for f in vision3 helper v3mail strings ue config menuedit wfc bin/sexyz bin/binkd; do
         [ -f "$f" ] && xattr -d com.apple.quarantine "$f" 2>/dev/null
     done
 fi
@@ -262,6 +262,11 @@ go build -o ue ./cmd/ue
 echo "Building config..."
 if ! go build -o config ./cmd/config; then
     echo -e "${RED}Build failed (config)!${NC}"
+    exit 1
+fi
+echo "Building wfc..."
+if ! go build -o wfc ./cmd/wfc; then
+    echo -e "${RED}Build failed (wfc)!${NC}"
     exit 1
 fi
 

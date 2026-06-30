@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/sshserver"
+	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -49,6 +49,10 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 		KeyboardInteractiveHandler: func(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool {
 			slog.Debug("SSH keyboard-interactive auth", "user", ctx.User(), "addr", ctx.RemoteAddr())
 			return true
+		},
+		PublicKeyHandler: wfcPublicKeyHandler,
+		SubsystemHandlers: map[string]func(ssh.Session){
+			"wfc-admin": wfcAdminSubsystem,
 		},
 	})
 	if err != nil {

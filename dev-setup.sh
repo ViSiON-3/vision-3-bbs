@@ -1,17 +1,21 @@
 #!/bin/bash
-# dev-setup.sh — Set up a development BBS instance from a git checkout
+# dev-setup.sh — Install a BBS instance into a separate directory
 #
-# Creates a working BBS directory tree at a target path, populated with
-# template configs, menus, data skeleton, and scripts.  Optionally symlinks
-# binaries back to the git repo so the BBS always runs the latest build.
+# Creates a working BBS directory tree at a target path (NOT the repo root),
+# populated with all binaries (vision3, helper, v3mail, strings, ue, config,
+# menuedit, wfc), template configs, menus, data skeleton, and scripts.
+# Suitable both for a standalone sysop install and for development:
+#   - copy mode (default): a self-contained instance you can move/keep
+#   - --symlink mode:       binaries symlink to the repo so the instance always
+#                           runs your latest `go build` (handy while developing)
 #
 # Usage:
 #   ./dev-setup.sh <target-dir> [--symlink]
 #
 # Examples:
-#   ./dev-setup.sh ~/bbs-test              # copy binaries
-#   ./dev-setup.sh ~/bbs-test --symlink    # symlink binaries to git repo
-#   ./dev-setup.sh ~/bbs-dev --symlink     # second instance, different ports
+#   ./dev-setup.sh ~/my-bbs                # standalone install (copies binaries)
+#   ./dev-setup.sh ~/bbs-test --symlink    # dev instance, binaries track the repo
+#   ./dev-setup.sh ~/bbs-dev --symlink     # second instance (edit ports to differ)
 
 set -euo pipefail
 
@@ -34,13 +38,19 @@ for arg in "$@"; do
         --help|-h)
             echo "Usage: $0 <target-dir> [--symlink]"
             echo ""
-            echo "Sets up a development BBS instance from this git checkout."
+            echo "Installs a self-contained BBS instance into <target-dir> (not the"
+            echo "repo root). Builds and installs all binaries (vision3, helper,"
+            echo "v3mail, strings, ue, config, menuedit, wfc), template configs, menus,"
+            echo "a data skeleton, an SSH host key, and a default sysop account."
+            echo "Works for both a standalone sysop install and development."
             echo ""
             echo "Options:"
-            echo "  --symlink   Symlink binaries to git repo instead of copying"
-            echo "              (BBS always uses latest 'go build' output)"
+            echo "  --symlink   Symlink binaries to the git repo instead of copying"
+            echo "              (instance always runs your latest 'go build' output)"
             echo ""
-            echo "After setup, build binaries and start the BBS:"
+            echo "Existing config/data in the target is never overwritten."
+            echo ""
+            echo "After setup, start the BBS:"
             echo "  cd <target-dir> && ./vision3"
             exit 0
         ;;
@@ -89,7 +99,7 @@ command -v ssh-keygen >/dev/null 2>&1 || fail "ssh-keygen is not installed"
 mkdir -p "$TARGET"
 
 # ── Build binaries first ─────────────────────────────────────────
-BINARIES=(vision3 helper v3mail strings ue config menuedit)
+BINARIES=(vision3 helper v3mail strings ue config menuedit wfc)
 
 info "Building binaries..."
 for bin in "${BINARIES[@]}"; do

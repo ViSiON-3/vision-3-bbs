@@ -52,6 +52,9 @@ BUILT+=("  config    — config editor")
 if ! go build -o menuedit ./cmd/menuedit; then echo "Build failed (menuedit)!"; exit 1; fi
 BUILT+=("  menuedit  — menu editor")
 
+if ! go build -o wfc ./cmd/wfc; then echo "Build failed (wfc)!"; exit 1; fi
+BUILT+=("  wfc       — sysop WFC console")
+
 echo "============================="
 echo "Build successful!"
 echo

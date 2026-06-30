@@ -108,6 +108,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | NUV (New User Verification)   | ✅ Working | Voting-based approval system for new user accounts                                                                  |
 | Info Forms                    | ✅ Working | Up to 5 configurable forms; required form enforcement on login; user fill/view; SysOp browse and management         |
 | TUI User Editor (`ue`)        | ✅ Working | Full-screen terminal user management                                                                                |
+| WFC Sysop Console (`wfc`)     | ✅ Working | Remote read-only monitor of live nodes/callers + event feed over SSH ([guide](docs/sysop/how-to-guides/wfc-console.md)) |
 | **Menus**                     |           |                                                                                                                     |
 | Menu System                   | ✅ Working | `.MNU`, `.CFG`, `.ANS` files, ACS evaluation, password protection                                                   |
 | TUI Menu Editor (`menuedit`)  | ✅ Working | Full-screen menu configuration editor                                                                               |
@@ -178,7 +179,7 @@ Pre-built releases are available for all major platforms. Linux x86_64 is the pr
 vision-3-bbs/
 ├── setup.sh / .ps1 / .bat  # One-time setup: SSH host key, configs, dirs, build binaries
 ├── build.sh / .ps1 / .bat  # Build all ViSiON/3 binaries
-├── dev-setup.sh            # Developer environment bootstrap
+├── dev-setup.sh            # Install a BBS instance into a separate directory (standalone or dev)
 ├── Dockerfile              # Container image build
 ├── docker-compose.yml      # Container orchestration
 ├── docker-entrypoint.sh    # Container startup script
@@ -312,7 +313,16 @@ See [Docker Deployment Guide](docs/sysop/getting-started/docker.md) for detailed
     .\setup.ps1         # Windows (PowerShell)
     ```
 
-    `setup.sh` will generate SSH host keys, copy template configs to `configs/`, create the required directory structure, and build all binaries (`vision3`, `helper`, `v3mail`, `strings`, `ue`, `config`, `menuedit`).
+    `setup.sh` will generate SSH host keys, copy template configs to `configs/`, create the required directory structure, and build all binaries (`vision3`, `helper`, `v3mail`, `strings`, `ue`, `config`, `menuedit`, `wfc`).
+
+    **Installing to a separate directory:** `setup.sh` installs the BBS **in-place** inside the repo checkout. To install into a **separate directory** instead (recommended for a real deployment, and required for running multiple instances), use `dev-setup.sh`:
+
+    ```bash
+    ./dev-setup.sh ~/my-bbs              # build binaries + a full config/data tree into ~/my-bbs
+    ./dev-setup.sh ~/my-bbs --symlink    # symlink binaries to the repo (instance always runs your latest build)
+    ```
+
+    This builds and installs **all** binaries (`vision3`, `helper`, `v3mail`, `strings`, `ue`, `config`, `menuedit`, `wfc`) into the target directory, creates the full `configs/`, `data/`, `menus/`, and `doors/` tree, generates an SSH host key, and seeds a default sysop account — leaving the repo checkout clean. Re-running it never overwrites existing config or data. Start the instance with `cd ~/my-bbs && ./vision3`.
 
 2. **Configure your BBS:**
     ```bash
