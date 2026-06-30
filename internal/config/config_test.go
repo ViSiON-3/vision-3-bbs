@@ -767,9 +767,16 @@ func TestServerConfig_QWKID_RoundTrip(t *testing.T) {
 		t.Errorf("default QWKID: want empty, got %q", def.QWKID)
 	}
 
-	// Save then load preserves QWKID.
+	// Save then load preserves QWKID. Start from a defaults-initialized config
+	// (as the editor does: load, edit, save) rather than a zeroed struct, so the
+	// round-trip reflects a realistic save and other defaults are retained.
 	saveDir := t.TempDir()
-	if err := SaveServerConfig(saveDir, ServerConfig{QWKID: "ABC123"}); err != nil {
+	cfg, err := LoadServerConfig(saveDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.QWKID = "ABC123"
+	if err := SaveServerConfig(saveDir, cfg); err != nil {
 		t.Fatal(err)
 	}
 	back, err := LoadServerConfig(saveDir)
@@ -778,5 +785,8 @@ func TestServerConfig_QWKID_RoundTrip(t *testing.T) {
 	}
 	if back.QWKID != "ABC123" {
 		t.Errorf("round-trip QWKID: want ABC123, got %q", back.QWKID)
+	}
+	if back.BoardName != cfg.BoardName {
+		t.Errorf("round-trip should retain other defaults: BoardName want %q, got %q", cfg.BoardName, back.BoardName)
 	}
 }
