@@ -146,6 +146,12 @@ func sysFieldsRegistration(cfg *config.ServerConfig) []fieldDef {
 				return items
 			},
 		},
+		{
+			Label: "QWK ID", Help: "Stable QWK packet ID (max 8, A-Z/0-9); blank = derive from Board Name",
+			Type: ftString, Col: 3, Row: 5, Width: 8,
+			Get: func() string { return cfg.QWKID },
+			Set: func(val string) error { cfg.QWKID = config.NormalizeQWKID(val); return nil },
+		},
 	}
 }
 
