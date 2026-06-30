@@ -12,7 +12,7 @@ func TestAuthorizeAdmin(t *testing.T) {
 		&user.User{Handle: "lowly", AccessLevel: 10},
 		&user.User{Handle: "boss", AccessLevel: 255},
 	)
-	adminMinLevel = 250
+	adminMinLevel = func() int { return 250 }
 
 	if authorizeAdmin("lowly") {
 		t.Error("expected lowly (level 10) to be denied admin access")
@@ -24,7 +24,7 @@ func TestAuthorizeAdmin(t *testing.T) {
 
 func TestAuthorizeAdmin_UnknownUser(t *testing.T) {
 	userMgr = user.NewUserMgrForTest()
-	adminMinLevel = 250
+	adminMinLevel = func() int { return 250 }
 
 	if authorizeAdmin("ghost") {
 		t.Error("expected unknown user to be denied admin access")

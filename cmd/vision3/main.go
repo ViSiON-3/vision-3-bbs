@@ -1737,7 +1737,8 @@ func main() {
 	sessionRegistry = session.NewSessionRegistry()
 
 	// Initialize and start the WFC admin server.
-	adminMinLevel = serverConfig.CoSysOpLevel
+	// adminMinLevel is a live getter so config hot-reloads take effect immediately.
+	adminMinLevel = func() int { return menuExecutor.GetServerConfig().CoSysOpLevel }
 	adminServer = admin.NewServer(admin.ServerConfig{
 		Reg:        sessionRegistry,
 		SystemName: serverConfig.BoardName,
