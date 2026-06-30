@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -233,14 +233,14 @@ func generateChainTxt(ctx *DoorCtx, dir string) error {
 	crlf := "\r\n"
 
 	var b strings.Builder
-	b.WriteString(ctx.UserIDStr + crlf)     // 1: User number
-	b.WriteString(ctx.User.Handle + crlf)   // 2: User alias
-	b.WriteString(ctx.User.RealName + crlf) // 3: Real name
-	b.WriteString("NONE" + crlf)                                                    // 4: Default protocol
+	b.WriteString(ctx.UserIDStr + crlf)                                                 // 1: User number
+	b.WriteString(ctx.User.Handle + crlf)                                               // 2: User alias
+	b.WriteString(ctx.User.RealName + crlf)                                             // 3: Real name
+	b.WriteString("NONE" + crlf)                                                        // 4: Default protocol
 	b.WriteString(strconv.Itoa(int(time.Since(ctx.SessionStartTime).Minutes())) + crlf) // 5: Time on (minutes)
-	b.WriteString("M" + crlf)               // 6: Gender
-	b.WriteString("0" + crlf)               // 7: Pause (0=no)
-	b.WriteString("01/01/71" + crlf)        // 8: Last call date
+	b.WriteString("M" + crlf)                                                           // 6: Gender
+	b.WriteString("0" + crlf)                                                           // 7: Pause (0=no)
+	b.WriteString("01/01/71" + crlf)                                                    // 8: Last call date
 
 	// Use user's saved screen dimensions, default to 80x25 if not set
 	screenWidth := ctx.User.ScreenWidth

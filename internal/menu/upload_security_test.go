@@ -56,7 +56,7 @@ func TestSanitizeControlChars_StripsEscapes(t *testing.T) {
 		{"hello\x1b[31mred\x1b[0m", "hello[31mred[0m"},
 		{"line\x00null", "linenull"},
 		{"bell\x07ring", "bellring"},
-		{"tab\tok", "tab\tok"}, // tabs preserved
+		{"tab\tok", "tab\tok"},         // tabs preserved
 		{"newline\nok", "newline\nok"}, // newlines preserved
 		{"", ""},
 	}
