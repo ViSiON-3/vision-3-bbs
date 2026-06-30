@@ -37,6 +37,7 @@ func (b *Base) WriteMessageExt(msg *Message, msgType MessageType, echoTag, bbsNa
 			Attribute:     attr,
 		}
 		copy(hdr.Signature[:], Signature)
+		hdr.ReplyTo = msg.ReplyTo
 
 		// For local messages, set DateProcessed to now (already "processed")
 		if msgType.IsLocal() {
