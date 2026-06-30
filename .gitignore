@@ -96,3 +96,6 @@ Thumbs.db
 # Beads runtime data
 .beads/*.pid
 .beads/
+
+# Superpowers SDD scratch (briefs, reports, ledger, diffs)
+.superpowers/
