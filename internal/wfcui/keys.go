@@ -50,7 +50,12 @@ func (m Model) handleKeyList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch string(msg.Runes) {
 		case "r", "R":
 			if m.client != nil {
-				return m, tea.Batch(m.fetchSnapshot(), m.subscribeCmd())
+				// Subscription is already live in list mode — do NOT call
+				// subscribeCmd() here. A second subscribeCmd would start a
+				// second waitForEvent goroutine on the same channel, splitting
+				// the event stream and silently dropping ~half the events.
+				// fetchSnapshot is a one-shot refresh only.
+				return m, m.fetchSnapshot()
 			}
 		case "l", "L":
 			m.showLogs = !m.showLogs

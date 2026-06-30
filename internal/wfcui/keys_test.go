@@ -1,6 +1,7 @@
 package wfcui
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -202,6 +203,62 @@ func TestHandleKeyRInListNilClientStaysInList(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Fatal("expected nil cmd for r with nil client")
+	}
+}
+
+// fakeAdminClient is a minimal AdminClient stub for tests that need to execute
+// returned tea.Cmds and inspect the resulting message type.
+type fakeAdminClient struct {
+	snap *admin.SystemSnapshot
+	ch   chan admin.Event
+}
+
+func (f *fakeAdminClient) Snapshot(_ context.Context) (*admin.SystemSnapshot, error) {
+	return f.snap, nil
+}
+func (f *fakeAdminClient) Subscribe(_ context.Context) (<-chan admin.Event, error) {
+	return f.ch, nil
+}
+func (f *fakeAdminClient) Execute(_ context.Context, _ admin.AdminCommand) (*admin.Result, error) {
+	return &admin.Result{}, nil
+}
+func (f *fakeAdminClient) Close() error { return nil }
+
+// TestHandleKeyRInListWithClientFetchesSnapshotOnly verifies that pressing R in
+// list mode with an active subscription returns a one-shot fetchSnapshot cmd (not
+// a subscribeCmd). Executing the returned cmd must yield a snapshotMsg, NOT a
+// subscribedMsg — the latter would create a second waitForEvent goroutine that
+// splits the live event channel and silently drops ~half the events.
+func TestHandleKeyRInListWithClientFetchesSnapshotOnly(t *testing.T) {
+	snap := &admin.SystemSnapshot{SystemName: "T", Time: time.Now()}
+	fc := &fakeAdminClient{snap: snap, ch: make(chan admin.Event)}
+	m := New(fc, Options{MaxEvents: 10})
+	m.width, m.height = 100, 30
+	m.mode = modeList
+	m.subscribed = true // subscription is live
+
+	mi, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	m = mi.(Model)
+
+	// Mode must stay in modeList; subscribed must remain true.
+	if m.mode != modeList {
+		t.Fatalf("expected modeList after R with live subscription, got %v", m.mode)
+	}
+	if !m.subscribed {
+		t.Fatal("subscribed must remain true after R in list mode")
+	}
+
+	// The returned command must be non-nil (a snapshot fetch is expected).
+	if cmd == nil {
+		t.Fatal("R in list mode with non-nil client must return a non-nil cmd")
+	}
+
+	// Execute the cmd and confirm it produces a snapshotMsg, not a subscribedMsg.
+	// A subscribedMsg would indicate subscribeCmd() was called, which would create
+	// a duplicate waitForEvent goroutine and split the event channel.
+	result := cmd()
+	if _, ok := result.(snapshotMsg); !ok {
+		t.Fatalf("R in list mode: expected snapshotMsg from cmd, got %T", result)
 	}
 }
 
