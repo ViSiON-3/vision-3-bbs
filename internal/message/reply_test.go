@@ -3,6 +3,7 @@ package message
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -66,6 +67,35 @@ func TestAddFamily_Characterization(t *testing.T) {
 	}
 	if !dmsg.DateTime.Equal(when) {
 		t.Errorf("AddMessageWithDate: want %v, got %v", when, dmsg.DateTime)
+	}
+}
+
+func TestAddPrivateMessage_SkipsBodyTransform(t *testing.T) {
+	mm := newReplyTestManager(t)
+	mm.BodyTransform = func(areaID int, body string) string { return body + "\n[TRANSFORMED]" }
+
+	pubNum, err := mm.AddMessage(1, "a", "All", "s", "public body", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := mm.GetMessage(1, pubNum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(pub.Body, "[TRANSFORMED]") {
+		t.Errorf("AddMessage should apply BodyTransform; body=%q", pub.Body)
+	}
+
+	privNum, err := mm.AddPrivateMessage(2, "a", "b", "s", "private body", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	priv, err := mm.GetMessage(2, privNum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(priv.Body, "[TRANSFORMED]") {
+		t.Errorf("AddPrivateMessage must NOT apply BodyTransform; body=%q", priv.Body)
 	}
 }
 

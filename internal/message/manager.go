@@ -590,7 +590,7 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	// The original body is preserved for OnMessagePosted so the wire message
 	// carries tearline/origin as separate protocol fields, not inline.
 	jamBody := body
-	if mm.BodyTransform != nil {
+	if !private && mm.BodyTransform != nil {
 		jamBody = mm.BodyTransform(areaID, body)
 	}
 
