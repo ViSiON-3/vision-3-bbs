@@ -63,22 +63,26 @@ preferred at review.
 
 ## Design
 
-### 1. JAM: preserve `Header.ReplyTo` on write
+### 1. JAM: a `Message.ReplyTo` convenience field, written into the header
 
-`internal/jam/message.go` `WriteMessage` builds a fresh `hdr` (line ~454) and
-drops any pre-set `msg.Header.ReplyTo`. `internal/jam/echomail.go`
-`WriteMessageExt` (line ~32) does the same. Patch both to copy a non-zero
-`msg.Header.ReplyTo` into the header being written:
+Add a `ReplyTo uint32` field to `jam.Message` (`internal/jam/types.go`, alongside
+`MsgID`/`ReplyID`). `WriteMessage` (`message.go` ~454) and `WriteMessageExt`
+(`echomail.go` ~32) set it into the header they build:
 
 ```go
-if msg.Header != nil && msg.Header.ReplyTo > 0 {
-    hdr.ReplyTo = msg.Header.ReplyTo
-}
+hdr.ReplyTo = msg.ReplyTo
 ```
 
-This is backward-compatible — `Header.ReplyTo` is always `0` at write time today.
-`ReadMessageHeader` already returns `ReplyTo` (`message.go:79`), so the value
-round-trips to disk and back.
+**Why a convenience field, not `msg.Header.ReplyTo`:** `Message.GetAttribute()`
+returns `m.Header.Attribute` whenever `Header != nil` (`types.go:109`). Creating
+or reusing `msg.Header` just to carry `ReplyTo` would change a local message's
+attribute from the `MsgLocal|MsgTypeLocal` default to whatever (possibly 0) the
+Header holds, and would OR stray flags into echomail. A top-level `Message.ReplyTo`
+maps straight to the header field with no attribute coupling.
+
+Backward-compatible — `msg.ReplyTo` is `0` for every existing caller, so the
+header's `ReplyTo` stays `0` as today. `ReadMessageHeader` already returns
+`ReplyTo` (`message.go:79`), so `GetMessage` (`manager.go:763`) keeps reading it.
 
 ### 2. Manager: consolidate posting + add `AddReply`
 
@@ -91,9 +95,11 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 
 It reproduces the current `AddMessage` body, plus:
 
-- `msg.DateTime = dateTime` if non-zero, else `time.Now()`.
+- `msg.DateTime = dateTime` (wrappers pass `time.Now()` explicitly; only
+  `AddMessageWithDate` passes a caller date — no zero-time sentinel, so the
+  current verbatim-date behavior is preserved exactly).
 - if `private`: `msg.Header = &jam.MessageHeader{Attribute: jam.MsgPrivate | jam.MsgLocal}`.
-- if `replyToNum > 0`: ensure `msg.Header != nil`, then `msg.Header.ReplyTo = uint32(replyToNum)`.
+- if `replyToNum > 0`: `msg.ReplyTo = uint32(replyToNum)` (the convenience field, no Header coupling).
 - if `replyToMsgID != ""`: `msg.ReplyID = replyToMsgID`.
 - fire `OnMessagePosted` only when `!private` (matching today: `AddPrivateMessage`
   does not fire it).
@@ -142,18 +148,20 @@ private-mail replies.
 
 ### 4. Display: ensure the header shows the reference
 
-`ReplyToNum` is already substituted as key `P` ("Reply to: #N", else "None").
-Confirm the shipped default MSGHDR template renders the reply reference; if it
-does not, add the field to the default template so the relationship is visible
-out of the box. (Sysop custom templates remain free to place/omit it.)
+`ReplyToNum` is already substituted as key `P` (`@P…@` field; value is the
+parent number, else "None"), and the shipped default template already renders it
+— `menus/v3/templates/message_headers/MSGHDR.1.ans` contains `Reply#: @P…@`. So
+once `ReplyToNum` becomes non-zero, the header shows the parent automatically;
+**no template change is required.** (Sysop/custom templates remain free to place
+or omit the `@P@` field.)
 
 ---
 
 ## Testing
 
-**`internal/jam`:** a message written with `Header.ReplyTo = N` reads back with
-`ReplyTo == N` (WriteMessage and WriteMessageExt); a message with no/zero
-`Header.ReplyTo` still writes `0` (no regression).
+**`internal/jam`:** a message written with `msg.ReplyTo = N` reads back with
+`Header.ReplyTo == N` (WriteMessage and WriteMessageExt); a message with
+`msg.ReplyTo == 0` still writes `0` (no regression).
 
 **`internal/message`:**
 - `AddReply` sets the new message's `Header.ReplyTo` to the parent number
