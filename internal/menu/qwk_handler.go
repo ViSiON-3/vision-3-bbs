@@ -246,6 +246,11 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		},
 	})
 	if err != nil {
+		if errors.Is(err, qwkservice.ErrWrongBBS) {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01This REP packet is addressed to another BBS.|07\r\n")), outputMode)
+			time.Sleep(2 * time.Second)
+			return currentUser, "", nil
+		}
 		slog.Error("failed to parse REP", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error reading REP packet.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
@@ -254,6 +259,12 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if importRes.Posted+importRes.Skipped == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07REP packet contains no messages.|07\r\n")), outputMode)
+		time.Sleep(2 * time.Second)
+		return currentUser, "", nil
+	}
+
+	if importRes.Duplicate > 0 {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07This packet was already uploaded — nothing posted.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
 		return currentUser, "", nil
 	}
