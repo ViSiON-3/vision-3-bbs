@@ -10,16 +10,32 @@ import (
 	"strings"
 )
 
-// ReadREP extracts messages from a QWK REP packet (ZIP archive).
-// The REP packet contains a BBSID.MSG file with the same block format
-// as MESSAGES.DAT, where the user's replies are stored.
+// REPPacket is a parsed REP upload: the destination BBS ID found in the first
+// block, the reply messages, and the raw .MSG payload (used for fingerprinting).
+type REPPacket struct {
+	BBSID    string
+	Messages []REPMessage
+	Payload  []byte
+}
+
+// ReadREP extracts messages from a QWK REP packet (ZIP archive). It is a thin
+// wrapper over ReadREPPacket retained for callers that only need the messages.
 func ReadREP(r io.ReaderAt, size int64, bbsID string) ([]REPMessage, error) {
+	p, err := ReadREPPacket(r, size, bbsID)
+	if err != nil {
+		return nil, err
+	}
+	return p.Messages, nil
+}
+
+// ReadREPPacket reads a REP packet's <bbsID>.MSG payload and returns the
+// first-block BBS ID, the parsed messages, and the raw payload bytes.
+func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) {
 	zr, err := zip.NewReader(r, size)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open REP archive: %w", err)
 	}
 
-	// Look for BBSID.MSG file (case-insensitive)
 	msgFileName := strings.ToUpper(bbsID) + ".MSG"
 	var msgFile *zip.File
 	for _, f := range zr.File {
@@ -43,7 +59,30 @@ func ReadREP(r io.ReaderAt, size int64, bbsID string) ([]REPMessage, error) {
 		return nil, fmt.Errorf("failed to read %s: %w", msgFileName, err)
 	}
 
-	return parseREPMessages(data)
+	msgs, err := parseREPMessages(data)
+	if err != nil {
+		return nil, err
+	}
+	return &REPPacket{BBSID: firstBlockID(data), Messages: msgs, Payload: data}, nil
+}
+
+// firstBlockID extracts the BBS ID from the first 128-byte block of a REP
+// payload: the leading whitespace-delimited token, upper-cased and capped at the
+// 8-character QWK BBS-ID length. Returns "" when the block is blank or absent.
+func firstBlockID(data []byte) string {
+	if len(data) < BlockSize {
+		return ""
+	}
+	block := data[:BlockSize]
+	start := 0
+	for start < len(block) && block[start] == ' ' {
+		start++
+	}
+	end := start
+	for end < len(block) && block[end] != ' ' && end-start < 8 {
+		end++
+	}
+	return strings.ToUpper(string(block[start:end]))
 }
 
 // parseREPMessages extracts messages from the raw block data.
