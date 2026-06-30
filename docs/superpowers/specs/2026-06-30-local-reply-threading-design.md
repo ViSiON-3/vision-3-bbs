@@ -109,18 +109,18 @@ behavior:
 
 ```go
 func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-    return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Time{}, false)
+    return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), false)
 }
 func (mm *MessageManager) AddMessageWithDate(areaID int, from, to, subject, body, replyToMsgID string, dateTime time.Time) (int, error) {
     return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, dateTime, false)
 }
 func (mm *MessageManager) AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-    return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Time{}, true)
+    return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), true)
 }
 // New: a reply carrying both the FTN ReplyID (for echomail Link()) and the
 // numeric parent (for local threading).
 func (mm *MessageManager) AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
-    return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Time{}, false)
+    return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false)
 }
 ```
 
