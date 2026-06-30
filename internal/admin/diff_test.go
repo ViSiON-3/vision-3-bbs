@@ -64,6 +64,18 @@ func TestDiffNodeIDTurnover(t *testing.T) {
 
 	events := DiffSnapshots(prev, cur)
 
+	// Turnover must emit exactly disconnect(old) then connect(new), in order,
+	// with no menu/activity events for the reused node.
+	if len(events) != 2 {
+		t.Fatalf("expected exactly 2 events (disconnect+connect), got %d: %+v", len(events), events)
+	}
+	if events[0].Type != EventCallerDisconnected || events[0].Handle != "OldCaller" {
+		t.Errorf("expected events[0] = disconnect(OldCaller), got %s(%q)", events[0].Type, events[0].Handle)
+	}
+	if events[1].Type != EventCallerConnected || events[1].Handle != "NewCaller" {
+		t.Errorf("expected events[1] = connect(NewCaller), got %s(%q)", events[1].Type, events[1].Handle)
+	}
+
 	var disconnects, connects, menuChanges, activityChanges int
 	var disconnectHandle, connectHandle string
 	for _, e := range events {
