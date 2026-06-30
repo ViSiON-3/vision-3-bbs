@@ -13,7 +13,7 @@ func TestBuildPacket_PacksNewMessages(t *testing.T) {
 	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL", Name: "General"})
 	store.seed(1, dm(1, "a", "All", "s1", "b1"), dm(2, "b", "All", "s2", "b2"))
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}})
 	if err != nil {
 		t.Fatalf("BuildPacket: %v", err)
@@ -54,7 +54,7 @@ func TestBuildPacket_RespectsLastRead(t *testing.T) {
 	store.seed(1, dm(1, "a", "All", "s1", "b1"), dm(2, "b", "All", "s2", "b2"), dm(3, "c", "All", "s3", "b3"))
 	store.lastRead[key(1, "tester")] = 2 // already read 1 and 2
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}})
 	if err != nil {
 		t.Fatalf("BuildPacket: %v", err)
@@ -74,7 +74,7 @@ func TestBuildPacket_SkipsDeleted(t *testing.T) {
 	deleted.IsDeleted = true
 	store.seed(1, dm(1, "a", "All", "s1", "b1"), deleted)
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, _ := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}})
 	if res.MessageCount != 1 {
 		t.Errorf("MessageCount: want 1 (deleted skipped), got %d", res.MessageCount)
@@ -94,7 +94,7 @@ func TestBuildPacket_NoNewMessages(t *testing.T) {
 	store.seed(1, dm(1, "a", "All", "s1", "b1"))
 	store.lastRead[key(1, "tester")] = 1
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}})
 	if err != nil {
 		t.Fatalf("BuildPacket: %v", err)
@@ -117,7 +117,7 @@ func TestBuildPacket_EmptyTagsFallsBackToAllAreas(t *testing.T) {
 	store.seed(1, dm(1, "a", "All", "s1", "b1"))
 	store.seed(2, dm(1, "a", "All", "s2", "b2"))
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, _ := svc.BuildPacket(ExportOptions{Handle: "tester"}) // no tags
 	if res.MessageCount != 2 {
 		t.Errorf("MessageCount across all areas: want 2, got %d", res.MessageCount)
@@ -129,7 +129,7 @@ func TestBuildPacket_DuplicateTagsDeduped(t *testing.T) {
 	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL", Name: "General"})
 	store.seed(1, dm(1, "a", "All", "s1", "b1"))
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, _ := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL", "GENERAL"}})
 
 	// A repeated tag must not double-count messages or last-read updates.
@@ -149,7 +149,7 @@ func TestBuildPacket_DoesNotMutateCallerTags(t *testing.T) {
 	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL", Name: "General"})
 	store.seed(1, dm(1, "a", "All", "s1", "b1"))
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	_, _ = svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: tags})
 
 	if len(tags) != 0 {
@@ -164,7 +164,7 @@ func TestBuildPacket_MaxPerArea(t *testing.T) {
 		store.seed(1, dm(i, "a", "All", "s", "b"))
 	}
 
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res, _ := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}, MaxPerArea: 3})
 	if res.MessageCount != 3 {
 		t.Errorf("MessageCount with MaxPerArea=3: want 3, got %d", res.MessageCount)
@@ -174,9 +174,83 @@ func TestBuildPacket_MaxPerArea(t *testing.T) {
 	}
 }
 
+// hasNDX reports whether the packet zip contains the given per-conference NDX.
+func hasNDX(t *testing.T, packet []byte, name string) bool {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(packet), int64(len(packet)))
+	if err != nil {
+		t.Fatalf("packet not a zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func privMsg(num int, from, to string) *message.DisplayMessage {
+	m := dm(num, from, to, "subj", "body")
+	m.IsPrivate = true
+	return m
+}
+
+func TestBuildPacket_PublicUsesStableNumber(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 5, Tag: "GENERAL", Name: "General"})
+	store.seed(5, dm(1, "a", "All", "s", "b"))
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	// Public area keeps its area.ID (5) as the conference number -> 005.NDX.
+	if !hasNDX(t, res.Packet, "005.NDX") {
+		t.Error("expected public area to export under conference 5 (005.NDX)")
+	}
+}
+
+func TestBuildPacket_PrivateMailUsesConferenceZero(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 3, Tag: "PRIVMAIL", Name: "Private Mail"})
+	store.seed(3, privMsg(1, "someone", "tester"))
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"PRIVMAIL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	if res.MessageCount != 1 {
+		t.Fatalf("MessageCount: want 1, got %d", res.MessageCount)
+	}
+	if !hasNDX(t, res.Packet, "000.NDX") {
+		t.Error("expected PRIVMAIL to export under conference 0 (000.NDX)")
+	}
+}
+
+func TestBuildPacket_PrivateMailFiltersToUser(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 3, Tag: "PRIVMAIL", Name: "Private Mail"})
+	store.seed(3,
+		privMsg(1, "someone", "tester"), // to me -> included
+		privMsg(2, "tester", "friend"),  // from me -> included
+		privMsg(3, "alice", "bob"),      // neither -> excluded
+	)
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"PRIVMAIL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	if res.MessageCount != 2 {
+		t.Errorf("private-mail export should include only the user's own mail: want 2, got %d", res.MessageCount)
+	}
+}
+
 func TestCommitExport_AppliesLastRead(t *testing.T) {
 	store := newFakeStore()
-	svc := New(store, "VISION3", "ViSiON/3 BBS", "SysOp")
+	svc := newTestService(t, store)
 	res := &ExportResult{LastRead: []LastReadUpdate{{AreaID: 1, MsgNum: 7}, {AreaID: 2, MsgNum: 4}}}
 
 	svc.CommitExport("tester", res)

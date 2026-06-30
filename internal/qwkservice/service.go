@@ -8,6 +8,8 @@ package qwkservice
 import (
 	"bytes"
 	"log/slog"
+	"path/filepath"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -29,21 +31,45 @@ type MessageStore interface {
 	GetMessageCountForArea(areaID int) (int, error)
 	GetMessage(areaID, msgNum int) (*message.DisplayMessage, error)
 	AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error)
+	AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error)
 }
 
 // Service orchestrates QWK packet export and REP import for a single BBS
 // identity.
 type Service struct {
-	store     MessageStore
-	bbsID     string
-	bbsName   string
-	sysOpName string
+	store       MessageStore
+	bbsID       string
+	bbsName     string
+	sysOpName   string
+	confMapPath string
 }
 
 // New creates a QWK service. bbsID is the short packet identifier (e.g.
-// "VISION3"); bbsName and sysOpName populate CONTROL.DAT.
-func New(store MessageStore, bbsID, bbsName, sysOpName string) *Service {
-	return &Service{store: store, bbsID: bbsID, bbsName: bbsName, sysOpName: sysOpName}
+// "VISION3"); bbsName and sysOpName populate CONTROL.DAT; dataPath is the base
+// data directory used to persist the stable conference map.
+func New(store MessageStore, bbsID, bbsName, sysOpName, dataPath string) *Service {
+	return &Service{
+		store:       store,
+		bbsID:       bbsID,
+		bbsName:     bbsName,
+		sysOpName:   sysOpName,
+		confMapPath: filepath.Join(dataPath, "qwk_conferences.json"),
+	}
+}
+
+// loadConfMap loads the conference map, syncs it against the current areas, and
+// persists it if anything changed.
+func (s *Service) loadConfMap() (*ConferenceMap, error) {
+	cm, err := LoadConferenceMap(s.confMapPath)
+	if err != nil {
+		return nil, err
+	}
+	if cm.Sync(s.store.ListAreas()) {
+		if err := cm.Save(s.confMapPath); err != nil {
+			return nil, err
+		}
+	}
+	return cm, nil
 }
 
 // LastReadUpdate records a pending newscan pointer advance for one area.
@@ -81,6 +107,11 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 		maxPerArea = defaultMaxPerArea
 	}
 
+	cm, err := s.loadConfMap()
+	if err != nil {
+		return nil, err
+	}
+
 	pw := qwk.NewPacketWriter(s.bbsID, s.bbsName, s.sysOpName)
 	pw.SetPersonalTo(opts.Handle)
 
@@ -110,7 +141,13 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			continue
 		}
 
-		pw.AddConference(area.ID, area.Name)
+		entry, ok := cm.EntryForTag(area.Tag)
+		if !ok {
+			// Sync guarantees an entry for every area; skip defensively.
+			continue
+		}
+		pw.AddConference(entry.QWKNumber, area.Name)
+		isPrivateConf := entry.Kind == KindPrivateMail
 
 		lastRead, err := s.store.GetLastRead(area.ID, opts.Handle)
 		if err != nil {
@@ -134,9 +171,12 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			if msg.IsDeleted {
 				continue
 			}
+			if isPrivateConf && !ownsPrivateMessage(msg, opts.Handle) {
+				continue
+			}
 
 			pw.AddMessage(qwk.PacketMessage{
-				Conference: area.ID,
+				Conference: entry.QWKNumber,
 				Number:     msg.MsgNum,
 				From:       msg.From,
 				To:         msg.To,
@@ -173,6 +213,15 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 	return res, nil
 }
 
+// ownsPrivateMessage reports whether a message in the private-mail conference
+// belongs to the given user (addressed to or sent by them). It is only called
+// once the conference is known to be private mail, so it gates purely on
+// ownership; an explicit IsPrivate check here would wrongly skip — and stall the
+// last-read pointer on — any conference-0 record lacking the flag.
+func ownsPrivateMessage(msg *message.DisplayMessage, handle string) bool {
+	return strings.EqualFold(msg.To, handle) || strings.EqualFold(msg.From, handle)
+}
+
 // CommitExport applies the deferred newscan pointer advances from a successful
 // export. Failures are logged and skipped; partial commits are tolerated.
 func (s *Service) CommitExport(handle string, res *ExportResult) {
@@ -184,69 +233,4 @@ func (s *Service) CommitExport(handle string, res *ExportResult) {
 			slog.Warn("qwk export: failed to update lastread", "area", upd.AreaID, "error", err)
 		}
 	}
-}
-
-// ImportOptions configure a REP import.
-type ImportOptions struct {
-	// Handle is the posting user's handle (becomes the message From).
-	Handle string
-	// Signature, when non-empty, is appended to each imported message body.
-	Signature string
-	// Authorize, when set, gates posting per area (e.g. an ACS write check).
-	// Returning false skips the message. A nil Authorize allows all areas.
-	Authorize func(area *message.MessageArea) bool
-	// Notify, when set, is called just before posting to an area. It is a UI
-	// hook (e.g. printing "Posting to <area>") and must not block.
-	Notify func(area *message.MessageArea)
-}
-
-// ImportResult summarizes a REP import.
-type ImportResult struct {
-	Posted  int
-	Skipped int
-}
-
-// ImportREP parses a REP packet and posts its replies into the message store,
-// routing each message to its conference's area. Unknown areas, unauthorized
-// areas, and post failures are skipped (and counted), so a single bad message
-// does not abort the whole import.
-func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, error) {
-	msgs, err := qwk.ReadREP(bytes.NewReader(data), int64(len(data)), s.bbsID)
-	if err != nil {
-		return nil, err
-	}
-
-	res := &ImportResult{}
-	for _, msg := range msgs {
-		area, exists := s.store.GetAreaByID(msg.Conference)
-		if !exists {
-			slog.Warn("qwk import: unknown conference, skipping", "conference", msg.Conference)
-			res.Skipped++
-			continue
-		}
-
-		if opts.Authorize != nil && !opts.Authorize(area) {
-			slog.Warn("qwk import: not authorized to post, skipping", "tag", area.Tag)
-			res.Skipped++
-			continue
-		}
-
-		if opts.Notify != nil {
-			opts.Notify(area)
-		}
-
-		body := msg.Body
-		if opts.Signature != "" {
-			body = body + "\n\n" + opts.Signature
-		}
-
-		if _, err := s.store.AddMessage(area.ID, opts.Handle, msg.To, msg.Subject, body, ""); err != nil {
-			slog.Error("qwk import: failed to post", "area", area.ID, "error", err)
-			res.Skipped++
-			continue
-		}
-		res.Posted++
-	}
-
-	return res, nil
 }

@@ -100,6 +100,13 @@ func NewMessageManager(dataPath, configPath, boardName string, networkTearlines 
 	return mm, nil
 }
 
+// DataPath returns the base data directory this manager was constructed with
+// (e.g. "data"). Used by adjacent subsystems that persist their own state
+// alongside the message bases.
+func (mm *MessageManager) DataPath() string {
+	return mm.dataPath
+}
+
 func normalizeNetworkTearlines(input map[string]string) map[string]string {
 	if len(input) == 0 {
 		return nil
