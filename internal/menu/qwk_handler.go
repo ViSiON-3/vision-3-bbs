@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,7 +12,8 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -57,97 +57,32 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	bbsID := qwkBBSID(e.ServerCfg.BoardName)
-	pw := qwk.NewPacketWriter(bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName)
-	pw.SetPersonalTo(currentUser.Handle)
-
-	// Gather messages from areas the user has tagged for newscan
-	taggedAreas := currentUser.TaggedMessageAreaTags
-	if len(taggedAreas) == 0 {
-		// Fall back to all areas the user can access
-		for _, area := range e.MessageMgr.ListAreas() {
-			taggedAreas = append(taggedAreas, area.Tag)
-		}
-	}
+	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName)
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15Building QWK packet...|07\r\n")), outputMode)
 
-	// pendingLastRead accumulates per-area last-read updates.
-	// They are only committed to the database after a successful transfer
-	// so that a failed or cancelled download does not advance the pointers.
-	type lastReadUpdate struct {
-		areaID int
-		msgNum int
-	}
-	var pendingLastRead []lastReadUpdate
-
-	totalMsgs := 0
-	for _, areaTag := range taggedAreas {
-		area, exists := e.MessageMgr.GetAreaByTag(areaTag)
-		if !exists {
-			continue
-		}
-
-		pw.AddConference(area.ID, area.Name)
-
-		// Get last read for this user in this area
-		lastRead, err := e.MessageMgr.GetLastRead(area.ID, currentUser.Handle)
-		if err != nil {
-			slog.Warn("failed to get lastread for area", "node", nodeNumber, "area", area.ID, "error", err)
-			continue
-		}
-
-		msgCount, err := e.MessageMgr.GetMessageCountForArea(area.ID)
-		if err != nil {
-			slog.Warn("failed to get msg count for area", "node", nodeNumber, "area", area.ID, "error", err)
-			continue
-		}
-
-		// Pack new messages (up to 500 per area to limit packet size)
-		maxPerArea := 500
-		packed := 0
-		highestPacked := lastRead
-		for msgNum := lastRead + 1; msgNum <= msgCount && packed < maxPerArea; msgNum++ {
-			msg, err := e.MessageMgr.GetMessage(area.ID, msgNum)
-			if err != nil {
-				continue
-			}
-			if msg.IsDeleted {
-				continue
-			}
-
-			pw.AddMessage(qwk.PacketMessage{
-				Conference: area.ID,
-				Number:     msg.MsgNum,
-				From:       msg.From,
-				To:         msg.To,
-				Subject:    msg.Subject,
-				DateTime:   msg.DateTime,
-				Body:       msg.Body,
-				Private:    msg.IsPrivate,
-			})
-			packed++
-			totalMsgs++
-			if msgNum > highestPacked {
-				highestPacked = msgNum
-			}
-		}
-
-		if packed > 0 {
-			newLastRead := highestPacked
-			if newLastRead > msgCount {
-				newLastRead = msgCount
-			}
-			pendingLastRead = append(pendingLastRead, lastReadUpdate{areaID: area.ID, msgNum: newLastRead})
-		}
+	// BuildPacket gathers new messages and returns the packet bytes plus the
+	// pending newscan advances. The advances are committed (via CommitExport)
+	// only after a successful transfer, so a failed or cancelled download does
+	// not move the pointers.
+	res, err := svc.BuildPacket(qwkservice.ExportOptions{
+		Handle:     currentUser.Handle,
+		TaggedTags: currentUser.TaggedMessageAreaTags,
+	})
+	if err != nil {
+		slog.Error("failed to build QWK packet", "node", nodeNumber, "error", err)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error building QWK packet.|07\r\n")), outputMode)
+		time.Sleep(2 * time.Second)
+		return currentUser, "", nil
 	}
 
-	if totalMsgs == 0 {
+	if res.MessageCount == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07No new messages to download.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
 		return currentUser, "", nil
 	}
 
-	statusMsg := fmt.Sprintf("\r\n|14%d|07 message(s) packed into QWK packet.\r\n", totalMsgs)
+	statusMsg := fmt.Sprintf("\r\n|14%d|07 message(s) packed into QWK packet.\r\n", res.MessageCount)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(statusMsg)), outputMode)
 
 	// Prompt user to send or quit
@@ -172,7 +107,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
 
-	if err := pw.WritePacket(tmpFile); err != nil {
+	if _, err := tmpFile.Write(res.Packet); err != nil {
 		tmpFile.Close()
 		slog.Error("failed to write packet", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
@@ -217,11 +152,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	} else {
 		// Transfer succeeded — commit the newscan pointer advances.
-		for _, upd := range pendingLastRead {
-			if err := e.MessageMgr.SetLastRead(upd.areaID, currentUser.Handle, upd.msgNum); err != nil {
-				slog.Warn("failed to update lastread for area", "node", nodeNumber, "area", upd.areaID, "error", err)
-			}
-		}
+		svc.CommitExport(currentUser.Handle, res)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|10QWK packet sent successfully.|07\r\n")), outputMode)
 	}
 	time.Sleep(2 * time.Second)
@@ -293,19 +224,27 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Process the REP packet
-	repInfo, err := os.Stat(repPath)
-	if err != nil {
-		slog.Error("failed to stat REP", "node", nodeNumber, "error", err)
-		return currentUser, "", nil
-	}
-
 	repData, err := os.ReadFile(repPath)
 	if err != nil {
 		slog.Error("failed to read REP", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
-	messages, err := qwk.ReadREP(bytes.NewReader(repData), repInfo.Size(), bbsID)
+	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName)
+
+	// The service owns parsing and posting; the menu supplies the ACS gate and
+	// per-area progress output as callbacks so terminal/UI concerns stay here.
+	importRes, err := svc.ImportREP(repData, bbsID, qwkservice.ImportOptions{
+		Handle:    currentUser.Handle,
+		Signature: currentUser.AutoSignature,
+		Authorize: func(area *message.MessageArea) bool {
+			return area.ACSWrite == "" || checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime)
+		},
+		Notify: func(area *message.MessageArea) {
+			postMsg := strings.ReplaceAll(e.LoadedStrings.PostingQWKMsg, "|BN", area.Name)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+postMsg)), outputMode)
+		},
+	})
 	if err != nil {
 		slog.Error("failed to parse REP", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error reading REP packet.|07\r\n")), outputMode)
@@ -313,42 +252,13 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	if len(messages) == 0 {
+	if importRes.Posted+importRes.Skipped == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07REP packet contains no messages.|07\r\n")), outputMode)
 		time.Sleep(2 * time.Second)
 		return currentUser, "", nil
 	}
 
-	// Post each message
-	posted := 0
-	for _, msg := range messages {
-		area, exists := e.MessageMgr.GetAreaByID(msg.Conference)
-		if !exists {
-			slog.Warn("unknown conference, skipping", "node", nodeNumber, "conference", msg.Conference)
-			continue
-		}
-
-		// Check write ACS
-		if area.ACSWrite != "" && !checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime) {
-			slog.Warn("user lacks write ACS for area", "node", nodeNumber, "tag", area.Tag)
-			continue
-		}
-
-		postMsg := strings.ReplaceAll(e.LoadedStrings.PostingQWKMsg, "|BN", area.Name)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+postMsg)), outputMode)
-
-		// Append auto-signature if user has one
-		qwkBody := msg.Body
-		if currentUser.AutoSignature != "" {
-			qwkBody = qwkBody + "\n\n" + currentUser.AutoSignature
-		}
-		_, err := e.MessageMgr.AddMessage(area.ID, currentUser.Handle, msg.To, msg.Subject, qwkBody, "")
-		if err != nil {
-			slog.Error("failed to post to area", "node", nodeNumber, "area", area.ID, "error", err)
-			continue
-		}
-		posted++
-	}
+	posted := importRes.Posted
 
 	// Update user stats
 	if posted > 0 && userManager != nil {
