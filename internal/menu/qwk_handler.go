@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -19,23 +20,22 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// qwkBBSID returns a short BBS identifier for QWK packet filenames.
-// Derived from BoardName: alphanumeric only, max 8 chars, uppercase.
+// qwkBBSID returns a short BBS identifier derived from the board name
+// (alphanumeric, max 8 chars, uppercase), falling back to "BBS".
 func qwkBBSID(boardName string) string {
-	var b strings.Builder
-	for _, r := range boardName {
-		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-			if b.Len() >= 8 {
-				break
-			}
-		}
+	if id := config.NormalizeQWKID(boardName); id != "" {
+		return id
 	}
-	id := strings.ToUpper(b.String())
-	if id == "" {
-		id = "BBS"
+	return "BBS"
+}
+
+// resolveQWKID returns the BBS's QWK packet ID: the explicitly configured ID
+// (normalized) if set, otherwise one derived from the board name (qwkBBSID).
+func resolveQWKID(cfg config.ServerConfig) string {
+	if id := config.NormalizeQWKID(cfg.QWKID); id != "" {
+		return id
 	}
-	return id
+	return qwkBBSID(cfg.BoardName)
 }
 
 // runQWKDownload builds and sends a QWK mail packet to the user.
@@ -56,7 +56,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	bbsID := qwkBBSID(e.ServerCfg.BoardName)
+	bbsID := resolveQWKID(e.ServerCfg)
 	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName, e.MessageMgr.DataPath())
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15Building QWK packet...|07\r\n")), outputMode)
@@ -180,7 +180,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	bbsID := qwkBBSID(e.ServerCfg.BoardName)
+	bbsID := resolveQWKID(e.ServerCfg)
 
 	// Protocol selection
 	proto, ok, protoErr := e.selectTransferProtocol(s, terminal, outputMode)

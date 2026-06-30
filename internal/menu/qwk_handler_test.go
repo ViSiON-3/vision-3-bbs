@@ -4,7 +4,24 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
+
+func TestResolveQWKID(t *testing.T) {
+	// Explicit QWKID wins and is normalized.
+	if got := resolveQWKID(config.ServerConfig{QWKID: "my id!", BoardName: "Whatever"}); got != "MYID" {
+		t.Errorf("explicit: want MYID, got %q", got)
+	}
+	// Blank QWKID falls back to board-name derivation.
+	if got := resolveQWKID(config.ServerConfig{QWKID: "", BoardName: "ViSiON/3 BBS"}); got != "VISION3B" {
+		t.Errorf("derive: want VISION3B, got %q", got)
+	}
+	// Both blank/invalid → BBS.
+	if got := resolveQWKID(config.ServerConfig{QWKID: "!!!", BoardName: "###"}); got != "BBS" {
+		t.Errorf("fallback: want BBS, got %q", got)
+	}
+}
 
 func TestQwkBBSID(t *testing.T) {
 	tests := []struct {
