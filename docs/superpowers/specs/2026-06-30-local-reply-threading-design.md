@@ -36,8 +36,14 @@ echomail replies link immediately rather than only after `Link()`).
 
 - Thread navigation commands (jump-to-parent, next-in-chain).
 - QWK export/import of the reply reference (QWK Phase 4 — now unblocked).
-- Changing the private-flag behavior of replies to private mail.
 - Backfilling reply pointers for existing messages.
+
+> Update (during review): originally scoped out, but a reply to a private
+> message must stay private to remain visible to its recipient (the private-mail
+> reader only shows `IsPrivate` messages), so `handleReply` now routes private
+> replies through `AddPrivateReply` — preserving the `MSG_PRIVATE` flag while
+> recording the parent pointer. Without this, the private-mail half of the
+> feature would be dormant.
 
 ## Decisions (confirmed)
 
