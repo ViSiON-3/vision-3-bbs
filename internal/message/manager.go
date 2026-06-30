@@ -577,12 +577,10 @@ func splitNetmailTo(to string) (name, addr string) {
 	return strings.TrimSpace(to[:idx]), candidate
 }
 
-// AddMessage creates and writes a new message to the specified area.
-// For echomail areas, it automatically handles MSGID, kludges, tearline, and origin.
-// For netmail areas, "user@zone:net/node" in the To field is automatically split
-// into the username and destination address.
-// Returns the 1-based message number assigned.
-func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
+// addMessage is the shared implementation behind AddMessage, AddMessageWithDate,
+// AddPrivateMessage, and AddReply.
+func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyToMsgID string,
+	replyToNum int, dateTime time.Time, private bool) (int, error) {
 	b, area, err := mm.openBase(areaID)
 	if err != nil {
 		return 0, err
@@ -601,15 +599,21 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 	msg.To = to
 	msg.Subject = subject
 	msg.Text = jamBody
-	msg.DateTime = time.Now()
+	msg.DateTime = dateTime
 
+	if private {
+		msg.Header = &jam.MessageHeader{Attribute: jam.MsgPrivate | jam.MsgLocal}
+	}
+	if replyToNum > 0 {
+		msg.ReplyTo = uint32(replyToNum)
+	}
 	if replyToMsgID != "" {
 		msg.ReplyID = replyToMsgID
 	}
 
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
 
-	// For netmail, split "user@address" into separate To and DestAddr fields
+	// For netmail, split "user@address" into separate To and DestAddr fields.
 	if msgType.IsNetmail() {
 		name, addr := splitNetmailTo(to)
 		msg.To = name
@@ -633,117 +637,40 @@ func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyT
 
 	if err == nil {
 		mm.invalidateThreadIndex(areaID)
-		if mm.OnMessagePosted != nil {
+		if !private && mm.OnMessagePosted != nil {
 			mm.OnMessagePosted(area, msgNum, from, to, subject, body)
 		}
 	}
 	return msgNum, err
+}
+
+// AddMessage creates and writes a new message to the specified area.
+// For echomail areas, it automatically handles MSGID, kludges, tearline, and origin.
+// For netmail areas, "user@zone:net/node" in the To field is automatically split
+// into the username and destination address.
+// Returns the 1-based message number assigned.
+func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), false)
 }
 
 // AddMessageWithDate is like AddMessage but uses the provided timestamp instead
 // of time.Now(). Used by V3Net to preserve the original authored date.
 func (mm *MessageManager) AddMessageWithDate(areaID int, from, to, subject, body, replyToMsgID string, dateTime time.Time) (int, error) {
-	b, area, err := mm.openBase(areaID)
-	if err != nil {
-		return 0, err
-	}
-
-	jamBody := body
-	if mm.BodyTransform != nil {
-		jamBody = mm.BodyTransform(areaID, body)
-	}
-
-	msg := jam.NewMessage()
-	msg.From = from
-	msg.To = to
-	msg.Subject = subject
-	msg.Text = jamBody
-	msg.DateTime = dateTime
-
-	if replyToMsgID != "" {
-		msg.ReplyID = replyToMsgID
-	}
-
-	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
-
-	if msgType.IsNetmail() {
-		name, addr := splitNetmailTo(to)
-		msg.To = name
-		if addr != "" {
-			msg.DestAddr = addr
-		}
-	}
-
-	var msgNum int
-	if msgType.IsEchomail() || msgType.IsNetmail() {
-		msg.OrigAddr = area.OriginAddr
-		msgNum, err = b.WriteMessageExt(msg, msgType, area.EchoTag, mm.boardName, mm.tearlineForNetwork(area.Network))
-	} else {
-		msgNum, err = b.WriteMessage(msg)
-	}
-
-	b.Close()
-
-	if err == nil {
-		mm.invalidateThreadIndex(areaID)
-		if mm.OnMessagePosted != nil {
-			mm.OnMessagePosted(area, msgNum, from, to, subject, body)
-		}
-	}
-	return msgNum, err
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, dateTime, false)
 }
 
-// AddPrivateMessage creates and writes a new private message to the specified area.
-// It sets the MSG_PRIVATE flag on the message to indicate it's private user-to-user mail.
+// AddPrivateMessage creates and writes a new private (MSG_PRIVATE) message.
 // For netmail areas, "user@zone:net/node" in the To field is automatically split
-// into the username and destination address.
-// Returns the 1-based message number assigned.
+// into the username and destination address. Returns the 1-based message number.
 func (mm *MessageManager) AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-	b, area, err := mm.openBase(areaID)
-	if err != nil {
-		return 0, err
-	}
-	defer b.Close()
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), true)
+}
 
-	msg := jam.NewMessage()
-	msg.From = from
-	msg.To = to
-	msg.Subject = subject
-	msg.Text = body
-	msg.DateTime = time.Now()
-
-	// Initialize header to set the MSG_PRIVATE flag
-	msg.Header = &jam.MessageHeader{
-		Attribute: jam.MsgPrivate | jam.MsgLocal,
-	}
-
-	if replyToMsgID != "" {
-		msg.ReplyID = replyToMsgID
-	}
-
-	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
-
-	// For netmail, split "user@address" into separate To and DestAddr fields
-	if msgType.IsNetmail() {
-		name, addr := splitNetmailTo(to)
-		msg.To = name
-		if addr != "" {
-			msg.DestAddr = addr
-		}
-	}
-
-	var msgNum int
-	if msgType.IsEchomail() || msgType.IsNetmail() {
-		msg.OrigAddr = area.OriginAddr
-		msgNum, err = b.WriteMessageExt(msg, msgType, area.EchoTag, mm.boardName, mm.tearlineForNetwork(area.Network))
-	} else {
-		msgNum, err = b.WriteMessage(msg)
-	}
-
-	if err == nil {
-		mm.invalidateThreadIndex(areaID)
-	}
-	return msgNum, err
+// AddReply creates and writes a reply, recording the parent's message number
+// (replyToNum) as the JAM ReplyTo so local areas thread, and the parent's FTN
+// MSGID (replyToMsgID, may be "") as ReplyID so echomail links via jam.Link().
+func (mm *MessageManager) AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false)
 }
 
 // GetMessage reads a single message by area ID and 1-based message number.
