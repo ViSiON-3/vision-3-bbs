@@ -71,6 +71,23 @@ QWK download and upload use the same file transfer subsystem as file areas. Any 
 
 When processing a REP upload, ViSiON/3 checks `acs_write` on the destination message area for each reply. Replies to areas where the user lacks write access are silently skipped and logged at `WARN` level.
 
+## Conference numbering and private mail
+
+ViSiON/3 assigns each exported message area a **stable QWK conference number**
+recorded in `data/qwk_conferences.json`. This file is created and maintained
+automatically — do not hand-edit it. Once an area is assigned a number, that
+number never changes, so offline readers and saved reply packets keep working
+even if local area IDs are renumbered.
+
+- Public areas are numbered from their local area ID the first time they are
+  exported, then frozen.
+- The private-mail area (tag `PRIVMAIL`) is always exported as **conference 0**.
+
+**Private mail is per-user.** A QWK packet only includes private messages
+addressed to, or sent by, the downloading user — never other users' mail.
+Replies uploaded to conference 0 are posted as private mail, not to a public
+base.
+
 ## Troubleshooting
 
 **User gets "No new messages to download"**
