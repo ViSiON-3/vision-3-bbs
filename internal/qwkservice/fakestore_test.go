@@ -21,12 +21,13 @@ type fakeStore struct {
 	posted     []postedMessage
 	privPosted []postedMessage
 	setReads   []setRead
-	addErr     map[int]error // areaID -> error to return from AddMessage
+	addErr     map[int]error // areaID -> error to return from AddReply/AddPrivateReply
 }
 
 type postedMessage struct {
 	areaID                       int
 	from, to, subject, body, rep string
+	replyToNum                   int
 }
 
 type setRead struct {
@@ -85,19 +86,19 @@ func (f *fakeStore) GetMessage(areaID, msgNum int) (*message.DisplayMessage, err
 	return list[msgNum-1], nil
 }
 
-func (f *fakeStore) AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
+func (f *fakeStore) AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
 	if err := f.addErr[areaID]; err != nil {
 		return 0, err
 	}
-	f.posted = append(f.posted, postedMessage{areaID, from, to, subject, body, replyToMsgID})
+	f.posted = append(f.posted, postedMessage{areaID, from, to, subject, body, replyToMsgID, replyToNum})
 	return len(f.posted), nil
 }
 
-func (f *fakeStore) AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
+func (f *fakeStore) AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
 	if err := f.addErr[areaID]; err != nil {
 		return 0, err
 	}
-	f.privPosted = append(f.privPosted, postedMessage{areaID, from, to, subject, body, replyToMsgID})
+	f.privPosted = append(f.privPosted, postedMessage{areaID, from, to, subject, body, replyToMsgID, replyToNum})
 	return len(f.privPosted), nil
 }
 

@@ -225,3 +225,27 @@ func TestWriteREP_CapsBBSIDToEightChars(t *testing.T) {
 		t.Errorf("first-block BBSID = %q, want LONGERNA", p.BBSID)
 	}
 }
+
+func TestREP_RoundTripReplyToNumber(t *testing.T) {
+	in := []PacketMessage{
+		{Conference: 1, Number: 1, From: "a", To: "b", Subject: "First",
+			DateTime: time.Date(2026, 3, 5, 10, 0, 0, 0, time.UTC), Body: "root"},
+		{Conference: 1, Number: 2, From: "a", To: "b", Subject: "Re: First",
+			DateTime: time.Date(2026, 3, 5, 11, 0, 0, 0, time.UTC), Body: "reply",
+			ReplyToNumber: 1},
+	}
+	data := buildREP(t, "VISION3", in)
+	out, err := ReadREP(bytes.NewReader(data), int64(len(data)), "VISION3")
+	if err != nil {
+		t.Fatalf("ReadREP: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("want 2 messages, got %d", len(out))
+	}
+	if out[0].ReplyToNumber != 0 {
+		t.Errorf("root ReplyToNumber: want 0, got %d", out[0].ReplyToNumber)
+	}
+	if out[1].ReplyToNumber != 1 {
+		t.Errorf("reply ReplyToNumber: want 1, got %d", out[1].ReplyToNumber)
+	}
+}
