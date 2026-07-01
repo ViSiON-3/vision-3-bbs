@@ -18,6 +18,7 @@ The QWK packet is a standard ZIP archive containing:
 | `CONTROL.DAT` | BBS info, packet date/time, conference list |
 | `DOOR.ID` | Software identification |
 | `MESSAGES.DAT` | All messages in 128-byte block format |
+| `HEADERS.DAT` | Extended headers (full-length To/From/Subject, Message-ID, timestamp) — see [Long headers](#long-headers-headersdat) |
 | `NNN.NDX` | Per-conference message index (one file per conference) |
 | `PERSONAL.NDX` | Index of messages addressed directly to the user |
 
@@ -124,6 +125,56 @@ packet in `data/qwk_dedup.db` (a small SQLite database, created automatically).
 Re-uploading the exact same `.REP` — for example after a dropped mobile
 connection — posts nothing the second time and reports the packet as already
 uploaded. Fingerprints are kept per user and pruned after 90 days.
+
+## Files and data
+
+QWK reads and writes these artifacts. The `configs/` files are sysop-editable;
+the `data/` files are created and maintained automatically — **do not hand-edit
+them.**
+
+| Path | Purpose | Managed by |
+|------|---------|------------|
+| `configs/config.json` (`qwkID`) | Explicit QWK BBS ID; blank = derived from Board Name (see [BBS ID](#bbs-id)) | Sysop (config editor) |
+| `configs/protocols.json` | File-transfer protocols offered for QWK/REP transfers; absent = built-in `sz`/`rz` defaults (see [Transfer Protocols](#transfer-protocols)) | Sysop |
+| `data/qwk_conferences.json` | Stable QWK conference-number map (frozen once assigned) | Automatic |
+| `data/qwk_dedup.db` | SQLite record of imported REP fingerprints for duplicate detection; pruned after 90 days | Automatic |
+
+`HEADERS.DAT` is not a stored file — it lives inside each `.QWK`/`.REP` packet
+(see [Packet Format](#packet-format) and [Long headers](#long-headers-headersdat)).
+
+## Operator logging
+
+QWK activity is logged through the server's structured logger (`slog`). The lines
+below are the ones worth watching; each carries context fields such as `node`,
+`area`, `conference`, or `error`.
+
+**Download (`QWKDOWNLOAD`)**
+
+| Level | Message | Meaning / action |
+|-------|---------|------------------|
+| INFO | `QWK packet written` | Packet built successfully (`messages`, `blocks` counts). |
+| WARN | `qwk export: failed to get lastread` / `failed to get message count` | A tagged area could not be read; it is skipped and export continues. Check that area's message base. |
+| WARN | `qwk export: failed to update lastread` | The newscan pointer for an area could not be advanced after a successful download; the user may re-receive those messages next time. |
+| WARN | `QWK download transfer failed` | The file transfer failed or was cancelled. Lastread is **not** advanced, so the user can safely retry. Most often the protocol binary is missing (see [Transfer Protocols](#transfer-protocols)). |
+| ERROR | `failed to build QWK packet` / `failed to write packet` / `failed to create temp dir` / `failed to create temp file` / `rename failed` | The download aborted before sending; the user sees an error. Check disk space and permissions on the temp/work directory. |
+| ERROR | `failed to update user stats` | Cosmetic: the post-transfer stat update failed, but the packet was still sent. |
+
+**Upload (`QWKUPLOAD`)**
+
+| Level | Message | Meaning / action |
+|-------|---------|------------------|
+| INFO | `parsed QWK REP messages` | The uploaded packet parsed; `count` is the number of replies found. |
+| WARN | `QWK REP receive error, checking for files anyway` | The receive protocol reported an error, but a `.REP` may still have arrived; import proceeds if one is present. |
+| WARN | `invalid QWK REP block count` / `QWK REP message extends past end of data` | A malformed message in the packet at `offset`; parsing stops there. Replies parsed before it are still posted. |
+| WARN | `qwk import: unknown conference` | A reply targets a `conference` number this BBS does not map; that reply is skipped. |
+| WARN | `qwk import: not authorized to post, skipping` | The user lacks `acs_write` on the destination area (`tag`); that reply is skipped. This is the per-area write gate. |
+| ERROR | `qwk import: failed to post` | Writing a reply to the message base failed (`area`); that reply is skipped, others continue. |
+| ERROR | `failed to read REP` / `failed to process REP` | The uploaded packet could not be read or parsed; nothing is posted. |
+
+Two upload outcomes are reported **to the user**, not as log lines: a packet
+addressed to another BBS is rejected (wrong BBS ID in the first block), and a
+re-uploaded identical packet is reported as already uploaded (duplicate
+detection). See [Upload safety](#upload-safety-destination-check-and-duplicate-detection).
 
 ## Troubleshooting
 
