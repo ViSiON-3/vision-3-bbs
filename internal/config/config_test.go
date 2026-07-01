@@ -5,7 +5,25 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+func TestQWKAPIConfig_Defaults(t *testing.T) {
+	var c QWKAPIConfig
+	if got := c.ListenAddr(); got != ":8666" {
+		t.Errorf("ListenAddr default = %q, want :8666", got)
+	}
+	c.Host, c.Port = "127.0.0.1", 9000
+	if got := c.ListenAddr(); got != "127.0.0.1:9000" {
+		t.Errorf("ListenAddr = %q, want 127.0.0.1:9000", got)
+	}
+	if got := (&QWKAPIConfig{}).TokenTTL(); got != 24*time.Hour {
+		t.Errorf("TokenTTL default = %v, want 24h", got)
+	}
+	if got := (&QWKAPIConfig{TokenTTLHours: 2}).TokenTTL(); got != 2*time.Hour {
+		t.Errorf("TokenTTL = %v, want 2h", got)
+	}
+}
 
 func TestLoadDoors_ValidFile(t *testing.T) {
 	tmpDir := t.TempDir()

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -894,6 +896,10 @@ type ServerConfig struct {
 	// DOS emulation — system-wide dosemu2 settings for DOS door games.
 	DosemuPath string `json:"dosemuPath,omitempty"` // Path to dosemu2 binary (default: /usr/libexec/dosemu2/dosemu2.bin)
 
+	// QWKAPI configures the optional QWK packet transport HTTP API (Phase 7).
+	// Disabled by default.
+	QWKAPI QWKAPIConfig `json:"qwkAPI"`
+
 	// Logging configuration (file location, level, caching, rolling). Shared by
 	// all binaries; each supplies its own default log filename in code.
 	Logging LoggingConfig `json:"logging"`
@@ -959,6 +965,34 @@ type V3NetConfig struct {
 	ConfigPath string            `json:"-"`
 	Hub        V3NetHubConfig    `json:"hub,omitempty"`
 	Leaves     []V3NetLeafConfig `json:"leaves,omitempty"`
+}
+
+// QWKAPIConfig configures the optional QWK packet transport API (Phase 7).
+// Disabled by default. See docs/sysop/messages/qwk-api.md.
+type QWKAPIConfig struct {
+	Enabled       bool   `json:"enabled"`
+	Host          string `json:"host"`          // blank = all interfaces
+	Port          int    `json:"port"`          // default 8666
+	CertFile      string `json:"certFile"`      // blank = auto self-signed
+	KeyFile       string `json:"keyFile"`       // blank = auto self-signed
+	TokenTTLHours int    `json:"tokenTTLHours"` // default 24
+}
+
+// ListenAddr returns host:port for http.Server, defaulting the port to 8666.
+func (c *QWKAPIConfig) ListenAddr() string {
+	port := c.Port
+	if port == 0 {
+		port = 8666
+	}
+	return net.JoinHostPort(c.Host, strconv.Itoa(port))
+}
+
+// TokenTTL returns the bearer-token lifetime, defaulting to 24h.
+func (c *QWKAPIConfig) TokenTTL() time.Duration {
+	if c.TokenTTLHours <= 0 {
+		return 24 * time.Hour
+	}
+	return time.Duration(c.TokenTTLHours) * time.Hour
 }
 
 // V3NetHubConfig configures this node as a V3Net hub.

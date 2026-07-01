@@ -176,6 +176,13 @@ addressed to another BBS is rejected (wrong BBS ID in the first block), and a
 re-uploaded identical packet is reported as already uploaded (duplicate
 detection). See [Upload safety](#upload-safety-destination-check-and-duplicate-detection).
 
+## Packet API (experimental)
+
+An optional HTTPS API can expose QWK download/upload to a future ViSiON/3 mobile
+client, without a terminal session. It is **off by default and experimental** —
+do not enable it in production until a mobile client exists. See
+[QWK Packet API](qwk-api.md).
+
 ## Troubleshooting
 
 **User gets "No new messages to download"**

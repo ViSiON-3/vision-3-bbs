@@ -35,5 +35,6 @@
   "nuvValidate": true,
   "nuvKill": false,
   "nuvLevel": 25,
-  "nuvForm": 1
+  "nuvForm": 1,
+  "qwkAPI": { "enabled": false, "host": "0.0.0.0", "port": 8666, "certFile": "", "keyFile": "", "tokenTTLHours": 24 }
 }
