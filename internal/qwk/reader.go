@@ -70,7 +70,20 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 		return nil, fmt.Errorf("failed to read %s: %w", msgFile.Name, err)
 	}
 
-	msgs, err := parseREPMessages(data)
+	headers := map[int]ExtHeader{}
+	for _, f := range zr.File {
+		if strings.EqualFold(f.Name, "HEADERS.DAT") {
+			hrc, err := f.Open()
+			if err == nil {
+				hdata, _ := io.ReadAll(hrc)
+				hrc.Close()
+				headers = parseHeadersDAT(hdata)
+			}
+			break
+		}
+	}
+
+	msgs, err := parseREPMessages(data, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -96,8 +109,10 @@ func firstBlockID(data []byte) string {
 	return strings.ToUpper(string(block[start:end]))
 }
 
-// parseREPMessages extracts messages from the raw block data.
-func parseREPMessages(data []byte) ([]REPMessage, error) {
+// parseREPMessages extracts messages from the raw block data. The headers map
+// (keyed by byte offset) is used to apply HEADERS.DAT precedence for Subject
+// and To fields that exceed the 25-character base-header limit.
+func parseREPMessages(data []byte, headers map[int]ExtHeader) ([]REPMessage, error) {
 	if len(data) < BlockSize {
 		return nil, fmt.Errorf("REP data too short (%d bytes)", len(data))
 	}
@@ -131,6 +146,17 @@ func parseREPMessages(data []byte) ([]REPMessage, error) {
 		subject := strings.TrimSpace(string(header[71:96]))
 		refStr := strings.TrimSpace(string(header[108:116]))
 		refNum, _ := strconv.Atoi(refStr) // 0 / unparsable => no parent
+
+		// Apply HEADERS.DAT precedence: full-length Subject/To override the
+		// truncated base-header values when present.
+		if h, ok := headers[pos]; ok {
+			if h.Subject != "" {
+				subject = h.Subject
+			}
+			if h.To != "" {
+				to = h.To
+			}
+		}
 
 		// Extract body (starts after header block)
 		bodyBytes := data[pos+BlockSize : pos+totalBytes]
