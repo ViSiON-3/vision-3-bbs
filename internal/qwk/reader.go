@@ -75,9 +75,11 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 		if strings.EqualFold(f.Name, "HEADERS.DAT") {
 			hrc, err := f.Open()
 			if err == nil {
-				hdata, _ := io.ReadAll(hrc)
+				hdata, rerr := io.ReadAll(hrc)
 				hrc.Close()
-				headers = parseHeadersDAT(hdata)
+				if rerr == nil {
+					headers = parseHeadersDAT(hdata)
+				}
 			}
 			break
 		}
