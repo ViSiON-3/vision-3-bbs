@@ -65,6 +65,13 @@ func (ts *tokenStore) sweep() {
 	ts.mu.Unlock()
 }
 
+// size reports the number of stored tokens (test helper).
+func (ts *tokenStore) size() int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return len(ts.m)
+}
+
 // expireForTest backdates a token (same-package test helper).
 func (ts *tokenStore) expireForTest(tok string) {
 	ts.mu.Lock()

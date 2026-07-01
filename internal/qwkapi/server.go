@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -40,6 +41,8 @@ type Server struct {
 	cert        tls.Certificate
 	fingerprint string
 	httpSrv     *http.Server
+	done        chan struct{}
+	closeOnce   sync.Once
 }
 
 // maxREPBytes is the upload cap for REP packets (16 MiB).
@@ -58,11 +61,9 @@ func NewServer(deps Deps) (*Server, error) {
 		packetLimit: newLimiter(30, time.Minute),
 		cert:        cert,
 		fingerprint: fp,
+		done:        make(chan struct{}),
 	}, nil
 }
-
-// Fingerprint returns the TLS cert SHA-256 fingerprint (hex, colon-separated).
-func (s *Server) Fingerprint() string { return s.fingerprint }
 
 // Handler builds the routed, middleware-wrapped handler.
 func (s *Server) Handler() http.Handler {
@@ -81,14 +82,33 @@ func (s *Server) Start() error {
 		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.cert}},
 	}
 	slog.Info("QWK API listening", "addr", s.deps.Config.ListenAddr(), "fingerprint", s.fingerprint)
+	go s.sweepLoop()
 	if err := s.httpSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("qwk api serve: %w", err)
 	}
 	return nil
 }
 
-// Shutdown gracefully stops the server.
+// sweepLoop periodically prunes expired tokens and elapsed rate-limit windows
+// until the server is shut down, bounding the in-memory maps.
+func (s *Server) sweepLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-ticker.C:
+			s.tokens.sweep()
+			s.loginLimit.sweep()
+			s.packetLimit.sweep()
+		}
+	}
+}
+
+// Shutdown gracefully stops the server and its sweeper.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.closeOnce.Do(func() { close(s.done) })
 	if s.httpSrv == nil {
 		return nil
 	}

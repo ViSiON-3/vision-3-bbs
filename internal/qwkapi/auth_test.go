@@ -29,3 +29,16 @@ func TestTokenStore_IssueResolveExpire(t *testing.T) {
 		t.Error("expired token still resolves")
 	}
 }
+
+func TestTokenStore_SweepPrunesExpired(t *testing.T) {
+	ts := newTokenStore(time.Hour)
+	tok, _ := ts.Issue(&user.User{Handle: "felonius"})
+	if ts.size() != 1 {
+		t.Fatalf("size = %d, want 1", ts.size())
+	}
+	ts.expireForTest(tok)
+	ts.sweep()
+	if ts.size() != 0 {
+		t.Errorf("after sweep size = %d, want 0", ts.size())
+	}
+}

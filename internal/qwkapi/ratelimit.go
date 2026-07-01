@@ -38,3 +38,22 @@ func (l *limiter) allow(key string) bool {
 	w.count++
 	return true
 }
+
+// sweep removes fully-elapsed windows, bounding map growth.
+func (l *limiter) sweep() {
+	now := time.Now()
+	l.mu.Lock()
+	for k, w := range l.hits {
+		if now.Sub(w.start) >= l.window {
+			delete(l.hits, k)
+		}
+	}
+	l.mu.Unlock()
+}
+
+// size reports the number of tracked windows (test helper).
+func (l *limiter) size() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.hits)
+}
