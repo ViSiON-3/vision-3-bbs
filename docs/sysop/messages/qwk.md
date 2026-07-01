@@ -81,6 +81,17 @@ Reply relationships are preserved across packets: a reply's parent message numbe
 travels in the QWK reference field, so a reply read or composed in an offline
 reader keeps its "Reply#: N" linkage when it is downloaded or uploaded.
 
+## Long headers (HEADERS.DAT)
+
+The base QWK message header limits To/From/Subject to 25 characters. ViSiON/3 also
+writes a `HEADERS.DAT` file carrying the full-length fields (and a Message-ID and
+timestamp) per the Synchronet extended-header format, and reads it back on REP
+upload — so long subjects survive the round trip. Readers that don't understand
+`HEADERS.DAT` simply ignore the extra file.
+
+(Interoperability with third-party readers such as MultiMail follows the
+documented format but has not yet been validated against a real reader.)
+
 ## Conference numbering and private mail
 
 ViSiON/3 assigns each exported message area a **stable QWK conference number**
