@@ -265,6 +265,28 @@ func TestWriteREP_EmitsHeadersDAT(t *testing.T) {
 	}
 }
 
+func TestREP_RoundTripLongSubjectViaHeaders(t *testing.T) {
+	longSubject := "A very long subject line beyond the 25-character base limit"
+	data := buildREP(t, "VISION3", []PacketMessage{
+		{Conference: 1, Number: 1, From: "SysOp", To: "SomebodyWithALongHandle",
+			Subject: longSubject, DateTime: time.Date(2026, 3, 5, 14, 30, 0, 0, time.UTC), Body: "x"},
+	})
+
+	out, err := ReadREP(bytes.NewReader(data), int64(len(data)), "VISION3")
+	if err != nil {
+		t.Fatalf("ReadREP: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("want 1 message, got %d", len(out))
+	}
+	if out[0].Subject != longSubject {
+		t.Errorf("subject not restored from HEADERS.DAT: got %q (len %d)", out[0].Subject, len(out[0].Subject))
+	}
+	if out[0].To != "SomebodyWithALongHandle" {
+		t.Errorf("to not restored from HEADERS.DAT: got %q", out[0].To)
+	}
+}
+
 func TestREP_RoundTripReplyToNumber(t *testing.T) {
 	in := []PacketMessage{
 		{Conference: 1, Number: 1, From: "a", To: "b", Subject: "First",
