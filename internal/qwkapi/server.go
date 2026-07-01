@@ -1,0 +1,95 @@
+package qwkapi
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+)
+
+// PacketService is the subset of *qwkservice.Service the API needs.
+type PacketService interface {
+	BuildPacket(opts qwkservice.ExportOptions) (*qwkservice.ExportResult, error)
+	CommitExport(handle string, res *qwkservice.ExportResult)
+	ImportREP(data []byte, opts qwkservice.ImportOptions) (*qwkservice.ImportResult, error)
+}
+
+// Deps are the collaborators the API server needs.
+type Deps struct {
+	Config       config.QWKAPIConfig
+	ConfigDir    string // where auto TLS certs live
+	Users        Authenticator
+	Service      PacketService
+	AuthorizeFor func(u *user.User) func(area *message.MessageArea) bool
+}
+
+// Server is the QWK packet transport API.
+type Server struct {
+	deps        Deps
+	tokens      *tokenStore
+	loginLimit  *limiter
+	packetLimit *limiter
+	cert        tls.Certificate
+	fingerprint string
+	httpSrv     *http.Server
+}
+
+// maxREPBytes is the upload cap for REP packets (16 MiB).
+const maxREPBytes = 16 << 20
+
+// NewServer builds the server and resolves its TLS certificate.
+func NewServer(deps Deps) (*Server, error) {
+	cert, fp, err := loadOrCreateCert(deps.Config, deps.ConfigDir)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{
+		deps:        deps,
+		tokens:      newTokenStore(deps.Config.TokenTTL()),
+		loginLimit:  newLimiter(5, time.Minute),
+		packetLimit: newLimiter(30, time.Minute),
+		cert:        cert,
+		fingerprint: fp,
+	}, nil
+}
+
+// Fingerprint returns the TLS cert SHA-256 fingerprint (hex, colon-separated).
+func (s *Server) Fingerprint() string { return s.fingerprint }
+
+// Handler builds the routed, middleware-wrapped handler.
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/qwk/login", requireClient(s.handleLogin))
+	mux.HandleFunc("/api/qwk/packet", requireClient(s.tokens.requireBearer(s.handlePacket)))
+	mux.HandleFunc("/api/qwk/reply", requireClient(s.tokens.requireBearer(s.handleReply)))
+	return mux
+}
+
+// Start serves HTTPS until Shutdown is called; blocking.
+func (s *Server) Start() error {
+	s.httpSrv = &http.Server{
+		Addr:      s.deps.Config.ListenAddr(),
+		Handler:   s.Handler(),
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.cert}},
+	}
+	slog.Info("QWK API listening", "addr", s.deps.Config.ListenAddr(), "fingerprint", s.fingerprint)
+	if err := s.httpSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("qwk api serve: %w", err)
+	}
+	return nil
+}
+
+// Shutdown gracefully stops the server.
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpSrv == nil {
+		return nil
+	}
+	return s.httpSrv.Shutdown(ctx)
+}
