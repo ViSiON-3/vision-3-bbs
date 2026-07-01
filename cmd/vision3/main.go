@@ -33,6 +33,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwkapi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
@@ -1972,6 +1974,34 @@ func main() {
 		slog.Info("telnet server ready", "host", telnetHost, "port", telnetPort)
 	} else {
 		slog.Info("telnet server disabled")
+	}
+
+	// Start QWK packet API if enabled (Phase 7 — experimental).
+	if serverConfig.QWKAPI.Enabled {
+		qwkSvc := qwkservice.New(messageMgr, menu.ResolveQWKID(serverConfig), serverConfig.BoardName, serverConfig.SysOpName, messageMgr.DataPath())
+		apiSrv, apiErr := qwkapi.NewServer(qwkapi.Deps{
+			Config:       serverConfig.QWKAPI,
+			ConfigDir:    rootConfigPath,
+			Users:        userMgr,
+			Service:      qwkSvc,
+			AuthorizeFor: menu.QWKWriteAuthorizer,
+		})
+		if apiErr != nil {
+			logging.Fatal("failed to create QWK API server", "error", apiErr)
+		}
+		go func() {
+			if err := apiSrv.Start(); err != nil {
+				slog.Error("QWK API server error", "error", err)
+			}
+		}()
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = apiSrv.Shutdown(ctx)
+		}()
+		slog.Info("QWK API enabled (experimental)", "addr", serverConfig.QWKAPI.ListenAddr())
+	} else {
+		slog.Info("QWK API disabled")
 	}
 
 	// Block forever — SSH and telnet servers run in background goroutines.
