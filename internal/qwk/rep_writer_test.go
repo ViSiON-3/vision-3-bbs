@@ -287,6 +287,62 @@ func TestREP_RoundTripLongSubjectViaHeaders(t *testing.T) {
 	}
 }
 
+// TestREP_HeadersDATMultiMessageOffsets locks the offset-accumulation logic: a
+// first message whose body spans multiple blocks must push the second message's
+// HEADERS.DAT section to the correct accumulated byte offset, and the full
+// second subject must survive the round trip.
+func TestREP_HeadersDATMultiMessageOffsets(t *testing.T) {
+	// 200-byte body: header(128) + body(200) = 328 -> 3 blocks -> 384 bytes.
+	// So message 2's header starts at 128 (spacer) + 384 = 512 (hex 200).
+	subj1 := "First message with a subject longer than twenty-five characters"
+	subj2 := "Second message also with a subject longer than the base limit"
+	data := buildREP(t, "VISION3", []PacketMessage{
+		{Conference: 1, Number: 1, From: "SysOp", To: "AlphaWithALongHandle",
+			Subject: subj1, DateTime: time.Date(2026, 3, 5, 14, 30, 0, 0, time.UTC),
+			Body: strings.Repeat("x", 200)},
+		{Conference: 1, Number: 2, From: "SysOp", To: "BravoWithALongHandle",
+			Subject: subj2, DateTime: time.Date(2026, 3, 5, 15, 0, 0, 0, time.UTC), Body: "y"},
+	})
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	var hdr []byte
+	for _, f := range zr.File {
+		if f.Name == "HEADERS.DAT" {
+			rc, _ := f.Open()
+			hdr, _ = io.ReadAll(rc)
+			rc.Close()
+		}
+	}
+	if hdr == nil {
+		t.Fatal("REP packet missing HEADERS.DAT")
+	}
+	got := parseHeadersDAT(hdr)
+	if h, ok := got[128]; !ok || h.Subject != subj1 {
+		t.Errorf("section [80] (offset 128): ok=%v subject=%q, want %q", ok, h.Subject, subj1)
+	}
+	if h, ok := got[512]; !ok || h.Subject != subj2 {
+		t.Errorf("section [200] (offset 512): ok=%v subject=%q, want %q; sections=%v", ok, h.Subject, subj2, got)
+	}
+
+	// Read side must agree on the accumulated offset and restore the full subject.
+	out, err := ReadREP(bytes.NewReader(data), int64(len(data)), "VISION3")
+	if err != nil {
+		t.Fatalf("ReadREP: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("want 2 messages, got %d", len(out))
+	}
+	if out[1].Subject != subj2 {
+		t.Errorf("second subject not restored: got %q", out[1].Subject)
+	}
+	if out[1].To != "BravoWithALongHandle" {
+		t.Errorf("second To not restored: got %q", out[1].To)
+	}
+}
+
 func TestREP_RoundTripReplyToNumber(t *testing.T) {
 	in := []PacketMessage{
 		{Conference: 1, Number: 1, From: "a", To: "b", Subject: "First",
