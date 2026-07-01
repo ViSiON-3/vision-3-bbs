@@ -11,7 +11,10 @@ func TestTokenStore_IssueResolveExpire(t *testing.T) {
 	ts := newTokenStore(50 * time.Millisecond)
 	u := &user.User{Handle: "felonius"}
 
-	tok, exp := ts.Issue(u)
+	tok, exp, err := ts.Issue(u)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
 	if tok == "" || !exp.After(time.Now()) {
 		t.Fatalf("bad issue: tok=%q exp=%v", tok, exp)
 	}
@@ -32,7 +35,10 @@ func TestTokenStore_IssueResolveExpire(t *testing.T) {
 
 func TestTokenStore_SweepPrunesExpired(t *testing.T) {
 	ts := newTokenStore(time.Hour)
-	tok, _ := ts.Issue(&user.User{Handle: "felonius"})
+	tok, _, err := ts.Issue(&user.User{Handle: "felonius"})
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
 	if ts.size() != 1 {
 		t.Fatalf("size = %d, want 1", ts.size())
 	}

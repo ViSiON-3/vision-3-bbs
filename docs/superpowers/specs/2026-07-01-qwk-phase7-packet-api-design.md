@@ -81,6 +81,7 @@ type Authenticator interface {
 
 type PacketService interface {
     BuildPacket(opts qwkservice.ExportOptions) (*qwkservice.ExportResult, error)
+    CommitExport(handle string, res *qwkservice.ExportResult)
     ImportREP(data []byte, opts qwkservice.ImportOptions) (*qwkservice.ImportResult, error)
 }
 ```
@@ -132,10 +133,12 @@ bearer-auth middleware first.
 ## Authentication and token store (`auth.go`)
 
 - Tokens are opaque, 256-bit, from `crypto/rand`, hex/base64url-encoded.
-- Store: `map[string]tokenEntry` under a mutex; `tokenEntry{handle string,
-  expiresAt time.Time}`. A background sweeper (ctx-cancellable goroutine) prunes
-  expired entries periodically; validation also rejects expired tokens lazily.
-- `IssueToken(handle) (token, expiresAt)`, `Resolve(token) (handle, ok)`.
+- Store: `map[string]tokenEntry` under a mutex; `tokenEntry{user *user.User,
+  expiresAt time.Time}` — the login-time user snapshot travels with the token so
+  the packet/ACS steps have `TaggedMessageAreaTags`, `AutoSignature`, and
+  `AccessLevel` without a re-fetch. A background sweeper prunes expired entries
+  periodically; validation also rejects (and deletes) expired tokens lazily.
+- `Issue(u *user.User) (token, expiresAt, error)`, `Resolve(token) (*user.User, ok)`.
 - Bearer middleware: read `Authorization: Bearer <token>`; on miss/expired →
   401. On success, attach the handle to the request context for handlers.
 - TTL from config (`tokenTTLHours`, default 24). Restart clears all tokens.
@@ -144,9 +147,10 @@ bearer-auth middleware first.
 
 ## TLS bootstrap (`tlscert.go`)
 
-- If `certFile` and `keyFile` are both set, load them (real cert path).
+- If `certFile` and `keyFile` are both set, load them (real cert path). If
+  exactly one is set, fail closed with a clear error (do not silently fall back).
 - Otherwise, look for an auto-managed pair next to the config
-  (`configs/qwkapi_cert.pem` / `qwkapi_key.pem`). If absent, generate a
+  (`configs/qwkapi_cert.pem` / `configs/qwkapi_key.pem`). If absent, generate a
   self-signed cert (ECDSA P-256, `crypto/x509`, long validity, SANs for the
   configured host plus `localhost`/loopback), persist both files (key `0600`),
   and use them.

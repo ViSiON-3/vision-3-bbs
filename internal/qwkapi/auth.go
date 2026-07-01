@@ -28,15 +28,19 @@ func newTokenStore(ttl time.Duration) *tokenStore {
 }
 
 // Issue creates a random bearer token bound to u, returning it and its expiry.
-func (ts *tokenStore) Issue(u *user.User) (string, time.Time) {
+// It returns an error (and no token) if secure randomness is unavailable.
+func (ts *tokenStore) Issue(u *user.User) (string, time.Time, error) {
 	raw := make([]byte, 32)
-	_, _ = rand.Read(raw)
+	if _, err := rand.Read(raw); err != nil {
+		// Fail closed: never issue a token from an incomplete random buffer.
+		return "", time.Time{}, err
+	}
 	tok := hex.EncodeToString(raw)
 	exp := time.Now().Add(ts.ttl)
 	ts.mu.Lock()
 	ts.m[tok] = tokenEntry{user: u, expiresAt: exp}
 	ts.mu.Unlock()
-	return tok, exp
+	return tok, exp, nil
 }
 
 // Resolve returns the user for a live token; ok is false if unknown or expired.

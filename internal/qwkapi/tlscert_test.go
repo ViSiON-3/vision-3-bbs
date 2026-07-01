@@ -52,3 +52,13 @@ func TestLoadOrCreateCert_ExplicitFiles(t *testing.T) {
 		t.Fatalf("explicit files: fp=%q err=%v", fp, err)
 	}
 }
+
+func TestLoadOrCreateCert_OneOfCertKeyFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	if _, _, err := loadOrCreateCert(config.QWKAPIConfig{CertFile: "/x/cert.pem"}, dir); err == nil {
+		t.Error("expected error when only CertFile is set")
+	}
+	if _, _, err := loadOrCreateCert(config.QWKAPIConfig{KeyFile: "/x/key.pem"}, dir); err == nil {
+		t.Error("expected error when only KeyFile is set")
+	}
+}

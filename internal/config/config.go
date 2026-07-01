@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -982,7 +984,7 @@ func (c *QWKAPIConfig) ListenAddr() string {
 	if port == 0 {
 		port = 8666
 	}
-	return fmt.Sprintf("%s:%d", c.Host, port)
+	return net.JoinHostPort(c.Host, strconv.Itoa(port))
 }
 
 // TokenTTL returns the bearer-token lifetime, defaulting to 24h.

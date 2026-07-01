@@ -33,7 +33,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
 		return
 	}
-	tok, exp := s.tokens.Issue(u)
+	tok, exp, err := s.tokens.Issue(u)
+	if err != nil {
+		slog.Error("qwk api login: token issue failed", "handle", u.Handle, "remote", ip, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal", "could not issue token")
+		return
+	}
 	slog.Info("qwk api login", "handle", u.Handle, "remote", ip, "outcome", "success")
 	writeJSON(w, http.StatusOK, loginResponse{Token: tok, ExpiresAt: exp.UTC().Format("2006-01-02T15:04:05Z07:00")})
 }

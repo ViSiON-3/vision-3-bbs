@@ -83,6 +83,9 @@ func (s *Server) Start() error {
 	}
 	slog.Info("QWK API listening", "addr", s.deps.Config.ListenAddr(), "fingerprint", s.fingerprint)
 	go s.sweepLoop()
+	// Stop the sweeper whenever Start returns — including an immediate listen
+	// failure (e.g. bind error) where Shutdown is never called.
+	defer s.closeOnce.Do(func() { close(s.done) })
 	if err := s.httpSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("qwk api serve: %w", err)
 	}

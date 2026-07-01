@@ -26,7 +26,11 @@ import (
 // returns the certificate and its SHA-256 fingerprint (hex, colon-separated).
 func loadOrCreateCert(cfg config.QWKAPIConfig, dir string) (tls.Certificate, string, error) {
 	certPath, keyPath := cfg.CertFile, cfg.KeyFile
-	if certPath == "" || keyPath == "" {
+	switch {
+	case certPath != "" && keyPath != "":
+		// Explicit cert/key pair — use as configured.
+	case certPath == "" && keyPath == "":
+		// Neither set — use the auto-managed self-signed pair.
 		certPath = filepath.Join(dir, "qwkapi_cert.pem")
 		keyPath = filepath.Join(dir, "qwkapi_key.pem")
 		if !fileExists(certPath) || !fileExists(keyPath) {
@@ -34,6 +38,10 @@ func loadOrCreateCert(cfg config.QWKAPIConfig, dir string) (tls.Certificate, str
 				return tls.Certificate{}, "", fmt.Errorf("generate self-signed cert: %w", err)
 			}
 		}
+	default:
+		// Exactly one set — a misconfiguration; fail closed rather than silently
+		// ignoring the configured file.
+		return tls.Certificate{}, "", fmt.Errorf("qwkapi: certFile and keyFile must be set together (certFile=%q keyFile=%q)", cfg.CertFile, cfg.KeyFile)
 	}
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
