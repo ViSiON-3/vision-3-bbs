@@ -32,9 +32,10 @@ func TestQWKWriteAuthorizer(t *testing.T) {
 
 func TestResolveQWKIDExported(t *testing.T) {
 	// ResolveQWKID is the exported wrapper — same logic as the unexported resolveQWKID.
-	// Explicit QWKID wins and is normalized (uppercase, non-alnum stripped).
-	if got := ResolveQWKID(config.ServerConfig{QWKID: "MYBBS"}); got != "MYBBS" {
-		t.Errorf("explicit QWKID: got %q, want %q", got, "MYBBS")
+	// Explicit QWKID wins and is normalized (uppercase, non-alnum stripped):
+	// a dirty input exercises NormalizeQWKID.
+	if got := ResolveQWKID(config.ServerConfig{QWKID: "my id!", BoardName: "Whatever"}); got != "MYID" {
+		t.Errorf("explicit QWKID: got %q, want %q", got, "MYID")
 	}
 	// Blank QWKID falls back to board-name derivation.
 	if got := ResolveQWKID(config.ServerConfig{QWKID: "", BoardName: "ViSiON/3 BBS"}); got != "VISION3B" {
