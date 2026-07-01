@@ -110,12 +110,24 @@ func TestFixture_TESTBBS_QWK_ExtendedHeaders(t *testing.T) {
 	nums := map[int]bool{}
 	for pos := BlockSize; pos+BlockSize <= len(messagesRaw); {
 		h := messagesRaw[pos : pos+BlockSize]
-		blocks, err := strconv.Atoi(strings.TrimSpace(string(h[116:122])))
+		// This is a golden fixture: malformed content is a hard failure, not a
+		// silent break that could let the invariants pass on a partial scan.
+		blkStr := strings.TrimSpace(string(h[116:122]))
+		blocks, err := strconv.Atoi(blkStr)
 		if err != nil || blocks < 1 {
-			break
+			t.Fatalf("message at offset %d: invalid block count %q: %v", pos, blkStr, err)
 		}
-		num, _ := strconv.Atoi(strings.TrimSpace(string(h[1:8])))
-		ref, _ := strconv.Atoi(strings.TrimSpace(string(h[108:116])))
+		numStr := strings.TrimSpace(string(h[1:8]))
+		num, err := strconv.Atoi(numStr)
+		if err != nil {
+			t.Fatalf("message at offset %d: invalid message number %q: %v", pos, numStr, err)
+		}
+		ref := 0
+		if refStr := strings.TrimSpace(string(h[108:116])); refStr != "" {
+			if ref, err = strconv.Atoi(refStr); err != nil {
+				t.Fatalf("message #%d at offset %d: invalid reference %q: %v", num, pos, refStr, err)
+			}
+		}
 		msgs = append(msgs, msgHdr{
 			offset:  pos,
 			number:  num,
