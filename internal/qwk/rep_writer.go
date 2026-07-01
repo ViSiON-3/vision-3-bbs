@@ -36,7 +36,9 @@ func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 	copy(spacer, bbsID)
 	msgBuf.Write(spacer)
 
+	var offsets []int
 	for _, msg := range msgs {
+		offsets = append(offsets, msgBuf.Len())
 		msgBytes := formatMessage(msg)
 		numBlocks := (len(msgBytes) + BlockSize - 1) / BlockSize
 
@@ -53,6 +55,14 @@ func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 		zw.Close()
 		return fmt.Errorf("%s: %w", name, err)
 	}
+
+	if hdrs := encodeHeadersDAT(extHeadersFor(msgs, offsets, bbsID)); len(hdrs) > 0 {
+		if err := writeZipEntry(zw, "HEADERS.DAT", hdrs); err != nil {
+			zw.Close()
+			return fmt.Errorf("HEADERS.DAT: %w", err)
+		}
+	}
+
 	// Close explicitly so a central-directory flush failure is reported rather
 	// than silently producing a truncated archive.
 	if err := zw.Close(); err != nil {

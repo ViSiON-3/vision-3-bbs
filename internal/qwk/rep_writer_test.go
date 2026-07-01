@@ -3,6 +3,7 @@ package qwk
 import (
 	"archive/zip"
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -209,12 +210,14 @@ func TestWriteREP_CapsBBSIDToEightChars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("zip: %v", err)
 	}
-	var name string
+	var msgName string
 	for _, f := range zr.File {
-		name = f.Name
+		if strings.HasSuffix(f.Name, ".MSG") {
+			msgName = f.Name
+		}
 	}
-	if name != "LONGERNA.MSG" {
-		t.Errorf("REP .MSG filename = %q, want LONGERNA.MSG", name)
+	if msgName != "LONGERNA.MSG" {
+		t.Errorf("REP .MSG filename = %q, want LONGERNA.MSG", msgName)
 	}
 
 	p, err := ReadREPPacket(bytes.NewReader(data), int64(len(data)), "LONGERNA")
@@ -223,6 +226,120 @@ func TestWriteREP_CapsBBSIDToEightChars(t *testing.T) {
 	}
 	if p.BBSID != "LONGERNA" {
 		t.Errorf("first-block BBSID = %q, want LONGERNA", p.BBSID)
+	}
+}
+
+func TestWriteREP_EmitsHeadersDAT(t *testing.T) {
+	longSubject := "A very long subject line beyond the 25-character base limit"
+	data := buildREP(t, "VISION3", []PacketMessage{
+		{Conference: 1, Number: 1, From: "SysOp", To: "SomebodyWithALongHandle",
+			Subject: longSubject, DateTime: time.Date(2026, 3, 5, 14, 30, 0, 0, time.UTC), Body: "x"},
+	})
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	var hdr []byte
+	for _, f := range zr.File {
+		if f.Name == "HEADERS.DAT" {
+			rc, _ := f.Open()
+			hdr, _ = io.ReadAll(rc)
+			rc.Close()
+		}
+	}
+	if hdr == nil {
+		t.Fatal("REP packet missing HEADERS.DAT")
+	}
+	// First message header is at offset 128 -> section [80].
+	got := parseHeadersDAT(hdr)
+	h, ok := got[128]
+	if !ok {
+		t.Fatalf("no section at offset 128; sections=%v", got)
+	}
+	if h.Subject != longSubject {
+		t.Errorf("HEADERS.DAT subject: want full, got %q", h.Subject)
+	}
+	if h.To != "SomebodyWithALongHandle" {
+		t.Errorf("HEADERS.DAT to: want full, got %q", h.To)
+	}
+}
+
+func TestREP_RoundTripLongSubjectViaHeaders(t *testing.T) {
+	longSubject := "A very long subject line beyond the 25-character base limit"
+	data := buildREP(t, "VISION3", []PacketMessage{
+		{Conference: 1, Number: 1, From: "SysOp", To: "SomebodyWithALongHandle",
+			Subject: longSubject, DateTime: time.Date(2026, 3, 5, 14, 30, 0, 0, time.UTC), Body: "x"},
+	})
+
+	out, err := ReadREP(bytes.NewReader(data), int64(len(data)), "VISION3")
+	if err != nil {
+		t.Fatalf("ReadREP: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("want 1 message, got %d", len(out))
+	}
+	if out[0].Subject != longSubject {
+		t.Errorf("subject not restored from HEADERS.DAT: got %q (len %d)", out[0].Subject, len(out[0].Subject))
+	}
+	if out[0].To != "SomebodyWithALongHandle" {
+		t.Errorf("to not restored from HEADERS.DAT: got %q", out[0].To)
+	}
+}
+
+// TestREP_HeadersDATMultiMessageOffsets locks the offset-accumulation logic: a
+// first message whose body spans multiple blocks must push the second message's
+// HEADERS.DAT section to the correct accumulated byte offset, and the full
+// second subject must survive the round trip.
+func TestREP_HeadersDATMultiMessageOffsets(t *testing.T) {
+	// 200-byte body: header(128) + body(200) = 328 -> 3 blocks -> 384 bytes.
+	// So message 2's header starts at 128 (spacer) + 384 = 512 (hex 200).
+	subj1 := "First message with a subject longer than twenty-five characters"
+	subj2 := "Second message also with a subject longer than the base limit"
+	data := buildREP(t, "VISION3", []PacketMessage{
+		{Conference: 1, Number: 1, From: "SysOp", To: "AlphaWithALongHandle",
+			Subject: subj1, DateTime: time.Date(2026, 3, 5, 14, 30, 0, 0, time.UTC),
+			Body: strings.Repeat("x", 200)},
+		{Conference: 1, Number: 2, From: "SysOp", To: "BravoWithALongHandle",
+			Subject: subj2, DateTime: time.Date(2026, 3, 5, 15, 0, 0, 0, time.UTC), Body: "y"},
+	})
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	var hdr []byte
+	for _, f := range zr.File {
+		if f.Name == "HEADERS.DAT" {
+			rc, _ := f.Open()
+			hdr, _ = io.ReadAll(rc)
+			rc.Close()
+		}
+	}
+	if hdr == nil {
+		t.Fatal("REP packet missing HEADERS.DAT")
+	}
+	got := parseHeadersDAT(hdr)
+	if h, ok := got[128]; !ok || h.Subject != subj1 {
+		t.Errorf("section [80] (offset 128): ok=%v subject=%q, want %q", ok, h.Subject, subj1)
+	}
+	if h, ok := got[512]; !ok || h.Subject != subj2 {
+		t.Errorf("section [200] (offset 512): ok=%v subject=%q, want %q; sections=%v", ok, h.Subject, subj2, got)
+	}
+
+	// Read side must agree on the accumulated offset and restore the full subject.
+	out, err := ReadREP(bytes.NewReader(data), int64(len(data)), "VISION3")
+	if err != nil {
+		t.Fatalf("ReadREP: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("want 2 messages, got %d", len(out))
+	}
+	if out[1].Subject != subj2 {
+		t.Errorf("second subject not restored: got %q", out[1].Subject)
+	}
+	if out[1].To != "BravoWithALongHandle" {
+		t.Errorf("second To not restored: got %q", out[1].To)
 	}
 }
 
