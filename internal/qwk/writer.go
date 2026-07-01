@@ -70,7 +70,7 @@ func (pw *PacketWriter) WritePacket(w io.Writer) error {
 		return fmt.Errorf("DOOR.ID: %w", err)
 	}
 
-	ndxData, personalNDX, err := pw.writeMessagesDAT(zw)
+	ndxData, personalNDX, offsets, err := pw.writeMessagesDAT(zw)
 	if err != nil {
 		return fmt.Errorf("MESSAGES.DAT: %w", err)
 	}
@@ -85,6 +85,12 @@ func (pw *PacketWriter) WritePacket(w io.Writer) error {
 	if len(personalNDX) > 0 {
 		if err := writeZipEntry(zw, "PERSONAL.NDX", personalNDX); err != nil {
 			return fmt.Errorf("PERSONAL.NDX: %w", err)
+		}
+	}
+
+	if hdrs := encodeHeadersDAT(extHeadersFor(pw.messages, offsets, pw.bbsID)); len(hdrs) > 0 {
+		if err := writeZipEntry(zw, "HEADERS.DAT", hdrs); err != nil {
+			return fmt.Errorf("HEADERS.DAT: %w", err)
 		}
 	}
 
@@ -143,9 +149,9 @@ func (pw *PacketWriter) writeDoorID(zw *zip.Writer) error {
 	return writeZipEntry(zw, "DOOR.ID", buf.Bytes())
 }
 
-// writeMessagesDAT writes all messages and returns NDX data per conference
-// and PERSONAL.NDX data.
-func (pw *PacketWriter) writeMessagesDAT(zw *zip.Writer) (map[int][]byte, []byte, error) {
+// writeMessagesDAT writes all messages and returns NDX data per conference,
+// PERSONAL.NDX data, and the per-message byte offsets into MESSAGES.DAT.
+func (pw *PacketWriter) writeMessagesDAT(zw *zip.Writer) (map[int][]byte, []byte, []int, error) {
 	var msgBuf bytes.Buffer
 
 	// First block is a copyright/spacer block (128 bytes of spaces)
@@ -159,6 +165,7 @@ func (pw *PacketWriter) writeMessagesDAT(zw *zip.Writer) (map[int][]byte, []byte
 	currentBlock := 2 // Block 1 is the spacer; messages start at block 2
 	ndxData := make(map[int][]byte)
 	var personalNDX []byte
+	var offsets []int
 
 	for _, msg := range pw.messages {
 		msgBytes := formatMessage(msg)
@@ -179,16 +186,19 @@ func (pw *PacketWriter) writeMessagesDAT(zw *zip.Writer) (map[int][]byte, []byte
 			personalNDX = append(personalNDX, ndxRecord...)
 		}
 
+		// Record the byte offset of this message before advancing currentBlock.
+		offsets = append(offsets, (currentBlock-1)*BlockSize)
+
 		msgBuf.Write(padded)
 		currentBlock += numBlocks
 	}
 
 	if err := writeZipEntry(zw, "MESSAGES.DAT", msgBuf.Bytes()); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	slog.Info("QWK packet written", "messages", len(pw.messages), "blocks", currentBlock-1)
-	return ndxData, personalNDX, nil
+	return ndxData, personalNDX, offsets, nil
 }
 
 // formatMessage encodes a single message in QWK format.
