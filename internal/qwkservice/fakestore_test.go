@@ -21,7 +21,7 @@ type fakeStore struct {
 	posted     []postedMessage
 	privPosted []postedMessage
 	setReads   []setRead
-	addErr     map[int]error // areaID -> error to return from AddMessage
+	addErr     map[int]error // areaID -> error to return from AddReply/AddPrivateReply
 }
 
 type postedMessage struct {

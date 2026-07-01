@@ -227,7 +227,7 @@ func formatMessage(msg PacketMessage) []byte {
 
 	// Password: positions 96-107 (12 chars) — blank
 
-	// Reference number: positions 108-115 (8 chars) — parent message number.
+	// Reference number: positions 108-115 (8 bytes) — parent message number.
 	copyPadded(header[108:116], fmt.Sprintf("%8d", msg.ReplyToNumber), 8)
 
 	// Body with QWK line ending (0xE3)
