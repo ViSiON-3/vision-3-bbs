@@ -63,7 +63,9 @@ func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	// Commit lastread only after producing the bytes (mirror the terminal path).
+	// Commit lastread only after confirming a non-empty, error-free export, so
+	// the newscan pointers never advance on an empty or failed download (mirror
+	// the terminal path).
 	s.deps.Service.CommitExport(u.Handle, res)
 	slog.Info("qwk api packet", "handle", u.Handle, "remote", clientIP(r), "messages", res.MessageCount)
 	w.Header().Set("Content-Type", "application/zip")

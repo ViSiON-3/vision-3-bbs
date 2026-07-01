@@ -3,6 +3,7 @@ package qwkapi
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -80,7 +81,7 @@ func (s *Server) Start() error {
 		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.cert}},
 	}
 	slog.Info("QWK API listening", "addr", s.deps.Config.ListenAddr(), "fingerprint", s.fingerprint)
-	if err := s.httpSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+	if err := s.httpSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("qwk api serve: %w", err)
 	}
 	return nil
