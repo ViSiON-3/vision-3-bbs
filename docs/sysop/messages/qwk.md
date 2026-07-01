@@ -75,6 +75,12 @@ QWK download and upload use the same file transfer subsystem as file areas. Any 
 
 When processing a REP upload, ViSiON/3 checks `acs_write` on the destination message area for each reply. Replies to areas where the user lacks write access are silently skipped and logged at `WARN` level.
 
+## Reply threading
+
+Reply relationships are preserved across packets: a reply's parent message number
+travels in the QWK reference field, so a reply read or composed in an offline
+reader keeps its "Reply#: N" linkage when it is downloaded or uploaded.
+
 ## Conference numbering and private mail
 
 ViSiON/3 assigns each exported message area a **stable QWK conference number**
