@@ -8,15 +8,41 @@ sessions that built Phases 0–7. Read it, then follow the process below.
 > read/reply/upload loop against real `.QWK`/`.REP` packets — no live browsing,
 > no terminal scraping.
 
-## How to kick off (paste into the new session)
+## Where this is built (separate repo)
 
-> "Start Phase 8 of the ViSiON/3 QWK roadmap — the React Native mobile client.
-> Read `docs/design/design_handoff_qwk_mobile/PHASE8-KICKOFF.md` first (it has the
-> Phase 7 API contract and the design source), then the design handoff
-> `README.md` and screenshots in that folder, and Phase 8 in
-> `docs-internal/plans/2026-06-29-qwk-rep-sync-mobile-design.md`. Use the
-> superpowers brainstorming → writing-plans → subagent-driven-development flow.
-> Begin by brainstorming the app architecture and the first sub-project's spec."
+The mobile client lives in its **own repository**, not in `vision-3-bbs`:
+
+> **https://github.com/ViSiON-3/vision-3-qwk-mobile.git**
+
+`vision-3-bbs` keeps only (a) the **Phase 7 server API** the app talks to and
+(b) this **design handoff** as the canonical design reference. All Phase 8
+application code — React Native app, offline store, QWK/REP parsing on the
+device — is built and committed in `vision-3-qwk-mobile`.
+
+Practical setup for the Phase 8 session:
+
+- Work in the `vision-3-qwk-mobile` repo.
+- Copy this design-handoff bundle (`docs/design/design_handoff_qwk_mobile/`,
+  including this file) into the mobile repo — e.g. under `docs/design/` there —
+  so the app's designs and API contract live with the code. (Or keep
+  `vision-3-bbs` checked out alongside and reference it.)
+- The **Phase 7 API contract below is the cross-repo interface** — the only thing
+  the mobile app needs from `vision-3-bbs`. It is reproduced here so the mobile
+  repo is self-sufficient once the bundle is copied over.
+
+## How to kick off (paste into the new session, working in `vision-3-qwk-mobile`)
+
+> "Start Phase 8 of the ViSiON/3 QWK roadmap — the React Native mobile client,
+> built in this repo (`vision-3-qwk-mobile`). Read the design handoff in
+> `docs/design/design_handoff_qwk_mobile/` — `PHASE8-KICKOFF.md` first (it has the
+> Phase 7 API contract and the design source), then the `README.md` and
+> screenshots. Use the superpowers brainstorming → writing-plans →
+> subagent-driven-development flow. Begin by brainstorming the app architecture
+> and the first sub-project's spec."
+
+(If the design bundle hasn't been copied into this repo yet, add `vision-3-bbs`
+as a source and read the bundle from
+`docs/design/design_handoff_qwk_mobile/` there.)
 
 Phase 8 is large enough that it should be **decomposed into sub-projects** during
 brainstorming (e.g. app shell + navigation; auth/connect; sync/download; offline
