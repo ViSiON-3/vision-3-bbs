@@ -3,6 +3,9 @@ package qwkservice
 import (
 	"archive/zip"
 	"bytes"
+	"io"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -260,5 +263,52 @@ func TestCommitExport_AppliesLastRead(t *testing.T) {
 	}
 	if store.setReads[0] != (setRead{1, "tester", 7}) {
 		t.Errorf("first commit: got %+v", store.setReads[0])
+	}
+}
+
+// firstMsgReplyRef parses the QWK reference field (positions 108-115) of the
+// first message in a packet's MESSAGES.DAT.
+func firstMsgReplyRef(t *testing.T, packet []byte) int {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(packet), int64(len(packet)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name != "MESSAGES.DAT" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Block 1 is the spacer; the first message header starts at offset 128.
+		hdr := data[128:256]
+		ref, _ := strconv.Atoi(strings.TrimSpace(string(hdr[108:116])))
+		return ref
+	}
+	t.Fatal("MESSAGES.DAT not found")
+	return 0
+}
+
+func TestBuildPacket_WritesReplyReference(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL", Name: "General"})
+	m := dm(1, "a", "All", "s", "b")
+	m.ReplyToNum = 7
+	store.seed(1, m)
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	if got := firstMsgReplyRef(t, res.Packet); got != 7 {
+		t.Errorf("exported reply reference: want 7, got %d", got)
 	}
 }

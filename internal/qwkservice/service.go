@@ -30,8 +30,8 @@ type MessageStore interface {
 	SetLastRead(areaID int, username string, msgNum int) error
 	GetMessageCountForArea(areaID int) (int, error)
 	GetMessage(areaID, msgNum int) (*message.DisplayMessage, error)
-	AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error)
-	AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error)
+	AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error)
+	AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error)
 }
 
 // Service orchestrates QWK packet export and REP import for a single BBS
@@ -178,14 +178,15 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			}
 
 			pw.AddMessage(qwk.PacketMessage{
-				Conference: entry.QWKNumber,
-				Number:     msg.MsgNum,
-				From:       msg.From,
-				To:         msg.To,
-				Subject:    msg.Subject,
-				DateTime:   msg.DateTime,
-				Body:       msg.Body,
-				Private:    msg.IsPrivate,
+				Conference:    entry.QWKNumber,
+				Number:        msg.MsgNum,
+				From:          msg.From,
+				To:            msg.To,
+				Subject:       msg.Subject,
+				DateTime:      msg.DateTime,
+				Body:          msg.Body,
+				Private:       msg.IsPrivate,
+				ReplyToNumber: msg.ReplyToNum,
 			})
 			packed++
 			res.MessageCount++

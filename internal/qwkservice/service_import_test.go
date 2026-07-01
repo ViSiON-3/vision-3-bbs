@@ -236,3 +236,35 @@ func TestImportREP_MappedButStaleAreaSkipped(t *testing.T) {
 		t.Errorf("nothing should be posted for a stale mapped conference: public=%d priv=%d", len(store.posted), len(store.privPosted))
 	}
 }
+
+func TestImportREP_SetsReplyPointer(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL", Name: "General"})
+	rep := makeREP(t, "VISION3", []qwk.PacketMessage{
+		{Conference: 1, Number: 1, To: "SysOp", Subject: "Re", DateTime: time.Now(), Body: "reply", ReplyToNumber: 5},
+	})
+
+	svc := newTestService(t, store)
+	if _, err := svc.ImportREP(rep, ImportOptions{Handle: "tester"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.posted) != 1 || store.posted[0].replyToNum != 5 {
+		t.Errorf("want AddReply with replyToNum 5, got %+v", store.posted)
+	}
+}
+
+func TestImportREP_PrivateReplyPointer(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 3, Tag: "PRIVMAIL", Name: "Private Mail"})
+	rep := makeREP(t, "VISION3", []qwk.PacketMessage{
+		{Conference: 0, Number: 1, To: "friend", Subject: "Re", DateTime: time.Now(), Body: "x", ReplyToNumber: 4},
+	})
+
+	svc := newTestService(t, store)
+	if _, err := svc.ImportREP(rep, ImportOptions{Handle: "tester"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.privPosted) != 1 || store.privPosted[0].replyToNum != 4 {
+		t.Errorf("want AddPrivateReply with replyToNum 4, got %+v", store.privPosted)
+	}
+}

@@ -100,9 +100,9 @@ func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, err
 
 		var perr error
 		if kind == KindPrivateMail {
-			_, perr = s.store.AddPrivateMessage(area.ID, opts.Handle, msg.To, msg.Subject, body, "")
+			_, perr = s.store.AddPrivateReply(area.ID, opts.Handle, msg.To, msg.Subject, body, "", msg.ReplyToNumber)
 		} else {
-			_, perr = s.store.AddMessage(area.ID, opts.Handle, msg.To, msg.Subject, body, "")
+			_, perr = s.store.AddReply(area.ID, opts.Handle, msg.To, msg.Subject, body, "", msg.ReplyToNumber)
 		}
 		if perr != nil {
 			slog.Error("qwk import: failed to post", "area", area.ID, "error", perr)
