@@ -9,6 +9,11 @@ compatibility coverage.
 - `vision3/` — packets produced by ViSiON/3 itself
   - `VISION3.QWK` — a small mail packet (CONTROL.DAT, MESSAGES.DAT, NDX, etc.)
   - `VISION3.REP` — a reply packet (`VISION3.MSG` inside the zip)
+  - `TESTBBS.QWK` — a packet captured from a live test-BBS export, carrying a
+    `HEADERS.DAT` (Phase 5 extended headers) and a threaded reply (Phase 4
+    reference field). Captured, not generator-produced — guards that real
+    export output stays parseable and its HEADERS.DAT offsets stay in sync
+    with `MESSAGES.DAT`.
 - `malformed/` — intentionally broken packets that must fail gracefully
   - `TRUNCATED.REP` — a valid zip whose `.MSG` is shorter than one 128-byte block
 - `external/` — packets produced by third-party readers/BBSes (Synchronet,
