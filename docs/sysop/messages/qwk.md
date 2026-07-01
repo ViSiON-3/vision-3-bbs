@@ -70,7 +70,7 @@ Edit these via the [String Editor](advanced/string-editor.md) (strings 147–149
 
 ## Transfer Protocols
 
-QWK download and upload use the same file transfer subsystem as file areas. Any protocol configured in `configs/doors.json` and available for the user's connection type (SSH or telnet) will be offered. See [File Transfer](files/file-transfer.md) for protocol setup.
+QWK download and upload use the same file transfer subsystem as file areas. Any protocol configured in `configs/protocols.json` and available for the user's connection type (SSH or telnet) will be offered. If that file is absent, the built-in defaults are used: Zmodem (`sz`/`rz`, the default), Ymodem (`sb`/`rb`), and Xmodem (`sx`/`rx`) — all via `lrzsz`. See [File Transfer](files/file-transfer.md) for protocol setup.
 
 ## Per-Area Write Access
 
@@ -135,7 +135,7 @@ them.**
 | Path | Purpose | Managed by |
 |------|---------|------------|
 | `configs/config.json` (`qwkID`) | Explicit QWK BBS ID; blank = derived from Board Name (see [BBS ID](#bbs-id)) | Sysop (config editor) |
-| `configs/protocols.json` | File-transfer protocols offered for QWK/REP transfers; absent = built-in `sz`/`rz` defaults (see [Transfer Protocols](#transfer-protocols)) | Sysop |
+| `configs/protocols.json` | File-transfer protocols offered for QWK/REP transfers; absent = built-in Zmodem/Ymodem/Xmodem defaults via `lrzsz` (see [Transfer Protocols](#transfer-protocols)) | Sysop |
 | `data/qwk_conferences.json` | Stable QWK conference-number map (frozen once assigned) | Automatic |
 | `data/qwk_dedup.db` | SQLite record of imported REP fingerprints for duplicate detection; pruned after 90 days | Automatic |
 
@@ -166,7 +166,7 @@ below are the ones worth watching; each carries context fields such as `node`,
 | INFO | `parsed QWK REP messages` | The uploaded packet parsed; `count` is the number of replies found. |
 | WARN | `QWK REP receive error, checking for files anyway` | The receive protocol reported an error, but a `.REP` may still have arrived; import proceeds if one is present. |
 | WARN | `invalid QWK REP block count` / `QWK REP message extends past end of data` | A malformed message in the packet at `offset`; parsing stops there. Replies parsed before it are still posted. |
-| WARN | `qwk import: unknown conference` | A reply targets a `conference` number this BBS does not map; that reply is skipped. |
+| WARN | `qwk import: unknown conference, skipping` | A reply targets a `conference` number this BBS does not map; that reply is skipped. |
 | WARN | `qwk import: not authorized to post, skipping` | The user lacks `acs_write` on the destination area (`tag`); that reply is skipped. This is the per-area write gate. |
 | ERROR | `qwk import: failed to post` | Writing a reply to the message base failed (`area`); that reply is skipped, others continue. |
 | ERROR | `failed to read REP` / `failed to process REP` | The uploaded packet could not be read or parsed; nothing is posted. |
