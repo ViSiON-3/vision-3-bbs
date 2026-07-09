@@ -10,6 +10,10 @@ There's detailed SysOp documentation [here](https://vision-3.github.io/vision-3-
 
 **Note:** This is currently under active development and is not quite feature-complete.
 
+## Companion Projects
+
+- **[ViSiON/3 QWK Mobile](https://github.com/ViSiON-3/vision-3-qwk-mobile)** — a React Native offline mail client for ViSiON/3. It consumes the experimental [QWK Packet API](docs/sysop/messages/qwk-api.md) to download `.QWK` packets, read and reply entirely offline, and upload `.REP` packets back to the board. The full offline loop (connect → sync → read → compose/reply → upload → import report) is implemented.
+
 ## Community
 
 Join us on Discord to get involved, follow development and to connect with other contributors and BBS enthusiasts:
@@ -116,7 +120,8 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | Message Areas                 | ✅ Working | JAM format, echomail/netmail, conferences, lightbar reader, threading, quoting, vi-style editor, newscan, last read |
 | Private Mail                  | ✅ Working | User-to-user messaging, send/read/list                                                                              |
 | Message List View (scan)      | ✅ Working | Title/subject scan view                                                                                             |
-| QWK Offline Mail              | ✅ Working | QWK packet download/upload for offline reading                                                                      |
+| QWK Offline Mail              | ✅ Working | QWK/REP packet download/upload, stable conference map, reply threading, HEADERS.DAT extended headers, REP upload dedup, configurable BBS ID |
+| QWK Packet API                | 🧪 Experimental | REST API for offline mail clients (off by default) — see the [QWK API docs](docs/sysop/messages/qwk-api.md) and the [QWK Mobile client](https://github.com/ViSiON-3/vision-3-qwk-mobile) |
 | **Files**                     |           |                                                                                                                     |
 | File Areas                    | ✅ Working | List/select areas, list files, search, file info, newscan, configurable columns, extended listing                   |
 | File Transfers                | ✅ Working | ZMODEM upload/download via `sexyz`, batch download with per-area ACS validation                                     |
@@ -128,6 +133,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | **Networking/FTN**            |           |                                                                                                                     |
 | FTN Echomail/Netmail          | ✅ Working | JAM-backed, tosser, import/export, dupe checking                                                                    |
 | FTN Setup Wizard              | ✅ Working | Guided setup in `./config`: pick network, download echo list, auto-create areas + `binkd.conf`                     |
+| V3Net Networking              | 🧪 Experimental | Native inter-BBS message networking via REST+SSE (hub/leaf, signed area lists) — see the [V3Net docs](docs/sysop/v3net/message-areas.md)                                 |
 | **Community Features**        |           |                                                                                                                     |
 | Voting System                 | ✅ Working | Voting booths, mandatory topics, SysOp management                                                                   |
 | News System                   | ✅ Working | SysOp-managed news items, auto-display on login                                                                     |
@@ -187,11 +193,14 @@ vision-3-bbs/
 │   ├── ansitest/           # ANSI color test utility
 │   ├── config/             # TUI system configuration editor
 │   ├── helper/             # FTN setup utility (import echomail areas)
+│   ├── ini2ftnreg/         # Convert Synchronet init-fidonet.ini to the FTN wizard's JSON registry
 │   ├── menuedit/           # TUI menu editor
 │   ├── strings/            # TUI string configuration editor
 │   ├── ue/                 # TUI user editor
 │   ├── v3mail/             # JAM message base and FTN mail processor
-│   └── vision3/            # Main BBS server application
+│   ├── v3net-bootstrap/    # Create and publish an initial NAL for a V3Net network
+│   ├── vision3/            # Main BBS server application
+│   └── wfc/                # Remote sysop console (SSH client for the WFC TUI)
 ├── configs/                # Active configuration files (not tracked in git)
 │   ├── allowlist.txt       # IP allowlist for connection filtering
 │   ├── archivers.json      # Archive handler configurations
@@ -219,20 +228,24 @@ vision-3-bbs/
 │   ├── ftn/                # FidoNet/FTN data (packets, tosses, etc.)
 │   └── logs/               # Application logs
 ├── internal/               # Internal packages
+│   ├── admin/              # WFC admin contract (shared types for the sysop console)
 │   ├── ansi/               # ANSI/pipe code processing
 │   ├── archiver/           # Archive format handling (ZIP, etc.)
 │   ├── chat/               # Inter-node chat and sysop paging
 │   ├── config/             # Configuration loading
 │   ├── configeditor/       # TUI configuration editor (BubbleTea)
 │   ├── conference/         # Conference management
-│   ├── editor/             # Full-screen text editor (BubbleTea)
+│   ├── editor/             # Full-screen ANSI message editor
 │   ├── file/               # File area management
 │   ├── ftn/                # FidoNet/echomail support
 │   ├── jam/                # JAM message base format
+│   ├── logging/            # Logging setup and helpers
 │   ├── menu/               # Menu system & lightbar UI
 │   ├── menueditor/         # TUI menu editor (BubbleTea)
 │   ├── message/            # Message base management
 │   ├── qwk/                # QWK offline mail packet format
+│   ├── qwkapi/             # QWK packet transport REST API (experimental)
+│   ├── qwkservice/         # QWK packet export/import service
 │   ├── scheduler/          # Cron-style event scheduler
 │   ├── scripting/          # V3 scripting engine (goja-based JavaScript runtime)
 │   ├── session/            # Session management
@@ -244,10 +257,13 @@ vision-3-bbs/
 │   ├── tosser/             # FTN echomail tosser (import/export)
 │   ├── transfer/           # File transfer protocols
 │   ├── types/              # Shared types
+│   ├── uitext/             # Shared UI text/formatting helpers
 │   ├── user/               # User management
 │   ├── usereditor/         # TUI user editor
 │   ├── util/               # Utility functions
+│   ├── v3net/              # V3Net inter-BBS networking service (experimental)
 │   ├── version/            # Version information
+│   ├── wfcui/              # WFC (Waiting For Call) sysop console TUI (BubbleTea)
 │   └── ziplab/             # ZIP archive processing and viewer
 ├── menus/v3/               # Menu set files
 │   ├── ansi/               # ANSI art files
