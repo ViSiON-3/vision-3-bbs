@@ -121,7 +121,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | Private Mail                  | ✅ Working | User-to-user messaging, send/read/list                                                                              |
 | Message List View (scan)      | ✅ Working | Title/subject scan view                                                                                             |
 | QWK Offline Mail              | ✅ Working | QWK/REP packet download/upload, stable conference map, reply threading, HEADERS.DAT extended headers, REP upload dedup, configurable BBS ID |
-| QWK Packet Transport API      | 🧪 Experimental | REST API for offline mail clients (off by default) — see the [QWK API docs](docs/sysop/messages/qwk-api.md) and the [QWK Mobile client](https://github.com/ViSiON-3/vision-3-qwk-mobile) |
+| QWK Packet API                | 🧪 Experimental | REST API for offline mail clients (off by default) — see the [QWK API docs](docs/sysop/messages/qwk-api.md) and the [QWK Mobile client](https://github.com/ViSiON-3/vision-3-qwk-mobile) |
 | **Files**                     |           |                                                                                                                     |
 | File Areas                    | ✅ Working | List/select areas, list files, search, file info, newscan, configurable columns, extended listing                   |
 | File Transfers                | ✅ Working | ZMODEM upload/download via `sexyz`, batch download with per-area ACS validation                                     |
