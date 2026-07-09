@@ -260,9 +260,10 @@ echo "  Login:  felonius / password"
 echo ""
 if [[ $SYMLINK -eq 1 ]]; then
     echo "Binaries are symlinked to $REPO_DIR"
-    echo "After rebuilding (go build -o vision3 ./cmd/vision3), the BBS"
-    echo "picks up the new binary automatically."
-    echo ""
+    echo "Download the external binaries separately"
+    echo "from the GitHub release page for your platform"
+    echo "and place in $REPO_DIR/bin"
+    echo " "
 fi
 echo "To start the BBS:"
 echo "  cd $TARGET && ./vision3"
