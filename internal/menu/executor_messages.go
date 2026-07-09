@@ -1026,7 +1026,10 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		NextMsgNum: privNextMsg,
 		ConfArea:   "Private Mail",
 	}
-	body, saved, err := editor.RunEditorWithMetadata("", s, s, outputMode, subject, recipientUser.Handle, currentUser.Handle, false, "", "", "", "", false, nil, nil, privEditorCtx)
+	// Share the session-scoped InputHandler with the editor; passing nil would
+	// spawn a second reader goroutine on the session that races the menu's
+	// reader for bytes (the "double key press" bug).
+	body, saved, err := editor.RunEditorWithMetadata("", s, s, outputMode, subject, recipientUser.Handle, currentUser.Handle, false, "", "", "", "", false, nil, getSessionIH(s), privEditorCtx)
 	slog.Debug("editor returned", "node", nodeNumber, "error", err, "saved", saved, "length", len(body))
 
 	if err != nil {

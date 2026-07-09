@@ -13,6 +13,7 @@ type FSEditor struct {
 	buffer      *MessageBuffer
 	screen      *Screen
 	input       *InputHandler
+	ownsInput   bool // input was created by NewFSEditor, so Run must close it on exit
 	wordWrapper *WordWrapper
 	commands    *CommandHandler
 
@@ -53,8 +54,10 @@ func NewFSEditor(session ssh.Session, terminal io.Writer, outputMode ansi.Output
 
 	buffer := NewMessageBuffer()
 	screen := NewScreen(terminal, outputMode, termWidth, termHeight)
+	ownsInput := false
 	if ih == nil {
 		ih = NewInputHandler(session)
+		ownsInput = true
 	}
 	input := ih
 	wordWrapper := NewWordWrapper(buffer)
@@ -64,6 +67,7 @@ func NewFSEditor(session ssh.Session, terminal io.Writer, outputMode ansi.Output
 		buffer:         buffer,
 		screen:         screen,
 		input:          input,
+		ownsInput:      ownsInput,
 		wordWrapper:    wordWrapper,
 		commands:       commandHandler,
 		currentLine:    1,
@@ -126,6 +130,13 @@ func (e *FSEditor) LoadContent(content string) {
 
 // Run starts the editor main loop
 func (e *FSEditor) Run() (string, bool, error) {
+	// A self-created InputHandler must not outlive the editor: its goroutine
+	// would keep reading the session and steal alternate keystrokes from the
+	// caller's reader (the "double key press" bug). Shared handlers stay open —
+	// they belong to the session, not the editor.
+	if e.ownsInput {
+		defer e.input.CloseAndWait()
+	}
 	// Load and display header
 	err := e.screen.LoadHeaderTemplate(e.menuSetPath, e.subject, e.recipient, e.fromName, e.isAnon)
 	if err != nil {
