@@ -62,4 +62,11 @@ func TestSysFieldsQWKAPI(t *testing.T) {
 	if got := find("Token TTL Hrs").Get(); got != "24" {
 		t.Errorf("Token TTL default: want 24, got %q", got)
 	}
+
+	// Runtime (TokenTTL) treats any non-positive value as 24h; the editor
+	// must display the same for hand-edited negative values.
+	cfg.QWKAPI.TokenTTLHours = -5
+	if got := find("Token TTL Hrs").Get(); got != "24" {
+		t.Errorf("Token TTL for negative value: want 24, got %q", got)
+	}
 }
