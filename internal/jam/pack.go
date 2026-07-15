@@ -315,31 +315,32 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 			b.jdtFile, jdtErr = os.OpenFile(b.BasePath+".jdt", os.O_RDWR, 0644)
 			b.jdxFile, jdxErr = os.OpenFile(b.BasePath+".jdx", os.O_RDWR, 0644)
 			if reopenErr := errors.Join(jhrErr, jdtErr, jdxErr); reopenErr != nil {
-				b.isOpen = false
+				b.closeHandles()
 				return result, fmt.Errorf("jam: rename failed: %w; base could not be reopened (%w) — manual recovery required", err, reopenErr)
 			}
 			if hdrErr := b.readFixedHeader(); hdrErr != nil {
-				b.isOpen = false
+				b.closeHandles()
 				return result, fmt.Errorf("jam: rename failed: %w; header unreadable after reopen (%w) — manual recovery required", err, hdrErr)
 			}
 			return result, fmt.Errorf("jam: rename failed: %w — base may need manual recovery", err)
 		}
 	}
 
-	// Reopen files
+	// Reopen files. On any failure, close whatever did reopen so a failed
+	// pack never leaks handles behind a closed base.
 	b.jhrFile, err = os.OpenFile(b.BasePath+".jhr", os.O_RDWR, 0644)
 	if err != nil {
-		b.isOpen = false
+		b.closeHandles()
 		return result, fmt.Errorf("jam: failed to reopen .jhr after pack: %w", err)
 	}
 	b.jdtFile, err = os.OpenFile(b.BasePath+".jdt", os.O_RDWR, 0644)
 	if err != nil {
-		b.isOpen = false
+		b.closeHandles()
 		return result, fmt.Errorf("jam: failed to reopen .jdt after pack: %w", err)
 	}
 	b.jdxFile, err = os.OpenFile(b.BasePath+".jdx", os.O_RDWR, 0644)
 	if err != nil {
-		b.isOpen = false
+		b.closeHandles()
 		return result, fmt.Errorf("jam: failed to reopen .jdx after pack: %w", err)
 	}
 

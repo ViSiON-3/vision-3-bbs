@@ -142,6 +142,19 @@ func (b *Base) create() error {
 	return nil
 }
 
+// closeHandles closes and clears every base file handle and marks the base
+// closed. Used on unrecoverable failure paths so no handle leaks behind a
+// closed base. Callers must hold b.mu.
+func (b *Base) closeHandles() {
+	for _, f := range []*os.File{b.jhrFile, b.jdtFile, b.jdxFile, b.jlrFile} {
+		if f != nil {
+			_ = f.Close()
+		}
+	}
+	b.jhrFile, b.jdtFile, b.jdxFile, b.jlrFile = nil, nil, nil, nil
+	b.isOpen = false
+}
+
 // Close closes all file handles for the message base.
 func (b *Base) Close() error {
 	b.mu.Lock()

@@ -176,7 +176,7 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	}
 	respBytes, err := readBody(resp.Body, maxRespBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("join chat: %w", err)
 	}
 	var joinResp protocol.ChatJoinResponse
 	if err := json.Unmarshal(respBytes, &joinResp); err != nil {
