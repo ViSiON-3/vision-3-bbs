@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l . | grep -v '^third_party/' || true)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt required on:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      # 132-issue legacy baseline exists (2026-07-15: 50 errcheck, 46
+      # staticcheck, 36 unused); block only new issues until it's burned down.
+      - name: golangci-lint
+        if: github.event_name == 'pull_request'
+        uses: golangci/golangci-lint-action@v8
+        with:
+          only-new-issues: true
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: go test
+        run: go test ./...
+      - name: go test -race
+        run: go test -race ./...
