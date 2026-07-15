@@ -452,7 +452,7 @@ func TestStripSAUCE_EmptyInput(t *testing.T) {
 func TestStripSAUCE_EOFMarkerFarBack(t *testing.T) {
 	// EOF marker is present but content between EOF and SAUCE is substantial
 	content := bytes.Repeat([]byte("A"), 200)
-	content = append(content, 0x1A) // EOF marker
+	content = append(content, 0x1A)                             // EOF marker
 	content = append(content, bytes.Repeat([]byte("C"), 50)...) // comment block
 	sauce := make([]byte, 128)
 	copy(sauce, []byte("SAUCE00"))
@@ -1338,12 +1338,12 @@ func TestProcessAnsiAndExtractCoords_DualPurposePipeCode(t *testing.T) {
 	// |O is only a field placeholder (not in pipeCodeReplacements).
 	// Both must record field coords; |P must also emit the terminal command.
 	tests := []struct {
-		name      string
-		input     []byte
-		fieldKey  string
-		wantX     int
-		wantY     int
-		wantAnsi  string // expected ANSI sequence in output (empty = no terminal command)
+		name     string
+		input    []byte
+		fieldKey string
+		wantX    int
+		wantY    int
+		wantAnsi string // expected ANSI sequence in output (empty = no terminal command)
 	}{
 		{
 			name:     "|P dual-purpose (save cursor + field coord)",

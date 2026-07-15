@@ -17,22 +17,22 @@ import (
 
 // Session represents an active user connection to the BBS.
 type BbsSession struct {
-	ID          int // Unique identifier for the session/node
-	Conn        gossh.Conn
-	Channel     gossh.Channel // Store the SSH channel for direct I/O
-	Term        *term.Terminal
-	User        *user.User // Logged-in user, nil if not logged in
-	Width       int
-	Height      int
-	RemoteAddr  net.Addr
-	CurrentMenu string               // Tracks the current ViSiON/2 menu the user is in
-	Activity    string               // Descriptive activity text for Who's Online (e.g., "Reading Messages")
-	NodeID      int                  // Node ID for the session
-	AssetsPath  string               // Store required path directly
-	Mutex       sync.RWMutex         // For thread-safe access to session state if needed later
-	Pty         *ssh.Pty             // Store PTY info
-	AutoRunLog  types.AutoRunTracker // Tracks run-once commands executed (Use types.AutoRunTracker)
-	LastMenu    string               // Tracks the previously visited menu
+	ID           int // Unique identifier for the session/node
+	Conn         gossh.Conn
+	Channel      gossh.Channel // Store the SSH channel for direct I/O
+	Term         *term.Terminal
+	User         *user.User // Logged-in user, nil if not logged in
+	Width        int
+	Height       int
+	RemoteAddr   net.Addr
+	CurrentMenu  string               // Tracks the current ViSiON/2 menu the user is in
+	Activity     string               // Descriptive activity text for Who's Online (e.g., "Reading Messages")
+	NodeID       int                  // Node ID for the session
+	AssetsPath   string               // Store required path directly
+	Mutex        sync.RWMutex         // For thread-safe access to session state if needed later
+	Pty          *ssh.Pty             // Store PTY info
+	AutoRunLog   types.AutoRunTracker // Tracks run-once commands executed (Use types.AutoRunTracker)
+	LastMenu     string               // Tracks the previously visited menu
 	StartTime    time.Time            // Tracks the session start time
 	LastActivity time.Time            // Tracks last user input for idle calculation
 	PendingPages []string             // Queued page messages for delivery at next prompt

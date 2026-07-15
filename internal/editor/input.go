@@ -69,9 +69,9 @@ const (
 // reader into a buffered channel. This makes select-based timeouts reliable
 // regardless of whether the reader supports SetReadDeadline (e.g. ssh.Session).
 type InputHandler struct {
-	incoming  chan byte    // raw bytes from background reader goroutine
+	incoming  chan byte     // raw bytes from background reader goroutine
 	done      chan struct{} // closed when background goroutine fully exits
-	unreadBuf []byte       // bytes pushed back for re-reading
+	unreadBuf []byte        // bytes pushed back for re-reading
 	debug     bool
 
 	// idleNs is the session-level idle timeout in nanoseconds (0 = disabled).

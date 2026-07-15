@@ -91,7 +91,7 @@ func TestStepExtract_ValidZip(t *testing.T) {
 	tmpDir := t.TempDir()
 	zipPath := filepath.Join(tmpDir, "test.zip")
 	createTestZip(t, zipPath, map[string]string{
-		"hello.txt":   "hello world",
+		"hello.txt":    "hello world",
 		"sub/deep.txt": "deep content",
 	})
 

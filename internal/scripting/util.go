@@ -6,8 +6,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/dop251/goja"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/dop251/goja"
 )
 
 // registerUtil creates the v3.util object with common utility functions.

@@ -51,7 +51,7 @@ type CmdData struct {
 
 // menuEntry holds a loaded menu with its on-disk name.
 type menuEntry struct {
-	Name string   // basename without extension, e.g. "MAIN"
+	Name string // basename without extension, e.g. "MAIN"
 	Data MenuData
 }
 
@@ -226,8 +226,8 @@ func atomicWriteJSON(path string, v any) error {
 	tmpPath := tmp.Name()
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()            // best-effort; already returning a write error
-		os.Remove(tmpPath)     // best-effort cleanup
+		tmp.Close()        // best-effort; already returning a write error
+		os.Remove(tmpPath) // best-effort cleanup
 		return fmt.Errorf("write temp: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {

@@ -94,9 +94,9 @@ func setupTestEnv(t *testing.T) *testEnv {
 		OwnAddress:            "21:4/158.1",
 		Links: []linkConfig{
 			{
-				Address:  "21:4/158",
+				Address:        "21:4/158",
 				PacketPassword: "",
-				Name:     "Test Hub",
+				Name:           "Test Hub",
 			},
 		},
 	}

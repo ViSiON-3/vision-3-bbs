@@ -426,8 +426,8 @@ func TestFindWordRight(t *testing.T) {
 		col  int
 		want int
 	}{
-		{1, 7},  // from start → start of "world"
-		{7, 13}, // from "world" → start of "test"
+		{1, 7},   // from start → start of "world"
+		{7, 13},  // from "world" → start of "test"
 		{13, 17}, // from "test" → past end
 	}
 	for _, tt := range tests {

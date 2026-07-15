@@ -93,8 +93,8 @@ func TestHubAutoInit_NALSeeded(t *testing.T) {
 		DedupDBPath:  filepath.Join(dir, "dedup.sqlite"),
 		ConfigPath:   dir,
 		Hub: config.V3NetHubConfig{
-			Enabled: true,
-			DataDir: dir,
+			Enabled:  true,
+			DataDir:  dir,
 			Networks: []config.V3NetHubNetwork{{Name: "testnet"}},
 			InitialAreas: []config.V3NetHubArea{
 				{Tag: "test.general", Name: "General"},
@@ -134,8 +134,8 @@ func TestHubAutoInit_NALSeedIdempotent(t *testing.T) {
 		DedupDBPath:  filepath.Join(dir, "dedup.sqlite"),
 		ConfigPath:   dir,
 		Hub: config.V3NetHubConfig{
-			Enabled: true,
-			DataDir: dir,
+			Enabled:  true,
+			DataDir:  dir,
 			Networks: []config.V3NetHubNetwork{{Name: "testnet"}},
 			InitialAreas: []config.V3NetHubArea{
 				{Tag: "test.general", Name: "General"},

@@ -57,7 +57,7 @@ func (mb *MessageBuffer) LoadContent(content string) {
 		if i >= MaxLines {
 			break
 		}
-		mb.lines[i+1] = line // 1-based indexing
+		mb.lines[i+1] = line       // 1-based indexing
 		mb.hardNewline[i+1] = true // loaded content = real line breaks
 		count++
 	}

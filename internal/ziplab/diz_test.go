@@ -87,7 +87,7 @@ func TestExtractDIZFromZip_NestedDIZ(t *testing.T) {
 	zipPath := filepath.Join(tmpDir, "test.zip")
 	dizContent := "nested diz content"
 	createTestZipWithDIZ(t, zipPath, map[string]string{
-		"readme.txt":          "hello",
+		"readme.txt":         "hello",
 		"subdir/FILE_ID.DIZ": dizContent,
 	})
 

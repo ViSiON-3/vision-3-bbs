@@ -69,9 +69,9 @@ func TestNewFileManager_ValidAreas(t *testing.T) {
 
 func TestNewFileManager_SkipsInvalidAreas(t *testing.T) {
 	areas := []FileArea{
-		{ID: 0, Tag: "BAD", Name: "Zero ID", Path: "bad"},         // ID <= 0
-		{ID: 1, Tag: "", Name: "Empty Tag", Path: "empty"},        // empty tag
-		{ID: 2, Tag: "ABS", Name: "Absolute Path", Path: "/etc"},  // absolute path
+		{ID: 0, Tag: "BAD", Name: "Zero ID", Path: "bad"},          // ID <= 0
+		{ID: 1, Tag: "", Name: "Empty Tag", Path: "empty"},         // empty tag
+		{ID: 2, Tag: "ABS", Name: "Absolute Path", Path: "/etc"},   // absolute path
 		{ID: 3, Tag: "TRAV", Name: "Traversal", Path: "../escape"}, // path traversal
 		{ID: 4, Tag: "GOOD", Name: "Valid Area", Path: "good"},     // valid
 	}
@@ -89,7 +89,7 @@ func TestNewFileManager_SkipsInvalidAreas(t *testing.T) {
 func TestNewFileManager_SkipsDuplicates(t *testing.T) {
 	areas := []FileArea{
 		{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"},
-		{ID: 1, Tag: "DUPE", Name: "Duplicate ID", Path: "dupe"},  // duplicate ID
+		{ID: 1, Tag: "DUPE", Name: "Duplicate ID", Path: "dupe"},   // duplicate ID
 		{ID: 2, Tag: "UTILS", Name: "Duplicate Tag", Path: "dup2"}, // duplicate tag
 	}
 	fm := setupTestFileManager(t, areas)
@@ -182,13 +182,13 @@ func TestAddFileRecord(t *testing.T) {
 	fm := setupTestFileManager(t, areas)
 
 	record := FileRecord{
-		ID:         uuid.New(),
-		AreaID:     1,
-		Filename:   "test.zip",
+		ID:          uuid.New(),
+		AreaID:      1,
+		Filename:    "test.zip",
 		Description: "A test file",
-		Size:       1024,
-		UploadedAt: time.Now(),
-		UploadedBy: "testuser",
+		Size:        1024,
+		UploadedAt:  time.Now(),
+		UploadedBy:  "testuser",
 	}
 
 	err := fm.AddFileRecord(record)

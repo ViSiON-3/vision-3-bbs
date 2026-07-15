@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/dop251/goja"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"github.com/dop251/goja"
 )
 
 // bytesToLatin1 converts raw bytes to a Go string using Latin-1 mapping,

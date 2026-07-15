@@ -8,14 +8,14 @@ import (
 
 // FileArea defines a logical grouping or directory for files.
 type FileArea struct {
-	ID          int    `json:"id"`
-	Tag         string `json:"tag"`  // e.g., "UTILS", "TEXTS" (Unique, uppercase)
-	Name        string `json:"name"` // e.g., "Utility Programs"
-	Description string `json:"description"`
-	Path        string `json:"path"`         // Server filesystem path (relative to a base path, e.g., "utils")
-	ACSList     string `json:"acs_list"`     // ACS to list files in this area
-	ACSUpload   string `json:"acs_upload"`   // ACS to upload to this area
-	ACSDownload  string `json:"acs_download"`              // ACS to download from this area
+	ID           int    `json:"id"`
+	Tag          string `json:"tag"`  // e.g., "UTILS", "TEXTS" (Unique, uppercase)
+	Name         string `json:"name"` // e.g., "Utility Programs"
+	Description  string `json:"description"`
+	Path         string `json:"path"`                    // Server filesystem path (relative to a base path, e.g., "utils")
+	ACSList      string `json:"acs_list"`                // ACS to list files in this area
+	ACSUpload    string `json:"acs_upload"`              // ACS to upload to this area
+	ACSDownload  string `json:"acs_download"`            // ACS to download from this area
 	ConferenceID int    `json:"conference_id,omitempty"` // Conference this area belongs to (0=ungrouped)
 }
 

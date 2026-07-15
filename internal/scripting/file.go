@@ -1,8 +1,8 @@
 package scripting
 
 import (
-	"github.com/dop251/goja"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/dop251/goja"
 )
 
 // registerFile creates the v3.file object for file area access.
