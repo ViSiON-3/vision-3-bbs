@@ -26,6 +26,15 @@ func TestChatEventPumpExitsOnClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalChatService: %v", err)
 	}
+	// Fallback so an early Fatal can't leave the service (and its pump
+	// goroutines/DB handle) open for later tests. The closed flag prevents
+	// a double Close of the events channel.
+	closed := false
+	t.Cleanup(func() {
+		if !closed {
+			_ = svc.Close()
+		}
+	})
 	if _, _, err := svc.Join("lobby"); err != nil {
 		t.Fatalf("Join: %v", err)
 	}
@@ -40,8 +49,13 @@ func TestChatEventPumpExitsOnClose(t *testing.T) {
 	}()
 
 	// Mirror runChat's cleanup(): leave, close, wait for the pump.
-	svc.Leave("lobby") //nolint:errcheck
-	svc.Close()        //nolint:errcheck
+	if err := svc.Leave("lobby"); err != nil {
+		t.Errorf("Leave: %v", err)
+	}
+	closed = true
+	if err := svc.Close(); err != nil {
+		t.Errorf("Close: %v", err)
+	}
 
 	select {
 	case <-done:

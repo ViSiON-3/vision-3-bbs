@@ -86,6 +86,19 @@ func TestEngineCloseStopsIOGoroutines(t *testing.T) {
 	sess := newInterruptibleSession("A")
 	eng := newLifecycleEngine(sess)
 
+	// Door-handler cleanup sequence: interrupt the blocked Read, then Close.
+	// Registered with t.Cleanup so an early Fatal can't leak the pump
+	// goroutines into later tests; the explicit call below goes through the
+	// same once-guarded path.
+	var cleanupOnce sync.Once
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			sess.closeInterrupt()
+			eng.Close()
+		})
+	}
+	t.Cleanup(cleanup)
+
 	// Consume the one scripted byte the way a door's first key read would;
 	// this starts the I/O pump goroutines and then leaves the copier blocked
 	// in session.Read — the state at normal door end.
@@ -93,9 +106,7 @@ func TestEngineCloseStopsIOGoroutines(t *testing.T) {
 		t.Fatalf("readKey = %q, %v; want \"A\", nil", key, err)
 	}
 
-	// Door-handler cleanup sequence: interrupt the blocked Read, then Close.
-	sess.closeInterrupt()
-	eng.Close()
+	cleanup()
 
 	select {
 	case <-eng.copierDone:
