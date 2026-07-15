@@ -23,11 +23,18 @@ const CWValidation = 0x0100
 // MaxFieldLen limits null-terminated string fields.
 const MaxFieldLen = 256
 
+// maxPacketBytes caps how much of a .PKT stream ReadPacket will buffer.
+// Typical packets are well under 1MB (arcmail bundles are split by mailers);
+// 16MB is far beyond any legitimate packet and guards against memory
+// exhaustion from a malformed or hostile input.
+const maxPacketBytes = 16 * 1024 * 1024
+
 // Errors
 var (
 	ErrInvalidPacketType = errors.New("ftn: invalid packet type (expected 2)")
 	ErrTruncatedPacket   = errors.New("ftn: truncated packet data")
 	ErrTruncatedMessage  = errors.New("ftn: truncated message in packet")
+	ErrPacketTooLarge    = errors.New("ftn: packet exceeds size limit")
 )
 
 // PacketHeader represents an FTN Type-2+ packet header (58 bytes).
@@ -159,9 +166,12 @@ func ReadPacketHeaderFromFile(path string) (*PacketHeader, error) {
 
 // ReadPacket parses a complete .PKT file from the reader.
 func ReadPacket(r io.Reader) (*PacketHeader, []*PackedMessage, error) {
-	data, err := io.ReadAll(r)
+	data, err := io.ReadAll(io.LimitReader(r, maxPacketBytes+1))
 	if err != nil {
 		return nil, nil, fmt.Errorf("ftn: read packet: %w", err)
+	}
+	if len(data) > maxPacketBytes {
+		return nil, nil, ErrPacketTooLarge
 	}
 
 	if len(data) < PacketHeaderSize+2 { // Header + terminator

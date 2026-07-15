@@ -44,8 +44,12 @@ func (b *Base) acquireFileLock() (func(), error) {
 
 		if info, statErr := os.Stat(lockPath); statErr == nil {
 			if time.Since(info.ModTime()) > staleAfter {
-				_ = os.Remove(lockPath)
-				continue
+				if rmErr := os.Remove(lockPath); rmErr == nil {
+					continue
+				}
+				// Couldn't remove the stale lock (permissions, or it's a
+				// directory); fall through to the deadline check so we time
+				// out instead of spinning forever.
 			}
 		}
 

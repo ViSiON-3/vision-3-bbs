@@ -60,7 +60,8 @@ func (l *Leaf) ProposeArea(req protocol.AreaProposalRequest) (*protocol.Proposal
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
+		// Diagnostic error body: truncation at the cap is acceptable here.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxRespBytes))
 		var pr protocol.ProposalResponse
 		if json.Unmarshal(body, &pr) == nil && pr.Error != "" {
 			return nil, fmt.Errorf("hub: %s", pr.Error)
