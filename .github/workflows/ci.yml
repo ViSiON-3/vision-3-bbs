@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -26,8 +28,10 @@ jobs:
           fi
       - name: go vet
         run: go vet ./...
-      # 132-issue legacy baseline exists (2026-07-15: 50 errcheck, 46
-      # staticcheck, 36 unused); block only new issues until it's burned down.
+      # A ~131-issue legacy baseline exists (2026-07-15: 50 errcheck, 45
+      # staticcheck, 36 unused); block only new issues until it's burned
+      # down. only-new-issues requires a PR patch, so this step is
+      # PR-only by design — a full run on main would fail on the baseline.
       - name: golangci-lint
         if: github.event_name == 'pull_request'
         uses: golangci/golangci-lint-action@v8
@@ -38,6 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

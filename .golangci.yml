@@ -12,15 +12,13 @@ linters:
     - unused
   settings:
     errcheck:
-      # Best-effort terminal/display writes: failures mean the user
-      # disconnected; every caller intentionally ignores them.
+      # Best-effort terminal/display writes only: failures mean the user
+      # disconnected; every caller intentionally ignores them. Keep this
+      # list terminal-specific — generic io.Writer/fmt.Fprint* writes must
+      # stay checked so real I/O errors aren't masked.
       exclude-functions:
         - github.com/ViSiON-3/vision-3-bbs/internal/terminalio.WriteProcessedBytes
         - github.com/ViSiON-3/vision-3-bbs/internal/terminalio.WriteString
-        - (io.Writer).Write
-        - fmt.Fprintf
-        - fmt.Fprint
-        - fmt.Fprintln
   exclusions:
     generated: lax
     paths:
