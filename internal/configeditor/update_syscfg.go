@@ -41,8 +41,12 @@ func (m Model) updateSysConfigMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeTopMenu
 			return m, nil
 		}
-		if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
+		if len(key) == 1 && key[0] >= '0' && key[0] <= '9' {
+			// '1'-'9' select items 1-9; '0' selects item 10.
 			idx := int(key[0] - '1')
+			if key[0] == '0' {
+				idx = 9
+			}
 			if idx < len(m.sysMenuItems) {
 				m.sysMenuCursor = idx
 				m.sysSubScreen = idx
