@@ -34,6 +34,9 @@ func TestProcessEditorPlaceholders(t *testing.T) {
 		{"unknown code preserved", "@Q|R8@", "@Q|R8@"},
 		{"no modifier", "@S:6@", "Jane  "},
 		{"insert mode", "@I@", "Ins"},
+		// Width larger than int must fall back to no padding, not pad to
+		// the MaxInt value Atoi returns alongside its range error.
+		{"overflow width ignored", "@T:99999999999999999999@", "3:04 PM"},
 	}
 
 	for _, tt := range tests {
