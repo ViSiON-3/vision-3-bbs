@@ -2237,7 +2237,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 
 // includeTagRe matches %%filename.ext%% include tags. Package-level so menu
 // renders don't recompile it on every call and recursion level.
-var includeTagRe = regexp.MustCompile(`%%([a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+)%%`)
+var includeTagRe = regexp.MustCompile(`%%[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+%%`)
 
 // processFileIncludes recursively replaces %%filename.ans tags with file content.
 // It now looks for included files within the MENU SET's ansi directory.
