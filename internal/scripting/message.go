@@ -3,6 +3,7 @@ package scripting
 import (
 	"fmt"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/dop251/goja"
 )
@@ -14,17 +15,17 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 	mgr := eng.providers.MessageMgr
 
 	// areas() — list all message areas [{id, tag, name, description, type}].
-	obj.Set("areas", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "areas", func(call goja.FunctionCall) goja.Value {
 		areas := mgr.ListAreas()
 		arr := vm.NewArray()
 		for i, a := range areas {
-			arr.Set(itoa(i), messageAreaToJS(vm, a))
+			jsutil.Set(arr, itoa(i), messageAreaToJS(vm, a))
 		}
 		return arr
 	})
 
 	// area(tag) — get a single area by tag, returns object or null.
-	obj.Set("area", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "area", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Null()
 		}
@@ -37,7 +38,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 	})
 
 	// count(areaID) — message count in an area.
-	obj.Set("count", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "count", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(0)
 		}
@@ -50,7 +51,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 	})
 
 	// get(areaID, msgNum) — get a message, returns object or null.
-	obj.Set("get", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "get", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return goja.Null()
 		}
@@ -64,7 +65,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 	})
 
 	// newCount(areaID) — count of unread messages for current user.
-	obj.Set("newCount", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "newCount", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(0)
 		}
@@ -77,7 +78,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 	})
 
 	// post(areaID, {to, subject, body}) — post a message to an area.
-	obj.Set("post", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "post", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			panic(vm.NewGoError(errMissingArgs("post", "areaID, {to, subject, body}")))
 		}
@@ -96,7 +97,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 	})
 
 	// postPrivate(areaID, {to, subject, body}) — post a private message.
-	obj.Set("postPrivate", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "postPrivate", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			panic(vm.NewGoError(errMissingArgs("postPrivate", "areaID, {to, subject, body}")))
 		}
@@ -118,37 +119,37 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 	})
 
 	// totalCount() — total messages across all areas.
-	obj.Set("totalCount", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "totalCount", func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(mgr.GetTotalMessageCount())
 	})
 
-	v3.Set("message", obj)
+	jsutil.Set(v3, "message", obj)
 }
 
 func messageAreaToJS(vm *goja.Runtime, a *message.MessageArea) goja.Value {
 	obj := vm.NewObject()
-	obj.Set("id", a.ID)
-	obj.Set("tag", a.Tag)
-	obj.Set("name", a.Name)
-	obj.Set("description", a.Description)
-	obj.Set("type", a.AreaType)
-	obj.Set("echoTag", a.EchoTag)
-	obj.Set("conferenceID", a.ConferenceID)
+	jsutil.Set(obj, "id", a.ID)
+	jsutil.Set(obj, "tag", a.Tag)
+	jsutil.Set(obj, "name", a.Name)
+	jsutil.Set(obj, "description", a.Description)
+	jsutil.Set(obj, "type", a.AreaType)
+	jsutil.Set(obj, "echoTag", a.EchoTag)
+	jsutil.Set(obj, "conferenceID", a.ConferenceID)
 	return obj
 }
 
 func displayMessageToJS(vm *goja.Runtime, msg *message.DisplayMessage) goja.Value {
 	obj := vm.NewObject()
-	obj.Set("msgNum", msg.MsgNum)
-	obj.Set("from", msg.From)
-	obj.Set("to", msg.To)
-	obj.Set("subject", msg.Subject)
-	obj.Set("body", msg.Body)
-	obj.Set("date", msg.DateTime.Unix())
-	obj.Set("msgID", msg.MsgID)
-	obj.Set("replyID", msg.ReplyID)
-	obj.Set("replyToNum", msg.ReplyToNum)
-	obj.Set("isPrivate", msg.IsPrivate)
-	obj.Set("areaID", msg.AreaID)
+	jsutil.Set(obj, "msgNum", msg.MsgNum)
+	jsutil.Set(obj, "from", msg.From)
+	jsutil.Set(obj, "to", msg.To)
+	jsutil.Set(obj, "subject", msg.Subject)
+	jsutil.Set(obj, "body", msg.Body)
+	jsutil.Set(obj, "date", msg.DateTime.Unix())
+	jsutil.Set(obj, "msgID", msg.MsgID)
+	jsutil.Set(obj, "replyID", msg.ReplyID)
+	jsutil.Set(obj, "replyToNum", msg.ReplyToNum)
+	jsutil.Set(obj, "isPrivate", msg.IsPrivate)
+	jsutil.Set(obj, "areaID", msg.AreaID)
 	return obj
 }

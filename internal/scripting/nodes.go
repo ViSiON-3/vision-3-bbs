@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -15,7 +16,7 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 
 	// list() — returns array of active nodes [{node, handle, activity, idle, invisible}].
 	// Invisible sessions are excluded unless the current user is sysop (accessLevel >= 200).
-	obj.Set("list", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "list", func(call goja.FunctionCall) goja.Value {
 		sessions := registry.ListActive()
 		arr := vm.NewArray()
 		isSysop := eng.session.AccessLevel >= 200
@@ -37,19 +38,19 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 			}
 
 			entry := vm.NewObject()
-			entry.Set("node", nodeID)
-			entry.Set("handle", handle)
-			entry.Set("activity", activity)
-			entry.Set("idle", int(idle))
-			entry.Set("invisible", invisible)
-			arr.Set(itoa(i), entry)
+			jsutil.Set(entry, "node", nodeID)
+			jsutil.Set(entry, "handle", handle)
+			jsutil.Set(entry, "activity", activity)
+			jsutil.Set(entry, "idle", int(idle))
+			jsutil.Set(entry, "invisible", invisible)
+			jsutil.Set(arr, itoa(i), entry)
 			i++
 		}
 		return arr
 	})
 
 	// count() — returns the number of active nodes (respects invisible flag).
-	obj.Set("count", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "count", func(call goja.FunctionCall) goja.Value {
 		sessions := registry.ListActive()
 		isSysop := eng.session.AccessLevel >= 200
 		count := 0
@@ -66,7 +67,7 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 
 	// send(nodeNum, message) — send a page message to a specific node.
 	// Returns true if the node exists and the message was queued.
-	obj.Set("send", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "send", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			panic(vm.NewGoError(errMissingArgs("send", "nodeNum, message")))
 		}
@@ -84,7 +85,7 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 	})
 
 	// broadcast(message) — send a page message to all active nodes (except self).
-	obj.Set("broadcast", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "broadcast", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -101,5 +102,5 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 		return goja.Undefined()
 	})
 
-	v3.Set("nodes", obj)
+	jsutil.Set(v3, "nodes", obj)
 }

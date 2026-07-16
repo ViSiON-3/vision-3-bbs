@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -16,25 +17,25 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 
 	// --- Properties ---
 
-	obj.Set("width", eng.session.ScreenWidth)
-	obj.Set("height", eng.session.ScreenHeight)
+	jsutil.Set(obj, "width", eng.session.ScreenWidth)
+	jsutil.Set(obj, "height", eng.session.ScreenHeight)
 
 	// --- Output ---
 
 	// write(text) — raw output, no pipe-code processing
-	obj.Set("write", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "write", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw(argsToString(call))
 		return goja.Undefined()
 	})
 
 	// writeln(text) — raw output + CRLF
-	obj.Set("writeln", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "writeln", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw(argsToString(call) + "\r\n")
 		return goja.Undefined()
 	})
 
 	// print(text) — output with pipe-code processing (|07, |09, etc.)
-	obj.Set("print", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "print", func(call goja.FunctionCall) goja.Value {
 		text := argsToString(call)
 		processed := ansi.ReplacePipeCodes([]byte(text))
 		eng.writeRaw(string(processed))
@@ -42,7 +43,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 	})
 
 	// println(text) — print with pipe-codes + CRLF
-	obj.Set("println", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "println", func(call goja.FunctionCall) goja.Value {
 		text := argsToString(call)
 		processed := ansi.ReplacePipeCodes([]byte(text))
 		eng.writeRaw(string(processed) + "\r\n")
@@ -54,11 +55,11 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 		eng.writeRaw("\x1b[2J\x1b[H")
 		return goja.Undefined()
 	}
-	obj.Set("clear", clearFn)
-	obj.Set("cls", clearFn)
+	jsutil.Set(obj, "clear", clearFn)
+	jsutil.Set(obj, "cls", clearFn)
 
 	// gotoxy(x, y) — cursor positioning (1-based)
-	obj.Set("gotoxy", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "gotoxy", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return goja.Undefined()
 		}
@@ -69,7 +70,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 	})
 
 	// color(fg) or color(fg, bg) — set color by number
-	obj.Set("color", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "color", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -85,13 +86,13 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 	})
 
 	// reset() — reset terminal attributes
-	obj.Set("reset", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "reset", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw("\x1b[0m")
 		return goja.Undefined()
 	})
 
 	// center(text) — center text on screen using pipe-code-aware width
-	obj.Set("center", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "center", func(call goja.FunctionCall) goja.Value {
 		text := argsToString(call)
 		processed := ansi.ReplacePipeCodes([]byte(text))
 		displayLen := displayLength(string(processed))
@@ -107,7 +108,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 	// --- Input ---
 
 	// getkey() or getkey(timeout_ms) — single key read
-	obj.Set("getkey", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getkey", func(call goja.FunctionCall) goja.Value {
 		timeout := time.Duration(0)
 		if len(call.Arguments) > 0 {
 			ms := call.Arguments[0].ToInteger()
@@ -124,7 +125,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 
 	// getstr(maxlen) or getstr(maxlen, opts) — line input with editing
 	// opts: {echo: false, upper: true, number: true}
-	obj.Set("getstr", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getstr", func(call goja.FunctionCall) goja.Value {
 		maxLen := 128
 		var opts lineOpts
 		if len(call.Arguments) > 0 {
@@ -150,7 +151,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 	})
 
 	// yesno(prompt) — Y/n prompt, returns true for Yes (default)
-	obj.Set("yesno", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "yesno", func(call goja.FunctionCall) goja.Value {
 		prompt := argsToString(call)
 		processed := ansi.ReplacePipeCodes([]byte(prompt + " (Y/n)? "))
 		eng.writeRaw(string(processed))
@@ -160,7 +161,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 	})
 
 	// noyes(prompt) — N/y prompt, returns true for No (default)
-	obj.Set("noyes", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "noyes", func(call goja.FunctionCall) goja.Value {
 		prompt := argsToString(call)
 		processed := ansi.ReplacePipeCodes([]byte(prompt + " (N/y)? "))
 		eng.writeRaw(string(processed))
@@ -170,7 +171,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 	})
 
 	// pause() — "press any key" prompt
-	obj.Set("pause", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "pause", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw("\r\n[Press any key] ")
 		eng.readKey(0) //nolint:errcheck
 		eng.writeRaw("\r\n")
@@ -178,7 +179,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 	})
 
 	// getnum(max) — read a number up to max
-	obj.Set("getnum", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getnum", func(call goja.FunctionCall) goja.Value {
 		maxVal := 0
 		if len(call.Arguments) > 0 {
 			maxVal = int(call.Arguments[0].ToInteger())
@@ -193,14 +194,14 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 			return vm.ToValue(0)
 		}
 		n := 0
-		fmt.Sscanf(result, "%d", &n)
+		_, _ = fmt.Sscanf(result, "%d", &n) // best-effort parse; n stays 0 on failure
 		if maxVal > 0 && n > maxVal {
 			n = maxVal
 		}
 		return vm.ToValue(n)
 	})
 
-	v3.Set("console", obj)
+	jsutil.Set(v3, "console", obj)
 }
 
 // argsToString concatenates all JS function arguments into a single string.

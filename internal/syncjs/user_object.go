@@ -3,6 +3,7 @@ package syncjs
 import (
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -10,45 +11,45 @@ import (
 func registerUser(vm *goja.Runtime, eng *Engine) {
 	obj := vm.NewObject()
 
-	obj.Set("alias", eng.session.UserHandle)
-	obj.Set("name", eng.session.UserRealName)
-	obj.Set("number", eng.session.UserID)
+	jsutil.Set(obj, "alias", eng.session.UserHandle)
+	jsutil.Set(obj, "name", eng.session.UserRealName)
+	jsutil.Set(obj, "number", eng.session.UserID)
 
 	// user.security — nested object with level, etc.
 	security := vm.NewObject()
-	security.Set("level", eng.session.AccessLevel)
-	security.Set("password", "") // never expose real password
-	obj.Set("security", security)
+	jsutil.Set(security, "level", eng.session.AccessLevel)
+	jsutil.Set(security, "password", "") // never expose real password
+	jsutil.Set(obj, "security", security)
 
 	// Convenience aliases used by some games
-	obj.Set("level", eng.session.AccessLevel)
-	obj.Set("full_name", eng.session.UserRealName)
-	obj.Set("location", eng.session.Location)
-	obj.Set("handle", eng.session.UserHandle)
+	jsutil.Set(obj, "level", eng.session.AccessLevel)
+	jsutil.Set(obj, "full_name", eng.session.UserRealName)
+	jsutil.Set(obj, "location", eng.session.Location)
+	jsutil.Set(obj, "handle", eng.session.UserHandle)
 
 	// user.settings — user preference flags (USER_EXPERT=2)
-	obj.Set("settings", 2)
+	jsutil.Set(obj, "settings", 2)
 
 	// Date properties used by sbbs_console.js (Unix timestamps)
 	now := time.Now().Unix()
-	obj.Set("laston_date", now)
-	obj.Set("expiration_date", 0)
-	obj.Set("new_file_time", now)
-	obj.Set("birthdate", "01/01/90")
-	obj.Set("phone", "")
-	obj.Set("comment", "")
-	obj.Set("download_protocol", "")
+	jsutil.Set(obj, "laston_date", now)
+	jsutil.Set(obj, "expiration_date", 0)
+	jsutil.Set(obj, "new_file_time", now)
+	jsutil.Set(obj, "birthdate", "01/01/90")
+	jsutil.Set(obj, "phone", "")
+	jsutil.Set(obj, "comment", "")
+	jsutil.Set(obj, "download_protocol", "")
 
 	// user.stats — usage statistics
 	stats := vm.NewObject()
-	stats.Set("total_logons", eng.session.TimesCalled)
-	stats.Set("total_posts", 0)
-	stats.Set("total_emails", 0)
-	stats.Set("files_uploaded", 0)
-	stats.Set("files_downloaded", 0)
-	stats.Set("bytes_uploaded", 0)
-	stats.Set("bytes_downloaded", 0)
-	obj.Set("stats", stats)
+	jsutil.Set(stats, "total_logons", eng.session.TimesCalled)
+	jsutil.Set(stats, "total_posts", 0)
+	jsutil.Set(stats, "total_emails", 0)
+	jsutil.Set(stats, "files_uploaded", 0)
+	jsutil.Set(stats, "files_downloaded", 0)
+	jsutil.Set(stats, "bytes_uploaded", 0)
+	jsutil.Set(stats, "bytes_downloaded", 0)
+	jsutil.Set(obj, "stats", stats)
 
-	vm.Set("user", obj)
+	jsutil.Set(vm, "user", obj)
 }

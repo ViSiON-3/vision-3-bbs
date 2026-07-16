@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 	"golang.org/x/text/encoding/charmap"
 )
@@ -87,7 +88,7 @@ func NewEngine(ctx context.Context, session *SessionContext, cfg ScriptConfig, p
 	if providers.SessionRegistry != nil {
 		registerNodes(v3, eng)
 	}
-	eng.vm.Set("v3", v3)
+	jsutil.Set(eng.vm, "v3", v3)
 
 	// Register top-level helpers.
 	eng.registerGlobals()
@@ -127,7 +128,7 @@ func (eng *Engine) Run(scriptPath string) error {
 // Close cleans up the engine, stopping I/O goroutines.
 func (eng *Engine) Close() {
 	if eng.pipeWriter != nil {
-		eng.pipeWriter.Close()
+		_ = eng.pipeWriter.Close() // best-effort shutdown of the input pipe
 	}
 	// Wait for the copier goroutine to exit so it stops reading from
 	// the session. This relies on the caller closing the read interrupt
@@ -140,7 +141,7 @@ func (eng *Engine) Close() {
 		}
 	}
 	if eng.pipeReader != nil {
-		eng.pipeReader.Close()
+		_ = eng.pipeReader.Close() // best-effort shutdown of the input pipe
 	}
 	// Drain buffered results so goroutines don't block.
 	if eng.rawInputCh != nil {
@@ -164,7 +165,7 @@ func (eng *Engine) watchContext() {
 
 // registerGlobals adds top-level convenience functions (exit, sleep, etc.).
 func (eng *Engine) registerGlobals() {
-	eng.vm.Set("exit", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(eng.vm, "exit", func(call goja.FunctionCall) goja.Value {
 		code := 0
 		if len(call.Arguments) > 0 {
 			code = int(call.Arguments[0].ToInteger())

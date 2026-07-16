@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -11,11 +12,11 @@ import (
 func registerBBS(vm *goja.Runtime, eng *Engine) {
 	obj := vm.NewObject()
 
-	obj.Set("node_num", eng.session.NodeNumber)
+	jsutil.Set(obj, "node_num", eng.session.NodeNumber)
 
 	// bbs.sys_status — system status flags (read/write)
 	var sysStatus int64
-	obj.DefineAccessorProperty("sys_status", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+	jsutil.DefineAccessor(obj, "sys_status", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(sysStatus)
 	}), vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) > 0 {
@@ -25,7 +26,7 @@ func registerBBS(vm *goja.Runtime, eng *Engine) {
 	}), goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 	// bbs.online — true if user is still connected
-	obj.DefineAccessorProperty("online", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+	jsutil.DefineAccessor(obj, "online", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		select {
 		case <-eng.ctx.Done():
 			return vm.ToValue(false)
@@ -35,7 +36,7 @@ func registerBBS(vm *goja.Runtime, eng *Engine) {
 	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
 	// bbs.get_time_left() — seconds remaining in session
-	obj.Set("get_time_left", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "get_time_left", func(call goja.FunctionCall) goja.Value {
 		elapsed := time.Since(eng.session.SessionStartTime)
 		limit := time.Duration(eng.session.TimeLimit) * time.Minute
 		if limit <= 0 {
@@ -49,19 +50,19 @@ func registerBBS(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// bbs.atcode(code) — convert @-code to value string
-	obj.Set("atcode", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "atcode", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue("")
 		}
 		return vm.ToValue(resolveAtCode(call.Arguments[0].String(), eng))
 	})
 
-	obj.Set("logon_time", eng.session.SessionStartTime.Unix())
+	jsutil.Set(obj, "logon_time", eng.session.SessionStartTime.Unix())
 
 	// bbs.mods — shared object for inter-module communication
-	obj.Set("mods", vm.NewObject())
+	jsutil.Set(obj, "mods", vm.NewObject())
 
-	vm.Set("bbs", obj)
+	jsutil.Set(vm, "bbs", obj)
 }
 
 // resolveAtCode converts Synchronet @-codes to their values.

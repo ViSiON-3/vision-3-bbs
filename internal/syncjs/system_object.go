@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -11,25 +12,25 @@ import (
 func registerSystem(vm *goja.Runtime, eng *Engine) {
 	obj := vm.NewObject()
 
-	obj.Set("name", eng.session.BoardName)
-	obj.Set("operator", eng.session.SysOpName)
-	obj.Set("qwk_id", makeQWKID(eng.session.BoardName))
+	jsutil.Set(obj, "name", eng.session.BoardName)
+	jsutil.Set(obj, "operator", eng.session.SysOpName)
+	jsutil.Set(obj, "qwk_id", makeQWKID(eng.session.BoardName))
 
 	// system.timer — current time in milliseconds (used for timing)
-	obj.DefineAccessorProperty("timer", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+	jsutil.DefineAccessor(obj, "timer", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(time.Now().UnixMilli())
 	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
 	// Directory paths
-	obj.Set("exec_dir", eng.cfg.ExecDir)
-	obj.Set("data_dir", eng.cfg.DataDir)
-	obj.Set("node_dir", eng.cfg.NodeDir)
-	obj.Set("ctrl_dir", eng.cfg.ExecDir)
-	obj.Set("text_dir", eng.cfg.DataDir)
+	jsutil.Set(obj, "exec_dir", eng.cfg.ExecDir)
+	jsutil.Set(obj, "data_dir", eng.cfg.DataDir)
+	jsutil.Set(obj, "node_dir", eng.cfg.NodeDir)
+	jsutil.Set(obj, "ctrl_dir", eng.cfg.ExecDir)
+	jsutil.Set(obj, "text_dir", eng.cfg.DataDir)
 
-	obj.Set("nodes", 4)
+	jsutil.Set(obj, "nodes", 4)
 
-	vm.Set("system", obj)
+	jsutil.Set(vm, "system", obj)
 }
 
 // makeQWKID derives a QWK ID from the BBS name.
