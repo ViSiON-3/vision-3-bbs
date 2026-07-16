@@ -91,7 +91,7 @@ func ParseNFO(filePath string) (*NFOConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open NFO file %s: %w", filePath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only
 
 	nfo := &NFOConfig{
 		Entries: make(map[string]NFOEntry),

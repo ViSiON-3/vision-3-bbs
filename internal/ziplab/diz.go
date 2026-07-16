@@ -98,7 +98,7 @@ func ExtractDIZFromZip(archivePath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open zip %s: %w", archivePath, err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	var dizFile *zip.File
 	for _, f := range r.File {
@@ -120,7 +120,7 @@ func ExtractDIZFromZip(archivePath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read %s from %s: %w", dizFile.Name, archivePath, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }() // read-only
 
 	data, readErr := io.ReadAll(io.LimitReader(rc, 10*1024))
 	if readErr != nil {
@@ -160,7 +160,7 @@ func ExtractDIZFromArchive(archivePath, configPath string) (string, error) {
 	if workDir == "" {
 		return "", nil
 	}
-	defer os.RemoveAll(workDir)
+	defer func() { _ = os.RemoveAll(workDir) }() // best-effort temp cleanup
 
 	return p.findAndReadDIZ(workDir), nil
 }

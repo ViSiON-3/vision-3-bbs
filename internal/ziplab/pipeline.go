@@ -85,7 +85,7 @@ func (p *Processor) RunPipeline(archivePath string, statusFn StatusCallback) Pip
 		}
 		// Clean up work directory when pipeline finishes
 		if workDir != "" {
-			defer os.RemoveAll(workDir)
+			defer func() { _ = os.RemoveAll(workDir) }() // best-effort temp cleanup
 		}
 	}
 
@@ -214,7 +214,7 @@ func (p *Processor) handleScanFailure(archivePath string) {
 func (p *Processor) DisplayPipeline(w io.Writer, nfo *NFOConfig, ansiContent []byte, archivePath string) PipelineResult {
 	// Display the ZIPLAB.ANS background
 	if ansiContent != nil {
-		w.Write(ansiContent)
+		_, _ = w.Write(ansiContent) // best-effort display
 	}
 
 	// Build the status callback that writes ANSI sequences to the terminal
@@ -224,7 +224,7 @@ func (p *Processor) DisplayPipeline(w io.Writer, nfo *NFOConfig, ansiContent []b
 		}
 		seq := nfo.BuildStatusSequence(int(step), status)
 		if seq != "" {
-			w.Write([]byte(seq))
+			_, _ = w.Write([]byte(seq)) // best-effort display
 		}
 	}
 
@@ -233,7 +233,7 @@ func (p *Processor) DisplayPipeline(w io.Writer, nfo *NFOConfig, ansiContent []b
 	// Move cursor below all NFO content so subsequent output doesn't overwrite
 	if nfo != nil {
 		if maxRow := nfo.MaxRow(); maxRow > 0 {
-			w.Write([]byte(fmt.Sprintf("\x1b[%d;1H", maxRow+1)))
+			_, _ = w.Write([]byte(fmt.Sprintf("\x1b[%d;1H", maxRow+1))) // best-effort display
 		}
 	}
 
