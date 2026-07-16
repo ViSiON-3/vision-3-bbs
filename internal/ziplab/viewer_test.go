@@ -267,10 +267,13 @@ func TestFormatArchiveListing_ManyFiles(t *testing.T) {
 	}
 }
 
+// zipLabViewSig pins RunZipLabView's signature so any change fails compilation.
+type zipLabViewSig = func(ctx context.Context, s ssh.Session, terminal *term.Terminal,
+	filePath, filename string, outputMode ansi.OutputMode,
+	readLine ReadLineFunc, readKey ReadKeyFunc)
+
 func TestRunZipLabView_Exists(t *testing.T) {
-	// Explicit function type so any signature change fails compilation.
-	var fn func(ctx context.Context, s ssh.Session, terminal *term.Terminal,
-		filePath, filename string, outputMode ansi.OutputMode,
-		readLine ReadLineFunc, readKey ReadKeyFunc) = RunZipLabView
-	_ = fn
+	// The conversion compiles only while RunZipLabView matches the pinned
+	// signature exactly.
+	_ = zipLabViewSig(RunZipLabView)
 }
