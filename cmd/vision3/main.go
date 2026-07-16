@@ -9,11 +9,13 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -28,6 +30,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
+	"github.com/ViSiON-3/vision-3-bbs/internal/mailer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkapi"
@@ -1562,8 +1565,8 @@ func main() {
 		slog.Info("configuration hot reload enabled")
 	}
 
-	if ftnErr == nil && len(ftnConfig.Networks) > 0 {
-		slog.Info("internal FTN tosser disabled, use v3mail for toss/scan")
+	if ftnErr == nil && len(ftnConfig.Networks) > 0 && !ftnConfig.Binkd.Enabled {
+		slog.Info("internal FTN tosser disabled, use v3mail for toss/scan or enable the binkd mailer")
 	}
 
 	// Load event scheduler configuration
@@ -1711,6 +1714,32 @@ func main() {
 		slog.Info("V3Net networking disabled")
 	}
 
+	// Start the integrated binkd mailer if enabled (configs/ftn.json "binkd").
+	// Failures are warnings: the BBS must come up even if the mailer can't.
+	if ftnErr == nil && ftnConfig.Binkd.Enabled {
+		mailerFTN := ftnConfig
+		mailerFTN.ResolvePaths(basePath)
+		mailerSvc, mErr := mailer.New(mailer.Config{
+			BBSRoot: basePath,
+			FTN:     mailerFTN,
+			MsgMgr:  messageMgr,
+		})
+		if mErr != nil {
+			slog.Warn("binkd mailer disabled", "error", mErr)
+		} else {
+			mailerCtx, mailerCancel := context.WithCancel(context.Background())
+			go mailerSvc.Start(mailerCtx)
+			defer func() {
+				slog.Info("shutting down binkd mailer")
+				mailerCancel()
+				if err := mailerSvc.Close(); err != nil {
+					slog.Error("binkd mailer shutdown", "error", err)
+				}
+			}()
+			slog.Info("binkd mailer enabled", "port", ftnConfig.Binkd.Port)
+		}
+	}
+
 	// Ensure at least one protocol is enabled
 	if !serverConfig.SSHEnabled && !serverConfig.TelnetEnabled {
 		logging.Fatal("neither SSH nor Telnet is enabled in config")
@@ -1793,11 +1822,15 @@ func main() {
 		slog.Info("QWK API disabled")
 	}
 
-	// Block forever — SSH and telnet servers run in background goroutines.
-	// The process exits when the OS terminates it or logging.Fatal fires.
+	// Wait for a shutdown signal. SSH and telnet servers run in background
+	// goroutines; blocking here (rather than `select {}`) lets main() return
+	// on SIGINT/SIGTERM so all deferred cleanup runs (mailer stop, scheduler
+	// cancel, messageMgr close, etc.) instead of leaving them unreachable.
 	slog.Info("Vision/3 BBS running")
-	select {}
-
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	sig := <-sigCh
+	slog.Info("shutdown signal received, stopping", "signal", sig.String())
 }
 
 // v3netChatProvider creates a menu.ChatLeafProvider from the V3Net service.

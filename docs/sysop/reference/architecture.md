@@ -71,7 +71,10 @@ The system is designed as a single Go application that listens for incoming SSH 
    * Background polling at configurable interval
    * JSON-based dupe database with automatic purge
 
-9. **V3Net Networking (`internal/v3net/`)**
+9. **Binkd Mailer Supervisor (`internal/mailer/`)**
+   * Supervised binkd FTN mailer daemon — launches the bundled binkd as a child process when `ftn.json` `binkd.enabled` is true, restarts on crash with backoff, and periodically exports outbound echomail/netmail via the internal tosser
+
+10. **V3Net Networking (`internal/v3net/`)**
    * Native inter-BBS message networking using REST+SSE over HTTP (ed25519 signatures provide authentication)
    * **Service** (`service.go`) — top-level orchestrator that wires keystore, dedup, hub, and leaf components; manages area-to-network mapping
    * **Hub** (`hub/`) — HTTP server with SSE broadcaster, subscriber management, message storage, NAL store, area proposals, access requests, coordinator transfers; SQLite-backed
@@ -173,6 +176,7 @@ vision3/
 │   ├── file/           # File area management
 │   ├── ftn/            # FTN packet (.PKT) library
 │   ├── jam/            # JAM message base implementation
+│   ├── mailer/         # Binkd mailer supervisor + outbound export loop
 │   ├── menu/           # Menu system
 │   ├── message/        # Message area management (JAM-backed)
 │   ├── scheduler/      # Event scheduler (cron-style)
@@ -213,6 +217,7 @@ vision3/
 * `internal/ftn`: FTN Type-2+ packet parsing and creation
 * `internal/message`: Message area management, JAM-backed storage
 * `internal/tosser`: FTN echomail import/export, dupe checking, SEEN-BY/PATH
+* `internal/mailer`: Supervised binkd child process (start/restart/stop) and outbound export loop
 * `internal/scheduler`: Cron-style event scheduler for automated tasks
 * `internal/file`: File area management and metadata
 * `internal/v3net`: V3Net message networking (hub, leaf, protocol, keystore, dedup, NAL, registry)

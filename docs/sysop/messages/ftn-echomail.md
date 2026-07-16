@@ -6,7 +6,7 @@ across one or more FTN networks.
 
 ## Overview
 
-FTN echomail requires two components working together: a **tosser** (internal) and a **mailer** (external). Vision/3 includes the tosser; you supply the mailer.
+FTN echomail requires two components working together: a **tosser** (internal) and a **mailer** (external). Vision/3 includes both: the internal tosser and a bundled binkd mailer that the BBS can supervise directly or run externally.
 
 ### Tosser (Internal) — `v3mail`
 
@@ -22,15 +22,43 @@ Configured via `configs/ftn.json`. The [Configuration Editor](configuration/conf
 
 > **Current limitation — single uplink per network:** Vision/3 currently supports one uplink (hub) per FTN network. All outbound echomail for a network is sent to every configured link, so defining more than one link will result in duplicate packets being delivered to each. Multi-link routing (hub/downlink operation) is planned for a future release.
 
-### Mailer (External) — `binkd`
+### Mailer — `binkd`
 
-The mailer handles network transport — BinkP sessions with your hub to send and receive mail bundles. Vision/3 works with **any FTN-compatible mailer** that uses standard inbound/outbound directory conventions.
-
-Vision/3 releases include a pre-built **binkd** binary in `bin/` and example configuration. Binkd is the mailer that has been tested with Vision/3.
+The mailer handles network transport — BinkP sessions with your hub to send and receive mail bundles. Vision/3 releases include a pre-built **binkd** binary at `bin/binkd`, and Vision/3 can run and supervise it for you directly — no separate daemon or systemd unit required.
 
 - binkd source: <https://github.com/pgul/binkd>
 
-Configured via `data/ftn/binkd.conf` (or your mailer's own config format). The [FTN Setup Wizard](#quick-setup-ftn-setup-wizard-recommended) generates and updates `binkd.conf` for you; you can also edit it by hand — see [Step 4](#step-4-configure-your-mailer-binkd-example) for the manual setup.
+Configured via `data/ftn/binkd.conf`, which the [FTN Setup Wizard](#quick-setup-ftn-setup-wizard-recommended) generates and keeps in sync. Vision/3 also works with **any FTN-compatible mailer** that uses standard inbound/outbound directory conventions if you'd rather run your own — see [Running in Production](#running-in-production) for the external/systemd alternative.
+
+#### Enabling the Integrated Mailer (Recommended)
+
+Once the FTN Setup Wizard has created `data/ftn/binkd.conf` (or you've created it manually — [Step 4](#step-4-configure-your-mailer-binkd-example)), enable the built-in mailer:
+
+- **Configuration Editor:** `./config` → **System Configuration** → **Server Setup** → set **"Binkd Mailer"** to `Y`
+- **Or directly in `configs/ftn.json`:** set `"binkd": {"enabled": true}`
+
+Restart the BBS afterward. On startup, Vision/3 launches `bin/binkd` as a supervised child process: it restarts binkd automatically if it crashes (exponential backoff, 5s up to 5min), and stops it cleanly (SIGTERM, then a 5s grace period) on BBS shutdown.
+
+**`configs/ftn.json` → `binkd` settings:**
+
+| Field                     | Default        | Description                                                    |
+| ------------------------- | -------------- | ---------------------------------------------------------------|
+| `enabled`                 | `false`        | Turn the integrated mailer on/off                               |
+| `port`                    | `24554`        | BinkP listen port (synced to `binkd.conf`'s `iport`)            |
+| `binary_path`             | `bin/binkd`    | Path to the binkd binary, relative to the BBS root              |
+| `log_level`               | `4`            | binkd log verbosity (synced to `binkd.conf`'s `loglevel`)       |
+| `export_interval_seconds` | `300`          | How often Vision/3 scans+packs outbound mail into binkd's outbound queue |
+
+These same fields appear in the Configuration Editor under **Server Setup** as "Binkd Mailer", "Binkd Port", "Binkd Binary", "Binkd Log Lvl", and "Export Secs". Saving from the config editor also re-syncs identity fields, link passwords, `iport`, and `loglevel` into `binkd.conf`.
+
+**Preflight checks:** before starting binkd, Vision/3 verifies the binary is present and executable, that `data/ftn/binkd.conf` exists (the wizard creates it — hub hostnames live only there, not in `ftn.json`), and that at least one configured network has an `own_address` set. If any check fails, the BBS logs a warning and continues running without the mailer — it never blocks startup.
+
+**Inbound and outbound flow with the integrated mailer:**
+
+- **Inbound:** `binkd.conf`'s `exec "v3mail toss"` hook runs automatically after each receive, so mail is tossed into JAM bases without any scheduler event.
+- **Outbound:** every `export_interval_seconds`, Vision/3 scans JAM bases and packs outbound bundles in-process for any network with `internal_tosser_enabled: true` — equivalent to running `v3mail scan` + `v3mail ftn-pack` on a timer.
+
+With the integrated mailer enabled, you generally don't need `binkd_poll`/`v3mail toss`/`v3mail scan`/`v3mail ftn-pack` scheduler events — see [event-scheduler.md](advanced/event-scheduler.md#ftn-mail-polling-binkd) for when they're still useful (e.g., forcing an out-of-cycle poll of a specific hub).
 
 ### How It Works
 
@@ -449,9 +477,16 @@ To scan for outbound messages and pack bundles:
 
 ## Running in Production
 
-### Running Your FTN Mailer
+> **Prefer the integrated mailer:** enabling `binkd` in Server Setup (see
+> [Enabling the Integrated Mailer](#enabling-the-integrated-mailer-recommended)
+> above) covers everything below — Vision/3 starts, supervises, and stops
+> binkd for you. The instructions in this section are for sysops who want to
+> run binkd as an independent process outside the BBS (e.g., under systemd),
+> which remains fully supported.
 
-For ongoing operation, run your mailer as a daemon so it can both accept incoming
+### Running Your FTN Mailer Externally
+
+For ongoing operation outside the BBS, run your mailer as a daemon so it can both accept incoming
 connections and poll your hub. Example using binkd:
 
 ```bash

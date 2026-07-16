@@ -822,6 +822,16 @@ type FTNNetworkConfig struct {
 	Links                 []FTNLinkConfig `json:"links"`
 }
 
+// BinkdServerConfig controls the integrated binkd mailer daemon.
+// Zero-valued numeric/string fields are filled with defaults by LoadFTNConfig.
+type BinkdServerConfig struct {
+	Enabled    bool   `json:"enabled"`                 // Run binkd as a supervised child of the BBS
+	Port       int    `json:"port"`                    // binkp listen port (default 24554)
+	BinaryPath string `json:"binary_path"`             // Path to binkd binary, relative to BBS root (default "bin/binkd")
+	LogLevel   int    `json:"log_level"`               // binkd loglevel (default 4)
+	ExportSecs int    `json:"export_interval_seconds"` // Outbound scan/pack cadence (default 300)
+}
+
 // FTNConfig holds all FTN (FidoNet Technology Network) echomail settings.
 // Loaded from configs/ftn.json.
 type FTNConfig struct {
@@ -833,6 +843,7 @@ type FTNConfig struct {
 	TempPath          string                      `json:"temp_path"`                     // Temp dir for processing
 	BadAreaTag        string                      `json:"bad_area_tag,omitempty"`        // Area for unroutable messages (e.g., "BAD")
 	DupeAreaTag       string                      `json:"dupe_area_tag,omitempty"`       // Area for duplicate messages (e.g., "DUPE")
+	Binkd             BinkdServerConfig           `json:"binkd"`                         // Integrated binkd mailer daemon
 	Networks          map[string]FTNNetworkConfig `json:"networks"`
 }
 
@@ -1132,6 +1143,22 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 	return config, nil
 }
 
+// applyBinkdDefaults fills zero-valued BinkdServerConfig fields with defaults.
+func applyBinkdDefaults(c *BinkdServerConfig) {
+	if c.Port == 0 {
+		c.Port = 24554
+	}
+	if c.BinaryPath == "" {
+		c.BinaryPath = "bin/binkd"
+	}
+	if c.LogLevel == 0 {
+		c.LogLevel = 4
+	}
+	if c.ExportSecs == 0 {
+		c.ExportSecs = 300
+	}
+}
+
 // LoadFTNConfig loads FTN network configuration from ftn.json.
 // Returns an empty config (no networks) if the file does not exist.
 func LoadFTNConfig(configPath string) (FTNConfig, error) {
@@ -1146,6 +1173,7 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			slog.Info("ftn.json not found, FTN disabled", "path", filePath)
+			applyBinkdDefaults(&defaultConfig.Binkd)
 			return defaultConfig, nil
 		}
 		return defaultConfig, fmt.Errorf("failed to read FTN config file %s: %w", filePath, err)
@@ -1171,6 +1199,7 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	}
 	slog.Info("loaded FTN configuration", "networks", len(config.Networks), "tosserEnabled", enabledCount)
 
+	applyBinkdDefaults(&config.Binkd)
 	return config, nil
 }
 
@@ -1204,6 +1233,25 @@ func ValidateFTNConfig(cfg FTNConfig) error {
 		}
 	}
 	return nil
+}
+
+// ResolvePaths makes the FTN path fields absolute by joining relative paths
+// against root (the BBS root directory). Empty and absolute paths are unchanged.
+func (c *FTNConfig) ResolvePaths(root string) {
+	resolve := func(p string) string {
+		if p == "" || filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(root, p)
+	}
+	c.InboundPath = resolve(c.InboundPath)
+	c.SecureInboundPath = resolve(c.SecureInboundPath)
+	c.OutboundPath = resolve(c.OutboundPath)
+	c.BinkdOutboundPath = resolve(c.BinkdOutboundPath)
+	c.TempPath = resolve(c.TempPath)
+	if c.DupeDBPath != "" {
+		c.DupeDBPath = resolve(c.DupeDBPath)
+	}
 }
 
 // LoadV3NetConfig loads V3Net networking configuration from v3net.json.

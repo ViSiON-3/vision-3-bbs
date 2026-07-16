@@ -66,6 +66,9 @@ func (m *Model) saveAll() {
 			}
 		}
 		binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
+		if binkdSyncErr == nil {
+			binkdSyncErr = ftn.SyncBinkdSettings(binkdPath, m.configs.FTN.Binkd.Port, m.configs.FTN.Binkd.LogLevel)
+		}
 	}
 	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)

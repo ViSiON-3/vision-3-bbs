@@ -192,18 +192,6 @@ func cmdFtnPack(args []string) {
 	}
 }
 
-// resolveFTNPath makes path absolute by joining with root if it is not already absolute.
-// Root is the BBS root (directory containing the data folder).
-func resolveFTNPath(root, path string) string {
-	if path == "" {
-		return path
-	}
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(root, path)
-}
-
 // loadFTNDeps loads all shared dependencies needed by toss/scan/ftn-pack commands.
 // FTN paths in ftn.json are resolved relative to the BBS root (parent of dataDir)
 // so toss/scan/pack work correctly regardless of CWD when v3mail is run.
@@ -224,11 +212,7 @@ func loadFTNDeps(configDir, dataDir string) (config.FTNConfig, *message.MessageM
 	bbsRoot := filepath.Dir(absData)
 
 	// Resolve relative FTN paths against BBS root
-	ftnCfg.InboundPath = resolveFTNPath(bbsRoot, ftnCfg.InboundPath)
-	ftnCfg.SecureInboundPath = resolveFTNPath(bbsRoot, ftnCfg.SecureInboundPath)
-	ftnCfg.OutboundPath = resolveFTNPath(bbsRoot, ftnCfg.OutboundPath)
-	ftnCfg.BinkdOutboundPath = resolveFTNPath(bbsRoot, ftnCfg.BinkdOutboundPath)
-	ftnCfg.TempPath = resolveFTNPath(bbsRoot, ftnCfg.TempPath)
+	ftnCfg.ResolvePaths(bbsRoot)
 
 	// Build tearlines map for MessageManager
 	tearlines := make(map[string]string)
@@ -248,12 +232,10 @@ func loadFTNDeps(configDir, dataDir string) (config.FTNConfig, *message.MessageM
 		return config.FTNConfig{}, nil, nil, fmt.Errorf("init message manager: %w", err)
 	}
 
-	// Load or create dupe database (resolve path if from ftn.json)
+	// Load or create dupe database (path already resolved by ResolvePaths)
 	dupeDBPath := ftnCfg.DupeDBPath
 	if dupeDBPath == "" {
 		dupeDBPath = filepath.Join(dataDir, "ftn", "dupes.json")
-	} else {
-		dupeDBPath = resolveFTNPath(bbsRoot, dupeDBPath)
 	}
 	dupeDB, err := tosser.NewDupeDBFromPath(dupeDBPath)
 	if err != nil {

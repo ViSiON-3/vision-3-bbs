@@ -179,6 +179,14 @@ cd /home/bbs/git/vision3
 
 ### FTN Mail Polling (Binkd)
 
+> **Note:** If the integrated binkd mailer is enabled (Server Setup → Binkd
+> Mailer), the scan/toss/ftn-pack scheduler events above **should be
+> disabled**. The integrated mailer already runs its own export loop against
+> the same JAM message bases; leaving both enabled risks two processes
+> concurrently exporting the same bases (double-export). Scheduler events
+> remain useful for forced polls (`binkd -p`) of specific hubs. See
+> [ftn-echomail.md](../messages/ftn-echomail.md#enabling-the-integrated-mailer-recommended).
+
 **Simple poll all nodes every 30 minutes:**
 
 ```json
@@ -210,6 +218,11 @@ cd /home/bbs/git/vision3
 ```
 
 ### Echomail Tossing (v3mail)
+
+> **Note:** If the integrated binkd mailer is enabled, inbound mail is tossed
+> automatically via `binkd.conf`'s `exec "v3mail toss"` hook and outbound mail
+> is scanned/packed on the `export_interval_seconds` timer — these scheduler
+> events are only needed when running binkd externally.
 
 **Toss inbound echomail every hour:**
 

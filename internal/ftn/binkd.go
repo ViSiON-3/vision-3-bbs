@@ -372,6 +372,56 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]str
 	return writeFileAtomic(confPath, out.String(), 0600)
 }
 
+// SyncBinkdSettings updates the iport and loglevel lines in binkd.conf to
+// match the configured values. The file is only rewritten when a value
+// differs; a missing binkd.conf is a no-op (the FTN Setup Wizard creates it).
+// Non-positive port/logLevel values leave the corresponding line untouched.
+func SyncBinkdSettings(confPath string, port, logLevel int) error {
+	existing, err := os.ReadFile(confPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // No binkd.conf to sync.
+		}
+		return fmt.Errorf("reading binkd.conf: %w", err)
+	}
+
+	var out strings.Builder
+	changed := false
+	scanner := bufio.NewScanner(strings.NewReader(string(existing)))
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "iport ") && port > 0 {
+			newLine := fmt.Sprintf("iport %d", port)
+			if trimmed != newLine {
+				out.WriteString(newLine)
+				out.WriteByte('\n')
+				changed = true
+				continue
+			}
+		}
+		if strings.HasPrefix(trimmed, "loglevel ") && logLevel > 0 {
+			newLine := fmt.Sprintf("loglevel %d", logLevel)
+			if trimmed != newLine {
+				out.WriteString(newLine)
+				out.WriteByte('\n')
+				changed = true
+				continue
+			}
+		}
+
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+
+	if !changed {
+		return nil
+	}
+	return writeFileAtomic(confPath, out.String(), 0600)
+}
+
 // writeFileAtomic creates the parent directory if needed and writes content via
 // a temp file + rename, so callers never see a partial/empty binkd.conf and
 // fresh installs (where data/ftn doesn't exist yet) don't fail.
