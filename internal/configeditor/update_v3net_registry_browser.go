@@ -29,29 +29,13 @@ func (m Model) updateRegistryBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	total := len(m.regBrowserEntries)
 
+	if cursor, ok := listNavKey(msg, m.regBrowserCursor, total); ok {
+		m.regBrowserCursor = cursor
+		m.regBrowserScroll = clampListScroll(cursor, m.regBrowserScroll, regBrowserListVisible)
+		return m, nil
+	}
+
 	switch msg.Type {
-	case tea.KeyUp:
-		if m.regBrowserCursor > 0 {
-			m.regBrowserCursor--
-		}
-		m.clampRegBrowserScroll()
-
-	case tea.KeyDown:
-		if m.regBrowserCursor < total-1 {
-			m.regBrowserCursor++
-		}
-		m.clampRegBrowserScroll()
-
-	case tea.KeyHome:
-		m.regBrowserCursor = 0
-		m.clampRegBrowserScroll()
-
-	case tea.KeyEnd:
-		if total > 0 {
-			m.regBrowserCursor = total - 1
-		}
-		m.clampRegBrowserScroll()
-
 	case tea.KeyEnter:
 		if total == 0 || m.regBrowserCursor >= total {
 			return m, nil
@@ -182,18 +166,4 @@ func (m Model) isLeafSubscribed(network string) bool {
 		}
 	}
 	return false
-}
-
-// clampRegBrowserScroll ensures the cursor is visible in the registry list.
-func (m *Model) clampRegBrowserScroll() {
-	visible := regBrowserListVisible
-	if m.regBrowserScroll > m.regBrowserCursor {
-		m.regBrowserScroll = m.regBrowserCursor
-	}
-	if m.regBrowserCursor >= m.regBrowserScroll+visible {
-		m.regBrowserScroll = m.regBrowserCursor - visible + 1
-	}
-	if m.regBrowserScroll < 0 {
-		m.regBrowserScroll = 0
-	}
 }

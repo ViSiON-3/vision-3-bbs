@@ -236,16 +236,6 @@ func (m *Model) findOrCreateNetworkConference(network string) int {
 	return newID
 }
 
-// clampAreaBrowserScroll ensures the cursor is visible in the list window.
-func (m *Model) clampAreaBrowserScroll() {
-	if m.areaBrowserCursor < m.areaBrowserScroll {
-		m.areaBrowserScroll = m.areaBrowserCursor
-	}
-	if m.areaBrowserCursor >= m.areaBrowserScroll+areaBrowserListVisible {
-		m.areaBrowserScroll = m.areaBrowserCursor - areaBrowserListVisible + 1
-	}
-}
-
 // enterAreaBrowser initializes the area browser and starts the NAL fetch.
 func (m Model) enterAreaBrowser(hubURL, network string, returnMode editorMode) (tea.Model, tea.Cmd) {
 	m.areaBrowserHub = hubURL

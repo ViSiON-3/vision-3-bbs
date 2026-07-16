@@ -18,29 +18,13 @@ func (m Model) updateV3NetAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	total := len(m.areaBrowserAreas)
 
+	if cursor, ok := listNavKey(msg, m.areaBrowserCursor, total); ok {
+		m.areaBrowserCursor = cursor
+		m.areaBrowserScroll = clampListScroll(cursor, m.areaBrowserScroll, areaBrowserListVisible)
+		return m, nil
+	}
+
 	switch msg.Type {
-	case tea.KeyUp:
-		if m.areaBrowserCursor > 0 {
-			m.areaBrowserCursor--
-		}
-		m.clampAreaBrowserScroll()
-
-	case tea.KeyDown:
-		if m.areaBrowserCursor < total-1 {
-			m.areaBrowserCursor++
-		}
-		m.clampAreaBrowserScroll()
-
-	case tea.KeyHome:
-		m.areaBrowserCursor = 0
-		m.clampAreaBrowserScroll()
-
-	case tea.KeyEnd:
-		if total > 0 {
-			m.areaBrowserCursor = total - 1
-		}
-		m.clampAreaBrowserScroll()
-
 	case tea.KeySpace:
 		if total == 0 || m.areaBrowserCursor >= total {
 			return m, nil
