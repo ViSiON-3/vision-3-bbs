@@ -1,7 +1,11 @@
 package stringeditor
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
+// TestParseColorCodes covers pipe/dollar color code parsing into styled spans.
 func TestParseColorCodes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -38,6 +42,7 @@ func TestParseColorCodes(t *testing.T) {
 	}
 }
 
+// TestDollarColorIndex covers the $-code letter to color index mapping.
 func TestDollarColorIndex(t *testing.T) {
 	tests := []struct {
 		ch   byte
@@ -54,6 +59,7 @@ func TestDollarColorIndex(t *testing.T) {
 	}
 }
 
+// TestPlainTextLength covers visible-length computation with codes stripped.
 func TestPlainTextLength(t *testing.T) {
 	tests := []struct {
 		name string
@@ -75,11 +81,16 @@ func TestPlainTextLength(t *testing.T) {
 	}
 }
 
+// TestRenderColorString_TruncatesWithOverflowMarker covers truncation to
+// maxWidth with the "»" overflow marker.
 func TestRenderColorString_TruncatesWithOverflowMarker(t *testing.T) {
 	// 10 visible chars, maxWidth 5: output visible content is 4 chars + "»".
 	out := RenderColorString("0123456789", 5)
 	if visualLen(out) != 5 {
 		t.Errorf("visible len = %d, want 5 (4 chars + overflow marker)", visualLen(out))
+	}
+	if !strings.Contains(out, "»") {
+		t.Errorf("truncated output missing overflow marker: %q", out)
 	}
 	// Fits: no marker.
 	out = RenderColorString("abc", 10)

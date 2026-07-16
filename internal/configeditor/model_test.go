@@ -26,14 +26,22 @@ func newTUIModel(t *testing.T) Model {
 	return m
 }
 
+// asModel asserts that a tea.Model returned by Update is this package's
+// Model, failing the test instead of panicking on a mismatch.
+func asModel(t *testing.T, m tea.Model) Model {
+	t.Helper()
+	got, ok := m.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want Model", m)
+	}
+	return got
+}
+
+// hit sends a key message and returns the updated Model.
 func hit(t *testing.T, m Model, msg tea.KeyMsg) Model {
 	t.Helper()
 	updated, _ := m.Update(msg)
-	got, ok := updated.(Model)
-	if !ok {
-		t.Fatalf("Update returned %T, want Model", updated)
-	}
-	return got
+	return asModel(t, updated)
 }
 
 func TestTopMenuNavigationAndSelect(t *testing.T) {
@@ -103,9 +111,12 @@ func TestExitConfirmFlow(t *testing.T) {
 
 	// Clean model quits immediately on Escape.
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
-	_ = updated.(Model) // type-assert only; m is not read afterwards
+	asModel(t, updated) // m is not read afterwards; assert the type only
 	if cmd == nil {
-		t.Error("clean exit should return Quit")
+		t.Fatal("clean exit should return Quit")
+	}
+	if msg := cmd(); msg != (tea.QuitMsg{}) {
+		t.Errorf("clean exit cmd returned %T, want tea.QuitMsg", msg)
 	}
 
 	// Dirty model prompts first; Escape on the dialog cancels back to top menu.
@@ -128,7 +139,7 @@ func TestExitConfirmFlow(t *testing.T) {
 func TestConfigEditorViewSmoke(t *testing.T) {
 	m := newTUIModel(t)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 32})
-	m = updated.(Model)
+	m = asModel(t, updated)
 
 	// Prepare state for the record screens.
 	m.recordType = "msgarea"

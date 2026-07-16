@@ -6,38 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// newTestEditor builds a Model over a menu base seeded with menus ALPHA and BETA.
-func newTestEditor(t *testing.T) Model {
-	t.Helper()
-	base := newMenuBase(t)
-	for _, name := range []string{"ALPHA", "BETA"} {
-		if err := CreateMenu(base, name); err != nil {
-			t.Fatalf("CreateMenu(%s): %v", name, err)
-		}
-	}
-	m, err := New(base)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	return m
-}
-
-// press sends a key message and returns the updated Model.
-func press(t *testing.T, m Model, msg tea.KeyMsg) Model {
-	t.Helper()
-	updated, _ := m.Update(msg)
-	got, ok := updated.(Model)
-	if !ok {
-		t.Fatalf("Update returned %T, want Model", updated)
-	}
-	return got
-}
-
-func typeText(t *testing.T, m Model, s string) Model {
-	t.Helper()
-	return press(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
-}
-
 func TestMenuListNavigation(t *testing.T) {
 	m := newTestEditor(t)
 	if m.mode != modeMenuList || m.menuCursor != 0 {
@@ -282,7 +250,7 @@ func TestExitFlow(t *testing.T) {
 	// Clean model: Escape quits immediately.
 	m := newTestEditor(t)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
-	_ = updated.(Model) // type-assert only; m is not read afterwards
+	asModel(t, updated) // m is not read afterwards; assert the type only
 	if cmd == nil {
 		t.Error("clean exit should return a Quit command")
 	}
@@ -304,32 +272,11 @@ func TestExitFlow(t *testing.T) {
 		t.Fatalf("mode/confirmYes = %v/%v, want exitConfirm/true", m.mode, m.confirmYes)
 	}
 	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
+	m = asModel(t, updated)
 	if cmd == nil {
 		t.Error("confirmed exit should return a Quit command")
 	}
 	if len(m.dirtyMenus) != 0 {
 		t.Errorf("dirtyMenus = %v, want empty after saveAll", m.dirtyMenus)
-	}
-}
-
-func TestViewSmokeAllModes(t *testing.T) {
-	m := newTestEditor(t)
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	m = updated.(Model)
-
-	modes := []editorMode{
-		modeMenuList, modeMenuEdit, modeDeleteMenuConfirm, modeAddMenu,
-		modeCommandList, modeCommandEdit, modeExitConfirm, modeHelp,
-	}
-	for _, mode := range modes {
-		mm := m
-		mm.mode = mode
-		if mode == modeCommandList || mode == modeCommandEdit {
-			mm.cmds = []CmdData{{Keys: "Q", Command: "LOGOFF"}}
-		}
-		if out := mm.View(); out == "" {
-			t.Errorf("View() in mode %v returned empty output", mode)
-		}
 	}
 }

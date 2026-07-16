@@ -18,17 +18,25 @@ func newTestModel(t *testing.T) Model {
 	return m
 }
 
-// key sends a key message and returns the updated Model.
-func key(t *testing.T, m Model, msg tea.KeyMsg) Model {
+// asModel asserts that a tea.Model returned by Update is this package's
+// Model, failing the test instead of panicking on a mismatch.
+func asModel(t *testing.T, m tea.Model) Model {
 	t.Helper()
-	updated, _ := m.Update(msg)
-	got, ok := updated.(Model)
+	got, ok := m.(Model)
 	if !ok {
-		t.Fatalf("Update returned %T, want Model", updated)
+		t.Fatalf("Update returned %T, want Model", m)
 	}
 	return got
 }
 
+// key sends a key message and returns the updated Model.
+func key(t *testing.T, m Model, msg tea.KeyMsg) Model {
+	t.Helper()
+	updated, _ := m.Update(msg)
+	return asModel(t, updated)
+}
+
+// TestModelNavigation exercises cursor and page movement keys.
 func TestModelNavigation(t *testing.T) {
 	m := newTestModel(t)
 	if m.cursor != 0 || m.page != 0 {
@@ -69,6 +77,7 @@ func TestModelNavigation(t *testing.T) {
 	}
 }
 
+// TestModelEditFlow covers entering, confirming, and cancelling an edit.
 func TestModelEditFlow(t *testing.T) {
 	m := newTestModel(t)
 	keyName := m.entries[0].Key
@@ -107,6 +116,7 @@ func TestModelEditFlow(t *testing.T) {
 	}
 }
 
+// TestModelAbortAndRevertConfirm covers the abort and revert dialogs.
 func TestModelAbortAndRevertConfirm(t *testing.T) {
 	m := newTestModel(t)
 	keyName := m.entries[0].Key
@@ -139,6 +149,7 @@ func TestModelAbortAndRevertConfirm(t *testing.T) {
 	}
 }
 
+// TestModelRestoreDefault covers F4 restoring a key's shipped default value.
 func TestModelRestoreDefault(t *testing.T) {
 	m := newTestModel(t)
 
@@ -166,6 +177,7 @@ func TestModelRestoreDefault(t *testing.T) {
 	}
 }
 
+// TestModelSearch covers entering search mode, matching a key, and escaping.
 func TestModelSearch(t *testing.T) {
 	m := newTestModel(t)
 
@@ -189,10 +201,11 @@ func TestModelSearch(t *testing.T) {
 	}
 }
 
+// TestModelViewSmoke checks that View renders non-empty output.
 func TestModelViewSmoke(t *testing.T) {
 	m := newTestModel(t)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	m = updated.(Model)
+	m = asModel(t, updated)
 	if out := m.View(); out == "" {
 		t.Error("View() returned empty output")
 	}

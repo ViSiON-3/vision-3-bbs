@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+// TestLoadStrings_MissingFileCreatesDefaults checks that a missing file is
+// created with default strings and no placeholder keys.
 func TestLoadStrings_MissingFileCreatesDefaults(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "strings.json")
 	got, err := LoadStrings(path)
@@ -34,6 +36,7 @@ func TestLoadStrings_MissingFileCreatesDefaults(t *testing.T) {
 	}
 }
 
+// TestLoadStrings_InvalidJSON checks that malformed JSON returns an error.
 func TestLoadStrings_InvalidJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "strings.json")
 	if err := os.WriteFile(path, []byte("{broken"), 0644); err != nil {
@@ -44,6 +47,8 @@ func TestLoadStrings_InvalidJSON(t *testing.T) {
 	}
 }
 
+// TestSaveStrings_RoundTripSortedAndFiltered checks the save/load round trip
+// filters placeholder keys and writes keys in sorted order.
 func TestSaveStrings_RoundTripSortedAndFiltered(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "strings.json")
 	in := map[string]string{
@@ -80,6 +85,7 @@ func TestSaveStrings_RoundTripSortedAndFiltered(t *testing.T) {
 	}
 }
 
+// TestMarshalOrdered_Empty checks that a nil map marshals to an empty object.
 func TestMarshalOrdered_Empty(t *testing.T) {
 	data, err := marshalOrdered(nil)
 	if err != nil {
@@ -94,6 +100,8 @@ func TestMarshalOrdered_Empty(t *testing.T) {
 	}
 }
 
+// TestDefaultStrings_SkipsPlaceholders checks defaults exclude placeholder
+// keys but cover every non-placeholder metadata entry.
 func TestDefaultStrings_SkipsPlaceholders(t *testing.T) {
 	defaults := DefaultStrings()
 	if len(defaults) == 0 {

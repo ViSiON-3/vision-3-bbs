@@ -56,12 +56,20 @@ func TestDisplayFile(t *testing.T) {
 	})
 
 	t.Run("CP437 mode writes raw bytes", func(t *testing.T) {
+		// Pipe codes are expanded in every mode; what CP437 mode guarantees
+		// is that the resulting bytes — including high CP437 bytes like
+		// 0xB1 (▒) — are written verbatim, with no UTF-8 translation.
+		raw := append([]byte("Raw |15Block "), 0xB1)
+		if err := os.WriteFile(filepath.Join(e.MenuSetPath, "ansi", "RAW.ANS"), raw, 0644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
 		ts := newTestSession("")
-		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeCP437); err != nil {
+		if err := e.displayFile(newTestTerminal(ts), "RAW.ANS", ansi.OutputModeCP437); err != nil {
 			t.Fatalf("displayFile: %v", err)
 		}
-		if !strings.Contains(ts.output(), "Hello") {
-			t.Errorf("output missing content: %q", ts.output())
+		want := string(ansi.ReplacePipeCodes(raw))
+		if got := ts.output(); got != want {
+			t.Errorf("output = %q, want raw %q", got, want)
 		}
 	})
 
