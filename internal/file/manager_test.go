@@ -257,22 +257,46 @@ func TestGetFilesForAreaPaginated(t *testing.T) {
 		})
 	}
 
-	// Page 1, size 2
+	// All records, in the order GetFilesForArea provides (pagination must match it).
+	all := fm.GetFilesForArea(1)
+	if len(all) != 5 {
+		t.Fatalf("expected 5 records total, got %d", len(all))
+	}
+
+	// Page 1, size 2 (first page)
 	page, err := fm.GetFilesForAreaPaginated(1, 1, 2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(page) != 2 {
-		t.Errorf("expected 2 records on page 1, got %d", len(page))
+		t.Fatalf("expected 2 records on page 1, got %d", len(page))
+	}
+	if page[0].ID != all[0].ID || page[1].ID != all[1].ID {
+		t.Error("page 1 does not match first two records of GetFilesForArea")
 	}
 
-	// Page 3, size 2 (only 1 record left)
+	// Page 2, size 2 (middle page)
+	page, err = fm.GetFilesForAreaPaginated(1, 2, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(page) != 2 {
+		t.Fatalf("expected 2 records on page 2, got %d", len(page))
+	}
+	if page[0].ID != all[2].ID || page[1].ID != all[3].ID {
+		t.Error("page 2 does not match middle records of GetFilesForArea")
+	}
+
+	// Page 3, size 2 (last, partial page: only 1 record left)
 	page, err = fm.GetFilesForAreaPaginated(1, 3, 2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(page) != 1 {
-		t.Errorf("expected 1 record on last page, got %d", len(page))
+		t.Fatalf("expected 1 record on last page, got %d", len(page))
+	}
+	if page[0].ID != all[4].ID {
+		t.Error("last page does not match final record of GetFilesForArea")
 	}
 
 	// Page beyond range
@@ -285,9 +309,22 @@ func TestGetFilesForAreaPaginated(t *testing.T) {
 	}
 
 	// Invalid page
-	_, err = fm.GetFilesForAreaPaginated(1, 0, 2)
-	if err == nil {
+	if _, err = fm.GetFilesForAreaPaginated(1, 0, 2); err == nil {
 		t.Error("expected error for page 0")
+	}
+
+	// Invalid page size
+	if _, err = fm.GetFilesForAreaPaginated(1, 1, 0); err == nil {
+		t.Error("expected error for pageSize 0")
+	}
+
+	// Nonexistent area
+	page, err = fm.GetFilesForAreaPaginated(999, 1, 2)
+	if err != nil {
+		t.Fatalf("unexpected error for nonexistent area: %v", err)
+	}
+	if len(page) != 0 {
+		t.Errorf("expected 0 records for nonexistent area, got %d", len(page))
 	}
 }
 
