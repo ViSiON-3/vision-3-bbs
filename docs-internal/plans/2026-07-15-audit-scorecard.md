@@ -109,3 +109,30 @@ healthy), and any V3Net/FTN behavior changes.
 Steps 1–4 are independent and could proceed immediately after this report is approved (each is a small,
 verifiable PR). Step 5 depends on none but benefits from snapshot tests. Steps 6–8 are ongoing-quality
 work suitable for interleaving with feature development. Steps 9–10 are parked pending fixtures/need.
+
+---
+
+## Post-remediation update — 2026-07-16
+
+Steps 1–8 executed and merged (PRs #86–#96), plus fixes surfaced by review along the way
+(post-door idle-timeout bypass #90, NAL SSE wiring gap #91, QWK zip-finalize and JAM
+delete-path error handling in #95). Re-measured on merged main:
+
+| Category | Was | Now | Notes |
+|---|---|---|---|
+| Error handling | C+ (50 shown / 1,092 actual errcheck) | **A (0 errcheck)** | the "50" was golangci's display cap; real bugs fixed en route |
+| Dead code | C+ (26 unused + 76 candidates) | **A− (0 unused)** | ~1,050 LOC deleted; NAL handlers wired instead of deleted |
+| Test coverage | C− (mean 54.8%, 4 pkgs at 0%) | **B− (mean 63.3%, 0 pkgs at 0%)** | suite 1,678 → 1,848 tests; menu still weak (7.8%) |
+| Duplication | C (~800–950 LOC) | **B** | lightbar + configeditor families consolidated (~700 LOC); ftn↔tosser parked |
+| Concurrency | A | A | regression tests added |
+| Memory | B | B+ | drains/reads bounded everywhere; lightbar full-list buffer remains |
+| Loading perf | A− | A− | regex hoist landed; caching still not warranted |
+| File size | D (106 files >300) | **D (110 files >300)** | worst offenders split (2,350/1,899 → ≤958), but error-handling additions nudged others over; remaining big files are single giant functions (Run, runUserEditor) needing logic-aware decomposition |
+
+Lint baseline: 121 → **16** (all staticcheck QF-class style suggestions, deliberately skipped).
+CI gates new issues on every PR.
+
+Remaining (parked by design): step 9 ftn↔tosser address unification (needs FTN golden-packet
+fixtures first), step 10 mtime-keyed ANSI cache (no spinning-disk deployment target), and
+logic-aware decomposition of the two giant functions if/when the menu executor gets its
+characterization-test layer thickened further.
