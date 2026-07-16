@@ -41,7 +41,7 @@ func (l *Leaf) subscribe(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("leaf: subscribe POST: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read side
 
 	body, err := readBody(resp.Body, maxRespBytes)
 	if err != nil {
@@ -95,8 +95,8 @@ func (l *Leaf) SendChatCtx(ctx context.Context, text, handle string) error {
 	if err != nil {
 		return fmt.Errorf("leaf: chat join: %w", err)
 	}
-	io.Copy(io.Discard, joinResp.Body)
-	joinResp.Body.Close()
+	_, _ = io.Copy(io.Discard, joinResp.Body) // drain for connection reuse
+	_ = joinResp.Body.Close()                 // read side
 	if joinResp.StatusCode/100 != 2 {
 		return fmt.Errorf("leaf: chat join returned %d", joinResp.StatusCode)
 	}
@@ -110,8 +110,8 @@ func (l *Leaf) SendChatCtx(ctx context.Context, text, handle string) error {
 	if err != nil {
 		return fmt.Errorf("leaf: chat post: %w", err)
 	}
-	io.Copy(io.Discard, postResp.Body)
-	postResp.Body.Close()
+	_, _ = io.Copy(io.Discard, postResp.Body) // drain for connection reuse
+	_ = postResp.Body.Close()                 // read side
 	if postResp.StatusCode/100 != 2 {
 		return fmt.Errorf("leaf: chat post returned %d", postResp.StatusCode)
 	}
@@ -171,8 +171,8 @@ func (l *Leaf) signedPostCtx(ctx context.Context, path string, body []byte) erro
 	if err != nil {
 		return fmt.Errorf("leaf: POST %s: %w", path, err)
 	}
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	defer func() { _ = resp.Body.Close() }() // read side
+	_, _ = io.Copy(io.Discard, resp.Body)    // drain for connection reuse
 
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("leaf: POST %s returned %d", path, resp.StatusCode)
@@ -241,7 +241,7 @@ func (l *Leaf) get(path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("leaf: GET %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read side
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s: status %d", path, resp.StatusCode)
 	}

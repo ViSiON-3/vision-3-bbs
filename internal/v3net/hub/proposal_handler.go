@@ -88,7 +88,7 @@ func (ps *ProposalStore) ListPending(network string) ([]protocol.AreaProposal, e
 	if err != nil {
 		return nil, fmt.Errorf("hub: list proposals: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() // read-only
 
 	var result []protocol.AreaProposal
 	for rows.Next() {

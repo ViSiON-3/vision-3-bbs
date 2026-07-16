@@ -57,7 +57,7 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	if err != nil {
 		return fmt.Errorf("SSE connect: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read side
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("SSE status: %d", resp.StatusCode)

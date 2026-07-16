@@ -175,7 +175,7 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 		}
 		// Create data dir before hub.New opens the SQLite database.
 		if err := os.MkdirAll(cfg.Hub.DataDir, 0755); err != nil {
-			ix.Close()
+			_ = ix.Close() // cleanup on error path
 			return nil, fmt.Errorf("v3net: create hub data dir: %w", err)
 		}
 		h, err := hub.New(hub.Config{
@@ -186,7 +186,7 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 			Networks:    networks,
 		})
 		if err != nil {
-			ix.Close()
+			_ = ix.Close() // cleanup on error path
 			return nil, fmt.Errorf("v3net: create hub: %w", err)
 		}
 		hubAutoInit(cfg, h, ks)
@@ -256,7 +256,7 @@ func (s *Service) Close() error {
 		l.Close()
 	}
 	if s.hub != nil {
-		s.hub.Close()
+		_ = s.hub.Close() // best-effort shutdown
 	}
 	return s.dedupIdx.Close()
 }

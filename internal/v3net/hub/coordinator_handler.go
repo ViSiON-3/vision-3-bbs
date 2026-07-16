@@ -121,7 +121,7 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 	// Enforce 24-hour TTL on transfer tokens.
 	if t, parseErr := time.Parse("2006-01-02 15:04:05", createdAt); parseErr == nil {
 		if time.Since(t) > 24*time.Hour {
-			h.db.Exec("DELETE FROM coordinator_transfers WHERE network = ?", network)
+			_, _ = h.db.Exec("DELETE FROM coordinator_transfers WHERE network = ?", network) // best-effort cleanup; leftovers expire via TTL check
 			http.Error(w, `{"error":"transfer token expired"}`, http.StatusGone)
 			return
 		}
@@ -169,7 +169,7 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clean up the transfer.
-	h.db.Exec("DELETE FROM coordinator_transfers WHERE network = ?", network)
+	_, _ = h.db.Exec("DELETE FROM coordinator_transfers WHERE network = ?", network) // best-effort cleanup; leftovers expire via TTL check
 
 	// Fan out nal_updated event.
 	ev, _ := protocol.NewEvent(protocol.EventNALUpdated, protocol.NALUpdatedPayload{

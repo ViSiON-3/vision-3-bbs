@@ -80,7 +80,7 @@ func (as *AreaSubscriptionStore) ListForNode(nodeID, network string) ([]protocol
 	if err != nil {
 		return nil, fmt.Errorf("hub: list area subscriptions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() // read-only
 
 	var result []protocol.AreaSubscriptionStatus
 	for rows.Next() {

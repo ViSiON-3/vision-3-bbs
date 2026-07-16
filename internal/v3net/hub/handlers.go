@@ -95,14 +95,14 @@ func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 	// Write raw JSON array of message objects.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("["))
+	_, _ = w.Write([]byte("[")) // best-effort response write
 	for i, data := range results {
 		if i > 0 {
-			w.Write([]byte(","))
+			_, _ = w.Write([]byte(",")) // best-effort response write
 		}
-		w.Write([]byte(data))
+		_, _ = w.Write([]byte(data)) // best-effort response write
 	}
-	w.Write([]byte("]"))
+	_, _ = w.Write([]byte("]")) // best-effort response write
 }
 
 // handlePostMessage accepts a new message from a leaf node (auth required).
@@ -364,7 +364,9 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 		// Second pass: all validations passed, apply subscriptions and events.
 		for _, ps := range pending {
-			h.areaSubscriptions.Upsert(req.NodeID, req.Network, ps.tag, ps.status)
+			if err := h.areaSubscriptions.Upsert(req.NodeID, req.Network, ps.tag, ps.status); err != nil {
+				slog.Error("v3net hub: persist area subscription", "node", req.NodeID, "tag", ps.tag, "error", err)
+			}
 			areaStatuses = append(areaStatuses, protocol.AreaSubscriptionStatus{
 				Tag:    ps.tag,
 				Status: ps.status,
@@ -372,7 +374,9 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, pr := range pendingRequests {
-			h.accessRequests.Add(req.Network, pr.tag, req.NodeID, req.BBSName)
+			if _, err := h.accessRequests.Add(req.Network, pr.tag, req.NodeID, req.BBSName); err != nil {
+				slog.Error("v3net hub: persist access request", "node", req.NodeID, "tag", pr.tag, "error", err)
+			}
 			ev, _ := protocol.NewEvent(protocol.EventAreaAccessRequested, protocol.AreaAccessRequestedPayload{
 				Network: req.Network,
 				Tag:     pr.tag,
@@ -414,5 +418,5 @@ func (h *Hub) findNetwork(name string) *NetworkConfig {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v) // best-effort response write
 }

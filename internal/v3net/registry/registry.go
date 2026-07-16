@@ -77,7 +77,7 @@ func fetchRemote(ctx context.Context, url string) ([]protocol.RegistryEntry, err
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read side
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s returned %d", url, resp.StatusCode)

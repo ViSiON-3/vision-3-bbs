@@ -30,11 +30,11 @@ func Open(path string) (*Index, error) {
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000"); err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, fmt.Errorf("dedup: configure pragmas: %w", err)
 	}
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, fmt.Errorf("dedup: create schema: %w", err)
 	}
 	return &Index{db: db}, nil
