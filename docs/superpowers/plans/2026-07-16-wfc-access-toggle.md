@@ -88,7 +88,7 @@ Expected: PASS (all `TestLoadServerConfig_*` tests, including the partial-overla
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-gofmt -l internal/config/ && go vet ./internal/config/
+gofmt -w internal/config/ && go vet ./internal/config/
 git add internal/config/config.go internal/config/config_test.go
 git commit -m "feat(config): add WFCEnabled server setting, default true"
 ```
