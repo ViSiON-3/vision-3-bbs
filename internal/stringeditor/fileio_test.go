@@ -75,7 +75,7 @@ func TestSaveStrings_RoundTripSortedAndFiltered(t *testing.T) {
 	ia := strings.Index(string(raw), `"alpha"`)
 	im := strings.Index(string(raw), `"mid"`)
 	iz := strings.Index(string(raw), `"zebra"`)
-	if ia < 0 || im < 0 || iz < 0 || !(ia < im && im < iz) {
+	if ia < 0 || im < 0 || iz < 0 || ia >= im || im >= iz {
 		t.Errorf("keys not sorted on disk: alpha@%d mid@%d zebra@%d", ia, im, iz)
 	}
 }

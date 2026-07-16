@@ -103,7 +103,7 @@ func TestExitConfirmFlow(t *testing.T) {
 
 	// Clean model quits immediately on Escape.
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
-	m = updated.(Model)
+	_ = updated.(Model) // type-assert only; m is not read afterwards
 	if cmd == nil {
 		t.Error("clean exit should return Quit")
 	}
