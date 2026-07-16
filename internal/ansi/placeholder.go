@@ -68,12 +68,19 @@ func ProcessEditorPlaceholders(template []byte, substitutions map[byte]string) [
 			align = ParseAlignment(string(template[match[4]:match[5]]))
 		}
 
-		// Parse width: digits-after-modifier > colon-width > visual-hash-width
+		// Parse width: digits-after-modifier > colon-width > visual-hash-width.
+		// The regex guarantees digits, so Atoi only fails on range overflow —
+		// where it returns MaxInt alongside the error. Treat that as no width
+		// rather than padding to MaxInt.
 		width := 0
 		if match[6] != -1 { // digits immediately after modifier (e.g. @T|R8@)
-			width, _ = strconv.Atoi(string(template[match[6]:match[7]]))
+			if w, err := strconv.Atoi(string(template[match[6]:match[7]])); err == nil {
+				width = w
+			}
 		} else if match[8] != -1 { // explicit :N width (e.g. @T:20@ or @T|R:20@)
-			width, _ = strconv.Atoi(string(template[match[8]:match[9]]))
+			if w, err := strconv.Atoi(string(template[match[8]:match[9]])); err == nil {
+				width = w
+			}
 		} else if match[10] != -1 { // visual width = total placeholder byte length
 			width = match[1] - match[0]
 		}

@@ -1478,13 +1478,7 @@ func main() {
 		networkTearlines = nil
 	}
 
-	// Load oneliners (Assuming they are still global for now, adjust if needed)
-	// oneliners, err := config.LoadOneLiners(filepath.Join(dataPath, "oneliners.dat")) // Example path
-	// if err != nil {
-	// 	slog.Warn("failed to load oneliners", "error", err)
-	// 	oneliners = []string{} // Use empty list if loading fails
-	// }
-	// Initialize oneliners as empty slice since loading is now handled by the runnable
+	// Oneliners are loaded by the runnable; start with an empty list here.
 	oneliners := []string{}
 
 	// Initialize UserManager (using dataPath)

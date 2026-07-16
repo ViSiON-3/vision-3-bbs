@@ -3,15 +3,10 @@ package menu
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-
-	"log/slog"
-	// "vision3/config" // TODO: Get MenuDir from config
 )
-
-// TODO: Replace this with path from config
-const menuDir = "menus"
 
 // LoadMenu reads a .MNU file (assumed JSON) for the given menu name.
 func LoadMenu(menuName string, configPath string) (*MenuRecord, error) {
@@ -78,23 +73,3 @@ func HasBarFile(menuName string, menuSetPath string) bool {
 	_, err := os.Stat(barPath)
 	return err == nil
 }
-
-// NOTE: Removed duplicate struct definitions here. They should exist elsewhere.
-/*
-type MenuRecord struct {
-	ClrScrBefore bool   `json:"CLR"`    // Clear screen before display
-	UsePrompt    bool   `json:"PROMPT"` // Use custom prompt? (Seems false for LOGIN)
-	Prompt1      string `json:"PROMPT1"`
-	Prompt2      string `json:"PROMPT2"` // (Ignoring PROMPT2/3 for now)
-	Fallback     string `json:"FALLBACK"` // Menu to go to on no match
-	ACS          string `json:"ACS"`
-	Password     string `json:"PASS"` // Added PASS field
-}
-
-type CommandRecord struct {
-	Keys    string `json:"KEYS"`
-	Command string `json:"CMD"`
-	ACS     string `json:"ACS"`
-	Hidden  bool   `json:"HIDDEN"`
-}
-*/

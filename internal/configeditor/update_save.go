@@ -49,6 +49,7 @@ func (m *Model) saveAll() {
 		return
 	}
 	// Sync BBS identity and link passwords to binkd.conf (best-effort).
+	var binkdSyncErr error
 	{
 		bbsRoot := filepath.Join(m.configPath, "..")
 		binkdPath := filepath.Join(bbsRoot, "data", "ftn", "binkd.conf")
@@ -64,7 +65,7 @@ func (m *Model) saveAll() {
 				links[addr] = lnk.SessionPassword
 			}
 		}
-		_ = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal
+		binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
 	}
 	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
@@ -84,7 +85,11 @@ func (m *Model) saveAll() {
 	}
 
 	m.dirty = false
-	m.message = "All configurations saved successfully"
+	if binkdSyncErr != nil {
+		m.message = fmt.Sprintf("Saved (warning: binkd.conf sync failed: %v)", binkdSyncErr)
+	} else {
+		m.message = "All configurations saved successfully"
+	}
 }
 
 // --- Record count and helpers ---
