@@ -80,29 +80,13 @@ func (m Model) updateFTNAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if cursor, ok := listNavKey(msg, m.ftnAreaBrowserCursor, total); ok {
+		m.ftnAreaBrowserCursor = cursor
+		m.ftnAreaBrowserScroll = clampListScroll(cursor, m.ftnAreaBrowserScroll, ftnAreaBrowserListVisible)
+		return m, nil
+	}
+
 	switch msg.Type {
-	case tea.KeyUp:
-		if m.ftnAreaBrowserCursor > 0 {
-			m.ftnAreaBrowserCursor--
-		}
-		m.clampFTNAreaBrowserScroll()
-
-	case tea.KeyDown:
-		if m.ftnAreaBrowserCursor < total-1 {
-			m.ftnAreaBrowserCursor++
-		}
-		m.clampFTNAreaBrowserScroll()
-
-	case tea.KeyHome:
-		m.ftnAreaBrowserCursor = 0
-		m.clampFTNAreaBrowserScroll()
-
-	case tea.KeyEnd:
-		if total > 0 {
-			m.ftnAreaBrowserCursor = total - 1
-		}
-		m.clampFTNAreaBrowserScroll()
-
 	case tea.KeySpace:
 		if total > 0 && m.ftnAreaBrowserCursor < total {
 			m.ftnAreaBrowserSelected[m.ftnAreaBrowserCursor] = !m.ftnAreaBrowserSelected[m.ftnAreaBrowserCursor]
@@ -136,14 +120,4 @@ func (m Model) updateFTNAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
-}
-
-// clampFTNAreaBrowserScroll ensures the cursor is visible.
-func (m *Model) clampFTNAreaBrowserScroll() {
-	if m.ftnAreaBrowserCursor < m.ftnAreaBrowserScroll {
-		m.ftnAreaBrowserScroll = m.ftnAreaBrowserCursor
-	}
-	if m.ftnAreaBrowserCursor >= m.ftnAreaBrowserScroll+ftnAreaBrowserListVisible {
-		m.ftnAreaBrowserScroll = m.ftnAreaBrowserCursor - ftnAreaBrowserListVisible + 1
-	}
 }

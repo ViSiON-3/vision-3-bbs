@@ -47,29 +47,13 @@ func (m Model) loadFTNOverrideNetworks() []ftn.RegistryNetwork {
 func (m Model) updateFTNNetworkBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	total := len(m.ftnNetBrowserEntries)
 
+	if cursor, ok := listNavKey(msg, m.ftnNetBrowserCursor, total); ok {
+		m.ftnNetBrowserCursor = cursor
+		m.ftnNetBrowserScroll = clampListScroll(cursor, m.ftnNetBrowserScroll, ftnNetBrowserListVisible)
+		return m, nil
+	}
+
 	switch msg.Type {
-	case tea.KeyUp:
-		if m.ftnNetBrowserCursor > 0 {
-			m.ftnNetBrowserCursor--
-		}
-		m.clampFTNNetBrowserScroll()
-
-	case tea.KeyDown:
-		if m.ftnNetBrowserCursor < total-1 {
-			m.ftnNetBrowserCursor++
-		}
-		m.clampFTNNetBrowserScroll()
-
-	case tea.KeyHome:
-		m.ftnNetBrowserCursor = 0
-		m.clampFTNNetBrowserScroll()
-
-	case tea.KeyEnd:
-		if total > 0 {
-			m.ftnNetBrowserCursor = total - 1
-		}
-		m.clampFTNNetBrowserScroll()
-
 	case tea.KeyEnter:
 		// Select the highlighted network and populate wizard fields.
 		if total > 0 && m.ftnNetBrowserCursor < total {
@@ -128,14 +112,4 @@ func (m *Model) populateFTNWizardFromRegistry(net *ftn.RegistryNetwork) {
 
 	// Refresh field definitions so closures point to updated state.
 	m.ftnWizardFields = m.fieldsFTNWizard()
-}
-
-// clampFTNNetBrowserScroll ensures the cursor is visible.
-func (m *Model) clampFTNNetBrowserScroll() {
-	if m.ftnNetBrowserCursor < m.ftnNetBrowserScroll {
-		m.ftnNetBrowserScroll = m.ftnNetBrowserCursor
-	}
-	if m.ftnNetBrowserCursor >= m.ftnNetBrowserScroll+ftnNetBrowserListVisible {
-		m.ftnNetBrowserScroll = m.ftnNetBrowserCursor - ftnNetBrowserListVisible + 1
-	}
 }
