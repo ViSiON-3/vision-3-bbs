@@ -60,7 +60,7 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 	}
 
 	cleanup := func() {
-		server.Close()
+		_ = server.Close() // best-effort shutdown
 		sshserver.Cleanup()
 	}
 
@@ -82,8 +82,8 @@ func sshSessionHandler(sess ssh.Session) {
 	canAccept, reason := connectionTracker.TryAccept(wrapped.RemoteAddr())
 	if !canAccept {
 		slog.Info("rejecting SSH connection", "addr", wrapped.RemoteAddr(), "reason", reason)
-		fmt.Fprintf(wrapped, "\r\nConnection rejected: %s\r\n", reason)
-		fmt.Fprintf(wrapped, "Please try again later.\r\n")
+		_, _ = fmt.Fprintf(wrapped, "\r\nConnection rejected: %s\r\n", reason) // best-effort notice to client
+		_, _ = fmt.Fprintf(wrapped, "Please try again later.\r\n") // best-effort notice to client
 		time.Sleep(2 * time.Second)
 		return
 	}

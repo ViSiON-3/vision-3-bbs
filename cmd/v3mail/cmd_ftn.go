@@ -18,7 +18,7 @@ func cmdToss(args []string) {
 	dataDir := fs.String("data", "data", "Data directory")
 	networkName := fs.String("network", "", "Limit to a single network (default: all enabled)")
 	quiet := fs.Bool("q", false, "Quiet mode")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	ftnCfg, msgMgr, dupeDB, err := loadFTNDeps(*configDir, *dataDir)
 	if err != nil {
@@ -80,7 +80,7 @@ func cmdScan(args []string) {
 	dataDir := fs.String("data", "data", "Data directory")
 	networkName := fs.String("network", "", "Limit to a single network (default: all enabled)")
 	quiet := fs.Bool("q", false, "Quiet mode")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	ftnCfg, msgMgr, dupeDB, err := loadFTNDeps(*configDir, *dataDir)
 	if err != nil {
@@ -139,7 +139,7 @@ func cmdFtnPack(args []string) {
 	dataDir := fs.String("data", "data", "Data directory")
 	networkName := fs.String("network", "", "Limit to a single network (default: all enabled)")
 	quiet := fs.Bool("q", false, "Quiet mode")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	ftnCfg, msgMgr, dupeDB, err := loadFTNDeps(*configDir, *dataDir)
 	if err != nil {

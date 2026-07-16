@@ -71,7 +71,7 @@ func wfcAdminSubsystem(sess ssh.Session) {
 	handle, _ := sess.Context().Value(wfcAdminHandleKey{}).(string)
 	if handle == "" || !authorizeAdmin(handle) {
 		slog.Warn("wfc-admin: subsystem access denied", "user", handle, "addr", sess.RemoteAddr())
-		fmt.Fprintf(sess, "access denied\n")
+		_, _ = fmt.Fprintf(sess, "access denied\n") // best-effort notice to client
 		return
 	}
 
@@ -83,7 +83,7 @@ func wfcAdminSubsystem(sess ssh.Session) {
 
 	if adminServer == nil {
 		slog.Warn("wfc-admin: subsystem requested before admin server initialized", "remote", sess.RemoteAddr())
-		fmt.Fprintf(sess, "server not ready\r\n")
+		_, _ = fmt.Fprintf(sess, "server not ready\r\n") // best-effort notice to client
 		return
 	}
 

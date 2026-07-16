@@ -50,9 +50,9 @@ const (
 )
 
 func printHeader() {
-	fmt.Fprintf(os.Stderr, "%sViSiON/3 Helper Utility v%s  ·  MIT License%s\n",
+	_, _ = fmt.Fprintf(os.Stderr, "%sViSiON/3 Helper Utility v%s  ·  MIT License%s\n",
 		clrBold, version.Number, clrReset)
-	fmt.Fprintln(os.Stderr, separator)
+	_, _ = fmt.Fprintln(os.Stderr, separator)
 }
 
 func bullet(msg string) string {
@@ -103,30 +103,30 @@ func main() {
 func printUsage(errMsg string) {
 	w := os.Stderr
 	printHeader()
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 	if errMsg != "" {
-		fmt.Fprintln(w, bullet(errMsg))
+		_, _ = fmt.Fprintln(w, bullet(errMsg))
 	}
-	fmt.Fprintln(w, bullet("helper needs a little more information!"))
-	fmt.Fprintln(w, bullet("Required Format: helper <command> [options]"))
-	fmt.Fprintln(w, bullet("Valid Commands Are As Follows..."))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sFTN Commands:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpcmd("FTNSETUP", "Import FTN echo areas from a FIDONET.NA file"))
-	fmt.Fprintln(w, helpcmd("AREAFIX", "Send an AreaFix netmail command to a network hub"))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sUser Commands:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpcmd("USERS PURGE", "Permanently remove soft-deleted users past retention"))
-	fmt.Fprintln(w, helpcmd("USERS LIST", "List user accounts"))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sFile Commands:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpcmd("FILES IMPORT", "Bulk import files from a directory into a file area"))
-	fmt.Fprintln(w, helpcmd("FILES REEXTRACTDIZ", "Re-extract FILE_ID.DIZ and update descriptions"))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))
-	fmt.Fprintln(w, helpopt("--data DIR", "Data directory (default: data)"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, bullet("helper needs a little more information!"))
+	_, _ = fmt.Fprintln(w, bullet("Required Format: helper <command> [options]"))
+	_, _ = fmt.Fprintln(w, bullet("Valid Commands Are As Follows..."))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sFTN Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("FTNSETUP", "Import FTN echo areas from a FIDONET.NA file"))
+	_, _ = fmt.Fprintln(w, helpcmd("AREAFIX", "Send an AreaFix netmail command to a network hub"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sUser Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("USERS PURGE", "Permanently remove soft-deleted users past retention"))
+	_, _ = fmt.Fprintln(w, helpcmd("USERS LIST", "List user accounts"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sFile Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("FILES IMPORT", "Bulk import files from a directory into a file area"))
+	_, _ = fmt.Fprintln(w, helpcmd("FILES REEXTRACTDIZ", "Re-extract FILE_ID.DIZ and update descriptions"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))
+	_, _ = fmt.Fprintln(w, helpopt("--data DIR", "Data directory (default: data)"))
+	_, _ = fmt.Fprintln(w)
 }
 
 // --- users command group ---
@@ -134,27 +134,27 @@ func printUsage(errMsg string) {
 func printUsersHelp(errMsg string) {
 	w := os.Stderr
 	printHeader()
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 	if errMsg != "" {
-		fmt.Fprintln(w, bullet(errMsg))
+		_, _ = fmt.Fprintln(w, bullet(errMsg))
 	}
-	fmt.Fprintln(w, bullet("Required Format: helper users <subcommand> [options]"))
-	fmt.Fprintln(w, bullet("Valid Subcommands Are As Follows..."))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sUser Subcommands:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpcmd("PURGE", "Permanently remove soft-deleted users past retention"))
-	fmt.Fprintln(w, helpcmd("LIST", "List user accounts (optionally filtered to deleted)"))
-	fmt.Fprintln(w, helpcmd("ADDKEY <handle> <keyfile|->", "Register a WFC SSH public key for a user"))
-	fmt.Fprintln(w, helpcmd("LISTKEYS <handle>", "List a user's WFC public keys (fingerprints)"))
-	fmt.Fprintln(w, helpcmd("DELKEY <handle> <fingerprint|index>", "Remove a WFC public key from a user"))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sOptions:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))
-	fmt.Fprintln(w, helpopt("--data DIR", "Data directory (default: data/users)"))
-	fmt.Fprintln(w, helpopt("--days N", "Retention days override (purge)"))
-	fmt.Fprintln(w, helpopt("--dry-run", "Show what would happen without making changes"))
-	fmt.Fprintln(w, helpopt("--deleted", "Show only soft-deleted accounts (list)"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, bullet("Required Format: helper users <subcommand> [options]"))
+	_, _ = fmt.Fprintln(w, bullet("Valid Subcommands Are As Follows..."))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sUser Subcommands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("PURGE", "Permanently remove soft-deleted users past retention"))
+	_, _ = fmt.Fprintln(w, helpcmd("LIST", "List user accounts (optionally filtered to deleted)"))
+	_, _ = fmt.Fprintln(w, helpcmd("ADDKEY <handle> <keyfile|->", "Register a WFC SSH public key for a user"))
+	_, _ = fmt.Fprintln(w, helpcmd("LISTKEYS <handle>", "List a user's WFC public keys (fingerprints)"))
+	_, _ = fmt.Fprintln(w, helpcmd("DELKEY <handle> <fingerprint|index>", "Remove a WFC public key from a user"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sOptions:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))
+	_, _ = fmt.Fprintln(w, helpopt("--data DIR", "Data directory (default: data/users)"))
+	_, _ = fmt.Fprintln(w, helpopt("--days N", "Retention days override (purge)"))
+	_, _ = fmt.Fprintln(w, helpopt("--dry-run", "Show what would happen without making changes"))
+	_, _ = fmt.Fprintln(w, helpopt("--deleted", "Show only soft-deleted accounts (list)"))
+	_, _ = fmt.Fprintln(w)
 }
 
 func cmdUsers(args []string) {
@@ -188,30 +188,30 @@ func cmdUsers(args []string) {
 func printFilesHelp(errMsg string) {
 	w := os.Stderr
 	printHeader()
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 	if errMsg != "" {
-		fmt.Fprintln(w, bullet(errMsg))
+		_, _ = fmt.Fprintln(w, bullet(errMsg))
 	}
-	fmt.Fprintln(w, bullet("Required Format: helper files <subcommand> [options]"))
-	fmt.Fprintln(w, bullet("Valid Subcommands Are As Follows..."))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sFile Subcommands:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpcmd("IMPORT", "Bulk import files from a directory into a file area"))
-	fmt.Fprintln(w, helpcmd("REEXTRACTDIZ", "Re-extract FILE_ID.DIZ and update descriptions"))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sImport Options:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpopt("--dir DIR", "Source directory containing files (required)"))
-	fmt.Fprintln(w, helpopt("--area TAG", "Target file area tag (required)"))
-	fmt.Fprintln(w, helpopt("--uploader NAME", "Uploader handle (default: Sysop)"))
-	fmt.Fprintln(w, helpopt("--move", "Move files instead of copying"))
-	fmt.Fprintln(w, helpopt("--preserve-dates", "Use file modification time as upload date"))
-	fmt.Fprintln(w, helpopt("--no-diz", "Skip FILE_ID.DIZ extraction from archives"))
-	fmt.Fprintln(w, helpopt("--dry-run", "Show what would happen without making changes"))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))
-	fmt.Fprintln(w, helpopt("--data DIR", "Data directory (default: data)"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, bullet("Required Format: helper files <subcommand> [options]"))
+	_, _ = fmt.Fprintln(w, bullet("Valid Subcommands Are As Follows..."))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sFile Subcommands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("IMPORT", "Bulk import files from a directory into a file area"))
+	_, _ = fmt.Fprintln(w, helpcmd("REEXTRACTDIZ", "Re-extract FILE_ID.DIZ and update descriptions"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sImport Options:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpopt("--dir DIR", "Source directory containing files (required)"))
+	_, _ = fmt.Fprintln(w, helpopt("--area TAG", "Target file area tag (required)"))
+	_, _ = fmt.Fprintln(w, helpopt("--uploader NAME", "Uploader handle (default: Sysop)"))
+	_, _ = fmt.Fprintln(w, helpopt("--move", "Move files instead of copying"))
+	_, _ = fmt.Fprintln(w, helpopt("--preserve-dates", "Use file modification time as upload date"))
+	_, _ = fmt.Fprintln(w, helpopt("--no-diz", "Skip FILE_ID.DIZ extraction from archives"))
+	_, _ = fmt.Fprintln(w, helpopt("--dry-run", "Show what would happen without making changes"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))
+	_, _ = fmt.Fprintln(w, helpopt("--data DIR", "Data directory (default: data)"))
+	_, _ = fmt.Fprintln(w)
 }
 
 func cmdFiles(args []string) {
@@ -242,22 +242,22 @@ func cmdUsersPurge(args []string) {
 	dryRun := fs.Bool("dry-run", false, "Show what would be purged without making changes")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: helper users purge [options]\n\n")
-		fmt.Fprintf(os.Stderr, "Permanently remove soft-deleted user accounts past the retention period.\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: helper users purge [options]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Permanently remove soft-deleted user accounts past the retention period.\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Options:\n")
 		fs.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  helper users purge\n")
-		fmt.Fprintf(os.Stderr, "  helper users purge --days 90 --dry-run\n")
+		_, _ = fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  helper users purge\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  helper users purge --days 90 --dry-run\n")
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	// Load config to get retention days if not overridden
 	retentionDays := *days
 	if retentionDays < 0 {
 		cfg, err := config.LoadServerConfig(*configDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 			os.Exit(1)
 		}
 		retentionDays = cfg.DeletedUserRetentionDays
@@ -271,7 +271,7 @@ func cmdUsersPurge(args []string) {
 	// Load user manager
 	um, err := user.NewUserManager(*dataDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading users: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error loading users: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -301,7 +301,7 @@ func cmdUsersPurge(args []string) {
 
 	purged, err := um.PurgeDeletedUsers(retentionDays)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error purging users: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error purging users: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -344,7 +344,7 @@ func cleanupInfoformResponses(responsesDir string, userID int) int {
 		if err := os.Remove(f); err == nil {
 			removed++
 		} else {
-			fmt.Fprintf(os.Stderr, "  Warning: failed to remove %s: %v\n", f, err)
+			_, _ = fmt.Fprintf(os.Stderr, "  Warning: failed to remove %s: %v\n", f, err)
 		}
 	}
 	return removed
@@ -357,16 +357,16 @@ func cmdUsersList(args []string) {
 	deletedOnly := fs.Bool("deleted", false, "Show only soft-deleted accounts")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: helper users list [options]\n\n")
-		fmt.Fprintf(os.Stderr, "List user accounts.\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: helper users list [options]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "List user accounts.\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Options:\n")
 		fs.PrintDefaults()
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	um, err := user.NewUserManager(*dataDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading users: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error loading users: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -475,19 +475,19 @@ func cmdFTNSetup(args []string) {
 	quiet := fs.Bool("quiet", false, "Suppress detailed output")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: helper ftnsetup [options]\n\n")
-		fmt.Fprintf(os.Stderr, "Import FTN echo areas from a FIDONET.NA file.\n")
-		fmt.Fprintf(os.Stderr, "Updates ftn.json, message_areas.json, and conferences.json.\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: helper ftnsetup [options]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Import FTN echo areas from a FIDONET.NA file.\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Updates ftn.json, message_areas.json, and conferences.json.\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Options:\n")
 		fs.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExample:\n")
-		fmt.Fprintf(os.Stderr, "  helper ftnsetup --na fsxnet.na --address 21:3/110 --hub 21:1/100 --network FSxNet\n")
-		fmt.Fprintf(os.Stderr, "  helper ftnsetup --na fidonet.na --address 3:633/2744.11 --hub 3:633/2744 --tag-prefix fd_\n")
+		_, _ = fmt.Fprintf(os.Stderr, "\nExample:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  helper ftnsetup --na fsxnet.na --address 21:3/110 --hub 21:1/100 --network FSxNet\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  helper ftnsetup --na fidonet.na --address 3:633/2744.11 --hub 3:633/2744 --tag-prefix fd_\n")
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	if *naFile == "" || *address == "" || *hub == "" {
-		fmt.Fprintf(os.Stderr, "Error: --na, --address, and --hub are required\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Error: --na, --address, and --hub are required\n\n")
 		fs.Usage()
 		os.Exit(1)
 	}
@@ -508,7 +508,7 @@ func cmdFTNSetup(args []string) {
 	// 1. Parse the NA file
 	areas, err := parseNAFile(*naFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing NA file: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error parsing NA file: %v\n", err)
 		os.Exit(1)
 	}
 	if !*quiet {
@@ -522,19 +522,19 @@ func cmdFTNSetup(args []string) {
 
 	ftn, err := loadFTNConfig(ftnPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", ftnPath, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", ftnPath, err)
 		os.Exit(1)
 	}
 
 	existingAreas, err := loadAreas(areasPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", areasPath, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", areasPath, err)
 		os.Exit(1)
 	}
 
 	conferences, err := loadConferences(confsPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", confsPath, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", confsPath, err)
 		os.Exit(1)
 	}
 
@@ -561,7 +561,7 @@ func cmdFTNSetup(args []string) {
 			}
 		}
 		if !found {
-			fmt.Fprintf(os.Stderr, "Error: conference ID %d not found in %s\n", *conferenceID, confsPath)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: conference ID %d not found in %s\n", *conferenceID, confsPath)
 			os.Exit(1)
 		}
 		confID = *conferenceID
@@ -589,7 +589,7 @@ func cmdFTNSetup(args []string) {
 		effectiveTag := strings.ToUpper(*tagPrefix + a.Tag)
 		if !isValidEchoTag(effectiveTag) {
 			if !*quiet {
-				fmt.Fprintf(os.Stderr, "Warn: skipping %s — tag %q exceeds length or invalid chars\n", a.Tag, effectiveTag)
+				_, _ = fmt.Fprintf(os.Stderr, "Warn: skipping %s — tag %q exceeds length or invalid chars\n", a.Tag, effectiveTag)
 			}
 			continue
 		}
@@ -747,7 +747,7 @@ func cmdFTNSetup(args []string) {
 
 	// 9. Write files
 	if err := writeJSON(confsPath, conferences); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", confsPath, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", confsPath, err)
 		os.Exit(1)
 	}
 	if !*quiet {
@@ -755,7 +755,7 @@ func cmdFTNSetup(args []string) {
 	}
 
 	if err := writeJSON(areasPath, existingAreas); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", areasPath, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", areasPath, err)
 		os.Exit(1)
 	}
 	if !*quiet {
@@ -763,7 +763,7 @@ func cmdFTNSetup(args []string) {
 	}
 
 	if err := writeJSON(ftnPath, ftn); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", ftnPath, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", ftnPath, err)
 		os.Exit(1)
 	}
 	if !*quiet {
@@ -785,26 +785,26 @@ func cmdAreafix(args []string) {
 	configDir := fs.String("config", "configs", "Config directory")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: helper areafix [options]\n\n")
-		fmt.Fprintf(os.Stderr, "Send an AreaFix netmail message to a network hub.\n")
-		fmt.Fprintf(os.Stderr, "To: AreaFix, Subject: <areafix_password>, Body: <command>---\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: helper areafix [options]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Send an AreaFix netmail message to a network hub.\n")
+		_, _ = fmt.Fprintf(os.Stderr, "To: AreaFix, Subject: <areafix_password>, Body: <command>---\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Options:\n")
 		fs.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nAreaFix commands: %%HELP %%LIST %%QUERY %%UNLINKED +area -area =area,R=<n> %%RESCAN\n")
-		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --command \"%%LIST\"\n")
-		fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --seed\n")
-		fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --seed --seed-messages 50\n")
+		_, _ = fmt.Fprintf(os.Stderr, "\nAreaFix commands: %%HELP %%LIST %%QUERY %%UNLINKED +area -area =area,R=<n> %%RESCAN\n")
+		_, _ = fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --command \"%%LIST\"\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --seed\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --seed --seed-messages 50\n")
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	if *network == "" {
-		fmt.Fprintf(os.Stderr, "Error: --network is required\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Error: --network is required\n\n")
 		fs.Usage()
 		os.Exit(1)
 	}
 	if !*seed && *command == "" {
-		fmt.Fprintf(os.Stderr, "Error: --command or --seed is required\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Error: --command or --seed is required\n\n")
 		fs.Usage()
 		os.Exit(1)
 	}
@@ -812,7 +812,7 @@ func cmdAreafix(args []string) {
 	ftnPath := filepath.Join(*configDir, "ftn.json")
 	ftnCfg, err := loadFTNConfig(ftnPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", ftnPath, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", ftnPath, err)
 		os.Exit(1)
 	}
 
@@ -825,13 +825,13 @@ func cmdAreafix(args []string) {
 		}
 	}
 	if netKey == "" {
-		fmt.Fprintf(os.Stderr, "Error: network %q not found in %s\n", *network, ftnPath)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: network %q not found in %s\n", *network, ftnPath)
 		os.Exit(1)
 	}
 
 	netCfg := ftnCfg.Networks[netKey]
 	if len(netCfg.Links) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: network %s has no links\n", netKey)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: network %s has no links\n", netKey)
 		os.Exit(1)
 	}
 
@@ -844,7 +844,7 @@ func cmdAreafix(args []string) {
 			}
 		}
 		if link == nil {
-			fmt.Fprintf(os.Stderr, "Error: link %s not found in network %s\n", *linkAddr, netKey)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: link %s not found in network %s\n", *linkAddr, netKey)
 			os.Exit(1)
 		}
 	} else {
@@ -852,7 +852,7 @@ func cmdAreafix(args []string) {
 	}
 
 	if link.AreafixPassword == "" {
-		fmt.Fprintf(os.Stderr, "Error: link %s has no areafix_password configured\n", link.Address)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: link %s has no areafix_password configured\n", link.Address)
 		os.Exit(1)
 	}
 
@@ -864,13 +864,13 @@ func cmdAreafix(args []string) {
 
 	ownAddr, err := jam.ParseAddress(netCfg.OwnAddress)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: invalid own_address %q: %v\n", netCfg.OwnAddress, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: invalid own_address %q: %v\n", netCfg.OwnAddress, err)
 		os.Exit(1)
 	}
 
 	destAddr, err := jam.ParseAddress(link.Address)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: invalid link address %q: %v\n", link.Address, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: invalid link address %q: %v\n", link.Address, err)
 		os.Exit(1)
 	}
 
@@ -881,7 +881,7 @@ func cmdAreafix(args []string) {
 		areasPath := filepath.Join(*configDir, "message_areas.json")
 		areas, err := loadAreas(areasPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", areasPath, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", areasPath, err)
 			os.Exit(1)
 		}
 		var lines []string
@@ -899,7 +899,7 @@ func cmdAreafix(args []string) {
 			lines = append(lines, fmt.Sprintf("+%s,R=%d", tag, *seedMessages))
 		}
 		if len(lines) == 0 {
-			fmt.Fprintf(os.Stderr, "Error: no echomail areas found for network %s in message_areas.json\n", netKey)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: no echomail areas found for network %s in message_areas.json\n", netKey)
 			os.Exit(1)
 		}
 		seedCount = len(lines)
@@ -965,25 +965,25 @@ func cmdAreafix(args []string) {
 		outboundPath = "data/ftn/temp_out"
 	}
 	if err := os.MkdirAll(outboundPath, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating outbound dir: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error creating outbound dir: %v\n", err)
 		os.Exit(1)
 	}
 
 	f, err := os.CreateTemp(outboundPath, "areafix_*.pkt")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating packet: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error creating packet: %v\n", err)
 		os.Exit(1)
 	}
 	pktPath := f.Name()
 	if err := ftn.WritePacket(f, hdr, []*ftn.PackedMessage{msg}); err != nil {
-		f.Close()
-		os.Remove(pktPath)
-		fmt.Fprintf(os.Stderr, "Error writing packet: %v\n", err)
+		_ = f.Close()          // cleanup on error path
+		_ = os.Remove(pktPath) // cleanup on error path
+		_, _ = fmt.Fprintf(os.Stderr, "Error writing packet: %v\n", err)
 		os.Exit(1)
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(pktPath)
-		fmt.Fprintf(os.Stderr, "Error finalizing packet: %v\n", err)
+		_ = os.Remove(pktPath) // cleanup on error path
+		_, _ = fmt.Fprintf(os.Stderr, "Error finalizing packet: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -1003,7 +1003,7 @@ func parseNAFile(path string) ([]naArea, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only
 
 	var areas []naArea
 	scanner := bufio.NewScanner(f)

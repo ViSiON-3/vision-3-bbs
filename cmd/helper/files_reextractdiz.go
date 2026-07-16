@@ -28,7 +28,7 @@ func cmdFilesReextractDIZ(args []string) {
 		fmt.Fprintf(os.Stderr, "  helper files reextractdiz --area GENERAL\n")
 		fmt.Fprintf(os.Stderr, "  helper files reextractdiz --dry-run\n")
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	areas, err := loadFileAreas(*configDir)
 	if err != nil {
