@@ -252,10 +252,6 @@ func (l *Leaf) get(path string) ([]byte, error) {
 	return data, nil
 }
 
-func (l *Leaf) signedGet(path string) (*http.Response, error) {
-	return l.signedGetCtx(context.Background(), path)
-}
-
 func (l *Leaf) signedGetCtx(ctx context.Context, path string) (*http.Response, error) {
 	return l.signedGetWith(ctx, path, l.client)
 }

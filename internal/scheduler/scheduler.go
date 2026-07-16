@@ -175,17 +175,3 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 	// Update history
 	s.updateHistory(result)
 }
-
-// GetHistory returns the current event history (for testing/monitoring)
-func (s *Scheduler) GetHistory() map[string]*EventHistory {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Return a copy to prevent external modification
-	historyCopy := make(map[string]*EventHistory)
-	for k, v := range s.history {
-		hCopy := *v
-		historyCopy[k] = &hCopy
-	}
-	return historyCopy
-}

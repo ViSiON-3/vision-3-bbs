@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -594,4 +595,32 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 	} // end if addYes
 
 	return nil, "", nil
+}
+
+// Mutex for protecting access to the oneliners file
+var onelinerMutex sync.Mutex
+
+const (
+	oneLinerMaxStored  = 20
+	oneLinerMaxDisplay = 10
+	oneLinerMaxLength  = 51
+	oneLinerNameWidth  = 20
+)
+
+type onelinerRecord struct {
+	Text             string `json:"text"`
+	Anonymous        bool   `json:"anonymous,omitempty"`
+	PostedByUsername string `json:"posted_by_username,omitempty"`
+	PostedByHandle   string `json:"posted_by_handle,omitempty"`
+	PostedAt         string `json:"posted_at,omitempty"`
+}
+
+type onelinerRecordCompat struct {
+	DisplayName      string `json:"display_name,omitempty"`
+	Username         string `json:"username,omitempty"`
+	Text             string `json:"text"`
+	Anonymous        bool   `json:"anonymous,omitempty"`
+	PostedByUsername string `json:"posted_by_username,omitempty"`
+	PostedByHandle   string `json:"posted_by_handle,omitempty"`
+	PostedAt         string `json:"posted_at,omitempty"`
 }

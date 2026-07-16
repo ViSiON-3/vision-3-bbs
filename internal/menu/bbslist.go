@@ -170,7 +170,6 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Layout constants.
 	const headerRows = 2 // title + separator
-	const hintRows = 2   // separator + hint line
 	leftPanelWidth := 30 // BBS name list width
 	if termWidth < 60 {
 		leftPanelWidth = termWidth / 2

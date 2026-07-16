@@ -360,16 +360,3 @@ func (ww *WordWrapper) FindWordRight(lineNum, col int) int {
 
 	return pos + 1 // Convert to 1-based
 }
-
-// IsAtWordBoundary returns true if cursor is at a word boundary
-func (ww *WordWrapper) IsAtWordBoundary(lineNum, col int) bool {
-	line := ww.buffer.GetLine(lineNum)
-	if col <= 1 || col > len(line) {
-		return true
-	}
-
-	before := line[col-2]
-	at := line[col-1]
-
-	return unicode.IsSpace(rune(before)) != unicode.IsSpace(rune(at))
-}

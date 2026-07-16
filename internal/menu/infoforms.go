@@ -84,19 +84,6 @@ func loadInfoFormConfig(rootConfigPath string) (*InfoFormConfig, error) {
 	return &cfg, nil
 }
 
-// saveInfoFormConfig saves the infoforms configuration.
-func saveInfoFormConfig(rootConfigPath string, cfg *InfoFormConfig) error {
-	data, err := json.MarshalIndent(cfg, "", "    ")
-	if err != nil {
-		return fmt.Errorf("marshal infoforms config: %w", err)
-	}
-	fp := infoformsConfigPath(rootConfigPath)
-	if err := os.MkdirAll(filepath.Dir(fp), 0755); err != nil {
-		return fmt.Errorf("create infoforms config directory: %w", err)
-	}
-	return os.WriteFile(fp, data, 0644)
-}
-
 // loadInfoFormResponse loads a user's response for a specific form.
 func loadInfoFormResponse(rootConfigPath string, userID int, formNum int) (*InfoFormResponse, error) {
 	data, err := os.ReadFile(infoformsResponsePath(rootConfigPath, userID, formNum))

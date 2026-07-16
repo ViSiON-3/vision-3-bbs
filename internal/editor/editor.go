@@ -50,103 +50,6 @@ func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
 	return menuSetPath, rootConfigPath
 }
 
-// RunEditor takes initial text, the input/output streams from the SSH session,
-// the output mode (CP437 or UTF-8), runs a full-screen editor, and returns
-// the final text content, whether it was saved, and any error.
-func RunEditor(initialContent string, input io.Reader, output io.Writer, outputMode ansi.OutputMode) (content string, saved bool, err error) {
-	// Get session from input (must be ssh.Session)
-	session, ok := input.(ssh.Session)
-	if !ok {
-		return initialContent, false, nil
-	}
-
-	// Get terminal dimensions
-	termWidth := 80
-	termHeight := 24
-
-	// Try to get PTY size from session
-	ptyReq, winCh, isPty := session.Pty()
-	if isPty {
-		termWidth = ptyReq.Window.Width
-		termHeight = ptyReq.Window.Height
-	}
-
-	// Ensure minimum dimensions
-	if termWidth < 80 {
-		termWidth = 80
-	}
-	if termHeight < 24 {
-		termHeight = 24
-	}
-
-	menuSetPath, rootConfigPath := resolveEditorPaths()
-
-	// Load theme colors for Yes/No lightbar prompts
-	theme, _ := config.LoadThemeConfig(menuSetPath)
-	yesNoHi := colorCodeToAnsi(theme.YesNoHighlightColor)
-	yesNoLo := colorCodeToAnsi(theme.YesNoRegularColor)
-
-	// Load configurable Yes/No labels for prompts.
-	stringsCfg, stringsErr := config.LoadStrings(rootConfigPath)
-	yesText := "Yes"
-	noText := "No"
-	abortText := "|07Abort Message & Quit, Are You Sure|09?"
-	if stringsErr == nil {
-		if v := strings.TrimSpace(stringsCfg.YesPromptText); v != "" {
-			yesText = v
-		}
-		if v := strings.TrimSpace(stringsCfg.NoPromptText); v != "" {
-			noText = v
-		}
-		if v := strings.TrimSpace(stringsCfg.AbortMessagePrompt); v != "" {
-			abortText = v
-		}
-	}
-
-	// Create the full-screen editor — pass raw output writer; WriteProcessedBytes
-	// handles CP437/UTF-8 conversion so wrapping with SelectiveCP437Writer would
-	// double-encode and corrupt CP437 box-drawing characters.
-	// nil InputHandler: RunEditor always creates its own (no shared reader needed here).
-	editor := NewFSEditor(session, output, outputMode, termWidth, termHeight, menuSetPath, yesNoHi, yesNoLo, yesText, noText, abortText, nil)
-
-	// Load server config: timezone and board name (for footer @B@ placeholder)
-	if serverCfg, cfgErr := config.LoadServerConfig(rootConfigPath); cfgErr == nil {
-		editor.SetTimezone(serverCfg.Timezone)
-		editor.SetBoardName(serverCfg.BoardName)
-	}
-
-	// Load initial content
-	if initialContent != "" {
-		editor.LoadContent(initialContent)
-	}
-
-	// Handle window resize events in background if we have PTY
-	done := make(chan struct{})
-	defer close(done)
-
-	if isPty && winCh != nil {
-		go func() {
-			for {
-				select {
-				case win, ok := <-winCh:
-					if !ok {
-						return
-					}
-					editor.HandleResize(win.Width, win.Height)
-				case <-done:
-					return
-				}
-			}
-		}()
-	}
-
-	// Run the editor
-	finalContent, wasSaved, editorErr := editor.Run()
-
-	// Return results
-	return finalContent, wasSaved, editorErr
-}
-
 // RunEditorWithMetadata is an extended version that accepts message metadata.
 // fromName is the sender display name shown in the @F@ header field: the user's
 // handle by default, their real name when the area requires it, or the configured
@@ -208,7 +111,7 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	}
 
 	// Create the full-screen editor — pass raw output writer; WriteProcessedBytes
-	// handles CP437/UTF-8 conversion so wrapping with SelectiveCP437Writer would
+	// handles CP437/UTF-8 conversion, so a CP437-encoding writer wrapper would
 	// double-encode and corrupt CP437 box-drawing characters.
 	// Pass ih (may be nil) so a shared InputHandler is reused when available.
 	editor := NewFSEditor(session, output, outputMode, termWidth, termHeight, menuSetPath, yesNoHi, yesNoLo, yesText, noText, abortText, ih)

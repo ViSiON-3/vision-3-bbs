@@ -125,14 +125,6 @@ var dialogTitleStyle = lipgloss.NewStyle().
 					Background(lipgloss.Color(dosColors[13])).
 					Bold(true)
 var dialogTextStyle = dosStyle(94) // magenta bg, yellow fg
-var dialogInputStyle = dosStyle(94)
-
-// --- Message box ---
-// UE.PAS Message: Color(4,12) border, Color(12,15) text
-var messageBorderStyle = dosColor(4, 12)
-var messageTextStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color(dosColors[15])).
-	Background(lipgloss.Color(dosColors[12]))
 
 // --- Help screen ---
 // UE.PAS Help_Screen: Color(4,15) box, Color(4,14) title

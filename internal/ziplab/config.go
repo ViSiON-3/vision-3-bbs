@@ -160,22 +160,6 @@ func archiverTypesFromConfig(cfg archiver.Config) []ArchiveType {
 	return types
 }
 
-// DefaultArchiveExtensions returns the list of archive extensions from the
-// default archiver config. This reads archivers.json from "configs/" relative
-// to the working directory, falling back to built-in defaults.
-func DefaultArchiveExtensions() []string {
-	// Try to load the central archiver config for the canonical list.
-	arcCfg, err := archiver.LoadConfig("configs")
-	if err == nil {
-		exts := arcCfg.SupportedExtensions()
-		if len(exts) > 0 {
-			return exts
-		}
-	}
-	// Fallback to built-in default.
-	return []string{".zip"}
-}
-
 // IsArchiveSupported checks if a filename matches a configured archive type.
 func (c *Config) IsArchiveSupported(filename string) bool {
 	_, ok := c.GetArchiveType(filename)

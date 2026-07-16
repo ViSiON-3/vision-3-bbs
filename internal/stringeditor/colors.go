@@ -1,7 +1,6 @@
 package stringeditor
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -236,32 +235,4 @@ func PlainTextLength(s string) int {
 		total += len([]rune(span.text))
 	}
 	return total
-}
-
-// DOSColorStyle returns a lipgloss style for a given DOS color attribute byte.
-// The byte encodes fg (lower 4 bits) and bg (upper 4 bits), matching the
-// Pascal TextAttr format: attr = bg*16 + fg.
-func DOSColorStyle(attr byte) lipgloss.Style {
-	fg := attr & 0x0F
-	bg := (attr >> 4) & 0x07
-	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(dosColors[fg]))
-	if bg > 0 {
-		style = style.Background(lipgloss.Color(dosBgColors[bg]))
-	}
-	return style
-}
-
-// DOSFGStyle returns a lipgloss style for a DOS foreground color index (0-15).
-func DOSFGStyle(colorIdx int) lipgloss.Style {
-	if colorIdx < 0 || colorIdx > 15 {
-		colorIdx = 7
-	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(dosColors[colorIdx]))
-}
-
-// FormatItemNumber formats an item number with consistent width for display.
-func FormatItemNumber(n, total int) string {
-	width := len(fmt.Sprintf("%d", total))
-	return fmt.Sprintf("%*d", width, n)
 }
