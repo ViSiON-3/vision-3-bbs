@@ -76,11 +76,16 @@ func (l *Leaf) ProposeArea(req protocol.AreaProposalRequest) (*protocol.Proposal
 	return &pr, nil
 }
 
+// nalRefetchBase is the base delay before re-fetching the NAL after an
+// nal_updated event (±10% jitter, per the protocol spec's thundering-herd
+// guidance). Variable so tests can shorten it.
+var nalRefetchBase = 60 * time.Second
+
 // handleNALUpdated schedules a NAL re-fetch after receiving an nal_updated SSE event.
 func (l *Leaf) handleNALUpdated(ctx context.Context) {
-	// Re-fetch within 60 seconds ±10% jitter.
+	// Re-fetch within nalRefetchBase ±10% jitter.
 	jitter := 1.0 + (rand.Float64()*2-1)*0.10
-	delay := time.Duration(float64(60*time.Second) * jitter)
+	delay := time.Duration(float64(nalRefetchBase) * jitter)
 
 	slog.Info("leaf: NAL updated, re-fetching", "network", l.cfg.Network, "delay", delay)
 

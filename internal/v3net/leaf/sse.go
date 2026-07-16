@@ -93,6 +93,7 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 				}
 				l.onEvent(ev)
 				l.chatSessions.dispatch(ev)
+				l.dispatchNALEvent(ctx, ev)
 			}
 			eventType = ""
 			continue
