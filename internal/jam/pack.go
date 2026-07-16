@@ -2,6 +2,7 @@ package jam
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -296,45 +297,50 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 	b.jdxFile.Close()
 
 	// Atomic rename
-	renameFailed := false
 	for _, pair := range [][2]string{
 		{tmpJhr, b.BasePath + ".jhr"},
 		{tmpJdt, b.BasePath + ".jdt"},
 		{tmpJdx, b.BasePath + ".jdx"},
 	} {
 		if err := os.Rename(pair[0], pair[1]); err != nil {
-			renameFailed = true
 			// Try to clean up remaining temp files
 			os.Remove(tmpJhr)
 			os.Remove(tmpJdt)
 			os.Remove(tmpJdx)
-			// Attempt to reopen original files
-			b.jhrFile, _ = os.OpenFile(b.BasePath+".jhr", os.O_RDWR, 0644)
-			b.jdtFile, _ = os.OpenFile(b.BasePath+".jdt", os.O_RDWR, 0644)
-			b.jdxFile, _ = os.OpenFile(b.BasePath+".jdx", os.O_RDWR, 0644)
-			b.readFixedHeader()
+			// Attempt to reopen original files; if any reopen fails the
+			// base is unusable and must not claim to be open with nil
+			// handles.
+			var jhrErr, jdtErr, jdxErr error
+			b.jhrFile, jhrErr = os.OpenFile(b.BasePath+".jhr", os.O_RDWR, 0644)
+			b.jdtFile, jdtErr = os.OpenFile(b.BasePath+".jdt", os.O_RDWR, 0644)
+			b.jdxFile, jdxErr = os.OpenFile(b.BasePath+".jdx", os.O_RDWR, 0644)
+			if reopenErr := errors.Join(jhrErr, jdtErr, jdxErr); reopenErr != nil {
+				b.closeHandles()
+				return result, fmt.Errorf("jam: rename failed: %w; base could not be reopened (%w) — manual recovery required", err, reopenErr)
+			}
+			if hdrErr := b.readFixedHeader(); hdrErr != nil {
+				b.closeHandles()
+				return result, fmt.Errorf("jam: rename failed: %w; header unreadable after reopen (%w) — manual recovery required", err, hdrErr)
+			}
 			return result, fmt.Errorf("jam: rename failed: %w — base may need manual recovery", err)
 		}
 	}
 
-	if renameFailed {
-		return result, fmt.Errorf("jam: pack failed during rename")
-	}
-
-	// Reopen files
+	// Reopen files. On any failure, close whatever did reopen so a failed
+	// pack never leaks handles behind a closed base.
 	b.jhrFile, err = os.OpenFile(b.BasePath+".jhr", os.O_RDWR, 0644)
 	if err != nil {
-		b.isOpen = false
+		b.closeHandles()
 		return result, fmt.Errorf("jam: failed to reopen .jhr after pack: %w", err)
 	}
 	b.jdtFile, err = os.OpenFile(b.BasePath+".jdt", os.O_RDWR, 0644)
 	if err != nil {
-		b.isOpen = false
+		b.closeHandles()
 		return result, fmt.Errorf("jam: failed to reopen .jdt after pack: %w", err)
 	}
 	b.jdxFile, err = os.OpenFile(b.BasePath+".jdx", os.O_RDWR, 0644)
 	if err != nil {
-		b.isOpen = false
+		b.closeHandles()
 		return result, fmt.Errorf("jam: failed to reopen .jdx after pack: %w", err)
 	}
 

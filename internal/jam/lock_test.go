@@ -64,6 +64,53 @@ func TestAcquireFileLockTimeout(t *testing.T) {
 	}
 }
 
+func TestAcquireFileLockUnremovableStaleReturnsError(t *testing.T) {
+	lockMu.Lock()
+	origRetry := lockRetryDelay
+	origTimeout := lockTimeout
+	origStale := lockStaleAfter
+	lockRetryDelay = 5 * time.Millisecond
+	lockTimeout = 100 * time.Millisecond
+	lockStaleAfter = 10 * time.Millisecond
+	lockMu.Unlock()
+	defer func() {
+		lockMu.Lock()
+		lockRetryDelay = origRetry
+		lockTimeout = origTimeout
+		lockStaleAfter = origStale
+		lockMu.Unlock()
+	}()
+
+	dir := t.TempDir()
+	basePath := filepath.Join(dir, "lock-unremovable")
+	lockPath := basePath + ".bsy"
+
+	// A stale lock that os.Remove cannot delete: a non-empty directory.
+	if err := os.MkdirAll(filepath.Join(lockPath, "child"), 0755); err != nil {
+		t.Fatalf("mkdir unremovable lock: %v", err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatalf("set stale lock mtime: %v", err)
+	}
+
+	b := &Base{BasePath: basePath}
+	done := make(chan error, 1)
+	go func() {
+		_, err := b.acquireFileLock()
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected error for unremovable stale lock, got nil")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("acquireFileLock spun forever on unremovable stale lock; want timeout error")
+	}
+}
+
 func TestAcquireFileLockRemovesStaleLock(t *testing.T) {
 	lockMu.Lock()
 	origRetry := lockRetryDelay

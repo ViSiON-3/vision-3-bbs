@@ -114,7 +114,8 @@ func main() {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	// Diagnostic output only: cap the read; truncation is acceptable.
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	fmt.Printf("Response: %d %s\n", resp.StatusCode, string(respBody))
 
 	if resp.StatusCode != http.StatusOK {

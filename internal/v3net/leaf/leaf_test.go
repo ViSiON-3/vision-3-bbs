@@ -286,3 +286,22 @@ func TestSSE_ReconnectsOnDisconnect(t *testing.T) {
 		}
 	}
 }
+
+func TestGetRejectsOversizedResponse(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		big := make([]byte, 64*1024)
+		// Stream well past the response cap.
+		for written := 0; written <= maxRespBytes; written += len(big) {
+			if _, err := w.Write(big); err != nil {
+				return
+			}
+		}
+	}))
+	defer ts.Close()
+
+	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+	if _, err := l.get("/v3net/v1/testnet/info"); err == nil {
+		t.Fatal("expected error for oversized response body, got nil")
+	}
+}

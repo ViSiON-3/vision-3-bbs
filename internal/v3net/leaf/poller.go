@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"time"
 
@@ -31,7 +30,7 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 			return total, fmt.Errorf("leaf: fetch messages: %w", err)
 		}
 
-		body, err := io.ReadAll(resp.Body)
+		body, err := readBody(resp.Body, maxPollRespBytes)
 		resp.Body.Close()
 
 		if err != nil {

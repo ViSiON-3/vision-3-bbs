@@ -43,7 +43,10 @@ func (l *Leaf) subscribe(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := readBody(resp.Body, maxRespBytes)
+	if err != nil {
+		return fmt.Errorf("leaf: read subscribe response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("leaf: subscribe returned %d: %s", resp.StatusCode, string(body))
 	}
@@ -202,6 +205,32 @@ func (l *Leaf) signedPostWithResponse(ctx context.Context, path string, body []b
 	return l.client.Do(req)
 }
 
+// Response-body size caps. Hub responses are JSON: subscribe/join/info
+// payloads are small, and a message page is at most 100 messages of ≤32KB
+// body each (~4MB). Reading is capped so a misbehaving or hostile hub
+// cannot exhaust leaf memory.
+const (
+	// maxRespBytes bounds small JSON responses (info, NAL, subscribe,
+	// chat join) and diagnostic error bodies.
+	maxRespBytes = 1 << 20 // 1MB
+	// maxPollRespBytes bounds a message-page response.
+	maxPollRespBytes = 8 << 20 // 8MB
+)
+
+// readBody reads an HTTP response body capped at limit bytes, erroring if
+// the body exceeds the cap (never parse truncated data as if complete).
+// Errors carry no "leaf:" prefix — call sites add their own context.
+func readBody(body io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("response body exceeds %d byte limit", limit)
+	}
+	return data, nil
+}
+
 // get performs an unauthenticated GET and returns the response body.
 func (l *Leaf) get(path string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, l.cfg.HubURL+path, nil)
@@ -216,7 +245,11 @@ func (l *Leaf) get(path string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s: status %d", path, resp.StatusCode)
 	}
-	return io.ReadAll(resp.Body)
+	data, err := readBody(resp.Body, maxRespBytes)
+	if err != nil {
+		return nil, fmt.Errorf("leaf: GET %s: %w", path, err)
+	}
+	return data, nil
 }
 
 func (l *Leaf) signedGet(path string) (*http.Response, error) {

@@ -2,6 +2,8 @@ package ftn
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -320,3 +322,20 @@ func TestParseLocalMessageBody(t *testing.T) {
 		t.Error("Text should contain message body")
 	}
 }
+
+func TestReadPacketRejectsOversizedInput(t *testing.T) {
+	// A reader that produces more than the packet size cap without
+	// allocating it all up front.
+	r := io.LimitReader(zeroReader{}, maxPacketBytes+2)
+	_, _, err := ReadPacket(r)
+	if err == nil {
+		t.Fatal("expected error for oversized packet, got nil")
+	}
+	if !errors.Is(err, ErrPacketTooLarge) {
+		t.Fatalf("want ErrPacketTooLarge, got: %v", err)
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) { return len(p), nil }

@@ -256,3 +256,45 @@ func TestPackPreservesFixedHeader(t *testing.T) {
 		t.Errorf("Serial changed: %d -> %d", serialBefore, serialAfter)
 	}
 }
+
+func TestPackRenameFailureMarksBaseClosed(t *testing.T) {
+	dir := t.TempDir()
+	basePath := filepath.Join(dir, "renamefail")
+
+	b, err := Open(basePath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer b.Close()
+
+	msg := NewMessage()
+	msg.From = "Sender"
+	msg.To = "All"
+	msg.Subject = "Test"
+	msg.Text = "Body"
+	if _, err := b.WriteMessage(msg); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+
+	// Force the atomic rename to fail: replace the .jhr file with a
+	// non-empty directory. The open handle still reads the unlinked file,
+	// but os.Rename onto a non-empty directory fails, and the recovery
+	// reopen of the original path fails too.
+	jhrPath := basePath + ".jhr"
+	if err := os.Remove(jhrPath); err != nil {
+		t.Fatalf("remove .jhr: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(jhrPath, "child"), 0755); err != nil {
+		t.Fatalf("mkdir over .jhr: %v", err)
+	}
+
+	if _, err := b.Pack(); err == nil {
+		t.Fatal("expected Pack to fail when rename target is a directory")
+	}
+
+	// The base could not be recovered (reopen failed), so it must not
+	// claim to be open with nil file handles.
+	if b.IsOpen() {
+		t.Error("base claims open after failed rename recovery; want IsOpen() == false")
+	}
+}

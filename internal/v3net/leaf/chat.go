@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
@@ -175,9 +174,9 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	if resp.StatusCode/100 != 2 {
 		return nil, nil, fmt.Errorf("join chat: hub returned status %d", resp.StatusCode)
 	}
-	respBytes, err := io.ReadAll(resp.Body)
+	respBytes, err := readBody(resp.Body, maxRespBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("join chat: %w", err)
 	}
 	var joinResp protocol.ChatJoinResponse
 	if err := json.Unmarshal(respBytes, &joinResp); err != nil {
