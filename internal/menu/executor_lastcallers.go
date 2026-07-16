@@ -20,6 +20,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
+var lastCallerATTokenRegex = regexp.MustCompile(`@([A-Za-z]{2,12})(?::(-?\d+))?@`)
+
 // runLastCallers displays the last callers list using templates.
 func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
