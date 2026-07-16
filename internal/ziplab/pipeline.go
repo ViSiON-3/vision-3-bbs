@@ -233,7 +233,7 @@ func (p *Processor) DisplayPipeline(w io.Writer, nfo *NFOConfig, ansiContent []b
 	// Move cursor below all NFO content so subsequent output doesn't overwrite
 	if nfo != nil {
 		if maxRow := nfo.MaxRow(); maxRow > 0 {
-			_, _ = w.Write([]byte(fmt.Sprintf("\x1b[%d;1H", maxRow+1))) // best-effort display
+			_, _ = fmt.Fprintf(w, "\x1b[%d;1H", maxRow+1) // best-effort display
 		}
 	}
 
