@@ -108,6 +108,25 @@ func TestExportLoopDisabledWithoutDeps(t *testing.T) {
 	}
 }
 
+func TestCloseBeforeStart(t *testing.T) {
+	// Close must return promptly even if Start is never called.
+	root := newTestRoot(t)
+	svc, err := New(Config{BBSRoot: root, FTN: testFTNConfig()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- svc.Close() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Close before Start: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close before Start must return promptly")
+	}
+}
+
 func TestNewPreflightAbsoluteBinaryPath(t *testing.T) {
 	root := newTestRoot(t)
 	cfg := testFTNConfig()

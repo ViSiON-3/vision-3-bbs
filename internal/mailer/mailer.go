@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -34,8 +35,9 @@ type Service struct {
 	backoffMax time.Duration
 	healthyRun time.Duration // process uptime that resets the backoff
 
-	mu sync.Mutex
-	wg sync.WaitGroup
+	started atomic.Bool
+	done    chan struct{} // closed when Start's loops have both finished
+	wg      sync.WaitGroup
 }
 
 // New validates the environment (preflight) and returns a ready service.
@@ -83,12 +85,18 @@ func New(cfg Config) (*Service, error) {
 		backoffMin: 5 * time.Second,
 		backoffMax: 5 * time.Minute,
 		healthyRun: time.Minute,
+		done:       make(chan struct{}),
 	}, nil
 }
 
 // Start runs the binkd supervisor and the export loop until ctx is cancelled.
-// It blocks; run it in a goroutine.
+// It blocks; run it in a goroutine. Calling Start more than once is a no-op.
 func (s *Service) Start(ctx context.Context) {
+	if !s.started.CompareAndSwap(false, true) {
+		return
+	}
+	defer close(s.done)
+
 	s.wg.Add(2)
 	go func() {
 		defer s.wg.Done()
@@ -101,9 +109,13 @@ func (s *Service) Start(ctx context.Context) {
 	s.wg.Wait()
 }
 
-// Close waits for the loops to finish and persists the dupe database.
+// Close waits for the loops to finish (if Start was ever called) and
+// persists the dupe database. It is safe to call Close before Start: it
+// returns promptly after saving the dupe database.
 func (s *Service) Close() error {
-	s.wg.Wait()
+	if s.started.Load() {
+		<-s.done
+	}
 	if s.cfg.DupeDB != nil {
 		if err := s.cfg.DupeDB.Save(); err != nil {
 			return fmt.Errorf("saving dupe db: %w", err)

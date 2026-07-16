@@ -16,6 +16,11 @@ func (s *Service) exportLoop(ctx context.Context) {
 		slog.Warn("binkd export loop disabled: message manager or dupe db unavailable")
 		return
 	}
+	if s.cfg.FTN.Binkd.ExportSecs <= 0 {
+		slog.Warn("binkd export loop disabled: export interval must be positive",
+			"export_secs", s.cfg.FTN.Binkd.ExportSecs)
+		return
+	}
 	interval := time.Duration(s.cfg.FTN.Binkd.ExportSecs) * time.Second
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
