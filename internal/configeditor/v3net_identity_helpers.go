@@ -118,26 +118,26 @@ func (m Model) writeRecoveryFile(path string, ks *keystore.Keystore) error {
 	tmpName := tmp.Name()
 
 	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("chmod temp file: %w", err)
 	}
 	if _, err := tmp.WriteString(b.String()); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("write temp file: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("sync temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("close temp file: %w", err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("rename %s -> %s: %w", tmpName, path, err)
 	}
 	return nil

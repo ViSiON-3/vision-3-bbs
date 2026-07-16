@@ -143,9 +143,9 @@ func (m Model) nextSysEditableField(dir int) int {
 func (m *Model) toggleSysYesNo(f fieldDef) {
 	if f.Get != nil && f.Set != nil {
 		if f.Get() == "Y" {
-			f.Set("N")
+			_ = f.Set("N") // Y/N field setters never fail
 		} else {
-			f.Set("Y")
+			_ = f.Set("Y") // Y/N field setters never fail
 		}
 		m.dirty = true
 		m.message = ""

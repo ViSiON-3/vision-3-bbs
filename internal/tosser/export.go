@@ -47,7 +47,7 @@ func (t *Tosser) ScanAndExport() TossResult {
 	var openBases []*jam.Base
 	defer func() {
 		for _, b := range openBases {
-			b.Close()
+			_ = b.Close() // best-effort close of read-side bases
 		}
 	}()
 
@@ -177,7 +177,7 @@ func (t *Tosser) scanAndExportNetmail(result *TossResult) {
 	var openBases []*jam.Base
 	defer func() {
 		for _, b := range openBases {
-			b.Close()
+			_ = b.Close() // best-effort close of read-side bases
 		}
 	}()
 
@@ -373,11 +373,14 @@ func (t *Tosser) createOutboundNetmailPacket(link *linkConfig, msgs []pendingNet
 	pktPath := f.Name()
 
 	if err := ftn.WritePacket(f, hdr, packedMsgs); err != nil {
-		f.Close()
-		os.Remove(pktPath)
+		_ = f.Close()          // cleanup on error path
+		_ = os.Remove(pktPath) // cleanup on error path
 		return 0, fmt.Errorf("write packet: %w", err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(pktPath) // cleanup on error path
+		return 0, fmt.Errorf("close packet: %w", err)
+	}
 
 	finalName := fmt.Sprintf("%08x.pkt", time.Now().UnixNano()&0xFFFFFFFF)
 	finalPath := filepath.Join(t.paths.OutboundPath, finalName)
@@ -491,11 +494,14 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 	pktPath := f.Name()
 
 	if err := ftn.WritePacket(f, hdr, packedMsgs); err != nil {
-		f.Close()
-		os.Remove(pktPath) // Clean up on error
+		_ = f.Close()          // cleanup on error path
+		_ = os.Remove(pktPath) // cleanup on error path
 		return 0, fmt.Errorf("write packet: %w", err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(pktPath) // cleanup on error path
+		return 0, fmt.Errorf("close packet: %w", err)
+	}
 
 	// Rename to a proper .pkt filename
 	finalName := fmt.Sprintf("%08x.pkt", time.Now().UnixNano()&0xFFFFFFFF)

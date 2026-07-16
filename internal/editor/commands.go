@@ -175,7 +175,7 @@ func (ch *CommandHandler) HandleQuote(inputHandler *InputHandler, currentLine, c
 		ch.screen.GoXY(1, promptRow)
 		ch.screen.ClearEOL()
 		ch.screen.WriteDirectProcessed("|12You are not replying to anything! Press any key...")
-		inputHandler.ReadKey()
+		_, _ = inputHandler.ReadKey() // wait for any key
 		return currentLine, 1
 	}
 
@@ -421,7 +421,7 @@ func (ch *CommandHandler) HandleHelp(inputHandler *InputHandler) {
 	// Wait for key press
 	ch.screen.GoXY(1, ch.screen.termHeight)
 	ch.screen.WriteDirectProcessed("|15Press any key to continue...")
-	inputHandler.ReadKey()
+	_, _ = inputHandler.ReadKey() // wait for any key
 }
 
 // displayBuiltInHelp displays built-in help text
@@ -484,7 +484,7 @@ func (ch *CommandHandler) HandleView(inputHandler *InputHandler) {
 	// Wait for key press
 	ch.screen.GoXY(1, ch.screen.termHeight)
 	ch.screen.WriteDirectProcessed("|15Press any key to continue...")
-	inputHandler.ReadKey()
+	_, _ = inputHandler.ReadKey() // wait for any key
 }
 
 // ShowEscapeMenu displays a lightbar selection menu at PromptRow when Escape is pressed.

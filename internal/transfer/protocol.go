@@ -137,7 +137,7 @@ func (p *ProtocolConfig) ExecuteSend(ctx context.Context, s ssh.Session, filePat
 
 	args, listFile := expandArgs(p.SendArgs, filePaths, "")
 	if listFile != "" {
-		defer os.Remove(listFile)
+		defer func() { _ = os.Remove(listFile) }() // best-effort temp cleanup
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -176,7 +176,7 @@ func (p *ProtocolConfig) ExecuteReceive(ctx context.Context, s ssh.Session, targ
 
 	args, listFile := expandArgs(p.RecvArgs, nil, targetDir)
 	if listFile != "" {
-		defer os.Remove(listFile)
+		defer func() { _ = os.Remove(listFile) }() // best-effort temp cleanup
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -278,8 +278,17 @@ func writeFileList(paths []string) string {
 		return ""
 	}
 	for _, p := range paths {
-		fmt.Fprintln(f, p)
+		if _, err := fmt.Fprintln(f, p); err != nil {
+			slog.Error("failed to write file list", "error", err)
+			_ = f.Close()           // cleanup on error path
+			_ = os.Remove(f.Name()) // cleanup on error path
+			return ""
+		}
 	}
-	_ = f.Close()
+	if err := f.Close(); err != nil {
+		slog.Error("failed to finalize file list", "error", err)
+		_ = os.Remove(f.Name()) // cleanup on error path
+		return ""
+	}
 	return f.Name()
 }

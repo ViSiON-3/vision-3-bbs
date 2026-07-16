@@ -1122,7 +1122,7 @@ func (m *Model) purgeUser(idx int) {
 		pattern := filepath.Join(responsesDir, fmt.Sprintf("%d_*.json", userID))
 		matches, _ := filepath.Glob(pattern)
 		for _, f := range matches {
-			os.Remove(f)
+			_ = os.Remove(f) // best-effort cleanup
 		}
 	}
 

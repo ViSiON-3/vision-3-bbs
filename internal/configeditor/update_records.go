@@ -461,7 +461,7 @@ func (m *Model) toggleYesNo(f fieldDef) {
 		} else {
 			val = "Y"
 		}
-		f.Set(val)
+		_ = f.Set(val) // Y/N field setters never fail
 		m.dirty = true
 		m.message = ""
 		if f.AfterSet != nil {

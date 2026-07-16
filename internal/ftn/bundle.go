@@ -56,7 +56,7 @@ func IsZIPBundle(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only
 
 	magic := make([]byte, 4)
 	n, err := f.Read(magic)
@@ -73,7 +73,7 @@ func ExtractBundle(srcPath, destDir string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open bundle %s: %w", filepath.Base(srcPath), err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create dest dir %s: %w", destDir, err)
@@ -101,16 +101,17 @@ func extractZipFile(zf *zip.File, destPath string) error {
 	if err != nil {
 		return err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }() // read-only
 
 	out, err := os.Create(destPath)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-
-	_, err = io.Copy(out, rc)
-	return err
+	if _, err := io.Copy(out, rc); err != nil {
+		_ = out.Close() // cleanup on error path
+		return err
+	}
+	return out.Close()
 }
 
 // CreateBundle creates a ZIP bundle archive at bundlePath containing the .PKT
@@ -136,25 +137,25 @@ func CreateBundle(bundlePath string, pktPaths []string) (int, error) {
 	count := 0
 	for _, pktPath := range pktPaths {
 		if err := addFileToZip(zw, pktPath); err != nil {
-			zw.Close()
-			f.Close()
-			os.Remove(tmpPath)
+			_ = zw.Close()         // cleanup on error path
+			_ = f.Close()          // cleanup on error path
+			_ = os.Remove(tmpPath) // cleanup on error path
 			return count, fmt.Errorf("add %s to bundle: %w", filepath.Base(pktPath), err)
 		}
 		count++
 	}
 
 	if err := zw.Close(); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()          // cleanup on error path
+		_ = os.Remove(tmpPath) // cleanup on error path
 		return count, fmt.Errorf("close zip writer: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) // cleanup on error path
 		return count, fmt.Errorf("close bundle file: %w", err)
 	}
 	if err := os.Rename(tmpPath, bundlePath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) // cleanup on error path
 		return 0, fmt.Errorf("rename bundle: %w", err)
 	}
 	return count, nil
@@ -166,7 +167,7 @@ func addFileToZip(zw *zip.Writer, filePath string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }() // read-only
 
 	info, err := in.Stat()
 	if err != nil {

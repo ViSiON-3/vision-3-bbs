@@ -265,7 +265,7 @@ func (e *FSEditor) handleCommand(cmdType CommandType) {
 			e.quit = true
 		} else {
 			// Error message already written; wait for key then restore footer
-			e.input.ReadKey()
+			_, _ = e.input.ReadKey() // wait for any key
 			e.screen.DisplayFooter()
 			e.screen.RefreshScreen(e.buffer, e.topLine, e.currentLine, e.currentCol, e.insertMode, true)
 		}
