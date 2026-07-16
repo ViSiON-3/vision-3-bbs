@@ -141,7 +141,6 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 		// Truncate tracking to what was actually written
 		if actualNew < newCount {
 			newCount = actualNew
-			outputLines = outputLines[:newCount]
 			lineStarts = lineStarts[:newCount]
 		}
 	} else if newCount < originalCount {

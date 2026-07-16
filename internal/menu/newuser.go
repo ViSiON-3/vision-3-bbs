@@ -627,11 +627,7 @@ func validateHandle(handle string) bool {
 			break
 		}
 	}
-	if allDigits {
-		return false
-	}
-
-	return true
+	return !allDigits
 }
 
 // validateRealName checks that a real name is >3 chars and contains a space.

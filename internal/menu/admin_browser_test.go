@@ -12,13 +12,13 @@ import (
 
 // runAdminBrowser drives adminUserLightbarBrowser through the test harness with
 // the given scripted keystrokes, returning its result plus the captured output.
-func runAdminBrowser(t *testing.T, users []*user.User, input string, selectOnEnter bool) (*user.User, bool, error, string) {
+func runAdminBrowser(t *testing.T, users []*user.User, input string, selectOnEnter bool) (*user.User, bool, string, error) {
 	t.Helper()
 	ts := newTestSession(input)
 	terminal := newTestTerminal(ts)
 	u, ok, err := adminUserLightbarBrowser(ts, terminal, users, "Test Title", "pick one", ansi.OutputModeUTF8, selectOnEnter)
 	resetSessionIH(ts)
-	return u, ok, err, ts.output()
+	return u, ok, ts.output(), err
 }
 
 func browserTestUsers() []*user.User {
@@ -30,7 +30,7 @@ func browserTestUsers() []*user.User {
 }
 
 func TestAdminBrowser_QuitNoSelection(t *testing.T) {
-	u, ok, err, out := runAdminBrowser(t, browserTestUsers(), "Q", true)
+	u, ok, out, err := runAdminBrowser(t, browserTestUsers(), "Q", true)
 	if u != nil || ok || err != nil {
 		t.Fatalf("quit = (%v, %v, %v), want (nil, false, nil)", u, ok, err)
 	}
@@ -43,7 +43,7 @@ func TestAdminBrowser_QuitNoSelection(t *testing.T) {
 }
 
 func TestAdminBrowser_EnterSelectsCurrent(t *testing.T) {
-	u, ok, err, _ := runAdminBrowser(t, browserTestUsers(), "\r", true)
+	u, ok, _, err := runAdminBrowser(t, browserTestUsers(), "\r", true)
 	if err != nil || !ok || u == nil || u.Handle != "Alice" {
 		t.Fatalf("enter selected (%v, %v, %v), want Alice/true/nil", u, ok, err)
 	}
@@ -73,7 +73,7 @@ func TestAdminBrowser_NavigateUpClampsAtTop(t *testing.T) {
 }
 
 func TestAdminBrowser_EOFReturnsEOF(t *testing.T) {
-	u, ok, err, _ := runAdminBrowser(t, browserTestUsers(), "", true)
+	u, ok, _, err := runAdminBrowser(t, browserTestUsers(), "", true)
 	if !errors.Is(err, io.EOF) || u != nil || ok {
 		t.Fatalf("EOF case = (%v, %v, %v), want (nil, false, io.EOF)", u, ok, err)
 	}
@@ -81,7 +81,7 @@ func TestAdminBrowser_EOFReturnsEOF(t *testing.T) {
 
 func TestAdminBrowser_EnterIgnoredWhenSelectDisabled(t *testing.T) {
 	// With selectOnEnter=false, Enter does nothing; input then hits EOF.
-	u, ok, err, _ := runAdminBrowser(t, browserTestUsers(), "\r", false)
+	u, ok, _, err := runAdminBrowser(t, browserTestUsers(), "\r", false)
 	if !errors.Is(err, io.EOF) || u != nil || ok {
 		t.Fatalf("enter (selectOnEnter=false) = (%v, %v, %v), want (nil, false, io.EOF)", u, ok, err)
 	}

@@ -565,7 +565,7 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 
 	// Set PTY to raw mode so binary protocol data passes through unmodified.
 	fd := int(ptmx.Fd())
-	var restoreTerminal func() = func() {}
+	restoreTerminal := func() {}
 	originalState, err := term.MakeRaw(fd)
 	if err != nil {
 		slog.Warn("failed to put PTY into raw mode", "fd", fd, "cmd", cmd.Path, "error", err)
@@ -700,7 +700,7 @@ func ExecuteZmodemReceive(ctx context.Context, s ssh.Session, targetDir string) 
 		return fmt.Errorf("failed to get absolute path for target directory '%s': %w", targetDir, err)
 	}
 	if err := os.MkdirAll(absTargetDir, 0755); err != nil {
-		if fileInfo, statErr := os.Stat(absTargetDir); !(statErr == nil && fileInfo.IsDir()) {
+		if fileInfo, statErr := os.Stat(absTargetDir); statErr != nil || !fileInfo.IsDir() {
 			return fmt.Errorf("failed to create or access target directory '%s': %w", absTargetDir, err)
 		}
 	}

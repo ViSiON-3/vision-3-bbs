@@ -90,7 +90,7 @@ func NewServer(cfg Config) (*Server, error) {
 		sc := &gossh.ServerConfig{}
 		if legacy {
 			slog.Debug("SSH legacy algorithms enabled for retro BBS client compatibility")
-			sc.Config.KeyExchanges = []string{
+			sc.KeyExchanges = []string{
 				"curve25519-sha256",
 				"curve25519-sha256@libssh.org",
 				"ecdh-sha2-nistp256",
@@ -101,7 +101,7 @@ func NewServer(cfg Config) (*Server, error) {
 				"diffie-hellman-group14-sha1",
 				"diffie-hellman-group1-sha1",
 			}
-			sc.Config.Ciphers = []string{
+			sc.Ciphers = []string{
 				"chacha20-poly1305@openssh.com",
 				"aes128-gcm@openssh.com",
 				"aes256-gcm@openssh.com",
@@ -112,7 +112,7 @@ func NewServer(cfg Config) (*Server, error) {
 				"aes256-cbc",
 				"3des-cbc",
 			}
-			sc.Config.MACs = []string{
+			sc.MACs = []string{
 				"hmac-sha2-256-etm@openssh.com",
 				"hmac-sha2-512-etm@openssh.com",
 				"hmac-sha2-256",
@@ -232,7 +232,7 @@ func (s *BBSSession) RawWrite(p []byte) (int, error) {
 	if s.rawCh != nil {
 		return s.rawCh.Write(p)
 	}
-	return s.Session.Write(p)
+	return s.Session.Write(p) //nolint:staticcheck // explicit: bypasses BBSSession wrappers
 }
 
 // SetTransferActive marks/unmarks the session as being in a binary transfer.

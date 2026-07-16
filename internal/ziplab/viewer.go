@@ -170,7 +170,7 @@ func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(buf.Bytes()), outputMode)
 
 	for {
-		prompt := fmt.Sprintf("\r\n|07ZipLab [|15#|07/|15Q|07]: |15")
+		prompt := "\r\n|07ZipLab [|15#|07/|15Q|07]: |15"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
 		line, err := readLine()

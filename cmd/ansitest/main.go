@@ -11,7 +11,7 @@ import (
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
-	terminal "golang.org/x/crypto/ssh/terminal"
+	terminal "golang.org/x/term"
 	"golang.org/x/text/encoding/charmap"
 
 	// Use the internal ansi package for Cp437ToUnicode

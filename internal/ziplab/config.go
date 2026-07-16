@@ -146,7 +146,7 @@ func archiverTypesFromConfig(cfg archiver.Config) []ArchiveType {
 		types = append(types, at)
 		// Also add additional extensions (e.g., .lzh for lha archiver)
 		for _, ext := range a.Extensions {
-			if strings.ToLower(ext) != strings.ToLower(a.Extension) {
+			if !strings.EqualFold(ext, a.Extension) {
 				extra := at
 				extra.Extension = ext
 				types = append(types, extra)
