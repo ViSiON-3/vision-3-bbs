@@ -48,7 +48,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, audit fun
 	// write error — a second Close is safe on most transports, but Once avoids
 	// any log noise from double-close.
 	var closeOnce sync.Once
-	closeRW := func() { closeOnce.Do(func() { rw.Close() }) }
+	closeRW := func() { closeOnce.Do(func() { _ = rw.Close() }) }
 	go func() {
 		<-subCtx.Done()
 		closeRW()

@@ -30,15 +30,15 @@ func openREPDedup(path string) (*repDedup, error) {
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000"); err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, fmt.Errorf("qwk dedup: configure pragmas: %w", err)
 	}
 	if _, err := db.Exec(repDedupSchema); err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, fmt.Errorf("qwk dedup: create schema: %w", err)
 	}
 	if _, err := db.Exec("DELETE FROM rep_uploads WHERE seen_at < datetime('now','-90 days')"); err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, fmt.Errorf("qwk dedup: prune: %w", err)
 	}
 	return &repDedup{db: db}, nil

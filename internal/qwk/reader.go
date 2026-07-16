@@ -63,7 +63,7 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to open %s: %w", msgFile.Name, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }() // read-only zip entry
 
 	data, err := io.ReadAll(rc)
 	if err != nil {
@@ -76,7 +76,7 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 			hrc, err := f.Open()
 			if err == nil {
 				hdata, rerr := io.ReadAll(hrc)
-				hrc.Close()
+				_ = hrc.Close() // read-only zip entry
 				if rerr == nil {
 					headers = parseHeadersDAT(hdata)
 				}

@@ -121,21 +121,21 @@ func (m *ConferenceMap) Save(path string) error {
 	}
 	tmpName := tmp.Name()
 	if _, err = tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("write temp conference map: %w", err)
 	}
 	if err = tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("sync temp conference map: %w", err)
 	}
 	if err = tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("close temp conference map: %w", err)
 	}
 	if err = os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("rename conference map: %w", err)
 	}
 	return nil

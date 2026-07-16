@@ -76,13 +76,13 @@ func DialSSH(cfg SSHDialConfig) (*SSHChannelClient, error) {
 
 	sess, err := conn.NewSession()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() // cleanup on error path
 		return nil, fmt.Errorf("admin: ssh new session: %w", err)
 	}
 
 	if err := sess.RequestSubsystem("wfc-admin"); err != nil {
-		sess.Close()
-		conn.Close()
+		_ = sess.Close() // cleanup on error path
+		_ = conn.Close() // cleanup on error path
 		return nil, fmt.Errorf("admin: request wfc-admin subsystem: %w", err)
 	}
 

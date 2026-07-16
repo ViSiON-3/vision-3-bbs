@@ -81,7 +81,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		if r := recover(); r != nil {
 			slog.Error("telnet panic handling connection", "remote", remoteAddr, "panic", r)
 		}
-		conn.Close()
+		_ = conn.Close() // best-effort close on teardown
 		slog.Info("telnet connection closed", "remote", remoteAddr)
 	}()
 

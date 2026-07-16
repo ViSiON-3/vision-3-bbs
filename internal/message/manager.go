@@ -634,7 +634,9 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	// Close the base before firing the callback. The V3Net hook calls
 	// MarkMessageSent which re-opens the same JAM base, so having it
 	// still open here can cause nested-open/file-sharing issues.
-	b.Close()
+	if cerr := b.Close(); cerr != nil && err == nil {
+		err = fmt.Errorf("closing message base: %w", cerr)
+	}
 
 	if err == nil {
 		mm.invalidateThreadIndex(areaID)
