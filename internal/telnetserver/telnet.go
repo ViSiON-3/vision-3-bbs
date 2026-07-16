@@ -180,13 +180,14 @@ func (tc *TelnetConn) processNegotiationBytes(data []byte) {
 			case IAC:
 				tc.state = stateData // Escaped 0xFF
 			case WILL, WONT, DO, DONT:
-				if b == WILL {
+				switch b {
+				case WILL:
 					tc.state = stateWill
-				} else if b == WONT {
+				case WONT:
 					tc.state = stateWont
-				} else if b == DO {
+				case DO:
 					tc.state = stateDo
-				} else {
+				default:
 					tc.state = stateDont
 				}
 			case SB:
@@ -217,15 +218,16 @@ func (tc *TelnetConn) processNegotiationBytes(data []byte) {
 			// else: silently discard excess subnegotiation data
 
 		case stateSBIAC:
-			if b == SE {
+			switch b {
+			case SE:
 				// End of subnegotiation
 				tc.handleSubnegotiation()
 				tc.state = stateData
-			} else if b == IAC {
+			case IAC:
 				// Escaped 0xFF in subnegotiation data
 				tc.sbData = append(tc.sbData, IAC)
 				tc.state = stateSBData
-			} else {
+			default:
 				// Unexpected, treat as end of subnegotiation
 				tc.state = stateData
 			}
@@ -385,15 +387,16 @@ func (tc *TelnetConn) Read(p []byte) (int, error) {
 				}
 
 			case stateSBIAC:
-				if b == SE {
+				switch b {
+				case SE:
 					tc.handleSubnegotiation()
 					tc.state = stateData
-				} else if b == IAC {
+				case IAC:
 					if len(tc.sbData) < 256 {
 						tc.sbData = append(tc.sbData, IAC)
 					}
 					tc.state = stateSBData
-				} else {
+				default:
 					tc.state = stateData
 				}
 			}

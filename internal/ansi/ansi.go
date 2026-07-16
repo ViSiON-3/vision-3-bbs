@@ -41,7 +41,7 @@ func ConvertCP437ToUTF8(data []byte) []byte {
 			if i < len(data) && data[i] == '[' {
 				out = append(out, data[i])
 				i++
-				for i < len(data) && !((data[i] >= 'A' && data[i] <= 'Z') || (data[i] >= 'a' && data[i] <= 'z')) {
+				for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
 					out = append(out, data[i])
 					i++
 				}
@@ -817,7 +817,7 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 				colorDigit := content[i+1]
 				if colorDigit >= '0' && colorDigit <= '7' {
 					ansiCode := 30 + int(colorDigit-'0')
-					displayBuf.WriteString(fmt.Sprintf("\x1b[%dm", ansiCode))
+					fmt.Fprintf(&displayBuf, "\x1b[%dm", ansiCode)
 					consumed = 2 // Consume $X
 				} else {
 					// Unhandled $ code, write literally

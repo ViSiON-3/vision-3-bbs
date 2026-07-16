@@ -343,15 +343,15 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		if err != nil {
 			return false
 		}
-		switch {
-		case key == 'Q' || key == 'q' || key == editor.KeyEsc:
+		switch key {
+		case 'Q', 'q', editor.KeyEsc:
 			return false
 
-		case key == '?':
+		case '?':
 			nuvShowHelp(terminal, outputMode)
 			wv(terminal, votePrompt, outputMode)
 
-		case key == 'R' || key == 'r':
+		case 'R', 'r':
 			nuvDisplayStats(e, terminal, c, idx+1, outputMode)
 			if voterIdx >= 0 {
 				vote := "|12No"
@@ -362,7 +362,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			}
 			wv(terminal, votePrompt, outputMode)
 
-		case key == 'I' || key == 'i':
+		case 'I', 'i':
 			if cfg.NUVForm > 0 && cfg.NUVForm <= 5 {
 				if u, ok := userManager.GetUser(c.Handle); ok {
 					showInfoForm(e, s, terminal, outputMode, u.ID, cfg.NUVForm, termHeight)
@@ -384,7 +384,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			}
 			wv(terminal, votePrompt, outputMode)
 
-		case key == 'C' || key == 'c':
+		case 'C', 'c':
 			if voterIdx < 0 {
 				// V2: 'You have to Vote First!'
 				wv(terminal, "\r\n|07You have to Vote First!\r\n", outputMode)
@@ -400,7 +400,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			}
 			wv(terminal, votePrompt, outputMode)
 
-		case key == 'Y' || key == 'y' || key == 'N' || key == 'n':
+		case 'Y', 'y', 'N', 'n':
 			castYes := key == 'Y' || key == 'y'
 			nuvMu.Lock()
 			fresh, loadErr := loadNUVData(e.RootConfigPath)

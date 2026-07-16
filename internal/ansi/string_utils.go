@@ -15,7 +15,7 @@ func VisibleLength(s string) int {
 		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
 			// Skip ANSI escape sequence
 			i += 2
-			for i < len(s) && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
+			for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
 				i++
 			}
 			if i < len(s) {
@@ -51,7 +51,7 @@ func TruncateVisible(s string, maxVisible int) string {
 			// ANSI escape sequence - always preserve
 			start := i
 			i += 2
-			for i < len(s) && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
+			for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
 				i++
 			}
 			if i < len(s) {

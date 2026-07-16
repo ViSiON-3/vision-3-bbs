@@ -196,12 +196,12 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			return currentUser, "", nil
 		}
 
-		switch {
-		case key == 'Q' || key == 'q' || key == editor.KeyEsc:
+		switch key {
+		case 'Q', 'q', editor.KeyEsc:
 			wv(terminal, "\r\n", outputMode)
 			return currentUser, "", nil
 
-		case key == 'A' || key == 'a':
+		case 'A', 'a':
 			wv(terminal, "\r\n|07Handle to add: ", outputMode)
 			handle, err := readLineFromSessionIH(s, terminal)
 			if err != nil || strings.TrimSpace(handle) == "" {
@@ -219,7 +219,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			wv(terminal, fmt.Sprintf("|10Added '%s' to NUV queue.\r\n", handle), outputMode)
 
-		case key == 'R' || key == 'r':
+		case 'R', 'r':
 			wv(terminal, "\r\n|07Remove candidate #: ", outputMode)
 			numStr, err := readLineFromSessionIH(s, terminal)
 			if err != nil || strings.TrimSpace(numStr) == "" {
@@ -250,7 +250,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			slog.Info("sysop removed candidate from queue", "handle", currentUser.Handle, "candidate", removed.Handle)
 			wv(terminal, fmt.Sprintf("|10Removed '%s' from queue.\r\n", removed.Handle), outputMode)
 
-		case key == 'V' || key == 'v':
+		case 'V', 'v':
 			wv(terminal, "\r\n|07Vote on candidate #: ", outputMode)
 			numStr, err := readLineFromSessionIH(s, terminal)
 			if err != nil || strings.TrimSpace(numStr) == "" {

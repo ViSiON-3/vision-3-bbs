@@ -95,7 +95,7 @@ func (m *Model) fieldsHubWizard() []fieldDef {
 					return fmt.Errorf("cannot be empty")
 				}
 				for _, c := range val {
-					if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+					if (c < 'a' || c > 'z') && (c < '0' || c > '9') {
 						return fmt.Errorf("must be lowercase alphanumeric only")
 					}
 				}

@@ -103,7 +103,7 @@ func NormalizeRoom(name string) (string, error) {
 		return "", fmt.Errorf("room name too long (max 32 characters)")
 	}
 	for _, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
 			return "", fmt.Errorf("room name may only contain lowercase letters, digits, and hyphens")
 		}
 	}
