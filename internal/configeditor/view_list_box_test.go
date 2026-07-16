@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"unicode/utf8"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -99,6 +101,37 @@ func TestListBox_ListPadsAndTruncates(t *testing.T) {
 	}
 	if got := rowFor("ok"); got != "ok"+strings.Repeat(" ", 8) {
 		t.Errorf("short row = %q, want padded to 10", got)
+	}
+}
+
+func TestListBox_ListUnicodeRowsStayValid(t *testing.T) {
+	m := Model{width: 30, height: 10}
+	lb := m.newListBox(10, 10)
+	// 25 runes of multi-byte content: byte-based truncation would split a
+	// UTF-8 sequence and misalign the box.
+	long := strings.Repeat("é", 25)
+	lb.list(2, 0, 0, 2, func(i int) string {
+		return []string{long, "ünïcødé"}[i]
+	})
+	out := stripStyles(lb.b.String())
+	if !utf8.ValidString(out) {
+		t.Fatal("list output contains invalid UTF-8 (rune split by truncation)")
+	}
+	lines := strings.Split(out, "\n")
+	rowFor := func(sub string) string {
+		for _, l := range lines {
+			if strings.Contains(l, sub) {
+				return strings.Trim(strings.Trim(l, "░"), "│")
+			}
+		}
+		t.Fatalf("no row containing %q", sub)
+		return ""
+	}
+	if got := rowFor("éé"); got != strings.Repeat("é", 10) {
+		t.Errorf("long unicode row = %q, want 10 runes of é", got)
+	}
+	if got := rowFor("ünïcødé"); got != "ünïcødé"+strings.Repeat(" ", 3) {
+		t.Errorf("short unicode row = %q, want padded to 10 runes", got)
 	}
 }
 

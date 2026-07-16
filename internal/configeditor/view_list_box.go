@@ -106,11 +106,9 @@ func (lb *listBox) list(visible, scroll, cursor, total int, format func(i int) s
 		if content == "" {
 			content = strings.Repeat(" ", lb.boxW)
 		}
-		if len(content) < lb.boxW {
-			content += strings.Repeat(" ", lb.boxW-len(content))
-		} else if len(content) > lb.boxW {
-			content = content[:lb.boxW]
-		}
+		// Rune-aware pad/truncate: byte-based slicing would split UTF-8
+		// sequences in non-ASCII rows and break box alignment.
+		content = padRight(content, lb.boxW)
 		if visIdx == cursor {
 			lb.row(menuHighlightStyle.Render(content))
 		} else {
