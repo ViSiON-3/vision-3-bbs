@@ -418,5 +418,9 @@ func (h *Hub) findNetwork(name string) *NetworkConfig {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v) // best-effort response write
+	// Usually a client disconnect, but Encode can also fail on a marshal
+	// bug — log so server-side errors don't vanish silently.
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Debug("hub: write JSON response", "error", err)
+	}
 }

@@ -274,6 +274,8 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 	}
 
 	if removed == 0 {
+		// Close before removing: some platforms can't delete open files.
+		_ = outFile.Close()    // discarding the file; close error is moot
 		_ = os.Remove(tmpPath) // nothing changed; discard temp copy
 		retErr = nil
 		return nil
