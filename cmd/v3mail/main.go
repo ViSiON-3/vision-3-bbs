@@ -207,6 +207,7 @@ func cmdStats(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	for _, meta := range paths {
 		b, err := jam.Open(meta.Path)
@@ -243,7 +244,12 @@ func cmdStats(args []string) {
 			}
 			fmt.Println()
 		}
-		closeBase(b, meta.Path)
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -259,6 +265,7 @@ func cmdPack(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	for _, meta := range paths {
 		b, err := jam.Open(meta.Path)
@@ -276,7 +283,9 @@ func cmdPack(args []string) {
 				fmt.Printf("%s: %d total, %d active, %d deleted (would remove %d)\n",
 					meta.Tag, total, active, deleted, deleted)
 			}
-			closeBase(b, meta.Path)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -284,7 +293,9 @@ func cmdPack(args []string) {
 			if !*quiet {
 				fmt.Printf("%s: no deleted messages, skipping\n", meta.Tag)
 			}
-			closeBase(b, meta.Path)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -295,7 +306,9 @@ func cmdPack(args []string) {
 		result, err := b.Pack()
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error packing %s: %v\n", meta.Path, err)
-			closeBase(b, meta.Path)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -305,7 +318,12 @@ func cmdPack(args []string) {
 			fmt.Printf("  After:  %d messages\n", result.MessagesAfter)
 			fmt.Printf("  Reclaimed: %s\n", formatBytes(result.BytesBefore-result.BytesAfter))
 		}
-		closeBase(b, meta.Path)
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -326,6 +344,7 @@ func cmdPurge(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: --days or --keep is required\n")
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	paths, err := resolveBasePaths(*allFlag, *configDir, *dataDir, fs.Args())
 	if err != nil {
@@ -413,7 +432,9 @@ func cmdPurge(args []string) {
 				fmt.Printf("%s: would delete %d messages (age>%dd, keep<=%d)\n",
 					meta.Tag, len(toDelete), effectiveDays, effectiveKeep)
 			}
-			closeBase(b, meta.Path)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -426,7 +447,12 @@ func cmdPurge(args []string) {
 		if !*quiet {
 			fmt.Printf("%s: deleted %d messages (run 'pack' to reclaim space)\n", meta.Tag, deleted)
 		}
-		closeBase(b, meta.Path)
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -556,7 +582,9 @@ func cmdFix(args []string) {
 				fmt.Printf("  Found %d issue(s)\n", issues)
 			}
 		}
-		closeBase(b, meta.Path)
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
 	}
 
 	if hadErrors {
@@ -576,6 +604,7 @@ func cmdLastread(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	for _, meta := range paths {
 		b, err := jam.Open(meta.Path)
@@ -590,14 +619,18 @@ func cmdLastread(args []string) {
 			} else if !*quiet {
 				fmt.Printf("%s: reset lastread for %q\n", meta.Tag, *resetUser)
 			}
-			closeBase(b, meta.Path)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
 		records, err := b.GetAllLastReadRecords()
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error reading lastread for %s: %v\n", meta.Tag, err)
-			closeBase(b, meta.Path)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -605,7 +638,9 @@ func cmdLastread(args []string) {
 			if !*quiet {
 				fmt.Printf("%s: no lastread records\n", meta.Tag)
 			}
-			closeBase(b, meta.Path)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -617,7 +652,12 @@ func cmdLastread(args []string) {
 			}
 			fmt.Println()
 		}
-		closeBase(b, meta.Path)
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -643,6 +683,7 @@ func cmdLink(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	totalUpdated := 0
 	for _, meta := range paths {
@@ -653,7 +694,9 @@ func cmdLink(args []string) {
 		}
 
 		updated, linkErr := linkBase(b, *quiet, meta.Tag)
-		closeBase(b, meta.Path)
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
 		if linkErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error linking %s: %v\n", meta.Path, linkErr)
 			continue
@@ -663,6 +706,9 @@ func cmdLink(args []string) {
 
 	if !*quiet && len(paths) > 1 {
 		fmt.Printf("\nTotal: %d links updated across %d areas\n", totalUpdated, len(paths))
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -864,10 +910,13 @@ func cleanReplyIDsPack(b *jam.Base) error {
 	return err
 }
 
-// closeBase closes a JAM base, reporting (but not aborting on) close errors
-// so flush failures after write operations are not silently ignored.
-func closeBase(b *jam.Base, path string) {
+// closeBase closes a JAM base, reporting close errors on stderr so
+// commands exit non-zero when a delayed flush/close failure occurs after
+// write operations. Returns true when the close succeeded.
+func closeBase(b *jam.Base, path string) bool {
 	if err := b.Close(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: closing %s: %v\n", path, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error closing %s: %v\n", path, err)
+		return false
 	}
+	return true
 }

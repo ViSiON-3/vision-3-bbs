@@ -3,12 +3,18 @@ package ziplab
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gliderlabs/ssh"
+	"golang.org/x/term"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // createTestZipWithTimes creates a ZIP with entries that have specific modification times.
@@ -262,6 +268,9 @@ func TestFormatArchiveListing_ManyFiles(t *testing.T) {
 }
 
 func TestRunZipLabView_Exists(t *testing.T) {
-	fn := RunZipLabView
+	// Explicit function type so any signature change fails compilation.
+	var fn func(ctx context.Context, s ssh.Session, terminal *term.Terminal,
+		filePath, filename string, outputMode ansi.OutputMode,
+		readLine ReadLineFunc, readKey ReadKeyFunc) = RunZipLabView
 	_ = fn
 }

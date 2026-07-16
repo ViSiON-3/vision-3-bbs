@@ -363,9 +363,14 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Second pass: all validations passed, apply subscriptions and events.
+		// Persistence failures must not be reported as success: Upsert and
+		// Add are both idempotent, so the leaf can safely retry the whole
+		// subscribe request after a 500.
 		for _, ps := range pending {
 			if err := h.areaSubscriptions.Upsert(req.NodeID, req.Network, ps.tag, ps.status); err != nil {
 				slog.Error("v3net hub: persist area subscription", "node", req.NodeID, "tag", ps.tag, "error", err)
+				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+				return
 			}
 			areaStatuses = append(areaStatuses, protocol.AreaSubscriptionStatus{
 				Tag:    ps.tag,
@@ -376,7 +381,11 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		for _, pr := range pendingRequests {
 			if _, err := h.accessRequests.Add(req.Network, pr.tag, req.NodeID, req.BBSName); err != nil {
 				slog.Error("v3net hub: persist access request", "node", req.NodeID, "tag", pr.tag, "error", err)
+				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+				return
 			}
+			// Publish only after the request is durably stored, so managers
+			// are never notified about a request that does not exist.
 			ev, _ := protocol.NewEvent(protocol.EventAreaAccessRequested, protocol.AreaAccessRequestedPayload{
 				Network: req.Network,
 				Tag:     pr.tag,

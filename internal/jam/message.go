@@ -512,10 +512,19 @@ func (b *Base) WriteMessage(msg *Message) (int, error) {
 			return err
 		}
 
-		// Sync all files to ensure consistency on crash
-		for name, f := range map[string]*os.File{".jdt": b.jdtFile, ".jhr": b.jhrFile, ".jdx": b.jdxFile} {
-			if err := f.Sync(); err != nil {
-				return fmt.Errorf("jam: sync %s: %w", name, err)
+		// Sync all files to ensure consistency on crash. Order matters:
+		// message data (.jdt) must reach disk before the header (.jhr) and
+		// index (.jdx) records that reference it.
+		for _, sf := range []struct {
+			name string
+			file *os.File
+		}{
+			{".jdt", b.jdtFile},
+			{".jhr", b.jhrFile},
+			{".jdx", b.jdxFile},
+		} {
+			if err := sf.file.Sync(); err != nil {
+				return fmt.Errorf("jam: sync %s: %w", sf.name, err)
 			}
 		}
 

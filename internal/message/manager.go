@@ -634,14 +634,19 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	// Close the base before firing the callback. The V3Net hook calls
 	// MarkMessageSent which re-opens the same JAM base, so having it
 	// still open here can cause nested-open/file-sharing issues.
-	if cerr := b.Close(); cerr != nil && err == nil {
-		err = fmt.Errorf("closing message base: %w", cerr)
-	}
+	cerr := b.Close()
 
+	// The write already succeeded at this point, so run the post-write hooks
+	// even if the close failed — the message is on disk and downstream
+	// consumers (thread index, V3Net delivery) must still see it. The close
+	// error is folded into the returned error afterwards.
 	if err == nil {
 		mm.invalidateThreadIndex(areaID)
 		if !private && mm.OnMessagePosted != nil {
 			mm.OnMessagePosted(area, msgNum, from, to, subject, body)
+		}
+		if cerr != nil {
+			err = fmt.Errorf("closing message base: %w", cerr)
 		}
 	}
 	return msgNum, err

@@ -319,7 +319,7 @@ func (t *Tosser) isPacketFromKnownLink(hdr *ftn.PacketHeader) bool {
 }
 
 // tossMessage processes a single message from a packet.
-func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) error {
+func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (retErr error) {
 	parsed := ftn.ParsePackedMessageBody(msg.Body)
 
 	// Extract MSGID and CHRS from kludges
@@ -390,9 +390,16 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) e
 	if err != nil {
 		return fmt.Errorf("get base for area %d: %w", area.ID, err)
 	}
+	// A failed close means the JAM write may not be fully flushed, so treat
+	// it as a write failure — otherwise the packet would be acknowledged and
+	// removed while the message is potentially lost.
 	defer func() {
 		if cerr := base.Close(); cerr != nil {
-			slog.Warn("closing JAM base", "error", cerr)
+			if retErr == nil {
+				retErr = fmt.Errorf("closing JAM base: %w", cerr)
+			} else {
+				slog.Warn("closing JAM base", "error", cerr)
+			}
 		}
 	}()
 
@@ -489,7 +496,7 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) e
 
 // writeMsgToArea writes a packet message to any JAM area by tag.
 // Used for netmail, bad-area, and dupe-area routing.
-func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, parsed *ftn.ParsedBody, msgID string) error {
+func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, parsed *ftn.ParsedBody, msgID string) (retErr error) {
 	area, found := t.msgMgr.GetAreaByTag(areaTag)
 	if !found {
 		return fmt.Errorf("area %q not configured", areaTag)
@@ -498,9 +505,15 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 	if err != nil {
 		return fmt.Errorf("get base for area %q: %w", areaTag, err)
 	}
+	// Treat a failed close as a write failure so callers do not acknowledge
+	// a packet whose JAM finalization failed.
 	defer func() {
 		if cerr := base.Close(); cerr != nil {
-			slog.Warn("closing JAM base", "error", cerr)
+			if retErr == nil {
+				retErr = fmt.Errorf("closing JAM base: %w", cerr)
+			} else {
+				slog.Warn("closing JAM base", "error", cerr)
+			}
 		}
 	}()
 

@@ -12,7 +12,7 @@ import (
 
 func TestExpandArgs_filePath_standalone(t *testing.T) {
 	tmpl := []string{"-b", "-e", "{filePath}"}
-	got, _ := expandArgs(tmpl, []string{"/files/a.zip", "/files/b.zip"}, "")
+	got, _, _ := expandArgs(tmpl, []string{"/files/a.zip", "/files/b.zip"}, "")
 	want := []string{"-b", "-e", "/files/a.zip", "/files/b.zip"}
 	assertStringSlice(t, want, got)
 }
@@ -20,7 +20,7 @@ func TestExpandArgs_filePath_standalone(t *testing.T) {
 func TestExpandArgs_filePath_appended_when_absent(t *testing.T) {
 	// No {filePath} placeholder: files are appended at the end.
 	tmpl := []string{"-b", "-e"}
-	got, _ := expandArgs(tmpl, []string{"/files/a.zip", "/files/b.zip"}, "")
+	got, _, _ := expandArgs(tmpl, []string{"/files/a.zip", "/files/b.zip"}, "")
 	want := []string{"-b", "-e", "/files/a.zip", "/files/b.zip"}
 	assertStringSlice(t, want, got)
 }
@@ -28,14 +28,14 @@ func TestExpandArgs_filePath_appended_when_absent(t *testing.T) {
 func TestExpandArgs_no_filePaths_no_placeholder(t *testing.T) {
 	// No filePaths and no placeholder: args returned unchanged (lrzsz rz style).
 	tmpl := []string{"-b", "-r"}
-	got, _ := expandArgs(tmpl, nil, "/upload")
+	got, _, _ := expandArgs(tmpl, nil, "/upload")
 	want := []string{"-b", "-r"}
 	assertStringSlice(t, want, got)
 }
 
 func TestExpandArgs_targetDir_standalone(t *testing.T) {
 	tmpl := []string{"-r", "{targetDir}"}
-	got, _ := expandArgs(tmpl, nil, "/upload/tmp")
+	got, _, _ := expandArgs(tmpl, nil, "/upload/tmp")
 	want := []string{"-r", "/upload/tmp/"}
 	assertStringSlice(t, want, got)
 }
@@ -44,13 +44,13 @@ func TestExpandArgs_inline_replacement(t *testing.T) {
 	// Inline replacement uses the first filePath only; remaining files are NOT appended
 	// (inline substitution marks {filePath} as consumed).
 	tmpl := []string{"send:{filePath}"}
-	got, _ := expandArgs(tmpl, []string{"/f/a.zip", "/f/b.zip"}, "")
+	got, _, _ := expandArgs(tmpl, []string{"/f/a.zip", "/f/b.zip"}, "")
 	want := []string{"send:/f/a.zip"}
 	assertStringSlice(t, want, got)
 }
 
 func TestExpandArgs_empty_template(t *testing.T) {
-	got, _ := expandArgs(nil, []string{"/f/a.zip"}, "")
+	got, _, _ := expandArgs(nil, []string{"/f/a.zip"}, "")
 	want := []string{"/f/a.zip"} // appended since no placeholder
 	assertStringSlice(t, want, got)
 }
@@ -59,7 +59,7 @@ func TestExpandArgs_fileListPath_inline(t *testing.T) {
 	// sexyz-style batch send with @{fileListPath}
 	tmpl := []string{"-raw", "-8", "sz", "@{fileListPath}"}
 	files := []string{"/files/a.zip", "/files/b.zip"}
-	got, listFile := expandArgs(tmpl, files, "")
+	got, listFile, _ := expandArgs(tmpl, files, "")
 	if listFile == "" {
 		t.Fatal("expected listFile path, got empty")
 	}
@@ -88,7 +88,7 @@ func TestExpandArgs_fileListPath_standalone(t *testing.T) {
 	// Standalone {fileListPath} (no @ prefix): bare temp file path is appended.
 	tmpl := []string{"-raw", "-8", "sz", "{fileListPath}"}
 	files := []string{"/files/a.zip", "/files/b.zip"}
-	got, listFile := expandArgs(tmpl, files, "")
+	got, listFile, _ := expandArgs(tmpl, files, "")
 	if listFile == "" {
 		t.Fatal("expected listFile path, got empty")
 	}
@@ -104,14 +104,14 @@ func TestExpandArgs_fileListPath_standalone(t *testing.T) {
 
 func TestExpandArgs_targetDir_already_has_separator(t *testing.T) {
 	tmpl := []string{"rz", "{targetDir}"}
-	got, _ := expandArgs(tmpl, nil, "/upload/tmp/")
+	got, _, _ := expandArgs(tmpl, nil, "/upload/tmp/")
 	want := []string{"rz", "/upload/tmp/"}
 	assertStringSlice(t, want, got)
 }
 
 func TestExpandArgs_targetDir_empty(t *testing.T) {
 	tmpl := []string{"rz", "{targetDir}"}
-	got, _ := expandArgs(tmpl, nil, "")
+	got, _, _ := expandArgs(tmpl, nil, "")
 	want := []string{"rz", ""}
 	assertStringSlice(t, want, got)
 }

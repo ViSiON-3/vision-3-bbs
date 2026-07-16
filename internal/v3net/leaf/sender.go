@@ -95,8 +95,8 @@ func (l *Leaf) SendChatCtx(ctx context.Context, text, handle string) error {
 	if err != nil {
 		return fmt.Errorf("leaf: chat join: %w", err)
 	}
-	_, _ = io.Copy(io.Discard, joinResp.Body) // drain for connection reuse
-	_ = joinResp.Body.Close()                 // read side
+	drainBody(joinResp.Body)  // drain for connection reuse
+	_ = joinResp.Body.Close() // read side
 	if joinResp.StatusCode/100 != 2 {
 		return fmt.Errorf("leaf: chat join returned %d", joinResp.StatusCode)
 	}
@@ -110,8 +110,8 @@ func (l *Leaf) SendChatCtx(ctx context.Context, text, handle string) error {
 	if err != nil {
 		return fmt.Errorf("leaf: chat post: %w", err)
 	}
-	_, _ = io.Copy(io.Discard, postResp.Body) // drain for connection reuse
-	_ = postResp.Body.Close()                 // read side
+	drainBody(postResp.Body)  // drain for connection reuse
+	_ = postResp.Body.Close() // read side
 	if postResp.StatusCode/100 != 2 {
 		return fmt.Errorf("leaf: chat post returned %d", postResp.StatusCode)
 	}
@@ -172,7 +172,7 @@ func (l *Leaf) signedPostCtx(ctx context.Context, path string, body []byte) erro
 		return fmt.Errorf("leaf: POST %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }() // read side
-	_, _ = io.Copy(io.Discard, resp.Body)    // drain for connection reuse
+	drainBody(resp.Body)                     // drain for connection reuse
 
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("leaf: POST %s returned %d", path, resp.StatusCode)
@@ -216,6 +216,13 @@ const (
 	// maxPollRespBytes bounds a message-page response.
 	maxPollRespBytes = 8 << 20 // 8MB
 )
+
+// drainBody discards a response body (capped at maxRespBytes) so the
+// underlying connection can be reused without letting a slow or oversized
+// hub response stall the request until the client timeout.
+func drainBody(body io.Reader) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxRespBytes))
+}
 
 // readBody reads an HTTP response body capped at limit bytes, erroring if
 // the body exceeds the cap (never parse truncated data as if complete).
