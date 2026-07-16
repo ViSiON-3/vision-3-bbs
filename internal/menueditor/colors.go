@@ -108,9 +108,9 @@ var editInfoValueStyle = dosStyle(0xF4) // light gray bg, red fg (for file/numbe
 // MENUEDIT.PAS Ask_Colors: PColor=94($5E), NormColor=95($5F) → magenta bg
 var dialogBorderStyle = dosStyle(0x5F) // magenta bg, white fg
 var dialogTitleStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color(dosColors[15])).
-	Background(lipgloss.Color(dosColors[13])).
-	Bold(true)
+					Foreground(lipgloss.Color(dosColors[15])).
+					Background(lipgloss.Color(dosColors[13])).
+					Bold(true)
 var dialogTextStyle = dosStyle(0x5E) // magenta bg, yellow fg
 
 // --- Input dialog (Add Menu, etc.) ---

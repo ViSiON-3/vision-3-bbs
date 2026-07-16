@@ -3,8 +3,8 @@ package scripting
 import (
 	"fmt"
 
-	"github.com/dop251/goja"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/dop251/goja"
 )
 
 // registerMessage creates the v3.message object for message area access.

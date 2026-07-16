@@ -12,16 +12,16 @@ import (
 
 // Config holds leaf client configuration.
 type Config struct {
-	HubURL        string
-	Network       string
-	AreaTags      []string // V3Net area tags to subscribe to
-	PollInterval  time.Duration
-	Keystore      *keystore.Keystore
-	DedupIndex    *dedup.Index
-	JAMWriter     JAMWriter
-	OnEvent       func(protocol.Event)
-	BBSName       string // Local BBS name for subscribe request
-	BBSHost       string // Local BBS hostname for subscribe request
+	HubURL       string
+	Network      string
+	AreaTags     []string // V3Net area tags to subscribe to
+	PollInterval time.Duration
+	Keystore     *keystore.Keystore
+	DedupIndex   *dedup.Index
+	JAMWriter    JAMWriter
+	OnEvent      func(protocol.Event)
+	BBSName      string // Local BBS name for subscribe request
+	BBSHost      string // Local BBS hostname for subscribe request
 }
 
 // DefaultPollInterval is used when no poll interval is configured.

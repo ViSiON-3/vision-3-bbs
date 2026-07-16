@@ -30,7 +30,7 @@ type SessionContext struct {
 	UserHandle   string
 	UserRealName string
 	AccessLevel  int
-	TimeLimit    int    // minutes
+	TimeLimit    int // minutes
 	TimesCalled  int
 	Location     string
 	ScreenWidth  int

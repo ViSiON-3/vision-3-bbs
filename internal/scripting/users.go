@@ -1,8 +1,8 @@
 package scripting
 
 import (
-	"github.com/dop251/goja"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/dop251/goja"
 )
 
 // registerUsers creates the v3.users object for read-only user database access.

@@ -194,4 +194,3 @@ func (m Model) viewV3NetAreaBrowser() string {
 
 	return b.String()
 }
-

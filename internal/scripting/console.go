@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dop251/goja"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/dop251/goja"
 )
 
 // registerConsole creates the v3.console object with terminal I/O bindings.

@@ -157,4 +157,3 @@ func TestVerify_RejectsInvalidSignature(t *testing.T) {
 		t.Error("Verify should reject invalid base64 signature")
 	}
 }
-

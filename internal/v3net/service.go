@@ -208,16 +208,16 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 	}
 
 	l := leaf.New(leaf.Config{
-		HubURL:        lcfg.HubURL,
-		Network:       lcfg.Network,
-		AreaTags:      lcfg.Boards,
-		PollInterval:  interval,
-		Keystore:      s.ks,
-		DedupIndex:    s.dedupIdx,
-		JAMWriter:     writer,
-		OnEvent:       onEvent,
-		BBSName:       s.BBSName,
-		BBSHost:       s.BBSHost,
+		HubURL:       lcfg.HubURL,
+		Network:      lcfg.Network,
+		AreaTags:     lcfg.Boards,
+		PollInterval: interval,
+		Keystore:     s.ks,
+		DedupIndex:   s.dedupIdx,
+		JAMWriter:    writer,
+		OnEvent:      onEvent,
+		BBSName:      s.BBSName,
+		BBSHost:      s.BBSHost,
 	})
 
 	s.leaves = append(s.leaves, l)

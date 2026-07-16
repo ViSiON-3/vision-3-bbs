@@ -6,9 +6,9 @@ import "strings"
 type MessageType int
 
 const (
-	MsgTypeLocalMsg   MessageType = iota // Local BBS-only message
-	MsgTypeEchomailMsg                   // FTN conference/echo message
-	MsgTypeNetmailMsg                    // FTN direct network mail
+	MsgTypeLocalMsg    MessageType = iota // Local BBS-only message
+	MsgTypeEchomailMsg                    // FTN conference/echo message
+	MsgTypeNetmailMsg                     // FTN direct network mail
 )
 
 // IsEchomail reports whether this is an echomail message.

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
+	"github.com/google/uuid"
 )
 
 // setupTestFileManagerForViewer creates a FileManager with temp dirs, areas, and optional files on disk.

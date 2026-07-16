@@ -108,12 +108,12 @@ func TestDOSColorToANSI_Foreground(t *testing.T) {
 		wantBG   int
 		wantBold bool
 	}{
-		{112, 0, 7, false},  // Light gray BG, black FG
-		{116, 4, 7, false},  // Light gray BG, red FG (4 < 8, not bold)
-		{114, 2, 7, false},  // Light gray BG, green FG (2 < 8, not bold)
-		{126, 14, 7, true},  // Light gray BG, bright yellow FG (14 >= 8, bold)
-		{7, 7, 0, false},    // Black BG, light gray FG
-		{12, 12, 0, true},   // Black BG, bright red FG (12 >= 8, bold)
+		{112, 0, 7, false}, // Light gray BG, black FG
+		{116, 4, 7, false}, // Light gray BG, red FG (4 < 8, not bold)
+		{114, 2, 7, false}, // Light gray BG, green FG (2 < 8, not bold)
+		{126, 14, 7, true}, // Light gray BG, bright yellow FG (14 >= 8, bold)
+		{7, 7, 0, false},   // Black BG, light gray FG
+		{12, 12, 0, true},  // Black BG, bright red FG (12 >= 8, bold)
 	}
 
 	for _, tt := range tests {

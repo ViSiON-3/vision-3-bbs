@@ -3,8 +3,8 @@ package editor
 import (
 	"io"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/gliderlabs/ssh"
 )
 
 // FSEditor is the full-screen message editor

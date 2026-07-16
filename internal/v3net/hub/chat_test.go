@@ -222,7 +222,7 @@ func TestChatStorePrune(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	old := now.AddDate(0, 0, -8) // 8 days ago — older than 7-day retention
+	old := now.AddDate(0, 0, -8)    // 8 days ago — older than 7-day retention
 	recent := now.AddDate(0, 0, -1) // 1 day ago — within retention
 
 	// Insert into chat_history.
