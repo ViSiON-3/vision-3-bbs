@@ -12,6 +12,10 @@ import (
 // binkd's outbound directory. Inbound needs no loop: the binkd.conf exec hook
 // runs "v3mail toss" after each receive.
 func (s *Service) exportLoop(ctx context.Context) {
+	if s.exportDisabled {
+		// Already logged once in New; avoid repeated logging every cycle.
+		return
+	}
 	if s.cfg.MsgMgr == nil {
 		slog.Warn("binkd export loop disabled: message manager unavailable")
 		return

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
 // newTestRoot builds a BBS root with a fake binkd binary and a binkd.conf.
@@ -124,6 +125,34 @@ func TestCloseBeforeStart(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Close before Start must return promptly")
+	}
+}
+
+func TestNewValidatesFTNPathsForExport(t *testing.T) {
+	// A tosser-enabled network with blank global paths (inbound/outbound/
+	// binkd_outbound/temp) must not fail New (binkd can still serve inbound),
+	// but export must be disabled up front with one warning instead of
+	// repeated tosser init/scan errors every cycle.
+	root := newTestRoot(t)
+	cfg := testFTNConfig() // InternalTosserEnabled: true, OwnAddress set, all global paths blank
+	svc, err := New(Config{BBSRoot: root, FTN: cfg})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if !svc.exportDisabled {
+		t.Fatal("expected exportDisabled to be true for invalid FTN path config")
+	}
+
+	// Give MsgMgr a non-nil sentinel: exportDisabled must be checked first,
+	// so exportOnce (and thus MsgMgr) is never reached/used.
+	svc.cfg.MsgMgr = &message.MessageManager{}
+
+	done := make(chan struct{})
+	go func() { svc.exportLoop(context.Background()); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("exportLoop must return immediately when exportDisabled is set")
 	}
 }
 

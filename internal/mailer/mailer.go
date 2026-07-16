@@ -6,6 +6,7 @@ package mailer
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -39,6 +40,12 @@ type Service struct {
 	// records or persists dupes: v3mail toss (external process) owns
 	// data/ftn/dupes.json for real dupe tracking on inbound mail.
 	exportDupeDB *tosser.DupeDB
+
+	// exportDisabled is set in New when FTN config validation fails for a
+	// tosser-enabled network (e.g. blank global paths). It suppresses the
+	// export loop entirely so the failure is logged once, up front, instead
+	// of on every export cycle. Inbound (binkd itself) is unaffected.
+	exportDisabled bool
 
 	started atomic.Bool
 	done    chan struct{} // closed when Start's loops have both finished
@@ -92,15 +99,26 @@ func New(cfg Config) (*Service, error) {
 		return nil, fmt.Errorf("creating export dupe db: %w", err)
 	}
 
+	// Validate FTN global paths for any tosser-enabled network up front.
+	// binkd can still serve inbound with an invalid config, so this must not
+	// fail New; instead the export loop is disabled with a single warning
+	// here rather than repeated tosser init/scan errors on every cycle.
+	exportDisabled := false
+	if err := config.ValidateFTNConfig(cfg.FTN); err != nil {
+		slog.Warn("binkd export loop disabled: FTN config invalid", "error", err)
+		exportDisabled = true
+	}
+
 	return &Service{
-		cfg:          cfg,
-		binkdPath:    binkdPath,
-		confPath:     confPath,
-		backoffMin:   5 * time.Second,
-		backoffMax:   5 * time.Minute,
-		healthyRun:   time.Minute,
-		done:         make(chan struct{}),
-		exportDupeDB: exportDupeDB,
+		cfg:            cfg,
+		binkdPath:      binkdPath,
+		confPath:       confPath,
+		backoffMin:     5 * time.Second,
+		backoffMax:     5 * time.Minute,
+		healthyRun:     time.Minute,
+		done:           make(chan struct{}),
+		exportDupeDB:   exportDupeDB,
+		exportDisabled: exportDisabled,
 	}, nil
 }
 
