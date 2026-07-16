@@ -9,11 +9,13 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -1829,11 +1831,15 @@ func main() {
 		slog.Info("QWK API disabled")
 	}
 
-	// Block forever — SSH and telnet servers run in background goroutines.
-	// The process exits when the OS terminates it or logging.Fatal fires.
+	// Wait for a shutdown signal. SSH and telnet servers run in background
+	// goroutines; blocking here (rather than `select {}`) lets main() return
+	// on SIGINT/SIGTERM so all deferred cleanup runs (mailer stop, scheduler
+	// cancel, messageMgr close, etc.) instead of leaving them unreachable.
 	slog.Info("Vision/3 BBS running")
-	select {}
-
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	sig := <-sigCh
+	slog.Info("shutdown signal received, stopping", "signal", sig.String())
 }
 
 // v3netChatProvider creates a menu.ChatLeafProvider from the V3Net service.
