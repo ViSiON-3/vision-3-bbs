@@ -101,18 +101,14 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		if currentUser == nil {
 			slog.Warn("COMPOSEMSG called without user and without args", "node", nodeNumber)
 			msg := "\r\n|01Error: Not logged in and no area specified.|07\r\n"
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			if wErr != nil { /* Log? */
-			}
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil // Return to menu
 		}
 		if currentUser.CurrentMessageAreaTag == "" || currentUser.CurrentMessageAreaID <= 0 {
 			slog.Warn("COMPOSEMSG called but no current message area is set", "node", nodeNumber, "handle", currentUser.Handle)
 			msg := "\r\n|01Error: No current message area selected.|07\r\n"
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			if wErr != nil { /* Log? */
-			}
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil // Return to menu
 		}
@@ -130,9 +126,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if !exists {
 		slog.Error("COMPOSEMSG called with invalid area tag", "node", nodeNumber, "tag", areaTag)
 		msg := fmt.Sprintf("\r\n|01Invalid message area: %s|07\r\n", areaTag)
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Return to menu, not an error
 	}
@@ -141,9 +135,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if currentUser == nil {
 		slog.Warn("COMPOSEMSG reached ACS check without logged in user", "node", nodeNumber, "tag", areaTag)
 		msg := "\r\n|01Error: You must be logged in to post messages.|07\r\n"
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Return to menu
 	}
@@ -577,7 +569,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 		if _, statErr := os.Stat(selPath); statErr == nil {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Please select a message header style.|07\r\n")), outputMode)
 			time.Sleep(500 * time.Millisecond)
-			runGetHeaderType(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
+			_, _, _ = runGetHeaderType(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 		}
 	}
 
@@ -1136,7 +1128,11 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
-	defer base.Close()
+	defer func() {
+		if cerr := base.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	// Get total message count
 	totalMessages, err := e.MessageMgr.GetMessageCountForArea(privmailArea.ID)

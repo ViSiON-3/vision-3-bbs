@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -17,7 +18,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 
 	// sleep(ms) — pause execution for the specified milliseconds.
 	// Respects context cancellation (returns early if user disconnects).
-	obj.Set("sleep", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "sleep", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -35,7 +36,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 
 	// random(max) — returns a random integer from 0 to max-1.
 	// Note: math/rand is automatically seeded since Go 1.20 (we require 1.24+).
-	obj.Set("random", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "random", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(0)
 		}
@@ -47,14 +48,14 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 	})
 
 	// time() — returns the current Unix timestamp in seconds.
-	obj.Set("time", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "time", func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(time.Now().Unix())
 	})
 
 	// date(format) — returns a formatted date string.
 	// Format uses Go's reference time (2006-01-02 15:04:05).
 	// With no arguments, returns "2006-01-02 15:04:05" format.
-	obj.Set("date", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "date", func(call goja.FunctionCall) goja.Value {
 		layout := "2006-01-02 15:04:05"
 		if len(call.Arguments) > 0 {
 			layout = call.Arguments[0].String()
@@ -64,7 +65,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 
 	// padRight(str, width) — pad string on the right to reach width.
 	// padRight(str, width, char) — pad with specified character.
-	obj.Set("padRight", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "padRight", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return vm.ToValue("")
 		}
@@ -82,7 +83,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 
 	// padLeft(str, width) — pad string on the left to reach width.
 	// padLeft(str, width, char) — pad with specified character.
-	obj.Set("padLeft", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "padLeft", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return vm.ToValue("")
 		}
@@ -104,7 +105,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 	})
 
 	// center(str, width) — center string within the given width.
-	obj.Set("center", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "center", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return vm.ToValue("")
 		}
@@ -114,7 +115,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 	})
 
 	// stripAnsi(str) — remove ANSI escape sequences from a string.
-	obj.Set("stripAnsi", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "stripAnsi", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue("")
 		}
@@ -122,7 +123,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 	})
 
 	// stripPipe(str) — remove Vision/3 pipe codes from a string.
-	obj.Set("stripPipe", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "stripPipe", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue("")
 		}
@@ -134,7 +135,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 
 	// displayLen(str) — returns visible display length of a string,
 	// ignoring both ANSI escape sequences and pipe codes.
-	obj.Set("displayLen", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "displayLen", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(0)
 		}
@@ -144,5 +145,5 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 		return vm.ToValue(ansi.VisibleLength(string(processed)))
 	})
 
-	v3.Set("util", obj)
+	jsutil.Set(v3, "util", obj)
 }

@@ -60,7 +60,9 @@ func (pw *PacketWriter) MessageCount() int {
 // WritePacket writes the complete QWK ZIP packet to w.
 func (pw *PacketWriter) WritePacket(w io.Writer) error {
 	zw := zip.NewWriter(w)
-	defer zw.Close()
+	// Cleanup for early-error returns; the success path closes explicitly
+	// below, making this second Close a harmless no-op error.
+	defer func() { _ = zw.Close() }()
 
 	if err := pw.writeControlDAT(zw); err != nil {
 		return fmt.Errorf("CONTROL.DAT: %w", err)
@@ -93,6 +95,11 @@ func (pw *PacketWriter) WritePacket(w io.Writer) error {
 		}
 	}
 
+	// Close explicitly so a central-directory flush failure is reported
+	// rather than silently producing a truncated packet.
+	if err := zw.Close(); err != nil {
+		return fmt.Errorf("finalize QWK archive: %w", err)
+	}
 	return nil
 }
 

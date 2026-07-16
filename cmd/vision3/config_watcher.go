@@ -48,7 +48,7 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 
 	// Watch the configs directory
 	if err := watcher.Add(rootConfigPath); err != nil {
-		watcher.Close()
+		_ = watcher.Close() // cleanup on error path
 		return nil, fmt.Errorf("failed to watch %s: %w", rootConfigPath, err)
 	}
 	slog.Info("watching for config changes", "path", rootConfigPath)
@@ -86,7 +86,7 @@ func (cw *ConfigWatcher) Stop() {
 	}
 	cw.watcherDone = nil
 
-	cw.watcher.Close()
+	_ = cw.watcher.Close() // best-effort watcher shutdown
 	cw.watcher = nil
 	slog.Info("configuration file watcher stopped")
 }

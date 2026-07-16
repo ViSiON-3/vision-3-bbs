@@ -137,11 +137,8 @@ func (e *FSEditor) Run() (string, bool, error) {
 	if e.ownsInput {
 		defer e.input.CloseAndWait()
 	}
-	// Load and display header
-	err := e.screen.LoadHeaderTemplate(e.menuSetPath, e.subject, e.recipient, e.fromName, e.isAnon)
-	if err != nil {
-		// Non-fatal - continue with minimal header
-	}
+	// Load and display header (non-fatal on error - continue with minimal header)
+	_ = e.screen.LoadHeaderTemplate(e.menuSetPath, e.subject, e.recipient, e.fromName, e.isAnon)
 
 	// Load footer template — adjusts statusLineY to reserve the bottom 2 rows.
 	// Must be called after LoadHeaderTemplate so editingStartY is already set from |#N.
@@ -268,7 +265,7 @@ func (e *FSEditor) handleCommand(cmdType CommandType) {
 			e.quit = true
 		} else {
 			// Error message already written; wait for key then restore footer
-			e.input.ReadKey()
+			_, _ = e.input.ReadKey() // wait for any key
 			e.screen.DisplayFooter()
 			e.screen.RefreshScreen(e.buffer, e.topLine, e.currentLine, e.currentCol, e.insertMode, true)
 		}

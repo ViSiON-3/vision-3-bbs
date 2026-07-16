@@ -307,7 +307,7 @@ readerLoop:
 				// MSGHDR template are converted to Unicode before reaching the terminal.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 				if outputMode == ansi.OutputModeCP437 {
-					terminal.Write(processedHeader)
+					_, _ = terminal.Write(processedHeader) // best-effort display
 				} else {
 					terminalio.WriteProcessedBytes(terminal, processedHeader, outputMode)
 				}

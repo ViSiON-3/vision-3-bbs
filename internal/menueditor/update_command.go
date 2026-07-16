@@ -158,9 +158,9 @@ func (m Model) startCmdFieldEdit() (Model, tea.Cmd) {
 	if f.Type == ftYesNo {
 		// Toggle directly
 		if val == "Y" {
-			f.SetC(d, "N")
+			_ = f.SetC(d, "N") // Y/N field setters never fail
 		} else {
-			f.SetC(d, "Y")
+			_ = f.SetC(d, "Y") // Y/N field setters never fail
 		}
 		m.dirtyCmds = true
 		return m, nil

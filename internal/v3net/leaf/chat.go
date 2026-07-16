@@ -47,7 +47,9 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 		var msg struct {
 			Room string `json:"room"`
 		}
-		json.Unmarshal(ev.Data, &msg)
+		if err := json.Unmarshal(ev.Data, &msg); err != nil {
+			return // drop malformed event rather than routing it to the wrong room
+		}
 		for _, s := range r.sessions {
 			if s.currentRoom == msg.Room {
 				s.deliver(ev)
@@ -56,7 +58,9 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 
 	case protocol.EventChatPrivate:
 		var msg protocol.ChatMsgPayload
-		json.Unmarshal(ev.Data, &msg)
+		if err := json.Unmarshal(ev.Data, &msg); err != nil {
+			return // drop malformed event rather than delivering partial data
+		}
 		if msg.ToNode != "" && msg.ToNode != r.nodeID {
 			return
 		}
@@ -104,29 +108,39 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 	switch ev.Type {
 	case protocol.EventChatMessage:
 		var p protocol.ChatMsgPayload
-		json.Unmarshal(ev.Data, &p)
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return // drop malformed event rather than delivering partial data
+		}
 		ce = chat.ChatEvent{Type: chat.TypeMessage, Message: protoMsgToDomain(p)}
 	case protocol.EventChatPrivate:
 		var p protocol.ChatMsgPayload
-		json.Unmarshal(ev.Data, &p)
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return // drop malformed event rather than delivering partial data
+		}
 		ce = chat.ChatEvent{Type: chat.TypePrivate, Message: protoMsgToDomain(p)}
 	case protocol.EventChatJoin:
 		var p protocol.ChatJoinPayload
-		json.Unmarshal(ev.Data, &p)
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return // drop malformed event rather than corrupting the user list
+		}
 		s.mu.Lock()
 		s.currentUsers = append(s.currentUsers, p.Handle)
 		s.mu.Unlock()
 		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS}}
 	case protocol.EventChatLeave:
 		var p protocol.ChatLeavePayload
-		json.Unmarshal(ev.Data, &p)
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return // drop malformed event rather than corrupting the user list
+		}
 		s.mu.Lock()
 		s.currentUsers = removeString(s.currentUsers, p.Handle)
 		s.mu.Unlock()
 		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS}}
 	case protocol.EventChatTopic:
 		var p protocol.ChatTopicPayload
-		json.Unmarshal(ev.Data, &p)
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return // drop malformed event rather than delivering partial data
+		}
 		ce = chat.ChatEvent{Type: chat.TypeTopic, Topic: &chat.ChatTopic{Room: p.Room, Topic: p.Topic, SetBy: p.SetBy}}
 	default:
 		return
@@ -170,7 +184,7 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	if err != nil {
 		return nil, nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read side
 	if resp.StatusCode/100 != 2 {
 		return nil, nil, fmt.Errorf("join chat: hub returned status %d", resp.StatusCode)
 	}

@@ -66,26 +66,26 @@ func Open(basePath string) (*Base, error) {
 	}
 	b.jdtFile, err = os.OpenFile(jdtPath, os.O_RDWR, 0644)
 	if err != nil {
-		b.jhrFile.Close()
+		_ = b.jhrFile.Close() // cleanup on error path
 		return nil, fmt.Errorf("jam: failed to open .jdt: %w", err)
 	}
 	b.jdxFile, err = os.OpenFile(jdxPath, os.O_RDWR, 0644)
 	if err != nil {
-		b.jhrFile.Close()
-		b.jdtFile.Close()
+		_ = b.jhrFile.Close() // cleanup on error path
+		_ = b.jdtFile.Close() // cleanup on error path
 		return nil, fmt.Errorf("jam: failed to open .jdx: %w", err)
 	}
 	b.jlrFile, err = os.OpenFile(jlrPath, os.O_RDWR, 0644)
 	if err != nil {
-		b.jhrFile.Close()
-		b.jdtFile.Close()
-		b.jdxFile.Close()
+		_ = b.jhrFile.Close() // cleanup on error path
+		_ = b.jdtFile.Close() // cleanup on error path
+		_ = b.jdxFile.Close() // cleanup on error path
 		return nil, fmt.Errorf("jam: failed to open .jlr: %w", err)
 	}
 
 	b.isOpen = true
 	if err := b.readFixedHeader(); err != nil {
-		b.Close()
+		_ = b.Close() // cleanup on error path
 		if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "invalid") {
 			removeBaseFiles(jhrPath, jdtPath, jdxPath, jlrPath)
 			return b, b.create()
@@ -111,20 +111,20 @@ func (b *Base) create() error {
 	}
 	b.jdtFile, err = os.Create(jdtPath)
 	if err != nil {
-		b.jhrFile.Close()
+		_ = b.jhrFile.Close() // cleanup on error path
 		return fmt.Errorf("jam: failed to create .jdt: %w", err)
 	}
 	b.jdxFile, err = os.Create(jdxPath)
 	if err != nil {
-		b.jhrFile.Close()
-		b.jdtFile.Close()
+		_ = b.jhrFile.Close() // cleanup on error path
+		_ = b.jdtFile.Close() // cleanup on error path
 		return fmt.Errorf("jam: failed to create .jdx: %w", err)
 	}
 	b.jlrFile, err = os.Create(jlrPath)
 	if err != nil {
-		b.jhrFile.Close()
-		b.jdtFile.Close()
-		b.jdxFile.Close()
+		_ = b.jhrFile.Close() // cleanup on error path
+		_ = b.jdtFile.Close() // cleanup on error path
+		_ = b.jdxFile.Close() // cleanup on error path
 		return fmt.Errorf("jam: failed to create .jlr: %w", err)
 	}
 
@@ -136,7 +136,7 @@ func (b *Base) create() error {
 
 	b.isOpen = true
 	if err := b.writeFixedHeader(); err != nil {
-		b.Close()
+		_ = b.Close() // cleanup on error path
 		return fmt.Errorf("jam: failed to write initial header: %w", err)
 	}
 	return nil
@@ -215,7 +215,9 @@ func (b *Base) GetModCounter() (uint32, error) {
 
 // readFixedHeader reads the 1024-byte fixed header from the .jhr file.
 func (b *Base) readFixedHeader() error {
-	b.jhrFile.Seek(0, 0)
+	if _, err := b.jhrFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to seek fixed header: %w", err)
+	}
 	b.fixedHeader = &FixedHeaderInfo{}
 	if err := binary.Read(b.jhrFile, binary.LittleEndian, b.fixedHeader); err != nil {
 		return fmt.Errorf("failed to read fixed header: %w", err)
@@ -228,7 +230,9 @@ func (b *Base) readFixedHeader() error {
 
 // writeFixedHeader writes the fixed header to the .jhr file.
 func (b *Base) writeFixedHeader() error {
-	b.jhrFile.Seek(0, 0)
+	if _, err := b.jhrFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to seek fixed header: %w", err)
+	}
 	return binary.Write(b.jhrFile, binary.LittleEndian, b.fixedHeader)
 }
 
@@ -354,6 +358,6 @@ func (b *Base) getNextMsgSerialLocked() (uint32, error) {
 
 func removeBaseFiles(paths ...string) {
 	for _, p := range paths {
-		os.Remove(p)
+		_ = os.Remove(p) // best-effort removal of a corrupt base
 	}
 }

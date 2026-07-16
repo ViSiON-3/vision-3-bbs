@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -36,7 +37,7 @@ func registerData(v3 *goja.Object, eng *Engine) {
 	}
 
 	// get(key) — read a value from the store, returns value or undefined.
-	obj.Set("get", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "get", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -53,7 +54,7 @@ func registerData(v3 *goja.Object, eng *Engine) {
 	})
 
 	// set(key, value) — write a JSON-serializable value.
-	obj.Set("set", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "set", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return goja.Undefined()
 		}
@@ -71,7 +72,7 @@ func registerData(v3 *goja.Object, eng *Engine) {
 	})
 
 	// delete(key) — remove a key.
-	obj.Set("delete", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "delete", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -88,7 +89,7 @@ func registerData(v3 *goja.Object, eng *Engine) {
 	})
 
 	// keys() — return array of all keys.
-	obj.Set("keys", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "keys", func(call goja.FunctionCall) goja.Value {
 		mu := dataFileLock(store.path)
 		mu.Lock()
 		data := store.loadFile()
@@ -96,14 +97,14 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		arr := vm.NewArray()
 		i := 0
 		for k := range data {
-			arr.Set(intToDataStr(i), k)
+			jsutil.Set(arr, intToDataStr(i), k)
 			i++
 		}
 		return arr
 	})
 
 	// getAll() — return entire store as an object.
-	obj.Set("getAll", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getAll", func(call goja.FunctionCall) goja.Value {
 		mu := dataFileLock(store.path)
 		mu.Lock()
 		data := store.loadFile()
@@ -111,7 +112,7 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		return vm.ToValue(data)
 	})
 
-	v3.Set("data", obj)
+	jsutil.Set(v3, "data", obj)
 }
 
 // dataFilePath computes the JSON storage path for a script.

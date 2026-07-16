@@ -1,6 +1,7 @@
 package scripting
 
 import (
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/dop251/goja"
 )
@@ -11,7 +12,7 @@ func registerUsers(v3 *goja.Object, eng *Engine) {
 	obj := vm.NewObject()
 
 	// get(handle) — look up a user by handle, returns object or null.
-	obj.Set("get", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "get", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Null()
 		}
@@ -24,7 +25,7 @@ func registerUsers(v3 *goja.Object, eng *Engine) {
 	})
 
 	// getByID(id) — look up a user by ID, returns object or null.
-	obj.Set("getByID", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getByID", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Null()
 		}
@@ -37,40 +38,40 @@ func registerUsers(v3 *goja.Object, eng *Engine) {
 	})
 
 	// count() — total registered user count.
-	obj.Set("count", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "count", func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(eng.providers.UserMgr.GetUserCount())
 	})
 
 	// list() — returns array of all users (safe fields only).
-	obj.Set("list", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "list", func(call goja.FunctionCall) goja.Value {
 		all := eng.providers.UserMgr.GetAllUsers()
 		arr := vm.NewArray()
 		for i, u := range all {
-			arr.Set(intToStr(i), userToJS(vm, u))
+			jsutil.Set(arr, intToStr(i), userToJS(vm, u))
 		}
 		return arr
 	})
 
-	v3.Set("users", obj)
+	jsutil.Set(v3, "users", obj)
 }
 
 // userToJS converts a *user.User to a JS object with safe fields only.
 // Sensitive fields (password hash, private notes, flags) are excluded.
 func userToJS(vm *goja.Runtime, u *user.User) goja.Value {
 	obj := vm.NewObject()
-	obj.Set("id", u.ID)
-	obj.Set("handle", u.Handle)
-	obj.Set("realName", u.RealName)
-	obj.Set("accessLevel", u.AccessLevel)
-	obj.Set("timesCalled", u.TimesCalled)
-	obj.Set("location", u.GroupLocation)
-	obj.Set("messagesPosted", u.MessagesPosted)
-	obj.Set("uploads", u.NumUploads)
-	obj.Set("downloads", u.NumDownloads)
-	obj.Set("filePoints", u.FilePoints)
-	obj.Set("validated", u.Validated)
-	obj.Set("lastLogin", u.LastLogin.Unix())
-	obj.Set("createdAt", u.CreatedAt.Unix())
+	jsutil.Set(obj, "id", u.ID)
+	jsutil.Set(obj, "handle", u.Handle)
+	jsutil.Set(obj, "realName", u.RealName)
+	jsutil.Set(obj, "accessLevel", u.AccessLevel)
+	jsutil.Set(obj, "timesCalled", u.TimesCalled)
+	jsutil.Set(obj, "location", u.GroupLocation)
+	jsutil.Set(obj, "messagesPosted", u.MessagesPosted)
+	jsutil.Set(obj, "uploads", u.NumUploads)
+	jsutil.Set(obj, "downloads", u.NumDownloads)
+	jsutil.Set(obj, "filePoints", u.FilePoints)
+	jsutil.Set(obj, "validated", u.Validated)
+	jsutil.Set(obj, "lastLogin", u.LastLogin.Unix())
+	jsutil.Set(obj, "createdAt", u.CreatedAt.Unix())
 	return obj
 }
 

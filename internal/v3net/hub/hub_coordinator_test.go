@@ -117,6 +117,63 @@ func TestCoordTransfer_FullFlow(t *testing.T) {
 	}
 }
 
+// TestCoordAccept_TokenNotReplayable verifies that a transfer token is a
+// strict one-time credential: after a successful accept, redeeming the same
+// token again must be rejected.
+func TestCoordAccept_TokenNotReplayable(t *testing.T) {
+	h, hubKS := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
+
+	registerAsLeaf(t, ts, hubKS)
+	registerAsLeaf(t, ts, leafKS)
+	seedCoordNAL(t, h, hubKS)
+
+	transferBody := fmt.Sprintf(`{"new_node_id":%q,"new_pubkey_b64":%q}`, leafKS.NodeID(), leafKS.PubKeyBase64())
+	req := signedRequest(t, hubKS, "POST", ts.URL+"/v3net/v1/testnet/coordinator/transfer", transferBody)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST transfer: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("transfer expected 200, got %d", resp.StatusCode)
+	}
+	var transferResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&transferResp); err != nil {
+		t.Fatalf("decode transfer response: %v", err)
+	}
+
+	acceptBody := fmt.Sprintf(`{"token":%q}`, transferResp.Token)
+	first := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/coordinator/accept", acceptBody)
+	firstResp, err := http.DefaultClient.Do(first)
+	if err != nil {
+		t.Fatalf("POST accept: %v", err)
+	}
+	firstResp.Body.Close()
+	if firstResp.StatusCode != http.StatusOK {
+		t.Fatalf("first accept expected 200, got %d", firstResp.StatusCode)
+	}
+
+	// Replay the exact same token: must be rejected.
+	second := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/coordinator/accept", acceptBody)
+	secondResp, err := http.DefaultClient.Do(second)
+	if err != nil {
+		t.Fatalf("POST replay accept: %v", err)
+	}
+	secondResp.Body.Close()
+	if secondResp.StatusCode == http.StatusOK {
+		t.Fatalf("replayed transfer token was accepted (status %d); tokens must be single-use", secondResp.StatusCode)
+	}
+}
+
 func TestCoordTransfer_NonCoordinator(t *testing.T) {
 	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())

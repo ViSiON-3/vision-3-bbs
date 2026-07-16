@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -118,7 +119,9 @@ func (eng *Engine) Close() {
 					slog.Warn("exit handler panic", "panic", r)
 				}
 			}()
-			eng.exitHandlers[i](goja.Undefined())
+			if _, err := eng.exitHandlers[i](goja.Undefined()); err != nil {
+				slog.Warn("exit handler error", "error", err)
+			}
 		}()
 	}
 	// Eval string exit codes in reverse order (Synchronet behavior)
@@ -129,14 +132,16 @@ func (eng *Engine) Close() {
 					slog.Warn("exit code eval panic", "panic", r)
 				}
 			}()
-			eng.vm.RunString(eng.exitCodes[i])
+			if _, err := eng.vm.RunString(eng.exitCodes[i]); err != nil {
+				slog.Warn("exit code eval error", "error", err)
+			}
 		}()
 	}
 	// Stop the reader goroutines by closing the pipe. The caller should
 	// close a SetReadInterrupt channel before calling Close() so the
 	// copier goroutine's blocked session.Read() returns immediately.
 	if eng.pipeWriter != nil {
-		eng.pipeWriter.Close()
+		_ = eng.pipeWriter.Close() // best-effort shutdown of the input pipe
 	}
 	// Wait for the copier goroutine to exit so it stops reading from
 	// the session. This relies on the caller closing the read interrupt
@@ -149,7 +154,7 @@ func (eng *Engine) Close() {
 		}
 	}
 	if eng.pipeReader != nil {
-		eng.pipeReader.Close()
+		_ = eng.pipeReader.Close() // best-effort shutdown of the input pipe
 	}
 	// Drain any buffered results so goroutines don't block on channel send
 	if eng.rawInputCh != nil {
@@ -164,7 +169,7 @@ func (eng *Engine) Close() {
 	}
 	// Clean up lock files created by file_mutex()
 	for _, lf := range eng.lockFiles {
-		os.Remove(lf)
+		_ = os.Remove(lf) // best-effort lock-file cleanup
 	}
 	eng.cancel()
 }
@@ -688,7 +693,7 @@ func (eng *Engine) createInputQueue() goja.Value {
 	obj := eng.vm.NewObject()
 
 	// poll(timeout_ms) — check if input is available within timeout
-	obj.Set("poll", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "poll", func(call goja.FunctionCall) goja.Value {
 		timeout := int64(0)
 		if len(call.Arguments) > 0 {
 			timeout = call.Arguments[0].ToInteger()
@@ -709,7 +714,7 @@ func (eng *Engine) createInputQueue() goja.Value {
 	})
 
 	// read() — read a single key/character
-	obj.Set("read", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "read", func(call goja.FunctionCall) goja.Value {
 		if len(eng.inputBuf) > 0 {
 			ch := eng.inputBuf[0]
 			eng.inputBuf = eng.inputBuf[1:]
@@ -723,7 +728,7 @@ func (eng *Engine) createInputQueue() goja.Value {
 	})
 
 	// write() — no-op for input queue (used for signaling exit)
-	obj.Set("write", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "write", func(call goja.FunctionCall) goja.Value {
 		return eng.vm.ToValue(true)
 	})
 

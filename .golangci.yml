@@ -19,6 +19,7 @@ linters:
       exclude-functions:
         - github.com/ViSiON-3/vision-3-bbs/internal/terminalio.WriteProcessedBytes
         - github.com/ViSiON-3/vision-3-bbs/internal/terminalio.WriteString
+        - github.com/ViSiON-3/vision-3-bbs/internal/terminalio.WriteStringCP437
   exclusions:
     generated: lax
     paths:

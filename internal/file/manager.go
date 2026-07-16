@@ -460,8 +460,8 @@ func (fm *FileManager) IncrementDownloadCount(fileID uuid.UUID) error {
 	fm.muFiles.Lock()
 	defer fm.muFiles.Unlock()
 
-	var foundAreaID int = -1
-	var foundIndex int = -1
+	foundAreaID := -1
+	foundIndex := -1
 
 	// Find the file across all areas
 searchLoop:
@@ -505,8 +505,8 @@ func (fm *FileManager) UpdateFileRecord(fileID uuid.UUID, updateFunc func(*FileR
 	fm.muFiles.Lock()
 	defer fm.muFiles.Unlock()
 
-	var foundAreaID int = -1
-	var foundIndex int = -1
+	foundAreaID := -1
+	foundIndex := -1
 
 searchLoop:
 	for areaID, records := range fm.fileRecords {
@@ -552,8 +552,8 @@ func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) e
 	fm.muFiles.Lock()
 	defer fm.muFiles.Unlock()
 
-	var foundAreaID int = -1
-	var foundIndex int = -1
+	foundAreaID := -1
+	foundIndex := -1
 	var foundFilename string
 
 searchLoop:
@@ -622,8 +622,8 @@ func (fm *FileManager) MoveFileRecord(fileID uuid.UUID, targetAreaID int) error 
 	fm.muFiles.Lock()
 	defer fm.muFiles.Unlock()
 
-	var srcAreaID int = -1
-	var srcIndex int = -1
+	srcAreaID := -1
+	srcIndex := -1
 
 searchLoop:
 	for areaID, records := range fm.fileRecords {

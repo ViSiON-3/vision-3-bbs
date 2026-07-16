@@ -32,7 +32,7 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 	if err := os.MkdirAll(nodeDir, 0o755); err != nil {
 		return fmt.Errorf("creating node directory: %w", err)
 	}
-	defer os.RemoveAll(nodeDir)
+	defer func() { _ = os.RemoveAll(nodeDir) }() // best-effort temp cleanup
 
 	// Set up a read interrupt so the engine's copier goroutine can be
 	// cleanly stopped when the door exits, preventing it from consuming

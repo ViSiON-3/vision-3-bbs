@@ -115,7 +115,7 @@ func (ms *MessageStore) Fetch(network, sinceUUID string, limit int, areaTags []s
 	if err != nil {
 		return nil, false, fmt.Errorf("hub: fetch messages: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() // read-only
 
 	var results []string
 	for rows.Next() {

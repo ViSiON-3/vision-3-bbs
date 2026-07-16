@@ -461,7 +461,11 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Warn("JAM base not open for PRIVMAIL area", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
-	defer base.Close()
+	defer func() {
+		if cerr := base.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	// Get total message count
 	totalMessages, err := e.MessageMgr.GetMessageCountForArea(privmailArea.ID)

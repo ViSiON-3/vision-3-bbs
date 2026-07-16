@@ -44,7 +44,7 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 		Users:   users,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp) // best-effort response write
 }
 
 // handleChatLeave: POST /v3net/v1/{network}/chat/rooms/leave
@@ -178,7 +178,7 @@ func (h *Hub) handleChatTopic(w http.ResponseWriter, r *http.Request, network st
 // handleChatRooms: GET /v3net/v1/{network}/chat/rooms  (no auth required)
 func (h *Hub) handleChatRooms(w http.ResponseWriter, r *http.Request, network string) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(h.chatRooms.RoomList(network))
+	_ = json.NewEncoder(w).Encode(h.chatRooms.RoomList(network)) // best-effort response write
 }
 
 // handleChatHistory: GET /v3net/v1/{network}/chat/rooms/{room}/history  (no auth)
@@ -209,7 +209,7 @@ func (h *Hub) handleChatHistory(w http.ResponseWriter, r *http.Request, network 
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(msgs)
+	_ = json.NewEncoder(w).Encode(msgs) // best-effort response write
 }
 
 // subscriberBBSName looks up the BBS name for a node, falling back to nodeID.
@@ -224,5 +224,5 @@ func (h *Hub) subscriberBBSName(nodeID, network string) string {
 func jsonError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg}) // best-effort response write
 }

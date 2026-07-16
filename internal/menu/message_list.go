@@ -709,7 +709,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 				actualIndex := start + previousIndex
 				if actualIndex < len(state.Entries) {
 					row := 6 + previousIndex
-					drawMessageLineAtRow(terminal, state.Entries[actualIndex], row, false, outputMode)
+					_ = drawMessageLineAtRow(terminal, state.Entries[actualIndex], row, false, outputMode) // best-effort redraw
 				}
 			}
 
@@ -718,7 +718,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 				actualIndex := start + state.SelectedIndex
 				if actualIndex < len(state.Entries) {
 					row := 6 + state.SelectedIndex
-					drawMessageLineAtRow(terminal, state.Entries[actualIndex], row, true, outputMode)
+					_ = drawMessageLineAtRow(terminal, state.Entries[actualIndex], row, true, outputMode) // best-effort redraw
 				}
 			}
 

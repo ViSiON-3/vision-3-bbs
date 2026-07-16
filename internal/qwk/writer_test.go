@@ -3,6 +3,7 @@ package qwk
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -279,5 +280,47 @@ func TestFormatMessage_ReplyToNumber(t *testing.T) {
 	ref := strings.TrimSpace(string(data[108:116]))
 	if ref != "7" {
 		t.Errorf("reference field (108-115): want 7, got %q", ref)
+	}
+}
+
+// failAfterWriter fails all writes once limit bytes have been written,
+// simulating a full disk during zip finalization.
+type failAfterWriter struct {
+	n     int
+	limit int
+}
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	if w.n+len(p) > w.limit {
+		return 0, errDiskFull
+	}
+	w.n += len(p)
+	return len(p), nil
+}
+
+var errDiskFull = errors.New("disk full")
+
+func TestPacketWriter_WritePacketReportsFinalizeError(t *testing.T) {
+	pw := NewPacketWriter("VISION3", "ViSiON/3 BBS", "SysOp")
+	pw.AddConference(1, "General")
+	pw.AddMessage(PacketMessage{
+		Conference: 1,
+		Number:     1,
+		From:       "SysOp",
+		To:         "TestUser",
+		Subject:    "Hi",
+		DateTime:   time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
+		Body:       "Body",
+	})
+
+	// Measure the full packet size, then cut the writer off just before the
+	// end so only the trailing central-directory flush in Close() fails.
+	var buf bytes.Buffer
+	if err := pw.WritePacket(&buf); err != nil {
+		t.Fatalf("WritePacket failed: %v", err)
+	}
+	w := &failAfterWriter{limit: buf.Len() - 4}
+	if err := pw.WritePacket(w); !errors.Is(err, errDiskFull) {
+		t.Fatalf("WritePacket = %v, want errDiskFull from zip finalization", err)
 	}
 }

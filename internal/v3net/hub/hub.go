@@ -41,55 +41,55 @@ func New(cfg Config) (*Hub, error) {
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000"); err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, fmt.Errorf("hub: configure pragmas: %w", err)
 	}
 
 	subscribers, err := NewSubscriberStore(db)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, err
 	}
 
 	messages, err := NewMessageStore(db)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, err
 	}
 
 	nalStore, err := NewNALStore(db)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, err
 	}
 
 	proposals, err := NewProposalStore(db)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, err
 	}
 
 	accessReqs, err := NewAccessRequestStore(db)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, err
 	}
 
 	areaSubs, err := NewAreaSubscriptionStore(db)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, err
 	}
 
 	coordTransfers, err := NewCoordTransferStore(db)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, err
 	}
 
 	chatStore, err := NewChatHistoryStore(db, 7)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, err
 	}
 
@@ -125,7 +125,7 @@ func (h *Hub) Start(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		h.server.Close()
+		_ = h.server.Close() // best-effort shutdown
 	}()
 
 	slog.Info("v3net hub starting", "addr", h.cfg.ListenAddr)

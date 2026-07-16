@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -17,7 +18,7 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 	// display(filename) — read and display an .ANS file with pipe-code processing.
 	// File path is resolved relative to the script's working directory,
 	// then falls back to menus/v3/ansi/ and menus/v3/templates/.
-	obj.Set("display", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "display", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -41,7 +42,7 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 
 	// displayRaw(filename) — display an .ANS file without pipe-code processing.
 	// Sends raw CP437 bytes directly to the terminal.
-	obj.Set("displayRaw", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "displayRaw", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -60,7 +61,7 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 		return goja.Undefined()
 	})
 
-	v3.Set("ansi", obj)
+	jsutil.Set(v3, "ansi", obj)
 }
 
 // resolveAnsiPath finds an ANSI file by checking multiple locations:

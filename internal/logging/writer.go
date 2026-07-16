@@ -114,7 +114,7 @@ func (w *rollingWriter) openCurrent() error {
 	}
 	fi, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close() // cleanup on error path
 		return err
 	}
 	w.f = f
@@ -219,7 +219,7 @@ func (w *rollingWriter) pruneDaily() {
 			continue // not a dated file (e.g. a size-style backup)
 		}
 		if d.Before(cutoff) {
-			os.Remove(m)
+			_ = os.Remove(m) // best-effort prune of old logs
 		}
 	}
 }

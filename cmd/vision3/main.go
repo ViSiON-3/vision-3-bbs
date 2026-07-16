@@ -452,12 +452,14 @@ func (ct *ConnectionTracker) AppendToBlocklist(ip string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open blocklist file: %w", err)
 	}
-	defer f.Close()
-
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	line := fmt.Sprintf("%s # auto-blocked %s: too many failed logins\n", normalizedIP, timestamp)
 	if _, err := f.WriteString(line); err != nil {
+		_ = f.Close() // best-effort; the write error takes precedence
 		return fmt.Errorf("failed to write to blocklist file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("failed to close blocklist file: %w", err)
 	}
 
 	// Update in-memory list immediately — don't wait for fsnotify debounce
@@ -617,7 +619,7 @@ func (ct *ConnectionTracker) watchLoop() {
 func (ct *ConnectionTracker) StopWatching() {
 	if ct.watcher != nil {
 		close(ct.watcherDone)
-		ct.watcher.Close()
+		_ = ct.watcher.Close() // best-effort watcher shutdown
 	}
 }
 
@@ -689,7 +691,7 @@ func sessionHandler(s ssh.Session) {
 			slog.Debug("no authenticated user, skipping call record", "node", nodeID)
 		}
 		// ------------------------
-		s.Close() // Ensure the session is closed
+		_ = s.Close() // ensure the session is closed; best-effort
 	}(capturedStartTime) // Pass only the startTime value
 
 	// Create the session state object *early* - COMMENTED OUT (not used, type mismatch)
@@ -967,7 +969,7 @@ func sessionHandler(s ssh.Session) {
 			// Log the error and decide how to proceed
 			slog.Error("error executing menu", "node", nodeID, "menu", currentMenuName, "error", execErr)
 			// Optionally display an error message to the user
-			fmt.Fprintf(terminal, "\r\nSystem error during menu execution: %v\r\n", execErr)
+			_, _ = fmt.Fprintf(terminal, "\r\nSystem error during menu execution: %v\r\n", execErr) // best-effort display
 			// Maybe force logoff or retry?
 			currentMenuName = "LOGOFF" // Force logoff on error for now
 			continue
@@ -1062,7 +1064,7 @@ func sessionHandler(s ssh.Session) {
 		invLevel = cfg.CoSysOpLevel // backward compat: missing config uses coSysOpLevel
 	}
 	if authenticatedUser.AccessLevel >= invLevel {
-		terminal.Write([]byte("\x1b[2J\x1b[H"))
+		_, _ = terminal.Write([]byte("\x1b[2J\x1b[H")) // best-effort display
 		invisPrompt := loadedStrings.InvisibleLogonPrompt
 		if invisPrompt == "" {
 			invisPrompt = " |03Invisible Logon?|07"
@@ -1105,7 +1107,7 @@ func sessionHandler(s ssh.Session) {
 				"detected_h", detectedH,
 				"stored_w", authenticatedUser.ScreenWidth,
 				"stored_h", authenticatedUser.ScreenHeight)
-			terminal.Write([]byte("\r\n"))
+			_, _ = terminal.Write([]byte("\r\n")) // best-effort display
 
 			useNew, promptErr := menuExecutor.PromptYesNo(s, terminal,
 				fmt.Sprintf(loadedStrings.TermSizeNewDetectedPrompt,
@@ -1184,16 +1186,16 @@ func sessionHandler(s ssh.Session) {
 
 		// Encoding Selection Prompt (for ambiguous terminals like xterm)
 		if effectiveMode == ansi.OutputModeUTF8 && termType == "xterm" && authenticatedUser.PreferredEncoding == "" {
-			terminal.Write([]byte("\r\n"))
-			terminal.Write([]byte("\x1b[1;36m CHARACTER ENCODING SELECTION\x1b[0m\r\n"))
-			terminal.Write([]byte("\x1b[1;33m ----------------------------\x1b[0m\r\n"))
-			terminal.Write([]byte("\r\n"))
-			terminal.Write([]byte("Your terminal reported as '\x1b[1m" + termType + "\x1b[0m' which can support multiple encodings.\r\n"))
-			terminal.Write([]byte("\r\n"))
-			terminal.Write([]byte("\x1b[1;32m[U]\x1b[0m Continue with \x1b[1mUTF-8\x1b[0m (modern terminals, Unicode support)\r\n"))
-			terminal.Write([]byte("\x1b[1;32m[C]\x1b[0m Switch to \x1b[1mCP437\x1b[0m (retro BBS terminals: SyncTerm, NetRunner, etc.)\r\n"))
-			terminal.Write([]byte("\r\n"))
-			terminal.Write([]byte("Choice \x1b[1;33m[U/C]\x1b[0m: "))
+			_, _ = terminal.Write([]byte("\r\n"))                                                                                                    // best-effort display
+			_, _ = terminal.Write([]byte("\x1b[1;36m CHARACTER ENCODING SELECTION\x1b[0m\r\n"))                                                      // best-effort display
+			_, _ = terminal.Write([]byte("\x1b[1;33m ----------------------------\x1b[0m\r\n"))                                                      // best-effort display
+			_, _ = terminal.Write([]byte("\r\n"))                                                                                                    // best-effort display
+			_, _ = terminal.Write([]byte("Your terminal reported as '\x1b[1m" + termType + "\x1b[0m' which can support multiple encodings.\r\n"))    // best-effort display
+			_, _ = terminal.Write([]byte("\r\n"))                                                                                                    // best-effort display
+			_, _ = terminal.Write([]byte("\x1b[1;32m[U]\x1b[0m Continue with \x1b[1mUTF-8\x1b[0m (modern terminals, Unicode support)\r\n"))          // best-effort display
+			_, _ = terminal.Write([]byte("\x1b[1;32m[C]\x1b[0m Switch to \x1b[1mCP437\x1b[0m (retro BBS terminals: SyncTerm, NetRunner, etc.)\r\n")) // best-effort display
+			_, _ = terminal.Write([]byte("\r\n"))                                                                                                    // best-effort display
+			_, _ = terminal.Write([]byte("Choice \x1b[1;33m[U/C]\x1b[0m: "))                                                                         // best-effort display
 
 			choice, err := terminal.ReadLine()
 			if err == nil {
@@ -1203,12 +1205,12 @@ func sessionHandler(s ssh.Session) {
 					effectiveMode = ansi.OutputModeCP437
 					authenticatedUser.PreferredEncoding = "cp437"
 					setupChanged = true
-					terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Switched to CP437 encoding for retro BBS experience.\r\n"))
+					_, _ = terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Switched to CP437 encoding for retro BBS experience.\r\n")) // best-effort display
 				} else {
 					slog.Info("user selected UTF-8 encoding", "node", nodeID)
 					authenticatedUser.PreferredEncoding = "utf8"
 					setupChanged = true
-					terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Continuing with UTF-8 encoding.\r\n"))
+					_, _ = terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Continuing with UTF-8 encoding.\r\n")) // best-effort display
 				}
 			}
 		}
@@ -1216,12 +1218,12 @@ func sessionHandler(s ssh.Session) {
 		// Terminal Height Adjustment Prompt
 		detectedHeight := int(termHeight.Load())
 		if detectedHeight > 25 && (authenticatedUser.ScreenWidth == 0 || authenticatedUser.ScreenHeight == 0) {
-			terminal.Write([]byte("\r\n"))
-			terminal.Write([]byte("Your terminal reports \x1b[1m" + fmt.Sprintf("%d", detectedHeight) + " rows\x1b[0m.\r\n"))
-			terminal.Write([]byte("If you have a status bar enabled (NetRunner, SyncTerm, etc.),\r\n"))
-			terminal.Write([]byte("some rows may not be available for display.\r\n"))
-			terminal.Write([]byte("\r\n"))
-			terminal.Write([]byte("How many rows are available for BBS display? [\x1b[1m" + fmt.Sprintf("%d", detectedHeight) + "\x1b[0m]: "))
+			_, _ = terminal.Write([]byte("\r\n"))                                                                                                     // best-effort display
+			_, _ = terminal.Write([]byte("Your terminal reports \x1b[1m" + fmt.Sprintf("%d", detectedHeight) + " rows\x1b[0m.\r\n"))                  // best-effort display
+			_, _ = terminal.Write([]byte("If you have a status bar enabled (NetRunner, SyncTerm, etc.),\r\n"))                                        // best-effort display
+			_, _ = terminal.Write([]byte("some rows may not be available for display.\r\n"))                                                          // best-effort display
+			_, _ = terminal.Write([]byte("\r\n"))                                                                                                     // best-effort display
+			_, _ = terminal.Write([]byte("How many rows are available for BBS display? [\x1b[1m" + fmt.Sprintf("%d", detectedHeight) + "\x1b[0m]: ")) // best-effort display
 
 			heightChoice, heightErr := terminal.ReadLine()
 			if heightErr != nil {
@@ -1240,7 +1242,7 @@ func sessionHandler(s ssh.Session) {
 						authenticatedUser.ScreenHeight = adjustedHeight
 						setupChanged = true
 						_ = terminal.SetSize(int(termWidth.Load()), adjustedHeight)
-						terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Display height set to " + fmt.Sprintf("%d", adjustedHeight) + " rows.\r\n"))
+						_, _ = terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Display height set to " + fmt.Sprintf("%d", adjustedHeight) + " rows.\r\n")) // best-effort display
 					}
 				}
 			}
@@ -1248,29 +1250,29 @@ func sessionHandler(s ssh.Session) {
 
 		// Ask to save as default if anything changed
 		if setupChanged {
-			terminal.Write([]byte("\r\n"))
-			terminal.Write([]byte("Save these settings as your default preference? \x1b[1;33m[Y/n]\x1b[0m: "))
+			_, _ = terminal.Write([]byte("\r\n"))                                                                     // best-effort display
+			_, _ = terminal.Write([]byte("Save these settings as your default preference? \x1b[1;33m[Y/n]\x1b[0m: ")) // best-effort display
 			saveChoice, saveErr := terminal.ReadLine()
 			if saveErr == nil {
 				saveChoice = strings.TrimSpace(strings.ToUpper(saveChoice))
 				if saveChoice == "" || saveChoice == "Y" || saveChoice == "YES" {
 					if err := userMgr.UpdateUser(authenticatedUser); err != nil {
 						slog.Warn("failed to save user preferences", "node", nodeID, "error", err)
-						terminal.Write([]byte("\r\n\x1b[1;33m[WARN]\x1b[0m Failed to save preferences.\r\n"))
+						_, _ = terminal.Write([]byte("\r\n\x1b[1;33m[WARN]\x1b[0m Failed to save preferences.\r\n")) // best-effort display
 					} else {
 						slog.Info("saved user preferences",
 							"node", nodeID,
 							"encoding", authenticatedUser.PreferredEncoding,
 							"width", authenticatedUser.ScreenWidth,
 							"height", authenticatedUser.ScreenHeight)
-						terminal.Write([]byte("\r\n\x1b[1;32m[SAVED]\x1b[0m Your preferences have been saved.\r\n"))
+						_, _ = terminal.Write([]byte("\r\n\x1b[1;32m[SAVED]\x1b[0m Your preferences have been saved.\r\n")) // best-effort display
 					}
 				} else {
 					slog.Info("user declined to save preferences", "node", nodeID)
-					terminal.Write([]byte("\r\n\x1b[1;36m[INFO]\x1b[0m Settings will be used for this session only.\r\n"))
+					_, _ = terminal.Write([]byte("\r\n\x1b[1;36m[INFO]\x1b[0m Settings will be used for this session only.\r\n")) // best-effort display
 				}
 			}
-			terminal.Write([]byte("\r\n"))
+			_, _ = terminal.Write([]byte("\r\n")) // best-effort display
 		}
 	} else if authenticatedUser.PreferredEncoding != "" {
 		// User has saved encoding preference - apply it
@@ -1310,7 +1312,7 @@ func sessionHandler(s ssh.Session) {
 	for {
 		if currentMenuName == "" || currentMenuName == "LOGOFF" {
 			slog.Info("user selected logoff", "node", nodeID, "user", authenticatedUser.Handle)
-			fmt.Fprintln(terminal, "\r\nLogging off...")
+			_, _ = fmt.Fprintln(terminal, "\r\nLogging off...") // best-effort display
 			// Add any cleanup tasks before closing the session
 			break // Exit the loop
 		}
@@ -1331,7 +1333,7 @@ func sessionHandler(s ssh.Session) {
 		nextMenuName, _, execErr := menuExecutor.Run(s, terminal, userMgr, authenticatedUser, currentMenuName, int(nodeID), sessionStartTime, autoRunLog, effectiveMode, "", int(termWidth.Load()), int(termHeight.Load()))
 		if execErr != nil {
 			slog.Error("error executing menu", "node", nodeID, "menu", currentMenuName, "error", execErr)
-			fmt.Fprintf(terminal, "\r\nSystem error during menu execution: %v\r\n", execErr)
+			_, _ = fmt.Fprintf(terminal, "\r\nSystem error during menu execution: %v\r\n", execErr) // best-effort display
 			// Logoff on error?
 			currentMenuName = "LOGOFF"
 			continue
@@ -1350,9 +1352,9 @@ func telnetSessionHandler(adapter *telnetserver.TelnetSessionAdapter) {
 	canAccept, reason := connectionTracker.TryAccept(adapter.RemoteAddr())
 	if !canAccept {
 		slog.Info("rejecting telnet connection", "addr", adapter.RemoteAddr(), "reason", reason)
-		fmt.Fprintf(adapter, "\r\nConnection rejected: %s\r\n", reason)
-		fmt.Fprintf(adapter, "Please try again later.\r\n")
-		time.Sleep(2 * time.Second) // Brief delay before closing
+		_, _ = fmt.Fprintf(adapter, "\r\nConnection rejected: %s\r\n", reason) // best-effort display
+		_, _ = fmt.Fprintf(adapter, "Please try again later.\r\n")             // best-effort display
+		time.Sleep(2 * time.Second)                                            // Brief delay before closing
 		return
 	}
 
@@ -1413,7 +1415,7 @@ func main() {
 	if err != nil {
 		logging.Fatal("failed to initialize logging", "error", err)
 	}
-	defer closeLog()
+	defer func() { _ = closeLog() }() // best-effort log flush at exit
 	slog.Info("starting ViSiON/3 BBS server")
 
 	// Initialize connection tracker with configured limits and IP filter file paths
@@ -1494,7 +1496,11 @@ func main() {
 	if err != nil {
 		logging.Fatal("failed to initialize message manager", "error", err)
 	}
-	defer messageMgr.Close() // Ensure JAM bases are closed on shutdown
+	defer func() {
+		if cerr := messageMgr.Close(); cerr != nil {
+			slog.Error("closing JAM message bases on shutdown", "error", cerr)
+		}
+	}()
 
 	// Initialize FileManager (using dataPath)
 	fileMgr, err = file.NewFileManager(dataPath, rootConfigPath)
@@ -1687,7 +1693,9 @@ func main() {
 			defer func() {
 				slog.Info("shutting down V3Net service")
 				v3netCancel()
-				v3netService.Close()
+				if cerr := v3netService.Close(); cerr != nil {
+					slog.Error("closing V3Net service", "error", cerr)
+				}
 			}()
 
 			go v3netService.Start(v3netCtx)
@@ -1743,7 +1751,7 @@ func main() {
 		if telnetErr != nil {
 			logging.Fatal("failed to create telnet server", "error", telnetErr)
 		}
-		defer telnetSrv.Close()
+		defer func() { _ = telnetSrv.Close() }() // best-effort shutdown
 
 		go func() {
 			if listenErr := telnetSrv.ListenAndServe(); listenErr != nil {

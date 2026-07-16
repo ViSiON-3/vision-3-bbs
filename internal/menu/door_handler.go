@@ -154,7 +154,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 	processedTop := ansi.ReplacePipeCodes(topBytes)
 	if outputMode == ansi.OutputModeCP437 {
-		terminal.Write(processedTop)
+		_, _ = terminal.Write(processedTop) // best-effort display
 	} else {
 		terminalio.WriteProcessedBytes(terminal, processedTop, outputMode)
 	}
@@ -211,7 +211,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	// Display footer
 	processedBot := ansi.ReplacePipeCodes(botBytes)
 	if outputMode == ansi.OutputModeCP437 {
-		terminal.Write(processedBot)
+		_, _ = terminal.Write(processedBot) // best-effort display
 	} else {
 		terminalio.WriteProcessedBytes(terminal, processedBot, outputMode)
 	}
@@ -269,7 +269,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		if upperInput == "?" {
-			runListDoors(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
+			_, _, _ = runListDoors(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
 		}
@@ -382,7 +382,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		if upperInput == "?" {
-			runListDoors(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
+			_, _, _ = runListDoors(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
 		}

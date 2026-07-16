@@ -79,7 +79,7 @@ func TestNewServer_LegacyAlgorithms(t *testing.T) {
 		t.Fatal(err)
 	}
 	sc := srv.inner.ServerConfigCallback(nil)
-	if containsStr(sc.Config.Ciphers, "3des-cbc") {
+	if containsStr(sc.Ciphers, "3des-cbc") {
 		t.Error("non-legacy config should not enable 3des-cbc")
 	}
 
@@ -89,10 +89,10 @@ func TestNewServer_LegacyAlgorithms(t *testing.T) {
 		t.Fatal(err)
 	}
 	scLegacy := srvLegacy.inner.ServerConfigCallback(nil)
-	if !containsStr(scLegacy.Config.Ciphers, "3des-cbc") {
+	if !containsStr(scLegacy.Ciphers, "3des-cbc") {
 		t.Error("legacy config should enable 3des-cbc")
 	}
-	if !containsStr(scLegacy.Config.KeyExchanges, "diffie-hellman-group1-sha1") {
+	if !containsStr(scLegacy.KeyExchanges, "diffie-hellman-group1-sha1") {
 		t.Error("legacy config should enable diffie-hellman-group1-sha1")
 	}
 }

@@ -52,14 +52,14 @@ func formatArchiveListing(w io.Writer, zipPath string, filename string, termHeig
 	if err != nil {
 		return 0, fmt.Errorf("failed to open archive: %w", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	// Header — sanitize filename to prevent terminal/pipe code injection
-	fmt.Fprintf(w, "\r\n|15--- Archive Contents: %s ---|07\r\n\r\n", sanitizeEntryName(filename))
+	_, _ = fmt.Fprintf(w, "\r\n|15--- Archive Contents: %s ---|07\r\n\r\n", sanitizeEntryName(filename)) // best-effort display
 
 	// Column headers
-	fmt.Fprintf(w, "|14  #   Size       Date       Name|07\r\n")
-	fmt.Fprintf(w, "|08 ---  ---------  ---------- --------------------------------|07\r\n")
+	_, _ = fmt.Fprintf(w, "|14  #   Size       Date       Name|07\r\n")                             // best-effort display
+	_, _ = fmt.Fprintf(w, "|08 ---  ---------  ---------- --------------------------------|07\r\n") // best-effort display
 
 	var totalSize uint64
 	fileCount := 0
@@ -69,18 +69,18 @@ func formatArchiveListing(w io.Writer, zipPath string, filename string, termHeig
 		sizeStr := util.FormatFileSize(int64(f.UncompressedSize64))
 		dateStr := f.Modified.Format("01/02/2006")
 
-		fmt.Fprintf(w, "|07 %3d  %9s  %s  |15%s|07\r\n",
+		_, _ = fmt.Fprintf(w, "|07 %3d  %9s  %s  |15%s|07\r\n", // best-effort display
 			fileCount, sizeStr, dateStr, sanitizeEntryName(f.Name))
 
 		totalSize += f.UncompressedSize64
 	}
 
 	// Summary
-	fmt.Fprintf(w, "\r\n|07 %d file(s), %s total\r\n",
+	_, _ = fmt.Fprintf(w, "\r\n|07 %d file(s), %s total\r\n", // best-effort display
 		fileCount, util.FormatFileSize(int64(totalSize)))
 
 	// Prompt
-	fmt.Fprintf(w, "\r\n|07[|15#|07]=Extract  [|15Q|07]=Quit\r\n")
+	_, _ = fmt.Fprintf(w, "\r\n|07[|15#|07]=Extract  [|15Q|07]=Quit\r\n") // best-effort display
 
 	return fileCount, nil
 }
@@ -100,7 +100,7 @@ func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 	if err != nil {
 		return "", noop, fmt.Errorf("failed to open archive: %w", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	if entryNum > len(r.File) {
 		return "", noop, fmt.Errorf("entry %d out of range (archive has %d entries)", entryNum, len(r.File))
@@ -117,7 +117,7 @@ func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 		return "", noop, fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
-	cleanup := func() { os.RemoveAll(tmpDir) }
+	cleanup := func() { _ = os.RemoveAll(tmpDir) } // best-effort temp cleanup
 
 	// Use Base to prevent zip slip
 	destPath := filepath.Join(tmpDir, filepath.Base(entry.Name))
@@ -127,18 +127,21 @@ func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 		cleanup()
 		return "", noop, fmt.Errorf("failed to open entry: %w", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }() // read-only
 
 	outFile, err := os.Create(destPath)
 	if err != nil {
 		cleanup()
 		return "", noop, fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer outFile.Close()
-
 	if _, err := io.Copy(outFile, rc); err != nil {
+		_ = outFile.Close() // cleanup on error path
 		cleanup()
 		return "", noop, fmt.Errorf("failed to extract file: %w", err)
+	}
+	if err := outFile.Close(); err != nil {
+		cleanup()
+		return "", noop, fmt.Errorf("failed to finalize extracted file: %w", err)
 	}
 
 	return destPath, cleanup, nil
@@ -170,7 +173,7 @@ func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(buf.Bytes()), outputMode)
 
 	for {
-		prompt := fmt.Sprintf("\r\n|07ZipLab [|15#|07/|15Q|07]: |15")
+		prompt := "\r\n|07ZipLab [|15#|07/|15Q|07]: |15"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
 		line, err := readLine()

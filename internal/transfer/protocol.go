@@ -135,9 +135,12 @@ func (p *ProtocolConfig) ExecuteSend(ctx context.Context, s ssh.Session, filePat
 		}
 	}
 
-	args, listFile := expandArgs(p.SendArgs, filePaths, "")
+	args, listFile, err := expandArgs(p.SendArgs, filePaths, "")
+	if err != nil {
+		return fmt.Errorf("prepare send args for protocol %q: %w", p.Name, err)
+	}
 	if listFile != "" {
-		defer os.Remove(listFile)
+		defer func() { _ = os.Remove(listFile) }() // best-effort temp cleanup
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -174,9 +177,12 @@ func (p *ProtocolConfig) ExecuteReceive(ctx context.Context, s ssh.Session, targ
 		}
 	}
 
-	args, listFile := expandArgs(p.RecvArgs, nil, targetDir)
+	args, listFile, err := expandArgs(p.RecvArgs, nil, targetDir)
+	if err != nil {
+		return fmt.Errorf("prepare recv args for protocol %q: %w", p.Name, err)
+	}
 	if listFile != "" {
-		defer os.Remove(listFile)
+		defer func() { _ = os.Remove(listFile) }() // best-effort temp cleanup
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -216,7 +222,7 @@ func (p *ProtocolConfig) ExecuteReceive(ctx context.Context, s ssh.Session, targ
 //   - Inline occurrences (e.g. "@{fileListPath}") perform in-place substitution.
 //   - If {filePath} never appears as a standalone arg and {fileListPath} is not
 //     used either, filePaths are appended at the end.
-func expandArgs(template []string, filePaths []string, targetDir string) ([]string, string) {
+func expandArgs(template []string, filePaths []string, targetDir string) ([]string, string, error) {
 	var result []string
 	filePathUsed := false
 	var listFilePath string
@@ -239,7 +245,10 @@ func expandArgs(template []string, filePaths []string, targetDir string) ([]stri
 		case "{fileListPath}":
 			// Write a temp file with one path per line.
 			if listFilePath == "" && len(filePaths) > 0 {
-				listFilePath = writeFileList(filePaths)
+				var err error
+				if listFilePath, err = writeFileList(filePaths); err != nil {
+					return nil, "", err
+				}
 			}
 			result = append(result, listFilePath)
 			filePathUsed = true
@@ -247,7 +256,10 @@ func expandArgs(template []string, filePaths []string, targetDir string) ([]stri
 			a := arg
 			if strings.Contains(a, "{fileListPath}") && len(filePaths) > 0 {
 				if listFilePath == "" {
-					listFilePath = writeFileList(filePaths)
+					var err error
+					if listFilePath, err = writeFileList(filePaths); err != nil {
+						return nil, "", err
+					}
 				}
 				a = strings.ReplaceAll(a, "{fileListPath}", listFilePath)
 				filePathUsed = true
@@ -266,20 +278,28 @@ func expandArgs(template []string, filePaths []string, targetDir string) ([]stri
 		result = append(result, filePaths...)
 	}
 
-	return result, listFilePath
+	return result, listFilePath, nil
 }
 
 // writeFileList creates a temporary file containing one path per line and
-// returns the file path in the OS temp directory.  Returns "" on error.
-func writeFileList(paths []string) string {
+// returns the file path in the OS temp directory. Errors are propagated so
+// callers abort the transfer instead of launching the command with an empty
+// file list.
+func writeFileList(paths []string) (string, error) {
 	f, err := os.CreateTemp("", "sexyz-filelist-*.txt")
 	if err != nil {
-		slog.Error("failed to create file list temp file", "error", err)
-		return ""
+		return "", fmt.Errorf("create file list temp file: %w", err)
 	}
 	for _, p := range paths {
-		fmt.Fprintln(f, p)
+		if _, err := fmt.Fprintln(f, p); err != nil {
+			_ = f.Close()           // cleanup on error path
+			_ = os.Remove(f.Name()) // cleanup on error path
+			return "", fmt.Errorf("write file list: %w", err)
+		}
 	}
-	_ = f.Close()
-	return f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name()) // cleanup on error path
+		return "", fmt.Errorf("finalize file list: %w", err)
+	}
+	return f.Name(), nil
 }

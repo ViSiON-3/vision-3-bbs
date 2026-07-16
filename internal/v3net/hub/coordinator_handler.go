@@ -121,7 +121,7 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 	// Enforce 24-hour TTL on transfer tokens.
 	if t, parseErr := time.Parse("2006-01-02 15:04:05", createdAt); parseErr == nil {
 		if time.Since(t) > 24*time.Hour {
-			h.db.Exec("DELETE FROM coordinator_transfers WHERE network = ?", network)
+			_, _ = h.db.Exec("DELETE FROM coordinator_transfers WHERE network = ?", network) // best-effort cleanup; leftovers expire via TTL check
 			http.Error(w, `{"error":"transfer token expired"}`, http.StatusGone)
 			return
 		}
@@ -152,6 +152,25 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Consume the one-time token atomically before applying the transfer:
+	// the guarded DELETE ensures a token can never be redeemed twice, even
+	// if a later step fails (the coordinator must then re-initiate). A
+	// concurrent redemption of the same token loses this race and is
+	// rejected below via RowsAffected.
+	res, err := h.db.Exec(
+		"DELETE FROM coordinator_transfers WHERE network = ? AND token = ? AND new_node_id = ?",
+		network, req.Token, nodeID,
+	)
+	if err != nil {
+		slog.Error("consume transfer token", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if n, raErr := res.RowsAffected(); raErr != nil || n == 0 {
+		http.Error(w, `{"error":"invalid transfer credentials"}`, http.StatusForbidden)
+		return
+	}
+
 	currentNAL.CoordNodeID = newNodeID
 	currentNAL.CoordPubKeyB64 = newPubKeyB64
 
@@ -167,9 +186,6 @@ func (h *Hub) handleCoordAccept(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-
-	// Clean up the transfer.
-	h.db.Exec("DELETE FROM coordinator_transfers WHERE network = ?", network)
 
 	// Fan out nal_updated event.
 	ev, _ := protocol.NewEvent(protocol.EventNALUpdated, protocol.NALUpdatedPayload{

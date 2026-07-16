@@ -97,7 +97,7 @@ func DownloadEcholist(ctx context.Context, url string) ([]EchoArea, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching echolist: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read-only
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("echolist download returned status %d", resp.StatusCode)

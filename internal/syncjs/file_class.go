@@ -4,11 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/dop251/goja"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/dop251/goja"
 )
 
 // bytesToLatin1 converts raw bytes to a Go string using Latin-1 mapping,
@@ -35,7 +38,7 @@ type jsFile struct {
 
 // registerFileClass registers the File constructor and file_exists global on the JS runtime.
 func registerFileClass(vm *goja.Runtime, eng *Engine) {
-	vm.Set("File", func(call goja.ConstructorCall) *goja.Object {
+	jsutil.Set(vm, "File", func(call goja.ConstructorCall) *goja.Object {
 		path := ""
 		if len(call.Arguments) > 0 {
 			path = call.Arguments[0].String()
@@ -46,17 +49,17 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 		obj := call.This
 
 		// --- Properties ---
-		obj.Set("name", path)
-		obj.DefineAccessorProperty("is_open", vm.ToValue(func(goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "name", path)
+		jsutil.DefineAccessor(obj, "is_open", vm.ToValue(func(goja.FunctionCall) goja.Value {
 			return vm.ToValue(jf.isOpen)
 		}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
-		obj.DefineAccessorProperty("exists", vm.ToValue(func(goja.FunctionCall) goja.Value {
+		jsutil.DefineAccessor(obj, "exists", vm.ToValue(func(goja.FunctionCall) goja.Value {
 			_, err := os.Stat(jf.path)
 			return vm.ToValue(err == nil)
 		}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
-		obj.DefineAccessorProperty("position", vm.ToValue(func(goja.FunctionCall) goja.Value {
+		jsutil.DefineAccessor(obj, "position", vm.ToValue(func(goja.FunctionCall) goja.Value {
 			if jf.f == nil {
 				return vm.ToValue(0)
 			}
@@ -71,12 +74,12 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 				return goja.Undefined()
 			}
 			pos := call.Arguments[0].ToInteger()
-			jf.f.Seek(pos, io.SeekStart)
-			jf.reader = nil // invalidate buffered reader
+			_, _ = jf.f.Seek(pos, io.SeekStart) // JS position setter has no error path; next read/write surfaces failures
+			jf.reader = nil                     // invalidate buffered reader
 			return goja.Undefined()
 		}), goja.FLAG_FALSE, goja.FLAG_TRUE)
 
-		obj.DefineAccessorProperty("length", vm.ToValue(func(goja.FunctionCall) goja.Value {
+		jsutil.DefineAccessor(obj, "length", vm.ToValue(func(goja.FunctionCall) goja.Value {
 			if jf.f == nil {
 				info, err := os.Stat(jf.path)
 				if err != nil {
@@ -91,11 +94,11 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 			return vm.ToValue(info.Size())
 		}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
-		obj.DefineAccessorProperty("error", vm.ToValue(func(goja.FunctionCall) goja.Value {
+		jsutil.DefineAccessor(obj, "error", vm.ToValue(func(goja.FunctionCall) goja.Value {
 			return vm.ToValue(jf.lastErr)
 		}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
-		obj.DefineAccessorProperty("eof", vm.ToValue(func(goja.FunctionCall) goja.Value {
+		jsutil.DefineAccessor(obj, "eof", vm.ToValue(func(goja.FunctionCall) goja.Value {
 			if jf.f == nil {
 				return vm.ToValue(true)
 			}
@@ -112,44 +115,46 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 		}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
 		// --- Methods ---
-		obj.Set("open", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "open", func(call goja.FunctionCall) goja.Value {
 			return vm.ToValue(jf.open(call))
 		})
-		obj.Set("close", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "close", func(call goja.FunctionCall) goja.Value {
 			jf.close()
 			return goja.Undefined()
 		})
-		obj.Set("flush", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "flush", func(call goja.FunctionCall) goja.Value {
 			if jf.f != nil {
-				jf.f.Sync()
+				if err := jf.f.Sync(); err != nil {
+					slog.Warn("syncjs: File.flush sync failed", "path", jf.path, "error", err)
+				}
 			}
 			return vm.ToValue(true)
 		})
-		obj.Set("read", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "read", func(call goja.FunctionCall) goja.Value {
 			return jf.read(vm, call)
 		})
-		obj.Set("readln", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "readln", func(call goja.FunctionCall) goja.Value {
 			return jf.readln(vm)
 		})
-		obj.Set("readAll", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "readAll", func(call goja.FunctionCall) goja.Value {
 			return jf.readAll(vm)
 		})
-		obj.Set("write", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "write", func(call goja.FunctionCall) goja.Value {
 			return jf.write(vm, call)
 		})
-		obj.Set("writeln", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "writeln", func(call goja.FunctionCall) goja.Value {
 			return jf.writeln(vm, call)
 		})
-		obj.Set("writeAll", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "writeAll", func(call goja.FunctionCall) goja.Value {
 			return jf.writeAll(vm, call)
 		})
-		obj.Set("readBin", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "readBin", func(call goja.FunctionCall) goja.Value {
 			return jf.readBin(vm, call)
 		})
-		obj.Set("writeBin", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "writeBin", func(call goja.FunctionCall) goja.Value {
 			return jf.writeBin(vm, call)
 		})
-		obj.Set("truncate", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "truncate", func(call goja.FunctionCall) goja.Value {
 			if jf.f == nil {
 				return vm.ToValue(false)
 			}
@@ -160,15 +165,15 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 			err := jf.f.Truncate(length)
 			return vm.ToValue(err == nil)
 		})
-		obj.Set("lock", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "lock", func(call goja.FunctionCall) goja.Value {
 			return vm.ToValue(jf.fileLock(call, true))
 		})
-		obj.Set("unlock", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "unlock", func(call goja.FunctionCall) goja.Value {
 			return vm.ToValue(jf.fileLock(call, false))
 		})
 
 		// INI file methods — Synchronet File objects can read/write INI format
-		obj.Set("iniGetValue", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "iniGetValue", func(call goja.FunctionCall) goja.Value {
 			section := ""
 			key := ""
 			var defVal goja.Value
@@ -197,12 +202,12 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 			return vm.ToValue(val)
 		})
 
-		obj.Set("iniGetSections", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "iniGetSections", func(call goja.FunctionCall) goja.Value {
 			sections := jf.iniGetSections()
 			return vm.ToValue(sections)
 		})
 
-		obj.Set("iniGetKeys", func(call goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "iniGetKeys", func(call goja.FunctionCall) goja.Value {
 			section := ""
 			if len(call.Arguments) > 0 && !goja.IsNull(call.Arguments[0]) {
 				section = call.Arguments[0].String()
@@ -215,7 +220,7 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// Global file_exists() function
-	vm.Set("file_exists", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_exists", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
@@ -225,7 +230,7 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// Global file_remove() function
-	vm.Set("file_remove", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_remove", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
@@ -235,7 +240,7 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// Global directory() function — list files in directory
-	vm.Set("directory", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "directory", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(vm.NewArray())
 		}
@@ -252,7 +257,7 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// Global mkdir() function
-	vm.Set("mkdir", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "mkdir", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
@@ -262,7 +267,7 @@ func registerFileClass(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// Global file_isdir() function
-	vm.Set("file_isdir", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_isdir", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
@@ -296,7 +301,9 @@ func (jf *jsFile) open(call goja.FunctionCall) bool {
 
 func (jf *jsFile) close() {
 	if jf.f != nil {
-		jf.f.Close()
+		if err := jf.f.Close(); err != nil {
+			slog.Warn("syncjs: File.close failed", "path", jf.path, "error", err)
+		}
 		jf.f = nil
 	}
 	jf.isOpen = false
@@ -483,7 +490,9 @@ func (jf *jsFile) iniParse() map[string]map[string]string {
 		return nil
 	}
 	// Seek to beginning
-	jf.f.Seek(0, io.SeekStart)
+	if _, err := jf.f.Seek(0, io.SeekStart); err != nil {
+		return nil
+	}
 	jf.reader = nil
 
 	sections := make(map[string]map[string]string)

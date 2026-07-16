@@ -95,26 +95,26 @@ func (ks *Keystore) save(path string) error {
 	tmpName := tmp.Name()
 
 	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("keystore: chmod temp file: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("keystore: write temp file: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("keystore: sync temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("keystore: close temp file: %w", err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("keystore: rename %s -> %s: %w", tmpName, path, err)
 	}
 	return nil

@@ -57,7 +57,7 @@ func (l *Leaf) ProposeArea(req protocol.AreaProposalRequest) (*protocol.Proposal
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read side
 
 	if resp.StatusCode != 200 {
 		// Diagnostic error body: truncation at the cap is acceptable here.

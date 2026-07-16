@@ -59,7 +59,11 @@ func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, err
 	if err != nil {
 		return nil, err
 	}
-	defer dedup.Close()
+	defer func() {
+		if cerr := dedup.Close(); cerr != nil {
+			slog.Warn("closing REP dedup database", "error", cerr)
+		}
+	}()
 	isNew, err := dedup.RecordIfNew(opts.Handle, fingerprint(packet.Payload))
 	if err != nil {
 		return nil, err

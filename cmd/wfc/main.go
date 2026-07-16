@@ -90,7 +90,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "wfc: connect: %v\n", err)
 		os.Exit(1)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() // best-effort teardown
 
 	model := wfcui.New(client, wfcui.Options{
 		ASCII:     f.ascii,

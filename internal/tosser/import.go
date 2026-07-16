@@ -182,7 +182,7 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 	// bundle in place for the correct tosser and clean up extracted temp files.
 	if allSkipped && len(pktPaths) > 0 {
 		for _, pktPath := range pktPaths {
-			os.Remove(pktPath)
+			_ = os.Remove(pktPath) // best-effort cleanup of skipped packets
 		}
 		slog.Debug("skipping foreign bundle", "network", t.networkName, "bundle", name)
 		return
@@ -245,7 +245,7 @@ func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, sk
 	if err != nil {
 		return 0, 0, []string{fmt.Sprintf("open %s: %v", path, err)}, false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only
 
 	pktHdr, msgs, err := ftn.ReadPacket(f)
 	if err != nil {
@@ -319,7 +319,7 @@ func (t *Tosser) isPacketFromKnownLink(hdr *ftn.PacketHeader) bool {
 }
 
 // tossMessage processes a single message from a packet.
-func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) error {
+func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (retErr error) {
 	parsed := ftn.ParsePackedMessageBody(msg.Body)
 
 	// Extract MSGID and CHRS from kludges
@@ -390,7 +390,18 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) e
 	if err != nil {
 		return fmt.Errorf("get base for area %d: %w", area.ID, err)
 	}
-	defer base.Close()
+	// A failed close means the JAM write may not be fully flushed, so treat
+	// it as a write failure — otherwise the packet would be acknowledged and
+	// removed while the message is potentially lost.
+	defer func() {
+		if cerr := base.Close(); cerr != nil {
+			if retErr == nil {
+				retErr = fmt.Errorf("closing JAM base: %w", cerr)
+			} else {
+				slog.Warn("closing JAM base", "error", cerr)
+			}
+		}
+	}()
 
 	// Update SEEN-BY and PATH with our address
 	own2D := t.ownAddr.String2D()
@@ -485,7 +496,7 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) e
 
 // writeMsgToArea writes a packet message to any JAM area by tag.
 // Used for netmail, bad-area, and dupe-area routing.
-func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, parsed *ftn.ParsedBody, msgID string) error {
+func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, parsed *ftn.ParsedBody, msgID string) (retErr error) {
 	area, found := t.msgMgr.GetAreaByTag(areaTag)
 	if !found {
 		return fmt.Errorf("area %q not configured", areaTag)
@@ -494,7 +505,17 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 	if err != nil {
 		return fmt.Errorf("get base for area %q: %w", areaTag, err)
 	}
-	defer base.Close()
+	// Treat a failed close as a write failure so callers do not acknowledge
+	// a packet whose JAM finalization failed.
+	defer func() {
+		if cerr := base.Close(); cerr != nil {
+			if retErr == nil {
+				retErr = fmt.Errorf("closing JAM base: %w", cerr)
+			} else {
+				slog.Warn("closing JAM base", "error", cerr)
+			}
+		}
+	}()
 
 	jamMsg := jam.NewMessage()
 	jamMsg.From = msg.From

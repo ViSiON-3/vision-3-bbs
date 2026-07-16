@@ -181,7 +181,7 @@ func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to open BAR file %s: %w", barPath, err)
 	}
-	defer barFile.Close()
+	defer func() { _ = barFile.Close() }() // read-only
 
 	var options []LightbarOption
 	scanner := bufio.NewScanner(barFile)
@@ -251,7 +251,7 @@ func loadBarFile(barName string, e *MenuExecutor) ([]LightbarOption, error) {
 		}
 		return nil, fmt.Errorf("failed to open BAR file %s: %w", barPath, err)
 	}
-	defer barFile.Close()
+	defer func() { _ = barFile.Close() }() // read-only
 
 	var options []LightbarOption
 	scanner := bufio.NewScanner(barFile)

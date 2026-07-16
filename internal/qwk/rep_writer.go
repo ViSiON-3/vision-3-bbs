@@ -52,13 +52,13 @@ func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 
 	name := bbsID + ".MSG"
 	if err := writeZipEntry(zw, name, msgBuf.Bytes()); err != nil {
-		zw.Close()
+		_ = zw.Close() // cleanup on error path
 		return fmt.Errorf("%s: %w", name, err)
 	}
 
 	if hdrs := encodeHeadersDAT(extHeadersFor(msgs, offsets, bbsID)); len(hdrs) > 0 {
 		if err := writeZipEntry(zw, "HEADERS.DAT", hdrs); err != nil {
-			zw.Close()
+			_ = zw.Close() // cleanup on error path
 			return fmt.Errorf("HEADERS.DAT: %w", err)
 		}
 	}

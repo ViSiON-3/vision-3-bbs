@@ -24,7 +24,7 @@ func fetchHubNetworks(hubURL string) tea.Cmd {
 		if err != nil {
 			return fetchNetworksMsg{err: err}
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }() // read-only
 		if resp.StatusCode != http.StatusOK {
 			return fetchNetworksMsg{err: fmt.Errorf("status %d", resp.StatusCode)}
 		}

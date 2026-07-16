@@ -33,9 +33,9 @@ func main() {
 	// absent, and a logging-init failure leaves the stdlib default (stderr).
 	cfg, _ := config.LoadServerConfig("configs")
 	if _, closeLog, err := logging.Init(cfg.Logging, "v3mail.log", true); err == nil {
-		defer closeLog()
+		defer func() { _ = closeLog() }() // best-effort log flush at exit
 	} else {
-		fmt.Fprintf(os.Stderr, "WARN: failed to initialize logging: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "WARN: failed to initialize logging: %v\n", err)
 	}
 
 	if len(os.Args) < 2 {
@@ -87,9 +87,9 @@ const (
 )
 
 func printHeader() {
-	fmt.Fprintf(os.Stderr, "%sViSiON/3 Mail Utility v%s  ·  MIT License%s\n",
+	_, _ = fmt.Fprintf(os.Stderr, "%sViSiON/3 Mail Utility v%s  ·  MIT License%s\n",
 		clrBold, version.Number, clrReset)
-	fmt.Fprintln(os.Stderr, separator)
+	_, _ = fmt.Fprintln(os.Stderr, separator)
 }
 
 func bullet(msg string) string {
@@ -109,34 +109,34 @@ func opt(flag, desc string) string {
 func printUsage(errMsg string) {
 	w := os.Stderr
 	printHeader()
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 	if errMsg != "" {
-		fmt.Fprintln(w, bullet(errMsg))
+		_, _ = fmt.Fprintln(w, bullet(errMsg))
 	}
-	fmt.Fprintln(w, bullet("v3mail needs a little more information!"))
-	fmt.Fprintln(w, bullet("Required Format: v3mail <command> [options] [base_path...]"))
-	fmt.Fprintln(w, bullet("Valid Commands Are As Follows..."))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sJAM Base Commands:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, cmd("STATS", "Display message base statistics"))
-	fmt.Fprintln(w, cmd("PACK", "Defragment base, removing deleted messages"))
-	fmt.Fprintln(w, cmd("PURGE", "Delete messages exceeding age or count limits"))
-	fmt.Fprintln(w, cmd("FIX", "Verify and repair JAM base integrity"))
-	fmt.Fprintln(w, cmd("LINK", "Build reply-threading chains (ReplyTo/Reply1st/ReplyNext)"))
-	fmt.Fprintln(w, cmd("LASTREAD", "Show or reset per-user lastread pointers"))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sFTN Echomail Commands:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, cmd("TOSS", "Unpack inbound FTN bundles and toss .PKT files into JAM bases"))
-	fmt.Fprintln(w, cmd("SCAN", "Scan JAM bases for unsent echomail; create outbound .PKT files"))
-	fmt.Fprintln(w, cmd("FTN-PACK", "Pack outbound .PKT files into ZIP bundles for binkd"))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
-	fmt.Fprintln(w, opt("--all", "Operate on all areas in message_areas.json"))
-	fmt.Fprintln(w, opt("--config DIR", "Config directory (default: configs)"))
-	fmt.Fprintln(w, opt("--data DIR", "Data directory (default: data)"))
-	fmt.Fprintln(w, opt("-q", "Suppress output"))
-	fmt.Fprintln(w, opt("--network NAME", "FTN: limit to a single network"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, bullet("v3mail needs a little more information!"))
+	_, _ = fmt.Fprintln(w, bullet("Required Format: v3mail <command> [options] [base_path...]"))
+	_, _ = fmt.Fprintln(w, bullet("Valid Commands Are As Follows..."))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sJAM Base Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, cmd("STATS", "Display message base statistics"))
+	_, _ = fmt.Fprintln(w, cmd("PACK", "Defragment base, removing deleted messages"))
+	_, _ = fmt.Fprintln(w, cmd("PURGE", "Delete messages exceeding age or count limits"))
+	_, _ = fmt.Fprintln(w, cmd("FIX", "Verify and repair JAM base integrity"))
+	_, _ = fmt.Fprintln(w, cmd("LINK", "Build reply-threading chains (ReplyTo/Reply1st/ReplyNext)"))
+	_, _ = fmt.Fprintln(w, cmd("LASTREAD", "Show or reset per-user lastread pointers"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sFTN Echomail Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, cmd("TOSS", "Unpack inbound FTN bundles and toss .PKT files into JAM bases"))
+	_, _ = fmt.Fprintln(w, cmd("SCAN", "Scan JAM bases for unsent echomail; create outbound .PKT files"))
+	_, _ = fmt.Fprintln(w, cmd("FTN-PACK", "Pack outbound .PKT files into ZIP bundles for binkd"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, opt("--all", "Operate on all areas in message_areas.json"))
+	_, _ = fmt.Fprintln(w, opt("--config DIR", "Config directory (default: configs)"))
+	_, _ = fmt.Fprintln(w, opt("--data DIR", "Data directory (default: data)"))
+	_, _ = fmt.Fprintln(w, opt("-q", "Suppress output"))
+	_, _ = fmt.Fprintln(w, opt("--network NAME", "FTN: limit to a single network"))
+	_, _ = fmt.Fprintln(w)
 }
 
 // resolveBasePaths returns base paths from positional args or --all flag.
@@ -200,18 +200,19 @@ func addGlobalFlags(fs *flag.FlagSet) (*bool, *string, *string, *bool) {
 func cmdStats(args []string) {
 	fs := flag.NewFlagSet("stats", flag.ExitOnError)
 	allFlag, configDir, dataDir, quiet := addGlobalFlags(fs)
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	paths, err := resolveBasePaths(*allFlag, *configDir, *dataDir, fs.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	for _, meta := range paths {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
 			continue
 		}
 
@@ -243,7 +244,12 @@ func cmdStats(args []string) {
 			}
 			fmt.Println()
 		}
-		b.Close()
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -252,18 +258,19 @@ func cmdPack(args []string) {
 	fs := flag.NewFlagSet("pack", flag.ExitOnError)
 	allFlag, configDir, dataDir, quiet := addGlobalFlags(fs)
 	dryRun := fs.Bool("dry-run", false, "Report what would happen without modifying")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	paths, err := resolveBasePaths(*allFlag, *configDir, *dataDir, fs.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	for _, meta := range paths {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
 			continue
 		}
 
@@ -276,7 +283,9 @@ func cmdPack(args []string) {
 				fmt.Printf("%s: %d total, %d active, %d deleted (would remove %d)\n",
 					meta.Tag, total, active, deleted, deleted)
 			}
-			b.Close()
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -284,7 +293,9 @@ func cmdPack(args []string) {
 			if !*quiet {
 				fmt.Printf("%s: no deleted messages, skipping\n", meta.Tag)
 			}
-			b.Close()
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -294,8 +305,10 @@ func cmdPack(args []string) {
 
 		result, err := b.Pack()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error packing %s: %v\n", meta.Path, err)
-			b.Close()
+			_, _ = fmt.Fprintf(os.Stderr, "Error packing %s: %v\n", meta.Path, err)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -305,7 +318,12 @@ func cmdPack(args []string) {
 			fmt.Printf("  After:  %d messages\n", result.MessagesAfter)
 			fmt.Printf("  Reclaimed: %s\n", formatBytes(result.BytesBefore-result.BytesAfter))
 		}
-		b.Close()
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -319,17 +337,18 @@ func cmdPurge(args []string) {
 	days := fs.Int("days", 0, "Delete messages older than N days (fallback when --all is used)")
 	keep := fs.Int("keep", 0, "Keep only the newest N messages (fallback when --all is used)")
 	dryRun := fs.Bool("dry-run", false, "Report what would happen without modifying")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	// --days or --keep are required for manual (non-all) invocations.
 	if !*allFlag && *days == 0 && *keep == 0 {
-		fmt.Fprintf(os.Stderr, "Error: --days or --keep is required\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Error: --days or --keep is required\n")
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	paths, err := resolveBasePaths(*allFlag, *configDir, *dataDir, fs.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -353,7 +372,7 @@ func cmdPurge(args []string) {
 
 		b, err := jam.Open(meta.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
 			continue
 		}
 
@@ -413,7 +432,9 @@ func cmdPurge(args []string) {
 				fmt.Printf("%s: would delete %d messages (age>%dd, keep<=%d)\n",
 					meta.Tag, len(toDelete), effectiveDays, effectiveKeep)
 			}
-			b.Close()
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -426,7 +447,12 @@ func cmdPurge(args []string) {
 		if !*quiet {
 			fmt.Printf("%s: deleted %d messages (run 'pack' to reclaim space)\n", meta.Tag, deleted)
 		}
-		b.Close()
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -435,11 +461,11 @@ func cmdFix(args []string) {
 	fs := flag.NewFlagSet("fix", flag.ExitOnError)
 	allFlag, configDir, dataDir, quiet := addGlobalFlags(fs)
 	repair := fs.Bool("repair", false, "Attempt to repair issues")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	paths, err := resolveBasePaths(*allFlag, *configDir, *dataDir, fs.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -447,7 +473,7 @@ func cmdFix(args []string) {
 	for _, meta := range paths {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
 			hadErrors = true
 			continue
 		}
@@ -556,7 +582,9 @@ func cmdFix(args []string) {
 				fmt.Printf("  Found %d issue(s)\n", issues)
 			}
 		}
-		b.Close()
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
 	}
 
 	if hadErrors {
@@ -569,35 +597,40 @@ func cmdLastread(args []string) {
 	fs := flag.NewFlagSet("lastread", flag.ExitOnError)
 	allFlag, configDir, dataDir, quiet := addGlobalFlags(fs)
 	resetUser := fs.String("reset", "", "Reset lastread for this username")
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	paths, err := resolveBasePaths(*allFlag, *configDir, *dataDir, fs.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	for _, meta := range paths {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
 			continue
 		}
 
 		if *resetUser != "" {
 			if err := b.ResetLastRead(*resetUser); err != nil {
-				fmt.Fprintf(os.Stderr, "Error resetting lastread for %s in %s: %v\n", *resetUser, meta.Tag, err)
+				_, _ = fmt.Fprintf(os.Stderr, "Error resetting lastread for %s in %s: %v\n", *resetUser, meta.Tag, err)
 			} else if !*quiet {
 				fmt.Printf("%s: reset lastread for %q\n", meta.Tag, *resetUser)
 			}
-			b.Close()
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
 		records, err := b.GetAllLastReadRecords()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading lastread for %s: %v\n", meta.Tag, err)
-			b.Close()
+			_, _ = fmt.Fprintf(os.Stderr, "Error reading lastread for %s: %v\n", meta.Tag, err)
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -605,7 +638,9 @@ func cmdLastread(args []string) {
 			if !*quiet {
 				fmt.Printf("%s: no lastread records\n", meta.Tag)
 			}
-			b.Close()
+			if !closeBase(b, meta.Path) {
+				hadErrors = true
+			}
 			continue
 		}
 
@@ -617,7 +652,12 @@ func cmdLastread(args []string) {
 			}
 			fmt.Println()
 		}
-		b.Close()
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -636,26 +676,29 @@ func formatBytes(b int64) string {
 func cmdLink(args []string) {
 	fs := flag.NewFlagSet("link", flag.ExitOnError)
 	allFlag, configDir, dataDir, quiet := addGlobalFlags(fs)
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	paths, err := resolveBasePaths(*allFlag, *configDir, *dataDir, fs.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	hadErrors := false
 
 	totalUpdated := 0
 	for _, meta := range paths {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
 			continue
 		}
 
 		updated, linkErr := linkBase(b, *quiet, meta.Tag)
-		b.Close()
+		if !closeBase(b, meta.Path) {
+			hadErrors = true
+		}
 		if linkErr != nil {
-			fmt.Fprintf(os.Stderr, "Error linking %s: %v\n", meta.Path, linkErr)
+			_, _ = fmt.Fprintf(os.Stderr, "Error linking %s: %v\n", meta.Path, linkErr)
 			continue
 		}
 		totalUpdated += updated
@@ -663,6 +706,9 @@ func cmdLink(args []string) {
 
 	if !*quiet && len(paths) > 1 {
 		fmt.Printf("\nTotal: %d links updated across %d areas\n", totalUpdated, len(paths))
+	}
+	if hadErrors {
+		os.Exit(1)
 	}
 }
 
@@ -862,4 +908,15 @@ func cleanReplyIDsPack(b *jam.Base) error {
 	// Use the new PackWithReplyIDCleanup function
 	_, err := b.PackWithReplyIDCleanup()
 	return err
+}
+
+// closeBase closes a JAM base, reporting close errors on stderr so
+// commands exit non-zero when a delayed flush/close failure occurs after
+// write operations. Returns true when the close succeeded.
+func closeBase(b *jam.Base, path string) bool {
+	if err := b.Close(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error closing %s: %v\n", path, err)
+		return false
+	}
+	return true
 }

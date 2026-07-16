@@ -335,7 +335,7 @@ func (e *MenuExecutor) runUploadFiles(
 		slog.Error("failed to create incoming directory", "node", nodeNumber, "error", err)
 		return fmt.Errorf("failed to create incoming directory: %w", err)
 	}
-	defer os.RemoveAll(incomingDir)
+	defer func() { _ = os.RemoveAll(incomingDir) }() // best-effort temp cleanup
 
 	// 8. Execute protocol receive into temp directory
 	msg = fmt.Sprintf("\r\n|15Starting %s receive...|07\r\n", proto.Name)
@@ -411,7 +411,7 @@ func (e *MenuExecutor) runUploadFiles(
 		safeName := filepath.Base(nf.name)
 		if safeName != nf.name || safeName == "." || safeName == ".." || strings.Contains(nf.name, "..") || filepath.IsAbs(nf.name) {
 			slog.Error("rejected unsafe filename", "node", nodeNumber, "name", nf.name)
-			os.Remove(incomingPath)
+			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
 			errMsg := fmt.Sprintf("\r\n|01'%s' rejected: invalid filename.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			continue
@@ -421,7 +421,7 @@ func (e *MenuExecutor) runUploadFiles(
 		if existingNames[strings.ToLower(nf.name)] {
 			slog.Warn("duplicate file rejected", "node", nodeNumber, "name", nf.name)
 			duplicateCount++
-			os.Remove(incomingPath)
+			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
 
 			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
@@ -517,7 +517,7 @@ func (e *MenuExecutor) runUploadFiles(
 		if _, statErr := os.Stat(finalPath); statErr == nil {
 			slog.Warn("upload rejected, file already exists on disk", "node", nodeNumber, "name", nf.name)
 			duplicateCount++
-			os.Remove(incomingPath)
+			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
 			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
 			continue
@@ -635,9 +635,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		slog.Warn("LISTFILES called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to list files.|07\r\n"
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Return to menu
 	}
@@ -649,9 +647,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentAreaID <= 0 {
 		slog.Warn("user has no current file area selected", "node", nodeNumber, "handle", currentUser.Handle)
 		msg := "\r\n|01Error: No file area selected.|07\r\n"
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil // Return to menu
 	}
@@ -684,9 +680,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		} else {
 			slog.Error("failed to load FILELIST.BOT template", "node", nodeNumber, "error", errBot)
 			msg := "\r\n|01Error loading File List screen templates.|07\r\n"
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			if wErr != nil { /* Log? */
-			}
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", fmt.Errorf("failed loading FILELIST templates")
 		}
@@ -695,9 +689,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	if errTop != nil || errMid != nil {
 		slog.Error("failed to load FILELIST template files", "node", nodeNumber, "topError", errTop, "midError", errMid)
 		msg := "\r\n|01Error loading File List screen templates.|07\r\n"
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading FILELIST templates")
 	}
@@ -748,9 +740,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	if err != nil {
 		slog.Error("failed to get file count for area", "node", nodeNumber, "area", currentAreaID, "error", err)
 		msg := fmt.Sprintf("\r\n|01Error retrieving file list for area '%s'.|07\r\n", currentAreaTag)
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", fmt.Errorf("failed getting file count: %w", err)
 	}
@@ -772,9 +762,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		if err != nil {
 			slog.Error("failed to get files for area page", "node", nodeNumber, "area", currentAreaID, "page", currentPage, "error", err)
 			msg := fmt.Sprintf("\r\n|01Error retrieving file list page for area '%s'.|07\r\n", currentAreaTag)
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			if wErr != nil { /* Log? */
-			}
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", fmt.Errorf("failed getting file page: %w", err)
 		}
@@ -830,9 +818,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			// Display "No files in this area" message
 			// TODO: Use a configurable string?
 			noFilesMsg := "\r\n|07   No files in this area.   \r\n"
-			wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(noFilesMsg)), outputMode)
-			if wErr != nil { /* Log? */
-			}
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(noFilesMsg)), outputMode)
 		} else {
 			for i, fileRec := range filesOnPage {
 				line := processedMidTemplate
@@ -933,10 +919,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		// 4.5 Display Prompt (Use a standard file list prompt or configure one)
 		// TODO: Use configurable prompt string
 		prompt := "\r\n|07File Cmd (|15N|07=Next, |15P|07=Prev, |15#|07=Mark, |15V|07=View, |15D|07=Download, |15U|07=Upload, |15Q|07=Quit): |15"
-		wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
-		if wErr != nil {
-			// Handle error
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
 		// 4.6 Read User Input
 		input, err := readLineFromSessionIH(s, terminal)
@@ -997,9 +980,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			// 1. Check if any files are marked
 			if len(currentUser.TaggedFileIDs) == 0 {
 				msg := "\r\n|07No files marked for download. Use |15#|07 to mark files.|07\r\n"
-				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				if wErr != nil { /* Log? */
-				}
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(1 * time.Second)
 				continue // Go back to file list display
 			}
@@ -1180,9 +1161,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		case "A": // Area Change (Placeholder/Not implemented here, handled by menu?)
 			slog.Debug("area change command entered (handled by menu)", "node", nodeNumber)
 			msg := "\r\n|01Use menu options to change area.|07\r\n"
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			if wErr != nil { /* Log? */
-			}
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 		default: // Includes 'T' (Tagging) and potential numeric input
 			// Try to parse as a number for tagging
@@ -1253,9 +1232,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 		slog.Error("failed to load FILEAREA template files", "node", nodeNumber, "top_error", errTop, "mid_error", errMid, "bot_error", errBot)
 		// Display error message to terminal
 		msg := "\r\n|01Error loading File Area screen templates.|07\r\n"
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return fmt.Errorf("failed loading FILEAREA templates")
 	}
@@ -1396,9 +1373,7 @@ func runListFileAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		slog.Warn("LISTFILEAR called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to list file areas.|07\r\n"
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -1476,9 +1451,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		slog.Warn("SELECTFILEAREA called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to select a file area.|07\r\n"
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}

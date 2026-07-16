@@ -120,6 +120,6 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		fmt.Sprintf(e.LoadedStrings.SearchResultsSummary, len(filtered)),
 	)), outputMode)
 
-	writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight)
+	_ = writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
 	return currentUser, "", nil
 }

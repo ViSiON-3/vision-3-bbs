@@ -123,7 +123,8 @@ func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network s
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, ev.Data)
+			// Best-effort: a dead connection is detected by the request context.
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, ev.Data)
 			flusher.Flush()
 		}
 	}

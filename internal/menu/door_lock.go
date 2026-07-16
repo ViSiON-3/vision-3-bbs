@@ -54,15 +54,16 @@ func acquireDoorLock(doorName string, nodeNumber int) error {
 	}
 
 	if !tryFileLock(f) {
-		f.Close()
+		_ = f.Close() // cleanup: lock not acquired
 		return ErrDoorBusy
 	}
 
 	// Write node/pid info for debugging stale locks
-	f.Truncate(0)
-	f.Seek(0, 0)
-	fmt.Fprintf(f, "node=%d\npid=%d\n", nodeNumber, os.Getpid())
-	f.Sync()
+	// Best-effort: this metadata is only for debugging stale locks.
+	_ = f.Truncate(0)
+	_, _ = f.Seek(0, 0)
+	_, _ = fmt.Fprintf(f, "node=%d\npid=%d\n", nodeNumber, os.Getpid())
+	_ = f.Sync()
 
 	doorLockFiles[key] = f
 	doorLockNodes[key] = nodeNumber
@@ -80,7 +81,7 @@ func releaseDoorLock(doorName string, nodeNumber int) {
 	if holder, exists := doorLockNodes[key]; exists && holder == nodeNumber {
 		if f, ok := doorLockFiles[key]; ok {
 			releaseFileLock(f)
-			f.Close()
+			_ = f.Close() // lock already released
 			// Lock file is intentionally NOT deleted: removing it after unlock
 			// creates a race where another process can lock the same path between
 			// our unlock and remove, then our remove unlinks their lock file.

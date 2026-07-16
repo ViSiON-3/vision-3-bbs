@@ -147,17 +147,17 @@ func writeFreshBinkdConf(out *strings.Builder, cfg BinkdConfig, outPath, logPath
 	// Domains.
 	out.WriteString("#\n# Domains:\n#\n")
 	for name, zone := range cfg.Domains {
-		out.WriteString(fmt.Sprintf("domain %s %s %d\n", name, outPath, zone))
+		fmt.Fprintf(out, "domain %s %s %d\n", name, outPath, zone)
 	}
 
 	// Addresses.
 	out.WriteString("\n#\n# Your Addresses:\n#\n")
 	for _, addr := range cfg.Addresses {
-		out.WriteString(fmt.Sprintf("address %s\n", addr))
+		fmt.Fprintf(out, "address %s\n", addr)
 	}
 
 	// General settings.
-	out.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(out, `
 #
 # General variables for your BBS:
 #
@@ -183,10 +183,10 @@ kill-old-bsy 43200
 try 2
 hold 1800
 iport 24554
-`, boardName, location, sysop, logPath, secureIn, insecureIn))
+`, boardName, location, sysop, logPath, secureIn, insecureIn)
 
 	// Exec / prescan.
-	out.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(out, `
 #
 # Execute v3mail toss after receiving files:
 #
@@ -197,7 +197,7 @@ exec "%s toss" *.[mwtfsMWTFS][oehrauOEHRAU][0-9a-zA-Z] *.pkt
 # BinkD additional options:
 #
 percents
-`, v3mailPath))
+`, v3mailPath)
 }
 
 // rewriteBinkdConf filters an existing binkd.conf, replacing placeholder
@@ -216,44 +216,44 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 			// If this is a domain placeholder, inject real domains once.
 			if strings.HasPrefix(trimmed, "domain ") && !injectedDomains {
 				for name, zone := range cfg.Domains {
-					out.WriteString(fmt.Sprintf("domain %s %s %d\n", name, outPath, zone))
+					fmt.Fprintf(out, "domain %s %s %d\n", name, outPath, zone)
 				}
 				injectedDomains = true
 			}
 			// If this is an address placeholder, inject real addresses once.
 			if strings.HasPrefix(trimmed, "address ") && !injectedAddresses {
 				for _, addr := range cfg.Addresses {
-					out.WriteString(fmt.Sprintf("address %s\n", addr))
+					fmt.Fprintf(out, "address %s\n", addr)
 				}
 				injectedAddresses = true
 			}
 			// Replace sysname/sysop/log/inbound/exec placeholders.
 			if strings.HasPrefix(trimmed, "sysname ") {
-				out.WriteString(fmt.Sprintf("sysname \"%s\"\n", boardName))
+				fmt.Fprintf(out, "sysname \"%s\"\n", boardName)
 				continue
 			}
 			if strings.HasPrefix(trimmed, "location ") {
-				out.WriteString(fmt.Sprintf("location \"%s\"\n", location))
+				fmt.Fprintf(out, "location \"%s\"\n", location)
 				continue
 			}
 			if strings.HasPrefix(trimmed, "sysop ") {
-				out.WriteString(fmt.Sprintf("sysop \"%s\"\n", sysop))
+				fmt.Fprintf(out, "sysop \"%s\"\n", sysop)
 				continue
 			}
 			if strings.HasPrefix(trimmed, "log ") {
-				out.WriteString(fmt.Sprintf("log %s\n", logPath))
+				fmt.Fprintf(out, "log %s\n", logPath)
 				continue
 			}
 			if strings.HasPrefix(trimmed, "inbound-nonsecure ") {
-				out.WriteString(fmt.Sprintf("inbound-nonsecure %s\n", insecureIn))
+				fmt.Fprintf(out, "inbound-nonsecure %s\n", insecureIn)
 				continue
 			}
 			if strings.HasPrefix(trimmed, "inbound ") {
-				out.WriteString(fmt.Sprintf("inbound %s\n", secureIn))
+				fmt.Fprintf(out, "inbound %s\n", secureIn)
 				continue
 			}
 			if strings.HasPrefix(trimmed, "exec ") {
-				out.WriteString(fmt.Sprintf("exec \"%s toss\" *.[mwtfsMWTFS][oehrauOEHRAU][0-9a-zA-Z] *.pkt\n", v3mailPath))
+				fmt.Fprintf(out, "exec \"%s toss\" *.[mwtfsMWTFS][oehrauOEHRAU][0-9a-zA-Z] *.pkt\n", v3mailPath)
 				continue
 			}
 			// Skip other placeholder lines (node hub.example.com, etc).
@@ -269,13 +269,13 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 	if !injectedDomains {
 		out.WriteString("\n#\n# Domains:\n#\n")
 		for name, zone := range cfg.Domains {
-			out.WriteString(fmt.Sprintf("domain %s %s %d\n", name, outPath, zone))
+			fmt.Fprintf(out, "domain %s %s %d\n", name, outPath, zone)
 		}
 	}
 	if !injectedAddresses {
 		out.WriteString("\n#\n# Your Addresses:\n#\n")
 		for _, addr := range cfg.Addresses {
-			out.WriteString(fmt.Sprintf("address %s\n", addr))
+			fmt.Fprintf(out, "address %s\n", addr)
 		}
 	}
 }
@@ -386,20 +386,20 @@ func writeFileAtomic(path, content string, perm os.FileMode) error {
 	}
 	tmpName := tmp.Name()
 	if _, err := tmp.WriteString(content); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("closing %s: %w", path, err)
 	}
 	if err := os.Chmod(tmpName, perm); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("chmod %s: %w", path, err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("installing %s: %w", path, err)
 	}
 	return nil

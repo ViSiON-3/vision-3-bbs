@@ -61,7 +61,7 @@ func (ss *SubscriberStore) loadCache() error {
 	if err != nil {
 		return fmt.Errorf("hub: load subscribers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() // read-only
 
 	for rows.Next() {
 		var s Subscriber

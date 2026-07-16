@@ -98,7 +98,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(info)), outputMode)
 
 	// Pause before returning.
-	writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight)
+	_ = writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
 
 	return currentUser, "", nil
 }

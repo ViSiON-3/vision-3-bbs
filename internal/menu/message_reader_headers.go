@@ -229,7 +229,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 		processedSelBytes := ansi.ReplacePipeCodes(selectionBytes)
 		if outputMode == ansi.OutputModeCP437 {
-			terminal.Write(processedSelBytes)
+			_, _ = terminal.Write(processedSelBytes) // best-effort display
 		} else {
 			terminalio.WriteProcessedBytes(terminal, processedSelBytes, outputMode)
 		}
@@ -331,7 +331,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 			if outputMode == ansi.OutputModeCP437 {
-				terminal.Write(processedPreview)
+				_, _ = terminal.Write(processedPreview) // best-effort display
 			} else {
 				terminalio.WriteProcessedBytes(terminal, processedPreview, outputMode)
 			}

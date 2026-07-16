@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -13,7 +14,7 @@ import (
 // When a Queue's poll/read find no data, they fall back to reading from the
 // session — this replaces Synchronet's background input thread model.
 func registerQueueClass(vm *goja.Runtime, eng *Engine) {
-	vm.Set("Queue", func(call goja.ConstructorCall) *goja.Object {
+	jsutil.Set(vm, "Queue", func(call goja.ConstructorCall) *goja.Object {
 		q := &jsQueue{
 			items: make([]goja.Value, 0),
 			eng:   eng,
@@ -21,7 +22,7 @@ func registerQueueClass(vm *goja.Runtime, eng *Engine) {
 		}
 
 		obj := call.This
-		obj.Set("write", func(fc goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "write", func(fc goja.FunctionCall) goja.Value {
 			val := goja.Undefined()
 			if len(fc.Arguments) > 0 {
 				val = fc.Arguments[0]
@@ -30,12 +31,12 @@ func registerQueueClass(vm *goja.Runtime, eng *Engine) {
 			return vm.ToValue(true)
 		})
 
-		obj.Set("read", func(fc goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "read", func(fc goja.FunctionCall) goja.Value {
 			return q.read()
 		})
 
 		// poll(timeout_ms) — returns true if data available, false on timeout.
-		obj.Set("poll", func(fc goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "poll", func(fc goja.FunctionCall) goja.Value {
 			timeout := int64(0)
 			if len(fc.Arguments) > 0 {
 				timeout = fc.Arguments[0].ToInteger()
@@ -43,7 +44,7 @@ func registerQueueClass(vm *goja.Runtime, eng *Engine) {
 			return vm.ToValue(q.poll(time.Duration(timeout) * time.Millisecond))
 		})
 
-		obj.Set("peek", func(fc goja.FunctionCall) goja.Value {
+		jsutil.Set(obj, "peek", func(fc goja.FunctionCall) goja.Value {
 			q.mu.Lock()
 			defer q.mu.Unlock()
 			if len(q.items) == 0 {
@@ -52,7 +53,7 @@ func registerQueueClass(vm *goja.Runtime, eng *Engine) {
 			return q.items[0]
 		})
 
-		obj.DefineAccessorProperty("data_waiting", vm.ToValue(func(fc goja.FunctionCall) goja.Value {
+		jsutil.DefineAccessor(obj, "data_waiting", vm.ToValue(func(fc goja.FunctionCall) goja.Value {
 			q.mu.Lock()
 			defer q.mu.Unlock()
 			return vm.ToValue(len(q.items) > 0)

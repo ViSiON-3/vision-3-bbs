@@ -634,12 +634,19 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	// Close the base before firing the callback. The V3Net hook calls
 	// MarkMessageSent which re-opens the same JAM base, so having it
 	// still open here can cause nested-open/file-sharing issues.
-	b.Close()
+	cerr := b.Close()
 
+	// The write already succeeded at this point, so run the post-write hooks
+	// even if the close failed — the message is on disk and downstream
+	// consumers (thread index, V3Net delivery) must still see it. The close
+	// error is folded into the returned error afterwards.
 	if err == nil {
 		mm.invalidateThreadIndex(areaID)
 		if !private && mm.OnMessagePosted != nil {
 			mm.OnMessagePosted(area, msgNum, from, to, subject, body)
+		}
+		if cerr != nil {
+			err = fmt.Errorf("closing message base: %w", cerr)
 		}
 	}
 	return msgNum, err
@@ -687,7 +694,11 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 	if err != nil {
 		return nil, err
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	msg, err := b.ReadMessage(msgNum)
 	if err != nil {
@@ -727,7 +738,11 @@ func (mm *MessageManager) GetMessageCountForArea(areaID int) (int, error) {
 		}
 		return 0, err // Propagate I/O and other errors
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	return b.GetMessageCount()
 }
@@ -757,7 +772,11 @@ func (mm *MessageManager) GetThreadReplyCount(areaID int, msgNum int, subject st
 		}
 		return 0, err // Propagate I/O and other errors
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	mm.mu.RLock()
 	idx := mm.threadIndex[areaID]
@@ -848,7 +867,11 @@ func (mm *MessageManager) FindMessageByMSGID(areaID int, msgID string) int {
 	if err != nil {
 		return 0
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	total, err := b.GetMessageCount()
 	if err != nil || total == 0 {
@@ -927,7 +950,11 @@ func (mm *MessageManager) GetNewMessageCount(areaID int, username string) (int, 
 		}
 		return 0, err // Propagate I/O and other errors
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	return b.GetUnreadCount(username)
 }
@@ -942,7 +969,11 @@ func (mm *MessageManager) GetLastRead(areaID int, username string) (int, error) 
 		}
 		return 0, err // Propagate I/O and other errors
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	lr, err := b.GetLastRead(username)
 	if err != nil {
@@ -960,7 +991,11 @@ func (mm *MessageManager) SetLastRead(areaID int, username string, msgNum int) e
 	if err != nil {
 		return err
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	return b.MarkMessageRead(username, msgNum)
 }
@@ -972,7 +1007,11 @@ func (mm *MessageManager) MarkMessageSent(areaID, msgNum int) error {
 	if err != nil {
 		return err
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	hdr, err := b.ReadMessageHeader(msgNum)
 	if err != nil {
@@ -993,7 +1032,11 @@ func (mm *MessageManager) GetNextUnreadMessage(areaID int, username string) (int
 		}
 		return 0, err // Propagate I/O and other errors
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	next, err := b.GetNextUnreadMessage(username)
 	if err != nil {
@@ -1013,7 +1056,11 @@ func (mm *MessageManager) DeleteMessage(areaID, msgNum int) error {
 	if err != nil {
 		return fmt.Errorf("open base for area %d: %w", areaID, err)
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 	if err := b.DeleteMessage(msgNum); err != nil {
 		return fmt.Errorf("delete message %d in area %d: %w", msgNum, areaID, err)
 	}
@@ -1030,7 +1077,11 @@ func (mm *MessageManager) PackAndLinkArea(areaID int) error {
 	if err != nil {
 		return fmt.Errorf("open base for area %d: %w", areaID, err)
 	}
-	defer b.Close()
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 	if _, err := b.Pack(); err != nil {
 		return fmt.Errorf("pack area %d: %w", areaID, err)
 	}

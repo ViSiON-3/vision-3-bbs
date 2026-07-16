@@ -123,9 +123,9 @@ func (tc *TelnetConn) Negotiate() error {
 	}
 
 	// Phase 1: wait for NAWS and WILL TERM_TYPE responses
-	tc.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	_ = tc.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)) // best-effort negotiation deadline
 	tc.drainNegotiations()
-	tc.conn.SetReadDeadline(time.Time{})
+	_ = tc.conn.SetReadDeadline(time.Time{}) // best-effort negotiation deadline
 
 	// Phase 2: if client agreed to send terminal type, request it
 	if tc.willTermType {
@@ -138,9 +138,9 @@ func (tc *TelnetConn) Negotiate() error {
 		}
 
 		// Wait for the IS <string> subnegotiation response
-		tc.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		_ = tc.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)) // best-effort negotiation deadline
 		tc.drainNegotiations()
-		tc.conn.SetReadDeadline(time.Time{})
+		_ = tc.conn.SetReadDeadline(time.Time{}) // best-effort negotiation deadline
 	}
 
 	return nil
@@ -306,7 +306,7 @@ func (tc *TelnetConn) SetReadInterrupt(ch <-chan struct{}) {
 
 	if ch == nil {
 		// Clear any deadline set by a previous interrupt
-		tc.conn.SetReadDeadline(time.Time{})
+		_ = tc.conn.SetReadDeadline(time.Time{}) // best-effort negotiation deadline
 		return
 	}
 
@@ -317,7 +317,7 @@ func (tc *TelnetConn) SetReadInterrupt(ch <-chan struct{}) {
 		stillCurrent := tc.readInterrupt == ch
 		tc.riMu.Unlock()
 		if stillCurrent {
-			tc.conn.SetReadDeadline(time.Now())
+			_ = tc.conn.SetReadDeadline(time.Now()) // best-effort negotiation deadline
 		}
 	}(ch)
 }
@@ -542,7 +542,7 @@ func (tc *TelnetConn) detectViaCursorPositioning() (width, height int, err error
 	defer func() {
 		if r := recover(); r != nil {
 			tc.writeMu.Lock()
-			tc.conn.Write([]byte("\033[u"))
+			_, _ = tc.conn.Write([]byte("\033[u")) // best-effort cursor restore
 			tc.writeMu.Unlock()
 		}
 	}()
@@ -570,10 +570,10 @@ func (tc *TelnetConn) detectViaCursorPositioning() (width, height int, err error
 			}
 		} else {
 			// Short read deadline to avoid blocking
-			tc.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+			_ = tc.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond)) // best-effort negotiation deadline
 			buf := make([]byte, 32)
 			n, readErr := tc.reader.Read(buf)
-			tc.conn.SetReadDeadline(time.Time{})
+			_ = tc.conn.SetReadDeadline(time.Time{}) // best-effort negotiation deadline
 
 			if n > 0 {
 				allData = append(allData, buf[:n]...)
@@ -598,7 +598,7 @@ func (tc *TelnetConn) detectViaCursorPositioning() (width, height int, err error
 
 	// Restore cursor position
 	tc.writeMu.Lock()
-	tc.conn.Write([]byte("\033[u"))
+	_, _ = tc.conn.Write([]byte("\033[u")) // best-effort cursor restore
 	tc.writeMu.Unlock()
 
 	// Process any telnet IAC commands that were in the raw response
@@ -615,8 +615,8 @@ func (tc *TelnetConn) detectViaCursorPositioning() (width, height int, err error
 	}
 
 	var rows, cols int
-	fmt.Sscanf(matches[1], "%d", &rows)
-	fmt.Sscanf(matches[2], "%d", &cols)
+	_, _ = fmt.Sscanf(matches[1], "%d", &rows) // regex guarantees digits
+	_, _ = fmt.Sscanf(matches[2], "%d", &cols) // regex guarantees digits
 
 	// Apply BBS-compatible limits
 	if cols > 80 {

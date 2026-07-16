@@ -121,21 +121,21 @@ func saveInfoFormResponse(rootConfigPath string, resp *InfoFormResponse) error {
 	}
 	tmpName := tmp.Name()
 	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("chmod temp file: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()        // cleanup on error path
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("write temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("close temp file: %w", err)
 	}
 	if err := os.Rename(tmpName, fp); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName) // cleanup on error path
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	return nil

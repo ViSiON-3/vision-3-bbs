@@ -147,7 +147,7 @@ func ReadPacketHeaderFromFile(path string) (*PacketHeader, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only
 
 	data := make([]byte, PacketHeaderSize)
 	if _, err := io.ReadFull(f, data); err != nil {

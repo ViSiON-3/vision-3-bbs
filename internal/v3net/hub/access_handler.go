@@ -79,7 +79,7 @@ func (ar *AccessRequestStore) ListPending(network, areaTag string) ([]protocol.A
 	if err != nil {
 		return nil, fmt.Errorf("hub: list access requests: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() // read-only
 
 	var result []protocol.AccessRequest
 	for rows.Next() {

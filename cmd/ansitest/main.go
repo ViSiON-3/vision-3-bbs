@@ -11,7 +11,7 @@ import (
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
-	terminal "golang.org/x/crypto/ssh/terminal"
+	terminal "golang.org/x/term"
 	"golang.org/x/text/encoding/charmap"
 
 	// Use the internal ansi package for Cp437ToUnicode
@@ -38,31 +38,31 @@ var cp437ToAscii = map[byte]string{
 
 // ANSI Test Server handler
 func handleAnsiTestSession(session ssh.Session) {
-	defer session.Close()
+	defer func() { _ = session.Close() }() // best-effort teardown
 	ptyReq, winCh, isPty := session.Pty()
 	if !isPty {
-		fmt.Fprintln(session, "No PTY requested. This test requires a terminal.")
+		_, _ = fmt.Fprintln(session, "No PTY requested. This test requires a terminal.")
 		return
 	}
 
 	term := terminal.NewTerminal(session, "TEST> ")
-	term.SetSize(ptyReq.Window.Width, ptyReq.Window.Height)
+	_ = term.SetSize(ptyReq.Window.Width, ptyReq.Window.Height) // best-effort display
 
 	go func() {
 		for win := range winCh {
-			term.SetSize(win.Width, win.Height)
+			_ = term.SetSize(win.Width, win.Height) // best-effort display
 		}
 	}()
 
-	fmt.Fprintln(session, "ANSI CP437 Character Display Test Suite")
-	fmt.Fprintln(session, "Terminal type:", ptyReq.Term)
-	fmt.Fprintln(session, "Size:", ptyReq.Window.Width, "x", ptyReq.Window.Height)
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "Type 'test' to run all display tests")
-	fmt.Fprintln(session, "Type 'test1' through 'test7' to run individual tests")
-	fmt.Fprintln(session, "Type 'file' to display a sample .ANS file with different methods")
-	fmt.Fprintln(session, "Type 'terminal' to print terminal information")
-	fmt.Fprintln(session, "Type 'exit' to quit")
+	_, _ = fmt.Fprintln(session, "ANSI CP437 Character Display Test Suite")
+	_, _ = fmt.Fprintln(session, "Terminal type:", ptyReq.Term)
+	_, _ = fmt.Fprintln(session, "Size:", ptyReq.Window.Width, "x", ptyReq.Window.Height)
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "Type 'test' to run all display tests")
+	_, _ = fmt.Fprintln(session, "Type 'test1' through 'test7' to run individual tests")
+	_, _ = fmt.Fprintln(session, "Type 'file' to display a sample .ANS file with different methods")
+	_, _ = fmt.Fprintln(session, "Type 'terminal' to print terminal information")
+	_, _ = fmt.Fprintln(session, "Type 'exit' to quit")
 
 	for {
 		line, err := term.ReadLine()
@@ -72,7 +72,7 @@ func handleAnsiTestSession(session ssh.Session) {
 
 		switch line {
 		case "exit", "quit":
-			fmt.Fprintln(session, "Goodbye!")
+			_, _ = fmt.Fprintln(session, "Goodbye!")
 			return
 		case "test":
 			runAllTests(session)
@@ -95,16 +95,16 @@ func handleAnsiTestSession(session ssh.Session) {
 		case "terminal":
 			printTerminalInfo(session)
 		default:
-			fmt.Fprintln(session, "Unknown command:", line)
+			_, _ = fmt.Fprintln(session, "Unknown command:", line)
 		}
 	}
 }
 
 // --- Test Functions (Moved from cmd/vision3/main.go) ---
 func runAllTests(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[2J\x1B[H") // Clear screen and home cursor
-	fmt.Fprintln(session, "Running all CP437 character display tests...")
-	fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "\x1B[2J\x1B[H") // Clear screen and home cursor
+	_, _ = fmt.Fprintln(session, "Running all CP437 character display tests...")
+	_, _ = fmt.Fprintln(session)
 
 	testRawBytes(session)
 	time.Sleep(500 * time.Millisecond)
@@ -120,186 +120,186 @@ func runAllTests(session ssh.Session) {
 	time.Sleep(500 * time.Millisecond)
 	testByteByByte(session)
 
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "All tests complete. Look for any method that displays the characters correctly.")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "All tests complete. Look for any method that displays the characters correctly.")
 }
 
 func testRawBytes(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 1: Raw CP437 Bytes ===\x1B[0m")
-	fmt.Fprintln(session, "Sending the raw CP437 bytes directly...")
-	fmt.Fprintln(session)
-	fmt.Fprint(session, "Raw CP437:  ")
-	session.Write(testChars)
-	fmt.Fprintln(session)
-	fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Test 1: Raw CP437 Bytes ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "Sending the raw CP437 bytes directly...")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprint(session, "Raw CP437:  ")
+	_, _ = session.Write(testChars)
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session)
 }
 
 func testUnicodeEscapes(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 2: Unicode Characters ===\x1B[0m")
-	fmt.Fprintln(session, "Using Go string literals with embedded Unicode characters...")
-	fmt.Fprintln(session)
-	fmt.Fprint(session, "Unicode:    ")
-	fmt.Fprint(session, "│─┌┐└┘├┤┬┴┼░▒▓█ßþ")
-	fmt.Fprintln(session)
-	fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Test 2: Unicode Characters ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "Using Go string literals with embedded Unicode characters...")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprint(session, "Unicode:    ")
+	_, _ = fmt.Fprint(session, "│─┌┐└┘├┤┬┴┼░▒▓█ßþ")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session)
 }
 
 func testUTF8Encoding(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 3: CP437 Converted to UTF-8 ===\x1B[0m")
-	fmt.Fprintln(session, "Converting each CP437 character to its Unicode equivalent (using internal/ansi map)...")
-	fmt.Fprintln(session)
-	fmt.Fprint(session, "UTF-8:      ")
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Test 3: CP437 Converted to UTF-8 ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "Converting each CP437 character to its Unicode equivalent (using internal/ansi map)...")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprint(session, "UTF-8:      ")
 	w := bufio.NewWriter(session)
 	for _, b := range testChars {
 		// Use the exported map from the ansi package
 		r := ansi.Cp437ToUnicode[b]
-		w.WriteRune(r)
+		_, _ = w.WriteRune(r) // best-effort display
 	}
-	w.Flush()
-	fmt.Fprintln(session)
-	fmt.Fprintln(session)
+	_ = w.Flush() // best-effort display
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session)
 }
 
 func testVT100LineDrawing(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 4: VT100 Line Drawing Mode ===\x1B[0m")
-	fmt.Fprintln(session, "Using VT100/xterm line drawing character set...")
-	fmt.Fprintln(session)
-	fmt.Fprint(session, "VT100:      ")
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Test 4: VT100 Line Drawing Mode ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "Using VT100/xterm line drawing character set...")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprint(session, "VT100:      ")
 	for _, b := range testChars {
 		if vt100Char, ok := cp437ToVT100[b]; ok {
-			fmt.Fprintf(session, "\x1B(0%c\x1B(B", vt100Char)
+			_, _ = fmt.Fprintf(session, "\x1B(0%c\x1B(B", vt100Char)
 		} else {
 			if fallback, ok := cp437ToAscii[b]; ok {
-				fmt.Fprint(session, fallback)
+				_, _ = fmt.Fprint(session, fallback)
 			} else {
-				fmt.Fprint(session, "?")
+				_, _ = fmt.Fprint(session, "?")
 			}
 		}
 	}
-	fmt.Fprintln(session)
-	fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session)
 }
 
 func testASCIIFallbacks(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 5: ASCII Fallbacks ===\x1B[0m")
-	fmt.Fprintln(session, "Using pure ASCII approximations for CP437 characters...")
-	fmt.Fprintln(session)
-	fmt.Fprint(session, "ASCII:      ")
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Test 5: ASCII Fallbacks ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "Using pure ASCII approximations for CP437 characters...")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprint(session, "ASCII:      ")
 	for _, b := range testChars {
 		if fallback, ok := cp437ToAscii[b]; ok {
-			fmt.Fprint(session, fallback)
+			_, _ = fmt.Fprint(session, fallback)
 		} else {
-			fmt.Fprint(session, "?")
+			_, _ = fmt.Fprint(session, "?")
 		}
 	}
-	fmt.Fprintln(session)
-	fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session)
 }
 
 func testCharacterSetSwitching(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 6: Character Set Switching ===\x1B[0m")
-	fmt.Fprintln(session, "Trying different terminal character set switching sequences...")
-	fmt.Fprintln(session)
-	session.Write([]byte("ISO 8859-1: \x1B%@"))
-	session.Write(testChars)
-	session.Write([]byte("\x1B%G\n"))
-	fmt.Fprintln(session)
-	fmt.Fprint(session, "DEC Special: ")
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Test 6: Character Set Switching ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "Trying different terminal character set switching sequences...")
+	_, _ = fmt.Fprintln(session)
+	_, _ = session.Write([]byte("ISO 8859-1: \x1B%@"))
+	_, _ = session.Write(testChars)
+	_, _ = session.Write([]byte("\x1B%G\n"))
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprint(session, "DEC Special: ")
 	for _, b := range testChars {
 		if vt100Char, ok := cp437ToVT100[b]; ok {
-			fmt.Fprintf(session, "\x1B(0%c", vt100Char)
+			_, _ = fmt.Fprintf(session, "\x1B(0%c", vt100Char)
 		} else {
-			fmt.Fprint(session, "?")
+			_, _ = fmt.Fprint(session, "?")
 		}
 	}
-	fmt.Fprintln(session, "\x1B(B")
-	fmt.Fprintln(session)
-	session.Write([]byte("UTF-8:      \x1B%G"))
+	_, _ = fmt.Fprintln(session, "\x1B(B")
+	_, _ = fmt.Fprintln(session)
+	_, _ = session.Write([]byte("UTF-8:      \x1B%G"))
 	w := bufio.NewWriter(session)
 	for _, b := range testChars {
 		r := ansi.Cp437ToUnicode[b]
-		w.WriteRune(r)
+		_, _ = w.WriteRune(r) // best-effort display
 	}
-	w.Flush()
-	fmt.Fprintln(session)
-	fmt.Fprintln(session)
+	_ = w.Flush() // best-effort display
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session)
 }
 
 func testByteByByte(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[1;37m=== Test 7: Byte-by-Byte Testing ===\x1B[0m")
-	fmt.Fprintln(session, "Testing each character individually with different methods...")
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "CP437 Byte | Raw | UTF-8 | VT100 | ASCII")
-	fmt.Fprintln(session, "---------------------------------------")
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Test 7: Byte-by-Byte Testing ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "Testing each character individually with different methods...")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "CP437 Byte | Raw | UTF-8 | VT100 | ASCII")
+	_, _ = fmt.Fprintln(session, "---------------------------------------")
 	w := bufio.NewWriter(session)
 	for _, b := range testChars {
-		fmt.Fprintf(w, "  0x%02X    |  ", b)
-		w.WriteByte(b)
-		fmt.Fprint(w, "  |  ")
+		_, _ = fmt.Fprintf(w, "  0x%02X    |  ", b)
+		_ = w.WriteByte(b) // best-effort display
+		_, _ = fmt.Fprint(w, "  |  ")
 		r := ansi.Cp437ToUnicode[b]
-		w.WriteRune(r)
-		fmt.Fprint(w, "  |  ")
+		_, _ = w.WriteRune(r) // best-effort display
+		_, _ = fmt.Fprint(w, "  |  ")
 		if vt100Char, ok := cp437ToVT100[b]; ok {
-			fmt.Fprintf(w, "\x1B(0%c\x1B(B", vt100Char)
+			_, _ = fmt.Fprintf(w, "\x1B(0%c\x1B(B", vt100Char)
 		} else {
-			fmt.Fprint(w, " ")
+			_, _ = fmt.Fprint(w, " ")
 		}
-		fmt.Fprint(w, "  |  ")
+		_, _ = fmt.Fprint(w, "  |  ")
 		if fallback, ok := cp437ToAscii[b]; ok {
-			fmt.Fprint(w, fallback)
+			_, _ = fmt.Fprint(w, fallback)
 		} else {
-			fmt.Fprint(w, "?")
+			_, _ = fmt.Fprint(w, "?")
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
-	w.Flush()
-	fmt.Fprintln(session)
+	_ = w.Flush() // best-effort display
+	_, _ = fmt.Fprintln(session)
 }
 
 func testANSFile(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[2J\x1B[H")
-	fmt.Fprintln(session, "\x1B[1;37m=== Testing .ANS File Display Methods ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "\x1B[2J\x1B[H")
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Testing .ANS File Display Methods ===\x1B[0m")
 	// Assumes sample.ans is in a relative 'assets' dir; adjust if needed
 	filename := filepath.Join("..", "assets", "sample.ans") // Adjust path relative to cmd/ansitest
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		fmt.Fprintln(session, "Sample ANSI file not found at:", filename)
-		fmt.Fprintln(session, "Ensure sample.ans exists in the assets directory relative to the project root.")
+		_, _ = fmt.Fprintln(session, "Sample ANSI file not found at:", filename)
+		_, _ = fmt.Fprintln(session, "Ensure sample.ans exists in the assets directory relative to the project root.")
 		return
 	}
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Fprintln(session, "Error reading sample file:", err)
+		_, _ = fmt.Fprintln(session, "Error reading sample file:", err)
 		return
 	}
 	term := terminal.NewTerminal(session, "")
 
-	fmt.Fprintln(session, "Press Enter to see the file displayed with raw bytes...")
-	term.ReadLine()
-	fmt.Fprintln(session, "\x1B[2J\x1B[H\x1B[1;37m--- Raw Bytes Method --- \x1B[0m")
-	session.Write(data)
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "Press Enter to continue...")
-	term.ReadLine()
+	_, _ = fmt.Fprintln(session, "Press Enter to see the file displayed with raw bytes...")
+	_, _ = term.ReadLine() // wait for Enter; input discarded
+	_, _ = fmt.Fprintln(session, "\x1B[2J\x1B[H\x1B[1;37m--- Raw Bytes Method --- \x1B[0m")
+	_, _ = session.Write(data)
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "Press Enter to continue...")
+	_, _ = term.ReadLine() // wait for Enter; input discarded
 
-	fmt.Fprintln(session, "\x1B[2J\x1B[H\x1B[1;37m--- UTF-8 Conversion Method --- \x1B[0m")
+	_, _ = fmt.Fprintln(session, "\x1B[2J\x1B[H\x1B[1;37m--- UTF-8 Conversion Method --- \x1B[0m")
 	decoder := charmap.CodePage437.NewDecoder()
 	utf8Data, _ := decoder.Bytes(data)
-	session.Write(utf8Data)
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "Press Enter to continue...")
-	term.ReadLine()
+	_, _ = session.Write(utf8Data)
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "Press Enter to continue...")
+	_, _ = term.ReadLine() // wait for Enter; input discarded
 
-	fmt.Fprintln(session, "\x1B[2J\x1B[H\x1B[1;37m--- VT100 Line Drawing Method --- \x1B[0m")
+	_, _ = fmt.Fprintln(session, "\x1B[2J\x1B[H\x1B[1;37m--- VT100 Line Drawing Method --- \x1B[0m")
 	displayWithVT100(session, data)
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "Press Enter to continue...")
-	term.ReadLine()
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "Press Enter to continue...")
+	_, _ = term.ReadLine() // wait for Enter; input discarded
 
-	fmt.Fprintln(session, "\x1B[2J\x1B[H\x1B[1;37m--- ASCII Fallbacks Method --- \x1B[0m")
+	_, _ = fmt.Fprintln(session, "\x1B[2J\x1B[H\x1B[1;37m--- ASCII Fallbacks Method --- \x1B[0m")
 	displayWithAscii(session, data)
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "Press Enter to return to the main menu...")
-	term.ReadLine()
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "Press Enter to return to the main menu...")
+	_, _ = term.ReadLine() // wait for Enter; input discarded
 }
 
 func displayWithVT100(session ssh.Session, data []byte) {
@@ -307,26 +307,26 @@ func displayWithVT100(session ssh.Session, data []byte) {
 	for i := 0; i < len(data); i++ {
 		b := data[i]
 		if inEscape {
-			session.Write([]byte{b})
+			_, _ = session.Write([]byte{b})
 			if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') {
 				inEscape = false
 			}
 			continue
 		}
 		if b == 0x1B {
-			session.Write([]byte{b})
+			_, _ = session.Write([]byte{b})
 			inEscape = true
 			continue
 		}
 		if b < 128 {
-			session.Write([]byte{b})
+			_, _ = session.Write([]byte{b})
 		} else if vt100Char, ok := cp437ToVT100[b]; ok {
-			fmt.Fprintf(session, "\x1B(0%c\x1B(B", vt100Char)
+			_, _ = fmt.Fprintf(session, "\x1B(0%c\x1B(B", vt100Char)
 		} else {
 			if fallback, ok := cp437ToAscii[b]; ok {
-				fmt.Fprint(session, fallback)
+				_, _ = fmt.Fprint(session, fallback)
 			} else {
-				session.Write([]byte{b}) // Pass through unknown bytes
+				_, _ = session.Write([]byte{b}) // Pass through unknown bytes
 			}
 		}
 	}
@@ -337,60 +337,60 @@ func displayWithAscii(session ssh.Session, data []byte) {
 	for i := 0; i < len(data); i++ {
 		b := data[i]
 		if inEscape {
-			session.Write([]byte{b})
+			_, _ = session.Write([]byte{b})
 			if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') {
 				inEscape = false
 			}
 			continue
 		}
 		if b == 0x1B {
-			session.Write([]byte{b})
+			_, _ = session.Write([]byte{b})
 			inEscape = true
 			continue
 		}
 		if b < 128 {
-			session.Write([]byte{b})
+			_, _ = session.Write([]byte{b})
 		} else {
 			if fallback, ok := cp437ToAscii[b]; ok {
-				fmt.Fprint(session, fallback)
+				_, _ = fmt.Fprint(session, fallback)
 			} else {
-				fmt.Fprint(session, "?")
+				_, _ = fmt.Fprint(session, "?")
 			}
 		}
 	}
 }
 
 func printTerminalInfo(session ssh.Session) {
-	fmt.Fprintln(session, "\x1B[2J\x1B[H")
-	fmt.Fprintln(session, "\x1B[1;37m=== Terminal Information ===\x1B[0m")
+	_, _ = fmt.Fprintln(session, "\x1B[2J\x1B[H")
+	_, _ = fmt.Fprintln(session, "\x1B[1;37m=== Terminal Information ===\x1B[0m")
 	ptyReq, _, isPty := session.Pty()
 	if !isPty {
-		fmt.Fprintln(session, "No PTY requested. Terminal information unavailable.")
+		_, _ = fmt.Fprintln(session, "No PTY requested. Terminal information unavailable.")
 		return
 	}
-	fmt.Fprintln(session, "Terminal Type:", ptyReq.Term)
-	fmt.Fprintln(session, "Window Size:", ptyReq.Window.Width, "x", ptyReq.Window.Height)
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "Requesting terminal attributes...")
-	session.SendRequest("xterm-256color", false, []byte("TERM=xterm-256color"))
-	fmt.Fprintln(session, "Testing UTF-8 support:")
-	fmt.Fprintln(session, "  ASCII:  ABCDEFG123456!@#$")
-	fmt.Fprintln(session, "  Latin1: ñ é ü ß ö ø å")
-	fmt.Fprintln(session, "  CJK:    你好 こんにちは 안녕하세요")
-	fmt.Fprintln(session, "  Emoji:  🚀 💻 📦 🔥")
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "Testing line drawing modes:")
-	fmt.Fprintln(session, "  VT100:  \x1B(0lqwqk\x1B(B")
-	fmt.Fprintln(session, "          \x1B(0x x x\x1B(B")
-	fmt.Fprintln(session, "          \x1B(0mqjm\x1B(B")
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "Testing character set switching sequences:")
-	fmt.Fprintln(session, "  Default UTF-8")
-	session.Write([]byte("  Switch to ISO 8859-1: \x1B%@Test\x1B%G\n"))
-	session.Write([]byte("  Switch to UTF-8: \x1B%GTest\n"))
-	fmt.Fprintln(session)
-	fmt.Fprintln(session, "If you see boxes or question marks instead of special characters")
-	fmt.Fprintln(session, "above, your terminal may not support UTF-8 properly.")
+	_, _ = fmt.Fprintln(session, "Terminal Type:", ptyReq.Term)
+	_, _ = fmt.Fprintln(session, "Window Size:", ptyReq.Window.Width, "x", ptyReq.Window.Height)
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "Requesting terminal attributes...")
+	_, _ = session.SendRequest("xterm-256color", false, []byte("TERM=xterm-256color")) // best-effort probe
+	_, _ = fmt.Fprintln(session, "Testing UTF-8 support:")
+	_, _ = fmt.Fprintln(session, "  ASCII:  ABCDEFG123456!@#$")
+	_, _ = fmt.Fprintln(session, "  Latin1: ñ é ü ß ö ø å")
+	_, _ = fmt.Fprintln(session, "  CJK:    你好 こんにちは 안녕하세요")
+	_, _ = fmt.Fprintln(session, "  Emoji:  🚀 💻 📦 🔥")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "Testing line drawing modes:")
+	_, _ = fmt.Fprintln(session, "  VT100:  \x1B(0lqwqk\x1B(B")
+	_, _ = fmt.Fprintln(session, "          \x1B(0x x x\x1B(B")
+	_, _ = fmt.Fprintln(session, "          \x1B(0mqjm\x1B(B")
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "Testing character set switching sequences:")
+	_, _ = fmt.Fprintln(session, "  Default UTF-8")
+	_, _ = session.Write([]byte("  Switch to ISO 8859-1: \x1B%@Test\x1B%G\n"))
+	_, _ = session.Write([]byte("  Switch to UTF-8: \x1B%GTest\n"))
+	_, _ = fmt.Fprintln(session)
+	_, _ = fmt.Fprintln(session, "If you see boxes or question marks instead of special characters")
+	_, _ = fmt.Fprintln(session, "above, your terminal may not support UTF-8 properly.")
 }
 
 // loadHostKey loads a private key for the SSH server.

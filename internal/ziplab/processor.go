@@ -62,7 +62,7 @@ func (p *Processor) testZipIntegrity(zipPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open zip %s: %w", zipPath, err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	for _, f := range r.File {
 		rc, err := f.Open()
@@ -70,10 +70,10 @@ func (p *Processor) testZipIntegrity(zipPath string) error {
 			return fmt.Errorf("corrupt entry %s: %w", f.Name, err)
 		}
 		if _, err := io.Copy(io.Discard, rc); err != nil {
-			rc.Close()
+			_ = rc.Close() // read-only
 			return fmt.Errorf("corrupt data in %s: %w", f.Name, err)
 		}
-		rc.Close()
+		_ = rc.Close() // read-only
 	}
 	return nil
 }
@@ -98,14 +98,14 @@ func (p *Processor) StepExtract(archivePath string) (string, error) {
 
 	if at.Native {
 		if err := p.extractZip(archivePath, workDir); err != nil {
-			os.RemoveAll(workDir)
+			_ = os.RemoveAll(workDir) // cleanup on error path
 			return "", err
 		}
 		return workDir, nil
 	}
 
 	if err := p.runExternalCommand(at.ExtractCommand, at.ExtractArgs, archivePath, workDir, 0); err != nil {
-		os.RemoveAll(workDir)
+		_ = os.RemoveAll(workDir) // cleanup on error path
 		return "", err
 	}
 	return workDir, nil
@@ -117,7 +117,7 @@ func (p *Processor) extractZip(zipPath, destDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open zip %s: %w", zipPath, err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	for _, f := range r.File {
 		targetPath := filepath.Join(destDir, f.Name)
@@ -146,18 +146,20 @@ func (p *Processor) extractZip(zipPath, destDir string) error {
 
 		rc, err := f.Open()
 		if err != nil {
-			outFile.Close()
+			_ = outFile.Close() // cleanup on error path
 			return fmt.Errorf("failed to open zip entry %s: %w", f.Name, err)
 		}
 
 		if _, err := io.Copy(outFile, rc); err != nil {
-			rc.Close()
-			outFile.Close()
+			_ = rc.Close()      // cleanup on error path
+			_ = outFile.Close() // cleanup on error path
 			return fmt.Errorf("failed to extract %s: %w", f.Name, err)
 		}
 
-		rc.Close()
-		outFile.Close()
+		_ = rc.Close() // read side
+		if err := outFile.Close(); err != nil {
+			return fmt.Errorf("failed to finalize %s: %w", targetPath, err)
+		}
 	}
 	return nil
 }
@@ -229,7 +231,7 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	tmpPath := zipPath + ".tmp"
 	outFile, err := os.Create(tmpPath)
@@ -237,15 +239,15 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 		return fmt.Errorf("failed to create temp zip: %w", err)
 	}
 	defer func() {
-		outFile.Close()
+		_ = outFile.Close() // no-op after the explicit Close on the success path
 		if retErr != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath) // cleanup on error path
 		}
 	}()
 
 	w := zip.NewWriter(outFile)
 	if r.Comment != "" {
-		w.SetComment(r.Comment)
+		_ = w.SetComment(r.Comment) // came from a valid zip, so it always fits
 	}
 
 	removed := 0
@@ -262,7 +264,7 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 		seen[f.Name] = true
 
 		if err := copyZipEntryRaw(w, f); err != nil {
-			w.Close()
+			_ = w.Close() // cleanup on error path
 			return fmt.Errorf("failed to copy entry %s: %w", f.Name, err)
 		}
 	}
@@ -272,11 +274,16 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 	}
 
 	if removed == 0 {
-		os.Remove(tmpPath)
+		// Close before removing: some platforms can't delete open files.
+		_ = outFile.Close()    // discarding the file; close error is moot
+		_ = os.Remove(tmpPath) // nothing changed; discard temp copy
 		retErr = nil
 		return nil
 	}
 
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp zip: %w", err)
+	}
 	return os.Rename(tmpPath, zipPath)
 }
 
@@ -295,7 +302,7 @@ func shouldRemoveFile(name string, patterns []string) bool {
 // (case-insensitive) in the work directory and one level of subdirectories.
 func (p *Processor) findAndReadDIZ(workDir string) string {
 	var ansPath, dizPath string
-	filepath.WalkDir(workDir, func(path string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(workDir, func(path string, d os.DirEntry, err error) error { // callback never returns an error
 		if err != nil {
 			return nil
 		}
@@ -342,7 +349,7 @@ func (p *Processor) loadRemovePatterns() []string {
 		slog.Warn("could not open patterns file", "path", patternsPath, "error", err)
 		return nil
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only
 
 	var patterns []string
 	scanner := bufio.NewScanner(f)
@@ -404,7 +411,7 @@ func (p *Processor) setZipComment(zipPath, comment string) (retErr error) {
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	tmpPath := zipPath + ".tmp"
 	outFile, err := os.Create(tmpPath)
@@ -412,18 +419,21 @@ func (p *Processor) setZipComment(zipPath, comment string) (retErr error) {
 		return fmt.Errorf("failed to create temp zip: %w", err)
 	}
 	defer func() {
-		outFile.Close()
+		_ = outFile.Close() // no-op after the explicit Close on the success path
 		if retErr != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath) // cleanup on error path
 		}
 	}()
 
 	w := zip.NewWriter(outFile)
-	w.SetComment(comment)
+	if err := w.SetComment(comment); err != nil {
+		_ = w.Close() // cleanup on error path
+		return fmt.Errorf("failed to set zip comment: %w", err)
+	}
 
 	for _, f := range r.File {
 		if err := copyZipEntryRaw(w, f); err != nil {
-			w.Close()
+			_ = w.Close() // cleanup on error path
 			return fmt.Errorf("failed to copy entry %s: %w", f.Name, err)
 		}
 	}
@@ -432,6 +442,9 @@ func (p *Processor) setZipComment(zipPath, comment string) (retErr error) {
 		return fmt.Errorf("failed to finalize zip: %w", err)
 	}
 
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp zip: %w", err)
+	}
 	return os.Rename(tmpPath, zipPath)
 }
 
@@ -465,7 +478,7 @@ func (p *Processor) addFileToZip(zipPath, name string, data []byte) (retErr erro
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }() // read-only zip reader
 
 	tmpPath := zipPath + ".tmp"
 	outFile, err := os.Create(tmpPath)
@@ -473,16 +486,16 @@ func (p *Processor) addFileToZip(zipPath, name string, data []byte) (retErr erro
 		return fmt.Errorf("failed to create temp zip: %w", err)
 	}
 	defer func() {
-		outFile.Close()
+		_ = outFile.Close() // no-op after the explicit Close on the success path
 		if retErr != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath) // cleanup on error path
 		}
 	}()
 
 	w := zip.NewWriter(outFile)
 
 	if r.Comment != "" {
-		w.SetComment(r.Comment)
+		_ = w.SetComment(r.Comment) // came from a valid zip, so it always fits
 	}
 
 	seen := make(map[string]bool)
@@ -493,22 +506,22 @@ func (p *Processor) addFileToZip(zipPath, name string, data []byte) (retErr erro
 		seen[f.Name] = true
 
 		if err := copyZipEntryRaw(w, f); err != nil {
-			w.Close()
+			_ = w.Close() // cleanup on error path
 			return fmt.Errorf("failed to copy entry %s: %w", f.Name, err)
 		}
 	}
 
 	if seen[name] {
-		w.Close()
+		_ = w.Close() // cleanup on error path
 		return fmt.Errorf("entry %s already exists in archive", name)
 	}
 	fw, err := w.Create(name)
 	if err != nil {
-		w.Close()
+		_ = w.Close() // cleanup on error path
 		return fmt.Errorf("failed to add %s: %w", name, err)
 	}
 	if _, err := fw.Write(data); err != nil {
-		w.Close()
+		_ = w.Close() // cleanup on error path
 		return fmt.Errorf("failed to write %s: %w", name, err)
 	}
 
@@ -516,6 +529,9 @@ func (p *Processor) addFileToZip(zipPath, name string, data []byte) (retErr erro
 		return fmt.Errorf("failed to finalize zip: %w", err)
 	}
 
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp zip: %w", err)
+	}
 	return os.Rename(tmpPath, zipPath)
 }
 

@@ -36,7 +36,7 @@ func fetchHubNAL(hubURL, network string) tea.Cmd {
 		if err != nil {
 			return fetchNALMsg{err: err}
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }() // read-only
 		if resp.StatusCode != http.StatusOK {
 			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
 			detail := strings.TrimSpace(string(body))
@@ -87,7 +87,7 @@ func subscribeToAreas(hubURL, network string, areaTags []string,
 		if err != nil {
 			return subscribeAreasMsg{err: err}
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }() // read-only
 
 		if resp.StatusCode != http.StatusOK {
 			return subscribeAreasMsg{err: fmt.Errorf("subscribe returned status %d", resp.StatusCode)}

@@ -343,9 +343,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load one or more ONELINER template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
 		msg := e.LoadedStrings.ExecOnelinerTemplateErr
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil {
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading ONELINER templates")
 	}
@@ -497,14 +495,10 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		// Use WriteProcessedBytes for SaveCursor, positioning, and clear line
-		wErr = terminalio.WriteProcessedBytes(terminal, []byte(ansi.SaveCursor()), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, []byte(ansi.SaveCursor()), outputMode)
 		// Clear legend row, detected input row, and prompt row fallback.
 		posClearCmd := fmt.Sprintf("\x1b[%d;1H\x1b[2K\x1b[%d;1H\x1b[2K\x1b[%d;1H\x1b[2K\x1b[%d;1H", legendRow, inputRow, promptRow, inputRow)
-		wErr = terminalio.WriteProcessedBytes(terminal, []byte(posClearCmd), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, []byte(posClearCmd), outputMode)
 
 		if legendText != "" {
 			legendText = truncatePipeCodedText(legendText, promptColWidth)

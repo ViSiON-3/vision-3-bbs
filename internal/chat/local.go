@@ -59,9 +59,12 @@ func NewLocalChatService(handle, dbPath string) (*LocalChatService, error) {
 		return nil, fmt.Errorf("local chat: open db: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000")
+	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000"); err != nil {
+		_ = db.Close() // cleanup on error path
+		return nil, fmt.Errorf("local chat: configure pragmas: %w", err)
+	}
 	if _, err := db.Exec(localChatSchema); err != nil {
-		db.Close()
+		_ = db.Close() // cleanup on error path
 		return nil, fmt.Errorf("local chat: create tables: %w", err)
 	}
 	pruneLocalHistory(db, 7)
@@ -185,7 +188,7 @@ func (s *LocalChatService) History(room string, limit int) ([]ChatMessage, error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() // read-only
 	var msgs []ChatMessage
 	for rows.Next() {
 		var m ChatMessage
@@ -222,7 +225,7 @@ func (s *LocalChatService) Close() error {
 		defer s.mu.RUnlock()
 		return s.currentRoom
 	}(); room != "" {
-		s.Leave(room)
+		_ = s.Leave(room) // best-effort on shutdown
 	}
 	close(s.events)
 	return s.db.Close()
@@ -274,6 +277,7 @@ func broadcastLocalEvent(room, senderHandle string, ev ChatEvent) {
 
 func pruneLocalHistory(db *sql.DB, days int) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -days)
-	db.Exec(`DELETE FROM chat_history WHERE created_at < ?`, cutoff)
-	db.Exec(`DELETE FROM chat_private_history WHERE created_at < ?`, cutoff)
+	// Best-effort maintenance; stale rows are retried on the next prune.
+	_, _ = db.Exec(`DELETE FROM chat_history WHERE created_at < ?`, cutoff)
+	_, _ = db.Exec(`DELETE FROM chat_private_history WHERE created_at < ?`, cutoff)
 }

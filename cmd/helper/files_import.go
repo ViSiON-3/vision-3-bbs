@@ -44,7 +44,7 @@ func cmdFilesImport(args []string) {
 		fmt.Fprintf(os.Stderr, "  helper files import --dir ~/staging --area UTILS --preserve-dates --dry-run\n")
 		fmt.Fprintf(os.Stderr, "  helper files import --dir /tmp/incoming --area UPLOADS --move --uploader Admin\n")
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
 	if *dir == "" || *areaTag == "" {
 		fmt.Fprintf(os.Stderr, "Error: --dir and --area are required\n\n")
@@ -314,13 +314,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }() // read-only
 
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }() // error path cleanup; success path closes explicitly
 
 	if _, err := io.Copy(out, in); err != nil {
 		return err

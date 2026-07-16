@@ -46,9 +46,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load USERLIST template files", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := e.LoadedStrings.ExecUserlistTemplateErr
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		if wErr != nil { /* Log? */
-		}
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading USERLIST templates")
 	}

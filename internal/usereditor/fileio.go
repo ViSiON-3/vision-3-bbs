@@ -73,17 +73,17 @@ func SaveUsers(path string, users []*user.User) (time.Time, error) {
 	tmpPath := tmpFile.Name()
 
 	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()    // cleanup on error path
+		_ = os.Remove(tmpPath) // cleanup on error path
 		return time.Time{}, fmt.Errorf("write temp file: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) // cleanup on error path
 		return time.Time{}, fmt.Errorf("close temp file: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) // cleanup on error path
 		return time.Time{}, fmt.Errorf("rename temp to %s: %w", path, err)
 	}
 

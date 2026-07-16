@@ -331,8 +331,7 @@ func ReplacePipeCodes(data []byte) []byte {
 		if data[i] == '|' && i+1 < dataLen {
 			// Try 4-char code first (e.g., |B10)
 			if i+3 < dataLen {
-				code := string(data[i : i+4])
-				if replacement, ok := pipeCodeReplacements[code]; ok {
+				if replacement, ok := pipeCodeReplacements[string(data[i:i+4])]; ok {
 					buf.WriteString(replacement)
 					i += 4
 					continue
@@ -340,16 +339,14 @@ func ReplacePipeCodes(data []byte) []byte {
 			}
 			// Try 3-char code (e.g., |PP, |CL, |01)
 			if i+2 < dataLen {
-				code := string(data[i : i+3])
-				if replacement, ok := pipeCodeReplacements[code]; ok {
+				if replacement, ok := pipeCodeReplacements[string(data[i:i+3])]; ok {
 					buf.WriteString(replacement)
 					i += 3
 					continue
 				}
 			}
 			// Try 2-char code (e.g., |P save cursor)
-			code := string(data[i : i+2])
-			if replacement, ok := pipeCodeReplacements[code]; ok {
+			if replacement, ok := pipeCodeReplacements[string(data[i:i+2])]; ok {
 				buf.WriteString(replacement)
 				i += 2
 				continue
@@ -768,8 +765,7 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 
 				// Try 2-char code |X (e.g., |P save cursor)
 				if !pipeCodeFound {
-					codeStr := string(content[i : i+2])
-					if replacement, ok := pipeCodeReplacements[codeStr]; ok {
+					if replacement, ok := pipeCodeReplacements[string(content[i:i+2])]; ok {
 						displayBuf.WriteString(replacement)
 						consumed = 2
 						pipeCodeFound = true

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -19,13 +20,22 @@ func registerModuleSystem(vm *goja.Runtime, eng *Engine) {
 	registerPolyfills(vm)
 }
 
+// runInternalJS executes fixed, internally-defined JS source. A failure
+// indicates a programming error in the embedded source, so it is logged
+// rather than propagated.
+func runInternalJS(vm *goja.Runtime, src string) {
+	if _, err := vm.RunString(src); err != nil {
+		slog.Error("syncjs: internal JS snippet failed", "error", err)
+	}
+}
+
 // registerPolyfills adds Mozilla/SpiderMonkey extensions that Synchronet scripts expect.
 func registerPolyfills(vm *goja.Runtime) {
 	// toSource() — Mozilla extension used by recordfile.js for deep cloning.
 	// Converts a value to a source code string that eval() can recreate.
 	// toSource() and getYear() polyfills must be non-enumerable so they
 	// don't appear in for-in loops over arrays/objects.
-	vm.RunString(`
+	runInternalJS(vm, `
 		(function() {
 			function defHidden(obj, name, fn) {
 				if (!obj[name]) {
@@ -45,7 +55,7 @@ func registerPolyfills(vm *goja.Runtime) {
 	// as a function expression, but ES5 strict parsing treats bare "function" at the
 	// statement level as a FunctionDeclaration requiring a name. Wrapping in parens
 	// forces expression parsing. Used by Synchronet's l2lib.js (LORD II) extensively.
-	vm.RunString(`
+	runInternalJS(vm, `
 		(function() {
 			var _nativeEval = eval;
 			this.eval = function(code) {
@@ -66,7 +76,7 @@ func registerJSObject(vm *goja.Runtime, eng *Engine) {
 	obj := vm.NewObject()
 
 	// js.exec_dir — directory of the currently executing script (dynamic)
-	obj.DefineAccessorProperty("exec_dir", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+	jsutil.DefineAccessor(obj, "exec_dir", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(eng.currentExecDir())
 	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
@@ -77,10 +87,10 @@ func registerJSObject(vm *goja.Runtime, eng *Engine) {
 	for i, p := range eng.cfg.LibraryPaths {
 		initPaths[i] = p
 	}
-	obj.Set("load_path_list", initPaths)
+	jsutil.Set(obj, "load_path_list", initPaths)
 
 	// js.terminated — true when context is cancelled
-	obj.DefineAccessorProperty("terminated", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+	jsutil.DefineAccessor(obj, "terminated", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		select {
 		case <-eng.ctx.Done():
 			return vm.ToValue(true)
@@ -90,7 +100,7 @@ func registerJSObject(vm *goja.Runtime, eng *Engine) {
 	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
 	// js.on_exit(callback) — register cleanup function
-	obj.Set("on_exit", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "on_exit", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) > 0 {
 			if fn, ok := goja.AssertFunction(call.Arguments[0]); ok {
 				eng.addExitHandler(fn)
@@ -104,14 +114,14 @@ func registerJSObject(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// js.global — reference to global scope
-	obj.Set("global", vm.GlobalObject())
+	jsutil.Set(obj, "global", vm.GlobalObject())
 
 	// js.gc() — no-op, Go handles GC
-	obj.Set("gc", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "gc", func(call goja.FunctionCall) goja.Value {
 		return goja.Undefined()
 	})
 
-	vm.Set("js", obj)
+	jsutil.Set(vm, "js", obj)
 }
 
 // registerGlobalFunctions adds load(), require(), and utility functions.
@@ -119,7 +129,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	// load(filename, ...) — load and execute a JS file.
 	// Synchronet supports load(true, filename, ...) for background thread loading.
 	// We return a stub Queue since goja is single-threaded.
-	vm.Set("load", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "load", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			panic(vm.NewTypeError("load() requires a filename"))
 		}
@@ -150,7 +160,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 
 	// require([scope], filename, symbol) — load and verify a symbol exists.
 	// If the first arg is an object (not a string), it's a scope to load into.
-	vm.Set("require", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "require", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 1 {
 			panic(vm.NewTypeError("require() requires a filename"))
 		}
@@ -182,7 +192,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 			if scope != nil {
 				slog.Warn("require failed", "filename", filename, "error", err)
 				if symbol != "" {
-					scope.Set(symbol, eng.newStubObject())
+					jsutil.Set(scope, symbol, eng.newStubObject())
 				}
 				return goja.Undefined()
 			}
@@ -194,21 +204,21 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 			if val == nil || goja.IsUndefined(val) {
 				if scope != nil {
 					slog.Warn("require: symbol not found", "filename", filename, "symbol", symbol)
-					scope.Set(symbol, eng.newStubObject())
+					jsutil.Set(scope, symbol, eng.newStubObject())
 					return goja.Undefined()
 				}
 				panic(vm.NewTypeError(fmt.Sprintf("require: symbol '%s' not found after loading '%s'", symbol, filename)))
 			}
 			// If scope provided, set the symbol on the scope object
 			if scope != nil {
-				scope.Set(symbol, val)
+				jsutil.Set(scope, symbol, val)
 			}
 		}
 		return goja.Undefined()
 	})
 
 	// exit(code) — terminate script execution via goja interrupt
-	vm.Set("exit", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "exit", func(call goja.FunctionCall) goja.Value {
 		eng.cancel()
 		eng.vm.Interrupt(exitCode(0))
 		// The interrupt is checked at the next JS instruction boundary.
@@ -217,7 +227,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// random(max) — return random integer 0 to max-1
-	vm.Set("random", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "random", func(call goja.FunctionCall) goja.Value {
 		max := int64(100)
 		if len(call.Arguments) > 0 {
 			max = call.Arguments[0].ToInteger()
@@ -229,12 +239,12 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// time() — current Unix timestamp
-	vm.Set("time", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "time", func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(time.Now().Unix())
 	})
 
 	// sleep(ms) — sleep for milliseconds
-	vm.Set("sleep", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "sleep", func(call goja.FunctionCall) goja.Value {
 		ms := int64(0)
 		if len(call.Arguments) > 0 {
 			ms = call.Arguments[0].ToInteger()
@@ -249,7 +259,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// format(fmt, ...) — printf-style string formatting
-	vm.Set("format", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "format", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue("")
 		}
@@ -259,7 +269,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// strftime(fmt, time) — format a timestamp
-	vm.Set("strftime", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "strftime", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue("")
 		}
@@ -272,7 +282,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// log([level,] msg) — log a message with optional syslog-style level
-	vm.Set("log", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "log", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -288,18 +298,18 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// Syslog-level constants used by Synchronet's log() function
-	vm.Set("LOG_EMERG", 0)
-	vm.Set("LOG_ALERT", 1)
-	vm.Set("LOG_CRIT", 2)
-	vm.Set("LOG_ERR", 3)
-	vm.Set("LOG_ERROR", 3) // alias used by some scripts (e.g. lord2.js)
-	vm.Set("LOG_WARNING", 4)
-	vm.Set("LOG_NOTICE", 5)
-	vm.Set("LOG_INFO", 6)
-	vm.Set("LOG_DEBUG", 7)
+	jsutil.Set(vm, "LOG_EMERG", 0)
+	jsutil.Set(vm, "LOG_ALERT", 1)
+	jsutil.Set(vm, "LOG_CRIT", 2)
+	jsutil.Set(vm, "LOG_ERR", 3)
+	jsutil.Set(vm, "LOG_ERROR", 3) // alias used by some scripts (e.g. lord2.js)
+	jsutil.Set(vm, "LOG_WARNING", 4)
+	jsutil.Set(vm, "LOG_NOTICE", 5)
+	jsutil.Set(vm, "LOG_INFO", 6)
+	jsutil.Set(vm, "LOG_DEBUG", 7)
 
 	// alert(msg) — alias for log
-	vm.Set("alert", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "alert", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) > 0 {
 			slog.Info("script alert", "message", call.Arguments[0].String())
 		}
@@ -307,7 +317,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// ascii(str) — return ASCII code of first character (Synchronet built-in)
-	vm.Set("ascii", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "ascii", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(0)
 		}
@@ -324,7 +334,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// ascii_str(code) — return character for ASCII code (Synchronet built-in)
-	vm.Set("ascii_str", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "ascii_str", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue("")
 		}
@@ -333,7 +343,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// truncsp(str) — truncate trailing spaces (Synchronet built-in)
-	vm.Set("truncsp", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "truncsp", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue("")
 		}
@@ -341,7 +351,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// backslash(path) — ensure path ends with directory separator (OS-native)
-	vm.Set("backslash", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "backslash", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(string(filepath.Separator))
 		}
@@ -353,7 +363,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// mswait(ms) — alias for sleep (millisecond wait)
-	vm.Set("mswait", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "mswait", func(call goja.FunctionCall) goja.Value {
 		ms := int64(0)
 		if len(call.Arguments) > 0 {
 			ms = call.Arguments[0].ToInteger()
@@ -369,7 +379,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 
 	// file_mutex(filename [, text]) — atomically create a lock file.
 	// Returns true if created, false if already exists.
-	vm.Set("file_mutex", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_mutex", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
@@ -384,9 +394,13 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 			return vm.ToValue(false)
 		}
 		if content != "" {
-			f.WriteString(content)
+			if _, err := f.WriteString(content); err != nil {
+				slog.Warn("file_mutex: writing lock-file content", "path", path, "error", err)
+			}
 		}
-		f.Close()
+		if err := f.Close(); err != nil {
+			slog.Warn("file_mutex: closing lock file", "path", path, "error", err)
+		}
 		// Track for cleanup on engine close
 		eng.lockFiles = append(eng.lockFiles, path)
 		return vm.ToValue(true)
@@ -394,7 +408,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 
 	// file_getcase(path) — case-insensitive file lookup.
 	// Returns the actual path with correct case, or undefined if not found.
-	vm.Set("file_getcase", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_getcase", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
@@ -420,7 +434,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// file_size(path) — return file size in bytes, or -1 if not found
-	vm.Set("file_size", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_size", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(-1)
 		}
@@ -433,7 +447,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// file_isdir(path) — check if path is a directory
-	vm.Set("file_isdir", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_isdir", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
@@ -443,7 +457,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// mkdir(path) — create a directory (including parents)
-	vm.Set("mkdir", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "mkdir", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
@@ -453,7 +467,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// file_removecase(filename) — case-insensitive file removal (stub, just calls remove)
-	vm.Set("file_removecase", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_removecase", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
@@ -463,7 +477,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// file_rename(oldname, newname) — rename/move a file
-	vm.Set("file_rename", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "file_rename", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return vm.ToValue(false)
 		}
@@ -474,7 +488,7 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// strerror(errno) — return string description of an error number
-	vm.Set("strerror", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(vm, "strerror", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue("Unknown error")
 		}
@@ -493,13 +507,13 @@ func registerGlobalFunctions(vm *goja.Runtime, eng *Engine) {
 			escaped = strings.ReplaceAll(escaped, `"`, `\"`)
 			parts[i] = `"` + escaped + `"`
 		}
-		vm.RunString(`var argv = [` + strings.Join(parts, ",") + `];`)
+		runInternalJS(vm, `var argv = [`+strings.Join(parts, ",")+`];`)
 	} else {
-		vm.RunString(`var argv = [];`)
+		runInternalJS(vm, `var argv = [];`)
 	}
 
 	// argc
-	vm.Set("argc", len(eng.cfg.Args))
+	jsutil.Set(vm, "argc", len(eng.cfg.Args))
 }
 
 // exitCode is a panic value used by exit() to halt script execution.
@@ -525,7 +539,7 @@ func (eng *Engine) loadModule(filename string, args []goja.Value) (goja.Value, e
 	// Set load arguments if provided
 	if len(args) > 0 {
 		for i, arg := range args {
-			eng.vm.Set(fmt.Sprintf("argv_%d", i), arg)
+			jsutil.Set(eng.vm, fmt.Sprintf("argv_%d", i), arg)
 		}
 	}
 

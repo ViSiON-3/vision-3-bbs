@@ -987,13 +987,21 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 	case modeMassPurge:
 		// Purge all deleted users (iterate in reverse to keep indices stable)
 		purged := 0
+		failed := 0
 		for i := len(m.users) - 1; i >= 0; i-- {
 			if m.users[i].DeletedUser {
-				m.purgeUser(i)
-				purged++
+				if m.purgeUser(i) {
+					purged++
+				} else {
+					failed++
+				}
 			}
 		}
-		m.message = fmt.Sprintf("Purged %d deleted user(s)", purged)
+		if failed > 0 {
+			m.message = fmt.Sprintf("Purged %d deleted user(s), %d failed (data files not removed)", purged, failed)
+		} else {
+			m.message = fmt.Sprintf("Purged %d deleted user(s)", purged)
+		}
 		m.mode = modeList
 		return m, nil
 
@@ -1108,21 +1116,27 @@ func (m *Model) undeleteUser(idx int) {
 
 // purgeUser permanently removes a user from the list and deletes their data files
 // (infoform responses, etc.). The user record is removed from the in-memory list.
-func (m *Model) purgeUser(idx int) {
+// Returns false without removing the user when data-file cleanup fails, so the
+// purge stays retryable and is never reported as successful while the user's
+// responses remain on disk.
+func (m *Model) purgeUser(idx int) bool {
 	if idx < 0 || idx >= len(m.users) {
-		return
+		return false
 	}
 	u := m.users[idx]
 	handle := u.Handle
 	userID := u.ID
 
-	// Remove infoform responses for this user
+	// Remove infoform responses for this user before removing the record.
 	if m.dataDir != "" {
 		responsesDir := filepath.Join(m.dataDir, "infoforms", "responses")
 		pattern := filepath.Join(responsesDir, fmt.Sprintf("%d_*.json", userID))
 		matches, _ := filepath.Glob(pattern)
 		for _, f := range matches {
-			os.Remove(f)
+			if err := os.Remove(f); err != nil {
+				m.message = fmt.Sprintf("Purge of %s failed: %v", handle, err)
+				return false
+			}
 		}
 	}
 
@@ -1152,6 +1166,7 @@ func (m *Model) purgeUser(idx int) {
 	m.dirty = true
 	m.editDirty = true
 	m.message = fmt.Sprintf("Purged: %s", handle)
+	return true
 }
 
 // resortAndTrack re-sorts the user list and updates cursor/editIndex to follow the given user.

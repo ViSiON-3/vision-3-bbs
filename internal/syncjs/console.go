@@ -6,6 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -16,14 +17,14 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 	// --- Properties ---
 
 	// console.screen_columns / console.screen_rows
-	obj.Set("screen_columns", eng.session.ScreenWidth)
-	obj.Set("screen_rows", eng.session.ScreenHeight)
+	jsutil.Set(obj, "screen_columns", eng.session.ScreenWidth)
+	jsutil.Set(obj, "screen_rows", eng.session.ScreenHeight)
 
 	// console.line_counter (read/write)
-	obj.Set("line_counter", 0)
+	jsutil.Set(obj, "line_counter", 0)
 
 	// console.attributes (get/set) — Synchronet attribute byte
-	obj.DefineAccessorProperty("attributes", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+	jsutil.DefineAccessor(obj, "attributes", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(eng.currentAttr)
 	}), vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) > 0 {
@@ -36,38 +37,38 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 
 	// --- Output Methods ---
 
-	obj.Set("write", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "write", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw(argsToString(call))
 		return goja.Undefined()
 	})
 
-	obj.Set("writeln", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "writeln", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw(argsToString(call) + "\r\n")
 		return goja.Undefined()
 	})
 
-	obj.Set("print", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "print", func(call goja.FunctionCall) goja.Value {
 		text := argsToString(call)
 		eng.writeRaw(ParseCtrlA(text))
 		return goja.Undefined()
 	})
 
-	obj.Set("clear", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "clear", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw("\x1b[2J\x1b[H")
 		return goja.Undefined()
 	})
 
-	obj.Set("home", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "home", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw("\x1b[H")
 		return goja.Undefined()
 	})
 
-	obj.Set("cleartoeol", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "cleartoeol", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw("\x1b[K")
 		return goja.Undefined()
 	})
 
-	obj.Set("gotoxy", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "gotoxy", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return goja.Undefined()
 		}
@@ -77,7 +78,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return goja.Undefined()
 	})
 
-	obj.Set("center", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "center", func(call goja.FunctionCall) goja.Value {
 		text := argsToString(call)
 		displayLen := displayLength(text)
 		cols := eng.session.ScreenWidth
@@ -89,14 +90,14 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return goja.Undefined()
 	})
 
-	obj.Set("strlen", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "strlen", func(call goja.FunctionCall) goja.Value {
 		text := argsToString(call)
 		return vm.ToValue(displayLength(text))
 	})
 
 	// --- Input Methods ---
 
-	obj.Set("getkey", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getkey", func(call goja.FunctionCall) goja.Value {
 		key, err := eng.readKey(0)
 		if err != nil {
 			return vm.ToValue("")
@@ -104,7 +105,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return vm.ToValue(key)
 	})
 
-	obj.Set("inkey", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "inkey", func(call goja.FunctionCall) goja.Value {
 		timeout := int64(0)
 		if len(call.Arguments) > 0 {
 			timeout = call.Arguments[0].ToInteger()
@@ -116,7 +117,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return vm.ToValue(key)
 	})
 
-	obj.Set("getstr", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getstr", func(call goja.FunctionCall) goja.Value {
 		maxLen := 128
 		mode := int64(0)
 		if len(call.Arguments) > 0 {
@@ -132,7 +133,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return vm.ToValue(result)
 	})
 
-	obj.Set("getkeys", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getkeys", func(call goja.FunctionCall) goja.Value {
 		validKeys := ""
 		if len(call.Arguments) > 0 {
 			validKeys = strings.ToUpper(call.Arguments[0].String())
@@ -149,7 +150,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		}
 	})
 
-	obj.Set("pause", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "pause", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw("\r\n[Hit a key] ")
 		eng.readKey(0) //nolint:errcheck
 		eng.writeRaw("\r\n")
@@ -157,7 +158,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// console.noyes(prompt) — returns true for No (default), false for Yes
-	obj.Set("noyes", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "noyes", func(call goja.FunctionCall) goja.Value {
 		prompt := argsToString(call)
 		eng.writeRaw(prompt + " (N/y)? ")
 		key, _ := eng.readKey(0)
@@ -166,7 +167,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// console.yesno(prompt) — returns true for Yes (default), false for No
-	obj.Set("yesno", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "yesno", func(call goja.FunctionCall) goja.Value {
 		prompt := argsToString(call)
 		eng.writeRaw(prompt + " (Y/n)? ")
 		key, _ := eng.readKey(0)
@@ -175,7 +176,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// console.getnum(max) — reads a number up to max
-	obj.Set("getnum", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "getnum", func(call goja.FunctionCall) goja.Value {
 		maxVal := 0
 		if len(call.Arguments) > 0 {
 			maxVal = int(call.Arguments[0].ToInteger())
@@ -185,7 +186,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 			return vm.ToValue(0)
 		}
 		n := 0
-		fmt.Sscanf(result, "%d", &n)
+		_, _ = fmt.Sscanf(result, "%d", &n) // best-effort parse; n stays 0 on failure
 		if maxVal > 0 && n > maxVal {
 			n = maxVal
 		}
@@ -193,13 +194,13 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 	})
 
 	// console.ctrlkey_passthru — read/write, controls which ctrl keys are passed through
-	obj.Set("ctrlkey_passthru", 0)
+	jsutil.Set(obj, "ctrlkey_passthru", 0)
 
 	// console.autoterm — terminal auto-detection flags (USER_ANSI=1, USER_UTF8=4)
-	obj.Set("autoterm", 1) // ANSI enabled
+	jsutil.Set(obj, "autoterm", 1) // ANSI enabled
 
 	// Cursor movement methods used by sbbs_console.js
-	obj.Set("right", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "right", func(call goja.FunctionCall) goja.Value {
 		n := int64(1)
 		if len(call.Arguments) > 0 {
 			n = call.Arguments[0].ToInteger()
@@ -210,7 +211,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return goja.Undefined()
 	})
 
-	obj.Set("left", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "left", func(call goja.FunctionCall) goja.Value {
 		n := int64(1)
 		if len(call.Arguments) > 0 {
 			n = call.Arguments[0].ToInteger()
@@ -221,7 +222,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return goja.Undefined()
 	})
 
-	obj.Set("up", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "up", func(call goja.FunctionCall) goja.Value {
 		n := int64(1)
 		if len(call.Arguments) > 0 {
 			n = call.Arguments[0].ToInteger()
@@ -232,7 +233,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return goja.Undefined()
 	})
 
-	obj.Set("down", func(call goja.FunctionCall) goja.Value {
+	jsutil.Set(obj, "down", func(call goja.FunctionCall) goja.Value {
 		n := int64(1)
 		if len(call.Arguments) > 0 {
 			n = call.Arguments[0].ToInteger()
@@ -243,7 +244,7 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 		return goja.Undefined()
 	})
 
-	vm.Set("console", obj)
+	jsutil.Set(vm, "console", obj)
 }
 
 // Input mode flags matching Synchronet's sbbsdefs.js K_* constants.

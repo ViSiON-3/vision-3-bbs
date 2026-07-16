@@ -107,7 +107,7 @@ func (chs *ChatHistoryStore) RoomHistory(network, room string, limit int) ([]pro
 	if err != nil {
 		return nil, fmt.Errorf("hub: query room history: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() // read-only
 
 	var results []protocol.ChatMsgPayload
 	for rows.Next() {

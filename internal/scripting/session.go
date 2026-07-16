@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
@@ -12,11 +13,11 @@ func registerSession(v3 *goja.Object, eng *Engine) {
 	vm := eng.vm
 	obj := vm.NewObject()
 
-	obj.Set("node", eng.session.NodeNumber)
-	obj.Set("startTime", eng.session.SessionStartTime.Unix())
+	jsutil.Set(obj, "node", eng.session.NodeNumber)
+	jsutil.Set(obj, "startTime", eng.session.SessionStartTime.Unix())
 
 	// timeLeft — seconds remaining in session (dynamic)
-	obj.DefineAccessorProperty("timeLeft", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+	jsutil.DefineAccessor(obj, "timeLeft", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		elapsed := time.Since(eng.session.SessionStartTime)
 		limit := time.Duration(eng.session.TimeLimit) * time.Minute
 		if limit <= 0 {
@@ -30,7 +31,7 @@ func registerSession(v3 *goja.Object, eng *Engine) {
 	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
 	// online — true if user is still connected (dynamic)
-	obj.DefineAccessorProperty("online", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+	jsutil.DefineAccessor(obj, "online", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		select {
 		case <-eng.ctx.Done():
 			return vm.ToValue(false)
@@ -41,29 +42,29 @@ func registerSession(v3 *goja.Object, eng *Engine) {
 
 	// v3.session.bbs — BBS info sub-object
 	bbs := vm.NewObject()
-	bbs.Set("name", eng.session.BoardName)
-	bbs.Set("sysop", eng.session.SysOpName)
-	bbs.Set("version", eng.session.BBSVersion)
-	obj.Set("bbs", bbs)
+	jsutil.Set(bbs, "name", eng.session.BoardName)
+	jsutil.Set(bbs, "sysop", eng.session.SysOpName)
+	jsutil.Set(bbs, "version", eng.session.BBSVersion)
+	jsutil.Set(obj, "bbs", bbs)
 
 	// v3.session.user — current user info (read-only snapshot)
 	usr := vm.NewObject()
-	usr.Set("id", eng.session.UserID)
-	usr.Set("handle", eng.session.UserHandle)
-	usr.Set("realName", eng.session.UserRealName)
-	usr.Set("accessLevel", eng.session.AccessLevel)
-	usr.Set("timesCalled", eng.session.TimesCalled)
-	usr.Set("location", eng.session.Location)
-	usr.Set("screenWidth", eng.session.ScreenWidth)
-	usr.Set("screenHeight", eng.session.ScreenHeight)
-	obj.Set("user", usr)
+	jsutil.Set(usr, "id", eng.session.UserID)
+	jsutil.Set(usr, "handle", eng.session.UserHandle)
+	jsutil.Set(usr, "realName", eng.session.UserRealName)
+	jsutil.Set(usr, "accessLevel", eng.session.AccessLevel)
+	jsutil.Set(usr, "timesCalled", eng.session.TimesCalled)
+	jsutil.Set(usr, "location", eng.session.Location)
+	jsutil.Set(usr, "screenWidth", eng.session.ScreenWidth)
+	jsutil.Set(usr, "screenHeight", eng.session.ScreenHeight)
+	jsutil.Set(obj, "user", usr)
 
 	// v3.args — script arguments
 	args := vm.NewArray()
 	for i, arg := range eng.cfg.Args {
-		args.Set(fmt.Sprintf("%d", i), arg)
+		jsutil.Set(args, fmt.Sprintf("%d", i), arg)
 	}
-	v3.Set("args", args)
+	jsutil.Set(v3, "args", args)
 
-	v3.Set("session", obj)
+	jsutil.Set(v3, "session", obj)
 }

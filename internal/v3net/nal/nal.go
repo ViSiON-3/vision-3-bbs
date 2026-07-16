@@ -212,7 +212,7 @@ func Fetch(ctx context.Context, url string, client *http.Client) (*protocol.NAL,
 	if err != nil {
 		return nil, fmt.Errorf("nal: fetch: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read side
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("nal: fetch status %d", resp.StatusCode)

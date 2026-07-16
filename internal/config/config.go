@@ -760,9 +760,8 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 		return defaultTheme, fmt.Errorf("failed to read theme file %s: %w", filePath, err)
 	}
 
-	var theme ThemeConfig
 	// Initialize theme with defaults before unmarshalling
-	theme = defaultTheme
+	theme := defaultTheme
 	err = json.Unmarshal(data, &theme)
 	if err != nil {
 		slog.Error("failed to parse theme JSON, using default theme settings", "path", filePath, "error", err)
@@ -1119,9 +1118,8 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		return defaultConfig, fmt.Errorf("failed to read config file %s: %w", filePath, err)
 	}
 
-	var config ServerConfig
 	// Initialize with defaults before unmarshalling
-	config = defaultConfig
+	config := defaultConfig
 	err = json.Unmarshal(data, &config)
 	if err != nil {
 		slog.Error("failed to parse config JSON, using default settings", "path", filePath, "error", err)

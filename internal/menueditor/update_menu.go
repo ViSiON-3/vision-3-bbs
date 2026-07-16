@@ -161,9 +161,9 @@ func (m Model) startMenuFieldEdit() (Model, tea.Cmd) {
 	if f.Type == ftYesNo {
 		// Toggle directly without opening text input
 		if val == "Y" {
-			f.SetM(d, "N")
+			_ = f.SetM(d, "N") // Y/N field setters never fail
 		} else {
-			f.SetM(d, "Y")
+			_ = f.SetM(d, "Y") // Y/N field setters never fail
 		}
 		m.dirtyMenus[m.menus[m.menuEditIdx].Name] = true
 		return m, nil

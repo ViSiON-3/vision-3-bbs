@@ -31,7 +31,7 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 
 		body, err := readBody(resp.Body, maxPollRespBytes)
-		resp.Body.Close()
+		_ = resp.Body.Close() // read side
 
 		if err != nil {
 			return total, fmt.Errorf("leaf: read response: %w", err)

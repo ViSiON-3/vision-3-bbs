@@ -112,7 +112,7 @@ func main() {
 	if err != nil {
 		logging.Fatal("POST NAL", "error", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // response fully consumed below
 
 	// Diagnostic output only: cap the read; truncation is acceptable.
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))

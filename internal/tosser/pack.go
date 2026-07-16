@@ -166,14 +166,15 @@ func writeFlowFile(dir string, destAddr *jam.FidoAddress, flavour, bundlePath st
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-
 	absPath, err := filepath.Abs(bundlePath)
 	if err != nil {
 		absPath = bundlePath
 	}
-	_, err = fmt.Fprintf(f, "^%s\n", absPath)
-	return err
+	if _, err := fmt.Fprintf(f, "^%s\n", absPath); err != nil {
+		_ = f.Close() // best-effort; the write error takes precedence
+		return err
+	}
+	return f.Close()
 }
 
 // resolveUniqueBundlePath returns a path that does not already exist. If the
