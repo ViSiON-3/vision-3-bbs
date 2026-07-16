@@ -465,71 +465,7 @@ func (ih *InputHandler) ReadKeyTranslated() (int, error) {
 	return TranslateToWordStar(key), nil
 }
 
-// IsControlKey returns true if the key is a control character
-func IsControlKey(key int) bool {
-	return key < 32 || key == 127
-}
-
 // IsPrintable returns true if the key is a printable character
 func IsPrintable(key int) bool {
 	return key >= 32 && key < 127 && key != KeyEsc
-}
-
-// KeyName returns a human-readable name for a key code
-func KeyName(key int) string {
-	switch key {
-	case KeyCtrlE:
-		return "Ctrl+E (Up)"
-	case KeyCtrlX:
-		return "Ctrl+X (Down)"
-	case KeyCtrlS:
-		return "Ctrl+S (Left)"
-	case KeyCtrlD:
-		return "Ctrl+D (Right)"
-	case KeyCtrlW:
-		return "Ctrl+W (Home)"
-	case KeyCtrlP:
-		return "Ctrl+P (End)"
-	case KeyCtrlR:
-		return "Ctrl+R (Page Up)"
-	case KeyCtrlC:
-		return "Ctrl+C (Page Down)"
-	case KeyCtrlA:
-		return "Ctrl+A (Abort)"
-	case KeyCtrlZ:
-		return "Ctrl+Z (Save)"
-	case KeyCtrlQ:
-		return "Ctrl+Q (Quote)"
-	case KeyCtrlF:
-		return "Ctrl+F (Word Right)"
-	case KeyCtrlV:
-		return "Ctrl+V (Toggle Insert)"
-	case KeyCtrlG:
-		return "Ctrl+G (Delete)"
-	case KeyCtrlT:
-		return "Ctrl+T (Delete Word)"
-	case KeyCtrlY:
-		return "Ctrl+Y (Delete Line)"
-	case KeyCtrlJ:
-		return "Ctrl+J (Join Lines)"
-	case KeyCtrlN:
-		return "Ctrl+N (New Line)"
-	case KeyCtrlB:
-		return "Ctrl+B (Reformat)"
-	case KeyCtrlL:
-		return "Ctrl+L (Redraw)"
-	case KeyEsc:
-		return "Escape"
-	case KeyEnter:
-		return "Enter"
-	case KeyBackspace:
-		return "Backspace"
-	case KeyTab:
-		return "Tab"
-	default:
-		if key >= 32 && key < 127 {
-			return string(rune(key))
-		}
-		return "Unknown"
-	}
 }

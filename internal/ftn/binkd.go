@@ -280,44 +280,6 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 	}
 }
 
-// AppendBinkdNode appends a node definition block to binkd.conf if the
-// address is not already defined. Uses section comment markers for
-// idempotency.
-func AppendBinkdNode(confPath string, node BinkdNode) error {
-	existing, err := os.ReadFile(confPath)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("reading binkd.conf: %w", err)
-	}
-
-	if len(existing) > 0 && nodeExists(string(existing), node.Address) {
-		return nil
-	}
-
-	pwd := node.SessionPwd
-	if pwd == "" {
-		pwd = "-"
-	}
-
-	block := fmt.Sprintf("\n%s\nnode %s %s %s\n",
-		sectionMarker(node.NetworkName),
-		node.Address,
-		node.Hostname,
-		pwd,
-	)
-
-	f, err := os.OpenFile(confPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("opening binkd.conf: %w", err)
-	}
-	defer f.Close()
-
-	if _, err := f.WriteString(block); err != nil {
-		return fmt.Errorf("writing binkd.conf: %w", err)
-	}
-
-	return nil
-}
-
 // BinkdIdentity holds BBS identity fields synced to binkd.conf.
 type BinkdIdentity struct {
 	BoardName string // sysname

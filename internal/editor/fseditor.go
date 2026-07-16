@@ -540,28 +540,8 @@ func (e *FSEditor) ensureCursorVisible() {
 	}
 }
 
-// GetContent returns the editor content
-func (e *FSEditor) GetContent() string {
-	return e.buffer.GetContent()
-}
-
-// IsSaved returns whether the message was saved
-func (e *FSEditor) IsSaved() bool {
-	return e.saved
-}
-
-// IsModified returns whether the content was modified
-func (e *FSEditor) IsModified() bool {
-	return e.modified
-}
-
 // HandleResize handles terminal resize events
 func (e *FSEditor) HandleResize(newWidth, newHeight int) {
 	e.screen.Resize(newWidth, newHeight)
 	e.screen.FullRedraw(e.buffer, e.topLine, e.currentLine, e.currentCol, e.insertMode)
-}
-
-// GetBuffer returns the message buffer (for testing)
-func (e *FSEditor) GetBuffer() *MessageBuffer {
-	return e.buffer
 }

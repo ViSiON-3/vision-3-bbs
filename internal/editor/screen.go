@@ -718,23 +718,6 @@ func (s *Screen) FullRedraw(buffer *MessageBuffer, topLine, currentLine, current
 	s.RefreshScreen(buffer, topLine, currentLine, currentCol, insertMode, true)
 }
 
-// UpdateDynamicFields updates dynamic fields in the status line (like Insert/Line indicators)
-func (s *Screen) UpdateDynamicFields(insertMode bool, currentLine, totalLines int) {
-	// For now, just update the status line
-	s.DisplayStatusLine(insertMode, currentLine, totalLines)
-}
-
-// ScrollUp scrolls the display up by the specified number of lines
-func (s *Screen) ScrollUp(lines int) {
-	// For simplicity, we'll do a full refresh when scrolling
-	// ANSI scroll sequences could be used for optimization
-}
-
-// ScrollDown scrolls the display down by the specified number of lines
-func (s *Screen) ScrollDown(lines int) {
-	// For simplicity, we'll do a full refresh when scrolling
-}
-
 // GetScreenLines returns the number of available editing lines
 func (s *Screen) GetScreenLines() int {
 	return s.screenLines
