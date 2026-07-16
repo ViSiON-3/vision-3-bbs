@@ -6,7 +6,7 @@ across one or more FTN networks.
 
 ## Overview
 
-FTN echomail requires two components working together: a **tosser** (internal) and a **mailer** (external). Vision/3 includes the tosser; you supply the mailer.
+FTN echomail requires two components working together: a **tosser** (internal) and a **mailer** (external). Vision/3 includes both: the internal tosser and a bundled binkd mailer that the BBS can supervise directly or run externally.
 
 ### Tosser (Internal) — `v3mail`
 
