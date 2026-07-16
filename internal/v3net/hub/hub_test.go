@@ -372,7 +372,10 @@ func TestSSEHTTPStream(t *testing.T) {
 		if eventType != "chat" {
 			t.Errorf("expected chat event, got %q", eventType)
 		}
-	case <-time.After(2 * time.Second):
+	// Generous deadline: 2s flaked repeatedly on loaded CI runners under
+	// -race. The event either arrives or this fails at the timeout, so a
+	// long deadline costs nothing on the passing path.
+	case <-time.After(15 * time.Second):
 		t.Error("timed out waiting for SSE event over HTTP")
 	}
 }
