@@ -744,7 +744,6 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("file list pagination", "node", nodeNumber, "termHeight", termHeight, "fixedLines", fixedLines, "filesPerPage", filesPerPage)
 
 	// --- Get Total File Count ---
-	// TODO: Implement GetFileCountForArea in FileManager
 	totalFiles, err := e.FileMgr.GetFileCountForArea(currentAreaID)
 	if err != nil {
 		slog.Error("failed to get file count for area", "node", nodeNumber, "area", currentAreaID, "error", err)
@@ -769,7 +768,6 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// --- Fetch Initial Page ---
 	if totalFiles > 0 {
-		// TODO: Implement GetFilesForAreaPaginated in FileManager
 		filesOnPage, err = e.FileMgr.GetFilesForAreaPaginated(currentAreaID, currentPage, filesPerPage)
 		if err != nil {
 			slog.Error("failed to get files for area page", "node", nodeNumber, "area", currentAreaID, "page", currentPage, "error", err)
