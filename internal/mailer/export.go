@@ -26,6 +26,9 @@ func (s *Service) exportLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	slog.Info("binkd export loop started", "interval", interval)
+	// Run once immediately so mail queued while the BBS was down doesn't
+	// wait a full interval before being exported.
+	s.exportOnce()
 	for {
 		select {
 		case <-ctx.Done():

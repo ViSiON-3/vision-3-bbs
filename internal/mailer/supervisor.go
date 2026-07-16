@@ -24,6 +24,9 @@ func (s *Service) superviseLoop(ctx context.Context) {
 		}
 
 		// Sync dynamic settings into binkd.conf before each launch (best-effort).
+		// b is the boot-time config snapshot: a config-editor port change made
+		// mid-session is only re-applied here after the BBS restarts (the TUI
+		// save path also syncs binkd.conf directly, for immediate effect).
 		b := s.cfg.FTN.Binkd
 		if err := ftn.SyncBinkdSettings(s.confPath, b.Port, b.LogLevel); err != nil {
 			slog.Warn("binkd.conf settings sync failed", "error", err)
@@ -55,7 +58,10 @@ func (s *Service) superviseLoop(ctx context.Context) {
 // runOnce starts binkd and blocks until it exits or ctx is cancelled.
 // On cancellation it sends SIGTERM, waits termGrace, then kills.
 func (s *Service) runOnce(ctx context.Context) error {
-	// No -D flag: binkd runs as a child and cannot outlive the BBS.
+	// No -D flag: binkd runs as a supervised child (not daemonized). The
+	// BBS's signal-driven shutdown (SIGTERM, then a grace period, then
+	// SIGKILL) is what stops it on exit; on Unix an orphaned child process
+	// can otherwise outlive its parent.
 	cmd := exec.Command(s.binkdPath, s.confPath)
 	cmd.Stdout = nil // binkd logs to file per binkd.conf
 	cmd.Stderr = nil

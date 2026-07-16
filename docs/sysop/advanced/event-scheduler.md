@@ -180,9 +180,11 @@ cd /home/bbs/git/vision3
 ### FTN Mail Polling (Binkd)
 
 > **Note:** If the integrated binkd mailer is enabled (Server Setup → Binkd
-> Mailer), these events are unnecessary — the BBS runs binkd and exports
-> outbound mail itself. Scheduler events remain useful for forced polls
-> (`binkd -p`) of specific hubs. See
+> Mailer), the scan/toss/ftn-pack scheduler events above **should be
+> disabled**. The integrated mailer already runs its own export loop against
+> the same JAM message bases; leaving both enabled risks two processes
+> concurrently exporting the same bases (double-export). Scheduler events
+> remain useful for forced polls (`binkd -p`) of specific hubs. See
 > [ftn-echomail.md](../messages/ftn-echomail.md#enabling-the-integrated-mailer-recommended).
 
 **Simple poll all nodes every 30 minutes:**

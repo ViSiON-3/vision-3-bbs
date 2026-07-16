@@ -78,8 +78,9 @@ Follows the V3Net / scheduler daemon pattern (`New` → `Start(ctx)` → `Close`
 **Supervision:**
 
 - Sync `binkd.conf` settings (`iport`, `loglevel`), then
-  `exec.Command(binkdPath, confPath)` — no `-D` flag, so binkd runs as a child
-  and cannot outlive the BBS.
+  `exec.Command(binkdPath, confPath)` — no `-D` flag, so binkd runs as a
+  supervised child; the BBS's signal-driven shutdown (SIGTERM → 5s grace →
+  kill) stops it on exit.
 - Wait on the process; on unexpected exit, restart with exponential backoff
   (5s doubling to a 5-minute cap, reset after a healthy run), each restart
   logged via `slog`.
