@@ -97,6 +97,8 @@ func (m *Model) buildSysFields(screen int) []fieldDef {
 		return sysFieldsDOS(cfg)
 	case 8:
 		return sysFieldsLogging(cfg)
+	case 9:
+		return sysFieldsQWKAPI(cfg)
 	}
 	return nil
 }

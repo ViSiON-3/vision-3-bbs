@@ -297,6 +297,7 @@ func New(configPath string) (Model, error) {
 		{"New User Voting (NUV)"},
 		{"DOS Emulation"},
 		{"Logging"},
+		{"QWK Mobile API"},
 	}
 
 	return Model{

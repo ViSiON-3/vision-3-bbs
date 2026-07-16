@@ -247,7 +247,9 @@ func (m Model) viewSysConfigMenu() string {
 
 	// Menu items
 	for i, item := range m.sysMenuItems {
-		content := fmt.Sprintf("  %d. %s", i+1, item.Label)
+		// Hotkey display matches input mapping: items 1-9 use their digit,
+		// item 10 uses '0'.
+		content := fmt.Sprintf("  %d. %s", (i+1)%10, item.Label)
 		content = padRight(content, boxW)
 
 		var styled string

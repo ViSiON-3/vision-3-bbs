@@ -30,3 +30,43 @@ func TestSysFieldsRegistration_QWKIDNormalizesOnSet(t *testing.T) {
 		t.Errorf("Get: want MYID, got %q", got)
 	}
 }
+
+func TestSysFieldsQWKAPI(t *testing.T) {
+	cfg := &config.ServerConfig{}
+	fields := sysFieldsQWKAPI(cfg)
+
+	find := func(label string) *fieldDef {
+		for i := range fields {
+			if fields[i].Label == label {
+				return &fields[i]
+			}
+		}
+		t.Fatalf("%s field not found in QWK API screen", label)
+		return nil
+	}
+
+	enabled := find("Enabled")
+	if got := enabled.Get(); got != "N" {
+		t.Errorf("Enabled default: want N, got %q", got)
+	}
+	if err := enabled.Set("Y"); err != nil {
+		t.Fatalf("Set Enabled: %v", err)
+	}
+	if !cfg.QWKAPI.Enabled {
+		t.Error("Set(Y) should enable cfg.QWKAPI.Enabled")
+	}
+
+	if got := find("Port").Get(); got != "8666" {
+		t.Errorf("Port default: want 8666, got %q", got)
+	}
+	if got := find("Token TTL Hrs").Get(); got != "24" {
+		t.Errorf("Token TTL default: want 24, got %q", got)
+	}
+
+	// Runtime (TokenTTL) treats any non-positive value as 24h; the editor
+	// must display the same for hand-edited negative values.
+	cfg.QWKAPI.TokenTTLHours = -5
+	if got := find("Token TTL Hrs").Get(); got != "24" {
+		t.Errorf("Token TTL for negative value: want 24, got %q", got)
+	}
+}
