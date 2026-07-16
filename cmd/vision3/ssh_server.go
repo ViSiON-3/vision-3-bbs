@@ -83,7 +83,7 @@ func sshSessionHandler(sess ssh.Session) {
 	if !canAccept {
 		slog.Info("rejecting SSH connection", "addr", wrapped.RemoteAddr(), "reason", reason)
 		_, _ = fmt.Fprintf(wrapped, "\r\nConnection rejected: %s\r\n", reason) // best-effort notice to client
-		_, _ = fmt.Fprintf(wrapped, "Please try again later.\r\n") // best-effort notice to client
+		_, _ = fmt.Fprintf(wrapped, "Please try again later.\r\n")             // best-effort notice to client
 		time.Sleep(2 * time.Second)
 		return
 	}

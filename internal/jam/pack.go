@@ -133,26 +133,26 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 	}
 	jdtOut, err := os.Create(tmpJdt)
 	if err != nil {
-		jhrOut.Close()
-		os.Remove(tmpJhr)
+		_ = jhrOut.Close()    // cleanup on error path
+		_ = os.Remove(tmpJhr) // cleanup on error path
 		return result, fmt.Errorf("jam: failed to create temp .jdt: %w", err)
 	}
 	jdxOut, err := os.Create(tmpJdx)
 	if err != nil {
-		jhrOut.Close()
-		jdtOut.Close()
-		os.Remove(tmpJhr)
-		os.Remove(tmpJdt)
+		_ = jhrOut.Close()    // cleanup on error path
+		_ = jdtOut.Close()    // cleanup on error path
+		_ = os.Remove(tmpJhr) // cleanup on error path
+		_ = os.Remove(tmpJdt) // cleanup on error path
 		return result, fmt.Errorf("jam: failed to create temp .jdx: %w", err)
 	}
 
 	cleanup := func() {
-		jhrOut.Close()
-		jdtOut.Close()
-		jdxOut.Close()
-		os.Remove(tmpJhr)
-		os.Remove(tmpJdt)
-		os.Remove(tmpJdx)
+		_ = jhrOut.Close()    // cleanup on error path
+		_ = jdtOut.Close()    // cleanup on error path
+		_ = jdxOut.Close()    // cleanup on error path
+		_ = os.Remove(tmpJhr) // cleanup on error path
+		_ = os.Remove(tmpJdt) // cleanup on error path
+		_ = os.Remove(tmpJdx) // cleanup on error path
 	}
 
 	// Write placeholder fixed header (will update ActiveMsgs at end)
@@ -291,10 +291,10 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 		}
 	}
 
-	// Close original file handles
-	b.jhrFile.Close()
-	b.jdtFile.Close()
-	b.jdxFile.Close()
+	// Close original file handles (read-side; contents already copied)
+	_ = b.jhrFile.Close()
+	_ = b.jdtFile.Close()
+	_ = b.jdxFile.Close()
 
 	// Atomic rename
 	for _, pair := range [][2]string{
@@ -304,9 +304,9 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 	} {
 		if err := os.Rename(pair[0], pair[1]); err != nil {
 			// Try to clean up remaining temp files
-			os.Remove(tmpJhr)
-			os.Remove(tmpJdt)
-			os.Remove(tmpJdx)
+			_ = os.Remove(tmpJhr) // cleanup on error path
+			_ = os.Remove(tmpJdt) // cleanup on error path
+			_ = os.Remove(tmpJdx) // cleanup on error path
 			// Attempt to reopen original files; if any reopen fails the
 			// base is unusable and must not claim to be open with nil
 			// handles.

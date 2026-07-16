@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 )
@@ -157,7 +158,9 @@ func (b *Base) writeMessageHeader(hdr *MessageHeader) (uint32, error) {
 	}
 	if pos == 0 {
 		pos = HeaderSize
-		b.jhrFile.Seek(pos, 0)
+		if _, err := b.jhrFile.Seek(pos, 0); err != nil {
+			return 0, fmt.Errorf("jam: seek failed on .jhr: %w", err)
+		}
 	}
 
 	if err := writeBinaryLE(b.jhrFile, hdr.Signature, "header signature"); err != nil {
@@ -510,9 +513,11 @@ func (b *Base) WriteMessage(msg *Message) (int, error) {
 		}
 
 		// Sync all files to ensure consistency on crash
-		b.jdtFile.Sync()
-		b.jhrFile.Sync()
-		b.jdxFile.Sync()
+		for name, f := range map[string]*os.File{".jdt": b.jdtFile, ".jhr": b.jhrFile, ".jdx": b.jdxFile} {
+			if err := f.Sync(); err != nil {
+				return fmt.Errorf("jam: sync %s: %w", name, err)
+			}
+		}
 
 		return nil
 	})
@@ -543,27 +548,20 @@ func (b *Base) DeleteMessage(msgNum int) error {
 		}
 
 		// Rewrite header at original offset
-		b.jhrFile.Seek(int64(idx.HdrOffset), 0)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.Signature)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.Revision)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.ReservedWord)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.SubfieldLen)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.TimesRead)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.MSGIDcrc)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.REPLYcrc)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.ReplyTo)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.Reply1st)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.ReplyNext)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.DateWritten)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.DateReceived)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.DateProcessed)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.MessageNumber)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.Attribute)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.Attribute2)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.Offset)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.TxtLen)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.PasswordCRC)
-		binary.Write(b.jhrFile, binary.LittleEndian, hdr.Cost)
+		if _, err := b.jhrFile.Seek(int64(idx.HdrOffset), 0); err != nil {
+			return fmt.Errorf("jam: seek header for delete: %w", err)
+		}
+		for _, field := range []interface{}{
+			hdr.Signature, hdr.Revision, hdr.ReservedWord, hdr.SubfieldLen,
+			hdr.TimesRead, hdr.MSGIDcrc, hdr.REPLYcrc, hdr.ReplyTo,
+			hdr.Reply1st, hdr.ReplyNext, hdr.DateWritten, hdr.DateReceived,
+			hdr.DateProcessed, hdr.MessageNumber, hdr.Attribute, hdr.Attribute2,
+			hdr.Offset, hdr.TxtLen, hdr.PasswordCRC, hdr.Cost,
+		} {
+			if err := writeBinaryLE(b.jhrFile, field, "deleted message header field"); err != nil {
+				return err
+			}
+		}
 
 		b.fixedHeader.ActiveMsgs--
 		b.fixedHeader.ModCounter++
