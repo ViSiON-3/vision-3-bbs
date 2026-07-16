@@ -1042,7 +1042,7 @@ func isValidEchoTag(tag string) bool {
 		return false
 	}
 	for _, r := range tag {
-		if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.') {
+		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' && r != '-' && r != '.' {
 			return false
 		}
 	}

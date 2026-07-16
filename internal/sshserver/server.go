@@ -207,7 +207,7 @@ func extractRawChannel(s ssh.Session) gossh.Channel {
 		return nil
 	}
 	// s is an interface containing *session; dereference the pointer.
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	if v.Kind() != reflect.Struct {

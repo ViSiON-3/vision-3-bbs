@@ -96,9 +96,9 @@ func (e *MenuExecutor) selectTransferProtocol(s ssh.Session, terminal *term.Term
 	menu.WriteString("\r\n|15Transfer Protocols:|07\r\n\r\n")
 	for _, p := range available {
 		if p.Default {
-			menu.WriteString(fmt.Sprintf("  |15[|14%-3s|15]|07 %-22s |08(default)|07\r\n", p.Key, p.Name))
+			fmt.Fprintf(&menu, "  |15[|14%-3s|15]|07 %-22s |08(default)|07\r\n", p.Key, p.Name)
 		} else {
-			menu.WriteString(fmt.Sprintf("  |15[|14%-3s|15]|07 %s\r\n", p.Key, p.Name))
+			fmt.Fprintf(&menu, "  |15[|14%-3s|15]|07 %s\r\n", p.Key, p.Name)
 		}
 	}
 	menuBytes := ansi.ReplacePipeCodes([]byte(menu.String()))

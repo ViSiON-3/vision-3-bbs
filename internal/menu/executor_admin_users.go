@@ -265,14 +265,14 @@ func adminUserLightbarBrowser(s ssh.Session, terminal *term.Terminal, users []*u
 
 		sel := users[selectedIndex]
 		b.WriteString("|08--------------------------------------------------------------------------------|07\r\n")
-		b.WriteString(fmt.Sprintf("|15Handle        :|07 %s\r\n", adminTruncate(sel.Handle, 56)))
-		b.WriteString(fmt.Sprintf("|15Real Name     :|07 %-21s |15Flags         :|07 %s\r\n", adminTruncate(sel.RealName, 21), adminTruncate(sel.Flags, 8)))
-		b.WriteString(fmt.Sprintf("|15Group/Location:|07 %s\r\n", adminTruncate(sel.GroupLocation, 40)))
-		b.WriteString(fmt.Sprintf("|15Validated     :|07 %-5t |15Level         :|07 %-3d |15TimeLimit     :|07 %-4d\r\n", sel.Validated, sel.AccessLevel, sel.TimeLimit))
-		b.WriteString(fmt.Sprintf("|15Created       :|07 %-16s |15Last Login    :|07 %s\r\n", adminTime(sel.CreatedAt), adminTime(sel.LastLogin)))
-		b.WriteString(fmt.Sprintf("|15Calls         :|07 %-5d |15Uploads       :|07 %-5d |15FilePoints    :|07 %-6d\r\n", sel.TimesCalled, sel.NumUploads, sel.FilePoints))
-		b.WriteString(fmt.Sprintf("|15Msg Area      :|07 %-16s |15File Area     :|07 %s\r\n", adminTruncate(sel.CurrentMessageAreaTag, 16), adminTruncate(sel.CurrentFileAreaTag, 24)))
-		b.WriteString(fmt.Sprintf("|15Note          :|07 %s\r\n", adminTruncate(sel.PrivateNote, 70)))
+		fmt.Fprintf(&b, "|15Handle        :|07 %s\r\n", adminTruncate(sel.Handle, 56))
+		fmt.Fprintf(&b, "|15Real Name     :|07 %-21s |15Flags         :|07 %s\r\n", adminTruncate(sel.RealName, 21), adminTruncate(sel.Flags, 8))
+		fmt.Fprintf(&b, "|15Group/Location:|07 %s\r\n", adminTruncate(sel.GroupLocation, 40))
+		fmt.Fprintf(&b, "|15Validated     :|07 %-5t |15Level         :|07 %-3d |15TimeLimit     :|07 %-4d\r\n", sel.Validated, sel.AccessLevel, sel.TimeLimit)
+		fmt.Fprintf(&b, "|15Created       :|07 %-16s |15Last Login    :|07 %s\r\n", adminTime(sel.CreatedAt), adminTime(sel.LastLogin))
+		fmt.Fprintf(&b, "|15Calls         :|07 %-5d |15Uploads       :|07 %-5d |15FilePoints    :|07 %-6d\r\n", sel.TimesCalled, sel.NumUploads, sel.FilePoints)
+		fmt.Fprintf(&b, "|15Msg Area      :|07 %-16s |15File Area     :|07 %s\r\n", adminTruncate(sel.CurrentMessageAreaTag, 16), adminTruncate(sel.CurrentFileAreaTag, 24))
+		fmt.Fprintf(&b, "|15Note          :|07 %s\r\n", adminTruncate(sel.PrivateNote, 70))
 
 		return terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(b.String())), outputMode)
 	}

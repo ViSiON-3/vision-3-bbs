@@ -241,7 +241,7 @@ func (m Model) updateAddMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Validate: alphanumeric + underscore only
 		for _, ch := range name {
-			if !((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+			if (ch < 'A' || ch > 'Z') && (ch < '0' || ch > '9') && ch != '_' {
 				m.message = "Invalid filename: use A-Z, 0-9, _ only"
 				m.mode = modeMenuList
 				return m, nil

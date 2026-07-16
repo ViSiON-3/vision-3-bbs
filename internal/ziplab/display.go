@@ -69,12 +69,12 @@ func (n *NFOConfig) BuildStatusSequence(step int, status Status) string {
 
 	var sb strings.Builder
 	// Cursor position
-	sb.WriteString(fmt.Sprintf("\x1b[%d;%dH", entry.Row, entry.Col))
+	fmt.Fprintf(&sb, "\x1b[%d;%dH", entry.Row, entry.Col)
 	// Color
 	if bold {
-		sb.WriteString(fmt.Sprintf("\x1b[1;%d;%dm", 30+(fg%8), 40+bg))
+		fmt.Fprintf(&sb, "\x1b[1;%d;%dm", 30+(fg%8), 40+bg)
 	} else {
-		sb.WriteString(fmt.Sprintf("\x1b[0;%d;%dm", 30+fg, 40+bg))
+		fmt.Fprintf(&sb, "\x1b[0;%d;%dm", 30+fg, 40+bg)
 	}
 	// Display chars
 	sb.WriteString(entry.DisplayChars)

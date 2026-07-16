@@ -115,12 +115,11 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 	if pwd == "" {
 		pwd = "-"
 	}
-	out.WriteString(fmt.Sprintf("\n%s\nnode %s %s %s\n",
+	fmt.Fprintf(&out, "\n%s\nnode %s %s %s\n",
 		sectionMarker(cfg.Node.NetworkName),
 		cfg.Node.Address,
 		cfg.Node.Hostname,
-		pwd,
-	))
+		pwd)
 
 	return writeFileAtomic(confPath, out.String(), 0600)
 }

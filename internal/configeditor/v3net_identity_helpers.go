@@ -93,18 +93,17 @@ func (m Model) writeRecoveryFile(path string, ks *keystore.Keystore) error {
 	var b strings.Builder
 	b.WriteString("V3Net Recovery Seed Phrase\n")
 	b.WriteString("==========================\n")
-	b.WriteString(fmt.Sprintf("Node ID: %s\n", ks.NodeID()))
-	b.WriteString(fmt.Sprintf("Generated: %s\n", time.Now().UTC().Format("2006-01-02")))
+	fmt.Fprintf(&b, "Node ID: %s\n", ks.NodeID())
+	fmt.Fprintf(&b, "Generated: %s\n", time.Now().UTC().Format("2006-01-02"))
 	b.WriteString("\nWords:\n")
 
 	// 4 columns x 6 rows
 	for row := 0; row < 6; row++ {
-		b.WriteString(fmt.Sprintf("  %2d. %-12s %2d. %-12s %2d. %-12s %2d. %-12s\n",
+		fmt.Fprintf(&b, "  %2d. %-12s %2d. %-12s %2d. %-12s %2d. %-12s\n",
 			row+1, words[row],
 			row+7, words[row+6],
 			row+13, words[row+12],
-			row+19, words[row+18],
-		))
+			row+19, words[row+18])
 	}
 
 	b.WriteString("\nStore this file safely and delete it from this server.\n")

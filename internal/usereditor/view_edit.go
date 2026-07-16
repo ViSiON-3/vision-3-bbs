@@ -93,26 +93,27 @@ func (m Model) viewEditScreen() string {
 
 	// Overlay for password entry and WFC key-manager dialogs
 	result := b.String()
-	if m.mode == modePasswordEntry {
+	switch m.mode {
+	case modePasswordEntry:
 		result = m.overlayPasswordDialog(result)
-	} else if m.mode == modeKeyList {
+	case modeKeyList:
 		result = m.overlayKeyListDialog(result)
-	} else if m.mode == modeKeyAdd {
+	case modeKeyAdd:
 		result = m.overlayKeyAddDialog(result)
-	} else if m.mode == modeDeleteConfirm {
+	case modeDeleteConfirm:
 		result = m.overlayDeleteDialog(result, u.Handle)
-	} else if m.mode == modePurgeConfirm {
+	case modePurgeConfirm:
 		result = m.overlayPurgeDialog(result, u.Handle)
-	} else if m.mode == modeUndeleteConfirm {
+	case modeUndeleteConfirm:
 		result = m.overlayConfirmDialog(result, "-- Undelete User --",
 			fmt.Sprintf("Undelete %s? ", u.Handle))
-	} else if m.mode == modeValidate {
+	case modeValidate:
 		result = m.overlayConfirmDialog(result, "-- Auto Validate --",
 			fmt.Sprintf("Set %s to Defaults? ", u.Handle))
-	} else if m.mode == modeSaveOnLeave {
+	case modeSaveOnLeave:
 		result = m.overlayConfirmDialog(result, "-- Unsaved Changes --",
 			"Save changes to disk? ")
-	} else if m.mode == modeInfoAlert {
+	case modeInfoAlert:
 		result = m.overlayInfoAlert(result)
 	}
 
@@ -132,10 +133,11 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 
 		rendered, rawW := m.renderField(i, f, u)
 
-		if f.Col == 3 {
+		switch f.Col {
+		case 3:
 			leftField = rendered
 			leftRawW = rawW
-		} else if f.Col == 50 {
+		case 50:
 			rightField = rendered
 			rightRawW = rawW
 		}
@@ -202,9 +204,10 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) 
 	// Left column: longest is "Group/Location" at 14 chars.
 	// Right column: longest is "Screen Height" at 13 chars.
 	labelText := f.Label
-	if f.Col == 3 {
+	switch f.Col {
+	case 3:
 		labelText = padRight(labelText, 14)
-	} else if f.Col == 50 {
+	case 50:
 		labelText = padRight(labelText, 13)
 	}
 	label := labelText + " : "
