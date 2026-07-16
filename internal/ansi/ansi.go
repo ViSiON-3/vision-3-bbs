@@ -721,9 +721,6 @@ func CursorBackward(n int) string {
 // Add StripAnsi if it was used externally
 func StripAnsi(str string) string {
 	// Simple ANSI removal regex (may not cover all cases)
-	// For more robust stripping, consider a dedicated library or more complex state machine.
-	const ansi = "[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-Za-z~]))"
-	// This regex is complex, for basic stripping:
 	var result strings.Builder
 	inEscape := false
 	for i := 0; i < len(str); i++ {

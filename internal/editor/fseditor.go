@@ -414,11 +414,6 @@ func (e *FSEditor) moveCursorEnd() {
 	e.currentCol = lineLen + 1
 }
 
-// moveCursorWordLeft moves cursor to start of previous word
-func (e *FSEditor) moveCursorWordLeft() {
-	e.currentCol = e.wordWrapper.FindWordLeft(e.currentLine, e.currentCol)
-}
-
 // moveCursorWordRight moves cursor to start of next word
 func (e *FSEditor) moveCursorWordRight() {
 	e.currentCol = e.wordWrapper.FindWordRight(e.currentLine, e.currentCol)

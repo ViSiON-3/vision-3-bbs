@@ -72,7 +72,6 @@ type InputHandler struct {
 	incoming  chan byte     // raw bytes from background reader goroutine
 	done      chan struct{} // closed when background goroutine fully exits
 	unreadBuf []byte        // bytes pushed back for re-reading
-	debug     bool
 
 	// idleNs is the session-level idle timeout in nanoseconds (0 = disabled).
 	// Stored as int64 for lock-free atomic access. Any call to readByte()

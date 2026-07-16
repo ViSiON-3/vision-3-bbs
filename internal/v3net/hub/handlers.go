@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -416,9 +415,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
-}
-
-// messagesPathSuffix checks if a path ends with /messages (to distinguish GET vs POST).
-func messagesPathSuffix(path string) bool {
-	return strings.HasSuffix(strings.TrimRight(path, "/"), "/messages")
 }

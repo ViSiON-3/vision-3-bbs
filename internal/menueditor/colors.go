@@ -102,7 +102,6 @@ var editTitleStyle = lipgloss.NewStyle().
 
 // Info label/value inside edit screens: Color(15,8) and Color(15,4)
 var editInfoLabelStyle = dosStyle(0xF0)
-var editInfoValueStyle = dosStyle(0xF4) // light gray bg, red fg (for file/number display)
 
 // --- Confirm dialog ---
 // MENUEDIT.PAS Ask_Colors: PColor=94($5E), NormColor=95($5F) → magenta bg
@@ -116,11 +115,6 @@ var dialogTextStyle = dosStyle(0x5E) // magenta bg, yellow fg
 // --- Input dialog (Add Menu, etc.) ---
 var inputDialogBorderStyle = dosStyle(0x5F)
 var inputDialogTextStyle = dosStyle(0x5E)
-
-// --- Message box ---
-// MENUEDIT.PAS Message: Color(5,13) border → magenta bg, light magenta fg
-var messageBorderStyle = dosColor(5, 13)
-var messageTextStyle = dosColor(13, 15)
 
 // --- Help screen ---
 var helpBoxStyle = dosColor(4, 15)

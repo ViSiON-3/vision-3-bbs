@@ -17,27 +17,26 @@ import (
 
 // Screen handles all screen rendering and ANSI control
 type Screen struct {
-	terminal         io.Writer
-	outputMode       ansi.OutputMode
-	termWidth        int
-	termHeight       int
-	editingStartY    int // First Y position for text entry
-	statusLineY      int // Y position of status line
-	screenLines      int // Number of editing lines available
-	headerHeight     int // Height of header
-	headerContent    string
-	physicalLines    map[int]string // Track last rendered state for incremental updates
-	lastInsertMode   bool           // Track last insert mode to avoid redundant updates
-	lastCurrentLine  int            // Track last current line to avoid redundant updates
-	lastStatusUpdate string         // Track last status to avoid redundant updates
-	insertModeRow    int            // Terminal row of the @I@ insert-mode indicator (1-based)
-	insertModeCol    int            // Terminal col of the @I@ insert-mode indicator (1-based)
-	insertModeColor  string         // ANSI SGR escape to restore colors at @I@ position
-	timeLoc          *time.Location // Timezone for date/time display
-	configTimezone   string         // Raw timezone string from config
-	nodeNumber       int            // Node number for @K@ placeholder
-	nextMsgNum       int            // Next message number for @#@ placeholder
-	confArea         string         // "Conference > Area" for @Z@ placeholder
+	terminal        io.Writer
+	outputMode      ansi.OutputMode
+	termWidth       int
+	termHeight      int
+	editingStartY   int // First Y position for text entry
+	statusLineY     int // Y position of status line
+	screenLines     int // Number of editing lines available
+	headerHeight    int // Height of header
+	headerContent   string
+	physicalLines   map[int]string // Track last rendered state for incremental updates
+	lastInsertMode  bool           // Track last insert mode to avoid redundant updates
+	lastCurrentLine int            // Track last current line to avoid redundant updates
+	insertModeRow   int            // Terminal row of the @I@ insert-mode indicator (1-based)
+	insertModeCol   int            // Terminal col of the @I@ insert-mode indicator (1-based)
+	insertModeColor string         // ANSI SGR escape to restore colors at @I@ position
+	timeLoc         *time.Location // Timezone for date/time display
+	configTimezone  string         // Raw timezone string from config
+	nodeNumber      int            // Node number for @K@ placeholder
+	nextMsgNum      int            // Next message number for @#@ placeholder
+	confArea        string         // "Conference > Area" for @Z@ placeholder
 	// Row-4 info bar overlay positions (tracked from template before substitution)
 	msgNumRow       int    // Terminal row of the @#@ msg-number field
 	msgNumCol       int    // Terminal col of the @#@ msg-number field (1-based)
