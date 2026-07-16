@@ -15,7 +15,9 @@ ViSiON/3 includes built-in connection management to prevent resource exhaustion 
 
 > **Sysop remote console (WFC):** the `wfc` admin console rides the existing SSH
 > server and is gated by per-user SSH **public keys** (CoSysOp level or above) —
-> it adds no new open port and accepts no password. See the
+> it adds no new open port and accepts no password. It can also be disabled
+> entirely with the `wfcEnabled` config flag (**WFC Access** in the config TUI's
+> Access Levels sub-screen, default on, hot-reloaded). See the
 > [WFC Sysop Console](how-to-guides/wfc-console.md) guide for key registration.
 
 ### Configuring Connection Limits

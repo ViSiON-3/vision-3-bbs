@@ -14,6 +14,7 @@ func TestAuthorizeAdmin(t *testing.T) {
 	)
 	adminMinLevel = func() int { return 250 }
 	wfcEnabled = func() bool { return true }
+	t.Cleanup(func() { userMgr, adminMinLevel, wfcEnabled = nil, nil, nil })
 
 	if authorizeAdmin("lowly") {
 		t.Error("expected lowly (level 10) to be denied admin access")
@@ -27,6 +28,7 @@ func TestAuthorizeAdmin_UnknownUser(t *testing.T) {
 	userMgr = user.NewUserMgrForTest()
 	adminMinLevel = func() int { return 250 }
 	wfcEnabled = func() bool { return true }
+	t.Cleanup(func() { userMgr, adminMinLevel, wfcEnabled = nil, nil, nil })
 
 	if authorizeAdmin("ghost") {
 		t.Error("expected unknown user to be denied admin access")
@@ -38,6 +40,7 @@ func TestAuthorizeAdmin_WFCDisabled(t *testing.T) {
 		&user.User{Handle: "boss", AccessLevel: 255},
 	)
 	adminMinLevel = func() int { return 250 }
+	t.Cleanup(func() { userMgr, adminMinLevel, wfcEnabled = nil, nil, nil })
 
 	wfcEnabled = func() bool { return false }
 	if authorizeAdmin("boss") {
