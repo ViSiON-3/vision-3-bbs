@@ -28,6 +28,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
+	"github.com/ViSiON-3/vision-3-bbs/internal/mailer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkapi"
@@ -36,6 +37,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -1561,8 +1563,8 @@ func main() {
 		slog.Info("configuration hot reload enabled")
 	}
 
-	if ftnErr == nil && len(ftnConfig.Networks) > 0 {
-		slog.Info("internal FTN tosser disabled, use v3mail for toss/scan")
+	if ftnErr == nil && len(ftnConfig.Networks) > 0 && !ftnConfig.Binkd.Enabled {
+		slog.Info("internal FTN tosser disabled, use v3mail for toss/scan or enable the binkd mailer")
 	}
 
 	// Load event scheduler configuration
@@ -1708,6 +1710,41 @@ func main() {
 		}
 	} else if v3netCfgErr == nil {
 		slog.Info("V3Net networking disabled")
+	}
+
+	// Start the integrated binkd mailer if enabled (configs/ftn.json "binkd").
+	// Failures are warnings: the BBS must come up even if the mailer can't.
+	if ftnErr == nil && ftnConfig.Binkd.Enabled {
+		mailerFTN := ftnConfig
+		mailerFTN.ResolvePaths(basePath)
+		dupeDBPath := mailerFTN.DupeDBPath
+		if dupeDBPath == "" {
+			dupeDBPath = filepath.Join(dataPath, "ftn", "dupes.json")
+		}
+		dupeDB, dupeErr := tosser.NewDupeDBFromPath(dupeDBPath)
+		if dupeErr != nil {
+			slog.Warn("binkd mailer: dupe db unavailable, export loop disabled", "error", dupeErr)
+		}
+		mailerSvc, mErr := mailer.New(mailer.Config{
+			BBSRoot: basePath,
+			FTN:     mailerFTN,
+			MsgMgr:  messageMgr,
+			DupeDB:  dupeDB,
+		})
+		if mErr != nil {
+			slog.Warn("binkd mailer disabled", "error", mErr)
+		} else {
+			mailerCtx, mailerCancel := context.WithCancel(context.Background())
+			go mailerSvc.Start(mailerCtx)
+			defer func() {
+				slog.Info("shutting down binkd mailer")
+				mailerCancel()
+				if err := mailerSvc.Close(); err != nil {
+					slog.Error("binkd mailer shutdown", "error", err)
+				}
+			}()
+			slog.Info("binkd mailer enabled", "port", ftnConfig.Binkd.Port)
+		}
 	}
 
 	// Ensure at least one protocol is enabled
