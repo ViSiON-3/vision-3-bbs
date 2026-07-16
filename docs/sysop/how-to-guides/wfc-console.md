@@ -11,7 +11,7 @@ or start sysop chat. Those are planned for a later release.
 
 ## Requirements to access WFC
 
-A user account can open the WFC console only when **both** of these are true:
+A user account can open the WFC console only when **all** of these are true:
 
 1. **Access level ≥ the CoSysOp level** (`coSysOpLevel` in `config.json`,
    default **250**). SysOp (255) and CoSysOp (≥250) qualify; regular users do
@@ -19,10 +19,14 @@ A user account can open the WFC console only when **both** of these are true:
    numeric access level that matters.
 2. **A registered SSH public key** on the account. WFC authenticates with your
    SSH key (no password), and the key must be listed on a qualifying account.
+3. **WFC access enabled** — the `wfcEnabled` config flag (default **true**).
+   Toggle it in the config TUI under **System Configuration → Access Levels**
+   as **WFC Access**. This is hot-reloaded: the change takes effect on the
+   *next* connection attempt, no restart needed.
 
-A key that isn't registered — or that belongs to a below-CoSysOp user — simply
-falls through to the **normal caller login**. Adding WFC access never affects
-regular logins.
+A key that isn't registered, belongs to a below-CoSysOp user, or arrives while
+WFC Access is disabled simply falls through to the **normal caller login**.
+Adding WFC access never affects regular logins.
 
 ## Enabling access for a sysop
 
