@@ -62,9 +62,14 @@ Extend the existing `BinkdConfig` / `UpdateBinkdConf` — do not rewrite:
   `v3mail` is resolved as the binary sitting next to the running `vision3`
   executable.
 
-Regeneration points: config-editor save (already wired via
+Note: full regeneration is only possible from the FTN wizard (hub hostnames
+live only in binkd.conf, not ftn.json). The daemon and TUI save therefore
+*sync* dynamic values into the existing file: identity + link passwords
+(existing `SyncBinkdConf`) and a new `SyncBinkdSettings` for `iport` /
+`loglevel`. Sync points: config-editor save (already wired via
 `ftn_wizard_save.go` / `update_save.go`) and every daemon (re)start, so the
-file is always fresh before binkd launches.
+file is always fresh before binkd launches. The inbound `exec "v3mail toss"`
+hook and `prescan` are already emitted by the existing generator.
 
 ## 3. Mailer daemon (`internal/mailer`, new package)
 
@@ -72,8 +77,9 @@ Follows the V3Net / scheduler daemon pattern (`New` → `Start(ctx)` → `Close`
 
 **Supervision:**
 
-- Regenerate `binkd.conf`, then `exec.Command(binkdPath, confPath)` — no `-D`
-  flag, so binkd runs as a child and cannot outlive the BBS.
+- Sync `binkd.conf` settings (`iport`, `loglevel`), then
+  `exec.Command(binkdPath, confPath)` — no `-D` flag, so binkd runs as a child
+  and cannot outlive the BBS.
 - Wait on the process; on unexpected exit, restart with exponential backoff
   (5s doubling to a 5-minute cap, reset after a healthy run), each restart
   logged via `slog`.
@@ -82,6 +88,7 @@ Follows the V3Net / scheduler daemon pattern (`New` → `Start(ctx)` → `Close`
 **Preflight (warn + disable, never fatal to BBS startup):**
 
 - Binary exists and is executable.
+- `data/ftn/binkd.conf` exists (created by the FTN Setup Wizard).
 - At least one network in `ftn.json` has an `OwnAddress`.
 - Port in valid range.
 
@@ -130,8 +137,8 @@ existing sync in `update_save.go`).
 - **Supervisor:** tests with a fake "binkd" shell script — clean start,
   crash → restart with backoff, ctx-cancel → SIGTERM then exit. Run with
   `-race`.
-- **Export loop:** temp JAM base → messages appear packed in
-  `BinkdOutboundPath`.
+- **Export loop:** returns immediately without deps; scan/pack behavior
+  itself is already covered by `internal/tosser` tests.
 
 ## 7. Documentation updates
 
