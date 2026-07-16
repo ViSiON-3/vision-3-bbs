@@ -845,6 +845,7 @@ type ServerConfig struct {
 	Timezone            string `json:"timezone,omitempty"`
 	SysOpLevel          int    `json:"sysOpLevel"`
 	CoSysOpLevel        int    `json:"coSysOpLevel"`
+	WFCEnabled          bool   `json:"wfcEnabled"`     // Allow remote WFC sysop console (wfc-admin subsystem)
 	InvisibleLevel      int    `json:"invisibleLevel"` // Access level for invisible logon prompt; 0 = use coSysOpLevel
 	NewUserLevel        int    `json:"newUserLevel"`   // Access level assigned to new signups
 	RegularUserLevel    int    `json:"regularUserLevel"`
@@ -1071,6 +1072,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		Timezone:                  "",
 		SysOpLevel:                255,
 		CoSysOpLevel:              250,
+		WFCEnabled:                true,
 		NewUserLevel:              1,
 		RegularUserLevel:          10,
 		LogonLevel:                10,
