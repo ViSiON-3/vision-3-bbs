@@ -23,7 +23,6 @@ type Config struct {
 	BBSRoot string                  // absolute BBS root directory
 	FTN     config.FTNConfig        // FTN config including the Binkd section
 	MsgMgr  *message.MessageManager // for the export loop (may be nil in tests)
-	DupeDB  *tosser.DupeDB          // for the export loop (may be nil in tests)
 }
 
 // Service runs binkd under supervision plus the outbound export loop.
@@ -34,6 +33,12 @@ type Service struct {
 	backoffMin time.Duration
 	backoffMax time.Duration
 	healthyRun time.Duration // process uptime that resets the backoff
+
+	// exportDupeDB is a throwaway dupe database used only to satisfy the
+	// tosser constructor's signature during export. The export path never
+	// records or persists dupes: v3mail toss (external process) owns
+	// data/ftn/dupes.json for real dupe tracking on inbound mail.
+	exportDupeDB *tosser.DupeDB
 
 	started atomic.Bool
 	done    chan struct{} // closed when Start's loops have both finished
@@ -78,14 +83,24 @@ func New(cfg Config) (*Service, error) {
 		return nil, fmt.Errorf("no FTN network has an own address configured")
 	}
 
+	// Throwaway dupe DB for the export path: the tosser constructor requires
+	// one, but export never records dupes (only inbound v3mail toss does),
+	// and os.DevNull guarantees this instance never reads or writes real
+	// dupe state on disk.
+	exportDupeDB, err := tosser.NewDupeDB(os.DevNull, 0)
+	if err != nil {
+		return nil, fmt.Errorf("creating export dupe db: %w", err)
+	}
+
 	return &Service{
-		cfg:        cfg,
-		binkdPath:  binkdPath,
-		confPath:   confPath,
-		backoffMin: 5 * time.Second,
-		backoffMax: 5 * time.Minute,
-		healthyRun: time.Minute,
-		done:       make(chan struct{}),
+		cfg:          cfg,
+		binkdPath:    binkdPath,
+		confPath:     confPath,
+		backoffMin:   5 * time.Second,
+		backoffMax:   5 * time.Minute,
+		healthyRun:   time.Minute,
+		done:         make(chan struct{}),
+		exportDupeDB: exportDupeDB,
 	}, nil
 }
 
@@ -109,17 +124,13 @@ func (s *Service) Start(ctx context.Context) {
 	s.wg.Wait()
 }
 
-// Close waits for the loops to finish (if Start was ever called) and
-// persists the dupe database. It is safe to call Close before Start: it
-// returns promptly after saving the dupe database.
+// Close waits for the loops to finish (if Start was ever called). It is
+// safe to call Close before Start: it returns promptly. There is no dupe
+// database to persist here — the export path never records dupes, and
+// v3mail toss (external process) owns data/ftn/dupes.json for inbound mail.
 func (s *Service) Close() error {
 	if s.started.Load() {
 		<-s.done
-	}
-	if s.cfg.DupeDB != nil {
-		if err := s.cfg.DupeDB.Save(); err != nil {
-			return fmt.Errorf("saving dupe db: %w", err)
-		}
 	}
 	return nil
 }

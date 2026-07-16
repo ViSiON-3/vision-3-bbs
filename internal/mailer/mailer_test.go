@@ -93,7 +93,7 @@ func TestNewPreflightBadPort(t *testing.T) {
 }
 
 func TestExportLoopDisabledWithoutDeps(t *testing.T) {
-	// With no MsgMgr/DupeDB the export loop must return immediately, not tick.
+	// With no MsgMgr the export loop must return immediately, not tick.
 	root := newTestRoot(t)
 	svc, err := New(Config{BBSRoot: root, FTN: testFTNConfig()})
 	if err != nil {

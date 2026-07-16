@@ -39,7 +39,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
-	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -1719,19 +1718,10 @@ func main() {
 	if ftnErr == nil && ftnConfig.Binkd.Enabled {
 		mailerFTN := ftnConfig
 		mailerFTN.ResolvePaths(basePath)
-		dupeDBPath := mailerFTN.DupeDBPath
-		if dupeDBPath == "" {
-			dupeDBPath = filepath.Join(dataPath, "ftn", "dupes.json")
-		}
-		dupeDB, dupeErr := tosser.NewDupeDBFromPath(dupeDBPath)
-		if dupeErr != nil {
-			slog.Warn("binkd mailer: dupe db unavailable, export loop disabled", "error", dupeErr)
-		}
 		mailerSvc, mErr := mailer.New(mailer.Config{
 			BBSRoot: basePath,
 			FTN:     mailerFTN,
 			MsgMgr:  messageMgr,
-			DupeDB:  dupeDB,
 		})
 		if mErr != nil {
 			slog.Warn("binkd mailer disabled", "error", mErr)

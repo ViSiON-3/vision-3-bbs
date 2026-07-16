@@ -12,8 +12,8 @@ import (
 // binkd's outbound directory. Inbound needs no loop: the binkd.conf exec hook
 // runs "v3mail toss" after each receive.
 func (s *Service) exportLoop(ctx context.Context) {
-	if s.cfg.MsgMgr == nil || s.cfg.DupeDB == nil {
-		slog.Warn("binkd export loop disabled: message manager or dupe db unavailable")
+	if s.cfg.MsgMgr == nil {
+		slog.Warn("binkd export loop disabled: message manager unavailable")
 		return
 	}
 	if s.cfg.FTN.Binkd.ExportSecs <= 0 {
@@ -37,12 +37,18 @@ func (s *Service) exportLoop(ctx context.Context) {
 }
 
 // exportOnce runs scan+pack for every tosser-enabled network.
+//
+// The tosser constructor requires a *tosser.DupeDB, but export
+// (ScanAndExport/PackOutbound) never consults or records dupes — only
+// inbound tossing does, and inbound runs in external "v3mail toss"
+// processes that own data/ftn/dupes.json. s.exportDupeDB is a throwaway
+// instance backed by os.DevNull that is never read from or written to.
 func (s *Service) exportOnce() {
 	for name, netCfg := range s.cfg.FTN.Networks {
 		if !netCfg.InternalTosserEnabled {
 			continue
 		}
-		t, err := tosser.New(name, netCfg, s.cfg.FTN, s.cfg.DupeDB, s.cfg.MsgMgr)
+		t, err := tosser.New(name, netCfg, s.cfg.FTN, s.exportDupeDB, s.cfg.MsgMgr)
 		if err != nil {
 			slog.Error("binkd export: tosser init failed", "network", name, "error", err)
 			continue
