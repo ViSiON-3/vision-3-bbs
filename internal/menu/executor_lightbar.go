@@ -897,3 +897,32 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 		}
 	}
 }
+
+// Define needed ANSI attributes
+const (
+	attrInverse = "\x1b[7m" // Inverse video - Keep for fallback?
+	attrReset   = "\x1b[0m" // Reset attributes
+)
+
+// LightbarOption represents a single option in a lightbar menu
+type LightbarOption struct {
+	X, Y           int    // Screen coordinates
+	Text           string // Display text
+	HotKey         string // Command hotkey
+	ReturnValue    string // Return value (often same as hotkey, but can differ)
+	HighlightColor int    // Color code when highlighted
+	RegularColor   int    // Color code when not highlighted
+}
+
+// ANSI foreground color codes (standard and bright)
+var ansiFg = map[int]int{
+	0: 30, 1: 34, 2: 32, 3: 36, 4: 31, 5: 35, 6: 33, 7: 37, // Standard
+	8: 90, 9: 94, 10: 92, 11: 96, 12: 91, 13: 95, 14: 93, 15: 97, // Bright
+}
+
+// ANSI background color codes (standard, non-bright)
+var ansiBg = map[int]int{
+	0: 40, 1: 44, 2: 42, 3: 46, 4: 41, 5: 45, 6: 43, 7: 47,
+	// Note: 40-47 are standard (darker) backgrounds
+	// 100-107 would be bright backgrounds (less terminal support)
+}
