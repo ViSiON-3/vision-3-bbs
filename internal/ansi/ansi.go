@@ -21,25 +21,6 @@ const (
 	OutputModeCP437                   // Force raw CP437 byte output
 )
 
-// Map of CP437 box drawing bytes to their VT100 line drawing mode equivalents
-var cp437ToVT100 = map[byte]byte{
-	0xB3: 'x', // │ vertical line
-	0xC4: 'q', // ─ horizontal line
-	0xDA: 'l', // ┌ upper left corner
-	0xC0: 'm', // └ lower left corner
-	0xD9: 'j', // ┘ lower right corner
-	0xBF: 'k', // ┐ upper right corner
-	0xC3: 't', // ├ left tee
-	0xB4: 'u', // ┤ right tee
-	0xC2: 'w', // ┬ top tee
-	0xC1: 'v', // ┴ bottom tee
-	0xC5: 'n', // ┼ cross
-	0xB1: 'a', // ▒ medium shade (approximate)
-	0xB0: '`', // ░ light shade (approximate)
-	0xB2: '0', // ▓ dark shade (approximate)
-	0xDB: '0', // █ full block (approximate)
-}
-
 // ConvertCP437ToUTF8 converts raw CP437-encoded bytes to valid UTF-8.
 // ANSI escape sequences (ESC [ ... <letter>) are preserved unchanged.
 // Bytes < 0x80 are passed through as-is (ASCII).
