@@ -2235,6 +2235,10 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 	return nil
 }
 
+// includeTagRe matches %%filename.ext%% include tags. Package-level so menu
+// renders don't recompile it on every call and recursion level.
+var includeTagRe = regexp.MustCompile(`%%([a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+)%%`)
+
 // processFileIncludes recursively replaces %%filename.ans tags with file content.
 // It now looks for included files within the MENU SET's ansi directory.
 func (e *MenuExecutor) processFileIncludes(prompt string, depth int) (string, error) {
@@ -2244,11 +2248,11 @@ func (e *MenuExecutor) processFileIncludes(prompt string, depth int) (string, er
 		return prompt, nil
 	}
 
-	re := regexp.MustCompile(`%%([a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+)%%`)
 	processedAny := false
-	result := re.ReplaceAllStringFunc(prompt, func(match string) string {
+	result := includeTagRe.ReplaceAllStringFunc(prompt, func(match string) string {
 		processedAny = true
-		fileName := re.FindStringSubmatch(match)[1]
+		// match is "%%name.ext%%"; strip the delimiters instead of re-matching.
+		fileName := strings.TrimSuffix(strings.TrimPrefix(match, "%%"), "%%")
 		// Look for included file in MenuSetPath/ansi
 		filePath := filepath.Join(e.MenuSetPath, "ansi", fileName)
 
