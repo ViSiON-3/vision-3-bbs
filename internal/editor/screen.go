@@ -568,9 +568,10 @@ func colorizeConfAreaText(text string) string {
 	for _, r := range text {
 		switch {
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			if wordCharCount == 0 {
+			switch wordCharCount {
+			case 0:
 				sb.WriteString("|07") // light grey — first letter of word
-			} else if wordCharCount == 1 {
+			case 1:
 				sb.WriteString("|15") // bright white — rest of word
 			}
 			sb.WriteRune(r)

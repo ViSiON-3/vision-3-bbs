@@ -416,9 +416,9 @@ func runCfgColor(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Display color palette
 	var palette strings.Builder
-	palette.WriteString(fmt.Sprintf(e.LoadedStrings.CfgColorSelectPrompt, slotName))
+	fmt.Fprintf(&palette, e.LoadedStrings.CfgColorSelectPrompt, slotName)
 	for i := 0; i < 16; i++ {
-		palette.WriteString(fmt.Sprintf("|%02d  %2d  ", i, i))
+		fmt.Fprintf(&palette, "|%02d  %2d  ", i, i)
 		if i == 7 {
 			palette.WriteString("\r\n")
 		}
@@ -753,12 +753,12 @@ func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
 
 		var buf strings.Builder
 		buf.WriteString(e.LoadedStrings.CfgFileColumnsHeader)
-		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "N", "Name", displayState(c.Name)))
-		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "S", "Size", displayState(c.Size)))
-		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "D", "Date", displayState(c.Date)))
-		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "L", "Downloads", displayState(c.Downloads)))
-		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "U", "Uploader", displayState(c.Uploader)))
-		buf.WriteString(fmt.Sprintf(e.LoadedStrings.CfgFileColumnsToggle, "E", "Description", displayState(c.Description)))
+		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "N", "Name", displayState(c.Name))
+		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "S", "Size", displayState(c.Size))
+		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "D", "Date", displayState(c.Date))
+		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "L", "Downloads", displayState(c.Downloads))
+		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "U", "Uploader", displayState(c.Uploader))
+		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "E", "Description", displayState(c.Description))
 		buf.WriteString(e.LoadedStrings.CfgFileColumnsHeader) // reuse as prompt separator
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(buf.String())), outputMode)
 

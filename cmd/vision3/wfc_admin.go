@@ -18,6 +18,11 @@ var adminServer *admin.Server
 // a restart. Set once at startup; tests may replace it with a stub.
 var adminMinLevel func() int
 
+// wfcEnabled reports whether remote WFC admin access is allowed at all.
+// Like adminMinLevel it is a live getter so config hot-reloads take effect
+// without a restart. Nil (not yet wired, or a test that left it unset) denies.
+var wfcEnabled func() bool
+
 // wfcAdminHandleKey is the context key used to stash the admin handle during
 // public-key authentication so wfcAdminSubsystem can re-verify it.
 type wfcAdminHandleKey struct{}
@@ -36,6 +41,11 @@ func wfcPublicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 		return false
 	}
 	if !authorizeAdmin(u.Handle) {
+		if wfcEnabled == nil || !wfcEnabled() {
+			slog.Info("wfc-admin: public key rejected, wfc access disabled",
+				"user", u.Handle, "addr", ctx.RemoteAddr())
+			return false
+		}
 		minLevel := 0
 		if adminMinLevel != nil {
 			minLevel = adminMinLevel()
@@ -49,12 +59,12 @@ func wfcPublicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	return true
 }
 
-// authorizeAdmin returns true when the user identified by handle exists and
-// has an access level >= the live adminMinLevel threshold. It denies access if
-// the getter is nil (daemon not yet initialised or running in a test that
-// deliberately left it unset).
+// authorizeAdmin returns true when WFC admin access is enabled and the user
+// identified by handle exists with an access level >= the live adminMinLevel
+// threshold. It denies access if either live getter is nil (daemon not yet
+// initialised or running in a test that deliberately left it unset).
 func authorizeAdmin(handle string) bool {
-	if userMgr == nil || adminMinLevel == nil {
+	if userMgr == nil || adminMinLevel == nil || wfcEnabled == nil || !wfcEnabled() {
 		return false
 	}
 	u, found := userMgr.GetUser(handle)

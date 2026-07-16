@@ -385,11 +385,11 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 		}
 
 		var newLastRead int
-		switch {
-		case scanDate == 0:
+		switch scanDate {
+		case 0:
 			// All new: reset pointer to 0 so all messages appear unread
 			newLastRead = 0
-		case scanDate == -2:
+		case -2:
 			// Mark all read: set pointer to totalCount
 			newLastRead = totalCount
 		default:

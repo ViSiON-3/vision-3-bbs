@@ -381,9 +381,10 @@ func (m Model) updateRecordField(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if f.Type == ftYesNo {
 			if len(msg.Runes) == 1 {
 				ch := msg.Runes[0]
-				if ch == 'y' || ch == 'Y' {
+				switch ch {
+				case 'y', 'Y':
 					m.textInput.SetValue("Y")
-				} else if ch == 'n' || ch == 'N' {
+				case 'n', 'N':
 					m.textInput.SetValue("N")
 				}
 				if err := m.applyRecordFieldValue(f); err == nil {

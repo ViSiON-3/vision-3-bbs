@@ -70,3 +70,34 @@ func TestSysFieldsQWKAPI(t *testing.T) {
 		t.Errorf("Token TTL for negative value: want 24, got %q", got)
 	}
 }
+
+func TestSysFieldsLevels_WFCAccess(t *testing.T) {
+	cfg := &config.ServerConfig{WFCEnabled: true}
+	fields := sysFieldsLevels(cfg)
+
+	var f *fieldDef
+	for i := range fields {
+		if fields[i].Label == "WFC Access" {
+			f = &fields[i]
+			break
+		}
+	}
+	if f == nil {
+		t.Fatal("WFC Access field not found in Access Levels screen")
+	}
+	if f.Type != ftYesNo {
+		t.Errorf("WFC Access type: want ftYesNo, got %v", f.Type)
+	}
+	if got := f.Get(); got != "Y" {
+		t.Errorf("Get with WFCEnabled=true: want Y, got %q", got)
+	}
+	if err := f.Set("N"); err != nil {
+		t.Fatalf("Set(N): %v", err)
+	}
+	if cfg.WFCEnabled {
+		t.Error("Set(N) should clear cfg.WFCEnabled")
+	}
+	if got := f.Get(); got != "N" {
+		t.Errorf("Get after Set(N): want N, got %q", got)
+	}
+}

@@ -372,7 +372,7 @@ func TestProcessPlaceholderGapFill(t *testing.T) {
 			for i < len(got) {
 				if got[i] == 0x1b && i+1 < len(got) && got[i+1] == '[' {
 					i += 2
-					for i < len(got) && !((got[i] >= 'A' && got[i] <= 'Z') || (got[i] >= 'a' && got[i] <= 'z')) {
+					for i < len(got) && (got[i] < 'A' || got[i] > 'Z') && (got[i] < 'a' || got[i] > 'z') {
 						i++
 					}
 					if i < len(got) {

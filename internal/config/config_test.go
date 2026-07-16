@@ -137,14 +137,18 @@ func TestLoadServerConfig_Defaults(t *testing.T) {
 	if result.BoardName != "ViSiON/3 BBS" {
 		t.Errorf("expected default board name, got %s", result.BoardName)
 	}
+	if !result.WFCEnabled {
+		t.Error("expected WFCEnabled to default to true")
+	}
 }
 
 func TestLoadServerConfig_CustomValues(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := map[string]interface{}{
-		"boardName": "Test BBS",
-		"sshPort":   3333,
-		"maxNodes":  50,
+		"boardName":  "Test BBS",
+		"sshPort":    3333,
+		"maxNodes":   50,
+		"wfcEnabled": false,
 	}
 	data, _ := json.Marshal(cfg)
 	os.WriteFile(filepath.Join(tmpDir, "config.json"), data, 0644)
@@ -161,6 +165,9 @@ func TestLoadServerConfig_CustomValues(t *testing.T) {
 	}
 	if result.MaxNodes != 50 {
 		t.Errorf("expected MaxNodes 50, got %d", result.MaxNodes)
+	}
+	if result.WFCEnabled {
+		t.Error("expected WFCEnabled false when explicitly disabled in config.json")
 	}
 }
 
