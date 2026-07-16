@@ -3,6 +3,7 @@ package menu
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -18,6 +19,25 @@ import (
 // the editor exits, which caused the "double key press" bug on return to a menu.
 var sessionInputHandlers sync.Map
 
+// sessionIdleTimeouts remembers the session-level idle timeout for each
+// ssh.Session so getSessionIH can re-apply it whenever the InputHandler is
+// recreated (doors and zmodem call resetSessionIH; without this the recreated
+// handler silently lost the timeout and the user could idle forever).
+var sessionIdleTimeouts sync.Map
+
+// applySessionIdleTimeout records the idle timeout for s and applies it to the
+// current InputHandler. It survives resetSessionIH: recreated handlers get the
+// same timeout.
+func applySessionIdleTimeout(s ssh.Session, d time.Duration) {
+	sessionIdleTimeouts.Store(s, d)
+	getSessionIH(s).SetSessionIdleTimeout(d)
+}
+
+// clearSessionIdleTimeout drops the remembered timeout when a session ends.
+func clearSessionIdleTimeout(s ssh.Session) {
+	sessionIdleTimeouts.Delete(s)
+}
+
 // getSessionIH returns (creating if necessary) the session-scoped InputHandler
 // for s. All callers within the same session share a single goroutine that
 // reads from the ssh.Session, so bytes are never lost when control passes
@@ -27,6 +47,9 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 		return v.(*editor.InputHandler)
 	}
 	ih := editor.NewInputHandler(s)
+	if d, ok := sessionIdleTimeouts.Load(s); ok {
+		ih.SetSessionIdleTimeout(d.(time.Duration))
+	}
 	sessionInputHandlers.Store(s, ih)
 	return ih
 }
