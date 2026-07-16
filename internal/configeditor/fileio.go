@@ -146,19 +146,6 @@ func saveJSONSlice[T any](configPath, filename string, data []T) error {
 	return nil
 }
 
-// saveJSONMap writes a map as a JSON object to a file.
-func saveJSONMap[K comparable, V any](configPath, filename string, data map[K]V) error {
-	filePath := filepath.Join(configPath, filename)
-	jsonData, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling %s: %w", filename, err)
-	}
-	if err := os.WriteFile(filePath, jsonData, 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", filePath, err)
-	}
-	return nil
-}
-
 // saveDoors writes doors config back to disk as a JSON array (matching LoadDoors format).
 func saveDoors(configPath string, doors map[string]config.DoorConfig) error {
 	// LoadDoors reads a JSON array and keys by Name, so we save as an array

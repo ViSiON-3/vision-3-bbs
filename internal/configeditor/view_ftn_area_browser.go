@@ -171,9 +171,3 @@ func (m Model) viewFTNAreaBrowser() string {
 
 	return b.String()
 }
-
-// viewFTNAreaDownloading renders the downloading progress screen.
-func (m Model) viewFTNAreaDownloading() string {
-	// Delegate to the area browser view which handles the loading state.
-	return m.viewFTNAreaBrowser()
-}

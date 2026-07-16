@@ -57,9 +57,6 @@ var globalHeaderBarStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color(dosColors[8])).
 	Bold(true)
 
-// --- Title/Status bars ---
-var titleBarStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color(dosColors[8]))
-
 // --- Background fill ---
 // Fill_Screen('░',7,1) → gray on blue
 var bgFillStyle = dosColor(1, 7)

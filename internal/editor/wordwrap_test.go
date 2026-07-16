@@ -25,15 +25,6 @@ func setupBuffer(lines []string, hardLines ...int) (*MessageBuffer, *WordWrapper
 	return mb, ww
 }
 
-func bufferLines(mb *MessageBuffer) []string {
-	count := mb.GetLineCount()
-	result := make([]string, count)
-	for i := 1; i <= count; i++ {
-		result[i-1] = mb.GetLine(i)
-	}
-	return result
-}
-
 // --- ReflowRange Tests ---
 
 func TestReflowRange_NoWrapNeeded(t *testing.T) {

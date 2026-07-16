@@ -56,7 +56,6 @@ type Model struct {
 
 	// Search
 	searchInput textinput.Model
-	searchQuery string
 
 	// Message (flash message shown briefly)
 	message string

@@ -41,8 +41,7 @@ type Config struct {
 
 // Server wraps a gliderlabs/ssh server.
 type Server struct {
-	inner    *ssh.Server
-	listener net.Listener
+	inner *ssh.Server
 }
 
 // NewServer creates and configures a new SSH server.
@@ -131,12 +130,6 @@ func NewServer(cfg Config) (*Server, error) {
 // It blocks until the server is closed.
 func (s *Server) ListenAndServe() error {
 	return s.inner.ListenAndServe()
-}
-
-// Serve starts serving on an existing listener. Blocks until closed.
-func (s *Server) Serve(l net.Listener) error {
-	s.listener = l
-	return s.inner.Serve(l)
 }
 
 // Close shuts down the server and all active connections.

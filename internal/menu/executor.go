@@ -144,25 +144,11 @@ func (e *MenuExecutor) SetStrings(strings config.StringsConfig) {
 	e.LoadedStrings = strings
 }
 
-// GetStrings atomically retrieves the strings configuration.
-func (e *MenuExecutor) GetStrings() config.StringsConfig {
-	e.configMu.RLock()
-	defer e.configMu.RUnlock()
-	return e.LoadedStrings
-}
-
 // SetTheme atomically updates the theme configuration.
 func (e *MenuExecutor) SetTheme(theme config.ThemeConfig) {
 	e.configMu.Lock()
 	defer e.configMu.Unlock()
 	e.Theme = theme
-}
-
-// GetTheme atomically retrieves the theme configuration.
-func (e *MenuExecutor) GetTheme() config.ThemeConfig {
-	e.configMu.RLock()
-	defer e.configMu.RUnlock()
-	return e.Theme
 }
 
 // SetServerConfig atomically updates the server configuration.

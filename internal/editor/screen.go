@@ -17,27 +17,26 @@ import (
 
 // Screen handles all screen rendering and ANSI control
 type Screen struct {
-	terminal         io.Writer
-	outputMode       ansi.OutputMode
-	termWidth        int
-	termHeight       int
-	editingStartY    int // First Y position for text entry
-	statusLineY      int // Y position of status line
-	screenLines      int // Number of editing lines available
-	headerHeight     int // Height of header
-	headerContent    string
-	physicalLines    map[int]string // Track last rendered state for incremental updates
-	lastInsertMode   bool           // Track last insert mode to avoid redundant updates
-	lastCurrentLine  int            // Track last current line to avoid redundant updates
-	lastStatusUpdate string         // Track last status to avoid redundant updates
-	insertModeRow    int            // Terminal row of the @I@ insert-mode indicator (1-based)
-	insertModeCol    int            // Terminal col of the @I@ insert-mode indicator (1-based)
-	insertModeColor  string         // ANSI SGR escape to restore colors at @I@ position
-	timeLoc          *time.Location // Timezone for date/time display
-	configTimezone   string         // Raw timezone string from config
-	nodeNumber       int            // Node number for @K@ placeholder
-	nextMsgNum       int            // Next message number for @#@ placeholder
-	confArea         string         // "Conference > Area" for @Z@ placeholder
+	terminal        io.Writer
+	outputMode      ansi.OutputMode
+	termWidth       int
+	termHeight      int
+	editingStartY   int // First Y position for text entry
+	statusLineY     int // Y position of status line
+	screenLines     int // Number of editing lines available
+	headerHeight    int // Height of header
+	headerContent   string
+	physicalLines   map[int]string // Track last rendered state for incremental updates
+	lastInsertMode  bool           // Track last insert mode to avoid redundant updates
+	lastCurrentLine int            // Track last current line to avoid redundant updates
+	insertModeRow   int            // Terminal row of the @I@ insert-mode indicator (1-based)
+	insertModeCol   int            // Terminal col of the @I@ insert-mode indicator (1-based)
+	insertModeColor string         // ANSI SGR escape to restore colors at @I@ position
+	timeLoc         *time.Location // Timezone for date/time display
+	configTimezone  string         // Raw timezone string from config
+	nodeNumber      int            // Node number for @K@ placeholder
+	nextMsgNum      int            // Next message number for @#@ placeholder
+	confArea        string         // "Conference > Area" for @Z@ placeholder
 	// Row-4 info bar overlay positions (tracked from template before substitution)
 	msgNumRow       int    // Terminal row of the @#@ msg-number field
 	msgNumCol       int    // Terminal col of the @#@ msg-number field (1-based)
@@ -717,23 +716,6 @@ func (s *Screen) FullRedraw(buffer *MessageBuffer, topLine, currentLine, current
 
 	// Refresh all lines (force status update on full redraw)
 	s.RefreshScreen(buffer, topLine, currentLine, currentCol, insertMode, true)
-}
-
-// UpdateDynamicFields updates dynamic fields in the status line (like Insert/Line indicators)
-func (s *Screen) UpdateDynamicFields(insertMode bool, currentLine, totalLines int) {
-	// For now, just update the status line
-	s.DisplayStatusLine(insertMode, currentLine, totalLines)
-}
-
-// ScrollUp scrolls the display up by the specified number of lines
-func (s *Screen) ScrollUp(lines int) {
-	// For simplicity, we'll do a full refresh when scrolling
-	// ANSI scroll sequences could be used for optimization
-}
-
-// ScrollDown scrolls the display down by the specified number of lines
-func (s *Screen) ScrollDown(lines int) {
-	// For simplicity, we'll do a full refresh when scrolling
 }
 
 // GetScreenLines returns the number of available editing lines

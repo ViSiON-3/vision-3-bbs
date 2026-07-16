@@ -169,11 +169,3 @@ func WriteStringCP437(writer io.Writer, data []byte, mode ansi.OutputMode) error
 	_, err := writer.Write(out)
 	return err
 }
-
-// WritePipeCodes directly writes pipe code processed output without CP437 conversion.
-// Useful when the underlying writer handles encoding or when UTF-8 is desired.
-func WritePipeCodes(w io.Writer, data []byte) error {
-	processed := ansi.ReplacePipeCodes(data)
-	_, err := w.Write(processed)
-	return err
-}

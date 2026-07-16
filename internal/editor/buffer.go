@@ -327,14 +327,6 @@ func (mb *MessageBuffer) JoinLines(lineNum int) bool {
 	return true
 }
 
-// RemoveTrailingSpaces removes trailing spaces from a line
-func (mb *MessageBuffer) RemoveTrailingSpaces(lineNum int) {
-	if lineNum < 1 || lineNum > MaxLines {
-		return
-	}
-	mb.lines[lineNum] = strings.TrimRight(mb.lines[lineNum], " ")
-}
-
 // GetContent returns the entire buffer content as a string.
 // Uses GetContentLineCount to trim trailing empty lines for storage.
 func (mb *MessageBuffer) GetContent() string {
@@ -358,30 +350,6 @@ func (mb *MessageBuffer) Clear() {
 		mb.hardNewline[i] = false
 	}
 	mb.lineCount = 1
-}
-
-// GetLastChar returns the last character on a line
-func (mb *MessageBuffer) GetLastChar(lineNum int) rune {
-	if lineNum < 1 || lineNum > MaxLines {
-		return ' '
-	}
-	line := mb.lines[lineNum]
-	if len(line) == 0 {
-		return ' '
-	}
-	return rune(line[len(line)-1])
-}
-
-// GetCharAt returns the character at a specific position (1-based)
-func (mb *MessageBuffer) GetCharAt(lineNum, col int) rune {
-	if lineNum < 1 || lineNum > MaxLines {
-		return ' '
-	}
-	line := mb.lines[lineNum]
-	if col < 1 || col > len(line) {
-		return ' '
-	}
-	return rune(line[col-1])
 }
 
 // IsLineEmpty returns true if a line is empty or contains only whitespace

@@ -87,20 +87,10 @@ var (
 	messageStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("14"))
 
-	// Title/header
-	titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15")).
-			Bold(true)
-
 	// Edit mode indicator
 	editingStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("11")).
 			Background(lipgloss.Color("4")).
-			Bold(true)
-
-	// Dirty indicator
-	dirtyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("12")).
 			Bold(true)
 )
 
