@@ -105,14 +105,17 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }() // best-effort temp cleanup
 
 	if _, err := tmpFile.Write(res.Packet); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close() // cleanup on error path
 		slog.Error("failed to write packet", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		slog.Error("failed to finalize packet file", "node", nodeNumber, "error", err)
+		return currentUser, "", nil
+	}
 
 	// Rename to BBSID.QWK for the transfer
 	qwkPath := filepath.Join(filepath.Dir(tmpPath), bbsID+".QWK")
@@ -120,7 +123,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("rename failed", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
-	defer os.Remove(qwkPath)
+	defer func() { _ = os.Remove(qwkPath) }() // best-effort temp cleanup
 
 	// Protocol selection and send
 	proto, ok, protoErr := e.selectTransferProtocol(s, terminal, outputMode)
@@ -202,7 +205,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("failed to create temp dir", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
-	defer os.RemoveAll(incomingDir)
+	defer func() { _ = os.RemoveAll(incomingDir) }() // best-effort temp cleanup
 
 	resetSessionIH(s)
 	ctx, cancel := e.transferContext(s.Context())

@@ -15,5 +15,5 @@ func tryFileLock(f *os.File) bool {
 
 // releaseFileLock releases the flock on the file.
 func releaseFileLock(f *os.File) {
-	syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) // kernel drops the lock on close regardless
 }

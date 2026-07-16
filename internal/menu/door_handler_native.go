@@ -296,7 +296,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				}
 			}
 
-			ptmx.Close()
+			_ = ptmx.Close() // best-effort PTY teardown
 			<-outputDone
 		}
 	} else if strings.ToUpper(doorConfig.IOMode) == "SOCKET" {
@@ -316,12 +316,12 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			cmd.Env = append(cmd.Env, "DOOR_SOCKET_FD=3")
 
 			if startErr := cmd.Start(); startErr != nil {
-				bbsSock.Close()
-				doorSock.Close()
+				_ = bbsSock.Close()  // best-effort socket teardown
+				_ = doorSock.Close() // best-effort socket teardown
 				cmdErr = fmt.Errorf("failed to start door '%s' with socket I/O: %w", ctx.DoorName, startErr)
 			} else {
 				// Parent closes the door's end
-				doorSock.Close()
+				_ = doorSock.Close() // best-effort socket teardown
 
 				// Set up read interrupt for clean shutdown
 				readInterrupt := make(chan struct{})
@@ -359,7 +359,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				if hasInterrupt {
 					<-inputDone
 				}
-				bbsSock.Close()
+				_ = bbsSock.Close() // best-effort socket teardown
 				<-outputDone
 			}
 		}

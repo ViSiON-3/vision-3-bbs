@@ -344,7 +344,7 @@ func (r *ANSIRenderer) parseCSI(seq string) ([]int, byte) {
 			continue
 		}
 		var num int
-		fmt.Sscanf(part, "%d", &num)
+		_, _ = fmt.Sscanf(part, "%d", &num) // best-effort parse; num stays 0
 		params = append(params, num)
 	}
 

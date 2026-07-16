@@ -245,7 +245,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	// Set PTY master to raw mode for clean passthrough of CP437 bytes
 	fd := int(ptmx.Fd())
 	if oldState, err := term.MakeRaw(fd); err == nil {
-		defer term.Restore(fd, oldState)
+		defer func() { _ = term.Restore(fd, oldState) }() // best-effort terminal restore
 	}
 
 	// Set up a read interrupt so we can cleanly stop the input goroutine
@@ -304,18 +304,18 @@ func executeDOSDoor(ctx *DoorCtx) error {
 						accum = append(accum, buf[:n]...)
 						if idx := bytes.IndexByte(accum, 0x1b); idx >= 0 {
 							gated = false
-							ctx.Session.Write(accum[idx:])
+							_, _ = ctx.Session.Write(accum[idx:]) // best-effort door output relay
 							accum = nil
 							slog.Debug("FOSSIL boot text gate opened", "node", ctx.NodeNumber, "offset", idx)
 						}
 						if gated && len(accum) > 32768 {
 							slog.Warn("FOSSIL gate: no ESC after 32KB, flushing", "node", ctx.NodeNumber)
 							gated = false
-							ctx.Session.Write(accum)
+							_, _ = ctx.Session.Write(accum) // best-effort door output relay
 							accum = nil
 						}
 					} else {
-						ctx.Session.Write(buf[:n])
+						_, _ = ctx.Session.Write(buf[:n]) // best-effort door output relay
 					}
 				}
 				if err != nil {
@@ -343,7 +343,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 					if idx := bytes.Index(accum, clearScreen); idx >= 0 {
 						// Found clear screen — forward it and everything after
 						gated = false
-						ctx.Session.Write(accum[idx:])
+						_, _ = ctx.Session.Write(accum[idx:]) // best-effort door output relay
 						accum = nil
 						slog.Debug("DOS boot text gate opened (clear screen detected)", "node", ctx.NodeNumber)
 					}
@@ -351,11 +351,11 @@ func executeDOSDoor(ctx *DoorCtx) error {
 					if gated && len(accum) > 32768 {
 						slog.Warn("clear screen not found after 32KB, flushing", "node", ctx.NodeNumber)
 						gated = false
-						ctx.Session.Write(accum)
+						_, _ = ctx.Session.Write(accum) // best-effort door output relay
 						accum = nil
 					}
 				} else {
-					ctx.Session.Write(buf[:n])
+					_, _ = ctx.Session.Write(buf[:n]) // best-effort door output relay
 				}
 			}
 			if err != nil {
@@ -380,7 +380,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	if hasInterrupt {
 		<-inputDone
 	}
-	ptmx.Close()
+	_ = ptmx.Close() // best-effort PTY teardown
 	<-outputDone
 
 	if cmdErr != nil {

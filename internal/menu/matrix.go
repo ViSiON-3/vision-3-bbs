@@ -126,7 +126,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 
 		case ' ':
 			// Spacebar redraws screen (matches Pascal behavior)
-			drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode)
+			_ = drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode) // best-effort redraw
 
 		default:
 			if key < 32 || key > 126 {
@@ -139,7 +139,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 				numIndex := int(r - '1')
 				if numIndex < len(options) {
 					selectedIndex = numIndex
-					drawMatrixOptions(terminal, options, selectedIndex, outputMode)
+					_ = drawMatrixOptions(terminal, options, selectedIndex, outputMode) // best-effort redraw
 					selectionMade = true
 				}
 				break
@@ -151,7 +151,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 			for i, opt := range options {
 				if keyStr == opt.HotKey {
 					selectedIndex = i
-					drawMatrixOptions(terminal, options, selectedIndex, outputMode)
+					_ = drawMatrixOptions(terminal, options, selectedIndex, outputMode) // best-effort redraw
 					selectionMade = true
 					matchedHotkey = true
 					break
@@ -159,13 +159,13 @@ func (e *MenuExecutor) RunMatrixScreen(
 			}
 			if !matchedHotkey {
 				e.showUndefinedMenuInput(terminal, outputMode, nodeNumber)
-				drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode)
+				_ = drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode) // best-effort redraw
 			}
 		}
 
 		if newIndex != selectedIndex {
 			selectedIndex = newIndex
-			drawMatrixOptions(terminal, options, selectedIndex, outputMode)
+			_ = drawMatrixOptions(terminal, options, selectedIndex, outputMode) // best-effort redraw
 		}
 
 		if selectionMade {
@@ -190,7 +190,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 			// redraw the screen and continue
 			tries++
 			selectedIndex = 0
-			drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode)
+			_ = drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode) // best-effort redraw
 		}
 	}
 
@@ -358,7 +358,7 @@ func (e *MenuExecutor) showPrelogon(s ssh.Session, terminal *term.Terminal, node
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 	if outputMode == ansi.OutputModeCP437 {
-		terminal.Write(rawContent)
+		_, _ = terminal.Write(rawContent) // best-effort display
 	} else {
 		terminalio.WriteProcessedBytes(terminal, rawContent, outputMode)
 	}
@@ -380,7 +380,7 @@ func drawMatrixScreen(
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 	if outputMode == ansi.OutputModeCP437 {
-		terminal.Write(ansBackground)
+		_, _ = terminal.Write(ansBackground) // best-effort display
 	} else {
 		terminalio.WriteProcessedBytes(terminal, ansBackground, outputMode)
 	}

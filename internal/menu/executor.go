@@ -210,7 +210,7 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 	if rawContent, err := ansi.GetAnsiFileContent(ansPath); err == nil {
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		if outputMode == ansi.OutputModeCP437 {
-			terminal.Write(rawContent)
+			_, _ = terminal.Write(rawContent) // best-effort display
 		} else {
 			terminalio.WriteProcessedBytes(terminal, rawContent, outputMode)
 		}

@@ -335,7 +335,7 @@ func (e *MenuExecutor) runUploadFiles(
 		slog.Error("failed to create incoming directory", "node", nodeNumber, "error", err)
 		return fmt.Errorf("failed to create incoming directory: %w", err)
 	}
-	defer os.RemoveAll(incomingDir)
+	defer func() { _ = os.RemoveAll(incomingDir) }() // best-effort temp cleanup
 
 	// 8. Execute protocol receive into temp directory
 	msg = fmt.Sprintf("\r\n|15Starting %s receive...|07\r\n", proto.Name)
@@ -411,7 +411,7 @@ func (e *MenuExecutor) runUploadFiles(
 		safeName := filepath.Base(nf.name)
 		if safeName != nf.name || safeName == "." || safeName == ".." || strings.Contains(nf.name, "..") || filepath.IsAbs(nf.name) {
 			slog.Error("rejected unsafe filename", "node", nodeNumber, "name", nf.name)
-			os.Remove(incomingPath)
+			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
 			errMsg := fmt.Sprintf("\r\n|01'%s' rejected: invalid filename.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			continue
@@ -421,7 +421,7 @@ func (e *MenuExecutor) runUploadFiles(
 		if existingNames[strings.ToLower(nf.name)] {
 			slog.Warn("duplicate file rejected", "node", nodeNumber, "name", nf.name)
 			duplicateCount++
-			os.Remove(incomingPath)
+			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
 
 			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
@@ -517,7 +517,7 @@ func (e *MenuExecutor) runUploadFiles(
 		if _, statErr := os.Stat(finalPath); statErr == nil {
 			slog.Warn("upload rejected, file already exists on disk", "node", nodeNumber, "name", nf.name)
 			duplicateCount++
-			os.Remove(incomingPath)
+			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
 			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
 			continue

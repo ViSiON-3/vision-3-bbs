@@ -569,7 +569,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 		if _, statErr := os.Stat(selPath); statErr == nil {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Please select a message header style.|07\r\n")), outputMode)
 			time.Sleep(500 * time.Millisecond)
-			runGetHeaderType(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
+			_, _, _ = runGetHeaderType(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 		}
 	}
 
@@ -1128,7 +1128,11 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
-	defer base.Close()
+	defer func() {
+		if cerr := base.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
 
 	// Get total message count
 	totalMessages, err := e.MessageMgr.GetMessageCountForArea(privmailArea.ID)

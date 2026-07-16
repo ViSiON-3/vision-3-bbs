@@ -334,7 +334,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	if ansErr == nil {
 		// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 		if outputMode == ansi.OutputModeCP437 {
-			terminal.Write(headerContent)
+			_, _ = terminal.Write(headerContent) // best-effort display
 		} else {
 			terminalio.WriteProcessedBytes(terminal, headerContent, outputMode)
 		}

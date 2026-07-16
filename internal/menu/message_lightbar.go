@@ -48,7 +48,7 @@ func readKeyWithEscapeHandling(reader *bufio.Reader) (rune, error) {
 		}
 
 		// Read the '[' and direction byte
-		reader.ReadByte() // consume '['
+		_, _ = reader.ReadByte() // consume '['; next read reports errors
 		dirByte, dirErr := reader.ReadByte()
 		if dirErr != nil {
 			return 27, nil

@@ -244,7 +244,7 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 		// (UTF-8 after ConvertCP437ToUTF8, or raw CP437 for CP437 terminals).
 		// Going through WriteProcessedBytes would re-interpret the bytes and
 		// produce '?' for byte pairs that form false UTF-8 sequences.
-		terminal.Write(append(line, '\r', '\n'))
+		_, _ = terminal.Write(append(line, '\r', '\n')) // best-effort display
 		lineCount++
 
 		if lineCount >= linesPerPage {
@@ -315,24 +315,24 @@ func displayTextWithPaging_toWriter(w io.Writer, filePath string, filename strin
 	f, err := os.Open(filePath)
 	if err != nil {
 		slog.Error("failed to open file", "file", filePath, "error", err)
-		fmt.Fprintf(w, "\r\nError opening file.\r\n")
+		_, _ = fmt.Fprintf(w, "\r\nError opening file.\r\n") // best-effort display
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only
 
-	fmt.Fprintf(w, "\r\n--- Viewing: %s ---\r\n\r\n", sanitizeControlChars(filename))
+	_, _ = fmt.Fprintf(w, "\r\n--- Viewing: %s ---\r\n\r\n", sanitizeControlChars(filename)) // best-effort display
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 4096), 4096)
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		fmt.Fprintf(w, "%s\r\n", line)
+		_, _ = fmt.Fprintf(w, "%s\r\n", line) // best-effort display
 	}
 
 	if err := scanner.Err(); err != nil {
 		slog.Warn("error reading file", "file", filePath, "error", err)
 	}
 
-	fmt.Fprintf(w, "\r\n--- End of File ---\r\n")
+	_, _ = fmt.Fprintf(w, "\r\n--- End of File ---\r\n") // best-effort display
 }

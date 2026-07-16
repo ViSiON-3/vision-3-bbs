@@ -418,7 +418,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	headerContent, ansErr := ansi.GetAnsiFileContent(ansPath)
 	if ansErr == nil {
 		if outputMode == ansi.OutputModeCP437 {
-			terminal.Write(headerContent)
+			_, _ = terminal.Write(headerContent) // best-effort display
 		} else {
 			terminalio.WriteProcessedBytes(terminal, headerContent, outputMode)
 		}
