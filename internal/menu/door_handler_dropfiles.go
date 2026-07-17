@@ -85,6 +85,16 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // --- Dropfile Generators ---
 
+// dropfileName resolves the on-disk filename for a dropfile type, applying the
+// configured case. dropfileCase == "lower" (case-insensitive) yields a lowercase
+// name (e.g. "door32.sys"); an empty or unrecognized value defaults to uppercase.
+func dropfileName(dropfileType, dropfileCase string) string {
+	if strings.EqualFold(dropfileCase, "lower") {
+		return strings.ToLower(dropfileType)
+	}
+	return strings.ToUpper(dropfileType)
+}
+
 // generateDoorSys writes a full 52-line PCBoard DOOR.SYS file.
 func generateDoorSys(ctx *DoorCtx, dir string) error {
 	path := filepath.Join(dir, "DOOR.SYS")
