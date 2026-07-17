@@ -233,8 +233,7 @@ func generateDorInfo(ctx *DoorCtx, dir, filename string) error {
 // generateChainTxt writes a CHAIN.TXT file (WWIV format).
 func generateChainTxt(ctx *DoorCtx, dir, filename string) error {
 	path := filepath.Join(dir, filename)
-	slog.Info("generating CHAIN.TXT", "path", path)
-
+	slog.Info("generating dropfile", "type", "CHAIN.TXT", "filename", filename, "path", path)
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	timeLeftSecs := ctx.TimeLeftMin * 60
 	crlf := "\r\n"
