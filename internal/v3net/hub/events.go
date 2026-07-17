@@ -105,14 +105,20 @@ func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network s
 		return
 	}
 
+	// Subscribe BEFORE announcing readiness to the client. The client's
+	// request returns as soon as these headers are flushed, so if we
+	// subscribed afterward a caller could publish an event in the window
+	// between receiving the headers and this handler registering its
+	// channel — that event would fan out to zero subscribers and be lost.
+	// Registering first closes that publish-before-subscribe race.
+	ch, cancel := b.Subscribe(network)
+	defer cancel()
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
-
-	ch, cancel := b.Subscribe(network)
-	defer cancel()
 
 	ctx := r.Context()
 	for {

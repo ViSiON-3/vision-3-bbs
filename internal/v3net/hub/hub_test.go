@@ -372,10 +372,13 @@ func TestSSEHTTPStream(t *testing.T) {
 		if eventType != "chat" {
 			t.Errorf("expected chat event, got %q", eventType)
 		}
-	// Generous deadline: 2s flaked repeatedly on loaded CI runners under
-	// -race. Passing runs aren't delayed (the done case wins as soon as
-	// the event arrives); only failing runs wait out the full deadline.
-	case <-time.After(15 * time.Second):
+	// ServeSSE registers its subscriber before returning the response
+	// headers, so by the time the SSE request above completes the
+	// subscription is guaranteed live and the Publish below cannot be
+	// missed. The event therefore arrives promptly; this deadline only
+	// bounds a genuine hang. (A publish-before-subscribe race previously
+	// forced this up to 15s — see ServeSSE.)
+	case <-time.After(5 * time.Second):
 		t.Error("timed out waiting for SSE event over HTTP")
 	}
 }
