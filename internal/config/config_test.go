@@ -28,8 +28,8 @@ func TestQWKAPIConfig_Defaults(t *testing.T) {
 func TestLoadDoors_ValidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	doors := []DoorConfig{
-		{Name: "LORD", Commands: []string{"/usr/bin/lord", "-n", "{NODE}"}},
-		{Name: "BRE", Commands: []string{"/usr/bin/bre"}},
+		{Code: "LORD", Name: "Legend of the Red Dragon", Commands: []string{"/usr/bin/lord", "-n", "{NODE}"}},
+		{Code: "BRE", Name: "Barren Realms Elite", Commands: []string{"/usr/bin/bre"}},
 	}
 	data, _ := json.Marshal(doors)
 	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
@@ -44,15 +44,19 @@ func TestLoadDoors_ValidFile(t *testing.T) {
 	if len(result["LORD"].Commands) == 0 || result["LORD"].Commands[0] != "/usr/bin/lord" {
 		t.Errorf("expected LORD command /usr/bin/lord, got %v", result["LORD"].Commands)
 	}
+	// Name is a display label: case must be preserved verbatim.
+	if got := result["LORD"].Name; got != "Legend of the Red Dragon" {
+		t.Errorf("Name = %q, want case preserved", got)
+	}
 }
 
-// Menu lookups uppercase the door name (GetDoorConfig(ToUpper(input))), so
-// mixed-case names in a hand-edited doors.json must be keyed uppercase or
+// Menu lookups uppercase the door code (GetDoorConfig(ToUpper(input))), so
+// a mixed-case code in a hand-edited doors.json must normalize on load or
 // the door is unreachable.
-func TestLoadDoors_UppercasesKeys(t *testing.T) {
+func TestLoadDoors_UppercasesCodes(t *testing.T) {
 	tmpDir := t.TempDir()
 	doors := []DoorConfig{
-		{Name: "Lord", Commands: []string{"/usr/bin/lord"}},
+		{Code: "lord", Name: "Legend of the Red Dragon"},
 	}
 	data, _ := json.Marshal(doors)
 	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
@@ -63,39 +67,42 @@ func TestLoadDoors_UppercasesKeys(t *testing.T) {
 	}
 	d, ok := result["LORD"]
 	if !ok {
-		t.Fatalf("expected key LORD for door named Lord, got keys %v", result)
+		t.Fatalf("expected key LORD for code lord, got keys %v", result)
 	}
-	if d.Name != "LORD" {
-		t.Errorf("Name = %q, want LORD (key and Name must stay in sync)", d.Name)
+	if d.Code != "LORD" {
+		t.Errorf("Code = %q, want LORD (key and Code must stay in sync)", d.Code)
+	}
+	if d.Name != "Legend of the Red Dragon" {
+		t.Errorf("Name = %q, want case preserved", d.Name)
 	}
 }
 
-func TestLoadDoors_RejectsEmptyName(t *testing.T) {
+func TestLoadDoors_RejectsEmptyCode(t *testing.T) {
 	tmpDir := t.TempDir()
 	doors := []DoorConfig{
-		{Name: "  ", Commands: []string{"/usr/bin/lord"}},
+		{Code: "  ", Name: "LORD", Commands: []string{"/usr/bin/lord"}},
 	}
 	data, _ := json.Marshal(doors)
 	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
 
 	if _, err := LoadDoors(filepath.Join(tmpDir, "doors.json")); err == nil {
-		t.Error("expected error for door with blank name")
+		t.Error("expected error for door with blank code")
 	}
 }
 
-// Duplicate detection must be case-insensitive since keys are uppercased.
-func TestLoadDoors_DuplicateNamesCaseInsensitive(t *testing.T) {
+// Duplicate detection must be case-insensitive since codes are uppercased.
+func TestLoadDoors_DuplicateCodesCaseInsensitive(t *testing.T) {
 	tmpDir := t.TempDir()
 	doors := []DoorConfig{
-		{Name: "Lord", Commands: []string{"/usr/bin/lord"}},
-		{Name: "LORD", Commands: []string{"/usr/bin/lord2"}},
+		{Code: "Lord", Commands: []string{"/usr/bin/lord"}},
+		{Code: "LORD", Commands: []string{"/usr/bin/lord2"}},
 	}
 	data, _ := json.Marshal(doors)
 	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
 
 	_, err := LoadDoors(filepath.Join(tmpDir, "doors.json"))
 	if err == nil {
-		t.Error("expected error for case-insensitive duplicate door names")
+		t.Error("expected error for case-insensitive duplicate door codes")
 	}
 }
 
@@ -109,18 +116,18 @@ func TestLoadDoors_MissingFile(t *testing.T) {
 	}
 }
 
-func TestLoadDoors_DuplicateNames(t *testing.T) {
+func TestLoadDoors_DuplicateCodes(t *testing.T) {
 	tmpDir := t.TempDir()
 	doors := []DoorConfig{
-		{Name: "LORD", Commands: []string{"/usr/bin/lord"}},
-		{Name: "LORD", Commands: []string{"/usr/bin/lord2"}},
+		{Code: "LORD", Commands: []string{"/usr/bin/lord"}},
+		{Code: "LORD", Commands: []string{"/usr/bin/lord2"}},
 	}
 	data, _ := json.Marshal(doors)
 	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
 
 	_, err := LoadDoors(filepath.Join(tmpDir, "doors.json"))
 	if err == nil {
-		t.Error("expected error for duplicate door names")
+		t.Error("expected error for duplicate door codes")
 	}
 }
 

@@ -599,7 +599,8 @@ func applyStringDefaults(c *StringsConfig) {
 
 // DoorConfig defines the configuration for a single external door program.
 type DoorConfig struct {
-	Name                string            `json:"name"`                            // Unique identifier used in DOOR:NAME commands
+	Code                string            `json:"code"`                            // Unique internal code used in DOOR:CODE commands (uppercase slug)
+	Name                string            `json:"name"`                            // Display label shown to users (free-form, case preserved)
 	WorkingDirectory    string            `json:"working_directory,omitempty"`     // Directory to run the command in (optional)
 	Commands            []string          `json:"commands,omitempty"`              // Commands to execute (native: [0]=executable, [1:]=args; DOS: batch lines)
 	DropfileType        string            `json:"dropfile_type,omitempty"`         // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "NONE") (optional, defaults to NONE)
@@ -644,20 +645,20 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal doors JSON from %s: %w", filePath, err)
 	}
 
-	// Normalize Name to uppercase and key by it: menu lookups uppercase the
-	// door name before consulting the registry, so mixed-case names must
-	// normalize or the door is unreachable. Key and Name stay in sync.
+	// Key by uppercased Code: menu lookups uppercase the door code before
+	// consulting the registry, so codes must normalize or the door is
+	// unreachable. Name is a display label and is left untouched.
 	doorMap := make(map[string]DoorConfig)
 	for _, door := range doors {
-		name := strings.ToUpper(strings.TrimSpace(door.Name))
-		if name == "" {
-			return nil, fmt.Errorf("door with empty name in %s", filePath)
+		code := strings.ToUpper(strings.TrimSpace(door.Code))
+		if code == "" {
+			return nil, fmt.Errorf("door %q with empty code in %s", door.Name, filePath)
 		}
-		if _, exists := doorMap[name]; exists {
-			return nil, fmt.Errorf("duplicate door name found in %s: %s", filePath, door.Name)
+		if _, exists := doorMap[code]; exists {
+			return nil, fmt.Errorf("duplicate door code found in %s: %s", filePath, door.Code)
 		}
-		door.Name = name
-		doorMap[name] = door
+		door.Code = code
+		doorMap[code] = door
 	}
 
 	return doorMap, nil

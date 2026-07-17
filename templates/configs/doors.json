@@ -1,6 +1,7 @@
 [
     {
-        "name": "LORD",
+        "code": "LORD",
+        "name": "Legend of the Red Dragon",
         "working_directory": "C:\\DOORS\\LORD",
         "commands": [
             "START.BAT {NODE}"
@@ -22,7 +23,8 @@
         "dosemu_config": ""
     },
     {
-        "name": "LORDJS",
+        "code": "LORDJS",
+        "name": "Legend of the Red Dragon (JS)",
         "type": "synchronet_js",
         "script": "lord.js",
         "working_directory": "doors/sbbs/xtrn/lord",
@@ -34,7 +36,8 @@
         "single_instance": true
     },
     {
-        "name": "LORD2JS",
+        "code": "LORD2JS",
+        "name": "LORD II: New World (JS)",
         "type": "synchronet_js",
         "script": "lord2.js",
         "working_directory": "doors/sbbs/xtrn/lord2",
@@ -46,44 +49,58 @@
         "single_instance": true
     },
     {
-        "name": "HELLO",
+        "code": "HELLO",
+        "name": "Hello World Example",
         "type": "v3_script",
         "script": "hello.js",
         "working_directory": "scripts/examples"
     },
     {
-        "name": "ONELINERS",
+        "code": "ONELINERS",
+        "name": "Oneliners",
         "type": "v3_script",
         "script": "oneliners.js",
         "working_directory": "scripts/examples"
     },
     {
-        "name": "VOTING",
+        "code": "VOTING",
+        "name": "Voting Booth",
         "type": "v3_script",
         "script": "voting.js",
         "working_directory": "scripts/examples",
-        "args": ["poll1", "What is the best BBS software?", "Vision/3", "Mystic", "Synchronet", "ENiGMA½"]
+        "args": [
+            "poll1",
+            "What is the best BBS software?",
+            "Vision/3",
+            "Mystic",
+            "Synchronet",
+            "ENiGMA½"
+        ]
     },
     {
-        "name": "STATS",
+        "code": "STATS",
+        "name": "System Stats",
         "type": "v3_script",
         "script": "stats.js",
         "working_directory": "scripts/examples"
     },
     {
-        "name": "AUTOMSG",
+        "code": "AUTOMSG",
+        "name": "Auto Message",
         "type": "v3_script",
         "script": "automsg.js",
         "working_directory": "scripts/examples"
     },
     {
-        "name": "USERSTATS",
+        "code": "USERSTATS",
+        "name": "User Stats",
         "type": "v3_script",
         "script": "userstats.js",
         "working_directory": "scripts/examples"
     },
     {
-        "name": "LAST10",
+        "code": "LAST10",
+        "name": "Last 10 Callers",
         "type": "v3_script",
         "script": "last10.js",
         "working_directory": "scripts/examples"

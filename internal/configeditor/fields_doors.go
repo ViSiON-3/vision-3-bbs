@@ -2,12 +2,13 @@ package configeditor
 
 import (
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
 // sliceToCSV joins a string slice with ", " for display.
@@ -126,6 +127,11 @@ func csvToEnvMap(s string) (map[string]string, error) {
 // doorEditProxy wraps DoorConfig fields for in-place editing via closures.
 type doorEditProxy = config.DoorConfig
 
+// doorCodeRE validates an internal door code (after uppercasing): the code
+// keys the registry and appears in DOOR:CODE menu commands, so it must be a
+// short slug with no spaces or punctuation.
+var doorCodeRE = regexp.MustCompile(`^[A-Z0-9_-]{1,16}$`)
+
 // doorTypeLabel returns a short label for the door type, used in list views.
 func doorTypeLabel(d *config.DoorConfig) string {
 	switch d.Type {
@@ -170,15 +176,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 	row := 1
 	fields := []fieldDef{
 		{
-			// Name is the door's identity: doors.json is saved as an array and
-			// re-keyed by Name on load, and DOOR:NAME menu lookups uppercase the
+			// Code is the door's identity: doors.json is saved as an array and
+			// re-keyed by Code on load, and DOOR:CODE menu lookups uppercase the
 			// input — so renaming re-keys the map and normalizes to uppercase.
-			Label: "Name", Help: "Door name used in DOOR:NAME menu commands (uppercased)", Type: ftString, Col: 3, Row: row, Width: 30,
-			Get: func() string { return dPtr.Name },
+			Label: "Code", Help: "Internal code used in DOOR:CODE menu commands (A-Z, 0-9, _ or -, max 16)", Type: ftString, Col: 3, Row: row, Width: 16,
+			Get: func() string { return dPtr.Code },
 			Set: func(val string) error {
 				val = strings.ToUpper(strings.TrimSpace(val))
-				if val == "" {
-					return fmt.Errorf("door name cannot be empty")
+				if !doorCodeRE.MatchString(val) {
+					return fmt.Errorf("code must be 1-16 chars: A-Z, 0-9, _ or -")
 				}
 				for k := range m.configs.Doors {
 					if k != key && strings.EqualFold(k, val) {
@@ -186,12 +192,12 @@ func (m *Model) fieldsDoor() []fieldDef {
 					}
 				}
 				cfg := m.configs.Doors[key]
-				cfg.Name = val
+				cfg.Code = val
 				m.configs.Doors[val] = cfg
 				if val != key {
 					delete(m.configs.Doors, key)
 				}
-				dPtr.Name = val // keep display current until fields are rebuilt
+				dPtr.Code = val // keep display current until fields are rebuilt
 				return nil
 			},
 			// AfterSet runs on the current model (not the stale captured pointer), so index
@@ -204,10 +210,17 @@ func (m *Model) fieldsDoor() []fieldDef {
 					cur.recordEditIdx = idx
 					cur.recordCursor = idx // keep list selection in sync for when user exits edit
 				}
-				cur.stayOnField = true // Stay on Name so user can see the updated value
+				cur.stayOnField = true // Stay on Code so user can see the updated value
 			},
 		},
 	}
+
+	row++
+	fields = append(fields, fieldDef{
+		Label: "Name", Help: "Display name shown to users (case preserved)", Type: ftString, Col: 3, Row: row, Width: 30,
+		Get: func() string { return dPtr.Name },
+		Set: func(val string) error { dPtr.Name = val; save(); return nil },
+	})
 
 	// Door type selector — determines which type-specific fields are shown
 	row++

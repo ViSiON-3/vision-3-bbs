@@ -347,19 +347,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		displayIdx++
-		doorType := "Native"
-		switch {
-		case doorCfg.Type == "v3_script":
-			doorType = "VPL"
-		case doorCfg.Type == "synchronet_js":
-			doorType = "Synchronet JS"
-		case doorCfg.IsDOS:
-			doorType = "DOS"
-		}
-		line := midTemplate
-		line = strings.ReplaceAll(line, "^ID", fmt.Sprintf("%-3d", displayIdx))
-		line = strings.ReplaceAll(line, "^NA", fmt.Sprintf("%-30s", name))
-		line = strings.ReplaceAll(line, "^TY", doorType)
+		line := formatDoorListLine(midTemplate, displayIdx, name, doorCfg)
 		terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
 	}
 

@@ -183,13 +183,14 @@ func (m *Model) insertRecord() {
 			Name:     "New Conference",
 		})
 	case "door":
-		// Key and Name must match: doors.json is saved as an array and re-keyed
-		// by Name on load, so a divergent key would vanish on reload.
+		// Key and Code must match: doors.json is saved as an array and re-keyed
+		// by Code on load, so a divergent key would vanish on reload.
 		for i := 1; ; i++ {
-			name := fmt.Sprintf("NEWDOOR%d", i)
-			if _, exists := m.configs.Doors[name]; !exists {
-				m.configs.Doors[name] = config.DoorConfig{
-					Name: name,
+			code := fmt.Sprintf("NEWDOOR%d", i)
+			if _, exists := m.configs.Doors[code]; !exists {
+				m.configs.Doors[code] = config.DoorConfig{
+					Code: code,
+					Name: "New Door",
 				}
 				break
 			}

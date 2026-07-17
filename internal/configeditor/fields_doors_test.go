@@ -14,36 +14,39 @@ func newDoorModel(doors map[string]config.DoorConfig) *Model {
 	}
 }
 
-// Doors are persisted as a JSON array keyed by Name on load, so a new door's
-// map key must equal its Name — otherwise the list shows a stale slug like
-// "newdoor1" that silently disappears on reload.
-func TestInsertDoorKeyedByName(t *testing.T) {
+// Doors are keyed by their internal Code (Synchronet-style slug); Name is a
+// free-form display label. A new door gets a unique code with key, Code, and
+// a placeholder Name.
+func TestInsertDoorKeyedByCode(t *testing.T) {
 	m := newDoorModel(map[string]config.DoorConfig{})
 	m.insertRecord()
 	d, ok := m.configs.Doors["NEWDOOR1"]
 	if !ok {
 		t.Fatalf("expected key NEWDOOR1, got keys %v", m.doorKeys())
 	}
-	if d.Name != "NEWDOOR1" {
-		t.Errorf("Name = %q, want NEWDOOR1 (key and Name must match)", d.Name)
+	if d.Code != "NEWDOOR1" {
+		t.Errorf("Code = %q, want NEWDOOR1 (key and Code must match)", d.Code)
+	}
+	if d.Name != "New Door" {
+		t.Errorf("Name = %q, want New Door", d.Name)
 	}
 	m.insertRecord()
-	if d2, ok := m.configs.Doors["NEWDOOR2"]; !ok || d2.Name != "NEWDOOR2" {
-		t.Errorf("second insert: got keys %v, NEWDOOR2.Name = %q", m.doorKeys(), d2.Name)
+	if d2, ok := m.configs.Doors["NEWDOOR2"]; !ok || d2.Code != "NEWDOOR2" {
+		t.Errorf("second insert: got keys %v, NEWDOOR2.Code = %q", m.doorKeys(), d2.Code)
 	}
 }
 
-func TestFieldsDoorNameRenamesKey(t *testing.T) {
+func TestFieldsDoorCodeRenamesKey(t *testing.T) {
 	m := newDoorModel(map[string]config.DoorConfig{
-		"LORD":   {Name: "LORD", WorkingDirectory: "doors/lord"},
-		"TW2002": {Name: "TW2002"},
+		"LORD":   {Code: "LORD", Name: "Legend of the Red Dragon", WorkingDirectory: "doors/lord"},
+		"TW2002": {Code: "TW2002", Name: "Trade Wars 2002"},
 	})
 	m.recordEditIdx = 0 // sorted keys: LORD, TW2002
 	fields := m.buildRecordFields()
-	name := findField(t, fields, "Name")
+	code := findField(t, fields, "Code")
 
-	// Renaming uppercases (DOOR:NAME menu lookups are uppercase) and re-keys the map.
-	if err := name.Set("legend"); err != nil {
+	// Renaming uppercases (DOOR:CODE menu lookups are uppercase) and re-keys the map.
+	if err := code.Set("legend"); err != nil {
 		t.Fatalf("Set(legend): %v", err)
 	}
 	if _, ok := m.configs.Doors["LORD"]; ok {
@@ -53,18 +56,21 @@ func TestFieldsDoorNameRenamesKey(t *testing.T) {
 	if !ok {
 		t.Fatalf("renamed key LEGEND missing, keys = %v", m.doorKeys())
 	}
-	if d.Name != "LEGEND" {
-		t.Errorf("Name = %q, want LEGEND", d.Name)
+	if d.Code != "LEGEND" {
+		t.Errorf("Code = %q, want LEGEND", d.Code)
+	}
+	if d.Name != "Legend of the Red Dragon" {
+		t.Errorf("rename touched display Name: %q", d.Name)
 	}
 	if d.WorkingDirectory != "doors/lord" {
 		t.Errorf("rename dropped config: WorkingDirectory = %q", d.WorkingDirectory)
 	}
 
 	// AfterSet re-syncs the edit index to the renamed entry and stays on the field.
-	if name.AfterSet == nil {
-		t.Fatal("Name field must have AfterSet to re-sync indices after rename")
+	if code.AfterSet == nil {
+		t.Fatal("Code field must have AfterSet to re-sync indices after rename")
 	}
-	name.AfterSet(m, "LEGEND")
+	code.AfterSet(m, "LEGEND")
 	if m.recordEditIdx != 0 { // sorted: LEGEND, TW2002
 		t.Errorf("recordEditIdx = %d, want 0", m.recordEditIdx)
 	}
@@ -73,46 +79,51 @@ func TestFieldsDoorNameRenamesKey(t *testing.T) {
 	}
 }
 
-func TestFieldsDoorNameValidation(t *testing.T) {
+func TestFieldsDoorCodeValidation(t *testing.T) {
 	m := newDoorModel(map[string]config.DoorConfig{
-		"LORD":   {Name: "LORD"},
-		"TW2002": {Name: "TW2002"},
+		"LORD":   {Code: "LORD", Name: "Legend of the Red Dragon"},
+		"TW2002": {Code: "TW2002", Name: "Trade Wars 2002"},
 	})
 	m.recordEditIdx = 0
-	name := findField(t, m.buildRecordFields(), "Name")
+	code := findField(t, m.buildRecordFields(), "Code")
 
-	if err := name.Set(""); err == nil {
-		t.Error("empty name should be rejected")
+	if err := code.Set(""); err == nil {
+		t.Error("empty code should be rejected")
 	}
-	if err := name.Set("tw2002"); err == nil {
-		t.Error("duplicate name (case-insensitive) should be rejected")
+	if err := code.Set("tw2002"); err == nil {
+		t.Error("duplicate code (case-insensitive) should be rejected")
 	}
-	if err := name.Set("LORD"); err != nil {
-		t.Errorf("re-setting the same name should be a no-op, got %v", err)
+	if err := code.Set("bad code!"); err == nil {
+		t.Error("code with spaces/punctuation should be rejected")
+	}
+	if err := code.Set("WAYTOOLONGDOORCODE"); err == nil {
+		t.Error("code longer than 16 chars should be rejected")
+	}
+	if err := code.Set("LORD"); err != nil {
+		t.Errorf("re-setting the same code should be a no-op, got %v", err)
 	}
 	if _, ok := m.configs.Doors["LORD"]; !ok {
 		t.Error("LORD should still exist after no-op rename")
 	}
 }
 
-// A door keyed uppercase but carrying a mixed-case Name (possible in a
-// hand-edited doors.json before load normalization existed) must have its
-// Name normalized even when the key itself doesn't change.
-func TestFieldsDoorNameSameKeyNormalizesName(t *testing.T) {
+// Name is a display label: case is preserved verbatim and editing it must not
+// re-key the map.
+func TestFieldsDoorNamePreservesCase(t *testing.T) {
 	m := newDoorModel(map[string]config.DoorConfig{
-		"LORD": {Name: "Lord"},
+		"LORD": {Code: "LORD", Name: "LORD"},
 	})
 	m.recordEditIdx = 0
 	name := findField(t, m.buildRecordFields(), "Name")
 
-	if err := name.Set("lord"); err != nil {
-		t.Fatalf("Set(lord): %v", err)
+	if err := name.Set("Legend of the Red Dragon"); err != nil {
+		t.Fatalf("Set: %v", err)
 	}
 	d, ok := m.configs.Doors["LORD"]
 	if !ok {
-		t.Fatalf("key LORD missing, keys = %v", m.doorKeys())
+		t.Fatalf("key LORD missing after Name edit, keys = %v", m.doorKeys())
 	}
-	if d.Name != "LORD" {
-		t.Errorf("Name = %q, want LORD (same-key set must still normalize Name)", d.Name)
+	if d.Name != "Legend of the Red Dragon" {
+		t.Errorf("Name = %q, want case preserved", d.Name)
 	}
 }
