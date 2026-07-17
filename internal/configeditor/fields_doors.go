@@ -311,7 +311,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// Native and DOS doors have commands and dropfiles
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Commands", Help: "Native: command args / DOS: comma-separated DOS commands", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Commands", Help: "Native: cmd + comma-sep args. Placeholders: {NODEDIR} {DROPFILE} {NODE} {PORT} — add trailing / if the door needs it, e.g. {NODEDIR}/", Type: ftString, Col: 3, Row: row, Width: 45,
 			Get: func() string { return doorCommandsGet(dPtr) },
 			Set: func(val string) error { doorCommandsSet(dPtr, val); save(); return nil },
 		})
