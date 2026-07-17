@@ -129,13 +129,19 @@ func TestFieldsDoorNamePreservesCase(t *testing.T) {
 }
 
 func TestDropfileCaseField(t *testing.T) {
-	d := &doorEditProxy{}
-	d.DropfileCase = "lower"
-	if d.DropfileCase != "lower" {
-		t.Fatalf("setup failed")
+	m := newDoorModel(map[string]config.DoorConfig{
+		"LORD": {Code: "LORD", Name: "LORD"},
+	})
+	m.recordEditIdx = 0
+	fld := findField(t, m.buildRecordFields(), "Dropfile Case")
+
+	if err := fld.Set("lower"); err != nil {
+		t.Fatalf("Set(lower): %v", err)
 	}
-	d.DropfileCase = "upper"
-	if got := d.DropfileCase; got != "upper" {
-		t.Errorf("DropfileCase = %q, want upper", got)
+	if got := m.configs.Doors["LORD"].DropfileCase; got != "lower" {
+		t.Errorf("persisted DropfileCase = %q, want lower", got)
+	}
+	if got := fld.Get(); got != "lower" {
+		t.Errorf("Get() = %q, want lower", got)
 	}
 }
