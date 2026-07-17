@@ -196,7 +196,8 @@ func (m Model) recordColumnHeader(boxW int) string {
 	case "door":
 		// Code is capped at 16 chars and type labels at 6 ("SyncJS"/"Native"),
 		// so both columns are sized tight and Name gets the remaining width.
-		return fmt.Sprintf("  %-16s  %-42s  %-6s", "Code", "Name", "Type")
+		// Widths leave a 2-space margin on each side of the 70-col box.
+		return fmt.Sprintf("  %-16s  %-40s  %-6s", "Code", "Name", "Type")
 	case "event":
 		return "  #  Name                                                     Enabled"
 	case "ftn":
@@ -243,7 +244,7 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 		if idx < len(keys) {
 			k := keys[idx]
 			d := m.configs.Doors[k]
-			content = fmt.Sprintf("  %-16s  %-42s  %-6s", padRight(k, 16), padRight(d.Name, 42), doorTypeLabel(&d))
+			content = fmt.Sprintf("  %-16s  %-40s  %-6s", padRight(k, 16), padRight(d.Name, 40), doorTypeLabel(&d))
 		}
 	case "event":
 		if idx < len(m.configs.Events.Events) {
