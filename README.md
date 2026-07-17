@@ -12,7 +12,7 @@ There's detailed SysOp documentation [here](https://vision-3.github.io/vision-3-
 
 ## Companion Projects
 
-- **[ViSiON/3 QWK Mobile](https://github.com/ViSiON-3/vision-3-qwk-mobile)** — a React Native offline mail client for ViSiON/3. It consumes the experimental [QWK Packet API](docs/sysop/messages/qwk-api.md) to download `.QWK` packets, read and reply entirely offline, and upload `.REP` packets back to the board. The full offline loop (connect → sync → read → compose/reply → upload → import report) is implemented.
+- **[ViSiON/3 QWK Mobile](https://github.com/ViSiON-3/vision-3-qwk-mobile)** — a React Native offline mail client for ViSiON/3. It consumes the experimental [QWK Packet API](docs/sysop/messages/qwk-api.md) to download `.QWK` packets, read and reply entirely offline, and upload `.REP` packets back to the board. The full offline loop (connect → sync → read → compose/reply → upload → import report) is implemented in-repo, but the app is **not yet available for download** — there's currently nothing end-users can connect to the QWK Packet API with, so sysops should leave it disabled for now.
 
 ## Community
 
@@ -112,7 +112,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | NUV (New User Verification)   | ✅ Working | Voting-based approval system for new user accounts                                                                  |
 | Info Forms                    | ✅ Working | Up to 5 configurable forms; required form enforcement on login; user fill/view; SysOp browse and management         |
 | TUI User Editor (`ue`)        | ✅ Working | Full-screen terminal user management                                                                                |
-| WFC Sysop Console (`wfc`)     | ✅ Working | Remote read-only monitor of live nodes/callers + event feed over SSH ([guide](docs/sysop/how-to-guides/wfc-console.md)) |
+| WFC Sysop Console (`wfc`)     | ✅ Working | Remote read-only monitor of live nodes/callers + event feed over SSH, gated by a hot-reloadable WFC Access toggle in Access Levels ([guide](docs/sysop/how-to-guides/wfc-console.md)) |
 | **Menus**                     |           |                                                                                                                     |
 | Menu System                   | ✅ Working | `.MNU`, `.CFG`, `.ANS` files, ACS evaluation, password protection                                                   |
 | TUI Menu Editor (`menuedit`)  | ✅ Working | Full-screen menu configuration editor                                                                               |
@@ -121,7 +121,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | Private Mail                  | ✅ Working | User-to-user messaging, send/read/list                                                                              |
 | Message List View (scan)      | ✅ Working | Title/subject scan view                                                                                             |
 | QWK Offline Mail              | ✅ Working | QWK/REP packet download/upload, stable conference map, reply threading, HEADERS.DAT extended headers, REP upload dedup, configurable BBS ID |
-| QWK Packet API                | 🧪 Experimental | REST API for offline mail clients (off by default) — see the [QWK API docs](docs/sysop/messages/qwk-api.md) and the [QWK Mobile client](https://github.com/ViSiON-3/vision-3-qwk-mobile) |
+| QWK Packet API                | 🧪 Experimental | REST API for offline mail clients (off by default — companion app not yet released) — see the [QWK API docs](docs/sysop/messages/qwk-api.md) and the [QWK Mobile client](https://github.com/ViSiON-3/vision-3-qwk-mobile) |
 | **Files**                     |           |                                                                                                                     |
 | File Areas                    | ✅ Working | List/select areas, list files, search, file info, newscan, configurable columns, extended listing                   |
 | File Transfers                | ✅ Working | ZMODEM upload/download via `sexyz`, batch download with per-area ACS validation                                     |
@@ -132,6 +132,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | V3 Scripting Engine           | ✅ Working | goja-based JavaScript runtime for native V3 script doors                                                            |
 | **Networking/FTN**            |           |                                                                                                                     |
 | FTN Echomail/Netmail          | ✅ Working | JAM-backed, tosser, import/export, dupe checking                                                                    |
+| Integrated Binkd Mailer       | ✅ Working | Bundled `bin/binkd` supervised as a child process (auto-restart on crash, clean shutdown); one-toggle echomail — inbound tosses automatically, outbound exports on a timer. See [FTN Echomail](docs/sysop/messages/ftn-echomail.md). |
 | FTN Setup Wizard              | ✅ Working | Guided setup in `./config`: pick network, download echo list, auto-create areas + `binkd.conf`                     |
 | V3Net Networking              | 🧪 Experimental | Native inter-BBS message networking via REST+SSE (hub/leaf, signed area lists) — see the [V3Net docs](docs/sysop/v3net/message-areas.md)                                 |
 | **Community Features**        |           |                                                                                                                     |

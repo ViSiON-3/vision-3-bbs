@@ -1,10 +1,12 @@
 # QWK Packet API (Experimental)
 
 > ⚠️ **Experimental — do not enable in production yet.** This HTTP API exists to
-> support a future ViSiON/3 mobile client (offline QWK mail on a phone). Until
-> that client ships there is nothing to connect to it, and its security surface
-> and behavior may still change. Leave `qwkAPI.enabled` set to `false` unless you
-> are actively developing or testing against it.
+> support the [ViSiON/3 QWK Mobile](https://github.com/ViSiON-3/vision-3-qwk-mobile)
+> companion client (offline QWK mail on a phone). That app is **not yet
+> available for download**, so there is currently nothing end-users can
+> connect to this API with, and its security surface and behavior may still
+> change. Leave `qwkAPI.enabled` set to `false` unless you are actively
+> developing or testing against it.
 
 ## What it is
 
