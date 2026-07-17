@@ -46,6 +46,42 @@ func TestLoadDoors_ValidFile(t *testing.T) {
 	}
 }
 
+// Menu lookups uppercase the door name (GetDoorConfig(ToUpper(input))), so
+// mixed-case names in a hand-edited doors.json must be keyed uppercase or
+// the door is unreachable.
+func TestLoadDoors_UppercasesKeys(t *testing.T) {
+	tmpDir := t.TempDir()
+	doors := []DoorConfig{
+		{Name: "Lord", Commands: []string{"/usr/bin/lord"}},
+	}
+	data, _ := json.Marshal(doors)
+	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
+
+	result, err := LoadDoors(filepath.Join(tmpDir, "doors.json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := result["LORD"]; !ok {
+		t.Errorf("expected key LORD for door named Lord, got keys %v", result)
+	}
+}
+
+// Duplicate detection must be case-insensitive since keys are uppercased.
+func TestLoadDoors_DuplicateNamesCaseInsensitive(t *testing.T) {
+	tmpDir := t.TempDir()
+	doors := []DoorConfig{
+		{Name: "Lord", Commands: []string{"/usr/bin/lord"}},
+		{Name: "LORD", Commands: []string{"/usr/bin/lord2"}},
+	}
+	data, _ := json.Marshal(doors)
+	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
+
+	_, err := LoadDoors(filepath.Join(tmpDir, "doors.json"))
+	if err == nil {
+		t.Error("expected error for case-insensitive duplicate door names")
+	}
+}
+
 func TestLoadDoors_MissingFile(t *testing.T) {
 	result, err := LoadDoors("/nonexistent/doors.json")
 	if err != nil {

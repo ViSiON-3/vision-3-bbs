@@ -644,12 +644,16 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal doors JSON from %s: %w", filePath, err)
 	}
 
+	// Key by uppercased Name: menu lookups uppercase the door name before
+	// consulting the registry, so mixed-case names must normalize or the
+	// door is unreachable.
 	doorMap := make(map[string]DoorConfig)
 	for _, door := range doors {
-		if _, exists := doorMap[door.Name]; exists {
+		key := strings.ToUpper(door.Name)
+		if _, exists := doorMap[key]; exists {
 			return nil, fmt.Errorf("duplicate door name found in %s: %s", filePath, door.Name)
 		}
-		doorMap[door.Name] = door
+		doorMap[key] = door
 	}
 
 	return doorMap, nil
