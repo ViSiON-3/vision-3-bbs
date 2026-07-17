@@ -170,8 +170,7 @@ func generateDoorSys(ctx *DoorCtx, dir, filename string) error {
 // generateDoor32Sys writes an 11-line DOOR32.SYS file.
 func generateDoor32Sys(ctx *DoorCtx, dir, filename string) error {
 	path := filepath.Join(dir, filename)
-	slog.Info("generating DOOR32.SYS", "path", path)
-
+	slog.Info("generating dropfile", "type", "DOOR32.SYS", "filename", filename, "path", path)
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	crlf := "\r\n"
 
