@@ -21,10 +21,12 @@ func formatDoorListLine(template string, displayIdx int, code string, d config.D
 		doorType = "DOS"
 	}
 
-	line := template
-	line = strings.ReplaceAll(line, "^ID", fmt.Sprintf("%-3d", displayIdx))
-	line = strings.ReplaceAll(line, "^CO", fmt.Sprintf("%-16s", code))
-	line = strings.ReplaceAll(line, "^NA", fmt.Sprintf("%-30s", d.Name))
-	line = strings.ReplaceAll(line, "^TY", doorType)
-	return line
+	// Single-pass replacement: substituted values (e.g. a Name containing a
+	// literal "^TY") must not be re-processed by later placeholders.
+	return strings.NewReplacer(
+		"^ID", fmt.Sprintf("%-3d", displayIdx),
+		"^CO", fmt.Sprintf("%-16s", code),
+		"^NA", fmt.Sprintf("%-30s", d.Name),
+		"^TY", doorType,
+	).Replace(template)
 }

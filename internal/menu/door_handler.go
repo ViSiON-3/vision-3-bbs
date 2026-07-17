@@ -167,18 +167,18 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	e.configMu.RUnlock()
 
-	// Sort door names for consistent display
-	doorNames := make([]string, 0, len(doorRegistryCopy))
-	for name := range doorRegistryCopy {
-		doorNames = append(doorNames, name)
+	// Sort door codes for consistent display
+	doorCodes := make([]string, 0, len(doorRegistryCopy))
+	for code := range doorRegistryCopy {
+		doorCodes = append(doorCodes, code)
 	}
-	sort.Strings(doorNames)
+	sort.Strings(doorCodes)
 
 	// Display each door (skip doors the user lacks access to)
 	midTemplate := string(ansi.ReplacePipeCodes(midBytes))
 	displayIdx := 0
-	for _, name := range doorNames {
-		doorCfg := doorRegistryCopy[name]
+	for _, code := range doorCodes {
+		doorCfg := doorRegistryCopy[code]
 
 		// Filter out doors the user doesn't have access to
 		if doorCfg.MinAccessLevel > 0 && currentUser.AccessLevel < doorCfg.MinAccessLevel {
@@ -186,7 +186,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		displayIdx++
-		line := formatDoorListLine(midTemplate, displayIdx, name, doorCfg)
+		line := formatDoorListLine(midTemplate, displayIdx, code, doorCfg)
 		terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
 	}
 

@@ -77,6 +77,34 @@ func TestLoadDoors_UppercasesCodes(t *testing.T) {
 	}
 }
 
+// The loader must enforce the same code contract as the editor
+// ([A-Z0-9_-]{1,16}), or hand-edited files can create registry keys that
+// DOOR:CODE commands and DOORLIST alignment don't expect.
+func TestLoadDoors_RejectsInvalidCodes(t *testing.T) {
+	for _, bad := range []string{"BAD CODE!", "WAYTOOLONGDOORCODE", "NÖPE"} {
+		t.Run(bad, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			data, _ := json.Marshal([]DoorConfig{{Code: bad, Name: "X"}})
+			os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
+
+			if _, err := LoadDoors(filepath.Join(tmpDir, "doors.json")); err == nil {
+				t.Errorf("expected error for invalid code %q", bad)
+			}
+		})
+	}
+}
+
+func TestNormalizeDoorCode(t *testing.T) {
+	if got, err := NormalizeDoorCode("  lord-2 "); err != nil || got != "LORD-2" {
+		t.Errorf("NormalizeDoorCode = %q, %v; want LORD-2", got, err)
+	}
+	for _, bad := range []string{"", "  ", "BAD CODE!", "WAYTOOLONGDOORCODE"} {
+		if _, err := NormalizeDoorCode(bad); err == nil {
+			t.Errorf("NormalizeDoorCode(%q) should error", bad)
+		}
+	}
+}
+
 func TestLoadDoors_RejectsEmptyCode(t *testing.T) {
 	tmpDir := t.TempDir()
 	doors := []DoorConfig{

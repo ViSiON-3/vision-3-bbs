@@ -25,6 +25,19 @@ func TestFormatDoorListLine(t *testing.T) {
 	}
 }
 
+// Substitution must be single-pass: a display name containing a literal
+// placeholder token (e.g. "^TY") must not be re-substituted.
+func TestFormatDoorListLineSinglePass(t *testing.T) {
+	d := config.DoorConfig{Code: "X", Name: "Weird ^TY Name"}
+	line := formatDoorListLine("^NA (^TY)", 1, "X", d)
+	if !strings.Contains(line, "Weird ^TY Name") {
+		t.Errorf("placeholder inside Name was re-substituted: %q", line)
+	}
+	if !strings.Contains(line, "(Native)") {
+		t.Errorf("real ^TY placeholder not substituted: %q", line)
+	}
+}
+
 func TestFormatDoorListLineTypes(t *testing.T) {
 	tests := []struct {
 		door config.DoorConfig

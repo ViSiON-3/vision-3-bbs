@@ -2,7 +2,6 @@ package configeditor
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -127,11 +126,6 @@ func csvToEnvMap(s string) (map[string]string, error) {
 // doorEditProxy wraps DoorConfig fields for in-place editing via closures.
 type doorEditProxy = config.DoorConfig
 
-// doorCodeRE validates an internal door code (after uppercasing): the code
-// keys the registry and appears in DOOR:CODE menu commands, so it must be a
-// short slug with no spaces or punctuation.
-var doorCodeRE = regexp.MustCompile(`^[A-Z0-9_-]{1,16}$`)
-
 // doorTypeLabel returns a short label for the door type, used in list views.
 func doorTypeLabel(d *config.DoorConfig) string {
 	switch d.Type {
@@ -181,10 +175,10 @@ func (m *Model) fieldsDoor() []fieldDef {
 			// input — so renaming re-keys the map and normalizes to uppercase.
 			Label: "Code", Help: "Internal code used in DOOR:CODE menu commands (A-Z, 0-9, _ or -, max 16)", Type: ftString, Col: 3, Row: row, Width: 16,
 			Get: func() string { return dPtr.Code },
-			Set: func(val string) error {
-				val = strings.ToUpper(strings.TrimSpace(val))
-				if !doorCodeRE.MatchString(val) {
-					return fmt.Errorf("code must be 1-16 chars: A-Z, 0-9, _ or -")
+			Set: func(rawVal string) error {
+				val, err := config.NormalizeDoorCode(rawVal)
+				if err != nil {
+					return err
 				}
 				for k := range m.configs.Doors {
 					if k != key && strings.EqualFold(k, val) {

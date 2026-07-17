@@ -63,7 +63,7 @@ Add a door entry with `"type": "synchronet_js"`:
 
 | Field               | Type     | Required | Description                                                              |
 | ------------------- | -------- | -------- | ------------------------------------------------------------------------ |
-| `code`              | string   | Yes      | Unique internal code (used in `DOOR:CODE` menu commands)                 |
+| `code`              | string   | Yes      | Unique internal code (used in `DOOR:CODE` menu commands). Uppercase; A-Z, 0-9, `_`, `-`; max 16 chars |
 | `name`              | string   | Yes      | Display name shown to users (case preserved)                             |
 | `type`              | string   | Yes      | Must be `"synchronet_js"`                                                |
 | `script`            | string   | Yes      | Main JS file to execute, relative to `working_directory`                 |

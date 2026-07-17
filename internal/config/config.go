@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -628,6 +629,22 @@ type DoorConfig struct {
 	DosemuConfig string `json:"dosemu_config,omitempty"` // Path to custom .dosemurc (optional)
 }
 
+// doorCodeRE validates a door code after uppercasing: the code keys the door
+// registry and appears in DOOR:CODE menu commands, so it must be a short slug
+// with no spaces or punctuation.
+var doorCodeRE = regexp.MustCompile(`^[A-Z0-9_-]{1,16}$`)
+
+// NormalizeDoorCode trims and uppercases a door code and validates it against
+// the required format. Both the loader and the config editor use this, so the
+// contract is enforced identically for hand-edited and TUI-edited configs.
+func NormalizeDoorCode(code string) (string, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if !doorCodeRE.MatchString(code) {
+		return "", fmt.Errorf("door code must be 1-16 chars: A-Z, 0-9, _ or -")
+	}
+	return code, nil
+}
+
 // LoadDoors loads the door configuration from the specified file path.
 func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 	data, err := os.ReadFile(filePath)
@@ -650,9 +667,9 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 	// unreachable. Name is a display label and is left untouched.
 	doorMap := make(map[string]DoorConfig)
 	for _, door := range doors {
-		code := strings.ToUpper(strings.TrimSpace(door.Code))
-		if code == "" {
-			return nil, fmt.Errorf("door %q with empty code in %s", door.Name, filePath)
+		code, err := NormalizeDoorCode(door.Code)
+		if err != nil {
+			return nil, fmt.Errorf("door %q in %s: %w", door.Name, filePath, err)
 		}
 		if _, exists := doorMap[code]; exists {
 			return nil, fmt.Errorf("duplicate door code found in %s: %s", filePath, door.Code)

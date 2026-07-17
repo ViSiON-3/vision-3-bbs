@@ -93,7 +93,7 @@ Or use the **Configuration Editor** (`./config`, section 5 — Door Programs) an
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `code` | Yes | Unique internal code used in `DOOR:CODE` menu commands (uppercase; A-Z, 0-9, `_`, `-`) |
+| `code` | Yes | Unique internal code used in `DOOR:CODE` menu commands (uppercase; A-Z, 0-9, `_`, `-`; max 16 chars) |
 | `name` | Yes | Display name shown to users (free-form, case preserved) |
 | `type` | Yes | Must be `"v3_script"` |
 | `script` | Yes | Script filename, relative to `working_directory` |
