@@ -345,32 +345,36 @@ func (m *Model) fieldsDoor() []fieldDef {
 			},
 		})
 
-		row++
-		fields = append(fields, fieldDef{
-			Label: "Dropfile Case", Help: "Filename case for the dropfile (native/Windows only)", Type: ftLookup, Col: 3, Row: row, Width: 10,
-			Get: func() string {
-				if dPtr.DropfileCase == "" {
-					return "upper"
-				}
-				return dPtr.DropfileCase
-			},
-			Set: func(val string) error {
-				if strings.EqualFold(val, "upper") {
-					// Preserve byte-identical legacy configs: empty means the default "upper".
-					dPtr.DropfileCase = ""
-				} else {
-					dPtr.DropfileCase = val
-				}
-				save()
-				return nil
-			},
-			LookupItems: func() []LookupItem {
-				return []LookupItem{
-					{Value: "upper", Display: "upper - DOOR32.SYS (default)"},
-					{Value: "lower", Display: "lower - door32.sys"},
-				}
-			},
-		})
+		// Dropfile Case only affects native/Windows doors; DOS doors use a
+		// separate dosDropfileName path that ignores it, so hide it for DOS.
+		if !dPtr.IsDOS {
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Dropfile Case", Help: "Filename case for the dropfile (native/Windows only)", Type: ftLookup, Col: 3, Row: row, Width: 10,
+				Get: func() string {
+					if dPtr.DropfileCase == "" {
+						return "upper"
+					}
+					return dPtr.DropfileCase
+				},
+				Set: func(val string) error {
+					if strings.EqualFold(val, "upper") {
+						// Preserve byte-identical legacy configs: empty means the default "upper".
+						dPtr.DropfileCase = ""
+					} else {
+						dPtr.DropfileCase = val
+					}
+					save()
+					return nil
+				},
+				LookupItems: func() []LookupItem {
+					return []LookupItem{
+						{Value: "upper", Display: "upper - DOOR32.SYS (default)"},
+						{Value: "lower", Display: "lower - door32.sys"},
+					}
+				},
+			})
+		}
 	}
 
 	// Common fields for all door types

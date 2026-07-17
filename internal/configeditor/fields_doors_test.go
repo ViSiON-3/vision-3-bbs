@@ -145,3 +145,17 @@ func TestDropfileCaseField(t *testing.T) {
 		t.Errorf("Get() = %q, want lower", got)
 	}
 }
+
+// Dropfile Case only affects native/Windows doors, so the field is hidden for
+// DOS doors (which use a separate dosDropfileName path that ignores it).
+func TestDropfileCaseFieldHiddenForDOS(t *testing.T) {
+	m := newDoorModel(map[string]config.DoorConfig{
+		"DOSGAME": {Code: "DOSGAME", Name: "DOSGAME", IsDOS: true},
+	})
+	m.recordEditIdx = 0
+	for _, f := range m.buildRecordFields() {
+		if f.Label == "Dropfile Case" {
+			t.Error("Dropfile Case field should be hidden for DOS doors")
+		}
+	}
+}
