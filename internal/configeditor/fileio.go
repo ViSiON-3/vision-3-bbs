@@ -64,11 +64,12 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 		return ac, fmt.Errorf("loading file areas: %w", err)
 	}
 
-	// Doors
+	// Doors (LoadDoors returns an empty map, not an error, for a missing file).
+	// A real load error must propagate: silently editing an empty list would
+	// overwrite the existing doors.json on save.
 	ac.Doors, err = config.LoadDoors(filepath.Join(configPath, "doors.json"))
 	if err != nil {
-		// Doors file may not exist; initialize empty
-		ac.Doors = make(map[string]config.DoorConfig)
+		return ac, fmt.Errorf("loading doors: %w", err)
 	}
 
 	// Events
