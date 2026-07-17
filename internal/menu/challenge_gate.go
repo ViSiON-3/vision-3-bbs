@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -86,7 +87,7 @@ func (e *MenuExecutor) RunChallengeGate(
 	passed, err := runChallengeLoop(getSessionIH(s), time.Now, deadline, matchKey, required, challengeStrayLimit, time.Second, onTick)
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return false, io.EOF
 		}
 		slog.Error("challenge gate error", "node", nodeNumber, "error", err)

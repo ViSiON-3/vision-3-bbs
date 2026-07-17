@@ -127,6 +127,18 @@ func TestRunChallengeLoopPass(t *testing.T) {
 	}
 }
 
+func TestRunChallengeLoopStrayBetweenMatches(t *testing.T) {
+	in := &scriptedInput{events: []struct {
+		key int
+		err error
+	}{key(editor.KeyEsc), key('x'), key(editor.KeyEsc)}} // match, stray, match
+	now := func() time.Time { return time.Unix(0, 0) }
+	passed, err := runChallengeLoop(in, now, time.Unix(100, 0), editor.KeyEsc, 2, 8, time.Second, func() {})
+	if err != nil || !passed {
+		t.Fatalf("passed=%v err=%v; want true/nil", passed, err)
+	}
+}
+
 func TestRunChallengeLoopFloodFails(t *testing.T) {
 	evts := make([]struct {
 		key int
