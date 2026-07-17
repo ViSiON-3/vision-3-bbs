@@ -1,6 +1,12 @@
 package menu
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+)
 
 func TestDropfileName(t *testing.T) {
 	tests := []struct {
@@ -24,5 +30,27 @@ func TestDropfileName(t *testing.T) {
 				t.Errorf("dropfileName(%q, %q) = %q, want %q", tt.dropfileType, tt.dropfileCase, got, tt.want)
 			}
 		})
+	}
+}
+
+func newTestDoorCtx() *DoorCtx {
+	return &DoorCtx{
+		Executor:    &MenuExecutor{ServerCfg: config.ServerConfig{BoardName: "Test BBS"}},
+		User:        doorUserInfo{ID: 1, Handle: "Neo", RealName: "Thomas Anderson", AccessLevel: 50, ScreenWidth: 80, ScreenHeight: 25},
+		NodeNumStr:  "1",
+		UserIDStr:   "1",
+		TimeLeftMin: 30,
+	}
+}
+
+func TestGenerateDoor32SysCase(t *testing.T) {
+	dir := t.TempDir()
+	ctx := newTestDoorCtx()
+
+	if err := generateDoor32Sys(ctx, dir, "door32.sys"); err != nil {
+		t.Fatalf("generateDoor32Sys: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "door32.sys")); err != nil {
+		t.Errorf("expected lowercase door32.sys to exist: %v", err)
 	}
 }

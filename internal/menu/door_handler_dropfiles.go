@@ -96,8 +96,8 @@ func dropfileName(dropfileType, dropfileCase string) string {
 }
 
 // generateDoorSys writes a full 52-line PCBoard DOOR.SYS file.
-func generateDoorSys(ctx *DoorCtx, dir string) error {
-	path := filepath.Join(dir, "DOOR.SYS")
+func generateDoorSys(ctx *DoorCtx, dir, filename string) error {
+	path := filepath.Join(dir, filename)
 	slog.Info("generating DOOR.SYS", "path", path)
 
 	bbsName := ctx.Executor.ServerCfg.BoardName
@@ -169,8 +169,8 @@ func generateDoorSys(ctx *DoorCtx, dir string) error {
 }
 
 // generateDoor32Sys writes an 11-line DOOR32.SYS file.
-func generateDoor32Sys(ctx *DoorCtx, dir string) error {
-	path := filepath.Join(dir, "DOOR32.SYS")
+func generateDoor32Sys(ctx *DoorCtx, dir, filename string) error {
+	path := filepath.Join(dir, filename)
 	slog.Info("generating DOOR32.SYS", "path", path)
 
 	bbsName := ctx.Executor.ServerCfg.BoardName
@@ -193,8 +193,8 @@ func generateDoor32Sys(ctx *DoorCtx, dir string) error {
 }
 
 // generateDorInfo writes a 13-line DORINFO1.DEF file.
-func generateDorInfo(ctx *DoorCtx, dir string) error {
-	path := filepath.Join(dir, "DORINFO1.DEF")
+func generateDorInfo(ctx *DoorCtx, dir, filename string) error {
+	path := filepath.Join(dir, filename)
 	slog.Info("generating DORINFO1.DEF", "path", path)
 
 	bbsName := ctx.Executor.ServerCfg.BoardName
@@ -234,8 +234,8 @@ func generateDorInfo(ctx *DoorCtx, dir string) error {
 }
 
 // generateChainTxt writes a CHAIN.TXT file (WWIV format).
-func generateChainTxt(ctx *DoorCtx, dir string) error {
-	path := filepath.Join(dir, "CHAIN.TXT")
+func generateChainTxt(ctx *DoorCtx, dir, filename string) error {
+	path := filepath.Join(dir, filename)
 	slog.Info("generating CHAIN.TXT", "path", path)
 
 	bbsName := ctx.Executor.ServerCfg.BoardName
@@ -293,16 +293,16 @@ func generateAllDropfiles(ctx *DoorCtx, dir string) error {
 		return fmt.Errorf("failed to create dropfile directory %s: %w", dir, err)
 	}
 
-	if err := generateDoorSys(ctx, dir); err != nil {
+	if err := generateDoorSys(ctx, dir, "DOOR.SYS"); err != nil {
 		return fmt.Errorf("failed to generate DOOR.SYS: %w", err)
 	}
-	if err := generateDoor32Sys(ctx, dir); err != nil {
+	if err := generateDoor32Sys(ctx, dir, "DOOR32.SYS"); err != nil {
 		return fmt.Errorf("failed to generate DOOR32.SYS: %w", err)
 	}
-	if err := generateDorInfo(ctx, dir); err != nil {
+	if err := generateDorInfo(ctx, dir, "DORINFO1.DEF"); err != nil {
 		return fmt.Errorf("failed to generate DORINFO1.DEF: %w", err)
 	}
-	if err := generateChainTxt(ctx, dir); err != nil {
+	if err := generateChainTxt(ctx, dir, "CHAIN.TXT"); err != nil {
 		return fmt.Errorf("failed to generate CHAIN.TXT: %w", err)
 	}
 
