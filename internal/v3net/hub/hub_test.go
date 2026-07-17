@@ -373,9 +373,9 @@ func TestSSEHTTPStream(t *testing.T) {
 			t.Errorf("expected chat event, got %q", eventType)
 		}
 	// ServeSSE registers its subscriber before returning the response
-	// headers, so by the time the SSE request above completes the
-	// subscription is guaranteed live and the Publish below cannot be
-	// missed. The event therefore arrives promptly; this deadline only
+	// headers, so the subscription is guaranteed live by the time the SSE
+	// request above returns — the event published just above therefore
+	// cannot be missed. The event arrives promptly; this deadline only
 	// bounds a genuine hang. (A publish-before-subscribe race previously
 	// forced this up to 15s — see ServeSSE.)
 	case <-time.After(5 * time.Second):
