@@ -1,9 +1,9 @@
 # Handoff: QWK/REP Offline Mail — Mobile Client (ViSiON/3)
 
 ## Overview
-This is the design handoff for the **mobile QWK offline-mail reader** described in
-`docs-internal/plans/2026-06-29-qwk-rep-sync-mobile-design.md` (Phase 8 — the React Native
-prototype). The app lets a BBS user log in, request a `.QWK` packet, download it, read and
+This is the design handoff for the **mobile QWK offline-mail reader** (Phase 8 of the
+QWK REP sync design — the React Native prototype; the full design plan is an internal
+document, available from the maintainer on request). The app lets a BBS user log in, request a `.QWK` packet, download it, read and
 reply to messages **entirely offline**, then upload a `.REP` packet of their replies and see
 an import report. It is deliberately **packet-oriented** — there is no live message browsing,
 no terminal scraping, and no online-only surface. Everything the user reads/writes happens
@@ -207,7 +207,7 @@ Reference captures of every screen live in `screenshots/` (each is the full devi
 - `QWK Offline Reader.dc.html` — the full interactive prototype (all 13 screens, live state, animations). Open in a browser to click through the flow. **Reference only — do not ship.**
 - `support.js` — the Design Component runtime needed to *run* the prototype locally. Not part of the deliverable; do not port.
 - `assets/`, `fonts/` — the real image + font assets, ready to reuse.
-- Plan of record (in the main repo, not this bundle): `docs-internal/plans/2026-06-29-qwk-rep-sync-mobile-design.md` — read Phase 1 (correctness core), Phase 8 (mobile prototype), "Recommended endpoints," and "React Native App Shape."
+- Plan of record: the internal QWK REP sync design plan (not tracked in this repo — available from the maintainer) — read Phase 1 (correctness core), Phase 8 (mobile prototype), "Recommended endpoints," and "React Native App Shape."
 
 ## Notes
 - State in the prototype resets on reload — it has **no persistence**. The real app must persist boards, settings, drafts, packet cache, and read pointers.

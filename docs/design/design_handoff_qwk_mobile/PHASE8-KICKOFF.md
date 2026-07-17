@@ -71,7 +71,7 @@ OS provides those; don't build them.
 
 ## Phase 8 scope (from the roadmap)
 
-See `docs-internal/plans/2026-06-29-qwk-rep-sync-mobile-design.md` → "Phase 8:
+From the internal QWK REP sync design plan (not tracked in this repo), "Phase 8:
 React Native Prototype". Summary:
 
 - **Build:** login → packet download → local packet storage → read/reply offline
