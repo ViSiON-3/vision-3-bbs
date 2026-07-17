@@ -86,6 +86,25 @@ func TestSubstituteCountdown(t *testing.T) {
 	}
 }
 
+func TestSubstituteGateTokens(t *testing.T) {
+	prompt := []byte(" Press {KEY} {PRESSES} times.")
+	got := string(substituteGateTokens(prompt, "*", 3))
+	if got != " Press * 3 times." {
+		t.Errorf("substituteGateTokens = %q", got)
+	}
+
+	noTokens := []byte(" nothing to replace here.")
+	if got := string(substituteGateTokens(noTokens, "*", 3)); got != string(noTokens) {
+		t.Errorf("substituteGateTokens with no tokens = %q, want unchanged %q", got, noTokens)
+	}
+
+	withCountdown := []byte(" Press {KEY} {PRESSES} times. You have ## seconds.")
+	got = string(substituteGateTokens(withCountdown, "ESC", 2))
+	if got != " Press ESC 2 times. You have ## seconds." {
+		t.Errorf("substituteGateTokens should leave ## intact, got %q", got)
+	}
+}
+
 // scriptedInput returns queued (key, err) pairs; when drained it returns
 // ErrIdleTimeout so the loop relies on the injected clock for the deadline.
 type scriptedInput struct {

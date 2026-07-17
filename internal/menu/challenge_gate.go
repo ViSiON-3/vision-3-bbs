@@ -19,21 +19,23 @@ import (
 // (8 or more), mirroring botgate's stray-key flood rule.
 const challengeStrayLimit = 8
 
-// fallbackGatePrompt is used when the configured art file cannot be read. The
-// %d is the configured required press count; the fallback must keep a "##"
-// countdown field so the live countdown still works.
-const fallbackGatePrompt = "\x1b[0m\r\n Press the challenge key %d time(s) if you're not a bot.\r\n You have ## seconds.\r\n"
+// fallbackGatePrompt is used when the configured art file cannot be read. It
+// keeps the "{KEY}"/"{PRESSES}" tokens and the "##" countdown field intact,
+// so substituteGateTokens and the live countdown work the same as for
+// configured art.
+const fallbackGatePrompt = "\x1b[0m\r\n Press {KEY} {PRESSES} time(s) if you're not a bot.\r\n You have ## seconds.\r\n"
 
 // gatePromptOrFallback loads the gate art file, returning a built-in fallback
-// (never an error) if it cannot be read, so a missing file never drops a caller.
-// requiredPresses is substituted into the fallback text so it accurately
-// reflects the configured press count.
-func gatePromptOrFallback(e *MenuExecutor, fileName string, requiredPresses, nodeNumber int) []byte {
+// (never an error) if it cannot be read, so a missing file never drops a
+// caller. The returned bytes still contain the "{KEY}"/"{PRESSES}" tokens
+// (and any "##" countdown field) unsubstituted; the caller is responsible for
+// running substituteGateTokens.
+func gatePromptOrFallback(e *MenuExecutor, fileName string, nodeNumber int) []byte {
 	path := filepath.Join(e.MenuSetPath, "ansi", fileName)
 	content, err := ansi.GetAnsiFileContent(path)
 	if err != nil {
 		slog.Warn("challenge gate art missing, using fallback", "node", nodeNumber, "file", path, "error", err)
-		return []byte(fmt.Sprintf(fallbackGatePrompt, requiredPresses))
+		return []byte(fallbackGatePrompt)
 	}
 	return content
 }
@@ -61,7 +63,8 @@ func (e *MenuExecutor) RunChallengeGate(
 		timeout = 1
 	}
 
-	prompt := gatePromptOrFallback(e, cfg.ChallengeGateFile, required, nodeNumber)
+	prompt := gatePromptOrFallback(e, cfg.ChallengeGateFile, nodeNumber)
+	prompt = substituteGateTokens(prompt, cfg.ChallengeGateKey, required)
 	row, col, width, hasField := findCountdownField(prompt)
 	live := cfg.ChallengeGateLiveCountdown && hasField
 
