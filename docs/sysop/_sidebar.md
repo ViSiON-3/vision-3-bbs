@@ -25,6 +25,7 @@
 * [SSH Host Keys](configuration/configuration.md#ssh-host-keys)
 * [Logging](configuration/configuration.md#logging)
 * [Security](configuration/security.md)
+* [Bot Defense](configuration/security.md#bot-defense)
 
 * **MENU SYSTEM**
 * [Menus & ACS](menus/menu-system.md)
