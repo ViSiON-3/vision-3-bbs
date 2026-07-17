@@ -153,6 +153,15 @@ The recommended nightly sequence (configured via the event scheduler):
 
 `v3mail` is designed to run as scheduled events. See `configs/events.json` and [Event Scheduler](advanced/event-scheduler.md) for full examples. A typical configuration:
 
+> **Integrated mailer alternative:** the scheduler-driven `toss`/`scan`/`ftn-pack`
+> workflow below is one way to run FTN mail. If you enable the integrated
+> **binkd** mailer instead (Server Setup → **Binkd Mailer** — see
+> [FTN Echomail](ftn-echomail.md#enabling-the-integrated-mailer-recommended)),
+> Vision/3 tosses inbound mail automatically via binkd's `exec` hook and
+> exports outbound mail on a timer, so these `binkd_poll`/`v3mail toss`/
+> `v3mail scan`/`v3mail ftn-pack` scheduler events should be **disabled** to
+> avoid double-exporting.
+
 ```json
 {
   "id": "v3mail_toss",

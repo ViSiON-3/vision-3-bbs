@@ -178,10 +178,11 @@ detection). See [Upload safety](#upload-safety-destination-check-and-duplicate-d
 
 ## Packet API (experimental)
 
-An optional HTTPS API can expose QWK download/upload to a future ViSiON/3 mobile
-client, without a terminal session. It is **off by default and experimental** —
-do not enable it in production until a mobile client exists. See
-[QWK Packet API](qwk-api.md).
+An optional HTTPS API can expose QWK download/upload to the ViSiON/3 QWK Mobile
+companion client, without a terminal session. It is **off by default and
+experimental** — the companion app is **not yet available for download**, so
+there is nothing to connect to it yet. Leave it disabled until the app ships.
+See [QWK Packet API](qwk-api.md).
 
 ## Troubleshooting
 

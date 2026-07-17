@@ -55,6 +55,7 @@
 * [Message Areas](messages/message-areas.md)
 * [Private Mail](messages/private-mail.md)
 * [QWK Offline Mail](messages/qwk.md)
+* [QWK Packet API (experimental)](messages/qwk-api.md)
 * [FTN Echomail](messages/ftn-echomail.md)
 * [Tosser (v3mail)](messages/ftn-echomail.md#tosser-internal--v3mail)
 * [Mailer (binkd)](messages/ftn-echomail.md#mailer-external--binkd)
