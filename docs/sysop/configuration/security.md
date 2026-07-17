@@ -5,6 +5,7 @@ This guide covers security features and best practices for protecting your BBS.
 ## Table of Contents
 
 - [Connection Security](#connection-security)
+- [Bot Defense](#bot-defense)
 - [IP Filtering](#ip-filtering)
 - [Access Control](#access-control)
 - [Best Practices](#best-practices)
@@ -53,6 +54,86 @@ Limits how many simultaneous connections a single IP address can make.
 
 - **Default:** 3 — prevents connection flooding from a single source
 - Useful for preventing multi-connection abuse and mitigating simple DoS attempts
+
+## Bot Defense
+
+ViSiON/3 offers two optional, pre-login defenses aimed specifically at automated
+scanners and bots that hammer telnet/SSH ports: a **Challenge Gate** and a
+**connection-rate limiter**. Both are disabled by default and configured in the
+config TUI's dedicated **Bot Defense** sub-screen:
+
+```bash
+./config
+# → 1 System Configuration → 11 Bot Defense
+```
+
+### Challenge Gate
+
+The Challenge Gate is a scanner filter, **not authentication**. It sits in
+front of the pre-login matrix/login screen and asks the caller to press a
+configured key a set number of times within a short timeout. Legitimate human
+callers pass in a second or two; most port-scanning and credential-stuffing
+bots never send the key at all, since they aren't coded to look for a prompt
+like this. A bot that *is* specifically coded to send the key will pass — the
+gate raises the cost of automated abuse, it does not replace login security.
+
+The gate runs in `sessionHandler` for **both telnet and SSH** connections,
+before the caller ever sees the pre-login matrix screen — but only for
+**unauthenticated** sessions. An SSH caller who was already pre-authenticated
+at the SSH layer (a known handle with the correct password) skips straight to
+the main menu and never sees the gate. It is also **skipped for allowlisted
+IPs** (see [Allowlist](#allowlist)), so admins and trusted networks never see
+it.
+
+| TUI Label | config.json key | Default | Description |
+|-----------|------------------|---------|--------------|
+| Enable Gate | `enableChallengeGate` | `false` | Master on/off switch for the Challenge Gate. |
+| Gate Art File | `challengeGateFile` | `BOTCHECK.ASC` | ANSI/ASCII art file shown as the challenge prompt, loaded from `menus/v3/ansi/`. If the file is missing or unreadable, a built-in plain-text fallback prompt is shown instead — the gate never blocks a caller because of a missing file. |
+| Challenge Key | `challengeGateKey` | `ESC` | The key the caller must press. Use the literal string `ESC` for the Escape key, or a single character (e.g. `*`). |
+| Timeout Secs | `challengeGateTimeoutSeconds` | `20` | Seconds the caller has to complete the challenge before the connection is dropped. |
+| Req Presses | `challengeGateRequiredPresses` | `2` | Number of times the key must be pressed to pass. |
+| Live Countdown | `challengeGateLiveCountdown` | `true` | Animates the countdown once per second in the art file. Turn this **off** for web-based telnet clients that garble absolute cursor repositioning — with it off, the starting number is drawn once and stays static instead of ticking down. |
+
+**The `##` countdown placeholder:** in the gate art file, a run of `#`
+characters marks where the countdown is drawn. The number of `#` characters
+sets the field width — for example `##` reserves two digits, right-aligned
+(so `20` fills it and single digits are padded with a leading space). If the
+art file contains no `#` run, the countdown is simply not drawn and the rest
+of the prompt renders normally.
+
+**The `{KEY}`, `{PRESSES}`, and `{TIMES}` tokens:** the gate art file (and the
+built-in fallback prompt) may also contain the literal tokens `{KEY}`,
+`{PRESSES}`, and `{TIMES}`. `{KEY}` is replaced with the configured Challenge
+Key, `{PRESSES}` with the configured Req Presses count, and `{TIMES}` with the
+correctly-pluralized noun ("time" for a count of 1, "times" otherwise), so
+custom art always reflects the current configuration and renders grammatically
+correct prompts instead of hardcoding values that can drift out of sync.
+
+### Connection-Rate Limiter
+
+The connection-rate limiter closes a gap the existing
+[Authentication Lockout](#authentication-lockout) doesn't cover: a bot that
+reconnects rapidly without ever attempting a login. Authentication lockout only
+triggers on *failed logins*, so a scanner that opens and closes connections
+without logging in — or that's just probing whether the port is open — never
+trips it. The rate limiter instead watches raw connection attempts per IP,
+regardless of what (if anything) the caller does after connecting.
+
+| TUI Label | config.json key | Default | Description |
+|-----------|------------------|---------|--------------|
+| Rate Limit | `enableConnRateLimit` | `false` | Master on/off switch for the connection-rate limiter. |
+| Rate Hits | `connRateLimitHits` | `20` | Number of connection attempts from one IP, within the window, that triggers a temp-ban — the attempt that reaches this count is itself banned/rejected (e.g. a value of `3` bans on the 3rd attempt). Set to `0` to disable. |
+| Rate Window | `connRateLimitWindowSeconds` | `10` | Sliding window, in seconds, over which attempts are counted. |
+| Ban Minutes | `connRateLimitBanMinutes` | `90` | Duration of the temporary ban once the threshold is hit. |
+
+**How it works:** once an IP makes `connRateLimitHits` connection attempts
+within `connRateLimitWindowSeconds`, it is temp-banned for
+`connRateLimitBanMinutes`. The ban is held **in memory only** and expires
+automatically — it is *not* written to `configs/blocklist.txt` and does not
+survive a BBS restart. This mirrors the existing IP-based
+[Authentication Lockout](#authentication-lockout), just triggered by
+connection volume instead of failed logins. As with every other connection
+check, **allowlisted IPs are exempt** from the rate limiter.
 
 ## IP Filtering
 

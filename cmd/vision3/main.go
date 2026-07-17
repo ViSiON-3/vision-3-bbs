@@ -126,6 +126,14 @@ type ConnectionTracker struct {
 	lockoutMinutes      int
 	watcher             *fsnotify.Watcher // File system watcher for auto-reload
 	watcherDone         chan bool         // Signal to stop watcher
+
+	// Connection-rate limiter (in-memory, auto-expiring).
+	connRateEnabled bool
+	connRateHits    int
+	connRateWindow  time.Duration
+	connRateBan     time.Duration
+	connAttempts    map[string][]time.Time // IP -> recent accept timestamps
+	connTempBans    map[string]time.Time   // IP -> ban expiry
 }
 
 // NewConnectionTracker creates a new connection tracker
@@ -141,6 +149,8 @@ func NewConnectionTracker(maxNodes, maxConnectionsPerIP, maxFailedLogins, lockou
 		allowlistPath:       allowlistPath,
 		maxFailedLogins:     maxFailedLogins,
 		lockoutMinutes:      lockoutMinutes,
+		connAttempts:        make(map[string][]time.Time),
+		connTempBans:        make(map[string]time.Time),
 	}
 
 	// Load initial IP lists
@@ -257,13 +267,18 @@ func (ct *ConnectionTracker) CanAccept(remoteAddr net.Addr) (bool, string) {
 	return ct.canAcceptLocked(remoteAddr)
 }
 
+// isAllowlistedLocked reports whether ip is on the allowlist. Caller must hold ct.mu.
+func (ct *ConnectionTracker) isAllowlistedLocked(ip string) bool {
+	return ct.allowlist != nil && ct.allowlist.Contains(ip)
+}
+
 // canAcceptLocked performs the accept check without acquiring the lock.
 func (ct *ConnectionTracker) canAcceptLocked(remoteAddr net.Addr) (bool, string) {
 	// Extract IP from address (strip port)
 	ip := extractIP(remoteAddr)
 
 	// Check allowlist first - if IP is on allowlist, skip all other checks
-	if ct.allowlist != nil && ct.allowlist.Contains(ip) {
+	if ct.isAllowlistedLocked(ip) {
 		slog.Debug("IP on allowlist, bypassing checks", "ip", ip)
 		return true, ""
 	}
@@ -271,6 +286,11 @@ func (ct *ConnectionTracker) canAcceptLocked(remoteAddr net.Addr) (bool, string)
 	// Check blocklist
 	if ct.blocklist != nil && ct.blocklist.Contains(ip) {
 		return false, "IP address is blocked"
+	}
+
+	// Check connection-rate temp-ban
+	if ct.isConnTempBannedLocked(ip) {
+		return false, "connection rate limit exceeded"
 	}
 
 	// Check max nodes limit
@@ -300,6 +320,9 @@ func (ct *ConnectionTracker) TryAccept(remoteAddr net.Addr) (bool, string) {
 	}
 
 	ip := extractIP(remoteAddr)
+	if !ct.isAllowlistedLocked(ip) && ct.recordConnAttemptLocked(ip) {
+		return false, "connection rate limit exceeded"
+	}
 	ct.activeConnections[ip]++
 	ct.totalConnections++
 
@@ -346,6 +369,87 @@ func (ct *ConnectionTracker) GetStats() (totalConns, uniqueIPs int) {
 	return ct.totalConnections, len(ct.activeConnections)
 }
 
+// SetConnRateLimit configures the connection-rate limiter. hits <= 0 disables it.
+func (ct *ConnectionTracker) SetConnRateLimit(enabled bool, hits, windowSeconds, banMinutes int) {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	ct.connRateEnabled = enabled && hits > 0
+	ct.connRateHits = hits
+	ct.connRateWindow = time.Duration(windowSeconds) * time.Second
+	ct.connRateBan = time.Duration(banMinutes) * time.Minute
+}
+
+// connRateSweepThreshold gates the opportunistic global prune in
+// recordConnAttemptLocked: the sweep only runs once connAttempts grows past
+// this size, keeping the common-case record path O(1) while still bounding
+// unbounded growth from one-shot IPs.
+const connRateSweepThreshold = 256
+
+// isConnTempBannedLocked reports whether ip has an unexpired temp-ban, pruning
+// it if expired. Caller must hold ct.mu.
+func (ct *ConnectionTracker) isConnTempBannedLocked(ip string) bool {
+	exp, ok := ct.connTempBans[ip]
+	if !ok {
+		return false
+	}
+	if time.Now().Before(exp) {
+		return true
+	}
+	delete(ct.connTempBans, ip)
+	return false
+}
+
+// recordConnAttemptLocked appends a timestamp for ip, prunes the window, and
+// temp-bans ip if it exceeded the threshold. Returns true if it was just
+// banned. Caller must hold ct.mu.
+func (ct *ConnectionTracker) recordConnAttemptLocked(ip string) bool {
+	if !ct.connRateEnabled {
+		return false
+	}
+	now := time.Now()
+	cutoff := now.Add(-ct.connRateWindow)
+	times := ct.connAttempts[ip]
+	kept := times[:0]
+	for _, t := range times {
+		if t.After(cutoff) {
+			kept = append(kept, t)
+		}
+	}
+	kept = append(kept, now)
+	ct.connAttempts[ip] = kept
+	if len(ct.connAttempts) > connRateSweepThreshold {
+		ct.pruneConnStateLocked()
+	}
+	if len(kept) >= ct.connRateHits {
+		ct.connTempBans[ip] = now.Add(ct.connRateBan)
+		delete(ct.connAttempts, ip)
+		logging.Security("IP temp-banned for connection-rate abuse",
+			"ip", ip, "hits", len(kept), "window_s", int(ct.connRateWindow.Seconds()),
+			"ban_until", ct.connTempBans[ip].Format(time.RFC3339))
+		return true
+	}
+	return false
+}
+
+// pruneConnStateLocked removes stale connAttempts and expired connTempBans
+// entries. It is an opportunistic, bounded global sweep (no goroutine) run
+// from recordConnAttemptLocked once the map grows large enough to be worth
+// it. Caller must hold ct.mu.
+func (ct *ConnectionTracker) pruneConnStateLocked() {
+	now := time.Now()
+	cutoff := now.Add(-ct.connRateWindow)
+	for ip, times := range ct.connAttempts {
+		if len(times) == 0 || times[len(times)-1].Before(cutoff) {
+			delete(ct.connAttempts, ip)
+		}
+	}
+	for ip, exp := range ct.connTempBans {
+		if !now.Before(exp) {
+			delete(ct.connTempBans, ip)
+		}
+	}
+}
+
 // extractIP extracts the IP address from a net.Addr, stripping the port
 func extractIP(addr net.Addr) string {
 	if tcpAddr, ok := addr.(*net.TCPAddr); ok {
@@ -386,6 +490,14 @@ func (ct *ConnectionTracker) IsIPLockedOut(ip string) (bool, time.Time, int) {
 		remainingAttempts = 0
 	}
 	return false, time.Time{}, remainingAttempts
+}
+
+// IsAllowlisted reports whether the IP is on the allowlist (and thus exempt
+// from the challenge gate, matching how it bypasses the accept-time checks).
+func (ct *ConnectionTracker) IsAllowlisted(ip string) bool {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	return ct.allowlist != nil && ct.allowlist.Contains(ip)
 }
 
 // RecordFailedLoginAttempt records a failed login attempt from an IP address.
@@ -938,6 +1050,19 @@ func sessionHandler(s ssh.Session) {
 
 	// Pre-login matrix screen for unauthenticated users (telnet or SSH without account)
 	if authenticatedUser == nil {
+		gateCfg := menuExecutor.GetServerConfig()
+		if gateCfg.EnableChallengeGate && !connectionTracker.IsAllowlisted(extractIP(s.RemoteAddr())) {
+			passed, gateErr := menuExecutor.RunChallengeGate(s, terminal, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
+			if gateErr != nil {
+				slog.Info("challenge gate ended session", "node", nodeID, "error", gateErr)
+				return
+			}
+			if !passed {
+				slog.Info("challenge gate not passed, disconnecting", "node", nodeID)
+				return
+			}
+		}
+
 		matrixAction, matrixErr := menuExecutor.RunMatrixScreen(s, terminal, userMgr, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
 		if matrixErr != nil {
 			slog.Error("matrix screen error", "node", nodeID, "error", matrixErr)
@@ -1430,6 +1555,12 @@ func main() {
 		serverConfig.LockoutMinutes,
 		serverConfig.IPBlocklistPath,
 		serverConfig.IPAllowlistPath,
+	)
+	connectionTracker.SetConnRateLimit(
+		serverConfig.EnableConnRateLimit,
+		serverConfig.ConnRateLimitHits,
+		serverConfig.ConnRateLimitWindowSeconds,
+		serverConfig.ConnRateLimitBanMinutes,
 	)
 	defer connectionTracker.StopWatching() // Ensure file watcher is stopped on shutdown
 

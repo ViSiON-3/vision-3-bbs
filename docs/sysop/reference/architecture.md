@@ -139,13 +139,14 @@ The system is designed as a single Go application that listens for incoming SSH 
 
 1. Client connects via SSH or telnet → `main` accepts → `sessionHandler` spawned
 2. `sessionHandler` handles PTY setup and determines output mode
-3. SSH users with known accounts are auto-logged in, skipping to step 6
-4. Telnet users see the pre-login matrix screen (`PDMATRIX.ANS`) with options: login, create account, check access, or disconnect
-5. `sessionHandler` starts authentication loop via menu executor (LOGIN menu)
-6. Successful login transitions to main menu loop (e.g., FASTLOGN or MAIN)
-7. Menu executor processes user commands and navigates between menus
-8. ANSI screens are loaded from `menus/v3/ansi/` and processed by `ansi` package
-9. User/message/file data is persisted to `data/` directory
+3. If the Challenge Gate is enabled (`enableChallengeGate`), `sessionHandler` runs it next, for both SSH and telnet connections, before the pre-login matrix screen — but only for sessions still unauthenticated at this point, and skipped for IPs on the allowlist. See [Bot Defense](../configuration/security.md#bot-defense).
+4. SSH users with known accounts are pre-authenticated at the SSH layer and auto-logged in, bypassing both the Challenge Gate and the pre-login matrix screen, skipping to step 7
+5. Telnet users see the pre-login matrix screen (`PDMATRIX.ANS`) with options: login, create account, check access, or disconnect
+6. `sessionHandler` starts authentication loop via menu executor (LOGIN menu)
+7. Successful login transitions to main menu loop (e.g., FASTLOGN or MAIN)
+8. Menu executor processes user commands and navigates between menus
+9. ANSI screens are loaded from `menus/v3/ansi/` and processed by `ansi` package
+10. User/message/file data is persisted to `data/` directory
 
 ## Directory Structure
 

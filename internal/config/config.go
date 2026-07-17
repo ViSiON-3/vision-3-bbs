@@ -904,6 +904,20 @@ type ServerConfig struct {
 	LegacySSHAlgorithms bool   `json:"legacySSHAlgorithms"`
 	AllowNewUsers       bool   `json:"allowNewUsers"`
 
+	// Challenge Gate — optional pre-login bot challenge (botgate-style).
+	EnableChallengeGate          bool   `json:"enableChallengeGate"`          // master on/off
+	ChallengeGateFile            string `json:"challengeGateFile"`            // art file in menus ansi dir
+	ChallengeGateKey             string `json:"challengeGateKey"`             // "ESC" or a single character
+	ChallengeGateTimeoutSeconds  int    `json:"challengeGateTimeoutSeconds"`  // seconds to complete the challenge
+	ChallengeGateRequiredPresses int    `json:"challengeGateRequiredPresses"` // presses of the key to pass
+	ChallengeGateLiveCountdown   bool   `json:"challengeGateLiveCountdown"`   // live per-second countdown vs static
+
+	// Connection-rate limiter — temp-ban IPs that reconnect too rapidly.
+	EnableConnRateLimit        bool `json:"enableConnRateLimit"`
+	ConnRateLimitHits          int  `json:"connRateLimitHits"`          // attempts within window that trigger a ban
+	ConnRateLimitWindowSeconds int  `json:"connRateLimitWindowSeconds"` // sliding window size
+	ConnRateLimitBanMinutes    int  `json:"connRateLimitBanMinutes"`    // temp-ban duration
+
 	// Idle timeout (0 = disabled). Applied across the entire app; any input loop
 	// that calls ReadKeyWithTimeout uses this value.
 	SessionIdleTimeoutMinutes int `json:"sessionIdleTimeoutMinutes"`
@@ -1105,39 +1119,49 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 
 	// Default config values
 	defaultConfig := ServerConfig{
-		BoardName:                 "ViSiON/3 BBS",
-		Timezone:                  "",
-		SysOpLevel:                255,
-		CoSysOpLevel:              250,
-		WFCEnabled:                true,
-		NewUserLevel:              1,
-		RegularUserLevel:          10,
-		LogonLevel:                10,
-		AnonymousLevel:            5,
-		SSHPort:                   2222,
-		SSHHost:                   "0.0.0.0",
-		SSHEnabled:                true,
-		TelnetPort:                2323,
-		TelnetHost:                "0.0.0.0",
-		TelnetEnabled:             false,
-		MaxNodes:                  10,
-		MaxConnectionsPerIP:       3,
-		MaxFailedLogins:           5,
-		LockoutMinutes:            30,
-		AllowNewUsers:             true,
-		SessionIdleTimeoutMinutes: 5,
-		TransferTimeoutMinutes:    10,
-		LegacySSHAlgorithms:       true,
-		DeletedUserRetentionDays:  30,
-		UseNUV:                    false,
-		AutoAddNUV:                false,
-		NUVUseLevel:               25,
-		NUVYesVotes:               5,
-		NUVNoVotes:                5,
-		NUVValidate:               true,
-		NUVKill:                   false,
-		NUVLevel:                  25,
-		NUVForm:                   1,
+		BoardName:                    "ViSiON/3 BBS",
+		Timezone:                     "",
+		SysOpLevel:                   255,
+		CoSysOpLevel:                 250,
+		WFCEnabled:                   true,
+		NewUserLevel:                 1,
+		RegularUserLevel:             10,
+		LogonLevel:                   10,
+		AnonymousLevel:               5,
+		SSHPort:                      2222,
+		SSHHost:                      "0.0.0.0",
+		SSHEnabled:                   true,
+		TelnetPort:                   2323,
+		TelnetHost:                   "0.0.0.0",
+		TelnetEnabled:                false,
+		MaxNodes:                     10,
+		MaxConnectionsPerIP:          3,
+		MaxFailedLogins:              5,
+		LockoutMinutes:               30,
+		AllowNewUsers:                true,
+		EnableChallengeGate:          false,
+		ChallengeGateFile:            "BOTCHECK.ASC",
+		ChallengeGateKey:             "ESC",
+		ChallengeGateTimeoutSeconds:  20,
+		ChallengeGateRequiredPresses: 2,
+		ChallengeGateLiveCountdown:   true,
+		EnableConnRateLimit:          false,
+		ConnRateLimitHits:            20,
+		ConnRateLimitWindowSeconds:   10,
+		ConnRateLimitBanMinutes:      90,
+		SessionIdleTimeoutMinutes:    5,
+		TransferTimeoutMinutes:       10,
+		LegacySSHAlgorithms:          true,
+		DeletedUserRetentionDays:     30,
+		UseNUV:                       false,
+		AutoAddNUV:                   false,
+		NUVUseLevel:                  25,
+		NUVYesVotes:                  5,
+		NUVNoVotes:                   5,
+		NUVValidate:                  true,
+		NUVKill:                      false,
+		NUVLevel:                     25,
+		NUVForm:                      1,
 		Logging: LoggingConfig{
 			Dir:       DefaultLogDir,
 			Level:     DefaultLogLevel,
@@ -1165,8 +1189,40 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		return defaultConfig, fmt.Errorf("failed to parse config JSON from %s: %w", filePath, err)
 	}
 
+	config.SanitizeChallengeGate()
 	slog.Info("loaded server configuration", "path", filePath)
 	return config, nil
+}
+
+// SanitizeChallengeGate fills invalid/zero Challenge Gate values with safe
+// defaults, and also clamps the connection-rate-limit fields. Called after
+// load so a hand-edited config.json can't disable the gate through
+// out-of-range numbers or empty required strings. Note this does not
+// guarantee the connection-rate limiter stays enabled: a negative
+// ConnRateLimitHits clamps to 0, and 0 (or lower) hits is treated as
+// "disabled" by SetConnRateLimit.
+func (c *ServerConfig) SanitizeChallengeGate() {
+	if c.ChallengeGateFile == "" {
+		c.ChallengeGateFile = "BOTCHECK.ASC"
+	}
+	if c.ChallengeGateKey == "" {
+		c.ChallengeGateKey = "ESC"
+	}
+	if c.ChallengeGateTimeoutSeconds < 1 {
+		c.ChallengeGateTimeoutSeconds = 20
+	}
+	if c.ChallengeGateRequiredPresses < 1 {
+		c.ChallengeGateRequiredPresses = 2
+	}
+	if c.ConnRateLimitHits < 0 {
+		c.ConnRateLimitHits = 0
+	}
+	if c.ConnRateLimitWindowSeconds < 1 {
+		c.ConnRateLimitWindowSeconds = 10
+	}
+	if c.ConnRateLimitBanMinutes < 1 {
+		c.ConnRateLimitBanMinutes = 90
+	}
 }
 
 // applyBinkdDefaults fills zero-valued BinkdServerConfig fields with defaults.
