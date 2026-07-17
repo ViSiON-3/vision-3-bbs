@@ -388,6 +388,14 @@ func (ct *ConnectionTracker) IsIPLockedOut(ip string) (bool, time.Time, int) {
 	return false, time.Time{}, remainingAttempts
 }
 
+// IsAllowlisted reports whether the IP is on the allowlist (and thus exempt
+// from the challenge gate, matching how it bypasses the accept-time checks).
+func (ct *ConnectionTracker) IsAllowlisted(ip string) bool {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	return ct.allowlist != nil && ct.allowlist.Contains(ip)
+}
+
 // RecordFailedLoginAttempt records a failed login attempt from an IP address.
 // Returns true if the IP was just locked out.
 func (ct *ConnectionTracker) RecordFailedLoginAttempt(ip string) bool {
@@ -938,6 +946,19 @@ func sessionHandler(s ssh.Session) {
 
 	// Pre-login matrix screen for unauthenticated users (telnet or SSH without account)
 	if authenticatedUser == nil {
+		gateCfg := menuExecutor.GetServerConfig()
+		if gateCfg.EnableChallengeGate && !connectionTracker.IsAllowlisted(extractIP(s.RemoteAddr())) {
+			passed, gateErr := menuExecutor.RunChallengeGate(s, terminal, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
+			if gateErr != nil {
+				slog.Info("challenge gate ended session", "node", nodeID, "error", gateErr)
+				return
+			}
+			if !passed {
+				slog.Info("challenge gate not passed, disconnecting", "node", nodeID)
+				return
+			}
+		}
+
 		matrixAction, matrixErr := menuExecutor.RunMatrixScreen(s, terminal, userMgr, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
 		if matrixErr != nil {
 			slog.Error("matrix screen error", "node", nodeID, "error", matrixErr)
