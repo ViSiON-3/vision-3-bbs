@@ -98,8 +98,7 @@ func dropfileName(dropfileType, dropfileCase string) string {
 // generateDoorSys writes a full 52-line PCBoard DOOR.SYS file.
 func generateDoorSys(ctx *DoorCtx, dir, filename string) error {
 	path := filepath.Join(dir, filename)
-	slog.Info("generating DOOR.SYS", "path", path)
-
+	slog.Info("generating dropfile", "type", "DOOR.SYS", "filename", filename, "path", path)
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	timeLeftSecs := ctx.TimeLeftMin * 60
 
