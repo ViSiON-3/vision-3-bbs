@@ -180,9 +180,6 @@ func (m *Model) fieldsDoor() []fieldDef {
 				if val == "" {
 					return fmt.Errorf("door name cannot be empty")
 				}
-				if val == key {
-					return nil
-				}
 				for k := range m.configs.Doors {
 					if k != key && strings.EqualFold(k, val) {
 						return fmt.Errorf("door %q already exists", k)
@@ -191,7 +188,9 @@ func (m *Model) fieldsDoor() []fieldDef {
 				cfg := m.configs.Doors[key]
 				cfg.Name = val
 				m.configs.Doors[val] = cfg
-				delete(m.configs.Doors, key)
+				if val != key {
+					delete(m.configs.Doors, key)
+				}
 				dPtr.Name = val // keep display current until fields are rebuilt
 				return nil
 			},

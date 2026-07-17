@@ -61,8 +61,25 @@ func TestLoadDoors_UppercasesKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, ok := result["LORD"]; !ok {
-		t.Errorf("expected key LORD for door named Lord, got keys %v", result)
+	d, ok := result["LORD"]
+	if !ok {
+		t.Fatalf("expected key LORD for door named Lord, got keys %v", result)
+	}
+	if d.Name != "LORD" {
+		t.Errorf("Name = %q, want LORD (key and Name must stay in sync)", d.Name)
+	}
+}
+
+func TestLoadDoors_RejectsEmptyName(t *testing.T) {
+	tmpDir := t.TempDir()
+	doors := []DoorConfig{
+		{Name: "  ", Commands: []string{"/usr/bin/lord"}},
+	}
+	data, _ := json.Marshal(doors)
+	os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
+
+	if _, err := LoadDoors(filepath.Join(tmpDir, "doors.json")); err == nil {
+		t.Error("expected error for door with blank name")
 	}
 }
 

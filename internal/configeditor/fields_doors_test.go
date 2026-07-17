@@ -94,3 +94,25 @@ func TestFieldsDoorNameValidation(t *testing.T) {
 		t.Error("LORD should still exist after no-op rename")
 	}
 }
+
+// A door keyed uppercase but carrying a mixed-case Name (possible in a
+// hand-edited doors.json before load normalization existed) must have its
+// Name normalized even when the key itself doesn't change.
+func TestFieldsDoorNameSameKeyNormalizesName(t *testing.T) {
+	m := newDoorModel(map[string]config.DoorConfig{
+		"LORD": {Name: "Lord"},
+	})
+	m.recordEditIdx = 0
+	name := findField(t, m.buildRecordFields(), "Name")
+
+	if err := name.Set("lord"); err != nil {
+		t.Fatalf("Set(lord): %v", err)
+	}
+	d, ok := m.configs.Doors["LORD"]
+	if !ok {
+		t.Fatalf("key LORD missing, keys = %v", m.doorKeys())
+	}
+	if d.Name != "LORD" {
+		t.Errorf("Name = %q, want LORD (same-key set must still normalize Name)", d.Name)
+	}
+}
