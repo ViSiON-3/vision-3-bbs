@@ -298,6 +298,7 @@ func New(configPath string) (Model, error) {
 		{"DOS Emulation"},
 		{"Logging"},
 		{"QWK Mobile API"},
+		{"Bot Defense"},
 	}
 
 	return Model{

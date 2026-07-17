@@ -101,3 +101,27 @@ func TestSysFieldsLevels_WFCAccess(t *testing.T) {
 		t.Errorf("Get after Set(N): want N, got %q", got)
 	}
 }
+
+func TestSysFieldsBotDefenseRoundTrip(t *testing.T) {
+	cfg := &config.ServerConfig{}
+	fields := sysFieldsBotDefense(cfg)
+	if len(fields) != 10 {
+		t.Fatalf("got %d fields, want 10", len(fields))
+	}
+	byLabel := map[string]fieldDef{}
+	for _, f := range fields {
+		byLabel[f.Label] = f
+	}
+	if err := byLabel["Enable Gate"].Set("Y"); err != nil || !cfg.EnableChallengeGate {
+		t.Errorf("Enable Gate Set failed: err=%v val=%v", err, cfg.EnableChallengeGate)
+	}
+	if err := byLabel["Challenge Key"].Set("*"); err != nil || cfg.ChallengeGateKey != "*" {
+		t.Errorf("Challenge Key Set failed: %q", cfg.ChallengeGateKey)
+	}
+	if err := byLabel["Timeout Secs"].Set("30"); err != nil || cfg.ChallengeGateTimeoutSeconds != 30 {
+		t.Errorf("Timeout Set failed: %d", cfg.ChallengeGateTimeoutSeconds)
+	}
+	if got := byLabel["Enable Gate"].Get(); got != "Y" {
+		t.Errorf("Enable Gate Get = %q, want Y", got)
+	}
+}
