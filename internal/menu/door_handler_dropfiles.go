@@ -193,8 +193,7 @@ func generateDoor32Sys(ctx *DoorCtx, dir, filename string) error {
 // generateDorInfo writes a 13-line DORINFO1.DEF file.
 func generateDorInfo(ctx *DoorCtx, dir, filename string) error {
 	path := filepath.Join(dir, filename)
-	slog.Info("generating DORINFO1.DEF", "path", path)
-
+	slog.Info("generating dropfile", "type", "DORINFO1.DEF", "filename", filename, "path", path)
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	crlf := "\r\n"
 
