@@ -278,11 +278,8 @@ vision-3-bbs/
 │   └── examples/           # Example JavaScript scripts for V3 scripting and SyncJS
 ├── third_party/            # Modified third-party packages (tracked in git)
 ├── ziplab/                 # ZipLab support data files
-├── docs/                   # GitHub Pages website (vision3bbs.com)
-│   └── sysop/              # Sysop documentation (published)
-└── docs-internal/          # Internal dev docs (not published to the site)
-    ├── plans/              # Development & implementation plans
-    └── specs/              # Design specifications
+└── docs/                   # GitHub Pages website (vision3bbs.com)
+    └── sysop/              # Sysop documentation (published)
 ```
 
 ## Setup & Installation
