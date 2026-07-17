@@ -1195,8 +1195,10 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 }
 
 // SanitizeChallengeGate fills invalid/zero Challenge Gate values with safe
-// defaults. Called after load so a hand-edited config.json can't disable the
-// gate through out-of-range numbers or empty required strings.
+// defaults, and also clamps the connection-rate-limit fields. Called after
+// load so a hand-edited config.json can't disable the gate (or the
+// connection-rate limiter) through out-of-range numbers or empty required
+// strings.
 func (c *ServerConfig) SanitizeChallengeGate() {
 	if c.ChallengeGateFile == "" {
 		c.ChallengeGateFile = "BOTCHECK.ASC"

@@ -126,6 +126,14 @@ type ConnectionTracker struct {
 	lockoutMinutes      int
 	watcher             *fsnotify.Watcher // File system watcher for auto-reload
 	watcherDone         chan bool         // Signal to stop watcher
+
+	// Connection-rate limiter (in-memory, auto-expiring).
+	connRateEnabled bool
+	connRateHits    int
+	connRateWindow  time.Duration
+	connRateBan     time.Duration
+	connAttempts    map[string][]time.Time // IP -> recent accept timestamps
+	connTempBans    map[string]time.Time   // IP -> ban expiry
 }
 
 // NewConnectionTracker creates a new connection tracker
@@ -141,6 +149,8 @@ func NewConnectionTracker(maxNodes, maxConnectionsPerIP, maxFailedLogins, lockou
 		allowlistPath:       allowlistPath,
 		maxFailedLogins:     maxFailedLogins,
 		lockoutMinutes:      lockoutMinutes,
+		connAttempts:        make(map[string][]time.Time),
+		connTempBans:        make(map[string]time.Time),
 	}
 
 	// Load initial IP lists
@@ -273,6 +283,11 @@ func (ct *ConnectionTracker) canAcceptLocked(remoteAddr net.Addr) (bool, string)
 		return false, "IP address is blocked"
 	}
 
+	// Check connection-rate temp-ban
+	if ct.isConnTempBannedLocked(ip) {
+		return false, "connection rate limit exceeded"
+	}
+
 	// Check max nodes limit
 	if ct.maxNodes > 0 && ct.totalConnections >= ct.maxNodes {
 		return false, "maximum nodes reached"
@@ -300,6 +315,9 @@ func (ct *ConnectionTracker) TryAccept(remoteAddr net.Addr) (bool, string) {
 	}
 
 	ip := extractIP(remoteAddr)
+	if ct.recordConnAttemptLocked(ip) {
+		return false, "connection rate limit exceeded"
+	}
 	ct.activeConnections[ip]++
 	ct.totalConnections++
 
@@ -344,6 +362,59 @@ func (ct *ConnectionTracker) GetStats() (totalConns, uniqueIPs int) {
 	ct.mu.Lock()
 	defer ct.mu.Unlock()
 	return ct.totalConnections, len(ct.activeConnections)
+}
+
+// SetConnRateLimit configures the connection-rate limiter. hits <= 0 disables it.
+func (ct *ConnectionTracker) SetConnRateLimit(enabled bool, hits, windowSeconds, banMinutes int) {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	ct.connRateEnabled = enabled && hits > 0
+	ct.connRateHits = hits
+	ct.connRateWindow = time.Duration(windowSeconds) * time.Second
+	ct.connRateBan = time.Duration(banMinutes) * time.Minute
+}
+
+// isConnTempBannedLocked reports whether ip has an unexpired temp-ban, pruning
+// it if expired. Caller must hold ct.mu.
+func (ct *ConnectionTracker) isConnTempBannedLocked(ip string) bool {
+	exp, ok := ct.connTempBans[ip]
+	if !ok {
+		return false
+	}
+	if time.Now().Before(exp) {
+		return true
+	}
+	delete(ct.connTempBans, ip)
+	return false
+}
+
+// recordConnAttemptLocked appends a timestamp for ip, prunes the window, and
+// temp-bans ip if it exceeded the threshold. Returns true if it was just
+// banned. Caller must hold ct.mu.
+func (ct *ConnectionTracker) recordConnAttemptLocked(ip string) bool {
+	if !ct.connRateEnabled {
+		return false
+	}
+	now := time.Now()
+	cutoff := now.Add(-ct.connRateWindow)
+	times := ct.connAttempts[ip]
+	kept := times[:0]
+	for _, t := range times {
+		if t.After(cutoff) {
+			kept = append(kept, t)
+		}
+	}
+	kept = append(kept, now)
+	ct.connAttempts[ip] = kept
+	if len(kept) >= ct.connRateHits {
+		ct.connTempBans[ip] = now.Add(ct.connRateBan)
+		delete(ct.connAttempts, ip)
+		logging.Security("IP temp-banned for connection-rate abuse",
+			"ip", ip, "hits", len(kept), "window_s", int(ct.connRateWindow.Seconds()),
+			"ban_until", ct.connTempBans[ip].Format(time.RFC3339))
+		return true
+	}
+	return false
 }
 
 // extractIP extracts the IP address from a net.Addr, stripping the port
@@ -1451,6 +1522,12 @@ func main() {
 		serverConfig.LockoutMinutes,
 		serverConfig.IPBlocklistPath,
 		serverConfig.IPAllowlistPath,
+	)
+	connectionTracker.SetConnRateLimit(
+		serverConfig.EnableConnRateLimit,
+		serverConfig.ConnRateLimitHits,
+		serverConfig.ConnRateLimitWindowSeconds,
+		serverConfig.ConnRateLimitBanMinutes,
 	)
 	defer connectionTracker.StopWatching() // Ensure file watcher is stopped on shutdown
 
