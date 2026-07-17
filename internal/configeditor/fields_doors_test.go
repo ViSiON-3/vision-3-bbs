@@ -127,3 +127,15 @@ func TestFieldsDoorNamePreservesCase(t *testing.T) {
 		t.Errorf("Name = %q, want case preserved", d.Name)
 	}
 }
+
+func TestDropfileCaseField(t *testing.T) {
+	d := &doorEditProxy{}
+	d.DropfileCase = "lower"
+	if d.DropfileCase != "lower" {
+		t.Fatalf("setup failed")
+	}
+	d.DropfileCase = "upper"
+	if got := d.DropfileCase; got != "upper" {
+		t.Errorf("DropfileCase = %q, want upper", got)
+	}
+}
