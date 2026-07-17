@@ -267,13 +267,18 @@ func (ct *ConnectionTracker) CanAccept(remoteAddr net.Addr) (bool, string) {
 	return ct.canAcceptLocked(remoteAddr)
 }
 
+// isAllowlistedLocked reports whether ip is on the allowlist. Caller must hold ct.mu.
+func (ct *ConnectionTracker) isAllowlistedLocked(ip string) bool {
+	return ct.allowlist != nil && ct.allowlist.Contains(ip)
+}
+
 // canAcceptLocked performs the accept check without acquiring the lock.
 func (ct *ConnectionTracker) canAcceptLocked(remoteAddr net.Addr) (bool, string) {
 	// Extract IP from address (strip port)
 	ip := extractIP(remoteAddr)
 
 	// Check allowlist first - if IP is on allowlist, skip all other checks
-	if ct.allowlist != nil && ct.allowlist.Contains(ip) {
+	if ct.isAllowlistedLocked(ip) {
 		slog.Debug("IP on allowlist, bypassing checks", "ip", ip)
 		return true, ""
 	}
@@ -315,7 +320,7 @@ func (ct *ConnectionTracker) TryAccept(remoteAddr net.Addr) (bool, string) {
 	}
 
 	ip := extractIP(remoteAddr)
-	if ct.recordConnAttemptLocked(ip) {
+	if !ct.isAllowlistedLocked(ip) && ct.recordConnAttemptLocked(ip) {
 		return false, "connection rate limit exceeded"
 	}
 	ct.activeConnections[ip]++
@@ -374,6 +379,12 @@ func (ct *ConnectionTracker) SetConnRateLimit(enabled bool, hits, windowSeconds,
 	ct.connRateBan = time.Duration(banMinutes) * time.Minute
 }
 
+// connRateSweepThreshold gates the opportunistic global prune in
+// recordConnAttemptLocked: the sweep only runs once connAttempts grows past
+// this size, keeping the common-case record path O(1) while still bounding
+// unbounded growth from one-shot IPs.
+const connRateSweepThreshold = 256
+
 // isConnTempBannedLocked reports whether ip has an unexpired temp-ban, pruning
 // it if expired. Caller must hold ct.mu.
 func (ct *ConnectionTracker) isConnTempBannedLocked(ip string) bool {
@@ -406,6 +417,9 @@ func (ct *ConnectionTracker) recordConnAttemptLocked(ip string) bool {
 	}
 	kept = append(kept, now)
 	ct.connAttempts[ip] = kept
+	if len(ct.connAttempts) > connRateSweepThreshold {
+		ct.pruneConnStateLocked()
+	}
 	if len(kept) >= ct.connRateHits {
 		ct.connTempBans[ip] = now.Add(ct.connRateBan)
 		delete(ct.connAttempts, ip)
@@ -415,6 +429,25 @@ func (ct *ConnectionTracker) recordConnAttemptLocked(ip string) bool {
 		return true
 	}
 	return false
+}
+
+// pruneConnStateLocked removes stale connAttempts and expired connTempBans
+// entries. It is an opportunistic, bounded global sweep (no goroutine) run
+// from recordConnAttemptLocked once the map grows large enough to be worth
+// it. Caller must hold ct.mu.
+func (ct *ConnectionTracker) pruneConnStateLocked() {
+	now := time.Now()
+	cutoff := now.Add(-ct.connRateWindow)
+	for ip, times := range ct.connAttempts {
+		if len(times) == 0 || times[len(times)-1].Before(cutoff) {
+			delete(ct.connAttempts, ip)
+		}
+	}
+	for ip, exp := range ct.connTempBans {
+		if !now.Before(exp) {
+			delete(ct.connTempBans, ip)
+		}
+	}
 }
 
 // extractIP extracts the IP address from a net.Addr, stripping the port

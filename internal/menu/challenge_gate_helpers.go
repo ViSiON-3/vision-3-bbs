@@ -37,14 +37,14 @@ func findCountdownField(prompt []byte) (row, col, width int, found bool) {
 	row, col = 1, 1
 	for i := 0; i < len(prompt); i++ {
 		b := prompt[i]
-		switch {
-		case b == 0x1B: // ESC — skip an escape sequence
+		switch b {
+		case 0x1B: // ESC — skip an escape sequence
 			i += escapeSeqLen(prompt[i:]) - 1 // -1: loop's i++ advances past the last byte
-		case b == '\r':
+		case '\r':
 			col = 1
-		case b == '\n':
+		case '\n':
 			row++
-		case b == '#':
+		case '#':
 			w := 0
 			for i+w < len(prompt) && prompt[i+w] == '#' {
 				w++

@@ -78,9 +78,12 @@ like this. A bot that *is* specifically coded to send the key will pass — the
 gate raises the cost of automated abuse, it does not replace login security.
 
 The gate runs in `sessionHandler` for **both telnet and SSH** connections,
-before the caller ever sees the pre-login matrix screen. It is **skipped for
-allowlisted IPs** (see [Allowlist](#allowlist)), so admins and trusted networks
-never see it.
+before the caller ever sees the pre-login matrix screen — but only for
+**unauthenticated** sessions. An SSH caller who was already pre-authenticated
+at the SSH layer (a known handle with the correct password) skips straight to
+the main menu and never sees the gate. It is also **skipped for allowlisted
+IPs** (see [Allowlist](#allowlist)), so admins and trusted networks never see
+it.
 
 | TUI Label | config.json key | Default | Description |
 |-----------|------------------|---------|--------------|
@@ -111,7 +114,7 @@ regardless of what (if anything) the caller does after connecting.
 | TUI Label | config.json key | Default | Description |
 |-----------|------------------|---------|--------------|
 | Rate Limit | `enableConnRateLimit` | `false` | Master on/off switch for the connection-rate limiter. |
-| Rate Hits | `connRateLimitHits` | `20` | Connection attempts allowed from one IP within the window before it's temp-banned. Set to `0` to disable. |
+| Rate Hits | `connRateLimitHits` | `20` | Number of connection attempts from one IP, within the window, that triggers a temp-ban — the attempt that reaches this count is itself banned/rejected (e.g. a value of `3` bans on the 3rd attempt). Set to `0` to disable. |
 | Rate Window | `connRateLimitWindowSeconds` | `10` | Sliding window, in seconds, over which attempts are counted. |
 | Ban Minutes | `connRateLimitBanMinutes` | `90` | Duration of the temporary ban once the threshold is hit. |
 
