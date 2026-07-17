@@ -170,9 +170,42 @@ func (m *Model) fieldsDoor() []fieldDef {
 	row := 1
 	fields := []fieldDef{
 		{
-			Label: "Name", Help: "Door name used in DOOR:NAME menu commands", Type: ftString, Col: 3, Row: row, Width: 30,
+			// Name is the door's identity: doors.json is saved as an array and
+			// re-keyed by Name on load, and DOOR:NAME menu lookups uppercase the
+			// input — so renaming re-keys the map and normalizes to uppercase.
+			Label: "Name", Help: "Door name used in DOOR:NAME menu commands (uppercased)", Type: ftString, Col: 3, Row: row, Width: 30,
 			Get: func() string { return dPtr.Name },
-			Set: func(val string) error { dPtr.Name = val; save(); return nil },
+			Set: func(val string) error {
+				val = strings.ToUpper(strings.TrimSpace(val))
+				if val == "" {
+					return fmt.Errorf("door name cannot be empty")
+				}
+				for k := range m.configs.Doors {
+					if k != key && strings.EqualFold(k, val) {
+						return fmt.Errorf("door %q already exists", k)
+					}
+				}
+				cfg := m.configs.Doors[key]
+				cfg.Name = val
+				m.configs.Doors[val] = cfg
+				if val != key {
+					delete(m.configs.Doors, key)
+				}
+				dPtr.Name = val // keep display current until fields are rebuilt
+				return nil
+			},
+			// AfterSet runs on the current model (not the stale captured pointer), so index
+			// updates here are correctly applied before buildRecordFields is called.
+			AfterSet: func(cur *Model, val string) {
+				val = strings.ToUpper(strings.TrimSpace(val))
+				newKeys := cur.doorKeys()
+				idx := sort.SearchStrings(newKeys, val)
+				if idx < len(newKeys) && newKeys[idx] == val {
+					cur.recordEditIdx = idx
+					cur.recordCursor = idx // keep list selection in sync for when user exits edit
+				}
+				cur.stayOnField = true // Stay on Name so user can see the updated value
+			},
 		},
 	}
 

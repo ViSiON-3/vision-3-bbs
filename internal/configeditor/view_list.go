@@ -194,7 +194,7 @@ func (m Model) recordColumnHeader(boxW int) string {
 	case "conference":
 		return " Pos  #  Tag               Name                         ACS"
 	case "door":
-		return "  Key                     Name                         I/O Mode"
+		return "  Name                    Working Dir                  Type"
 	case "event":
 		return "  #  Name                                                     Enabled"
 	case "ftn":
@@ -241,7 +241,7 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 		if idx < len(keys) {
 			k := keys[idx]
 			d := m.configs.Doors[k]
-			content = fmt.Sprintf("  %-22s %-28s %s", padRight(k, 22), padRight(d.Name, 28), doorTypeLabel(&d))
+			content = fmt.Sprintf("  %-22s %-28s %s", padRight(d.Name, 22), padRight(d.WorkingDirectory, 28), doorTypeLabel(&d))
 		}
 	case "event":
 		if idx < len(m.configs.Events.Events) {
