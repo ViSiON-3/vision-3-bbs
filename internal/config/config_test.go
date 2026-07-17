@@ -908,3 +908,50 @@ func TestServerConfig_QWKID_RoundTrip(t *testing.T) {
 		t.Errorf("round-trip should retain other defaults: BoardName want %q, got %q", cfg.BoardName, back.BoardName)
 	}
 }
+
+func TestLoadServerConfigChallengeGateDefaults(t *testing.T) {
+	dir := t.TempDir() // no config.json -> defaults returned
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+	if cfg.EnableChallengeGate {
+		t.Errorf("EnableChallengeGate default = true, want false")
+	}
+	if cfg.ChallengeGateFile != "BOTCHECK.ASC" {
+		t.Errorf("ChallengeGateFile = %q, want BOTCHECK.ASC", cfg.ChallengeGateFile)
+	}
+	if cfg.ChallengeGateKey != "ESC" {
+		t.Errorf("ChallengeGateKey = %q, want ESC", cfg.ChallengeGateKey)
+	}
+	if cfg.ChallengeGateTimeoutSeconds != 20 {
+		t.Errorf("ChallengeGateTimeoutSeconds = %d, want 20", cfg.ChallengeGateTimeoutSeconds)
+	}
+	if cfg.ChallengeGateRequiredPresses != 2 {
+		t.Errorf("ChallengeGateRequiredPresses = %d, want 2", cfg.ChallengeGateRequiredPresses)
+	}
+	if !cfg.ChallengeGateLiveCountdown {
+		t.Errorf("ChallengeGateLiveCountdown default = false, want true")
+	}
+	if cfg.ConnRateLimitHits != 20 || cfg.ConnRateLimitWindowSeconds != 10 || cfg.ConnRateLimitBanMinutes != 90 {
+		t.Errorf("rate-limit defaults = %d/%d/%d, want 20/10/90",
+			cfg.ConnRateLimitHits, cfg.ConnRateLimitWindowSeconds, cfg.ConnRateLimitBanMinutes)
+	}
+}
+
+func TestSanitizeChallengeGate(t *testing.T) {
+	cfg := ServerConfig{ChallengeGateTimeoutSeconds: 0, ChallengeGateRequiredPresses: 0, ChallengeGateFile: "", ChallengeGateKey: ""}
+	cfg.SanitizeChallengeGate()
+	if cfg.ChallengeGateTimeoutSeconds != 20 {
+		t.Errorf("timeout not defaulted: %d", cfg.ChallengeGateTimeoutSeconds)
+	}
+	if cfg.ChallengeGateRequiredPresses != 2 {
+		t.Errorf("presses not defaulted: %d", cfg.ChallengeGateRequiredPresses)
+	}
+	if cfg.ChallengeGateFile != "BOTCHECK.ASC" {
+		t.Errorf("file not defaulted: %q", cfg.ChallengeGateFile)
+	}
+	if cfg.ChallengeGateKey != "ESC" {
+		t.Errorf("key not defaulted: %q", cfg.ChallengeGateKey)
+	}
+}
