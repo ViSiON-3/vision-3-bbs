@@ -84,8 +84,13 @@ func TestLoadDoors_RejectsInvalidCodes(t *testing.T) {
 	for _, bad := range []string{"BAD CODE!", "WAYTOOLONGDOORCODE", "NÖPE"} {
 		t.Run(bad, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			data, _ := json.Marshal([]DoorConfig{{Code: bad, Name: "X"}})
-			os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644)
+			data, err := json.Marshal([]DoorConfig{{Code: bad, Name: "X"}})
+			if err != nil {
+				t.Fatalf("marshal fixture: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644); err != nil {
+				t.Fatalf("write fixture: %v", err)
+			}
 
 			if _, err := LoadDoors(filepath.Join(tmpDir, "doors.json")); err == nil {
 				t.Errorf("expected error for invalid code %q", bad)
