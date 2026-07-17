@@ -196,7 +196,8 @@ Configures external door programs that can be launched from the BBS. The file co
 ```json
 [
   {
-    "name": "LORD",
+    "code": "LORD",
+    "name": "Legend of the Red Dragon",
     "commands": [
       "START.BAT {NODE}"
     ],
@@ -222,7 +223,8 @@ Configures external door programs that can be launched from the BBS. The file co
 
 ### Common Fields
 
-- `name` - Unique identifier used in `DOOR:NAME` menu commands
+- `code` - Unique internal code used in `DOOR:CODE` menu commands (uppercase; A-Z, 0-9, `_`, `-`; max 16 chars)
+- `name` - Display name shown to users (free-form, case preserved)
 - `commands` - Native: `[0]`=executable, `[1:]`=args. DOS: each entry is a batch command line
 - `working_directory` - Native: Linux directory to run the command in. DOS: DOS path to cd into before running commands
 - `dropfile_type` - Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or blank

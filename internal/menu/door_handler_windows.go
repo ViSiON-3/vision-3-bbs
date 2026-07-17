@@ -329,17 +329,17 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	e.configMu.RUnlock()
 
-	doorNames := make([]string, 0, len(doorRegistryCopy))
-	for name := range doorRegistryCopy {
-		doorNames = append(doorNames, name)
+	doorCodes := make([]string, 0, len(doorRegistryCopy))
+	for code := range doorRegistryCopy {
+		doorCodes = append(doorCodes, code)
 	}
-	sort.Strings(doorNames)
+	sort.Strings(doorCodes)
 
 	// Display each door (skip doors the user lacks access to)
 	midTemplate := string(ansi.ReplacePipeCodes(midBytes))
 	displayIdx := 0
-	for _, name := range doorNames {
-		doorCfg := doorRegistryCopy[name]
+	for _, code := range doorCodes {
+		doorCfg := doorRegistryCopy[code]
 
 		// Filter out doors the user doesn't have access to
 		if doorCfg.MinAccessLevel > 0 && currentUser.AccessLevel < doorCfg.MinAccessLevel {
@@ -347,19 +347,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		displayIdx++
-		doorType := "Native"
-		switch {
-		case doorCfg.Type == "v3_script":
-			doorType = "VPL"
-		case doorCfg.Type == "synchronet_js":
-			doorType = "Synchronet JS"
-		case doorCfg.IsDOS:
-			doorType = "DOS"
-		}
-		line := midTemplate
-		line = strings.ReplaceAll(line, "^ID", fmt.Sprintf("%-3d", displayIdx))
-		line = strings.ReplaceAll(line, "^NA", fmt.Sprintf("%-30s", name))
-		line = strings.ReplaceAll(line, "^TY", doorType)
+		line := formatDoorListLine(midTemplate, displayIdx, code, doorCfg)
 		terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
 	}
 

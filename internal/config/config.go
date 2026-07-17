@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -599,7 +600,8 @@ func applyStringDefaults(c *StringsConfig) {
 
 // DoorConfig defines the configuration for a single external door program.
 type DoorConfig struct {
-	Name                string            `json:"name"`                            // Unique identifier used in DOOR:NAME commands
+	Code                string            `json:"code"`                            // Unique internal code used in DOOR:CODE commands (uppercase slug)
+	Name                string            `json:"name"`                            // Display label shown to users (free-form, case preserved)
 	WorkingDirectory    string            `json:"working_directory,omitempty"`     // Directory to run the command in (optional)
 	Commands            []string          `json:"commands,omitempty"`              // Commands to execute (native: [0]=executable, [1:]=args; DOS: batch lines)
 	DropfileType        string            `json:"dropfile_type,omitempty"`         // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "NONE") (optional, defaults to NONE)
@@ -627,6 +629,22 @@ type DoorConfig struct {
 	DosemuConfig string `json:"dosemu_config,omitempty"` // Path to custom .dosemurc (optional)
 }
 
+// doorCodeRE validates a door code after uppercasing: the code keys the door
+// registry and appears in DOOR:CODE menu commands, so it must be a short slug
+// with no spaces or punctuation.
+var doorCodeRE = regexp.MustCompile(`^[A-Z0-9_-]{1,16}$`)
+
+// NormalizeDoorCode trims and uppercases a door code and validates it against
+// the required format. Both the loader and the config editor use this, so the
+// contract is enforced identically for hand-edited and TUI-edited configs.
+func NormalizeDoorCode(code string) (string, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if !doorCodeRE.MatchString(code) {
+		return "", fmt.Errorf("door code must be 1-16 chars: A-Z, 0-9, _ or -")
+	}
+	return code, nil
+}
+
 // LoadDoors loads the door configuration from the specified file path.
 func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 	data, err := os.ReadFile(filePath)
@@ -644,20 +662,20 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal doors JSON from %s: %w", filePath, err)
 	}
 
-	// Normalize Name to uppercase and key by it: menu lookups uppercase the
-	// door name before consulting the registry, so mixed-case names must
-	// normalize or the door is unreachable. Key and Name stay in sync.
+	// Key by uppercased Code: menu lookups uppercase the door code before
+	// consulting the registry, so codes must normalize or the door is
+	// unreachable. Name is a display label and is left untouched.
 	doorMap := make(map[string]DoorConfig)
 	for _, door := range doors {
-		name := strings.ToUpper(strings.TrimSpace(door.Name))
-		if name == "" {
-			return nil, fmt.Errorf("door with empty name in %s", filePath)
+		code, err := NormalizeDoorCode(door.Code)
+		if err != nil {
+			return nil, fmt.Errorf("door %q in %s: %w", door.Name, filePath, err)
 		}
-		if _, exists := doorMap[name]; exists {
-			return nil, fmt.Errorf("duplicate door name found in %s: %s", filePath, door.Name)
+		if _, exists := doorMap[code]; exists {
+			return nil, fmt.Errorf("duplicate door code found in %s: %s", filePath, door.Code)
 		}
-		door.Name = name
-		doorMap[name] = door
+		door.Code = code
+		doorMap[code] = door
 	}
 
 	return doorMap, nil

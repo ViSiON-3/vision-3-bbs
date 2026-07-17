@@ -15,7 +15,8 @@ Door programs are stored in `configs/doors.json` as an array.
 ```json
 [
   {
-    "name": "LORD",
+    "code": "LORD",
+    "name": "Legend of the Red Dragon",
     "commands": [
       "START.BAT {NODE}"
     ],
@@ -47,7 +48,8 @@ These fields apply to both native and DOS doors:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `name` | string | Display name for the door (used in `DOOR:NAME` menu commands) |
+| `code` | string | Unique internal code (used in `DOOR:CODE` menu commands). Uppercase; A-Z, 0-9, `_`, `-`; max 16 chars |
+| `name` | string | Display name shown to users (free-form, case preserved) |
 | `commands` | []string | Native: `[0]`=executable, `[1:]`=args. DOS: each entry is a batch command line |
 | `working_directory` | string | Native: Linux directory to run the command in. DOS: DOS path to `cd` into before running commands (e.g., `C:\DOORS\LORD`) |
 | `dropfile_type` | string | Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or blank for none |
@@ -161,9 +163,9 @@ Set `use_shell: true` to wrap the door command in a shell (`/bin/sh -c` on Linux
 
 Doors are launched via menu commands:
 
-- `DOOR:NAME` — Launch a specific door by name
+- `DOOR:CODE` — Launch a specific door by its internal code
 - `LISTDOORS` — Display the list of available doors
-- `OPENDOOR` — Prompt the user to enter a door name (supports `?` to list)
+- `OPENDOOR` — Prompt the user to enter a door code (supports `?` to list)
 - `DOORINFO` — Show configuration details for a specific door
 
 See [Menus & ACS](menus/menu-system.md) for details on adding door entries to menus.
@@ -233,7 +235,8 @@ A complete LORD (Legend of the Red Dragon) configuration:
 
 ```json
 {
-  "name": "LORD",
+  "code": "LORD",
+  "name": "Legend of the Red Dragon",
   "working_directory": "C:\\DOORS\\LORD",
   "dropfile_type": "DOOR.SYS",
   "dropfile_location": "node",

@@ -984,7 +984,7 @@ type Message struct {
 | -------- | ------------------------- | -------------------------------------- |
 | `GOTO`   | `GOTO:MENUNAME`           | Navigate to another menu               |
 | `RUN`    | `RUN:FUNCTIONNAME [ARGS]` | Execute a registered runnable function |
-| `DOOR`   | `DOOR:DOORNAME`           | Launch an external door program        |
+| `DOOR`   | `DOOR:DOORCODE`           | Launch an external door program by its internal code |
 | `LOGOFF` | `LOGOFF`                  | Disconnect the user session            |
 
 ### Command Record Structure

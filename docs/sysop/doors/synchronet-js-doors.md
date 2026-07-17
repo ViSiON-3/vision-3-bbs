@@ -44,7 +44,8 @@ Add a door entry with `"type": "synchronet_js"`:
 
 ```json
 {
-  "name": "LORDJS",
+  "code": "LORDJS",
+  "name": "Legend of the Red Dragon (JS)",
   "type": "synchronet_js",
   "script": "lord.js",
   "working_directory": "doors/sbbs/xtrn/lord",
@@ -62,7 +63,8 @@ Add a door entry with `"type": "synchronet_js"`:
 
 | Field               | Type     | Required | Description                                                              |
 | ------------------- | -------- | -------- | ------------------------------------------------------------------------ |
-| `name`              | string   | Yes      | Door name (used in `DOOR:NAME` menu commands)                            |
+| `code`              | string   | Yes      | Unique internal code (used in `DOOR:CODE` menu commands). Uppercase; A-Z, 0-9, `_`, `-`; max 16 chars |
+| `name`              | string   | Yes      | Display name shown to users (case preserved)                             |
 | `type`              | string   | Yes      | Must be `"synchronet_js"`                                                |
 | `script`            | string   | Yes      | Main JS file to execute, relative to `working_directory`                 |
 | `working_directory` | string   | Yes      | Path to the game's data directory (relative to BBS root or absolute)     |
@@ -197,7 +199,8 @@ LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `d
 1. **Add to doors.json**:
    ```json
    {
-     "name": "LORDJS",
+     "code": "LORDJS",
+     "name": "Legend of the Red Dragon (JS)",
      "type": "synchronet_js",
      "script": "lord.js",
      "working_directory": "doors/sbbs/xtrn/lord",
@@ -209,7 +212,8 @@ LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `d
      "single_instance": true
    },
    {
-     "name": "LORD2JS",
+     "code": "LORD2JS",
+     "name": "LORD II: New World (JS)",
      "type": "synchronet_js",
      "script": "lord2.js",
      "working_directory": "doors/sbbs/xtrn/lord2",
