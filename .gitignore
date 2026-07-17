@@ -90,13 +90,21 @@ Thumbs.db
 # Cursor rules (local development)
 .cursorrules
 
-# Claude Code (local developer settings)
+# Agent / LLM coding tools (local only, never tracked)
 .claude/
 .codex/
+.cursor/
+.superpowers/
+/docs/superpowers/
+/docs-internal/
+.remember/
+.aider*
+.mcp.json
+AGENTS.md
+CLAUDE.md
+GEMINI.md
 
 # Beads runtime data
 .beads/*.pid
 .beads/
 
-# Superpowers SDD scratch (briefs, reports, ledger, diffs)
-.superpowers/
