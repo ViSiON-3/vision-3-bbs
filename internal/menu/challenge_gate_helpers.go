@@ -1,8 +1,11 @@
 package menu
 
 import (
+	"errors"
+	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
@@ -114,4 +117,52 @@ func substituteCountdown(prompt []byte, seconds, width int) []byte {
 	out = append(out, []byte(formatCountdownValue(seconds, end-start))...)
 	out = append(out, prompt[end:]...)
 	return out
+}
+
+// challengeInput is the subset of editor.InputHandler the loop needs.
+type challengeInput interface {
+	ReadKeyWithTimeout(d time.Duration) (int, error)
+}
+
+// runChallengeLoop drives the gate decision. It returns (true, nil) once
+// matchKey has been read `required` times, (false, nil) on deadline or on a
+// flood of `strayLimit` non-matching keys, and (false, io.EOF) if the caller
+// disconnects. `now` and `tick` are injected for testability; `onTick` runs on
+// each idle second (used to redraw the live countdown).
+func runChallengeLoop(in challengeInput, now func() time.Time, deadline time.Time,
+	matchKey, required, strayLimit int, tick time.Duration, onTick func()) (bool, error) {
+	matches, stray := 0, 0
+	for {
+		cur := now()
+		if !cur.Before(deadline) {
+			return false, nil // timed out
+		}
+		remaining := deadline.Sub(cur)
+		wait := tick
+		if remaining < wait {
+			wait = remaining
+		}
+		k, err := in.ReadKeyWithTimeout(wait)
+		if err != nil {
+			if errors.Is(err, editor.ErrIdleTimeout) {
+				onTick()
+				continue
+			}
+			if errors.Is(err, io.EOF) {
+				return false, io.EOF
+			}
+			return false, err
+		}
+		if k == matchKey {
+			matches++
+			if matches >= required {
+				return true, nil
+			}
+			continue
+		}
+		stray++
+		if stray >= strayLimit {
+			return false, nil // scripted-payload flood
+		}
+	}
 }

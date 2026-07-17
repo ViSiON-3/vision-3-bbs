@@ -1,7 +1,10 @@
 package menu
 
 import (
+	"errors"
+	"io"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
@@ -80,5 +83,90 @@ func TestSubstituteCountdown(t *testing.T) {
 	got := string(substituteCountdown(prompt, 9, 2))
 	if got != " You have  9 seconds." {
 		t.Errorf("substituteCountdown = %q", got)
+	}
+}
+
+// scriptedInput returns queued (key, err) pairs; when drained it returns
+// ErrIdleTimeout so the loop relies on the injected clock for the deadline.
+type scriptedInput struct {
+	events []struct {
+		key int
+		err error
+	}
+	i int
+}
+
+func (s *scriptedInput) ReadKeyWithTimeout(time.Duration) (int, error) {
+	if s.i >= len(s.events) {
+		return 0, editor.ErrIdleTimeout
+	}
+	e := s.events[s.i]
+	s.i++
+	return e.key, e.err
+}
+
+func key(k int) struct {
+	key int
+	err error
+} {
+	return struct {
+		key int
+		err error
+	}{k, nil}
+}
+
+func TestRunChallengeLoopPass(t *testing.T) {
+	in := &scriptedInput{events: []struct {
+		key int
+		err error
+	}{key('a'), key(editor.KeyEsc), key(editor.KeyEsc)}} // one stray, then two ESC
+	now := func() time.Time { return time.Unix(0, 0) }
+	passed, err := runChallengeLoop(in, now, time.Unix(100, 0), editor.KeyEsc, 2, 8, time.Second, func() {})
+	if err != nil || !passed {
+		t.Fatalf("passed=%v err=%v; want true/nil", passed, err)
+	}
+}
+
+func TestRunChallengeLoopFloodFails(t *testing.T) {
+	evts := make([]struct {
+		key int
+		err error
+	}, 8)
+	for i := range evts {
+		evts[i] = key('x')
+	}
+	in := &scriptedInput{events: evts}
+	now := func() time.Time { return time.Unix(0, 0) }
+	passed, err := runChallengeLoop(in, now, time.Unix(100, 0), editor.KeyEsc, 2, 8, time.Second, func() {})
+	if err != nil || passed {
+		t.Fatalf("passed=%v err=%v; want false/nil (flood)", passed, err)
+	}
+}
+
+func TestRunChallengeLoopTimeout(t *testing.T) {
+	in := &scriptedInput{} // always idle-timeout
+	ticks := 0
+	// clock advances one second per call so the deadline is eventually hit.
+	base := time.Unix(0, 0)
+	calls := 0
+	now := func() time.Time { calls++; return base.Add(time.Duration(calls) * time.Second) }
+	passed, err := runChallengeLoop(in, now, base.Add(3*time.Second), editor.KeyEsc, 2, 8, time.Second, func() { ticks++ })
+	if err != nil || passed {
+		t.Fatalf("passed=%v err=%v; want false/nil (timeout)", passed, err)
+	}
+	if ticks == 0 {
+		t.Error("onTick never called; countdown would not update")
+	}
+}
+
+func TestRunChallengeLoopEOF(t *testing.T) {
+	in := &scriptedInput{events: []struct {
+		key int
+		err error
+	}{{0, io.EOF}}}
+	now := func() time.Time { return time.Unix(0, 0) }
+	passed, err := runChallengeLoop(in, now, time.Unix(100, 0), editor.KeyEsc, 2, 8, time.Second, func() {})
+	if passed || !errors.Is(err, io.EOF) {
+		t.Fatalf("passed=%v err=%v; want false + io.EOF", passed, err)
 	}
 }
