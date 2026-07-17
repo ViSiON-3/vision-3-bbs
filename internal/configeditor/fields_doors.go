@@ -311,7 +311,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// Native and DOS doors have commands and dropfiles
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Commands", Help: "Native: command args / DOS: comma-separated DOS commands", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Commands", Help: "Native: cmd + comma-sep args. Placeholders: {NODEDIR} {DROPFILE} {NODE} {PORT} — add trailing / if the door needs it, e.g. {NODEDIR}/", Type: ftString, Col: 3, Row: row, Width: 45,
 			Get: func() string { return doorCommandsGet(dPtr) },
 			Set: func(val string) error { doorCommandsSet(dPtr, val); save(); return nil },
 		})
@@ -344,6 +344,37 @@ func (m *Model) fieldsDoor() []fieldDef {
 				}
 			},
 		})
+
+		// Dropfile Case only affects native/Windows doors; DOS doors use a
+		// separate dosDropfileName path that ignores it, so hide it for DOS.
+		if !dPtr.IsDOS {
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Dropfile Case", Help: "Filename case for the dropfile (native/Windows only)", Type: ftLookup, Col: 3, Row: row, Width: 10,
+				Get: func() string {
+					if dPtr.DropfileCase == "" {
+						return "upper"
+					}
+					return dPtr.DropfileCase
+				},
+				Set: func(val string) error {
+					if strings.EqualFold(val, "upper") {
+						// Preserve byte-identical legacy configs: empty means the default "upper".
+						dPtr.DropfileCase = ""
+					} else {
+						dPtr.DropfileCase = val
+					}
+					save()
+					return nil
+				},
+				LookupItems: func() []LookupItem {
+					return []LookupItem{
+						{Value: "upper", Display: "upper - DOOR32.SYS (default)"},
+						{Value: "lower", Display: "lower - door32.sys"},
+					}
+				},
+			})
+		}
 	}
 
 	// Common fields for all door types

@@ -85,11 +85,20 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // --- Dropfile Generators ---
 
-// generateDoorSys writes a full 52-line PCBoard DOOR.SYS file.
-func generateDoorSys(ctx *DoorCtx, dir string) error {
-	path := filepath.Join(dir, "DOOR.SYS")
-	slog.Info("generating DOOR.SYS", "path", path)
+// dropfileName resolves the on-disk filename for a dropfile type, applying the
+// configured case. dropfileCase == "lower" (case-insensitive) yields a lowercase
+// name (e.g. "door32.sys"); an empty or unrecognized value defaults to uppercase.
+func dropfileName(dropfileType, dropfileCase string) string {
+	if strings.EqualFold(dropfileCase, "lower") {
+		return strings.ToLower(dropfileType)
+	}
+	return strings.ToUpper(dropfileType)
+}
 
+// generateDoorSys writes a full 52-line PCBoard DOOR.SYS file.
+func generateDoorSys(ctx *DoorCtx, dir, filename string) error {
+	path := filepath.Join(dir, filename)
+	slog.Info("generating dropfile", "type", "DOOR.SYS", "filename", filename, "path", path)
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	timeLeftSecs := ctx.TimeLeftMin * 60
 
@@ -159,10 +168,9 @@ func generateDoorSys(ctx *DoorCtx, dir string) error {
 }
 
 // generateDoor32Sys writes an 11-line DOOR32.SYS file.
-func generateDoor32Sys(ctx *DoorCtx, dir string) error {
-	path := filepath.Join(dir, "DOOR32.SYS")
-	slog.Info("generating DOOR32.SYS", "path", path)
-
+func generateDoor32Sys(ctx *DoorCtx, dir, filename string) error {
+	path := filepath.Join(dir, filename)
+	slog.Info("generating dropfile", "type", "DOOR32.SYS", "filename", filename, "path", path)
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	crlf := "\r\n"
 
@@ -183,10 +191,9 @@ func generateDoor32Sys(ctx *DoorCtx, dir string) error {
 }
 
 // generateDorInfo writes a 13-line DORINFO1.DEF file.
-func generateDorInfo(ctx *DoorCtx, dir string) error {
-	path := filepath.Join(dir, "DORINFO1.DEF")
-	slog.Info("generating DORINFO1.DEF", "path", path)
-
+func generateDorInfo(ctx *DoorCtx, dir, filename string) error {
+	path := filepath.Join(dir, filename)
+	slog.Info("generating dropfile", "type", "DORINFO1.DEF", "filename", filename, "path", path)
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	crlf := "\r\n"
 
@@ -224,10 +231,9 @@ func generateDorInfo(ctx *DoorCtx, dir string) error {
 }
 
 // generateChainTxt writes a CHAIN.TXT file (WWIV format).
-func generateChainTxt(ctx *DoorCtx, dir string) error {
-	path := filepath.Join(dir, "CHAIN.TXT")
-	slog.Info("generating CHAIN.TXT", "path", path)
-
+func generateChainTxt(ctx *DoorCtx, dir, filename string) error {
+	path := filepath.Join(dir, filename)
+	slog.Info("generating dropfile", "type", "CHAIN.TXT", "filename", filename, "path", path)
 	bbsName := ctx.Executor.ServerCfg.BoardName
 	timeLeftSecs := ctx.TimeLeftMin * 60
 	crlf := "\r\n"
@@ -283,16 +289,16 @@ func generateAllDropfiles(ctx *DoorCtx, dir string) error {
 		return fmt.Errorf("failed to create dropfile directory %s: %w", dir, err)
 	}
 
-	if err := generateDoorSys(ctx, dir); err != nil {
+	if err := generateDoorSys(ctx, dir, "DOOR.SYS"); err != nil {
 		return fmt.Errorf("failed to generate DOOR.SYS: %w", err)
 	}
-	if err := generateDoor32Sys(ctx, dir); err != nil {
+	if err := generateDoor32Sys(ctx, dir, "DOOR32.SYS"); err != nil {
 		return fmt.Errorf("failed to generate DOOR32.SYS: %w", err)
 	}
-	if err := generateDorInfo(ctx, dir); err != nil {
+	if err := generateDorInfo(ctx, dir, "DORINFO1.DEF"); err != nil {
 		return fmt.Errorf("failed to generate DORINFO1.DEF: %w", err)
 	}
-	if err := generateChainTxt(ctx, dir); err != nil {
+	if err := generateChainTxt(ctx, dir, "CHAIN.TXT"); err != nil {
 		return fmt.Errorf("failed to generate CHAIN.TXT: %w", err)
 	}
 

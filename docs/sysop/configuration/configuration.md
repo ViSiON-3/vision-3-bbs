@@ -229,6 +229,7 @@ Configures external door programs that can be launched from the BBS. The file co
 - `working_directory` - Native: Linux directory to run the command in. DOS: DOS path to cd into before running commands
 - `dropfile_type` - Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or blank
 - `dropfile_location` - Where to write dropfile: `startup` (working dir) or `node` (per-node temp dir)
+- `dropfile_case` - Filename case for the generated dropfile: `upper` (default, e.g. `DOOR32.SYS`) or `lower` (e.g. `door32.sys`). Use `lower` for native Linux doors whose library opens a lowercase dropfile name on a case-sensitive filesystem. Does not affect DOS doors.
 - `min_access_level` - Minimum user access level (0 = no restriction)
 - `single_instance` - Only allow one node to run this door at a time
 - `cleanup_command` / `cleanup_args` - Post-exit cleanup command (supports placeholders)
@@ -258,7 +259,8 @@ Configures external door programs that can be launched from the BBS. The file co
 - `{USERID}` - User ID number
 - `{REALNAME}` - User's real name
 - `{LEVEL}` - Access level
-- `{DROPFILE}` / `{NODEDIR}` - Linux paths to dropfile and its directory
+- `{DROPFILE}` - Host OS path to the generated dropfile (full path incl. filename)
+- `{NODEDIR}` - Host OS path to the dropfile's directory, **no trailing slash**. Some door libraries (e.g. godoors) concatenate the filename directly and need a trailing slash — pass `{NODEDIR}/` in that case.
 - `{DOSDROPFILE}` / `{DOSNODEDIR}` - DOS paths (e.g., `C:\NODES\TEMP1\DOOR.SYS`)
 
 ## archivers.json
