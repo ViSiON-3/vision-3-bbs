@@ -101,11 +101,13 @@ sets the field width — for example `##` reserves two digits, right-aligned
 art file contains no `#` run, the countdown is simply not drawn and the rest
 of the prompt renders normally.
 
-**The `{KEY}` and `{PRESSES}` tokens:** the gate art file (and the built-in
-fallback prompt) may also contain the literal tokens `{KEY}` and `{PRESSES}`.
-`{KEY}` is replaced with the configured Challenge Key and `{PRESSES}` with the
-configured Req Presses, so custom art always reflects the current
-configuration instead of hardcoding a key or count that can drift out of sync.
+**The `{KEY}`, `{PRESSES}`, and `{TIMES}` tokens:** the gate art file (and the
+built-in fallback prompt) may also contain the literal tokens `{KEY}`,
+`{PRESSES}`, and `{TIMES}`. `{KEY}` is replaced with the configured Challenge
+Key, `{PRESSES}` with the configured Req Presses count, and `{TIMES}` with the
+correctly-pluralized noun ("time" for a count of 1, "times" otherwise), so
+custom art always reflects the current configuration and renders grammatically
+correct prompts instead of hardcoding values that can drift out of sync.
 
 ### Connection-Rate Limiter
 

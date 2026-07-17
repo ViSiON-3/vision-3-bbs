@@ -20,10 +20,10 @@ import (
 const challengeStrayLimit = 8
 
 // fallbackGatePrompt is used when the configured art file cannot be read. It
-// keeps the "{KEY}"/"{PRESSES}" tokens and the "##" countdown field intact,
-// so substituteGateTokens and the live countdown work the same as for
+// keeps the "{KEY}"/"{PRESSES}"/"{TIMES}" tokens and the "##" countdown field
+// intact, so substituteGateTokens and the live countdown work the same as for
 // configured art.
-const fallbackGatePrompt = "\x1b[0m\r\n Press {KEY} {PRESSES} time(s) if you're not a bot.\r\n You have ## seconds.\r\n"
+const fallbackGatePrompt = "\x1b[0m\r\n Press {KEY} {PRESSES} {TIMES} if you're not a bot.\r\n You have ## seconds.\r\n"
 
 // gatePromptOrFallback loads the gate art file, returning a built-in fallback
 // (never an error) if it cannot be read, so a missing file never drops a

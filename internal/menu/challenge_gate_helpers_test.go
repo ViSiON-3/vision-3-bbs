@@ -87,18 +87,35 @@ func TestSubstituteCountdown(t *testing.T) {
 }
 
 func TestSubstituteGateTokens(t *testing.T) {
-	prompt := []byte(" Press {KEY} {PRESSES} times.")
-	got := string(substituteGateTokens(prompt, "*", 3))
-	if got != " Press * 3 times." {
-		t.Errorf("substituteGateTokens = %q", got)
+	// Test {TIMES} token with singular count (1)
+	prompt := []byte(" Press {KEY} {PRESSES} {TIMES}.")
+	got := string(substituteGateTokens(prompt, "*", 1))
+	if got != " Press * 1 time." {
+		t.Errorf("substituteGateTokens with presses=1: got %q, want %q", got, " Press * 1 time.")
 	}
 
+	// Test {TIMES} token with plural count (2)
+	prompt = []byte(" Press {KEY} {PRESSES} {TIMES}.")
+	got = string(substituteGateTokens(prompt, "*", 2))
+	if got != " Press * 2 times." {
+		t.Errorf("substituteGateTokens with presses=2: got %q, want %q", got, " Press * 2 times.")
+	}
+
+	// Test {TIMES} token with plural count (3)
+	prompt = []byte(" Press {KEY} {PRESSES} {TIMES}.")
+	got = string(substituteGateTokens(prompt, "ESC", 3))
+	if got != " Press ESC 3 times." {
+		t.Errorf("substituteGateTokens with presses=3: got %q, want %q", got, " Press ESC 3 times.")
+	}
+
+	// Test no tokens
 	noTokens := []byte(" nothing to replace here.")
 	if got := string(substituteGateTokens(noTokens, "*", 3)); got != string(noTokens) {
 		t.Errorf("substituteGateTokens with no tokens = %q, want unchanged %q", got, noTokens)
 	}
 
-	withCountdown := []byte(" Press {KEY} {PRESSES} times. You have ## seconds.")
+	// Test with countdown field (## should remain unchanged)
+	withCountdown := []byte(" Press {KEY} {PRESSES} {TIMES}. You have ## seconds.")
 	got = string(substituteGateTokens(withCountdown, "ESC", 2))
 	if got != " Press ESC 2 times. You have ## seconds." {
 		t.Errorf("substituteGateTokens should leave ## intact, got %q", got)

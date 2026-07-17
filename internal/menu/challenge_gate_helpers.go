@@ -120,14 +120,20 @@ func substituteCountdown(prompt []byte, seconds, width int) []byte {
 	return out
 }
 
-// substituteGateTokens replaces the literal tokens "{KEY}" and "{PRESSES}" in
-// prompt with keyDisplay and the decimal presses count, respectively, so
-// custom gate art (and the built-in fallback) can render the configured
-// challenge key and required press count without drifting from config. Any
-// "##" countdown field is left untouched.
+// substituteGateTokens replaces the literal tokens "{KEY}", "{PRESSES}", and
+// "{TIMES}" in prompt with keyDisplay, the decimal presses count, and the
+// correct pluralized noun ("time" for 1 press, "times" for other counts),
+// respectively. This allows custom gate art (and the built-in fallback) to
+// render the configured challenge key and required press count without
+// drifting from config. Any "##" countdown field is left untouched.
 func substituteGateTokens(prompt []byte, keyDisplay string, presses int) []byte {
 	out := bytes.ReplaceAll(prompt, []byte("{KEY}"), []byte(keyDisplay))
 	out = bytes.ReplaceAll(out, []byte("{PRESSES}"), []byte(strconv.Itoa(presses)))
+	timesWord := "times"
+	if presses == 1 {
+		timesWord = "time"
+	}
+	out = bytes.ReplaceAll(out, []byte("{TIMES}"), []byte(timesWord))
 	return out
 }
 

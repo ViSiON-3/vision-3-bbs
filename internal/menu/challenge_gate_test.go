@@ -14,7 +14,7 @@ func TestGatePromptOrFallbackMissingFile(t *testing.T) {
 	if !strings.Contains(string(got), "##") {
 		t.Errorf("fallback should contain a '##' countdown field, got %q", got)
 	}
-	if !strings.Contains(string(got), "{KEY}") || !strings.Contains(string(got), "{PRESSES}") {
-		t.Errorf("fallback should contain unsubstituted {KEY}/{PRESSES} tokens, got %q", got)
+	if !strings.Contains(string(got), "{KEY}") || !strings.Contains(string(got), "{PRESSES}") || !strings.Contains(string(got), "{TIMES}") {
+		t.Errorf("fallback should contain unsubstituted {KEY}/{PRESSES}/{TIMES} tokens, got %q", got)
 	}
 }
