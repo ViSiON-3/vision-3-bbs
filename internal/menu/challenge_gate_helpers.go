@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -79,4 +80,38 @@ func escapeSeqLen(b []byte) int {
 	default:
 		return 1
 	}
+}
+
+// formatCountdownValue renders seconds right-aligned to width. If the number is
+// wider than width it is returned unpadded.
+func formatCountdownValue(seconds, width int) string {
+	s := strconv.Itoa(seconds)
+	if len(s) >= width {
+		return s
+	}
+	return strings.Repeat(" ", width-len(s)) + s
+}
+
+// substituteCountdown replaces the first run of '#' in prompt with the
+// right-aligned seconds value. Used for the initial (and static-mode) draw.
+func substituteCountdown(prompt []byte, seconds, width int) []byte {
+	start := -1
+	for i := 0; i < len(prompt); i++ {
+		if prompt[i] == '#' {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return prompt
+	}
+	end := start
+	for end < len(prompt) && prompt[end] == '#' {
+		end++
+	}
+	out := make([]byte, 0, len(prompt))
+	out = append(out, prompt[:start]...)
+	out = append(out, []byte(formatCountdownValue(seconds, end-start))...)
+	out = append(out, prompt[end:]...)
+	return out
 }

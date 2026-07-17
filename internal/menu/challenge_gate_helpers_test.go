@@ -57,3 +57,28 @@ func TestFindCountdownFieldNone(t *testing.T) {
 		t.Error("found = true, want false")
 	}
 }
+
+func TestFormatCountdownValue(t *testing.T) {
+	cases := []struct {
+		secs, width int
+		want        string
+	}{
+		{20, 2, "20"},
+		{5, 2, " 5"}, // right-aligned within width
+		{5, 3, "  5"},
+		{100, 2, "100"}, // exceeds width -> printed as-is
+	}
+	for _, c := range cases {
+		if got := formatCountdownValue(c.secs, c.width); got != c.want {
+			t.Errorf("formatCountdownValue(%d,%d) = %q, want %q", c.secs, c.width, got, c.want)
+		}
+	}
+}
+
+func TestSubstituteCountdown(t *testing.T) {
+	prompt := []byte(" You have ## seconds.")
+	got := string(substituteCountdown(prompt, 9, 2))
+	if got != " You have  9 seconds." {
+		t.Errorf("substituteCountdown = %q", got)
+	}
+}
