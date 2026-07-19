@@ -59,6 +59,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error initializing editor: %v\n", err)
 		os.Exit(1)
 	}
+	model = model.WithStartupSplash()
 
 	// Run the BubbleTea TUI
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInputTTY())

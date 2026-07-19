@@ -15,10 +15,13 @@ func (m Model) viewV3NetWizard() string {
 
 func (m Model) viewHubAreasStep() string {
 	var b strings.Builder
+
+	row := 0
+
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
+	row++
 
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
 
 	// Content rows inside the box (between title and bottom border).
@@ -32,23 +35,26 @@ func (m Model) viewHubAreasStep() string {
 	}
 	// Box: top border(1) + title(1) + blank(1) + content + blank(1) + bottom border(1)
 	boxH := contentRows + 5
-	// -4: header(1) + help line(1) + bgLine spacer(1) + help bar(1)
+	// -4: header(1) + help line(1) + spacer line(1) + help bar(1)
 	extraV := maxInt(0, m.height-boxH-4)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
+	// border reads the live row counter, so it must be called at the row it
+	// is meant to render (rather than cached in a variable).
 	border := func(s string) string {
-		return bgFillStyle.Render(strings.Repeat("░", padL)) + s +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+		return m.backdrop.segment(row, 0, padL) + s +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	}
-	row := func(content string) string {
+	rowLine := func(content string) string {
 		return border(editBorderStyle.Render("│") +
 			fieldDisplayStyle.Width(boxW).Render(content) +
 			editBorderStyle.Render("│"))
@@ -56,14 +62,17 @@ func (m Model) viewHubAreasStep() string {
 
 	b.WriteString(border(editBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
 	b.WriteByte('\n')
+	row++
 	b.WriteString(border(editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText("Initial Message Areas", boxW)) +
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
+	row++
 	b.WriteString(border(editBorderStyle.Render("│") +
 		editInfoLabelStyle.Render(strings.Repeat(" ", boxW)) +
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
+	row++
 
 	if m.wizard.areaAdding {
 		for _, af := range []struct {
@@ -91,19 +100,22 @@ func (m Model) viewHubAreasStep() string {
 				fieldDisplayStyle.Render(strings.Repeat(" ", padAfter))
 			b.WriteString(border(editBorderStyle.Render("│") + rowStr + editBorderStyle.Render("│")))
 			b.WriteByte('\n')
+			row++
 		}
 	} else {
 		if len(m.wizard.areas) == 0 {
-			b.WriteString(row("  (no areas yet — press A to add)"))
+			b.WriteString(rowLine("  (no areas yet — press A to add)"))
 			b.WriteByte('\n')
+			row++
 		}
 		for i, a := range m.wizard.areas {
 			cursor := "  "
 			if i == m.wizard.areaCursor {
 				cursor = "> "
 			}
-			b.WriteString(row(fmt.Sprintf("  %s%-20s %s", cursor, a.Tag, a.Name)))
+			b.WriteString(rowLine(fmt.Sprintf("  %s%-20s %s", cursor, a.Tag, a.Name)))
 			b.WriteByte('\n')
+			row++
 		}
 	}
 
@@ -111,12 +123,15 @@ func (m Model) viewHubAreasStep() string {
 		editInfoLabelStyle.Render(strings.Repeat(" ", boxW)) +
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
+	row++
 	b.WriteString(border(editBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	helpText := "A Add  |  E Edit  |  D Delete  |  Enter Done  |  ESC Back"
@@ -124,17 +139,19 @@ func (m Model) viewHubAreasStep() string {
 		helpText = "Enter Confirm  |  ESC Cancel"
 	}
 	if m.message != "" {
-		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+		b.WriteString(m.backdrop.segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1))))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1))
 	} else {
-		b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+		b.WriteString(m.backdrop.segment(row, 0, padL) +
 			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1))))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1))
 	}
 	b.WriteByte('\n')
-	b.WriteString(bgLine)
+	row++
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
 	return b.String()
 }

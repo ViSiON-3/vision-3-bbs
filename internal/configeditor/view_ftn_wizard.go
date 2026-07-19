@@ -10,10 +10,12 @@ import (
 func (m Model) viewFTNWizardForm() string {
 	var b strings.Builder
 
+	row := 0
+
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
+	row++
 
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 70
 
 	// Find max row in fields.
@@ -32,35 +34,45 @@ func (m Model) viewFTNWizardForm() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
 
 	// Top border.
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Title.
 	titleLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText("FTN Setup Wizard", boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + titleLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + titleLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
+
+	// emptyLine renders a blank field-row line at the current row; it is used
+	// at multiple, differently-numbered rows below, so it must be recomputed
+	// each time rather than cached in a variable.
+	emptyLine := func() string {
+		return m.backdrop.segment(row, 0, padL) +
+			editBorderStyle.Render("│") +
+			fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
+			editBorderStyle.Render("│") +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+	}
 
 	// Empty line.
-	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-	b.WriteString(emptyLine)
+	b.WriteString(emptyLine())
 	b.WriteByte('\n')
+	row++
 
 	// Field rows (windowed by fieldScroll).
 	firstRow := m.fieldScroll + 1
@@ -68,25 +80,28 @@ func (m Model) viewFTNWizardForm() string {
 	if lastRow > maxRow {
 		lastRow = maxRow
 	}
-	for row := firstRow; row <= lastRow; row++ {
-		rowContent := m.renderFTNWizardRow(row, boxW)
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
+	for fr := firstRow; fr <= lastRow; fr++ {
+		rowContent := m.renderFTNWizardRow(fr, boxW)
+		line := m.backdrop.segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
 			rowContent +
 			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 		b.WriteString(line)
 		b.WriteByte('\n')
+		row++
 	}
 	// Pad remaining rows if fewer fields than visibleRows.
-	for row := lastRow + 1; row <= m.fieldScroll+visibleRows; row++ {
-		b.WriteString(emptyLine)
+	for fr := lastRow + 1; fr <= m.fieldScroll+visibleRows; fr++ {
+		b.WriteString(emptyLine())
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Empty line.
-	b.WriteString(emptyLine)
+	b.WriteString(emptyLine())
 	b.WriteByte('\n')
+	row++
 
 	// Info line.
 	scrollHint := ""
@@ -103,27 +118,32 @@ func (m Model) viewFTNWizardForm() string {
 	infoLine := editBorderStyle.Render("│") +
 		editInfoLabelStyle.Render(centerText(infoText, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + infoLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + infoLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Bottom border.
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Message or field help text.
-	b.WriteString(m.renderFieldHelpLine(m.ftnWizardFields, padL, padR, boxW))
+	b.WriteString(m.renderFieldHelpLine(m.ftnWizardFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
+	row++
 
-	b.WriteString(bgLine)
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 
 	helpBarStr := "Enter - Edit  |  S - Save  |  ESC - Back"
 	helpText := centerText(helpBarStr, m.width)

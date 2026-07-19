@@ -14,7 +14,8 @@ type listBox struct {
 	padL      int // background columns left of the box
 	padR      int // background columns right of the box
 	bottomPad int // background rows below the box (vertical centering)
-	bgLine    string
+	bd        *backdrop
+	rowIdx    int // absolute screen row of the next line to be written
 }
 
 // newListBox writes the global header plus top padding and returns a renderer
@@ -22,9 +23,9 @@ type listBox struct {
 // non-padding screen rows (header, box, footer) used for vertical centering.
 func (m Model) newListBox(boxW, fixedRows int) *listBox {
 	lb := &listBox{
-		width:  m.width,
-		boxW:   boxW,
-		bgLine: bgFillStyle.Render(strings.Repeat("░", m.width)),
+		width: m.width,
+		boxW:  boxW,
+		bd:    m.backdrop,
 	}
 	extraV := maxInt(0, m.height-fixedRows)
 	topPad := extraV / 2
@@ -32,22 +33,24 @@ func (m Model) newListBox(boxW, fixedRows int) *listBox {
 	lb.padL = maxInt(0, (m.width-boxW-2)/2)
 	lb.padR = maxInt(0, m.width-lb.padL-boxW-2)
 
-	lb.b.WriteString(m.globalHeaderLine())
-	lb.b.WriteByte('\n')
+	lb.line(m.globalHeaderLine())
 	lb.bgRows(topPad)
 	return lb
 }
 
-// line writes a full-width screen line followed by a newline.
+// line writes a full-width screen line followed by a newline, advancing the
+// row counter for the next line.
 func (lb *listBox) line(s string) {
 	lb.b.WriteString(s)
 	lb.b.WriteByte('\n')
+	lb.rowIdx++
 }
 
-// pad surrounds box content with the background fill on both sides.
+// pad surrounds box content with the background fill on both sides, sourced
+// from the backdrop at the current row.
 func (lb *listBox) pad(s string) string {
-	return bgFillStyle.Render(strings.Repeat("░", lb.padL)) + s +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, lb.padR)))
+	return lb.bd.segment(lb.rowIdx, 0, lb.padL) + s +
+		lb.bd.segment(lb.rowIdx, lb.width-maxInt(0, lb.padR), maxInt(0, lb.padR))
 }
 
 // row writes styled inner content wrapped in │ │ side borders.
@@ -89,7 +92,7 @@ func (lb *listBox) emptyRows(n int) {
 // bgRows writes n full-width background lines.
 func (lb *listBox) bgRows(n int) {
 	for i := 0; i < n; i++ {
-		lb.line(lb.bgLine)
+		lb.line(lb.bd.segment(lb.rowIdx, 0, lb.width))
 	}
 }
 
@@ -121,12 +124,12 @@ func (lb *listBox) list(visible, scroll, cursor, total int, format func(i int) s
 // background line when the message is empty.
 func (lb *listBox) messageRow(msg string) {
 	if msg == "" {
-		lb.line(lb.bgLine)
+		lb.line(lb.bd.segment(lb.rowIdx, 0, lb.width))
 		return
 	}
-	lb.line(bgFillStyle.Render(strings.Repeat("░", lb.padL)) +
+	lb.line(lb.bd.segment(lb.rowIdx, 0, lb.padL) +
 		flashMessageStyle.Render(" "+padRight(msg, lb.boxW)) +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, lb.padR+1))))
+		lb.bd.segment(lb.rowIdx, lb.width-(lb.padR+1), lb.padR+1))
 }
 
 // errorRow returns the styled inner content for an error status row,

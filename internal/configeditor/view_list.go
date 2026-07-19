@@ -10,11 +10,12 @@ import (
 func (m Model) viewRecordList() string {
 	var b strings.Builder
 
+	row := 0
+
 	// Global header
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
-
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
+	row++
 
 	boxW := 70
 	listVisible := m.recordListVisible()
@@ -26,56 +27,61 @@ func (m Model) viewRecordList() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
 
 	// Top border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		menuBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Box title (record type)
 	boxTitle := menuBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(m.recordTypeTitle(), boxW)) +
 		menuBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + boxTitle +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + boxTitle +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Column header
 	colHeader := m.recordColumnHeader(boxW)
 	headerLine := menuBorderStyle.Render("│") +
 		menuHeaderStyle.Render(padRight(colHeader, boxW)) +
 		menuBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + headerLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + headerLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Separator
-	sepLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+	sepLine := m.backdrop.segment(row, 0, padL) +
 		menuBorderStyle.Render("│") +
 		separatorStyle.Render(strings.Repeat("─", boxW)) +
 		menuBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	b.WriteString(sepLine)
 	b.WriteByte('\n')
+	row++
 
 	// List rows
 	total := m.recordCount()
 	inReorder := m.mode == modeRecordReorder
-	for row := 0; row < listVisible; row++ {
-		idx := m.recordScroll + row
+	for i := 0; i < listVisible; i++ {
+		idx := m.recordScroll + i
 		isHighlight := idx == m.recordCursor
 		isSource := inReorder && idx == m.reorderSourceIdx
 
 		var rowContent string
 		if idx < 0 || idx >= total {
-			if row == 0 && total == 0 && m.recordType == "v3nethub" {
+			if i == 0 && total == 0 && m.recordType == "v3nethub" {
 				hint := " Only operators running their own hub/network will have entries here."
 				rowContent = menuItemStyle.Render(padRight(hint, boxW))
 			} else {
@@ -95,35 +101,39 @@ func (m Model) viewRecordList() string {
 			}
 		}
 
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		line := m.backdrop.segment(row, 0, padL) +
 			menuBorderStyle.Render("│") +
 			rowContent +
 			menuBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 		b.WriteString(line)
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Bottom border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		menuBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Message/fill
 	if m.message != "" {
-		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		msgLine := m.backdrop.segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1)
 		b.WriteString(msgLine)
 	} else {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 	}
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	var helpStr string

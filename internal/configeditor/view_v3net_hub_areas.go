@@ -10,10 +10,13 @@ import (
 // viewV3NetHubAreas renders the hub area management list.
 func (m Model) viewV3NetHubAreas() string {
 	var b strings.Builder
+
+	row := 0
+
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
+	row++
 
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 70
 	listVisible := 10
 	indices := m.hubNetworkAreaIndices()
@@ -26,21 +29,25 @@ func (m Model) viewV3NetHubAreas() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
 
+	// border reads the live row counter, so it must be called at the row it
+	// is meant to render (rather than cached in a variable).
 	border := func(s string) string {
-		return bgFillStyle.Render(strings.Repeat("░", padL)) + s +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+		return m.backdrop.segment(row, 0, padL) + s +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	}
 
 	// Top border.
 	b.WriteString(border(menuBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
 	b.WriteByte('\n')
+	row++
 
 	// Title.
 	title := fmt.Sprintf("Network Areas — %s", m.hubAreaNetwork)
@@ -48,6 +55,7 @@ func (m Model) viewV3NetHubAreas() string {
 		menuHeaderStyle.Render(centerText(title, boxW)) +
 		menuBorderStyle.Render("│")))
 	b.WriteByte('\n')
+	row++
 
 	// Column header.
 	colHeader := fmt.Sprintf("   %-20s %-24s %s", "Tag", "Name", "Base Path")
@@ -55,16 +63,18 @@ func (m Model) viewV3NetHubAreas() string {
 		menuHeaderStyle.Render(padRight(colHeader, boxW)) +
 		menuBorderStyle.Render("│")))
 	b.WriteByte('\n')
+	row++
 
 	// Separator.
 	b.WriteString(border(menuBorderStyle.Render("│") +
 		separatorStyle.Render(strings.Repeat("─", boxW)) +
 		menuBorderStyle.Render("│")))
 	b.WriteByte('\n')
+	row++
 
 	// List rows.
-	for row := 0; row < listVisible; row++ {
-		visIdx := m.hubAreaScroll + row
+	for fr := 0; fr < listVisible; fr++ {
+		visIdx := m.hubAreaScroll + fr
 		var content string
 
 		if visIdx >= 0 && visIdx < total {
@@ -96,30 +106,35 @@ func (m Model) viewV3NetHubAreas() string {
 
 		b.WriteString(border(menuBorderStyle.Render("│") + styled + menuBorderStyle.Render("│")))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Bottom border.
 	b.WriteString(border(menuBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Help row (message or blank).
 	if m.message != "" {
-		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		msgLine := m.backdrop.segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1)
 		b.WriteString(msgLine)
 	} else {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 	}
 	b.WriteByte('\n')
+	row++
 
-	b.WriteString(bgLine)
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 
 	helpStr := "I - Insert  |  E - Edit  |  D - Delete  |  S - Save  |  ESC/Q - Return"
 	if total == 0 {
@@ -140,10 +155,13 @@ type areaFormField struct {
 // viewV3NetAreaForm renders a centered form box used by both insert and edit views.
 func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeStep int) string {
 	var b strings.Builder
+
+	row := 0
+
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
+	row++
 
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
 	boxH := 9 // top + title + blank + fields(4) + blank + bottom
 
@@ -152,17 +170,20 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
+	// border reads the live row counter, so it must be called at the row it
+	// is meant to render (rather than cached in a variable).
 	border := func(s string) string {
-		return bgFillStyle.Render(strings.Repeat("░", padL)) + s +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+		return m.backdrop.segment(row, 0, padL) + s +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	}
-	row := func(content string) string {
+	rowLine := func(content string) string {
 		return border(editBorderStyle.Render("│") +
 			fieldDisplayStyle.Width(boxW).Render(content) +
 			editBorderStyle.Render("│"))
@@ -170,12 +191,15 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 
 	b.WriteString(border(editBorderStyle.Render("┌" + strings.Repeat("─", boxW) + "┐")))
 	b.WriteByte('\n')
+	row++
 	b.WriteString(border(editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(title, boxW)) +
 		editBorderStyle.Render("│")))
 	b.WriteByte('\n')
-	b.WriteString(row(strings.Repeat(" ", boxW)))
+	row++
+	b.WriteString(rowLine(strings.Repeat(" ", boxW)))
 	b.WriteByte('\n')
+	row++
 
 	for _, f := range fields {
 		labelStr := fieldLabelStyle.Render(padRight(f.label, 12) + " : ")
@@ -194,31 +218,37 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 			fieldDisplayStyle.Render(strings.Repeat(" ", padAfter))
 		b.WriteString(border(editBorderStyle.Render("│") + rowStr + editBorderStyle.Render("│")))
 		b.WriteByte('\n')
+		row++
 	}
 
-	b.WriteString(row(strings.Repeat(" ", boxW)))
+	b.WriteString(rowLine(strings.Repeat(" ", boxW)))
 	b.WriteByte('\n')
+	row++
 	b.WriteString(border(editBorderStyle.Render("└" + strings.Repeat("─", boxW) + "┘")))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Help row (message or blank).
 	if m.message != "" {
-		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		msgLine := m.backdrop.segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1)
 		b.WriteString(msgLine)
 	} else {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 	}
 	b.WriteByte('\n')
+	row++
 
-	b.WriteString(bgLine)
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 
 	helpStr := "Enter - Next Field / Confirm  |  ESC - Cancel"
 	b.WriteString(helpBarStyle.Render(centerText(helpStr, m.width)))

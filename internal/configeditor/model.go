@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -55,6 +56,7 @@ const (
 	modeFTNNetworkBrowser                        // Known FTN network list with info panel
 	modeFTNAreaBrowser                           // FTN echo area selection from downloaded echolist
 	modeFTNAreaDownloading                       // Progress state while downloading echolist
+	modeQuitConfirm                              // Plain Exit? Y/N confirm (used by Task 10)
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -255,11 +257,17 @@ type Model struct {
 	keyExistedBeforeSave   bool
 
 	// Terminal
-	width   int
-	height  int
-	mode    editorMode
-	message string // Flash message
+	width    int
+	height   int
+	mode     editorMode
+	message  string // Flash message
+	backdrop *backdrop
+
+	splashActive bool // true while the startup art splash is showing
 }
+
+// splashDoneMsg fires when the startup art splash timer elapses.
+type splashDoneMsg struct{}
 
 // New creates a new config editor model.
 func New(configPath string) (Model, error) {
@@ -312,12 +320,26 @@ func New(configPath string) (Model, error) {
 		width:        minWidth,
 		height:       minHeight,
 		mode:         modeTopMenu,
+		backdrop:     loadBackdrop(minWidth, minHeight),
 	}, nil
+}
+
+// WithStartupSplash enables the ~2s startup art splash. Opt-in so tests that
+// build via New are unaffected; cmd/config/main.go calls it for the real TUI.
+func (m Model) WithStartupSplash() Model {
+	m.splashActive = true
+	return m
 }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.SetWindowTitle("ViSiON/3 Configuration Editor")
+	title := tea.SetWindowTitle("ViSiON/3 Configuration Editor")
+	if m.splashActive {
+		return tea.Batch(title, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+			return splashDoneMsg{}
+		}))
+	}
+	return title
 }
 
 // Update implements tea.Model.
@@ -332,6 +354,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.height < minHeight {
 			m.height = minHeight
 		}
+		m.backdrop = loadBackdrop(m.width, m.height)
+		return m, nil
+
+	case splashDoneMsg:
+		m.splashActive = false
 		return m, nil
 
 	case fetchNetworksMsg:
@@ -350,6 +377,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFTNEcholistMsg(msg)
 
 	case tea.KeyMsg:
+		if m.splashActive {
+			m.splashActive = false
+			return m, nil
+		}
 		prevMode := m.mode
 		var result tea.Model
 		var cmd tea.Cmd
@@ -372,7 +403,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateRecordEdit(msg)
 		case modeRecordField:
 			result, cmd = m.updateRecordField(msg)
-		case modeExitConfirm, modeSaveConfirm, modeDeleteConfirm:
+		case modeExitConfirm, modeSaveConfirm, modeDeleteConfirm, modeQuitConfirm:
 			result, cmd = m.updateConfirm(msg)
 		case modeLookupPicker:
 			result, cmd = m.updateLookupPicker(msg)
@@ -556,14 +587,17 @@ func (m *Model) backMode() editorMode {
 	return modeTopMenu
 }
 
-// tryExit begins the exit flow, prompting to save first if there are unsaved changes.
+// tryExit begins the exit flow: prompt to save if there are unsaved changes,
+// otherwise confirm a plain exit.
 func (m Model) tryExit() (Model, tea.Cmd) {
 	if m.dirty {
 		m.mode = modeExitConfirm
 		m.confirmYes = true
 		return m, nil
 	}
-	return m, tea.Quit
+	m.mode = modeQuitConfirm
+	m.confirmYes = true
+	return m, nil
 }
 
 // --- Confirm Dialog ---
@@ -602,6 +636,9 @@ func (m Model) cancelConfirm() (Model, tea.Cmd) {
 	case modeDeleteConfirm:
 		m.mode = modeRecordList
 		return m, nil
+	case modeQuitConfirm:
+		m.mode = modeTopMenu
+		return m, nil
 	default:
 		m.mode = modeTopMenu
 		return m, nil
@@ -616,6 +653,9 @@ func (m Model) rejectConfirm() (Model, tea.Cmd) {
 	case modeDeleteConfirm:
 		m.mode = modeRecordList
 		return m, nil
+	case modeQuitConfirm:
+		m.mode = modeTopMenu
+		return m, nil
 	default:
 		m.mode = modeTopMenu
 		return m, nil
@@ -625,6 +665,8 @@ func (m Model) rejectConfirm() (Model, tea.Cmd) {
 // executeConfirm runs the action associated with the active confirmation dialog.
 func (m Model) executeConfirm() (Model, tea.Cmd) {
 	switch m.mode {
+	case modeQuitConfirm:
+		return m, tea.Quit
 	case modeExitConfirm, modeSaveConfirm:
 		m.saveAll()
 		return m, tea.Quit
