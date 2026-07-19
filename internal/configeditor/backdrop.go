@@ -1,7 +1,10 @@
 package configeditor
 
 import (
-	_ "embed"
+	"embed"
+	"io/fs"
+	"math/rand/v2"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -9,13 +12,50 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
-//go:embed assets/TUICONFIG.ANS
-var tuiConfigANS []byte
+// backdropFS holds every embedded ANSI backdrop screen. Any .ANS file dropped
+// into assets/ is automatically included in the startup rotation.
+//
+//go:embed assets/*.ANS
+var backdropFS embed.FS
 
 const (
 	artWidth  = 80
 	artHeight = 25
 )
+
+// backdropArts returns the raw bytes of every embedded backdrop screen, sorted
+// by filename for deterministic ordering.
+func backdropArts() [][]byte {
+	entries, err := fs.ReadDir(backdropFS, "assets")
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	arts := make([][]byte, 0, len(names))
+	for _, n := range names {
+		if b, err := backdropFS.ReadFile("assets/" + n); err == nil {
+			arts = append(arts, b)
+		}
+	}
+	return arts
+}
+
+// pickBackdropArt returns the raw bytes of a randomly chosen embedded backdrop
+// screen, or nil if none are embedded. Selection happens once per startup; the
+// chosen bytes are reused across resizes so the screen stays consistent.
+func pickBackdropArt() []byte {
+	arts := backdropArts()
+	if len(arts) == 0 {
+		return nil
+	}
+	return arts[rand.IntN(len(arts))]
+}
 
 // artCell is one rasterized character with its DOS palette colors.
 // fg is 0-15 (bright included), bg is 0-7 (blink bit dropped).
@@ -130,15 +170,16 @@ type backdrop struct {
 	art    bool
 }
 
-// loadBackdrop rasterizes the embedded TUICONFIG.ANS art and composites it,
-// centered, onto a width×height black canvas.
+// loadBackdrop rasterizes a randomly chosen embedded backdrop screen and
+// composites it, centered, onto a width×height black canvas.
 func loadBackdrop(width, height int) *backdrop {
-	return loadBackdropFrom(tuiConfigANS, width, height)
+	return loadBackdropFrom(pickBackdropArt(), width, height)
 }
 
 // loadBackdropFrom rasterizes the given CP437 art bytes and composites them,
-// centered, onto a width×height black canvas. If data is empty it returns a
-// backdrop in fallback mode (art=false), which renders the legacy ░ fill.
+// centered, onto a width×height black canvas. SAUCE metadata is stripped first.
+// If the (stripped) data is empty it returns a backdrop in fallback mode
+// (art=false), which renders the legacy ░ fill.
 func loadBackdropFrom(data []byte, width, height int) *backdrop {
 	if width < artWidth {
 		width = artWidth
@@ -146,8 +187,10 @@ func loadBackdropFrom(data []byte, width, height int) *backdrop {
 	if height < artHeight {
 		height = artHeight
 	}
-	// Defensive fallback: if the embedded art is missing/empty, render the
-	// legacy ░ fill rather than a blank grid.
+	// Strip any SAUCE record so its metadata is not rasterized as glyphs.
+	data = ansi.StripSAUCE(data)
+	// Defensive fallback: if the art is missing/empty, render the legacy ░ fill
+	// rather than a blank grid.
 	if len(data) == 0 {
 		return &backdrop{width: width, height: height, art: false}
 	}

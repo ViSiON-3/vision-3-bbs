@@ -262,6 +262,9 @@ type Model struct {
 	mode     editorMode
 	message  string // Flash message
 	backdrop *backdrop
+	// backdropArt is the raw bytes of the backdrop screen chosen at startup,
+	// reused when the backdrop is rebuilt on resize.
+	backdropArt []byte
 
 	splashActive bool // true while the startup art splash is showing
 }
@@ -309,6 +312,10 @@ func New(configPath string) (Model, error) {
 		{"Bot Defense"},
 	}
 
+	// Choose the backdrop screen once per startup; the bytes are reused on
+	// resize so the screen stays consistent for the session.
+	art := pickBackdropArt()
+
 	return Model{
 		configs:      configs,
 		origServer:   configs.Server,
@@ -320,7 +327,8 @@ func New(configPath string) (Model, error) {
 		width:        minWidth,
 		height:       minHeight,
 		mode:         modeTopMenu,
-		backdrop:     loadBackdrop(minWidth, minHeight),
+		backdropArt:  art,
+		backdrop:     loadBackdropFrom(art, minWidth, minHeight),
 	}, nil
 }
 
@@ -354,7 +362,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.height < minHeight {
 			m.height = minHeight
 		}
-		m.backdrop = loadBackdrop(m.width, m.height)
+		m.backdrop = loadBackdropFrom(m.backdropArt, m.width, m.height)
 		return m, nil
 
 	case splashDoneMsg:

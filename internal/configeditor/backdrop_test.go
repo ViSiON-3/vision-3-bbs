@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -8,6 +9,68 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
+
+func TestModel_BackdropArtStableAcrossResize(t *testing.T) {
+	m, err := New("testdata")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if len(m.backdropArt) == 0 {
+		t.Fatal("New should pick a backdrop art")
+	}
+	chosen := m.backdropArt
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m2 := mm.(Model)
+	if !bytes.Equal(m2.backdropArt, chosen) {
+		t.Fatal("backdrop art must not change on resize")
+	}
+	if m2.backdrop == nil || m2.backdrop.width != 120 || m2.backdrop.height != 40 {
+		t.Fatalf("backdrop not rebuilt at new size: %+v", m2.backdrop)
+	}
+}
+
+func TestBackdropArts_EnumeratesEmbedded(t *testing.T) {
+	arts := backdropArts()
+	if len(arts) < 2 {
+		t.Fatalf("expected >=2 embedded backdrops, got %d", len(arts))
+	}
+	for i, a := range arts {
+		if len(a) == 0 {
+			t.Fatalf("embedded backdrop %d is empty", i)
+		}
+	}
+}
+
+func TestPickBackdropArt_ReturnsEmbedded(t *testing.T) {
+	arts := backdropArts()
+	got := pickBackdropArt()
+	if len(got) == 0 {
+		t.Fatal("pickBackdropArt returned empty")
+	}
+	found := false
+	for _, a := range arts {
+		if bytes.Equal(a, got) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("pickBackdropArt returned bytes not in the embedded set")
+	}
+}
+
+func TestLoadBackdropFrom_StripsSAUCE(t *testing.T) {
+	// Rasterizing raw bytes that carry a SAUCE record must still yield a valid
+	// art backdrop (SAUCE stripped, not rasterized as trailing glyphs).
+	raw := []byte("\x1b[37mhi\x1aSAUCE00metadata-should-be-stripped")
+	b := loadBackdropFrom(raw, 80, 25)
+	if !b.art {
+		t.Fatal("expected art backdrop after SAUCE strip")
+	}
+	if b.cells[0][0].ch != 'h' || b.cells[0][1].ch != 'i' {
+		t.Fatalf("art content lost: got %q%q", b.cells[0][0].ch, b.cells[0][1].ch)
+	}
+}
 
 func TestRasterizeArt_Dimensions(t *testing.T) {
 	grid := rasterizeArt([]byte("hello"))
