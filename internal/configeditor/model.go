@@ -56,7 +56,6 @@ const (
 	modeFTNNetworkBrowser                        // Known FTN network list with info panel
 	modeFTNAreaBrowser                           // FTN echo area selection from downloaded echolist
 	modeFTNAreaDownloading                       // Progress state while downloading echolist
-	modeSplash                                   // Startup art splash (pre-menu)
 	modeQuitConfirm                              // Plain Exit? Y/N confirm (used by Task 10)
 )
 

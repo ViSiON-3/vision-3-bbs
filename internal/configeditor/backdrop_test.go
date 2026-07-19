@@ -300,3 +300,23 @@ func TestSplash_ViewIsBackdropOnly(t *testing.T) {
 		t.Fatal("splash view should differ from top-menu view")
 	}
 }
+
+// TestViewTopMenu_ArtRowAlignment guards against an off-by-one in the per-line
+// row counter: a top-padding row (rendered as a full backdrop line) must equal
+// the backdrop's line at that exact absolute row index. At 100x30 the global
+// header is row 0 and row 1 is the first top-padding row.
+func TestViewTopMenu_ArtRowAlignment(t *testing.T) {
+	m, err := New("testdata")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m2 := mm.(Model)
+	lines := strings.Split(m2.View(), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("view has %d lines, want >=2", len(lines))
+	}
+	if lines[1] != m2.backdrop.line(1) {
+		t.Fatal("top-pad row 1 does not match backdrop.line(1): row-counter off-by-one in art mode")
+	}
+}
