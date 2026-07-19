@@ -120,6 +120,107 @@ func rasterizeArt(data []byte) [][]artCell {
 	return grid
 }
 
+// backdrop holds the composited terminal-sized cell grid rendered behind every
+// config-editor screen. When art is false (rasterization failed), segment/line
+// fall back to the legacy ░ shaded fill.
+type backdrop struct {
+	cells  [][]artCell
+	width  int
+	height int
+	art    bool
+}
+
+// loadBackdrop rasterizes the embedded TUICONFIG.ANS art and composites it,
+// centered, onto a width×height black canvas. On failure it returns a backdrop
+// in fallback mode (art=false).
+func loadBackdrop(width, height int) *backdrop {
+	if width < artWidth {
+		width = artWidth
+	}
+	if height < artHeight {
+		height = artHeight
+	}
+	grid := rasterizeArt(tuiConfigANS)
+	if len(grid) != artHeight || len(grid[0]) != artWidth {
+		return &backdrop{width: width, height: height, art: false}
+	}
+
+	startCol := (width - artWidth) / 2
+	startRow := (height - artHeight) / 2
+
+	cells := make([][]artCell, height)
+	for r := 0; r < height; r++ {
+		cells[r] = make([]artCell, width)
+		for c := 0; c < width; c++ {
+			ar, ac := r-startRow, c-startCol
+			if ar >= 0 && ar < artHeight && ac >= 0 && ac < artWidth {
+				cells[r][c] = grid[ar][ac]
+			} else {
+				cells[r][c] = artCell{ch: ' ', fg: 7, bg: 0} // black margin
+			}
+		}
+	}
+	return &backdrop{cells: cells, width: width, height: height, art: true}
+}
+
+// renderCells renders a run of cells, grouping consecutive cells that share the
+// same fg/bg into a single dosColor-styled span.
+func renderCells(cells []artCell) string {
+	if len(cells) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	runFg, runBg := cells[0].fg, cells[0].bg
+	var run strings.Builder
+	flush := func() {
+		if run.Len() > 0 {
+			b.WriteString(dosColor(runBg, runFg).Render(run.String()))
+			run.Reset()
+		}
+	}
+	for _, c := range cells {
+		if c.fg != runFg || c.bg != runBg {
+			flush()
+			runFg, runBg = c.fg, c.bg
+		}
+		run.WriteRune(c.ch)
+	}
+	flush()
+	return b.String()
+}
+
+// segment returns the styled backdrop slice for row starting at col, width
+// columns wide. Out-of-range requests are padded with black spaces so callers
+// never need bounds checks. In fallback mode it returns the ░ shaded fill.
+func (b *backdrop) segment(row, col, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if b == nil || !b.art || row < 0 || row >= len(b.cells) {
+		return bgFillStyle.Render(strings.Repeat("░", width))
+	}
+	src := b.cells[row]
+	out := make([]artCell, width)
+	for i := 0; i < width; i++ {
+		c := col + i
+		if c >= 0 && c < len(src) {
+			out[i] = src[c]
+		} else {
+			out[i] = artCell{ch: ' ', fg: 7, bg: 0}
+		}
+	}
+	return renderCells(out)
+}
+
+// line returns the full-width styled backdrop row.
+func (b *backdrop) line(row int) string {
+	w := artWidth
+	if b != nil {
+		w = b.width
+	}
+	return b.segment(row, 0, w)
+}
+
 // parseCSIParams splits a CSI parameter string like "1;33;44" into ints,
 // treating empty fields as 0 and ignoring a leading '?'.
 func parseCSIParams(s string) []int {

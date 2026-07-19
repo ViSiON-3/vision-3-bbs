@@ -1,6 +1,11 @@
 package configeditor
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+)
 
 func TestRasterizeArt_Dimensions(t *testing.T) {
 	grid := rasterizeArt([]byte("hello"))
@@ -66,4 +71,66 @@ func TestRasterizeArt_CursorPosition(t *testing.T) {
 	if grid[2][4].ch != 'Z' {
 		t.Fatalf("grid[2][4] = %q, want Z", grid[2][4].ch)
 	}
+}
+
+func TestLoadBackdrop_CentersArt(t *testing.T) {
+	b := loadBackdrop(100, 30)
+	if !b.art {
+		t.Fatal("expected art mode from embedded asset")
+	}
+	if b.width != 100 || b.height != 30 {
+		t.Fatalf("size = %dx%d, want 100x30", b.width, b.height)
+	}
+	if len(b.cells) != 30 || len(b.cells[0]) != 100 {
+		t.Fatalf("grid = %dx%d, want 100x30", len(b.cells), len(b.cells[0]))
+	}
+	// Art (80x25) centered in 100x30: startCol=10, startRow=2.
+	// Margin cells are black spaces.
+	if c := b.cells[0][0]; c.ch != ' ' || c.bg != 0 {
+		t.Fatalf("top-left margin = %+v, want black space", c)
+	}
+}
+
+func TestLoadBackdrop_ExactSize(t *testing.T) {
+	b := loadBackdrop(80, 25)
+	if len(b.cells) != 25 || len(b.cells[0]) != 80 {
+		t.Fatalf("grid = %dx%d, want 80x25", len(b.cells), len(b.cells[0]))
+	}
+}
+
+func TestBackdrop_SegmentVisibleWidth(t *testing.T) {
+	b := loadBackdrop(80, 25)
+	seg := b.segment(5, 0, 10)
+	if got := ansiVisibleLen(seg); got != 10 {
+		t.Fatalf("segment visible width = %d, want 10", got)
+	}
+}
+
+func TestBackdrop_LineVisibleWidth(t *testing.T) {
+	b := loadBackdrop(90, 25)
+	if got := ansiVisibleLen(b.line(3)); got != 90 {
+		t.Fatalf("line visible width = %d, want 90", got)
+	}
+}
+
+func TestBackdrop_FallbackUsesShade(t *testing.T) {
+	b := &backdrop{width: 80, height: 25, art: false}
+	seg := b.segment(0, 0, 4)
+	if !strings.Contains(seg, "░") {
+		t.Fatalf("fallback segment should contain ░, got %q", seg)
+	}
+}
+
+func TestBackdrop_SegmentOutOfBounds(t *testing.T) {
+	b := loadBackdrop(80, 25)
+	// row beyond height must not panic and must pad to requested width.
+	seg := b.segment(999, 0, 5)
+	if got := ansiVisibleLen(seg); got != 5 {
+		t.Fatalf("oob segment width = %d, want 5", got)
+	}
+}
+
+// ansiVisibleLen counts runes outside ANSI SGR escape sequences.
+func ansiVisibleLen(s string) int {
+	return ansi.VisibleLength(s)
 }
