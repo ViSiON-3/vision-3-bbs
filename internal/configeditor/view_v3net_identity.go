@@ -9,10 +9,13 @@ import (
 
 func (m Model) viewSeedInterstitial() string {
 	var b strings.Builder
+
+	row := 0
+
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
+	row++
 
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
 	title := "V3Net Node Identity Created"
 	var contentLines []string
@@ -51,32 +54,40 @@ func (m Model) viewSeedInterstitial() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
 
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	titleLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(title, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + titleLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + titleLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
-	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-	b.WriteString(emptyLine)
+	// emptyLine reads the live row counter, so it must be called at the row
+	// it is meant to render (rather than cached in a variable).
+	emptyLine := func() string {
+		return m.backdrop.segment(row, 0, padL) +
+			editBorderStyle.Render("│") +
+			fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
+			editBorderStyle.Render("│") +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+	}
+	b.WriteString(emptyLine())
 	b.WriteByte('\n')
+	row++
 
 	for _, line := range contentLines {
 		padded := line
@@ -86,40 +97,46 @@ func (m Model) viewSeedInterstitial() string {
 		if lipgloss.Width(padded) < boxW {
 			padded += strings.Repeat(" ", boxW-lipgloss.Width(padded))
 		}
-		row := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		rowLine := m.backdrop.segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
 			fieldDisplayStyle.Render(padded) +
 			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-		b.WriteString(row)
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+		b.WriteString(rowLine)
 		b.WriteByte('\n')
+		row++
 	}
 
-	b.WriteString(emptyLine)
+	b.WriteString(emptyLine())
 	b.WriteByte('\n')
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	row++
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Help row (message or blank).
 	if m.message != "" {
-		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		msgLine := m.backdrop.segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1)
 		b.WriteString(msgLine)
 	} else {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 	}
 	b.WriteByte('\n')
+	row++
 
-	b.WriteString(bgLine)
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 
 	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
 
@@ -129,10 +146,13 @@ func (m Model) viewSeedInterstitial() string {
 // viewV3NetIdentity renders the Node Identity screen and all sub-states.
 func (m Model) viewV3NetIdentity() string {
 	var b strings.Builder
+
+	row := 0
+
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
+	row++
 
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 	boxW := 60
 
 	// Build content lines based on sub-state.
@@ -226,35 +246,42 @@ func (m Model) viewV3NetIdentity() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
 
 	// Top border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Title
 	titleLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(title, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + titleLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + titleLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
-	// Empty line
-	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-	b.WriteString(emptyLine)
+	// Empty line — reads the live row counter, so it must be called at the
+	// row it is meant to render (rather than cached in a variable).
+	emptyLine := func() string {
+		return m.backdrop.segment(row, 0, padL) +
+			editBorderStyle.Render("│") +
+			fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
+			editBorderStyle.Render("│") +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+	}
+	b.WriteString(emptyLine())
 	b.WriteByte('\n')
+	row++
 
 	// Content lines
 	for _, line := range contentLines {
@@ -265,41 +292,47 @@ func (m Model) viewV3NetIdentity() string {
 		if lipgloss.Width(padded) < boxW {
 			padded += strings.Repeat(" ", boxW-lipgloss.Width(padded))
 		}
-		row := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		rowLine := m.backdrop.segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
 			fieldDisplayStyle.Render(padded) +
 			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-		b.WriteString(row)
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+		b.WriteString(rowLine)
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Empty line + bottom border
-	b.WriteString(emptyLine)
+	b.WriteString(emptyLine())
 	b.WriteByte('\n')
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	row++
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Help row (message or blank).
 	if m.message != "" {
-		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
+		msgLine := m.backdrop.segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1)
 		b.WriteString(msgLine)
 	} else {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 	}
 	b.WriteByte('\n')
+	row++
 
-	b.WriteString(bgLine)
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 
 	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
 

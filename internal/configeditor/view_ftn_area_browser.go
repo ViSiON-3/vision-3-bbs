@@ -1,9 +1,6 @@
 package configeditor
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // viewFTNAreaBrowser renders the FTN echo area browser screen.
 func (m Model) viewFTNAreaBrowser() string {
@@ -59,9 +56,7 @@ func (m Model) viewFTNAreaBrowser() string {
 		}
 	}
 	countMsg := fmt.Sprintf("%d of %d areas selected", selected, total)
-	lb.line(bgFillStyle.Render(strings.Repeat("░", lb.padL)) +
-		editInfoValueStyle.Render(centerText(countMsg, boxW+2)) +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, lb.padR))))
+	lb.line(lb.pad(editInfoValueStyle.Render(centerText(countMsg, boxW+2))))
 	lb.bgRows(1)
 
 	return lb.finish("Space - Toggle  |  A - All  |  N - None  |  Enter - Confirm  |  ESC - Back")
