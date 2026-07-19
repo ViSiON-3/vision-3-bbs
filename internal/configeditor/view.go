@@ -7,6 +7,9 @@ import (
 
 // View implements tea.Model.
 func (m Model) View() string {
+	if m.splashActive {
+		return m.viewSplash()
+	}
 	switch m.mode {
 	case modeTopMenu:
 		return m.viewTopMenu()
@@ -84,6 +87,16 @@ func (m Model) View() string {
 func (m Model) globalHeaderLine() string {
 	title := centerText("-- ViSiON/3 Configuration Editor v1.0 --", m.width)
 	return globalHeaderBarStyle.Render(title)
+}
+
+// viewSplash renders the full backdrop art alone (no menu box), shown briefly
+// at startup before the top menu appears.
+func (m Model) viewSplash() string {
+	rows := make([]string, m.height)
+	for r := 0; r < m.height; r++ {
+		rows[r] = m.backdrop.line(r)
+	}
+	return strings.Join(rows, "\n")
 }
 
 // viewTopMenu renders the top-level menu.

@@ -245,3 +245,58 @@ func TestLoadBackdrop_OddMargin(t *testing.T) {
 		t.Fatalf("right slack col 80 bg = %d, want 0 (black)", c.bg)
 	}
 }
+
+func TestNew_NoSplashByDefault(t *testing.T) {
+	m, err := New("testdata")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if m.splashActive {
+		t.Fatal("New must not enable splash (would break interaction tests)")
+	}
+}
+
+func TestSplash_KeyDismissesToMenu(t *testing.T) {
+	m, err := New("testdata")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m = m.WithStartupSplash()
+	if !m.splashActive {
+		t.Fatal("WithStartupSplash should set splashActive")
+	}
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m2 := mm.(Model)
+	if m2.splashActive {
+		t.Fatal("keypress should dismiss splash")
+	}
+	if m2.mode != modeTopMenu {
+		t.Fatalf("mode after skip = %v, want topMenu", m2.mode)
+	}
+}
+
+func TestSplash_TickDismissesToMenu(t *testing.T) {
+	m, _ := New("testdata")
+	m = m.WithStartupSplash()
+	mm, _ := m.Update(splashDoneMsg{})
+	if mm.(Model).splashActive {
+		t.Fatal("splashDoneMsg should dismiss splash")
+	}
+}
+
+func TestSplash_ViewIsBackdropOnly(t *testing.T) {
+	m, _ := New("testdata")
+	m = m.WithStartupSplash()
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m2 := mm.(Model)
+	splash := m2.View()
+	// Splash shows no menu box: the top-menu box header must be absent.
+	if strings.Contains(splash, "ViSiON/3 Configuration") {
+		t.Fatal("splash should not render the menu box header")
+	}
+	// And it must differ from the revealed top menu.
+	m2.splashActive = false
+	if splash == m2.View() {
+		t.Fatal("splash view should differ from top-menu view")
+	}
+}
