@@ -183,7 +183,7 @@ func (m Model) viewRecordEdit() string {
 	}
 
 	// Message or field help text
-	b.WriteString(m.renderFieldHelpLineBD(m.recordFields, padL, padR, boxW, row))
+	b.WriteString(m.renderFieldHelpLine(m.recordFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
 	row++
 
@@ -349,11 +349,11 @@ func (m Model) renderRecordField(fieldIdx int, f fieldDef) (string, int) {
 	return fieldLabelStyle.Render(label) + fieldDisplayStyle.Render(displayValue), rawW
 }
 
-// renderFieldHelpLineBD is the backdrop-aware counterpart of
-// renderFieldHelpLine, used by screens that have been converted to source
-// their background fill from m.backdrop. row is the absolute screen row this
+// renderFieldHelpLine returns the message/help line below the bottom border,
+// sourcing its background fill from m.backdrop. Priority: flash message >
+// active field help text > blank fill. row is the absolute screen row this
 // line occupies.
-func (m Model) renderFieldHelpLineBD(fields []fieldDef, padL, padR, boxW, row int) string {
+func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row int) string {
 	if m.message != "" {
 		return m.backdrop.segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +

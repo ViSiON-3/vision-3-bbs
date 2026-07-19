@@ -14,11 +14,12 @@ func (m Model) viewWizardForm() string {
 
 	var b strings.Builder
 
+	row := 0
+
 	// Global header
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
-
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
+	row++
 
 	boxW := 70
 	// Find max row in fields
@@ -36,78 +37,95 @@ func (m Model) viewWizardForm() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
 
 	// Top border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Box title
 	titleLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(m.wizardTitle, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + titleLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + titleLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
-	// Empty line
-	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-	b.WriteString(emptyLine)
-	b.WriteByte('\n')
-
-	// Field rows
-	for row := 1; row <= maxRow; row++ {
-		rowContent := m.renderWizardRow(row, boxW)
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
+	// emptyLine renders a blank field-row line at the current row; it is used
+	// at multiple, differently-numbered rows below, so it must be recomputed
+	// each time rather than cached in a variable.
+	emptyLine := func() string {
+		return m.backdrop.segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
-			rowContent +
+			fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
 			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-		b.WriteString(line)
-		b.WriteByte('\n')
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	}
 
 	// Empty line
-	b.WriteString(emptyLine)
+	b.WriteString(emptyLine())
 	b.WriteByte('\n')
+	row++
+
+	// Field rows
+	for fr := 1; fr <= maxRow; fr++ {
+		rowContent := m.renderWizardRow(fr, boxW)
+		line := m.backdrop.segment(row, 0, padL) +
+			editBorderStyle.Render("│") +
+			rowContent +
+			editBorderStyle.Render("│") +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+		b.WriteString(line)
+		b.WriteByte('\n')
+		row++
+	}
+
+	// Empty line
+	b.WriteString(emptyLine())
+	b.WriteByte('\n')
+	row++
 
 	// Info line
 	infoText := "S - Save  |  ESC - Cancel"
 	infoLine := editBorderStyle.Render("│") +
 		editInfoLabelStyle.Render(centerText(infoText, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + infoLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + infoLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Bottom border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Message or field help text
-	b.WriteString(m.renderFieldHelpLine(m.wizardFields, padL, padR, boxW))
+	b.WriteString(m.renderFieldHelpLine(m.wizardFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
+	row++
 
-	b.WriteString(bgLine)
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 
 	helpBarStr := "Enter - Edit  |  S - Save  |  ESC - Back"
 	helpText := centerText(helpBarStr, m.width)
@@ -189,33 +207,4 @@ func (m Model) renderWizardField(fieldIdx int, f fieldDef) string {
 	}
 
 	return fieldLabelStyle.Render(label) + fieldDisplayStyle.Render(displayValue)
-}
-
-// renderFieldHelpLine returns the message/help line below the bottom border.
-// Priority: flash message > active field help text > blank fill.
-//
-// TODO(configeditor backdrop): this is the pre-backdrop ░-fill variant, still
-// used by screens not yet converted to source their background from
-// m.backdrop (see renderFieldHelpLineBD in view_record.go for the converted
-// counterpart).
-func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW int) string {
-	if m.message != "" {
-		return bgFillStyle.Render(strings.Repeat("░", padL)) +
-			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
-	}
-	if m.editField >= 0 && m.editField < len(fields) && fields[m.editField].Help != "" {
-		helpText := fields[m.editField].Help
-		// Add interaction hints
-		switch fields[m.editField].Type {
-		case ftYesNo:
-			helpText += " (Space toggles)"
-		case ftLookup:
-			helpText += " (Enter to select)"
-		}
-		return bgFillStyle.Render(strings.Repeat("░", padL)) +
-			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
-	}
-	return bgFillStyle.Render(strings.Repeat("░", m.width))
 }

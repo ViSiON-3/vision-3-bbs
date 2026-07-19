@@ -146,7 +146,7 @@ func (m Model) viewSysConfigEdit() string {
 	}
 
 	// Message or field help text
-	b.WriteString(m.renderFieldHelpLineBD(m.sysFields, padL, padR, boxW, row))
+	b.WriteString(m.renderFieldHelpLine(m.sysFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
 	row++
 

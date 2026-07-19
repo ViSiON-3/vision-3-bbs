@@ -208,6 +208,32 @@ func TestViewCategoryMenu_BackgroundFromBackdrop(t *testing.T) {
 	}
 }
 
+func TestViewWizardForm_BackgroundFromBackdrop(t *testing.T) {
+	m, err := New("testdata")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m2 := mm.(Model)
+
+	// Enter the leaf wizard form the same way the record list's Insert key
+	// does (see newLeafWizardModel in wizard_test.go).
+	m2.recordType = "v3netleaf"
+	m2.mode = modeRecordList
+	result, _ := m2.updateRecordList(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	m2 = result.(Model)
+	if m2.mode != modeWizardForm {
+		t.Fatalf("expected modeWizardForm, got %v", m2.mode)
+	}
+
+	artOut := m2.View()
+	m2.backdrop = &backdrop{width: 100, height: 30, art: false}
+	fbOut := m2.View()
+	if artOut == fbOut {
+		t.Fatal("wizard form background not sourced from m.backdrop (art and fallback render identically)")
+	}
+}
+
 func TestLoadBackdrop_OddMargin(t *testing.T) {
 	b := loadBackdrop(81, 25) // (81-80)/2 = 0 → art starts at col 0
 	// Row 0 col 0 should be an art cell region (not guaranteed non-space),
