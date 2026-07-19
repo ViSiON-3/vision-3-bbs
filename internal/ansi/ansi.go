@@ -207,6 +207,14 @@ func GetAnsiFileContent(filename string) ([]byte, error) {
 	return data, nil
 }
 
+// StripSAUCE removes a trailing SAUCE metadata record (and its EOF marker)
+// from raw ANSI art bytes, returning the art content. It is a no-op when no
+// SAUCE record is present. Use it before rasterizing embedded art bytes that
+// were not loaded via GetAnsiFileContent.
+func StripSAUCE(data []byte) []byte {
+	return stripSAUCE(data)
+}
+
 // stripSAUCE removes SAUCE metadata from ANSI art file content.
 // SAUCE (Standard Architecture for Universal Comment Extensions) is a 128-byte
 // metadata record appended to the end of ANSI art files, preceded by an EOF marker (0x1A).
