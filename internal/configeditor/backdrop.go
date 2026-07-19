@@ -65,7 +65,7 @@ func rasterizeArt(data []byte) [][]artCell {
 		if r == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
 			// Parse CSI: ESC [ params final
 			j := i + 2
-			for j < len(s) && !(s[j] >= '@' && s[j] <= '~') {
+			for j < len(s) && (s[j] < '@' || s[j] > '~') {
 				j++
 			}
 			if j >= len(s) {
