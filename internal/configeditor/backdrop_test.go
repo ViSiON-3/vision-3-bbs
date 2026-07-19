@@ -134,3 +134,34 @@ func TestBackdrop_SegmentOutOfBounds(t *testing.T) {
 func ansiVisibleLen(s string) int {
 	return ansi.VisibleLength(s)
 }
+
+func TestBackdrop_SegmentRowOOBPadsBlack(t *testing.T) {
+	b := loadBackdrop(80, 25)
+	seg := b.segment(999, 0, 6)
+	if strings.Contains(seg, "░") {
+		t.Fatalf("row-OOB in art mode should pad black, not ░: %q", seg)
+	}
+	if got := ansi.VisibleLength(seg); got != 6 {
+		t.Fatalf("row-OOB segment width = %d, want 6", got)
+	}
+}
+
+func TestBackdrop_SegmentColOOBPadsWidth(t *testing.T) {
+	b := loadBackdrop(80, 25)
+	seg := b.segment(5, 78, 6) // starts at col 78, runs 6 cols → 4 beyond width 80
+	if got := ansi.VisibleLength(seg); got != 6 {
+		t.Fatalf("col-OOB segment width = %d, want 6", got)
+	}
+}
+
+func TestLoadBackdrop_OddMargin(t *testing.T) {
+	b := loadBackdrop(81, 25) // (81-80)/2 = 0 → art starts at col 0
+	// Row 0 col 0 should be an art cell region (not guaranteed non-space),
+	// and the extra column of slack is on the right (col 80) as a black margin.
+	if len(b.cells[0]) != 81 {
+		t.Fatalf("width = %d, want 81", len(b.cells[0]))
+	}
+	if c := b.cells[0][80]; c.bg != 0 {
+		t.Fatalf("right slack col 80 bg = %d, want 0 (black)", c.bg)
+	}
+}

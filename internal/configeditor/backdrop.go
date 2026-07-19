@@ -196,8 +196,15 @@ func (b *backdrop) segment(row, col, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	if b == nil || !b.art || row < 0 || row >= len(b.cells) {
+	if b == nil || !b.art {
 		return bgFillStyle.Render(strings.Repeat("░", width))
+	}
+	if row < 0 || row >= len(b.cells) {
+		out := make([]artCell, width)
+		for i := range out {
+			out[i] = artCell{ch: ' ', fg: 7, bg: 0}
+		}
+		return renderCells(out)
 	}
 	src := b.cells[row]
 	out := make([]artCell, width)
