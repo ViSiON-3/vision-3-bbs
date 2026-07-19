@@ -404,7 +404,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateRecordEdit(msg)
 		case modeRecordField:
 			result, cmd = m.updateRecordField(msg)
-		case modeExitConfirm, modeSaveConfirm, modeDeleteConfirm:
+		case modeExitConfirm, modeSaveConfirm, modeDeleteConfirm, modeQuitConfirm:
 			result, cmd = m.updateConfirm(msg)
 		case modeLookupPicker:
 			result, cmd = m.updateLookupPicker(msg)
@@ -588,14 +588,17 @@ func (m *Model) backMode() editorMode {
 	return modeTopMenu
 }
 
-// tryExit begins the exit flow, prompting to save first if there are unsaved changes.
+// tryExit begins the exit flow: prompt to save if there are unsaved changes,
+// otherwise confirm a plain exit.
 func (m Model) tryExit() (Model, tea.Cmd) {
 	if m.dirty {
 		m.mode = modeExitConfirm
 		m.confirmYes = true
 		return m, nil
 	}
-	return m, tea.Quit
+	m.mode = modeQuitConfirm
+	m.confirmYes = true
+	return m, nil
 }
 
 // --- Confirm Dialog ---
@@ -634,6 +637,9 @@ func (m Model) cancelConfirm() (Model, tea.Cmd) {
 	case modeDeleteConfirm:
 		m.mode = modeRecordList
 		return m, nil
+	case modeQuitConfirm:
+		m.mode = modeTopMenu
+		return m, nil
 	default:
 		m.mode = modeTopMenu
 		return m, nil
@@ -648,6 +654,9 @@ func (m Model) rejectConfirm() (Model, tea.Cmd) {
 	case modeDeleteConfirm:
 		m.mode = modeRecordList
 		return m, nil
+	case modeQuitConfirm:
+		m.mode = modeTopMenu
+		return m, nil
 	default:
 		m.mode = modeTopMenu
 		return m, nil
@@ -657,6 +666,8 @@ func (m Model) rejectConfirm() (Model, tea.Cmd) {
 // executeConfirm runs the action associated with the active confirmation dialog.
 func (m Model) executeConfirm() (Model, tea.Cmd) {
 	switch m.mode {
+	case modeQuitConfirm:
+		return m, tea.Quit
 	case modeExitConfirm, modeSaveConfirm:
 		m.saveAll()
 		return m, tea.Quit

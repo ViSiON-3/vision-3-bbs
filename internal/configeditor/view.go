@@ -29,6 +29,9 @@ func (m Model) View() string {
 		result := m.viewTopMenu()
 		return m.overlayConfirmDialog(result, "-- Unsaved Changes --",
 			"Save changes before exit? ")
+	case modeQuitConfirm:
+		result := m.viewTopMenu()
+		return m.overlayConfirmDialog(result, "-- Exit --", "Exit? ")
 	case modeHelp:
 		result := m.viewTopMenu()
 		return m.overlayHelpScreen(result)

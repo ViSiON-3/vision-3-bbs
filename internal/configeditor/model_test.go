@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -109,14 +110,16 @@ func TestCategoryMenuToRecordEdit(t *testing.T) {
 func TestExitConfirmFlow(t *testing.T) {
 	m := newTUIModel(t)
 
-	// Clean model quits immediately on Escape.
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
-	asModel(t, updated) // m is not read afterwards; assert the type only
-	if cmd == nil {
-		t.Fatal("clean exit should return Quit")
+	// Clean model prompts "Exit? Y/N" on Escape (no immediate quit).
+	m2 := hit(t, m, tea.KeyMsg{Type: tea.KeyEscape})
+	if m2.mode != modeQuitConfirm {
+		t.Fatalf("clean exit mode = %v, want quitConfirm", m2.mode)
 	}
-	if msg := cmd(); msg != (tea.QuitMsg{}) {
-		t.Errorf("clean exit cmd returned %T, want tea.QuitMsg", msg)
+	// Y confirms and quits.
+	updated, cmd := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	asModel(t, updated)
+	if cmd == nil || cmd() != (tea.QuitMsg{}) {
+		t.Fatalf("Y on quit confirm should return tea.QuitMsg")
 	}
 
 	// Dirty model prompts first; Escape on the dialog cancels back to top menu.
@@ -133,6 +136,37 @@ func TestExitConfirmFlow(t *testing.T) {
 	m = hit(t, m, tea.KeyMsg{Type: tea.KeyEscape})
 	if m.mode != modeTopMenu {
 		t.Errorf("mode = %v, want topMenu after cancel", m.mode)
+	}
+}
+
+func TestQuitConfirm_NoStaysInMenu(t *testing.T) {
+	m := newTUIModel(t)
+	m2 := hit(t, m, tea.KeyMsg{Type: tea.KeyEscape}) // clean -> quit confirm
+	if m2.mode != modeQuitConfirm {
+		t.Fatalf("mode = %v, want quitConfirm", m2.mode)
+	}
+	m3 := hit(t, m2, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	if m3.mode != modeTopMenu {
+		t.Fatalf("N should return to top menu, got %v", m3.mode)
+	}
+}
+
+func TestQuitConfirm_DirtyStillUsesSavePrompt(t *testing.T) {
+	m := newTUIModel(t)
+	m.dirty = true
+	m2 := hit(t, m, tea.KeyMsg{Type: tea.KeyEscape})
+	if m2.mode != modeExitConfirm {
+		t.Fatalf("dirty exit mode = %v, want exitConfirm (unchanged)", m2.mode)
+	}
+}
+
+func TestQuitConfirm_ViewShowsExitPrompt(t *testing.T) {
+	m := newTUIModel(t)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = asModel(t, updated)
+	m.mode = modeQuitConfirm
+	if !strings.Contains(m.View(), "Exit?") {
+		t.Fatal("quit confirm view should show the Exit? prompt")
 	}
 }
 
