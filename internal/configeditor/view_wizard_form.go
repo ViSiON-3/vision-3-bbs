@@ -190,3 +190,32 @@ func (m Model) renderWizardField(fieldIdx int, f fieldDef) string {
 
 	return fieldLabelStyle.Render(label) + fieldDisplayStyle.Render(displayValue)
 }
+
+// renderFieldHelpLine returns the message/help line below the bottom border.
+// Priority: flash message > active field help text > blank fill.
+//
+// TODO(configeditor backdrop): this is the pre-backdrop ░-fill variant, still
+// used by screens not yet converted to source their background from
+// m.backdrop (see renderFieldHelpLineBD in view_record.go for the converted
+// counterpart).
+func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW int) string {
+	if m.message != "" {
+		return bgFillStyle.Render(strings.Repeat("░", padL)) +
+			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+	}
+	if m.editField >= 0 && m.editField < len(fields) && fields[m.editField].Help != "" {
+		helpText := fields[m.editField].Help
+		// Add interaction hints
+		switch fields[m.editField].Type {
+		case ftYesNo:
+			helpText += " (Space toggles)"
+		case ftLookup:
+			helpText += " (Enter to select)"
+		}
+		return bgFillStyle.Render(strings.Repeat("░", padL)) +
+			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
+			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+	}
+	return bgFillStyle.Render(strings.Repeat("░", m.width))
+}

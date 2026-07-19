@@ -191,6 +191,23 @@ func TestViewTopMenu_BackgroundFromBackdrop(t *testing.T) {
 	}
 }
 
+func TestViewCategoryMenu_BackgroundFromBackdrop(t *testing.T) {
+	m, err := New("testdata")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m.mode = modeCategoryMenu
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m2 := mm.(Model)
+	m2.mode = modeCategoryMenu
+	artOut := m2.View()
+	m2.backdrop = &backdrop{width: 100, height: 30, art: false}
+	fbOut := m2.View()
+	if artOut == fbOut {
+		t.Fatal("category menu background not sourced from m.backdrop")
+	}
+}
+
 func TestLoadBackdrop_OddMargin(t *testing.T) {
 	b := loadBackdrop(81, 25) // (81-80)/2 = 0 → art starts at col 0
 	// Row 0 col 0 should be an art cell region (not guaranteed non-space),

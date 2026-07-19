@@ -36,11 +36,12 @@ func truncateToDisplayWidth(s string, maxWidth int) string {
 func (m Model) viewRecordEdit() string {
 	var b strings.Builder
 
+	row := 0
+
 	// Global header
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
-
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
+	row++
 
 	boxW := 70
 	// Find max row in fields
@@ -61,18 +62,20 @@ func (m Model) viewRecordEdit() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
 
 	// Top border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Box title
 	boxTitleText := fmt.Sprintf("Edit %s", m.recordTypeTitle())
@@ -82,27 +85,36 @@ func (m Model) viewRecordEdit() string {
 	boxTitleLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(boxTitleText, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + boxTitleLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + boxTitleLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Record name header
 	headerText := m.recordEditHeader()
 	headerLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(headerText, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + headerLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + headerLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
+
+	// emptyFieldLine renders a blank field-row line at the current row; it is
+	// used at multiple, differently-numbered rows below, so it must be
+	// recomputed each time rather than cached in a variable.
+	emptyFieldLine := func() string {
+		return m.backdrop.segment(row, 0, padL) +
+			editBorderStyle.Render("│") +
+			fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
+			editBorderStyle.Render("│") +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+	}
 
 	// Empty line
-	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-	b.WriteString(emptyLine)
+	b.WriteString(emptyFieldLine())
 	b.WriteByte('\n')
+	row++
 
 	// Field rows (windowed by fieldScroll)
 	firstRow := m.fieldScroll + 1
@@ -110,25 +122,28 @@ func (m Model) viewRecordEdit() string {
 	if lastRow > maxRow {
 		lastRow = maxRow
 	}
-	for row := firstRow; row <= lastRow; row++ {
-		rowContent := m.renderRecordEditRow(row, boxW)
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
+	for fr := firstRow; fr <= lastRow; fr++ {
+		rowContent := m.renderRecordEditRow(fr, boxW)
+		line := m.backdrop.segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
 			rowContent +
 			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 		b.WriteString(line)
 		b.WriteByte('\n')
+		row++
 	}
 	// Pad remaining rows if fewer fields than visibleRows
-	for row := lastRow + 1; row <= m.fieldScroll+visibleRows; row++ {
-		b.WriteString(emptyLine)
+	for fr := lastRow + 1; fr <= m.fieldScroll+visibleRows; fr++ {
+		b.WriteString(emptyFieldLine())
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Empty line
-	b.WriteString(emptyLine)
+	b.WriteString(emptyFieldLine())
 	b.WriteByte('\n')
+	row++
 
 	// Record info
 	total := m.recordCount()
@@ -149,27 +164,32 @@ func (m Model) viewRecordEdit() string {
 	infoLine := editBorderStyle.Render("│") +
 		editInfoLabelStyle.Render(centerText(infoText, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + infoLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + infoLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Bottom border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Message or field help text
-	b.WriteString(m.renderFieldHelpLine(m.recordFields, padL, padR, boxW))
+	b.WriteString(m.renderFieldHelpLineBD(m.recordFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
+	row++
 
-	b.WriteString(bgLine)
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 
 	helpBarStr := "Enter - Edit  |  PgUp/PgDn - Records  |  ESC - Return"
 	if m.recordEditIdx < 0 {
@@ -329,13 +349,15 @@ func (m Model) renderRecordField(fieldIdx int, f fieldDef) (string, int) {
 	return fieldLabelStyle.Render(label) + fieldDisplayStyle.Render(displayValue), rawW
 }
 
-// renderFieldHelpLine returns the message/help line below the bottom border.
-// Priority: flash message > active field help text > blank fill.
-func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW int) string {
+// renderFieldHelpLineBD is the backdrop-aware counterpart of
+// renderFieldHelpLine, used by screens that have been converted to source
+// their background fill from m.backdrop. row is the absolute screen row this
+// line occupies.
+func (m Model) renderFieldHelpLineBD(fields []fieldDef, padL, padR, boxW, row int) string {
 	if m.message != "" {
-		return bgFillStyle.Render(strings.Repeat("░", padL)) +
+		return m.backdrop.segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1)
 	}
 	if m.editField >= 0 && m.editField < len(fields) && fields[m.editField].Help != "" {
 		helpText := fields[m.editField].Help
@@ -346,9 +368,9 @@ func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW int) stri
 		case ftLookup:
 			helpText += " (Enter to select)"
 		}
-		return bgFillStyle.Render(strings.Repeat("░", padL)) +
+		return m.backdrop.segment(row, 0, padL) +
 			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR+1)))
+			m.backdrop.segment(row, m.width-(padR+1), padR+1)
 	}
-	return bgFillStyle.Render(strings.Repeat("░", m.width))
+	return m.backdrop.line(row)
 }

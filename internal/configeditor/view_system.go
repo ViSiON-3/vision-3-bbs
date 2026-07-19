@@ -11,16 +11,17 @@ import (
 func (m Model) viewSysConfigEdit() string {
 	var b strings.Builder
 
+	row := 0
+
 	// Global header
 	b.WriteString(m.globalHeaderLine())
 	b.WriteByte('\n')
+	row++
 
 	screenName := ""
 	if m.sysSubScreen < len(m.sysMenuItems) {
 		screenName = m.sysMenuItems[m.sysSubScreen].Label
 	}
-
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
 
 	// Box dimensions
 	boxW := 70
@@ -42,35 +43,45 @@ func (m Model) viewSysConfigEdit() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	padL := maxInt(0, (m.width-boxW-2)/2)
 	padR := maxInt(0, m.width-padL-boxW-2)
 
 	// Top border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Header
 	headerLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(screenName, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + headerLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + headerLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
+
+	// emptyFieldLine renders a blank field-row line at the current row; it is
+	// used at multiple, differently-numbered rows below, so it must be
+	// recomputed each time rather than cached in a variable.
+	emptyFieldLine := func() string {
+		return m.backdrop.segment(row, 0, padL) +
+			editBorderStyle.Render("│") +
+			fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
+			editBorderStyle.Render("│") +
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+	}
 
 	// Empty line
-	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
-	b.WriteString(emptyLine)
+	b.WriteString(emptyFieldLine())
 	b.WriteByte('\n')
+	row++
 
 	// Field rows (windowed by fieldScroll)
 	firstRow := m.fieldScroll + 1
@@ -78,25 +89,28 @@ func (m Model) viewSysConfigEdit() string {
 	if lastRow > maxRow {
 		lastRow = maxRow
 	}
-	for row := firstRow; row <= lastRow; row++ {
-		rowContent := m.renderSysEditRow(row, boxW)
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
+	for fr := firstRow; fr <= lastRow; fr++ {
+		rowContent := m.renderSysEditRow(fr, boxW)
+		line := m.backdrop.segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
 			rowContent +
 			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR)))
+			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 		b.WriteString(line)
 		b.WriteByte('\n')
+		row++
 	}
 	// Pad remaining rows if fewer fields than visibleRows
-	for row := lastRow + 1; row <= m.fieldScroll+visibleRows; row++ {
-		b.WriteString(emptyLine)
+	for fr := lastRow + 1; fr <= m.fieldScroll+visibleRows; fr++ {
+		b.WriteString(emptyFieldLine())
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Empty line
-	b.WriteString(emptyLine)
+	b.WriteString(emptyFieldLine())
 	b.WriteByte('\n')
+	row++
 
 	// Screen navigation info
 	scrollHint := ""
@@ -113,27 +127,32 @@ func (m Model) viewSysConfigEdit() string {
 	infoLine := editBorderStyle.Render("│") +
 		editInfoLabelStyle.Render(centerText(infoText, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + infoLine +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+	b.WriteString(m.backdrop.segment(row, 0, padL) + infoLine +
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	// Bottom border
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) +
+	b.WriteString(m.backdrop.segment(row, 0, padL) +
 		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", maxInt(0, padR))))
+		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
+	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
+		b.WriteString(m.backdrop.line(row))
 		b.WriteByte('\n')
+		row++
 	}
 
 	// Message or field help text
-	b.WriteString(m.renderFieldHelpLine(m.sysFields, padL, padR, boxW))
+	b.WriteString(m.renderFieldHelpLineBD(m.sysFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
+	row++
 
-	b.WriteString(bgLine)
+	b.WriteString(m.backdrop.line(row))
 	b.WriteByte('\n')
+	row++
 
 	helpText := centerText("Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return", m.width)
 	b.WriteString(helpBarStyle.Render(helpText))
