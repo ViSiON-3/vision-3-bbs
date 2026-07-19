@@ -131,19 +131,27 @@ type backdrop struct {
 }
 
 // loadBackdrop rasterizes the embedded TUICONFIG.ANS art and composites it,
-// centered, onto a width×height black canvas. On failure it returns a backdrop
-// in fallback mode (art=false).
+// centered, onto a width×height black canvas.
 func loadBackdrop(width, height int) *backdrop {
+	return loadBackdropFrom(tuiConfigANS, width, height)
+}
+
+// loadBackdropFrom rasterizes the given CP437 art bytes and composites them,
+// centered, onto a width×height black canvas. If data is empty it returns a
+// backdrop in fallback mode (art=false), which renders the legacy ░ fill.
+func loadBackdropFrom(data []byte, width, height int) *backdrop {
 	if width < artWidth {
 		width = artWidth
 	}
 	if height < artHeight {
 		height = artHeight
 	}
-	grid := rasterizeArt(tuiConfigANS)
-	if len(grid) != artHeight || len(grid[0]) != artWidth {
+	// Defensive fallback: if the embedded art is missing/empty, render the
+	// legacy ░ fill rather than a blank grid.
+	if len(data) == 0 {
 		return &backdrop{width: width, height: height, art: false}
 	}
+	grid := rasterizeArt(data)
 
 	startCol := (width - artWidth) / 2
 	startRow := (height - artHeight) / 2

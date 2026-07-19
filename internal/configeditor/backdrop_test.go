@@ -115,6 +115,16 @@ func TestBackdrop_LineVisibleWidth(t *testing.T) {
 	}
 }
 
+func TestLoadBackdropFrom_EmptyAssetFallsBack(t *testing.T) {
+	b := loadBackdropFrom(nil, 100, 30)
+	if b.art {
+		t.Fatal("empty asset should yield art:false fallback")
+	}
+	if !strings.Contains(b.segment(0, 0, 4), "░") {
+		t.Fatalf("empty-asset fallback should render ░, got %q", b.segment(0, 0, 4))
+	}
+}
+
 func TestBackdrop_FallbackUsesShade(t *testing.T) {
 	b := &backdrop{width: 80, height: 25, art: false}
 	seg := b.segment(0, 0, 4)

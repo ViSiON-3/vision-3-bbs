@@ -92,7 +92,7 @@ func (lb *listBox) emptyRows(n int) {
 // bgRows writes n full-width background lines.
 func (lb *listBox) bgRows(n int) {
 	for i := 0; i < n; i++ {
-		lb.line(lb.bd.line(lb.rowIdx))
+		lb.line(lb.bd.segment(lb.rowIdx, 0, lb.width))
 	}
 }
 
@@ -124,7 +124,7 @@ func (lb *listBox) list(visible, scroll, cursor, total int, format func(i int) s
 // background line when the message is empty.
 func (lb *listBox) messageRow(msg string) {
 	if msg == "" {
-		lb.line(lb.bd.line(lb.rowIdx))
+		lb.line(lb.bd.segment(lb.rowIdx, 0, lb.width))
 		return
 	}
 	lb.line(lb.bd.segment(lb.rowIdx, 0, lb.padL) +
