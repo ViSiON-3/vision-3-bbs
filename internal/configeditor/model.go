@@ -255,10 +255,11 @@ type Model struct {
 	keyExistedBeforeSave   bool
 
 	// Terminal
-	width   int
-	height  int
-	mode    editorMode
-	message string // Flash message
+	width    int
+	height   int
+	mode     editorMode
+	message  string // Flash message
+	backdrop *backdrop
 }
 
 // New creates a new config editor model.
@@ -312,6 +313,7 @@ func New(configPath string) (Model, error) {
 		width:        minWidth,
 		height:       minHeight,
 		mode:         modeTopMenu,
+		backdrop:     loadBackdrop(minWidth, minHeight),
 	}, nil
 }
 
@@ -332,6 +334,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.height < minHeight {
 			m.height = minHeight
 		}
+		m.backdrop = loadBackdrop(m.width, m.height)
 		return m, nil
 
 	case fetchNetworksMsg:

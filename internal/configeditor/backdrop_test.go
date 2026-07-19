@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
@@ -151,6 +153,21 @@ func TestBackdrop_SegmentColOOBPadsWidth(t *testing.T) {
 	seg := b.segment(5, 78, 6) // starts at col 78, runs 6 cols → 4 beyond width 80
 	if got := ansi.VisibleLength(seg); got != 6 {
 		t.Fatalf("col-OOB segment width = %d, want 6", got)
+	}
+}
+
+func TestModel_BackdropBuiltAndResized(t *testing.T) {
+	m, err := New("testdata")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if m.backdrop == nil {
+		t.Fatal("backdrop nil after New")
+	}
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m2 := updated.(Model)
+	if m2.backdrop == nil || m2.backdrop.width != 100 || m2.backdrop.height != 30 {
+		t.Fatalf("backdrop not rebuilt on resize: %+v", m2.backdrop)
 	}
 }
 
