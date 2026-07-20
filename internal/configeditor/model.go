@@ -151,7 +151,7 @@ type Model struct {
 	sysMenuCursor int
 	sysMenuItems  []sysConfigMenuItem
 	sysMenuTitle  string     // header for the active inner menu
-	sysSubScreen  int        // which sub-screen (0-5)
+	sysSubScreen  int        // index of the active sub-screen within sysMenuItems
 	sysFields     []fieldDef // current sub-screen fields
 
 	// Record list state
@@ -289,15 +289,16 @@ func New(configPath string) (Model, error) {
 	ti.Width = 40
 
 	topItems := []topMenuItem{
-		{"1", "System Configuration"},
-		{"2", "Areas and Conferences"},
-		{"3", "Echomail Networking"},
-		{"4", "ViSiON/3 Networking (V3Net)"},
-		{"5", "Door Programs"},
-		{"6", "Transfer Protocols"},
-		{"7", "Archivers"},
-		{"8", "Event Scheduler"},
-		{"9", "Login Sequence"},
+		{"1", "System Setup"},
+		{"2", "Access & Security"},
+		{"3", "Areas and Conferences"},
+		{"4", "Echomail Networking"},
+		{"5", "ViSiON/3 Networking (V3Net)"},
+		{"6", "Door Programs"},
+		{"7", "Transfer Protocols"},
+		{"8", "Archivers"},
+		{"9", "Event Scheduler"},
+		{"0", "Login Sequence"},
 		{"Q", "Quit Program"},
 	}
 
@@ -499,7 +500,14 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.sysMenuCursor = 0
 		return m, nil
 
-	case 1: // Areas and Conferences
+	case 1: // Access & Security
+		m.sysMenuItems = securityMenuItems()
+		m.sysMenuTitle = "Access & Security"
+		m.mode = modeSysConfigMenu
+		m.sysMenuCursor = 0
+		return m, nil
+
+	case 2: // Areas and Conferences
 		m.catMenuTitle = "Areas and Conferences"
 		m.catMenuItems = []categoryMenuItem{
 			{Label: "Message Areas", RecordType: "msgarea"},
@@ -510,7 +518,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeCategoryMenu
 		return m, nil
 
-	case 2: // Echomail Networking
+	case 3: // Echomail Networking
 		m.catMenuTitle = "Echomail Networking"
 		m.catMenuItems = []categoryMenuItem{
 			{Label: "Echomail Networks", RecordType: "ftn"},
@@ -521,7 +529,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeCategoryMenu
 		return m, nil
 
-	case 3: // V3Net Networking
+	case 4: // V3Net Networking
 		m.catMenuTitle = "ViSiON/3 Networking (V3Net)"
 		m.catMenuItems = []categoryMenuItem{
 			{Label: "Node Identity", Mode: modeV3NetIdentity},
@@ -532,7 +540,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeCategoryMenu
 		return m, nil
 
-	case 4: // Door Programs (direct)
+	case 5: // Door Programs (direct)
 		m.recordType = "door"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -540,7 +548,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 5: // Transfer Protocols (direct)
+	case 6: // Transfer Protocols (direct)
 		m.recordType = "protocol"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -548,7 +556,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 6: // Archivers (direct)
+	case 7: // Archivers (direct)
 		m.recordType = "archiver"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -556,7 +564,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 7: // Event Scheduler (direct)
+	case 8: // Event Scheduler (direct)
 		m.recordType = "event"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -564,7 +572,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 8: // Login Sequence (direct)
+	case 9: // Login Sequence (direct)
 		m.recordType = "login"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -572,7 +580,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 9: // Quit
+	case 10: // Quit
 		return m.tryExit()
 	}
 	return m, nil
