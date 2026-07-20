@@ -1,8 +1,9 @@
 package configeditor
 
 import (
-	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
 // overlayConfirmDialog renders a confirmation dialog centered over the background.
@@ -67,7 +68,7 @@ func (m Model) overlayConfirmDialog(background, title, question string) string {
 		side
 
 	// ESC hint line
-	escHint := "ESC - Cancel"
+	escHint := "[ESC] Cancel"
 	escPad := (dialogW - 2 - len(escHint)) / 2
 	escLine := side +
 		dialogTextStyle.Render(strings.Repeat(" ", maxInt(0, escPad))+escHint+strings.Repeat(" ", maxInt(0, dialogW-2-escPad-len(escHint)))) +
