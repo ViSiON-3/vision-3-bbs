@@ -1,6 +1,6 @@
 # ViSiON/3 Installation Guide
 
-> **Current Version: v0.1.1** — [GitHub Releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
+> **Current Version: v0.2.0** — [GitHub Releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
 >
 > ⚠️ **Early Development:** ViSiON/3 is under active development and not yet feature-complete. Expect rough edges and missing features. Use at your own risk. Check the [releases page](https://github.com/ViSiON-3/vision-3-bbs/releases) and the [README](https://github.com/ViSiON-3/vision-3-bbs) for the current status of features.
 
