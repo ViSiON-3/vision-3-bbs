@@ -1,6 +1,6 @@
 # Getting Started
 
-> **Current Version: v0.2.0** — [GitHub Releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
+> **Current Version: v0.2.1** — [GitHub Releases](https://github.com/ViSiON-3/vision-3-bbs/releases)
 >
 > ⚠️ **Early Development:** ViSiON/3 is under active development and not yet feature-complete. Use at your own risk.
 
