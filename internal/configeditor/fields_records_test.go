@@ -84,15 +84,15 @@ func TestSysFieldGetSetIdempotence(t *testing.T) {
 	m.configs.Server = config.ServerConfig{
 		BoardName: "Test BBS", SysOpName: "sysop", QWKID: "TEST",
 	}
-	for screen := 0; screen <= 9; screen++ {
-		fields := m.buildSysFields(screen)
+	for _, it := range append(systemConfigMenuItems(), securityMenuItems()...) {
+		fields := it.Build(m)
 		if len(fields) == 0 {
-			t.Errorf("no fields for sys screen %d", screen)
+			t.Errorf("no fields for sys screen %q", it.Label)
 			continue
 		}
 		for _, f := range fields {
 			if f.Get == nil {
-				t.Errorf("screen %d field %q has no Get", screen, f.Label)
+				t.Errorf("screen %q field %q has no Get", it.Label, f.Label)
 				continue
 			}
 			v1 := f.Get()
@@ -100,11 +100,11 @@ func TestSysFieldGetSetIdempotence(t *testing.T) {
 				continue
 			}
 			if err := f.Set(v1); err != nil {
-				t.Errorf("screen %d field %q: Set(Get()) = %v", screen, f.Label, err)
+				t.Errorf("screen %q field %q: Set(Get()) = %v", it.Label, f.Label, err)
 				continue
 			}
 			if v2 := f.Get(); v2 != v1 {
-				t.Errorf("screen %d field %q: Get after Set = %q, want %q", screen, f.Label, v2, v1)
+				t.Errorf("screen %q field %q: Get after Set = %q, want %q", it.Label, f.Label, v2, v1)
 			}
 		}
 	}

@@ -72,9 +72,11 @@ type categoryMenuItem struct {
 	Mode       editorMode // If non-zero, transitions to this mode instead
 }
 
-// sysConfigMenuItem defines an entry in the system config inner menu.
+// sysConfigMenuItem defines an entry in a system-config-style inner menu.
+// Build returns the field definitions for the item's sub-screen.
 type sysConfigMenuItem struct {
 	Label string
+	Build func(m *Model) []fieldDef
 }
 
 // wizardArea is a single area entry in the hub setup wizard.
@@ -148,6 +150,7 @@ type Model struct {
 	// System config inner menu
 	sysMenuCursor int
 	sysMenuItems  []sysConfigMenuItem
+	sysMenuTitle  string     // header for the active inner menu
 	sysSubScreen  int        // which sub-screen (0-5)
 	sysFields     []fieldDef // current sub-screen fields
 
@@ -298,19 +301,7 @@ func New(configPath string) (Model, error) {
 		{"Q", "Quit Program"},
 	}
 
-	sysMenuItems := []sysConfigMenuItem{
-		{"BBS Registration"},
-		{"Server Setup"},
-		{"Connection Limits"},
-		{"Access Levels"},
-		{"Default Settings"},
-		{"IP Blocklist/Allowlist"},
-		{"New User Voting (NUV)"},
-		{"DOS Emulation"},
-		{"Logging"},
-		{"QWK Mobile API"},
-		{"Bot Defense"},
-	}
+	sysMenuItems := systemConfigMenuItems()
 
 	// Choose the backdrop screen once per startup; the bytes are reused on
 	// resize so the screen stays consistent for the session.
@@ -322,6 +313,7 @@ func New(configPath string) (Model, error) {
 		configPath:   configPath,
 		topItems:     topItems,
 		sysMenuItems: sysMenuItems,
+		sysMenuTitle: "System Setup",
 		textInput:    ti,
 		wizard:       &wizardState{},
 		width:        minWidth,
@@ -500,7 +492,9 @@ func (m Model) updateTopMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // selectTopMenuItem activates the currently highlighted top-menu item.
 func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 	switch m.topCursor {
-	case 0: // System Configuration
+	case 0: // System Setup
+		m.sysMenuItems = systemConfigMenuItems()
+		m.sysMenuTitle = "System Setup"
 		m.mode = modeSysConfigMenu
 		m.sysMenuCursor = 0
 		return m, nil

@@ -106,12 +106,12 @@ func TestSysFieldsLogging_RollingTypeLabelMapping(t *testing.T) {
 }
 
 func TestBuildSysFields_LoggingScreenWired(t *testing.T) {
-	m := &Model{configs: &allConfigs{}}
+	m := &Model{configs: &allConfigs{}, sysMenuItems: systemConfigMenuItems()}
 	m.configs.Server.Logging = config.LoggingConfig{Dir: "data/logs", Level: "INFO"}
 
-	fields := m.buildSysFields(8)
+	fields := m.buildSysFields(4)
 	if len(fields) != 6 {
-		t.Fatalf("buildSysFields(8) returned %d fields, want 6 (Logging screen)", len(fields))
+		t.Fatalf("buildSysFields(4) returned %d fields, want 6 (Logging screen)", len(fields))
 	}
 	// Sanity: it's the logging screen, not some other screen's fields.
 	fieldByLabel(t, fields, "Rolling Type")
