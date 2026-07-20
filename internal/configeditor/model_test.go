@@ -71,9 +71,9 @@ func TestTopMenuNavigationAndSelect(t *testing.T) {
 		t.Fatalf("mode = %v, want sysConfigMenu", m.mode)
 	}
 
-	// Hotkey selection: "6" jumps straight to the protocols record list.
+	// Hotkey selection: "7" jumps straight to the protocols record list.
 	m.mode = modeTopMenu
-	m = hit(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("6")})
+	m = hit(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("7")})
 	if m.mode != modeRecordList || m.recordType != "protocol" {
 		t.Errorf("mode/type = %v/%q, want recordList/protocol", m.mode, m.recordType)
 	}
@@ -87,8 +87,8 @@ func TestTopMenuNavigationAndSelect(t *testing.T) {
 func TestCategoryMenuToRecordEdit(t *testing.T) {
 	m := newTUIModel(t)
 
-	// Item 1: Areas and Conferences → category menu.
-	m.topCursor = 1
+	// Item 2: Areas and Conferences → category menu.
+	m.topCursor = 2
 	m = hit(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if m.mode != modeCategoryMenu || len(m.catMenuItems) != 3 {
 		t.Fatalf("mode/items = %v/%d, want categoryMenu/3", m.mode, len(m.catMenuItems))
@@ -193,5 +193,40 @@ func TestConfigEditorViewSmoke(t *testing.T) {
 		if out := mm.View(); out == "" {
 			t.Errorf("View() in mode %v returned empty output", mode)
 		}
+	}
+}
+
+func TestTopMenuAccessSecurityEntry(t *testing.T) {
+	m, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Item 2 is Access & Security.
+	if got := m.topItems[1].Label; got != "Access & Security" {
+		t.Fatalf("topItems[1].Label = %q, want %q", got, "Access & Security")
+	}
+
+	// Selecting it loads the 5 security screens with the right title.
+	m.topCursor = 1
+	updated, _ := m.selectTopMenuItem()
+	m = updated
+	if m.mode != modeSysConfigMenu {
+		t.Fatalf("mode = %v, want modeSysConfigMenu", m.mode)
+	}
+	if m.sysMenuTitle != "Access & Security" {
+		t.Errorf("sysMenuTitle = %q, want %q", m.sysMenuTitle, "Access & Security")
+	}
+	if len(m.sysMenuItems) != 5 {
+		t.Fatalf("len(sysMenuItems) = %d, want 5", len(m.sysMenuItems))
+	}
+	if m.sysMenuItems[0].Label != "Access Levels" {
+		t.Errorf("first security item = %q, want %q", m.sysMenuItems[0].Label, "Access Levels")
+	}
+
+	// Login Sequence is the 10th functional item, keyed "0".
+	login := m.topItems[9]
+	if login.Label != "Login Sequence" || login.Key != "0" {
+		t.Errorf("topItems[9] = %+v, want {Key:0 Label:Login Sequence}", login)
 	}
 }

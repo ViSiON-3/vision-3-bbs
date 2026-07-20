@@ -75,34 +75,38 @@ func buildTimezoneLookupItems() []LookupItem {
 	return items
 }
 
-// buildSysFields returns field definitions for the given system config sub-screen.
+// buildSysFields returns the field definitions for the currently loaded inner
+// menu's sub-screen at the given index.
 func (m *Model) buildSysFields(screen int) []fieldDef {
-	cfg := &m.configs.Server
-	switch screen {
-	case 0:
-		return sysFieldsRegistration(cfg)
-	case 1:
-		return m.sysFieldsNetwork(cfg)
-	case 2:
-		return sysFieldsLimits(cfg)
-	case 3:
-		return sysFieldsLevels(cfg)
-	case 4:
-		return sysFieldsDefaults(cfg)
-	case 5:
-		return sysFieldsIPLists(cfg)
-	case 6:
-		return sysFieldsNUV(cfg)
-	case 7:
-		return sysFieldsDOS(cfg)
-	case 8:
-		return sysFieldsLogging(cfg)
-	case 9:
-		return sysFieldsQWKAPI(cfg)
-	case 10:
-		return sysFieldsBotDefense(cfg)
+	if screen < 0 || screen >= len(m.sysMenuItems) {
+		return nil
 	}
-	return nil
+	return m.sysMenuItems[screen].Build(m)
+}
+
+// systemConfigMenuItems returns the System Setup inner menu (general board and
+// server settings).
+func systemConfigMenuItems() []sysConfigMenuItem {
+	return []sysConfigMenuItem{
+		{Label: "BBS Registration", Build: func(m *Model) []fieldDef { return sysFieldsRegistration(&m.configs.Server) }},
+		{Label: "Server Setup", Build: func(m *Model) []fieldDef { return m.sysFieldsNetwork(&m.configs.Server) }},
+		{Label: "Default Settings", Build: func(m *Model) []fieldDef { return sysFieldsDefaults(&m.configs.Server) }},
+		{Label: "DOS Emulation", Build: func(m *Model) []fieldDef { return sysFieldsDOS(&m.configs.Server) }},
+		{Label: "Logging", Build: func(m *Model) []fieldDef { return sysFieldsLogging(&m.configs.Server) }},
+		{Label: "QWK Mobile API", Build: func(m *Model) []fieldDef { return sysFieldsQWKAPI(&m.configs.Server) }},
+	}
+}
+
+// securityMenuItems returns the Access & Security inner menu (access control and
+// abuse-defense settings).
+func securityMenuItems() []sysConfigMenuItem {
+	return []sysConfigMenuItem{
+		{Label: "Access Levels", Build: func(m *Model) []fieldDef { return sysFieldsLevels(&m.configs.Server) }},
+		{Label: "Connection Limits", Build: func(m *Model) []fieldDef { return sysFieldsLimits(&m.configs.Server) }},
+		{Label: "Bot Defense", Build: func(m *Model) []fieldDef { return sysFieldsBotDefense(&m.configs.Server) }},
+		{Label: "IP Blocklist/Allowlist", Build: func(m *Model) []fieldDef { return sysFieldsIPLists(&m.configs.Server) }},
+		{Label: "New User Voting (NUV)", Build: func(m *Model) []fieldDef { return sysFieldsNUV(&m.configs.Server) }},
+	}
 }
 
 // sysFieldsBotDefense returns fields for the Bot Defense sub-screen

@@ -264,7 +264,7 @@ func (m Model) viewSysConfigMenu() string {
 
 	// Header
 	headerLine := menuBorderStyle.Render("│") +
-		menuHeaderStyle.Render(centerText("System Configuration", boxW)) +
+		menuHeaderStyle.Render(centerText(m.sysMenuTitle, boxW)) +
 		menuBorderStyle.Render("│")
 	b.WriteString(m.backdrop.segment(row, 0, padL) + headerLine +
 		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
