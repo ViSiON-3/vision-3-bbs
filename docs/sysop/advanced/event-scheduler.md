@@ -49,7 +49,7 @@ Event scheduling is configured in `configs/events.json`.
 
 #### Root Configuration
 
-- **enabled** (boolean): Enable/disable the entire scheduler
+- **enabled** (boolean): Deprecated and ignored — the scheduler always runs; enable/disable individual events instead (kept for compatibility with older versions)
 - **max_concurrent_events** (integer): Maximum number of events that can run simultaneously (default: 3)
 - **events** (array): List of event configurations
 

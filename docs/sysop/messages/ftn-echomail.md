@@ -104,8 +104,7 @@ then go to **Echomail Networking → FTN Setup Wizard**. The wizard walks you th
      mailer/inbound/outbound paths, and the hub node)
    - an enabled scheduler event that polls your hub every 15 minutes (the
      daemon only calls out when outbound mail is queued), and it enables the
-     seeded toss safety-net and nightly message-base maintenance events and
-     the scheduler itself
+     seeded toss safety-net and nightly message-base maintenance events
 
 After saving, **restart the BBS** so the new `ftn.json` settings take effect,
 then initialize the message bases and test the connection (see
