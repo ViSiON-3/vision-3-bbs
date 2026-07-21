@@ -75,6 +75,21 @@ func TestNewPreflightMissingConf(t *testing.T) {
 	}
 }
 
+func TestNewPreflightPlaceholderConf(t *testing.T) {
+	// A binkd.conf that is still the raw shipped template (placeholder
+	// /opt/vision3 paths, never rewritten by the FTN Setup Wizard) makes
+	// binkd exit 1 in a restart loop. New must refuse it up front with a
+	// clear error instead.
+	root := newTestRoot(t)
+	conf := "log /opt/vision3/data/logs/binkd.log\ninbound /opt/vision3/data/ftn/secure_in\niport 24554\n"
+	if err := os.WriteFile(filepath.Join(root, "data", "ftn", "binkd.conf"), []byte(conf), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(Config{BBSRoot: root, FTN: testFTNConfig()}); err == nil {
+		t.Fatal("expected error for template-placeholder binkd.conf")
+	}
+}
+
 func TestNewPreflightNoAddresses(t *testing.T) {
 	root := newTestRoot(t)
 	cfg := testFTNConfig()
