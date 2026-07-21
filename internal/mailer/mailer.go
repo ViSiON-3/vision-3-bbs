@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
 )
@@ -71,8 +72,17 @@ func New(cfg Config) (*Service, error) {
 	}
 
 	confPath := filepath.Join(cfg.BBSRoot, "data", "ftn", "binkd.conf")
-	if _, err := os.Stat(confPath); err != nil {
-		return nil, fmt.Errorf("binkd.conf not found (run the FTN Setup Wizard first): %w", err)
+	confData, err := os.ReadFile(confPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("binkd.conf not found (run the FTN Setup Wizard first): %w", err)
+		}
+		return nil, fmt.Errorf("reading binkd.conf: %w", err)
+	}
+	// An unconfigured template conf makes binkd exit 1 in a restart loop;
+	// refuse it up front with a clear message instead.
+	if ftn.HasPlaceholders(string(confData), cfg.BBSRoot) {
+		return nil, fmt.Errorf("binkd.conf at %s still contains template placeholders (run the FTN Setup Wizard)", confPath)
 	}
 
 	if b.Port < 1 || b.Port > 65535 {

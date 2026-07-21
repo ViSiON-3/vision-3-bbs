@@ -38,34 +38,6 @@ func sectionMarker(networkName string) string {
 	return fmt.Sprintf("# --- %s (added by FTN Setup Wizard) ---", networkName)
 }
 
-// isPlaceholderLine returns true if a line contains template placeholder data
-// that should be replaced by the wizard.
-func isPlaceholderLine(line string) bool {
-	trimmed := strings.TrimSpace(line)
-
-	// Skip comments and blank lines — they're not placeholders.
-	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-		return false
-	}
-
-	placeholders := []string{
-		"hub.example.com",
-		"/opt/vision3",
-		"21:1/123@fsxnet",
-		"3:1/456.1@fidonet",
-		"\"My BBS\"",
-		"\"Somewhere, USA\"",
-		"\"SysOp\"",
-		"PASSWORD",
-	}
-	for _, p := range placeholders {
-		if strings.Contains(trimmed, p) {
-			return true
-		}
-	}
-	return false
-}
-
 // UpdateBinkdConf reads an existing binkd.conf, strips placeholder lines,
 // injects real domain/address/node/sysname values from cfg, and writes
 // the result back. Existing wizard-managed node blocks (from prior runs)
@@ -211,7 +183,7 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 		trimmed := strings.TrimSpace(line)
 
 		// Strip placeholder lines entirely.
-		if isPlaceholderLine(line) {
+		if isPlaceholderLine(line, cfg.BBSRoot) {
 			// If this is a domain placeholder, inject real domains once.
 			if strings.HasPrefix(trimmed, "domain ") && !injectedDomains {
 				for name, zone := range cfg.Domains {
