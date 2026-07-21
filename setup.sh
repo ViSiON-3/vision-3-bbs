@@ -120,11 +120,9 @@ mkdir -p data/ftn/{in,secure_in,temp_in,temp_out,out,dupehist,dloads,dloads/pass
 mkdir -p data/infoforms/{templates,responses}
 mkdir -p configs
 
-# Copy binkd.conf template to data/ftn/ if not present
-if [ -f "templates/configs/binkd.conf" ] && [ ! -f "data/ftn/binkd.conf" ]; then
-    echo "  Creating data/ftn/binkd.conf from template..."
-    cp templates/configs/binkd.conf data/ftn/binkd.conf
-fi
+# Note: data/ftn/binkd.conf is intentionally NOT created here. The FTN Setup
+# Wizard (in the BBS config editor) generates a fully-configured binkd.conf;
+# pre-seeding the raw template left placeholder values the mailer refuses.
 mkdir -p bin
 mkdir -p scripts
 echo "Directories created."

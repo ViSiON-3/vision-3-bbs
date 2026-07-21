@@ -51,7 +51,7 @@ Restart the BBS afterward. On startup, Vision/3 launches `bin/binkd` as a superv
 
 These same fields appear in the Configuration Editor under **Server Setup** as "Binkd Mailer", "Binkd Port", "Binkd Binary", "Binkd Log Lvl", and "Export Secs". Saving from the config editor also re-syncs identity fields, link passwords, `iport`, and `loglevel` into `binkd.conf`.
 
-**Preflight checks:** before starting binkd, Vision/3 verifies the binary is present and executable, that `data/ftn/binkd.conf` exists (the wizard creates it — hub hostnames live only there, not in `ftn.json`), and that at least one configured network has an `own_address` set. If any check fails, the BBS logs a warning and continues running without the mailer — it never blocks startup.
+**Preflight checks:** before starting binkd, Vision/3 verifies the binary is present and executable, that `data/ftn/binkd.conf` exists and contains no unconfigured template placeholders (the wizard creates and fills it — hub hostnames live only there, not in `ftn.json`), and that at least one configured network has an `own_address` set. If any check fails, the BBS logs a warning and continues running without the mailer — it never blocks startup.
 
 **Inbound and outbound flow with the integrated mailer:**
 
