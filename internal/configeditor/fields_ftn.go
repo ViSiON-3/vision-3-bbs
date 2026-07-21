@@ -27,10 +27,13 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 
 	return []fieldDef{
 		{
-			Label: "Network Name", Help: "Network identifier (e.g. FSXNET, FIDONET)", Type: ftString, Col: 3, Row: 1, Width: 30,
+			Label: "Network Name", Help: "Network identifier (e.g. fsxnet, fidonet) — also the binkd domain; stored lowercase", Type: ftString, Col: 3, Row: 1, Width: 30,
 			Get: func() string { return key },
 			Set: func(val string) error {
-				val = strings.TrimSpace(val)
+				// The key is the binkd domain (addresses are <addr>@<key> and
+				// binkd.conf gets "domain <key> ..."); hubs expect lowercase,
+				// and the FTN wizard lowercases too.
+				val = strings.ToLower(strings.TrimSpace(val))
 				if val == "" {
 					return fmt.Errorf("network name cannot be empty")
 				}

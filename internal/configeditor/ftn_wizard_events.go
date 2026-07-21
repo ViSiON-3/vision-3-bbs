@@ -56,16 +56,7 @@ func wireFTNEvents(events *config.EventsConfig, netKey, hubAddress string) {
 		break
 	}
 	if !updated {
-		events.Events = append(events.Events, config.EventConfig{
-			ID:               pollID,
-			Name:             fmt.Sprintf("Poll Hub (%s)", hubAddress),
-			Schedule:         "*/15 * * * *",
-			Command:          "{BBS_ROOT}/bin/binkd",
-			Args:             []string{"-p", "-P", hubFull, "{BBS_ROOT}/data/ftn/binkd.conf"},
-			WorkingDirectory: "{BBS_ROOT}",
-			TimeoutSeconds:   300,
-			Enabled:          true,
-		})
+		events.Events = append(events.Events, newPollEvent(netKey, hubAddress))
 	}
 
 	// Enable supporting seeded events where present.
@@ -83,20 +74,37 @@ func wireFTNEvents(events *config.EventsConfig, netKey, hubAddress string) {
 	}
 }
 
-// refreshPollEvents updates each existing per-network poll event to point at
-// the network's current first-link hub address, so a hub change in the
-// Echomail Links editor propagates on save. It never creates events — only
-// the wizard does that.
+// newPollEvent builds the standard enabled hub-poll event for a network.
+func newPollEvent(netKey, hubAddress string) config.EventConfig {
+	return config.EventConfig{
+		ID:               "echomail_poll_" + netKey,
+		Name:             fmt.Sprintf("Poll Hub (%s)", hubAddress),
+		Schedule:         "*/15 * * * *",
+		Command:          "{BBS_ROOT}/bin/binkd",
+		Args:             []string{"-p", "-P", fmt.Sprintf("%s@%s", hubAddress, netKey), "{BBS_ROOT}/data/ftn/binkd.conf"},
+		WorkingDirectory: "{BBS_ROOT}",
+		TimeoutSeconds:   300,
+		Enabled:          true,
+	}
+}
+
+// refreshPollEvents keeps per-network poll events in step with the networks
+// on save: an existing event is retargeted to the first link's current hub
+// address, and a network whose first link has a hostname (a real, pollable
+// hub — including manually created networks that never went through the
+// wizard) gets an enabled poll event created if none exists.
 func refreshPollEvents(events *config.EventsConfig, networks map[string]config.FTNNetworkConfig) {
 	for netKey, nc := range networks {
 		if len(nc.Links) == 0 {
 			continue
 		}
 		hub := nc.Links[0].Address
+		found := false
 		for i := range events.Events {
 			if events.Events[i].ID != "echomail_poll_"+netKey {
 				continue
 			}
+			found = true
 			e := &events.Events[i]
 			e.Name = fmt.Sprintf("Poll Hub (%s)", hub)
 			hubFull := fmt.Sprintf("%s@%s", hub, netKey)
@@ -113,6 +121,9 @@ func refreshPollEvents(events *config.EventsConfig, networks map[string]config.F
 			if !retargeted {
 				e.Args = []string{"-p", "-P", hubFull, "{BBS_ROOT}/data/ftn/binkd.conf"}
 			}
+		}
+		if !found && nc.Links[0].HostPort() != "" {
+			events.Events = append(events.Events, newPollEvent(netKey, hub))
 		}
 	}
 }
