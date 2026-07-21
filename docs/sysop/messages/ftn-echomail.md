@@ -58,7 +58,7 @@ These same fields appear in the Configuration Editor under **Server Setup** as "
 - **Inbound:** `binkd.conf`'s `exec "v3mail toss"` hook runs automatically after each receive, so mail is tossed into JAM bases without any scheduler event.
 - **Outbound:** every `export_interval_seconds`, Vision/3 scans JAM bases and packs outbound bundles in-process for any network with `internal_tosser_enabled: true` — equivalent to running `v3mail scan` + `v3mail ftn-pack` on a timer.
 
-With the integrated mailer enabled, you generally don't need `binkd_poll`/`v3mail toss`/`v3mail scan`/`v3mail ftn-pack` scheduler events — see [event-scheduler.md](advanced/event-scheduler.md#ftn-mail-polling-binkd) for when they're still useful (e.g., forcing an out-of-cycle poll of a specific hub).
+With the integrated mailer enabled, you don't need `v3mail toss`/`v3mail scan`/`v3mail ftn-pack` scheduler events — those steps run in-process. **Hub polling is the exception**: the daemon only calls out when outbound mail is queued, so inbound mail held at your hub needs the periodic poll event the wizard creates (see below). See [event-scheduler.md](advanced/event-scheduler.md#ftn-mail-polling-binkd) for tuning it or forcing an out-of-cycle poll.
 
 ### How It Works
 

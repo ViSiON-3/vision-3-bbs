@@ -25,8 +25,9 @@ var ftnSupportEventIDs = []string{
 // (the built-in binkd daemon only calls out when outbound mail is queued, so
 // inbound needs a periodic poll), removes the template's placeholder poll,
 // enables the supporting seeded events, and turns the scheduler on. An
-// existing poll event for the network keeps its (possibly user-tuned)
-// schedule; only command, args, name, and enabled state are refreshed.
+// existing poll event for the network keeps every user-tuned field
+// (schedule, timeout, env vars, chaining); only command, args, name, and
+// enabled state are refreshed.
 func wireFTNEvents(events *config.EventsConfig, netKey, hubAddress string) {
 	pollID := "echomail_poll_" + netKey
 	hubFull := fmt.Sprintf("%s@%s", hubAddress, netKey)
@@ -41,30 +42,30 @@ func wireFTNEvents(events *config.EventsConfig, netKey, hubAddress string) {
 	}
 	events.Events = kept
 
-	poll := config.EventConfig{
-		ID:               pollID,
-		Name:             fmt.Sprintf("Poll Hub (%s)", hubAddress),
-		Schedule:         "*/15 * * * *",
-		Command:          "{BBS_ROOT}/bin/binkd",
-		Args:             []string{"-p", "-P", hubFull, "{BBS_ROOT}/data/ftn/binkd.conf"},
-		WorkingDirectory: "{BBS_ROOT}",
-		TimeoutSeconds:   300,
-		Enabled:          true,
-	}
 	updated := false
 	for i := range events.Events {
 		if events.Events[i].ID != pollID {
 			continue
 		}
-		if s := events.Events[i].Schedule; s != "" {
-			poll.Schedule = s // preserve a user-tuned cadence
-		}
-		events.Events[i] = poll
+		e := &events.Events[i]
+		e.Name = fmt.Sprintf("Poll Hub (%s)", hubAddress)
+		e.Command = "{BBS_ROOT}/bin/binkd"
+		e.Args = []string{"-p", "-P", hubFull, "{BBS_ROOT}/data/ftn/binkd.conf"}
+		e.Enabled = true
 		updated = true
 		break
 	}
 	if !updated {
-		events.Events = append(events.Events, poll)
+		events.Events = append(events.Events, config.EventConfig{
+			ID:               pollID,
+			Name:             fmt.Sprintf("Poll Hub (%s)", hubAddress),
+			Schedule:         "*/15 * * * *",
+			Command:          "{BBS_ROOT}/bin/binkd",
+			Args:             []string{"-p", "-P", hubFull, "{BBS_ROOT}/data/ftn/binkd.conf"},
+			WorkingDirectory: "{BBS_ROOT}",
+			TimeoutSeconds:   300,
+			Enabled:          true,
+		})
 	}
 
 	// Enable supporting seeded events where present.

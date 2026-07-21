@@ -106,6 +106,29 @@ func TestWireFTNEventsIdempotentAndPreservesUserSchedule(t *testing.T) {
 	}
 }
 
+func TestWireFTNEventsPreservesUserTunedPollFields(t *testing.T) {
+	ev := templateEvents()
+	wireFTNEvents(&ev, "fsxnet", "21:1/100")
+
+	// Sysop tunes timeout and adds an env var; a re-run must keep both while
+	// still refreshing the hub args.
+	poll := findEvent(ev, "echomail_poll_fsxnet")
+	poll.TimeoutSeconds = 900
+	poll.EnvironmentVars = map[string]string{"BINKD_OPT": "x"}
+	wireFTNEvents(&ev, "fsxnet", "21:9/999")
+
+	poll = findEvent(ev, "echomail_poll_fsxnet")
+	if poll.TimeoutSeconds != 900 {
+		t.Errorf("user timeout overwritten: %d", poll.TimeoutSeconds)
+	}
+	if poll.EnvironmentVars["BINKD_OPT"] != "x" {
+		t.Errorf("user env vars dropped: %v", poll.EnvironmentVars)
+	}
+	if !containsArg(poll.Args, "21:9/999@fsxnet") {
+		t.Errorf("hub arg not refreshed: %v", poll.Args)
+	}
+}
+
 func TestWireFTNEventsMissingOptionalEventsNotCreated(t *testing.T) {
 	// A trimmed events.json without the toss/maintenance entries: the wizard
 	// must not invent them, only the poll event.
