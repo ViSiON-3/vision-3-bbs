@@ -65,6 +65,68 @@ func TestSyncBinkdConfPasswordOnlyLinkDoesNotCreateNode(t *testing.T) {
 	}
 }
 
+func TestSyncBinkdConfSurvivesOversizedLines(t *testing.T) {
+	// An over-64KB line must not truncate the rewrite: content after it
+	// survives and the node line past it is still found (not re-appended).
+	content := "# " + strings.Repeat("x", 128*1024) + "\n" +
+		"node 21:4/999@fsxnet oldhub.example.org:24554 oldpwd\n" +
+		"iport 24555\n"
+	path := writeConf(t, content)
+	links := map[string]BinkdLinkSync{
+		"21:4/999@fsxnet": {SessionPwd: "newpwd", HostPort: "pointhub.example.org:24556"},
+	}
+	if err := SyncBinkdConf(path, BinkdIdentity{}, links); err != nil {
+		t.Fatalf("SyncBinkdConf: %v", err)
+	}
+	got := readConf(t, path)
+	if !strings.Contains(got, "iport 24555") {
+		t.Errorf("content after oversized line truncated:\n%.200s...", got)
+	}
+	if n := strings.Count(got, "node 21:4/999@fsxnet"); n != 1 {
+		t.Errorf("want exactly 1 node line, got %d", n)
+	}
+	if !strings.Contains(got, "pointhub.example.org:24556 newpwd") {
+		t.Errorf("node line not updated:\n%s", got)
+	}
+}
+
+func TestRegenerateBinkdConfFromConfig(t *testing.T) {
+	// Deleting binkd.conf must not be a dead end: everything needed to
+	// rebuild it lives in ftn.json + server config.
+	dir := t.TempDir()
+	confPath := dir + "/binkd.conf"
+	cfg := BinkdConfig{
+		BBSRoot:   "/real/root",
+		BoardName: "Test Board",
+		SysopName: "Test Sysop",
+		Location:  "Testville",
+		Domains:   map[string]int{"fsxnet": 21},
+		Addresses: []string{"21:4/999@fsxnet"},
+	}
+	nodes := []BinkdNode{{
+		Address: "21:4/158@fsxnet", Hostname: "pointhub.example.org:24556",
+		SessionPwd: "s3cret", NetworkName: "fsxnet",
+	}}
+	if err := RegenerateBinkdConf(confPath, cfg, nodes); err != nil {
+		t.Fatalf("RegenerateBinkdConf: %v", err)
+	}
+	got := readConf(t, confPath)
+	for _, want := range []string{
+		"domain fsxnet /real/root/data/ftn/out 21",
+		"address 21:4/999@fsxnet",
+		"sysname \"Test Board\"",
+		"node 21:4/158@fsxnet pointhub.example.org:24556 s3cret",
+		"log /real/root/data/logs/binkd.log",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("regenerated conf missing %q:\n%s", want, got)
+		}
+	}
+	if HasPlaceholders(got, "/real/root") {
+		t.Error("regenerated conf must not contain template placeholders")
+	}
+}
+
 func TestSyncBinkdConfNoChangeLeavesFileUntouched(t *testing.T) {
 	content := "iport 24554\nnode 21:4/999@fsxnet pointhub.example.org:24556 s3cret\n"
 	path := writeConf(t, content)

@@ -113,7 +113,9 @@ then initialize the message bases and test the connection (see
 > Identity fields and link details are re-synced to `binkd.conf` whenever you
 > save from the config editor: each link's hostname, port, and session password
 > (Echomail Links is the source of truth) update or create the matching `node`
-> line, and the network's poll event follows a changed hub address.
+> line, and the network's poll event follows a changed hub address. If
+> `binkd.conf` has been deleted, saving from the config editor regenerates a
+> complete file from your configuration — deleting it is a supported reset.
 
 For networks **not** in the registry — or to understand exactly what the wizard
 configures — follow the manual steps below.

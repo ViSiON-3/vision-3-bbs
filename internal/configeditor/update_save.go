@@ -2,6 +2,8 @@ package configeditor
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -58,6 +60,9 @@ func (m *Model) saveAll() {
 	var binkdSyncErr error
 	{
 		bbsRoot := filepath.Join(m.configPath, "..")
+		if abs, absErr := filepath.Abs(bbsRoot); absErr == nil {
+			bbsRoot = abs // regenerated conf paths must be absolute
+		}
 		binkdPath := filepath.Join(bbsRoot, "data", "ftn", "binkd.conf")
 		identity := ftn.BinkdIdentity{
 			BoardName: m.configs.Server.BoardName,
@@ -74,7 +79,21 @@ func (m *Model) saveAll() {
 				}
 			}
 		}
-		binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
+		// A deleted binkd.conf is regenerated from configuration (the wizard
+		// refuses to re-run for an existing network, so this is the only
+		// recovery path); the syncs below then apply port/loglevel.
+		if _, statErr := os.Stat(binkdPath); os.IsNotExist(statErr) {
+			if regenCfg, nodes, ok := buildBinkdRegen(m.configs.FTN, m.configs.Server, bbsRoot); ok {
+				if err := ftn.RegenerateBinkdConf(binkdPath, regenCfg, nodes); err != nil {
+					binkdSyncErr = err
+				} else {
+					slog.Info("binkd.conf regenerated from configuration", "path", binkdPath)
+				}
+			}
+		}
+		if binkdSyncErr == nil {
+			binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
+		}
 		if binkdSyncErr == nil {
 			binkdSyncErr = ftn.SyncBinkdSettings(binkdPath, m.configs.FTN.Binkd.Port, m.configs.FTN.Binkd.LogLevel)
 		}

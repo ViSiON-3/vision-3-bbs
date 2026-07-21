@@ -1,7 +1,6 @@
 package ftn
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,9 +97,8 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 
 // nodeExists checks whether a node address is already defined in the config.
 func nodeExists(content, address string) bool {
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	for _, l := range confLines(content) {
+		line := strings.TrimSpace(l)
 		if strings.HasPrefix(line, "node ") {
 			fields := strings.Fields(line)
 			if len(fields) >= 2 && fields[1] == address {
@@ -345,10 +343,10 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 	var out strings.Builder
 	changed := false
 	seenNodes := make(map[string]bool)
-	scanner := bufio.NewScanner(strings.NewReader(string(existing)))
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	// confLines, not bufio.Scanner: an over-64KB line would stop a scanner
+	// early and the append path below would then persist a truncated file.
+	for _, line := range confLines(string(existing)) {
 		trimmed := strings.TrimSpace(line)
 
 		// Sync sysname.
@@ -453,10 +451,8 @@ func SyncBinkdSettings(confPath string, port, logLevel int) error {
 
 	var out strings.Builder
 	changed := false
-	scanner := bufio.NewScanner(strings.NewReader(string(existing)))
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range confLines(string(existing)) {
 		trimmed := strings.TrimSpace(line)
 
 		if strings.HasPrefix(trimmed, "iport ") && port > 0 {
