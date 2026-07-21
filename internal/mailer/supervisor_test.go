@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,56 @@ func TestSupervisorStartsAndStops(t *testing.T) {
 	}
 	if err := svc.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestRunOnceReportsStderrOnCrash(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("supervisor tests use shell scripts; skipped on windows")
+	}
+	root := newTestRoot(t)
+	script := "#!/bin/sh\necho 'config error: boom' >&2\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(root, "bin", "binkd"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := testFTNConfig()
+	cfg.Networks = map[string]config.FTNNetworkConfig{
+		"fsxnet": {OwnAddress: "21:4/158"},
+	}
+	svc, err := New(Config{BBSRoot: root, FTN: cfg})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	runErr := svc.runOnce(context.Background())
+	if runErr == nil {
+		t.Fatal("expected error from crashing binkd")
+	}
+	if !strings.Contains(runErr.Error(), "config error: boom") {
+		t.Fatalf("error must include binkd's stderr, got: %v", runErr)
+	}
+}
+
+func TestSuperviseLoopCreatesRuntimeDirs(t *testing.T) {
+	svc, pidFile := newSupervisedService(t, true)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { svc.Start(ctx); close(done) }()
+
+	waitForLines(t, pidFile, 1)
+	cancel()
+	<-done
+
+	for _, d := range []string{
+		filepath.Join(svc.cfg.BBSRoot, "data", "logs"),
+		filepath.Join(svc.cfg.BBSRoot, "data", "ftn", "in"),
+		filepath.Join(svc.cfg.BBSRoot, "data", "ftn", "secure_in"),
+		filepath.Join(svc.cfg.BBSRoot, "data", "ftn", "out"),
+	} {
+		info, err := os.Stat(d)
+		if err != nil || !info.IsDir() {
+			t.Errorf("runtime dir %s must exist before binkd launch: %v", d, err)
+		}
 	}
 }
 
