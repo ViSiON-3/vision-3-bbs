@@ -285,14 +285,14 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			},
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
-				if val == "" {
-					linkPtr.Port = 0
+				if val == "" || val == "0" {
+					linkPtr.Port = 0 // unset: HostPort() defaults to 24554
 					save()
 					return nil
 				}
 				p, err := strconv.Atoi(val)
 				if err != nil || p < 1 || p > 65535 {
-					return fmt.Errorf("port must be 1-65535")
+					return fmt.Errorf("port must be 1-65535 (or 0/empty for default)")
 				}
 				linkPtr.Port = p
 				save()

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -418,10 +419,16 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 
 	// Append node lines for configured links that have a hostname but no
 	// line yet (new link, or the link's address was changed in the TUI).
+	// Sorted so repeated syncs produce identical files.
+	var missing []string
 	for addr, link := range links {
-		if seenNodes[addr] || link.HostPort == "" {
-			continue
+		if !seenNodes[addr] && link.HostPort != "" {
+			missing = append(missing, addr)
 		}
+	}
+	sort.Strings(missing)
+	for _, addr := range missing {
+		link := links[addr]
 		pwd := link.SessionPwd
 		if pwd == "" {
 			pwd = "-"

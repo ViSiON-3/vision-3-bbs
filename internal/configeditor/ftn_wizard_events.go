@@ -99,7 +99,20 @@ func refreshPollEvents(events *config.EventsConfig, networks map[string]config.F
 			}
 			e := &events.Events[i]
 			e.Name = fmt.Sprintf("Poll Hub (%s)", hub)
-			e.Args = []string{"-p", "-P", fmt.Sprintf("%s@%s", hub, netKey), "{BBS_ROOT}/data/ftn/binkd.conf"}
+			hubFull := fmt.Sprintf("%s@%s", hub, netKey)
+			// Retarget only the -P value so sysop-added flags survive; if
+			// the args no longer contain -P, rebuild the standard set.
+			retargeted := false
+			for j := 0; j < len(e.Args)-1; j++ {
+				if e.Args[j] == "-P" {
+					e.Args[j+1] = hubFull
+					retargeted = true
+					break
+				}
+			}
+			if !retargeted {
+				e.Args = []string{"-p", "-P", hubFull, "{BBS_ROOT}/data/ftn/binkd.conf"}
+			}
 		}
 	}
 }

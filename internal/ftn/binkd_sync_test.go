@@ -127,6 +127,27 @@ func TestRegenerateBinkdConfFromConfig(t *testing.T) {
 	}
 }
 
+func TestSyncBinkdConfAppendsMissingNodesDeterministically(t *testing.T) {
+	// Multiple appended node lines must come out in a stable (sorted) order
+	// so repeated syncs don't churn the file.
+	links := map[string]BinkdLinkSync{
+		"21:4/999@fsxnet": {SessionPwd: "a", HostPort: "h1:24554"},
+		"1:2/3@othernet":  {SessionPwd: "b", HostPort: "h2:24554"},
+	}
+	for i := 0; i < 5; i++ {
+		path := writeConf(t, "iport 24554\n")
+		if err := SyncBinkdConf(path, BinkdIdentity{}, links); err != nil {
+			t.Fatalf("SyncBinkdConf: %v", err)
+		}
+		got := readConf(t, path)
+		first := strings.Index(got, "node 1:2/3@othernet")
+		second := strings.Index(got, "node 21:4/999@fsxnet")
+		if first == -1 || second == -1 || first > second {
+			t.Fatalf("appended nodes not in stable sorted order:\n%s", got)
+		}
+	}
+}
+
 func TestSyncBinkdConfNoChangeLeavesFileUntouched(t *testing.T) {
 	content := "iport 24554\nnode 21:4/999@fsxnet pointhub.example.org:24556 s3cret\n"
 	path := writeConf(t, content)
