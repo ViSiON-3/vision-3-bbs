@@ -19,7 +19,7 @@ func TestUpdateBinkdConfKeepsRealRootLinesMatchingPlaceholder(t *testing.T) {
 	cfg := BinkdConfig{
 		BBSRoot:   "/opt/vision3",
 		Domains:   map[string]int{"fsxnet": 21},
-		Addresses: []string{"21:4/158@fsxnet"},
+		Addresses: []string{"21:4/999@fsxnet"},
 		Node: BinkdNode{
 			Address: "21:1/100@fsxnet", Hostname: "hub.fsxnet.nz:24556",
 			SessionPwd: "secret", NetworkName: "fsxnet",
@@ -34,6 +34,85 @@ func TestUpdateBinkdConfKeepsRealRootLinesMatchingPlaceholder(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "exec \"/opt/vision3/custom.sh\" *.pkt") {
 		t.Fatalf("custom line under the real BBS root was stripped:\n%s", got)
+	}
+}
+
+func TestUpdateBinkdConfNoDuplicateDomainsWhenRootMatchesPlaceholder(t *testing.T) {
+	// Regression: on an install whose real root is /opt/vision3 (the default),
+	// the template's domain lines are exempt from placeholder stripping, so
+	// the wizard must not inject a second "domain fsxnet" (binkd aborts on
+	// "duplicate domain") and must not duplicate kept address lines either.
+	dir := t.TempDir()
+	confPath := filepath.Join(dir, "binkd.conf")
+	existing := `domain fsxnet /opt/vision3/data/ftn/out 21
+domain fidonet /opt/vision3/data/ftn/out 3
+address 21:4/999@fsxnet
+sysname "My BBS"
+iport 24554
+`
+	if err := os.WriteFile(confPath, []byte(existing), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := BinkdConfig{
+		BBSRoot:   "/opt/vision3",
+		BoardName: "Real Board",
+		Domains:   map[string]int{"fsxnet": 21},
+		Addresses: []string{"21:4/999@fsxnet"},
+		Node: BinkdNode{
+			Address: "21:1/100@fsxnet", Hostname: "hub.fsxnet.nz:24556",
+			SessionPwd: "secret", NetworkName: "fsxnet",
+		},
+	}
+	if err := UpdateBinkdConf(confPath, cfg); err != nil {
+		t.Fatalf("UpdateBinkdConf: %v", err)
+	}
+	got, err := os.ReadFile(confPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(got), "domain fsxnet "); n != 1 {
+		t.Errorf("want exactly 1 'domain fsxnet' line, got %d:\n%s", n, got)
+	}
+	if n := strings.Count(string(got), "address 21:4/999@fsxnet"); n != 1 {
+		t.Errorf("want exactly 1 real address line, got %d:\n%s", n, got)
+	}
+	if !strings.Contains(string(got), "node 21:1/100@fsxnet hub.fsxnet.nz:24556 secret") {
+		t.Errorf("hub node line missing:\n%s", got)
+	}
+}
+
+func TestUpdateBinkdConfSurvivesOversizedLines(t *testing.T) {
+	// A pathological very long line must not silently truncate the rewrite:
+	// lines after it must survive, and dedup must still see them.
+	dir := t.TempDir()
+	confPath := filepath.Join(dir, "binkd.conf")
+	existing := "# " + strings.Repeat("x", 128*1024) + "\n" +
+		"domain fsxnet /real/root/data/ftn/out 21\n" +
+		"iport 24555\n"
+	if err := os.WriteFile(confPath, []byte(existing), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := BinkdConfig{
+		BBSRoot:   "/real/root",
+		Domains:   map[string]int{"fsxnet": 21},
+		Addresses: []string{"21:4/999@fsxnet"},
+		Node: BinkdNode{
+			Address: "21:1/100@fsxnet", Hostname: "hub.fsxnet.nz:24556",
+			SessionPwd: "secret", NetworkName: "fsxnet",
+		},
+	}
+	if err := UpdateBinkdConf(confPath, cfg); err != nil {
+		t.Fatalf("UpdateBinkdConf: %v", err)
+	}
+	got, err := os.ReadFile(confPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "iport 24555") {
+		t.Errorf("line after oversized line was dropped:\n%.300s...", got)
+	}
+	if n := strings.Count(string(got), "domain fsxnet "); n != 1 {
+		t.Errorf("want exactly 1 'domain fsxnet' line, got %d", n)
 	}
 }
 
@@ -54,7 +133,7 @@ func TestHasPlaceholdersCleanConf(t *testing.T) {
 sysname "My Board"
 log /bbs/data/logs/binkd.log
 inbound /bbs/data/ftn/secure_in
-node 21:4/158@fsxnet agency.bbs.nz:24556 secret
+node 21:4/999@fsxnet agency.bbs.nz:24556 secret
 `
 	if HasPlaceholders(clean, "/bbs") {
 		t.Fatal("wizard-generated conf must not be flagged")
