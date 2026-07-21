@@ -1703,15 +1703,19 @@ func main() {
 	// Load event scheduler configuration
 	eventsConfig, eventsErr := config.LoadEventsConfig(rootConfigPath)
 	if eventsErr != nil {
-		slog.Warn("failed to load events config", "error", eventsErr)
-		eventsConfig = config.EventsConfig{Enabled: false}
+		slog.Warn("failed to load events config, scheduler not started", "error", eventsErr)
 	}
 
-	// Start event scheduler if enabled
+	// The scheduler always runs; individual events are enabled/disabled per
+	// entry. The legacy global "enabled" flag is ignored (it silently kept
+	// TUI-enabled events from ever firing).
 	var eventScheduler *scheduler.Scheduler
 	var schedulerCtx context.Context
 	var schedulerCancel context.CancelFunc
-	if eventsConfig.Enabled {
+	if eventsErr == nil {
+		if !eventsConfig.Enabled {
+			slog.Info("events.json global 'enabled' flag is deprecated and ignored; disable individual events instead")
+		}
 		historyPath := filepath.Join(dataPath, "logs", "event_history.json")
 		eventScheduler = scheduler.NewScheduler(eventsConfig, historyPath)
 		schedulerCtx, schedulerCancel = context.WithCancel(context.Background())
@@ -1724,8 +1728,6 @@ func main() {
 
 		go eventScheduler.Start(schedulerCtx)
 		slog.Info("event scheduler started", "count", len(eventsConfig.Events))
-	} else {
-		slog.Info("event scheduler disabled")
 	}
 
 	// Load V3Net configuration from v3net.json (separate from main config, like ftn.json).

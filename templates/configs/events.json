@@ -1,6 +1,6 @@
 {
-  "_comment": "Event Scheduler Configuration - IMPORTANT: Update command paths and arguments for your system. {BBS_ROOT} will be replaced with the BBS installation directory at runtime.",
-  "enabled": false,
+  "_comment": "Event Scheduler Configuration - IMPORTANT: Update command paths and arguments for your system. {BBS_ROOT} will be replaced with the BBS installation directory at runtime. The top-level enabled flag is deprecated and ignored; enable/disable individual events instead.",
+  "enabled": true,
   "max_concurrent_events": 3,
   "events": [
     {

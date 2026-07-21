@@ -302,8 +302,8 @@ func TestLoadEventsConfig_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Enabled {
-		t.Error("expected events disabled by default")
+	if !result.Enabled {
+		t.Error("expected events enabled by default (global flag is deprecated; events disable individually)")
 	}
 	if result.MaxConcurrentEvents != 3 {
 		t.Errorf("expected default max concurrent 3, got %d", result.MaxConcurrentEvents)

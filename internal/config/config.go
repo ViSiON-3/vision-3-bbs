@@ -1108,6 +1108,9 @@ type EventConfig struct {
 
 // EventsConfig is the root configuration for the event scheduler
 type EventsConfig struct {
+	// Enabled is deprecated and ignored: the scheduler always runs, and
+	// events are enabled/disabled individually. The field is kept so older
+	// binaries reading the same events.json still start their scheduler.
 	Enabled             bool          `json:"enabled"`
 	MaxConcurrentEvents int           `json:"max_concurrent_events"`
 	Events              []EventConfig `json:"events"`
@@ -1398,7 +1401,7 @@ func LoadEventsConfig(configPath string) (EventsConfig, error) {
 	slog.Info("loading event scheduler configuration", "path", filePath)
 
 	defaultConfig := EventsConfig{
-		Enabled:             false,
+		Enabled:             true,
 		MaxConcurrentEvents: 3,
 		Events:              []EventConfig{},
 	}
@@ -1406,7 +1409,7 @@ func LoadEventsConfig(configPath string) (EventsConfig, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			slog.Info("events.json not found, event scheduler disabled", "path", filePath)
+			slog.Info("events.json not found, no events to schedule", "path", filePath)
 			return defaultConfig, nil
 		}
 		return defaultConfig, fmt.Errorf("failed to read events config file %s: %w", filePath, err)
