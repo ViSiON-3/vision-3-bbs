@@ -174,6 +174,30 @@ percents
 // rewriteBinkdConf filters an existing binkd.conf, replacing placeholder
 // lines with real values and injecting missing domain/address lines.
 func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, outPath, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location string) {
+	// Collect domain names and addresses on lines that will be kept, so
+	// injection never duplicates them — binkd aborts on "duplicate domain".
+	// This matters when the real BBS root matches a placeholder path (e.g. a
+	// default /opt/vision3 install): the template's domain lines are then
+	// legitimate-looking and are kept rather than stripped.
+	kept := keptDirectives(content, cfg.BBSRoot)
+
+	writeDomains := func() {
+		for name, zone := range cfg.Domains {
+			if kept["domain "+name] {
+				continue
+			}
+			fmt.Fprintf(out, "domain %s %s %d\n", name, outPath, zone)
+		}
+	}
+	writeAddresses := func() {
+		for _, addr := range cfg.Addresses {
+			if kept["address "+addr] {
+				continue
+			}
+			fmt.Fprintf(out, "address %s\n", addr)
+		}
+	}
+
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	injectedDomains := false
 	injectedAddresses := false
@@ -186,16 +210,12 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 		if isPlaceholderLine(line, cfg.BBSRoot) {
 			// If this is a domain placeholder, inject real domains once.
 			if strings.HasPrefix(trimmed, "domain ") && !injectedDomains {
-				for name, zone := range cfg.Domains {
-					fmt.Fprintf(out, "domain %s %s %d\n", name, outPath, zone)
-				}
+				writeDomains()
 				injectedDomains = true
 			}
 			// If this is an address placeholder, inject real addresses once.
 			if strings.HasPrefix(trimmed, "address ") && !injectedAddresses {
-				for _, addr := range cfg.Addresses {
-					fmt.Fprintf(out, "address %s\n", addr)
-				}
+				writeAddresses()
 				injectedAddresses = true
 			}
 			// Replace sysname/sysop/log/inbound/exec placeholders.
@@ -236,19 +256,53 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 		out.WriteByte('\n')
 	}
 
-	// If we never hit a domain/address placeholder, inject at the end.
-	if !injectedDomains {
+	// If we never hit a domain/address placeholder, inject at the end —
+	// but only what isn't already present in kept lines.
+	if !injectedDomains && anyMissing(kept, "domain ", domainNames(cfg.Domains)) {
 		out.WriteString("\n#\n# Domains:\n#\n")
-		for name, zone := range cfg.Domains {
-			fmt.Fprintf(out, "domain %s %s %d\n", name, outPath, zone)
-		}
+		writeDomains()
 	}
-	if !injectedAddresses {
+	if !injectedAddresses && anyMissing(kept, "address ", cfg.Addresses) {
 		out.WriteString("\n#\n# Your Addresses:\n#\n")
-		for _, addr := range cfg.Addresses {
-			fmt.Fprintf(out, "address %s\n", addr)
+		writeAddresses()
+	}
+}
+
+// keptDirectives returns a set of "domain <name>" and "address <addr>" keys
+// for non-placeholder lines in content — directives that a rewrite will keep.
+func keptDirectives(content, bbsRoot string) map[string]bool {
+	kept := make(map[string]bool)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if isPlaceholderLine(line, bbsRoot) {
+			continue
+		}
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) >= 2 && (fields[0] == "domain" || fields[0] == "address") {
+			kept[fields[0]+" "+fields[1]] = true
 		}
 	}
+	return kept
+}
+
+// domainNames returns the keys of a domain->zone map.
+func domainNames(domains map[string]int) []string {
+	names := make([]string, 0, len(domains))
+	for name := range domains {
+		names = append(names, name)
+	}
+	return names
+}
+
+// anyMissing reports whether any of names is absent from kept under prefix.
+func anyMissing(kept map[string]bool, prefix string, names []string) bool {
+	for _, n := range names {
+		if !kept[prefix+n] {
+			return true
+		}
+	}
+	return false
 }
 
 // BinkdIdentity holds BBS identity fields synced to binkd.conf.
