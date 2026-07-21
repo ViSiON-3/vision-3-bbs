@@ -198,12 +198,12 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 		}
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(content))
 	injectedDomains := false
 	injectedAddresses := false
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	// strings.Split rather than bufio.Scanner: a pathological over-64KB line
+	// would make the scanner stop early and silently drop the rest of the file.
+	for _, line := range confLines(content) {
 		trimmed := strings.TrimSpace(line)
 
 		// Strip placeholder lines entirely.
@@ -272,9 +272,7 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 // for non-placeholder lines in content — directives that a rewrite will keep.
 func keptDirectives(content, bbsRoot string) map[string]bool {
 	kept := make(map[string]bool)
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range confLines(content) {
 		if isPlaceholderLine(line, bbsRoot) {
 			continue
 		}
@@ -284,6 +282,12 @@ func keptDirectives(content, bbsRoot string) map[string]bool {
 		}
 	}
 	return kept
+}
+
+// confLines splits conf content into lines without bufio.Scanner's 64KB
+// per-line limit; a trailing newline does not yield a spurious empty line.
+func confLines(content string) []string {
+	return strings.Split(strings.TrimSuffix(content, "\n"), "\n")
 }
 
 // domainNames returns the keys of a domain->zone map.
