@@ -2,6 +2,8 @@ package configeditor
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -47,6 +49,9 @@ func (m *Model) saveAll() {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
 	}
+	// Follow hub changes: existing per-network poll events track the
+	// network's first link address.
+	refreshPollEvents(&m.configs.Events, m.configs.FTN.Networks)
 	if err := saveEventsConfig(m.configPath, m.configs.Events); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
@@ -55,20 +60,40 @@ func (m *Model) saveAll() {
 	var binkdSyncErr error
 	{
 		bbsRoot := filepath.Join(m.configPath, "..")
+		if abs, absErr := filepath.Abs(bbsRoot); absErr == nil {
+			bbsRoot = abs // regenerated conf paths must be absolute
+		}
 		binkdPath := filepath.Join(bbsRoot, "data", "ftn", "binkd.conf")
 		identity := ftn.BinkdIdentity{
 			BoardName: m.configs.Server.BoardName,
 			SysopName: m.configs.Server.SysOpName,
 			Location:  m.configs.Server.BBSLocation,
 		}
-		links := make(map[string]string)
+		links := make(map[string]ftn.BinkdLinkSync)
 		for netKey, nc := range m.configs.FTN.Networks {
 			for _, lnk := range nc.Links {
 				addr := fmt.Sprintf("%s@%s", lnk.Address, netKey)
-				links[addr] = lnk.SessionPassword
+				links[addr] = ftn.BinkdLinkSync{
+					SessionPwd: lnk.SessionPassword,
+					HostPort:   lnk.HostPort(),
+				}
 			}
 		}
-		binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
+		// A deleted binkd.conf is regenerated from configuration (the wizard
+		// refuses to re-run for an existing network, so this is the only
+		// recovery path); the syncs below then apply port/loglevel.
+		if _, statErr := os.Stat(binkdPath); os.IsNotExist(statErr) {
+			if regenCfg, nodes, ok := buildBinkdRegen(m.configs.FTN, m.configs.Server, bbsRoot); ok {
+				if err := ftn.RegenerateBinkdConf(binkdPath, regenCfg, nodes); err != nil {
+					binkdSyncErr = err
+				} else {
+					slog.Info("binkd.conf regenerated from configuration", "path", binkdPath)
+				}
+			}
+		}
+		if binkdSyncErr == nil {
+			binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
+		}
 		if binkdSyncErr == nil {
 			binkdSyncErr = ftn.SyncBinkdSettings(binkdPath, m.configs.FTN.Binkd.Port, m.configs.FTN.Binkd.LogLevel)
 		}

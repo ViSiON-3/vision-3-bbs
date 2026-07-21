@@ -129,6 +129,59 @@ func TestWireFTNEventsPreservesUserTunedPollFields(t *testing.T) {
 	}
 }
 
+func TestRefreshPollEventsFollowsHubChange(t *testing.T) {
+	// Hub change scenario: the sysop edits the fsxnet link's address in the
+	// TUI; on save the existing poll event must follow, but no event is
+	// created for networks without one.
+	ev := templateEvents()
+	wireFTNEvents(&ev, "fsxnet", "21:4/100")
+
+	nets := map[string]config.FTNNetworkConfig{
+		"fsxnet":   {Links: []config.FTNLinkConfig{{Address: "21:4/158"}}},
+		"othernet": {Links: []config.FTNLinkConfig{{Address: "1:2/3"}}},
+	}
+	refreshPollEvents(&ev, nets)
+
+	poll := findEvent(ev, "echomail_poll_fsxnet")
+	if poll == nil {
+		t.Fatal("poll event missing")
+	}
+	if !containsArg(poll.Args, "21:4/158@fsxnet") {
+		t.Errorf("poll -P arg not refreshed: %v", poll.Args)
+	}
+	if poll.Name != "Poll Hub (21:4/158)" {
+		t.Errorf("poll name not refreshed: %q", poll.Name)
+	}
+	if findEvent(ev, "echomail_poll_othernet") != nil {
+		t.Error("refresh must not create events for networks without one")
+	}
+}
+
+func TestRefreshPollEventsPreservesCustomArgs(t *testing.T) {
+	// A sysop may add extra binkd flags to the poll event; refresh must only
+	// retarget the -P value (and name), not clobber the rest of the args.
+	ev := templateEvents()
+	wireFTNEvents(&ev, "fsxnet", "21:4/100")
+	poll := findEvent(ev, "echomail_poll_fsxnet")
+	poll.Args = []string{"-p", "-q", "-P", "21:4/100@fsxnet", "{BBS_ROOT}/data/ftn/binkd.conf"}
+
+	nets := map[string]config.FTNNetworkConfig{
+		"fsxnet": {Links: []config.FTNLinkConfig{{Address: "21:4/158"}}},
+	}
+	refreshPollEvents(&ev, nets)
+
+	poll = findEvent(ev, "echomail_poll_fsxnet")
+	want := []string{"-p", "-q", "-P", "21:4/158@fsxnet", "{BBS_ROOT}/data/ftn/binkd.conf"}
+	if len(poll.Args) != len(want) {
+		t.Fatalf("args = %v, want %v", poll.Args, want)
+	}
+	for i := range want {
+		if poll.Args[i] != want[i] {
+			t.Fatalf("args = %v, want %v", poll.Args, want)
+		}
+	}
+}
+
 func TestWireFTNEventsMissingOptionalEventsNotCreated(t *testing.T) {
 	// A trimmed events.json without the toss/maintenance entries: the wizard
 	// must not invent them, only the poll event.
