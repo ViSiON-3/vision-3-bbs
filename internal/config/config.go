@@ -809,6 +809,21 @@ type FTNLinkConfig struct {
 	AreafixPassword string `json:"areafix_password,omitempty"` // Password for AreaFix netmail (subject line)
 	Name            string `json:"name"`                       // Human-readable name
 	Flavour         string `json:"flavour,omitempty"`          // Delivery flavour: Normal (default), Crash, Hold, Direct
+	Hostname        string `json:"hostname,omitempty"`         // Hub BinkP hostname; source of truth for the binkd.conf node line
+	Port            int    `json:"port,omitempty"`             // Hub BinkP port (default 24554 when Hostname is set)
+}
+
+// HostPort returns "hostname:port" for the link, defaulting the port to
+// 24554. Empty when no hostname is configured.
+func (c FTNLinkConfig) HostPort() string {
+	if c.Hostname == "" {
+		return ""
+	}
+	port := c.Port
+	if port <= 0 {
+		port = 24554
+	}
+	return fmt.Sprintf("%s:%d", c.Hostname, port)
 }
 
 // UnmarshalJSON supports backward compatibility: "password" is read into PacketPassword
@@ -821,6 +836,8 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 		AreafixPassword string  `json:"areafix_password,omitempty"`
 		Name            string  `json:"name"`
 		Flavour         string  `json:"flavour,omitempty"`
+		Hostname        string  `json:"hostname,omitempty"`
+		Port            int     `json:"port,omitempty"`
 		LegacyPassword  string  `json:"password"`
 	}
 	if err := json.Unmarshal(data, &r); err != nil {
@@ -831,6 +848,8 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 	c.AreafixPassword = r.AreafixPassword
 	c.Name = r.Name
 	c.Flavour = r.Flavour
+	c.Hostname = r.Hostname
+	c.Port = r.Port
 	if r.PacketPassword != nil {
 		c.PacketPassword = *r.PacketPassword
 	} else if r.LegacyPassword != "" {

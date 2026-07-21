@@ -316,13 +316,24 @@ type BinkdIdentity struct {
 	Location  string // location
 }
 
-// SyncBinkdConf updates binkd.conf to reflect the current FTN link passwords
-// and BBS identity fields (sysname, sysop, location). Only lines that differ
-// from the current config are rewritten; if nothing changed the file is not
-// touched. Called from saveAll so TUI edits are reflected automatically.
+// BinkdLinkSync carries the per-link values synced into a binkd.conf node
+// line. HostPort is "hostname:port"; when empty only the password of an
+// existing line is synced and no new line is created (host unknown).
+type BinkdLinkSync struct {
+	SessionPwd string
+	HostPort   string
+}
+
+// SyncBinkdConf updates binkd.conf to reflect the current FTN links and BBS
+// identity fields (sysname, sysop, location). Node lines are upserted from
+// links: an existing line (matched by address) gets its hostname and password
+// refreshed, and a configured link with a hostname but no node line has one
+// appended — so a hub change in the TUI fully propagates. Only lines that
+// differ are rewritten; if nothing changed the file is not touched. Called
+// from saveAll so TUI edits are reflected automatically.
 //
-// links maps "address@network" (e.g. "21:1/100@fsxnet") to the session password.
-func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]string) error {
+// links maps "address@network" (e.g. "21:1/100@fsxnet") to its sync values.
+func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]BinkdLinkSync) error {
 	existing, err := os.ReadFile(confPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -333,6 +344,7 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]str
 
 	var out strings.Builder
 	changed := false
+	seenNodes := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(existing)))
 
 	for scanner.Scan() {
@@ -372,17 +384,27 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]str
 			}
 		}
 
-		// Sync node session passwords.
+		// Sync node hostname and session password.
 		if strings.HasPrefix(trimmed, "node ") {
 			fields := strings.Fields(trimmed)
 			if len(fields) >= 4 {
 				addr := fields[1] // e.g. "21:1/100@fsxnet"
-				if newPwd, ok := links[addr]; ok {
+				if link, ok := links[addr]; ok {
+					seenNodes[addr] = true
+					newPwd := link.SessionPwd
 					if newPwd == "" {
 						newPwd = "-"
 					}
+					lineChanged := false
+					if link.HostPort != "" && fields[2] != link.HostPort {
+						fields[2] = link.HostPort
+						lineChanged = true
+					}
 					if fields[3] != newPwd {
 						fields[3] = newPwd
+						lineChanged = true
+					}
+					if lineChanged {
 						out.WriteString(strings.Join(fields, " "))
 						out.WriteByte('\n')
 						changed = true
@@ -394,6 +416,20 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]str
 
 		out.WriteString(line)
 		out.WriteByte('\n')
+	}
+
+	// Append node lines for configured links that have a hostname but no
+	// line yet (new link, or the link's address was changed in the TUI).
+	for addr, link := range links {
+		if seenNodes[addr] || link.HostPort == "" {
+			continue
+		}
+		pwd := link.SessionPwd
+		if pwd == "" {
+			pwd = "-"
+		}
+		fmt.Fprintf(&out, "node %s %s %s\n", addr, link.HostPort, pwd)
+		changed = true
 	}
 
 	if !changed {

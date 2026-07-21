@@ -60,6 +60,8 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		AreafixPassword: w.areafixPassword,
 		Name:            w.networkName + " Hub",
 		Flavour:         "Crash",
+		Hostname:        w.hubHostname,
+		Port:            w.hubPort,
 	}
 
 	m.configs.FTN.Networks[netKey] = config.FTNNetworkConfig{

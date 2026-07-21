@@ -271,7 +271,36 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			Set: func(val string) error { linkPtr.Name = val; save(); return nil },
 		},
 		{
-			Label: "Flavour", Help: "Delivery flavour: Normal, Crash, Hold, Direct", Type: ftLookup, Col: 3, Row: 7, Width: 10,
+			Label: "Hostname", Help: "Hub BinkP hostname; synced to the binkd.conf node line on save", Type: ftString, Col: 3, Row: 7, Width: 40,
+			Get: func() string { return linkPtr.Hostname },
+			Set: func(val string) error { linkPtr.Hostname = strings.TrimSpace(val); save(); return nil },
+		},
+		{
+			Label: "Port", Help: "Hub BinkP port (default 24554)", Type: ftInteger, Col: 3, Row: 8, Width: 6, Min: 0, Max: 65535,
+			Get: func() string {
+				if linkPtr.Port == 0 {
+					return ""
+				}
+				return strconv.Itoa(linkPtr.Port)
+			},
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if val == "" {
+					linkPtr.Port = 0
+					save()
+					return nil
+				}
+				p, err := strconv.Atoi(val)
+				if err != nil || p < 1 || p > 65535 {
+					return fmt.Errorf("port must be 1-65535")
+				}
+				linkPtr.Port = p
+				save()
+				return nil
+			},
+		},
+		{
+			Label: "Flavour", Help: "Delivery flavour: Normal, Crash, Hold, Direct", Type: ftLookup, Col: 3, Row: 9, Width: 10,
 			Get: func() string {
 				if linkPtr.Flavour == "" {
 					return "Normal"

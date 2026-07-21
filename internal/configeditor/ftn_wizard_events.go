@@ -83,6 +83,27 @@ func wireFTNEvents(events *config.EventsConfig, netKey, hubAddress string) {
 	}
 }
 
+// refreshPollEvents updates each existing per-network poll event to point at
+// the network's current first-link hub address, so a hub change in the
+// Echomail Links editor propagates on save. It never creates events — only
+// the wizard does that.
+func refreshPollEvents(events *config.EventsConfig, networks map[string]config.FTNNetworkConfig) {
+	for netKey, nc := range networks {
+		if len(nc.Links) == 0 {
+			continue
+		}
+		hub := nc.Links[0].Address
+		for i := range events.Events {
+			if events.Events[i].ID != "echomail_poll_"+netKey {
+				continue
+			}
+			e := &events.Events[i]
+			e.Name = fmt.Sprintf("Poll Hub (%s)", hub)
+			e.Args = []string{"-p", "-P", fmt.Sprintf("%s@%s", hub, netKey), "{BBS_ROOT}/data/ftn/binkd.conf"}
+		}
+	}
+}
+
 // containsArg reports whether args contains the exact value s.
 func containsArg(args []string, s string) bool {
 	for _, a := range args {

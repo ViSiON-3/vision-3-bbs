@@ -47,6 +47,9 @@ func (m *Model) saveAll() {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
 	}
+	// Follow hub changes: existing per-network poll events track the
+	// network's first link address.
+	refreshPollEvents(&m.configs.Events, m.configs.FTN.Networks)
 	if err := saveEventsConfig(m.configPath, m.configs.Events); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
@@ -61,11 +64,14 @@ func (m *Model) saveAll() {
 			SysopName: m.configs.Server.SysOpName,
 			Location:  m.configs.Server.BBSLocation,
 		}
-		links := make(map[string]string)
+		links := make(map[string]ftn.BinkdLinkSync)
 		for netKey, nc := range m.configs.FTN.Networks {
 			for _, lnk := range nc.Links {
 				addr := fmt.Sprintf("%s@%s", lnk.Address, netKey)
-				links[addr] = lnk.SessionPassword
+				links[addr] = ftn.BinkdLinkSync{
+					SessionPwd: lnk.SessionPassword,
+					HostPort:   lnk.HostPort(),
+				}
 			}
 		}
 		binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
