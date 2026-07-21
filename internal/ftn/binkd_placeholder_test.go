@@ -46,7 +46,7 @@ func TestUpdateBinkdConfNoDuplicateDomainsWhenRootMatchesPlaceholder(t *testing.
 	confPath := filepath.Join(dir, "binkd.conf")
 	existing := `domain fsxnet /opt/vision3/data/ftn/out 21
 domain fidonet /opt/vision3/data/ftn/out 3
-address 21:1/123@fsxnet
+address 21:4/158@fsxnet
 sysname "My BBS"
 iport 24554
 `
