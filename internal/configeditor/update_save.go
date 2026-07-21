@@ -40,11 +40,14 @@ func (m *Model) saveAll() {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
 	}
-	if err := saveEventsConfig(m.configPath, m.configs.Events); err != nil {
+	// FTN before events: the FTN wizard enables a hub-poll event for the
+	// network it saves, so if the sequence fails midway the poll must not be
+	// persisted for a network that never made it to ftn.json.
+	if err := saveFTNConfig(m.configPath, m.configs.FTN); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
 	}
-	if err := saveFTNConfig(m.configPath, m.configs.FTN); err != nil {
+	if err := saveEventsConfig(m.configPath, m.configs.Events); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
 	}
