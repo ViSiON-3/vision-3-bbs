@@ -183,7 +183,7 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 		trimmed := strings.TrimSpace(line)
 
 		// Strip placeholder lines entirely.
-		if isPlaceholderLine(line) {
+		if isPlaceholderLine(line, cfg.BBSRoot) {
 			// If this is a domain placeholder, inject real domains once.
 			if strings.HasPrefix(trimmed, "domain ") && !injectedDomains {
 				for name, zone := range cfg.Domains {

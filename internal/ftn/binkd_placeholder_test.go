@@ -1,6 +1,41 @@
 package ftn
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestUpdateBinkdConfKeepsRealRootLinesMatchingPlaceholder(t *testing.T) {
+	// When the real BBS root IS /opt/vision3, user-added lines containing it
+	// are legitimate and must survive the wizard's placeholder rewrite.
+	dir := t.TempDir()
+	confPath := filepath.Join(dir, "binkd.conf")
+	existing := "iport 24554\nexec \"/opt/vision3/custom.sh\" *.pkt\n"
+	if err := os.WriteFile(confPath, []byte(existing), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := BinkdConfig{
+		BBSRoot:   "/opt/vision3",
+		Domains:   map[string]int{"fsxnet": 21},
+		Addresses: []string{"21:4/158@fsxnet"},
+		Node: BinkdNode{
+			Address: "21:1/100@fsxnet", Hostname: "hub.fsxnet.nz:24556",
+			SessionPwd: "secret", NetworkName: "fsxnet",
+		},
+	}
+	if err := UpdateBinkdConf(confPath, cfg); err != nil {
+		t.Fatalf("UpdateBinkdConf: %v", err)
+	}
+	got, err := os.ReadFile(confPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "exec \"/opt/vision3/custom.sh\" *.pkt") {
+		t.Fatalf("custom line under the real BBS root was stripped:\n%s", got)
+	}
+}
 
 func TestHasPlaceholdersDetectsTemplate(t *testing.T) {
 	template := `# binkd.conf template
@@ -23,6 +58,16 @@ node 21:4/158@fsxnet agency.bbs.nz:24556 secret
 `
 	if HasPlaceholders(clean, "/bbs") {
 		t.Fatal("wizard-generated conf must not be flagged")
+	}
+}
+
+func TestHasPlaceholdersSurvivesOversizedLines(t *testing.T) {
+	// A pathological very long line must not abort scanning and let a
+	// placeholder later in the file slip through.
+	conf := "# " + strings.Repeat("x", 128*1024) + "\n" +
+		"inbound /opt/vision3/data/ftn/secure_in\n"
+	if !HasPlaceholders(conf, "/bbs") {
+		t.Fatal("placeholder after an oversized line must still be detected")
 	}
 }
 
