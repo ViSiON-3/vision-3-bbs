@@ -110,6 +110,28 @@ func TestRunOnceReportsStderrOnCrash(t *testing.T) {
 	}
 }
 
+func TestStderrTailKeepsOnlyLastBytes(t *testing.T) {
+	tail := &stderrTail{}
+	// One oversized write followed by a small one: only the newest
+	// stderrTailCap bytes may survive, ending with the small write.
+	big := strings.Repeat("x", stderrTailCap*3) + "MARKER-A"
+	for _, chunk := range []string{big, "MARKER-B"} {
+		if _, err := tail.Write([]byte(chunk)); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+	}
+	got := tail.String()
+	if len(got) > stderrTailCap {
+		t.Fatalf("tail length %d exceeds cap %d", len(got), stderrTailCap)
+	}
+	if !strings.HasSuffix(got, "MARKER-A"+"MARKER-B") {
+		t.Fatalf("tail must end with the most recent writes, got tail of %q", got[len(got)-40:])
+	}
+	if len(tail.buf) > stderrTailCap || cap(tail.buf) > 2*stderrTailCap {
+		t.Fatalf("backing storage unbounded: len=%d cap=%d", len(tail.buf), cap(tail.buf))
+	}
+}
+
 func TestSuperviseLoopCreatesRuntimeDirs(t *testing.T) {
 	svc, pidFile := newSupervisedService(t, true)
 	ctx, cancel := context.WithCancel(context.Background())

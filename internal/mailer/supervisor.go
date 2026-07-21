@@ -31,13 +31,18 @@ type stderrTail struct {
 }
 
 func (t *stderrTail) Write(p []byte) (int, error) {
+	n := len(p)
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if len(p) > stderrTailCap {
+		p = p[len(p)-stderrTailCap:]
+	}
 	t.buf = append(t.buf, p...)
 	if len(t.buf) > stderrTailCap {
-		t.buf = t.buf[len(t.buf)-stderrTailCap:]
+		// Copy down in place so the backing array stays bounded too.
+		t.buf = append(t.buf[:0], t.buf[len(t.buf)-stderrTailCap:]...)
 	}
-	return len(p), nil
+	return n, nil
 }
 
 func (t *stderrTail) String() string {
