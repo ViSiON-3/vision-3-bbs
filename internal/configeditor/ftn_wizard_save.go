@@ -148,7 +148,10 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		m.message = fmt.Sprintf("Warning: binkd.conf update failed: %v (network saved OK)", err)
 	}
 
-	// 6. Save everything.
+	// 6. Wire scheduler events for mail flow (hub poll + supporting events).
+	wireFTNEvents(&m.configs.Events, netKey, w.hubAddress)
+
+	// 7. Save everything.
 	m.dirty = true
 	m.saveAll()
 	if strings.HasPrefix(m.message, "SAVE ERROR") {
