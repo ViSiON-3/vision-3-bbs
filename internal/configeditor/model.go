@@ -332,6 +332,14 @@ func (m Model) WithStartupSplash() Model {
 	return m
 }
 
+// WithStartupMessage sets the initial status-line message shown when the
+// editor opens (e.g. "binkd.conf was missing - regenerated"). Opt-in like
+// WithStartupSplash; cmd/config/main.go uses it for startup notices.
+func (m Model) WithStartupMessage(msg string) Model {
+	m.message = msg
+	return m
+}
+
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	title := tea.SetWindowTitle("ViSiON/3 Configuration Editor")

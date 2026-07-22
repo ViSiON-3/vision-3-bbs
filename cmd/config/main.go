@@ -20,7 +20,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/configeditor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
 func main() {
@@ -49,6 +51,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Regenerate a missing binkd.conf from configuration before the editor
+	// starts (best-effort): the FTN Setup Wizard refuses to re-run for an
+	// existing network, so this is the recovery path after a manual delete.
+	startupMsg := ""
+	bbsRoot := filepath.Dir(path)
+	if abs, err := filepath.Abs(path); err == nil {
+		bbsRoot = filepath.Dir(abs) // regenerated conf paths must be absolute
+	}
+	if ftnCfg, ftnErr := config.LoadFTNConfig(path); ftnErr == nil {
+		if serverCfg, svErr := config.LoadServerConfig(path); svErr == nil {
+			if created, err := ftn.EnsureBinkdConf(bbsRoot, ftnCfg, serverCfg); err != nil {
+				startupMsg = fmt.Sprintf("Warning: binkd.conf regeneration failed: %v", err)
+			} else if created {
+				startupMsg = "binkd.conf was missing - regenerated from configuration"
+			}
+		}
+	}
+
 	// Suppress slog output during TUI operation — the alternate-screen terminal
 	// cannot tolerate interleaved log lines.
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -60,6 +80,9 @@ func main() {
 		os.Exit(1)
 	}
 	model = model.WithStartupSplash()
+	if startupMsg != "" {
+		model = model.WithStartupMessage(startupMsg)
+	}
 
 	// Run the BubbleTea TUI
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInputTTY())
