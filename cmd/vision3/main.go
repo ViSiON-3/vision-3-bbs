@@ -1855,6 +1855,7 @@ func main() {
 		mailerSvc, mErr := mailer.New(mailer.Config{
 			BBSRoot: basePath,
 			FTN:     mailerFTN,
+			Server:  serverConfig,
 			MsgMgr:  messageMgr,
 		})
 		if mErr != nil {

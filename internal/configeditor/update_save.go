@@ -3,7 +3,6 @@ package configeditor
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"sort"
 
@@ -80,16 +79,12 @@ func (m *Model) saveAll() {
 			}
 		}
 		// A deleted binkd.conf is regenerated from configuration (the wizard
-		// refuses to re-run for an existing network, so this is the only
-		// recovery path); the syncs below then apply port/loglevel.
-		if _, statErr := os.Stat(binkdPath); os.IsNotExist(statErr) {
-			if regenCfg, nodes, ok := buildBinkdRegen(m.configs.FTN, m.configs.Server, bbsRoot); ok {
-				if err := ftn.RegenerateBinkdConf(binkdPath, regenCfg, nodes); err != nil {
-					binkdSyncErr = err
-				} else {
-					slog.Info("binkd.conf regenerated from configuration", "path", binkdPath)
-				}
-			}
+		// refuses to re-run for an existing network); the syncs below then
+		// apply identity, passwords, port, and loglevel.
+		if created, err := ftn.EnsureBinkdConf(bbsRoot, m.configs.FTN, m.configs.Server); err != nil {
+			binkdSyncErr = err
+		} else if created {
+			slog.Info("binkd.conf regenerated from configuration", "path", binkdPath)
 		}
 		if binkdSyncErr == nil {
 			binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below

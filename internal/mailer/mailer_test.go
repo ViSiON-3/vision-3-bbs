@@ -67,13 +67,54 @@ func TestNewPreflightMissingBinary(t *testing.T) {
 	}
 }
 
-func TestNewPreflightMissingConf(t *testing.T) {
+func TestNewRegeneratesMissingConf(t *testing.T) {
+	// A deleted binkd.conf is regenerated from configuration during
+	// preflight instead of disabling the mailer until the next TUI save.
+	root := newTestRoot(t)
+	confPath := filepath.Join(root, "data", "ftn", "binkd.conf")
+	if err := os.Remove(confPath); err != nil {
+		t.Fatal(err)
+	}
+	cfg := testFTNConfig()
+	cfg.Networks = map[string]config.FTNNetworkConfig{
+		"fsxnet": {
+			OwnAddress: "21:4/158",
+			Links: []config.FTNLinkConfig{{
+				Address: "21:4/100", Hostname: "hub.example.org",
+			}},
+			InternalTosserEnabled: true,
+		},
+	}
+	svc, err := New(Config{
+		BBSRoot: root,
+		FTN:     cfg,
+		Server:  config.ServerConfig{BoardName: "Test Board", SysOpName: "Sysop", BBSLocation: "Testville"},
+	})
+	if err != nil {
+		t.Fatalf("New should regenerate a missing conf: %v", err)
+	}
+	if svc == nil {
+		t.Fatal("expected non-nil service")
+	}
+	data, err := os.ReadFile(confPath)
+	if err != nil {
+		t.Fatalf("regenerated conf not written: %v", err)
+	}
+	if !strings.Contains(string(data), "address 21:4/158@fsxnet") {
+		t.Errorf("regenerated conf missing own address:\n%s", data)
+	}
+}
+
+func TestNewMissingConfNoNetworksStillErrors(t *testing.T) {
+	// With nothing to regenerate from, the original guidance stands.
 	root := newTestRoot(t)
 	if err := os.Remove(filepath.Join(root, "data", "ftn", "binkd.conf")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(Config{BBSRoot: root, FTN: testFTNConfig()}); err == nil {
-		t.Fatal("expected error for missing binkd.conf")
+	cfg := testFTNConfig()
+	cfg.Networks = nil
+	if _, err := New(Config{BBSRoot: root, FTN: cfg}); err == nil {
+		t.Fatal("expected error when conf is missing and nothing can be regenerated")
 	}
 }
 

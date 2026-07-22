@@ -230,3 +230,14 @@ func TestTopMenuAccessSecurityEntry(t *testing.T) {
 		t.Errorf("topItems[9] = %+v, want {Key:0 Label:Login Sequence}", login)
 	}
 }
+
+func TestWithStartupMessageSetsStatusLine(t *testing.T) {
+	m, err := New("testdata")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m = m.WithStartupMessage("binkd.conf was missing - regenerated from configuration")
+	if m.message != "binkd.conf was missing - regenerated from configuration" {
+		t.Errorf("startup message not set: %q", m.message)
+	}
+}
