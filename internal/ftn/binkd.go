@@ -33,6 +33,26 @@ type BinkdConfig struct {
 	Node BinkdNode
 }
 
+// identityOrDefaults fills fallback values for blank BBS identity fields.
+// The sysop fallback is deliberately not "SysOp": that exact quoted string
+// is a placeholder token in the shipped template, and HasPlaceholders would
+// reject a conf carrying it (see binkd_placeholder.go).
+func identityOrDefaults(cfg BinkdConfig) (boardName, sysop, location string) {
+	boardName = cfg.BoardName
+	if boardName == "" {
+		boardName = "Vision3 BBS"
+	}
+	sysop = cfg.SysopName
+	if sysop == "" {
+		sysop = "Sysop"
+	}
+	location = cfg.Location
+	if location == "" {
+		location = "Earth"
+	}
+	return boardName, sysop, location
+}
+
 // sectionMarker returns the comment line used to identify a wizard-managed block.
 func sectionMarker(networkName string) string {
 	return fmt.Sprintf("# --- %s (added by FTN Setup Wizard) ---", networkName)
@@ -59,18 +79,7 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 	insecureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "in")
 	v3mailPath := filepath.Join(cfg.BBSRoot, "v3mail")
 
-	sysop := cfg.SysopName
-	if sysop == "" {
-		sysop = "SysOp"
-	}
-	boardName := cfg.BoardName
-	if boardName == "" {
-		boardName = "Vision3 BBS"
-	}
-	location := cfg.Location
-	if location == "" {
-		location = "Earth"
-	}
+	boardName, sysop, location := identityOrDefaults(cfg)
 
 	var out strings.Builder
 

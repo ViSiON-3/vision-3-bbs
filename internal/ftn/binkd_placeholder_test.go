@@ -160,3 +160,31 @@ inbound /opt/vision3/data/ftn/secure_in
 		t.Fatal("paths under the real BBS root must not be flagged as placeholders")
 	}
 }
+
+func TestUpdateBinkdConfEmptyIdentityPassesPlaceholderCheck(t *testing.T) {
+	// A blank sysop name must not make the wizard write a conf that
+	// HasPlaceholders rejects: the fallback may not collide with the
+	// template's "SysOp" placeholder token, or the mailer would refuse
+	// the file the wizard just generated.
+	dir := t.TempDir()
+	confPath := filepath.Join(dir, "binkd.conf")
+	cfg := BinkdConfig{
+		BBSRoot:   "/real/root",
+		Domains:   map[string]int{"fsxnet": 21},
+		Addresses: []string{"21:4/999@fsxnet"},
+		Node: BinkdNode{
+			Address: "21:1/100@fsxnet", Hostname: "hub.fsxnet.nz:24556",
+			SessionPwd: "secret", NetworkName: "fsxnet",
+		},
+	}
+	if err := UpdateBinkdConf(confPath, cfg); err != nil {
+		t.Fatalf("UpdateBinkdConf: %v", err)
+	}
+	got, err := os.ReadFile(confPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if HasPlaceholders(string(got), "/real/root") {
+		t.Errorf("wizard conf with empty identity must pass the placeholder check:\n%s", got)
+	}
+}
