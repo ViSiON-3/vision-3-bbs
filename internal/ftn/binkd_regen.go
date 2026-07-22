@@ -19,21 +19,7 @@ func RegenerateBinkdConf(confPath string, cfg BinkdConfig, nodes []BinkdNode) er
 	insecureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "in")
 	v3mailPath := filepath.Join(cfg.BBSRoot, "v3mail")
 
-	sysop := cfg.SysopName
-	if sysop == "" {
-		// Not "SysOp": that exact quoted string is a placeholder token in
-		// the shipped template, and HasPlaceholders would reject the
-		// regenerated conf (see binkd_placeholder.go).
-		sysop = "Sysop"
-	}
-	boardName := cfg.BoardName
-	if boardName == "" {
-		boardName = "Vision3 BBS"
-	}
-	location := cfg.Location
-	if location == "" {
-		location = "Earth"
-	}
+	boardName, sysop, location := identityOrDefaults(cfg)
 
 	var out strings.Builder
 	writeFreshBinkdConf(&out, cfg, outPath, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location)
