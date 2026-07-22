@@ -24,6 +24,7 @@ import (
 type Config struct {
 	BBSRoot string                  // absolute BBS root directory
 	FTN     config.FTNConfig        // FTN config including the Binkd section
+	Server  config.ServerConfig     // BBS identity for binkd.conf regeneration
 	MsgMgr  *message.MessageManager // for the export loop (may be nil in tests)
 }
 
@@ -72,6 +73,16 @@ func New(cfg Config) (*Service, error) {
 	}
 
 	confPath := filepath.Join(cfg.BBSRoot, "data", "ftn", "binkd.conf")
+
+	// A deleted binkd.conf is regenerated from configuration (best-effort):
+	// the FTN Setup Wizard refuses to re-run for an existing network, so
+	// without this the mailer would stay down until the next TUI save.
+	if created, ensureErr := ftn.EnsureBinkdConf(cfg.BBSRoot, cfg.FTN, cfg.Server); ensureErr != nil {
+		slog.Warn("binkd.conf regeneration failed", "error", ensureErr)
+	} else if created {
+		slog.Info("binkd.conf regenerated from configuration", "path", confPath)
+	}
+
 	confData, err := os.ReadFile(confPath)
 	if err != nil {
 		if os.IsNotExist(err) {
