@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
@@ -23,7 +24,16 @@ func buildBinkdRegen(ftnCfg config.FTNConfig, server config.ServerConfig, bbsRoo
 	}
 	var nodes []BinkdNode
 
-	for netKey, nc := range ftnCfg.Networks {
+	// Sorted iteration so repeated regenerations produce identical files
+	// (map order would otherwise shuffle address and node lines).
+	netKeys := make([]string, 0, len(ftnCfg.Networks))
+	for k := range ftnCfg.Networks {
+		netKeys = append(netKeys, k)
+	}
+	sort.Strings(netKeys)
+
+	for _, netKey := range netKeys {
+		nc := ftnCfg.Networks[netKey]
 		if nc.OwnAddress == "" {
 			continue
 		}

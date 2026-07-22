@@ -171,3 +171,56 @@ func TestEnsureBinkdConfNoNetworksNoFile(t *testing.T) {
 		t.Error("no file must be written when no network is configured")
 	}
 }
+
+func TestEnsureBinkdConfDeterministicOrder(t *testing.T) {
+	// Networks live in a map; the regenerated conf must not depend on map
+	// iteration order — domain, address, and node lines come out sorted by
+	// network name so repeated regenerations produce identical files.
+	ftnCfg := config.FTNConfig{
+		Networks: map[string]config.FTNNetworkConfig{
+			"zznet": {
+				OwnAddress: "2:1/5",
+				Links:      []config.FTNLinkConfig{{Address: "2:1/1", Hostname: "zz.example.org"}},
+			},
+			"aanet": {
+				OwnAddress: "21:4/999",
+				Links:      []config.FTNLinkConfig{{Address: "21:4/158", Hostname: "aa.example.org"}},
+			},
+			"mmnet": {
+				OwnAddress: "3:2/7",
+				Links:      []config.FTNLinkConfig{{Address: "3:2/1", Hostname: "mm.example.org"}},
+			},
+		},
+	}
+	root := t.TempDir()
+	created, err := EnsureBinkdConf(root, ftnCfg, config.ServerConfig{})
+	if err != nil {
+		t.Fatalf("EnsureBinkdConf: %v", err)
+	}
+	if !created {
+		t.Fatal("expected binkd.conf to be created")
+	}
+	data, err := os.ReadFile(filepath.Join(root, "data", "ftn", "binkd.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conf := string(data)
+
+	inOrder := func(kind string, lines ...string) {
+		t.Helper()
+		prev := -1
+		for _, l := range lines {
+			idx := strings.Index(conf, l)
+			if idx < 0 {
+				t.Fatalf("%s line %q missing:\n%s", kind, l, conf)
+			}
+			if idx < prev {
+				t.Errorf("%s lines not sorted by network name: %q out of order:\n%s", kind, l, conf)
+			}
+			prev = idx
+		}
+	}
+	inOrder("domain", "domain aanet ", "domain mmnet ", "domain zznet ")
+	inOrder("address", "address 21:4/999@aanet", "address 3:2/7@mmnet", "address 2:1/5@zznet")
+	inOrder("node", "node 21:4/158@aanet", "node 3:2/1@mmnet", "node 2:1/1@zznet")
+}
