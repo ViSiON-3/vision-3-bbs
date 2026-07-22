@@ -51,6 +51,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Suppress slog output during TUI operation — the alternate-screen terminal
+	// cannot tolerate interleaved log lines.
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+
 	// Regenerate a missing binkd.conf from configuration before the editor
 	// starts (best-effort): the FTN Setup Wizard refuses to re-run for an
 	// existing network, so this is the recovery path after a manual delete.
@@ -68,10 +72,6 @@ func main() {
 			}
 		}
 	}
-
-	// Suppress slog output during TUI operation — the alternate-screen terminal
-	// cannot tolerate interleaved log lines.
-	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	// Create the editor model
 	model, err := configeditor.New(path)
