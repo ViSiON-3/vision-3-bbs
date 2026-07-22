@@ -21,7 +21,10 @@ func RegenerateBinkdConf(confPath string, cfg BinkdConfig, nodes []BinkdNode) er
 
 	sysop := cfg.SysopName
 	if sysop == "" {
-		sysop = "SysOp"
+		// Not "SysOp": that exact quoted string is a placeholder token in
+		// the shipped template, and HasPlaceholders would reject the
+		// regenerated conf (see binkd_placeholder.go).
+		sysop = "Sysop"
 	}
 	boardName := cfg.BoardName
 	if boardName == "" {
