@@ -224,3 +224,25 @@ func TestEnsureBinkdConfDeterministicOrder(t *testing.T) {
 	inOrder("address", "address 21:4/999@aanet", "address 3:2/7@mmnet", "address 2:1/5@zznet")
 	inOrder("node", "node 21:4/158@aanet", "node 3:2/1@mmnet", "node 2:1/1@zznet")
 }
+
+func TestEnsureBinkdConfEmptyIdentityPassesPlaceholderCheck(t *testing.T) {
+	// A blank sysOpName must not regenerate a conf that HasPlaceholders
+	// rejects: the fallback sysop value may not collide with the shipped
+	// template's "SysOp" placeholder token, or the mailer would refuse the
+	// file it just regenerated (and never regenerate again, since it exists).
+	root := t.TempDir()
+	created, err := EnsureBinkdConf(root, ensureTestFTNConfig(), config.ServerConfig{})
+	if err != nil {
+		t.Fatalf("EnsureBinkdConf: %v", err)
+	}
+	if !created {
+		t.Fatal("expected binkd.conf to be created")
+	}
+	data, err := os.ReadFile(filepath.Join(root, "data", "ftn", "binkd.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if HasPlaceholders(string(data), root) {
+		t.Errorf("conf regenerated with empty identity must pass the placeholder check:\n%s", data)
+	}
+}
