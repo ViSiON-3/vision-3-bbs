@@ -31,3 +31,17 @@ func fetchFTNEcholist(url string, reg *ftn.RegistryNetwork) tea.Cmd {
 		return ftnEcholistMsg{areas: areas}
 	}
 }
+
+// ftnNodelistMsg is the result of downloading and parsing an FTN nodelist.
+type ftnNodelistMsg struct {
+	nodelist *ftn.Nodelist
+	err      error
+}
+
+// fetchFTNNodelist returns a tea.Cmd that downloads and parses a nodelist.
+func fetchFTNNodelist(url string) tea.Cmd {
+	return func() tea.Msg {
+		nl, err := ftn.DownloadNodelist(context.Background(), url)
+		return ftnNodelistMsg{nodelist: nl, err: err}
+	}
+}

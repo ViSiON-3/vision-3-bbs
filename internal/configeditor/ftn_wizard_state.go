@@ -35,6 +35,13 @@ type ftnWizardState struct {
 
 	// Registry data (for pre-fill).
 	registryEntry *ftn.RegistryNetwork // nil if manual/custom
+
+	// Nodelist lookup.
+	nodelistURL   string          // from registry entry; empty = no lookup offered
+	nodelist      *ftn.Nodelist   // cached parse, nil until fetched
+	lookupLoading bool            // true while the nodelist download runs
+	lookupResult  *ftn.NodeLookup // last successful lookup, nil if none
+	lookupErr     string          // last lookup failure, "" if none
 }
 
 // selectedAreaCount returns how many areas are currently selected.

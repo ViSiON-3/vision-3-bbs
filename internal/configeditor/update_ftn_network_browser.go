@@ -99,6 +99,13 @@ func (m *Model) populateFTNWizardFromRegistry(net *ftn.RegistryNetwork) {
 	w.echolistURL = net.EcholistURL
 	w.registryEntry = net
 
+	// Nodelist lookup state is per-network.
+	w.nodelistURL = net.NodelistURL
+	w.nodelist = nil
+	w.lookupLoading = false
+	w.lookupResult = nil
+	w.lookupErr = ""
+
 	// Pre-fill zone in own address.
 	if w.ownAddress == "" && net.Zone > 0 {
 		w.ownAddress = fmt.Sprintf("%d:", net.Zone)
