@@ -53,6 +53,8 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 					return err
 				}
 				w.ownAddress = val
+				w.lookupResult = nil
+				w.lookupErr = ""
 				return nil
 			},
 		},

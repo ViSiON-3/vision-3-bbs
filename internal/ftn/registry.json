@@ -9,7 +9,7 @@
     "coordinator_ftn": "1:229/426",
     "dns_suffix": "binkp.net",
     "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
-    "nodelist_url": "http://fido-z1.darkrealms.ca/$webfile.send.ZC1./NODELIST.Z05"
+    "nodelist_url": "https://nodelist.fidonet.cc/download/latest"
   },
   {
     "zone": 2,
@@ -20,14 +20,14 @@
     "coordinator_ftn": "2:292/854",
     "dns_suffix": "binkp.net",
     "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
-    "nodelist_url": "http://fido-z1.darkrealms.ca/$webfile.send.ZC1./NODELIST.Z05"
+    "nodelist_url": "https://nodelist.fidonet.cc/download/latest"
   },
   {
     "zone": 3,
     "name": "FidoNet",
     "description": "Australasia",
     "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
-    "nodelist_url": "http://fido-z1.darkrealms.ca/$webfile.send.ZC1./NODELIST.Z05"
+    "nodelist_url": "https://nodelist.fidonet.cc/download/latest"
   },
   {
     "zone": 4,
@@ -39,7 +39,7 @@
     "coordinator_ftn": "4:902/26",
     "dns_suffix": "binkp.net",
     "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
-    "nodelist_url": "http://fido-z1.darkrealms.ca/$webfile.send.ZC1./NODELIST.Z05"
+    "nodelist_url": "https://nodelist.fidonet.cc/download/latest"
   },
   {
     "zone": 11,

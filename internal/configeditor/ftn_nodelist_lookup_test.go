@@ -182,6 +182,33 @@ func TestStartLookupValidation(t *testing.T) {
 	}
 }
 
+func TestEditingAddressClearsStaleLookup(t *testing.T) {
+	m := newLookupWizardModel("https://example.org/nl.zip")
+	m.ftnWizard.ownAddress = "21:4/158"
+	m.ftnWizard.nodelist = lookupTestNodelist(t)
+
+	m.applyFTNNodeLookup()
+	if m.ftnWizard.lookupResult == nil {
+		t.Fatal("precondition: lookupResult must be set after applyFTNNodeLookup")
+	}
+
+	addr := fieldByLabel(t, m.fieldsFTNWizard(), "Your Address")
+	if err := addr.Set("21:2/101"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	w := m.ftnWizard
+	if w.lookupResult != nil {
+		t.Error("lookupResult must be cleared after editing address")
+	}
+	if w.lookupErr != "" {
+		t.Errorf("lookupErr = %q, want empty after editing address", w.lookupErr)
+	}
+	if w.nodelist == nil {
+		t.Error("nodelist cache must be preserved after editing address")
+	}
+}
+
 func TestHandleNodelistMsg(t *testing.T) {
 	// Success: caches, applies, returns to form.
 	m := newLookupWizardModel("https://example.org/nl.zip")
