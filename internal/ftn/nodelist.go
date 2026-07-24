@@ -168,6 +168,12 @@ func (nl *Nodelist) Lookup(addr Address, dnsSuffix string) (*NodeLookup, error) 
 			continue
 		}
 		cand := &nl.Entries[ci]
+		// Defense-in-depth: candidates are structurally Hub/Host/Region/Zone
+		// entries (see hubIdx/hostIdx/zoneIdx above), and FTS-5000 lists a
+		// downed hub under the single-valued "Down" keyword instead, so the
+		// scan never records one as a candidate in the first place. This
+		// check enforces the skip rule by construction should that ever
+		// change.
 		if cand.Keyword == "Down" || cand.Keyword == "Hold" {
 			continue
 		}

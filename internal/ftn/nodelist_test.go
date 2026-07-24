@@ -231,6 +231,60 @@ func TestLookupSelfIsHubUsesHostUplink(t *testing.T) {
 	}
 }
 
+func TestLookupDownedHubIsNeverACandidate(t *testing.T) {
+	// A former hub marked Down must never be chosen as an uplink, even
+	// though it still carries an INA flag: the scan only ever records
+	// Hub/Host/Region/Zone lines as candidates, so a Down-keyword line
+	// never becomes one in the first place.
+	const fixture = "Zone,21,fsxNet,NZ,Coordinator,-Unpublished-,300,CM,INA:agency.bbs.nz,IBN:24556\r\n" +
+		"Host,6,Net6_HQ,Oslo_NO,Host_Six,-Unpublished-,300,CM,INA:host6.example.org,IBN:24556\r\n" +
+		"Down,100,Former_Hub,Oslo_NO,Gone_Op,-Unpublished-,300,CM,INA:downhub.example.org\r\n" +
+		",101,Node_BBS,Oslo_NO,Node_Op,-Unpublished-,300,CM,IBN\r\n"
+	nl, err := ParseNodelist(strings.NewReader(fixture))
+	if err != nil {
+		t.Fatalf("ParseNodelist: %v", err)
+	}
+	res := mustLookup(t, nl, "21:6/101", "")
+
+	if res.Uplink.Address.String() != "21:6/0" {
+		t.Fatalf("Uplink = %s, want host 21:6/0 (not the downed hub 21:6/100)", res.Uplink.Address)
+	}
+	if res.Hostname != "host6.example.org" || res.Port != 24556 {
+		t.Errorf("hub connect = %s:%d, want host6.example.org:24556", res.Hostname, res.Port)
+	}
+}
+
+func TestLookupNearestPrecedingHubWins(t *testing.T) {
+	// Two hubs in one net: each node's uplink is the nearest preceding
+	// Hub line, not the net's first (or only) hub.
+	const fixture = "Zone,21,fsxNet,NZ,Coordinator,-Unpublished-,300,CM,INA:agency.bbs.nz,IBN:24556\r\n" +
+		"Host,7,Net7_HQ,Chicago_IL,Host_Seven,-Unpublished-,300,CM,INA:host7.example.org,IBN:24556\r\n" +
+		"Hub,100,First_Hub,Chicago_IL,Hub_One,-Unpublished-,300,CM,INA:hub1.example.org,IBN:24556\r\n" +
+		",101,Alpha_BBS,Chicago_IL,Alpha_Op,-Unpublished-,300,CM,IBN\r\n" +
+		"Hub,200,Second_Hub,Denver_CO,Hub_Two,-Unpublished-,300,CM,INA:hub2b.example.org,IBN:24557\r\n" +
+		",201,Beta_BBS,Denver_CO,Beta_Op,-Unpublished-,300,CM,IBN\r\n"
+	nl, err := ParseNodelist(strings.NewReader(fixture))
+	if err != nil {
+		t.Fatalf("ParseNodelist: %v", err)
+	}
+
+	alpha := mustLookup(t, nl, "21:7/101", "")
+	if alpha.Uplink.Address.String() != "21:7/100" {
+		t.Fatalf("Uplink = %s, want hub 21:7/100", alpha.Uplink.Address)
+	}
+	if alpha.Hostname != "hub1.example.org" || alpha.Port != 24556 {
+		t.Errorf("hub connect = %s:%d, want hub1.example.org:24556", alpha.Hostname, alpha.Port)
+	}
+
+	beta := mustLookup(t, nl, "21:7/201", "")
+	if beta.Uplink.Address.String() != "21:7/200" {
+		t.Fatalf("Uplink = %s, want hub 21:7/200", beta.Uplink.Address)
+	}
+	if beta.Hostname != "hub2b.example.org" || beta.Port != 24557 {
+		t.Errorf("hub connect = %s:%d, want hub2b.example.org:24557", beta.Hostname, beta.Port)
+	}
+}
+
 func TestBinkpFlagPortForms(t *testing.T) {
 	cases := []struct {
 		flags    []string
