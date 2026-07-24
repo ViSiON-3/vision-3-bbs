@@ -93,3 +93,133 @@ func ParseNodelist(r io.Reader) (*Nodelist, error) {
 func deunderscore(s string) string {
 	return strings.ReplaceAll(strings.TrimSpace(s), "_", " ")
 }
+
+// DefaultBinkpPort is the standard BinkP TCP port.
+const DefaultBinkpPort = 24554
+
+// NodeLookup is the result of resolving a node and its uplink hub.
+type NodeLookup struct {
+	Self     *NodelistEntry // nil when the address is not in the nodelist
+	Uplink   *NodelistEntry // hub/host/zone entry chosen as the uplink
+	Hostname string         // resolved BinkP hostname for Uplink
+	Port     int            // resolved BinkP port for Uplink
+	Inferred bool           // true when Self is nil (uplink inferred from the net segment)
+}
+
+// Lookup finds addr's entry and its uplink hub. The uplink is the nearest
+// enclosing Hub segment, else the net's Host, else the Zone entry —
+// skipping entries that are Down/Hold or have no resolvable hostname.
+// dnsSuffix (e.g. "binkp.net"), when non-empty, derives a hostname for
+// uplinks that carry no INA/IBN hostname flag.
+func (nl *Nodelist) Lookup(addr Address, dnsSuffix string) (*NodeLookup, error) {
+	selfIdx, hubIdx, hostIdx, zoneIdx := -1, -1, -1, -1
+	curHub := -1
+	netSeen := false
+
+	for i := range nl.Entries {
+		e := &nl.Entries[i]
+		if e.Address.Zone != addr.Zone {
+			continue
+		}
+		if e.Keyword == "Zone" && zoneIdx == -1 {
+			zoneIdx = i
+		}
+		if e.Address.Net != addr.Net {
+			continue
+		}
+		switch e.Keyword {
+		case "Region", "Host":
+			netSeen = true
+			if hostIdx == -1 {
+				hostIdx = i
+			}
+			curHub = -1
+		case "Hub":
+			netSeen = true
+			curHub = i
+		default:
+			netSeen = true
+		}
+		if selfIdx == -1 && e.Address.Node == addr.Node {
+			selfIdx = i
+			if curHub != i {
+				hubIdx = curHub
+			}
+		}
+	}
+
+	if !netSeen {
+		return nil, fmt.Errorf("net %d:%d not found in nodelist", addr.Zone, addr.Net)
+	}
+
+	res := &NodeLookup{Inferred: selfIdx == -1}
+	if selfIdx != -1 {
+		res.Self = &nl.Entries[selfIdx]
+	}
+
+	// Candidate uplinks in preference order. For an unlisted node the
+	// governing hub is unknowable (position matters), so start at the Host.
+	candidates := []int{hostIdx, zoneIdx}
+	if selfIdx != -1 {
+		candidates = append([]int{hubIdx}, candidates...)
+	}
+	for _, ci := range candidates {
+		if ci == -1 || ci == selfIdx {
+			continue
+		}
+		cand := &nl.Entries[ci]
+		if cand.Keyword == "Down" || cand.Keyword == "Hold" {
+			continue
+		}
+		host, port := cand.binkpHostPort()
+		if host == "" && dnsSuffix != "" {
+			host = fmt.Sprintf("f%d.n%d.z%d.%s",
+				cand.Address.Node, cand.Address.Net, cand.Address.Zone, dnsSuffix)
+		}
+		if host == "" {
+			continue
+		}
+		res.Uplink = cand
+		res.Hostname = host
+		res.Port = port
+		return res, nil
+	}
+	return nil, fmt.Errorf("no usable uplink found for %s in nodelist", addr)
+}
+
+// binkpHostPort resolves the entry's BinkP hostname and port from its
+// INA/IBN flags. Hostname preference: INA, then IBN's host part. Port
+// comes from IBN ("IBN:port" or "IBN:host:port"), else DefaultBinkpPort.
+func (e *NodelistEntry) binkpHostPort() (string, int) {
+	inaHost, ibnHost := "", ""
+	port := DefaultBinkpPort
+	for _, f := range e.Flags {
+		parts := strings.Split(strings.TrimSpace(f), ":")
+		switch strings.ToUpper(parts[0]) {
+		case "INA":
+			if len(parts) > 1 && parts[1] != "" && inaHost == "" {
+				inaHost = parts[1]
+			}
+		case "IBN":
+			switch len(parts) {
+			case 2:
+				if p, err := strconv.Atoi(parts[1]); err == nil {
+					port = p
+				} else if ibnHost == "" {
+					ibnHost = parts[1]
+				}
+			case 3:
+				if ibnHost == "" {
+					ibnHost = parts[1]
+				}
+				if p, err := strconv.Atoi(parts[2]); err == nil {
+					port = p
+				}
+			}
+		}
+	}
+	if inaHost != "" {
+		return inaHost, port
+	}
+	return ibnHost, port
+}
