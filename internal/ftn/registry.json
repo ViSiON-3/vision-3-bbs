@@ -52,6 +52,7 @@
     "hub_hostname": "bbs.weather-station.org",
     "hub_port": 24555,
     "echolist_url": "https://raw.githubusercontent.com/wwivbbs/wwivnet/master/wwivnet/wwivnet.na",
+    "nodelist_url": "https://raw.githubusercontent.com/wwivbbs/wwivnet/master/wwivnet/wwivftn.286",
     "areatag_prefix": "WWIV_"
   },
   {
@@ -131,6 +132,7 @@
     "hub_address": "44:100/0",
     "hub_hostname": "bbs.dreamlandbbs.org",
     "echolist_url": "DORENET.NA",
+    "nodelist_url": "https://www.dreamlandbbs.org/wp-content/uploads/2020/04/dorenet.zip",
     "areatag_prefix": "DN_",
     "areatag_exclude": [
       "netmail"
@@ -207,6 +209,7 @@
     "hub_hostname": "bridge.vkradio.com",
     "dns_suffix": "ftn.vkradio.com",
     "echolist_url": "https://vkradio.com/vkradio.na",
+    "nodelist_url": "https://vkradio.com/vkradio.zip",
     "areatag_prefix": "VK_"
   },
   {
@@ -303,6 +306,7 @@
     "hub_address": "1337:3/100",
     "hub_hostname": "hub.ca.erb.pw",
     "echolist_url": "tqwnet.na",
+    "nodelist_url": "https://www.erb.pw/tqwinfo.zip",
     "areatag_prefix": "TQW_"
   }
 ]
