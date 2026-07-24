@@ -81,12 +81,81 @@ func TestDownloadNodelistZipFallsBackToLargestMember(t *testing.T) {
 	}
 }
 
+func TestDownloadNodelistZipPicksZMember(t *testing.T) {
+	// A .z## member (e.g. VKRADIO.z97, tqwnet.z51) must outrank a larger
+	// .txt member: it scores in the same tier as a day-numbered extension.
+	body := zipOf(t, map[string]string{
+		"SOMENET.TXT": "a much longer plain-text member that is not a nodelist, just padding",
+		"SOMENET.z12": testNodelist,
+	})
+	srv := serveBytes(t, body)
+	nl, err := DownloadNodelist(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("DownloadNodelist: %v", err)
+	}
+	if len(nl.Entries) == 0 || nl.Entries[0].Address.Zone != 21 {
+		t.Fatalf("wrong member extracted: %+v", nl.Entries)
+	}
+}
+
+func TestDownloadNodelistZipTieBreakPrefersLargerPlainDayExtMember(t *testing.T) {
+	// Regression guard for fsxNet: the live fsxnet.zip ships both
+	// FSXNET.205 (plain, day-numbered, 36751 bytes) and FSXNET.Z05 (a
+	// nested zip wrapping the identical nodelist text, 13376 bytes as a
+	// zip entry -- smaller because it is already compressed). Both now
+	// score 2 in memberScore via dayExtRe/zExtRe respectively, so the
+	// larger-wins tie-break must still choose the plain FSXNET.205 member,
+	// preserving pre-existing extraction behavior. This is reproduced here
+	// with a garbage payload behind the smaller nested member: if the
+	// tie-break ever flipped to prefer the nested member, this test would
+	// fail with zero parsed entries instead of silently passing.
+	nested := zipOf(t, map[string]string{"FSXNET.205": "not a valid nodelist, just filler"})
+	if len(nested) >= len(testNodelist) {
+		t.Fatalf("fixture assumption violated: nested zip entry (%d bytes) must be smaller than the plain member (%d bytes) to match real-world fsxNet sizes", len(nested), len(testNodelist))
+	}
+	body := zipOf(t, map[string]string{
+		"FSXNET.205": testNodelist,
+		"FSXNET.Z05": string(nested),
+	})
+	srv := serveBytes(t, body)
+	nl, err := DownloadNodelist(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("DownloadNodelist: %v", err)
+	}
+	if len(nl.Entries) == 0 || nl.Entries[0].Address.Zone != 21 {
+		t.Fatalf("wrong member extracted, want plain FSXNET.205 to win tie-break: %+v", nl.Entries)
+	}
+}
+
+func TestDownloadNodelistZipSingleNestedZMemberUnwrapped(t *testing.T) {
+	// In the wild, .z## members are themselves zip-compressed nodelists
+	// (e.g. VKRADIO.z97 contains VKRADIO.097). One level of nesting must
+	// be unwrapped automatically.
+	inner := zipOf(t, map[string]string{"VKRADIO.097": testNodelist})
+	body := zipOf(t, map[string]string{
+		"VKRADIO.TXT": "plain text member, smaller and not chosen",
+		"VKRADIO.z97": string(inner),
+	})
+	srv := serveBytes(t, body)
+	nl, err := DownloadNodelist(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("DownloadNodelist: %v", err)
+	}
+	if len(nl.Entries) == 0 || nl.Entries[0].Address.Zone != 21 {
+		t.Fatalf("wrong member extracted: %+v", nl.Entries)
+	}
+}
+
 func TestDownloadNodelistNestedZipRejected(t *testing.T) {
-	inner := zipOf(t, map[string]string{"NODELIST.001": testNodelist})
-	body := zipOf(t, map[string]string{"NODELIST.ZIP": string(inner)})
+	// One level of zip-in-zip is now unwrapped automatically (see the z##
+	// test above), but a second level of nesting exceeds the unwrap budget
+	// and must still be rejected.
+	innermost := zipOf(t, map[string]string{"NODELIST.001": testNodelist})
+	middle := zipOf(t, map[string]string{"NODELIST.ZIP": string(innermost)})
+	body := zipOf(t, map[string]string{"OUTER.ZIP": string(middle)})
 	srv := serveBytes(t, body)
 	if _, err := DownloadNodelist(context.Background(), srv.URL); err == nil {
-		t.Fatal("want error for nested zip")
+		t.Fatal("want error for doubly-nested zip")
 	}
 }
 

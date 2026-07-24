@@ -20,6 +20,16 @@ const maxNodelistBytes = 16 * 1024 * 1024
 // dayExtRe matches day-of-year nodelist extensions like NODELIST.158.
 var dayExtRe = regexp.MustCompile(`\.\d{1,3}$`)
 
+// zExtRe matches the FTN ".z##" convention for a zip-compressed nodelist
+// member, e.g. VKRADIO.z97, tqwnet.z51, agoranet.z98.
+var zExtRe = regexp.MustCompile(`\.z\d{1,3}$`)
+
+// maxZipNestingDepth caps zip-in-zip unwrapping. Members named ".z##" are
+// themselves single-file zip archives (e.g. VKRADIO.z97 contains
+// VKRADIO.097), so one level of nesting is expected and unwrapped
+// automatically; anything nested deeper is rejected as suspicious.
+const maxZipNestingDepth = 1
+
 // DownloadNodelist fetches a nodelist from url and parses it. Zip payloads
 // (detected by magic bytes, not URL extension) are unwrapped, extracting
 // the member that looks most like a nodelist.
@@ -63,9 +73,16 @@ func isZipData(data []byte) bool {
 }
 
 // extractNodelistMember picks and reads the most nodelist-looking member
-// of a zip archive: name starting with "nodelist", then a day-numbered
-// extension, then .txt, then the largest member as a last resort.
+// of a zip archive: name starting with "nodelist", then a day-numbered or
+// ".z##" extension, then .txt, then the largest member as a last resort.
+// If the chosen member is itself a zip (the ".z##" convention packs a
+// single-file zip inside the outer archive), one level of nesting is
+// unwrapped automatically; a second level of nesting is rejected.
 func extractNodelistMember(data []byte) ([]byte, error) {
+	return extractZipMember(data, 0)
+}
+
+func extractZipMember(data []byte, depth int) ([]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, fmt.Errorf("opening nodelist zip: %w", err)
@@ -101,7 +118,10 @@ func extractNodelistMember(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("zip member %s exceeds %d-byte limit", best.Name, maxNodelistBytes)
 	}
 	if isZipData(member) {
-		return nil, fmt.Errorf("nested zip archives are not supported")
+		if depth >= maxZipNestingDepth {
+			return nil, fmt.Errorf("zip member %s is nested more than %d level deep", best.Name, maxZipNestingDepth)
+		}
+		return extractZipMember(member, depth+1)
 	}
 	return member, nil
 }
@@ -112,7 +132,7 @@ func memberScore(name string) int {
 	switch {
 	case strings.HasPrefix(lower, "nodelist"):
 		return 3
-	case dayExtRe.MatchString(lower):
+	case dayExtRe.MatchString(lower) || zExtRe.MatchString(lower):
 		return 2
 	case strings.HasSuffix(lower, ".txt"):
 		return 1
