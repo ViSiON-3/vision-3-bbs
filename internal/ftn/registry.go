@@ -27,6 +27,7 @@ type RegistryNetwork struct {
 	HubPort          int      `json:"hub_port,omitempty"`
 	DNSSuffix        string   `json:"dns_suffix,omitempty"`
 	EcholistURL      string   `json:"echolist_url,omitempty"`
+	NodelistURL      string   `json:"nodelist_url,omitempty"`
 	AreatagPrefix    string   `json:"areatag_prefix,omitempty"`
 	AreatagExclude   []string `json:"areatag_exclude,omitempty"`
 	AreatitlePrefix  string   `json:"areatitle_prefix,omitempty"`

@@ -8,7 +8,8 @@
     "coordinator_email": "nandre@net229.org",
     "coordinator_ftn": "1:229/426",
     "dns_suffix": "binkp.net",
-    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA"
+    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
+    "nodelist_url": "http://fido-z1.darkrealms.ca/$webfile.send.ZC1./NODELIST.Z05"
   },
   {
     "zone": 2,
@@ -18,13 +19,15 @@
     "coordinator_email": "wd@skynet.be",
     "coordinator_ftn": "2:292/854",
     "dns_suffix": "binkp.net",
-    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA"
+    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
+    "nodelist_url": "http://fido-z1.darkrealms.ca/$webfile.send.ZC1./NODELIST.Z05"
   },
   {
     "zone": 3,
     "name": "FidoNet",
     "description": "Australasia",
-    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA"
+    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
+    "nodelist_url": "http://fido-z1.darkrealms.ca/$webfile.send.ZC1./NODELIST.Z05"
   },
   {
     "zone": 4,
@@ -35,7 +38,8 @@
     "coordinator_email": "ragnarok@docksud.com.ar",
     "coordinator_ftn": "4:902/26",
     "dns_suffix": "binkp.net",
-    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA"
+    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
+    "nodelist_url": "http://fido-z1.darkrealms.ca/$webfile.send.ZC1./NODELIST.Z05"
   },
   {
     "zone": 11,
@@ -64,6 +68,7 @@
     "hub_port": 24556,
     "dns_suffix": "fsxnet.nz",
     "echolist_url": "https://raw.githubusercontent.com/fsxnet/infopack/master/fsxnet.na",
+    "nodelist_url": "https://fsxnet.nz/fsxnet.zip",
     "areatag_prefix": "FSX_"
   },
   {
@@ -88,6 +93,7 @@
     "hub_address": "39:39/0",
     "hub_hostname": "amiganet.fidoweb.net",
     "echolist_url": "https://amiganet.fidoweb.net/AmigaNetEchomailAreas.na",
+    "nodelist_url": "https://amiganet.fidoweb.net/amylist.zip",
     "areatitle_prefix": "AmigaNet:"
   },
   {
@@ -111,6 +117,7 @@
     "hub_address": "42:1/100",
     "hub_hostname": "capitolcityonline.net",
     "echolist_url": "sfnet.na",
+    "nodelist_url": "http://wiki.capitolcityonline.net/sfnet.zip",
     "areatag_prefix": "SF_"
   },
   {
@@ -253,6 +260,7 @@
     "hub_address": "618:618/2",
     "hub_hostname": "phoenix.bnbbbs.net",
     "echolist_url": "micronet.na",
+    "nodelist_url": "http://minftn.net/MININFO.ZIP",
     "areatag_prefix": "MIN_"
   },
   {
@@ -266,6 +274,7 @@
     "hub_address": "911:1423/0",
     "hub_hostname": "d1st.org",
     "echolist_url": "ZERONET.NA",
+    "nodelist_url": "https://jackphla.sh/files/zeronet/ZER0NET.ZIP",
     "areatag_prefix": "0N-",
     "handles_allowed": true
   },
@@ -280,6 +289,7 @@
     "coordinator_ftn": "3:712/1321.5",
     "hub_address": "954:895/2",
     "echolist_url": "HOBBYNET.NA",
+    "nodelist_url": "https://hobbynet.hobbyline.com/docs/HobbyNet.zip",
     "areatag_prefix": "HNET_"
   },
   {
