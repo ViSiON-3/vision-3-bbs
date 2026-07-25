@@ -1,6 +1,10 @@
 package configeditor
 
-import "github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+import (
+	"context"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+)
 
 // ftnWizardState holds all transient state for the FTN setup wizard.
 type ftnWizardState struct {
@@ -35,6 +39,21 @@ type ftnWizardState struct {
 
 	// Registry data (for pre-fill).
 	registryEntry *ftn.RegistryNetwork // nil if manual/custom
+
+	// Nodelist lookup.
+	nodelistURL   string             // from registry entry; empty = no lookup offered
+	nodelist      *ftn.Nodelist      // cached parse, nil until fetched
+	lookupLoading bool               // true while the nodelist download runs
+	lookupResult  *ftn.NodeLookup    // last successful lookup, nil if none
+	lookupErr     string             // last lookup failure, "" if none
+	lookupCancel  context.CancelFunc // cancels the in-flight fetch, nil if none running
+	hubAutofilled bool               // true if hub fields were last set by a lookup, not manual edit
+
+	// lookupGeneration increments on every startFTNNodeLookup call (and on
+	// every network switch). It guards against a late result from a
+	// cancelled-then-retried fetch against the same URL, which the url
+	// staleness check alone cannot distinguish from the current fetch.
+	lookupGeneration uint64
 }
 
 // selectedAreaCount returns how many areas are currently selected.

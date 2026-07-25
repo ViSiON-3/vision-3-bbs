@@ -76,7 +76,7 @@ func (m Model) View() string {
 		return m.viewV3NetAreaBrowser()
 	case modeRegistryBrowser:
 		return m.viewRegistryBrowser()
-	case modeFTNWizardForm, modeFTNWizardField:
+	case modeFTNWizardForm, modeFTNWizardField, modeFTNNodelistLookup:
 		return m.viewFTNWizardForm()
 	case modeFTNNetworkBrowser:
 		return m.viewFTNNetworkBrowser()

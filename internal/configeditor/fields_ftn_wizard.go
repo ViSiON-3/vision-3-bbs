@@ -52,12 +52,54 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 				if err := ftn.ValidateAddress(val); err != nil {
 					return err
 				}
+				changed := val != w.ownAddress
 				w.ownAddress = val
+				w.lookupResult = nil
+				w.lookupErr = ""
+				if changed && w.hubAutofilled {
+					if reg := w.registryEntry; reg != nil {
+						w.hubAddress = reg.HubAddress
+						w.hubHostname = reg.HubHostname
+						if reg.HubPort > 0 {
+							w.hubPort = reg.HubPort
+						} else {
+							w.hubPort = 24554
+						}
+					} else {
+						w.hubAddress = ""
+						w.hubHostname = ""
+						w.hubPort = 24554
+					}
+					w.hubAutofilled = false
+				}
 				return nil
 			},
 		},
 		{
-			Label: "Hub Address", Help: "Hub's FTN address (zone:net/node)", Type: ftString, Col: 3, Row: 7, Width: 20,
+			Label: "Node Lookup", Help: "Press Enter to find your hub in the network nodelist", Type: ftDisplay, Col: 3, Row: 7, Width: 45,
+			Get: func() string {
+				switch {
+				case w.lookupLoading:
+					return "downloading nodelist..."
+				case w.nodelistURL == "":
+					return "(no nodelist available for this network)"
+				case ftn.ValidateAddress(w.ownAddress) != nil:
+					return "(enter your address first)"
+				case w.lookupErr != "":
+					return "lookup failed - " + w.lookupErr
+				case w.lookupResult != nil && w.lookupResult.Self != nil:
+					e := w.lookupResult.Self
+					return fmt.Sprintf("%s, %s (%s)", e.Name, e.Location, e.Sysop)
+				case w.lookupResult != nil:
+					return fmt.Sprintf("not listed yet - hub inferred from net %d",
+						w.lookupResult.Uplink.Address.Net)
+				default:
+					return "(press Enter to look up your hub)"
+				}
+			},
+		},
+		{
+			Label: "Hub Address", Help: "Hub's FTN address (zone:net/node)", Type: ftString, Col: 3, Row: 8, Width: 20,
 			Get: func() string { return w.hubAddress },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -68,11 +110,12 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 					return err
 				}
 				w.hubAddress = val
+				w.hubAutofilled = false
 				return nil
 			},
 		},
 		{
-			Label: "Hub Hostname", Help: "Hub BinkP hostname or IP address", Type: ftString, Col: 3, Row: 8, Width: 35,
+			Label: "Hub Hostname", Help: "Hub BinkP hostname or IP address", Type: ftString, Col: 3, Row: 9, Width: 35,
 			Get: func() string { return w.hubHostname },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -80,11 +123,12 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 					return fmt.Errorf("cannot be empty")
 				}
 				w.hubHostname = val
+				w.hubAutofilled = false
 				return nil
 			},
 		},
 		{
-			Label: "Hub BinkP Port", Help: "BinkP port (1-65535, default 24554)", Type: ftInteger, Col: 3, Row: 9, Width: 6, Min: 1, Max: 65535,
+			Label: "Hub BinkP Port", Help: "BinkP port (1-65535, default 24554)", Type: ftInteger, Col: 3, Row: 10, Width: 6, Min: 1, Max: 65535,
 			Get: func() string { return strconv.Itoa(w.hubPort) },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -93,11 +137,12 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 					return fmt.Errorf("must be 1-65535")
 				}
 				w.hubPort = p
+				w.hubAutofilled = false
 				return nil
 			},
 		},
 		{
-			Label: "Areafix Pwd", Help: "AreaFix password (required, case-insensitive)", Type: ftString, Col: 3, Row: 11, Width: 20, Masked: true,
+			Label: "Areafix Pwd", Help: "AreaFix password (required, case-insensitive)", Type: ftString, Col: 3, Row: 12, Width: 20, Masked: true,
 			Get: func() string { return w.areafixPassword },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -109,7 +154,7 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Session Pwd", Help: "BinkP session password (required)", Type: ftString, Col: 3, Row: 12, Width: 20, Masked: true,
+			Label: "Session Pwd", Help: "BinkP session password (required)", Type: ftString, Col: 3, Row: 13, Width: 20, Masked: true,
 			Get: func() string { return w.sessionPassword },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -121,7 +166,7 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Packet Pwd", Help: "Packet password (optional, max 8 chars)", Type: ftString, Col: 3, Row: 13, Width: 8, Masked: true,
+			Label: "Packet Pwd", Help: "Packet password (optional, max 8 chars)", Type: ftString, Col: 3, Row: 14, Width: 8, Masked: true,
 			Get: func() string { return w.packetPassword },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -133,7 +178,7 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Origin Line", Help: "Echomail origin line (leave blank for default)", Type: ftString, Col: 3, Row: 15, Width: 45,
+			Label: "Origin Line", Help: "Echomail origin line (leave blank for default)", Type: ftString, Col: 3, Row: 16, Width: 45,
 			Get: func() string { return w.originLine },
 			Set: func(val string) error {
 				w.originLine = strings.TrimSpace(val)
@@ -141,7 +186,7 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 			},
 		},
 		{
-			Label: "Echo Areas", Help: "Press Enter to download and browse echo areas", Type: ftDisplay, Col: 3, Row: 17, Width: 40,
+			Label: "Echo Areas", Help: "Press Enter to download and browse echo areas", Type: ftDisplay, Col: 3, Row: 18, Width: 40,
 			Get: func() string {
 				n := w.selectedAreaCount()
 				if n == 0 {

@@ -56,6 +56,7 @@ const (
 	modeFTNNetworkBrowser                        // Known FTN network list with info panel
 	modeFTNAreaBrowser                           // FTN echo area selection from downloaded echolist
 	modeFTNAreaDownloading                       // Progress state while downloading echolist
+	modeFTNNodelistLookup                        // Progress state while downloading nodelist
 	modeQuitConfirm                              // Plain Exit? Y/N confirm (used by Task 10)
 )
 
@@ -385,6 +386,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ftnEcholistMsg:
 		return m.handleFTNEcholistMsg(msg)
 
+	case ftnNodelistMsg:
+		return m.handleFTNNodelistMsg(msg)
+
 	case tea.KeyMsg:
 		if m.splashActive {
 			m.splashActive = false
@@ -452,6 +456,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateFTNAreaBrowser(msg)
 		case modeFTNAreaDownloading:
 			result, cmd = m.updateFTNAreaDownloading(msg)
+		case modeFTNNodelistLookup:
+			result, cmd = m.updateFTNNodelistLookup(msg)
 		default:
 			return m, nil
 		}

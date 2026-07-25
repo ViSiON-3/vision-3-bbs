@@ -1,6 +1,7 @@
 package ftn
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -61,5 +62,36 @@ func TestLoadRegistry(t *testing.T) {
 			}
 			break
 		}
+	}
+}
+
+func TestRegistryNodelistURLRoundTrips(t *testing.T) {
+	var nets []RegistryNetwork
+	data := []byte(`[{"zone": 21, "name": "fsxNet", "nodelist_url": "https://example.org/fsxnet.zip"}]`)
+	if err := json.Unmarshal(data, &nets); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if nets[0].NodelistURL != "https://example.org/fsxnet.zip" {
+		t.Fatalf("NodelistURL = %q", nets[0].NodelistURL)
+	}
+}
+
+func TestEmbeddedRegistryFsxNetHasNodelistURL(t *testing.T) {
+	nets, err := LoadRegistry()
+	if err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	found := false
+	for _, n := range nets {
+		if n.Name != "fsxNet" {
+			continue
+		}
+		found = true
+		if n.NodelistURL == "" {
+			t.Error("fsxNet registry entry should carry a nodelist_url")
+		}
+	}
+	if !found {
+		t.Error("fsxNet registry entry not found")
 	}
 }

@@ -55,6 +55,11 @@ func (m Model) updateFTNWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.enterFTNAreaBrowser()
 		}
 
+		// "Node Lookup" field → run nodelist lookup.
+		if f.Type == ftDisplay && f.Label == "Node Lookup" {
+			return m.startFTNNodeLookup()
+		}
+
 		// Other display fields → just advance.
 		if f.Type == ftDisplay {
 			m.editField = m.nextFTNWizardField(1)

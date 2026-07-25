@@ -67,6 +67,10 @@ Choosing **System Configuration** (key 1) opens an inner menu with nine numbered
 | Echomail Links | Per-hub link settings (address, packet/session/AreaFix passwords, flavour) |
 | FTN Setup Wizard | Guided flow: downloads a network's echolist, lets you browse and subscribe to areas, then writes `ftn.json`, `message_areas.json`, and `conferences.json` automatically |
 
+#### FTN Setup Wizard Flow
+
+**Node Lookup.** After entering your FTN address, select the *Node Lookup* row and press Enter. The wizard downloads the network's nodelist, finds your node, and fills in your uplink hub's address, hostname, and BinkP port automatically. If your node isn't listed yet (new nodes appear in the next weekly nodelist), the hub is inferred from your net's Host/Hub entries. Networks without a published nodelist URL skip this feature; hub details can always be entered manually.
+
 ### ViSiON/3 Networking (V3Net) Sub-menu
 
 | Item | What it edits |
