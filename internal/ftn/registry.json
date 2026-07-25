@@ -263,7 +263,7 @@
     "hub_address": "618:618/2",
     "hub_hostname": "phoenix.bnbbbs.net",
     "echolist_url": "micronet.na",
-    "nodelist_url": "http://minftn.net/MININFO.ZIP",
+    "nodelist_url": "https://minftn.net/MININFO.ZIP",
     "areatag_prefix": "MIN_"
   },
   {

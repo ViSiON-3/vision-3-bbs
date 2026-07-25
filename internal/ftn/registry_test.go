@@ -81,9 +81,17 @@ func TestEmbeddedRegistryFsxNetHasNodelistURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadRegistry: %v", err)
 	}
+	found := false
 	for _, n := range nets {
-		if n.Name == "fsxNet" && n.NodelistURL == "" {
+		if n.Name != "fsxNet" {
+			continue
+		}
+		found = true
+		if n.NodelistURL == "" {
 			t.Error("fsxNet registry entry should carry a nodelist_url")
 		}
+	}
+	if !found {
+		t.Error("fsxNet registry entry not found")
 	}
 }
