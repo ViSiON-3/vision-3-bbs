@@ -215,7 +215,7 @@ func TestHandleNodelistMsg(t *testing.T) {
 	m.ftnWizard.ownAddress = "21:4/158"
 	m.ftnWizard.lookupLoading = true
 	m.mode = modeFTNNodelistLookup
-	res, _ := m.handleFTNNodelistMsg(ftnNodelistMsg{nodelist: lookupTestNodelist(t)})
+	res, _ := m.handleFTNNodelistMsg(ftnNodelistMsg{url: "https://example.org/nl.zip", nodelist: lookupTestNodelist(t)})
 	m2 := res.(Model)
 	if m2.mode != modeFTNWizardForm || m2.ftnWizard.hubHostname != "eu.example.org" {
 		t.Errorf("mode=%v hubHostname=%q", m2.mode, m2.ftnWizard.hubHostname)
@@ -225,7 +225,7 @@ func TestHandleNodelistMsg(t *testing.T) {
 	m = newLookupWizardModel("https://example.org/nl.zip")
 	m.ftnWizard.lookupLoading = true
 	m.mode = modeFTNNodelistLookup
-	res, _ = m.handleFTNNodelistMsg(ftnNodelistMsg{err: errTest})
+	res, _ = m.handleFTNNodelistMsg(ftnNodelistMsg{url: "https://example.org/nl.zip", err: errTest})
 	m2 = res.(Model)
 	if m2.ftnWizard.lookupErr == "" || m2.message == "" || m2.mode != modeFTNWizardForm {
 		t.Errorf("err path: lookupErr=%q msg=%q", m2.ftnWizard.lookupErr, m2.message)
@@ -234,7 +234,7 @@ func TestHandleNodelistMsg(t *testing.T) {
 	// Late result after ESC: dropped.
 	m = newLookupWizardModel("https://example.org/nl.zip")
 	m.mode = modeFTNWizardForm
-	res, _ = m.handleFTNNodelistMsg(ftnNodelistMsg{nodelist: lookupTestNodelist(t)})
+	res, _ = m.handleFTNNodelistMsg(ftnNodelistMsg{url: "https://example.org/nl.zip", nodelist: lookupTestNodelist(t)})
 	m2 = res.(Model)
 	if m2.ftnWizard.nodelist != nil {
 		t.Error("late nodelist result must be dropped")

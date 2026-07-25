@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"context"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -36,7 +37,9 @@ func (m Model) startFTNNodeLookup() (Model, tea.Cmd) {
 	w.lookupLoading = true
 	w.lookupErr = ""
 	m.mode = modeFTNNodelistLookup
-	return m, fetchFTNNodelist(w.nodelistURL)
+	ctx, cancel := context.WithCancel(context.Background())
+	w.lookupCancel = cancel
+	return m, fetchFTNNodelist(ctx, w.nodelistURL)
 }
 
 // applyFTNNodeLookup runs the lookup against the cached nodelist and, on
@@ -67,6 +70,7 @@ func (m *Model) applyFTNNodeLookup() {
 	w.hubAddress = res.Uplink.Address.String()
 	w.hubHostname = res.Hostname
 	w.hubPort = res.Port
+	w.hubAutofilled = true
 
 	if res.Self != nil {
 		m.message = fmt.Sprintf("Found %s — hub %s (%s:%d)",
@@ -81,6 +85,10 @@ func (m *Model) applyFTNNodeLookup() {
 // updateFTNNodelistLookup handles keys while the nodelist download runs.
 func (m Model) updateFTNNodelistLookup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyEscape {
+		if m.ftnWizard.lookupCancel != nil {
+			m.ftnWizard.lookupCancel()
+			m.ftnWizard.lookupCancel = nil
+		}
 		m.ftnWizard.lookupLoading = false
 		m.mode = modeFTNWizardForm
 	}
@@ -93,7 +101,13 @@ func (m Model) handleFTNNodelistMsg(msg ftnNodelistMsg) (tea.Model, tea.Cmd) {
 	if m.mode != modeFTNNodelistLookup {
 		return m, nil
 	}
+	// A stale result from a network we've since navigated away from: drop it
+	// before touching any state.
+	if msg.url != m.ftnWizard.nodelistURL {
+		return m, nil
+	}
 	m.ftnWizard.lookupLoading = false
+	m.ftnWizard.lookupCancel = nil
 	m.mode = modeFTNWizardForm
 	if msg.err != nil {
 		m.ftnWizard.lookupErr = msg.err.Error()

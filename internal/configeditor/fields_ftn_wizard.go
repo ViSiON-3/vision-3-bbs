@@ -52,9 +52,26 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 				if err := ftn.ValidateAddress(val); err != nil {
 					return err
 				}
+				changed := val != w.ownAddress
 				w.ownAddress = val
 				w.lookupResult = nil
 				w.lookupErr = ""
+				if changed && w.hubAutofilled {
+					if reg := w.registryEntry; reg != nil {
+						w.hubAddress = reg.HubAddress
+						w.hubHostname = reg.HubHostname
+						if reg.HubPort > 0 {
+							w.hubPort = reg.HubPort
+						} else {
+							w.hubPort = 24554
+						}
+					} else {
+						w.hubAddress = ""
+						w.hubHostname = ""
+						w.hubPort = 24554
+					}
+					w.hubAutofilled = false
+				}
 				return nil
 			},
 		},
@@ -93,6 +110,7 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 					return err
 				}
 				w.hubAddress = val
+				w.hubAutofilled = false
 				return nil
 			},
 		},
@@ -105,6 +123,7 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 					return fmt.Errorf("cannot be empty")
 				}
 				w.hubHostname = val
+				w.hubAutofilled = false
 				return nil
 			},
 		},
@@ -118,6 +137,7 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 					return fmt.Errorf("must be 1-65535")
 				}
 				w.hubPort = p
+				w.hubAutofilled = false
 				return nil
 			},
 		},

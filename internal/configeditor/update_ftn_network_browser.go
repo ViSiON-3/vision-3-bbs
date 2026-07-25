@@ -99,12 +99,18 @@ func (m *Model) populateFTNWizardFromRegistry(net *ftn.RegistryNetwork) {
 	w.echolistURL = net.EcholistURL
 	w.registryEntry = net
 
-	// Nodelist lookup state is per-network.
+	// Nodelist lookup state is per-network. Cancel any in-flight fetch from
+	// the network we're navigating away from.
+	if w.lookupCancel != nil {
+		w.lookupCancel()
+		w.lookupCancel = nil
+	}
 	w.nodelistURL = net.NodelistURL
 	w.nodelist = nil
 	w.lookupLoading = false
 	w.lookupResult = nil
 	w.lookupErr = ""
+	w.hubAutofilled = false
 
 	// Pre-fill zone in own address.
 	if w.ownAddress == "" && net.Zone > 0 {
