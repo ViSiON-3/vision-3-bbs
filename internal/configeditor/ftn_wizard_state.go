@@ -48,6 +48,12 @@ type ftnWizardState struct {
 	lookupErr     string             // last lookup failure, "" if none
 	lookupCancel  context.CancelFunc // cancels the in-flight fetch, nil if none running
 	hubAutofilled bool               // true if hub fields were last set by a lookup, not manual edit
+
+	// lookupGeneration increments on every startFTNNodeLookup call (and on
+	// every network switch). It guards against a late result from a
+	// cancelled-then-retried fetch against the same URL, which the url
+	// staleness check alone cannot distinguish from the current fetch.
+	lookupGeneration uint64
 }
 
 // selectedAreaCount returns how many areas are currently selected.

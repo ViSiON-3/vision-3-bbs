@@ -37,9 +37,10 @@ func (m Model) startFTNNodeLookup() (Model, tea.Cmd) {
 	w.lookupLoading = true
 	w.lookupErr = ""
 	m.mode = modeFTNNodelistLookup
+	w.lookupGeneration++
 	ctx, cancel := context.WithCancel(context.Background())
 	w.lookupCancel = cancel
-	return m, fetchFTNNodelist(ctx, w.nodelistURL)
+	return m, fetchFTNNodelist(ctx, w.nodelistURL, w.lookupGeneration)
 }
 
 // applyFTNNodeLookup runs the lookup against the cached nodelist and, on
@@ -106,7 +107,16 @@ func (m Model) handleFTNNodelistMsg(msg ftnNodelistMsg) (tea.Model, tea.Cmd) {
 	if msg.url != m.ftnWizard.nodelistURL {
 		return m, nil
 	}
+	// A late result from a cancelled-then-retried fetch against the same
+	// URL: the url check alone can't tell it apart from the current fetch,
+	// so guard with the generation counter too.
+	if msg.generation != m.ftnWizard.lookupGeneration {
+		return m, nil
+	}
 	m.ftnWizard.lookupLoading = false
+	if m.ftnWizard.lookupCancel != nil {
+		m.ftnWizard.lookupCancel()
+	}
 	m.ftnWizard.lookupCancel = nil
 	m.mode = modeFTNWizardForm
 	if msg.err != nil {
