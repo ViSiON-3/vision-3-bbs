@@ -27,6 +27,20 @@ With the files owned by `bbs`, you'll run the TUI editors via
 `sudo -u bbs` — see [Running the TUI Editors](#running-the-tui-editors)
 below.
 
+> **Tighter variant:** the recursive `chown` above lets the service user
+> replace its own binaries. If you want stricter separation, keep the
+> binaries root-owned and give `bbs` only the mutable directories:
+>
+> ```bash
+> sudo chown -R root:root /opt/vision3
+> sudo chown -R bbs:bbs /opt/vision3/configs /opt/vision3/data \
+>     /opt/vision3/menus /opt/vision3/doors
+> ```
+>
+> and narrow the unit's `ReadWritePaths=` to those same four directories.
+> Binary updates then require root. The simple recursive `chown` is fine
+> for most hobby installs; pick the variant that matches your paranoia.
+
 ## Step 2: Create the Unit File
 
 Copy the template below to `/etc/systemd/system/vision3.service`:
@@ -97,8 +111,15 @@ ViSiON/3 writes to `data/logs/vision3.log` and echoes the same output to
 stderr, which systemd captures in the journal:
 
 ```bash
-journalctl -u vision3 -f          # follow live
-journalctl -u vision3 --since today
+sudo journalctl -u vision3 -f          # follow live
+sudo journalctl -u vision3 --since today
+```
+
+To read the journal without `sudo`, add yourself to the `systemd-journal`
+group (takes effect at your next login):
+
+```bash
+sudo usermod -aG systemd-journal youruser
 ```
 
 ## Managing the Service
@@ -168,6 +189,14 @@ Group=youruser
 ProtectHome=read-only
 ```
 
+In this setup, **skip Step 1 entirely** — don't create the `bbs` user and
+don't `chown` the install. The files should stay owned by your own account
+so the service (and the TUI editors) can write to `configs/`, `data/`, and
+`menus/`. If you already ran the Step 1 `chown`, put it back with
+`sudo chown -R youruser:youruser /opt/vision3`. Note that `ReadWritePaths=`
+only relaxes the systemd sandbox — it does not change file ownership or
+grant write permission the filesystem denies.
+
 **Replace** the existing `ProtectHome=true` line in the hardening block —
 don't just add a second `ProtectHome=` entry. When a directive appears
 twice in a unit, systemd silently uses the last one, so a leftover
@@ -179,6 +208,13 @@ is all the symlinked binaries need — the BBS writes only under the install
 directory, which stays writable via `ReadWritePaths`. Running as your own
 account also means you own all the files, so the TUI editors work without
 `sudo`.
+
+Understand the trade-off: with `ProtectHome=read-only`, the network-facing
+BBS process can *read* anything your account can read under `/home` —
+SSH keys, dotfiles, other projects. That's a reasonable compromise on a
+dev or hobby box; for a hardened production install, use the release
+bundle with the dedicated `bbs` user instead, or keep your source tree
+outside `/home` so `ProtectHome=true` can stay.
 
 Note that rebuilding (`./build.sh`) replaces the binary in the repo, but
 the running service keeps executing the old code until you
@@ -208,7 +244,7 @@ restart the service.
 Check the journal for the actual error:
 
 ```bash
-journalctl -u vision3 -n 50
+sudo journalctl -u vision3 -n 50
 ```
 
 The most common cause is a wrong `WorkingDirectory=` — the BBS must be
