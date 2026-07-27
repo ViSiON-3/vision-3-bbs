@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -204,18 +205,27 @@ func (e *MenuExecutor) handleNewUserApplication(
 	newUser.PrivateNote = userNote
 	newUser.CreatedAt = time.Now()
 
-	// Auto-join any message areas flagged with auto_join
+	// Auto-join any message areas flagged with auto_join, seed their
+	// last-read pointers ~1 week back so the first newscan is manageable,
+	// and record the current areas/networks as offered.
 	if e.MessageMgr != nil {
+		allAreas := e.MessageMgr.ListAreas()
+		since := time.Now().AddDate(0, 0, -message.NewscanSeedDays)
 		var autoJoinTags []string
-		for _, area := range e.MessageMgr.ListAreas() {
-			if area.AutoJoin {
-				autoJoinTags = append(autoJoinTags, area.Tag)
+		for _, area := range allAreas {
+			if !area.AutoJoin {
+				continue
+			}
+			autoJoinTags = append(autoJoinTags, area.Tag)
+			if err := e.MessageMgr.SeedLastRead(area.ID, newUser.Handle, since); err != nil {
+				slog.Warn("failed to seed lastread for new user", "node", nodeNumber, "area", area.ID, "handle", handle, "error", err)
 			}
 		}
 		if len(autoJoinTags) > 0 {
 			newUser.TaggedMessageAreaTags = autoJoinTags
 			slog.Info("auto-joining message areas for new user", "node", nodeNumber, "count", len(autoJoinTags), "handle", handle)
 		}
+		initNewscanSeen(newUser, allAreas)
 	}
 
 	if saveErr := userManager.UpdateUser(newUser); saveErr != nil {
