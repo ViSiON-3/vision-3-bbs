@@ -838,6 +838,16 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 	loginSequence := e.GetLoginSequence()
 	slog.Info("running FULL_LOGIN_SEQUENCE", "node", nodeNumber, "handle", currentUser.Handle, "count", len(loginSequence))
 
+	// Offer newly flagged newscan-default areas before the login items run.
+	if updated, njErr := runNewscanAutoJoin(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}); njErr != nil {
+		if errors.Is(njErr, io.EOF) {
+			return nil, "LOGOFF", io.EOF
+		}
+		slog.Error("newscan auto-join failed", "node", nodeNumber, "error", njErr)
+	} else if updated != nil {
+		currentUser = updated
+	}
+
 	// Build dispatch map for login item commands
 	type loginHandler func(c *cmdCtx, args string) (*user.User, string, error)
 

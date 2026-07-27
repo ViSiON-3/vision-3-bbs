@@ -348,6 +348,7 @@ type StringsConfig struct {
 	ScanNoAreaSelected      string `json:"scanNoAreaSelected"`
 	ScanNoMessages          string `json:"scanNoMessages"`
 	ScanNoTaggedAreas       string `json:"scanNoTaggedAreas"`
+	NewscanNewNetworkPrompt string `json:"newscanNewNetworkPrompt"`
 	ScanAreaProgress        string `json:"scanAreaProgress"`
 	ScanComplete            string `json:"scanComplete"`
 	ScanLoginRequired       string `json:"scanLoginRequired"`
