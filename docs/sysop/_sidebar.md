@@ -98,6 +98,7 @@
 * [How-To Guides](how-to-guides/README.md)
 * [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md)
 * [WFC Sysop Console](how-to-guides/wfc-console.md)
+* [Running as a systemd Service](how-to-guides/systemd-service.md)
 
 * **REFERENCE**
 * [Architecture](reference/architecture.md)
