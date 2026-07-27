@@ -97,6 +97,9 @@ See the [Configuration Guide](configuration/configuration.md) for all available 
 
 The server listens on port 2222 (SSH) and 2323 (Telnet) by default.
 
+To start the BBS automatically at boot on Linux, see
+[Running as a systemd Service](how-to-guides/systemd-service.md).
+
 ## Step 6: Connect and Verify
 
 ```bash
