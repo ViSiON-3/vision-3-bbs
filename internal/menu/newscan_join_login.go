@@ -74,9 +74,7 @@ func runNewscanAutoJoin(c *cmdCtx) (*user.User, error) {
 		addTag(tag)
 		u.SeenNewscanAreaTags = append(u.SeenNewscanAreaTags, tag)
 	}
-	for _, tag := range plan.ResidualSeenTags {
-		u.SeenNewscanAreaTags = append(u.SeenNewscanAreaTags, tag)
-	}
+	u.SeenNewscanAreaTags = append(u.SeenNewscanAreaTags, plan.ResidualSeenTags...)
 	if len(plan.SilentTags) > 0 {
 		slog.Info("silently added local areas to newscan", "node", c.nodeNumber, "handle", u.Handle, "count", len(plan.SilentTags))
 	}
