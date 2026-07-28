@@ -46,6 +46,11 @@ func (m Model) updateFTNWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyTab, tea.KeyEnter:
 		f := m.ftnWizardFields[m.editField]
 
+		if f.Type == ftYesNo {
+			m.toggleFTNWizardYesNo(f)
+			return m, nil
+		}
+
 		// "Network" field → open network browser.
 		if f.Type == ftDisplay && f.Label == "Network" {
 			return m.enterFTNNetworkBrowser()
@@ -70,6 +75,13 @@ func (m Model) updateFTNWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		// Editable field → start text input.
 		return m.startFTNWizardFieldEdit()
+
+	case tea.KeySpace:
+		f := m.ftnWizardFields[m.editField]
+		if f.Type == ftYesNo {
+			m.toggleFTNWizardYesNo(f)
+		}
+		return m, nil
 
 	case tea.KeyDown:
 		m.editField = m.nextFTNWizardField(1)
@@ -133,6 +145,26 @@ func (m Model) updateFTNWizardField(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	default:
+		if f.Type == ftYesNo {
+			if len(msg.Runes) == 1 {
+				ch := msg.Runes[0]
+				switch ch {
+				case 'y', 'Y':
+					m.textInput.SetValue("Y")
+				case 'n', 'N':
+					m.textInput.SetValue("N")
+				}
+				if err := m.applyFTNWizardFieldValue(f); err == nil {
+					m.textInput.Blur()
+					m.mode = modeFTNWizardForm
+					m.editField = m.nextFTNWizardField(1)
+					m.clampFieldScroll(m.ftnWizardFields)
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if f.Type == ftInteger {
 			if len(msg.Runes) == 1 {
 				ch := msg.Runes[0]
@@ -145,6 +177,18 @@ func (m Model) updateFTNWizardField(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
 		return m, cmd
+	}
+}
+
+// toggleFTNWizardYesNo flips the value of a boolean (yes/no) FTN wizard field.
+func (m *Model) toggleFTNWizardYesNo(f fieldDef) {
+	if f.Get != nil && f.Set != nil {
+		if f.Get() == "Y" {
+			_ = f.Set("N") // Y/N field setters never fail
+		} else {
+			_ = f.Set("Y") // Y/N field setters never fail
+		}
+		m.message = ""
 	}
 }
 
@@ -197,6 +241,12 @@ func (m *Model) applyFTNWizardFieldValue(f fieldDef) error {
 		if n < f.Min || n > f.Max {
 			return fmt.Errorf("must be %d-%d", f.Min, f.Max)
 		}
+	case ftYesNo:
+		upper := strings.ToUpper(val)
+		if upper != "Y" && upper != "N" {
+			return fmt.Errorf("must be Y or N")
+		}
+		val = upper
 	}
 
 	if f.Set != nil {
