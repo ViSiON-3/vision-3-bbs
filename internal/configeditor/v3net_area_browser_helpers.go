@@ -196,12 +196,23 @@ func (m *Model) createBrowserMsgAreaIfNeeded(tag, name, network string) {
 		AreaType:     "v3net",
 		Network:      network,
 		EchoTag:      tag,
-		AutoJoin:     true,
+		AutoJoin:     m.leafAutoJoin(network),
 		ACSRead:      "s10",
 		ACSWrite:     "s20",
 		BasePath:     filepath.Join("msgbases", safeName),
 		ConferenceID: confID,
 	})
+}
+
+// leafAutoJoin returns the newscan-default setting for a network's leaf
+// subscription; true when no leaf exists yet.
+func (m *Model) leafAutoJoin(network string) bool {
+	for _, l := range m.configs.V3Net.Leaves {
+		if l.Network == network {
+			return l.AutoJoinEnabled()
+		}
+	}
+	return true
 }
 
 // findOrCreateNetworkConference returns the conference ID for a V3Net network,

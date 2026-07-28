@@ -37,6 +37,7 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	outputMode := c.outputMode
 	termWidth := c.termWidth
 	termHeight := c.termHeight
+	nodeNumber := c.nodeNumber
 
 	if currentUser == nil || e.V3NetStatus == nil {
 		return nil, "", nil
@@ -323,7 +324,17 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			} else {
 				// Subscribe: add leaf config + create message area.
-				if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, ent.network, ent.hubURL, ent.area); err != nil {
+				// Prompt once for the newscan-default choice if this
+				// network has no leaf yet (its choice was already made
+				// if one exists).
+				autoJoin := true
+				if !v3netHasLeaf(e.RootConfigPath, ent.network) {
+					yes, perr := e.PromptYesNo(s, terminal, fmt.Sprintf("|15Add |14%s|15 areas to users' newscan by default?", ent.network), outputMode, nodeNumber, termWidth, termHeight, true)
+					if perr == nil {
+						autoJoin = yes
+					}
+				}
+				if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, ent.network, ent.hubURL, ent.area, autoJoin); err != nil {
 					statusMsg = fmt.Sprintf("|04Subscribe failed: %s|07", err)
 				} else {
 					ent.subscribed = true
@@ -339,8 +350,26 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 }
 
+// v3netHasLeaf reports whether a leaf subscription already exists for the
+// network (meaning its newscan-default choice was already made).
+func v3netHasLeaf(configPath, network string) bool {
+	cfg, err := config.LoadV3NetConfig(configPath)
+	if err != nil {
+		return false
+	}
+	for _, l := range cfg.Leaves {
+		if l.Network == network {
+			return true
+		}
+	}
+	return false
+}
+
 // v3netSubscribe adds a leaf config entry and auto-creates the message area.
-func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hubURL string, area protocol.Area) error {
+// autoJoin sets the newscan-default flag for a newly created leaf; when a
+// leaf already exists for the network, its own AutoJoinAreas setting is used
+// instead so the sysop's original choice is respected.
+func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hubURL string, area protocol.Area, autoJoin bool) error {
 	cfg, err := config.LoadV3NetConfig(configPath)
 	if err != nil {
 		return err
@@ -354,20 +383,23 @@ func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hub
 	}
 
 	// Append to existing leaf for this network, or create a new one.
+	effectiveAutoJoin := autoJoin
 	found := false
 	for i, l := range cfg.Leaves {
 		if l.Network == network {
 			cfg.Leaves[i].Boards = append(cfg.Leaves[i].Boards, area.Tag)
+			effectiveAutoJoin = l.AutoJoinEnabled()
 			found = true
 			break
 		}
 	}
 	if !found {
 		cfg.Leaves = append(cfg.Leaves, config.V3NetLeafConfig{
-			HubURL:       hubURL,
-			Network:      network,
-			Boards:       []string{area.Tag},
-			PollInterval: "5m",
+			HubURL:        hubURL,
+			Network:       network,
+			Boards:        []string{area.Tag},
+			PollInterval:  "5m",
+			AutoJoinAreas: &autoJoin,
 		})
 	}
 
@@ -393,7 +425,7 @@ func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hub
 			Network:      network,
 			EchoTag:      area.Tag,
 			ConferenceID: confID,
-			AutoJoin:     true,
+			AutoJoin:     effectiveAutoJoin,
 			ACSRead:      "s10",
 			ACSWrite:     "s20",
 		})
