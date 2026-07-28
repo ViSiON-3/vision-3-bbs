@@ -136,7 +136,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			},
 		},
 		{
-			Label: "Auto Join", Help: "Newscan default: new users auto-join this area (existing users are offered new networks at login)", Type: ftYesNo, Col: 3, Row: 12, Width: 1,
+			Label: "Auto Join", Help: "Newscan default: new users auto-join this area; local areas are added silently, new networks are offered at login", Type: ftYesNo, Col: 3, Row: 12, Width: 1,
 			Get: func() string { return uitext.BoolToYN(a.AutoJoin) },
 			Set: func(val string) error { a.AutoJoin = uitext.YNToBool(val); return nil },
 		},

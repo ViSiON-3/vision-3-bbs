@@ -66,6 +66,7 @@ Message areas are defined in `configs/message_areas.json` as an array:
 - **local** — Messages stay on this BBS only. No FTN processing.
 - **echomail** — Conference-style networked messages. The tosser imports/exports packets. Messages get MSGID, tearline, origin line, and SEEN-BY/PATH.
 - **netmail** — Point-to-point private FTN mail between addresses.
+- **v3net** — Networked V3Net message area. Messages sync with a V3Net hub.
 
 ### Auto Join Behavior
 

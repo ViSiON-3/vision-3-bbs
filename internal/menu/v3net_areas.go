@@ -330,9 +330,10 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 				autoJoin := true
 				if !v3netHasLeaf(e.RootConfigPath, ent.network) {
 					yes, perr := e.PromptYesNo(s, terminal, fmt.Sprintf("|15Add |14%s|15 areas to users' newscan by default?", ent.network), outputMode, nodeNumber, termWidth, termHeight, true)
-					if perr == nil {
-						autoJoin = yes
+					if perr != nil {
+						return nil, "", perr
 					}
+					autoJoin = yes
 				}
 				if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, ent.network, ent.hubURL, ent.area, autoJoin); err != nil {
 					statusMsg = fmt.Sprintf("|04Subscribe failed: %s|07", err)
