@@ -360,11 +360,11 @@ You can hide parts of a menu's ANSI art from users who don't pass an access
 check. Wrap the text in `{{acs}}` and `{{/}}`, where `acs` is any standard
 ACS expression — the same syntax used for menu commands:
 
-````
+```text
 [M] Message Bases
 [F] File Bases
 {{S255}}[*] Sysop Menu{{/}}
-````
+```
 
 Users with level 255+ see `[*] Sysop Menu`; everyone else sees blank space
 of exactly the same size, so the surrounding art stays aligned.
