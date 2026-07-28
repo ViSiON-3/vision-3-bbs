@@ -77,10 +77,12 @@ func pipeSequence(s []byte) (n int, keep bool) {
 	return 0, false
 }
 
-// applyConditionalRegions resolves {{acs}}...{{/}} regions in raw menu ANSI
-// content against the viewing user. Safe for a nil user (all gated regions
+// applyConditionalRegions resolves {{condition}}...{{/}} regions in raw menu
+// ANSI content against the viewing user. A condition is resolved first
+// against the caller-supplied keywords map (e.g. "SPONSOR"), then as an ACS
+// expression. Safe for a nil user and a nil keywords map (all gated regions
 // hide, matching CheckUserACS).
-func applyConditionalRegions(content []byte, u *user.User) []byte {
+func applyConditionalRegions(content []byte, u *user.User, keywords map[string]bool) []byte {
 	if !bytes.Contains(content, []byte(condOpen)) {
 		return content
 	}
@@ -133,7 +135,11 @@ func applyConditionalRegions(content []byte, u *user.User) []byte {
 		} else {
 			slog.Warn("unclosed conditional region in menu ANSI, applying to end of file", "acs", inner)
 		}
-		if CheckUserACS(inner, u) {
+		show, isKeyword := keywords[inner]
+		if !isKeyword {
+			show = CheckUserACS(inner, u)
+		}
+		if show {
 			out.Write(region)
 		} else {
 			out.Write(blankRegion(region))
