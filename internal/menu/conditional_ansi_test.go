@@ -35,6 +35,8 @@ func TestApplyConditionalRegions(t *testing.T) {
 		{"pending validations untouched", "N: {{PENDING_VALIDATIONS}}", lowUser, "N: {{PENDING_VALIDATIONS}}"},
 		{"multiple sequential regions", "{{S255}}A{{/}}-{{S10}}B{{/}}", lowUser, " -B"},
 		{"open braces without close are literal", "{{S255", lowUser, "{{S255"},
+		{"condition spanning lines is literal art", "{{\r\nart}}text", lowUser, "{{\r\nart}}text"},
+		{"real region still works after literal braces", "{{\r\n}} {{S255}}Hi{{/}}", lowUser, "{{\r\n}}   "},
 	}
 
 	for _, tt := range tests {

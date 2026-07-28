@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log/slog"
 	"regexp"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -58,6 +59,14 @@ func applyConditionalRegions(content []byte, u *user.User) []byte {
 		}
 		inner := string(content[open+len(condOpen) : open+braceEnd])
 		markerEnd := open + braceEnd + 2
+
+		// A real ACS condition never spans lines; decorative {{ in ASCII art
+		// whose nearest }} is on a later line stays literal.
+		if strings.ContainsAny(inner, "\r\n") {
+			out.Write([]byte(condOpen))
+			i = open + len(condOpen)
+			continue
+		}
 
 		if knownLiteralTokens[inner] {
 			out.Write(content[open:markerEnd])

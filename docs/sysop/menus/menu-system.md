@@ -382,6 +382,9 @@ Rules and caveats:
   warning is logged).
 - **Invalid ACS hides the region** and logs a warning — a typo never leaks
   restricted text.
+- **Decorative braces are safe across lines.** A `{{` whose nearest `}}`
+  falls on a later line is treated as literal art. But avoid a decorative
+  `{{...}}` pair on a single line — it would be read as a condition.
 - **Don't put field markers inside regions.** Lightbar/field coordinate
   markers (`|XX`, `~XX`) inside a hidden region are blanked with the rest,
   which would break those fields for users who fail the check.
