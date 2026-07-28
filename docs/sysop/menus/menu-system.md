@@ -374,6 +374,19 @@ Any ACS expression works: `{{SYSOP}}`, `{{S50}}`, `{{F(A)}}`,
 hidden lines are blanked, not removed, so vertical layout is preserved.
 Pipe color codes inside a hidden region are discarded cleanly.
 
+### Keyword conditions
+
+Besides ACS expressions, a region can use a keyword condition:
+
+- `{{SPONSOR}}` — shows the region only to users who can enter the sponsor
+  menu for the currently selected message area: sysops, co-sysops, and the
+  area's sponsor (matched by handle). On menus where no message area is
+  selected, the region is hidden.
+
+Keywords stand alone — they cannot be combined with ACS operators.
+`{{SPONSOR&S50}}` is not a keyword; it is evaluated as an ACS expression,
+fails, and hides the region.
+
 Rules and caveats:
 
 - **No nesting.** The first `{{/}}` after an opening `{{acs}}` closes it.
