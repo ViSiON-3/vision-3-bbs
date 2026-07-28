@@ -36,6 +36,11 @@ func TestApplyConditionalRegions(t *testing.T) {
 		{"multiple sequential regions", "{{S255}}A{{/}}-{{S10}}B{{/}}", lowUser, " -B"},
 		{"open braces without close are literal", "{{S255", lowUser, "{{S255"},
 		{"condition spanning lines is literal art", "{{\r\nart}}text", lowUser, "{{\r\nart}}text"},
+		{"multi-letter token blanked at full width", "{{S255}}|NEWUSERS{{/}}", lowUser, "         "},
+		{"pipe CR line break preserved", "{{S255}}A|CRB{{/}}", lowUser, " |CR "},
+		{"login position markers removed", "{{S255}}|{P}Hi{{/}}", lowUser, "  "},
+		{"two-letter coord marker removed", "{{S255}}|CDx{{/}}", lowUser, " "},
+		{"tilde with digit is visible width", "{{S255}}~A1Hi{{/}}", lowUser, "     "},
 		{"real region still works after literal braces", "{{\r\n}} {{S255}}Hi{{/}}", lowUser, "{{\r\n}}   "},
 	}
 

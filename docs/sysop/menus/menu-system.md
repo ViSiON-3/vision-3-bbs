@@ -380,7 +380,7 @@ Rules and caveats:
 - **Unclosed regions fail safe.** If you forget `{{/}}`, the region runs to
   the end of the file and is hidden from anyone failing the check (a
   warning is logged).
-- **Invalid ACS hides the region** and logs a warning — a typo never leaks
+- **Invalid ACS hides the region** and logs an error — a typo never leaks
   restricted text.
 - **Decorative braces are safe across lines.** A `{{` whose nearest `}}`
   falls on a later line is treated as literal art. But avoid a decorative

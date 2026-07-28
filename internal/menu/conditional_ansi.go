@@ -3,7 +3,6 @@ package menu
 import (
 	"bytes"
 	"log/slog"
-	"regexp"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -25,12 +24,58 @@ var knownLiteralTokens = map[string]bool{
 	"PENDING_VALIDATIONS": true,
 }
 
-// zeroWidthRegex matches content that occupies no screen cells when the ANSI
-// processor renders it: CSI escape sequences, |XX pipe/coordinate codes
-// (including 3-char |B10..|B15 backgrounds), and ~XX coordinate markers.
-// Removed (not spaced) when blanking so the blank area matches the region's
-// rendered width.
-var zeroWidthRegex = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]|\|(?:B1[0-5]|[A-Z0-9]{2})|~[A-Z0-9]{2}`)
+func isUpper(b byte) bool { return b >= 'A' && b <= 'Z' }
+func isDigit(b byte) bool { return b >= '0' && b <= '9' }
+
+// pipeSequence classifies the pipe code at the start of s (s[0] == '|'),
+// mirroring the renderer's longest-match-first parsing. It returns the byte
+// length of the zero-width code and whether it must be kept verbatim (the
+// |CR line break, which affects vertical geometry). n == 0 means s does not
+// start a recognized code and the '|' is visible content — notably a
+// multi-letter |TOKEN placeholder, which is blanked at full marker width
+// rather than partially consumed.
+func pipeSequence(s []byte) (n int, keep bool) {
+	if len(s) >= 4 {
+		if s[1] == '{' && (s[2] == 'P' || s[2] == 'O') && s[3] == '}' {
+			return 4, false // |{P} / |{O} login position markers
+		}
+		if s[1] == 'B' && s[2] == '1' && s[3] >= '0' && s[3] <= '5' {
+			return 4, false // |B10..|B15 bright backgrounds
+		}
+	}
+	if len(s) >= 3 {
+		switch string(s[:3]) {
+		case "|CR":
+			return 3, true // line break: preserve vertical geometry
+		case "|CL", "|DE", "|PP":
+			return 3, false
+		}
+		if isDigit(s[1]) && isDigit(s[2]) {
+			if v := int(s[1]-'0')*10 + int(s[2]-'0'); v <= 23 {
+				return 3, false // |00..|23 colors and reset
+			}
+			return 0, false // not a color code: visible
+		}
+		if s[1] == 'B' && isDigit(s[2]) {
+			return 3, false // |B0..|B9 backgrounds
+		}
+	}
+	if len(s) >= 2 && s[1] == 'P' {
+		return 2, false // |P save cursor (renderer matches it before placeholders)
+	}
+	// Coordinate placeholders: |X or |XY uppercase — but three or more
+	// uppercase letters is a |TOKEN placeholder, left visible.
+	if len(s) >= 2 && isUpper(s[1]) {
+		if len(s) >= 3 && isUpper(s[2]) {
+			if len(s) >= 4 && isUpper(s[3]) {
+				return 0, false
+			}
+			return 3, false
+		}
+		return 2, false
+	}
+	return 0, false
+}
 
 // applyConditionalRegions resolves {{acs}}...{{/}} regions in raw menu ANSI
 // content against the viewing user. Safe for a nil user (all gated regions
@@ -99,16 +144,54 @@ func applyConditionalRegions(content []byte, u *user.User) []byte {
 }
 
 // blankRegion replaces a hidden region with whitespace of identical rendered
-// geometry: zero-width sequences removed, line breaks kept, all else spaced.
+// geometry: zero-width content (CSI escapes, pipe/tilde codes and markers)
+// is removed, line breaks — including the |CR pipe command — are preserved,
+// and everything else, including multi-letter |TOKEN placeholders, is
+// blanked at its own width.
 func blankRegion(region []byte) []byte {
-	region = zeroWidthRegex.ReplaceAll(region, nil)
-	blanked := make([]byte, len(region))
-	for i, b := range region {
-		if b == '\r' || b == '\n' {
-			blanked[i] = b
-		} else {
-			blanked[i] = ' '
+	var out bytes.Buffer
+	out.Grow(len(region))
+	i := 0
+	for i < len(region) {
+		b := region[i]
+		switch {
+		case b == '\r' || b == '\n':
+			out.WriteByte(b)
+			i++
+		case b == 0x1b: // CSI escape sequence: zero-width, remove
+			j := i + 1
+			if j < len(region) && region[j] == '[' {
+				j++
+				for j < len(region) && !isCSIFinal(region[j]) {
+					j++
+				}
+				if j < len(region) {
+					j++ // consume the final byte
+				}
+			}
+			i = j
+		case b == '|':
+			n, keep := pipeSequence(region[i:])
+			switch {
+			case n == 0:
+				out.WriteByte(' ') // literal '|' is visible
+				i++
+			case keep:
+				out.Write(region[i : i+n])
+				i += n
+			default:
+				i += n
+			}
+		case b == '~' && i+2 < len(region) && isUpper(region[i+1]) && isUpper(region[i+2]):
+			i += 3 // ~XY coordinate marker (letters only): zero-width, remove
+		default:
+			out.WriteByte(' ')
+			i++
 		}
 	}
-	return blanked
+	return out.Bytes()
+}
+
+func isCSIFinal(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
 }
