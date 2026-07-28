@@ -30,3 +30,23 @@ func CanAccessSponsorMenu(u *user.User, area *message.MessageArea, cfg config.Se
 	}
 	return false
 }
+
+// areaLookup is the slice of MessageManager the sponsor keyword needs,
+// defined here (at the consumer) so tests can substitute a fake.
+type areaLookup interface {
+	GetAreaByID(id int) (*message.MessageArea, bool)
+}
+
+// sponsorKeyword resolves the {{SPONSOR}} conditional-region keyword: true
+// when u could enter the sponsor menu for their currently selected message
+// area. Nil user, nil lookup, or no selected/known area all yield false.
+func sponsorKeyword(u *user.User, areas areaLookup, cfg config.ServerConfig) bool {
+	if u == nil || areas == nil || u.CurrentMessageAreaID <= 0 {
+		return false
+	}
+	area, found := areas.GetAreaByID(u.CurrentMessageAreaID)
+	if !found {
+		return false
+	}
+	return CanAccessSponsorMenu(u, area, cfg)
+}
