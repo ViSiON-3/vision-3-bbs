@@ -68,8 +68,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		if readErr == nil {
 			// Resolve {{acs}}...{{/}} conditional regions first, before any
 			// |TOKEN substitution, so tokens inside hidden regions never expand.
-			// Keyword conditions for {{...}} regions. e.MessageMgr is passed
-			// through a nil check so a nil *MessageManager never becomes a
+			// Keyword conditions (e.g. {{SPONSOR}}) are resolved first against the
+			// keywords map, then fall through to ACS evaluation. e.MessageMgr is
+			// passed through a nil check so a nil *MessageManager never becomes a
 			// non-nil areaLookup interface.
 			var areas areaLookup
 			if e.MessageMgr != nil {

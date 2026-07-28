@@ -31,7 +31,7 @@ func CanAccessSponsorMenu(u *user.User, area *message.MessageArea, cfg config.Se
 	return false
 }
 
-// areaLookup is the slice of MessageManager the sponsor keyword needs,
+// areaLookup is the subset of MessageManager's method set the sponsor keyword needs,
 // defined here (at the consumer) so tests can substitute a fake.
 type areaLookup interface {
 	GetAreaByID(id int) (*message.MessageArea, bool)

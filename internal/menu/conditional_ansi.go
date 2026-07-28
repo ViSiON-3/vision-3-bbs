@@ -135,7 +135,7 @@ func applyConditionalRegions(content []byte, u *user.User, keywords map[string]b
 		} else {
 			slog.Warn("unclosed conditional region in menu ANSI, applying to end of file", "acs", inner)
 		}
-		show, isKeyword := keywords[inner]
+		show, isKeyword := keywords[strings.ToUpper(inner)]
 		if !isKeyword {
 			show = CheckUserACS(inner, u)
 		}

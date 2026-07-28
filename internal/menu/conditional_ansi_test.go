@@ -69,6 +69,7 @@ func TestApplyConditionalRegionsKeywords(t *testing.T) {
 		{"keyword false blanks region", "{{SPONSOR}}[%] Sponsor{{/}}", denied, "           "},
 		{"keyword absent falls through to ACS and hides", "{{SPONSOR}}Hi{{/}}", map[string]bool{}, "  "},
 		{"nil map falls through to ACS and hides", "{{SPONSOR}}Hi{{/}}", nil, "  "},
+		{"keyword lookup is case-insensitive", "{{sponsor}}Hi{{/}}", granted, "Hi"},
 		{"acs conditions still work alongside keywords", "{{S10}}Hi{{/}}", granted, "Hi"},
 	}
 

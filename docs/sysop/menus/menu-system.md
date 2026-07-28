@@ -380,8 +380,10 @@ Besides ACS expressions, a region can use a keyword condition:
 
 - `{{SPONSOR}}` — shows the region only to users who can enter the sponsor
   menu for the currently selected message area: sysops, co-sysops, and the
-  area's sponsor (matched by handle). On menus where no message area is
-  selected, the region is hidden.
+  area's sponsor (matched by handle). Area selection is per-user and persists
+  across menus, so `{{SPONSOR}}` works on any menu screen; for users with no
+  message area selected, the region is hidden. Keywords are written in
+  uppercase (lowercase also matches).
 
 Keywords stand alone — they cannot be combined with ACS operators.
 `{{SPONSOR&S50}}` is not a keyword; it is evaluated as an ACS expression,
