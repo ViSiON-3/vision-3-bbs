@@ -15,16 +15,16 @@ func areaFix(tag, network string, autoJoin bool) *message.MessageArea {
 	return &message.MessageArea{Tag: tag, Network: network, AutoJoin: autoJoin}
 }
 
-func TestBuildPlan_GrandfatherWhenSeenSetsEmpty(t *testing.T) {
+func TestBuildPlan_GrandfatherWhenNotInitialized(t *testing.T) {
 	u := &user.User{Handle: "old"}
 	p := buildNewscanJoinPlan([]*message.MessageArea{areaFix("GEN", "", true)}, u, allReadable)
 	if !p.Grandfather {
-		t.Fatal("expected grandfather for user with empty seen-sets")
+		t.Fatal("expected grandfather for user without the seen-init marker")
 	}
 }
 
 func TestBuildPlan_SilentLocalAdd(t *testing.T) {
-	u := &user.User{SeenNewscanAreaTags: []string{"OLD"}}
+	u := &user.User{NewscanSeenInitialized: true, SeenNewscanAreaTags: []string{"OLD"}}
 	p := buildNewscanJoinPlan([]*message.MessageArea{
 		areaFix("OLD", "", true),
 		areaFix("CHAT", "", true),
@@ -36,13 +36,13 @@ func TestBuildPlan_SilentLocalAdd(t *testing.T) {
 	if !reflect.DeepEqual(p.SilentTags, []string{"CHAT"}) {
 		t.Errorf("SilentTags = %v, want [CHAT]", p.SilentTags)
 	}
-	if !reflect.DeepEqual(p.SeenTags, []string{"CHAT"}) {
-		t.Errorf("SeenTags = %v, want [CHAT]", p.SeenTags)
+	if len(p.ResidualSeenTags) != 0 {
+		t.Errorf("ResidualSeenTags = %v, want empty", p.ResidualSeenTags)
 	}
 }
 
 func TestBuildPlan_NewNetworkGrouped(t *testing.T) {
-	u := &user.User{SeenNewscanAreaTags: []string{"GEN"}, SeenNewscanNetworks: []string{"fsxnet"}}
+	u := &user.User{NewscanSeenInitialized: true, SeenNewscanAreaTags: []string{"GEN"}, SeenNewscanNetworks: []string{"fsxnet"}}
 	p := buildNewscanJoinPlan([]*message.MessageArea{
 		areaFix("GEN", "", true),
 		areaFix("TQW_GEN", "TQWNet", true),
@@ -56,14 +56,11 @@ func TestBuildPlan_NewNetworkGrouped(t *testing.T) {
 	if p.NetworkNames["tqwnet"] != "TQWNet" {
 		t.Errorf("NetworkNames = %v, want display name TQWNet", p.NetworkNames)
 	}
-	if !reflect.DeepEqual(p.SeenNets, []string{"tqwnet"}) {
-		t.Errorf("SeenNets = %v, want [tqwnet]", p.SeenNets)
-	}
 }
 
 func TestBuildPlan_SeenNetworkAreasMarkedSeenNotTagged(t *testing.T) {
 	// User declined fsxnet earlier; a new area appears in it later.
-	u := &user.User{SeenNewscanAreaTags: []string{"FSX_GEN"}, SeenNewscanNetworks: []string{"fsxnet"}}
+	u := &user.User{NewscanSeenInitialized: true, SeenNewscanAreaTags: []string{"FSX_GEN"}, SeenNewscanNetworks: []string{"fsxnet"}}
 	p := buildNewscanJoinPlan([]*message.MessageArea{
 		areaFix("FSX_GEN", "fsxnet", true),
 		areaFix("FSX_NEW", "fsxnet", true),
@@ -71,25 +68,36 @@ func TestBuildPlan_SeenNetworkAreasMarkedSeenNotTagged(t *testing.T) {
 	if len(p.SilentTags) != 0 || len(p.NetworkTags) != 0 {
 		t.Errorf("declined network must not tag: silent=%v nets=%v", p.SilentTags, p.NetworkTags)
 	}
-	if !reflect.DeepEqual(p.SeenTags, []string{"FSX_NEW"}) {
-		t.Errorf("SeenTags = %v, want [FSX_NEW]", p.SeenTags)
+	if !reflect.DeepEqual(p.ResidualSeenTags, []string{"FSX_NEW"}) {
+		t.Errorf("ResidualSeenTags = %v, want [FSX_NEW]", p.ResidualSeenTags)
 	}
 }
 
 func TestBuildPlan_InaccessibleAreasSkipped(t *testing.T) {
-	u := &user.User{SeenNewscanAreaTags: []string{"X"}}
+	u := &user.User{NewscanSeenInitialized: true, SeenNewscanAreaTags: []string{"X"}}
 	p := buildNewscanJoinPlan([]*message.MessageArea{areaFix("SYSOP", "", true)}, u,
 		func(*message.MessageArea) bool { return false })
-	if len(p.SilentTags) != 0 || len(p.SeenTags) != 0 {
+	if len(p.SilentTags) != 0 || len(p.ResidualSeenTags) != 0 {
 		t.Errorf("inaccessible area leaked into plan: %+v", p)
 	}
 }
 
 func TestBuildPlan_CaseInsensitiveNetworkMatch(t *testing.T) {
-	u := &user.User{SeenNewscanAreaTags: []string{"X"}, SeenNewscanNetworks: []string{"tqwnet"}}
+	u := &user.User{NewscanSeenInitialized: true, SeenNewscanAreaTags: []string{"X"}, SeenNewscanNetworks: []string{"tqwnet"}}
 	p := buildNewscanJoinPlan([]*message.MessageArea{areaFix("TQW_GEN", "TQWNET", true)}, u, allReadable)
 	if len(p.NetworkTags) != 0 {
 		t.Errorf("TQWNET should match seen 'tqwnet'; got prompt for %v", p.NetworkTags)
+	}
+}
+
+func TestBuildPlan_InitializedEmptyWorldJoinsLaterAreas(t *testing.T) {
+	u := &user.User{NewscanSeenInitialized: true}
+	p := buildNewscanJoinPlan([]*message.MessageArea{areaFix("CHAT", "", true)}, u, allReadable)
+	if p.Grandfather {
+		t.Fatal("initialized user with empty seen-sets must not be grandfathered")
+	}
+	if !reflect.DeepEqual(p.SilentTags, []string{"CHAT"}) {
+		t.Errorf("SilentTags = %v, want [CHAT]", p.SilentTags)
 	}
 }
 
@@ -108,5 +116,8 @@ func TestInitNewscanSeen(t *testing.T) {
 	sort.Strings(u.SeenNewscanNetworks)
 	if !reflect.DeepEqual(u.SeenNewscanNetworks, []string{"fsxnet", "tqwnet"}) {
 		t.Errorf("SeenNewscanNetworks = %v", u.SeenNewscanNetworks)
+	}
+	if !u.NewscanSeenInitialized {
+		t.Error("NewscanSeenInitialized = false, want true")
 	}
 }

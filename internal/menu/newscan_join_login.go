@@ -28,19 +28,25 @@ func runNewscanAutoJoin(c *cmdCtx) (*user.User, error) {
 	}
 	plan := buildNewscanJoinPlan(allAreas, u, canRead)
 
+	save := func() {
+		if err := c.userManager.UpdateUser(u); err != nil {
+			slog.Error("failed to save newscan auto-join", "node", c.nodeNumber, "handle", u.Handle, "error", err)
+		}
+	}
+
 	if plan.Grandfather {
 		initNewscanSeen(u, allAreas)
-		if len(u.SeenNewscanAreaTags) == 0 && len(u.SeenNewscanNetworks) == 0 {
-			return nil, nil // nothing to record yet
-		}
+		// The marker itself must persist even in an empty world (zero
+		// AutoJoin areas, zero networks), or the user is re-grandfathered
+		// on every login.
 		if err := c.userManager.UpdateUser(u); err != nil {
 			slog.Error("failed to save grandfathered newscan seen-sets", "node", c.nodeNumber, "handle", u.Handle, "error", err)
-			return nil, nil
+			return nil, nil // retry next login
 		}
 		return u, nil
 	}
 
-	if len(plan.SilentTags) == 0 && len(plan.NetworkTags) == 0 && len(plan.SeenTags) == 0 {
+	if len(plan.SilentTags) == 0 && len(plan.NetworkTags) == 0 && len(plan.ResidualSeenTags) == 0 {
 		return nil, nil
 	}
 
@@ -61,13 +67,25 @@ func runNewscanAutoJoin(c *cmdCtx) (*user.User, error) {
 		}
 	}
 
+	// Phase 1: silent local adds and areas whose network was already seen.
+	// Persist before any prompting so a disconnect at the network prompt
+	// doesn't lose decisions that required no prompt at all.
 	for _, tag := range plan.SilentTags {
 		addTag(tag)
+		u.SeenNewscanAreaTags = append(u.SeenNewscanAreaTags, tag)
+	}
+	for _, tag := range plan.ResidualSeenTags {
+		u.SeenNewscanAreaTags = append(u.SeenNewscanAreaTags, tag)
 	}
 	if len(plan.SilentTags) > 0 {
 		slog.Info("silently added local areas to newscan", "node", c.nodeNumber, "handle", u.Handle, "count", len(plan.SilentTags))
 	}
+	if len(plan.SilentTags) > 0 || len(plan.ResidualSeenTags) > 0 {
+		save()
+	}
 
+	// Phase 2: one prompt per new network, persisted immediately after each
+	// answer so a disconnect mid-loop only loses the undecided remainder.
 	promptTpl := e.LoadedStrings.NewscanNewNetworkPrompt
 	if promptTpl == "" {
 		promptTpl = "|15New network |14%s|15 is available - add to your newscan?"
@@ -81,19 +99,17 @@ func runNewscanAutoJoin(c *cmdCtx) (*user.User, error) {
 		prompt := fmt.Sprintf(promptTpl, plan.NetworkNames[net])
 		yes, err := e.PromptYesNo(c.s, c.terminal, prompt, c.outputMode, c.nodeNumber, c.termWidth, c.termHeight, true)
 		if err != nil {
-			return nil, err // EOF/disconnect — caller handles
+			return nil, err // EOF/disconnect — everything decided so far is already saved
 		}
 		if yes {
 			for _, tag := range plan.NetworkTags[net] {
 				addTag(tag)
 			}
 		}
+		u.SeenNewscanNetworks = append(u.SeenNewscanNetworks, net)
+		u.SeenNewscanAreaTags = append(u.SeenNewscanAreaTags, plan.NetworkTags[net]...)
+		save()
 	}
 
-	u.SeenNewscanAreaTags = append(u.SeenNewscanAreaTags, plan.SeenTags...)
-	u.SeenNewscanNetworks = append(u.SeenNewscanNetworks, plan.SeenNets...)
-	if err := c.userManager.UpdateUser(u); err != nil {
-		slog.Error("failed to save newscan auto-join", "node", c.nodeNumber, "handle", u.Handle, "error", err)
-	}
 	return u, nil
 }
