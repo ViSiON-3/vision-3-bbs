@@ -354,6 +354,40 @@ For interactive positioning (like login screens):
 - `|{P}` - Mark username input position
 - `|{O}` - Mark password input position
 
+## Conditional Regions ({{acs}}...{{/}})
+
+You can hide parts of a menu's ANSI art from users who don't pass an access
+check. Wrap the text in `{{acs}}` and `{{/}}`, where `acs` is any standard
+ACS expression — the same syntax used for menu commands:
+
+````
+[M] Message Bases
+[F] File Bases
+{{S255}}[*] Sysop Menu{{/}}
+````
+
+Users with level 255+ see `[*] Sysop Menu`; everyone else sees blank space
+of exactly the same size, so the surrounding art stays aligned.
+
+Any ACS expression works: `{{SYSOP}}`, `{{S50}}`, `{{F(A)}}`,
+`{{S50&V}}`, `{{S255|S250}}`, etc. Regions can span multiple lines —
+hidden lines are blanked, not removed, so vertical layout is preserved.
+Pipe color codes inside a hidden region are discarded cleanly.
+
+Rules and caveats:
+
+- **No nesting.** The first `{{/}}` after an opening `{{acs}}` closes it.
+- **Unclosed regions fail safe.** If you forget `{{/}}`, the region runs to
+  the end of the file and is hidden from anyone failing the check (a
+  warning is logged).
+- **Invalid ACS hides the region** and logs a warning — a typo never leaks
+  restricted text.
+- **Don't put field markers inside regions.** Lightbar/field coordinate
+  markers (`|XX`, `~XX`) inside a hidden region are blanked with the rest,
+  which would break those fields for users who fail the check.
+- Applies to menu ANSI art (`menus/<set>/ansi/*.ANS`); the special
+  `{{PENDING_VALIDATIONS}}` counter token is unaffected.
+
 ## Access Control Strings (ACS)
 
 Control who can access menus and commands:
