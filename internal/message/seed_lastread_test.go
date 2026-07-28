@@ -111,6 +111,56 @@ func TestSeedLastRead_EmptyAreaWritesNothing(t *testing.T) {
 	}
 }
 
+func TestSeedLastRead_DeletedNewestOldMessage(t *testing.T) {
+	mm := newSeedTestManager(t)
+	ref := time.Now()
+	postAged(t, mm, ref, 30*24*time.Hour) // msg 1: 30d old
+	postAged(t, mm, ref, 20*24*time.Hour) // msg 2: 20d old
+	postAged(t, mm, ref, 15*24*time.Hour) // msg 3: 15d old (will be deleted)
+	if err := mm.DeleteMessage(1, 3); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mm.SeedLastRead(1, "newbie", ref.AddDate(0, 0, -NewscanSeedDays)); err != nil {
+		t.Fatal(err)
+	}
+	unread, err := mm.GetNewMessageCount(1, "newbie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unread != 0 {
+		t.Errorf("unread = %d, want 0 (deleted newest message counts toward seed)", unread)
+	}
+}
+
+func TestSeedLastRead_LateArrivingOldMessage(t *testing.T) {
+	mm := newSeedTestManager(t)
+	ref := time.Now()
+	postAged(t, mm, ref, 30*24*time.Hour) // msg 1: 30d old
+	postAged(t, mm, ref, 2*24*time.Hour)  // msg 2: 2d old
+	postAged(t, mm, ref, 1*24*time.Hour)  // msg 3: 1d old
+	postAged(t, mm, ref, 20*24*time.Hour) // msg 4: 20d old (late arrival)
+	postAged(t, mm, ref, 1*time.Hour)     // msg 5: 1h old
+
+	if err := mm.SeedLastRead(1, "newbie", ref.AddDate(0, 0, -NewscanSeedDays)); err != nil {
+		t.Fatal(err)
+	}
+	lr, err := mm.GetLastRead(1, "newbie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lr != 1 {
+		t.Errorf("lastread = %d, want 1 (forward scan finds first recent-or-later message)", lr)
+	}
+	unread, err := mm.GetNewMessageCount(1, "newbie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unread != 4 {
+		t.Errorf("unread = %d, want 4 (msgs 2-5 stay unread, including the old late arrival)", unread)
+	}
+}
+
 func TestSeedLastRead_NeverOverwritesExistingPointer(t *testing.T) {
 	mm := newSeedTestManager(t)
 	ref := time.Now()
