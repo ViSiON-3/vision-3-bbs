@@ -59,12 +59,32 @@ Message areas are defined in `configs/message_areas.json` as an array:
 - `max_msgs` — Maximum number of messages to retain (0 = no limit). Oldest messages are removed when the count is exceeded.
 - `max_msg_age` — Maximum message age in days (0 = no limit). Messages older than this are removed.
 - `sponsor` — Handle of the area sponsor/moderator (optional). See [Sponsor Menus](users/sponsor-menus.md).
+- `auto_join` — Flags this area as a newscan default. See [Auto Join Behavior](#auto-join-behavior) below.
 
 ### Area Types
 
 - **local** — Messages stay on this BBS only. No FTN processing.
 - **echomail** — Conference-style networked messages. The tosser imports/exports packets. Messages get MSGID, tearline, origin line, and SEEN-BY/PATH.
 - **netmail** — Point-to-point private FTN mail between addresses.
+
+### Auto Join Behavior
+
+When a user joins an area automatically (at signup, or when an existing user
+gains a new area at login), their last-read pointer is seeded one week back,
+so the first newscan shows only recent messages instead of the area's entire
+history.
+
+Existing users are handled at login:
+
+- New **local** areas flagged Auto Join are added to their newscan silently.
+- A new **network** (FTN or V3Net) triggers a one-time prompt — "New network
+  X is available - add to your newscan?" — covering all of that network's
+  Auto Join areas. The answer is remembered; declining never re-prompts, and
+  areas a user removes from their newscan are never re-added.
+
+The FTN wizard and V3Net subscription flows ask whether imported areas
+should be newscan defaults; the V3Net setting is per-network on the leaf
+subscription (`autoJoinAreas`, default yes).
 
 ---
 
