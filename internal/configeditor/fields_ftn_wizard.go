@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
 // fieldsFTNWizard returns field definitions for the FTN setup wizard form.
@@ -184,6 +185,11 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 				w.originLine = strings.TrimSpace(val)
 				return nil
 			},
+		},
+		{
+			Label: "Newscan Default", Help: "Add these areas to users' newscan by default (Y/n)", Type: ftYesNo, Col: 3, Row: 17, Width: 1,
+			Get: func() string { return uitext.BoolToYN(w.autoJoinAreas) },
+			Set: func(val string) error { w.autoJoinAreas = uitext.YNToBool(val); return nil },
 		},
 		{
 			Label: "Echo Areas", Help: "Press Enter to download and browse echo areas", Type: ftDisplay, Col: 3, Row: 18, Width: 40,

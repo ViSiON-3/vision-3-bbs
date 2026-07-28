@@ -31,6 +31,9 @@ type ftnWizardState struct {
 	originLine  string
 	echolistURL string // from registry, may be overridden
 
+	// Newscan default for created areas (wizard Y/n, default yes).
+	autoJoinAreas bool
+
 	// Area selection (populated after echolist download).
 	availableAreas []ftn.EchoArea // parsed from downloaded echolist
 	selectedAreas  []bool         // parallel array, true = subscribed

@@ -22,8 +22,9 @@ func (m Model) enterFTNWizard() (Model, tea.Cmd) {
 	}
 
 	m.ftnWizard = &ftnWizardState{
-		hubPort:    24554,
-		originLine: origin,
+		hubPort:       24554,
+		originLine:    origin,
+		autoJoinAreas: true,
 	}
 	m.ftnWizardFields = m.fieldsFTNWizard()
 	m.editField = 0
