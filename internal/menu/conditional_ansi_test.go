@@ -46,7 +46,36 @@ func TestApplyConditionalRegions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := string(applyConditionalRegions([]byte(tt.in), tt.u))
+			got := string(applyConditionalRegions([]byte(tt.in), tt.u, nil))
+			if got != tt.want {
+				t.Errorf("applyConditionalRegions(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyConditionalRegionsKeywords(t *testing.T) {
+	lowUser := &user.User{AccessLevel: 50}
+	granted := map[string]bool{"SPONSOR": true}
+	denied := map[string]bool{"SPONSOR": false}
+
+	tests := []struct {
+		name     string
+		in       string
+		keywords map[string]bool
+		want     string
+	}{
+		{"keyword true shows region", "{{SPONSOR}}[%] Sponsor{{/}}", granted, "[%] Sponsor"},
+		{"keyword false blanks region", "{{SPONSOR}}[%] Sponsor{{/}}", denied, "           "},
+		{"keyword absent falls through to ACS and hides", "{{SPONSOR}}Hi{{/}}", map[string]bool{}, "  "},
+		{"nil map falls through to ACS and hides", "{{SPONSOR}}Hi{{/}}", nil, "  "},
+		{"keyword lookup is case-insensitive", "{{sponsor}}Hi{{/}}", granted, "Hi"},
+		{"acs conditions still work alongside keywords", "{{S10}}Hi{{/}}", granted, "Hi"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := string(applyConditionalRegions([]byte(tt.in), lowUser, tt.keywords))
 			if got != tt.want {
 				t.Errorf("applyConditionalRegions(%q) = %q, want %q", tt.in, got, tt.want)
 			}

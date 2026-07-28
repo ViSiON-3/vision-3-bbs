@@ -118,3 +118,49 @@ func TestCanAccessSponsorMenu(t *testing.T) {
 		})
 	}
 }
+
+type fakeAreaLookup struct {
+	areas map[int]*message.MessageArea
+}
+
+func (f fakeAreaLookup) GetAreaByID(id int) (*message.MessageArea, bool) {
+	a, ok := f.areas[id]
+	return a, ok
+}
+
+func TestSponsorKeyword(t *testing.T) {
+	cfg := config.ServerConfig{SysOpLevel: 255, CoSysOpLevel: 250}
+	lookup := fakeAreaLookup{areas: map[int]*message.MessageArea{
+		1: {ID: 1, Tag: "GENERAL", Sponsor: "Alice"},
+		2: {ID: 2, Tag: "EMPTY"},
+	}}
+
+	tests := []struct {
+		name string
+		u    *user.User
+		want bool
+	}{
+		{"sponsor of current area", &user.User{Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 1}, true},
+		{"sponsor match is case-insensitive", &user.User{Handle: "alice", AccessLevel: 50, CurrentMessageAreaID: 1}, true},
+		{"non-sponsor denied", &user.User{Handle: "Mallory", AccessLevel: 50, CurrentMessageAreaID: 1}, false},
+		{"cosysop allowed without sponsorship", &user.User{Handle: "Carol", AccessLevel: 250, CurrentMessageAreaID: 2}, true},
+		{"no current area denied", &user.User{Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 0}, false},
+		{"unknown area id denied", &user.User{Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 99}, false},
+		{"nil user denied", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sponsorKeyword(tt.u, lookup, cfg); got != tt.want {
+				t.Errorf("sponsorKeyword() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSponsorKeywordNilLookup(t *testing.T) {
+	u := &user.User{Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 1}
+	if sponsorKeyword(u, nil, config.ServerConfig{}) {
+		t.Error("sponsorKeyword() with nil lookup should be false")
+	}
+}

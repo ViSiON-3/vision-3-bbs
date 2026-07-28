@@ -68,7 +68,18 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		if readErr == nil {
 			// Resolve {{acs}}...{{/}} conditional regions first, before any
 			// |TOKEN substitution, so tokens inside hidden regions never expand.
-			rawAnsiContent = applyConditionalRegions(rawAnsiContent, currentUser)
+			// Keyword conditions (e.g. {{SPONSOR}}) are resolved first against the
+			// keywords map, then fall through to ACS evaluation. e.MessageMgr is
+			// passed through a nil check so a nil *MessageManager never becomes a
+			// non-nil areaLookup interface.
+			var areas areaLookup
+			if e.MessageMgr != nil {
+				areas = e.MessageMgr
+			}
+			keywords := map[string]bool{
+				"SPONSOR": sponsorKeyword(currentUser, areas, e.GetServerConfig()),
+			}
+			rawAnsiContent = applyConditionalRegions(rawAnsiContent, currentUser, keywords)
 			if currentMenuName == "ADMIN" {
 				pendingCount := pendingValidationCount(userManager)
 				rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("{{PENDING_VALIDATIONS}}"), []byte(strconv.Itoa(pendingCount)))
