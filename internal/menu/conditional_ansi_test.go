@@ -22,7 +22,7 @@ func TestApplyConditionalRegions(t *testing.T) {
 		{"fail preserves surrounding text", "A{{S255}}XX{{/}}B", lowUser, "A  B"},
 		{"fail preserves newlines", "{{S255}}AB\r\nCD{{/}}", lowUser, "  \r\n  "},
 		{"fail removes pipe color codes", "{{S255}}|15Hi{{/}}", lowUser, "  "},
-		{"fail removes 3-char bg pipe codes", "{{S255}}|B15Hi{{/}}", lowUser, "  "},
+		{"fail removes 4-char bg pipe codes", "{{S255}}|B15Hi{{/}}", lowUser, "  "},
 		{"fail removes ansi escapes", "{{S255}}\x1b[1;31mHi{{/}}", lowUser, "  "},
 		{"fail removes tilde coord markers", "{{S255}}~ABHi{{/}}", lowUser, "  "},
 		{"pass keeps pipe codes verbatim", "{{S255}}|15Hi{{/}}", sysop, "|15Hi"},

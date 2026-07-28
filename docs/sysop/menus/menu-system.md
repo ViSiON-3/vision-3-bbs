@@ -385,8 +385,13 @@ Rules and caveats:
 - **Don't put field markers inside regions.** Lightbar/field coordinate
   markers (`|XX`, `~XX`) inside a hidden region are blanked with the rest,
   which would break those fields for users who fail the check.
-- Applies to menu ANSI art (`menus/<set>/ansi/*.ANS`); the special
-  `{{PENDING_VALIDATIONS}}` counter token is unaffected.
+- Applies only to the menu screens themselves — the `.ANS` file named after
+  the menu (e.g. `MAIN.ANS`). Other screens in the `ansi/` directory (stats,
+  newscan headers, timeout screens, etc.) do not support regions yet and
+  will show the markers as literal text.
+- The special `{{PENDING_VALIDATIONS}}` counter token is unaffected at the
+  top level, but don't place it inside a conditional region — it would be
+  blanked at marker width for users who fail the check.
 
 ## Access Control Strings (ACS)
 
