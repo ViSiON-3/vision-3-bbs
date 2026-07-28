@@ -296,6 +296,7 @@
   "scanNoAreaSelected": "\r\n|01No message area selected.|07\r\n",
   "scanNoMessages": "\r\n|07No messages in current area.|07\r\n",
   "scanNoTaggedAreas": "\r\n|07No message areas tagged for newscan.|07\r\n|07Use |15Newscan Config|07 to select areas to scan.|07\r\n",
+  "newscanNewNetworkPrompt": "|15New network |14%s|15 is available - add to your newscan?",
   "scanAreaProgress": "\r\n|09Scanning |01(|13%s|01)... |07[|15%d|07/|15%d|07 msgs]",
   "scanComplete": "\r\n|15Newscan complete!|07\r\n",
   "scanLoginRequired": "\r\n|01Error: You must be logged in to scan for new messages.|07\r\n",

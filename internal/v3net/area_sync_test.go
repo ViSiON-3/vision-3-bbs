@@ -79,3 +79,35 @@ func TestSyncAreasCreatesMissing(t *testing.T) {
 		t.Errorf("second SyncAreas created = %d, want 0", created2)
 	}
 }
+
+func TestSyncAreasRespectsAutoJoinAreasFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	mgr, err := message.NewMessageManager(tmpDir, configDir, "TestBBS", nil)
+	if err != nil {
+		t.Fatalf("NewMessageManager: %v", err)
+	}
+	defer mgr.Close()
+
+	noAutoJoin := false
+	leaves := []config.V3NetLeafConfig{
+		{HubURL: "https://hub.example.com", Network: "felonynet", Boards: []string{"FELQUIET"}, AutoJoinAreas: &noAutoJoin},
+	}
+
+	created := SyncAreas(leaves, mgr, nil)
+	if created != 1 {
+		t.Fatalf("SyncAreas created = %d, want 1", created)
+	}
+
+	area, ok := mgr.GetAreaByTag("FELQUIET")
+	if !ok {
+		t.Fatal("FELQUIET not found")
+	}
+	if area.AutoJoin {
+		t.Error("FELQUIET AutoJoin = true, want false when leaf AutoJoinAreas is false")
+	}
+}

@@ -348,6 +348,7 @@ type StringsConfig struct {
 	ScanNoAreaSelected      string `json:"scanNoAreaSelected"`
 	ScanNoMessages          string `json:"scanNoMessages"`
 	ScanNoTaggedAreas       string `json:"scanNoTaggedAreas"`
+	NewscanNewNetworkPrompt string `json:"newscanNewNetworkPrompt"`
 	ScanAreaProgress        string `json:"scanAreaProgress"`
 	ScanComplete            string `json:"scanComplete"`
 	ScanLoginRequired       string `json:"scanLoginRequired"`
@@ -1102,11 +1103,19 @@ type V3NetHubArea struct {
 
 // V3NetLeafConfig configures a subscription to a V3Net network.
 type V3NetLeafConfig struct {
-	HubURL       string   `json:"hubUrl"`
-	Network      string   `json:"network"`
-	Boards       []string `json:"boards"`           // Local message area tags to write received messages
-	PollInterval string   `json:"pollInterval"`     // Duration string (e.g., "5m")
-	Origin       string   `json:"origin,omitempty"` // Origin line text (e.g. "My Cool BBS - bbs.example.com")
+	HubURL        string   `json:"hubUrl"`
+	Network       string   `json:"network"`
+	Boards        []string `json:"boards"`                  // Local message area tags to write received messages
+	PollInterval  string   `json:"pollInterval"`            // Duration string (e.g., "5m")
+	Origin        string   `json:"origin,omitempty"`        // Origin line text (e.g. "My Cool BBS - bbs.example.com")
+	AutoJoinAreas *bool    `json:"autoJoinAreas,omitempty"` // Flag created areas as newscan defaults (nil = true)
+}
+
+// AutoJoinEnabled reports whether message areas created for this leaf
+// should be flagged AutoJoin (newscan default). Unset means enabled, so
+// existing configs keep today's behavior.
+func (l V3NetLeafConfig) AutoJoinEnabled() bool {
+	return l.AutoJoinAreas == nil || *l.AutoJoinAreas
 }
 
 // EventConfig defines a scheduled event configuration

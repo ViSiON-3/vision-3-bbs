@@ -53,9 +53,12 @@ type User struct {
 	TaggedFileIDs      []uuid.UUID `json:"tagged_file_ids,omitempty"`       // List of FileRecord IDs marked for batch download
 
 	// Message System Related
-	TaggedMessageAreaTags []string `json:"tagged_message_area_tags,omitempty"` // List of message area tags tagged for newscan
-	TaggedFileAreaIDs     []int    `json:"tagged_file_area_ids,omitempty"`     // File area IDs tagged for file newscan
-	TaggedFileAreaTags    []string `json:"tagged_file_area_tags,omitempty"`    // File area tags tagged for file newscan config
+	TaggedMessageAreaTags  []string `json:"tagged_message_area_tags,omitempty"` // List of message area tags tagged for newscan
+	TaggedFileAreaIDs      []int    `json:"tagged_file_area_ids,omitempty"`     // File area IDs tagged for file newscan
+	TaggedFileAreaTags     []string `json:"tagged_file_area_tags,omitempty"`    // File area tags tagged for file newscan config
+	SeenNewscanNetworks    []string `json:"seen_newscan_networks,omitempty"`    // Lowercase network names already offered for newscan auto-join
+	SeenNewscanAreaTags    []string `json:"seen_newscan_area_tags,omitempty"`   // Area tags already offered/added for newscan auto-join
+	NewscanSeenInitialized bool     `json:"newscan_seen_initialized,omitempty"` // Seen-set tracking has been initialized for this user
 
 	// Terminal Preferences
 	ScreenWidth       int    `json:"screenWidth,omitempty"`       // Detected/preferred terminal width (default 80)

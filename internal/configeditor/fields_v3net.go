@@ -3,6 +3,8 @@ package configeditor
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
 // fieldsV3NetHubNetwork returns fields for editing a single hub network.
@@ -110,6 +112,15 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			Label: "Origin", Help: "Origin line identifying your BBS", Type: ftString, Col: 3, Row: 5, Width: 49,
 			Get: func() string { return l.Origin },
 			Set: func(val string) error { l.Origin = val; return nil },
+		},
+		{
+			Label: "Newscan Default", Help: "Flag this network's areas as newscan defaults for users", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.AutoJoinEnabled()) },
+			Set: func(val string) error {
+				v := uitext.YNToBool(val)
+				l.AutoJoinAreas = &v
+				return nil
+			},
 		},
 		{
 			Label: "Browse Areas", Help: "Press Enter to browse and subscribe to hub areas", Type: ftDisplay, Col: 3, Row: 7, Width: 49,

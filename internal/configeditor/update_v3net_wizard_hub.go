@@ -282,7 +282,7 @@ func (m *Model) createHubMessageAreas(network string, areas []wizardArea) {
 			AreaType:    "v3net",
 			Network:     network,
 			EchoTag:     a.Tag,
-			AutoJoin:    true,
+			AutoJoin:    m.leafAutoJoin(network),
 			ACSRead:     "s10",
 			ACSWrite:    "s20",
 			BasePath:    basePath,

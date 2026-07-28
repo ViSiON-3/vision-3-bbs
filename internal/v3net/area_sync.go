@@ -31,7 +31,7 @@ func SyncAreas(leaves []config.V3NetLeafConfig, mgr *message.MessageManager, con
 				Network:      lcfg.Network,
 				EchoTag:      board,
 				ConferenceID: inferConferenceID(mgr, confMgr, lcfg.Network),
-				AutoJoin:     true,
+				AutoJoin:     lcfg.AutoJoinEnabled(),
 				ACSRead:      "s10",
 				ACSWrite:     "s20",
 			}
