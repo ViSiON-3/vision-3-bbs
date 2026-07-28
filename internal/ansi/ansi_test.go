@@ -552,6 +552,36 @@ func TestProcessAnsiAndExtractCoords_PipeColorCode(t *testing.T) {
 	}
 }
 
+func TestProcessAnsiAndExtractCoords_FourCharBackgroundPipeCode(t *testing.T) {
+	input := []byte("|B15Hi")
+	result, err := ProcessAnsiAndExtractCoords(input, OutputModeCP437)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Contains(result.DisplayBytes, []byte("\x1B[107m")) {
+		t.Errorf("DisplayBytes should contain bright white BG code for |B15, got %q", result.DisplayBytes)
+	}
+	if bytes.Contains(result.DisplayBytes, []byte("5Hi")) {
+		t.Errorf("|B15 mis-parsed as |B1 plus literal '5', got %q", result.DisplayBytes)
+	}
+}
+
+func TestProcessAnsiAndExtractCoords_FourCharPipeCodeUpdatesFieldColors(t *testing.T) {
+	// A field placeholder after |B15 must capture the bright background in its color state.
+	input := []byte("|B15|AB")
+	result, err := ProcessAnsiAndExtractCoords(input, OutputModeCP437)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	color, ok := result.FieldColors["AB"]
+	if !ok {
+		t.Fatal("expected field color 'AB' to be recorded")
+	}
+	if !bytes.Contains([]byte(color), []byte("107")) {
+		t.Errorf("field color for AB should include background 107, got %q", color)
+	}
+}
+
 func TestProcessAnsiAndExtractCoords_FieldPlaceholder(t *testing.T) {
 	// |AB should be recognized as a field placeholder (uppercase letters)
 	input := []byte("|AB")
