@@ -66,6 +66,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Process the associated ANSI file to get display bytes and coordinates
 		rawAnsiContent, readErr := ansi.GetAnsiFileContent(fullAnsPath)
 		if readErr == nil {
+			// Resolve {{acs}}...{{/}} conditional regions first, before any
+			// |TOKEN substitution, so tokens inside hidden regions never expand.
+			rawAnsiContent = applyConditionalRegions(rawAnsiContent, currentUser)
 			if currentMenuName == "ADMIN" {
 				pendingCount := pendingValidationCount(userManager)
 				rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("{{PENDING_VALIDATIONS}}"), []byte(strconv.Itoa(pendingCount)))

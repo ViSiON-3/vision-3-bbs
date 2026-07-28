@@ -504,6 +504,68 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 		return fmt.Sprintf("\x1b[%sm", strings.Join(attrs, ";"))
 	}
 
+	// Helper to fold a pipe-code's ANSI replacement into the SGR state so
+	// FieldColors captures correct colors after pipe codes.
+	updateSGRFromReplacement := func(replacement string) {
+		for ri := 0; ri < len(replacement); ri++ {
+			if replacement[ri] == 0x1b && ri+1 < len(replacement) && replacement[ri+1] == '[' {
+				ri += 2
+				var sgrParams []int
+				num := 0
+				hasNum := false
+				for ri < len(replacement) && replacement[ri] != 'm' {
+					if replacement[ri] >= '0' && replacement[ri] <= '9' {
+						num = num*10 + int(replacement[ri]-'0')
+						hasNum = true
+					} else if replacement[ri] == ';' {
+						if hasNum {
+							sgrParams = append(sgrParams, num)
+						}
+						num = 0
+						hasNum = false
+					}
+					ri++
+				}
+				if hasNum {
+					sgrParams = append(sgrParams, num)
+				}
+				if ri < len(replacement) && replacement[ri] == 'm' {
+					if len(sgrParams) == 0 {
+						sgrParams = []int{0}
+					}
+					for _, p := range sgrParams {
+						switch {
+						case p == 0:
+							sgrState.bold = false
+							sgrState.dim = false
+							sgrState.italic = false
+							sgrState.underline = false
+							sgrState.blink = false
+							sgrState.reverse = false
+							sgrState.hidden = false
+							sgrState.foreground = 0
+							sgrState.background = 0
+						case p == 1:
+							sgrState.bold = true
+						case p >= 30 && p <= 37:
+							sgrState.foreground = p
+						case p == 39:
+							sgrState.foreground = 0
+						case p >= 40 && p <= 47:
+							sgrState.background = p
+						case p == 49:
+							sgrState.background = 0
+						case p >= 90 && p <= 97:
+							sgrState.foreground = p
+						case p >= 100 && p <= 107:
+							sgrState.background = p
+						}
+					}
+				}
+			}
+		}
+	}
+
 	i := 0
 	for i < len(content) {
 		b := content[i]
@@ -694,6 +756,16 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 				// Priority: check pipeCodeReplacements FIRST (commands take precedence over placeholders).
 				// This ensures |CL, |CR, |PP etc. are handled as commands, not field placeholders.
 
+				// Try 4-char code |BXX (bright backgrounds |B10..|B15), longest match first
+				if !pipeCodeFound && i+3 < len(content) {
+					if replacement, ok := pipeCodeReplacements[string(content[i:i+4])]; ok {
+						displayBuf.WriteString(replacement)
+						consumed = 4
+						pipeCodeFound = true
+						updateSGRFromReplacement(replacement)
+					}
+				}
+
 				// Try 3-char code |XX (colors, commands)
 				if !pipeCodeFound && i+2 < len(content) {
 					codeStr := string(content[i : i+3])
@@ -701,64 +773,7 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 						displayBuf.WriteString(replacement)
 						consumed = 3
 						pipeCodeFound = true
-						// Update SGR state so FieldColors captures correct colors after pipe codes.
-						for ri := 0; ri < len(replacement); ri++ {
-							if replacement[ri] == 0x1b && ri+1 < len(replacement) && replacement[ri+1] == '[' {
-								ri += 2
-								var sgrParams []int
-								num := 0
-								hasNum := false
-								for ri < len(replacement) && replacement[ri] != 'm' {
-									if replacement[ri] >= '0' && replacement[ri] <= '9' {
-										num = num*10 + int(replacement[ri]-'0')
-										hasNum = true
-									} else if replacement[ri] == ';' {
-										if hasNum {
-											sgrParams = append(sgrParams, num)
-										}
-										num = 0
-										hasNum = false
-									}
-									ri++
-								}
-								if hasNum {
-									sgrParams = append(sgrParams, num)
-								}
-								if ri < len(replacement) && replacement[ri] == 'm' {
-									if len(sgrParams) == 0 {
-										sgrParams = []int{0}
-									}
-									for _, p := range sgrParams {
-										switch {
-										case p == 0:
-											sgrState.bold = false
-											sgrState.dim = false
-											sgrState.italic = false
-											sgrState.underline = false
-											sgrState.blink = false
-											sgrState.reverse = false
-											sgrState.hidden = false
-											sgrState.foreground = 0
-											sgrState.background = 0
-										case p == 1:
-											sgrState.bold = true
-										case p >= 30 && p <= 37:
-											sgrState.foreground = p
-										case p == 39:
-											sgrState.foreground = 0
-										case p >= 40 && p <= 47:
-											sgrState.background = p
-										case p == 49:
-											sgrState.background = 0
-										case p >= 90 && p <= 97:
-											sgrState.foreground = p
-										case p >= 100 && p <= 107:
-											sgrState.background = p
-										}
-									}
-								}
-							}
-						}
+						updateSGRFromReplacement(replacement)
 						// Cursor tracking for cursor-moving pipe codes
 						switch codeStr {
 						case "|CL":
