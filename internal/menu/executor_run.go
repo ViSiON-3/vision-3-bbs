@@ -218,7 +218,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		input, act, retErr := st.readMenuInput(ansiProcessResult, menuRec)
 		switch act {
 		case loopReturn:
-			return input, nil, retErr
+			// Propagate the user like every other loopReturn site: nil here dropped
+			// an authenticated user on the disconnect paths, and main.go reads a nil
+			// user as "authentication did not happen".
+			return input, st.currentUser, retErr
 		case loopContinue:
 			continue
 		}
@@ -249,12 +252,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		} else {
 			slog.Debug("input did not match any commands in menu", "input", st.userInput, "menu", st.currentMenuName)
 
-			// If it was a lightbar menu and input was ignored (st.userInput == ""), just loop again
-			if st.isLightbarMenu {
-				continue
-			}
-
-			// Empty Enter should just redisplay the current menu, not fall through to fallback
+			// Empty Enter should just redisplay the current menu, not fall through
+			// to fallback. This also covers ignored lightbar keypresses, which
+			// yield empty input. Non-empty unmatched input gets the fallback /
+			// undefined-command treatment even on a lightbar menu: runLightbarInput
+			// only ever returns a hotkey defined in the .BAR file, so reaching here
+			// with input means that hotkey has no command in the menu's .CFG, and
+			// silently redisplaying hid the misconfiguration.
 			if st.userInput == "" {
 				continue
 			}

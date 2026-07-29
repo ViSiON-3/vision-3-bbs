@@ -30,35 +30,16 @@ func (st *runLoopState) handleLoginMenu(res ansi.ProcessAnsiResult) (act loopAct
 	termHeight := st.termHeight
 	userManager := st.userManager
 	nodeNumber := st.nodeNumber
-	sessionStartTime := st.sessionStartTime
 	ansiProcessResult := res
 
 	if st.currentUser != nil {
 		slog.Warn("attempting to run LOGIN menu for already authenticated user, skipping login, going to MAIN", "handle", st.currentUser.Handle)
 
-		// Set default message area if not already set (e.g., SSH auto-login)
-		if st.currentUser.CurrentMessageAreaID == 0 && e.MessageMgr != nil {
-			for _, area := range e.MessageMgr.ListAreas() {
-				if checkACS(area.ACSRead, st.currentUser, s, terminal, sessionStartTime) {
-					st.currentUser.CurrentMessageAreaID = area.ID
-					st.currentUser.CurrentMessageAreaTag = area.Tag
-					e.setUserMsgConference(st.currentUser, area.ConferenceID)
-					break
-				}
-			}
-		}
-
-		// Set default file area if not already set
-		if st.currentUser.CurrentFileAreaID == 0 && e.FileMgr != nil {
-			for _, area := range e.FileMgr.ListAreas() {
-				if checkACS(area.ACSList, st.currentUser, s, terminal, sessionStartTime) {
-					st.currentUser.CurrentFileAreaID = area.ID
-					st.currentUser.CurrentFileAreaTag = area.Tag
-					e.setUserFileConference(st.currentUser, area.ConferenceID)
-					break
-				}
-			}
-		}
+		// Seed default areas if not already set (e.g., SSH auto-login). Shares
+		// setDefaultArea with the post-authentication path so both log the
+		// selection and clear a stale tag when no area is accessible.
+		st.setDefaultArea("message")
+		st.setDefaultArea("file")
 
 		// Persist defaults
 		if userManager != nil {
