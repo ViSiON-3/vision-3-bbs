@@ -13,7 +13,9 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/term"
 )
 
 // applyPendingUserChanges validates and persists the staged edits for target.
@@ -170,6 +172,133 @@ type userEditorConfig struct {
 	pendingOnly  bool   // restrict to users awaiting validation + queue behavior
 }
 
+// userEditorLayout is the fixed screen geometry of the admin user editor,
+// derived once from the (already-resolved) terminal height.
+type userEditorLayout struct {
+	pageSize       int
+	titleRow       int
+	sepTopRow      int
+	headerRow      int
+	listStartRow   int
+	sepMidRow      int
+	detailStartRow int
+	statusRow      int
+	actionRow      int
+}
+
+// computeUserEditorLayout derives the row layout and page size for the admin
+// user editor from a resolved terminal height. Callers are responsible for
+// substituting a default before calling this (e.g. when the terminal reports
+// height <= 0).
+func computeUserEditorLayout(termHeight int) userEditorLayout {
+	pageSize := termHeight - 14 // Reduced by 1 to account for header row
+	if pageSize < 3 {
+		pageSize = 3
+	}
+	if pageSize > 12 {
+		pageSize = 12
+	}
+
+	titleRow := 1
+	sepTopRow := 2
+	headerRow := 3    // Column header labels
+	listStartRow := 4 // First user row (after header)
+	sepMidRow := listStartRow + pageSize
+	detailStartRow := sepMidRow + 1
+	statusRow := termHeight - 1
+	actionRow := termHeight
+
+	return userEditorLayout{
+		pageSize:       pageSize,
+		titleRow:       titleRow,
+		sepTopRow:      sepTopRow,
+		headerRow:      headerRow,
+		listStartRow:   listStartRow,
+		sepMidRow:      sepMidRow,
+		detailStartRow: detailStartRow,
+		statusRow:      statusRow,
+		actionRow:      actionRow,
+	}
+}
+
+// visualPipeWidth returns the display width of s, treating |NN pipe color
+// codes as zero-width.
+func visualPipeWidth(s string) int {
+	width := 0
+	i := 0
+	for i < len(s) {
+		if s[i] == '|' && i+2 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' && s[i+2] >= '0' && s[i+2] <= '9' {
+			i += 3 // Skip pipe code
+		} else {
+			width++
+			i++
+		}
+	}
+	return width
+}
+
+// userEditorState holds the dependencies and mutable state for a single
+// runUserEditor session. It replaces the closure-captured locals the loop
+// body used to mutate directly; users and pendingChanges in particular are
+// reassigned (not just mutated) inside the loop, which requires them to live
+// as struct fields rather than closed-over locals.
+type userEditorState struct {
+	e           *MenuExecutor
+	s           ssh.Session
+	terminal    *term.Terminal
+	ih          *editor.InputHandler
+	userManager *user.UserMgr
+	currentUser *user.User
+	nodeNumber  int
+	outputMode  ansi.OutputMode
+	cfg         userEditorConfig
+	layout      userEditorLayout
+
+	users              []*user.User
+	selectedIndex      int
+	topIndex           int
+	pendingChanges     map[string]interface{}
+	originalTimestamps map[int]time.Time
+	statusMessage      string
+	adminCursorHidden  bool
+}
+
+// loadEditorUsers loads the full user list, filtered down to users awaiting
+// validation when cfg.pendingOnly is set.
+func (st *userEditorState) loadEditorUsers() []*user.User {
+	all := sortedUsersByID(st.userManager.GetAllUsers())
+	if !st.cfg.pendingOnly {
+		return all
+	}
+	pending := make([]*user.User, 0)
+	for _, u := range all {
+		if isPendingValidationUser(u) {
+			pending = append(pending, u)
+		}
+	}
+	return pending
+}
+
+// moveUp moves the selection up one row, scrolling topIndex if needed.
+func (st *userEditorState) moveUp() {
+	if st.selectedIndex > 0 {
+		st.selectedIndex--
+		if st.selectedIndex < st.topIndex {
+			st.topIndex = st.selectedIndex
+		}
+	}
+}
+
+// moveDown moves the selection down one row, scrolling topIndex if needed.
+func (st *userEditorState) moveDown() {
+	if st.selectedIndex < len(st.users)-1 {
+		st.selectedIndex++
+		if st.selectedIndex >= st.topIndex+st.layout.pageSize {
+			st.topIndex = st.selectedIndex - st.layout.pageSize + 1
+		}
+	}
+}
+
 // runUserEditor implements the shared interactive user editor used by both the
 // admin user browser and the pending-validation queue. See userEditorConfig.
 func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) {
@@ -203,24 +332,23 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		return nil, "", nil
 	}
 
-	loadEditorUsers := func() []*user.User {
-		all := sortedUsersByID(userManager.GetAllUsers())
-		if !cfg.pendingOnly {
-			return all
-		}
-		pending := make([]*user.User, 0)
-		for _, u := range all {
-			if isPendingValidationUser(u) {
-				pending = append(pending, u)
-			}
-		}
-		return pending
+	st := &userEditorState{
+		e:                 e,
+		s:                 s,
+		terminal:          terminal,
+		ih:                getSessionIH(s),
+		userManager:       userManager,
+		currentUser:       currentUser,
+		nodeNumber:        nodeNumber,
+		outputMode:        outputMode,
+		cfg:               cfg,
+		adminCursorHidden: adminCursorHidden,
 	}
 
-	users := loadEditorUsers()
-	if len(users) == 0 {
-		_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+cfg.emptyMessage+"|07")), outputMode)
+	st.users = st.loadEditorUsers()
+	if len(st.users) == 0 {
+		_ = terminalio.WriteProcessedBytes(st.terminal, []byte(ansi.ClearScreen()), st.outputMode)
+		_ = terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n"+st.cfg.emptyMessage+"|07")), st.outputMode)
 		if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
 			if errors.Is(pauseErr, io.EOF) {
 				return nil, "LOGOFF", io.EOF
@@ -230,62 +358,44 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		return nil, "", nil
 	}
 
-	ih := getSessionIH(s)
-	selectedIndex := 0
-	topIndex := 0
 	if termHeight <= 0 {
 		termHeight = 24
 		if ptyReq, _, ok := s.Pty(); ok && ptyReq.Window.Height > 0 {
 			termHeight = ptyReq.Window.Height
 		}
 	}
-	pageSize := termHeight - 14 // Reduced by 1 to account for header row
-	if pageSize < 3 {
-		pageSize = 3
-	}
-	if pageSize > 12 {
-		pageSize = 12
-	}
-
-	titleRow := 1
-	sepTopRow := 2
-	headerRow := 3    // Column header labels
-	listStartRow := 4 // First user row (after header)
-	sepMidRow := listStartRow + pageSize
-	detailStartRow := sepMidRow + 1
-	statusRow := termHeight - 1
-	actionRow := termHeight
+	st.layout = computeUserEditorLayout(termHeight)
 
 	writeAt := func(row, col int, text string) error {
 		cmd := fmt.Sprintf("\x1b[%d;%dH\x1b[2K%s", row, col, text)
-		return terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(cmd)), outputMode)
+		return terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte(cmd)), st.outputMode)
 	}
 
 	clearRow := func(row int) error {
 		cmd := fmt.Sprintf("\x1b[%d;1H\x1b[2K", row)
-		return terminalio.WriteProcessedBytes(terminal, []byte(cmd), outputMode)
+		return terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode)
 	}
 
 	renderHeader := func() error {
-		if err := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode); err != nil {
+		if err := terminalio.WriteProcessedBytes(st.terminal, []byte(ansi.ClearScreen()), st.outputMode); err != nil {
 			return err
 		}
-		if err := writeAt(titleRow, 1, cfg.title); err != nil {
+		if err := writeAt(st.layout.titleRow, 1, st.cfg.title); err != nil {
 			return err
 		}
-		if err := clearRow(sepTopRow); err != nil {
+		if err := clearRow(st.layout.sepTopRow); err != nil {
 			return err
 		}
 		// Render column header - aligned with data columns
 		// Format: prefix(2) handle(22) space(3) date(10) space(3) ID:(3+4) space(3) L:(2+3) space(2) status(2)
 		headerText := fmt.Sprintf("|08  %-22s   %-10s   %-7s   %-5s|07", "Handle", "Created", "ID", "Level")
-		if err := writeAt(headerRow, 1, headerText); err != nil {
+		if err := writeAt(st.layout.headerRow, 1, headerText); err != nil {
 			return err
 		}
-		if err := clearRow(sepMidRow); err != nil {
+		if err := clearRow(st.layout.sepMidRow); err != nil {
 			return err
 		}
-		for r := detailStartRow; r <= statusRow; r++ {
+		for r := st.layout.detailStartRow; r <= st.layout.statusRow; r++ {
 			if err := clearRow(r); err != nil {
 				return err
 			}
@@ -293,36 +403,21 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		return nil
 	}
 
-	// Calculate visual display width (excluding pipe codes)
-	visualWidth := func(s string) int {
-		width := 0
-		i := 0
-		for i < len(s) {
-			if s[i] == '|' && i+2 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' && s[i+2] >= '0' && s[i+2] <= '9' {
-				i += 3 // Skip pipe code
-			} else {
-				width++
-				i++
-			}
-		}
-		return width
-	}
-
-	pendingChanges := make(map[string]interface{})
+	st.pendingChanges = make(map[string]interface{})
 	// Track original UpdatedAt timestamps for optimistic locking (indexed by user ID)
-	originalTimestamps := make(map[int]time.Time)
-	for _, u := range users {
+	st.originalTimestamps = make(map[int]time.Time)
+	for _, u := range st.users {
 		if u != nil {
-			originalTimestamps[u.ID] = u.UpdatedAt
+			st.originalTimestamps[u.ID] = u.UpdatedAt
 		}
 	}
 
 	renderActionBar := func() error {
 		var barText string
-		if len(pendingChanges) > 0 {
+		if len(st.pendingChanges) > 0 {
 			barText = "|08[|15S|08] |14Save Changes  |08[|15X|08] |14Abort  |08[|15Q|08] |14Quit|07"
 		} else {
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			// Dynamic labels based on user state
 			validateLabel := "Validate"
 			validateColor := "|10" // Green for validate
@@ -344,27 +439,27 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 			barText = fmt.Sprintf("|08[|15G|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd |08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
 		}
-		if err := clearRow(actionRow); err != nil {
+		if err := clearRow(st.layout.actionRow); err != nil {
 			return err
 		}
 		// Center the action bar
-		textWidth := visualWidth(barText)
+		textWidth := visualPipeWidth(barText)
 		padding := (80 - textWidth) / 2
 		if padding < 1 {
 			padding = 1
 		}
 		centeredText := strings.Repeat(" ", padding) + barText
-		return writeAt(actionRow, 1, centeredText)
+		return writeAt(st.layout.actionRow, 1, centeredText)
 	}
 
 	renderList := func() error {
-		endIndex := topIndex + pageSize
-		if endIndex > len(users) {
-			endIndex = len(users)
+		endIndex := st.topIndex + st.layout.pageSize
+		if endIndex > len(st.users) {
+			endIndex = len(st.users)
 		}
-		row := listStartRow
-		for idx := topIndex; idx < endIndex; idx++ {
-			u := users[idx]
+		row := st.layout.listStartRow
+		for idx := st.topIndex; idx < endIndex; idx++ {
+			u := st.users[idx]
 			status := "OK"
 			if u.DeletedUser {
 				status = "DEL"
@@ -373,13 +468,13 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 			// Check if user is currently online (actual session tracking)
 			onlineIndicator := " "
-			if userManager.IsUserOnline(u.ID) {
+			if st.userManager.IsUserOnline(u.ID) {
 				onlineIndicator = "*" // Asterisk indicates user is currently online
 			}
 			prefix := "  "
 			lineStart := ""
 			lineEnd := ""
-			if idx == selectedIndex {
+			if idx == st.selectedIndex {
 				prefix = "» "
 				lineStart = "\x1b[46;30m" // Dark cyan background, black foreground
 				lineEnd = "\x1b[0m"       // Reset colors
@@ -390,7 +485,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 			row++
 		}
-		for ; row < listStartRow+pageSize; row++ {
+		for ; row < st.layout.listStartRow+st.layout.pageSize; row++ {
 			if err := clearRow(row); err != nil {
 				return err
 			}
@@ -399,48 +494,33 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 	}
 
 	renderDetails := func(message string) error {
-		sel := users[selectedIndex]
+		sel := st.users[st.selectedIndex]
 
 		getFieldValue := func(fieldName string, originalValue string) string {
-			if val, ok := pendingChanges[fieldName]; ok {
+			if val, ok := st.pendingChanges[fieldName]; ok {
 				return fmt.Sprintf("|14*|03%s|07", adminTruncate(val.(string), 23))
 			}
 			return adminTruncate(originalValue, 24)
 		}
 
 		getIntFieldValue := func(fieldName string, originalValue int) string {
-			if val, ok := pendingChanges[fieldName]; ok {
+			if val, ok := st.pendingChanges[fieldName]; ok {
 				return fmt.Sprintf("|14*|03%d|07", val.(int))
 			}
 			return fmt.Sprintf("%d", originalValue)
 		}
 
 		getBoolFieldValue := func(fieldName string, originalValue bool) string {
-			if val, ok := pendingChanges[fieldName]; ok {
+			if val, ok := st.pendingChanges[fieldName]; ok {
 				return fmt.Sprintf("|14*|03%t|07", val.(bool))
 			}
 			return fmt.Sprintf("%t", originalValue)
 		}
 
-		// Calculate visual display width (excluding pipe codes)
-		visualWidth := func(s string) int {
-			width := 0
-			i := 0
-			for i < len(s) {
-				if s[i] == '|' && i+2 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' && s[i+2] >= '0' && s[i+2] <= '9' {
-					i += 3 // Skip pipe code
-				} else {
-					width++
-					i++
-				}
-			}
-			return width
-		}
-
 		lineTwoCol := func(leftLabel, leftValue, rightLabel, rightValue string) string {
 			// Calculate padding needed to align second column at position 45
-			leftLabelWidth := visualWidth(leftLabel)
-			leftValueWidth := visualWidth(leftValue)
+			leftLabelWidth := visualPipeWidth(leftLabel)
+			leftValueWidth := visualPipeWidth(leftValue)
 			totalLeft := leftLabelWidth + 2 + leftValueWidth // label + ": " + value
 			paddingNeeded := 45 - totalLeft
 			if paddingNeeded < 2 {
@@ -460,7 +540,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 
 		// Draw separator line above edit area
 		separator := "|08" + strings.Repeat("-", 79) + "|07"
-		if err := writeAt(sepMidRow, 1, separator); err != nil {
+		if err := writeAt(st.layout.sepMidRow, 1, separator); err != nil {
 			return err
 		}
 
@@ -475,16 +555,16 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			lineTwoCol("|08[|14G|08]|11 Validated", getBoolFieldValue("validated", sel.Validated), "|11Deleted", deletedStatus),
 		}
 		for i, line := range lines {
-			if err := writeAt(detailStartRow+i, 1, line); err != nil {
+			if err := writeAt(st.layout.detailStartRow+i, 1, line); err != nil {
 				return err
 			}
 		}
 		if message != "" {
-			if err := writeAt(statusRow, 1, message); err != nil {
+			if err := writeAt(st.layout.statusRow, 1, message); err != nil {
 				return err
 			}
 		} else {
-			if err := clearRow(statusRow); err != nil {
+			if err := clearRow(st.layout.statusRow); err != nil {
 				return err
 			}
 		}
@@ -492,20 +572,20 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 	}
 
 	readFieldInput := func(fieldLabel string, currentValue string, maxLen int, mask bool) (string, error) {
-		if adminCursorHidden {
-			_ = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h"), outputMode)
-			defer terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25l"), outputMode)
+		if st.adminCursorHidden {
+			_ = terminalio.WriteProcessedBytes(st.terminal, []byte("\x1b[?25h"), st.outputMode)
+			defer terminalio.WriteProcessedBytes(st.terminal, []byte("\x1b[?25l"), st.outputMode)
 		}
 
 		prompt := fmt.Sprintf("|15%s:|07 ", fieldLabel)
-		if err := writeAt(statusRow, 1, prompt); err != nil {
+		if err := writeAt(st.layout.statusRow, 1, prompt); err != nil {
 			return "", err
 		}
 
 		// Position cursor after prompt
 		cursorPos := len(fieldLabel) + 3
-		cmd := fmt.Sprintf("\x1b[%d;%dH", statusRow, cursorPos)
-		if err := terminalio.WriteProcessedBytes(terminal, []byte(cmd), outputMode); err != nil {
+		cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos)
+		if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
 			return "", err
 		}
 
@@ -521,12 +601,12 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		}
 
 		// Show current value
-		if err := terminalio.WriteProcessedBytes(terminal, []byte(display()), outputMode); err != nil {
+		if err := terminalio.WriteProcessedBytes(st.terminal, []byte(display()), st.outputMode); err != nil {
 			return "", err
 		}
 
 		for {
-			key, readErr := ih.ReadKey()
+			key, readErr := st.ih.ReadKey()
 			if readErr != nil {
 				return "", readErr
 			}
@@ -540,11 +620,11 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 				if cursorIdx > 0 {
 					input = append(input[:cursorIdx-1], input[cursorIdx:]...)
 					cursorIdx--
-					if err := writeAt(statusRow, 1, prompt+display()+"  "); err != nil {
+					if err := writeAt(st.layout.statusRow, 1, prompt+display()+"  "); err != nil {
 						return "", err
 					}
-					cmd := fmt.Sprintf("\x1b[%d;%dH", statusRow, cursorPos+cursorIdx)
-					if err := terminalio.WriteProcessedBytes(terminal, []byte(cmd), outputMode); err != nil {
+					cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
+					if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
 						return "", err
 					}
 				}
@@ -553,31 +633,14 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 					r := rune(key)
 					input = append(input[:cursorIdx], append([]rune{r}, input[cursorIdx:]...)...)
 					cursorIdx++
-					if err := writeAt(statusRow, 1, prompt+display()); err != nil {
+					if err := writeAt(st.layout.statusRow, 1, prompt+display()); err != nil {
 						return "", err
 					}
-					cmd := fmt.Sprintf("\x1b[%d;%dH", statusRow, cursorPos+cursorIdx)
-					if err := terminalio.WriteProcessedBytes(terminal, []byte(cmd), outputMode); err != nil {
+					cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
+					if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
 						return "", err
 					}
 				}
-			}
-		}
-	}
-
-	moveUp := func() {
-		if selectedIndex > 0 {
-			selectedIndex--
-			if selectedIndex < topIndex {
-				topIndex = selectedIndex
-			}
-		}
-	}
-	moveDown := func() {
-		if selectedIndex < len(users)-1 {
-			selectedIndex++
-			if selectedIndex >= topIndex+pageSize {
-				topIndex = selectedIndex - pageSize + 1
 			}
 		}
 	}
@@ -596,7 +659,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 	}
 
 	for {
-		key, err := ih.ReadKey()
+		key, err := st.ih.ReadKey()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil, "LOGOFF", io.EOF
@@ -605,33 +668,33 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		}
 
 		refresh := false
-		statusMessage := ""
+		st.statusMessage = ""
 
 		switch key {
 		case 'k', 'K', 'w', 'W':
-			if len(pendingChanges) == 0 {
-				moveUp()
+			if len(st.pendingChanges) == 0 {
+				st.moveUp()
 				refresh = true
 			}
 		case 'j', 'J':
-			if len(pendingChanges) == 0 {
-				moveDown()
+			if len(st.pendingChanges) == 0 {
+				st.moveDown()
 				refresh = true
 			}
 		case 's', 'S':
-			if len(pendingChanges) > 0 {
-				target := users[selectedIndex]
+			if len(st.pendingChanges) > 0 {
+				target := st.users[st.selectedIndex]
 				var saved bool
-				statusMessage, saved = e.applyPendingUserChanges(userManager, currentUser, target, pendingChanges, originalTimestamps)
+				st.statusMessage, saved = st.e.applyPendingUserChanges(st.userManager, st.currentUser, target, st.pendingChanges, st.originalTimestamps)
 				if saved {
-					pendingChanges = make(map[string]interface{})
-					users = loadEditorUsers()
-					if cfg.pendingOnly {
+					st.pendingChanges = make(map[string]interface{})
+					st.users = st.loadEditorUsers()
+					if st.cfg.pendingOnly {
 						// Validated users drop out of the queue: handle the now-empty
 						// case and clamp the selection back into range.
-						if len(users) == 0 {
-							_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-							_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|10All users have been validated!|07")), outputMode)
+						if len(st.users) == 0 {
+							_ = terminalio.WriteProcessedBytes(st.terminal, []byte(ansi.ClearScreen()), st.outputMode)
+							_ = terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|10All users have been validated!|07")), st.outputMode)
 							if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
 								if errors.Is(pauseErr, io.EOF) {
 									return nil, "LOGOFF", io.EOF
@@ -640,11 +703,11 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 							}
 							return nil, "", nil
 						}
-						if selectedIndex >= len(users) {
-							selectedIndex = len(users) - 1
+						if st.selectedIndex >= len(st.users) {
+							st.selectedIndex = len(st.users) - 1
 						}
-						if topIndex > selectedIndex {
-							topIndex = selectedIndex
+						if st.topIndex > st.selectedIndex {
+							st.topIndex = st.selectedIndex
 						}
 						if err := renderHeader(); err != nil {
 							return nil, "", err
@@ -653,155 +716,155 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 				}
 				refresh = true
 			} else {
-				moveDown()
+				st.moveDown()
 				refresh = true
 			}
 		case 'q', 'Q':
-			if len(pendingChanges) > 0 {
-				statusMessage = "|11Unsaved changes! Press [S] to save or [X] to abort.|07"
+			if len(st.pendingChanges) > 0 {
+				st.statusMessage = "|11Unsaved changes! Press [S] to save or [X] to abort.|07"
 			} else {
 				return nil, "", nil
 			}
 		case 'x', 'X':
-			if len(pendingChanges) > 0 {
-				pendingChanges = make(map[string]interface{})
-				statusMessage = "|11Changes discarded.|07"
+			if len(st.pendingChanges) > 0 {
+				st.pendingChanges = make(map[string]interface{})
+				st.statusMessage = "|11Changes discarded.|07"
 				refresh = true
 			}
 		case 'a', 'A':
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			if newVal, editErr := readFieldInput("Handle", sel.Handle, 30, false); editErr == nil {
 				trimmedHandle := strings.TrimSpace(newVal)
 				if trimmedHandle != sel.Handle {
-					pendingChanges["handle"] = trimmedHandle
-					statusMessage = "|10Field marked for update.|07"
+					st.pendingChanges["handle"] = trimmedHandle
+					st.statusMessage = "|10Field marked for update.|07"
 				} else {
-					delete(pendingChanges, "handle")
-					statusMessage = "|08No change.|07"
+					delete(st.pendingChanges, "handle")
+					st.statusMessage = "|08No change.|07"
 				}
 				refresh = true
 			} else {
 				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
 				}
 				refresh = true
 			}
 		case 'b', 'B':
 			// Edit Real Name field
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			if newVal, editErr := readFieldInput("Real Name", sel.RealName, 50, false); editErr == nil {
 				if newVal != sel.RealName {
-					pendingChanges["realname"] = newVal
-					statusMessage = "|10Field marked for update.|07"
+					st.pendingChanges["realname"] = newVal
+					st.statusMessage = "|10Field marked for update.|07"
 				} else {
-					delete(pendingChanges, "realname")
-					statusMessage = "|08No change.|07"
+					delete(st.pendingChanges, "realname")
+					st.statusMessage = "|08No change.|07"
 				}
 				refresh = true
 			} else {
 				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
 				}
 				refresh = true
 			}
 		case 'c', 'C':
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			if newVal, editErr := readFieldInput("Group/Location", sel.GroupLocation, 30, false); editErr == nil {
 				if newVal != sel.GroupLocation {
-					pendingChanges["grouploc"] = newVal
-					statusMessage = "|10Field marked for update.|07"
+					st.pendingChanges["grouploc"] = newVal
+					st.statusMessage = "|10Field marked for update.|07"
 				} else {
-					delete(pendingChanges, "grouploc")
-					statusMessage = "|08No change.|07"
+					delete(st.pendingChanges, "grouploc")
+					st.statusMessage = "|08No change.|07"
 				}
 				refresh = true
 			} else {
 				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
 				}
 				refresh = true
 			}
 		case 'd', 'D':
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			if newVal, editErr := readFieldInput("Note", sel.PrivateNote, 50, false); editErr == nil {
 				if newVal != sel.PrivateNote {
-					pendingChanges["note"] = newVal
-					statusMessage = "|10Field marked for update.|07"
+					st.pendingChanges["note"] = newVal
+					st.statusMessage = "|10Field marked for update.|07"
 				} else {
-					delete(pendingChanges, "note")
-					statusMessage = "|08No change.|07"
+					delete(st.pendingChanges, "note")
+					st.statusMessage = "|08No change.|07"
 				}
 				refresh = true
 			} else {
 				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
 				}
 				refresh = true
 			}
 		case 'e', 'E':
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			if newVal, editErr := readFieldInput("Flags", sel.Flags, 20, false); editErr == nil {
 				if newVal != sel.Flags {
-					pendingChanges["flags"] = newVal
-					statusMessage = "|10Field marked for update.|07"
+					st.pendingChanges["flags"] = newVal
+					st.statusMessage = "|10Field marked for update.|07"
 				} else {
-					delete(pendingChanges, "flags")
-					statusMessage = "|08No change.|07"
+					delete(st.pendingChanges, "flags")
+					st.statusMessage = "|08No change.|07"
 				}
 				refresh = true
 			} else {
 				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
 				}
 				refresh = true
 			}
 		case 'f', 'F':
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			levelStr := fmt.Sprintf("%d", sel.AccessLevel)
 			if newVal, editErr := readFieldInput("Level", levelStr, 3, false); editErr == nil {
 				if level, parseErr := strconv.Atoi(newVal); parseErr == nil {
 					// Protect User #1 from level reduction
-					if sel.ID == 1 && level < e.ServerCfg.SysOpLevel {
-						statusMessage = "|01Cannot lower User #1 below SysOp level!|07"
+					if sel.ID == 1 && level < st.e.ServerCfg.SysOpLevel {
+						st.statusMessage = "|01Cannot lower User #1 below SysOp level!|07"
 						refresh = true
 					} else if level != sel.AccessLevel {
-						pendingChanges["level"] = level
-						statusMessage = "|10Field marked for update.|07"
+						st.pendingChanges["level"] = level
+						st.statusMessage = "|10Field marked for update.|07"
 						refresh = true
 					} else {
-						delete(pendingChanges, "level")
-						statusMessage = "|08No change.|07"
+						delete(st.pendingChanges, "level")
+						st.statusMessage = "|08No change.|07"
 						refresh = true
 					}
 				} else {
-					statusMessage = "|01Invalid number.|07"
+					st.statusMessage = "|01Invalid number.|07"
 					refresh = true
 				}
 			} else {
 				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
 				}
 				refresh = true
 			}
 		case 'g', 'G':
 			// Toggle validated status
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			if sel.ID == 1 && sel.Validated {
 				// Don't allow unvalidating User #1
-				statusMessage = "|01Cannot unvalidate User #1!|07"
+				st.statusMessage = "|01Cannot unvalidate User #1!|07"
 				refresh = true
 			} else {
 				newValidated := !sel.Validated
 				if newValidated != sel.Validated {
-					pendingChanges["validated"] = newValidated
+					st.pendingChanges["validated"] = newValidated
 					if newValidated {
-						statusMessage = "|10Validated status marked for update.|07"
+						st.statusMessage = "|10Validated status marked for update.|07"
 					} else {
-						statusMessage = "|11Unvalidated status marked for update.|07"
+						st.statusMessage = "|11Unvalidated status marked for update.|07"
 					}
 				} else {
-					delete(pendingChanges, "validated")
-					statusMessage = "|08No change.|07"
+					delete(st.pendingChanges, "validated")
+					st.statusMessage = "|08No change.|07"
 				}
 				refresh = true
 			}
@@ -809,74 +872,74 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			// Change password
 			if newPassword, editErr := readFieldInput("New Password", "", 50, true); editErr == nil {
 				if newPassword != "" {
-					pendingChanges["password"] = newPassword
-					statusMessage = "|10Password marked for update.|07"
+					st.pendingChanges["password"] = newPassword
+					st.statusMessage = "|10Password marked for update.|07"
 				} else {
-					delete(pendingChanges, "password")
-					statusMessage = "|08Password change cancelled.|07"
+					delete(st.pendingChanges, "password")
+					st.statusMessage = "|08Password change cancelled.|07"
 				}
 				refresh = true
 			} else {
 				if editErr.Error() != "cancelled" {
-					statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
 				}
 				refresh = true
 			}
 		case '0':
 			// Toggle ban user (sets level 0, unvalidated) or unban (restore to regular level)
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			if sel.ID == 1 {
-				statusMessage = "|01Cannot ban User #1!|07"
+				st.statusMessage = "|01Cannot ban User #1!|07"
 			} else {
 				// Check if user is currently banned
 				isBanned := sel.AccessLevel == 0 && !sel.Validated
 				if isBanned {
 					// Unban: restore to regular user level and validate
-					pendingChanges["validated"] = true
-					pendingChanges["level"] = e.ServerCfg.RegularUserLevel
-					statusMessage = fmt.Sprintf("|10Un-ban marked for update (level %d, validated).|07", e.ServerCfg.RegularUserLevel)
+					st.pendingChanges["validated"] = true
+					st.pendingChanges["level"] = st.e.ServerCfg.RegularUserLevel
+					st.statusMessage = fmt.Sprintf("|10Un-ban marked for update (level %d, validated).|07", st.e.ServerCfg.RegularUserLevel)
 				} else {
 					// Ban: set level 0 and unvalidated
-					pendingChanges["validated"] = false
-					pendingChanges["level"] = 0
-					statusMessage = "|01Ban marked for update (level 0, unvalidated).|07"
+					st.pendingChanges["validated"] = false
+					st.pendingChanges["level"] = 0
+					st.statusMessage = "|01Ban marked for update (level 0, unvalidated).|07"
 				}
 			}
 			refresh = true
 		case '9':
 			// Toggle delete user (soft delete)
-			sel := users[selectedIndex]
+			sel := st.users[st.selectedIndex]
 			if sel.ID == 1 {
-				statusMessage = "|01Cannot delete User #1!|07"
+				st.statusMessage = "|01Cannot delete User #1!|07"
 			} else {
 				newDeleted := !sel.DeletedUser
 				if newDeleted != sel.DeletedUser {
-					pendingChanges["deleted"] = newDeleted
+					st.pendingChanges["deleted"] = newDeleted
 					if newDeleted {
-						statusMessage = "|01Delete marked for update (soft delete).|07"
+						st.statusMessage = "|01Delete marked for update (soft delete).|07"
 					} else {
-						statusMessage = "|10Undelete marked for update (restore user).|07"
+						st.statusMessage = "|10Undelete marked for update (restore user).|07"
 					}
 				} else {
-					delete(pendingChanges, "deleted")
-					statusMessage = "|08No change.|07"
+					delete(st.pendingChanges, "deleted")
+					st.statusMessage = "|08No change.|07"
 				}
 			}
 			refresh = true
 		case 'i', 'I':
 			// View selected user's infoforms - interactive menu
-			if len(pendingChanges) == 0 {
-				sel := users[selectedIndex]
+			if len(st.pendingChanges) == 0 {
+				sel := st.users[st.selectedIndex]
 				infoformsMu.Lock()
-				ifCfg, ifErr := loadInfoFormConfig(e.RootConfigPath)
+				ifCfg, ifErr := loadInfoFormConfig(st.e.RootConfigPath)
 				infoformsMu.Unlock()
 
 				if ifErr != nil {
-					_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-					wv(terminal, "\r\n|04Error loading infoforms config.\r\n", outputMode)
-					e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+					_ = terminalio.WriteProcessedBytes(st.terminal, []byte(ansi.ClearScreen()), st.outputMode)
+					wv(st.terminal, "\r\n|04Error loading infoforms config.\r\n", st.outputMode)
+					st.e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 				} else {
-					_ = browseInfoForms(e, s, terminal, outputMode, sel, ifCfg, termWidth, termHeight)
+					_ = browseInfoForms(st.e, s, terminal, outputMode, sel, ifCfg, termWidth, termHeight)
 				}
 				// Restore full screen layout after infoform viewer cleared the screen
 				if err := renderHeader(); err != nil {
@@ -889,18 +952,18 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		case editor.KeyArrowUp:
 			// Block navigation while edits are staged (matches j/k handling) so
 			// a subsequent Save can't apply pendingChanges to a different user.
-			if len(pendingChanges) == 0 {
-				moveUp()
+			if len(st.pendingChanges) == 0 {
+				st.moveUp()
 				refresh = true
 			}
 		case editor.KeyArrowDown:
-			if len(pendingChanges) == 0 {
-				moveDown()
+			if len(st.pendingChanges) == 0 {
+				st.moveDown()
 				refresh = true
 			}
 		case editor.KeyEsc:
-			if cfg.pendingOnly && len(pendingChanges) > 0 {
-				statusMessage = "|11Unsaved changes! Press [S] to save or [X] to abort.|07"
+			if st.cfg.pendingOnly && len(st.pendingChanges) > 0 {
+				st.statusMessage = "|11Unsaved changes! Press [S] to save or [X] to abort.|07"
 			} else {
 				return nil, "", nil
 			}
@@ -910,11 +973,11 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			if err := renderList(); err != nil {
 				return nil, "", err
 			}
-			if err := renderDetails(statusMessage); err != nil {
+			if err := renderDetails(st.statusMessage); err != nil {
 				return nil, "", err
 			}
-		} else if !cfg.pendingOnly && statusMessage != "" {
-			if err := renderDetails(statusMessage); err != nil {
+		} else if !st.cfg.pendingOnly && st.statusMessage != "" {
+			if err := renderDetails(st.statusMessage); err != nil {
 				return nil, "", err
 			}
 		}
