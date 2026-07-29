@@ -20,13 +20,57 @@ import (
 	"golang.org/x/term"
 )
 
+// loopAction tells the Run loop what to do after a phase completes.
+type loopAction int
+
+const (
+	loopFallthrough loopAction = iota // proceed to next phase
+	loopContinue                      // restart the menu loop (re-enter current/next menu)
+	loopReturn                        // leave Run (logoff/goodbye); use with retAction/retErr
+)
+
+// runLoopState carries the mutable state of one MenuExecutor.Run invocation.
+type runLoopState struct {
+	e                *MenuExecutor
+	s                ssh.Session
+	terminal         *term.Terminal
+	userManager      *user.UserMgr
+	nodeNumber       int
+	sessionStartTime time.Time
+	autoRunLog       types.AutoRunTracker
+	outputMode       ansi.OutputMode
+	termWidth        int
+	termHeight       int
+
+	currentMenuName  string
+	previousMenuName string
+	currentUser      *user.User
+	currentAreaName  string
+	userInput        string
+	isLightbarMenu   bool
+}
+
 // Run executes the menu logic for a given starting menu name.
 // Reverted s parameter back to ssh.Session
 // Added outputMode parameter
 // Added currentAreaName parameter
 func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, startMenu string, nodeNumber int, sessionStartTime time.Time, autoRunLog types.AutoRunTracker, outputMode ansi.OutputMode, currentAreaName string, termWidth int, termHeight int) (string, *user.User, error) {
-	currentMenuName := strings.ToUpper(startMenu)
-	var previousMenuName string // Track the last menu visited
+	st := &runLoopState{
+		e:                e,
+		s:                s,
+		terminal:         terminal,
+		userManager:      userManager,
+		nodeNumber:       nodeNumber,
+		sessionStartTime: sessionStartTime,
+		autoRunLog:       autoRunLog,
+		outputMode:       outputMode,
+		termWidth:        termWidth,
+		termHeight:       termHeight,
+		currentMenuName:  strings.ToUpper(startMenu),
+		currentUser:      currentUser,
+		currentAreaName:  currentAreaName,
+	}
+	// previousMenuName starts at its zero value (""); tracked via st.previousMenuName below.
 	// var authenticatedUserResult *user.User // Unused
 
 	// Clean up the session-scoped InputHandler when this Run() returns so the
@@ -37,8 +81,8 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	defer resetSessionIH(s)
 	defer clearSessionIdleTimeout(s)
 
-	if currentUser != nil {
-		slog.Debug("running menu for user", "handle", currentUser.Handle, "level", currentUser.AccessLevel)
+	if st.currentUser != nil {
+		slog.Debug("running menu for user", "handle", st.currentUser.Handle, "level", st.currentUser.AccessLevel)
 	} else {
 		slog.Debug("running menu for potentially unauthenticated user (login phase)")
 	}
@@ -49,17 +93,17 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	// message reader, etc. — without requiring per-call changes, and it
 	// survives InputHandler recreation after doors (applySessionIdleTimeout
 	// stores the value for getSessionIH to re-apply).
-	applySessionIdleTimeout(s, e.idleTimeout(currentUser))
+	applySessionIdleTimeout(s, e.idleTimeout(st.currentUser))
 
 	for {
-		slog.Info("running menu", "menu", currentMenuName, "previous", previousMenuName, "node", nodeNumber)
+		slog.Info("running menu", "menu", st.currentMenuName, "previous", st.previousMenuName, "node", nodeNumber)
 
-		var userInput string // Declare userInput here (Keep this one)
+		st.userInput = "" // Reset per iteration (Keep this one)
 		// Removed authenticatedUserResult declaration from here
 		// Numeric commands must be explicitly defined in KEYS tokens (no positional matching)
 
 		// Determine ANSI filename using standard convention
-		ansFilename := currentMenuName + ".ANS"
+		ansFilename := st.currentMenuName + ".ANS"
 		// Use MenuSetPath for ANSI file
 		fullAnsPath := filepath.Join(e.MenuSetPath, "ansi", ansFilename)
 
@@ -77,10 +121,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				areas = e.MessageMgr
 			}
 			keywords := map[string]bool{
-				"SPONSOR": sponsorKeyword(currentUser, areas, e.GetServerConfig()),
+				"SPONSOR": sponsorKeyword(st.currentUser, areas, e.GetServerConfig()),
 			}
-			rawAnsiContent = applyConditionalRegions(rawAnsiContent, currentUser, keywords)
-			if currentMenuName == "ADMIN" {
+			rawAnsiContent = applyConditionalRegions(rawAnsiContent, st.currentUser, keywords)
+			if st.currentMenuName == "ADMIN" {
 				pendingCount := pendingValidationCount(userManager)
 				rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("{{PENDING_VALIDATIONS}}"), []byte(strconv.Itoa(pendingCount)))
 			}
@@ -91,10 +135,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				newUsersVal = "YES"
 			}
 			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|NEWUSERS"), []byte(newUsersVal))
-			currentAreaTag, currentAreaDisplayName := e.resolveCurrentAreaTokens(currentUser, currentAreaName)
-			currentFileAreaTag, currentFileAreaDisplayName := e.resolveCurrentFileAreaTokens(currentUser)
+			currentAreaTag, currentAreaDisplayName := e.resolveCurrentAreaTokens(st.currentUser, st.currentAreaName)
+			currentFileAreaTag, currentFileAreaDisplayName := e.resolveCurrentFileAreaTokens(st.currentUser)
 			// Replace longer tokens first to avoid partial replacement conflicts (e.g. |FCONFPATH, |CFAN vs |CFA vs |CAN vs |CA).
-			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|FCONFPATH"), []byte(e.resolveFileConferencePath(currentUser)))
+			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|FCONFPATH"), []byte(e.resolveFileConferencePath(st.currentUser)))
 			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CFAN"), []byte(currentFileAreaDisplayName))
 			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CFA"), []byte(currentFileAreaTag))
 			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CAN"), []byte(currentAreaDisplayName))
@@ -103,8 +147,8 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			rawAnsiContent = replaceMenuATCode(rawAnsiContent, "U", strconv.Itoa(e.SessionRegistry.ActiveCount()))
 			// @RR@ — Random Rumor text (supports @RR@, @RR:50@, @RR######@)
 			rumorLevel := 1 // default MinLevel when no user context
-			if currentUser != nil {
-				rumorLevel = currentUser.AccessLevel
+			if st.currentUser != nil {
+				rumorLevel = st.currentUser.AccessLevel
 			}
 			rawAnsiContent = expandRandomRumorATCode(rawAnsiContent, e.RootConfigPath, rumorLevel)
 		}
@@ -139,29 +183,29 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// CP437 mode: DisplayBytes already contain raw CP437, pass through as-is
 
 		// --- SPECIAL HANDLING FOR LOGIN MENU INTERACTION ---
-		if currentMenuName == "LOGIN" {
-			if currentUser != nil {
-				slog.Warn("attempting to run LOGIN menu for already authenticated user, skipping login, going to MAIN", "handle", currentUser.Handle)
+		if st.currentMenuName == "LOGIN" {
+			if st.currentUser != nil {
+				slog.Warn("attempting to run LOGIN menu for already authenticated user, skipping login, going to MAIN", "handle", st.currentUser.Handle)
 
 				// Set default message area if not already set (e.g., SSH auto-login)
-				if currentUser.CurrentMessageAreaID == 0 && e.MessageMgr != nil {
+				if st.currentUser.CurrentMessageAreaID == 0 && e.MessageMgr != nil {
 					for _, area := range e.MessageMgr.ListAreas() {
-						if checkACS(area.ACSRead, currentUser, s, terminal, sessionStartTime) {
-							currentUser.CurrentMessageAreaID = area.ID
-							currentUser.CurrentMessageAreaTag = area.Tag
-							e.setUserMsgConference(currentUser, area.ConferenceID)
+						if checkACS(area.ACSRead, st.currentUser, s, terminal, sessionStartTime) {
+							st.currentUser.CurrentMessageAreaID = area.ID
+							st.currentUser.CurrentMessageAreaTag = area.Tag
+							e.setUserMsgConference(st.currentUser, area.ConferenceID)
 							break
 						}
 					}
 				}
 
 				// Set default file area if not already set
-				if currentUser.CurrentFileAreaID == 0 && e.FileMgr != nil {
+				if st.currentUser.CurrentFileAreaID == 0 && e.FileMgr != nil {
 					for _, area := range e.FileMgr.ListAreas() {
-						if checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
-							currentUser.CurrentFileAreaID = area.ID
-							currentUser.CurrentFileAreaTag = area.Tag
-							e.setUserFileConference(currentUser, area.ConferenceID)
+						if checkACS(area.ACSList, st.currentUser, s, terminal, sessionStartTime) {
+							st.currentUser.CurrentFileAreaID = area.ID
+							st.currentUser.CurrentFileAreaTag = area.Tag
+							e.setUserFileConference(st.currentUser, area.ConferenceID)
 							break
 						}
 					}
@@ -169,13 +213,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 				// Persist defaults
 				if userManager != nil {
-					if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
+					if saveErr := userManager.UpdateUser(st.currentUser); saveErr != nil {
 						slog.Error("failed to save user default area selections", "error", saveErr)
 					}
 				}
 
-				currentMenuName = "MAIN"
-				previousMenuName = "LOGIN" // Set previous explicitly here
+				st.currentMenuName = "MAIN"
+				st.previousMenuName = "LOGIN" // Set previous explicitly here
 				continue
 			}
 
@@ -220,79 +264,79 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 			if authenticatedUserResult != nil {
 				slog.Info("login successful, proceeding based on LOGIN menu config", "handle", authenticatedUserResult.Handle)
-				currentUser = authenticatedUserResult // Update the user for this Run context
+				st.currentUser = authenticatedUserResult // Update the user for this Run context
 
 				// --- Update user's terminal dimensions from detected size ---
 				if termWidth > 0 && termHeight > 0 {
-					currentUser.ScreenWidth = termWidth
-					currentUser.ScreenHeight = termHeight
-					slog.Info("updated user screen preferences", "handle", currentUser.Handle, "width", termWidth, "height", termHeight)
+					st.currentUser.ScreenWidth = termWidth
+					st.currentUser.ScreenHeight = termHeight
+					slog.Info("updated user screen preferences", "handle", st.currentUser.Handle, "width", termWidth, "height", termHeight)
 					if userManager != nil {
-						if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
+						if saveErr := userManager.UpdateUser(st.currentUser); saveErr != nil {
 							slog.Error("failed to save user screen preferences", "error", saveErr)
 						}
 					}
 				}
 
 				// --- BEGIN Set Default Message Area (only if not already set from saved prefs) ---
-				if currentUser.CurrentMessageAreaID == 0 && e.MessageMgr != nil {
+				if st.currentUser.CurrentMessageAreaID == 0 && e.MessageMgr != nil {
 					allAreas := e.MessageMgr.ListAreas() // Already sorted by Position
-					slog.Debug("found message areas for user", "count", len(allAreas), "handle", currentUser.Handle)
+					slog.Debug("found message areas for user", "count", len(allAreas), "handle", st.currentUser.Handle)
 					foundDefaultArea := false
 					for _, area := range allAreas {
 						// Check if user has read access to this area
-						if checkACS(area.ACSRead, currentUser, s, terminal, sessionStartTime) {
-							slog.Info("setting default message area for user", "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
-							currentUser.CurrentMessageAreaID = area.ID
-							currentUser.CurrentMessageAreaTag = area.Tag
-							e.setUserMsgConference(currentUser, area.ConferenceID)
+						if checkACS(area.ACSRead, st.currentUser, s, terminal, sessionStartTime) {
+							slog.Info("setting default message area for user", "handle", st.currentUser.Handle, "id", area.ID, "tag", area.Tag)
+							st.currentUser.CurrentMessageAreaID = area.ID
+							st.currentUser.CurrentMessageAreaTag = area.Tag
+							e.setUserMsgConference(st.currentUser, area.ConferenceID)
 							foundDefaultArea = true
 							break // Found the first accessible area
 						} else {
-							slog.Debug("user denied read access to message area", "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag, "acs", area.ACSRead)
+							slog.Debug("user denied read access to message area", "handle", st.currentUser.Handle, "id", area.ID, "tag", area.Tag, "acs", area.ACSRead)
 						}
 					}
 					if !foundDefaultArea {
-						slog.Warn("user has no access to any message areas", "handle", currentUser.Handle)
-						currentUser.CurrentMessageAreaID = 0
-						currentUser.CurrentMessageAreaTag = ""
+						slog.Warn("user has no access to any message areas", "handle", st.currentUser.Handle)
+						st.currentUser.CurrentMessageAreaID = 0
+						st.currentUser.CurrentMessageAreaTag = ""
 					}
-				} else if currentUser.CurrentMessageAreaID != 0 {
-					slog.Info("user has saved message area", "handle", currentUser.Handle, "id", currentUser.CurrentMessageAreaID, "tag", currentUser.CurrentMessageAreaTag, "conferenceID", currentUser.CurrentMsgConferenceID, "conferenceTag", currentUser.CurrentMsgConferenceTag)
+				} else if st.currentUser.CurrentMessageAreaID != 0 {
+					slog.Info("user has saved message area", "handle", st.currentUser.Handle, "id", st.currentUser.CurrentMessageAreaID, "tag", st.currentUser.CurrentMessageAreaTag, "conferenceID", st.currentUser.CurrentMsgConferenceID, "conferenceTag", st.currentUser.CurrentMsgConferenceTag)
 				}
 				// --- END Set Default Message Area ---
 
 				// --- BEGIN Set Default File Area (only if not already set from saved prefs) ---
-				if currentUser.CurrentFileAreaID == 0 && e.FileMgr != nil {
+				if st.currentUser.CurrentFileAreaID == 0 && e.FileMgr != nil {
 					allFileAreas := e.FileMgr.ListAreas() // Assumes ListAreas is sorted by ID
-					slog.Debug("found file areas for user", "count", len(allFileAreas), "handle", currentUser.Handle)
+					slog.Debug("found file areas for user", "count", len(allFileAreas), "handle", st.currentUser.Handle)
 					foundDefaultFileArea := false
 					for _, area := range allFileAreas {
 						// Check if user has list access to this area
-						if checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) { // Use ACSList
-							slog.Info("setting default file area for user", "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
-							currentUser.CurrentFileAreaID = area.ID
-							currentUser.CurrentFileAreaTag = area.Tag
-							e.setUserFileConference(currentUser, area.ConferenceID)
+						if checkACS(area.ACSList, st.currentUser, s, terminal, sessionStartTime) { // Use ACSList
+							slog.Info("setting default file area for user", "handle", st.currentUser.Handle, "id", area.ID, "tag", area.Tag)
+							st.currentUser.CurrentFileAreaID = area.ID
+							st.currentUser.CurrentFileAreaTag = area.Tag
+							e.setUserFileConference(st.currentUser, area.ConferenceID)
 							foundDefaultFileArea = true
 							break // Found the first accessible area
 						} else {
-							slog.Debug("user denied list access to file area", "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag, "acs", area.ACSList)
+							slog.Debug("user denied list access to file area", "handle", st.currentUser.Handle, "id", area.ID, "tag", area.Tag, "acs", area.ACSList)
 						}
 					}
 					if !foundDefaultFileArea {
-						slog.Warn("user has no access to any file areas", "handle", currentUser.Handle)
-						currentUser.CurrentFileAreaID = 0
-						currentUser.CurrentFileAreaTag = ""
+						slog.Warn("user has no access to any file areas", "handle", st.currentUser.Handle)
+						st.currentUser.CurrentFileAreaID = 0
+						st.currentUser.CurrentFileAreaTag = ""
 					}
-				} else if currentUser.CurrentFileAreaID != 0 {
-					slog.Info("user has saved file area", "handle", currentUser.Handle, "id", currentUser.CurrentFileAreaID, "tag", currentUser.CurrentFileAreaTag, "conferenceID", currentUser.CurrentFileConferenceID, "conferenceTag", currentUser.CurrentFileConferenceTag)
+				} else if st.currentUser.CurrentFileAreaID != 0 {
+					slog.Info("user has saved file area", "handle", st.currentUser.Handle, "id", st.currentUser.CurrentFileAreaID, "tag", st.currentUser.CurrentFileAreaTag, "conferenceID", st.currentUser.CurrentFileConferenceID, "conferenceTag", st.currentUser.CurrentFileConferenceTag)
 				}
 				// --- END Set Default File Area ---
 
 				// Persist default area/conference selections to disk
 				if userManager != nil {
-					if saveErr := userManager.UpdateUser(currentUser); saveErr != nil {
+					if saveErr := userManager.UpdateUser(st.currentUser); saveErr != nil {
 						slog.Error("failed to save user default area selections", "error", saveErr)
 					}
 				}
@@ -304,7 +348,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				if loadCmdErr != nil {
 					slog.Error("failed to load LOGIN.CFG after successful authentication", "path", filepath.Join(loginCfgPath, "LOGIN.CFG"), "error", loadCmdErr)
 					// Return an error? Or try to default to MAIN?
-					return "LOGOFF", currentUser, fmt.Errorf("failed loading LOGIN.CFG post-auth") // Logoff user on critical error
+					return "LOGOFF", st.currentUser, fmt.Errorf("failed loading LOGIN.CFG post-auth") // Logoff user on critical error
 				}
 
 				// Find the default command (Keys == "")
@@ -315,23 +359,23 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 						if cmd.Command == "RUN:AUTHENTICATE" {
 							continue
 						}
-						if checkACS(cmd.ACS, currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
+						if checkACS(cmd.ACS, st.currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
 							nextAction = cmd.Command
 							foundDefault = true
 							slog.Debug("found default command in LOGIN.CFG after auth", "command", nextAction)
 							break // Found the relevant default command (e.g., GOTO:MAIN)
 						} else {
-							slog.Warn("user denied default command in LOGIN.CFG", "handle", currentUser.Handle, "command", cmd.Command, "acs", cmd.ACS)
+							slog.Warn("user denied default command in LOGIN.CFG", "handle", st.currentUser.Handle, "command", cmd.Command, "acs", cmd.ACS)
 						}
 					}
 				}
 
 				if !foundDefault {
-					slog.Error("no accessible default command found in LOGIN.CFG, logging off", "handle", currentUser.Handle)
-					return "LOGOFF", currentUser, fmt.Errorf("no accessible default command found in LOGIN.CFG")
+					slog.Error("no accessible default command found in LOGIN.CFG, logging off", "handle", st.currentUser.Handle)
+					return "LOGOFF", st.currentUser, fmt.Errorf("no accessible default command found in LOGIN.CFG")
 				}
 				// -- Return the next action AND the authenticated user --
-				return nextAction, currentUser, nil
+				return nextAction, st.currentUser, nil
 			} else { // authenticatedUserResult == nil
 				slog.Info("login failed, redisplaying LOGIN menu")
 				continue // Restart loop for LOGIN
@@ -341,9 +385,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// --- REGULAR MENU PROCESSING (Common for ALL menus, including LOGIN after interaction) ---
 		// 1. Load Menu Definition (.MNU)
 		menuMnuPath := filepath.Join(e.MenuSetPath, "mnu") // Use correct path structure for MNU
-		menuRec, err := LoadMenu(currentMenuName, menuMnuPath)
+		menuRec, err := LoadMenu(st.currentMenuName, menuMnuPath)
 		if err != nil {
-			errMsg := fmt.Sprintf(e.LoadedStrings.ExecMenuLoadError, currentMenuName, err)
+			errMsg := fmt.Sprintf(e.LoadedStrings.ExecMenuLoadError, st.currentMenuName, err)
 			processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
 			// Use new helper for error message
 			wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode)
@@ -351,19 +395,19 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				slog.Error("failed writing menu load error message", "error", wErr)
 			}
 			slog.Error(errMsg)
-			return "", nil, fmt.Errorf("failed to load menu %s: %w", currentMenuName, err)
+			return "", nil, fmt.Errorf("failed to load menu %s: %w", st.currentMenuName, err)
 		}
 
 		// 2. Load Commands (.CFG) for the *current* menu (which might be LOGIN)
 		menuCfgPath := filepath.Join(e.MenuSetPath, "cfg") // Use correct path structure for CFG
-		commands, err := LoadCommands(currentMenuName, menuCfgPath)
+		commands, err := LoadCommands(st.currentMenuName, menuCfgPath)
 		if err != nil {
-			slog.Warn("failed to load commands for menu", "menu", currentMenuName, "error", err)
+			slog.Warn("failed to load commands for menu", "menu", st.currentMenuName, "error", err)
 			commands = []CommandRecord{} // Use empty slice
 		}
 
 		// Determine default node activity for this menu from autorun entries
-		menuDefaultActivity := currentMenuName
+		menuDefaultActivity := st.currentMenuName
 		for _, cmd := range commands {
 			if (cmd.Keys == "//" || cmd.Keys == "~~") && cmd.NodeActivity != "" {
 				menuDefaultActivity = cmd.NodeActivity
@@ -380,10 +424,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Check Menu Password if required
 		menuPassword := menuRec.Password
 		if menuPassword != "" {
-			slog.Debug("menu requires password", "menu", currentMenuName)
+			slog.Debug("menu requires password", "menu", st.currentMenuName)
 			passwordOk := false
 			for i := 0; i < 3; i++ { // Allow 3 attempts
-				prompt := fmt.Sprintf(e.LoadedStrings.ExecMenuPasswordPrompt, currentMenuName, i+1)
+				prompt := fmt.Sprintf(e.LoadedStrings.ExecMenuPasswordPrompt, st.currentMenuName, i+1)
 				processedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
 				wErr := terminalio.WriteProcessedBytes(terminal, processedPrompt, outputMode)
 				if wErr != nil {
@@ -394,11 +438,11 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				inputPassword, err := readPasswordSecurely(s, terminal, outputMode)
 				if err != nil {
 					if errors.Is(err, io.EOF) {
-						slog.Info("user disconnected during menu password entry", "menu", currentMenuName)
+						slog.Info("user disconnected during menu password entry", "menu", st.currentMenuName)
 						return "LOGOFF", nil, nil // Signal logoff
 					}
 					if errors.Is(err, errInputAborted) { // Check for specific error
-						slog.Info("user interrupted password entry for menu", "menu", currentMenuName)
+						slog.Info("user interrupted password entry for menu", "menu", st.currentMenuName)
 						return "LOGOFF", nil, nil // Signal logoff
 					}
 					slog.Error("failed to read password input securely", "error", err)
@@ -421,7 +465,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				}
 			}
 			if !passwordOk {
-				slog.Warn("user failed password entry for menu", "menu", currentMenuName, "user", currentUser)
+				slog.Warn("user failed password entry for menu", "menu", st.currentMenuName, "user", st.currentUser)
 				// Use new helper for feedback message
 				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecTooManyAttempts)), outputMode)
 				if wErr != nil {
@@ -434,8 +478,8 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 		// Check Menu ACS before proceeding
 		menuACS := menuRec.ACS
-		if !checkACS(menuACS, currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
-			slog.Info("user denied access to menu", "menu", currentMenuName, "acs", menuACS, "user", currentUser)
+		if !checkACS(menuACS, st.currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
+			slog.Info("user denied access to menu", "menu", st.currentMenuName, "acs", menuACS, "user", st.currentUser)
 			errMsg := e.LoadedStrings.ExecAccessDenied
 			processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
 			// Use new helper for error message
@@ -451,32 +495,32 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		autoRunActionTaken := false
 		for _, cmd := range commands {
 			if cmd.Keys == "//" || cmd.Keys == "~~" {
-				autoRunKey := fmt.Sprintf("%s:%s", currentMenuName, cmd.Command) // Unique key per menu/command
+				autoRunKey := fmt.Sprintf("%s:%s", st.currentMenuName, cmd.Command) // Unique key per menu/command
 
 				if cmd.Keys == "//" && autoRunLog[autoRunKey] {
 					slog.Debug("skipping already executed run-once command", "command", autoRunKey)
 					continue // Skip if already run
 				}
-				if checkACS(cmd.ACS, currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
+				if checkACS(cmd.ACS, st.currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
 					slog.Info("executing autorun command", "keys", cmd.Keys, "command", cmd.Command, "acs", cmd.ACS)
 
 					if cmd.Keys == "//" {
 						autoRunLog[autoRunKey] = true
 					}
-					nextAction, nextMenu, userResult, err := e.executeCommandAction(cmd.Command, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
+					nextAction, nextMenu, userResult, err := e.executeCommandAction(cmd.Command, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
 					if err != nil {
 						return "", userResult, err
 					}
 					if nextAction == "GOTO" {
-						previousMenuName = currentMenuName
-						currentMenuName = nextMenu
+						st.previousMenuName = st.currentMenuName
+						st.currentMenuName = nextMenu
 						autoRunActionTaken = true
 						break
 					} else if nextAction == "LOGOFF" {
 						return "LOGOFF", userResult, nil
 					} else if nextAction == "CONTINUE" {
 						if userResult != nil {
-							currentUser = userResult
+							st.currentUser = userResult
 						}
 					}
 				} else {
@@ -494,7 +538,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// We still need the raw content for potential lightbar background
 		// Note: ansBackgroundBytes is currently unused but will be needed for full lightbar implementation
 		// ansBackgroundBytes := ansiProcessResult.DisplayBytes
-		if currentMenuName != "LOGIN" {
+		if st.currentMenuName != "LOGIN" {
 			// Truncate ANSI output to terminal height to prevent scrolling
 			displayBytes := ansiProcessResult.DisplayBytes
 			// Prepend clear sequence when CLR is set (single write for reliable clearing)
@@ -505,7 +549,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				lines := bytes.Split(displayBytes, []byte("\n"))
 				if len(lines) > termHeight {
 					displayBytes = bytes.Join(lines[:termHeight], []byte("\n"))
-					slog.Debug("truncated menu ANSI to fit terminal", "menu", currentMenuName, "from", len(lines), "to", termHeight, "rows", termHeight)
+					slog.Debug("truncated menu ANSI to fit terminal", "menu", st.currentMenuName, "from", len(lines), "to", termHeight, "rows", termHeight)
 				}
 			}
 			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
@@ -516,34 +560,34 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				wErr = terminalio.WriteProcessedBytes(terminal, displayBytes, outputMode)
 			}
 			if wErr != nil {
-				slog.Error("failed writing ANSI screen", "menu", currentMenuName, "error", wErr)
+				slog.Error("failed writing ANSI screen", "menu", st.currentMenuName, "error", wErr)
 				return "", nil, fmt.Errorf("failed displaying screen: %w", wErr)
 			}
 		}
 
 		// --- Check for Lightbar Menu (.BAR) ---
 		// Check if a .BAR file exists for this menu in the MENU SET directory
-		isLightbarMenu := HasBarFile(currentMenuName, e.MenuSetPath)
+		st.isLightbarMenu = HasBarFile(st.currentMenuName, e.MenuSetPath)
 
 		// Variable declarations for command handling
-		// var userInput string // REMOVE this redeclaration
+		// var st.userInput string // REMOVE this redeclaration
 		// var numericMatchAction string // Moved declaration up
 
 		// 4. Determine Input Mode / Method
-		if isLightbarMenu {
-			slog.Debug("entering lightbar input mode", "menu", currentMenuName)
+		if st.isLightbarMenu {
+			slog.Debug("entering lightbar input mode", "menu", st.currentMenuName)
 
 			// Load lightbar options from the config directory
-			lightbarOptions, loadErr := loadLightbarOptions(currentMenuName, e)
+			lightbarOptions, loadErr := loadLightbarOptions(st.currentMenuName, e)
 			if loadErr != nil {
-				slog.Error("failed to load lightbar options", "menu", currentMenuName, "error", loadErr)
-				isLightbarMenu = false
+				slog.Error("failed to load lightbar options", "menu", st.currentMenuName, "error", loadErr)
+				st.isLightbarMenu = false
 			} else if len(lightbarOptions) == 0 {
-				slog.Warn("no valid lightbar options loaded", "menu", currentMenuName)
-				isLightbarMenu = false
+				slog.Warn("no valid lightbar options loaded", "menu", st.currentMenuName)
+				st.isLightbarMenu = false
 			}
 
-			if isLightbarMenu {
+			if st.isLightbarMenu {
 				cursorHidden := e.hideCursorIfNeeded(terminal, outputMode, cursorHideContextDefault)
 				ansBackgroundBytes := ansiProcessResult.DisplayBytes
 
@@ -551,9 +595,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				selectedIndex := 0
 				drawErr := drawLightbarMenu(terminal, ansBackgroundBytes, lightbarOptions, selectedIndex, outputMode, false)
 				if drawErr != nil {
-					slog.Error("failed to draw lightbar menu", "menu", currentMenuName, "error", drawErr)
+					slog.Error("failed to draw lightbar menu", "menu", st.currentMenuName, "error", drawErr)
 					e.showCursorIfHidden(terminal, outputMode, cursorHidden)
-					isLightbarMenu = false
+					st.isLightbarMenu = false
 				} else {
 					// Process keyboard navigation for lightbar.
 					// Use the session-scoped InputHandler so the same goroutine that
@@ -569,14 +613,14 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 						if err != nil {
 							e.showCursorIfHidden(terminal, outputMode, cursorHidden)
 							if errors.Is(err, io.EOF) {
-								slog.Info("user disconnected during lightbar input", "menu", currentMenuName)
+								slog.Info("user disconnected during lightbar input", "menu", st.currentMenuName)
 								return "LOGOFF", nil, nil
 							}
 							if errors.Is(err, editor.ErrIdleTimeout) {
 								e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
 								return "LOGOFF", nil, nil
 							}
-							slog.Error("failed to read lightbar input", "menu", currentMenuName, "error", err)
+							slog.Error("failed to read lightbar input", "menu", st.currentMenuName, "error", err)
 							return "", nil, fmt.Errorf("failed reading lightbar input: %w", err)
 						}
 						slog.Debug("lightbar input key", "key", key)
@@ -654,82 +698,82 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					}
 					slog.Debug("processed lightbar input", "result", lightbarResult)
 					e.showCursorIfHidden(terminal, outputMode, cursorHidden)
-					// Set userInput to lightbar result if a selection was made
+					// Set st.userInput to lightbar result if a selection was made
 					if lightbarResult != "" {
-						userInput = lightbarResult
+						st.userInput = lightbarResult
 					}
 				}
 			}
 
-			if !isLightbarMenu || userInput == "" {
+			if !st.isLightbarMenu || st.userInput == "" {
 				// Fallback to standard input if lightbar loading failed or no valid selection made
 				e.deliverPendingPages(terminal, nodeNumber, outputMode)
 				// Display Prompt (Skip if USEPROMPT is false)
 				if menuRec.GetUsePrompt() { // Condition changed: Only check UsePrompt
-					err = e.displayPrompt(terminal, menuRec, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, outputMode, currentAreaName) // Pass currentAreaName
+					err = e.displayPrompt(terminal, menuRec, st.currentUser, userManager, nodeNumber, st.currentMenuName, sessionStartTime, outputMode, st.currentAreaName) // Pass st.currentAreaName
 					if err != nil {
 						return "", nil, err // Propagate the error
 					}
 				} else {
 					// Log message remains the same, but the condition causing it is now just UsePrompt==false
-					slog.Debug("skipping prompt display", "menu", currentMenuName, "usePrompt", menuRec.GetUsePrompt(), "prompt1Empty", menuRec.Prompt1 == "")
+					slog.Debug("skipping prompt display", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt(), "prompt1Empty", menuRec.Prompt1 == "")
 				}
 
 				// Read User Input Line via shared InputHandler to avoid reader races.
 				input, err := readLineFromSessionIH(s, terminal)
 				if err != nil {
 					if err == io.EOF {
-						slog.Info("user disconnected during menu input", "menu", currentMenuName)
+						slog.Info("user disconnected during menu input", "menu", st.currentMenuName)
 						return "LOGOFF", nil, nil // Signal logoff
 					}
-					slog.Error("failed to read input for menu", "menu", currentMenuName, "error", err)
+					slog.Error("failed to read input for menu", "menu", st.currentMenuName, "error", err)
 					return "", nil, fmt.Errorf("failed reading input: %w", err)
 				}
-				userInput = strings.ToUpper(strings.TrimSpace(input))
-				slog.Debug("user input", "input", userInput)
+				st.userInput = strings.ToUpper(strings.TrimSpace(input))
+				slog.Debug("user input", "input", st.userInput)
 			}
 		} else {
 			// --- Standard Menu Input Handling ---
 			e.deliverPendingPages(terminal, nodeNumber, outputMode)
 			// Display Prompt (Skip if USEPROMPT is false)
-			slog.Debug("checking prompt display for menu", "menu", currentMenuName, "usePrompt", menuRec.GetUsePrompt())
+			slog.Debug("checking prompt display for menu", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt())
 			if menuRec.GetUsePrompt() { // Condition changed: Only check UsePrompt
-				slog.Debug("calling displayPrompt for menu", "menu", currentMenuName)
-				err = e.displayPrompt(terminal, menuRec, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, outputMode, currentAreaName) // Pass currentAreaName
-				slog.Debug("returned from displayPrompt for menu", "menu", currentMenuName, "error", err)
+				slog.Debug("calling displayPrompt for menu", "menu", st.currentMenuName)
+				err = e.displayPrompt(terminal, menuRec, st.currentUser, userManager, nodeNumber, st.currentMenuName, sessionStartTime, outputMode, st.currentAreaName) // Pass st.currentAreaName
+				slog.Debug("returned from displayPrompt for menu", "menu", st.currentMenuName, "error", err)
 				if err != nil {
 					return "", nil, err // Propagate the error
 				}
 			} else {
 				// Log message remains the same, but the condition causing it is now just UsePrompt==false
-				slog.Debug("skipping prompt display", "menu", currentMenuName, "usePrompt", menuRec.GetUsePrompt(), "prompt1Empty", menuRec.Prompt1 == "")
+				slog.Debug("skipping prompt display", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt(), "prompt1Empty", menuRec.Prompt1 == "")
 			}
 
 			// Read User Input Line via shared InputHandler to avoid reader races.
 			input, err := readLineFromSessionIH(s, terminal)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					slog.Info("user disconnected during menu input", "menu", currentMenuName)
+					slog.Info("user disconnected during menu input", "menu", st.currentMenuName)
 					return "LOGOFF", nil, nil
 				}
 				if errors.Is(err, editor.ErrIdleTimeout) {
 					e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
 					return "LOGOFF", nil, nil
 				}
-				slog.Error("failed to read input for menu", "menu", currentMenuName, "error", err)
+				slog.Error("failed to read input for menu", "menu", st.currentMenuName, "error", err)
 				return "", nil, fmt.Errorf("failed reading input: %w", err)
 			}
-			userInput = strings.ToUpper(strings.TrimSpace(input))
-			slog.Debug("user input", "input", userInput)
+			st.userInput = strings.ToUpper(strings.TrimSpace(input))
+			slog.Debug("user input", "input", st.userInput)
 
 			// --- Special Input Handling (^P, ##) ---
-			if userInput == "\x10" || userInput == "^P" { // Ctrl+P is ASCII 16 (\x10)
-				if previousMenuName != "" {
-					slog.Debug("user entered ^P, going back to previous menu", "previous", previousMenuName)
-					temp := currentMenuName
-					currentMenuName = previousMenuName
-					previousMenuName = temp // Update previous in case they go back again
-					continue                // Go directly to the previous menu loop iteration
+			if st.userInput == "\x10" || st.userInput == "^P" { // Ctrl+P is ASCII 16 (\x10)
+				if st.previousMenuName != "" {
+					slog.Debug("user entered ^P, going back to previous menu", "previous", st.previousMenuName)
+					temp := st.currentMenuName
+					st.currentMenuName = st.previousMenuName
+					st.previousMenuName = temp // Update previous in case they go back again
+					continue                   // Go directly to the previous menu loop iteration
 				} else {
 					slog.Debug("user entered ^P, but no previous menu recorded")
 					continue // Re-display current menu prompt
@@ -737,15 +781,15 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			}
 
 			// --- End Special Input Handling ---
-		} // End if isLightbarMenu / else
+		} // End if st.isLightbarMenu / else
 
-		// 6. Process Input / Find Command Match (userInput determined by menu type)
+		// 6. Process Input / Find Command Match (st.userInput determined by menu type)
 		matched := false
 		nextAction := ""          // Store the action determined by the matched command
 		matchedNodeActivity := "" // Store matched command's node activity
 
 		// Global hangup shortcut: /G
-		if userInput == "/G" {
+		if st.userInput == "/G" {
 			nextAction = "RUN:IMMEDIATELOGOFF"
 			matched = true
 		}
@@ -755,9 +799,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				// Hidden commands are still matched (e.g. % for sponsor menu); HIDDEN only affects display/prompts.
 
 				cmdACS := cmdRec.ACS
-				if !checkACS(cmdACS, currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
-					if currentUser != nil {
-						slog.Debug("user does not meet ACS for command keys", "handle", currentUser.Handle, "acs", cmdACS, "keys", cmdRec.Keys)
+				if !checkACS(cmdACS, st.currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
+					if st.currentUser != nil {
+						slog.Debug("user does not meet ACS for command keys", "handle", st.currentUser.Handle, "acs", cmdACS, "keys", cmdRec.Keys)
 					} else {
 						slog.Debug("unauthenticated user does not meet ACS for command keys", "acs", cmdACS, "keys", cmdRec.Keys)
 					}
@@ -767,7 +811,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				keys := strings.Split(cmdRec.Keys, " ") // Use string directly
 				for _, key := range keys {
 					// ^M matches when user presses Enter with no input (classic BBS default command)
-					if key == "^M" && userInput == "" {
+					if key == "^M" && st.userInput == "" {
 						nextAction = cmdRec.Command
 						matchedNodeActivity = cmdRec.NodeActivity
 						slog.Debug("matched ^M (enter/default) to command action", "command", nextAction)
@@ -775,7 +819,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 						break
 					}
 					// Standard exact key match
-					if key != "" && userInput != "" && userInput == key {
+					if key != "" && st.userInput != "" && st.userInput == key {
 						nextAction = cmdRec.Command
 						matchedNodeActivity = cmdRec.NodeActivity
 						slog.Debug("matched key to command action", "key", key, "command", nextAction)
@@ -783,9 +827,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 						break
 					}
 					// ## matches any numeric input (classic BBS numeric wildcard)
-					if key == "##" && userInput != "" {
+					if key == "##" && st.userInput != "" {
 						isNumeric := true
-						for _, ch := range userInput {
+						for _, ch := range st.userInput {
 							if ch < '0' || ch > '9' {
 								isNumeric = false
 								break
@@ -794,9 +838,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 						if isNumeric {
 							// Append the entered number as args so executeCommandAction
 							// forwards it to the RUN: handler via runArgs.
-							nextAction = cmdRec.Command + " " + userInput
+							nextAction = cmdRec.Command + " " + st.userInput
 							matchedNodeActivity = cmdRec.NodeActivity
-							slog.Debug("matched ## numeric wildcard to command action", "input", userInput, "command", nextAction)
+							slog.Debug("matched ## numeric wildcard to command action", "input", st.userInput, "command", nextAction)
 							matched = true
 							break
 						}
@@ -820,13 +864,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			}
 
 			// Execute the determined action here
-			nextActionType, nextMenuName, userResult, err := e.executeCommandAction(nextAction, s, terminal, userManager, currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
+			nextActionType, nextMenuName, userResult, err := e.executeCommandAction(nextAction, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
 			if err != nil {
 				return "", userResult, err
 			}
 			if nextActionType == "GOTO" {
-				previousMenuName = currentMenuName // Store current before going to next
-				currentMenuName = nextMenuName
+				st.previousMenuName = st.currentMenuName // Store current before going to next
+				st.currentMenuName = nextMenuName
 				continue // Continue main loop to the new menu
 			} else if nextActionType == "LOGOFF" {
 				return "LOGOFF", userResult, nil // Return specific logoff action
@@ -838,30 +882,30 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					sess.Mutex.Unlock()
 				}
 				if userResult != nil {
-					currentUser = userResult
+					st.currentUser = userResult
 				}
 				continue // Re-display current menu prompt
 			}
 			slog.Warn("unhandled action type after executing command", "actionType", nextActionType, "command", nextAction)
 			continue
 		} else {
-			slog.Debug("input did not match any commands in menu", "input", userInput, "menu", currentMenuName)
+			slog.Debug("input did not match any commands in menu", "input", st.userInput, "menu", st.currentMenuName)
 
-			// If it was a lightbar menu and input was ignored (userInput == ""), just loop again
-			if isLightbarMenu {
+			// If it was a lightbar menu and input was ignored (st.userInput == ""), just loop again
+			if st.isLightbarMenu {
 				continue
 			}
 
 			// Empty Enter should just redisplay the current menu, not fall through to fallback
-			if userInput == "" {
+			if st.userInput == "" {
 				continue
 			}
 
 			fallbackMenu := menuRec.Fallback
 			if fallbackMenu != "" {
 				slog.Info("no command match, using fallback menu", "menu", fallbackMenu)
-				previousMenuName = currentMenuName // Store current before going to fallback
-				currentMenuName = strings.ToUpper(fallbackMenu)
+				st.previousMenuName = st.currentMenuName // Store current before going to fallback
+				st.currentMenuName = strings.ToUpper(fallbackMenu)
 				continue
 			}
 			e.showUndefinedMenuInput(terminal, outputMode, nodeNumber)
