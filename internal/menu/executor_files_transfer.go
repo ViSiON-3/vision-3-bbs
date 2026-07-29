@@ -51,7 +51,10 @@ func (e *MenuExecutor) selectTransferProtocol(s ssh.Session, terminal *term.Term
 		return transfer.ProtocolConfig{}, false, fmt.Errorf("no transfer protocols configured for this connection type")
 	}
 
-	defaultProto, _ := transfer.DefaultProtocol(available)
+	defaultProto, hasDefault := transfer.DefaultProtocol(available)
+	if !hasDefault {
+		defaultProto = available[0]
+	}
 
 	// Build the menu string once — reused on re-prompt.
 	var menu strings.Builder
