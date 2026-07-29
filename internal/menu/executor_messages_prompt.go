@@ -205,17 +205,23 @@ func sanitizeControlChars(s string) string {
 // It returns aborted=true if the user confirmed abandoning the post (caller should
 // return to the menu), err=io.EOF if the session disconnected, or the raw error
 // from styledInput for any other read failure (caller decides how to report it).
+// fieldName is interpolated into "user disconnected during %s input" to reproduce
+// the original per-field disconnect log texts (e.g. "title" or "'to'") — it is
+// logged here, and only here, when styledInput itself returns io.EOF; when
+// confirmAbortPost instead surfaces the EOF (user disconnected mid-abort-confirm),
+// no log is emitted, matching the original code's silence on that path.
 // Callers own any additional validation (e.g. required-field retry, default
 // substitution) since that differs between the title and to prompts.
-func (e *MenuExecutor) promptComposeField(s ssh.Session, terminal *term.Terminal, ih *editor.InputHandler, prompt string, maxLen int, defaultValue string, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (value string, aborted bool, err error) {
+func (e *MenuExecutor) promptComposeField(s ssh.Session, terminal *term.Terminal, ih *editor.InputHandler, prompt string, maxLen int, defaultValue string, fieldName string, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (value string, aborted bool, err error) {
 	for {
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 		if wErr != nil {
-			slog.Warn("failed to write compose field prompt", "node", nodeNumber, "error", wErr)
+			slog.Warn("failed to write compose field prompt", "node", nodeNumber, "field", fieldName, "error", wErr)
 		}
 		value, err = styledInput(terminal, s, outputMode, maxLen, defaultValue)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				slog.Info(fmt.Sprintf("user disconnected during %s input", fieldName), "node", nodeNumber)
 				return "", false, io.EOF
 			}
 			if errors.Is(err, errInputAborted) {

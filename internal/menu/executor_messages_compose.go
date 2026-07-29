@@ -110,10 +110,9 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	var subject string
 	for {
-		val, aborted, ferr := e.promptComposeField(s, terminal, ih, titlePrompt, 30, "", outputMode, nodeNumber, termWidth, termHeight)
+		val, aborted, ferr := e.promptComposeField(s, terminal, ih, titlePrompt, 30, "", "title", outputMode, nodeNumber, termWidth, termHeight)
 		if ferr != nil {
 			if errors.Is(ferr, io.EOF) {
-				slog.Info("user disconnected during title input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
 			slog.Error("failed reading title input", "node", nodeNumber, "error", ferr)
@@ -138,10 +137,9 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 	var toUser string
 	for {
-		val, aborted, ferr := e.promptComposeField(s, terminal, ih, toPrompt, 24, "All", outputMode, nodeNumber, termWidth, termHeight)
+		val, aborted, ferr := e.promptComposeField(s, terminal, ih, toPrompt, 24, "All", "'to'", outputMode, nodeNumber, termWidth, termHeight)
 		if ferr != nil {
 			if errors.Is(ferr, io.EOF) {
-				slog.Info("user disconnected during 'to' input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
 			slog.Error("failed reading 'to' input", "node", nodeNumber, "error", ferr)
