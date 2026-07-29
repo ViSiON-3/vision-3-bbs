@@ -139,7 +139,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 
 	if areasDisplayed == 0 {
 		slog.Debug("no accessible file areas to display", "node", nodeNumber, "handle", currentUser.Handle)
-		outputBuffer.WriteString("\r\n|07   No accessible file areas found.   \r\n")
+		outputBuffer.Write(ansi.ReplacePipeCodes([]byte("\r\n|07   No accessible file areas found.   \r\n")))
 	}
 
 	outputBuffer.Write(processedBotTemplate)
