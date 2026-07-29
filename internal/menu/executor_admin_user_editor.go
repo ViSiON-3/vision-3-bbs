@@ -265,7 +265,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			if err := st.renderDetails(st.statusMessage); err != nil {
 				return nil, "", err
 			}
-		} else if !st.cfg.pendingOnly && st.statusMessage != "" {
+		} else if st.statusMessage != "" {
 			if err := st.renderDetails(st.statusMessage); err != nil {
 				return nil, "", err
 			}
