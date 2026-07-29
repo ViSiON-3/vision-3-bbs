@@ -52,6 +52,13 @@ func scanDirectoryFiles(dir string) (map[string]int64, error) {
 	return files, nil
 }
 
+// newFileInfo describes a single file discovered in the incoming-upload
+// staging directory, pending duplicate-checking and registration.
+type newFileInfo struct {
+	name string
+	size int64
+}
+
 // runUploadFile is the RunnableFunc wrapper for UPLOADFILE menu commands.
 func runUploadFile(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
@@ -173,8 +180,41 @@ func (e *MenuExecutor) runUploadFiles(
 	}
 	defer func() { _ = os.RemoveAll(incomingDir) }() // best-effort temp cleanup
 
+	// 8-9. Receive files via the selected protocol and scan for new arrivals.
+	newFiles, ok := e.receiveUploadBatch(s, terminal, outputMode, nodeNumber, proto, incomingDir)
+	if !ok {
+		return nil
+	}
+
+	// 9. Process each new file: dedupe, register, and credit the uploader.
+	successCount, duplicateCount := e.registerUploadedFiles(s, terminal, outputMode, nodeNumber, newFiles, incomingDir, targetDir, currentAreaID, currentUser, userManager, existingNames)
+
+	// 10. Display summary
+	summary := fmt.Sprintf("\r\n|15Upload complete.|07 Added: |15%d|07", successCount)
+	if duplicateCount > 0 {
+		summary += fmt.Sprintf("  Rejected (duplicate): |09%d|07", duplicateCount)
+	}
+	summary += "\r\n"
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(summary)), outputMode)
+	time.Sleep(2 * time.Second)
+
+	return nil
+}
+
+// receiveUploadBatch executes the selected transfer protocol's receive into
+// incomingDir and scans the result for newly arrived files. It returns
+// ok=false when the caller should return nil immediately; a message has
+// already been displayed to the user in that case.
+func (e *MenuExecutor) receiveUploadBatch(
+	s ssh.Session,
+	terminal *term.Terminal,
+	outputMode ansi.OutputMode,
+	nodeNumber int,
+	proto transfer.ProtocolConfig,
+	incomingDir string,
+) ([]newFileInfo, bool) {
 	// 8. Execute protocol receive into temp directory
-	msg = fmt.Sprintf("\r\n|15Starting %s receive...|07\r\n", proto.Name)
+	msg := fmt.Sprintf("\r\n|15Starting %s receive...|07\r\n", proto.Name)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 
 	resetSessionIH(s)
@@ -188,7 +228,7 @@ func (e *MenuExecutor) runUploadFiles(
 		if errors.Is(transferErr, transfer.ErrBinaryNotFound) {
 			slog.Error("transfer binary not found", "node", nodeNumber, "error", transferErr)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01File transfer program not found!|07\r\n|07The SysOp needs to install the transfer binary (sexyz).\r\n|07See docs/sysop/files/file-transfer.md for setup instructions.\r\n")), outputMode)
-			return nil
+			return nil, false
 		}
 		slog.Warn("receive returned error, checking for partial receives", "node", nodeNumber, "protocol", proto.Name, "error", transferErr)
 	}
@@ -199,13 +239,9 @@ func (e *MenuExecutor) runUploadFiles(
 	receivedFiles, err := scanDirectoryFiles(incomingDir)
 	if err != nil {
 		slog.Error("failed to scan incoming directory", "node", nodeNumber, "error", err)
-		return nil
+		return nil, false
 	}
 
-	type newFileInfo struct {
-		name string
-		size int64
-	}
 	var newFiles []newFileInfo
 	for filename, size := range receivedFiles {
 		newFiles = append(newFiles, newFileInfo{name: filename, size: size})
@@ -220,7 +256,7 @@ func (e *MenuExecutor) runUploadFiles(
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		}
 		time.Sleep(2 * time.Second)
-		return nil
+		return nil, false
 	}
 
 	// Sort by name for consistent ordering
@@ -230,10 +266,63 @@ func (e *MenuExecutor) runUploadFiles(
 
 	slog.Info("detected new files after upload", "node", nodeNumber, "count", len(newFiles))
 
-	// 9. Process each new file
-	successCount := 0
-	duplicateCount := 0
+	return newFiles, true
+}
 
+// checkUploadDuplicates validates a received filename and rejects it if it is
+// unsafe or already present in the area's file metadata. It returns
+// skip=true when the caller should skip the file (a message has already been
+// shown and any partial file removed); duplicate indicates whether the skip
+// should be counted as a rejected duplicate.
+func checkUploadDuplicates(
+	nf newFileInfo,
+	incomingPath string,
+	existingNames map[string]bool,
+	terminal *term.Terminal,
+	outputMode ansi.OutputMode,
+	nodeNumber int,
+) (skip bool, duplicate bool) {
+	// Validate filename (defense in depth — rz -r should prevent this, but be safe)
+	safeName := filepath.Base(nf.name)
+	if safeName != nf.name || safeName == "." || safeName == ".." || strings.Contains(nf.name, "..") || filepath.IsAbs(nf.name) {
+		slog.Error("rejected unsafe filename", "node", nodeNumber, "name", nf.name)
+		_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
+		errMsg := fmt.Sprintf("\r\n|01'%s' rejected: invalid filename.|07\r\n", nf.name)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+		return true, false
+	}
+
+	// Check for duplicate in metadata
+	if existingNames[strings.ToLower(nf.name)] {
+		slog.Warn("duplicate file rejected", "node", nodeNumber, "name", nf.name)
+		_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
+
+		dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
+		return true, true
+	}
+
+	return false, false
+}
+
+// registerUploadedFiles processes each received file: it runs ZipLab
+// extraction where applicable, prompts for a description, creates the
+// FileRecord, moves the file into the area directory, saves it to the area,
+// and finally credits the uploader's upload count. It returns the number of
+// files successfully registered and the number rejected as duplicates.
+func (e *MenuExecutor) registerUploadedFiles(
+	s ssh.Session,
+	terminal *term.Terminal,
+	outputMode ansi.OutputMode,
+	nodeNumber int,
+	newFiles []newFileInfo,
+	incomingDir string,
+	targetDir string,
+	currentAreaID int,
+	currentUser *user.User,
+	userManager *user.UserMgr,
+	existingNames map[string]bool,
+) (successCount int, duplicateCount int) {
 	// Load ZipLab config once for all files
 	zlCfg, zlErr := ziplab.LoadConfig(e.RootConfigPath)
 	if zlErr != nil {
@@ -243,24 +332,10 @@ func (e *MenuExecutor) runUploadFiles(
 	for _, nf := range newFiles {
 		incomingPath := filepath.Join(incomingDir, nf.name)
 
-		// Validate filename (defense in depth — rz -r should prevent this, but be safe)
-		safeName := filepath.Base(nf.name)
-		if safeName != nf.name || safeName == "." || safeName == ".." || strings.Contains(nf.name, "..") || filepath.IsAbs(nf.name) {
-			slog.Error("rejected unsafe filename", "node", nodeNumber, "name", nf.name)
-			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
-			errMsg := fmt.Sprintf("\r\n|01'%s' rejected: invalid filename.|07\r\n", nf.name)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
-			continue
-		}
-
-		// Check for duplicate in metadata
-		if existingNames[strings.ToLower(nf.name)] {
-			slog.Warn("duplicate file rejected", "node", nodeNumber, "name", nf.name)
-			duplicateCount++
-			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
-
-			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
+		if skip, dup := checkUploadDuplicates(nf, incomingPath, existingNames, terminal, outputMode, nodeNumber); skip {
+			if dup {
+				duplicateCount++
+			}
 			continue
 		}
 
@@ -388,14 +463,5 @@ func (e *MenuExecutor) runUploadFiles(
 		}
 	}
 
-	// 10. Display summary
-	summary := fmt.Sprintf("\r\n|15Upload complete.|07 Added: |15%d|07", successCount)
-	if duplicateCount > 0 {
-		summary += fmt.Sprintf("  Rejected (duplicate): |09%d|07", duplicateCount)
-	}
-	summary += "\r\n"
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(summary)), outputMode)
-	time.Sleep(2 * time.Second)
-
-	return nil
+	return successCount, duplicateCount
 }
