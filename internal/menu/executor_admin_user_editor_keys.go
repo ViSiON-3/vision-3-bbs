@@ -244,7 +244,7 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 			refresh = true
 		}
 	case editor.KeyEsc:
-		if st.cfg.pendingOnly && len(st.pendingChanges) > 0 {
+		if len(st.pendingChanges) > 0 {
 			st.statusMessage = "|11Unsaved changes! Press [S] to save or [X] to abort.|07"
 		} else {
 			return false, true, nil, "", nil
