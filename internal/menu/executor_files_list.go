@@ -305,11 +305,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		fileListMode = st.e.ServerCfg.FileListingMode
 	}
 	if !strings.EqualFold(fileListMode, "classic") {
-		return runListFilesLightbar(st.e, st.s, st.terminal, st.userManager, st.currentUser, st.nodeNumber, st.sessionStartTime,
-			st.currentAreaID, st.currentAreaTag, st.area,
-			st.topTemplateBytes, st.processedMidTemplate, st.processedBotTemplate,
-			st.filesPerPage, st.totalFiles, st.totalPages,
-			st.cmdBarOptions, st.hiBarOptions, st.outputMode)
+		return runListFilesLightbar(st)
 	}
 
 	// Classic display loop

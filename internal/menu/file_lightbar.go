@@ -71,34 +71,28 @@ type fileLightbar struct {
 	cmdIndex             int
 }
 
-func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time,
-	currentAreaID int, currentAreaTag string, area *file.FileArea,
-	topTemplateBytes []byte, processedMidTemplate string, processedBotTemplate []byte,
-	filesPerPage int, totalFiles int, totalPages int,
-	cmdBarOptions []LightbarOption, hiBarOptions []LightbarOption,
-	outputMode ansi.OutputMode) (*user.User, string, error) {
+func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 
 	// Hide cursor on entry, show on exit.
-	_ = terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25l"), outputMode)
-	defer terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h"), outputMode)
+	_ = terminalio.WriteProcessedBytes(st.terminal, []byte("\x1b[?25l"), st.outputMode)
+	defer terminalio.WriteProcessedBytes(st.terminal, []byte("\x1b[?25h"), st.outputMode)
 
 	// Fetch all files for the area.
-	allFiles := e.FileMgr.GetFilesForArea(currentAreaID)
+	allFiles := st.e.FileMgr.GetFilesForArea(st.currentAreaID)
 
 	selectedIndex := 0
 	topIndex := 0
 	cmdIndex := 0
-	ih := getSessionIH(s)
+	ih := getSessionIH(st.s)
 
 	// Build command bar entries (user bar, sysop bar) and the file-row highlight.
-	cmdEntries, sysopEntries, userEntries, hiColorSeq, isSysop := buildFileListCmdBar(e, currentUser, cmdBarOptions, hiBarOptions)
+	cmdEntries, sysopEntries, userEntries, hiColorSeq, isSysop := buildFileListCmdBar(st.e, st.currentUser, st.cmdBarOptions, st.hiBarOptions)
 	showSysopBar := false
 
 	// Determine terminal dimensions.
 	termHeight := 24
 	termWidth := 80
-	if ptyReq, _, ok := s.Pty(); ok && ptyReq.Window.Height > 0 {
+	if ptyReq, _, ok := st.s.Pty(); ok && ptyReq.Window.Height > 0 {
 		termHeight = ptyReq.Window.Height
 		if ptyReq.Window.Width > 0 {
 			termWidth = ptyReq.Window.Width
@@ -106,8 +100,8 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	}
 
 	// Count header lines from top template (line count is invariant to page/file counts).
-	fconfpath := e.resolveFileConferencePath(currentUser)
-	processedTopSample := ansi.ReplacePipeCodes(processFileListPlaceholders(topTemplateBytes, 1, 1, totalFiles, fconfpath))
+	fconfpath := st.e.resolveFileConferencePath(st.currentUser)
+	processedTopSample := ansi.ReplacePipeCodes(processFileListPlaceholders(st.topTemplateBytes, 1, 1, st.totalFiles, fconfpath))
 	headerLines := strings.Count(string(processedTopSample), "\n")
 	if headerLines < 1 {
 		headerLines = 1
@@ -116,10 +110,10 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	// Reserve rows for the separator, command bar, and optional BOT template.
 	// Derive botLineCount from the expanded string (after placeholder + pipe-code
 	// processing) so it matches what renderPageIndicator actually renders.
-	botContent := strings.TrimRight(string(processedBotTemplate), "\r\n")
+	botContent := strings.TrimRight(string(st.processedBotTemplate), "\r\n")
 	botLineCount := 0
 	if len(botContent) > 0 {
-		expandedBotSample := string(ansi.ReplacePipeCodes(processFileListPlaceholders([]byte(botContent), 1, 1, totalFiles, fconfpath)))
+		expandedBotSample := string(ansi.ReplacePipeCodes(processFileListPlaceholders([]byte(botContent), 1, 1, st.totalFiles, fconfpath)))
 		expandedBotSample = strings.ReplaceAll(expandedBotSample, "^PAGE", "1")
 		expandedBotSample = strings.ReplaceAll(expandedBotSample, "^TOTALPAGES", "1")
 		botLineCount = len(strings.Split(expandedBotSample, "\n"))
@@ -139,7 +133,7 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	// All template placeholders are fixed-width, so the description column
 	// width is constant across all file entries. Precompute once for both
 	// fileEntryHeight and buildFileEntry.
-	sample := strings.ReplaceAll(processedMidTemplate, "^MARK", " ")
+	sample := strings.ReplaceAll(st.processedMidTemplate, "^MARK", " ")
 	sample = strings.ReplaceAll(sample, "^NUM", "  1")
 	sample = strings.ReplaceAll(sample, "^NAME", "            ")
 	sample = strings.ReplaceAll(sample, "^DATE", "01/01/00")
@@ -202,24 +196,24 @@ func runListFilesLightbar(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	// after overlay commands that clobber the screen).
 
 	lb := &fileLightbar{
-		e:                    e,
-		s:                    s,
-		terminal:             terminal,
-		userManager:          userManager,
-		currentUser:          currentUser,
-		nodeNumber:           nodeNumber,
-		sessionStartTime:     sessionStartTime,
-		currentAreaID:        currentAreaID,
-		currentAreaTag:       currentAreaTag,
-		area:                 area,
-		outputMode:           outputMode,
+		e:                    st.e,
+		s:                    st.s,
+		terminal:             st.terminal,
+		userManager:          st.userManager,
+		currentUser:          st.currentUser,
+		nodeNumber:           st.nodeNumber,
+		sessionStartTime:     st.sessionStartTime,
+		currentAreaID:        st.currentAreaID,
+		currentAreaTag:       st.currentAreaTag,
+		area:                 st.area,
+		outputMode:           st.outputMode,
 		ih:                   ih,
-		topTemplateBytes:     topTemplateBytes,
-		processedMidTemplate: processedMidTemplate,
-		processedBotTemplate: processedBotTemplate,
-		filesPerPage:         filesPerPage,
-		totalFiles:           totalFiles,
-		totalPages:           totalPages,
+		topTemplateBytes:     st.topTemplateBytes,
+		processedMidTemplate: st.processedMidTemplate,
+		processedBotTemplate: st.processedBotTemplate,
+		filesPerPage:         st.filesPerPage,
+		totalFiles:           st.totalFiles,
+		totalPages:           st.totalPages,
 		allFiles:             allFiles,
 		cmdEntries:           cmdEntries,
 		sysopEntries:         sysopEntries,
