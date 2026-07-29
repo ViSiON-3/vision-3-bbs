@@ -1,7 +1,14 @@
 package menu
 
 import (
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func TestComputeFilePagination(t *testing.T) {
@@ -32,5 +39,79 @@ func TestComputeFilePagination_ClampsToAtLeastOne(t *testing.T) {
 	got := computeFilePagination(80, 1, top, bot)
 	if got != 1 {
 		t.Fatalf("computeFilePagination(80, 1, ...) = %d, want 1 (clamped)", got)
+	}
+}
+
+func TestFormatFileListLine_TokenSubstitution(t *testing.T) {
+	u := &user.User{}
+	rec := file.FileRecord{
+		ID:          uuid.New(),
+		Filename:    "TESTFILE.ZIP",
+		Description: "A single line description",
+		Size:        2048,
+		UploadedAt:  time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
+	}
+	midTemplate := "^MARK^NUM ^NAME ^DATE ^SIZE ^DESC"
+
+	line, cont := formatFileListLine(rec, u, false, midTemplate, 7)
+
+	if len(cont) != 0 {
+		t.Fatalf("expected no continuation lines for single-line description, got %d: %v", len(cont), cont)
+	}
+	if !strings.HasPrefix(line, " 7 ") {
+		t.Errorf("expected unmarked line to start with ' 7 ' (mark+num), got %q", line)
+	}
+	if !strings.Contains(line, "TESTFILE.ZIP") {
+		t.Errorf("expected filename in line, got %q", line)
+	}
+	if !strings.Contains(line, "03/15/24") {
+		t.Errorf("expected formatted date in line, got %q", line)
+	}
+	if !strings.Contains(line, "2k") {
+		t.Errorf("expected formatted size in line, got %q", line)
+	}
+	if !strings.Contains(line, "A single line description") {
+		t.Errorf("expected description in line, got %q", line)
+	}
+}
+
+func TestFormatFileListLine_MarkedFile(t *testing.T) {
+	id := uuid.New()
+	u := &user.User{TaggedFileIDs: []uuid.UUID{id}}
+	rec := file.FileRecord{ID: id, Filename: "X.ZIP", Size: 1024, UploadedAt: time.Now()}
+
+	line, _ := formatFileListLine(rec, u, false, "^MARK^NUM", 1)
+
+	if !strings.HasPrefix(line, "*") {
+		t.Errorf("expected tagged file line to start with '*', got %q", line)
+	}
+}
+
+func TestFormatFileListLine_MultilineDIZContinuations(t *testing.T) {
+	u := &user.User{}
+	rec := file.FileRecord{
+		Filename:    "MULTI.ZIP",
+		Description: "Line one\nLine two\nLine three",
+		Size:        1024,
+		UploadedAt:  time.Now(),
+	}
+	midTemplate := "^MARK^NUM ^NAME ^DATE ^SIZE ^DESC"
+
+	line, cont := formatFileListLine(rec, u, false, midTemplate, 1)
+
+	if !strings.Contains(line, "Line one") {
+		t.Fatalf("expected first DIZ line embedded via ^DESC, got %q", line)
+	}
+	if len(cont) != 2 {
+		t.Fatalf("expected 2 continuation lines, got %d: %v", len(cont), cont)
+	}
+	if !strings.Contains(cont[0], "Line two") {
+		t.Errorf("expected continuation[0] to contain %q, got %q", "Line two", cont[0])
+	}
+	if !strings.Contains(cont[1], "Line three") {
+		t.Errorf("expected continuation[1] to contain %q, got %q", "Line three", cont[1])
+	}
+	if !strings.HasPrefix(cont[0], "|07") {
+		t.Errorf("expected continuation to be prefixed with |07 color code, got %q", cont[0])
 	}
 }

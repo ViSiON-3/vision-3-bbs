@@ -13,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -82,10 +83,10 @@ func computeFilePagination(termWidth, termHeight int, top []byte, bot []byte) in
 }
 
 // renderFileListPage draws one page of the classic file listing: clears the
-// screen, writes the top template, the file rows, the bottom template, and
-// the command prompt. Write failures are logged but do not abort the draw
-// (matching the original inline loop body); the returned error is reserved
-// for future use and is always nil today.
+// screen, writes the top template, the file rows (via formatFileListLine),
+// the bottom template, and the command prompt. Write failures are logged but
+// do not abort the draw (matching the original inline loop body); the
+// returned error is reserved for future use and is always nil today.
 func (st *fileListState) renderFileListPage() error {
 	// 4.1 Clear Screen
 	writeErr := terminalio.WriteProcessedBytes(st.terminal, []byte(ansi.ClearScreen()), st.outputMode)
@@ -112,58 +113,8 @@ func (st *fileListState) renderFileListPage() error {
 		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte(noFilesMsg)), st.outputMode)
 	} else {
 		for i, fileRec := range st.filesOnPage {
-			line := st.processedMidTemplate
 			fileNumOnPage := (st.currentPage-1)*st.filesPerPage + i + 1
-
-			fileNumStr := strconv.Itoa(fileNumOnPage)
-			fileNameStr := ""
-			if fileColumnEnabled(st.currentUser, "name", st.extendedMode) {
-				fileNameStr = fileRec.Filename
-				if len(fileNameStr) > 12 {
-					fileNameStr = fileNameStr[:12]
-				}
-				fileNameStr = fmt.Sprintf("%-12s", fileNameStr)
-			} else {
-				fileNameStr = strings.Repeat(" ", 12)
-			}
-			dateStr := ""
-			if fileColumnEnabled(st.currentUser, "date", st.extendedMode) {
-				dateStr = fileRec.UploadedAt.Format("01/02/06")
-			} else {
-				dateStr = strings.Repeat(" ", 8)
-			}
-			sizeStr := ""
-			if fileColumnEnabled(st.currentUser, "size", st.extendedMode) {
-				sizeStr = fmt.Sprintf("%5s", fmt.Sprintf("%dk", fileRec.Size/1024))
-			} else {
-				sizeStr = strings.Repeat(" ", 5)
-			}
-
-			markStr := " "
-			if st.currentUser.TaggedFileIDs != nil {
-				for _, taggedID := range st.currentUser.TaggedFileIDs {
-					if taggedID == fileRec.ID {
-						markStr = "*"
-						break
-					}
-				}
-			}
-
-			var dizLines []string
-			firstDesc := ""
-			if fileColumnEnabled(st.currentUser, "description", st.extendedMode) {
-				dizLines = formatDIZLines(fileRec.Description, dizMaxWidth, dizMaxLines)
-				if len(dizLines) > 0 {
-					firstDesc = dizLines[0]
-				}
-			}
-
-			line = strings.ReplaceAll(line, "^MARK", markStr)
-			line = strings.ReplaceAll(line, "^NUM", fileNumStr)
-			line = strings.ReplaceAll(line, "^NAME", fileNameStr)
-			line = strings.ReplaceAll(line, "^DATE", dateStr)
-			line = strings.ReplaceAll(line, "^SIZE", sizeStr)
-			line = strings.ReplaceAll(line, "^DESC", firstDesc)
+			line, dizContinuations := formatFileListLine(fileRec, st.currentUser, st.extendedMode, st.processedMidTemplate, fileNumOnPage)
 
 			wErr = writeProcessedStringWithManualEncoding(st.terminal, []byte(line), st.outputMode)
 			if wErr != nil {
@@ -174,25 +125,13 @@ func (st *fileListState) renderFileListPage() error {
 				slog.Error("failed writing CRLF after file list line", "node", st.nodeNumber, "line", i, "error", wErr)
 			}
 
-			prefixLine := st.processedMidTemplate
-			prefixLine = strings.ReplaceAll(prefixLine, "^MARK", " ")
-			prefixLine = strings.ReplaceAll(prefixLine, "^NUM", "   ")
-			prefixLine = strings.ReplaceAll(prefixLine, "^NAME", strings.Repeat(" ", 12))
-			prefixLine = strings.ReplaceAll(prefixLine, "^DATE", strings.Repeat(" ", 8))
-			prefixLine = strings.ReplaceAll(prefixLine, "^SIZE", strings.Repeat(" ", 5))
-			prefixLine = strings.ReplaceAll(prefixLine, "^DESC", "")
-			processedPrefix := string(ansi.ReplacePipeCodes([]byte(prefixLine)))
-			prefixLen := ansi.VisibleLength(processedPrefix)
-			descIndent := strings.Repeat(" ", prefixLen)
-			for j := 1; j < len(dizLines); j++ {
-				contLine := "|07" + descIndent + dizLines[j]
+			for _, contLine := range dizContinuations {
 				wErr = writeProcessedStringWithManualEncoding(st.terminal, ansi.ReplacePipeCodes([]byte(contLine)), st.outputMode)
 				if wErr != nil {
 					break
 				}
 				_ = terminalio.WriteProcessedBytes(st.terminal, []byte("\r\n"), st.outputMode)
 			}
-
 		}
 	}
 
@@ -213,4 +152,77 @@ func (st *fileListState) renderFileListPage() error {
 	terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte(prompt)), st.outputMode)
 
 	return nil
+}
+
+// formatFileListLine renders the FILELIST.MID template for a single file
+// record, substituting the ^MARK/^NUM/^NAME/^DATE/^SIZE/^DESC tokens, and
+// computes the indented continuation lines for any FILE_ID.DIZ description
+// lines beyond the first (which is embedded in line via ^DESC).
+func formatFileListLine(rec file.FileRecord, currentUser *user.User, extendedMode bool, midTemplate string, fileNumOnPage int) (line string, dizContinuations []string) {
+	line = midTemplate
+	fileNumStr := strconv.Itoa(fileNumOnPage)
+	fileNameStr := ""
+	if fileColumnEnabled(currentUser, "name", extendedMode) {
+		fileNameStr = rec.Filename
+		if len(fileNameStr) > 12 {
+			fileNameStr = fileNameStr[:12]
+		}
+		fileNameStr = fmt.Sprintf("%-12s", fileNameStr)
+	} else {
+		fileNameStr = strings.Repeat(" ", 12)
+	}
+	dateStr := ""
+	if fileColumnEnabled(currentUser, "date", extendedMode) {
+		dateStr = rec.UploadedAt.Format("01/02/06")
+	} else {
+		dateStr = strings.Repeat(" ", 8)
+	}
+	sizeStr := ""
+	if fileColumnEnabled(currentUser, "size", extendedMode) {
+		sizeStr = fmt.Sprintf("%5s", fmt.Sprintf("%dk", rec.Size/1024))
+	} else {
+		sizeStr = strings.Repeat(" ", 5)
+	}
+
+	markStr := " "
+	if currentUser.TaggedFileIDs != nil {
+		for _, taggedID := range currentUser.TaggedFileIDs {
+			if taggedID == rec.ID {
+				markStr = "*"
+				break
+			}
+		}
+	}
+
+	var dizLines []string
+	firstDesc := ""
+	if fileColumnEnabled(currentUser, "description", extendedMode) {
+		dizLines = formatDIZLines(rec.Description, dizMaxWidth, dizMaxLines)
+		if len(dizLines) > 0 {
+			firstDesc = dizLines[0]
+		}
+	}
+
+	line = strings.ReplaceAll(line, "^MARK", markStr)
+	line = strings.ReplaceAll(line, "^NUM", fileNumStr)
+	line = strings.ReplaceAll(line, "^NAME", fileNameStr)
+	line = strings.ReplaceAll(line, "^DATE", dateStr)
+	line = strings.ReplaceAll(line, "^SIZE", sizeStr)
+	line = strings.ReplaceAll(line, "^DESC", firstDesc)
+
+	prefixLine := midTemplate
+	prefixLine = strings.ReplaceAll(prefixLine, "^MARK", " ")
+	prefixLine = strings.ReplaceAll(prefixLine, "^NUM", "   ")
+	prefixLine = strings.ReplaceAll(prefixLine, "^NAME", strings.Repeat(" ", 12))
+	prefixLine = strings.ReplaceAll(prefixLine, "^DATE", strings.Repeat(" ", 8))
+	prefixLine = strings.ReplaceAll(prefixLine, "^SIZE", strings.Repeat(" ", 5))
+	prefixLine = strings.ReplaceAll(prefixLine, "^DESC", "")
+	processedPrefix := string(ansi.ReplacePipeCodes([]byte(prefixLine)))
+	prefixLen := ansi.VisibleLength(processedPrefix)
+	descIndent := strings.Repeat(" ", prefixLen)
+	for j := 1; j < len(dizLines); j++ {
+		dizContinuations = append(dizContinuations, "|07"+descIndent+dizLines[j])
+	}
+
+	return line, dizContinuations
 }
