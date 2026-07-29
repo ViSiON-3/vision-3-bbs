@@ -63,13 +63,16 @@ func runFileLightbarN(t *testing.T, input string, numFiles int) (*user.User, str
 	ts := newTestSession(input)
 	terminal := newTestTerminal(ts)
 
-	res, action, runErr := runListFilesLightbar(
-		e, ts, terminal, um, u, 1, fixedUploadTime,
-		1, "UTILS", area,
-		[]byte{}, "^MARK^NUM ^NAME ^SIZE", []byte{}, // top / mid / bot templates
-		10, numFiles, (numFiles+9)/10, // filesPerPage, totalFiles, totalPages
-		nil, nil, // cmd/hi bar options -> defaults
-		ansi.OutputModeUTF8)
+	st := &fileListState{
+		e: e, s: ts, terminal: terminal, userManager: um, currentUser: u,
+		nodeNumber: 1, sessionStartTime: fixedUploadTime,
+		currentAreaID: 1, currentAreaTag: "UTILS", area: area,
+		topTemplateBytes: []byte{}, processedMidTemplate: "^MARK^NUM ^NAME ^SIZE", processedBotTemplate: []byte{}, // top / mid / bot templates
+		filesPerPage: 10, totalFiles: numFiles, totalPages: (numFiles + 9) / 10, // filesPerPage, totalFiles, totalPages
+		cmdBarOptions: nil, hiBarOptions: nil, // cmd/hi bar options -> defaults
+		outputMode: ansi.OutputModeUTF8,
+	}
+	res, action, runErr := runListFilesLightbar(st)
 	resetSessionIH(ts)
 	return res, action, ts.output(), runErr
 }
