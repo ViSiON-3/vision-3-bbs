@@ -151,54 +151,12 @@ func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 	}
 	descIndentStr := strings.Repeat(" ", descPrefixLen)
 
-	// fileEntryHeight returns the number of screen lines a file at idx takes:
-	// first line (metadata + first DIZ line) + continuation DIZ lines.
-
-	// filesVisibleFrom counts how many files fit in visibleRows starting from startIdx,
-	// accounting for each entry's variable height (DIZ lines).
-
-	// topIndexForPrevPage walks backward from the current topIndex to find where
-	// the previous page should start, filling visibleRows from bottom to top.
-
-	// calculatePageInfo walks all files with variable heights to determine
-	// which page topIndex falls on and how many total pages exist.
-
-	// --- Rendering helpers for smart refresh ---
-
 	// fileAreaStartRow is the absolute terminal row where file entries begin.
 	fileAreaStartRow := headerLines + 2
-
-	// buildFileEntry produces the ANSI output for a single file entry at the
-	// given file index, returning the rendered lines (first line + continuations)
-	// already processed through pipe codes.  If highlighted is true the first
-	// line uses the highlight color with stripped ANSI (lightbar style).
-	// The caller specifies how many screen lines are available (maxLines) so the
-	// function can truncate continuation lines to fit.
-
-	// screenRowForFile returns the absolute terminal row a file entry starts on,
-	// given the current topIndex.  Returns -1 if the file is not in the viewport.
-
-	// writeFileRow renders a single file entry at the given absolute screen row,
-	// clearing the lines it occupies first.
-
-	// renderFileArea redraws only the file list rows using absolute cursor
-	// positioning and line-clear (no full screen clear).
 
 	// Layout: separator row, then command bar, then optional BOT.
 	cmdBarRow := max(1, termHeight-botLineCount)
 	separatorRow := max(1, cmdBarRow-1)
-
-	// renderSeparator draws the separator line above the command bar.
-	// Uses CP437 0xFA (·) and 0xC4 (─) to match the header separator style.
-
-	// renderCmdBar redraws only the horizontal command bar.
-
-	// renderPageIndicator redraws only the page/bot indicator row(s).
-
-	// renderTop writes the TOP template with |FPAGE, |FTOTAL, @FPAGE@, @FTOTAL@ substituted.
-
-	// renderFull performs a complete screen redraw (used on first display and
-	// after overlay commands that clobber the screen).
 
 	lb := &fileLightbar{
 		e:                    st.e,
