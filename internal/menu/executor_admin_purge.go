@@ -142,7 +142,9 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 			Action:       "PURGE_USER",
 			Notes:        fmt.Sprintf("Permanently purged after %d-day retention period", retentionDays),
 		}
-		_ = userManager.LogAdminActivity(logEntry)
+		if logErr := userManager.LogAdminActivity(logEntry); logErr != nil {
+			slog.Warn("failed writing admin audit entry", "action", "PURGE_USER", "error", logErr)
+		}
 	}
 
 	result := fmt.Sprintf("\r\n\r\n|10Purged %d user account(s).|07\r\n", len(purged))
