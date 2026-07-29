@@ -299,6 +299,149 @@ func (st *userEditorState) moveDown() {
 	}
 }
 
+// readFieldInput prompts on the status row for a single-line text value,
+// pre-filled with currentValue, and runs a minimal line editor (backspace,
+// printable insertion, Enter to accept, Esc to cancel) until the caller
+// presses Enter or Esc. mask renders the buffer as asterisks (for password
+// entry) without affecting the returned value.
+func (st *userEditorState) readFieldInput(fieldLabel string, currentValue string, maxLen int, mask bool) (string, error) {
+	if st.adminCursorHidden {
+		_ = terminalio.WriteProcessedBytes(st.terminal, []byte("\x1b[?25h"), st.outputMode)
+		defer terminalio.WriteProcessedBytes(st.terminal, []byte("\x1b[?25l"), st.outputMode)
+	}
+
+	prompt := fmt.Sprintf("|15%s:|07 ", fieldLabel)
+	if err := st.writeAt(st.layout.statusRow, 1, prompt); err != nil {
+		return "", err
+	}
+
+	// Position cursor after prompt
+	cursorPos := len(fieldLabel) + 3
+	cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos)
+	if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
+		return "", err
+	}
+
+	input := []rune(currentValue)
+	cursorIdx := len(input)
+
+	// display renders the editable buffer, masking it for secret fields.
+	display := func() string {
+		if mask {
+			return strings.Repeat("*", len(input))
+		}
+		return string(input)
+	}
+
+	// Show current value
+	if err := terminalio.WriteProcessedBytes(st.terminal, []byte(display()), st.outputMode); err != nil {
+		return "", err
+	}
+
+	for {
+		key, readErr := st.ih.ReadKey()
+		if readErr != nil {
+			return "", readErr
+		}
+
+		switch key {
+		case int('\r'), int('\n'):
+			return string(input), nil
+		case editor.KeyEsc:
+			return "", fmt.Errorf("cancelled")
+		case editor.KeyBackspace, editor.KeyDelete: // Backspace / DEL
+			if cursorIdx > 0 {
+				input = append(input[:cursorIdx-1], input[cursorIdx:]...)
+				cursorIdx--
+				if err := st.writeAt(st.layout.statusRow, 1, prompt+display()+"  "); err != nil {
+					return "", err
+				}
+				cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
+				if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
+					return "", err
+				}
+			}
+		default:
+			if key >= 32 && key < 127 && len(input) < maxLen {
+				r := rune(key)
+				input = append(input[:cursorIdx], append([]rune{r}, input[cursorIdx:]...)...)
+				cursorIdx++
+				if err := st.writeAt(st.layout.statusRow, 1, prompt+display()); err != nil {
+					return "", err
+				}
+				cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
+				if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
+					return "", err
+				}
+			}
+		}
+	}
+}
+
+// stageFieldEdit reads a new value for a text field via readFieldInput and
+// stages the change in st.pendingChanges (keyed by fieldKey) when it differs
+// from orig, clearing any previously staged change when it matches. It
+// always sets st.statusMessage. A cancelled edit (Esc) leaves pendingChanges
+// untouched and the status message blank; other read errors are surfaced as
+// an error status message. This is the shared body of the six near-identical
+// plain-text field cases ('a'-'e' and the Real Name case in particular);
+// cases with extra validation or formatting (Handle's whitespace trim, Level's
+// numeric parsing) keep that deviation at their call site instead of being
+// forced through this helper.
+func (st *userEditorState) stageFieldEdit(fieldKey, label, orig string, maxLen int) {
+	newVal, editErr := st.readFieldInput(label, orig, maxLen, false)
+	if editErr != nil {
+		if editErr.Error() != "cancelled" {
+			st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+		}
+		return
+	}
+	if newVal != orig {
+		st.pendingChanges[fieldKey] = newVal
+		st.statusMessage = "|10Field marked for update.|07"
+	} else {
+		delete(st.pendingChanges, fieldKey)
+		st.statusMessage = "|08No change.|07"
+	}
+}
+
+// postSaveReload reloads the user list after a successful save. For the
+// pending-validation queue it also handles the queue-emptied terminal case
+// (the "all users validated" screen and pause prompt) and clamps the
+// selection back into range for the next render. exit reports that
+// runUserEditor should return immediately with (nil, msg, err) — either
+// because the validation queue emptied out, or because the pause-prompt read
+// failed; the parent loop performs the actual return.
+func (st *userEditorState) postSaveReload(termWidth, termHeight int) (exit bool, msg string, err error) {
+	st.users = st.loadEditorUsers()
+	if !st.cfg.pendingOnly {
+		return false, "", nil
+	}
+	// Validated users drop out of the queue: handle the now-empty case and
+	// clamp the selection back into range.
+	if len(st.users) == 0 {
+		_ = terminalio.WriteProcessedBytes(st.terminal, []byte(ansi.ClearScreen()), st.outputMode)
+		_ = terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|10All users have been validated!|07")), st.outputMode)
+		if pauseErr := st.e.loginPausePrompt(st.s, st.terminal, st.nodeNumber, st.outputMode, termWidth, termHeight); pauseErr != nil {
+			if errors.Is(pauseErr, io.EOF) {
+				return true, "LOGOFF", io.EOF
+			}
+			return true, "", pauseErr
+		}
+		return true, "", nil
+	}
+	if st.selectedIndex >= len(st.users) {
+		st.selectedIndex = len(st.users) - 1
+	}
+	if st.topIndex > st.selectedIndex {
+		st.topIndex = st.selectedIndex
+	}
+	if renderErr := st.renderHeader(); renderErr != nil {
+		return true, "", renderErr
+	}
+	return false, "", nil
+}
+
 // runUserEditor implements the shared interactive user editor used by both the
 // admin user browser and the pending-validation queue. See userEditorConfig.
 func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) {
@@ -375,80 +518,6 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		}
 	}
 
-	readFieldInput := func(fieldLabel string, currentValue string, maxLen int, mask bool) (string, error) {
-		if st.adminCursorHidden {
-			_ = terminalio.WriteProcessedBytes(st.terminal, []byte("\x1b[?25h"), st.outputMode)
-			defer terminalio.WriteProcessedBytes(st.terminal, []byte("\x1b[?25l"), st.outputMode)
-		}
-
-		prompt := fmt.Sprintf("|15%s:|07 ", fieldLabel)
-		if err := st.writeAt(st.layout.statusRow, 1, prompt); err != nil {
-			return "", err
-		}
-
-		// Position cursor after prompt
-		cursorPos := len(fieldLabel) + 3
-		cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos)
-		if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
-			return "", err
-		}
-
-		input := []rune(currentValue)
-		cursorIdx := len(input)
-
-		// display renders the editable buffer, masking it for secret fields.
-		display := func() string {
-			if mask {
-				return strings.Repeat("*", len(input))
-			}
-			return string(input)
-		}
-
-		// Show current value
-		if err := terminalio.WriteProcessedBytes(st.terminal, []byte(display()), st.outputMode); err != nil {
-			return "", err
-		}
-
-		for {
-			key, readErr := st.ih.ReadKey()
-			if readErr != nil {
-				return "", readErr
-			}
-
-			switch key {
-			case int('\r'), int('\n'):
-				return string(input), nil
-			case editor.KeyEsc:
-				return "", fmt.Errorf("cancelled")
-			case editor.KeyBackspace, editor.KeyDelete: // Backspace / DEL
-				if cursorIdx > 0 {
-					input = append(input[:cursorIdx-1], input[cursorIdx:]...)
-					cursorIdx--
-					if err := st.writeAt(st.layout.statusRow, 1, prompt+display()+"  "); err != nil {
-						return "", err
-					}
-					cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
-					if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
-						return "", err
-					}
-				}
-			default:
-				if key >= 32 && key < 127 && len(input) < maxLen {
-					r := rune(key)
-					input = append(input[:cursorIdx], append([]rune{r}, input[cursorIdx:]...)...)
-					cursorIdx++
-					if err := st.writeAt(st.layout.statusRow, 1, prompt+display()); err != nil {
-						return "", err
-					}
-					cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
-					if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
-						return "", err
-					}
-				}
-			}
-		}
-	}
-
 	if err := st.renderHeader(); err != nil {
 		return nil, "", err
 	}
@@ -492,30 +561,8 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 				st.statusMessage, saved = st.e.applyPendingUserChanges(st.userManager, st.currentUser, target, st.pendingChanges, st.originalTimestamps)
 				if saved {
 					st.pendingChanges = make(map[string]interface{})
-					st.users = st.loadEditorUsers()
-					if st.cfg.pendingOnly {
-						// Validated users drop out of the queue: handle the now-empty
-						// case and clamp the selection back into range.
-						if len(st.users) == 0 {
-							_ = terminalio.WriteProcessedBytes(st.terminal, []byte(ansi.ClearScreen()), st.outputMode)
-							_ = terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|10All users have been validated!|07")), st.outputMode)
-							if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
-								if errors.Is(pauseErr, io.EOF) {
-									return nil, "LOGOFF", io.EOF
-								}
-								return nil, "", pauseErr
-							}
-							return nil, "", nil
-						}
-						if st.selectedIndex >= len(st.users) {
-							st.selectedIndex = len(st.users) - 1
-						}
-						if st.topIndex > st.selectedIndex {
-							st.topIndex = st.selectedIndex
-						}
-						if err := st.renderHeader(); err != nil {
-							return nil, "", err
-						}
+					if exit, msg, reloadErr := st.postSaveReload(termWidth, termHeight); exit {
+						return nil, msg, reloadErr
 					}
 				}
 				refresh = true
@@ -537,7 +584,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 		case 'a', 'A':
 			sel := st.users[st.selectedIndex]
-			if newVal, editErr := readFieldInput("Handle", sel.Handle, 30, false); editErr == nil {
+			if newVal, editErr := st.readFieldInput("Handle", sel.Handle, 30, false); editErr == nil {
 				trimmedHandle := strings.TrimSpace(newVal)
 				if trimmedHandle != sel.Handle {
 					st.pendingChanges["handle"] = trimmedHandle
@@ -556,76 +603,24 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		case 'b', 'B':
 			// Edit Real Name field
 			sel := st.users[st.selectedIndex]
-			if newVal, editErr := readFieldInput("Real Name", sel.RealName, 50, false); editErr == nil {
-				if newVal != sel.RealName {
-					st.pendingChanges["realname"] = newVal
-					st.statusMessage = "|10Field marked for update.|07"
-				} else {
-					delete(st.pendingChanges, "realname")
-					st.statusMessage = "|08No change.|07"
-				}
-				refresh = true
-			} else {
-				if editErr.Error() != "cancelled" {
-					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
-				}
-				refresh = true
-			}
+			st.stageFieldEdit("realname", "Real Name", sel.RealName, 50)
+			refresh = true
 		case 'c', 'C':
 			sel := st.users[st.selectedIndex]
-			if newVal, editErr := readFieldInput("Group/Location", sel.GroupLocation, 30, false); editErr == nil {
-				if newVal != sel.GroupLocation {
-					st.pendingChanges["grouploc"] = newVal
-					st.statusMessage = "|10Field marked for update.|07"
-				} else {
-					delete(st.pendingChanges, "grouploc")
-					st.statusMessage = "|08No change.|07"
-				}
-				refresh = true
-			} else {
-				if editErr.Error() != "cancelled" {
-					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
-				}
-				refresh = true
-			}
+			st.stageFieldEdit("grouploc", "Group/Location", sel.GroupLocation, 30)
+			refresh = true
 		case 'd', 'D':
 			sel := st.users[st.selectedIndex]
-			if newVal, editErr := readFieldInput("Note", sel.PrivateNote, 50, false); editErr == nil {
-				if newVal != sel.PrivateNote {
-					st.pendingChanges["note"] = newVal
-					st.statusMessage = "|10Field marked for update.|07"
-				} else {
-					delete(st.pendingChanges, "note")
-					st.statusMessage = "|08No change.|07"
-				}
-				refresh = true
-			} else {
-				if editErr.Error() != "cancelled" {
-					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
-				}
-				refresh = true
-			}
+			st.stageFieldEdit("note", "Note", sel.PrivateNote, 50)
+			refresh = true
 		case 'e', 'E':
 			sel := st.users[st.selectedIndex]
-			if newVal, editErr := readFieldInput("Flags", sel.Flags, 20, false); editErr == nil {
-				if newVal != sel.Flags {
-					st.pendingChanges["flags"] = newVal
-					st.statusMessage = "|10Field marked for update.|07"
-				} else {
-					delete(st.pendingChanges, "flags")
-					st.statusMessage = "|08No change.|07"
-				}
-				refresh = true
-			} else {
-				if editErr.Error() != "cancelled" {
-					st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
-				}
-				refresh = true
-			}
+			st.stageFieldEdit("flags", "Flags", sel.Flags, 20)
+			refresh = true
 		case 'f', 'F':
 			sel := st.users[st.selectedIndex]
 			levelStr := fmt.Sprintf("%d", sel.AccessLevel)
-			if newVal, editErr := readFieldInput("Level", levelStr, 3, false); editErr == nil {
+			if newVal, editErr := st.readFieldInput("Level", levelStr, 3, false); editErr == nil {
 				if level, parseErr := strconv.Atoi(newVal); parseErr == nil {
 					// Protect User #1 from level reduction
 					if sel.ID == 1 && level < st.e.ServerCfg.SysOpLevel {
@@ -674,7 +669,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 			}
 		case 'p', 'P':
 			// Change password
-			if newPassword, editErr := readFieldInput("New Password", "", 50, true); editErr == nil {
+			if newPassword, editErr := st.readFieldInput("New Password", "", 50, true); editErr == nil {
 				if newPassword != "" {
 					st.pendingChanges["password"] = newPassword
 					st.statusMessage = "|10Password marked for update.|07"
