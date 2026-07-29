@@ -155,9 +155,9 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	if updatedUser != nil {
 		updatedUser.CurrentMessageAreaID = originalAreaID
 		updatedUser.CurrentMessageAreaTag = originalAreaTag
-		currentUser.CurrentMessageAreaID = originalAreaID
-		currentUser.CurrentMessageAreaTag = originalAreaTag
 	}
+	currentUser.CurrentMessageAreaID = originalAreaID
+	currentUser.CurrentMessageAreaTag = originalAreaTag
 
 	return updatedUser, nextMenu, err
 }
