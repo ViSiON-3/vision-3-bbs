@@ -220,14 +220,14 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 // command); "##" matches any all-numeric input (classic BBS numeric
 // wildcard), appending the entered number to the command as args.
 //
-// Adaptation: the original inline loop logged a handle-aware, two-branch
-// "does not meet ACS" debug message per denied command (see
-// executor_run.go's construction of the hasAccess closure passed in here,
-// which now performs that logging instead, since it has access to
-// st.currentUser and this pure function does not). That closure only
-// receives the ACS string, not the command's Keys, so the preserved log
-// lines no longer include a "keys" field; see task-23-report.md.
-func matchCommand(commands []CommandRecord, userInput string, hasAccess func(string) bool) (nextAction string, nodeActivity string, matched bool) {
+// hasAccess takes both the command's ACS string and its Keys string (rather
+// than just the ACS string) so that the closure Run constructs — which has
+// access to st.currentUser and therefore knows whether to log the
+// authenticated-user or unauthenticated-user denial message — can still
+// include the original "keys" field in that debug log line. The denial log
+// itself is emitted exactly once, inside that closure; matchCommand never
+// logs the ACS-denial case itself, so there is no risk of a duplicate line.
+func matchCommand(commands []CommandRecord, userInput string, hasAccess func(acs string, keys string) bool) (nextAction string, nodeActivity string, matched bool) {
 	matchedNodeActivity := ""
 
 	// Global hangup shortcut: /G
@@ -241,7 +241,7 @@ func matchCommand(commands []CommandRecord, userInput string, hasAccess func(str
 			// Hidden commands are still matched (e.g. % for sponsor menu); HIDDEN only affects display/prompts.
 
 			cmdACS := cmdRec.ACS
-			if !hasAccess(cmdACS) { // ACS check closure (logs denial itself; see doc comment above)
+			if !hasAccess(cmdACS, cmdRec.Keys) { // ACS check closure (logs denial itself; see doc comment above)
 				continue // Skip this command if ACS check fails
 			}
 

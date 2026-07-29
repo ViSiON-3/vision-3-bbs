@@ -361,13 +361,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		} // End if st.isLightbarMenu / else
 
 		// 6. Process Input / Find Command Match (st.userInput determined by menu type)
-		hasAccess := func(acs string) bool {
+		hasAccess := func(acs string, keys string) bool {
 			ok := checkACS(acs, st.currentUser, s, terminal, sessionStartTime) // Use ssh.Session 's'
 			if !ok {
 				if st.currentUser != nil {
-					slog.Debug("user does not meet ACS for command keys", "handle", st.currentUser.Handle, "acs", acs)
+					slog.Debug("user does not meet ACS for command keys", "handle", st.currentUser.Handle, "acs", acs, "keys", keys)
 				} else {
-					slog.Debug("unauthenticated user does not meet ACS for command keys", "acs", acs)
+					slog.Debug("unauthenticated user does not meet ACS for command keys", "acs", acs, "keys", keys)
 				}
 			}
 			return ok

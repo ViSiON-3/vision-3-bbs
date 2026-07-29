@@ -3,7 +3,7 @@ package menu
 import "testing"
 
 func TestMatchCommand(t *testing.T) {
-	allow := func(acs string) bool { return true }
+	allow := func(acs string, keys string) bool { return true }
 	cmds := []CommandRecord{
 		{Keys: "M", Command: "GOTO:MAIL"},
 		{Keys: "G", Command: "LOGOFF"},
@@ -16,7 +16,7 @@ func TestMatchCommand(t *testing.T) {
 	if matched {
 		t.Fatal("ZZ should not match")
 	}
-	deny := func(string) bool { return false }
+	deny := func(string, string) bool { return false }
 	if _, _, m := matchCommand(cmds, "M", deny); m {
 		t.Fatal("ACS-denied command must not match")
 	}
@@ -25,7 +25,7 @@ func TestMatchCommand(t *testing.T) {
 func TestMatchCommandGlobalHangup(t *testing.T) {
 	// /G matches unconditionally, without consulting hasAccess at all,
 	// and without needing any command in the list.
-	denyAll := func(string) bool { return false }
+	denyAll := func(string, string) bool { return false }
 	action, nodeActivity, matched := matchCommand(nil, "/G", denyAll)
 	if !matched || action != "RUN:IMMEDIATELOGOFF" {
 		t.Fatalf("got (%q, %q, %v), want (RUN:IMMEDIATELOGOFF, \"\", true)", action, nodeActivity, matched)
@@ -37,7 +37,7 @@ func TestMatchCommandGlobalHangup(t *testing.T) {
 
 func TestMatchCommandEnterDefault(t *testing.T) {
 	// ^M matches Enter (empty input) as the menu's default command.
-	allow := func(string) bool { return true }
+	allow := func(string, string) bool { return true }
 	cmds := []CommandRecord{
 		{Keys: "^M", Command: "GOTO:MAIN", NodeActivity: "Main Menu"},
 	}
@@ -53,7 +53,7 @@ func TestMatchCommandEnterDefault(t *testing.T) {
 
 func TestMatchCommandNumericWildcard(t *testing.T) {
 	// ## matches any all-numeric input, appending it as args to the command.
-	allow := func(string) bool { return true }
+	allow := func(string, string) bool { return true }
 	cmds := []CommandRecord{
 		{Keys: "##", Command: "GOTO:READMSG"},
 	}
@@ -64,5 +64,31 @@ func TestMatchCommandNumericWildcard(t *testing.T) {
 	// Non-numeric input must not match ##.
 	if _, _, m := matchCommand(cmds, "4A", allow); m {
 		t.Fatal("## should not match non-numeric input")
+	}
+}
+
+func TestMatchCommandHasAccessReceivesKeys(t *testing.T) {
+	// hasAccess must be called with the command's own Keys string (not just
+	// its ACS), so a closure built by the caller can log/attribute denials
+	// per-command (see executor_run.go's construction of this closure,
+	// which logs the "keys" field on ACS denial).
+	var gotACS, gotKeys string
+	calls := 0
+	spy := func(acs string, keys string) bool {
+		calls++
+		gotACS, gotKeys = acs, keys
+		return false
+	}
+	cmds := []CommandRecord{
+		{Keys: "Q W", Command: "GOTO:QUIT", ACS: "s10"},
+	}
+	if _, _, matched := matchCommand(cmds, "Q", spy); matched {
+		t.Fatal("hasAccess denied the command; it must not match")
+	}
+	if calls != 1 {
+		t.Fatalf("hasAccess called %d times, want 1", calls)
+	}
+	if gotACS != "s10" || gotKeys != "Q W" {
+		t.Fatalf("hasAccess called with (%q, %q), want (\"s10\", \"Q W\")", gotACS, gotKeys)
 	}
 }
