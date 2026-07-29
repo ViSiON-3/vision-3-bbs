@@ -229,7 +229,7 @@ func (e *MenuExecutor) receiveUploadBatch(
 		slog.Warn("receive returned error, checking for partial receives", "node", nodeNumber, "protocol", proto.Name, "error", transferErr)
 	}
 
-	// 9. Scan received files. Always scan even on transferErr != nil: rz can
+	// 9. Scan received files after non-binary receive errors: rz can
 	// exit non-zero on a ZFIN timeout after already receiving files successfully.
 	receivedFiles, err := scanDirectoryFiles(incomingDir)
 	if err != nil {
