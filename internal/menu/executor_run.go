@@ -45,6 +45,16 @@ type runLoopState struct {
 	isLightbarMenu   bool
 }
 
+// userHandle returns the current user's handle for logging, or "" when no user
+// is authenticated yet. Logging the handle rather than the *user.User keeps the
+// password hash and personal fields out of the logs.
+func (st *runLoopState) userHandle() string {
+	if st.currentUser == nil {
+		return ""
+	}
+	return st.currentUser.Handle
+}
+
 // Run executes the menu logic for a given starting menu name.
 // Reverted s parameter back to ssh.Session
 // Added outputMode parameter
@@ -165,7 +175,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Check Menu ACS before proceeding
 		menuACS := menuRec.ACS
 		if !checkACS(menuACS, st.currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
-			slog.Info("user denied access to menu", "menu", st.currentMenuName, "acs", menuACS, "user", st.currentUser)
+			slog.Info("user denied access to menu", "menu", st.currentMenuName, "acs", menuACS, "user", st.userHandle())
 			errMsg := e.LoadedStrings.ExecAccessDenied
 			processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
 			// Use new helper for error message

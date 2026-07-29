@@ -73,7 +73,7 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 			}
 		}
 		if !passwordOk {
-			slog.Warn("user failed password entry for menu", "menu", st.currentMenuName, "user", st.currentUser)
+			slog.Warn("user failed password entry for menu", "menu", st.currentMenuName, "user", st.userHandle())
 			// Use new helper for feedback message
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecTooManyAttempts)), outputMode)
 			if wErr != nil {
@@ -201,14 +201,15 @@ func (st *runLoopState) dispatchMatchedAction(nextAction, nodeActivity, menuDefa
 		st.currentUser = userResult
 		return loopReturn, "", err
 	}
-	if nextActionType == "GOTO" {
+	switch nextActionType {
+	case "GOTO":
 		st.previousMenuName = st.currentMenuName // Store current before going to next
 		st.currentMenuName = nextMenuName
 		return loopContinue, "", nil // Continue main loop to the new menu
-	} else if nextActionType == "LOGOFF" {
+	case "LOGOFF":
 		st.currentUser = userResult
 		return loopReturn, "LOGOFF", nil // Return specific logoff action
-	} else if nextActionType == "CONTINUE" {
+	case "CONTINUE":
 		// Reset activity to menu default after command completes
 		if sess := e.SessionRegistry.Get(nodeNumber); sess != nil {
 			sess.Mutex.Lock()

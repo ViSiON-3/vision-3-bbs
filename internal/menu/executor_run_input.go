@@ -211,9 +211,10 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 // matchCommand finds the command among commands whose Keys match userInput,
 // subject to hasAccess (an ACS check closure over the requesting session's
 // user/terminal/start-time, matching the closure form checkACS is invoked
-// with inline). It is a pure function so it can be exercised directly by
-// unit tests: given the same commands/userInput/hasAccess it always
-// produces the same (nextAction, nodeActivity, matched).
+// with inline). It is deterministic — given the same
+// commands/userInput/hasAccess it always produces the same (nextAction,
+// nodeActivity, matched) — so it can be exercised directly by unit tests. Its
+// only side effect is debug logging.
 //
 // Special cases: "/G" is the global hangup shortcut (matches unconditionally,
 // no ACS check); "^M" matches Enter with no input (classic BBS default
