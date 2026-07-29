@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -102,85 +101,12 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Removed authenticatedUserResult declaration from here
 		// Numeric commands must be explicitly defined in KEYS tokens (no positional matching)
 
-		// Determine ANSI filename using standard convention
-		ansFilename := st.currentMenuName + ".ANS"
-		// Use MenuSetPath for ANSI file
-		fullAnsPath := filepath.Join(e.MenuSetPath, "ansi", ansFilename)
-
-		// Process the associated ANSI file to get display bytes and coordinates
-		rawAnsiContent, readErr := ansi.GetAnsiFileContent(fullAnsPath)
-		if readErr == nil {
-			// Resolve {{acs}}...{{/}} conditional regions first, before any
-			// |TOKEN substitution, so tokens inside hidden regions never expand.
-			// Keyword conditions (e.g. {{SPONSOR}}) are resolved first against the
-			// keywords map, then fall through to ACS evaluation. e.MessageMgr is
-			// passed through a nil check so a nil *MessageManager never becomes a
-			// non-nil areaLookup interface.
-			var areas areaLookup
-			if e.MessageMgr != nil {
-				areas = e.MessageMgr
-			}
-			keywords := map[string]bool{
-				"SPONSOR": sponsorKeyword(st.currentUser, areas, e.GetServerConfig()),
-			}
-			rawAnsiContent = applyConditionalRegions(rawAnsiContent, st.currentUser, keywords)
-			if st.currentMenuName == "ADMIN" {
-				pendingCount := pendingValidationCount(userManager)
-				rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("{{PENDING_VALIDATIONS}}"), []byte(strconv.Itoa(pendingCount)))
-			}
-			// Substitute global server-state placeholders before ANSI processing,
-			// so multi-letter codes like |NEWUSERS aren't mis-parsed as coord markers.
-			newUsersVal := "NO"
-			if e.GetServerConfig().AllowNewUsers {
-				newUsersVal = "YES"
-			}
-			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|NEWUSERS"), []byte(newUsersVal))
-			currentAreaTag, currentAreaDisplayName := e.resolveCurrentAreaTokens(st.currentUser, st.currentAreaName)
-			currentFileAreaTag, currentFileAreaDisplayName := e.resolveCurrentFileAreaTokens(st.currentUser)
-			// Replace longer tokens first to avoid partial replacement conflicts (e.g. |FCONFPATH, |CFAN vs |CFA vs |CAN vs |CA).
-			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|FCONFPATH"), []byte(e.resolveFileConferencePath(st.currentUser)))
-			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CFAN"), []byte(currentFileAreaDisplayName))
-			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CFA"), []byte(currentFileAreaTag))
-			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CAN"), []byte(currentAreaDisplayName))
-			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CA"), []byte(currentAreaTag))
-			rawAnsiContent = replaceMenuATCode(rawAnsiContent, "UC", strconv.Itoa(userManager.GetUserCount()))
-			rawAnsiContent = replaceMenuATCode(rawAnsiContent, "U", strconv.Itoa(e.SessionRegistry.ActiveCount()))
-			// @RR@ — Random Rumor text (supports @RR@, @RR:50@, @RR######@)
-			rumorLevel := 1 // default MinLevel when no user context
-			if st.currentUser != nil {
-				rumorLevel = st.currentUser.AccessLevel
-			}
-			rawAnsiContent = expandRandomRumorATCode(rawAnsiContent, e.RootConfigPath, rumorLevel)
+		// Load and process the ANSI file for the current menu (conditional
+		// regions, pipe/token substitution, CP437/encoding conversion).
+		ansiProcessResult, renderErr := st.renderMenuAnsi()
+		if renderErr != nil {
+			return "", nil, renderErr
 		}
-		var ansiProcessResult ansi.ProcessAnsiResult
-		var processErr error
-		if readErr != nil {
-			slog.Error("failed to read ANSI file", "file", ansFilename, "error", readErr)
-			// Display error message to user (using new helper)
-			errMsg := fmt.Sprintf("\r\n|01Error reading screen file: %s|07\r\n", ansFilename)
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
-			if wErr != nil {
-				slog.Error("failed writing screen read error", "error", wErr)
-			}
-			// Reading the screen file is critical, return error
-			return "", nil, fmt.Errorf("failed to read screen file %s: %w", ansFilename, readErr)
-		}
-
-		// Process for coords and display bytes
-		// Use CP437 mode to keep raw bytes for coordinate tracking, then convert based on outputMode
-		ansiProcessResult, processErr = ansi.ProcessAnsiAndExtractCoords(rawAnsiContent, ansi.OutputModeCP437)
-		if processErr != nil {
-			slog.Error("failed to process ANSI file, display may be incorrect", "file", ansFilename, "error", processErr)
-			// Processing error is also critical, return error
-			return "", nil, fmt.Errorf("failed to process screen file %s: %w", ansFilename, processErr)
-		}
-
-		// Convert encoding based on output mode (similar to SHOWSTATS fix)
-		if outputMode == ansi.OutputModeUTF8 {
-			// UTF-8 mode: Convert CP437 bytes to UTF-8 for proper display
-			ansiProcessResult.DisplayBytes = ansi.CP437BytesToUTF8(ansiProcessResult.DisplayBytes)
-		}
-		// CP437 mode: DisplayBytes already contain raw CP437, pass through as-is
 
 		// --- SPECIAL HANDLING FOR LOGIN MENU INTERACTION ---
 		if st.currentMenuName == "LOGIN" {
@@ -538,31 +464,8 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// We still need the raw content for potential lightbar background
 		// Note: ansBackgroundBytes is currently unused but will be needed for full lightbar implementation
 		// ansBackgroundBytes := ansiProcessResult.DisplayBytes
-		if st.currentMenuName != "LOGIN" {
-			// Truncate ANSI output to terminal height to prevent scrolling
-			displayBytes := ansiProcessResult.DisplayBytes
-			// Prepend clear sequence when CLR is set (single write for reliable clearing)
-			if menuRec.GetClrScrBefore() {
-				displayBytes = append([]byte(ansi.ClearScreen()), displayBytes...)
-			}
-			if termHeight > 0 {
-				lines := bytes.Split(displayBytes, []byte("\n"))
-				if len(lines) > termHeight {
-					displayBytes = bytes.Join(lines[:termHeight], []byte("\n"))
-					slog.Debug("truncated menu ANSI to fit terminal", "menu", st.currentMenuName, "from", len(lines), "to", termHeight, "rows", termHeight)
-				}
-			}
-			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-			var wErr error
-			if outputMode == ansi.OutputModeCP437 {
-				_, wErr = terminal.Write(displayBytes)
-			} else {
-				wErr = terminalio.WriteProcessedBytes(terminal, displayBytes, outputMode)
-			}
-			if wErr != nil {
-				slog.Error("failed writing ANSI screen", "menu", st.currentMenuName, "error", wErr)
-				return "", nil, fmt.Errorf("failed displaying screen: %w", wErr)
-			}
+		if err := st.displayMenuScreen(ansiProcessResult, menuRec); err != nil {
+			return "", nil, err
 		}
 
 		// --- Check for Lightbar Menu (.BAR) ---
