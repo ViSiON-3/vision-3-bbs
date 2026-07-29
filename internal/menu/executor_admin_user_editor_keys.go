@@ -128,7 +128,11 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 			st.statusMessage = "|01Cannot unvalidate User #1!|07"
 			refresh = true
 		} else {
-			newValidated := !sel.Validated
+			cur := sel.Validated
+			if staged, ok := st.pendingChanges["validated"].(bool); ok {
+				cur = staged
+			}
+			newValidated := !cur
 			if newValidated != sel.Validated {
 				st.pendingChanges["validated"] = newValidated
 				if newValidated {
@@ -186,7 +190,11 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 		if sel.ID == 1 {
 			st.statusMessage = "|01Cannot delete User #1!|07"
 		} else {
-			newDeleted := !sel.DeletedUser
+			cur := sel.DeletedUser
+			if staged, ok := st.pendingChanges["deleted"].(bool); ok {
+				cur = staged
+			}
+			newDeleted := !cur
 			if newDeleted != sel.DeletedUser {
 				st.pendingChanges["deleted"] = newDeleted
 				if newDeleted {
