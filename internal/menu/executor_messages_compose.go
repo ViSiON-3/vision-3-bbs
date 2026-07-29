@@ -135,25 +135,20 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if toPrompt == "" {
 		toPrompt = "|07To: |15"
 	}
-	var toUser string
-	for {
-		val, aborted, ferr := e.promptComposeField(s, terminal, ih, toPrompt, 24, "All", "'to'", outputMode, nodeNumber, termWidth, termHeight)
-		if ferr != nil {
-			if errors.Is(ferr, io.EOF) {
-				return nil, "LOGOFF", io.EOF
-			}
-			slog.Error("failed reading 'to' input", "node", nodeNumber, "error", ferr)
-			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading recipient.\r\n"), outputMode)
-			time.Sleep(1 * time.Second)
-			return nil, "", nil
+	val, aborted, ferr := e.promptComposeField(s, terminal, ih, toPrompt, 24, "All", "'to'", outputMode, nodeNumber, termWidth, termHeight)
+	if ferr != nil {
+		if errors.Is(ferr, io.EOF) {
+			return nil, "LOGOFF", io.EOF
 		}
-		if aborted {
-			return nil, "", nil
-		}
-		toUser = val
-		break
+		slog.Error("failed reading 'to' input", "node", nodeNumber, "error", ferr)
+		terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading recipient.\r\n"), outputMode)
+		time.Sleep(1 * time.Second)
+		return nil, "", nil
 	}
-	toUser = strings.TrimSpace(toUser)
+	if aborted {
+		return nil, "", nil
+	}
+	toUser := strings.TrimSpace(val)
 	if toUser == "" {
 		toUser = "All"
 	}
