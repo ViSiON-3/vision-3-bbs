@@ -2,7 +2,6 @@ package menu
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -206,78 +205,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// var numericMatchAction string // Moved declaration up
 
 		// 4. Determine Input Mode / Method
-		if st.isLightbarMenu {
-			slog.Debug("entering lightbar input mode", "menu", st.currentMenuName)
-
-			// Load lightbar options from the config directory
-			lightbarOptions, loadErr := loadLightbarOptions(st.currentMenuName, e)
-			if loadErr != nil {
-				slog.Error("failed to load lightbar options", "menu", st.currentMenuName, "error", loadErr)
-				st.isLightbarMenu = false
-			} else if len(lightbarOptions) == 0 {
-				slog.Warn("no valid lightbar options loaded", "menu", st.currentMenuName)
-				st.isLightbarMenu = false
-			}
-
-			if st.isLightbarMenu {
-				cursorHidden := e.hideCursorIfNeeded(terminal, outputMode, cursorHideContextDefault)
-				ansBackgroundBytes := ansiProcessResult.DisplayBytes
-
-				// Initially draw with first option selected
-				selectedIndex := 0
-				drawErr := drawLightbarMenu(terminal, ansBackgroundBytes, lightbarOptions, selectedIndex, outputMode, false)
-				if drawErr != nil {
-					slog.Error("failed to draw lightbar menu", "menu", st.currentMenuName, "error", drawErr)
-					e.showCursorIfHidden(terminal, outputMode, cursorHidden)
-					st.isLightbarMenu = false
-				} else {
-					lightbarInput, act, retErr := st.runLightbarInput(lightbarOptions, cursorHidden)
-					if act == loopReturn {
-						return lightbarInput, nil, retErr
-					}
-					// Set st.userInput to lightbar result if a selection was made
-					if lightbarInput != "" {
-						st.userInput = lightbarInput
-					}
-				}
-			}
-
-			if !st.isLightbarMenu || st.userInput == "" {
-				// Fallback to standard input if lightbar loading failed or no valid selection made
-				e.deliverPendingPages(terminal, nodeNumber, outputMode)
-				// Display Prompt (Skip if USEPROMPT is false)
-				if menuRec.GetUsePrompt() { // Condition changed: Only check UsePrompt
-					err = e.displayPrompt(terminal, menuRec, st.currentUser, userManager, nodeNumber, st.currentMenuName, sessionStartTime, outputMode, st.currentAreaName) // Pass st.currentAreaName
-					if err != nil {
-						return "", nil, err // Propagate the error
-					}
-				} else {
-					// Log message remains the same, but the condition causing it is now just UsePrompt==false
-					slog.Debug("skipping prompt display", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt(), "prompt1Empty", menuRec.Prompt1 == "")
-				}
-
-				// Read User Input Line via shared InputHandler to avoid reader races.
-				input, err := readLineFromSessionIH(s, terminal)
-				if err != nil {
-					if err == io.EOF {
-						slog.Info("user disconnected during menu input", "menu", st.currentMenuName)
-						return "LOGOFF", nil, nil // Signal logoff
-					}
-					slog.Error("failed to read input for menu", "menu", st.currentMenuName, "error", err)
-					return "", nil, fmt.Errorf("failed reading input: %w", err)
-				}
-				st.userInput = strings.ToUpper(strings.TrimSpace(input))
-				slog.Debug("user input", "input", st.userInput)
-			}
-		} else {
-			input, act, retErr := st.readStandardInput(menuRec)
-			switch act {
-			case loopReturn:
-				return input, nil, retErr
-			case loopContinue:
-				continue
-			}
-		} // End if st.isLightbarMenu / else
+		input, act, retErr := st.readMenuInput(ansiProcessResult, menuRec)
+		switch act {
+		case loopReturn:
+			return input, nil, retErr
+		case loopContinue:
+			continue
+		}
 
 		// 6. Process Input / Find Command Match (st.userInput determined by menu type)
 		hasAccess := func(acs string, keys string) bool {
