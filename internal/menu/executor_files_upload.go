@@ -198,10 +198,9 @@ func (e *MenuExecutor) runUploadFiles(
 	return nil
 }
 
-// receiveUploadBatch executes the selected transfer protocol's receive into
-// incomingDir and scans the result for newly arrived files. It returns
-// ok=false when the caller should return nil immediately; a message has
-// already been displayed to the user in that case.
+// receiveUploadBatch executes proto's receive into incomingDir and scans for
+// newly arrived files. ok=false means the caller should return nil; most
+// failure paths show a message first, but a scanDirectoryFiles error only logs.
 func (e *MenuExecutor) receiveUploadBatch(
 	s ssh.Session,
 	terminal *term.Terminal,
@@ -230,9 +229,8 @@ func (e *MenuExecutor) receiveUploadBatch(
 		slog.Warn("receive returned error, checking for partial receives", "node", nodeNumber, "protocol", proto.Name, "error", transferErr)
 	}
 
-	// 9. Scan received files from temp directory.
-	// Always scan even if transferErr != nil: rz exits non-zero when it times out
-	// waiting for ZFIN, but may have already received files successfully.
+	// 9. Scan received files. Always scan even on transferErr != nil: rz can
+	// exit non-zero on a ZFIN timeout after already receiving files successfully.
 	receivedFiles, err := scanDirectoryFiles(incomingDir)
 	if err != nil {
 		slog.Error("failed to scan incoming directory", "node", nodeNumber, "error", err)
@@ -266,11 +264,10 @@ func (e *MenuExecutor) receiveUploadBatch(
 	return newFiles, true
 }
 
-// checkUploadDuplicates validates a received filename and rejects it if it is
-// unsafe or already present in the area's file metadata. It returns
-// skip=true when the caller should skip the file (a message has already been
-// shown and any partial file removed); duplicate indicates whether the skip
-// should be counted as a rejected duplicate.
+// checkUploadDuplicates rejects nf if its filename is unsafe or already
+// present in existingNames, removing any partial file and showing a message.
+// skip reports whether the file should be skipped; duplicate reports whether
+// the skip counts as a rejected duplicate.
 func checkUploadDuplicates(
 	nf newFileInfo,
 	incomingPath string,
