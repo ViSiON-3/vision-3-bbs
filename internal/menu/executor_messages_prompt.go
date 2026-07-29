@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -212,7 +211,7 @@ func sanitizeControlChars(s string) string {
 // no log is emitted, matching the original code's silence on that path.
 // Callers own any additional validation (e.g. required-field retry, default
 // substitution) since that differs between the title and to prompts.
-func (e *MenuExecutor) promptComposeField(s ssh.Session, terminal *term.Terminal, ih *editor.InputHandler, prompt string, maxLen int, defaultValue string, fieldName string, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (value string, aborted bool, err error) {
+func (e *MenuExecutor) promptComposeField(s ssh.Session, terminal *term.Terminal, prompt string, maxLen int, defaultValue string, fieldName string, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (value string, aborted bool, err error) {
 	for {
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 		if wErr != nil {

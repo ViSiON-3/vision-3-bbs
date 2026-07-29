@@ -3,6 +3,7 @@ package menu
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -10,7 +11,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"golang.org/x/term"
-	"log/slog"
 )
 
 // colorCodeToAnsi converts a DOS-style color code (0-255) to ANSI escape sequence.

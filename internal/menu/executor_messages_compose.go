@@ -110,7 +110,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	var subject string
 	for {
-		val, aborted, ferr := e.promptComposeField(s, terminal, ih, titlePrompt, 30, "", "title", outputMode, nodeNumber, termWidth, termHeight)
+		val, aborted, ferr := e.promptComposeField(s, terminal, titlePrompt, 30, "", "title", outputMode, nodeNumber, termWidth, termHeight)
 		if ferr != nil {
 			if errors.Is(ferr, io.EOF) {
 				return nil, "LOGOFF", io.EOF
@@ -135,7 +135,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if toPrompt == "" {
 		toPrompt = "|07To: |15"
 	}
-	val, aborted, ferr := e.promptComposeField(s, terminal, ih, toPrompt, 24, "All", "'to'", outputMode, nodeNumber, termWidth, termHeight)
+	val, aborted, ferr := e.promptComposeField(s, terminal, toPrompt, 24, "All", "'to'", outputMode, nodeNumber, termWidth, termHeight)
 	if ferr != nil {
 		if errors.Is(ferr, io.EOF) {
 			return nil, "LOGOFF", io.EOF
