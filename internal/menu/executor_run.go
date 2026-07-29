@@ -312,108 +312,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 					e.showCursorIfHidden(terminal, outputMode, cursorHidden)
 					st.isLightbarMenu = false
 				} else {
-					// Process keyboard navigation for lightbar.
-					// Use the session-scoped InputHandler so the same goroutine that
-					// reads from the SSH session is shared with any editor invocations
-					// triggered from this menu (e.g. COMPOSEMSG). This prevents the
-					// orphaned goroutine from consuming the first keystroke after the
-					// editor exits, which caused the "double key press" bug.
-					lightbarResult := "" // Use a local variable for the result
-					inputLoop := true
-					sessionIH := getSessionIH(s)
-					for inputLoop {
-						key, err := sessionIH.ReadKey()
-						if err != nil {
-							e.showCursorIfHidden(terminal, outputMode, cursorHidden)
-							if errors.Is(err, io.EOF) {
-								slog.Info("user disconnected during lightbar input", "menu", st.currentMenuName)
-								return "LOGOFF", nil, nil
-							}
-							if errors.Is(err, editor.ErrIdleTimeout) {
-								e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
-								return "LOGOFF", nil, nil
-							}
-							slog.Error("failed to read lightbar input", "menu", st.currentMenuName, "error", err)
-							return "", nil, fmt.Errorf("failed reading lightbar input: %w", err)
-						}
-						slog.Debug("lightbar input key", "key", key)
-
-						switch key {
-						case editor.KeyArrowUp:
-							prevIndex := selectedIndex
-							selectedIndex--
-							if selectedIndex < 0 {
-								selectedIndex = len(lightbarOptions) - 1
-							}
-							if prevIndex != selectedIndex {
-								_ = drawLightbarOption(terminal, lightbarOptions[prevIndex], false, outputMode)
-								_ = drawLightbarOption(terminal, lightbarOptions[selectedIndex], true, outputMode)
-							}
-						case editor.KeyArrowDown:
-							prevIndex := selectedIndex
-							selectedIndex++
-							if selectedIndex >= len(lightbarOptions) {
-								selectedIndex = 0
-							}
-							if prevIndex != selectedIndex {
-								_ = drawLightbarOption(terminal, lightbarOptions[prevIndex], false, outputMode)
-								_ = drawLightbarOption(terminal, lightbarOptions[selectedIndex], true, outputMode)
-							}
-						case editor.KeyHome:
-							if selectedIndex != 0 {
-								prevIndex := selectedIndex
-								selectedIndex = 0
-								_ = drawLightbarOption(terminal, lightbarOptions[prevIndex], false, outputMode)
-								_ = drawLightbarOption(terminal, lightbarOptions[selectedIndex], true, outputMode)
-							}
-						case editor.KeyEnd:
-							lastIdx := len(lightbarOptions) - 1
-							if selectedIndex != lastIdx {
-								prevIndex := selectedIndex
-								selectedIndex = lastIdx
-								_ = drawLightbarOption(terminal, lightbarOptions[prevIndex], false, outputMode)
-								_ = drawLightbarOption(terminal, lightbarOptions[selectedIndex], true, outputMode)
-							}
-						case int('\r'), int('\n'): // Enter (CR or LF) - select current item
-							if selectedIndex >= 0 && selectedIndex < len(lightbarOptions) {
-								lightbarResult = lightbarOptions[selectedIndex].HotKey
-								inputLoop = false
-							}
-						case editor.KeyEsc:
-							// Bare ESC (InputHandler already consumed any ANSI sequence) — ignore
-						default:
-							if key >= int('1') && key <= int('9') {
-								// Direct selection by number
-								numIndex := key - int('1') // Convert 1-9 to 0-8
-								if numIndex >= 0 && numIndex < len(lightbarOptions) {
-									prevIndex := selectedIndex
-									selectedIndex = numIndex
-									if prevIndex != selectedIndex {
-										_ = drawLightbarOption(terminal, lightbarOptions[prevIndex], false, outputMode)
-										_ = drawLightbarOption(terminal, lightbarOptions[selectedIndex], true, outputMode)
-									}
-									lightbarResult = lightbarOptions[numIndex].HotKey
-									inputLoop = false
-								}
-							} else if key >= 32 && key < 127 {
-								// Check if printable key matches any hotkey directly
-								keyStr := strings.ToUpper(string(rune(key)))
-								for _, opt := range lightbarOptions {
-									if keyStr == opt.HotKey {
-										lightbarResult = opt.HotKey
-										inputLoop = false
-										break
-									}
-								}
-							}
-							// Control chars and other special codes are ignored
-						}
+					lightbarInput, act, retErr := st.runLightbarInput(lightbarOptions, cursorHidden)
+					if act == loopReturn {
+						return lightbarInput, nil, retErr
 					}
-					slog.Debug("processed lightbar input", "result", lightbarResult)
-					e.showCursorIfHidden(terminal, outputMode, cursorHidden)
 					// Set st.userInput to lightbar result if a selection was made
-					if lightbarResult != "" {
-						st.userInput = lightbarResult
+					if lightbarInput != "" {
+						st.userInput = lightbarInput
 					}
 				}
 			}
@@ -446,124 +351,28 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				slog.Debug("user input", "input", st.userInput)
 			}
 		} else {
-			// --- Standard Menu Input Handling ---
-			e.deliverPendingPages(terminal, nodeNumber, outputMode)
-			// Display Prompt (Skip if USEPROMPT is false)
-			slog.Debug("checking prompt display for menu", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt())
-			if menuRec.GetUsePrompt() { // Condition changed: Only check UsePrompt
-				slog.Debug("calling displayPrompt for menu", "menu", st.currentMenuName)
-				err = e.displayPrompt(terminal, menuRec, st.currentUser, userManager, nodeNumber, st.currentMenuName, sessionStartTime, outputMode, st.currentAreaName) // Pass st.currentAreaName
-				slog.Debug("returned from displayPrompt for menu", "menu", st.currentMenuName, "error", err)
-				if err != nil {
-					return "", nil, err // Propagate the error
-				}
-			} else {
-				// Log message remains the same, but the condition causing it is now just UsePrompt==false
-				slog.Debug("skipping prompt display", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt(), "prompt1Empty", menuRec.Prompt1 == "")
+			input, act, retErr := st.readStandardInput(menuRec)
+			switch act {
+			case loopReturn:
+				return input, nil, retErr
+			case loopContinue:
+				continue
 			}
-
-			// Read User Input Line via shared InputHandler to avoid reader races.
-			input, err := readLineFromSessionIH(s, terminal)
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					slog.Info("user disconnected during menu input", "menu", st.currentMenuName)
-					return "LOGOFF", nil, nil
-				}
-				if errors.Is(err, editor.ErrIdleTimeout) {
-					e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
-					return "LOGOFF", nil, nil
-				}
-				slog.Error("failed to read input for menu", "menu", st.currentMenuName, "error", err)
-				return "", nil, fmt.Errorf("failed reading input: %w", err)
-			}
-			st.userInput = strings.ToUpper(strings.TrimSpace(input))
-			slog.Debug("user input", "input", st.userInput)
-
-			// --- Special Input Handling (^P, ##) ---
-			if st.userInput == "\x10" || st.userInput == "^P" { // Ctrl+P is ASCII 16 (\x10)
-				if st.previousMenuName != "" {
-					slog.Debug("user entered ^P, going back to previous menu", "previous", st.previousMenuName)
-					temp := st.currentMenuName
-					st.currentMenuName = st.previousMenuName
-					st.previousMenuName = temp // Update previous in case they go back again
-					continue                   // Go directly to the previous menu loop iteration
-				} else {
-					slog.Debug("user entered ^P, but no previous menu recorded")
-					continue // Re-display current menu prompt
-				}
-			}
-
-			// --- End Special Input Handling ---
 		} // End if st.isLightbarMenu / else
 
 		// 6. Process Input / Find Command Match (st.userInput determined by menu type)
-		matched := false
-		nextAction := ""          // Store the action determined by the matched command
-		matchedNodeActivity := "" // Store matched command's node activity
-
-		// Global hangup shortcut: /G
-		if st.userInput == "/G" {
-			nextAction = "RUN:IMMEDIATELOGOFF"
-			matched = true
-		}
-
-		if !matched { // Check keyword matches (relevant for both)
-			for _, cmdRec := range commands {
-				// Hidden commands are still matched (e.g. % for sponsor menu); HIDDEN only affects display/prompts.
-
-				cmdACS := cmdRec.ACS
-				if !checkACS(cmdACS, st.currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
-					if st.currentUser != nil {
-						slog.Debug("user does not meet ACS for command keys", "handle", st.currentUser.Handle, "acs", cmdACS, "keys", cmdRec.Keys)
-					} else {
-						slog.Debug("unauthenticated user does not meet ACS for command keys", "acs", cmdACS, "keys", cmdRec.Keys)
-					}
-					continue // Skip this command if ACS check fails
-				}
-
-				keys := strings.Split(cmdRec.Keys, " ") // Use string directly
-				for _, key := range keys {
-					// ^M matches when user presses Enter with no input (classic BBS default command)
-					if key == "^M" && st.userInput == "" {
-						nextAction = cmdRec.Command
-						matchedNodeActivity = cmdRec.NodeActivity
-						slog.Debug("matched ^M (enter/default) to command action", "command", nextAction)
-						matched = true
-						break
-					}
-					// Standard exact key match
-					if key != "" && st.userInput != "" && st.userInput == key {
-						nextAction = cmdRec.Command
-						matchedNodeActivity = cmdRec.NodeActivity
-						slog.Debug("matched key to command action", "key", key, "command", nextAction)
-						matched = true
-						break
-					}
-					// ## matches any numeric input (classic BBS numeric wildcard)
-					if key == "##" && st.userInput != "" {
-						isNumeric := true
-						for _, ch := range st.userInput {
-							if ch < '0' || ch > '9' {
-								isNumeric = false
-								break
-							}
-						}
-						if isNumeric {
-							// Append the entered number as args so executeCommandAction
-							// forwards it to the RUN: handler via runArgs.
-							nextAction = cmdRec.Command + " " + st.userInput
-							matchedNodeActivity = cmdRec.NodeActivity
-							slog.Debug("matched ## numeric wildcard to command action", "input", st.userInput, "command", nextAction)
-							matched = true
-							break
-						}
-					}
-				}
-				if matched {
-					break // Break outer command loop
+		hasAccess := func(acs string) bool {
+			ok := checkACS(acs, st.currentUser, s, terminal, sessionStartTime) // Use ssh.Session 's'
+			if !ok {
+				if st.currentUser != nil {
+					slog.Debug("user does not meet ACS for command keys", "handle", st.currentUser.Handle, "acs", acs)
+				} else {
+					slog.Debug("unauthenticated user does not meet ACS for command keys", "acs", acs)
 				}
 			}
+			return ok
 		}
+		nextAction, matchedNodeActivity, matched := matchCommand(commands, st.userInput, hasAccess)
 
 		// 7. Handle Action or No Match
 		if matched {
