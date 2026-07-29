@@ -11,9 +11,12 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
+	"golang.org/x/term"
 )
 
 // runPromptAndComposeMessage lists areas, prompts for selection, checks permissions, and calls runComposeMessage.
@@ -194,4 +197,42 @@ func sanitizeControlChars(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// promptComposeField performs one shared "compose field" input cycle: write the
+// prompt, read via styledInput, and handle EOF/abort. On ESC (errInputAborted) it
+// asks confirmAbortPost; a "No" answer re-shows the prompt and retries in place.
+// It returns aborted=true if the user confirmed abandoning the post (caller should
+// return to the menu), err=io.EOF if the session disconnected, or the raw error
+// from styledInput for any other read failure (caller decides how to report it).
+// Callers own any additional validation (e.g. required-field retry, default
+// substitution) since that differs between the title and to prompts.
+func (e *MenuExecutor) promptComposeField(s ssh.Session, terminal *term.Terminal, ih *editor.InputHandler, prompt string, maxLen int, defaultValue string, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (value string, aborted bool, err error) {
+	for {
+		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+		if wErr != nil {
+			slog.Warn("failed to write compose field prompt", "node", nodeNumber, "error", wErr)
+		}
+		value, err = styledInput(terminal, s, outputMode, maxLen, defaultValue)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return "", false, io.EOF
+			}
+			if errors.Is(err, errInputAborted) {
+				abort, confirmErr := e.confirmAbortPost(s, terminal, outputMode, nodeNumber, termWidth, termHeight)
+				if confirmErr != nil {
+					if errors.Is(confirmErr, io.EOF) {
+						return "", false, io.EOF
+					}
+					return "", true, nil
+				}
+				if abort {
+					return "", true, nil
+				}
+				continue // No — re-show prompt and retry
+			}
+			return "", false, err
+		}
+		return value, false, nil
+	}
 }
