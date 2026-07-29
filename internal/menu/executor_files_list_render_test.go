@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -84,6 +85,26 @@ func TestFormatFileListLine_MarkedFile(t *testing.T) {
 
 	if !strings.HasPrefix(line, "*") {
 		t.Errorf("expected tagged file line to start with '*', got %q", line)
+	}
+}
+
+func TestFormatFileListLine_MultibyteFilenameTruncation(t *testing.T) {
+	u := &user.User{}
+	rec := file.FileRecord{
+		Filename:   "abcdefgh日本語.zip",
+		Size:       1024,
+		UploadedAt: time.Now(),
+	}
+
+	line, _ := formatFileListLine(rec, u, false, "^NAME", 1)
+
+	if !utf8.ValidString(line) {
+		t.Fatalf("expected valid UTF-8 output from truncated multibyte filename, got invalid string %q", line)
+	}
+
+	want := string([]rune(rec.Filename)[:12])
+	if got := strings.TrimRight(line, " "); got != want {
+		t.Errorf("expected filename truncated to 12 runes %q, got %q (full line %q)", want, got, line)
 	}
 }
 

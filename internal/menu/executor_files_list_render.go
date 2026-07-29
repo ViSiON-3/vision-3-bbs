@@ -164,8 +164,8 @@ func formatFileListLine(rec file.FileRecord, currentUser *user.User, extendedMod
 	fileNameStr := ""
 	if fileColumnEnabled(currentUser, "name", extendedMode) {
 		fileNameStr = rec.Filename
-		if len(fileNameStr) > 12 {
-			fileNameStr = fileNameStr[:12]
+		if r := []rune(fileNameStr); len(r) > 12 {
+			fileNameStr = string(r[:12])
 		}
 		fileNameStr = fmt.Sprintf("%-12s", fileNameStr)
 	} else {
