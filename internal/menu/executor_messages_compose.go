@@ -107,52 +107,28 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		titlePrompt = "|07Title: |15"
 	}
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-	wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(titlePrompt)), outputMode)
-	if wErr != nil {
-		slog.Warn("failed to write title prompt", "node", nodeNumber, "error", wErr)
-	}
 
 	var subject string
-	var err error
 	for {
-		subject, err = styledInput(terminal, s, outputMode, 30, "")
-		if err != nil {
-			if errors.Is(err, io.EOF) {
+		val, aborted, ferr := e.promptComposeField(s, terminal, ih, titlePrompt, 30, "", outputMode, nodeNumber, termWidth, termHeight)
+		if ferr != nil {
+			if errors.Is(ferr, io.EOF) {
 				slog.Info("user disconnected during title input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
-			if errors.Is(err, errInputAborted) {
-				abort, confirmErr := e.confirmAbortPost(s, terminal, outputMode, nodeNumber, termWidth, termHeight)
-				if confirmErr != nil {
-					if errors.Is(confirmErr, io.EOF) {
-						return nil, "LOGOFF", io.EOF
-					}
-					return nil, "", nil
-				}
-				if abort {
-					return nil, "", nil
-				}
-				// No — re-show prompt and retry
-				wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(titlePrompt)), outputMode)
-				if wErr != nil {
-					slog.Warn("failed to rewrite title prompt", "node", nodeNumber, "error", wErr)
-				}
-				continue
-			}
-			slog.Error("failed reading title input", "node", nodeNumber, "error", err)
+			slog.Error("failed reading title input", "node", nodeNumber, "error", ferr)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading title.\r\n"), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil // Return to menu
 		}
-		subject = strings.TrimSpace(subject)
+		if aborted {
+			return nil, "", nil
+		}
+		subject = strings.TrimSpace(val)
 		if subject != "" {
 			break
 		}
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|01Subject is required.|07\r\n")), outputMode)
-		wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(titlePrompt)), outputMode)
-		if wErr != nil {
-			slog.Warn("failed to rewrite title prompt", "node", nodeNumber, "error", wErr)
-		}
 	}
 
 	// 3. Prompt for To (24 chars, default "All")
@@ -162,34 +138,21 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 	var toUser string
 	for {
-		wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(toPrompt)), outputMode)
-		if wErr != nil {
-			slog.Warn("failed to write 'to' prompt", "node", nodeNumber, "error", wErr)
-		}
-		toUser, err = styledInput(terminal, s, outputMode, 24, "All")
-		if err != nil {
-			if errors.Is(err, io.EOF) {
+		val, aborted, ferr := e.promptComposeField(s, terminal, ih, toPrompt, 24, "All", outputMode, nodeNumber, termWidth, termHeight)
+		if ferr != nil {
+			if errors.Is(ferr, io.EOF) {
 				slog.Info("user disconnected during 'to' input", "node", nodeNumber)
 				return nil, "LOGOFF", io.EOF
 			}
-			if errors.Is(err, errInputAborted) {
-				abort, confirmErr := e.confirmAbortPost(s, terminal, outputMode, nodeNumber, termWidth, termHeight)
-				if confirmErr != nil {
-					if errors.Is(confirmErr, io.EOF) {
-						return nil, "LOGOFF", io.EOF
-					}
-					return nil, "", nil
-				}
-				if abort {
-					return nil, "", nil
-				}
-				continue // No — re-show prompt and retry
-			}
-			slog.Error("failed reading 'to' input", "node", nodeNumber, "error", err)
+			slog.Error("failed reading 'to' input", "node", nodeNumber, "error", ferr)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading recipient.\r\n"), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil
 		}
+		if aborted {
+			return nil, "", nil
+		}
+		toUser = val
 		break
 	}
 	toUser = strings.TrimSpace(toUser)
@@ -322,4 +285,42 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	time.Sleep(1 * time.Second)
 
 	return nil, "", nil
+}
+
+// promptComposeField performs one shared "compose field" input cycle: write the
+// prompt, read via styledInput, and handle EOF/abort. On ESC (errInputAborted) it
+// asks confirmAbortPost; a "No" answer re-shows the prompt and retries in place.
+// It returns aborted=true if the user confirmed abandoning the post (caller should
+// return to the menu), err=io.EOF if the session disconnected, or the raw error
+// from styledInput for any other read failure (caller decides how to report it).
+// Callers own any additional validation (e.g. required-field retry, default
+// substitution) since that differs between the title and to prompts.
+func (e *MenuExecutor) promptComposeField(s ssh.Session, terminal *term.Terminal, ih *editor.InputHandler, prompt string, maxLen int, defaultValue string, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (value string, aborted bool, err error) {
+	for {
+		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+		if wErr != nil {
+			slog.Warn("failed to write compose field prompt", "node", nodeNumber, "error", wErr)
+		}
+		value, err = styledInput(terminal, s, outputMode, maxLen, defaultValue)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return "", false, io.EOF
+			}
+			if errors.Is(err, errInputAborted) {
+				abort, confirmErr := e.confirmAbortPost(s, terminal, outputMode, nodeNumber, termWidth, termHeight)
+				if confirmErr != nil {
+					if errors.Is(confirmErr, io.EOF) {
+						return "", false, io.EOF
+					}
+					return "", true, nil
+				}
+				if abort {
+					return "", true, nil
+				}
+				continue // No — re-show prompt and retry
+			}
+			return "", false, err
+		}
+		return value, false, nil
+	}
 }
