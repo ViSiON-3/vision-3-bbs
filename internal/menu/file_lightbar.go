@@ -71,6 +71,11 @@ type fileLightbar struct {
 	cmdIndex             int
 }
 
+// runListFilesLightbar builds a fileLightbar from st's already-loaded
+// templates, pagination, and area state, then drives the interactive
+// lightbar file browser via run(). It always returns a nil *user.User; the
+// command is "LOGOFF" with err set (typically io.EOF) when the session
+// disconnected or idled out, or ("", nil) on a normal user-initiated quit.
 func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 
 	// Hide cursor on entry, show on exit.
@@ -243,6 +248,13 @@ func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 	return lb.run()
 }
 
+// run drives the lightbar's main input/redraw loop: it renders the file
+// list, command bar, and page indicator (redrawing only the regions whose
+// state changed since the last iteration), dispatches navigation and command
+// hotkeys — including mark, view, download, upload, and the sysop-only edit,
+// kill, move, and rename commands — and loops until the user quits or the
+// session ends. Return values follow the same convention documented on
+// runListFilesLightbar, which constructs lb and calls this method.
 func (lb *fileLightbar) run() (*user.User, string, error) {
 	// Track previous state for smart refresh.
 	prevSelectedIndex := -1
