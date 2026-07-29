@@ -252,7 +252,6 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		botTemplateBytes:     botTemplateBytes,
 		processedMidTemplate: processedMidTemplate,
 		processedBotTemplate: processedBotTemplate,
-		fconfpath:            e.resolveFileConferencePath(currentUser),
 		filesPerPage:         filesPerPage,
 		totalFiles:           totalFiles,
 		totalPages:           totalPages,
@@ -273,6 +272,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Classic display loop
+	st.fconfpath = st.e.resolveFileConferencePath(st.currentUser)
 	for {
 		if err := st.renderFileListPage(); err != nil {
 			slog.Error("failed rendering file list page", "node", st.nodeNumber, "error", err)
