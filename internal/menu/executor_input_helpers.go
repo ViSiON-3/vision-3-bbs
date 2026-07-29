@@ -100,7 +100,7 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 	remainingStyle := string(ansi.ReplacePipeCodes([]byte("|B12|15")))
 	resetColor := "\x1b[0m"
 
-	shadeChar := "░"
+	shadeChar := "\u2591"
 
 	input := make([]byte, 0, maxLen)
 	if defaultValue != "" {
