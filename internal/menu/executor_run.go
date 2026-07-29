@@ -158,58 +158,11 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		}
 
 		// Check Menu Password if required
-		menuPassword := menuRec.Password
-		if menuPassword != "" {
-			slog.Debug("menu requires password", "menu", st.currentMenuName)
-			passwordOk := false
-			for i := 0; i < 3; i++ { // Allow 3 attempts
-				prompt := fmt.Sprintf(e.LoadedStrings.ExecMenuPasswordPrompt, st.currentMenuName, i+1)
-				processedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
-				wErr := terminalio.WriteProcessedBytes(terminal, processedPrompt, outputMode)
-				if wErr != nil {
-					slog.Error("failed writing menu password prompt", "node", nodeNumber, "error", wErr)
-				}
-
-				// Use our helper for secure input reading (using ssh.Session 's')
-				inputPassword, err := readPasswordSecurely(s, terminal, outputMode)
-				if err != nil {
-					if errors.Is(err, io.EOF) {
-						slog.Info("user disconnected during menu password entry", "menu", st.currentMenuName)
-						return "LOGOFF", nil, nil // Signal logoff
-					}
-					if errors.Is(err, errInputAborted) { // Check for specific error
-						slog.Info("user interrupted password entry for menu", "menu", st.currentMenuName)
-						return "LOGOFF", nil, nil // Signal logoff
-					}
-					slog.Error("failed to read password input securely", "error", err)
-					return "", nil, fmt.Errorf("failed reading password: %w", err)
-				}
-				if inputPassword == menuPassword {
-					passwordOk = true
-					// Use new helper for feedback message
-					wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecPasswordAccepted)), outputMode)
-					if wErr != nil {
-						slog.Error("failed writing password accepted message", "error", wErr)
-					}
-					break
-				} else {
-					// Use new helper for feedback message
-					wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecIncorrectPassword)), outputMode)
-					if wErr != nil {
-						slog.Error("failed writing incorrect password message", "error", wErr)
-					}
-				}
+		if _, act, retErr := st.checkMenuPassword(menuRec); act == loopReturn {
+			if retErr != nil {
+				return "", nil, retErr
 			}
-			if !passwordOk {
-				slog.Warn("user failed password entry for menu", "menu", st.currentMenuName, "user", st.currentUser)
-				// Use new helper for feedback message
-				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecTooManyAttempts)), outputMode)
-				if wErr != nil {
-					slog.Error("failed writing too many attempts message", "error", wErr)
-				}
-				time.Sleep(1 * time.Second)
-				return "LOGOFF", nil, nil // Signal logoff after too many failures
-			}
+			return "LOGOFF", nil, nil
 		}
 
 		// Check Menu ACS before proceeding
@@ -228,43 +181,11 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		}
 
 		// --- AutoRun Command Execution ---
-		autoRunActionTaken := false
-		for _, cmd := range commands {
-			if cmd.Keys == "//" || cmd.Keys == "~~" {
-				autoRunKey := fmt.Sprintf("%s:%s", st.currentMenuName, cmd.Command) // Unique key per menu/command
-
-				if cmd.Keys == "//" && autoRunLog[autoRunKey] {
-					slog.Debug("skipping already executed run-once command", "command", autoRunKey)
-					continue // Skip if already run
-				}
-				if checkACS(cmd.ACS, st.currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
-					slog.Info("executing autorun command", "keys", cmd.Keys, "command", cmd.Command, "acs", cmd.ACS)
-
-					if cmd.Keys == "//" {
-						autoRunLog[autoRunKey] = true
-					}
-					nextAction, nextMenu, userResult, err := e.executeCommandAction(cmd.Command, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
-					if err != nil {
-						return "", userResult, err
-					}
-					if nextAction == "GOTO" {
-						st.previousMenuName = st.currentMenuName
-						st.currentMenuName = nextMenu
-						autoRunActionTaken = true
-						break
-					} else if nextAction == "LOGOFF" {
-						return "LOGOFF", userResult, nil
-					} else if nextAction == "CONTINUE" {
-						if userResult != nil {
-							st.currentUser = userResult
-						}
-					}
-				} else {
-					slog.Debug("autorun command denied by ACS", "keys", cmd.Keys, "command", cmd.Command, "acs", cmd.ACS)
-				}
-			}
-		}
-		if autoRunActionTaken {
+		autoRunAct, autoRunRetAction, autoRunRetErr := st.runAutoRunCommands(commands)
+		switch autoRunAct {
+		case loopReturn:
+			return autoRunRetAction, st.currentUser, autoRunRetErr
+		case loopContinue:
 			continue
 		}
 		// --- End AutoRun Command Execution ---
@@ -376,40 +297,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 		// 7. Handle Action or No Match
 		if matched {
-			// Update session activity before executing command
-			if matchedNodeActivity != "" {
-				if sess := e.SessionRegistry.Get(nodeNumber); sess != nil {
-					sess.Mutex.Lock()
-					sess.Activity = matchedNodeActivity
-					sess.Mutex.Unlock()
-				}
+			dispatchAct, dispatchRetAction, dispatchRetErr := st.dispatchMatchedAction(nextAction, matchedNodeActivity, menuDefaultActivity)
+			switch dispatchAct {
+			case loopReturn:
+				return dispatchRetAction, st.currentUser, dispatchRetErr
+			case loopContinue:
+				continue
 			}
-
-			// Execute the determined action here
-			nextActionType, nextMenuName, userResult, err := e.executeCommandAction(nextAction, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
-			if err != nil {
-				return "", userResult, err
-			}
-			if nextActionType == "GOTO" {
-				st.previousMenuName = st.currentMenuName // Store current before going to next
-				st.currentMenuName = nextMenuName
-				continue // Continue main loop to the new menu
-			} else if nextActionType == "LOGOFF" {
-				return "LOGOFF", userResult, nil // Return specific logoff action
-			} else if nextActionType == "CONTINUE" {
-				// Reset activity to menu default after command completes
-				if sess := e.SessionRegistry.Get(nodeNumber); sess != nil {
-					sess.Mutex.Lock()
-					sess.Activity = menuDefaultActivity
-					sess.Mutex.Unlock()
-				}
-				if userResult != nil {
-					st.currentUser = userResult
-				}
-				continue // Re-display current menu prompt
-			}
-			slog.Warn("unhandled action type after executing command", "actionType", nextActionType, "command", nextAction)
-			continue
 		} else {
 			slog.Debug("input did not match any commands in menu", "input", st.userInput, "menu", st.currentMenuName)
 
