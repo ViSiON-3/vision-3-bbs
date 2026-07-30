@@ -51,8 +51,10 @@ func (p *areaLightbarPicker[T]) renderItemArea() error {
 		line := p.buildItemLine(p.items[idx], idx+1)
 		if idx == p.selectedIndex {
 			stripped := stripAreaAnsi(line)
-			if len(stripped) > p.termWidth {
-				stripped = stripped[:p.termWidth]
+			// Runes, not bytes: the row text comes from area Tag/Name/
+			// Description, which can hold multi-byte characters.
+			if strippedRunes := []rune(stripped); len(strippedRunes) > p.termWidth {
+				stripped = string(strippedRunes[:p.termWidth])
 			}
 			rendered := p.hiColorSeq + padRight(stripped, p.termWidth) + "\x1b[0m"
 			if err := terminalio.WriteProcessedBytes(p.terminal, []byte(rendered), p.outputMode); err != nil {
