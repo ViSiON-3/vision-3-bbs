@@ -325,7 +325,14 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 				'X': "GENERAL > General Discussion [1/42]",
 				'K': strconv.Itoa(nodeNumber),
 			}
-			sampleAutoWidths := buildAutoWidths(sampleSubs, 42, 80, false)
+			// Mirror the real reader path: in CP437 mode the substitutions are
+			// converted to CP437 bytes before widths are measured, so the preview
+			// sizes and renders the same way the message reader will.
+			cp437Preview := outputMode == ansi.OutputModeCP437
+			if cp437Preview {
+				sampleSubs = convertSubsToCP437(sampleSubs)
+			}
+			sampleAutoWidths := buildAutoWidths(sampleSubs, 42, 80, cp437Preview)
 
 			processedPreview := processTemplate(hdrBytes, sampleSubs, sampleAutoWidths)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
