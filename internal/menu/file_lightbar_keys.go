@@ -88,6 +88,12 @@ func (lb *fileLightbar) handleNavKey(keyInt int) (key string, dispatch bool, exi
 	case editor.KeyEsc: // Bare Esc
 		return "", false, true, nil, "", nil
 	case editor.KeyEnter: // Enter: execute selected command bar item
+		// FIX: guard against an empty command bar — cmdIndex is otherwise
+		// unconditionally trusted as a valid index into cmdEntries, which
+		// panics if the bar has no entries (e.g. a misconfigured BAR file).
+		if len(lb.cmdEntries) == 0 {
+			return "", false, false, nil, "", nil
+		}
 		return lb.cmdEntries[lb.cmdIndex].hotkey, true, false, nil, "", nil
 	default:
 		if keyInt >= 32 && keyInt < 127 {
