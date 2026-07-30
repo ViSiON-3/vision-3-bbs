@@ -223,68 +223,14 @@ func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 // runListFilesLightbar, which constructs lb and calls this method.
 func (lb *fileLightbar) run() (*user.User, string, error) {
 	// Track previous state for smart refresh.
-	prevSelectedIndex := -1
-	prevTopIndex := -1
-	prevCmdIndex := -1
-	prevPage := -1
-	needFullRedraw := true
+	frame := &lbFrame{prevSelectedIndex: -1, prevTopIndex: -1, prevCmdIndex: -1, prevPage: -1, needFullRedraw: true}
 
 	for {
 		lb.clampSelection()
 
-		if needFullRedraw {
-			if err := lb.renderFull(); err != nil {
-				return nil, "", err
-			}
-			needFullRedraw = false
-		} else if lb.topIndex != prevTopIndex {
-			// Viewport scrolled — full redraw of all regions to prevent overlap.
-			if err := lb.renderTop(); err != nil {
-				return nil, "", err
-			}
-			if err := lb.renderFileArea(); err != nil {
-				return nil, "", err
-			}
-			if err := lb.renderSeparator(); err != nil {
-				return nil, "", err
-			}
-			if err := lb.renderCmdBar(); err != nil {
-				return nil, "", err
-			}
-			if err := lb.renderPageIndicator(); err != nil {
-				return nil, "", err
-			}
-		} else if lb.selectedIndex != prevSelectedIndex {
-			// Same viewport, selection changed — redraw old/new rows; redraw TOP if page changed.
-			curPage, _ := lb.calculatePageInfo()
-			if curPage != prevPage {
-				if err := lb.renderTop(); err != nil {
-					return nil, "", err
-				}
-			}
-			if prevSelectedIndex >= 0 && prevSelectedIndex < len(lb.allFiles) {
-				if row, h := lb.screenRowForFile(prevSelectedIndex); row >= 0 {
-					if err := lb.writeFileRow(row, prevSelectedIndex, false, h); err != nil {
-						return nil, "", err
-					}
-				}
-			}
-			if row, h := lb.screenRowForFile(lb.selectedIndex); row >= 0 {
-				if err := lb.writeFileRow(row, lb.selectedIndex, true, h); err != nil {
-					return nil, "", err
-				}
-			}
+		if err := lb.refreshFrame(frame); err != nil {
+			return nil, "", err
 		}
-		if lb.cmdIndex != prevCmdIndex {
-			if err := lb.renderCmdBar(); err != nil {
-				return nil, "", err
-			}
-		}
-
-		prevSelectedIndex = lb.selectedIndex
-		prevTopIndex = lb.topIndex
-		prevCmdIndex = lb.cmdIndex
-		prevPage, _ = lb.calculatePageInfo()
 
 		keyInt, err := lb.ih.ReadKey()
 		if err != nil {
@@ -367,7 +313,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				copy(lb.cmdEntries, lb.userEntries)
 			}
 			lb.cmdIndex = 0
-			needFullRedraw = true
+			frame.needFullRedraw = true
 			continue
 		}
 
@@ -402,45 +348,12 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			return nil, "", nil
 
 		case "i": // Info: show file detail overlay
-			if len(lb.allFiles) > 0 {
-				sel := lb.allFiles[lb.selectedIndex]
-				descLines := formatDIZLines(sel.Description, dizMaxWidth, dizMaxLines)
-
-				_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(ansi.ClearScreen()), lb.outputMode)
-
-				d1 := fmt.Sprintf("|15Filename  : |07%s\r\n", sel.Filename)
-				d2 := fmt.Sprintf("|15Size      : |07%s\r\n", compactFileSize(sel.Size))
-				_ = lb.writePipe(d1)
-				_ = lb.writePipe(d2)
-
-				for i, dl := range descLines {
-					var dLine string
-					if i == 0 {
-						dLine = fmt.Sprintf("|15Desc      : |07%s\r\n", dl)
-					} else {
-						dLine = fmt.Sprintf("|07            %s\r\n", dl)
-					}
-					_ = lb.writePipe(dLine)
-				}
-				if len(descLines) == 0 {
-					_ = lb.writePipe("|15Desc      : |07(none)\r\n")
-				}
-
-				d3 := fmt.Sprintf("|15Uploaded  : |07%s\r\n", sel.UploadedAt.Format("01/02/2006 15:04"))
-				d4 := fmt.Sprintf("|15Uploader  : |07%s\r\n", sel.UploadedBy)
-				d5 := fmt.Sprintf("|15Downloads : |07%d\r\n", sel.DownloadCount)
-				_ = lb.writePipe(d3)
-				_ = lb.writePipe(d4)
-				_ = lb.writePipe(d5)
-
-				_ = lb.writePipe("\r\n|08Press any key to return...|07")
-				if _, waitErr := lb.ih.ReadKey(); waitErr != nil {
-					if logoffIfDisconnected(waitErr) {
-						return nil, "LOGOFF", io.EOF
-					}
-					return nil, "", waitErr
-				}
-				needFullRedraw = true
+			refresh, exit, result, action, infoErr := lb.showFileInfo()
+			if exit {
+				return result, action, infoErr
+			}
+			if refresh {
+				frame.needFullRedraw = true
 			}
 
 		case "v":
@@ -463,7 +376,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				}
 				// Hide cursor again.
 				lb.endFooterPrompt()
-				needFullRedraw = true
+				frame.needFullRedraw = true
 			}
 
 		case "d":
@@ -471,7 +384,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				msg := "\r\n|07No files marked for download. Use |15Space|07 to mark files.|07\r\n"
 				_ = lb.writePipe(msg)
 				time.Sleep(1 * time.Second)
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 
@@ -487,13 +400,13 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				}
 				slog.Error("error getting download confirmation", "node", lb.nodeNumber, "error", promptErr)
 				lb.endFooterPrompt()
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 
 			if !proceed {
 				lb.endFooterPrompt()
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 
@@ -570,7 +483,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			// Refresh file list.
 			lb.refreshFileList()
 			lb.endFooterPrompt()
-			needFullRedraw = true
+			frame.needFullRedraw = true
 
 		case "u":
 			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
@@ -584,7 +497,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			// Refresh file list after upload.
 			lb.refreshFileList()
 			lb.endFooterPrompt()
-			needFullRedraw = true
+			frame.needFullRedraw = true
 
 		case "e": // Edit description (sysop only)
 			if !lb.isSysop || len(lb.allFiles) == 0 {
@@ -602,7 +515,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 				}
 			}
-			needFullRedraw = true
+			frame.needFullRedraw = true
 
 		case "k": // Kill/delete file (sysop only)
 			if !lb.isSysop || len(lb.allFiles) == 0 {
@@ -618,7 +531,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				if logoffIfDisconnected(promptErr) {
 					return nil, "LOGOFF", io.EOF
 				}
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			if proceed {
@@ -637,7 +550,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					lb.refreshFileList()
 				}
 			}
-			needFullRedraw = true
+			frame.needFullRedraw = true
 
 		case "m": // Move file to another area (sysop only)
 			if !lb.isSysop || len(lb.allFiles) == 0 {
@@ -649,7 +562,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			areaInput, readErr := readLineFromSessionIHAllowAbort(lb.s, lb.terminal)
 			lb.endFooterPrompt()
 			if readErr != nil || strings.TrimSpace(areaInput) == "" {
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			// Resolve area by ID or tag.
@@ -667,7 +580,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			}
 			if targetArea == nil {
 				lb.errMsgPause("\r\n|01Area not found.|07\r\n")
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			confirmPrompt := fmt.Sprintf("Move %s to %s?", rec.Filename, targetArea.Name)
@@ -679,7 +592,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				if logoffIfDisconnected(promptErr) {
 					return nil, "LOGOFF", io.EOF
 				}
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			if proceed {
@@ -690,7 +603,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					lb.refreshFileList()
 				}
 			}
-			needFullRedraw = true
+			frame.needFullRedraw = true
 
 		case "r": // Rename file on disk (sysop only)
 			if !lb.isSysop || len(lb.allFiles) == 0 {
@@ -702,13 +615,13 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			newName, readErr := readLineFromSessionIHAllowAbort(lb.s, lb.terminal)
 			lb.endFooterPrompt()
 			if readErr != nil || strings.TrimSpace(newName) == "" {
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			newName = filepath.Base(strings.TrimSpace(newName))
 			if newName == "." || newName == ".." {
 				lb.errMsgPause("\r\n|01Invalid filename.|07\r\n")
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			// Check for duplicate filename in the current area.
@@ -721,13 +634,13 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			}
 			if duplicate {
 				lb.errMsgPause("\r\n|01Filename already exists in this area.|07\r\n")
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			oldPath, pathErr := lb.e.FileMgr.GetFilePath(rec.ID)
 			if pathErr != nil {
 				slog.Error("failed to resolve path", "node", lb.nodeNumber, "file", rec.Filename, "error", pathErr)
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			newPath := filepath.Join(filepath.Dir(oldPath), newName)
@@ -744,19 +657,19 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				if oldStatErr != nil || !os.SameFile(oldInfo, newInfo) {
 					slog.Error("rename target already exists on disk", "node", lb.nodeNumber, "path", newPath)
 					lb.errMsgPause("\r\n|01A file with that name already exists.|07\r\n")
-					needFullRedraw = true
+					frame.needFullRedraw = true
 					continue
 				}
 			case !errors.Is(statErr, os.ErrNotExist):
 				slog.Error("cannot stat rename target", "node", lb.nodeNumber, "path", newPath, "error", statErr)
 				lb.errMsgPause("\r\n|01Rename failed.|07\r\n")
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			if renErr := os.Rename(oldPath, newPath); renErr != nil {
 				slog.Error("failed to rename file", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "error", renErr)
 				lb.errMsgPause("\r\n|01Rename failed.|07\r\n")
-				needFullRedraw = true
+				frame.needFullRedraw = true
 				continue
 			}
 			if updErr := lb.e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
@@ -770,7 +683,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				slog.Info("sysop renamed file in area", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "area", lb.currentAreaID)
 				lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 			}
-			needFullRedraw = true
+			frame.needFullRedraw = true
 		}
 	}
 }
