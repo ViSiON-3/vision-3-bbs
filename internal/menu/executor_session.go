@@ -261,16 +261,31 @@ func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbor
 				_, _ = terminal.Write([]byte("\r\n"))
 				return "", errInputAborted
 			}
+			// Ignored (ESC has no other meaning here): drop any partial
+			// UTF-8 sequence rather than let it survive to swallow whatever
+			// comes next.
+			utf8Pending = nil
 		default:
 			if key >= 32 && key < 127 {
 				line = append(line, byte(key))
 				_, _ = terminal.Write([]byte{byte(key)})
+				// A completed ASCII keystroke means any partial multi-byte
+				// sequence still buffered belongs to a different, abandoned
+				// character (e.g. a stray lead byte with no valid
+				// continuation) and must not be left around to absorb the
+				// bytes of the NEXT legitimate character.
+				utf8Pending = nil
 			} else if key >= 128 && key <= 255 {
 				var echo []byte
 				line, echo, utf8Pending = decodeExtendedKey(line, mode, byte(key), utf8Pending)
 				if len(echo) > 0 {
 					_, _ = terminal.Write(echo)
 				}
+			} else {
+				// Any other ignored key (e.g. an untranslated control code
+				// or synthetic key we don't act on here): same reasoning as
+				// the ASCII branch above.
+				utf8Pending = nil
 			}
 		}
 	}

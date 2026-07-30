@@ -217,6 +217,12 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 					input = append(input, ch)
 					renderBox(true)
 				}
+				// A completed ASCII keystroke means any partial multi-byte
+				// sequence still buffered belongs to a different, abandoned
+				// character (e.g. a stray lead byte with no valid
+				// continuation) and must not be left around to absorb the
+				// bytes of the NEXT legitimate character.
+				utf8Pending = nil
 			} else if ch >= 128 {
 				// Extended character (CP437 byte, or one byte of a multi-byte
 				// UTF-8 sequence). decodeExtendedKey only appends once a full
@@ -238,6 +244,11 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 					// grow input past maxLen.
 					_, _, utf8Pending = decodeExtendedKey(nil, outputMode, ch, utf8Pending)
 				}
+			} else {
+				// Any other ignored byte (e.g. an untranslated control
+				// code): same reasoning as the ASCII branch above -- don't
+				// leave a partial sequence around to absorb what comes next.
+				utf8Pending = nil
 			}
 		}
 	}

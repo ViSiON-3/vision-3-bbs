@@ -79,6 +79,29 @@ func TestStyledInput_CP437ByteRendersOneColumn(t *testing.T) {
 	}
 }
 
+// TestStyledInput_StrayLeadByteDoesNotEatNextChar mirrors the reader-side
+// regression: styledInput's read loop has the identical utf8Pending
+// structure, and the same bug applied here -- an ASCII keystroke between a
+// stray lead byte and a legitimate multi-byte character must not leave the
+// stale pending buffer around to swallow it.
+func TestStyledInput_StrayLeadByteDoesNotEatNextChar(t *testing.T) {
+	const maxLen = 5
+	ts := newTestSession("\xc9A\xc3\xa9\r")
+	SetSessionOutputMode(ts, ansi.OutputModeUTF8)
+	terminal := newTestTerminal(ts)
+
+	result, err := styledInput(terminal, ts, ansi.OutputModeUTF8, maxLen, "")
+	if err != nil {
+		t.Fatalf("styledInput: %v", err)
+	}
+	if !utf8.ValidString(result) {
+		t.Fatalf("result is not valid UTF-8: %q", result)
+	}
+	if result != "Aé" {
+		t.Errorf("result = %q, want %q (stray lead byte must not swallow the next legitimate character)", result, "Aé")
+	}
+}
+
 // TestStyledInput_DefaultValueClampCountsRunesNotBytes is the maxLen-as-bytes
 // hazard called out in the design brief: "éééé" is 4 runes but 8 bytes. A
 // byte-based clamp (input[:maxLen]) on maxLen=3 would slice mid-rune and

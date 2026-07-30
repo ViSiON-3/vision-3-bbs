@@ -152,3 +152,58 @@ func TestReadLineFromSessionIH_ASCIIUnchanged(t *testing.T) {
 		t.Errorf("line = %q, want %q", line, "hel")
 	}
 }
+
+// TestReadLineFromSessionIH_StrayLeadByteDoesNotEatNextChar reproduces the
+// bug found in review: utf8Pending was only cleared by the extended-byte
+// branch and by Backspace. A stray valid-looking lead byte (0xC9 here, which
+// wants one continuation byte) left pending by itself; the ASCII branch for
+// 'A' appended and echoed 'A' but never touched utf8Pending, so the next
+// extended byte (0xC3, the lead byte of a legitimate "é") was appended to
+// the STALE pending buffer instead of starting fresh. 0xC9+0xC3 is not a
+// valid sequence, so it was dropped as malformed -- silently eating the
+// leading byte of "é" -- and the trailing continuation byte 0xA9 was then
+// dropped too as an orphaned continuation byte with no lead. Net effect:
+// "é" vanished with no echo and no error, and the stored line was "A", not
+// "Aé". Reachable whenever a UTF-8-mode session's client sends a high byte
+// with no valid continuation, e.g. auto-detection misreading a raw-CP437
+// client as modern.
+func TestReadLineFromSessionIH_StrayLeadByteDoesNotEatNextChar(t *testing.T) {
+	ts := newTestSession("\xc9A\xc3\xa9\r")
+	SetSessionOutputMode(ts, ansi.OutputModeUTF8)
+	terminal := newTestTerminal(ts)
+
+	line, err := readLineFromSessionIH(ts, terminal)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIH: %v", err)
+	}
+	if !utf8.ValidString(line) {
+		t.Fatalf("line is not valid UTF-8: %q", line)
+	}
+	if line != "Aé" {
+		t.Errorf("line = %q, want %q (stray lead byte must not swallow the next legitimate character)", line, "Aé")
+	}
+}
+
+// TestReadLineFromSessionIH_BackspaceInterruptsPendingUTF8Sequence verifies
+// the case right next to the bug above: Backspace arriving while a partial
+// multi-byte sequence is buffered (nothing appended to line or echoed yet)
+// must discard only the pending bytes -- not touch line, not echo "\b \b" --
+// and normal typing afterward must resume cleanly.
+func TestReadLineFromSessionIH_BackspaceInterruptsPendingUTF8Sequence(t *testing.T) {
+	// 0xC3 is a valid lead byte awaiting one continuation byte; Backspace
+	// arrives before that continuation byte, then 'x', then Enter.
+	ts := newTestSession("\xc3\x08x\r")
+	SetSessionOutputMode(ts, ansi.OutputModeUTF8)
+	terminal := newTestTerminal(ts)
+
+	line, err := readLineFromSessionIH(ts, terminal)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIH: %v", err)
+	}
+	if line != "x" {
+		t.Errorf("line = %q, want %q (backspace on a pending sequence must not affect line)", line, "x")
+	}
+	if n := strings.Count(ts.output(), "\b \b"); n != 0 {
+		t.Errorf("output contains %d \\b \\b sequences, want 0 (nothing was displayed for the pending byte yet)", n)
+	}
+}
