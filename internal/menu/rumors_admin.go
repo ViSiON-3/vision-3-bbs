@@ -290,11 +290,20 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 		rumorsMu.Unlock()
 		return currentUser, "", nil
 	}
+	removed := false
 	for i, rr := range rd.Rumors {
 		if rr.ID == num {
 			rd.Rumors = append(rd.Rumors[:i], rd.Rumors[i+1:]...)
+			removed = true
 			break
 		}
+	}
+	if !removed {
+		// Another session deleted it between the lookup above and this reload.
+		// Nothing changed, so skip the write and don't claim a deletion.
+		rumorsMu.Unlock()
+		wv(terminal, "\r\n|04Rumor not found.\r\n", outputMode)
+		return currentUser, "", nil
 	}
 	saveErr := saveRumorsData(e.RootConfigPath, rd)
 	rumorsMu.Unlock()
