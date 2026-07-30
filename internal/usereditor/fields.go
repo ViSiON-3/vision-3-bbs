@@ -307,16 +307,18 @@ func infoformStatus(dataDir string, userID int) string {
 
 // padRight pads a string to width with spaces, truncating if longer.
 func padRight(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
+	runes := []rune(s)
+	if len(runes) >= width {
+		return string(runes[:width])
 	}
-	return s + strings.Repeat(" ", width-len(s))
+	return s + strings.Repeat(" ", width-len(runes))
 }
 
 // padLeft pads a string on the left to width.
 func padLeft(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
+	runes := []rune(s)
+	if len(runes) >= width {
+		return string(runes[:width])
 	}
-	return strings.Repeat(" ", width-len(s)) + s
+	return strings.Repeat(" ", width-len(runes)) + s
 }
