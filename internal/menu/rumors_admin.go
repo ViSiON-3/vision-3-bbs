@@ -272,7 +272,15 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 	// Confirm
 	wv(terminal, fmt.Sprintf("\r\n|07%s\r\n", r.Text), outputMode)
 	delYes, delErr := e.PromptYesNo(s, terminal, "|09Delete this rumor? @", outputMode, nodeNumber, termWidth, termHeight, false)
-	if delErr != nil || !delYes {
+	if delErr != nil {
+		// A disconnect must end the session rather than read as "no", matching
+		// the anonymous prompt above and every other read in this file.
+		if errors.Is(delErr, io.EOF) {
+			return nil, "LOGOFF", io.EOF
+		}
+		return currentUser, "", nil
+	}
+	if !delYes {
 		return currentUser, "", nil
 	}
 
