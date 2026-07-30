@@ -1,6 +1,8 @@
 package menu
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -101,6 +103,134 @@ func TestRunCfgToggle_NilUserReturnsNilWithoutPanic(t *testing.T) {
 	}
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
+	}
+}
+
+// --- UpdateUser failure rollback ---
+//
+// These two tests force a genuine UpdateUser save failure (permission denied
+// on users.json) to characterize the rollback fix: on save failure, the
+// in-memory currentUser must revert to its pre-mutation value, matching what
+// is genuinely still on disk.
+//
+// breakUserStore makes users.json read-only so a subsequent UpdateUser call
+// fails with a real write error, and schedules cleanup to restore write
+// access so t.TempDir() can remove it afterward. Chmod-ing the *directory*
+// does not work for this: an existing file can still be truncated and
+// rewritten by its owner as long as the directory permits opening it --
+// os.WriteFile only needs write access to the file itself, not create/rename
+// access to its parent directory. Verified empirically before writing these
+// tests (see the report).
+func breakUserStore(t *testing.T, dir string) {
+	t.Helper()
+	usersFile := filepath.Join(dir, "users.json")
+	if _, err := os.Stat(usersFile); err != nil {
+		t.Fatalf("stat users.json before breaking it: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(usersFile, 0o600) })
+	if err := os.Chmod(usersFile, 0o400); err != nil {
+		t.Fatalf("chmod users.json: %v", err)
+	}
+}
+
+// reloadPersistedUser restores write access to users.json and opens a fresh
+// *user.UserMgr over the same data directory, so the returned user reflects
+// what genuinely made it to disk. A second GetUser on the ORIGINAL manager
+// would not prove this: UserMgr.UpdateUser writes its in-memory map entry
+// before attempting the save and does not roll that back on error (unlike
+// UpdateUserByID, which does), so the original manager's cache would show the
+// failed-to-persist value. Reloading from disk sidesteps that unrelated,
+// pre-existing gap in internal/user and tests only what this fix controls.
+func reloadPersistedUser(t *testing.T, dir, handle string) *user.User {
+	t.Helper()
+	if err := os.Chmod(filepath.Join(dir, "users.json"), 0o600); err != nil {
+		t.Fatalf("restore users.json permissions: %v", err)
+	}
+	reloaded, err := user.NewUserManager(dir)
+	if err != nil {
+		t.Fatalf("reload NewUserManager: %v", err)
+	}
+	persisted, ok := reloaded.GetUser(handle)
+	if !ok {
+		t.Fatalf("user %q not found after reload", handle)
+	}
+	return persisted
+}
+
+func TestRunCfgToggle_UpdateFailureRollsBackAndPreservesStore(t *testing.T) {
+	dir := t.TempDir()
+	um, err := user.NewUserManager(dir)
+	if err != nil {
+		t.Fatalf("NewUserManager: %v", err)
+	}
+	u, err := um.AddUser("password", "Tester", "Real Name", "Loc")
+	if err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if u.HotKeys {
+		t.Fatal("expected HotKeys to default false")
+	}
+	breakUserStore(t, dir)
+
+	e := &MenuExecutor{}
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	getter := func(u *user.User) bool { return u.HotKeys }
+	setter := func(u *user.User, v bool) { u.HotKeys = v }
+
+	returned, action, err := runCfgToggle(e, ts, terminal, um, u, 1, fixedCfgTestTime, "",
+		ansi.OutputModeUTF8, "Hot Keys", getter, setter)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if action != "" {
+		t.Errorf("action = %q, want empty", action)
+	}
+	if returned.HotKeys {
+		t.Error("HotKeys should have rolled back to false in memory after the save failed")
+	}
+
+	persisted := reloadPersistedUser(t, dir, "Tester")
+	if persisted.HotKeys {
+		t.Error("store should still hold HotKeys=false; the failed write must not have reached disk")
+	}
+}
+
+func TestRunCfgScreenWidth_UpdateFailureRollsBackAndPreservesStore(t *testing.T) {
+	dir := t.TempDir()
+	um, err := user.NewUserManager(dir)
+	if err != nil {
+		t.Fatalf("NewUserManager: %v", err)
+	}
+	u, err := um.AddUser("password", "Tester", "Real Name", "Loc")
+	if err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	originalWidth := u.ScreenWidth
+	breakUserStore(t, dir)
+
+	e := &MenuExecutor{}
+	ts := newTestSession("100\r")
+	terminal := newTestTerminal(ts)
+	c := &cmdCtx{
+		e: e, s: ts, terminal: terminal, userManager: um, currentUser: u,
+		nodeNumber: 1, outputMode: ansi.OutputModeUTF8,
+	}
+
+	returned, action, err := runCfgScreenWidth(c, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if action != "" {
+		t.Errorf("action = %q, want empty", action)
+	}
+	if returned.ScreenWidth != originalWidth {
+		t.Errorf("ScreenWidth = %d, want rolled back to %d in memory after the save failed", returned.ScreenWidth, originalWidth)
+	}
+
+	persisted := reloadPersistedUser(t, dir, "Tester")
+	if persisted.ScreenWidth != originalWidth {
+		t.Errorf("store ScreenWidth = %d, want unchanged %d; the failed write must not have reached disk", persisted.ScreenWidth, originalWidth)
 	}
 }
 

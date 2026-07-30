@@ -99,8 +99,10 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
+	originalHash := currentUser.PasswordHash
 	currentUser.PasswordHash = string(hashed)
 	if err := userManager.UpdateUser(currentUser); err != nil {
+		currentUser.PasswordHash = originalHash
 		slog.Error("failed to save password", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}

@@ -105,8 +105,10 @@ func runCfgColor(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
+	original := currentUser.Colors[slot]
 	currentUser.Colors[slot] = val
 	if err := userManager.UpdateUser(currentUser); err != nil {
+		currentUser.Colors[slot] = original
 		slog.Error("failed to save color", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
@@ -161,6 +163,8 @@ func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
+	originalColumns := currentUser.FileListColumns
+
 	boolStr := func(v bool) string {
 		if v {
 			return e.LoadedStrings.CfgToggleOn
@@ -201,6 +205,7 @@ func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
 		input = strings.TrimSpace(strings.ToUpper(input))
 		if input == "" || input == "Q" {
 			if err := userManager.UpdateUser(currentUser); err != nil {
+				currentUser.FileListColumns = originalColumns
 				slog.Error("failed to save file column preferences", "node", nodeNumber, "error", err)
 			}
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.CfgFileColumnsSaved)), outputMode)

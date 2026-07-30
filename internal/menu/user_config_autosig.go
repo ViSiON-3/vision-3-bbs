@@ -102,8 +102,10 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 				body = strings.Join(lines, "\n")
 			}
 
+			originalSig := currentUser.AutoSignature
 			currentUser.AutoSignature = body
 			if err := userManager.UpdateUser(currentUser); err != nil {
+				currentUser.AutoSignature = originalSig
 				slog.Error("failed to save auto-signature", "node", nodeNumber, "error", err)
 				return currentUser, "", nil
 			}
@@ -118,8 +120,10 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 			if currentUser.AutoSignature == "" {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|03You don't have an Auto-Signature to delete!|07\r\n")), outputMode)
 			} else {
+				originalSig := currentUser.AutoSignature
 				currentUser.AutoSignature = ""
 				if err := userManager.UpdateUser(currentUser); err != nil {
+					currentUser.AutoSignature = originalSig
 					slog.Error("failed to delete auto-signature", "node", nodeNumber, "error", err)
 					return currentUser, "", nil
 				}

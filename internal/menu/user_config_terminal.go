@@ -55,8 +55,10 @@ func runCfgScreenWidth(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
+	original := currentUser.ScreenWidth
 	currentUser.ScreenWidth = val
 	if err := userManager.UpdateUser(currentUser); err != nil {
+		currentUser.ScreenWidth = original
 		slog.Error("failed to save screen width", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
@@ -108,8 +110,10 @@ func runCfgScreenHeight(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
+	original := currentUser.ScreenHeight
 	currentUser.ScreenHeight = val
 	if err := userManager.UpdateUser(currentUser); err != nil {
+		currentUser.ScreenHeight = original
 		slog.Error("failed to save screen height", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
@@ -137,6 +141,7 @@ func runCfgTermType(c *cmdCtx, args string) (*user.User, string, error) {
 		current = "cp437"
 	}
 
+	original := currentUser.OutputMode
 	if current == "ansi" {
 		currentUser.OutputMode = "cp437"
 	} else {
@@ -144,6 +149,7 @@ func runCfgTermType(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
+		currentUser.OutputMode = original
 		slog.Error("failed to save terminal type", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
