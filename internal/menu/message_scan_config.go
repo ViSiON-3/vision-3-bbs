@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -167,10 +168,11 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Helper to pad string to width
 	padRight := func(s string, width int) string {
-		if len(s) >= width {
+		n := utf8.RuneCountInString(s)
+		if n >= width {
 			return s
 		}
-		return s + strings.Repeat(" ", width-len(s))
+		return s + strings.Repeat(" ", width-n)
 	}
 
 	// Format a single area line to match the menu layout
@@ -198,10 +200,11 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 			colorSeq = "\x1b[97;46m" // Bright white text on cyan background
 		}
 
-		// Truncate area name if too long
+		// Truncate area name if too long. Runes, not bytes: area names are
+		// sysop-editable UTF-8 JSON and can hold multi-byte characters.
 		areaName := item.area.Name
-		if len(areaName) > 40 {
-			areaName = areaName[:37] + "..."
+		if nameRunes := []rune(areaName); len(nameRunes) > 40 {
+			areaName = string(nameRunes[:37]) + "..."
 		}
 
 		var builder strings.Builder
