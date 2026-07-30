@@ -97,29 +97,32 @@ func ClearSessionOutputMode(s ssh.Session) {
 // have accumulated without one, which guards against a malformed sequence
 // that would otherwise never complete and silently swallow all subsequent
 // input). Once complete, the sequence is appended to line and echoed
-// verbatim; a malformed sequence is dropped without being stored or echoed.
+// verbatim.
+//
+// A malformed sequence is not stored or echoed, and the decoder resynchronises
+// by discarding one byte at a time rather than the whole accumulator: a stray
+// lead byte is often immediately followed by a real character's lead byte, and
+// dropping the buffer wholesale would swallow that character too.
 func decodeExtendedKey(line []byte, mode ansi.OutputMode, b byte, utf8Pending []byte) (newLine []byte, echo []byte, pending []byte) {
 	if mode == ansi.OutputModeUTF8 {
 		utf8Pending = append(utf8Pending, b)
-		if !utf8.FullRune(utf8Pending) && len(utf8Pending) < utf8.UTFMax {
-			return line, nil, utf8Pending
+		for len(utf8Pending) > 0 {
+			if !utf8.FullRune(utf8Pending) && len(utf8Pending) < utf8.UTFMax {
+				return line, nil, utf8Pending
+			}
+			r, size := utf8.DecodeRune(utf8Pending)
+			if r == utf8.RuneError && size <= 1 {
+				// Malformed: drop one byte and retry, so a stray lead byte does
+				// not take the following character down with it. Discarding the
+				// whole buffer would swallow a valid lead byte sitting behind it.
+				utf8Pending = utf8Pending[1:]
+				continue
+			}
+			seq := append([]byte(nil), utf8Pending[:size]...)
+			return append(line, seq...), seq, nil
 		}
-		r, size := utf8.DecodeRune(utf8Pending)
-		if r == utf8.RuneError && size <= 1 {
-			// Malformed sequence: drop it rather than store or echo garbage.
-			return line, nil, nil
-		}
-		// Any bytes beyond the decoded rune are dropped rather than carried
-		// forward: a leftover cannot be a valid lead byte, so keeping it would
-		// swallow the next character. Unreachable today — accumulation stops as
-		// soon as FullRune is true, and the only way to reach four bytes is a
-		// 4-byte lead, which decodes as either size 4 or RuneError size 1 —
-		// but the contract is "drop the malformed remainder", so say so here
-		// rather than leaving it to be re-derived.
-		seq := append([]byte(nil), utf8Pending[:size]...)
-		return append(line, seq...), seq, nil
+		return line, nil, nil
 	}
-
 	r := ansi.Cp437ToUnicode[b]
 	if r == 0 {
 		return line, nil, utf8Pending

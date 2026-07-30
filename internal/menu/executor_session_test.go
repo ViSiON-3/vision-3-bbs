@@ -207,3 +207,22 @@ func TestReadLineFromSessionIH_BackspaceInterruptsPendingUTF8Sequence(t *testing
 		t.Errorf("output contains %d \\b \\b sequences, want 0 (nothing was displayed for the pending byte yet)", n)
 	}
 }
+
+// A stray lead byte must not take a following valid character down with it.
+// Dropping the whole pending buffer on a malformed decode discards the next
+// lead byte too; the decoder has to resynchronise by dropping one byte and
+// retrying, the way any UTF-8 decoder does.
+func TestReadLineFromSessionIH_ResyncsAfterStrayLeadByte(t *testing.T) {
+	ts := newTestSession("\xc3" + "日" + "\r") // stray 2-byte lead, then a valid "日"
+	terminal := newTestTerminal(ts)
+	SetSessionOutputMode(ts, ansi.OutputModeUTF8)
+	t.Cleanup(func() { ClearSessionOutputMode(ts) })
+
+	got, err := readLineFromSessionIH(ts, terminal)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIH: %v", err)
+	}
+	if got != "日" {
+		t.Errorf("line = %q, want %q — the stray lead byte swallowed the next character", got, "日")
+	}
+}

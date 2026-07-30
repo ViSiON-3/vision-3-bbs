@@ -106,11 +106,18 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 
 	shadeChar := "\u2591"
 
-	// maxLen is a column budget, not a byte count: input holds UTF-8 (ASCII,
-	// or an extended character decoded via decodeExtendedKey below), so a
-	// multi-byte rune occupies one column but several bytes. defaultValue is
-	// clamped with ansi.TruncateRunes (rune-based) rather than a raw byte
-	// slice, which would otherwise cut a multi-byte value mid-rune.
+	// maxLen is counted in runes, not bytes: input holds UTF-8 (ASCII, or an
+	// extended character decoded via decodeExtendedKey below), so a multi-byte
+	// rune is one unit of the budget but several bytes. defaultValue is clamped
+	// with ansi.TruncateRunes rather than a raw byte slice, which would cut a
+	// multi-byte value mid-rune.
+	//
+	// Runes are treated as one terminal column each. That holds for CP437 and
+	// for the Latin-1 range this BBS actually sees; it is NOT true of
+	// double-width glyphs such as CJK, which would render two columns wide and
+	// skew the box and cursor maths. Wide-character support is deliberately out
+	// of scope repo-wide (it would need go-runewidth threaded through
+	// ansi.VisibleLength), so a CJK value here draws a box that is too narrow.
 	input := make([]byte, 0, maxLen)
 	if defaultValue != "" {
 		input = append(input, []byte(ansi.TruncateRunes(defaultValue, maxLen, ""))...)
