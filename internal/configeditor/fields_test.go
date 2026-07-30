@@ -39,7 +39,10 @@ func TestCenterText(t *testing.T) {
 	if got := centerText("hi", 5); got != " hi  " {
 		t.Errorf("centerText odd = %q, want %q", got, " hi  ")
 	}
-	if got := centerText("toolong", 3); got != "toolong" {
-		t.Errorf("centerText overflow = %q, want toolong", got)
+	// An over-long value is truncated so the box holds its shape. This
+	// expectation changed deliberately: centerText used to return the value
+	// unchanged and let it push the border out.
+	if got := centerText("toolong", 3); got != "too" {
+		t.Errorf("centerText overflow = %q, want %q", got, "too")
 	}
 }

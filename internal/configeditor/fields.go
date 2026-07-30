@@ -61,5 +61,9 @@ func padLeft(s string, width int) string {
 
 // centerText centers a string within a given width using visual (rune) width.
 func centerText(s string, width int) string {
-	return ansi.Center(s, width)
+	// Truncate before centring so the box holds its shape: an over-long title
+	// is cut to the column budget rather than pushing the border out. Matches
+	// menueditor and usereditor. Editable values are not affected — the
+	// textinput fields scroll horizontally while editing.
+	return ansi.Center(ansi.TruncateRunes(s, width, ""), width)
 }
