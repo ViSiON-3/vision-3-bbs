@@ -15,8 +15,8 @@ import (
 
 // truncateRunes (pubkey dialog) has no ellipsis and no TrimSpace: it is a
 // plain rune-aware hard cut, used for the key-list comment column and error
-// text. These cases pin its current behaviour before it is migrated to
-// delegate to ansi.TruncateRunes.
+// text. These cases pin its behaviour, which the migration onto
+// ansi.TruncateRunes had to preserve exactly — and still must.
 func TestPubkeyDialogTruncateRunes(t *testing.T) {
 	tests := []struct {
 		name string

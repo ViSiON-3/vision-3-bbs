@@ -5,11 +5,11 @@ import (
 	"unicode/utf8"
 )
 
-// centerText (view.go) is currently byte-based (len(s) >= width, s[:width]).
-// Every caller today passes ASCII literals, so byte and rune counting agree —
-// these cases pin that observable behaviour before the helper is migrated to
-// delegate to ansi.Center/ansi.TruncateRunes as a genuine (if today
-// unreachable) correctness fix.
+// centerText (view.go) was byte-based (len(s) >= width, s[:width]) and now
+// delegates to ansi.Center/ansi.TruncateRunes. Every caller passes ASCII
+// literals, so byte and rune counting agree and these cases pin the observable
+// layout either way; the conversion was a genuine correctness fix for input
+// that cannot reach it today.
 func TestViewCenterText(t *testing.T) {
 	tests := []struct {
 		name  string

@@ -4,7 +4,8 @@ import "testing"
 
 // truncateRunes (oneliners) trims surrounding whitespace before measuring,
 // then appends a 3-rune "..." ellipsis when it cuts. These cases pin its
-// current behaviour before it is migrated to delegate to ansi.TruncateRunes.
+// behaviour, which the migration onto ansi.TruncateRunes had to preserve
+// exactly — and still must.
 func TestOnelinerTruncateRunes(t *testing.T) {
 	tests := []struct {
 		name string
