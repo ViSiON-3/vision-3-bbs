@@ -121,7 +121,7 @@ func (lb *fileLightbar) killFile(frame *lbFrame) (exit bool, result *user.User, 
 	proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
 	lb.endFooterPrompt()
 	if promptErr != nil {
-		if logoffIfDisconnected(promptErr) {
+		if errors.Is(promptErr, io.EOF) {
 			return true, nil, "LOGOFF", io.EOF
 		}
 		frame.needFullRedraw = true
@@ -172,7 +172,7 @@ func (lb *fileLightbar) moveFile(frame *lbFrame) (exit bool, result *user.User, 
 	proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
 	lb.endFooterPrompt()
 	if promptErr != nil {
-		if logoffIfDisconnected(promptErr) {
+		if errors.Is(promptErr, io.EOF) {
 			return true, nil, "LOGOFF", io.EOF
 		}
 		frame.needFullRedraw = true

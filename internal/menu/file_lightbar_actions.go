@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -93,7 +94,7 @@ func (lb *fileLightbar) confirmDownload() (proceed bool, exit bool, action strin
 	tw, th := getTerminalSize(lb.s)
 	proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
 	if promptErr != nil {
-		if logoffIfDisconnected(promptErr) {
+		if errors.Is(promptErr, io.EOF) {
 			return false, true, "LOGOFF", io.EOF
 		}
 		slog.Error("error getting download confirmation", "node", lb.nodeNumber, "error", promptErr)
@@ -148,7 +149,7 @@ func (lb *fileLightbar) sendTaggedFiles(filesToDownload []string, fileIDsToDownl
 	// Use protocol selection (respects connection type - SSH vs Telnet)
 	proto, protoOK, protoErr := lb.e.selectTransferProtocol(lb.s, lb.terminal, lb.outputMode)
 	if protoErr != nil {
-		if logoffIfDisconnected(protoErr) {
+		if errors.Is(protoErr, io.EOF) {
 			return 0, failCount, true, "LOGOFF", io.EOF
 		}
 		slog.Error("protocol selection error", "node", lb.nodeNumber, "error", protoErr)
