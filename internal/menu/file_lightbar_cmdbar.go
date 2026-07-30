@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -88,6 +90,22 @@ func buildFileListCmdBar(e *MenuExecutor, currentUser *user.User, cmdBarOptions,
 		hiColorSeq = colorCodeToAnsi(hiBarOptions[0].HighlightColor)
 	}
 	return cmdEntries, sysopEntries, userEntries, hiColorSeq, isSysop
+}
+
+// beginFooterPrompt clears the separator and command-bar rows, moves the
+// cursor to the command-bar row, and shows the cursor — the preamble every
+// sysop footer prompt (edit/kill/move/rename) and the download confirm use
+// before reading input. Pair with endFooterPrompt when the prompt is done.
+func (lb *fileLightbar) beginFooterPrompt() {
+	clearFooter := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + ansi.MoveCursor(lb.cmdBarRow, 1) + "\x1b[2K"
+	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(clearFooter), lb.outputMode)
+	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(ansi.MoveCursor(lb.cmdBarRow, 1)), lb.outputMode)
+	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
+}
+
+// endFooterPrompt hides the cursor again after a footer prompt completes.
+func (lb *fileLightbar) endFooterPrompt() {
+	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
 }
 
 // compactFileSize renders a byte count compactly: bytes (B), kilobytes (k), or
