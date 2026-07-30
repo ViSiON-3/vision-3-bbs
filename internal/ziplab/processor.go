@@ -1,11 +1,8 @@
 package ziplab
 
 import (
-	"archive/zip"
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -13,6 +10,9 @@ import (
 	"strings"
 	"time"
 )
+
+// The ZipLab pipeline steps. Each Step* method is one stage a sysop can enable
+// or disable; the zip mechanics they call live in the processor_* files.
 
 // Processor runs the ZipLab pipeline steps against an uploaded archive.
 type Processor struct {
@@ -56,28 +56,6 @@ func (p *Processor) StepTestIntegrity(archivePath string) error {
 	return p.runExternalCommand(at.TestCommand, at.TestArgs, archivePath, "", 0)
 }
 
-// testZipIntegrity opens a ZIP and reads every entry to verify integrity.
-func (p *Processor) testZipIntegrity(zipPath string) error {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return fmt.Errorf("failed to open zip %s: %w", zipPath, err)
-	}
-	defer func() { _ = r.Close() }() // read-only zip reader
-
-	for _, f := range r.File {
-		rc, err := f.Open()
-		if err != nil {
-			return fmt.Errorf("corrupt entry %s: %w", f.Name, err)
-		}
-		if _, err := io.Copy(io.Discard, rc); err != nil {
-			_ = rc.Close() // read-only
-			return fmt.Errorf("corrupt data in %s: %w", f.Name, err)
-		}
-		_ = rc.Close() // read-only
-	}
-	return nil
-}
-
 // StepExtract (Step 2) extracts the archive to a temporary work directory.
 // Returns the path to the work directory.
 func (p *Processor) StepExtract(archivePath string) (string, error) {
@@ -109,59 +87,6 @@ func (p *Processor) StepExtract(archivePath string) (string, error) {
 		return "", err
 	}
 	return workDir, nil
-}
-
-// extractZip extracts all files from a ZIP archive to destDir.
-func (p *Processor) extractZip(zipPath, destDir string) error {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return fmt.Errorf("failed to open zip %s: %w", zipPath, err)
-	}
-	defer func() { _ = r.Close() }() // read-only zip reader
-
-	for _, f := range r.File {
-		targetPath := filepath.Join(destDir, f.Name)
-
-		// Prevent zip slip
-		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("illegal file path in zip: %s", f.Name)
-		}
-
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
-			}
-			continue
-		}
-
-		// Ensure parent directory exists
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			return fmt.Errorf("failed to create parent directory for %s: %w", targetPath, err)
-		}
-
-		outFile, err := os.Create(targetPath)
-		if err != nil {
-			return fmt.Errorf("failed to create %s: %w", targetPath, err)
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			_ = outFile.Close() // cleanup on error path
-			return fmt.Errorf("failed to open zip entry %s: %w", f.Name, err)
-		}
-
-		if _, err := io.Copy(outFile, rc); err != nil {
-			_ = rc.Close()      // cleanup on error path
-			_ = outFile.Close() // cleanup on error path
-			return fmt.Errorf("failed to extract %s: %w", f.Name, err)
-		}
-
-		_ = rc.Close() // read side
-		if err := outFile.Close(); err != nil {
-			return fmt.Errorf("failed to finalize %s: %w", targetPath, err)
-		}
-	}
-	return nil
 }
 
 // StepVirusScan (Step 3) runs a configurable external virus scanner.
@@ -208,178 +133,6 @@ func (p *Processor) StepRemoveAdsAndDIZ(workDir, archivePath string) (string, er
 	return diz, nil
 }
 
-// copyZipEntryRaw copies a ZIP entry without decompressing/recompressing.
-// This preserves entries exactly as-is, avoiding checksum errors on entries
-// with symlinks, resource forks, or other platform-specific features.
-func copyZipEntryRaw(w *zip.Writer, f *zip.File) error {
-	fh := f.FileHeader
-	fw, err := w.CreateRaw(&fh)
-	if err != nil {
-		return err
-	}
-	rc, err := f.OpenRaw()
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(fw, rc)
-	return err
-}
-
-// removeFilesFromZip rewrites a ZIP excluding entries that match any of the patterns (case-insensitive).
-func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retErr error) {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return fmt.Errorf("failed to open zip: %w", err)
-	}
-	defer func() { _ = r.Close() }() // read-only zip reader
-
-	tmpPath := zipPath + ".tmp"
-	outFile, err := os.Create(tmpPath)
-	if err != nil {
-		return fmt.Errorf("failed to create temp zip: %w", err)
-	}
-	defer func() {
-		_ = outFile.Close() // no-op after the explicit Close on the success path
-		if retErr != nil {
-			_ = os.Remove(tmpPath) // cleanup on error path
-		}
-	}()
-
-	w := zip.NewWriter(outFile)
-	if r.Comment != "" {
-		_ = w.SetComment(r.Comment) // came from a valid zip, so it always fits
-	}
-
-	removed := 0
-	seen := make(map[string]bool)
-	for _, f := range r.File {
-		if shouldRemoveFile(f.Name, patterns) {
-			slog.Info("removing ad file from archive", "file", f.Name)
-			removed++
-			continue
-		}
-		if seen[f.Name] {
-			continue
-		}
-		seen[f.Name] = true
-
-		if err := copyZipEntryRaw(w, f); err != nil {
-			_ = w.Close() // cleanup on error path
-			return fmt.Errorf("failed to copy entry %s: %w", f.Name, err)
-		}
-	}
-
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("failed to finalize zip: %w", err)
-	}
-
-	if removed == 0 {
-		// Close before removing: some platforms can't delete open files.
-		_ = outFile.Close()    // discarding the file; close error is moot
-		_ = os.Remove(tmpPath) // nothing changed; discard temp copy
-		retErr = nil
-		return nil
-	}
-
-	if err := outFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp zip: %w", err)
-	}
-	return os.Rename(tmpPath, zipPath)
-}
-
-// shouldRemoveFile checks if a filename matches any removal pattern (case-insensitive).
-func shouldRemoveFile(name string, patterns []string) bool {
-	baseName := filepath.Base(name)
-	for _, pattern := range patterns {
-		if strings.EqualFold(baseName, pattern) {
-			return true
-		}
-	}
-	return false
-}
-
-// findAndReadDIZ searches for FILE_ID.ANS (preferred) or FILE_ID.DIZ
-// (case-insensitive) in the work directory and one level of subdirectories.
-func (p *Processor) findAndReadDIZ(workDir string) string {
-	var ansPath, dizPath string
-	_ = filepath.WalkDir(workDir, func(path string, d os.DirEntry, err error) error { // callback never returns an error
-		if err != nil {
-			return nil
-		}
-		rel, _ := filepath.Rel(workDir, path)
-		if d.IsDir() && strings.Count(rel, string(filepath.Separator)) > 1 {
-			return filepath.SkipDir
-		}
-		if !d.IsDir() {
-			switch {
-			case strings.EqualFold(d.Name(), "FILE_ID.ANS"):
-				ansPath = path
-			case strings.EqualFold(d.Name(), "FILE_ID.DIZ") && ansPath == "":
-				dizPath = path
-			}
-		}
-		return nil
-	})
-
-	target := ansPath
-	if target == "" {
-		target = dizPath
-	}
-	if target == "" {
-		return ""
-	}
-
-	data, readErr := os.ReadFile(target)
-	if readErr != nil {
-		slog.Warn("found diz file but failed to read", "file", filepath.Base(target), "error", readErr)
-		return ""
-	}
-	return cleanDIZ(string(stripSauceMetadata(data)))
-}
-
-// loadRemovePatterns reads filenames to remove from the patterns file.
-func (p *Processor) loadRemovePatterns() []string {
-	patternsPath := p.resolvePath(p.config.Steps.RemoveAds.PatternsFile)
-	if patternsPath == "" {
-		return nil
-	}
-
-	f, err := os.Open(patternsPath)
-	if err != nil {
-		slog.Warn("could not open patterns file", "path", patternsPath, "error", err)
-		return nil
-	}
-	defer func() { _ = f.Close() }() // read-only
-
-	var patterns []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" && !strings.HasPrefix(line, ";") {
-			patterns = append(patterns, line)
-		}
-	}
-	return patterns
-}
-
-// removeMatchingFiles removes files matching a pattern (case-insensitive) from a directory.
-func (p *Processor) removeMatchingFiles(dir, pattern string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.EqualFold(entry.Name(), pattern) {
-			target := filepath.Join(dir, entry.Name())
-			if err := os.Remove(target); err != nil {
-				slog.Warn("failed to remove ad file", "path", target, "error", err)
-			} else {
-				slog.Info("removed ad file", "file", entry.Name())
-			}
-		}
-	}
-}
-
 // StepAddComment (Step 6) adds a ZIP comment from the configured comment file.
 func (p *Processor) StepAddComment(archivePath string) error {
 	if !p.config.Steps.AddComment.Enabled {
@@ -405,49 +158,6 @@ func (p *Processor) StepAddComment(archivePath string) error {
 	return p.runExternalCommand(at.CommentCommand, at.CommentArgs, archivePath, "", 0)
 }
 
-// setZipComment rewrites a ZIP file with the given comment.
-func (p *Processor) setZipComment(zipPath, comment string) (retErr error) {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return fmt.Errorf("failed to open zip: %w", err)
-	}
-	defer func() { _ = r.Close() }() // read-only zip reader
-
-	tmpPath := zipPath + ".tmp"
-	outFile, err := os.Create(tmpPath)
-	if err != nil {
-		return fmt.Errorf("failed to create temp zip: %w", err)
-	}
-	defer func() {
-		_ = outFile.Close() // no-op after the explicit Close on the success path
-		if retErr != nil {
-			_ = os.Remove(tmpPath) // cleanup on error path
-		}
-	}()
-
-	w := zip.NewWriter(outFile)
-	if err := w.SetComment(comment); err != nil {
-		_ = w.Close() // cleanup on error path
-		return fmt.Errorf("failed to set zip comment: %w", err)
-	}
-
-	for _, f := range r.File {
-		if err := copyZipEntryRaw(w, f); err != nil {
-			_ = w.Close() // cleanup on error path
-			return fmt.Errorf("failed to copy entry %s: %w", f.Name, err)
-		}
-	}
-
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("failed to finalize zip: %w", err)
-	}
-
-	if err := outFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp zip: %w", err)
-	}
-	return os.Rename(tmpPath, zipPath)
-}
-
 // StepIncludeFile (Step 7) adds a file (e.g., BBS.AD) into the archive.
 func (p *Processor) StepIncludeFile(archivePath string) error {
 	if !p.config.Steps.IncludeFile.Enabled {
@@ -470,69 +180,6 @@ func (p *Processor) StepIncludeFile(archivePath string) error {
 		return p.addFileToZip(archivePath, filepath.Base(includeFilePath), includeData)
 	}
 	return p.runExternalCommand(at.AddCommand, at.AddArgs, archivePath, "", 0)
-}
-
-// addFileToZip rewrites a ZIP adding a new file entry.
-func (p *Processor) addFileToZip(zipPath, name string, data []byte) (retErr error) {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return fmt.Errorf("failed to open zip: %w", err)
-	}
-	defer func() { _ = r.Close() }() // read-only zip reader
-
-	tmpPath := zipPath + ".tmp"
-	outFile, err := os.Create(tmpPath)
-	if err != nil {
-		return fmt.Errorf("failed to create temp zip: %w", err)
-	}
-	defer func() {
-		_ = outFile.Close() // no-op after the explicit Close on the success path
-		if retErr != nil {
-			_ = os.Remove(tmpPath) // cleanup on error path
-		}
-	}()
-
-	w := zip.NewWriter(outFile)
-
-	if r.Comment != "" {
-		_ = w.SetComment(r.Comment) // came from a valid zip, so it always fits
-	}
-
-	seen := make(map[string]bool)
-	for _, f := range r.File {
-		if seen[f.Name] {
-			continue
-		}
-		seen[f.Name] = true
-
-		if err := copyZipEntryRaw(w, f); err != nil {
-			_ = w.Close() // cleanup on error path
-			return fmt.Errorf("failed to copy entry %s: %w", f.Name, err)
-		}
-	}
-
-	if seen[name] {
-		_ = w.Close() // cleanup on error path
-		return fmt.Errorf("entry %s already exists in archive", name)
-	}
-	fw, err := w.Create(name)
-	if err != nil {
-		_ = w.Close() // cleanup on error path
-		return fmt.Errorf("failed to add %s: %w", name, err)
-	}
-	if _, err := fw.Write(data); err != nil {
-		_ = w.Close() // cleanup on error path
-		return fmt.Errorf("failed to write %s: %w", name, err)
-	}
-
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("failed to finalize zip: %w", err)
-	}
-
-	if err := outFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp zip: %w", err)
-	}
-	return os.Rename(tmpPath, zipPath)
 }
 
 // runExternalCommand runs an external command with placeholder substitution.
