@@ -20,6 +20,9 @@ func (fm *FileManager) AddFileRecord(record FileRecord) error {
 	if record.Filename == "" {
 		return fmt.Errorf("file record must have a Filename")
 	}
+	if _, err := validateFilename(record.Filename); err != nil {
+		return fmt.Errorf("file record %s: %w", record.ID, err)
+	}
 
 	fm.muAreas.RLock() // Check if area exists
 	_, areaExists := fm.fileAreas[record.AreaID]

@@ -48,7 +48,14 @@ searchLoop:
 		if err != nil {
 			return fmt.Errorf("failed to get absolute base path: %w", err)
 		}
-		fullPath := filepath.Join(absBasePath, area.Path, filepath.Base(foundFilename))
+		// Only gate the disk delete: a record with a corrupt filename must
+		// still be removable from metadata (deleteFromDisk=false), or the
+		// sysop has no way to clear it.
+		safeName, err := validateFilename(foundFilename)
+		if err != nil {
+			return fmt.Errorf("refusing to delete from disk: %w", err)
+		}
+		fullPath := filepath.Join(absBasePath, area.Path, safeName)
 		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 			slog.Warn("failed to delete file from disk", "path", fullPath, "error", err)
 			return fmt.Errorf("failed to delete file from disk: %w", err)
@@ -119,7 +126,10 @@ searchLoop:
 	if err != nil {
 		return fmt.Errorf("failed to get absolute base path: %w", err)
 	}
-	safeFilename := filepath.Base(record.Filename)
+	safeFilename, err := validateFilename(record.Filename)
+	if err != nil {
+		return fmt.Errorf("refusing to move file record %s: %w", fileID, err)
+	}
 	srcPath := filepath.Join(absBasePath, srcArea.Path, safeFilename)
 	dstPath := filepath.Join(absBasePath, targetArea.Path, safeFilename)
 
@@ -150,8 +160,9 @@ searchLoop:
 			slog.Error("failed to roll back file rename after metadata save failure", "from", dstPath, "to", srcPath, "error", renameBackErr)
 		} else {
 			// Restore in-memory state.
-			tgtRecords := fm.fileRecords[targetAreaID]
-			fm.fileRecords[targetAreaID] = tgtRecords[:len(tgtRecords)-1]
+			// By identity, not position: muFiles was released for the saves
+			// above, so another writer may have appended in the meantime.
+			fm.fileRecords[targetAreaID] = removeRecordByID(fm.fileRecords[targetAreaID], fileID)
 			record.AreaID = srcAreaID
 			fm.fileRecords[srcAreaID] = append(fm.fileRecords[srcAreaID], record)
 			// Re-persist both areas so disk reflects the restored in-memory state.

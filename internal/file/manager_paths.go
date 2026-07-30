@@ -11,7 +11,11 @@ import (
 )
 
 // GetFilePath returns the full, absolute path to a file given its record ID.
-// It checks that the file exists and constructs the path safely.
+// The path is constructed safely: the record's filename must be a plain name,
+// and the result must resolve inside the base directory.
+//
+// It does NOT check that the file exists on disk -- callers that need that must
+// stat the returned path themselves.
 func (fm *FileManager) GetFilePath(fileID uuid.UUID) (string, error) {
 	fm.muFiles.RLock() // Need read lock to find the file record
 	defer fm.muFiles.RUnlock()
@@ -50,9 +54,9 @@ searchLoop:
 	}
 	// Area path is relative to base path
 	// Filename should be just the base name
-	safeFilename := filepath.Base(foundRecord.Filename)
-	if safeFilename == "." || safeFilename == "/" || strings.Contains(safeFilename, "..") {
-		return "", fmt.Errorf("invalid filename in record: %s", foundRecord.Filename)
+	safeFilename, err := validateFilename(foundRecord.Filename)
+	if err != nil {
+		return "", fmt.Errorf("file record %s: %w", fileID, err)
 	}
 
 	fullPath := filepath.Join(absBasePath, foundArea.Path, safeFilename)
@@ -61,11 +65,6 @@ searchLoop:
 	if !strings.HasPrefix(fullPath, absBasePath) {
 		return "", fmt.Errorf("constructed file path '%s' is outside base directory '%s'", fullPath, absBasePath)
 	}
-
-	// Optional: Check if file actually exists on disk?
-	// if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-	// 	return "", fmt.Errorf("file '%s' not found on disk at expected path '%s'", safeFilename, fullPath)
-	// }
 
 	return fullPath, nil
 }
