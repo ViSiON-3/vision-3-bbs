@@ -109,8 +109,15 @@ func decodeExtendedKey(line []byte, mode ansi.OutputMode, b byte, utf8Pending []
 			// Malformed sequence: drop it rather than store or echo garbage.
 			return line, nil, nil
 		}
+		// Any bytes beyond the decoded rune are dropped rather than carried
+		// forward: a leftover cannot be a valid lead byte, so keeping it would
+		// swallow the next character. Unreachable today — accumulation stops as
+		// soon as FullRune is true, and the only way to reach four bytes is a
+		// 4-byte lead, which decodes as either size 4 or RuneError size 1 —
+		// but the contract is "drop the malformed remainder", so say so here
+		// rather than leaving it to be re-derived.
 		seq := append([]byte(nil), utf8Pending[:size]...)
-		return append(line, seq...), seq, utf8Pending[size:]
+		return append(line, seq...), seq, nil
 	}
 
 	r := ansi.Cp437ToUnicode[b]
