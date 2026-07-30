@@ -765,6 +765,7 @@ func sessionHandler(s ssh.Session) {
 		activeSessionsMutex.Lock()
 		delete(activeSessions, s) // Remove using session as key
 		activeSessionsMutex.Unlock()
+		menu.ClearSessionOutputMode(s)
 		if sessionRegistry != nil {
 			sessionRegistry.Unregister(int(nodeID))
 		}
@@ -899,6 +900,14 @@ func sessionHandler(s ssh.Session) {
 			effectiveMode = ansi.OutputModeUTF8
 		}
 	}
+
+	// Record the output mode for this session so extended (byte >= 128)
+	// keystrokes are decoded the same way output is encoded: CP437 bytes
+	// decode via a single-byte table, UTF-8 bytes accumulate across reads.
+	// See menu.SetSessionOutputMode / readLineFromSessionIH. Re-applied below
+	// if the post-auth encoding prompt or a saved user preference changes
+	// effectiveMode.
+	menu.SetSessionOutputMode(s, effectiveMode)
 
 	// --- Create Terminal ---
 	slog.Info("creating terminal for session", "node", nodeID)
@@ -1413,6 +1422,11 @@ func sessionHandler(s ssh.Session) {
 			slog.Info("using saved encoding preference", "node", nodeID, "encoding", "utf8")
 		}
 	}
+
+	// effectiveMode may have just changed (encoding prompt above, or a saved
+	// user preference) — re-record it so post-auth input decodes extended
+	// characters with the mode actually in effect for the rest of the session.
+	menu.SetSessionOutputMode(s, effectiveMode)
 
 	// Run the configurable login sequence (login.json) directly after authentication.
 	// This replaces the old FASTLOGN menu routing — FASTLOGIN is now an optional login.json item.
