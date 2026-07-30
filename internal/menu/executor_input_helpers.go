@@ -58,7 +58,10 @@ func writeCenteredPausePrompt(s ssh.Session, terminal *term.Terminal, pausePromp
 	// Center the pause prompt if terminal width is available
 	if termWidth > 0 {
 		// Calculate visible text width (excluding ANSI escape sequences)
-		visibleWidth := calculateVisibleWidth(string(pauseBytesToWrite))
+		// ansi.VisibleLength advances a rune at a time, so this is correct in
+		// UTF-8 mode; in CP437 mode the raw high bytes are invalid UTF-8 and
+		// decode as one RuneError each, which is also one column apiece.
+		visibleWidth := ansi.VisibleLength(string(pauseBytesToWrite))
 
 		if visibleWidth < termWidth {
 			// Calculate centering offset
