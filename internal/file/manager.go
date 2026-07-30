@@ -12,6 +12,25 @@ import (
 )
 
 // FileManager manages file areas and their associated file records.
+//
+// Locking: FileManager has two mutexes, muAreas (guards fileAreas/fileTags)
+// and muFiles (guards fileRecords). The intended acquisition order is
+// muAreas before muFiles. GetFilePath and DeleteFileRecord invert that
+// order: they take muFiles first and, while still holding it, take muAreas
+// (nested, not sequential — both are held at once). MoveFileRecord does
+// the same nested muFiles-then-muAreas acquisition internally (after an
+// initial, unrelated sequential muAreas check made before muFiles is ever
+// taken). loadAllFileRecords is the only function that nests them in the
+// intended muAreas-then-muFiles order.
+//
+// This is an ABBA lock-ordering inversion. It cannot deadlock today only
+// because muAreas.Lock() (the exclusive write lock) is taken solely by
+// loadAreas, which runs once from NewFileManager before the FileManager
+// is shared, so muAreas is effectively read-only for the rest of the
+// process's life and concurrent RLock holders never block each other.
+// Introducing any runtime reload of file areas (an exclusive muAreas.Lock()
+// after startup) would make this a live deadlock risk. Do not add such a
+// reload without first resolving the ordering inversion.
 type FileManager struct {
 	basePath    string               // Base directory for all file areas (e.g., "data/files")
 	configPath  string               // Path to file_areas.json
