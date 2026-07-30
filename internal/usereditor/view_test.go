@@ -1,6 +1,9 @@
 package usereditor
 
-import "testing"
+import (
+	"testing"
+	"unicode/utf8"
+)
 
 // centerText (view.go) is currently byte-based (len(s) >= width, s[:width]).
 // Every caller today passes ASCII literals, so byte and rune counting agree —
@@ -27,5 +30,19 @@ func TestViewCenterText(t *testing.T) {
 				t.Errorf("centerText(%q, %d) = %q, want %q", tt.s, tt.width, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestViewCenterTextMultiByteIsRuneSafe is new coverage added alongside the
+// migration to ansi.Center/ansi.TruncateRunes: it was unreachable under the
+// old byte-based implementation (no caller passes multi-byte input today),
+// but the fix must not corrupt UTF-8 if that ever changes.
+func TestViewCenterTextMultiByteIsRuneSafe(t *testing.T) {
+	got := centerText("héllo wörld", 8)
+	if !utf8.ValidString(got) {
+		t.Fatalf("centerText produced invalid UTF-8: %q", got)
+	}
+	if want := "héllo wö"; got != want {
+		t.Errorf("centerText(%q, 8) = %q, want %q", "héllo wörld", got, want)
 	}
 }
