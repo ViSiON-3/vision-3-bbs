@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -97,68 +96,13 @@ func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 	showSysopBar := false
 
 	// Determine terminal dimensions.
-	termHeight := 24
-	termWidth := 80
-	if ptyReq, _, ok := st.s.Pty(); ok && ptyReq.Window.Height > 0 {
-		termHeight = ptyReq.Window.Height
-		if ptyReq.Window.Width > 0 {
-			termWidth = ptyReq.Window.Width
-		}
-	}
+	termHeight, termWidth := resolveTermSize(st.s)
 
-	// Count header lines from top template (line count is invariant to page/file counts).
 	fconfpath := st.e.resolveFileConferencePath(st.currentUser)
-	processedTopSample := ansi.ReplacePipeCodes(processFileListPlaceholders(st.topTemplateBytes, 1, 1, st.totalFiles, fconfpath))
-	headerLines := strings.Count(string(processedTopSample), "\n")
-	if headerLines < 1 {
-		headerLines = 1
-	}
+	headerLines, botContent, botLineCount, reservedBottom, visibleRows, fileAreaStartRow, cmdBarRow, separatorRow :=
+		computeVerticalLayout(termHeight, st.topTemplateBytes, st.processedBotTemplate, st.totalFiles, fconfpath)
 
-	// Reserve rows for the separator, command bar, and optional BOT template.
-	// Derive botLineCount from the expanded string (after placeholder + pipe-code
-	// processing) so it matches what renderPageIndicator actually renders.
-	botContent := strings.TrimRight(string(st.processedBotTemplate), "\r\n")
-	botLineCount := 0
-	if len(botContent) > 0 {
-		expandedBotSample := string(ansi.ReplacePipeCodes(processFileListPlaceholders([]byte(botContent), 1, 1, st.totalFiles, fconfpath)))
-		expandedBotSample = strings.ReplaceAll(expandedBotSample, "^PAGE", "1")
-		expandedBotSample = strings.ReplaceAll(expandedBotSample, "^TOTALPAGES", "1")
-		botLineCount = len(strings.Split(expandedBotSample, "\n"))
-	}
-	reservedBottom := 2 // separator + command bar
-	if botLineCount > 0 {
-		reservedBottom = 2 + botLineCount // separator + command bar + BOT lines
-	}
-	visibleRows := termHeight - headerLines - reservedBottom - 1
-	if visibleRows < 3 {
-		visibleRows = 3
-	}
-
-	// stripAnsi removes all ANSI escape sequences from a string.
-	ansiRe := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-	// All template placeholders are fixed-width, so the description column
-	// width is constant across all file entries. Precompute once for both
-	// fileEntryHeight and buildFileEntry.
-	sample := strings.ReplaceAll(st.processedMidTemplate, "^MARK", " ")
-	sample = strings.ReplaceAll(sample, "^NUM", "  1")
-	sample = strings.ReplaceAll(sample, "^NAME", "            ")
-	sample = strings.ReplaceAll(sample, "^DATE", "01/01/00")
-	sample = strings.ReplaceAll(sample, "^SIZE", "     ")
-	sample = strings.ReplaceAll(sample, "^DESC", "")
-	descPrefixLen := len(ansiRe.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(sample))), ""))
-	descColWidth := termWidth - descPrefixLen - 1
-	if descColWidth < 20 {
-		descColWidth = 20
-	}
-	descIndentStr := strings.Repeat(" ", descPrefixLen)
-
-	// fileAreaStartRow is the absolute terminal row where file entries begin.
-	fileAreaStartRow := headerLines + 2
-
-	// Layout: separator row, then command bar, then optional BOT.
-	cmdBarRow := max(1, termHeight-botLineCount)
-	separatorRow := max(1, cmdBarRow-1)
+	ansiRe, descPrefixLen, descColWidth, descIndentStr := computeDescMetrics(st.processedMidTemplate, termWidth)
 
 	lb := &fileLightbar{
 		e:                    st.e,
