@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
@@ -412,22 +413,30 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 }
 
 // padRight pads s with spaces on the right to the given width. If s is already wider, it is returned as-is.
+// padRight pads s with spaces to width columns. Counted in runes, not bytes:
+// callers pass area, conference and network names that can hold multi-byte
+// characters, and byte padding would leave the column short.
 func padRight(s string, width int) string {
-	if len(s) >= width {
+	n := utf8.RuneCountInString(s)
+	if n >= width {
 		return s
 	}
-	return s + strings.Repeat(" ", width-len(s))
+	return s + strings.Repeat(" ", width-n)
 }
 
 // truncateStr truncates s to maxLen characters, appending ".." if truncated.
+// truncateStr clamps s to maxLen columns, appending ".." when it cuts.
+// Measured and cut in runes so a multi-byte name is never split mid-sequence:
+// several callers render text fetched from the remote V3Net registry.
 func truncateStr(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
+	runes := []rune(s)
 	if maxLen <= 2 {
-		return s[:maxLen]
+		return string(runes[:maxLen])
 	}
-	return s[:maxLen-2] + ".."
+	return string(runes[:maxLen-2]) + ".."
 }
 
 // findFirstAccessibleAreaInConference returns the first area the user can read in the given conference.
