@@ -424,7 +424,6 @@ func padRight(s string, width int) string {
 	return s + strings.Repeat(" ", width-n)
 }
 
-// truncateStr truncates s to maxLen characters, appending ".." if truncated.
 // truncateStr clamps s to maxLen columns, appending ".." when it cuts.
 // Measured and cut in runes so a multi-byte name is never split mid-sequence:
 // several callers render text fetched from the remote V3Net registry.

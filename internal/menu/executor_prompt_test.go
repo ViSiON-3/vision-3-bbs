@@ -12,14 +12,14 @@ import (
 
 var promptCursorBackRe = regexp.MustCompile(`\x1b\[(\d+)D`)
 
-// promptYesNoLightbar computes optionsWidth = len(noOptionText) + spacing +
-// len(yesOptionText), counting bytes, and uses it to move the cursor
-// backward (CursorBackward) before erasing and redrawing the options. The
-// shipped Yes/No labels are ASCII ("Yes"/"No"), so this is unreachable
-// today, but a localized label with multi-byte characters would move the
-// cursor too far and the following "\x1b[K" would erase into the prompt
-// text itself. This test uses custom labels to exercise that path
-// pre-emptively.
+// promptYesNoLightbar sums the option-label widths and uses the total to move
+// the cursor backward (CursorBackward) before erasing and redrawing the
+// options. That sum used to count bytes; it now counts runes. The
+// shipped Yes/No labels are ASCII ("Yes"/"No"), so the byte version was never
+// reachable in practice — but a localized label with multi-byte characters
+// would have moved the cursor too far, and the following "\x1b[K" would have
+// erased into the prompt text itself. This test uses custom labels to keep
+// that path correct.
 func TestPromptYesNoLightbarCursorBackIsRuneWidth(t *testing.T) {
 	yesLabel := "はい" // 2 runes, 6 bytes
 	noLabel := "いいえ" // 3 runes, 9 bytes
