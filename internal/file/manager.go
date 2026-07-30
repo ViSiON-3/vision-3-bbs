@@ -21,7 +21,10 @@ import (
 // the same nested muFiles-then-muAreas acquisition internally (after an
 // initial, unrelated sequential muAreas check made before muFiles is ever
 // taken). loadAllFileRecords is the only function that nests them in the
-// intended muAreas-then-muFiles order.
+// intended muAreas-then-muFiles order — and it, too, runs only from
+// NewFileManager, so at runtime the nested order is in fact uniformly
+// muFiles-then-muAreas. Both halves of the inversion are therefore
+// confined to construction.
 //
 // This is an ABBA lock-ordering inversion. It cannot deadlock today only
 // because muAreas.Lock() (the exclusive write lock) is taken solely by
