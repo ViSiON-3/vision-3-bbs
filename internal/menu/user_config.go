@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -96,8 +97,10 @@ func runCfgStringInput(
 		return currentUser, "", nil
 	}
 
-	if len(input) > maxLen {
-		input = input[:maxLen]
+	// Rune-safe, not byte-safe: see the fix commit for why byte slicing here
+	// would be a latent hazard even though it's unreachable today.
+	if utf8.RuneCountInString(input) > maxLen {
+		input = string([]rune(input)[:maxLen])
 	}
 
 	setter(currentUser, input)
