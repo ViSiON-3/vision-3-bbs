@@ -170,17 +170,19 @@ func cmdFields() []fieldDef {
 
 // padRight pads a string to width with spaces, truncating if longer.
 func padRight(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
+	runes := []rune(s)
+	if len(runes) >= width {
+		return string(runes[:width])
 	}
-	return s + strings.Repeat(" ", width-len(s))
+	return s + strings.Repeat(" ", width-len(runes))
 }
 
 // centerText centers a string within a given width.
 func centerText(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
+	runes := []rune(s)
+	if len(runes) >= width {
+		return string(runes[:width])
 	}
-	pad := (width - len(s)) / 2
-	return strings.Repeat(" ", pad) + s + strings.Repeat(" ", width-pad-len(s))
+	pad := (width - len(runes)) / 2
+	return strings.Repeat(" ", pad) + s + strings.Repeat(" ", width-pad-len(runes))
 }

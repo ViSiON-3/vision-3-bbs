@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
@@ -336,11 +337,27 @@ func writePackedMessage(w io.Writer, msg *PackedMessage) error {
 	return nil
 }
 
+// truncateField clamps s to max BYTES, which is what FTS-0001 specifies for the
+// null-terminated To/From/Subject fields — but it cuts on a rune boundary, so a
+// multi-byte character is dropped whole rather than leaving a partial UTF-8
+// sequence on the wire for every other system to parse.
 func truncateField(s string, max int) string {
-	if len(s) > max {
-		return s[:max]
+	if len(s) <= max {
+		return s
 	}
-	return s
+	end := 0
+	for end < len(s) {
+		// DecodeRuneInString gives the byte size at this offset, which is 1 for a
+		// stray invalid byte. utf8.RuneLen would report 3 for those, since range
+		// surfaces them as RuneError, and the cut would land inside the next
+		// character.
+		_, size := utf8.DecodeRuneInString(s[end:])
+		if end+size > max {
+			break
+		}
+		end += size
+	}
+	return s[:end]
 }
 
 // ParsedBody holds the components of a parsed FTN message body.
