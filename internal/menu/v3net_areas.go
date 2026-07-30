@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
 	term "golang.org/x/term"
@@ -170,10 +171,13 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 
 		line := fmt.Sprintf(" %s %-24s %-28s %-8s %s", status, tag, name, access, net)
 		maxW := termWidth - 1 // leave 1 col to prevent terminal auto-wrap
-		if len(line) < maxW {
-			line += strings.Repeat(" ", maxW-len(line))
-		} else if len(line) > maxW {
-			line = line[:maxW]
+		// Runes, not bytes: net is a hub-supplied network name and can hold
+		// multi-byte characters, so a byte-based clamp can split it mid-rune.
+		lineLen := utf8.RuneCountInString(line)
+		if lineLen < maxW {
+			line += strings.Repeat(" ", maxW-lineLen)
+		} else if lineLen > maxW {
+			line = string([]rune(line)[:maxW])
 		}
 
 		if highlight {
