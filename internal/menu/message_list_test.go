@@ -3,9 +3,12 @@ package menu
 import (
 	"errors"
 	"io"
+	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
@@ -57,6 +60,13 @@ func TestTruncateString(t *testing.T) {
 		// "..." once it's subtracted, so the function just slices instead.
 		{"maxLen exactly 3, string longer", "Hello", 3, "Hel"},
 		{"maxLen 0", "Hello", 0, ""},
+		// Multi-byte input must be measured and cut on rune boundaries: a
+		// subject line can contain accented or CJK characters, and slicing by
+		// byte offset would emit a partial UTF-8 sequence.
+		{"multi-byte fits by runes but not bytes", "héllo", 5, "héllo"},
+		{"multi-byte truncation lands on a rune boundary", "héllo wörld", 8, "héllo..."},
+		{"CJK truncation lands on a rune boundary", "日本語のメッセージ", 5, "日本..."},
+		{"maxLen 3 with multi-byte", "日本語のメッセージ", 3, "日本語"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -280,5 +290,55 @@ func TestRunMessageListNavigation_ExhaustedReaderReturnsError(t *testing.T) {
 	}
 	if !errors.Is(err, io.EOF) {
 		t.Errorf("err = %v, want io.EOF", err)
+	}
+}
+
+// testAnsiEscape strips CSI sequences so a rendered line can be measured in
+// visible runes. Test-local on purpose: calculateVisibleWidth counts bytes,
+// which is exactly the measurement bug this test guards against.
+var testAnsiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
+
+// The help line sits inside a 77-column frame, so the full line is 79 visible
+// runes. Its padding must be computed in runes: in UTF-8 mode the up/down
+// arrows are 3 bytes each, and a byte-length measurement pads 4 columns short,
+// pulling the frame's right edge inward.
+func TestDrawMessageListScreenHelpLineCenteringIsRuneBased(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mode ansi.OutputMode
+	}{
+		{"cp437 arrows", ansi.OutputModeCP437},
+		{"utf8 arrows", ansi.OutputModeUTF8},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := newTestSession("")
+			terminal := newTestTerminal(ts)
+			state := &MessageListState{
+				Entries:       []MessageListEntry{},
+				CurrentPage:   1,
+				ItemsPerPage:  10,
+				TotalMessages: 0,
+			}
+
+			if err := drawMessageListScreen(terminal, state, "General", "Main", tc.mode); err != nil {
+				t.Fatalf("drawMessageListScreen: %v", err)
+			}
+
+			var helpLine string
+			for _, line := range strings.Split(ts.output(), "\n") {
+				if strings.Contains(line, "Navigate") && strings.Contains(line, "Q:") {
+					helpLine = strings.TrimRight(line, "\r")
+					break
+				}
+			}
+			if helpLine == "" {
+				t.Fatal("help line not found in rendered output")
+			}
+
+			stripped := testAnsiEscape.ReplaceAllString(helpLine, "")
+			if got := utf8.RuneCountInString(stripped); got != 79 {
+				t.Errorf("help line visible width = %d runes, want 79 (line %q)", got, stripped)
+			}
+		})
 	}
 }

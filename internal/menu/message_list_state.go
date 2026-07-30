@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"log/slog"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
@@ -30,13 +31,17 @@ type MessageListState struct {
 
 // truncateString truncates a string to maxLen, adding "..." if truncated
 func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	// Measured and cut in runes, not bytes: subjects and handles can hold
+	// multi-byte characters, and a byte-offset slice would emit a partial UTF-8
+	// sequence and render as garbage.
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
+	runes := []rune(s)
 	if maxLen <= 3 {
-		return s[:maxLen]
+		return string(runes[:maxLen])
 	}
-	return s[:maxLen-3] + "..."
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // formatStatusChar returns the status character for a message entry

@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -129,7 +130,9 @@ func drawMessageListScreen(terminal *term.Terminal, state *MessageListState, are
 		upArrow, downArrow = "\u2191", "\u2193" // Unicode arrows
 	}
 	helpText := upArrow + "/" + downArrow + ": Navigate  Enter: Read  Q: Quit"
-	helpTextLen := len(helpText)
+	// Runes, not bytes: the UTF-8 arrows are 3 bytes each but occupy one column,
+	// so a byte length pads 4 columns short and pulls the right border inward.
+	helpTextLen := utf8.RuneCountInString(helpText)
 	leftPad = (77 - helpTextLen) / 2
 	rightPad = 77 - helpTextLen - leftPad
 	helpPadded := fmt.Sprintf("%s%s%s", strings.Repeat(" ", leftPad), helpText, strings.Repeat(" ", rightPad))
