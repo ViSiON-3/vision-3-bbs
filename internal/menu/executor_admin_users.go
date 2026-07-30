@@ -190,9 +190,10 @@ func sortedUsersByID(users []*user.User) []*user.User {
 }
 
 // adminTruncate trims surrounding whitespace, then clamps input to max
-// columns, appending "…" when it cuts.
+// columns, appending "..." when it cuts. The ellipsis is ASCII deliberately:
+// U+2026 has no CP437 mapping, so it reached CP437 terminals as a stray '?'.
 func adminTruncate(input string, max int) string {
-	return ansi.TruncateRunes(strings.TrimSpace(input), max, "…")
+	return ansi.TruncateRunes(strings.TrimSpace(input), max, "...")
 }
 
 func adminTime(t time.Time) string {

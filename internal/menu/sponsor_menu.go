@@ -453,7 +453,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 		switch key {
 		case int('t'), int('T'):
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
-				msg := "|01Tag — sysop/co-sysop only.|07"
+				msg := "|01Tag - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(1 * time.Second)
 				break
@@ -512,7 +512,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			case newHandle != "":
 				if userManager != nil {
 					if _, exists := userManager.GetUser(newHandle); !exists {
-						msg := fmt.Sprintf("|01User '%s' not found — sponsor unchanged.|07", newHandle)
+						msg := fmt.Sprintf("|01User '%s' not found - sponsor unchanged.|07", newHandle)
 						_ = terminalio.WriteProcessedBytes(terminal,
 							ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 						time.Sleep(1 * time.Second)
@@ -537,7 +537,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				if _, scanErr := fmt.Sscanf(raw, "%d", &n); scanErr == nil && n >= 0 {
 					edited.MaxMessages = n
 				} else {
-					msg := "|01Invalid number — unchanged.|07"
+					msg := "|01Invalid number - unchanged.|07"
 					_ = terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 					time.Sleep(1 * time.Second)
@@ -557,7 +557,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				if _, scanErr := fmt.Sscanf(raw, "%d", &n); scanErr == nil && n >= 0 {
 					edited.MaxAge = n
 				} else {
-					msg := "|01Invalid number — unchanged.|07"
+					msg := "|01Invalid number - unchanged.|07"
 					_ = terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 					time.Sleep(1 * time.Second)
@@ -645,7 +645,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				if _, scanErr := fmt.Sscanf(raw, "%d", &n); scanErr == nil && n >= 0 {
 					edited.ConferenceID = n
 				} else {
-					msg := "|01Invalid number — unchanged.|07"
+					msg := "|01Invalid number - unchanged.|07"
 					_ = terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 					time.Sleep(1 * time.Second)
@@ -658,7 +658,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 		case int('b'), int('B'):
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
-				msg := "|01Base Path — sysop/co-sysop only.|07"
+				msg := "|01Base Path - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(1 * time.Second)
 				break
@@ -673,7 +673,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 		case int('y'), int('Y'):
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
-				msg := "|01Area Type — sysop/co-sysop only.|07"
+				msg := "|01Area Type - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(1 * time.Second)
 				break
@@ -688,7 +688,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 		case int('e'), int('E'):
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
-				msg := "|01Echo Tag — sysop/co-sysop only.|07"
+				msg := "|01Echo Tag - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(1 * time.Second)
 				break
@@ -703,7 +703,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 		case int('o'), int('O'):
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
-				msg := "|01Origin Address — sysop/co-sysop only.|07"
+				msg := "|01Origin Address - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(1 * time.Second)
 				break
@@ -718,7 +718,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 		case int('k'), int('K'):
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
-				msg := "|01Network — sysop/co-sysop only.|07"
+				msg := "|01Network - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(1 * time.Second)
 				break
@@ -833,7 +833,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			if updateErr := e.MessageMgr.UpdateAreaByID(edited.ID, edited); updateErr != nil {
 				slog.Error("failed to update area", "node", nodeNumber, "error", updateErr)
-				msg := "|01Error updating area — changes may be lost.|07\r\n"
+				msg := "|01Error updating area - changes may be lost.|07\r\n"
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(2 * time.Second)
@@ -841,7 +841,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			if saveErr := e.MessageMgr.SaveAreas(); saveErr != nil {
 				slog.Error("failed to save areas", "node", nodeNumber, "error", saveErr)
-				msg := "|01Error saving area — changes may be lost.|07\r\n"
+				msg := "|01Error saving area - changes may be lost.|07\r\n"
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				time.Sleep(2 * time.Second)

@@ -125,7 +125,7 @@ func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, 
 	yes := nuvYesCount(c)
 	no := len(c.Votes) - yes
 	terminalio.WriteProcessedBytes(terminal, []byte("\x1b[2J\x1b[H"), outputMode)
-	wv(terminal, fmt.Sprintf("\r\n|15New User Voting — Candidate #%d\r\n|08%s\r\n", idx, strings.Repeat("\xc4", 50)), outputMode)
+	wv(terminal, fmt.Sprintf("\r\n|15New User Voting - Candidate #%d\r\n|08%s\r\n", idx, strings.Repeat("\xc4", 50)), outputMode)
 
 	// V2: NUV_Voting_On = '|08U|07s|15er |08N|07a|15me|09: |15|NA'
 	nameStr := e.LoadedStrings.WhosBeingVotedOn
@@ -478,7 +478,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			}
 			nuvMu.Unlock()
 			if removed {
-				wv(terminal, "|10Threshold reached — candidate processed.\r\n", outputMode)
+				wv(terminal, "|10Threshold reached - candidate processed.\r\n", outputMode)
 				return true
 			}
 			wv(terminal, votePrompt, outputMode)
