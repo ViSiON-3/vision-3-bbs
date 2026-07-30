@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -121,8 +122,10 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 			if maxDesc < 10 {
 				maxDesc = 10
 			}
-			if len(desc) > maxDesc {
-				desc = desc[:maxDesc-3] + "..."
+			// Runes, not bytes: FILE_ID.DIZ descriptions are UTF-8 (converted by
+			// internal/ziplab/diz.go cleanDIZ) and can hold multi-byte characters.
+			if descRunes := []rune(desc); len(descRunes) > maxDesc {
+				desc = string(descRunes[:maxDesc-3]) + "..."
 			}
 
 			fname := f.Filename
@@ -298,10 +301,11 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	previousViewportOffset := 0
 
 	padRight := func(s string, width int) string {
-		if len(s) >= width {
+		n := utf8.RuneCountInString(s)
+		if n >= width {
 			return s
 		}
-		return s + strings.Repeat(" ", width-len(s))
+		return s + strings.Repeat(" ", width-n)
 	}
 
 	formatAreaLine := func(item fileAreaListItem, selected bool, tagged bool) string {
@@ -322,8 +326,8 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 			colorSeq = "\x1b[97;46m"
 		}
 		areaName := item.area.Name
-		if len(areaName) > 40 {
-			areaName = areaName[:37] + "..."
+		if nameRunes := []rune(areaName); len(nameRunes) > 40 {
+			areaName = string(nameRunes[:37]) + "..."
 		}
 		var b strings.Builder
 		b.WriteString(paddingStr)
