@@ -189,15 +189,10 @@ func sortedUsersByID(users []*user.User) []*user.User {
 	return filtered
 }
 
+// adminTruncate trims surrounding whitespace, then clamps input to max
+// columns, appending "…" when it cuts.
 func adminTruncate(input string, max int) string {
-	runes := []rune(strings.TrimSpace(input))
-	if len(runes) <= max {
-		return string(runes)
-	}
-	if max <= 1 {
-		return string(runes[:max])
-	}
-	return string(runes[:max-1]) + "…"
+	return ansi.TruncateRunes(strings.TrimSpace(input), max, "…")
 }
 
 func adminTime(t time.Time) string {

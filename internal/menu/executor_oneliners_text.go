@@ -3,21 +3,18 @@ package menu
 import (
 	"strings"
 	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
+// truncateRunes trims surrounding whitespace, then clamps value to max
+// columns, appending "..." when it cuts.
 func truncateRunes(value string, max int) string {
 	value = strings.TrimSpace(value)
 	if max <= 0 || value == "" {
 		return ""
 	}
-	if utf8.RuneCountInString(value) <= max {
-		return value
-	}
-	runes := []rune(value)
-	if max <= 3 {
-		return string(runes[:max])
-	}
-	return string(runes[:max-3]) + "..."
+	return ansi.TruncateRunes(value, max, "...")
 }
 
 func isPipeCodeStartChar(b byte) bool {

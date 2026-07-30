@@ -13,6 +13,38 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
+// truncateRunes (pubkey dialog) has no ellipsis and no TrimSpace: it is a
+// plain rune-aware hard cut, used for the key-list comment column and error
+// text. These cases pin its behaviour, which the migration onto
+// ansi.TruncateRunes had to preserve exactly — and still must.
+func TestPubkeyDialogTruncateRunes(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		n    int
+		want string
+	}{
+		{"empty input", "", 10, ""},
+		{"n 0 non-empty input", "hello", 0, ""},
+		{"n 0 empty input", "", 0, ""},
+		{"shorter than n", "abc", 10, "abc"},
+		{"exactly n", "Hello", 5, "Hello"},
+		{"longer hard-cuts, no ellipsis", "Hello World", 5, "Hello"},
+		{"n 1", "Hello", 1, "H"},
+		{"leading/trailing whitespace preserved (no trim)", "  Hello  ", 5, "  Hel"},
+		{"multi-byte fits by runes", "héllo", 5, "héllo"},
+		{"multi-byte hard-cut on rune boundary", "héllo wörld", 6, "héllo "},
+		{"cjk hard-cut on rune boundary", "日本語のメッセージ", 4, "日本語の"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := truncateRunes(tt.s, tt.n); got != tt.want {
+				t.Errorf("truncateRunes(%q, %d) = %q, want %q", tt.s, tt.n, got, tt.want)
+			}
+		})
+	}
+}
+
 // makeTestKey returns a valid OpenSSH ed25519 authorized_keys line for testing.
 func makeTestKey(t *testing.T, comment string) string {
 	t.Helper()

@@ -5,6 +5,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -335,12 +336,12 @@ func (m Model) cursorToDisplayRow(cursor int) int {
 }
 
 // centerText centers a string within a given width.
+//
+// This is rune-based, not byte-based: every caller today passes an ASCII
+// literal, so this was unreachable in practice, but a byte-offset slice on
+// multi-byte input would emit a partial UTF-8 sequence and render as garbage.
 func centerText(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
-	}
-	pad := (width - len(s)) / 2
-	return strings.Repeat(" ", pad) + s + strings.Repeat(" ", width-pad-len(s))
+	return ansi.Center(ansi.TruncateRunes(s, width, ""), width)
 }
 
 // centerInBox centers text inside the box area between borders.
