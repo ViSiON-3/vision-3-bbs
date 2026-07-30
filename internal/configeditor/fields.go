@@ -3,6 +3,8 @@ package configeditor
 import (
 	"strings"
 	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // fieldType defines the edit behavior for a field.
@@ -49,28 +51,15 @@ func maskValue(s string) string {
 
 // padRight pads a string to width with spaces, truncating if longer.
 func padRight(s string, width int) string {
-	runes := []rune(s)
-	if len(runes) >= width {
-		return string(runes[:width])
-	}
-	return s + strings.Repeat(" ", width-len(runes))
+	return ansi.PadRight(ansi.TruncateRunes(s, width, ""), width)
 }
 
 // padLeft pads a string on the left to width.
 func padLeft(s string, width int) string {
-	runes := []rune(s)
-	if len(runes) >= width {
-		return string(runes[:width])
-	}
-	return strings.Repeat(" ", width-len(runes)) + s
+	return ansi.PadLeft(ansi.TruncateRunes(s, width, ""), width)
 }
 
 // centerText centers a string within a given width using visual (rune) width.
 func centerText(s string, width int) string {
-	vis := utf8.RuneCountInString(s)
-	if vis >= width {
-		return s
-	}
-	pad := (width - vis) / 2
-	return strings.Repeat(" ", pad) + s + strings.Repeat(" ", width-pad-vis)
+	return ansi.Center(s, width)
 }

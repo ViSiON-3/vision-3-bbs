@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -57,11 +58,7 @@ func (m *Model) keyDialogDelete(ref string) error {
 // truncateRunes truncates s to at most n runes, returning a string of at most n
 // runes (never splitting a multi-byte UTF-8 sequence).
 func truncateRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n])
+	return ansi.TruncateRunes(s, n, "")
 }
 
 // overlayKeyListDialog renders the WFC Keys list overlay over background.

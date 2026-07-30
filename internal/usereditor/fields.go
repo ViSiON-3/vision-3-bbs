@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -307,18 +308,10 @@ func infoformStatus(dataDir string, userID int) string {
 
 // padRight pads a string to width with spaces, truncating if longer.
 func padRight(s string, width int) string {
-	runes := []rune(s)
-	if len(runes) >= width {
-		return string(runes[:width])
-	}
-	return s + strings.Repeat(" ", width-len(runes))
+	return ansi.PadRight(ansi.TruncateRunes(s, width, ""), width)
 }
 
 // padLeft pads a string on the left to width.
 func padLeft(s string, width int) string {
-	runes := []rune(s)
-	if len(runes) >= width {
-		return string(runes[:width])
-	}
-	return strings.Repeat(" ", width-len(runes)) + s
+	return ansi.PadLeft(ansi.TruncateRunes(s, width, ""), width)
 }
