@@ -44,13 +44,17 @@ const messageAreaFile = "message_areas.json"
 // Bases are opened on-demand and closed after each operation to allow
 // v3mail and other external tools concurrent access.
 type MessageManager struct {
-	mu             sync.RWMutex
-	dataPath       string // Base data directory (e.g., "data")
-	areasPath      string // Full path to message_areas.json
-	areasByID      map[int]*MessageArea
-	areasByTag     map[string]*MessageArea
-	areasByEchoTag map[string]*MessageArea // indexed by EchoTag when it differs from Tag
-	boardName      string                  // BBS name for echomail origin lines
+	mu         sync.RWMutex
+	dataPath   string // Base data directory (e.g., "data")
+	areasPath  string // Full path to message_areas.json
+	areasByID  map[int]*MessageArea
+	areasByTag map[string]*MessageArea
+	// areasByEchoTag indexes areas by EchoTag when it differs from Tag.
+	// The key is the echo tag alone, so it holds at most one area per tag even
+	// across networks; AddArea/UpdateAreaByID reject same-network duplicates and
+	// the load path warns about any collision it finds in an existing config.
+	areasByEchoTag map[string]*MessageArea
+	boardName      string // BBS name for echomail origin lines
 	// networkTearlines maps network key -> custom tearline text.
 	networkTearlines map[string]string
 	threadIndex      map[int]*threadIndex

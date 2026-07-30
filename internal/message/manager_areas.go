@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 )
 
 // GetAreaByID retrieves a message area by its ID.
@@ -20,6 +21,50 @@ func (mm *MessageManager) GetAreaByTag(tag string) (*MessageArea, bool) {
 	defer mm.mu.RUnlock()
 	area, exists := mm.areasByTag[tag]
 	return area, exists
+}
+
+// echoTagConflict reports an area that already claims echoTag, excluding
+// excludeID. Two kinds of claim count:
+//
+//   - Another area with the same EchoTag on the same network. areasByEchoTag
+//     keeps only the last writer, so that echo's mail silently lands in
+//     whichever area was indexed last. Areas on DIFFERENT networks may
+//     legitimately share an echo tag -- the same echo name exists on separate
+//     FTN networks -- and the tosser disambiguates by network when routing
+//     (internal/tosser/import.go).
+//
+//   - Any area whose Tag equals echoTag, on any network. The tosser tries
+//     GetAreaByTag first and that lookup is NOT network-gated, so a tag match
+//     always wins and the echo-tagged area would never receive anything.
+//
+// Comparison is exact, matching the areasByEchoTag key. Caller must hold mm.mu.
+func (mm *MessageManager) echoTagConflict(echoTag, network string, excludeID int) *MessageArea {
+	if echoTag == "" {
+		return nil
+	}
+	for _, a := range mm.areasByID {
+		if a.ID == excludeID {
+			continue
+		}
+		if a.Tag == echoTag {
+			return a
+		}
+		if a.EchoTag != "" && a.EchoTag == echoTag && strings.EqualFold(a.Network, network) {
+			return a
+		}
+	}
+	return nil
+}
+
+// echoTagConflictError describes why echoTag cannot be used, naming the area
+// that already claims it and how.
+func echoTagConflictError(echoTag string, c *MessageArea) error {
+	if c.Tag == echoTag {
+		return fmt.Errorf("echo tag %q is the local tag of area %q (id %d); inbound mail for it already routes there",
+			echoTag, c.Tag, c.ID)
+	}
+	return fmt.Errorf("echo tag %q already used by area %q (id %d) on network %q",
+		echoTag, c.Tag, c.ID, c.Network)
 }
 
 // GetAreaByEchoTag retrieves a message area by its FTN echo tag.
@@ -49,12 +94,20 @@ func (mm *MessageManager) UpdateAreaByID(id int, updated MessageArea) error {
 	oldEchoTag := old.EchoTag
 	replacement := new(MessageArea)
 	*replacement = updated
+	// Validate everything before touching any index, so a rejected update
+	// leaves the manager exactly as it was.
 	if oldTag != updated.Tag {
 		if existing, ok := mm.areasByTag[updated.Tag]; ok && existing.ID != id {
 			return fmt.Errorf("tag %q already in use by area %d", updated.Tag, existing.ID)
 		}
+	}
+	if conflict := mm.echoTagConflict(updated.EchoTag, updated.Network, id); conflict != nil {
+		return echoTagConflictError(updated.EchoTag, conflict)
+	}
+	if oldTag != updated.Tag {
 		delete(mm.areasByTag, oldTag)
 	}
+
 	// Keep areasByEchoTag in sync when EchoTag changes.
 	if oldEchoTag != "" && oldEchoTag != old.Tag {
 		delete(mm.areasByEchoTag, oldEchoTag)
@@ -77,6 +130,11 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 	if _, exists := mm.areasByTag[area.Tag]; exists {
 		mm.mu.Unlock()
 		return 0, fmt.Errorf("message area tag %q already exists", area.Tag)
+	}
+
+	if conflict := mm.echoTagConflict(area.EchoTag, area.Network, 0); conflict != nil {
+		mm.mu.Unlock()
+		return 0, echoTagConflictError(area.EchoTag, conflict)
 	}
 
 	// Assign next ID and position.

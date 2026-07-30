@@ -45,10 +45,38 @@ func (mm *MessageManager) loadMessageAreas() error {
 		mm.areasByID[area.ID] = area
 		mm.areasByTag[area.Tag] = area
 		// Also index by EchoTag for FTN inbound routing when tag-prefix is in use.
+		// Existing configs may already contain duplicates, so load stays tolerant
+		// and warns rather than failing; AddArea/UpdateAreaByID reject new ones.
 		if area.EchoTag != "" && area.EchoTag != area.Tag {
+			if prev, dup := mm.areasByEchoTag[area.EchoTag]; dup {
+				// Only the last area loaded stays reachable by this echo tag.
+				// Same network: its mail goes to that area instead of the other.
+				// Different networks: the tosser's network check rejects the
+				// mismatch, so the shadowed network's mail goes unrouted.
+				slog.Warn("duplicate FTN echo tag; only the last area loaded is reachable by it",
+					"echo_tag", area.EchoTag,
+					"kept_area", area.Tag, "kept_id", area.ID, "kept_network", area.Network,
+					"shadowed_area", prev.Tag, "shadowed_id", prev.ID, "shadowed_network", prev.Network)
+			}
 			mm.areasByEchoTag[area.EchoTag] = area
 		}
 		slog.Debug("loaded area", "id", area.ID, "tag", area.Tag, "type", area.AreaType)
+	}
+
+	// An area's Tag shadows another area's EchoTag: the tosser tries the tag
+	// lookup first and that lookup is not network-gated, so the echo-tagged
+	// area never receives anything. Checked after the loop because the two
+	// areas can appear in either order.
+	for _, area := range mm.areasByID {
+		if area.EchoTag == "" || area.EchoTag == area.Tag {
+			continue
+		}
+		if owner, ok := mm.areasByTag[area.EchoTag]; ok && owner.ID != area.ID {
+			slog.Warn("FTN echo tag is another area's local tag; mail for it routes to that area instead",
+				"echo_tag", area.EchoTag,
+				"echo_area", area.Tag, "echo_id", area.ID, "echo_network", area.Network,
+				"tag_area", owner.Tag, "tag_id", owner.ID)
+		}
 	}
 
 	// Migration: assign positions to any areas that have Position <= 0.
