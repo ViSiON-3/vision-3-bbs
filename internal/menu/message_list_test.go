@@ -53,6 +53,7 @@ func TestTruncateString(t *testing.T) {
 		maxLen int
 		want   string
 	}{
+		{"empty input", "", 10, ""},
 		{"shorter than max", "abc", 10, "abc"},
 		{"exactly max", "Hello", 5, "Hello"},
 		{"longer, ellipsis applied", "Hello World", 8, "Hello..."},

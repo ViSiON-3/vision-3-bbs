@@ -41,10 +41,13 @@ func TestTruncateStrCutsOnRuneBoundaries(t *testing.T) {
 		maxLen int
 		want   string
 	}{
+		{"empty input", "", 10, ""},
+		{"maxLen 0", "abcdef", 0, ""},
 		{"shorter than max", "abc", 10, "abc"},
 		{"exactly max", "abcde", 5, "abcde"},
 		{"longer gets ellipsis", "abcdefgh", 5, "abc.."},
 		{"maxLen 2 hard cut", "abcdef", 2, "ab"},
+		{"maxLen 1 hard cut", "abcdef", 1, "a"},
 		{"multi-byte fits by runes", "café", 4, "café"},
 		{"multi-byte cut on boundary", "café society", 6, "café.."},
 		{"cjk cut on boundary", "日本語のメッセージ", 5, "日本語.."},
