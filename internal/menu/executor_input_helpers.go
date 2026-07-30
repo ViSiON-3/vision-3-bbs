@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -105,12 +106,21 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 
 	shadeChar := "\u2591"
 
+	// maxLen is counted in runes, not bytes: input holds UTF-8 (ASCII, or an
+	// extended character decoded via decodeExtendedKey below), so a multi-byte
+	// rune is one unit of the budget but several bytes. defaultValue is clamped
+	// with ansi.TruncateRunes rather than a raw byte slice, which would cut a
+	// multi-byte value mid-rune.
+	//
+	// Runes are treated as one terminal column each. That holds for CP437 and
+	// for the Latin-1 range this BBS actually sees; it is NOT true of
+	// double-width glyphs such as CJK, which would render two columns wide and
+	// skew the box and cursor maths. Wide-character support is deliberately out
+	// of scope repo-wide (it would need go-runewidth threaded through
+	// ansi.VisibleLength), so a CJK value here draws a box that is too narrow.
 	input := make([]byte, 0, maxLen)
 	if defaultValue != "" {
-		input = append(input, []byte(defaultValue)...)
-		if len(input) > maxLen {
-			input = input[:maxLen]
-		}
+		input = append(input, []byte(ansi.TruncateRunes(defaultValue, maxLen, ""))...)
 	}
 	cursorStyleSet := false
 	savedCursor := false
@@ -125,12 +135,12 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 		if len(input) > 0 {
 			display.Write(input)
 		}
-		cursorPos := len(input)
+		cursorCols := utf8.RuneCount(input)
 		remainingLen := 0
-		if len(input) < maxLen {
+		if cursorCols < maxLen {
 			display.WriteString(cursorStyle)
 			display.WriteString(shadeChar)
-			remainingLen = maxLen - len(input) - 1
+			remainingLen = maxLen - cursorCols - 1
 		}
 		if remainingLen > 0 {
 			display.WriteString(remainingStyle)
@@ -139,8 +149,8 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 		display.WriteString(resetColor)
 
 		moveToCursor := ""
-		if cursorPos < maxLen {
-			moveToCursor = fmt.Sprintf("\x1b[%dD", maxLen-cursorPos)
+		if cursorCols < maxLen {
+			moveToCursor = fmt.Sprintf("\x1b[%dD", maxLen-cursorCols)
 		}
 		terminalio.WriteStringCP437(terminal, []byte(display.String()+moveToCursor), outputMode)
 	}
@@ -164,6 +174,7 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 	// caused the "double key press" bug when the lightbar's goroutine was also active.
 	ih := getSessionIH(session)
 	readBuf := make([]byte, 1)
+	var utf8Pending []byte
 
 	for {
 		n, err := ih.Read(readBuf)
@@ -187,8 +198,14 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 			return strings.TrimSpace(result), nil
 
 		case 8, 127: // Backspace or Delete
-			if len(input) > 0 {
-				input = input[:len(input)-1]
+			// A byte in progress toward a multi-byte UTF-8 character was never
+			// appended to input or rendered, so just discard it. Otherwise
+			// remove the whole last RUNE (see backspaceRune) -- not one byte,
+			// which would cut a multi-byte character in half.
+			if len(utf8Pending) > 0 {
+				utf8Pending = nil
+			} else if len(input) > 0 {
+				input = backspaceRune(input)
 				renderBox(true)
 			}
 
@@ -201,10 +218,44 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 			return "", io.EOF
 
 		default:
-			// Printable ASCII character
-			if ch >= 32 && ch < 127 && len(input) < maxLen {
-				input = append(input, ch)
-				renderBox(true)
+			if ch >= 32 && ch < 127 {
+				// Printable ASCII character
+				if utf8.RuneCount(input) < maxLen {
+					input = append(input, ch)
+					renderBox(true)
+				}
+				// A completed ASCII keystroke means any partial multi-byte
+				// sequence still buffered belongs to a different, abandoned
+				// character (e.g. a stray lead byte with no valid
+				// continuation) and must not be left around to absorb the
+				// bytes of the NEXT legitimate character.
+				utf8Pending = nil
+			} else if ch >= 128 {
+				// Extended character (CP437 byte, or one byte of a multi-byte
+				// UTF-8 sequence). decodeExtendedKey only appends once a full
+				// character is known; the echo it returns is not needed here
+				// since renderBox already re-writes the whole visible box
+				// through terminalio.WriteStringCP437, which re-encodes per
+				// outputMode.
+				if utf8.RuneCount(input) < maxLen {
+					var newInput []byte
+					newInput, _, utf8Pending = decodeExtendedKey(input, outputMode, ch, utf8Pending)
+					if len(newInput) != len(input) {
+						input = newInput
+						renderBox(true)
+					}
+				} else {
+					// At the column limit: still track pending UTF-8 bytes so
+					// the next byte of an in-flight sequence isn't
+					// misinterpreted as the start of a new one, but don't
+					// grow input past maxLen.
+					_, _, utf8Pending = decodeExtendedKey(nil, outputMode, ch, utf8Pending)
+				}
+			} else {
+				// Any other ignored byte (e.g. an untranslated control
+				// code): same reasoning as the ASCII branch above -- don't
+				// leave a partial sequence around to absorb what comes next.
+				utf8Pending = nil
 			}
 		}
 	}
