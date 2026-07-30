@@ -89,7 +89,7 @@ func (um *UserMgr) saveCallHistoryLocked() error {
 	}
 
 	filePath := filepath.Join(um.dataPath, callHistoryFile) // Use stored dataPath
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write %s: %w", callHistoryFile, err)
 	}
 
@@ -110,7 +110,7 @@ func (um *UserMgr) saveNextCallNumberLocked() error {
 	}
 
 	filePath := filepath.Join(um.dataPath, callNumberFile)
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write %s: %w", callNumberFile, err)
 	}
 	return nil

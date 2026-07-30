@@ -132,18 +132,31 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 	}
 	lowerHandle := strings.ToLower(handle)
 
-	um.mu.Lock()
-	defer um.mu.Unlock()
-
-	// Check if handle already exists
-	if _, exists := um.users[lowerHandle]; exists {
+	// Reject a duplicate handle before doing the expensive work, so the common
+	// error path is unchanged and costs nothing.
+	um.mu.RLock()
+	_, exists := um.users[lowerHandle]
+	um.mu.RUnlock()
+	if exists {
 		return nil, ErrHandleExists
 	}
 
-	// Hash the password
+	// Hash OUTSIDE the lock. bcrypt is deliberately slow, and it depends only on
+	// password -- holding um.mu across it blocks every read and write on the
+	// manager for the duration of each registration. Authenticate already
+	// releases the lock before bcrypt for exactly this reason.
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	um.mu.Lock()
+	defer um.mu.Unlock()
+
+	// Re-check under the write lock: another registration may have taken the
+	// handle while we were hashing.
+	if _, exists := um.users[lowerHandle]; exists {
+		return nil, ErrHandleExists
 	}
 
 	// Create new user
