@@ -3,12 +3,31 @@ package menu
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
 
 // fileLightbar rendering: file rows, separator, command bar, page indicator.
+
+// writePipe writes s to the terminal after pipe-code ANSI translation. This is
+// the lightbar's most common output call (~25 sites in the former monolithic
+// run() method), hoisted verbatim to cut the repeated
+// terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(s)), lb.outputMode)
+// boilerplate.
+func (lb *fileLightbar) writePipe(s string) error {
+	return terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(s)), lb.outputMode)
+}
+
+// errMsgPause writes msg, pauses briefly so the user can read it, and expects
+// the caller to set needFullRedraw = true and continue the run() loop
+// afterward (that part can't be hoisted since needFullRedraw is local to
+// run()).
+func (lb *fileLightbar) errMsgPause(msg string) {
+	_ = lb.writePipe(msg)
+	time.Sleep(1 * time.Second)
+}
 func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) []string {
 	if idx < 0 || idx >= len(lb.allFiles) {
 		return nil

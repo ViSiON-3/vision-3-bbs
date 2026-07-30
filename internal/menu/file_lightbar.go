@@ -71,6 +71,14 @@ type fileLightbar struct {
 	cmdIndex             int
 }
 
+// logoffIfDisconnected reports whether err indicates the session has gone
+// away (EOF) or idled out — the six places in the lightbar loop that read a
+// key or wait on a prompt all map either condition to the same "LOGOFF"
+// result.
+func logoffIfDisconnected(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, editor.ErrIdleTimeout)
+}
+
 // runListFilesLightbar builds a fileLightbar from st's already-loaded
 // templates, pagination, and area state, then drives the interactive
 // lightbar file browser via run(). It always returns a nil *user.User; the
@@ -280,10 +288,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 
 		keyInt, err := lb.ih.ReadKey()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, "LOGOFF", io.EOF
-			}
-			if errors.Is(err, editor.ErrIdleTimeout) {
+			if logoffIfDisconnected(err) {
 				return nil, "LOGOFF", io.EOF
 			}
 			return nil, "", err
@@ -405,8 +410,8 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 
 				d1 := fmt.Sprintf("|15Filename  : |07%s\r\n", sel.Filename)
 				d2 := fmt.Sprintf("|15Size      : |07%s\r\n", compactFileSize(sel.Size))
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(d1)), lb.outputMode)
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(d2)), lb.outputMode)
+				_ = lb.writePipe(d1)
+				_ = lb.writePipe(d2)
 
 				for i, dl := range descLines {
 					var dLine string
@@ -415,22 +420,22 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					} else {
 						dLine = fmt.Sprintf("|07            %s\r\n", dl)
 					}
-					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(dLine)), lb.outputMode)
+					_ = lb.writePipe(dLine)
 				}
 				if len(descLines) == 0 {
-					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("|15Desc      : |07(none)\r\n")), lb.outputMode)
+					_ = lb.writePipe("|15Desc      : |07(none)\r\n")
 				}
 
 				d3 := fmt.Sprintf("|15Uploaded  : |07%s\r\n", sel.UploadedAt.Format("01/02/2006 15:04"))
 				d4 := fmt.Sprintf("|15Uploader  : |07%s\r\n", sel.UploadedBy)
 				d5 := fmt.Sprintf("|15Downloads : |07%d\r\n", sel.DownloadCount)
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(d3)), lb.outputMode)
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(d4)), lb.outputMode)
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(d5)), lb.outputMode)
+				_ = lb.writePipe(d3)
+				_ = lb.writePipe(d4)
+				_ = lb.writePipe(d5)
 
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|08Press any key to return...|07")), lb.outputMode)
+				_ = lb.writePipe("\r\n|08Press any key to return...|07")
 				if _, waitErr := lb.ih.ReadKey(); waitErr != nil {
-					if errors.Is(waitErr, io.EOF) || errors.Is(waitErr, editor.ErrIdleTimeout) {
+					if logoffIfDisconnected(waitErr) {
 						return nil, "LOGOFF", io.EOF
 					}
 					return nil, "", waitErr
@@ -457,14 +462,14 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					viewFileByRecord(lb.e, lb.s, lb.terminal, sel, lb.outputMode, tw, th)
 				}
 				// Hide cursor again.
-				_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+				lb.endFooterPrompt()
 				needFullRedraw = true
 			}
 
 		case "d":
 			if len(lb.currentUser.TaggedFileIDs) == 0 {
 				msg := "\r\n|07No files marked for download. Use |15Space|07 to mark files.|07\r\n"
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(msg)), lb.outputMode)
+				_ = lb.writePipe(msg)
 				time.Sleep(1 * time.Second)
 				needFullRedraw = true
 				continue
@@ -472,25 +477,22 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 
 			confirmPrompt := fmt.Sprintf("Download %d marked file(s)?", len(lb.currentUser.TaggedFileIDs))
 			// Replace the footer lightbar with the confirm prompt instead of printing over the file list.
-			clearFooter := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + ansi.MoveCursor(lb.cmdBarRow, 1) + "\x1b[2K"
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(clearFooter), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(ansi.MoveCursor(lb.cmdBarRow, 1)), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
+			lb.beginFooterPrompt()
 
 			tw, th := getTerminalSize(lb.s)
 			proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
 			if promptErr != nil {
-				if errors.Is(promptErr, io.EOF) {
+				if logoffIfDisconnected(promptErr) {
 					return nil, "LOGOFF", io.EOF
 				}
 				slog.Error("error getting download confirmation", "node", lb.nodeNumber, "error", promptErr)
-				_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+				lb.endFooterPrompt()
 				needFullRedraw = true
 				continue
 			}
 
 			if !proceed {
-				_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+				lb.endFooterPrompt()
 				needFullRedraw = true
 				continue
 			}
@@ -498,7 +500,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			slog.Info("starting download", "node", lb.nodeNumber, "handle", lb.currentUser.Handle, "count", len(lb.currentUser.TaggedFileIDs))
 			// Clear the screen before the download process begins.
 			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[2J\x1b[H"), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("|07Preparing download...\r\n")), lb.outputMode)
+			_ = lb.writePipe("|07Preparing download...\r\n")
 			time.Sleep(500 * time.Millisecond)
 
 			successCount := 0
@@ -532,14 +534,14 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				// Use protocol selection (respects connection type - SSH vs Telnet)
 				proto, protoOK, protoErr := lb.e.selectTransferProtocol(lb.s, lb.terminal, lb.outputMode)
 				if protoErr != nil {
-					if errors.Is(protoErr, io.EOF) {
+					if logoffIfDisconnected(protoErr) {
 						return nil, "LOGOFF", io.EOF
 					}
 					slog.Error("protocol selection error", "node", lb.nodeNumber, "error", protoErr)
-					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), lb.outputMode)
+					_ = lb.writePipe("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")
 					failCount += len(filesToDownload)
 				} else if !protoOK {
-					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Download cancelled.|07\r\n")), lb.outputMode)
+					_ = lb.writePipe("\r\n|07Download cancelled.|07\r\n")
 				} else {
 					sentCount, sendFails := lb.e.runTransferSend(lb.s, lb.terminal, proto, filesToDownload, fileIDsToDownload, lb.outputMode, lb.nodeNumber)
 					successCount = sentCount
@@ -549,7 +551,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				time.Sleep(1 * time.Second)
 			} else {
 				slog.Warn("no valid file paths found for tagged files", "node", lb.nodeNumber)
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Could not find any of the marked files on the server.|07\r\n")), lb.outputMode)
+				_ = lb.writePipe("\r\n|01Could not find any of the marked files on the server.|07\r\n")
 				// failCount already equals the number of missing files (every
 				// tagged ID incremented it in the collection loop above).
 			}
@@ -562,15 +564,12 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			}
 
 			statusMsg := fmt.Sprintf("|07Download finished. Success: %d, Failed: %d.|07\r\n", successCount, failCount)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(statusMsg)), lb.outputMode)
+			_ = lb.writePipe(statusMsg)
 			time.Sleep(2 * time.Second)
 
 			// Refresh file list.
-			lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
-			if lb.selectedIndex >= len(lb.allFiles) && len(lb.allFiles) > 0 {
-				lb.selectedIndex = len(lb.allFiles) - 1
-			}
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+			lb.refreshFileList()
+			lb.endFooterPrompt()
 			needFullRedraw = true
 
 		case "u":
@@ -583,11 +582,8 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			// so the local ih is now stale — refresh it.
 			lb.ih = getSessionIH(lb.s)
 			// Refresh file list after upload.
-			lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
-			if lb.selectedIndex >= len(lb.allFiles) && len(lb.allFiles) > 0 {
-				lb.selectedIndex = len(lb.allFiles) - 1
-			}
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+			lb.refreshFileList()
+			lb.endFooterPrompt()
 			needFullRedraw = true
 
 		case "e": // Edit description (sysop only)
@@ -595,13 +591,10 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				continue
 			}
 			rec := lb.allFiles[lb.selectedIndex]
-			clearFooter := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + ansi.MoveCursor(lb.cmdBarRow, 1) + "\x1b[2K"
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(clearFooter), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(ansi.MoveCursor(lb.cmdBarRow, 1)), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("|15New description: |07")), lb.outputMode)
+			lb.beginFooterPrompt()
+			_ = lb.writePipe("|15New description: |07")
 			newDesc, readErr := readLineFromSessionIHAllowAbort(lb.s, lb.terminal)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+			lb.endFooterPrompt()
 			if readErr == nil && newDesc != "" {
 				if updErr := lb.e.FileMgr.UpdateFileDescription(rec.ID, newDesc); updErr != nil {
 					slog.Error("failed to update description", "node", lb.nodeNumber, "file", rec.Filename, "error", updErr)
@@ -617,15 +610,12 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			}
 			rec := lb.allFiles[lb.selectedIndex]
 			confirmPrompt := fmt.Sprintf("Delete %s from disk?", rec.Filename)
-			clearFooter := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + ansi.MoveCursor(lb.cmdBarRow, 1) + "\x1b[2K"
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(clearFooter), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(ansi.MoveCursor(lb.cmdBarRow, 1)), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
+			lb.beginFooterPrompt()
 			tw, th := getTerminalSize(lb.s)
 			proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+			lb.endFooterPrompt()
 			if promptErr != nil {
-				if errors.Is(promptErr, io.EOF) {
+				if logoffIfDisconnected(promptErr) {
 					return nil, "LOGOFF", io.EOF
 				}
 				needFullRedraw = true
@@ -644,10 +634,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 						}
 					}
 					lb.currentUser.TaggedFileIDs = filtered
-					lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
-					if lb.selectedIndex >= len(lb.allFiles) && len(lb.allFiles) > 0 {
-						lb.selectedIndex = len(lb.allFiles) - 1
-					}
+					lb.refreshFileList()
 				}
 			}
 			needFullRedraw = true
@@ -657,13 +644,10 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				continue
 			}
 			rec := lb.allFiles[lb.selectedIndex]
-			clearFooter := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + ansi.MoveCursor(lb.cmdBarRow, 1) + "\x1b[2K"
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(clearFooter), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(ansi.MoveCursor(lb.cmdBarRow, 1)), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("|15Move to area (# or tag): |07")), lb.outputMode)
+			lb.beginFooterPrompt()
+			_ = lb.writePipe("|15Move to area (# or tag): |07")
 			areaInput, readErr := readLineFromSessionIHAllowAbort(lb.s, lb.terminal)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+			lb.endFooterPrompt()
 			if readErr != nil || strings.TrimSpace(areaInput) == "" {
 				needFullRedraw = true
 				continue
@@ -682,8 +666,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				}
 			}
 			if targetArea == nil {
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Area not found.|07\r\n")), lb.outputMode)
-				time.Sleep(1 * time.Second)
+				lb.errMsgPause("\r\n|01Area not found.|07\r\n")
 				needFullRedraw = true
 				continue
 			}
@@ -691,9 +674,9 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
 			tw, th := getTerminalSize(lb.s)
 			proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+			lb.endFooterPrompt()
 			if promptErr != nil {
-				if errors.Is(promptErr, io.EOF) {
+				if logoffIfDisconnected(promptErr) {
 					return nil, "LOGOFF", io.EOF
 				}
 				needFullRedraw = true
@@ -704,10 +687,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 					slog.Error("failed to move file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "error", mvErr)
 				} else {
 					slog.Info("sysop moved file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "tag", targetArea.Tag)
-					lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
-					if lb.selectedIndex >= len(lb.allFiles) && len(lb.allFiles) > 0 {
-						lb.selectedIndex = len(lb.allFiles) - 1
-					}
+					lb.refreshFileList()
 				}
 			}
 			needFullRedraw = true
@@ -717,21 +697,17 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				continue
 			}
 			rec := lb.allFiles[lb.selectedIndex]
-			clearFooter := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + ansi.MoveCursor(lb.cmdBarRow, 1) + "\x1b[2K"
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(clearFooter), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(ansi.MoveCursor(lb.cmdBarRow, 1)), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("|15New filename: |07")), lb.outputMode)
+			lb.beginFooterPrompt()
+			_ = lb.writePipe("|15New filename: |07")
 			newName, readErr := readLineFromSessionIHAllowAbort(lb.s, lb.terminal)
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25l"), lb.outputMode)
+			lb.endFooterPrompt()
 			if readErr != nil || strings.TrimSpace(newName) == "" {
 				needFullRedraw = true
 				continue
 			}
 			newName = filepath.Base(strings.TrimSpace(newName))
 			if newName == "." || newName == ".." {
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Invalid filename.|07\r\n")), lb.outputMode)
-				time.Sleep(1 * time.Second)
+				lb.errMsgPause("\r\n|01Invalid filename.|07\r\n")
 				needFullRedraw = true
 				continue
 			}
@@ -744,8 +720,7 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				}
 			}
 			if duplicate {
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Filename already exists in this area.|07\r\n")), lb.outputMode)
-				time.Sleep(1 * time.Second)
+				lb.errMsgPause("\r\n|01Filename already exists in this area.|07\r\n")
 				needFullRedraw = true
 				continue
 			}
@@ -768,22 +743,19 @@ func (lb *fileLightbar) run() (*user.User, string, error) {
 				oldInfo, oldStatErr := os.Stat(oldPath)
 				if oldStatErr != nil || !os.SameFile(oldInfo, newInfo) {
 					slog.Error("rename target already exists on disk", "node", lb.nodeNumber, "path", newPath)
-					_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01A file with that name already exists.|07\r\n")), lb.outputMode)
-					time.Sleep(1 * time.Second)
+					lb.errMsgPause("\r\n|01A file with that name already exists.|07\r\n")
 					needFullRedraw = true
 					continue
 				}
 			case !errors.Is(statErr, os.ErrNotExist):
 				slog.Error("cannot stat rename target", "node", lb.nodeNumber, "path", newPath, "error", statErr)
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Rename failed.|07\r\n")), lb.outputMode)
-				time.Sleep(1 * time.Second)
+				lb.errMsgPause("\r\n|01Rename failed.|07\r\n")
 				needFullRedraw = true
 				continue
 			}
 			if renErr := os.Rename(oldPath, newPath); renErr != nil {
 				slog.Error("failed to rename file", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "error", renErr)
-				_ = terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Rename failed.|07\r\n")), lb.outputMode)
-				time.Sleep(1 * time.Second)
+				lb.errMsgPause("\r\n|01Rename failed.|07\r\n")
 				needFullRedraw = true
 				continue
 			}

@@ -150,6 +150,16 @@ func (lb *fileLightbar) clampSelection() {
 	}
 }
 
+// refreshFileList refetches allFiles for the current area and clamps
+// selectedIndex back onto the list if the file that was selected no longer
+// exists (e.g. after a download, upload, kill, or move changed the count).
+func (lb *fileLightbar) refreshFileList() {
+	lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
+	if lb.selectedIndex >= len(lb.allFiles) && len(lb.allFiles) > 0 {
+		lb.selectedIndex = len(lb.allFiles) - 1
+	}
+}
+
 func (lb *fileLightbar) screenRowForFile(fileIdx int) (startRow int, height int) {
 	if fileIdx < lb.topIndex {
 		return -1, 0
