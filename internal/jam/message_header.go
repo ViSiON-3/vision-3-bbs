@@ -119,7 +119,7 @@ func (b *Base) readMessageHeaderLocked(msgNum int) (*MessageHeader, error) {
 	return hdr, nil
 }
 
-// WriteMessageHeader writes a message header to the .jhr file and returns
+// writeMessageHeader writes a message header to the .jhr file and returns
 // the byte offset where it was written.
 func (b *Base) writeMessageHeader(hdr *MessageHeader) (uint32, error) {
 	if !b.isOpen {
