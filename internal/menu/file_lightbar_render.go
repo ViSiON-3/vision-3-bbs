@@ -20,14 +20,15 @@ func (lb *fileLightbar) writePipe(s string) error {
 	return terminalio.WriteProcessedBytes(lb.terminal, ansi.ReplacePipeCodes([]byte(s)), lb.outputMode)
 }
 
-// errMsgPause writes msg, pauses briefly so the user can read it, and expects
-// the caller to set needFullRedraw = true and continue the run() loop
-// afterward (that part can't be hoisted since needFullRedraw is local to
-// run()).
+// errMsgPause writes msg and pauses briefly so the user can read it. The
+// message clobbers part of the screen, so callers are expected to set
+// frame.needFullRedraw = true afterward; that part stays at the call site
+// because the frame is owned by the run() loop.
 func (lb *fileLightbar) errMsgPause(msg string) {
 	_ = lb.writePipe(msg)
 	time.Sleep(1 * time.Second)
 }
+
 func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) []string {
 	if idx < 0 || idx >= len(lb.allFiles) {
 		return nil
