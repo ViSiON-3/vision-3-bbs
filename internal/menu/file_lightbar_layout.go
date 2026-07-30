@@ -1,10 +1,98 @@
 package menu
 
 import (
+	"regexp"
+	"strings"
+
+	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // fileLightbar geometry, paging, and selection helpers.
+
+// resolveTermSize returns the terminal height and width for s, falling back
+// to the default 80x24 when no PTY window size is reported.
+func resolveTermSize(s ssh.Session) (termHeight, termWidth int) {
+	termHeight = 24
+	termWidth = 80
+	if ptyReq, _, ok := s.Pty(); ok && ptyReq.Window.Height > 0 {
+		termHeight = ptyReq.Window.Height
+		if ptyReq.Window.Width > 0 {
+			termWidth = ptyReq.Window.Width
+		}
+	}
+	return termHeight, termWidth
+}
+
+// computeVerticalLayout derives the lightbar's fixed vertical geometry from
+// the terminal height and the top/bot templates: how many lines the top
+// template's header renders, how many lines the (already placeholder- and
+// pipe-code-expanded) BOT template occupies, how many rows are reserved for
+// the separator/command bar/BOT, how many rows remain for the file list, and
+// the absolute rows where the file area, separator, and command bar begin.
+func computeVerticalLayout(termHeight int, topTemplateBytes []byte, processedBotTemplate []byte, totalFiles int, fconfpath string) (headerLines int, botContent string, botLineCount int, reservedBottom int, visibleRows int, fileAreaStartRow int, cmdBarRow int, separatorRow int) {
+	// Count header lines from top template (line count is invariant to page/file counts).
+	processedTopSample := ansi.ReplacePipeCodes(processFileListPlaceholders(topTemplateBytes, 1, 1, totalFiles, fconfpath))
+	headerLines = strings.Count(string(processedTopSample), "\n")
+	if headerLines < 1 {
+		headerLines = 1
+	}
+
+	// Reserve rows for the separator, command bar, and optional BOT template.
+	// Derive botLineCount from the expanded string (after placeholder + pipe-code
+	// processing) so it matches what renderPageIndicator actually renders.
+	botContent = strings.TrimRight(string(processedBotTemplate), "\r\n")
+	botLineCount = 0
+	if len(botContent) > 0 {
+		expandedBotSample := string(ansi.ReplacePipeCodes(processFileListPlaceholders([]byte(botContent), 1, 1, totalFiles, fconfpath)))
+		expandedBotSample = strings.ReplaceAll(expandedBotSample, "^PAGE", "1")
+		expandedBotSample = strings.ReplaceAll(expandedBotSample, "^TOTALPAGES", "1")
+		botLineCount = len(strings.Split(expandedBotSample, "\n"))
+	}
+	reservedBottom = 2 // separator + command bar
+	if botLineCount > 0 {
+		reservedBottom = 2 + botLineCount // separator + command bar + BOT lines
+	}
+	visibleRows = termHeight - headerLines - reservedBottom - 1
+	if visibleRows < 3 {
+		visibleRows = 3
+	}
+
+	// fileAreaStartRow is the absolute terminal row where file entries begin.
+	fileAreaStartRow = headerLines + 2
+
+	// Layout: separator row, then command bar, then optional BOT.
+	cmdBarRow = max(1, termHeight-botLineCount)
+	separatorRow = max(1, cmdBarRow-1)
+
+	return headerLines, botContent, botLineCount, reservedBottom, visibleRows, fileAreaStartRow, cmdBarRow, separatorRow
+}
+
+// computeDescMetrics precomputes the fixed-width description-column geometry
+// shared by fileEntryHeight and buildFileEntry: every mid-template
+// placeholder except ^DESC is fixed width, so the prefix length (and
+// therefore how much room is left for the description) is constant across
+// all file entries.
+func computeDescMetrics(processedMidTemplate string, termWidth int) (ansiRe *regexp.Regexp, descPrefixLen int, descColWidth int, descIndentStr string) {
+	// stripAnsi removes all ANSI escape sequences from a string.
+	ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+	sample := strings.ReplaceAll(processedMidTemplate, "^MARK", " ")
+	sample = strings.ReplaceAll(sample, "^NUM", "  1")
+	sample = strings.ReplaceAll(sample, "^NAME", "            ")
+	sample = strings.ReplaceAll(sample, "^DATE", "01/01/00")
+	sample = strings.ReplaceAll(sample, "^SIZE", "     ")
+	sample = strings.ReplaceAll(sample, "^DESC", "")
+	descPrefixLen = len(ansiRe.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(sample))), ""))
+	descColWidth = termWidth - descPrefixLen - 1
+	if descColWidth < 20 {
+		descColWidth = 20
+	}
+	descIndentStr = strings.Repeat(" ", descPrefixLen)
+	return ansiRe, descPrefixLen, descColWidth, descIndentStr
+}
 func (lb *fileLightbar) isFileTagged(fileID uuid.UUID) bool {
 	for _, taggedID := range lb.currentUser.TaggedFileIDs {
 		if taggedID == fileID {
