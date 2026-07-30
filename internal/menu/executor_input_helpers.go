@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -105,12 +106,14 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 
 	shadeChar := "\u2591"
 
+	// maxLen is a column budget, not a byte count: input holds UTF-8 (ASCII,
+	// or an extended character decoded via decodeExtendedKey below), so a
+	// multi-byte rune occupies one column but several bytes. defaultValue is
+	// clamped with ansi.TruncateRunes (rune-based) rather than a raw byte
+	// slice, which would otherwise cut a multi-byte value mid-rune.
 	input := make([]byte, 0, maxLen)
 	if defaultValue != "" {
-		input = append(input, []byte(defaultValue)...)
-		if len(input) > maxLen {
-			input = input[:maxLen]
-		}
+		input = append(input, []byte(ansi.TruncateRunes(defaultValue, maxLen, ""))...)
 	}
 	cursorStyleSet := false
 	savedCursor := false
@@ -125,12 +128,12 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 		if len(input) > 0 {
 			display.Write(input)
 		}
-		cursorPos := len(input)
+		cursorCols := utf8.RuneCount(input)
 		remainingLen := 0
-		if len(input) < maxLen {
+		if cursorCols < maxLen {
 			display.WriteString(cursorStyle)
 			display.WriteString(shadeChar)
-			remainingLen = maxLen - len(input) - 1
+			remainingLen = maxLen - cursorCols - 1
 		}
 		if remainingLen > 0 {
 			display.WriteString(remainingStyle)
@@ -139,8 +142,8 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 		display.WriteString(resetColor)
 
 		moveToCursor := ""
-		if cursorPos < maxLen {
-			moveToCursor = fmt.Sprintf("\x1b[%dD", maxLen-cursorPos)
+		if cursorCols < maxLen {
+			moveToCursor = fmt.Sprintf("\x1b[%dD", maxLen-cursorCols)
 		}
 		terminalio.WriteStringCP437(terminal, []byte(display.String()+moveToCursor), outputMode)
 	}
@@ -164,6 +167,7 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 	// caused the "double key press" bug when the lightbar's goroutine was also active.
 	ih := getSessionIH(session)
 	readBuf := make([]byte, 1)
+	var utf8Pending []byte
 
 	for {
 		n, err := ih.Read(readBuf)
@@ -187,8 +191,14 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 			return strings.TrimSpace(result), nil
 
 		case 8, 127: // Backspace or Delete
-			if len(input) > 0 {
-				input = input[:len(input)-1]
+			// A byte in progress toward a multi-byte UTF-8 character was never
+			// appended to input or rendered, so just discard it. Otherwise
+			// remove the whole last RUNE (see backspaceRune) -- not one byte,
+			// which would cut a multi-byte character in half.
+			if len(utf8Pending) > 0 {
+				utf8Pending = nil
+			} else if len(input) > 0 {
+				input = backspaceRune(input)
 				renderBox(true)
 			}
 
@@ -201,10 +211,33 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 			return "", io.EOF
 
 		default:
-			// Printable ASCII character
-			if ch >= 32 && ch < 127 && len(input) < maxLen {
-				input = append(input, ch)
-				renderBox(true)
+			if ch >= 32 && ch < 127 {
+				// Printable ASCII character
+				if utf8.RuneCount(input) < maxLen {
+					input = append(input, ch)
+					renderBox(true)
+				}
+			} else if ch >= 128 {
+				// Extended character (CP437 byte, or one byte of a multi-byte
+				// UTF-8 sequence). decodeExtendedKey only appends once a full
+				// character is known; the echo it returns is not needed here
+				// since renderBox already re-writes the whole visible box
+				// through terminalio.WriteStringCP437, which re-encodes per
+				// outputMode.
+				if utf8.RuneCount(input) < maxLen {
+					var newInput []byte
+					newInput, _, utf8Pending = decodeExtendedKey(input, outputMode, ch, utf8Pending)
+					if len(newInput) != len(input) {
+						input = newInput
+						renderBox(true)
+					}
+				} else {
+					// At the column limit: still track pending UTF-8 bytes so
+					// the next byte of an in-flight sequence isn't
+					// misinterpreted as the start of a new one, but don't
+					// grow input past maxLen.
+					_, _, utf8Pending = decodeExtendedKey(nil, outputMode, ch, utf8Pending)
+				}
 			}
 		}
 	}
