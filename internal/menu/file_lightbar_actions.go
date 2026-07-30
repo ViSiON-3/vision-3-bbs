@@ -17,24 +17,31 @@ import (
 
 // fileLightbar user-facing actions: mark toggle, view, download, upload.
 
+// toggleTaggedID returns taggedIDs with fileID removed, if it was already
+// present, or appended, if it wasn't — the pure list-mutation logic behind
+// toggleMark's tag toggle.
+func toggleTaggedID(taggedIDs []uuid.UUID, fileID uuid.UUID) []uuid.UUID {
+	found := false
+	newTaggedIDs := make([]uuid.UUID, 0, len(taggedIDs))
+	for _, taggedID := range taggedIDs {
+		if taggedID == fileID {
+			found = true
+		} else {
+			newTaggedIDs = append(newTaggedIDs, taggedID)
+		}
+	}
+	if !found {
+		newTaggedIDs = append(newTaggedIDs, fileID)
+	}
+	return newTaggedIDs
+}
+
 // toggleMark toggles whether the selected file is tagged for download,
 // saves the change to the user record, and redraws just the toggled row.
 func (lb *fileLightbar) toggleMark() {
 	if len(lb.allFiles) > 0 {
 		fileID := lb.allFiles[lb.selectedIndex].ID
-		found := false
-		newTaggedIDs := make([]uuid.UUID, 0, len(lb.currentUser.TaggedFileIDs))
-		for _, taggedID := range lb.currentUser.TaggedFileIDs {
-			if taggedID == fileID {
-				found = true
-			} else {
-				newTaggedIDs = append(newTaggedIDs, taggedID)
-			}
-		}
-		if !found {
-			newTaggedIDs = append(newTaggedIDs, fileID)
-		}
-		lb.currentUser.TaggedFileIDs = newTaggedIDs
+		lb.currentUser.TaggedFileIDs = toggleTaggedID(lb.currentUser.TaggedFileIDs, fileID)
 		if err := lb.userManager.UpdateUser(lb.currentUser); err != nil {
 			slog.Error("failed to save user after tag toggle", "node", lb.nodeNumber, "error", err)
 		}
