@@ -12,7 +12,9 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// registerPlaceholderRunnables adds dummy functions for testing
+// registerPlaceholderRunnables registers the runnables that are implemented
+// inline here rather than in their own file, including the production "DOOR:"
+// handler and the READMAIL placeholder.
 func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use local RunnableFunc
 	// Keep READMAIL as a placeholder for now
 	registry["READMAIL"] = func(c *cmdCtx, args string) (*user.User, string, error) {
