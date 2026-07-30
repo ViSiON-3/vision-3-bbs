@@ -346,15 +346,16 @@ func truncateField(s string, max int) string {
 		return s
 	}
 	end := 0
-	for i, r := range s {
-		size := utf8.RuneLen(r)
-		if size < 0 {
-			size = 1 // invalid rune: it occupies a single byte here
-		}
-		if i+size > max {
+	for end < len(s) {
+		// DecodeRuneInString gives the byte size at this offset, which is 1 for a
+		// stray invalid byte. utf8.RuneLen would report 3 for those, since range
+		// surfaces them as RuneError, and the cut would land inside the next
+		// character.
+		_, size := utf8.DecodeRuneInString(s[end:])
+		if end+size > max {
 			break
 		}
-		end = i + size
+		end += size
 	}
 	return s[:end]
 }

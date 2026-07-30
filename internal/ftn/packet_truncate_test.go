@@ -49,3 +49,23 @@ func TestTruncateFieldCutsOnRuneBoundaryWithinByteBudget(t *testing.T) {
 		})
 	}
 }
+
+// Invalid UTF-8 can reach these fields (a peer's packet is just bytes). Each
+// stray byte occupies exactly one byte of the budget: range decodes it as
+// RuneError, whose utf8.RuneLen is 3, so sizing by RuneLen would truncate at a
+// third of the real limit.
+func TestTruncateFieldCountsInvalidBytesAsOneByte(t *testing.T) {
+	// One stray byte, then a 3-byte rune. The stray byte occupies ONE byte, so a
+	// 3-byte budget must keep just it — sizing the stray byte as 3 (utf8.RuneLen
+	// of RuneError) makes the cut land inside the following rune instead.
+	s := "\xff" + "\u65e5" + "tail"
+
+	got := truncateField(s, 3)
+
+	// Not asserting ValidString here: the input itself carries a stray byte, so a
+	// faithful prefix cannot be valid UTF-8. What matters is that the cut lands on
+	// a decode boundary rather than inside the following character.
+	if len(got) != 1 {
+		t.Errorf("len = %d bytes (%q), want 1 (the stray byte alone fits in 3)", len(got), got)
+	}
+}
