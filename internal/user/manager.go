@@ -412,8 +412,15 @@ func (um *UserMgr) UpdateUser(u *User) error {
 	}
 	// Create a defensive copy to prevent external mutations from bypassing locks
 	userCopy := *u
+	previous := um.users[lowerHandle]
 	um.users[lowerHandle] = &userCopy
-	return um.saveUsersLocked()
+	if err := um.saveUsersLocked(); err != nil {
+		// Restore the previous entry so the cache never serves a value that
+		// failed to reach disk, matching AddUser and UpdateUserByID.
+		um.users[lowerHandle] = previous
+		return err
+	}
+	return nil
 }
 
 // LogAdminActivity logs an administrative action to the activity log file
