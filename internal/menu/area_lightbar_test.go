@@ -154,6 +154,31 @@ func TestRenderItemAreaInvokesBuilder(t *testing.T) {
 	}
 }
 
+// renderItemArea clamps the highlighted row's stripped text to termWidth
+// with len(stripped) and stripped[:p.termWidth] — both byte counts. The row
+// text comes from area Tag/Name/Description, which can hold multi-byte
+// characters, so a byte-based clamp can split it mid-rune.
+func TestRenderItemAreaHighlightedRowClampsByRunes(t *testing.T) {
+	// 20 CJK runes = 60 bytes, well past termWidth=10.
+	longName := strings.Repeat("日", 20)
+	p, out, _ := newTestPicker(1, 5)
+	p.buildItemLine = func(item string, displayIdx int) string { return longName }
+	p.termWidth = 10
+	p.selectedIndex = 0
+	p.hiColorSeq = "\x1b[44m"
+	p.outputMode = ansi.OutputModeUTF8
+
+	if err := p.renderItemArea(); err != nil {
+		t.Fatalf("renderItemArea: %v", err)
+	}
+
+	// A rune-correct clamp keeps all 10 runes of the highlighted row (it is
+	// clamped to termWidth runes, not bytes).
+	if got, want := strings.Count(out.String(), "日"), 10; got != want {
+		t.Errorf("highlighted row has %d intact '日' runes, want %d (output %q)", got, want, out.String())
+	}
+}
+
 func TestComputeLayout(t *testing.T) {
 	p, _, _ := newTestPicker(1, 0)
 	p.termHeight = 24

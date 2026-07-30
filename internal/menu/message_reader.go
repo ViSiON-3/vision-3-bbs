@@ -218,7 +218,7 @@ readerLoop:
 		if outputMode == ansi.OutputModeCP437 {
 			substitutions = convertSubsToCP437(substitutions)
 		}
-		autoWidths := buildAutoWidths(substitutions, totalMsgCount, termWidth)
+		autoWidths := buildAutoWidths(substitutions, totalMsgCount, termWidth, outputMode == ansi.OutputModeCP437)
 
 		// Process template with substitutions (auto-detects @CODE@ or |X format)
 		processedHeader := processTemplate(hdrTemplateBytes, substitutions, autoWidths)

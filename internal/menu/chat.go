@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
 	term "golang.org/x/term"
@@ -282,13 +283,17 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		artPath := filepath.Join(e.MenuSetPath, "ansi", "CHATHEADER.ANS")
 		artData, artErr := ansi.GetAnsiFileContent(artPath)
 		if artErr == nil {
-			// Replace MCI placeholders (ASCII — safe before CP437 conversion).
-			artData = chatArtReplace(artData, "NET", currentNetwork)
-			artData = chatArtReplace(artData, "ROOM", currentRoom)
-			artData = chatArtReplace(artData, "TOPIC", currentTopic)
 			// Convert CP437 high bytes to UTF-8 so box-drawing chars render
 			// correctly on UTF-8 SSH terminals.
 			artData = ansi.ConvertCP437ToUTF8(artData)
+			// Substitute AFTER the conversion. The network name comes from a
+			// V3Net leaf and can be non-ASCII; substituting first would feed its
+			// UTF-8 bytes through the CP437 converter, which reinterprets each
+			// byte separately and garbles the name rather than just cutting it.
+			// The @NAME@ placeholders are ASCII, so conversion leaves them intact.
+			artData = chatArtReplace(artData, "NET", currentNetwork)
+			artData = chatArtReplace(artData, "ROOM", currentRoom)
+			artData = chatArtReplace(artData, "TOPIC", currentTopic)
 			// Split into lines (SAUCE already stripped by GetAnsiFileContent).
 			lines := strings.Split(string(artData), "\n")
 			for i := 0; i < chatHeaderRows && i < len(lines); i++ {
@@ -808,12 +813,16 @@ func chatArtReplace(data []byte, name, value string) []byte {
 	if end < 0 {
 		return data
 	}
-	totalLen := len(tag) + end + 1 // full placeholder byte span including both @s
-	repl := []byte(value)
-	if len(repl) > totalLen {
-		repl = repl[:totalLen]
+	totalLen := len(tag) + end + 1 // placeholder span; ASCII, so bytes == columns
+	// Fill by columns, not bytes: the NET value is a V3Net leaf network name and
+	// is not ASCII-gated, so byte padding would leave the row short and byte
+	// truncation would cut a rune in half.
+	runes := []rune(value)
+	if len(runes) > totalLen {
+		runes = runes[:totalLen]
 	}
-	for len(repl) < totalLen {
+	repl := []byte(string(runes))
+	for utf8.RuneCount(repl) < totalLen {
 		repl = append(repl, ' ')
 	}
 	out := make([]byte, 0, len(data))

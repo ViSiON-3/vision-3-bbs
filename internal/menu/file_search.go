@@ -100,8 +100,8 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	lineCount := 0
 	for _, r := range filtered {
 		fname := r.filename
-		if len(fname) > 12 {
-			fname = fname[:12]
+		if runes := []rune(fname); len(runes) > 12 {
+			fname = string(runes[:12])
 		}
 
 		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, fname, (r.size+1023)/1024, r.description)

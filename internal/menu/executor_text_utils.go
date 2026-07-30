@@ -15,37 +15,6 @@ import (
 
 // colorCodeToAnsi converts a DOS-style color code (0-255) to ANSI escape sequence.
 // Assumes Color = Background*16 + Foreground
-// calculateVisibleWidth calculates the visible width of text, excluding ANSI escape sequences.
-// This is used for centering text that contains color codes.
-func calculateVisibleWidth(text string) int {
-	width := 0
-	inEscape := false
-
-	for i := 0; i < len(text); i++ {
-		ch := text[i]
-
-		if ch == '\x1b' {
-			// Start of ANSI escape sequence
-			inEscape = true
-			continue
-		}
-
-		if inEscape {
-			// Skip characters until we hit a letter (end of ANSI sequence)
-			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-
-		// Count visible characters (excluding control characters)
-		if ch >= 32 {
-			width++
-		}
-	}
-
-	return width
-}
 
 func colorCodeToAnsi(code int) string {
 	fgCode := code % 16

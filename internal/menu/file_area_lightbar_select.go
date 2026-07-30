@@ -217,8 +217,10 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 			line := buildItemLine(areas[idx], idx+1)
 			if idx == selectedIndex {
 				stripped := stripAreaAnsi(line)
-				if len(stripped) > termWidth {
-					stripped = stripped[:termWidth]
+				// Runes, not bytes: the row includes area Description, which is
+				// inserted unconstrained and can hold multi-byte characters.
+				if strippedRunes := []rune(stripped); len(strippedRunes) > termWidth {
+					stripped = string(strippedRunes[:termWidth])
 				}
 				rendered := hiColorSeq + padRight(stripped, termWidth) + "\x1b[0m"
 				if err := terminalio.WriteProcessedBytes(terminal, []byte(rendered), outputMode); err != nil {

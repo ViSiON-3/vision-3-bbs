@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -73,7 +74,9 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 
 		// Total visible width of the options area (used for cursor-backward repositioning).
 		// This avoids cursor save/restore which is unreliable across terminals.
-		optionsWidth := len(noOptionText) + optionSpacing + len(yesOptionText)
+		// Runes, not bytes: Yes/No labels are sysop-configurable strings and a
+		// localized label can hold multi-byte characters.
+		optionsWidth := utf8.RuneCountInString(noOptionText) + optionSpacing + utf8.RuneCountInString(yesOptionText)
 
 		// Track current selection: 0 = No, 1 = Yes
 		selectedIndex := 0
