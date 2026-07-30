@@ -7,9 +7,9 @@ import (
 )
 
 // UpdateUser writes the user into the in-memory map before persisting. If the
-// save fails it must restore the previous entry, the way AddUser and RenameUser
-// do — otherwise the in-process cache serves data that never reached disk, for
-// the rest of the process's life.
+// save fails it must restore the previous entry, the way AddUser and
+// UpdateUserByID do — otherwise the in-process cache serves data that never
+// reached disk, for the rest of the process's life.
 func TestUpdateUserRollsBackCacheWhenSaveFails(t *testing.T) {
 	dir := t.TempDir()
 	um, err := NewUserManager(dir)
@@ -20,14 +20,15 @@ func TestUpdateUserRollsBackCacheWhenSaveFails(t *testing.T) {
 		t.Fatalf("AddUser: %v", err)
 	}
 
-	// Make the store unwritable so the save inside UpdateUser fails. Chmod the
-	// file, not the directory: the owner can still rewrite an existing file
-	// regardless of the directory's mode.
-	usersPath := filepath.Join(dir, "users.json")
-	if err := os.Chmod(usersPath, 0o400); err != nil {
-		t.Fatalf("chmod: %v", err)
+	// Point the store at an existing directory: os.WriteFile can never write
+	// bytes into a directory inode, so the save fails deterministically on every
+	// platform and regardless of privileges. (chmod would not — the owner can
+	// still rewrite a read-only file, and root ignores the mode entirely.)
+	blocker := filepath.Join(dir, "blocked")
+	if err := os.MkdirAll(blocker, 0o750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(usersPath, 0o600) })
+	um.path = blocker
 
 	before, ok := um.GetUser("Tester")
 	if !ok {
@@ -37,7 +38,7 @@ func TestUpdateUserRollsBackCacheWhenSaveFails(t *testing.T) {
 	modified := *before
 	modified.RealName = "Should Not Stick"
 	if err := um.UpdateUser(&modified); err == nil {
-		t.Fatal("UpdateUser returned nil error; expected the read-only store to fail the save")
+		t.Fatal("UpdateUser returned nil error; expected the unwritable store to fail the save")
 	}
 
 	after, ok := um.GetUser("Tester")

@@ -416,7 +416,7 @@ func (um *UserMgr) UpdateUser(u *User) error {
 	um.users[lowerHandle] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {
 		// Restore the previous entry so the cache never serves a value that
-		// failed to reach disk, matching AddUser and RenameUser.
+		// failed to reach disk, matching AddUser and UpdateUserByID.
 		um.users[lowerHandle] = previous
 		return err
 	}
