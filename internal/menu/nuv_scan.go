@@ -160,7 +160,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	terminalio.WriteProcessedBytes(terminal, []byte("\x1b[2J\x1b[H"), outputMode)
-	wv(terminal, fmt.Sprintf("|15New User Voting Queue — %d Candidate(s)\r\n", len(nd.Candidates)), outputMode)
+	wv(terminal, fmt.Sprintf("|15New User Voting Queue - %d Candidate(s)\r\n", len(nd.Candidates)), outputMode)
 	wv(terminal, fmt.Sprintf("|08%s\r\n", strings.Repeat("\xc4", 60)), outputMode)
 
 	if len(nd.Candidates) == 0 {
@@ -284,7 +284,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			return currentUser, "", nil
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte("\x1b[2J\x1b[H"), outputMode)
-		wv(terminal, fmt.Sprintf("|15New User Voting Queue — %d Candidate(s)\r\n", len(nd.Candidates)), outputMode)
+		wv(terminal, fmt.Sprintf("|15New User Voting Queue - %d Candidate(s)\r\n", len(nd.Candidates)), outputMode)
 		wv(terminal, fmt.Sprintf("|08%s\r\n", strings.Repeat("\xc4", 60)), outputMode)
 		if len(nd.Candidates) == 0 {
 			wv(terminal, "|07No candidates pending.\r\n", outputMode)

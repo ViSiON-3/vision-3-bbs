@@ -89,7 +89,7 @@ func (e *MenuExecutor) selectTransferProtocol(s ssh.Session, terminal *term.Term
 		if found {
 			return p, true, nil
 		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("\r\n|01Unknown protocol %q — please choose from the list above.|07\r\n", strings.ToUpper(input)))), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("\r\n|01Unknown protocol %q - please choose from the list above.|07\r\n", strings.ToUpper(input)))), outputMode)
 	}
 }
 
