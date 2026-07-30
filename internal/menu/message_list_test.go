@@ -342,3 +342,40 @@ func TestDrawMessageListScreenHelpLineCenteringIsRuneBased(t *testing.T) {
 		})
 	}
 }
+
+// A non-ASCII area or conference name must not panic the screen draw. The title
+// is clamped to 75 runes, but the padding arithmetic measured bytes, so a
+// multi-byte title exceeded the 77-column frame and strings.Repeat got a
+// negative count.
+func TestDrawMessageListScreenNonASCIITitleDoesNotPanic(t *testing.T) {
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	state := &MessageListState{
+		Entries:       []MessageListEntry{},
+		CurrentPage:   1,
+		ItemsPerPage:  10,
+		TotalMessages: 0,
+	}
+
+	// 40 CJK runes: well under the 75-rune clamp, but 120 bytes.
+	areaName := strings.Repeat("日", 40)
+
+	if err := drawMessageListScreen(terminal, state, areaName, "Main", ansi.OutputModeUTF8); err != nil {
+		t.Fatalf("drawMessageListScreen: %v", err)
+	}
+
+	var titleLine string
+	for _, line := range strings.Split(ts.output(), "\n") {
+		if strings.Contains(line, "Message List") {
+			titleLine = strings.TrimRight(line, "\r")
+			break
+		}
+	}
+	if titleLine == "" {
+		t.Fatal("title line not found in rendered output")
+	}
+	stripped := testAnsiEscape.ReplaceAllString(titleLine, "")
+	if got := utf8.RuneCountInString(stripped); got != 79 {
+		t.Errorf("title line visible width = %d runes, want 79 (line %q)", got, stripped)
+	}
+}

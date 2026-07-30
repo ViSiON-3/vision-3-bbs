@@ -52,11 +52,15 @@ func drawMessageListScreen(terminal *term.Terminal, state *MessageListState, are
 		title = fmt.Sprintf("%s > %s - Message List", confName, areaName)
 	}
 	title = truncateString(title, 75)
-	padding := (77 - len(title)) / 2
+	// Runes, not bytes: truncateString clamps to 75 runes, so a multi-byte
+	// title measured in bytes overflows the 77-column frame and hands
+	// strings.Repeat a negative count.
+	titleLen := utf8.RuneCountInString(title)
+	padding := (77 - titleLen) / 2
 	titleLine := fmt.Sprintf("|11│|13%s%s%s|11│|07\r\n",
 		strings.Repeat(" ", padding),
 		title,
-		strings.Repeat(" ", 77-padding-len(title)))
+		strings.Repeat(" ", 77-padding-titleLen))
 	if err := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(titleLine)), outputMode); err != nil {
 		return err
 	}
