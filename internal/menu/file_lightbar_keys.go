@@ -8,15 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
 )
 
 // fileLightbar key handling: reading input, navigation, the sysop-bar
@@ -136,29 +132,7 @@ func (lb *fileLightbar) toggleSysopBar() {
 func (lb *fileLightbar) dispatchCommand(key string, frame *lbFrame) (exit bool, result *user.User, action string, err error) {
 	switch key {
 	case " ": // Space: toggle mark
-		if len(lb.allFiles) > 0 {
-			fileID := lb.allFiles[lb.selectedIndex].ID
-			found := false
-			newTaggedIDs := make([]uuid.UUID, 0, len(lb.currentUser.TaggedFileIDs))
-			for _, taggedID := range lb.currentUser.TaggedFileIDs {
-				if taggedID == fileID {
-					found = true
-				} else {
-					newTaggedIDs = append(newTaggedIDs, taggedID)
-				}
-			}
-			if !found {
-				newTaggedIDs = append(newTaggedIDs, fileID)
-			}
-			lb.currentUser.TaggedFileIDs = newTaggedIDs
-			if err := lb.userManager.UpdateUser(lb.currentUser); err != nil {
-				slog.Error("failed to save user after tag toggle", "node", lb.nodeNumber, "error", err)
-			}
-			// Redraw just the toggled row to show/hide the mark.
-			if row, h := lb.screenRowForFile(lb.selectedIndex); row >= 0 {
-				_ = lb.writeFileRow(row, lb.selectedIndex, true, h)
-			}
-		}
+		lb.toggleMark()
 
 	case "q":
 		return true, nil, "", nil
@@ -173,147 +147,15 @@ func (lb *fileLightbar) dispatchCommand(key string, frame *lbFrame) (exit bool, 
 		}
 
 	case "v":
-		if len(lb.allFiles) > 0 {
-			sel := &lb.allFiles[lb.selectedIndex]
-			filePath, pathErr := lb.e.FileMgr.GetFilePath(sel.ID)
-			if pathErr != nil {
-				slog.Error("failed to get path for file", "node", lb.nodeNumber, "id", sel.ID, "error", pathErr)
-				return false, nil, "", nil
-			}
-			// Show cursor for the viewer.
-			_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
-			if lb.e.FileMgr.IsSupportedArchive(sel.Filename) {
-				ctx, cancel := lb.e.transferContext(lb.s.Context())
-				ziplab.RunZipLabView(ctx, lb.s, lb.terminal, filePath, sel.Filename, lb.outputMode, sessionReadLine(lb.s, lb.terminal), sessionReadKey(lb.s))
-				cancel()
-			} else {
-				tw, th := getTerminalSize(lb.s)
-				viewFileByRecord(lb.e, lb.s, lb.terminal, sel, lb.outputMode, tw, th)
-			}
-			// Hide cursor again.
-			lb.endFooterPrompt()
+		if lb.viewFile() {
 			frame.needFullRedraw = true
 		}
 
 	case "d":
-		if len(lb.currentUser.TaggedFileIDs) == 0 {
-			msg := "\r\n|07No files marked for download. Use |15Space|07 to mark files.|07\r\n"
-			_ = lb.writePipe(msg)
-			time.Sleep(1 * time.Second)
-			frame.needFullRedraw = true
-			return false, nil, "", nil
-		}
-
-		confirmPrompt := fmt.Sprintf("Download %d marked file(s)?", len(lb.currentUser.TaggedFileIDs))
-		// Replace the footer lightbar with the confirm prompt instead of printing over the file list.
-		lb.beginFooterPrompt()
-
-		tw, th := getTerminalSize(lb.s)
-		proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
-		if promptErr != nil {
-			if logoffIfDisconnected(promptErr) {
-				return true, nil, "LOGOFF", io.EOF
-			}
-			slog.Error("error getting download confirmation", "node", lb.nodeNumber, "error", promptErr)
-			lb.endFooterPrompt()
-			frame.needFullRedraw = true
-			return false, nil, "", nil
-		}
-
-		if !proceed {
-			lb.endFooterPrompt()
-			frame.needFullRedraw = true
-			return false, nil, "", nil
-		}
-
-		slog.Info("starting download", "node", lb.nodeNumber, "handle", lb.currentUser.Handle, "count", len(lb.currentUser.TaggedFileIDs))
-		// Clear the screen before the download process begins.
-		_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[2J\x1b[H"), lb.outputMode)
-		_ = lb.writePipe("|07Preparing download...\r\n")
-		time.Sleep(500 * time.Millisecond)
-
-		successCount := 0
-		failCount := 0
-		filesToDownload := make([]string, 0, len(lb.currentUser.TaggedFileIDs))
-		fileIDsToDownload := make([]uuid.UUID, 0, len(lb.currentUser.TaggedFileIDs))
-
-		for _, fileID := range lb.currentUser.TaggedFileIDs {
-			fp, pathErr := lb.e.FileMgr.GetFilePath(fileID)
-			if pathErr != nil {
-				slog.Error("failed to get path for file ID", "node", lb.nodeNumber, "id", fileID, "error", pathErr)
-				failCount++
-				continue
-			}
-			if _, statErr := os.Stat(fp); os.IsNotExist(statErr) {
-				slog.Error("file path for ID does not exist", "node", lb.nodeNumber, "path", fp, "id", fileID)
-				failCount++
-				continue
-			} else if statErr != nil {
-				slog.Error("error stating file path for ID", "node", lb.nodeNumber, "path", fp, "id", fileID, "error", statErr)
-				failCount++
-				continue
-			}
-			filesToDownload = append(filesToDownload, fp)
-			fileIDsToDownload = append(fileIDsToDownload, fileID)
-		}
-
-		if len(filesToDownload) > 0 {
-			slog.Info("initiating transfer", "node", lb.nodeNumber, "count", len(filesToDownload))
-
-			// Use protocol selection (respects connection type - SSH vs Telnet)
-			proto, protoOK, protoErr := lb.e.selectTransferProtocol(lb.s, lb.terminal, lb.outputMode)
-			if protoErr != nil {
-				if logoffIfDisconnected(protoErr) {
-					return true, nil, "LOGOFF", io.EOF
-				}
-				slog.Error("protocol selection error", "node", lb.nodeNumber, "error", protoErr)
-				_ = lb.writePipe("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")
-				failCount += len(filesToDownload)
-			} else if !protoOK {
-				_ = lb.writePipe("\r\n|07Download cancelled.|07\r\n")
-			} else {
-				sentCount, sendFails := lb.e.runTransferSend(lb.s, lb.terminal, proto, filesToDownload, fileIDsToDownload, lb.outputMode, lb.nodeNumber)
-				successCount = sentCount
-				failCount += sendFails
-				lb.ih = getSessionIH(lb.s)
-			}
-			time.Sleep(1 * time.Second)
-		} else {
-			slog.Warn("no valid file paths found for tagged files", "node", lb.nodeNumber)
-			_ = lb.writePipe("\r\n|01Could not find any of the marked files on the server.|07\r\n")
-			// failCount already equals the number of missing files (every
-			// tagged ID incremented it in the collection loop above).
-		}
-
-		// Clear tags, update download count, and save.
-		lb.currentUser.TaggedFileIDs = nil
-		lb.currentUser.NumDownloads += successCount
-		if saveErr := lb.userManager.UpdateUser(lb.currentUser); saveErr != nil {
-			slog.Error("failed to save user data after download", "node", lb.nodeNumber, "error", saveErr)
-		}
-
-		statusMsg := fmt.Sprintf("|07Download finished. Success: %d, Failed: %d.|07\r\n", successCount, failCount)
-		_ = lb.writePipe(statusMsg)
-		time.Sleep(2 * time.Second)
-
-		// Refresh file list.
-		lb.refreshFileList()
-		lb.endFooterPrompt()
-		frame.needFullRedraw = true
+		return lb.downloadFiles(frame)
 
 	case "u":
-		_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
-		uploadErr := lb.e.runUploadFiles(lb.s, lb.terminal, lb.currentUser, lb.userManager, lb.currentAreaID, lb.currentAreaTag, lb.outputMode, lb.nodeNumber, lb.sessionStartTime)
-		if uploadErr != nil {
-			slog.Error("upload error", "node", lb.nodeNumber, "error", uploadErr)
-		}
-		// runUploadFiles calls resetSessionIH/getSessionIH internally,
-		// so the local ih is now stale — refresh it.
-		lb.ih = getSessionIH(lb.s)
-		// Refresh file list after upload.
-		lb.refreshFileList()
-		lb.endFooterPrompt()
-		frame.needFullRedraw = true
+		lb.uploadFiles(frame)
 
 	case "e": // Edit description (sysop only)
 		if !lb.isSysop || len(lb.allFiles) == 0 {
