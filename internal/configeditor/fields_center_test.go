@@ -14,21 +14,26 @@ func TestCenterTextHoldsTheBoxWidth(t *testing.T) {
 		name  string
 		s     string
 		width int
+		want  string
 	}{
-		{"shorter than width", "Title", 20},
-		{"exactly width", "12345678901234567890", 20},
-		{"longer than width", "A Very Long Category Title That Overflows", 20},
-		{"multi-byte longer than width", "Zone Réseau — Configuration Générale Étendue", 20},
-		{"cjk longer than width", "日本語のメッセージエリア設定画面", 20},
+		{"shorter is centred", "Title", 20, "       Title        "},
+		{"exactly width is untouched", "12345678901234567890", 20, "12345678901234567890"},
+		{"longer is truncated", "A Very Long Category Title That Overflows", 20, "A Very Long Category"},
+		{"multi-byte truncated on a rune boundary", "Zone Réseau — Configuration Générale Étendue", 20, "Zone Réseau — Config"},
+		{"cjk shorter is centred", "日本語のメッセージエリア設定画面", 20, "  日本語のメッセージエリア設定画面  "},
+		{"cjk longer is truncated", "日本語のメッセージエリア設定画面をとても長くしたもの", 20, "日本語のメッセージエリア設定画面をとても"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := centerText(tt.s, tt.width)
+			if got != tt.want {
+				t.Errorf("centerText(%q, %d) = %q, want %q", tt.s, tt.width, got, tt.want)
+			}
 			if !utf8.ValidString(got) {
-				t.Fatalf("centerText(%q, %d) produced invalid UTF-8: %q", tt.s, tt.width, got)
+				t.Errorf("centerText(%q, %d) produced invalid UTF-8: %q", tt.s, tt.width, got)
 			}
 			if n := utf8.RuneCountInString(got); n != tt.width {
-				t.Errorf("centerText(%q, %d) = %d columns, want exactly %d (%q)", tt.s, tt.width, n, tt.width, got)
+				t.Errorf("centerText(%q, %d) = %d columns, want exactly %d", tt.s, tt.width, n, tt.width)
 			}
 		})
 	}
