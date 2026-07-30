@@ -313,7 +313,7 @@ func (b *Base) readIndexRecordLocked(msgNum int) (*IndexRecord, error) {
 	return &IndexRecord{ToCRC: toCRC, HdrOffset: hdrOffset}, nil
 }
 
-// WriteIndexRecord writes an index record for a 1-based message number.
+// writeIndexRecord writes an index record for a 1-based message number.
 func (b *Base) writeIndexRecord(msgNum int, rec *IndexRecord) error {
 	if !b.isOpen {
 		return ErrBaseNotOpen
