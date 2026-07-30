@@ -80,7 +80,12 @@ func (um *UserMgr) FindByAuthorizedKey(marshaled []byte) (*User, bool) {
 				continue
 			}
 			if bytes.Equal(pub.Marshal(), marshaled) {
-				return u, true
+				// Return a copy, as GetUser/GetUserByID/Authenticate do. Handing
+				// back the map's own pointer lets the caller read it after the
+				// lock is released, while Authenticate mutates LastLogin and
+				// TimesCalled on that same struct in place -- a live data race.
+				userCopy := *u
+				return &userCopy, true
 			}
 		}
 	}

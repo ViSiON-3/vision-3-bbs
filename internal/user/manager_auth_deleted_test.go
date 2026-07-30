@@ -50,3 +50,25 @@ func TestFindByAuthorizedKeyFindsActiveUsers(t *testing.T) {
 		t.Errorf("found %q, want Active", got.Handle)
 	}
 }
+
+// FindByAuthorizedKey must return a copy, like the rest of the UserMgr API.
+// Handing back the map's own pointer would let a caller observe another
+// session's in-place LastLogin/TimesCalled updates from Authenticate.
+func TestFindByAuthorizedKeyReturnsCopy(t *testing.T) {
+	const keyLine = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJx0eUyJ1cVfhVJZ2m8mZmXaJXVMRxHi/8oRSPCbf5oM tester"
+	pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(keyLine))
+	if err != nil {
+		t.Fatalf("ParseAuthorizedKey: %v", err)
+	}
+	seeded := &User{ID: 1, Handle: "Active", PublicKeys: []string{keyLine}, TimesCalled: 5}
+	um := NewUserMgrForTest(seeded)
+
+	got, ok := um.FindByAuthorizedKey(pub.Marshal())
+	if !ok {
+		t.Fatal("user not found by key")
+	}
+	got.TimesCalled = 999
+	if seeded.TimesCalled != 5 {
+		t.Errorf("mutating the returned user changed the stored one (TimesCalled=%d); a copy was not returned", seeded.TimesCalled)
+	}
+}
