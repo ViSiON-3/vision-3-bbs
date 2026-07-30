@@ -806,12 +806,13 @@ func (um *UserMgr) FindByAuthorizedKey(marshaled []byte) (*User, bool) {
 }
 
 // NewUserMgrForTest builds a UserMgr seeded with the given users, keyed by
-// handle. Exported so tests in other packages (e.g. cmd/vision3) can seed a
-// manager without touching the JSON load path.
+// lowercased handle to match the JSON load path and the lookup methods.
+// Exported so tests in other packages (e.g. cmd/vision3) can seed a manager
+// without touching the JSON load path.
 func NewUserMgrForTest(users ...*User) *UserMgr {
 	m := &UserMgr{users: make(map[string]*User, len(users))}
 	for _, u := range users {
-		m.users[u.Handle] = u
+		m.users[strings.ToLower(u.Handle)] = u
 	}
 	return m
 }
