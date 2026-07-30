@@ -221,9 +221,10 @@ func buildAutoWidths(subs map[byte]string, totalMsgs int, termWidth int) map[byt
 
 	// Z = "confName > areaName" (same for all messages in area)
 	if zVal, ok := subs['Z']; ok {
-		widths['Z'] = len(zVal)
+		zLen := utf8.RuneCountInString(zVal)
+		widths['Z'] = zLen
 		// X = Z + " " + [current/total], max when current = totalMsgs
-		widths['X'] = len(zVal) + 1 + len(maxCountStr)
+		widths['X'] = zLen + 1 + len(maxCountStr)
 	}
 
 	// Gap fill: target width is terminal width minus 1 to avoid auto-wrap
@@ -235,7 +236,7 @@ func buildAutoWidths(subs map[byte]string, totalMsgs int, termWidth int) map[byt
 	// All other codes: use current value length
 	for code, val := range subs {
 		if _, exists := widths[code]; !exists {
-			widths[code] = len(val)
+			widths[code] = utf8.RuneCountInString(val)
 		}
 	}
 
