@@ -35,7 +35,10 @@ func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	// WriteFile ensures atomic write (usually via temp file)
+	// NOTE: os.WriteFile truncates and rewrites in place. It is NOT atomic --
+	// a crash mid-write can leave a truncated users.json. Callers rely on this
+	// being the single writer under um.mu; making it crash-safe would need a
+	// write-to-temp-then-rename.
 	if err = os.WriteFile(um.path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write users file %s: %w", um.path, err) // Include path in error
 	}
@@ -66,7 +69,10 @@ func (um *UserMgr) LogAdminActivity(logEntry AdminActivityLog) error {
 
 	// Add new entry
 	logEntry.ID = len(logs) + 1
-	logEntry.Timestamp = time.Now()
+	// UTC to match AdminActivityLogEntry in admin_log.go, which stamps
+	// time.Now().UTC(). Mixing zones in one log file silently misorders entries
+	// across a DST boundary for anyone reconstructing an incident.
+	logEntry.Timestamp = time.Now().UTC()
 	logs = append(logs, logEntry)
 
 	// Keep only recent entries (prevent file from growing indefinitely)

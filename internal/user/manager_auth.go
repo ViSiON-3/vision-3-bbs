@@ -1,6 +1,7 @@
 package user
 
 import (
+	"bytes"
 	"log/slog"
 	"strings"
 	"time"
@@ -67,13 +68,24 @@ func (um *UserMgr) FindByAuthorizedKey(marshaled []byte) (*User, bool) {
 	um.mu.RLock()
 	defer um.mu.RUnlock()
 	for _, u := range um.users { // um.users is map[string]*User
+		// A soft-deleted account must not authenticate. The SSH-key path is the
+		// one login route that never re-checks this: callers only verify access
+		// level, so without this guard a removed user keeps their key access.
+		if u.DeletedUser {
+			continue
+		}
 		for _, line := range u.PublicKeys {
 			pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
 			if err != nil {
 				continue
 			}
-			if string(pub.Marshal()) == string(marshaled) {
-				return u, true
+			if bytes.Equal(pub.Marshal(), marshaled) {
+				// Return a copy, as GetUser/GetUserByID/Authenticate do. Handing
+				// back the map's own pointer lets the caller read it after the
+				// lock is released, while Authenticate mutates LastLogin and
+				// TimesCalled on that same struct in place -- a live data race.
+				userCopy := *u
+				return &userCopy, true
 			}
 		}
 	}
