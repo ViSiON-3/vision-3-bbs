@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 )
 
 // GetAreaByID retrieves a message area by its ID.
@@ -20,6 +21,34 @@ func (mm *MessageManager) GetAreaByTag(tag string) (*MessageArea, bool) {
 	defer mm.mu.RUnlock()
 	area, exists := mm.areasByTag[tag]
 	return area, exists
+}
+
+// echoTagConflict reports an area that already claims echoTag on the same
+// network, excluding excludeID.
+//
+// Within one network a duplicate is a misconfiguration: areasByEchoTag keeps
+// only the last writer, so that echo's mail silently lands in whichever area
+// happened to be indexed last. Areas on different networks may legitimately
+// share an echo tag -- the same echo name exists on separate FTN networks, and
+// the tosser disambiguates by network when routing (see internal/tosser/import.go).
+//
+// Comparison is exact, matching the areasByEchoTag key. Areas whose EchoTag
+// equals their Tag count as claimants too: they are not in the index, but the
+// tosser's tag lookup already routes that echo to them, so a second area asking
+// for it would never receive anything. Caller must hold mm.mu.
+func (mm *MessageManager) echoTagConflict(echoTag, network string, excludeID int) *MessageArea {
+	if echoTag == "" {
+		return nil
+	}
+	for _, a := range mm.areasByID {
+		if a.ID == excludeID || a.EchoTag == "" {
+			continue
+		}
+		if a.EchoTag == echoTag && strings.EqualFold(a.Network, network) {
+			return a
+		}
+	}
+	return nil
 }
 
 // GetAreaByEchoTag retrieves a message area by its FTN echo tag.
@@ -49,12 +78,21 @@ func (mm *MessageManager) UpdateAreaByID(id int, updated MessageArea) error {
 	oldEchoTag := old.EchoTag
 	replacement := new(MessageArea)
 	*replacement = updated
+	// Validate everything before touching any index, so a rejected update
+	// leaves the manager exactly as it was.
 	if oldTag != updated.Tag {
 		if existing, ok := mm.areasByTag[updated.Tag]; ok && existing.ID != id {
 			return fmt.Errorf("tag %q already in use by area %d", updated.Tag, existing.ID)
 		}
+	}
+	if conflict := mm.echoTagConflict(updated.EchoTag, updated.Network, id); conflict != nil {
+		return fmt.Errorf("echo tag %q already used by area %q (id %d) on network %q",
+			updated.EchoTag, conflict.Tag, conflict.ID, updated.Network)
+	}
+	if oldTag != updated.Tag {
 		delete(mm.areasByTag, oldTag)
 	}
+
 	// Keep areasByEchoTag in sync when EchoTag changes.
 	if oldEchoTag != "" && oldEchoTag != old.Tag {
 		delete(mm.areasByEchoTag, oldEchoTag)
@@ -77,6 +115,12 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 	if _, exists := mm.areasByTag[area.Tag]; exists {
 		mm.mu.Unlock()
 		return 0, fmt.Errorf("message area tag %q already exists", area.Tag)
+	}
+
+	if conflict := mm.echoTagConflict(area.EchoTag, area.Network, 0); conflict != nil {
+		mm.mu.Unlock()
+		return 0, fmt.Errorf("echo tag %q already used by area %q (id %d) on network %q",
+			area.EchoTag, conflict.Tag, conflict.ID, area.Network)
 	}
 
 	// Assign next ID and position.

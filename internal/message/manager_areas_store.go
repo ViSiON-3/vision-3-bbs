@@ -45,7 +45,15 @@ func (mm *MessageManager) loadMessageAreas() error {
 		mm.areasByID[area.ID] = area
 		mm.areasByTag[area.Tag] = area
 		// Also index by EchoTag for FTN inbound routing when tag-prefix is in use.
+		// Existing configs may already contain duplicates, so load stays tolerant
+		// and warns rather than failing; AddArea/UpdateAreaByID reject new ones.
 		if area.EchoTag != "" && area.EchoTag != area.Tag {
+			if prev, dup := mm.areasByEchoTag[area.EchoTag]; dup {
+				slog.Warn("duplicate FTN echo tag; inbound mail for it will route to the last area loaded",
+					"echo_tag", area.EchoTag,
+					"kept_area", area.Tag, "kept_id", area.ID, "kept_network", area.Network,
+					"shadowed_area", prev.Tag, "shadowed_id", prev.ID, "shadowed_network", prev.Network)
+			}
 			mm.areasByEchoTag[area.EchoTag] = area
 		}
 		slog.Debug("loaded area", "id", area.ID, "tag", area.Tag, "type", area.AreaType)
