@@ -23,32 +23,48 @@ func (mm *MessageManager) GetAreaByTag(tag string) (*MessageArea, bool) {
 	return area, exists
 }
 
-// echoTagConflict reports an area that already claims echoTag on the same
-// network, excluding excludeID.
+// echoTagConflict reports an area that already claims echoTag, excluding
+// excludeID. Two kinds of claim count:
 //
-// Within one network a duplicate is a misconfiguration: areasByEchoTag keeps
-// only the last writer, so that echo's mail silently lands in whichever area
-// happened to be indexed last. Areas on different networks may legitimately
-// share an echo tag -- the same echo name exists on separate FTN networks, and
-// the tosser disambiguates by network when routing (see internal/tosser/import.go).
+//   - Another area with the same EchoTag on the same network. areasByEchoTag
+//     keeps only the last writer, so that echo's mail silently lands in
+//     whichever area was indexed last. Areas on DIFFERENT networks may
+//     legitimately share an echo tag -- the same echo name exists on separate
+//     FTN networks -- and the tosser disambiguates by network when routing
+//     (internal/tosser/import.go).
 //
-// Comparison is exact, matching the areasByEchoTag key. Areas whose EchoTag
-// equals their Tag count as claimants too: they are not in the index, but the
-// tosser's tag lookup already routes that echo to them, so a second area asking
-// for it would never receive anything. Caller must hold mm.mu.
+//   - Any area whose Tag equals echoTag, on any network. The tosser tries
+//     GetAreaByTag first and that lookup is NOT network-gated, so a tag match
+//     always wins and the echo-tagged area would never receive anything.
+//
+// Comparison is exact, matching the areasByEchoTag key. Caller must hold mm.mu.
 func (mm *MessageManager) echoTagConflict(echoTag, network string, excludeID int) *MessageArea {
 	if echoTag == "" {
 		return nil
 	}
 	for _, a := range mm.areasByID {
-		if a.ID == excludeID || a.EchoTag == "" {
+		if a.ID == excludeID {
 			continue
 		}
-		if a.EchoTag == echoTag && strings.EqualFold(a.Network, network) {
+		if a.Tag == echoTag {
+			return a
+		}
+		if a.EchoTag != "" && a.EchoTag == echoTag && strings.EqualFold(a.Network, network) {
 			return a
 		}
 	}
 	return nil
+}
+
+// echoTagConflictError describes why echoTag cannot be used, naming the area
+// that already claims it and how.
+func echoTagConflictError(echoTag string, c *MessageArea) error {
+	if c.Tag == echoTag {
+		return fmt.Errorf("echo tag %q is the local tag of area %q (id %d); inbound mail for it already routes there",
+			echoTag, c.Tag, c.ID)
+	}
+	return fmt.Errorf("echo tag %q already used by area %q (id %d) on network %q",
+		echoTag, c.Tag, c.ID, c.Network)
 }
 
 // GetAreaByEchoTag retrieves a message area by its FTN echo tag.
@@ -86,8 +102,7 @@ func (mm *MessageManager) UpdateAreaByID(id int, updated MessageArea) error {
 		}
 	}
 	if conflict := mm.echoTagConflict(updated.EchoTag, updated.Network, id); conflict != nil {
-		return fmt.Errorf("echo tag %q already used by area %q (id %d) on network %q",
-			updated.EchoTag, conflict.Tag, conflict.ID, updated.Network)
+		return echoTagConflictError(updated.EchoTag, conflict)
 	}
 	if oldTag != updated.Tag {
 		delete(mm.areasByTag, oldTag)
@@ -119,8 +134,7 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 
 	if conflict := mm.echoTagConflict(area.EchoTag, area.Network, 0); conflict != nil {
 		mm.mu.Unlock()
-		return 0, fmt.Errorf("echo tag %q already used by area %q (id %d) on network %q",
-			area.EchoTag, conflict.Tag, conflict.ID, area.Network)
+		return 0, echoTagConflictError(area.EchoTag, conflict)
 	}
 
 	// Assign next ID and position.

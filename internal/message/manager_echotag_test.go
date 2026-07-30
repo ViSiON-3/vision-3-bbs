@@ -148,3 +148,60 @@ func TestUpdateAreaRejectedByEchoTagLeavesIndexesIntact(t *testing.T) {
 		t.Errorf("echo tag LINUX no longer resolves to FD_LINUX, got %+v (found=%v)", a, ok)
 	}
 }
+
+// The tosser tries GetAreaByTag before the echo-tag index and that lookup is
+// not network-gated, so an area whose Tag equals another area's EchoTag takes
+// the mail unconditionally -- the echo-tagged area never sees any.
+func TestAddAreaRejectsEchoTagThatIsAnotherAreasTag(t *testing.T) {
+	mm := newEchoTagTestManager(t)
+
+	if _, err := mm.AddArea(MessageArea{Tag: "LINUX", Name: "Local Linux", Network: ""}); err != nil {
+		t.Fatalf("AddArea local: %v", err)
+	}
+	_, err := mm.AddArea(MessageArea{Tag: "FD_LINUX", Name: "Linux", EchoTag: "LINUX", Network: "fsxnet"})
+	if err == nil {
+		t.Fatal("AddArea accepted an echo tag that is already another area's local tag")
+	}
+	if !strings.Contains(err.Error(), "local tag") {
+		t.Errorf("error should say the tag is a local tag, got: %v", err)
+	}
+}
+
+// An area keeping EchoTag == its own Tag must not be treated as conflicting
+// with itself, on add or on update.
+func TestAreaMayUseItsOwnTagAsEchoTag(t *testing.T) {
+	mm := newEchoTagTestManager(t)
+
+	id, err := mm.AddArea(MessageArea{Tag: "FSX_GEN", Name: "General", EchoTag: "FSX_GEN", Network: "fsxnet"})
+	if err != nil {
+		t.Fatalf("an area whose EchoTag equals its own Tag was rejected: %v", err)
+	}
+	if err := mm.UpdateAreaByID(id, MessageArea{ID: id, Tag: "FSX_GEN", Name: "General Chat", EchoTag: "FSX_GEN", Network: "fsxnet"}); err != nil {
+		t.Errorf("updating that area was rejected: %v", err)
+	}
+}
+
+func TestLoadAreasWarnsWhenEchoTagIsAnotherAreasTag(t *testing.T) {
+	configDir, dataDir := t.TempDir(), t.TempDir()
+	// Deliberately listed with the echo-tagged area FIRST, so the check cannot
+	// depend on load order.
+	areas := `[
+		{"id":1,"tag":"FD_LINUX","name":"Linux","echo_tag":"LINUX","network":"fsxnet","area_type":"echomail"},
+		{"id":2,"tag":"LINUX","name":"Local Linux","area_type":"local"}
+	]`
+	if err := os.WriteFile(filepath.Join(configDir, "message_areas.json"), []byte(areas), 0o644); err != nil {
+		t.Fatalf("write areas: %v", err)
+	}
+
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	if _, err := NewMessageManager(dataDir, configDir, "TestBBS", nil); err != nil {
+		t.Fatalf("NewMessageManager: %v", err)
+	}
+	if out := logs.String(); !strings.Contains(out, "another area's local tag") {
+		t.Errorf("no warning logged for the tag/echo-tag collision; log was:\n%s", out)
+	}
+}
