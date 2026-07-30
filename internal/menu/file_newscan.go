@@ -128,9 +128,11 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 				desc = string(descRunes[:maxDesc-3]) + "..."
 			}
 
+			// Clamp in runes so a multi-byte filename is not cut mid-sequence,
+			// matching executor_files_list_render.go and file_lightbar_render.go.
 			fname := f.Filename
-			if len(fname) > 12 {
-				fname = fname[:12]
+			if fnameRunes := []rune(fname); len(fnameRunes) > 12 {
+				fname = string(fnameRunes[:12])
 			}
 
 			line := midTemplate

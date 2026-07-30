@@ -198,7 +198,17 @@ func buildNameWithAddr(name, addr string) string {
 //   - Fixed-format codes (D, W): known max format lengths
 //   - Context codes (Z, X): based on current conference/area names + max count width
 //   - All others: width of the current substitution value
-func buildAutoWidths(subs map[byte]string, totalMsgs int, termWidth int) map[byte]int {
+//
+// cp437Values says how to measure the substitution values. In CP437 mode the
+// caller has already converted them to raw CP437 bytes, where one byte is one
+// column; counting runes there would undercount whenever adjacent CP437 bytes
+// happen to form a valid UTF-8 sequence. In UTF-8 mode the values are UTF-8 and
+// must be counted in runes.
+func buildAutoWidths(subs map[byte]string, totalMsgs int, termWidth int, cp437Values bool) map[byte]int {
+	valueWidth := utf8.RuneCountInString
+	if cp437Values {
+		valueWidth = func(s string) int { return len(s) }
+	}
 	widths := make(map[byte]int)
 
 	maxMsgNumWidth := len(strconv.Itoa(totalMsgs))
@@ -221,7 +231,7 @@ func buildAutoWidths(subs map[byte]string, totalMsgs int, termWidth int) map[byt
 
 	// Z = "confName > areaName" (same for all messages in area)
 	if zVal, ok := subs['Z']; ok {
-		zLen := utf8.RuneCountInString(zVal)
+		zLen := valueWidth(zVal)
 		widths['Z'] = zLen
 		// X = Z + " " + [current/total], max when current = totalMsgs
 		widths['X'] = zLen + 1 + len(maxCountStr)
@@ -236,7 +246,7 @@ func buildAutoWidths(subs map[byte]string, totalMsgs int, termWidth int) map[byt
 	// All other codes: use current value length
 	for code, val := range subs {
 		if _, exists := widths[code]; !exists {
-			widths[code] = utf8.RuneCountInString(val)
+			widths[code] = valueWidth(val)
 		}
 	}
 

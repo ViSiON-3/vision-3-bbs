@@ -325,7 +325,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 				'X': "GENERAL > General Discussion [1/42]",
 				'K': strconv.Itoa(nodeNumber),
 			}
-			sampleAutoWidths := buildAutoWidths(sampleSubs, 42, 80)
+			sampleAutoWidths := buildAutoWidths(sampleSubs, 42, 80, false)
 
 			processedPreview := processTemplate(hdrBytes, sampleSubs, sampleAutoWidths)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
