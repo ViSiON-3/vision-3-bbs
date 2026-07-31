@@ -92,3 +92,78 @@ func TestCursorVisibility(t *testing.T) {
 		t.Errorf("Unhandled() = %q, want empty", got)
 	}
 }
+
+// ESC[K is what Screen.ClearEOL emits.
+func TestEraseToEndOfLine(t *testing.T) {
+	tt := New(10, 3)
+	tt.Write([]byte("abcdef\x1b[1;4H\x1b[K"))
+
+	if got := tt.Row(1); got != "abc" {
+		t.Errorf("Row(1) = %q, want %q", got, "abc")
+	}
+}
+
+func TestEraseToStartOfLine(t *testing.T) {
+	tt := New(10, 3)
+	tt.Write([]byte("abcdef\x1b[1;3H\x1b[1K"))
+
+	// Columns 1..3 cleared, the rest kept.
+	if got := tt.Row(1); got != "   def" {
+		t.Errorf("Row(1) = %q, want %q", got, "   def")
+	}
+}
+
+func TestEraseWholeLine(t *testing.T) {
+	tt := New(10, 3)
+	tt.Write([]byte("abcdef\x1b[2;1Hxyz\x1b[1;1H\x1b[2K"))
+
+	if got := tt.Row(1); got != "" {
+		t.Errorf("Row(1) = %q, want empty", got)
+	}
+	if got := tt.Row(2); got != "xyz" {
+		t.Errorf("Row(2) = %q, want %q — other rows must be untouched", got, "xyz")
+	}
+}
+
+// ESC[2J ESC[H is what ansi.ClearScreen() emits and Screen.ClearScreen uses.
+func TestEraseWholeDisplayAndHome(t *testing.T) {
+	tt := New(10, 3)
+	tt.Write([]byte("aaa\x1b[2;1Hbbb\x1b[2J\x1b[H"))
+
+	if got := tt.Snapshot(); got != "" {
+		t.Errorf("Snapshot() = %q, want empty", got)
+	}
+	if row, col := tt.Cursor(); row != 1 || col != 1 {
+		t.Errorf("Cursor() = (%d,%d), want (1,1)", row, col)
+	}
+}
+
+func TestEraseDisplayToEndAndToStart(t *testing.T) {
+	tt := New(5, 3)
+	tt.Write([]byte("aaaaa\x1b[2;1Hbbbbb\x1b[3;1Hccccc"))
+	tt.Write([]byte("\x1b[2;3H\x1b[J")) // erase from cursor to end of screen
+
+	if got := tt.Row(1); got != "aaaaa" {
+		t.Errorf("Row(1) = %q, want unchanged %q", got, "aaaaa")
+	}
+	if got := tt.Row(2); got != "bb" {
+		t.Errorf("Row(2) = %q, want %q", got, "bb")
+	}
+	if got := tt.Row(3); got != "" {
+		t.Errorf("Row(3) = %q, want empty", got)
+	}
+
+	tt2 := New(5, 3)
+	tt2.Write([]byte("aaaaa\x1b[2;1Hbbbbb\x1b[3;1Hccccc"))
+	tt2.Write([]byte("\x1b[2;3H\x1b[1J")) // erase from start of screen to cursor
+
+	if got := tt2.Row(1); got != "" {
+		t.Errorf("Row(1) = %q, want empty", got)
+	}
+	if got := tt2.Row(2); got != "   bb" {
+		t.Errorf("Row(2) = %q, want %q", got, "   bb")
+	}
+	if got := tt2.Row(3); got != "ccccc" {
+		t.Errorf("Row(3) = %q, want unchanged %q", got, "ccccc")
+	}
+}

@@ -168,6 +168,10 @@ func (t *Term) applyEscape(seq []byte) {
 	case 'u':
 		t.row, t.col = t.savedRow, t.savedCol
 		t.clampCursor()
+	case 'K':
+		t.eraseLine(param(params, 0, 0))
+	case 'J':
+		t.eraseDisplay(param(params, 0, 0))
 	default:
 		t.unhandled = append(t.unhandled, string(seq))
 	}
@@ -206,6 +210,56 @@ func (t *Term) applyControl(b byte) {
 		t.col = next
 	default:
 		t.unhandled = append(t.unhandled, string([]byte{b}))
+	}
+}
+
+// eraseLine clears part of the cursor's row: 0 = cursor to end, 1 = start to
+// cursor, 2 = the whole row. Erased cells take the current pen's colours, which
+// is how a coloured background survives a clear on a real terminal.
+func (t *Term) eraseLine(mode int) {
+	if t.row < 1 || t.row > t.height {
+		return
+	}
+	from, to := 1, t.width
+	switch mode {
+	case 0:
+		from = t.col
+	case 1:
+		to = t.col
+	case 2:
+	default:
+		return
+	}
+	for c := from; c <= to; c++ {
+		if c >= 1 && c <= t.width {
+			t.cells[t.row-1][c-1] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg}
+		}
+	}
+}
+
+// eraseDisplay clears part of the screen: 0 = cursor to end, 1 = start to
+// cursor, 2 = everything.
+func (t *Term) eraseDisplay(mode int) {
+	switch mode {
+	case 0:
+		t.eraseLine(0)
+		t.eraseRows(t.row+1, t.height)
+	case 1:
+		t.eraseLine(1)
+		t.eraseRows(1, t.row-1)
+	case 2:
+		t.eraseRows(1, t.height)
+	}
+}
+
+func (t *Term) eraseRows(from, to int) {
+	for r := from; r <= to; r++ {
+		if r < 1 || r > t.height {
+			continue
+		}
+		for c := range t.cells[r-1] {
+			t.cells[r-1][c] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg}
+		}
 	}
 }
 
