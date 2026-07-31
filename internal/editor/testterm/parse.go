@@ -172,6 +172,8 @@ func (t *Term) applyEscape(seq []byte) {
 		t.eraseLine(param(params, 0, 0))
 	case 'J':
 		t.eraseDisplay(param(params, 0, 0))
+	case 'm':
+		t.applySGR(params)
 	default:
 		t.unhandled = append(t.unhandled, string(seq))
 	}

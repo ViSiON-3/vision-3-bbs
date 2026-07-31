@@ -167,3 +167,69 @@ func TestEraseDisplayToEndAndToStart(t *testing.T) {
 		t.Errorf("Row(3) = %q, want unchanged %q", got, "ccccc")
 	}
 }
+
+func TestSGRAppliesToSubsequentCells(t *testing.T) {
+	tt := New(20, 3)
+	tt.Write([]byte("\x1b[1;36;44mHi\x1b[0mLo"))
+
+	h := tt.Cell(1, 1)
+	if h.Fg != 36 || h.Bg != 44 || !h.Bold {
+		t.Errorf("Cell(1,1) = %+v, want Fg=36 Bg=44 Bold=true", h)
+	}
+	l := tt.Cell(1, 3)
+	if l.Fg != -1 || l.Bg != -1 || l.Bold {
+		t.Errorf("Cell(1,3) = %+v, want defaults after reset", l)
+	}
+}
+
+// A bare ESC[m is a reset, as is ESC[0m.
+func TestSGRBareResets(t *testing.T) {
+	tt := New(20, 3)
+	tt.Write([]byte("\x1b[31mA\x1b[mB"))
+
+	if got := tt.Cell(1, 1).Fg; got != 31 {
+		t.Errorf("Cell(1,1).Fg = %d, want 31", got)
+	}
+	if got := tt.Cell(1, 2).Fg; got != -1 {
+		t.Errorf("Cell(1,2).Fg = %d, want -1", got)
+	}
+}
+
+func TestSGRBrightColours(t *testing.T) {
+	tt := New(20, 3)
+	tt.Write([]byte("\x1b[93;104mX"))
+
+	c := tt.Cell(1, 1)
+	if c.Fg != 93 || c.Bg != 104 {
+		t.Errorf("Cell(1,1) = %+v, want Fg=93 Bg=104", c)
+	}
+}
+
+// SGR must never reach Unhandled, or every coloured write would trip a test
+// that asserts the list is empty.
+func TestSGRIsNotRecordedAsUnhandled(t *testing.T) {
+	tt := New(20, 3)
+	tt.Write([]byte("\x1b[0m\x1b[1;36;44m\x1b[22m\x1b[39;49mX"))
+
+	if got := tt.Unhandled(); len(got) != 0 {
+		t.Errorf("Unhandled() = %q, want empty", got)
+	}
+}
+
+func TestSGRBoldOffAndDefaultColours(t *testing.T) {
+	tt := New(20, 3)
+	tt.Write([]byte("\x1b[1;31;41mA\x1b[22mB\x1b[39mC\x1b[49mD"))
+
+	if c := tt.Cell(1, 1); !c.Bold || c.Fg != 31 || c.Bg != 41 {
+		t.Errorf("Cell(1,1) = %+v, want Bold Fg=31 Bg=41", c)
+	}
+	if c := tt.Cell(1, 2); c.Bold || c.Fg != 31 {
+		t.Errorf("Cell(1,2) = %+v, want bold off, Fg still 31", c)
+	}
+	if c := tt.Cell(1, 3); c.Fg != -1 || c.Bg != 41 {
+		t.Errorf("Cell(1,3) = %+v, want Fg default, Bg still 41", c)
+	}
+	if c := tt.Cell(1, 4); c.Bg != -1 {
+		t.Errorf("Cell(1,4) = %+v, want Bg default", c)
+	}
+}
