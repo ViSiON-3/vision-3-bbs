@@ -27,6 +27,11 @@ func blankCell() Cell { return Cell{Rune: ' ', Fg: -1, Bg: -1} }
 // Option configures a Term at construction.
 type Option func(*Term)
 
+// CP437 makes the Term treat each byte 0x80-0xFF as one CP437 character,
+// matching what ansi.OutputModeCP437 puts on the wire. Without it the stream is
+// read as UTF-8.
+func CP437() Option { return func(t *Term) { t.cp437 = true } }
+
 // Term is a virtual screen that records what was drawn on it.
 type Term struct {
 	width, height int

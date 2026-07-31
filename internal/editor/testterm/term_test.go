@@ -159,3 +159,49 @@ func TestCarriageReturnAndBackspaceAndTab(t *testing.T) {
 		t.Errorf("Cell(1,9).Rune = %q, want 'X' (tab stop at column 9)", got)
 	}
 }
+
+// 0xB0 is ░ and 0xDB is █ in CP437. Both are single bytes on the wire.
+func TestCP437ModeDecodesHighBytes(t *testing.T) {
+	tt := New(10, 3, CP437())
+	tt.Write([]byte{0xB0, 0xDB, 'A'})
+
+	if got := tt.Cell(1, 1).Rune; got != '░' {
+		t.Errorf("Cell(1,1).Rune = %q, want '░'", got)
+	}
+	if got := tt.Cell(1, 2).Rune; got != '█' {
+		t.Errorf("Cell(1,2).Rune = %q, want '█'", got)
+	}
+	if got := tt.Cell(1, 3).Rune; got != 'A' {
+		t.Errorf("Cell(1,3).Rune = %q, want 'A'", got)
+	}
+	if row, col := tt.Cursor(); row != 1 || col != 4 {
+		t.Errorf("Cursor() = (%d,%d), want (1,4) — one column per byte", row, col)
+	}
+}
+
+// A CP437 byte pair that happens to be valid UTF-8 must still decode as two
+// separate glyphs. 0xDB 0xB2 is █▓ in CP437 but U+06F2 read as UTF-8.
+func TestCP437ModeDoesNotMisreadBytePairsAsUTF8(t *testing.T) {
+	tt := New(10, 3, CP437())
+	tt.Write([]byte{0xDB, 0xB2})
+
+	if got := tt.Cell(1, 1).Rune; got != '█' {
+		t.Errorf("Cell(1,1).Rune = %q, want '█'", got)
+	}
+	if got := tt.Cell(1, 2).Rune; got != '▓' {
+		t.Errorf("Cell(1,2).Rune = %q, want '▓'", got)
+	}
+}
+
+// Escape sequences are ASCII and must be interpreted the same in CP437 mode.
+func TestCP437ModeStillParsesEscapes(t *testing.T) {
+	tt := New(10, 3, CP437())
+	tt.Write([]byte("\x1b[2;3HX"))
+
+	if got := tt.Cell(2, 3).Rune; got != 'X' {
+		t.Errorf("Cell(2,3).Rune = %q, want 'X'", got)
+	}
+	if got := tt.Unhandled(); len(got) != 0 {
+		t.Errorf("Unhandled() = %q, want empty", got)
+	}
+}

@@ -2,6 +2,8 @@ package testterm
 
 import (
 	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // Write feeds terminal output to the screen. It never returns an error; the
@@ -270,5 +272,13 @@ func (t *Term) eraseRows(from, to int) {
 	}
 }
 
-// cp437Rune is replaced with a real decode in Task 6.
-func cp437Rune(b byte) rune { return rune(b) }
+// cp437Rune decodes one CP437 byte. It goes through ansi.CP437BytesToUTF8 so
+// there is exactly one CP437 table in the codebase rather than another copy.
+func cp437Rune(b byte) rune {
+	if b < 0x80 {
+		return rune(b)
+	}
+	decoded := ansi.CP437BytesToUTF8([]byte{b})
+	r, _ := utf8.DecodeRune(decoded)
+	return r
+}
