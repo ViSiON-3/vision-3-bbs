@@ -81,10 +81,113 @@ func scanEscape(buf []byte) (seq, rest []byte, complete bool) {
 	return nil, buf, false
 }
 
-// applyEscape interprets one sequence. Task 1 records everything; later tasks
-// replace this body with real handling.
+// csiParams splits a CSI sequence into its numeric parameters and final byte.
+// private reports a "?" prefix (as in ESC[?25l). Empty parameters are returned
+// as -1 so a caller can tell "omitted" from "zero".
+func csiParams(seq []byte) (params []int, final byte, private bool) {
+	if len(seq) < 3 || seq[1] != '[' {
+		return nil, 0, false
+	}
+	final = seq[len(seq)-1]
+	body := seq[2 : len(seq)-1]
+	if len(body) > 0 && body[0] == '?' {
+		private = true
+		body = body[1:]
+	}
+	if len(body) == 0 {
+		return nil, final, private
+	}
+	cur, has := 0, false
+	for _, c := range body {
+		switch {
+		case c >= '0' && c <= '9':
+			cur = cur*10 + int(c-'0')
+			has = true
+		case c == ';':
+			if has {
+				params = append(params, cur)
+			} else {
+				params = append(params, -1)
+			}
+			cur, has = 0, false
+		}
+	}
+	if has {
+		params = append(params, cur)
+	} else {
+		params = append(params, -1)
+	}
+	return params, final, private
+}
+
+// param returns the i-th parameter, or def when it is missing or omitted.
+func param(params []int, i, def int) int {
+	if i >= len(params) || params[i] < 0 {
+		return def
+	}
+	return params[i]
+}
+
 func (t *Term) applyEscape(seq []byte) {
-	t.unhandled = append(t.unhandled, string(seq))
+	params, final, private := csiParams(seq)
+	if final == 0 {
+		t.unhandled = append(t.unhandled, string(seq))
+		return
+	}
+
+	if private {
+		if final == 'h' || final == 'l' {
+			if param(params, 0, 0) == 25 {
+				t.cursorHidden = final == 'l'
+				return
+			}
+		}
+		t.unhandled = append(t.unhandled, string(seq))
+		return
+	}
+
+	switch final {
+	case 'H', 'f':
+		t.row = param(params, 0, 1)
+		t.col = param(params, 1, 1)
+		t.clampCursor()
+	case 'A':
+		t.row -= param(params, 0, 1)
+		t.clampCursor()
+	case 'B':
+		t.row += param(params, 0, 1)
+		t.clampCursor()
+	case 'C':
+		t.col += param(params, 0, 1)
+		t.clampCursor()
+	case 'D':
+		t.col -= param(params, 0, 1)
+		t.clampCursor()
+	case 's':
+		t.savedRow, t.savedCol = t.row, t.col
+	case 'u':
+		t.row, t.col = t.savedRow, t.savedCol
+		t.clampCursor()
+	default:
+		t.unhandled = append(t.unhandled, string(seq))
+	}
+}
+
+// clampCursor keeps the cursor inside the screen. Writing past the last column
+// is handled at write time (Task 5), not here.
+func (t *Term) clampCursor() {
+	if t.row < 1 {
+		t.row = 1
+	}
+	if t.row > t.height {
+		t.row = t.height
+	}
+	if t.col < 1 {
+		t.col = 1
+	}
+	if t.col > t.width {
+		t.col = t.width
+	}
 }
 
 // applyControl handles the C0 control characters the editor emits.
