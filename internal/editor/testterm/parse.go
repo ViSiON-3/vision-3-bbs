@@ -202,7 +202,12 @@ func (t *Term) applyControl(b byte) {
 	case '\r':
 		t.col = 1
 	case '\n':
-		t.row++
+		if t.row >= t.height {
+			t.scrollUp()
+			t.row = t.height
+		} else {
+			t.row++
+		}
 	case '\b':
 		if t.col > 1 {
 			t.col--

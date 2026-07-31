@@ -92,3 +92,70 @@ func TestWriteDecodesMultiByteUTF8(t *testing.T) {
 		t.Errorf("Cursor() = (%d,%d), want (1,3) — one column per rune", row, col)
 	}
 }
+
+func TestWriteWrapsAtRightMargin(t *testing.T) {
+	tt := New(4, 3)
+	tt.Write([]byte("abcdef"))
+
+	if got := tt.Row(1); got != "abcd" {
+		t.Errorf("Row(1) = %q, want %q", got, "abcd")
+	}
+	if got := tt.Row(2); got != "ef" {
+		t.Errorf("Row(2) = %q, want %q", got, "ef")
+	}
+	if row, col := tt.Cursor(); row != 2 || col != 3 {
+		t.Errorf("Cursor() = (%d,%d), want (2,3)", row, col)
+	}
+}
+
+func TestLineFeedOnLastRowScrolls(t *testing.T) {
+	tt := New(6, 3)
+	tt.Write([]byte("one\r\ntwo\r\nthree"))
+
+	if got := tt.Snapshot(); got != "one\ntwo\nthree" {
+		t.Errorf("Snapshot() = %q, want %q", got, "one\ntwo\nthree")
+	}
+
+	tt.Write([]byte("\r\nfour"))
+
+	if got := tt.Snapshot(); got != "two\nthree\nfour" {
+		t.Errorf("Snapshot() = %q, want %q — top row should have scrolled off", got, "two\nthree\nfour")
+	}
+	if row := tt.row; row != 3 {
+		t.Errorf("cursor row = %d, want 3 (stays on the last row)", row)
+	}
+}
+
+func TestWrapOnLastRowScrolls(t *testing.T) {
+	tt := New(3, 2)
+	tt.Write([]byte("abc\r\ndef"))
+	if got := tt.Snapshot(); got != "abc\ndef" {
+		t.Fatalf("setup: Snapshot() = %q, want %q", got, "abc\ndef")
+	}
+
+	tt.Write([]byte("g")) // wraps past the last column on the last row
+
+	if got := tt.Snapshot(); got != "def\ng" {
+		t.Errorf("Snapshot() = %q, want %q", got, "def\ng")
+	}
+}
+
+func TestCarriageReturnAndBackspaceAndTab(t *testing.T) {
+	tt := New(20, 3)
+	tt.Write([]byte("abc\rX"))
+	if got := tt.Row(1); got != "Xbc" {
+		t.Errorf("Row(1) = %q, want %q", got, "Xbc")
+	}
+
+	tt2 := New(20, 3)
+	tt2.Write([]byte("abc\b\bX"))
+	if got := tt2.Row(1); got != "aXc" {
+		t.Errorf("Row(1) = %q, want %q", got, "aXc")
+	}
+
+	tt3 := New(20, 3)
+	tt3.Write([]byte("ab\tX"))
+	if got := tt3.Cell(1, 9).Rune; got != 'X' {
+		t.Errorf("Cell(1,9).Rune = %q, want 'X' (tab stop at column 9)", got)
+	}
+}

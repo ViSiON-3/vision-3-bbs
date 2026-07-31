@@ -122,10 +122,32 @@ func (t *Term) Unhandled() []string {
 	return out
 }
 
-// putRune writes r at the cursor using the current pen and advances the cursor.
+// putRune writes r at the cursor using the current pen and advances the cursor,
+// wrapping at the right margin and scrolling at the bottom of the screen.
 func (t *Term) putRune(r rune) {
+	if t.col > t.width {
+		t.col = 1
+		t.row++
+	}
+	if t.row > t.height {
+		t.scrollUp()
+		t.row = t.height
+	}
 	if t.row >= 1 && t.row <= t.height && t.col >= 1 && t.col <= t.width {
 		t.cells[t.row-1][t.col-1] = Cell{Rune: r, Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
 	}
 	t.col++
+}
+
+// scrollUp discards the top row and appends a blank row at the bottom.
+func (t *Term) scrollUp() {
+	if t.height == 0 {
+		return
+	}
+	copy(t.cells, t.cells[1:])
+	last := make([]Cell, t.width)
+	for c := range last {
+		last[c] = blankCell()
+	}
+	t.cells[t.height-1] = last
 }
