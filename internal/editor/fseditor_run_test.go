@@ -1,53 +1,13 @@
 package editor
 
 import (
-	"errors"
 	"io"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/gliderlabs/ssh"
-
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
 )
-
-// fakeEditorSession is a minimal ssh.Session for driving FSEditor in tests.
-// Read replays scripted keystrokes; once they are exhausted it blocks like a
-// live connection until the read interrupt fires (mirroring the ssh/telnet
-// adapters' SetReadInterrupt support). The embedded nil ssh.Session supplies
-// the rest of the interface.
-type fakeEditorSession struct {
-	ssh.Session
-	mu        sync.Mutex
-	data      []byte
-	interrupt <-chan struct{}
-}
-
-func (fs *fakeEditorSession) Read(p []byte) (int, error) {
-	fs.mu.Lock()
-	if len(fs.data) > 0 {
-		n := copy(p, fs.data)
-		fs.data = fs.data[n:]
-		fs.mu.Unlock()
-		return n, nil
-	}
-	interrupt := fs.interrupt
-	fs.mu.Unlock()
-	if interrupt == nil {
-		return 0, io.EOF
-	}
-	<-interrupt
-	return 0, errors.New("read interrupted")
-}
-
-func (fs *fakeEditorSession) Write(p []byte) (int, error) { return len(p), nil }
-
-func (fs *fakeEditorSession) SetReadInterrupt(ch <-chan struct{}) {
-	fs.mu.Lock()
-	fs.interrupt = ch
-	fs.mu.Unlock()
-}
 
 // TestRunClosesSelfCreatedInputHandler guards against the "double key press"
 // bug: when NewFSEditor is passed a nil InputHandler it creates its own, and
@@ -56,7 +16,7 @@ func (fs *fakeEditorSession) SetReadInterrupt(ch <-chan struct{}) {
 // the menu's reader for the rest of the session.
 func TestRunClosesSelfCreatedInputHandler(t *testing.T) {
 	// "hi" then Ctrl-Z (save and exit).
-	sess := &fakeEditorSession{data: []byte("hi\x1a")}
+	sess := testterm.NewSession(nil, "hi\x1a")
 	ed := NewFSEditor(sess, io.Discard, ansi.OutputModeUTF8, 80, 24,
 		"", "", "", "", "", "", nil)
 
@@ -80,7 +40,7 @@ func TestRunClosesSelfCreatedInputHandler(t *testing.T) {
 // a caller-provided (session-scoped, shared) InputHandler must survive Run so
 // the menu keeps receiving keystrokes through it after the editor exits.
 func TestRunLeavesSharedInputHandlerOpen(t *testing.T) {
-	sess := &fakeEditorSession{data: []byte("hi\x1a")}
+	sess := testterm.NewSession(nil, "hi\x1a")
 	shared := NewInputHandler(sess)
 	ed := NewFSEditor(sess, io.Discard, ansi.OutputModeUTF8, 80, 24,
 		"", "", "", "", "", "", shared)
