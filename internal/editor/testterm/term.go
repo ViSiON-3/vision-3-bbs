@@ -10,7 +10,11 @@
 // catch output the double does not understand rather than silently passing.
 package testterm
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+	"sync"
+)
 
 // Cell is one character position on the screen.
 //
@@ -33,7 +37,14 @@ type Option func(*Term)
 func CP437() Option { return func(t *Term) { t.cp437 = true } }
 
 // Term is a virtual screen that records what was drawn on it.
+//
+// Term is safe for concurrent use: Write and every accessor take an internal
+// mutex. That matters when a test drives interactive code through a Session —
+// the code under test writes to the Term on its own goroutine while the test
+// goroutine reads Row, Cell, Cursor or Snapshot to make assertions.
 type Term struct {
+	mu sync.Mutex
+
 	width, height int
 	cells         [][]Cell
 
@@ -75,6 +86,14 @@ func New(width, height int, opts ...Option) *Term {
 // Row returns the text of a 1-based row with trailing blanks removed.
 // An out-of-range row returns "".
 func (t *Term) Row(row int) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.rowLocked(row)
+}
+
+// rowLocked is Row's implementation, callable from methods that already hold
+// t.mu so they do not recursively lock it.
+func (t *Term) rowLocked(row int) string {
 	if row < 1 || row > t.height {
 		return ""
 	}
@@ -88,26 +107,41 @@ func (t *Term) Row(row int) string {
 // Cell returns the cell at a 1-based row and column. Out-of-range coordinates
 // return a blank cell so that a mistaken assertion fails rather than panics.
 func (t *Term) Cell(row, col int) Cell {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if row < 1 || row > t.height || col < 1 || col > t.width {
 		return blankCell()
 	}
 	return t.cells[row-1][col-1]
 }
 
-// Cursor returns the 1-based cursor position.
-func (t *Term) Cursor() (row, col int) { return t.row, t.col }
+// Cursor returns the 1-based cursor position. The column can be width+1 right
+// after a write that lands exactly on the last column: wrap is deferred until
+// the next character arrives (see putRune), so the cursor briefly points one
+// past the right margin, matching real terminal behaviour.
+func (t *Term) Cursor() (row, col int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.row, t.col
+}
 
 // CursorVisible reports whether the cursor is shown (ESC[?25h / ESC[?25l).
-func (t *Term) CursorVisible() bool { return !t.cursorHidden }
+func (t *Term) CursorVisible() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return !t.cursorHidden
+}
 
 // Snapshot returns the whole screen as text: rows joined by "\n", with trailing
 // blanks on each row and trailing blank rows removed. Colour is deliberately
 // excluded — assert colour through Cell.
 func (t *Term) Snapshot() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	rows := make([]string, t.height)
 	last := -1
 	for i := 1; i <= t.height; i++ {
-		rows[i-1] = t.Row(i)
+		rows[i-1] = t.rowLocked(i)
 		if rows[i-1] != "" {
 			last = i - 1
 		}
@@ -119,11 +153,18 @@ func (t *Term) Snapshot() string {
 }
 
 // Unhandled returns the escape sequences this Term consumed but did not model,
-// in the order they arrived. A test that wants to be sure the double kept up
+// in the order they arrived, plus a trailing entry when the stream ended
+// mid-sequence (bytes are still sitting in the pending buffer, waiting for a
+// Write that never came). A test that wants to be sure the double kept up
 // with the code under test asserts this is empty.
 func (t *Term) Unhandled() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	out := make([]string, len(t.unhandled))
 	copy(out, t.unhandled)
+	if len(t.pending) > 0 {
+		out = append(out, fmt.Sprintf("pending: %q", string(t.pending)))
+	}
 	return out
 }
 
@@ -134,6 +175,10 @@ func (t *Term) putRune(r rune) {
 		t.col = 1
 		t.row++
 	}
+	// row > height, not >=: a bare '\n' (applyControl) advances the row itself
+	// and must scroll as soon as it reaches the last row, but putRune only
+	// wrapped col back to 1 above and needs the increment to have already
+	// landed one row past the bottom before it scrolls.
 	if t.row > t.height {
 		t.scrollUp()
 		t.row = t.height
@@ -144,7 +189,10 @@ func (t *Term) putRune(r rune) {
 	t.col++
 }
 
-// scrollUp discards the top row and appends a blank row at the bottom.
+// scrollUp discards the top row and appends a blank row at the bottom. The new
+// row is filled with default colours rather than the current pen's background;
+// a real terminal paints it in the pen's background, but this Term deliberately
+// does not model that.
 func (t *Term) scrollUp() {
 	if t.height == 0 {
 		return

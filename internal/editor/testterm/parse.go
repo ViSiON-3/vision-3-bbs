@@ -11,7 +11,13 @@ import (
 //
 // Bytes held back mid-sequence or mid-rune are carried over to the next call,
 // so a sequence split across writes is still parsed as one sequence.
+//
+// Write takes Term's mutex for the whole call, so a Write racing with an
+// accessor on another goroutine (the shape a Session-driven test uses) is
+// safe.
 func (t *Term) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	n := len(p)
 	buf := p
 	if len(t.pending) > 0 {
@@ -71,6 +77,16 @@ func scanEscape(buf []byte) (seq, rest []byte, complete bool) {
 		return nil, buf, false
 	}
 	if buf[1] != '[' {
+		if buf[1] == '(' || buf[1] == ')' {
+			// Character-set designation (ESC ( / ESC )) takes a third byte
+			// naming the set, e.g. ESC(B for US-ASCII. ansi.CP437BytesToUTF8
+			// passes these through, so this codebase does emit them; consume
+			// all three bytes or the designator leaks into the grid as text.
+			if len(buf) < 3 {
+				return nil, buf, false
+			}
+			return buf[:3], buf[3:], true
+		}
 		// Not CSI; consume ESC plus one byte so it cannot be printed as text.
 		return buf[:2], buf[2:], true
 	}
@@ -130,6 +146,17 @@ func param(params []int, i, def int) int {
 	return params[i]
 }
 
+// moveCount returns how far a relative cursor movement (A/B/C/D) should go.
+// An omitted parameter defaults to 1, and — matching real terminals — an
+// explicit 0 is coerced to 1 too: ESC[0B still moves one row, it does not
+// stay put.
+func moveCount(params []int) int {
+	if n := param(params, 0, 1); n > 0 {
+		return n
+	}
+	return 1
+}
+
 func (t *Term) applyEscape(seq []byte) {
 	params, final, private := csiParams(seq)
 	if final == 0 {
@@ -154,16 +181,16 @@ func (t *Term) applyEscape(seq []byte) {
 		t.col = param(params, 1, 1)
 		t.clampCursor()
 	case 'A':
-		t.row -= param(params, 0, 1)
+		t.row -= moveCount(params)
 		t.clampCursor()
 	case 'B':
-		t.row += param(params, 0, 1)
+		t.row += moveCount(params)
 		t.clampCursor()
 	case 'C':
-		t.col += param(params, 0, 1)
+		t.col += moveCount(params)
 		t.clampCursor()
 	case 'D':
-		t.col -= param(params, 0, 1)
+		t.col -= moveCount(params)
 		t.clampCursor()
 	case 's':
 		t.savedRow, t.savedCol = t.row, t.col
@@ -171,9 +198,13 @@ func (t *Term) applyEscape(seq []byte) {
 		t.row, t.col = t.savedRow, t.savedCol
 		t.clampCursor()
 	case 'K':
-		t.eraseLine(param(params, 0, 0))
+		if !t.eraseLine(param(params, 0, 0)) {
+			t.unhandled = append(t.unhandled, string(seq))
+		}
 	case 'J':
-		t.eraseDisplay(param(params, 0, 0))
+		if !t.eraseDisplay(param(params, 0, 0)) {
+			t.unhandled = append(t.unhandled, string(seq))
+		}
 	case 'm':
 		t.applySGR(params)
 	default:
@@ -195,80 +226,6 @@ func (t *Term) clampCursor() {
 	}
 	if t.col > t.width {
 		t.col = t.width
-	}
-}
-
-// applyControl handles the C0 control characters the editor emits.
-func (t *Term) applyControl(b byte) {
-	switch b {
-	case '\r':
-		t.col = 1
-	case '\n':
-		if t.row >= t.height {
-			t.scrollUp()
-			t.row = t.height
-		} else {
-			t.row++
-		}
-	case '\b':
-		if t.col > 1 {
-			t.col--
-		}
-	case '\t':
-		next := ((t.col-1)/8+1)*8 + 1
-		t.col = next
-	default:
-		t.unhandled = append(t.unhandled, string([]byte{b}))
-	}
-}
-
-// eraseLine clears part of the cursor's row: 0 = cursor to end, 1 = start to
-// cursor, 2 = the whole row. Erased cells take the current pen's colours, which
-// is how a coloured background survives a clear on a real terminal.
-func (t *Term) eraseLine(mode int) {
-	if t.row < 1 || t.row > t.height {
-		return
-	}
-	from, to := 1, t.width
-	switch mode {
-	case 0:
-		from = t.col
-	case 1:
-		to = t.col
-	case 2:
-	default:
-		return
-	}
-	for c := from; c <= to; c++ {
-		if c >= 1 && c <= t.width {
-			t.cells[t.row-1][c-1] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg}
-		}
-	}
-}
-
-// eraseDisplay clears part of the screen: 0 = cursor to end, 1 = start to
-// cursor, 2 = everything.
-func (t *Term) eraseDisplay(mode int) {
-	switch mode {
-	case 0:
-		t.eraseLine(0)
-		t.eraseRows(t.row+1, t.height)
-	case 1:
-		t.eraseLine(1)
-		t.eraseRows(1, t.row-1)
-	case 2:
-		t.eraseRows(1, t.height)
-	}
-}
-
-func (t *Term) eraseRows(from, to int) {
-	for r := from; r <= to; r++ {
-		if r < 1 || r > t.height {
-			continue
-		}
-		for c := range t.cells[r-1] {
-			t.cells[r-1][c] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg}
-		}
 	}
 }
 

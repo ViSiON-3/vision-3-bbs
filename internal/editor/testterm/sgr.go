@@ -1,8 +1,13 @@
 package testterm
 
+import "fmt"
+
 // applySGR updates the pen from a Select Graphic Rendition sequence. Only the
 // attributes internal/editor emits are modelled: reset, bold on/off, the eight
-// standard and eight bright colours, and the default-colour codes.
+// standard and eight bright colours, and the default-colour codes. Any other
+// parameter (blink, reverse, 256-colour, ...) is recorded in Unhandled instead
+// of being silently dropped; a 256-colour sequence like ESC[48;5;12m records
+// each of its three parameters separately rather than as one entry.
 func (t *Term) applySGR(params []int) {
 	if len(params) == 0 {
 		t.pen = blankCell()
@@ -24,6 +29,8 @@ func (t *Term) applySGR(params []int) {
 			t.pen.Bg = p
 		case p == 49:
 			t.pen.Bg = -1
+		default:
+			t.unhandled = append(t.unhandled, fmt.Sprintf("SGR %d", p))
 		}
 	}
 }

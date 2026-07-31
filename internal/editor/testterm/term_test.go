@@ -78,6 +78,19 @@ func TestEscapeSplitAcrossWrites(t *testing.T) {
 	}
 }
 
+// Bytes left over when the stream ends mid-sequence must not vanish: without
+// a trace, an incomplete escape sequence swallowed by a test double looks
+// identical to one that never happened.
+func TestIncompletePendingSequenceIsRecorded(t *testing.T) {
+	tt := New(20, 5)
+	tt.Write([]byte("\x1b[3"))
+
+	got := tt.Unhandled()
+	if len(got) != 1 || got[0] != `pending: "\x1b[3"` {
+		t.Errorf("Unhandled() = %q, want [%q]", got, `pending: "\x1b[3"`)
+	}
+}
+
 func TestWriteDecodesMultiByteUTF8(t *testing.T) {
 	tt := New(20, 5)
 	tt.Write([]byte("░é"))

@@ -38,6 +38,9 @@ func TestScreenClearEOL(t *testing.T) {
 	if got := tt.Row(2); got != "abc" {
 		t.Errorf("Row(2) = %q, want %q", got, "abc")
 	}
+	if got := tt.Unhandled(); len(got) != 0 {
+		t.Errorf("Unhandled() = %q, want empty — the double missed output Screen emitted", got)
+	}
 }
 
 func TestScreenClearScreen(t *testing.T) {
@@ -56,6 +59,9 @@ func TestScreenClearScreen(t *testing.T) {
 	if row, col := tt.Cursor(); row != 1 || col != 1 {
 		t.Errorf("Cursor() = (%d,%d), want (1,1) — ClearScreen homes the cursor", row, col)
 	}
+	if got := tt.Unhandled(); len(got) != 0 {
+		t.Errorf("Unhandled() = %q, want empty — the double missed output Screen emitted", got)
+	}
 }
 
 // WriteDirectProcessed runs the real pipe-code table, so this covers SGR
@@ -70,8 +76,9 @@ func TestScreenWriteDirectProcessedAppliesPipeCodeColour(t *testing.T) {
 	if got := tt.Row(1); got != "Bright" {
 		t.Errorf("Row(1) = %q, want %q — pipe code leaked into the text", got, "Bright")
 	}
-	if c := tt.Cell(1, 1); c.Fg == -1 {
-		t.Errorf("Cell(1,1) = %+v, want a foreground colour from |09", c)
+	// |09 expands to ESC[1;34m: bright (bold) blue foreground.
+	if c := tt.Cell(1, 1); c.Fg != 34 || !c.Bold {
+		t.Errorf("Cell(1,1) = %+v, want Fg=34 Bold=true from |09", c)
 	}
 	if got := tt.Unhandled(); len(got) != 0 {
 		t.Errorf("Unhandled() = %q, want empty", got)
