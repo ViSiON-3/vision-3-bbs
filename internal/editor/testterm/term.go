@@ -51,6 +51,7 @@ type Term struct {
 	row, col           int // cursor, 1-based
 	savedRow, savedCol int
 	cursorHidden       bool
+	wrapPending        bool // set when a write landed exactly on the last column; see putRune
 
 	pen   Cell // current SGR state; Rune is unused
 	cp437 bool
@@ -115,10 +116,10 @@ func (t *Term) Cell(row, col int) Cell {
 	return t.cells[row-1][col-1]
 }
 
-// Cursor returns the 1-based cursor position. The column can be width+1 right
-// after a write that lands exactly on the last column: wrap is deferred until
-// the next character arrives (see putRune), so the cursor briefly points one
-// past the right margin, matching real terminal behaviour.
+// Cursor returns the 1-based cursor position. After a write that lands
+// exactly on the last column, the column stays at width — never past it — while
+// the wrap to the next row is deferred until the next character arrives (see
+// putRune's wrapPending flag), matching real terminal behaviour.
 func (t *Term) Cursor() (row, col int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -170,8 +171,16 @@ func (t *Term) Unhandled() []string {
 
 // putRune writes r at the cursor using the current pen and advances the cursor,
 // wrapping at the right margin and scrolling at the bottom of the screen.
+//
+// Wrapping is deferred: a write that lands exactly on the last column sets
+// wrapPending and leaves col at width rather than stepping it past the right
+// margin. The next putRune call consumes that flag first, moving to column 1
+// of the next row before it writes. That mirrors real terminal behaviour,
+// where the cursor visibly sits on the last column — not one past it — until
+// something is actually written there.
 func (t *Term) putRune(r rune) {
-	if t.col > t.width {
+	if t.wrapPending {
+		t.wrapPending = false
 		t.col = 1
 		t.row++
 	}
@@ -186,7 +195,11 @@ func (t *Term) putRune(r rune) {
 	if t.row >= 1 && t.row <= t.height && t.col >= 1 && t.col <= t.width {
 		t.cells[t.row-1][t.col-1] = Cell{Rune: r, Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
 	}
-	t.col++
+	if t.col >= t.width {
+		t.wrapPending = true
+	} else {
+		t.col++
+	}
 }
 
 // scrollUp discards the top row and appends a blank row at the bottom. The new

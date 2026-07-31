@@ -173,6 +173,38 @@ func TestCarriageReturnAndBackspaceAndTab(t *testing.T) {
 	}
 }
 
+// A bare '\n' arriving right after a write that lands on the last column
+// must not double-advance the row. putRune defers wrapping (see wrapPending)
+// rather than stepping the column past the margin; if '\n' does not resolve
+// that pending state itself, the next character sees the stale state and
+// wraps a second time. Real terminals clear the deferred wrap when '\n' moves
+// the cursor down, so the wrap "uses up" the row '\n' already advanced.
+func TestBareLineFeedDoesNotDoubleAdvanceRow(t *testing.T) {
+	tt := New(4, 3)
+	tt.Write([]byte("abcd\nX"))
+
+	if got := tt.Cell(2, 1).Rune; got != 'X' {
+		t.Errorf("Cell(2,1).Rune = %q, want 'X'", got)
+	}
+	if got := tt.Row(3); got != "" {
+		t.Errorf("Row(3) = %q, want empty — a bare '\\n' after a full-width write must only advance one row", got)
+	}
+	if row, col := tt.Cursor(); row != 2 || col != 2 {
+		t.Errorf("Cursor() = (%d,%d), want (2,2)", row, col)
+	}
+}
+
+// A tab stop past the right margin must clamp to width, not run past it the
+// way a bare column overflow would.
+func TestTabClampsToWidth(t *testing.T) {
+	tt := New(6, 3)
+	tt.Write([]byte("abcde\t"))
+
+	if row, col := tt.Cursor(); row != 1 || col != 6 {
+		t.Errorf("Cursor() = (%d,%d), want (1,6) — tab stop clamped to width", row, col)
+	}
+}
+
 // 0xB0 is ░ and 0xDB is █ in CP437. Both are single bytes on the wire.
 func TestCP437ModeDecodesHighBytes(t *testing.T) {
 	tt := New(10, 3, CP437())

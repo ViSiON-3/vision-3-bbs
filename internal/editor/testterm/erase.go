@@ -5,7 +5,21 @@ func (t *Term) applyControl(b byte) {
 	switch b {
 	case '\r':
 		t.col = 1
+		t.wrapPending = false
 	case '\n':
+		// A '\n' arriving with a wrap pending consumes it: clear the flag and
+		// reset the column, so the row advances once rather than twice.
+		//
+		// Deliberate divergence: a real terminal clears the pending-wrap flag
+		// but leaves the column where it was, so text after a full row plus a
+		// bare '\n' would resume under the right margin. Column 1 is what a
+		// test author means by "\n", and the editor always emits "\r\n", where
+		// the '\r' makes the two models identical. Without a pending wrap,
+		// '\n' leaves the column untouched, as a real terminal does.
+		if t.wrapPending {
+			t.wrapPending = false
+			t.col = 1
+		}
 		// row >= height, not >: applyControl advances the row itself, unlike
 		// putRune, which only wraps col back to 1 and lets row run one past
 		// height before scrolling. A bare '\n' must scroll as soon as the
@@ -20,9 +34,14 @@ func (t *Term) applyControl(b byte) {
 		if t.col > 1 {
 			t.col--
 		}
+		t.wrapPending = false
 	case '\t':
 		next := ((t.col-1)/8+1)*8 + 1
+		if next > t.width {
+			next = t.width
+		}
 		t.col = next
+		t.wrapPending = false
 	default:
 		t.unhandled = append(t.unhandled, string([]byte{b}))
 	}
@@ -48,10 +67,10 @@ func (t *Term) eraseLine(mode int) bool {
 		return false
 	}
 	for c := from; c <= to; c++ {
-		// This guard is reachable, not dead: putRune leaves t.col ==
-		// t.width+1 after writing the last column (wrap is deferred to the
-		// next character), so ESC[1K issued in that state would index one
-		// past the end of the row without it.
+		// t.col cannot exceed t.width — putRune's deferred wrap holds it at
+		// width rather than stepping past the margin — so this guard should
+		// never trigger in practice. It stays as cheap defensive bounds
+		// checking rather than something load-bearing.
 		if c >= 1 && c <= t.width {
 			t.cells[t.row-1][c-1] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
 		}

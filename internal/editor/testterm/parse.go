@@ -227,7 +227,12 @@ func (t *Term) applyEscape(seq []byte) {
 
 // clampCursor keeps the cursor inside the screen. Writing past the last column
 // is handled at write time (Task 5), not here.
+//
+// Every caller repositions the cursor explicitly (CUP/HVP or a relative
+// move), so — like any cursor movement on a real terminal — it clears a
+// deferred wrap from a previous write that landed on the last column.
 func (t *Term) clampCursor() {
+	t.wrapPending = false
 	if t.row < 1 {
 		t.row = 1
 	}
