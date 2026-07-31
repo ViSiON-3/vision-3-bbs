@@ -194,6 +194,70 @@ func TestRelativeMovementExplicitZeroStillMovesOne(t *testing.T) {
 	}
 }
 
+// A parameter body byte that is neither a digit nor ';' must not be silently
+// dropped: skipping it concatenates the digits on either side into a
+// different, wrong parameter. This is the colon sub-parameter form used by
+// 24-bit/indexed colour (e.g. ESC[38:2:R:G:Bm); nothing in this codebase
+// emits it, but a parser that mis-happens to produce a valid-looking
+// parameter from it would silently apply the wrong thing while Unhandled()
+// stayed empty.
+func TestCsiColonSubParametersAreUnhandledNotMisapplied(t *testing.T) {
+	// Without the fix this reads as the single parameter "22" (bold off),
+	// which SGR does recognise — so it would be silently applied.
+	tt := New(20, 10)
+	tt.Write([]byte("\x1b[1m\x1b[2:2m"))
+
+	if !tt.pen.Bold {
+		t.Error("ESC[2:2m must not be applied as SGR 22 (bold off) via concatenated digits")
+	}
+	if got := tt.Unhandled(); len(got) != 1 || got[0] != "\x1b[2:2m" {
+		t.Errorf("Unhandled() = %q, want [%q]", got, "\x1b[2:2m")
+	}
+
+	// Without the fix this reads as the single parameter "12", moving the
+	// cursor to row 12 (clamped to the last row) — a positioning sequence
+	// silently misapplied while Unhandled() stayed empty.
+	tt2 := New(20, 10)
+	tt2.Write([]byte("\x1b[1:2H"))
+
+	if row, col := tt2.Cursor(); row != 1 || col != 1 {
+		t.Errorf("Cursor() = (%d,%d), want (1,1) — ESC[1:2H must not move the cursor", row, col)
+	}
+	if got := tt2.Unhandled(); len(got) != 1 || got[0] != "\x1b[1:2H" {
+		t.Errorf("Unhandled() = %q, want [%q]", got, "\x1b[1:2H")
+	}
+
+	// The '?' private-mode prefix must still parse correctly.
+	tt3 := New(20, 10)
+	tt3.Write([]byte("\x1b[?25l"))
+	if tt3.CursorVisible() {
+		t.Error("cursor should be hidden after ESC[?25l")
+	}
+	if got := tt3.Unhandled(); len(got) != 0 {
+		t.Errorf("Unhandled() = %q, want empty", got)
+	}
+}
+
+// Erasing must carry the pen's Bold along with Fg/Bg: a real terminal fills
+// erased cells with the full current SGR state, and Cell models Bold
+// explicitly, so dropping it would leave an erased cell with an attribute
+// that never existed.
+func TestEraseCarriesPenBold(t *testing.T) {
+	tt := New(10, 3)
+	tt.Write([]byte("\x1b[1mabc\x1b[1;1H\x1b[K"))
+
+	if got := tt.Cell(1, 1); !got.Bold {
+		t.Errorf("Cell(1,1) after erase = %+v, want Bold=true (carried from pen)", got)
+	}
+
+	tt2 := New(10, 3)
+	tt2.Write([]byte("\x1b[1mabc\x1b[2J"))
+
+	if got := tt2.Cell(1, 1); !got.Bold {
+		t.Errorf("Cell(1,1) after ESC[2J = %+v, want Bold=true (carried from pen)", got)
+	}
+}
+
 // ESC( and ESC) designate a character set and take a third byte naming it;
 // that byte must be consumed with the escape, not printed as text.
 func TestCharsetDesignationConsumesDesignatorByte(t *testing.T) {

@@ -102,6 +102,17 @@ func scanEscape(buf []byte) (seq, rest []byte, complete bool) {
 // csiParams splits a CSI sequence into its numeric parameters and final byte.
 // private reports a "?" prefix (as in ESC[?25l). Empty parameters are returned
 // as -1 so a caller can tell "omitted" from "zero".
+//
+// A parameter body byte that is neither a digit nor ';' — most notably ':',
+// the sub-parameter separator used by the colon form of 24-bit/indexed
+// colour (ESC[38:2:R:G:Bm) — is not silently skipped. Skipping it would
+// concatenate the digits on either side into one wrong parameter (ESC[1:2H
+// would read as "12", not "1" and "2") and the sequence would then be applied
+// as if it had parsed correctly. Instead csiParams reports final = 0, the
+// same sentinel applyEscape already uses for a sequence it cannot make sense
+// of, so the caller records the whole sequence in Unhandled instead of
+// acting on it. Colon-form parameters themselves are not modelled — this
+// only stops them from being misread as something else.
 func csiParams(seq []byte) (params []int, final byte, private bool) {
 	if len(seq) < 3 || seq[1] != '[' {
 		return nil, 0, false
@@ -128,6 +139,8 @@ func csiParams(seq []byte) (params []int, final byte, private bool) {
 				params = append(params, -1)
 			}
 			cur, has = 0, false
+		default:
+			return nil, 0, false
 		}
 	}
 	if has {

@@ -53,7 +53,7 @@ func (t *Term) eraseLine(mode int) bool {
 		// next character), so ESC[1K issued in that state would index one
 		// past the end of the row without it.
 		if c >= 1 && c <= t.width {
-			t.cells[t.row-1][c-1] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg}
+			t.cells[t.row-1][c-1] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
 		}
 	}
 	return true
@@ -87,7 +87,7 @@ func (t *Term) eraseRows(from, to int) {
 			continue
 		}
 		for c := range t.cells[r-1] {
-			t.cells[r-1][c] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg}
+			t.cells[r-1][c] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
 		}
 	}
 }
