@@ -3,6 +3,7 @@ package protocol
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // AreaTagRegexp validates area tags: {prefix}.{name} where prefix is 1-8
@@ -60,12 +61,16 @@ const (
 	AccessModeClosed   = "closed"
 )
 
-// ValidateAreaTag checks that a tag matches the required format.
+// ValidateAreaTag checks that a tag matches the required format. Errors are
+// worded for sysops typing tags into config forms, not for developers.
 func ValidateAreaTag(tag string) error {
-	if !AreaTagRegexp.MatchString(tag) {
-		return fmt.Errorf("invalid area tag %q: must match %s", tag, AreaTagRegexp.String())
+	if AreaTagRegexp.MatchString(tag) {
+		return nil
 	}
-	return nil
+	if !strings.Contains(tag, ".") {
+		return fmt.Errorf(`invalid area tag %q: missing a period - tags are "prefix.name", e.g. "fel.general"`, tag)
+	}
+	return fmt.Errorf(`invalid area tag %q: must be lowercase "prefix.name" like "fel.general" - prefix 1-8 letters/digits, name 1-24 letters/digits/hyphens`, tag)
 }
 
 // ValidateAccessMode checks that a mode string is one of the valid access modes.
