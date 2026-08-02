@@ -3,9 +3,11 @@ package configeditor
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -28,16 +30,43 @@ func defaultLocalBoardName(network, areaName string) string {
 	return titled + " " + areaName
 }
 
+// friendlyNetErrorText maps common transport-level failures to a short
+// message a sysop can act on. Returns "" when the error is not recognized.
+func friendlyNetErrorText(err error) string {
+	var dnsErr *net.DNSError
+	switch {
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "connection refused - no hub is listening at that address"
+	case errors.As(err, &dnsErr) && dnsErr.IsNotFound:
+		return "host not found - check the hub URL"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "hub not responding (timed out) - it may be down or unreachable"
+	}
+	return ""
+}
+
+// hubErrorText formats a hub request error for the status line as
+// "{prefix}: {cause}", preferring a friendly transport-level explanation
+// over the raw error chain.
+func hubErrorText(prefix string, err error) string {
+	if friendly := friendlyNetErrorText(err); friendly != "" {
+		return prefix + ": " + friendly
+	}
+	cause := err
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		cause = urlErr.Err
+	}
+	return fmt.Sprintf("%s: %v", prefix, cause)
+}
+
 // handleFetchNALMsg processes the NAL fetch result.
 func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 	m.areaBrowserLoading = false
 	if msg.err != nil {
-		cause := msg.err
-		var urlErr *url.Error
-		if errors.As(msg.err, &urlErr) {
-			cause = urlErr.Err
-		}
-		m.areaBrowserError = fmt.Sprintf("Could not fetch areas: %v", cause)
+		m.areaBrowserError = hubErrorText("Could not fetch areas", msg.err)
 		return m, nil
 	}
 
@@ -93,7 +122,7 @@ func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 // handleSubscribeAreasMsg processes the subscribe response.
 func (m Model) handleSubscribeAreasMsg(msg subscribeAreasMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.message = fmt.Sprintf("Subscribe failed: %v", msg.err)
+		m.message = hubErrorText("Subscribe failed", msg.err)
 		return m, nil
 	}
 	statusMap := make(map[string]string)
