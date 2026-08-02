@@ -62,15 +62,46 @@ const (
 )
 
 // ValidateAreaTag checks that a tag matches the required format. Errors are
-// worded for sysops typing tags into config forms, not for developers.
+// worded for sysops typing tags into config forms, not for developers: the
+// offending value is not echoed (it is visible in the form field) and every
+// message fits a 59-character status row (the narrowest screen showing them).
 func ValidateAreaTag(tag string) error {
 	if AreaTagRegexp.MatchString(tag) {
 		return nil
 	}
-	if !strings.Contains(tag, ".") {
-		return fmt.Errorf(`invalid area tag %q: missing a period - tags are "prefix.name", e.g. "fel.general"`, tag)
+	prefix, name, found := strings.Cut(tag, ".")
+	switch {
+	case !found:
+		return fmt.Errorf(`area tag missing a period - tags look like "fel.general"`)
+	case len(prefix) > 8 && prefixCharsValid(prefix):
+		return fmt.Errorf("area tag prefix too long - max 8 letters/digits")
+	case len(name) > 24 && nameCharsValid(name):
+		return fmt.Errorf("area tag name too long - max 24 letters/digits/hyphens")
+	default:
+		return fmt.Errorf(`area tag must be lowercase "prefix.name" like "fel.general"`)
 	}
-	return fmt.Errorf(`invalid area tag %q: must be lowercase "prefix.name" like "fel.general" - prefix 1-8 letters/digits, name 1-24 letters/digits/hyphens`, tag)
+}
+
+// prefixCharsValid reports whether every prefix character is allowed
+// (lowercase letters and digits), regardless of length.
+func prefixCharsValid(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// nameCharsValid reports whether every name character is allowed
+// (lowercase letters, digits, hyphens), regardless of length.
+func nameCharsValid(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateAccessMode checks that a mode string is one of the valid access modes.
