@@ -36,13 +36,13 @@ func friendlyNetErrorText(err error) string {
 	var dnsErr *net.DNSError
 	switch {
 	case errors.Is(err, syscall.ECONNREFUSED):
-		return "connection refused - no hub is listening at that address"
+		return "connection refused - no hub at that address"
 	case errors.As(err, &dnsErr) && dnsErr.IsNotFound:
 		return "host not found - check the hub URL"
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		return "hub not responding (timed out) - it may be down or unreachable"
+		return "hub timed out - it may be down or unreachable"
 	}
 	return ""
 }
