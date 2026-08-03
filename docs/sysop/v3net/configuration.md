@@ -172,6 +172,23 @@ plain HTTP.
 
 ---
 
+### Managing Subscriber Nodes
+
+From the Networks list, press **N** on a hosted network to open Node
+Management. The screen lists every BBS registered with your hub:
+
+- **A** — approve a `pending` node (required when Auto-Approve is off)
+- **B** — ban a node (its requests are rejected) or unban it
+- **D** — delete a registration entirely; the node may re-subscribe fresh
+- **R** — refresh the list
+
+The BBS (and its hub) must be running: the screen talks to the live hub
+so changes take effect immediately, with no restart. With **Auto-Approve**
+set to `Y`, new nodes activate on registration and approval is never
+needed; ban and delete still apply.
+
+---
+
 ## Node Identity
 
 ```
