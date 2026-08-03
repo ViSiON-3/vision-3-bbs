@@ -97,6 +97,39 @@ func TestNodesScreen_RemoveMsgDropsRow(t *testing.T) {
 	}
 }
 
+func TestNodesScreen_CursorMoveScrollsList(t *testing.T) {
+	m := newNodesModel()
+	nodes := make([]protocol.NodeInfo, 15)
+	for i := range nodes {
+		nodes[i] = protocol.NodeInfo{NodeID: string(rune('a' + i)), Status: "active"}
+	}
+	m.nodesList = nodes
+	m.nodesCursor = 0
+	m.nodesScroll = 0
+
+	for i := 0; i < 10; i++ {
+		result, _ := m.updateV3NetNodes(tea.KeyMsg{Type: tea.KeyDown})
+		m = result.(Model)
+	}
+	if m.nodesCursor != 10 {
+		t.Fatalf("cursor = %d, want 10", m.nodesCursor)
+	}
+	if m.nodesScroll == 0 {
+		t.Error("nodesScroll should follow the cursor past the visible window")
+	}
+
+	for i := 0; i < 10; i++ {
+		result, _ := m.updateV3NetNodes(tea.KeyMsg{Type: tea.KeyUp})
+		m = result.(Model)
+	}
+	if m.nodesCursor != 0 {
+		t.Fatalf("cursor = %d, want 0", m.nodesCursor)
+	}
+	if m.nodesScroll != 0 {
+		t.Errorf("nodesScroll should return to 0 when cursor moves back above it, got %d", m.nodesScroll)
+	}
+}
+
 func TestNodesScreen_EscReturnsToRecordList(t *testing.T) {
 	m := newNodesModel()
 	result, _ := m.updateV3NetNodes(tea.KeyMsg{Type: tea.KeyEscape})

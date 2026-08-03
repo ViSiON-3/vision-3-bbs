@@ -82,16 +82,13 @@ func (m Model) updateV3NetNodes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	switch msg.Type {
-	case tea.KeyUp:
-		if m.nodesCursor > 0 {
-			m.nodesCursor--
-		}
-	case tea.KeyDown:
-		if m.nodesCursor < total-1 {
-			m.nodesCursor++
-		}
-	case tea.KeyEscape:
+	if cursor, ok := listNavKey(msg, m.nodesCursor, total); ok {
+		m.nodesCursor = cursor
+		m.nodesScroll = clampListScroll(cursor, m.nodesScroll, nodesListVisible)
+		return m, nil
+	}
+
+	if msg.Type == tea.KeyEscape {
 		m.mode = modeRecordList
 		return m, nil
 	}
