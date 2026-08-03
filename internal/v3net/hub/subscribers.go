@@ -106,11 +106,19 @@ func (ss *SubscriberStore) Add(s Subscriber) (string, error) {
 	return s.Status, nil
 }
 
-// Get returns a subscriber by node ID and network, or nil if not found.
+// Get returns a copy of the cached subscriber by node ID and network, or nil
+// if not found. A copy is returned (rather than the cache pointer) so that
+// SetStatus mutating the cached entry under the write lock can never race
+// with a caller reading the returned value after this call returns.
 func (ss *SubscriberStore) Get(nodeID, network string) *Subscriber {
 	ss.mu.RLock()
 	defer ss.mu.RUnlock()
-	return ss.cache[nodeID+":"+network]
+	s, ok := ss.cache[nodeID+":"+network]
+	if !ok {
+		return nil
+	}
+	cp := *s
+	return &cp
 }
 
 // GetPubKey returns the decoded ed25519 public key for an active subscriber,

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -108,4 +109,40 @@ func TestSubscriberStore_DeleteRemovesRowAndCache(t *testing.T) {
 	if err := ss.Delete("aaaa000000000001", "testnet"); !errors.Is(err, ErrUnknownNode) {
 		t.Errorf("second delete: got %v, want ErrUnknownNode", err)
 	}
+}
+
+// TestSubscriberStore_GetDuringConcurrentSetStatusIsRaceFree exercises Get
+// and SetStatus concurrently under -race. Get must never return a cache
+// pointer that SetStatus can mutate out from under a reader.
+func TestSubscriberStore_GetDuringConcurrentSetStatusIsRaceFree(t *testing.T) {
+	ss := newTestStore(t)
+	addTestSub(t, ss, "aaaa000000000001", "pending")
+
+	const iterations = 2000
+	var wg sync.WaitGroup
+
+	// Writer: flips status back and forth.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		statuses := []string{"active", "pending", "banned"}
+		for i := 0; i < iterations; i++ {
+			_ = ss.SetStatus("aaaa000000000001", "testnet", statuses[i%len(statuses)])
+		}
+	}()
+
+	// Readers: fetch the pointer and read its Status field repeatedly.
+	for r := 0; r < 4; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				if sub := ss.Get("aaaa000000000001", "testnet"); sub != nil {
+					_ = sub.Status
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }

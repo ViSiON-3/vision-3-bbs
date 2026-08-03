@@ -34,7 +34,7 @@ func (m Model) viewV3NetNodes() string {
 				joined = joined[:10] // date only
 			}
 			return fmt.Sprintf("   %-16s %-20s %-8s %s",
-				n.NodeID, padRight(n.BBSName, 20), padRight(n.Status, 8), joined)
+				n.NodeID, padRight(sanitizeRegistryField(n.BBSName), 20), padRight(n.Status, 8), joined)
 		})
 	lb.bottomBorder()
 	lb.bgRows(lb.bottomPad)

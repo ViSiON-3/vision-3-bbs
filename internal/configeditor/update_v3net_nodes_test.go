@@ -97,6 +97,33 @@ func TestNodesScreen_ApproveKeyFiresActionForPendingNode(t *testing.T) {
 	}
 }
 
+func TestNodesScreen_ActionKeysIgnoredWhileLoading(t *testing.T) {
+	m := newNodesModel()
+	m.nodesCursor = 0 // pending node
+	m.nodesLoading = true
+
+	if _, cmd := m.updateV3NetNodes(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}); cmd != nil {
+		t.Error("A while loading should do nothing")
+	}
+	if _, cmd := m.updateV3NetNodes(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}); cmd != nil {
+		t.Error("B while loading should do nothing")
+	}
+	result, cmd := m.updateV3NetNodes(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if cmd != nil || result.(Model).nodesConfirmDelete {
+		t.Error("D while loading should do nothing")
+	}
+
+	// A pending confirm-delete's 'y' should also be ignored while loading.
+	m.nodesConfirmDelete = true
+	result, cmd = m.updateV3NetNodes(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if cmd != nil {
+		t.Error("confirm Y while loading should do nothing")
+	}
+	if !result.(Model).nodesConfirmDelete {
+		t.Error("confirm Y while loading should leave confirmation armed")
+	}
+}
+
 func TestNodesScreen_ApproveKeyIgnoredForActiveNode(t *testing.T) {
 	m := newNodesModel()
 	m.nodesCursor = 1 // active node
@@ -148,6 +175,35 @@ func TestNodesScreen_RemoveMsgDropsRow(t *testing.T) {
 	rm := result.(Model)
 	if len(rm.nodesList) != 1 || rm.nodesList[0].NodeID != "bbbb000000000002" {
 		t.Errorf("list %+v", rm.nodesList)
+	}
+}
+
+func TestNodesScreen_RemoveMsgClampsScrollToShorterList(t *testing.T) {
+	m := newNodesModel()
+	nodes := make([]protocol.NodeInfo, 11)
+	for i := range nodes {
+		nodes[i] = protocol.NodeInfo{NodeID: string(rune('a' + i)), Status: "active"}
+	}
+	m.nodesList = nodes
+	// Cursor/scroll pinned at the bottom of an 11-row list with a
+	// nodesListVisible(10)-row window: scroll = 1 shows rows [1..10].
+	m.nodesCursor = 10
+	m.nodesScroll = 1
+
+	result, _ := m.handleNodeActionMsg(nodeActionMsg{network: "testnet", nodeID: nodes[10].NodeID, action: "remove"})
+	rm := result.(Model)
+
+	if len(rm.nodesList) != 10 {
+		t.Fatalf("nodesList len = %d, want 10", len(rm.nodesList))
+	}
+	// With only 10 rows left and a 10-row window, scroll must be 0 or the
+	// window renders past the end of the list (blank rows).
+	maxScroll := len(rm.nodesList) - nodesListVisible
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if rm.nodesScroll > maxScroll {
+		t.Errorf("nodesScroll = %d, want <= %d after removal shrank the list", rm.nodesScroll, maxScroll)
 	}
 }
 

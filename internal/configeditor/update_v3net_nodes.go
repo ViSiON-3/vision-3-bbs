@@ -66,6 +66,13 @@ func (m Model) handleNodeActionMsg(msg nodeActionMsg) (tea.Model, tea.Cmd) {
 		if m.nodesCursor >= len(m.nodesList) && m.nodesCursor > 0 {
 			m.nodesCursor--
 		}
+		m.nodesScroll = clampListScroll(m.nodesCursor, m.nodesScroll, nodesListVisible)
+		if maxScroll := len(m.nodesList) - nodesListVisible; m.nodesScroll > maxScroll {
+			if maxScroll < 0 {
+				maxScroll = 0
+			}
+			m.nodesScroll = maxScroll
+		}
 		m.message = "Node removed"
 		return m, nil
 	}
@@ -89,6 +96,9 @@ func (m Model) updateV3NetNodes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.nodesConfirmDelete {
 		switch msg.String() {
 		case "y", "Y":
+			if m.nodesLoading {
+				return m, nil // ignore confirm while a refresh is in flight
+			}
 			m.nodesConfirmDelete = false
 			if n := m.currentNode(); n != nil {
 				return m, nodeAction(m.configs.V3Net.Hub.Port, m.nodesNetwork,
@@ -110,6 +120,15 @@ func (m Model) updateV3NetNodes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyEscape {
 		m.mode = modeRecordList
 		return m, nil
+	}
+
+	// Ignore action keys while a refresh is in flight: the list backing
+	// them may be stale by the time the response lands.
+	if m.nodesLoading {
+		switch msg.String() {
+		case "a", "A", "b", "B", "d", "D":
+			return m, nil
+		}
 	}
 
 	switch msg.String() {
