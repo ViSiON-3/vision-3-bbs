@@ -57,6 +57,9 @@ func TestFetchHubNodes_ReturnsNodes(t *testing.T) {
 	if fm.err != nil || len(fm.nodes) != 1 || fm.nodes[0].NodeID != "aaaa000000000001" {
 		t.Errorf("msg %+v", fm)
 	}
+	if fm.network != "testnet" {
+		t.Errorf("network = %q, want testnet", fm.network)
+	}
 }
 
 func TestFetchHubNodes_MissingKeystoreErrorsWithoutCreatingKey(t *testing.T) {
@@ -83,6 +86,9 @@ func TestNodeAction_ReturnsStatus(t *testing.T) {
 	}
 	if am.err != nil || am.status != "active" || am.nodeID != "aaaa000000000001" || am.action != "approve" {
 		t.Errorf("msg %+v", am)
+	}
+	if am.network != "testnet" {
+		t.Errorf("network = %q, want testnet", am.network)
 	}
 }
 

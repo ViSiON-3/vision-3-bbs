@@ -123,6 +123,54 @@ func TestNodesBanUnban_TogglesAuth(t *testing.T) {
 	}
 }
 
+func TestNodesApprove_OnActiveNodeConflicts(t *testing.T) {
+	ts, hubKS, leafKS := setupNodesTest(t)
+	// Activate the leaf first.
+	resp := doSigned(t, hubKS, "POST", ts.URL+"/v3net/v1/testnet/nodes/"+leafKS.NodeID()+"/approve")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("first approve: status %d, want 200", resp.StatusCode)
+	}
+	// Approving an already-active node should be rejected.
+	resp = doSigned(t, hubKS, "POST", ts.URL+"/v3net/v1/testnet/nodes/"+leafKS.NodeID()+"/approve")
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("approve on active node: status %d, want 409", resp.StatusCode)
+	}
+	var out struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || out.Error != "node is not pending" {
+		t.Errorf("body %+v err %v, want error=node is not pending", out, err)
+	}
+}
+
+func TestNodesUnban_OnPendingNodeConflicts(t *testing.T) {
+	ts, hubKS, leafKS := setupNodesTest(t)
+	// leafKS is pending (not banned); unban should be rejected.
+	resp := doSigned(t, hubKS, "POST", ts.URL+"/v3net/v1/testnet/nodes/"+leafKS.NodeID()+"/unban")
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("unban on pending node: status %d, want 409", resp.StatusCode)
+	}
+	var out struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || out.Error != "node is not banned" {
+		t.Errorf("body %+v err %v, want error=node is not banned", out, err)
+	}
+}
+
+func TestNodesList_NonOperatorForbiddenForActiveLeaf(t *testing.T) {
+	ts, hubKS, leafKS := setupNodesTest(t)
+	resp := doSigned(t, hubKS, "POST", ts.URL+"/v3net/v1/testnet/nodes/"+leafKS.NodeID()+"/approve")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("approve leaf: status %d, want 200", resp.StatusCode)
+	}
+	// Now the leaf is active and passes auth; requireOperator must reject it.
+	resp = doSigned(t, leafKS, "GET", ts.URL+"/v3net/v1/testnet/nodes")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("active non-operator leaf: status %d, want 403", resp.StatusCode)
+	}
+}
+
 func TestNodesRemove_DeletesRegistration(t *testing.T) {
 	ts, hubKS, leafKS := setupNodesTest(t)
 	resp := doSigned(t, hubKS, "POST", ts.URL+"/v3net/v1/testnet/nodes/"+leafKS.NodeID()+"/remove")

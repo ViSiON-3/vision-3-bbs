@@ -30,7 +30,7 @@ func TestNodesScreen_FetchMsgPopulatesList(t *testing.T) {
 	m := newNodesModel()
 	m.nodesList = nil
 	m.nodesLoading = true
-	result, _ := m.handleFetchNodesMsg(fetchNodesMsg{nodes: []protocol.NodeInfo{{NodeID: "cccc000000000003"}}})
+	result, _ := m.handleFetchNodesMsg(fetchNodesMsg{network: "testnet", nodes: []protocol.NodeInfo{{NodeID: "cccc000000000003"}}})
 	rm := result.(Model)
 	if rm.nodesLoading || len(rm.nodesList) != 1 || rm.nodesError != "" {
 		t.Errorf("model %+v", rm)
@@ -39,10 +39,52 @@ func TestNodesScreen_FetchMsgPopulatesList(t *testing.T) {
 
 func TestNodesScreen_FetchErrorUsesFriendlyText(t *testing.T) {
 	m := newNodesModel()
-	result, _ := m.handleFetchNodesMsg(fetchNodesMsg{err: errors.New("boom")})
+	result, _ := m.handleFetchNodesMsg(fetchNodesMsg{network: "testnet", err: errors.New("boom")})
 	rm := result.(Model)
 	if rm.nodesError == "" {
 		t.Error("error should be surfaced")
+	}
+}
+
+func TestNodesScreen_FetchErrorWithExistingListSurfacesMessage(t *testing.T) {
+	m := newNodesModel()
+	original := m.nodesList
+	result, _ := m.handleFetchNodesMsg(fetchNodesMsg{network: "testnet", err: errors.New("boom")})
+	rm := result.(Model)
+	if rm.message == "" {
+		t.Error("message row should surface the fetch error when the list is non-empty")
+	}
+	if len(rm.nodesList) != len(original) {
+		t.Errorf("nodesList should remain unchanged on fetch error, got %+v", rm.nodesList)
+	}
+}
+
+func TestNodesScreen_FetchMsgFromOtherNetworkIgnored(t *testing.T) {
+	m := newNodesModel()
+	original := m.nodesList
+	m.nodesLoading = true
+	result, cmd := m.handleFetchNodesMsg(fetchNodesMsg{network: "othernet", nodes: []protocol.NodeInfo{{NodeID: "zzzz000000000009"}}})
+	rm := result.(Model)
+	if cmd != nil {
+		t.Error("stale fetch message should not produce a command")
+	}
+	if !rm.nodesLoading {
+		t.Error("stale fetch message should not clear nodesLoading")
+	}
+	if len(rm.nodesList) != len(original) {
+		t.Errorf("stale fetch message should not replace nodesList, got %+v", rm.nodesList)
+	}
+}
+
+func TestNodesScreen_ActionMsgFromOtherNetworkIgnored(t *testing.T) {
+	m := newNodesModel()
+	result, _ := m.handleNodeActionMsg(nodeActionMsg{network: "othernet", nodeID: "aaaa000000000001", action: "approve", status: "active"})
+	rm := result.(Model)
+	if rm.nodesList[0].Status != "pending" {
+		t.Errorf("stale action message should not update status, got %q", rm.nodesList[0].Status)
+	}
+	if rm.message != "" {
+		t.Errorf("stale action message should not set message, got %q", rm.message)
 	}
 }
 
@@ -81,16 +123,28 @@ func TestNodesScreen_DeleteNeedsConfirm(t *testing.T) {
 
 func TestNodesScreen_ActionMsgUpdatesRowStatus(t *testing.T) {
 	m := newNodesModel()
-	result, _ := m.handleNodeActionMsg(nodeActionMsg{nodeID: "aaaa000000000001", action: "approve", status: "active"})
+	result, _ := m.handleNodeActionMsg(nodeActionMsg{network: "testnet", nodeID: "aaaa000000000001", action: "approve", status: "active"})
 	rm := result.(Model)
 	if rm.nodesList[0].Status != "active" {
 		t.Errorf("status = %q, want active", rm.nodesList[0].Status)
+	}
+	if rm.message != "Node approved" {
+		t.Errorf("message = %q, want %q", rm.message, "Node approved")
+	}
+}
+
+func TestNodesScreen_BanActionMsgUsesCorrectGrammar(t *testing.T) {
+	m := newNodesModel()
+	result, _ := m.handleNodeActionMsg(nodeActionMsg{network: "testnet", nodeID: "bbbb000000000002", action: "ban", status: "banned"})
+	rm := result.(Model)
+	if rm.message != "Node banned" {
+		t.Errorf("message = %q, want %q", rm.message, "Node banned")
 	}
 }
 
 func TestNodesScreen_RemoveMsgDropsRow(t *testing.T) {
 	m := newNodesModel()
-	result, _ := m.handleNodeActionMsg(nodeActionMsg{nodeID: "aaaa000000000001", action: "remove"})
+	result, _ := m.handleNodeActionMsg(nodeActionMsg{network: "testnet", nodeID: "aaaa000000000001", action: "remove"})
 	rm := result.(Model)
 	if len(rm.nodesList) != 1 || rm.nodesList[0].NodeID != "bbbb000000000002" {
 		t.Errorf("list %+v", rm.nodesList)

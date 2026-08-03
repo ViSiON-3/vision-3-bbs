@@ -64,7 +64,18 @@ func (h *Hub) handleNodeAction(w http.ResponseWriter, r *http.Request, nodeID, a
 	var err error
 	status := ""
 	switch action {
-	case "approve", "unban":
+	case "approve":
+		if sub := h.subscribers.Get(nodeID, network); sub != nil && sub.Status != "pending" {
+			http.Error(w, `{"error":"node is not pending"}`, http.StatusConflict)
+			return
+		}
+		status = "active"
+		err = h.subscribers.SetStatus(nodeID, network, status)
+	case "unban":
+		if sub := h.subscribers.Get(nodeID, network); sub != nil && sub.Status != "banned" {
+			http.Error(w, `{"error":"node is not banned"}`, http.StatusConflict)
+			return
+		}
 		status = "active"
 		err = h.subscribers.SetStatus(nodeID, network, status)
 	case "ban":

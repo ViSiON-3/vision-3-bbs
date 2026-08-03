@@ -20,11 +20,23 @@ func (m Model) enterNodeManagement(network string) (tea.Model, tea.Cmd) {
 	return m, fetchHubNodes(m.configs.V3Net.Hub.Port, network, m.configs.V3Net.KeystorePath)
 }
 
+// nodeActionMessages maps a node action to its past-tense status message.
+var nodeActionMessages = map[string]string{
+	"approve": "Node approved",
+	"ban":     "Node banned",
+	"unban":   "Node unbanned",
+}
+
 // handleFetchNodesMsg processes the node list fetch result.
 func (m Model) handleFetchNodesMsg(msg fetchNodesMsg) (tea.Model, tea.Cmd) {
+	if m.mode != modeV3NetNodes || msg.network != m.nodesNetwork {
+		return m, nil // stale response from a previous network's fetch
+	}
 	m.nodesLoading = false
 	if msg.err != nil {
-		m.nodesError = hubErrorText("Could not fetch nodes", msg.err)
+		errText := hubErrorText("Could not fetch nodes", msg.err)
+		m.nodesError = errText
+		m.message = errText
 		return m, nil
 	}
 	m.nodesList = msg.nodes
@@ -36,6 +48,9 @@ func (m Model) handleFetchNodesMsg(msg fetchNodesMsg) (tea.Model, tea.Cmd) {
 
 // handleNodeActionMsg processes an approve/ban/unban/remove result.
 func (m Model) handleNodeActionMsg(msg nodeActionMsg) (tea.Model, tea.Cmd) {
+	if m.mode != modeV3NetNodes || msg.network != m.nodesNetwork {
+		return m, nil // stale response from a previous network's action
+	}
 	if msg.err != nil {
 		m.message = hubErrorText("Action failed", msg.err)
 		return m, nil
@@ -59,7 +74,11 @@ func (m Model) handleNodeActionMsg(msg nodeActionMsg) (tea.Model, tea.Cmd) {
 			m.nodesList[i].Status = msg.status
 		}
 	}
-	m.message = "Node " + msg.action + "d" // approved / banned / unbanned reads fine
+	if text, ok := nodeActionMessages[msg.action]; ok {
+		m.message = text
+	} else {
+		m.message = "Node updated"
+	}
 	return m, nil
 }
 

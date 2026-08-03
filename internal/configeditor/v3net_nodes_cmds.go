@@ -17,16 +17,18 @@ import (
 
 // fetchNodesMsg is the result of listing a hosted network's nodes.
 type fetchNodesMsg struct {
-	nodes []protocol.NodeInfo
-	err   error
+	network string // network this fetch was issued for; guards stale responses
+	nodes   []protocol.NodeInfo
+	err     error
 }
 
 // nodeActionMsg is the result of an approve/ban/unban/remove call.
 type nodeActionMsg struct {
-	nodeID string
-	action string
-	status string // new status returned by the hub ("" for remove)
-	err    error
+	network string // network this action was issued for; guards stale responses
+	nodeID  string
+	action  string
+	status  string // new status returned by the hub ("" for remove)
+	err     error
 }
 
 // loadAdminKeystore loads the BBS keystore for signing admin requests.
@@ -68,26 +70,26 @@ func fetchHubNodes(hubPort int, network, keystorePath string) tea.Cmd {
 	return func() tea.Msg {
 		ks, err := loadAdminKeystore(keystorePath)
 		if err != nil {
-			return fetchNodesMsg{err: err}
+			return fetchNodesMsg{network: network, err: err}
 		}
 		req, err := signedHubRequest(ks, "GET", hubPort, "/v3net/v1/"+network+"/nodes")
 		if err != nil {
-			return fetchNodesMsg{err: err}
+			return fetchNodesMsg{network: network, err: err}
 		}
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			return fetchNodesMsg{err: err}
+			return fetchNodesMsg{network: network, err: err}
 		}
 		defer func() { _ = resp.Body.Close() }() // read-only
 		if resp.StatusCode != http.StatusOK {
-			return fetchNodesMsg{err: fmt.Errorf("hub returned status %d", resp.StatusCode)}
+			return fetchNodesMsg{network: network, err: fmt.Errorf("hub returned status %d", resp.StatusCode)}
 		}
 		var nodes []protocol.NodeInfo
 		if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
-			return fetchNodesMsg{err: fmt.Errorf("decode nodes: %w", err)}
+			return fetchNodesMsg{network: network, err: fmt.Errorf("decode nodes: %w", err)}
 		}
-		return fetchNodesMsg{nodes: nodes}
+		return fetchNodesMsg{network: network, nodes: nodes}
 	}
 }
 
@@ -96,29 +98,29 @@ func nodeAction(hubPort int, network, keystorePath, nodeID, action string) tea.C
 	return func() tea.Msg {
 		ks, err := loadAdminKeystore(keystorePath)
 		if err != nil {
-			return nodeActionMsg{nodeID: nodeID, action: action, err: err}
+			return nodeActionMsg{network: network, nodeID: nodeID, action: action, err: err}
 		}
 		path := "/v3net/v1/" + network + "/nodes/" + nodeID + "/" + action
 		req, err := signedHubRequest(ks, "POST", hubPort, path)
 		if err != nil {
-			return nodeActionMsg{nodeID: nodeID, action: action, err: err}
+			return nodeActionMsg{network: network, nodeID: nodeID, action: action, err: err}
 		}
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			return nodeActionMsg{nodeID: nodeID, action: action, err: err}
+			return nodeActionMsg{network: network, nodeID: nodeID, action: action, err: err}
 		}
 		defer func() { _ = resp.Body.Close() }() // read-only
 		if resp.StatusCode != http.StatusOK {
-			return nodeActionMsg{nodeID: nodeID, action: action,
+			return nodeActionMsg{network: network, nodeID: nodeID, action: action,
 				err: fmt.Errorf("hub returned status %d", resp.StatusCode)}
 		}
 		var out struct {
 			Status string `json:"status"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			return nodeActionMsg{nodeID: nodeID, action: action, err: fmt.Errorf("decode response: %w", err)}
+			return nodeActionMsg{network: network, nodeID: nodeID, action: action, err: fmt.Errorf("decode response: %w", err)}
 		}
-		return nodeActionMsg{nodeID: nodeID, action: action, status: out.Status}
+		return nodeActionMsg{network: network, nodeID: nodeID, action: action, status: out.Status}
 	}
 }
