@@ -58,6 +58,7 @@ const (
 	modeFTNAreaDownloading                       // Progress state while downloading echolist
 	modeFTNNodelistLookup                        // Progress state while downloading nodelist
 	modeQuitConfirm                              // Plain Exit? Y/N confirm (used by Task 10)
+	modeV3NetNodes                               // Node management (hosted network node approvals)
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -237,6 +238,15 @@ type Model struct {
 	regBrowserError     string                   // error from fetch
 	regBrowserReturn    editorMode               // mode to return to on ESC
 
+	// V3Net node management state
+	nodesNetwork       string              // hosted network being managed
+	nodesList          []protocol.NodeInfo // fetched node registrations
+	nodesCursor        int                 // highlighted row
+	nodesScroll        int                 // scroll offset
+	nodesLoading       bool                // true while node fetch in flight
+	nodesError         string              // error from fetch
+	nodesConfirmDelete bool                // true while awaiting Y/N for remove
+
 	// FTN setup wizard state
 	ftnWizard       *ftnWizardState // pointer so field closures survive value-receiver copies
 	ftnWizardFields []fieldDef      // fields for FTN wizard form
@@ -380,6 +390,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subscribeAreasMsg:
 		return m.handleSubscribeAreasMsg(msg)
 
+	case fetchNodesMsg:
+		return m.handleFetchNodesMsg(msg)
+
+	case nodeActionMsg:
+		return m.handleNodeActionMsg(msg)
+
 	case fetchRegistryMsg:
 		return m.handleFetchRegistryMsg(msg)
 
@@ -444,6 +460,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateWizardExitConfirm(msg)
 		case modeV3NetAreaBrowser:
 			result, cmd = m.updateV3NetAreaBrowser(msg)
+		case modeV3NetNodes:
+			result, cmd = m.updateV3NetNodes(msg)
 		case modeRegistryBrowser:
 			result, cmd = m.updateRegistryBrowser(msg)
 		case modeFTNWizardForm:

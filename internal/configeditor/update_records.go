@@ -105,6 +105,11 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m.enterRegistryBrowserForLeafList()
 			}
 			return m, nil
+		case "n", "N":
+			if m.recordType == "v3nethub" && total > 0 {
+				return m.enterNodeManagement(m.configs.V3Net.Hub.Networks[m.recordCursor].Name)
+			}
+			return m, nil
 		case "p", "P":
 			if total > 0 && m.recordTypeSupportsReorder() {
 				m.reorderSourceIdx = m.recordCursor

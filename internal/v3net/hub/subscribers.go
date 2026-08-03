@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -21,6 +22,10 @@ CREATE TABLE IF NOT EXISTS subscribers (
 );
 `
 
+// ErrUnknownNode is returned by SetStatus and Delete when no subscriber
+// row matches the node/network pair.
+var ErrUnknownNode = errors.New("hub: unknown node")
+
 // Subscriber represents a registered leaf node.
 type Subscriber struct {
 	NodeID    string
@@ -29,6 +34,7 @@ type Subscriber struct {
 	BBSName   string
 	BBSHost   string
 	Status    string // "active", "pending", "banned"
+	CreatedAt string // populated by List only
 }
 
 // SubscriberStore manages leaf node subscriptions with SQLite persistence
@@ -57,6 +63,7 @@ func NewSubscriberStore(db *sql.DB) (*SubscriberStore, error) {
 }
 
 func (ss *SubscriberStore) loadCache() error {
+	ss.cache = make(map[string]*Subscriber)
 	rows, err := ss.db.Query("SELECT node_id, network, pubkey_b64, COALESCE(bbs_name, ''), COALESCE(bbs_host, ''), status FROM subscribers")
 	if err != nil {
 		return fmt.Errorf("hub: load subscribers: %w", err)
@@ -99,11 +106,19 @@ func (ss *SubscriberStore) Add(s Subscriber) (string, error) {
 	return s.Status, nil
 }
 
-// Get returns a subscriber by node ID and network, or nil if not found.
+// Get returns a copy of the cached subscriber by node ID and network, or nil
+// if not found. A copy is returned (rather than the cache pointer) so that
+// SetStatus mutating the cached entry under the write lock can never race
+// with a caller reading the returned value after this call returns.
 func (ss *SubscriberStore) Get(nodeID, network string) *Subscriber {
 	ss.mu.RLock()
 	defer ss.mu.RUnlock()
-	return ss.cache[nodeID+":"+network]
+	s, ok := ss.cache[nodeID+":"+network]
+	if !ok {
+		return nil
+	}
+	cp := *s
+	return &cp
 }
 
 // GetPubKey returns the decoded ed25519 public key for an active subscriber,
@@ -132,4 +147,72 @@ func (ss *SubscriberStore) ActiveCount(network string) int {
 		}
 	}
 	return count
+}
+
+// List returns all subscribers for a network ordered by registration time.
+// Rows are read from the DB (created_at is not cached) and returned as
+// copies, never cache pointers.
+func (ss *SubscriberStore) List(network string) ([]Subscriber, error) {
+	rows, err := ss.db.Query(
+		`SELECT node_id, network, pubkey_b64, COALESCE(bbs_name, ''),
+		        COALESCE(bbs_host, ''), status, created_at
+		 FROM subscribers WHERE network = ? ORDER BY created_at`, network)
+	if err != nil {
+		return nil, fmt.Errorf("hub: list subscribers: %w", err)
+	}
+	defer func() { _ = rows.Close() }() // read-only
+
+	var subs []Subscriber
+	for rows.Next() {
+		var s Subscriber
+		if err := rows.Scan(&s.NodeID, &s.Network, &s.PubKeyB64,
+			&s.BBSName, &s.BBSHost, &s.Status, &s.CreatedAt); err != nil {
+			return nil, fmt.Errorf("hub: scan subscriber: %w", err)
+		}
+		subs = append(subs, s)
+	}
+	return subs, rows.Err()
+}
+
+// SetStatus updates a subscriber's status in the DB and cache together.
+func (ss *SubscriberStore) SetStatus(nodeID, network, status string) error {
+	switch status {
+	case "active", "pending", "banned":
+	default:
+		return fmt.Errorf("hub: invalid status %q", status)
+	}
+
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	res, err := ss.db.Exec(
+		"UPDATE subscribers SET status = ? WHERE node_id = ? AND network = ?",
+		status, nodeID, network)
+	if err != nil {
+		return fmt.Errorf("hub: set status: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return fmt.Errorf("%w: %s on %s", ErrUnknownNode, nodeID, network)
+	}
+	if s := ss.cache[nodeID+":"+network]; s != nil {
+		s.Status = status
+	}
+	return nil
+}
+
+// Delete removes a subscriber registration from the DB and cache.
+func (ss *SubscriberStore) Delete(nodeID, network string) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	res, err := ss.db.Exec(
+		"DELETE FROM subscribers WHERE node_id = ? AND network = ?", nodeID, network)
+	if err != nil {
+		return fmt.Errorf("hub: delete subscriber: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return fmt.Errorf("%w: %s on %s", ErrUnknownNode, nodeID, network)
+	}
+	delete(ss.cache, nodeID+":"+network)
+	return nil
 }
