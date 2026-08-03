@@ -171,3 +171,13 @@ type CoordTransferRequest struct {
 type CoordAcceptRequest struct {
 	Token string `json:"token"`
 }
+
+// NodeInfo describes a subscriber node registration on a hub. Served by
+// the hub-operator nodes admin endpoints.
+type NodeInfo struct {
+	NodeID    string `json:"node_id"`
+	BBSName   string `json:"bbs_name"`
+	BBSHost   string `json:"bbs_host"`
+	Status    string `json:"status"` // "active" | "pending" | "banned"
+	CreatedAt string `json:"created_at"`
+}

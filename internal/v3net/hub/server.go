@@ -101,6 +101,13 @@ func (h *Hub) newMux() http.Handler {
 			case strings.HasSuffix(path, "/coordinator/accept") && r.Method == http.MethodPost:
 				h.handleCoordAccept(w, r)
 
+			// Node management (hub operator only).
+			case strings.HasSuffix(path, "/nodes") && r.Method == http.MethodGet:
+				h.handleListNodes(w, r)
+			case r.Method == http.MethodPost && isNodeAction(path):
+				id, action, _ := matchNodeActionPath(path)
+				h.handleNodeAction(w, r, id, action)
+
 			default:
 				http.NotFound(w, r)
 			}
@@ -129,4 +136,10 @@ func matchProposalActionPath(path, action string) bool {
 		return false
 	}
 	return parts[3] == "areas" && parts[4] == "proposals" && parts[6] == action
+}
+
+// isNodeAction reports whether the path is a nodes admin action route.
+func isNodeAction(path string) bool {
+	_, _, ok := matchNodeActionPath(path)
+	return ok
 }
