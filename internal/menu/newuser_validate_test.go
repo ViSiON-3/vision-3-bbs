@@ -37,6 +37,8 @@ func TestValidateHandleRejectsControlCharacters(t *testing.T) {
 		"tab\tname",            // C0 tab
 		"del\x7fete",           // DEL
 		"nul\x00name",          // NUL
+		"csi\u009b2Jname",      // C1 8-bit CSI
+		"pad\u0080name",        // C1 PAD
 	}
 	for _, h := range bad {
 		if validateHandle(h) {

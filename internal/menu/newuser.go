@@ -621,12 +621,14 @@ func validateHandle(handle string) bool {
 		return false
 	}
 
-	// Cannot contain special characters or control bytes. Control bytes would
+	// Cannot contain special characters or control characters. Controls would
 	// replay terminal escape sequences wherever the handle is later rendered
-	// (node lists, WFC console, logs).
+	// (node lists, WFC console, logs). The C1 range U+0080–U+009F is included
+	// because U+009B is the 8-bit form of CSI; CP437 input decodes its high
+	// bytes to printable codepoints, so legitimate handles are unaffected.
 	invalidChars := "?#/*&:"
 	for _, c := range handle {
-		if strings.ContainsRune(invalidChars, c) || c < 0x20 || c == 0x7f {
+		if strings.ContainsRune(invalidChars, c) || c < 0x20 || c == 0x7f || (c >= 0x80 && c <= 0x9f) {
 			return false
 		}
 	}

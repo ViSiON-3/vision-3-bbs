@@ -11,15 +11,16 @@ import (
 // hostileHandle embeds an OSC title-change sequence and a C0 control byte —
 // the shape of a terminal-escape injection a caller could attempt via their
 // handle. No rendered view may pass these bytes through to the terminal.
-const hostileHandle = "Bad\x1b]0;pwned\x07Guy\x01"
+const hostileHandle = "Bad\x1b]0;pwned\x07Guy\x012K"
 
 // assertNoControlBytes fails if s contains any C0 control byte other than
-// newline, or a DEL. Views under NoColor emit no escapes of their own, so any
-// hit is injected data leaking through.
+// newline, a DEL, or a C1 control (U+0080–U+009F — U+009B is 8-bit CSI).
+// Views under NoColor emit no escapes of their own, so any hit is injected
+// data leaking through.
 func assertNoControlBytes(t *testing.T, view, s string) {
 	t.Helper()
 	for _, r := range s {
-		if (r < 0x20 && r != '\n') || r == 0x7f {
+		if (r < 0x20 && r != '\n') || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
 			t.Fatalf("%s leaked control byte %q into rendered output:\n%q", view, r, s)
 		}
 	}
@@ -83,10 +84,16 @@ func TestDetailsViewStripsControlBytes(t *testing.T) {
 func TestSanitizeTerminal(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"plain", "plain"},
-		{hostileHandle, "Bad]0;pwnedGuy"},
+		{hostileHandle, "Bad]0;pwnedGuy2K"},
 		{"tab\there", "tabhere"},
 		{"höla™", "höla™"},
 		{"", ""},
+		// C1 controls: U+009B is 8-bit CSI, so "2J" is a screen clear on
+		// terminals that honour C1. CP437 high bytes decode to printable
+		// codepoints (é, ü, ¢) outside this range, so they survive.
+		{"clear\u009b2J", "clear2J"},
+		{"pad\u0080ding", "padding"},
+		{"café ¢ ü", "café ¢ ü"},
 	}
 	for _, c := range cases {
 		if got := sanitizeTerminal(c.in); got != c.want {

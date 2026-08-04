@@ -45,3 +45,23 @@ func TestExecuteRefreshRateLimited(t *testing.T) {
 		t.Fatalf("refresh after interval polled registry %d times, want 2", reg.polls)
 	}
 }
+
+// TestLastTickIsMonotonic verifies that an out-of-order tick cannot move
+// lastTick backwards. tick() captures its `now` before contending for tickMu,
+// so a refresh-forced tick can land after a later periodic tick; if the older
+// timestamp won, the rate limit would be weakened or defeated.
+func TestLastTickIsMonotonic(t *testing.T) {
+	base := time.Now()
+	reg := &countingRegistry{}
+	srv := NewServer(ServerConfig{Reg: reg, Refresh: time.Second, MaxEvents: 4})
+
+	srv.tick(base.Add(10 * time.Second)) // later tick lands first
+	srv.tick(base)                       // stale tick applied afterwards
+
+	srv.mu.RLock()
+	last := srv.lastTick
+	srv.mu.RUnlock()
+	if last.Before(base.Add(10 * time.Second)) {
+		t.Fatalf("lastTick moved backwards to %v, want >= %v", last, base.Add(10*time.Second))
+	}
+}

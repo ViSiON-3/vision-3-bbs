@@ -76,7 +76,12 @@ func (s *Server) tick(now time.Time) {
 	s.mu.Lock()
 	events := DiffSnapshots(s.prev, snap)
 	s.prev = snap
-	s.lastTick = now
+	// Monotonic: tick() captures `now` before contending for tickMu, so a
+	// refresh-forced tick can land after a later periodic tick. Letting the
+	// stale timestamp win would weaken the refresh rate limit.
+	if now.After(s.lastTick) {
+		s.lastTick = now
+	}
 	for _, e := range events {
 		s.ring = append(s.ring, e)
 		if len(s.ring) > s.cfg.MaxEvents {
