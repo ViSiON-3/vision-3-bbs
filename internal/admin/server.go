@@ -23,12 +23,13 @@ type ServerConfig struct {
 // Server polls SessionRegistry, keeps the latest snapshot, and fans out
 // diff-synthesized events to subscribers. Read-only; v1 implements no mutations.
 type Server struct {
-	cfg    ServerConfig
-	mu     sync.RWMutex
-	tickMu sync.Mutex // serialises tick end-to-end to prevent out-of-order snapshots
-	prev   *SystemSnapshot
-	ring   []Event
-	subs   map[chan Event]struct{}
+	cfg      ServerConfig
+	mu       sync.RWMutex
+	tickMu   sync.Mutex // serialises tick end-to-end to prevent out-of-order snapshots
+	prev     *SystemSnapshot
+	ring     []Event
+	subs     map[chan Event]struct{}
+	lastTick time.Time
 }
 
 // RefreshInterval returns the configured polling interval.
@@ -75,6 +76,7 @@ func (s *Server) tick(now time.Time) {
 	s.mu.Lock()
 	events := DiffSnapshots(s.prev, snap)
 	s.prev = snap
+	s.lastTick = now
 	for _, e := range events {
 		s.ring = append(s.ring, e)
 		if len(s.ring) > s.cfg.MaxEvents {
@@ -129,7 +131,15 @@ func (s *Server) Subscribe(ctx context.Context) <-chan Event {
 func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 	switch cmd.Command {
 	case CommandRefresh:
-		s.tick(time.Now())
+		// Rate-limit forced ticks: a client spamming refresh must not drive
+		// snapshot rebuilds faster than the configured polling interval.
+		now := timeNow()
+		s.mu.RLock()
+		fresh := now.Sub(s.lastTick) < s.cfg.Refresh
+		s.mu.RUnlock()
+		if !fresh {
+			s.tick(now)
+		}
 		return &Result{OK: true}, nil
 	default:
 		return nil, fmt.Errorf("admin: command not supported in read-only v1: %s", cmd.Command)

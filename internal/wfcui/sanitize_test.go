@@ -1,0 +1,96 @@
+package wfcui
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
+)
+
+// hostileHandle embeds an OSC title-change sequence and a C0 control byte —
+// the shape of a terminal-escape injection a caller could attempt via their
+// handle. No rendered view may pass these bytes through to the terminal.
+const hostileHandle = "Bad\x1b]0;pwned\x07Guy\x01"
+
+// assertNoControlBytes fails if s contains any C0 control byte other than
+// newline, or a DEL. Views under NoColor emit no escapes of their own, so any
+// hit is injected data leaking through.
+func assertNoControlBytes(t *testing.T, view, s string) {
+	t.Helper()
+	for _, r := range s {
+		if (r < 0x20 && r != '\n') || r == 0x7f {
+			t.Fatalf("%s leaked control byte %q into rendered output:\n%q", view, r, s)
+		}
+	}
+}
+
+// TestNodeTableStripsControlBytes verifies a hostile handle cannot inject
+// terminal escapes via the node list.
+func TestNodeTableStripsControlBytes(t *testing.T) {
+	m := makeModel(Options{NoColor: true, ASCII: true}, 100, 30)
+	m.mode = modeList
+	m.snapshot = &admin.SystemSnapshot{
+		SystemName: "TestBBS",
+		Time:       time.Now(),
+		Nodes: []admin.NodeState{
+			{NodeID: 1, Handle: hostileHandle, Activity: "read\x1b[2Jing", Status: admin.StatusOnline},
+		},
+		Counters: admin.Counters{ActiveNodes: 1},
+	}
+	got := m.View()
+	assertNoControlBytes(t, "list view", got)
+	if !strings.Contains(got, "Bad") {
+		t.Errorf("printable part of handle missing; got:\n%s", got)
+	}
+}
+
+// TestEventFeedStripsControlBytes verifies a hostile handle cannot inject
+// terminal escapes via the event feed.
+func TestEventFeedStripsControlBytes(t *testing.T) {
+	m := makeModel(Options{NoColor: true, ASCII: true}, 100, 30)
+	m.mode = modeList
+	m.showLogs = true
+	m.snapshot = &admin.SystemSnapshot{SystemName: "TestBBS", Time: time.Now()}
+	m.events = []admin.Event{
+		{Time: time.Now(), Type: admin.EventCallerConnected, NodeID: 2,
+			Handle: hostileHandle, Message: "caller\x1b[31m connected"},
+	}
+	got := m.View()
+	assertNoControlBytes(t, "event feed", got)
+}
+
+// TestDetailsViewStripsControlBytes verifies a hostile handle cannot inject
+// terminal escapes via the node details view.
+func TestDetailsViewStripsControlBytes(t *testing.T) {
+	m := makeModel(Options{NoColor: true, ASCII: true}, 100, 30)
+	m.mode = modeDetails
+	m.selected = 0
+	m.snapshot = &admin.SystemSnapshot{
+		SystemName: "TestBBS",
+		Time:       time.Now(),
+		Nodes: []admin.NodeState{
+			{NodeID: 1, Handle: hostileHandle, Activity: "x\x1bc", CurrentMenu: "MAIN\x08\x08",
+				RemoteAddr: "10.0.0.1:9\x1b[9999", Status: admin.StatusOnline},
+		},
+	}
+	got := m.View()
+	assertNoControlBytes(t, "details view", got)
+}
+
+// TestSanitizeTerminal covers the helper directly: strips C0 controls and DEL,
+// keeps printable text (including non-ASCII) intact.
+func TestSanitizeTerminal(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"plain", "plain"},
+		{hostileHandle, "Bad]0;pwnedGuy"},
+		{"tab\there", "tabhere"},
+		{"höla™", "höla™"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := sanitizeTerminal(c.in); got != c.want {
+			t.Errorf("sanitizeTerminal(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

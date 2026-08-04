@@ -621,10 +621,12 @@ func validateHandle(handle string) bool {
 		return false
 	}
 
-	// Cannot contain special characters
+	// Cannot contain special characters or control bytes. Control bytes would
+	// replay terminal escape sequences wherever the handle is later rendered
+	// (node lists, WFC console, logs).
 	invalidChars := "?#/*&:"
 	for _, c := range handle {
-		if strings.ContainsRune(invalidChars, c) {
+		if strings.ContainsRune(invalidChars, c) || c < 0x20 || c == 0x7f {
 			return false
 		}
 	}
