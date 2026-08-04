@@ -264,9 +264,15 @@ of likelihood:
 
 Check which key your client is offering with
 `ssh-keygen -lf ~/.ssh/id_ed25519.pub` and compare fingerprints against
-`helper users listkeys "Your Handle"` on the server. The server also logs
-every rejection with a reason (`wfc access disabled` vs `insufficient access
-level`), so the BBS log tells you exactly which rule fired.
+`helper users listkeys "Your Handle"` on the server.
+
+The BBS log narrows it down, but note the two levels:
+
+- A **registered** key rejected for insufficient access level or disabled WFC
+  access is logged at **info**, with the reason.
+- An **unregistered** key is logged at **debug** with its fingerprint only, so
+  at normal log levels a wrong or unknown key leaves no visible record. Raise
+  the log level to debug if you see no rejection logged at all.
 
 **`Host key verification failed`** — the server isn't in your
 `~/.ssh/known_hosts` yet. Add it with
@@ -286,12 +292,13 @@ login because it didn't match a qualifying account.
   level.
 - **Additive, non-disruptive.** Unknown or under-privileged keys fall through
   to the normal caller login; existing logins are unchanged.
-- **Re-checked while connected.** An open WFC session re-verifies its
-  authorization every 30 seconds. Turning **WFC Access** off, or banning or
-  demoting the user from within the running BBS, disconnects their open
-  console within that window. Key removals made with `ue` or `helper` edit
-  `users.json` on disk, which the daemon only reads at startup — so **revoking
-  a key still requires a BBS restart** to lock out new connections.
+- **Re-checked while connected.** An open WFC session re-verifies every 30
+  seconds that the *key* it authenticated with is still registered to a
+  qualifying account. Turning **WFC Access** off, or banning, demoting, or
+  deleting the user in the running BBS, disconnects their console within that
+  window. Key edits made with `ue` or `helper` change `users.json` on disk,
+  which the daemon only reads at startup — so revoking a key that way still
+  requires a **BBS restart** to take effect.
 - **Everything is visible to every qualifying account.** The console shows all
   active sessions — including **invisible** ones — with each caller's handle,
   IP address, and activity, to *any* account at or above `coSysOpLevel`.

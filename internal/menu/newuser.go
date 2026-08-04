@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -612,6 +613,12 @@ func (e *MenuExecutor) promptForUserNote(
 // cannot be "new" or "q", cannot be purely numeric.
 func validateHandle(handle string) bool {
 	if len(handle) < 3 {
+		return false
+	}
+
+	// Reject invalid UTF-8 outright: malformed byte sequences render
+	// unpredictably and defeat per-rune inspection below.
+	if !utf8.ValidString(handle) {
 		return false
 	}
 

@@ -66,7 +66,29 @@ func (s *Server) Run(ctx context.Context) {
 func (s *Server) tick(now time.Time) {
 	s.tickMu.Lock()
 	defer s.tickMu.Unlock()
+	s.tickLocked(now)
+}
 
+// refreshIfDue runs a tick only if the last one is older than the refresh
+// interval. The freshness check happens under tickMu, and the timestamp is
+// taken there too, so concurrent CommandRefresh calls collapse into a single
+// poll instead of each observing the same stale lastTick.
+func (s *Server) refreshIfDue() {
+	s.tickMu.Lock()
+	defer s.tickMu.Unlock()
+
+	now := timeNow()
+	s.mu.RLock()
+	fresh := now.Sub(s.lastTick) < s.cfg.Refresh
+	s.mu.RUnlock()
+	if fresh {
+		return
+	}
+	s.tickLocked(now)
+}
+
+// tickLocked is the body of tick. Callers must hold tickMu.
+func (s *Server) tickLocked(now time.Time) {
 	calls := -1
 	if s.cfg.CallsToday != nil {
 		calls = s.cfg.CallsToday()
@@ -138,13 +160,7 @@ func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 	case CommandRefresh:
 		// Rate-limit forced ticks: a client spamming refresh must not drive
 		// snapshot rebuilds faster than the configured polling interval.
-		now := timeNow()
-		s.mu.RLock()
-		fresh := now.Sub(s.lastTick) < s.cfg.Refresh
-		s.mu.RUnlock()
-		if !fresh {
-			s.tick(now)
-		}
+		s.refreshIfDue()
 		return &Result{OK: true}, nil
 	default:
 		return nil, fmt.Errorf("admin: command not supported in read-only v1: %s", cmd.Command)

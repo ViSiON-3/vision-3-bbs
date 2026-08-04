@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -34,6 +35,11 @@ var wfcEnabled func() bool
 // wfcAdminHandleKey is the context key used to stash the admin handle during
 // public-key authentication so wfcAdminSubsystem can re-verify it.
 type wfcAdminHandleKey struct{}
+
+// wfcAdminPubKey is the context key used to stash the marshaled public key that
+// authenticated the session, so authorization can be re-verified against the
+// key itself — not just the account — for the life of the session.
+type wfcAdminPubKey struct{}
 
 // wfcPublicKeyHandler is the SSH-level public-key auth handler for admin clients.
 // If the key is registered to a BBS user with sufficient access level, the
@@ -68,6 +74,7 @@ func wfcPublicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 		return false
 	}
 	ctx.SetValue(wfcAdminHandleKey{}, u.Handle)
+	ctx.SetValue(wfcAdminPubKey{}, key.Marshal())
 	slog.Info("wfc-admin: public key accepted", "user", u.Handle, "addr", ctx.RemoteAddr())
 	return true
 }
@@ -82,6 +89,25 @@ func authorizeAdmin(handle string) bool {
 	}
 	u, found := userMgr.GetUser(handle)
 	if !found || u == nil {
+		return false
+	}
+	return u.AccessLevel >= adminMinLevel()
+}
+
+// authorizeAdminKey reports whether the session opened by keyBytes is still
+// authorized. Unlike authorizeAdmin it re-verifies the key itself, so removing
+// the key — or soft-deleting the account, which the by-handle lookup does not
+// catch — revokes access. handle must still own the key, guarding against a
+// key that has been moved to another account mid-session.
+func authorizeAdminKey(handle string, keyBytes []byte) bool {
+	if userMgr == nil || adminMinLevel == nil || wfcEnabled == nil || !wfcEnabled() {
+		return false
+	}
+	u, found := userMgr.FindByAuthorizedKey(keyBytes)
+	if !found || u == nil {
+		return false
+	}
+	if !strings.EqualFold(u.Handle, handle) {
 		return false
 	}
 	return u.AccessLevel >= adminMinLevel()
@@ -108,10 +134,12 @@ func watchAdminAuthorization(ctx context.Context, handle string, interval time.D
 
 // wfcAdminSubsystem handles an SSH "wfc-admin" subsystem session by serving
 // the binary admin RPC protocol over the session stream. Access is re-checked
-// against the stashed handle before any data is exchanged.
+// against the stashed handle and public key before any data is exchanged, and
+// periodically for the life of the session.
 func wfcAdminSubsystem(sess ssh.Session) {
 	handle, _ := sess.Context().Value(wfcAdminHandleKey{}).(string)
-	if handle == "" || !authorizeAdmin(handle) {
+	keyBytes, _ := sess.Context().Value(wfcAdminPubKey{}).([]byte)
+	if handle == "" || len(keyBytes) == 0 || !authorizeAdminKey(handle, keyBytes) {
 		slog.Warn("wfc-admin: subsystem access denied", "user", handle, "addr", sess.RemoteAddr())
 		_, _ = fmt.Fprintf(sess, "access denied\n") // best-effort notice to client
 		return
@@ -133,7 +161,8 @@ func wfcAdminSubsystem(sess ssh.Session) {
 	// revocation (key removed, level lowered, WFC disabled) kicks the client.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go watchAdminAuthorization(ctx, handle, wfcReauthInterval, authorizeAdmin, func() {
+	stillAuthorized := func(h string) bool { return authorizeAdminKey(h, keyBytes) }
+	go watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
 		slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr())
 		_ = sess.Close() // unblocks ServeRPC's read loop
 	})

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -44,6 +45,55 @@ func TestExecuteRefreshRateLimited(t *testing.T) {
 	if reg.polls != 2 {
 		t.Fatalf("refresh after interval polled registry %d times, want 2", reg.polls)
 	}
+}
+
+// TestConcurrentRefreshPollsOnce verifies that simultaneous CommandRefresh
+// calls collapse into a single registry poll. Checking freshness outside the
+// serialized tick path lets every racing caller observe the same stale
+// timestamp and each run a full snapshot rebuild.
+func TestConcurrentRefreshPollsOnce(t *testing.T) {
+	reg := &lockedRegistry{}
+	srv := NewServer(ServerConfig{Reg: reg, Refresh: time.Minute, MaxEvents: 4})
+
+	const callers = 16
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, err := srv.Execute(AdminCommand{Command: CommandRefresh}); err != nil {
+				t.Errorf("refresh failed: %v", err)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := reg.count(); got != 1 {
+		t.Fatalf("%d concurrent refreshes polled registry %d times, want 1", callers, got)
+	}
+}
+
+// lockedRegistry counts polls safely under concurrent access.
+type lockedRegistry struct {
+	mu     sync.Mutex
+	polls  int
+	unused []*session.BbsSession
+}
+
+func (r *lockedRegistry) ListActive() []*session.BbsSession {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.polls++
+	return r.unused
+}
+
+func (r *lockedRegistry) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.polls
 }
 
 // TestLastTickIsMonotonic verifies that an out-of-order tick cannot move

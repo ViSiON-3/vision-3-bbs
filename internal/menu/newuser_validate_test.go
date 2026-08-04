@@ -39,6 +39,8 @@ func TestValidateHandleRejectsControlCharacters(t *testing.T) {
 		"nul\x00name",          // NUL
 		"csi\u009b2Jname",      // C1 8-bit CSI
 		"pad\u0080name",        // C1 PAD
+		"bad\xffbyte",          // invalid UTF-8
+		"lone\xc3",             // truncated multi-byte sequence
 	}
 	for _, h := range bad {
 		if validateHandle(h) {
