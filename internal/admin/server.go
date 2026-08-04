@@ -23,12 +23,13 @@ type ServerConfig struct {
 // Server polls SessionRegistry, keeps the latest snapshot, and fans out
 // diff-synthesized events to subscribers. Read-only; v1 implements no mutations.
 type Server struct {
-	cfg    ServerConfig
-	mu     sync.RWMutex
-	tickMu sync.Mutex // serialises tick end-to-end to prevent out-of-order snapshots
-	prev   *SystemSnapshot
-	ring   []Event
-	subs   map[chan Event]struct{}
+	cfg      ServerConfig
+	mu       sync.RWMutex
+	tickMu   sync.Mutex // serialises tick end-to-end to prevent out-of-order snapshots
+	prev     *SystemSnapshot
+	ring     []Event
+	subs     map[chan Event]struct{}
+	lastTick time.Time
 }
 
 // RefreshInterval returns the configured polling interval.
@@ -65,7 +66,29 @@ func (s *Server) Run(ctx context.Context) {
 func (s *Server) tick(now time.Time) {
 	s.tickMu.Lock()
 	defer s.tickMu.Unlock()
+	s.tickLocked(now)
+}
 
+// refreshIfDue runs a tick only if the last one is older than the refresh
+// interval. The freshness check happens under tickMu, and the timestamp is
+// taken there too, so concurrent CommandRefresh calls collapse into a single
+// poll instead of each observing the same stale lastTick.
+func (s *Server) refreshIfDue() {
+	s.tickMu.Lock()
+	defer s.tickMu.Unlock()
+
+	now := timeNow()
+	s.mu.RLock()
+	fresh := now.Sub(s.lastTick) < s.cfg.Refresh
+	s.mu.RUnlock()
+	if fresh {
+		return
+	}
+	s.tickLocked(now)
+}
+
+// tickLocked is the body of tick. Callers must hold tickMu.
+func (s *Server) tickLocked(now time.Time) {
 	calls := -1
 	if s.cfg.CallsToday != nil {
 		calls = s.cfg.CallsToday()
@@ -75,6 +98,12 @@ func (s *Server) tick(now time.Time) {
 	s.mu.Lock()
 	events := DiffSnapshots(s.prev, snap)
 	s.prev = snap
+	// Monotonic: tick() captures `now` before contending for tickMu, so a
+	// refresh-forced tick can land after a later periodic tick. Letting the
+	// stale timestamp win would weaken the refresh rate limit.
+	if now.After(s.lastTick) {
+		s.lastTick = now
+	}
 	for _, e := range events {
 		s.ring = append(s.ring, e)
 		if len(s.ring) > s.cfg.MaxEvents {
@@ -129,7 +158,9 @@ func (s *Server) Subscribe(ctx context.Context) <-chan Event {
 func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 	switch cmd.Command {
 	case CommandRefresh:
-		s.tick(time.Now())
+		// Rate-limit forced ticks: a client spamming refresh must not drive
+		// snapshot rebuilds faster than the configured polling interval.
+		s.refreshIfDue()
 		return &Result{OK: true}, nil
 	default:
 		return nil, fmt.Errorf("admin: command not supported in read-only v1: %s", cmd.Command)

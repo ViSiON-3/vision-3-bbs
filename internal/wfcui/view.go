@@ -182,14 +182,14 @@ func (m Model) renderNodeTable(st colorSet, width, maxLines int) []string {
 		if len(lines) >= maxLines {
 			break
 		}
-		handle := truncate(n.Handle, colHandle)
+		handle := truncate(sanitizeTerminal(n.Handle), colHandle)
 		if handle == "" {
 			handle = "(login)"
 		}
-		status := truncate(string(n.Status), colStatus)
-		activity := truncate(n.Activity, colActivity)
-		menu := truncate(n.CurrentMenu, colMenu)
-		addr := truncate(n.RemoteAddr, colAddr)
+		status := truncate(sanitizeTerminal(string(n.Status)), colStatus)
+		activity := truncate(sanitizeTerminal(n.Activity), colActivity)
+		menu := truncate(sanitizeTerminal(n.CurrentMenu), colMenu)
+		addr := truncate(sanitizeTerminal(n.RemoteAddr), colAddr)
 
 		row := fmt.Sprintf(titleFmt, handle, status, activity, menu, addr)
 		if i == m.selected {
@@ -224,7 +224,7 @@ func (m Model) renderEventFeed(st colorSet, width, maxLines int) []string {
 		// consuming extra rows beyond maxLines.  tsLen accounts for the timestamp
 		// prefix plus the two two-space separators ("  " each).
 		const tsLen = 8 + 2 // "HH:MM:SS" + two-space separator
-		tail := ev.Handle + "  " + ev.Message
+		tail := sanitizeTerminal(ev.Handle + "  " + ev.Message)
 		tailRunes := []rune(tail)
 		maxTail := width - tsLen
 		if maxTail < 0 {

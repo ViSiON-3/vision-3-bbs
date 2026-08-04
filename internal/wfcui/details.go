@@ -51,7 +51,7 @@ func (m Model) detailsView() string {
 		sb.WriteString(" ")
 		sb.WriteString(st.dimmed.Render(label))
 		sb.WriteString(" ")
-		sb.WriteString(row.value)
+		sb.WriteString(sanitizeTerminal(row.value))
 		sb.WriteString("\n")
 	}
 
