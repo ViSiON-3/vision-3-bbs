@@ -6,28 +6,7 @@ Use the [User Editor](users/user-editor.md) (`./ue`) to manage user accounts int
 
 ## User Database
 
-User data is stored in `data/users/users.json`. The system automatically creates this file with a default user on first run.
-
-### Default User
-
-The bootstrap account is `felonius` / `password`, created at **access level 255**
-so it can reach the [Admin Menu](users/admin-menu.md) and validate other users.
-Everything a SysOp needs is gated behind `S255`, and raising an account's level
-is itself an Admin Menu function, so a first account below that level cannot
-promote itself from inside the BBS.
-
-> **Change the password immediately.** It is published here and in the README,
-> and it now belongs to a full SysOp account.
-
-Some older installs — and any Docker install created before this was corrected —
-ended up with `felonius` at level **10** instead, because the fallback that
-creates `users.json` at startup disagreed with the one in `setup.sh`. If your
-SysOp account cannot open the Admin Menu, that is why. Fix it with the
-[User Editor](users/user-editor.md):
-
-```bash
-./ue          # select the account, set Access Level to 255, save
-```
+User data is stored in `data/users/users.json`. The system automatically creates this file with a default user on first run. See [Default User](#default-user) for its credentials and access level.
 
 ## User Structure
 
@@ -344,10 +323,26 @@ The system creates a default user on first run:
 
 - Username: `felonius`
 - Password: `password`
-- Access Level: 10
+- Access Level: 255 (SysOp)
 - Validated: true
 
-**Important**: Change this password immediately!
+**Important**: Change this password immediately! It is published here and in the
+README, and it belongs to a full SysOp account.
+
+The level is 255 because this is the only account a fresh install has.
+Everything a SysOp needs is gated behind `S255`, and raising an account's level
+is itself an [Admin Menu](users/admin-menu.md) function — so an account below
+that level cannot promote itself from inside the BBS.
+
+> **SysOp account stuck at level 10?** Some older installs, and any Docker
+> install created before this was corrected, ended up there because the fallback
+> that writes `users.json` at startup disagreed with the one in `setup.sh`. If
+> your account cannot open the Admin Menu, that is why. Fix it with the
+> [User Editor](users/user-editor.md):
+>
+> ```bash
+> ./ue          # select the account, set Access Level to 255, save
+> ```
 
 ### User Authentication
 
