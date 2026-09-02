@@ -89,10 +89,14 @@ cp menus/v3/cfg/SOMEMENU.CFG   /opt/vision3/menus/v3/cfg/
 cp menus/v3/bar/SOMEMENU.BAR   /opt/vision3/menus/v3/bar/
 ```
 
-A screen's files travel together — the `.ANS` art, its `.BAR` lightbar
-coordinates and its `.CFG` key bindings all have to agree, so copying one and not
-the others can leave you worse off than before. If you have customised a file,
-diff it against the repo's version rather than overwriting it.
+A screen's files travel together — a fix may span the `.ANS` art, its `.BAR`
+lightbar coordinates and its `.CFG` key bindings, so copy whatever the release
+changed as a set; taking one file and not the others can leave you worse off
+than before. (For most menus the three must agree outright; menus that read
+their own keys in Go, like the Sponsor Menu, keep only a subset in their `.CFG`
+— see [the menu system guide](menus/menu-system.md#keeping-the-bar-file-and-the-art-in-step).)
+If you have customised a file, diff it against the repo's version rather than
+overwriting it.
 
 This does not apply if you run Vision/3 directly out of the git checkout, or if
 you bind-mount the repo's `menus/` as `docker-compose.yml` does — there `git pull`
