@@ -6,7 +6,7 @@ Use the [User Editor](users/user-editor.md) (`./ue`) to manage user accounts int
 
 ## User Database
 
-User data is stored in `data/users/users.json`. The system automatically creates this file with a default user on first run.
+User data is stored in `data/users/users.json`. The system automatically creates this file with a default user on first run. See [Default User](#default-user) for its credentials and access level.
 
 ## User Structure
 
@@ -323,10 +323,28 @@ The system creates a default user on first run:
 
 - Username: `felonius`
 - Password: `password`
-- Access Level: 10
+- Access Level: 255 (SysOp)
 - Validated: true
 
-**Important**: Change this password immediately!
+**Important**: Change this password immediately! It is published here and in the
+README, and it belongs to a full SysOp account.
+
+The level is 255 because this is the only account a fresh install has. Every
+gate in the shipped menu set is the literal ACS `S255` — not the configurable
+`sysOpLevel`, which drives Go-side checks only (see
+[Why 255 and not `sysOpLevel`](users/admin-menu.md#why-255-and-not-sysoplevel)) —
+and raising an account's level is itself an [Admin Menu](users/admin-menu.md)
+function, so an account below 255 cannot promote itself from inside the BBS.
+
+> **SysOp account stuck at level 10?** Some older installs, and any Docker
+> install created before this was corrected, ended up there because the fallback
+> that writes `users.json` at startup disagreed with the one in `setup.sh`. If
+> your account cannot open the Admin Menu, that is why. Fix it with the
+> [User Editor](users/user-editor.md):
+>
+> ```bash
+> ./ue          # select the account, set Access Level to 255, save
+> ```
 
 ### User Authentication
 
@@ -419,7 +437,7 @@ New accounts are created with:
 - `accessLevel: 1` — minimal access level
 - `timeLimit: 60` — 60-minute time limit per call
 
-The SysOp can validate users in-BBS from the Admin Menu (`X` from MAIN → `V`). See [Admin Menu](users/admin-menu.md) for the full key reference.
+The SysOp can validate users in-BBS from the Admin Menu (`%` from MAIN → `V`). See [Admin Menu](users/admin-menu.md) for the full key reference.
 
 SysOp accounts also receive an automatic notification on MAIN menu entry when there are pending unvalidated users.
 
@@ -587,7 +605,7 @@ Since passwords are hashed, you cannot recover them. To reset: run `./ue`, selec
 
 ### Validating New Users
 
-**Recommended:** use the in-BBS Admin Menu (`X` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `H` to toggle validation status, then `S` to save. See [Admin Menu](users/admin-menu.md) for all key bindings.
+**Recommended:** use the in-BBS Admin Menu (`%` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `H` to toggle validation status, then `S` to save. See [Admin Menu](users/admin-menu.md) for all key bindings.
 
 **Alternative:** use `./ue`, select the user, and toggle the Validated field to `Y` and set Access Level to 10.
 
@@ -598,7 +616,7 @@ The ban feature sets a user's access level to 0 and marks them as unvalidated, p
 #### How to Ban a User
 
 **Option 1: From Admin User Browser**
-1. Press `X` from MAIN menu to enter Admin menu
+1. Press `%` from MAIN menu to enter Admin menu
 2. Press `E` to run Edit Users (Admin List Users)
 3. Navigate to the user you want to ban
 4. Press `0` to toggle ban status (bans if not banned, or unbans if already banned)
@@ -632,7 +650,7 @@ The soft-delete feature marks users as deleted without removing their data. This
 #### How to Delete a User
 
 **Option 1: From Admin User Browser**
-1. Press `X` from MAIN menu to enter Admin menu
+1. Press `%` from MAIN menu to enter Admin menu
 2. Press `E` to run Edit Users (Admin List Users)
 3. Navigate to the user you want to delete
 4. Press `9` to toggle deletion (marks for delete if not deleted, or undeletes if already deleted)

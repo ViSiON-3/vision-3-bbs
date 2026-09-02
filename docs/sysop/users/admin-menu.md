@@ -1,16 +1,41 @@
 # Admin Menu
 
-The Admin Menu provides in-BBS access to user management functions without leaving the BBS or editing JSON files directly. It is accessible only to SysOps (access level ≥ `sysOpLevel`).
+The Admin Menu provides in-BBS access to user management functions without leaving the BBS or editing JSON files directly. It is accessible only to SysOps — access level **255**, see [Why 255 and not `sysOpLevel`](#why-255-and-not-sysoplevel) below.
 
 ## Accessing the Admin Menu
 
-From the **Main Menu**, press `X`. You are taken to the Admin Menu (`ADMIN.MNU`), which presents a prompt:
+From the **Main Menu**, press `%` — the key the Main Menu screen advertises to
+SysOps as `(%) Sysop Menu`. `X` and `/SYSOP` do the same thing. You are taken to
+the Admin Menu (`ADMIN.MNU`), which presents a prompt:
 
 ```text
 [hh:mm] Admin Menu -> _
 ```
 
-> **Access control:** The Admin Menu requires `S255` ACS — only the primary SysOp account (user #1 or any user at `sysOpLevel`) can enter it.
+> **Access control:** The Admin Menu requires `S255` ACS — only an account at level 255 can enter it.
+
+### Why 255 and not `sysOpLevel`
+
+`config.json` has a `sysOpLevel` setting, and it is tempting to assume the menus
+follow it. They do not. An ACS condition like `S255` is a literal comparison
+against the user's access level, so every gate in the shipped menu set — all 24
+of them, `ADMIN.MNU` included — requires 255 no matter what `sysOpLevel` says.
+
+`sysOpLevel` governs Go-side checks instead, such as whether the pending-user
+validation notice appears on the Main Menu.
+
+So if you lower `sysOpLevel` expecting to hand a co-sysop the Admin Menu,
+nothing will change. To actually move the gate, edit the ACS strings themselves:
+`ACS` in `menus/v3/mnu/ADMIN.MNU`, and the `%`, `X` and `/SYSOP` entries in
+`menus/v3/cfg/MAIN.CFG`.
+
+> **Nothing happens when you press it?** Check your access level first — the
+> option is drawn only for level 255 and the key only works at that level, so on
+> a level-10 account there is nothing to see and nothing to press. Run `./ue`,
+> find your account and set **Access Level** to `255`. Some older installs — and
+> any Docker install created before this was corrected — ended up with a
+> level-10 SysOp account this way; see
+> [Default User](users/user-management.md#default-user).
 
 ---
 

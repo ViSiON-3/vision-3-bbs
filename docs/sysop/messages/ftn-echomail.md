@@ -87,7 +87,34 @@ manual steps below. Launch it with:
 ./config
 ```
 
-then go to **Echomail Networking → FTN Setup Wizard**. The wizard walks you through:
+then go to **Echomail Networking → FTN Setup Wizard**.
+
+On a system with no networks configured yet the wizard opens straight on a blank
+form. Once you have set one up, it opens on a picker instead, listing what you
+already carry alongside **Add a new network**:
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│                           FTN Setup Wizard                           │
+│  Network         Your Address      Hub                               │
+│──────────────────────────────────────────────────────────────────────│
+│+ Add a new network...                                                │
+│  fsxnet          21:4/158          agency.bbs.nz:24554               │
+│──────────────────────────────────────────────────────────────────────│
+│  fsxnet — address 21:4/158                                           │
+│  Hub: 21:1/100 at agency.bbs.nz:24554                                │
+│  Areas: 2 echos + netmail                                            │
+│  Tosser: on   Poll: 900s                                             │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+Choosing **Add a new network** runs the walkthrough below. Choosing a configured
+network loads it for editing — see [Editing a configured
+network](#editing-a-configured-network).
+
+### Adding a network
+
+The wizard walks you through:
 
 1. **Pick a network** — choose from a built-in registry of known FTN networks
    (fsxNet, FidoNet, etc.). Selecting one pre-fills the hub address, hostname,
@@ -121,6 +148,38 @@ then initialize the message bases and test the connection (see
 
 For networks **not** in the registry — or to understand exactly what the wizard
 configures — follow the manual steps below.
+
+### Editing a configured network
+
+Selecting an existing network from the picker loads its address, hub details and
+AreaFix / session / packet passwords into the same form, so you can see what was
+originally set up and change it. Opening **Echo Areas** downloads the current
+echo list with the areas you already carry ticked, so you can add more without
+re-picking the ones you have.
+
+Saving an edit updates `configs/ftn.json`, the hub's `node` line in
+`data/ftn/binkd.conf`, and the network's poll event, and creates a message area
+for any newly ticked echo.
+
+Three behaviours are worth knowing before you rely on it:
+
+- **Unticking an echo area does not delete it.** That area is a message base
+  holding real mail, and the wizard will not remove one as a side effect of
+  saving a form. The area stays and keeps tossing; the save message tells you
+  how many were left in place. To actually retire one, remove it under **Message
+  Areas** — and send an AreaFix unsubscribe to your hub so it stops sending it.
+- **The network name cannot be changed.** Renaming would have to migrate the
+  conference, every area tag and every message base path on disk. Add a new
+  network instead.
+- **Settings the wizard does not ask about are left alone.** Tosser enable, poll
+  interval and tearline belong to **Echomail Networks**, and an edit here will
+  not reset them. Links other than the hub — downstream systems you feed — are
+  likewise untouched.
+
+Changing **Your Address** also restamps the origin address on every message area
+belonging to that network, so outbound mail matches the new address.
+
+As with adding, **restart the BBS** after saving.
 
 ## Prerequisites
 

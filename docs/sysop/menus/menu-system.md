@@ -607,6 +607,41 @@ Enable cursor-driven selection by creating a `.BAR` file:
 
 Format: X,Y,HighlightColor,NormalColor,Hotkey,Unused,DisplayText
 
+#### Keeping the BAR file and the art in step
+
+`X` and `Y` are absolute screen coordinates, 1-based, written straight out as a
+cursor-position sequence. Nothing checks them against the art underneath, so if
+you move an option in the `.ANS` and forget the `.BAR`, the highlight bar keeps
+painting at the old spot — you get the option drawn twice, once by the art and
+once by the lightbar, a few rows apart. Whenever you edit a lightbar screen's
+art, re-check the coordinates in its `.BAR`.
+
+The hotkeys are the other half of the same problem. A key printed in the art has
+to exist in that menu's `.CFG`, or pressing it does nothing and the screen is
+lying to the user. Menus that read their own keys in Go, such as the Sponsor
+Menu, are the exception — there the art is the accurate record and the `.CFG`
+lists only a subset.
+
+#### Full-screen art and short terminals
+
+Art that fills all 80 columns of its **last** row will scroll the screen on a
+terminal exactly that tall. The character in the bottom-right corner wraps the
+cursor onto a row that does not exist, the display scrolls up by one, and every
+absolute coordinate in your `.BAR` is then off by a row relative to the art.
+
+This bites on 24-row terminals in particular — SyncTERM with its status line
+showing is the common case — while looking perfect at 25 rows. Leave the last
+row one column short:
+
+- A full-screen piece should be **at most 24 rows**, with the final row ending
+  at **column 79 or earlier**.
+- Every other full-screen screen in the shipped menu set follows this; it is
+  worth matching.
+
+A test in the repo (`TestMenuArtFitsStandardHeights`) checks this for shipped art
+that has a matching `.BAR`, since that is the art where a scroll actually breaks
+something.
+
 ## Built-in Functions
 
 Functions available via `RUN:` command:
