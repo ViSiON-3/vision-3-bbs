@@ -5,8 +5,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,7 +73,41 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/qwk/login", requireClient(s.handleLogin))
 	mux.HandleFunc("/api/qwk/packet", requireClient(s.tokens.requireBearer(s.handlePacket)))
 	mux.HandleFunc("/api/qwk/reply", requireClient(s.tokens.requireBearer(s.handleReply)))
-	return mux
+	// Catch-all so requests to unknown paths are visible too; without it the
+	// mux's own 404 would leave scanner traffic entirely unrecorded.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		logProbe(r, "unknownPath")
+		http.NotFound(w, r)
+	})
+	return logRedirects(mux)
+}
+
+// logRedirects records the redirects ServeMux issues for unclean paths
+// ("/api//qwk/login", "/a/../b"). The mux answers those itself, before any
+// registered handler runs — including the catch-all above — so without this
+// wrapper they would be the one class of request that reaches the port and
+// leaves no trace at all.
+func logRedirects(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sr := &statusRecorder{ResponseWriter: w}
+		h.ServeHTTP(sr, r)
+		switch sr.status {
+		case http.StatusMovedPermanently, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+			logProbe(r, "pathRedirect")
+		}
+	})
+}
+
+// statusRecorder remembers the status code written through it. A handler that
+// never calls WriteHeader leaves status at 0, which no case above matches.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
 }
 
 // Start serves HTTPS until Shutdown is called; blocking.
@@ -80,6 +116,10 @@ func (s *Server) Start() error {
 		Addr:      s.deps.Config.ListenAddr(),
 		Handler:   s.Handler(),
 		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.cert}},
+		// Route net/http's own connection-level errors (TLS handshake failures,
+		// malformed requests) through slog instead of the stdlib log bridge, so
+		// they land in the rolling log as structured records like everything else.
+		ErrorLog: log.New(serverErrorWriter{}, "", 0),
 	}
 	slog.Info("QWK API listening", "addr", s.deps.Config.ListenAddr(), "fingerprint", s.fingerprint)
 	go s.sweepLoop()
@@ -116,4 +156,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	return s.httpSrv.Shutdown(ctx)
+}
+
+// serverErrorWriter adapts http.Server's stdlib logger to slog. Each line net/http
+// writes (e.g. "http: TLS handshake error from 1.2.3.4:5678: ...") becomes one
+// WARN record: these are connection-level problems, not BBS-level failures.
+type serverErrorWriter struct{}
+
+func (serverErrorWriter) Write(p []byte) (int, error) {
+	slog.Warn("qwk api server", "error", strings.TrimRight(string(p), "\r\n"))
+	return len(p), nil
 }

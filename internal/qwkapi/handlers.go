@@ -13,17 +13,24 @@ import (
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		logProbe(r, "badMethod")
 		writeError(w, http.StatusMethodNotAllowed, "method", "POST required")
 		return
 	}
 	ip := clientIP(r)
 	if !s.loginLimit.allow(ip) {
+		// Repeated login attempts from one address are the brute-force signal a
+		// sysop most wants to see, so this is the one throttle logged at WARN.
+		slog.Warn("qwk api login", "remote", ip, "outcome", "rateLimited")
 		w.Header().Set("Retry-After", "60")
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many login attempts")
 		return
 	}
 	var req loginRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		// The handle is not logged here: on a decode failure it may be absent,
+		// partial, or actually be the password field of a malformed body.
+		slog.Info("qwk api login", "remote", ip, "outcome", "badRequest", "error", err)
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
 		return
 	}
@@ -45,11 +52,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
+		logProbe(r, "badMethod")
 		writeError(w, http.StatusMethodNotAllowed, "method", "GET required")
 		return
 	}
 	u := userFromContext(r.Context())
 	if !s.packetLimit.allow(u.Handle) {
+		slog.Info("qwk api packet", "handle", u.Handle, "remote", clientIP(r), "outcome", "rateLimited")
 		w.Header().Set("Retry-After", "60")
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "slow down")
 		return
@@ -60,6 +69,14 @@ func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		slog.Error("qwk api build packet", "handle", u.Handle, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal", "failed to build packet")
+		return
+	}
+	if res == nil {
+		// A (nil, nil) return would panic on the field reads below. net/http
+		// would recover that, but the client just sees a dropped connection and
+		// the log gets a stack trace instead of a usable record.
+		slog.Error("qwk api build packet", "handle", u.Handle, "error", "service returned no result and no error")
 		writeError(w, http.StatusInternalServerError, "internal", "failed to build packet")
 		return
 	}
@@ -81,21 +98,25 @@ func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		logProbe(r, "badMethod")
 		writeError(w, http.StatusMethodNotAllowed, "method", "POST required")
 		return
 	}
 	u := userFromContext(r.Context())
 	if !s.packetLimit.allow(u.Handle) {
+		slog.Info("qwk api reply", "handle", u.Handle, "remote", clientIP(r), "outcome", "rateLimited")
 		w.Header().Set("Retry-After", "60")
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "slow down")
 		return
 	}
 	data, err := io.ReadAll(io.LimitReader(r.Body, maxREPBytes+1))
 	if err != nil {
+		slog.Info("qwk api reply", "handle", u.Handle, "remote", clientIP(r), "outcome", "readError", "error", err)
 		writeError(w, http.StatusBadRequest, "bad_request", "read error")
 		return
 	}
 	if len(data) > maxREPBytes {
+		slog.Warn("qwk api reply", "handle", u.Handle, "remote", clientIP(r), "outcome", "tooLarge", "limit", maxREPBytes)
 		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "packet exceeds 16 MiB")
 		return
 	}
@@ -112,6 +133,13 @@ func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Error("qwk api import rep", "handle", u.Handle, "error", err)
 		writeError(w, http.StatusBadRequest, "bad_packet", "could not process packet")
+		return
+	}
+	if res == nil {
+		// As in handlePacket: turn a (nil, nil) service return into a logged
+		// 500 rather than a panic and a dropped connection.
+		slog.Error("qwk api import rep", "handle", u.Handle, "error", "service returned no result and no error")
+		writeError(w, http.StatusInternalServerError, "internal", "could not process packet")
 		return
 	}
 	slog.Info("qwk api reply", "handle", u.Handle, "remote", clientIP(r),

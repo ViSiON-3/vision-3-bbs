@@ -78,3 +78,36 @@ also send `Authorization: Bearer <token>`.
 Errors are JSON: `{"error": "<code>", "message": "<text>"}`. Rate limits apply
 (login per client IP, packet/reply per user); exceeding them returns `429` with a
 `Retry-After` header.
+
+## What gets logged
+
+Everything the API does goes to the normal BBS log (`data/logs/vision3.log` by
+default, JSON, one record per line) — there is no separate API log file. QWK API
+sessions do **not** appear in Last Callers; that list is for terminal logins.
+
+Apart from the `QWK API listening` line at startup, every record's `msg` starts
+with `qwk api`, so `grep -i '"qwk api'` on the log gives you the full picture of
+API activity.
+
+| Level | `msg` | When |
+|-------|-------|------|
+| INFO | `QWK API listening` | Startup: listen address and TLS cert fingerprint. |
+| INFO | `qwk api login` | `outcome=success` / `outcome=fail`, with `handle` and `remote`. A malformed body logs `outcome=badRequest` with `remote` and `error` but **no** `handle` — on a decode failure that field may be partial or hold the password. |
+| WARN | `qwk api login` | `outcome=rateLimited` — too many login attempts from one IP. |
+| ERROR | `qwk api login: token issue failed` | The server could not mint a token. |
+| INFO | `qwk api auth` | `outcome=noToken` / `outcome=badToken` — a request with a missing, invalid, or expired bearer token. |
+| INFO | `qwk api packet` | A download, with `messages` count (including the `0`/`204` case), or `outcome=rateLimited`. |
+| INFO | `qwk api reply` | An upload, with `posted`/`skipped`/`duplicate`, or `outcome=wrongBBS`, `readError`, or `rateLimited`. |
+| WARN | `qwk api reply` | `outcome=tooLarge` — an upload over the 16 MiB cap. |
+| ERROR | `qwk api build packet` / `qwk api import rep` | A packet failed to build or import. |
+| WARN | `qwk api server` | Connection-level trouble from Go's HTTP server, e.g. `http: TLS handshake error from ...`. |
+| DEBUG | `qwk api rejected` | A request turned away without doing any work: `reason=noClientHeader`, `browser`, `htmlAccept`, `unknownPath`, `badMethod`, or `pathRedirect`. Each carries `remote`, `method`, `path`, and `agent`. |
+
+Failed logins, bad tokens, oversized uploads, and rate-limit trips are all
+recorded at INFO or WARN, so they are visible with the default log level.
+
+Rejected probes are the exception: an open port on the public internet collects
+constant scanner traffic (`/wp-login.php` and friends), and logging every one of
+those at INFO would bury real activity. They are recorded at DEBUG instead — set
+`logging.level` to `"debug"` in `configs/config.json` when you want to see who is
+knocking, then set it back.
