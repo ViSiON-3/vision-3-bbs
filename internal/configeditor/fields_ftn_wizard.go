@@ -9,13 +9,25 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
+// networkFieldHelp explains the Network row, which is a browse action when
+// adding and a fixed label when editing.
+func networkFieldHelp(w *ftnWizardState) string {
+	if w.editing() {
+		return "Editing an existing network; its name is fixed"
+	}
+	return "Press Enter to browse known FTN networks"
+}
+
 // fieldsFTNWizard returns field definitions for the FTN setup wizard form.
 func (m *Model) fieldsFTNWizard() []fieldDef {
 	w := m.ftnWizard
 	return []fieldDef{
 		{
-			Label: "Network", Help: "Press Enter to browse known FTN networks", Type: ftDisplay, Col: 3, Row: 1, Width: 40,
+			Label: "Network", Help: networkFieldHelp(w), Type: ftDisplay, Col: 3, Row: 1, Width: 40,
 			Get: func() string {
+				if w.editing() {
+					return w.networkName + "  (editing — name cannot be changed)"
+				}
 				if w.networkName != "" {
 					return w.networkName
 				}
@@ -198,6 +210,12 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 				if n == 0 {
 					if w.areasFetched {
 						return "(none selected — press Enter to browse)"
+					}
+					// Editing: report what is already configured instead of
+					// implying nothing is subscribed just because this run has
+					// not downloaded the echolist yet.
+					if len(w.subscribedTags) > 0 {
+						return fmt.Sprintf("%d already subscribed — press Enter to change", len(w.subscribedTags))
 					}
 					return "(press Enter to download area list)"
 				}

@@ -19,16 +19,23 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 
 	// Derive network key (lowercase).
 	netKey := strings.ToLower(w.networkName)
+	editing := w.editing()
+	if editing {
+		// The name is fixed while editing, so the key the fields describe is
+		// the key we loaded from.
+		netKey = w.editingKey
+	}
 
-	// Duplicate check.
-	if m.configs.FTN.Networks != nil {
+	// Adding a network that already exists would silently merge into it, so
+	// refuse. Editing is the supported way to change one.
+	if !editing && m.configs.FTN.Networks != nil {
 		if _, exists := m.configs.FTN.Networks[netKey]; exists {
-			m.message = fmt.Sprintf("Network %q already exists in ftn.json", netKey)
+			m.message = fmt.Sprintf("Network %q already exists — go back and choose it to edit instead", netKey)
 			return m, nil
 		}
 	}
 
-	// 1. Create FTN network entry.
+	// 1. Create or update the FTN network entry.
 	if m.configs.FTN.Networks == nil {
 		m.configs.FTN.Networks = make(map[string]config.FTNNetworkConfig)
 	}
@@ -64,12 +71,32 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		Port:            w.hubPort,
 	}
 
-	m.configs.FTN.Networks[netKey] = config.FTNNetworkConfig{
-		InternalTosserEnabled: true,
-		OwnAddress:            w.ownAddress,
-		PollSeconds:           300,
-		Tearline:              "ViSiON/3",
-		Links:                 []config.FTNLinkConfig{link},
+	if existing, ok := m.configs.FTN.Networks[netKey]; ok && editing {
+		// Keep the settings this wizard does not ask about. Tosser, poll
+		// interval and tearline are all editable under Echomail Networks, and
+		// rewriting them with the wizard's create-time defaults would throw
+		// away whatever the sysop set there.
+		existing.OwnAddress = w.ownAddress
+		existing.Links = replaceHubLink(existing.Links, link)
+		m.configs.FTN.Networks[netKey] = existing
+
+		// Areas carry the origin address they were created with, and
+		// createFTNMsgAreaIfNeeded leaves existing ones alone. Without this,
+		// editing the address updates ftn.json while every area keeps stamping
+		// outbound mail with the old one.
+		for i := range m.configs.MsgAreas {
+			if strings.EqualFold(m.configs.MsgAreas[i].Network, netKey) {
+				m.configs.MsgAreas[i].OriginAddr = w.ownAddress
+			}
+		}
+	} else {
+		m.configs.FTN.Networks[netKey] = config.FTNNetworkConfig{
+			InternalTosserEnabled: true,
+			OwnAddress:            w.ownAddress,
+			PollSeconds:           300,
+			Tearline:              "ViSiON/3",
+			Links:                 []config.FTNLinkConfig{link},
+		}
 	}
 
 	// 2. Create conference for the network.
@@ -145,9 +172,12 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 			NetworkName: w.networkName,
 		},
 	}
+	// Non-fatal: binkd.conf update is best-effort, but the operator has to be
+	// told, because the final status below otherwise says "restart to
+	// activate" for a mailer that never got the new details.
+	binkdWarning := ""
 	if err := ftn.UpdateBinkdConf(binkdPath, binkdCfg); err != nil {
-		// Non-fatal: binkd.conf update is best-effort.
-		m.message = fmt.Sprintf("Warning: binkd.conf update failed: %v (network saved OK)", err)
+		binkdWarning = fmt.Sprintf(" Warning: binkd.conf update failed: %v — fix it before restarting.", err)
 	}
 
 	// 6. Wire scheduler events for mail flow (hub poll + supporting events).
@@ -157,13 +187,57 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 	m.dirty = true
 	m.saveAll()
 	if strings.HasPrefix(m.message, "SAVE ERROR") {
+		m.message += binkdWarning
 		return m, nil
 	}
 
 	selectedCount := w.selectedAreaCount()
-	m.message = fmt.Sprintf("FTN network %q saved — %d area(s) created. Restart BBS to activate.", w.networkName, selectedCount)
+	if editing {
+		// Areas are only ever added here. Removing one would mean deleting a
+		// message base with real mail in it, which is not something to do as a
+		// side effect of saving a form, so say so rather than quietly ignoring
+		// the untick.
+		dropped := w.unsubscribedTagCount()
+		m.message = fmt.Sprintf("FTN network %q updated — %d area(s) subscribed. Restart BBS to activate.",
+			netKey, selectedCount)
+		if dropped > 0 {
+			m.message = fmt.Sprintf("FTN network %q updated — %d area(s) subscribed. "+
+				"%d existing area(s) left in place: remove them under Message Areas. Restart BBS to activate.",
+				netKey, selectedCount, dropped)
+		}
+	} else {
+		m.message = fmt.Sprintf("FTN network %q saved — %d area(s) created. Restart BBS to activate.", w.networkName, selectedCount)
+	}
+	m.message += binkdWarning
 	m.mode = modeCategoryMenu
 	return m, nil
+}
+
+// replaceHubLink updates the hub entry in a link list, leaving every other link
+// alone. The hub is the first link the wizard wrote; any links after it are
+// downstream systems this node feeds, which the wizard does not manage and must
+// not drop. Matching by address first keeps the right entry when the list has
+// been reordered under Echomail Networks.
+func replaceHubLink(links []config.FTNLinkConfig, hub config.FTNLinkConfig) []config.FTNLinkConfig {
+	for i := range links {
+		if strings.EqualFold(links[i].Address, hub.Address) {
+			// Preserve fields the wizard does not ask about.
+			hub.Flavour = links[i].Flavour
+			if links[i].Name != "" {
+				hub.Name = links[i].Name
+			}
+			links[i] = hub
+			return links
+		}
+	}
+	if len(links) == 0 {
+		return []config.FTNLinkConfig{hub}
+	}
+	// The hub address itself changed: replace the first entry, which is where
+	// the wizard puts the hub.
+	hub.Flavour = links[0].Flavour
+	links[0] = hub
+	return links
 }
 
 // createFTNMsgAreaIfNeeded creates a message area if one with the given tag

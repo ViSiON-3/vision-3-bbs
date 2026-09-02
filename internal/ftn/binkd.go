@@ -71,9 +71,17 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 		return fmt.Errorf("reading binkd.conf: %w", err)
 	}
 
-	// Check if this node address already exists — skip if so.
+	// This node is already defined: rewrite its line in place rather than
+	// skipping. The wizard can be re-run to change a hub's hostname, port or
+	// session password, and skipping would leave binkd talking to the old
+	// details while ftn.json showed the new ones. Appending instead would give
+	// binkd two lines for one address.
 	if len(existing) > 0 && nodeExists(string(existing), cfg.Node.Address) {
-		return nil
+		updated, changed := replaceNodeLine(string(existing), cfg.Node.Address, cfg.Node.Hostname, cfg.Node.SessionPwd)
+		if !changed {
+			return nil
+		}
+		return writeFileAtomic(confPath, updated, 0600)
 	}
 
 	outPath := filepath.Join(cfg.BBSRoot, "data", "ftn", "out")
@@ -95,17 +103,80 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 	}
 
 	// Append the new node block.
-	pwd := cfg.Node.SessionPwd
-	if pwd == "" {
-		pwd = "-"
-	}
-	fmt.Fprintf(&out, "\n%s\nnode %s %s %s\n",
-		sectionMarker(cfg.Node.NetworkName),
-		cfg.Node.Address,
-		cfg.Node.Hostname,
-		pwd)
+	fmt.Fprintf(&out, "\n%s\n%s\n", sectionMarker(cfg.Node.NetworkName), buildNodeLine(cfg))
 
 	return writeFileAtomic(confPath, out.String(), 0600)
+}
+
+// buildNodeLine renders the binkd "node" directive for a link.
+func buildNodeLine(cfg BinkdConfig) string {
+	return fmt.Sprintf("node %s %s %s", cfg.Node.Address, cfg.Node.Hostname, nodePassword(cfg.Node.SessionPwd))
+}
+
+// nodePassword renders a session password, using binkd's "-" for none.
+func nodePassword(pwd string) string {
+	if pwd == "" {
+		return "-"
+	}
+	return pwd
+}
+
+// mergeNodeFields rewrites the host and password of an existing binkd node
+// directive while keeping everything else on the line.
+//
+// The directive is "node <address> [host[:port]] [password] [flags...]", and
+// binkd accepts trailing options such as -md, -ip or filebox settings that the
+// wizard knows nothing about. Rewriting the whole line would silently drop a
+// sysop's hand-added flags, so only the two fields the wizard owns are
+// replaced and any beyond them are carried across untouched.
+func mergeNodeFields(existing []string, address, hostname, pwd string) []string {
+	merged := append([]string(nil), existing...)
+
+	// Grow to at least "node <address> <host> <pwd>" so a short directive can
+	// still take the values.
+	for len(merged) < 4 {
+		merged = append(merged, "-")
+	}
+	merged[0] = "node"
+	merged[1] = address
+	merged[2] = hostname
+	merged[3] = nodePassword(pwd)
+	return merged
+}
+
+// replaceNodeLine updates the "node <address> ..." directive for the given
+// address in place, preserving the line's indentation, any binkd flags beyond
+// the fields the wizard manages, and the rest of the file. It reports whether
+// anything actually changed, so an unchanged config is left untouched on disk.
+func replaceNodeLine(content, address, hostname, pwd string) (string, bool) {
+	lines := confLines(content)
+	changed := false
+	for i, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if !strings.HasPrefix(trimmed, "node ") {
+			continue
+		}
+		fields := strings.Fields(trimmed)
+		if len(fields) < 2 || fields[1] != address {
+			continue
+		}
+
+		merged := strings.Join(mergeNodeFields(fields, address, hostname, pwd), " ")
+		if trimmed == merged {
+			continue // already correct
+		}
+		indent := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
+		lines[i] = indent + merged
+		changed = true
+	}
+	if !changed {
+		return content, false
+	}
+	out := strings.Join(lines, "\n")
+	if strings.HasSuffix(content, "\n") {
+		out += "\n"
+	}
+	return out, true
 }
 
 // nodeExists checks whether a node address is already defined in the config.
