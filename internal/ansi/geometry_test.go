@@ -79,6 +79,55 @@ func TestArtGeometry(t *testing.T) {
 			wantRows: 1,
 			wantCols: 1,
 		},
+		{
+			name:     "horizontal tab advances to the next tab stop",
+			data:     []byte("a\tb"), // a at col 1, tab to col 9, b at col 9
+			width:    80,
+			wantRows: 1,
+			wantCols: 9,
+		},
+		{
+			name:     "tabs push the row over the margin like printable cells do",
+			data:     bytes.Repeat([]byte("\t"), 10), // 10 tab stops = col 81 > 80
+			width:    16,
+			wantRows: 1,
+			wantCols: 0, // nothing printable was written
+		},
+		{
+			name:     "tabs stop at the tab stop they land on",
+			data:     append(bytes.Repeat([]byte("\t"), 9), 'x'), // stops at 9,17..73
+			width:    80,
+			wantRows: 1,
+			wantCols: 73,
+		},
+		{
+			name:     "a tab past the margin clamps, and the cell it fills still wraps",
+			data:     append(bytes.Repeat([]byte("\t"), 10), 'x'), // 10th stop is 81, clamped to 80
+			width:    80,
+			wantRows: 2,
+			wantCols: 80,
+		},
+		{
+			name:     "cursor forward is clamped at the right margin",
+			data:     []byte("\x1b[200C\x1b[1Dx"), // clamped to 80, back one, so no wrap
+			width:    80,
+			wantRows: 1,
+			wantCols: 79,
+		},
+		{
+			name:     "absolute positioning past the margin is clamped",
+			data:     []byte("\x1b[1;500H\x1b[1Dx"),
+			width:    80,
+			wantRows: 1,
+			wantCols: 79,
+		},
+		{
+			name:     "a character in the last column wraps even when reached by positioning",
+			data:     []byte("\x1b[1;500Hx"),
+			width:    80,
+			wantRows: 2,
+			wantCols: 80,
+		},
 	}
 
 	for _, tc := range tests {

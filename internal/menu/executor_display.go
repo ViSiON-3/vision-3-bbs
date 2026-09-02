@@ -211,9 +211,12 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 	// ASCII-safe and work correctly in both CP437 and UTF-8 output modes.
 	data = ansi.ReplacePipeCodes(data)
 
+	// Measured from the home position, so this under-reports for art drawn
+	// without clearing first — it warns on art that is too tall no matter where
+	// it starts, and stays quiet otherwise rather than crying wolf.
 	if ansi.ArtOverflowsHeight(data, 80, termHeight) {
 		rows, lastCols := ansi.ArtGeometry(data, 80)
-		slog.Warn("ANSI art is taller than the terminal and will scroll the screen",
+		slog.Warn("ANSI art extends past the bottom of the terminal and will scroll or be clipped",
 			"file", filename, "termHeight", termHeight, "artRows", rows, "lastRowCols", lastCols)
 	}
 

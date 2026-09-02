@@ -55,6 +55,9 @@ func ArtGeometry(data []byte, width int) (rows, lastRowCols int) {
 		if x < 1 {
 			x = 1
 		}
+		if x > width {
+			x = width // terminals clamp the cursor at the right margin
+		}
 		if y < 1 {
 			y = 1
 		}
@@ -131,6 +134,10 @@ func ArtGeometry(data []byte, width int) (rows, lastRowCols int) {
 			x--
 			clamp()
 
+		case b == '\t': // advance to the next 8-column tab stop, never past the margin
+			x = ((x-1)/8+1)*8 + 1
+			clamp()
+
 		case b < 0x20: // remaining control characters do not advance the cursor
 			// no-op
 
@@ -156,7 +163,14 @@ func ArtGeometry(data []byte, width int) (rows, lastRowCols int) {
 }
 
 // ArtOverflowsHeight reports whether drawing this art on a width x height
-// terminal would push the cursor past the bottom row and scroll the screen.
+// terminal would take the cursor past the bottom row, so the art either scrolls
+// the screen or is clipped at the bottom.
+//
+// The answer is a lower bound in two respects, both of which cost a missed
+// warning rather than a false one. The art is measured from the home position,
+// so art drawn without clearing first starts lower down and can overflow
+// without being reported; and art that only overshoots via absolute
+// positioning is clamped rather than scrolled by most terminals.
 func ArtOverflowsHeight(data []byte, width, height int) bool {
 	if height <= 0 {
 		return false // height unknown — nothing to check against
