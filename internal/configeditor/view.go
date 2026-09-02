@@ -80,6 +80,8 @@ func (m Model) View() string {
 		return m.viewRegistryBrowser()
 	case modeFTNWizardForm, modeFTNWizardField, modeFTNNodelistLookup:
 		return m.viewFTNWizardForm()
+	case modeFTNWizardPicker:
+		return m.viewFTNWizardPicker()
 	case modeFTNNetworkBrowser:
 		return m.viewFTNNetworkBrowser()
 	case modeFTNAreaBrowser, modeFTNAreaDownloading:

@@ -53,6 +53,7 @@ const (
 	modeRegistryBrowser                          // Registry browser (discover networks)
 	modeFTNWizardForm                            // FTN wizard form navigation
 	modeFTNWizardField                           // FTN wizard field editing (textinput active)
+	modeFTNWizardPicker                          // Add-new vs edit-existing choice on wizard entry
 	modeFTNNetworkBrowser                        // Known FTN network list with info panel
 	modeFTNAreaBrowser                           // FTN echo area selection from downloaded echolist
 	modeFTNAreaDownloading                       // Progress state while downloading echolist
@@ -255,6 +256,13 @@ type Model struct {
 	ftnNetBrowserEntries []ftn.RegistryNetwork // loaded from embedded registry
 	ftnNetBrowserCursor  int
 	ftnNetBrowserScroll  int
+
+	// FTN wizard entry picker: choose between adding a network and editing
+	// one that is already configured. Entry 0 is always "add new"; the rest
+	// index into ftnWizardPickerKeys.
+	ftnWizardPickerKeys   []string
+	ftnWizardPickerCursor int
+	ftnWizardPickerScroll int
 
 	// FTN area browser state
 	ftnAreaBrowserAreas    []ftn.EchoArea // parsed from downloaded echolist
@@ -468,6 +476,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateFTNWizardForm(msg)
 		case modeFTNWizardField:
 			result, cmd = m.updateFTNWizardField(msg)
+		case modeFTNWizardPicker:
+			result, cmd = m.updateFTNWizardPicker(msg)
 		case modeFTNNetworkBrowser:
 			result, cmd = m.updateFTNNetworkBrowser(msg)
 		case modeFTNAreaBrowser:

@@ -2,15 +2,49 @@ package configeditor
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
-// enterFTNWizard initializes the FTN setup wizard and transitions to the form.
+// ftnWizardPickerVisible is how many picker rows fit on screen at once.
+const ftnWizardPickerVisible = 12
+
+// enterFTNWizard opens the FTN setup wizard. With networks already configured
+// it offers the choice of adding another or editing one of them; on a fresh
+// system it goes straight to the blank form, since there is nothing to pick
+// between.
 func (m Model) enterFTNWizard() (Model, tea.Cmd) {
+	if keys := m.configuredFTNNetworkKeys(); len(keys) > 0 {
+		m.ftnWizardPickerKeys = keys
+		m.ftnWizardPickerCursor = 0
+		m.ftnWizardPickerScroll = 0
+		m.mode = modeFTNWizardPicker
+		return m, nil
+	}
+	return m.startFTNWizardAdd()
+}
+
+// configuredFTNNetworkKeys returns the ftn.json network keys, sorted.
+func (m Model) configuredFTNNetworkKeys() []string {
+	if m.configs == nil || len(m.configs.FTN.Networks) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(m.configs.FTN.Networks))
+	for k := range m.configs.FTN.Networks {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// startFTNWizardAdd initializes a blank wizard for adding a new network.
+func (m Model) startFTNWizardAdd() (Model, tea.Cmd) {
 	origin := ""
 	if m.configs != nil {
 		origin = m.configs.Server.BoardName
@@ -26,6 +60,129 @@ func (m Model) enterFTNWizard() (Model, tea.Cmd) {
 		originLine:    origin,
 		autoJoinAreas: true,
 	}
+	m.ftnWizardFields = m.fieldsFTNWizard()
+	m.editField = 0
+	m.fieldScroll = 0
+	m.mode = modeFTNWizardForm
+	return m, nil
+}
+
+// updateFTNWizardPicker handles the add-new vs edit-existing choice. Entry 0
+// is "add a new network"; the rest are configured networks.
+func (m Model) updateFTNWizardPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	total := len(m.ftnWizardPickerKeys) + 1
+
+	if cursor, ok := listNavKey(msg, m.ftnWizardPickerCursor, total); ok {
+		m.ftnWizardPickerCursor = cursor
+		m.ftnWizardPickerScroll = clampListScroll(cursor, m.ftnWizardPickerScroll, ftnWizardPickerVisible)
+		return m, nil
+	}
+
+	switch msg.Type {
+	case tea.KeyEnter:
+		if m.ftnWizardPickerCursor == 0 {
+			return m.startFTNWizardAdd()
+		}
+		key := m.ftnWizardPickerKeys[m.ftnWizardPickerCursor-1]
+		return m.startFTNWizardEdit(key)
+
+	case tea.KeyEscape:
+		m.mode = modeCategoryMenu
+		return m, nil
+	}
+
+	if strings.EqualFold(msg.String(), "n") {
+		return m.startFTNWizardAdd()
+	}
+	return m, nil
+}
+
+// startFTNWizardEdit loads an already-configured network into the wizard so the
+// sysop can see what was set up and change it.
+func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
+	net, ok := m.configs.FTN.Networks[netKey]
+	if !ok {
+		m.message = fmt.Sprintf("Network %q is no longer configured", netKey)
+		m.mode = modeCategoryMenu
+		return m, nil
+	}
+
+	w := &ftnWizardState{
+		editingKey:     netKey,
+		networkName:    netKey,
+		ownAddress:     net.OwnAddress,
+		hubPort:        24554,
+		autoJoinAreas:  true,
+		subscribedTags: make(map[string]bool),
+	}
+
+	// Zone comes from the configured address, since ftn.json does not store
+	// it separately and binkd.conf needs it on save.
+	if zone, err := ftn.ParseAddress(net.OwnAddress); err == nil {
+		w.zone = zone.Zone
+	}
+
+	// Hub details live on the first link; later links are other systems this
+	// node feeds and are left untouched.
+	if len(net.Links) > 0 {
+		link := net.Links[0]
+		w.hubAddress = link.Address
+		w.hubHostname = link.Hostname
+		if link.Port > 0 {
+			w.hubPort = link.Port
+		}
+		w.areafixPassword = link.AreafixPassword
+		w.sessionPassword = link.SessionPassword
+		w.packetPassword = link.PacketPassword
+	}
+
+	// Description comes from the network's conference, which is where the
+	// wizard put it on the way in.
+	for _, c := range m.configs.Conferences {
+		if strings.EqualFold(c.Name, netKey) || strings.EqualFold(c.Name, net.OwnAddress) {
+			w.networkDesc = c.Description
+			break
+		}
+	}
+
+	// Existing subscriptions, and the newscan default they were created with.
+	autoJoinSeen := false
+	for _, area := range m.configs.MsgAreas {
+		if !strings.EqualFold(area.Network, netKey) || area.EchoTag == "" {
+			continue
+		}
+		w.subscribedTags[strings.ToUpper(area.EchoTag)] = true
+		if !autoJoinSeen {
+			w.autoJoinAreas = area.AutoJoin
+			autoJoinSeen = true
+		}
+	}
+
+	// Registry data (echolist and nodelist URLs, description) if this network
+	// is one we ship an entry for, so Echo Areas and Node Lookup still work.
+	if regNets, err := ftn.LoadRegistry(); err == nil {
+		for i := range regNets {
+			if !strings.EqualFold(regNets[i].Name, netKey) {
+				continue
+			}
+			reg := regNets[i]
+			w.registryEntry = &reg
+			w.echolistURL = reg.EcholistURL
+			w.nodelistURL = reg.NodelistURL
+			w.coordinator = reg.Coordinator
+			w.coordinatorEmail = reg.CoordinatorEmail
+			w.infoURL = reg.InfoURL
+			if w.networkDesc == "" {
+				w.networkDesc = reg.Description
+			}
+			if w.zone == 0 {
+				w.zone = reg.Zone
+			}
+			break
+		}
+	}
+
+	m.ftnWizard = w
 	m.ftnWizardFields = m.fieldsFTNWizard()
 	m.editField = 0
 	m.fieldScroll = 0
@@ -51,8 +208,14 @@ func (m Model) updateFTNWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// "Network" field → open network browser.
+		// "Network" field → open network browser. Not while editing: the
+		// wizard is bound to one configured network, and swapping the identity
+		// underneath the loaded fields would write them to the wrong one.
 		if f.Type == ftDisplay && f.Label == "Network" {
+			if m.ftnWizard.editing() {
+				m.message = "Network name is fixed while editing — ESC and choose Add a new network instead"
+				return m, nil
+			}
 			return m.enterFTNNetworkBrowser()
 		}
 

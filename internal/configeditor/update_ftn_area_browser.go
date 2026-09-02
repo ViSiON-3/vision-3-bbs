@@ -44,6 +44,15 @@ func (m Model) handleFTNEcholistMsg(msg ftnEcholistMsg) (tea.Model, tea.Cmd) {
 	// Preserve existing selections if re-downloading.
 	if len(m.ftnWizard.selectedAreas) != len(msg.areas) {
 		m.ftnWizard.selectedAreas = make([]bool, len(msg.areas))
+
+		// Editing an existing network: start from what is actually
+		// configured, so the list shows the current subscriptions rather
+		// than an empty slate the sysop would have to re-tick from memory.
+		for i, area := range msg.areas {
+			if m.ftnWizard.subscribedTags[strings.ToUpper(area.Tag)] {
+				m.ftnWizard.selectedAreas[i] = true
+			}
+		}
 	}
 
 	// Copy to browser state. selectedAreas must be a distinct copy so that

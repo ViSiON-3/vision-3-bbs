@@ -71,9 +71,17 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 		return fmt.Errorf("reading binkd.conf: %w", err)
 	}
 
-	// Check if this node address already exists — skip if so.
+	// This node is already defined: rewrite its line in place rather than
+	// skipping. The wizard can be re-run to change a hub's hostname, port or
+	// session password, and skipping would leave binkd talking to the old
+	// details while ftn.json showed the new ones. Appending instead would give
+	// binkd two lines for one address.
 	if len(existing) > 0 && nodeExists(string(existing), cfg.Node.Address) {
-		return nil
+		updated, changed := replaceNodeLine(string(existing), cfg.Node.Address, buildNodeLine(cfg))
+		if !changed {
+			return nil
+		}
+		return writeFileAtomic(confPath, updated, 0600)
 	}
 
 	outPath := filepath.Join(cfg.BBSRoot, "data", "ftn", "out")
@@ -95,17 +103,51 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 	}
 
 	// Append the new node block.
+	fmt.Fprintf(&out, "\n%s\n%s\n", sectionMarker(cfg.Node.NetworkName), buildNodeLine(cfg))
+
+	return writeFileAtomic(confPath, out.String(), 0600)
+}
+
+// buildNodeLine renders the binkd "node" directive for a link.
+func buildNodeLine(cfg BinkdConfig) string {
 	pwd := cfg.Node.SessionPwd
 	if pwd == "" {
 		pwd = "-"
 	}
-	fmt.Fprintf(&out, "\n%s\nnode %s %s %s\n",
-		sectionMarker(cfg.Node.NetworkName),
-		cfg.Node.Address,
-		cfg.Node.Hostname,
-		pwd)
+	return fmt.Sprintf("node %s %s %s", cfg.Node.Address, cfg.Node.Hostname, pwd)
+}
 
-	return writeFileAtomic(confPath, out.String(), 0600)
+// replaceNodeLine swaps the "node <address> ..." directive for the given
+// address, preserving the rest of the file and the line's own indentation. It
+// reports whether anything actually changed, so an unchanged config is left
+// untouched on disk.
+func replaceNodeLine(content, address, newLine string) (string, bool) {
+	lines := confLines(content)
+	changed := false
+	for i, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if !strings.HasPrefix(trimmed, "node ") {
+			continue
+		}
+		fields := strings.Fields(trimmed)
+		if len(fields) < 2 || fields[1] != address {
+			continue
+		}
+		if trimmed == newLine {
+			continue // already correct
+		}
+		indent := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
+		lines[i] = indent + newLine
+		changed = true
+	}
+	if !changed {
+		return content, false
+	}
+	out := strings.Join(lines, "\n")
+	if strings.HasSuffix(content, "\n") {
+		out += "\n"
+	}
+	return out, true
 }
 
 // nodeExists checks whether a node address is already defined in the config.
