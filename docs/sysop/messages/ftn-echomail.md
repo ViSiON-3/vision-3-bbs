@@ -158,8 +158,8 @@ echo list with the areas you already carry ticked, so you can add more without
 re-picking the ones you have.
 
 Saving an edit updates `configs/ftn.json`, the hub's `node` line in
-`binkd.conf`, and the network's poll event, and creates a message area for any
-newly ticked echo.
+`data/ftn/binkd.conf`, and the network's poll event, and creates a message area
+for any newly ticked echo.
 
 Three behaviours are worth knowing before you rely on it:
 

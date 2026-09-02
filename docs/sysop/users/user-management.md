@@ -329,10 +329,12 @@ The system creates a default user on first run:
 **Important**: Change this password immediately! It is published here and in the
 README, and it belongs to a full SysOp account.
 
-The level is 255 because this is the only account a fresh install has.
-Everything a SysOp needs is gated behind `S255`, and raising an account's level
-is itself an [Admin Menu](users/admin-menu.md) function — so an account below
-that level cannot promote itself from inside the BBS.
+The level is 255 because this is the only account a fresh install has. Every
+gate in the shipped menu set is the literal ACS `S255` — not the configurable
+`sysOpLevel`, which drives Go-side checks only (see
+[Why 255 and not `sysOpLevel`](users/admin-menu.md#why-255-and-not-sysoplevel)) —
+and raising an account's level is itself an [Admin Menu](users/admin-menu.md)
+function, so an account below 255 cannot promote itself from inside the BBS.
 
 > **SysOp account stuck at level 10?** Some older installs, and any Docker
 > install created before this was corrected, ended up there because the fallback
