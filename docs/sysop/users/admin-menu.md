@@ -4,13 +4,23 @@ The Admin Menu provides in-BBS access to user management functions without leavi
 
 ## Accessing the Admin Menu
 
-From the **Main Menu**, press `X`. You are taken to the Admin Menu (`ADMIN.MNU`), which presents a prompt:
+From the **Main Menu**, press `%` — the key the Main Menu screen advertises to
+SysOps as `(%) Sysop Menu`. `X` and `/SYSOP` do the same thing. You are taken to
+the Admin Menu (`ADMIN.MNU`), which presents a prompt:
 
 ```text
 [hh:mm] Admin Menu -> _
 ```
 
 > **Access control:** The Admin Menu requires `S255` ACS — only the primary SysOp account (user #1 or any user at `sysOpLevel`) can enter it.
+
+> **Nothing happens when you press it?** Check your access level first — the
+> option is drawn only for level 255 and the key only works at that level, so on
+> a level-10 account there is nothing to see and nothing to press. Run `./ue`,
+> find your account and set **Access Level** to `255`. Some older installs — and
+> any Docker install created before this was corrected — ended up with a
+> level-10 SysOp account this way; see
+> [Default User](users/user-management.md#default-user).
 
 ---
 

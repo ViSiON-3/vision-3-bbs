@@ -8,6 +8,27 @@ Use the [User Editor](users/user-editor.md) (`./ue`) to manage user accounts int
 
 User data is stored in `data/users/users.json`. The system automatically creates this file with a default user on first run.
 
+### Default User
+
+The bootstrap account is `felonius` / `password`, created at **access level 255**
+so it can reach the [Admin Menu](users/admin-menu.md) and validate other users.
+Everything a SysOp needs is gated behind `S255`, and raising an account's level
+is itself an Admin Menu function, so a first account below that level cannot
+promote itself from inside the BBS.
+
+> **Change the password immediately.** It is published here and in the README,
+> and it now belongs to a full SysOp account.
+
+Some older installs — and any Docker install created before this was corrected —
+ended up with `felonius` at level **10** instead, because the fallback that
+creates `users.json` at startup disagreed with the one in `setup.sh`. If your
+SysOp account cannot open the Admin Menu, that is why. Fix it with the
+[User Editor](users/user-editor.md):
+
+```bash
+./ue          # select the account, set Access Level to 255, save
+```
+
 ## User Structure
 
 Users are stored as a JSON array. Each user account contains:
@@ -419,7 +440,7 @@ New accounts are created with:
 - `accessLevel: 1` — minimal access level
 - `timeLimit: 60` — 60-minute time limit per call
 
-The SysOp can validate users in-BBS from the Admin Menu (`X` from MAIN → `V`). See [Admin Menu](users/admin-menu.md) for the full key reference.
+The SysOp can validate users in-BBS from the Admin Menu (`%` from MAIN → `V`). See [Admin Menu](users/admin-menu.md) for the full key reference.
 
 SysOp accounts also receive an automatic notification on MAIN menu entry when there are pending unvalidated users.
 
@@ -587,7 +608,7 @@ Since passwords are hashed, you cannot recover them. To reset: run `./ue`, selec
 
 ### Validating New Users
 
-**Recommended:** use the in-BBS Admin Menu (`X` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `H` to toggle validation status, then `S` to save. See [Admin Menu](users/admin-menu.md) for all key bindings.
+**Recommended:** use the in-BBS Admin Menu (`%` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `H` to toggle validation status, then `S` to save. See [Admin Menu](users/admin-menu.md) for all key bindings.
 
 **Alternative:** use `./ue`, select the user, and toggle the Validated field to `Y` and set Access Level to 10.
 
@@ -598,7 +619,7 @@ The ban feature sets a user's access level to 0 and marks them as unvalidated, p
 #### How to Ban a User
 
 **Option 1: From Admin User Browser**
-1. Press `X` from MAIN menu to enter Admin menu
+1. Press `%` from MAIN menu to enter Admin menu
 2. Press `E` to run Edit Users (Admin List Users)
 3. Navigate to the user you want to ban
 4. Press `0` to toggle ban status (bans if not banned, or unbans if already banned)
@@ -632,7 +653,7 @@ The soft-delete feature marks users as deleted without removing their data. This
 #### How to Delete a User
 
 **Option 1: From Admin User Browser**
-1. Press `X` from MAIN menu to enter Admin menu
+1. Press `%` from MAIN menu to enter Admin menu
 2. Press `E` to run Edit Users (Admin List Users)
 3. Navigate to the user you want to delete
 4. Press `9` to toggle deletion (marks for delete if not deleted, or undeletes if already deleted)

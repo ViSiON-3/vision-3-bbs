@@ -28,8 +28,11 @@ var knownUnboundHotkeys = map[string]map[string]string{
 		"B": "sample Synchronet door in the shipped art; doors are site-specific and sysops bind their own",
 		"C": "sample Synchronet door in the shipped art; doors are site-specific and sysops bind their own",
 	},
+	// SPONSORM reads its own keys in runSponsorMenu rather than dispatching
+	// through its CFG, so the CFG lists only a subset and the art is the
+	// accurate record. P (reorder areas) is implemented and works.
 	"SPONSORM": {
-		"P": "'Re-Order Sub-Boards' is advertised but not implemented; see issue #176",
+		"P": "handled directly in runSponsorMenu, not dispatched via SPONSORM.CFG",
 	},
 }
 
