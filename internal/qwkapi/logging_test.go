@@ -105,40 +105,86 @@ func TestLog_ProbeRejections(t *testing.T) {
 	logs := captureLogs(t)
 	h := testServer(t, &fakeSvc{}, true)
 
-	noHeader := httptest.NewRequest("POST", "/api/qwk/login", nil)
-	h.ServeHTTP(httptest.NewRecorder(), noHeader)
+	// httptest gives every request RemoteAddr 192.0.2.1:1234, so the logged
+	// remote must be the host half of that.
+	const remote = "192.0.2.1"
 
-	browser := clientReq("GET", "/api/qwk/packet", nil)
-	browser.Header.Set("Sec-Fetch-Mode", "navigate")
-	h.ServeHTTP(httptest.NewRecorder(), browser)
-
-	unknown := clientReq("GET", "/wp-login.php", nil)
-	rrUnknown := httptest.NewRecorder()
-	h.ServeHTTP(rrUnknown, unknown)
-	if rrUnknown.Code != http.StatusNotFound {
-		t.Errorf("unknown path status = %d, want 404", rrUnknown.Code)
+	cases := []struct {
+		name   string
+		reason string
+		method string
+		path   string
+		agent  string
+		req    func(agent string) *http.Request
+	}{
+		{
+			name: "no client header", reason: "noClientHeader",
+			method: "POST", path: "/api/qwk/login", agent: "curl/8.5.0",
+			req: func(agent string) *http.Request {
+				r := httptest.NewRequest("POST", "/api/qwk/login", nil) // no X-V3-Client
+				r.Header.Set("User-Agent", agent)
+				return r
+			},
+		},
+		{
+			name: "browser fetch", reason: "browser",
+			method: "GET", path: "/api/qwk/packet", agent: "Mozilla/5.0",
+			req: func(agent string) *http.Request {
+				r := clientReq("GET", "/api/qwk/packet", nil)
+				r.Header.Set("Sec-Fetch-Mode", "navigate")
+				r.Header.Set("User-Agent", agent)
+				return r
+			},
+		},
+		{
+			name: "html accept", reason: "htmlAccept",
+			method: "GET", path: "/api/qwk/packet", agent: "Mozilla/5.0",
+			req: func(agent string) *http.Request {
+				r := clientReq("GET", "/api/qwk/packet", nil)
+				r.Header.Set("Accept", "text/html,application/xhtml+xml")
+				r.Header.Set("User-Agent", agent)
+				return r
+			},
+		},
+		{
+			name: "unknown path", reason: "unknownPath",
+			method: "GET", path: "/wp-login.php", agent: "zgrab/0.x",
+			req: func(agent string) *http.Request {
+				r := clientReq("GET", "/wp-login.php", nil)
+				r.Header.Set("User-Agent", agent)
+				return r
+			},
+		},
+		{
+			name: "wrong method", reason: "badMethod",
+			method: "GET", path: "/api/qwk/login", agent: "vision3-mobile/1.0",
+			req: func(agent string) *http.Request {
+				r := clientReq("GET", "/api/qwk/login", nil) // login is POST-only
+				r.Header.Set("User-Agent", agent)
+				return r
+			},
+		},
 	}
 
-	badMethod := clientReq("GET", "/api/qwk/login", nil)
-	h.ServeHTTP(httptest.NewRecorder(), badMethod)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, tc.req(tc.agent))
 
-	recs := logs()
-	for _, want := range []map[string]any{
-		{"msg": "qwk api rejected", "reason": "noClientHeader"},
-		{"msg": "qwk api rejected", "reason": "browser"},
-		{"msg": "qwk api rejected", "reason": "unknownPath", "path": "/wp-login.php"},
-		{"msg": "qwk api rejected", "reason": "badMethod", "path": "/api/qwk/login"},
-	} {
-		rec := requireRec(t, recs, want)
-		if rec["level"] != "DEBUG" {
-			t.Errorf("%v level = %v, want DEBUG", want["reason"], rec["level"])
-		}
-		// Every rejection shares one shape, so probe traffic stays correlatable.
-		for _, field := range []string{"remote", "method", "path", "agent"} {
-			if _, ok := rec[field]; !ok {
-				t.Errorf("%v record missing %q field: %v", want["reason"], field, rec)
+			// Every field is matched exactly, so a record carrying the right
+			// keys with wrong or empty values still fails.
+			rec := requireRec(t, logs(), map[string]any{
+				"msg":    "qwk api rejected",
+				"reason": tc.reason,
+				"remote": remote,
+				"method": tc.method,
+				"path":   tc.path,
+				"agent":  tc.agent,
+			})
+			if rec["level"] != "DEBUG" {
+				t.Errorf("level = %v, want DEBUG", rec["level"])
 			}
-		}
+		})
 	}
 }
 
@@ -155,7 +201,8 @@ func TestLog_PathRedirect(t *testing.T) {
 			t.Fatalf("%s status = %d, want a 3xx redirect from the mux", path, rr.Code)
 		}
 		rec := requireRec(t, logs(), map[string]any{
-			"msg": "qwk api rejected", "reason": "pathRedirect", "path": path,
+			"msg": "qwk api rejected", "reason": "pathRedirect",
+			"path": path, "method": "GET", "remote": "192.0.2.1",
 		})
 		if rec["level"] != "DEBUG" {
 			t.Errorf("%s level = %v, want DEBUG", path, rec["level"])
@@ -228,12 +275,10 @@ func TestLog_ServerErrorWriter(t *testing.T) {
 	if rec["level"] != "WARN" {
 		t.Errorf("level = %v, want WARN", rec["level"])
 	}
-	got, _ := rec["error"].(string)
-	if !strings.Contains(got, "TLS handshake error") {
-		t.Errorf("error = %q, want the handshake line", got)
-	}
-	if strings.HasSuffix(got, "\n") || strings.HasSuffix(got, "\r") {
-		t.Errorf("error = %q, want CR and LF trimmed", got)
+	// Full equality, so a handler that dropped the detail after the prefix
+	// would fail rather than pass on a substring match.
+	if got, _ := rec["error"].(string); got != strings.TrimRight(line, "\r\n") {
+		t.Errorf("error = %q, want %q", got, strings.TrimRight(line, "\r\n"))
 	}
 }
 
