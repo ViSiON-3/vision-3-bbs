@@ -79,7 +79,35 @@ func (s *Server) Handler() http.Handler {
 		logProbe(r, "unknownPath")
 		http.NotFound(w, r)
 	})
-	return mux
+	return logRedirects(mux)
+}
+
+// logRedirects records the redirects ServeMux issues for unclean paths
+// ("/api//qwk/login", "/a/../b"). The mux answers those itself, before any
+// registered handler runs — including the catch-all above — so without this
+// wrapper they would be the one class of request that reaches the port and
+// leaves no trace at all.
+func logRedirects(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sr := &statusRecorder{ResponseWriter: w}
+		h.ServeHTTP(sr, r)
+		switch sr.status {
+		case http.StatusMovedPermanently, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+			logProbe(r, "pathRedirect")
+		}
+	})
+}
+
+// statusRecorder remembers the status code written through it. A handler that
+// never calls WriteHeader leaves status at 0, which no case above matches.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
 }
 
 // Start serves HTTPS until Shutdown is called; blocking.

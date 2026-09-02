@@ -85,8 +85,9 @@ Everything the API does goes to the normal BBS log (`data/logs/vision3.log` by
 default, JSON, one record per line) — there is no separate API log file. QWK API
 sessions do **not** appear in Last Callers; that list is for terminal logins.
 
-Every record's `msg` starts with `qwk api`, so `grep '"qwk api'` on the log gives
-you the full picture of API activity.
+Apart from the `QWK API listening` line at startup, every record's `msg` starts
+with `qwk api`, so `grep -i '"qwk api'` on the log gives you the full picture of
+API activity.
 
 | Level | `msg` | When |
 |-------|-------|------|
@@ -100,7 +101,7 @@ you the full picture of API activity.
 | WARN | `qwk api reply` | `outcome=tooLarge` — an upload over the 16 MiB cap. |
 | ERROR | `qwk api build packet` / `qwk api import rep` | A packet failed to build or import. |
 | WARN | `qwk api server` | Connection-level trouble from Go's HTTP server, e.g. `http: TLS handshake error from ...`. |
-| DEBUG | `qwk api rejected` | A request turned away without doing any work: `reason=noClientHeader`, `browser`, `htmlAccept`, `unknownPath`, or `badMethod`. Each carries `remote`, `method`, `path`, and `agent`. |
+| DEBUG | `qwk api rejected` | A request turned away without doing any work: `reason=noClientHeader`, `browser`, `htmlAccept`, `unknownPath`, `badMethod`, or `pathRedirect`. Each carries `remote`, `method`, `path`, and `agent`. |
 
 Failed logins, bad tokens, oversized uploads, and rate-limit trips are all
 recorded at INFO or WARN, so they are visible with the default log level.

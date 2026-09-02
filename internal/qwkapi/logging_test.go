@@ -142,6 +142,27 @@ func TestLog_ProbeRejections(t *testing.T) {
 	}
 }
 
+func TestLog_PathRedirect(t *testing.T) {
+	logs := captureLogs(t)
+	h := testServer(t, &fakeSvc{}, true)
+
+	// ServeMux answers unclean paths with a redirect before any registered
+	// handler runs, so these bypass even the "/" catch-all.
+	for _, path := range []string{"/api//qwk/login", "/scan/../..//wp-admin"} {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, clientReq("GET", path, nil))
+		if rr.Code < 300 || rr.Code > 399 {
+			t.Fatalf("%s status = %d, want a 3xx redirect from the mux", path, rr.Code)
+		}
+		rec := requireRec(t, logs(), map[string]any{
+			"msg": "qwk api rejected", "reason": "pathRedirect", "path": path,
+		})
+		if rec["level"] != "DEBUG" {
+			t.Errorf("%s level = %v, want DEBUG", path, rec["level"])
+		}
+	}
+}
+
 func TestLog_LoginBadJSON(t *testing.T) {
 	logs := captureLogs(t)
 	h := testServer(t, &fakeSvc{}, true)
