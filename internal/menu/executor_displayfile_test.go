@@ -33,7 +33,7 @@ func TestDisplayFile(t *testing.T) {
 
 	t.Run("renders file with pipe codes translated", func(t *testing.T) {
 		ts := newTestSession("")
-		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeAuto); err != nil {
+		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeAuto, 0); err != nil {
 			t.Fatalf("displayFile: %v", err)
 		}
 		out := ts.output()
@@ -47,7 +47,7 @@ func TestDisplayFile(t *testing.T) {
 
 	t.Run("clearFirst prepends clear sequence", func(t *testing.T) {
 		ts := newTestSession("")
-		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeAuto, true); err != nil {
+		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeAuto, 0, true); err != nil {
 			t.Fatalf("displayFile: %v", err)
 		}
 		if !strings.HasPrefix(ts.output(), ansi.ClearScreen()) {
@@ -64,7 +64,7 @@ func TestDisplayFile(t *testing.T) {
 			t.Fatalf("write: %v", err)
 		}
 		ts := newTestSession("")
-		if err := e.displayFile(newTestTerminal(ts), "RAW.ANS", ansi.OutputModeCP437); err != nil {
+		if err := e.displayFile(newTestTerminal(ts), "RAW.ANS", ansi.OutputModeCP437, 0); err != nil {
 			t.Fatalf("displayFile: %v", err)
 		}
 		want := string(ansi.ReplacePipeCodes(raw))
@@ -75,7 +75,7 @@ func TestDisplayFile(t *testing.T) {
 
 	t.Run("missing file returns error and shows load-error string", func(t *testing.T) {
 		ts := newTestSession("")
-		err := e.displayFile(newTestTerminal(ts), "NOPE.ANS", ansi.OutputModeAuto)
+		err := e.displayFile(newTestTerminal(ts), "NOPE.ANS", ansi.OutputModeAuto, 0)
 		if err == nil {
 			t.Fatal("missing file should return an error")
 		}

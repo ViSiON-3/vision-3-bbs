@@ -175,7 +175,15 @@ func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.
 
 // displayFile reads and displays an ANSI file from the MENU SET's ansi directory.
 // If clearFirst is true, prepends the ANSI clear sequence so clear and content go out in one write.
-func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, outputMode ansi.OutputMode, clearFirst ...bool) error {
+//
+// termHeight is the session's negotiated terminal height; pass 0 when it is not
+// known. When it is known, the art's rendered geometry is checked first and a
+// warning is logged if drawing it would scroll the screen. That is worth
+// catching because a scroll shifts the whole image up a row while absolute
+// cursor positioning (BAR lightbar overlays, field coordinates) stays put, so
+// the two silently desynchronise on short terminals — e.g. SyncTERM at 24 rows
+// with its status line showing.
+func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, outputMode ansi.OutputMode, termHeight int, clearFirst ...bool) error {
 	// Construct full path using MenuSetPath
 	filePath := filepath.Join(e.MenuSetPath, "ansi", filename)
 
@@ -202,6 +210,15 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 	// Process pipe codes before output — ANSI escape sequences produced are
 	// ASCII-safe and work correctly in both CP437 and UTF-8 output modes.
 	data = ansi.ReplacePipeCodes(data)
+
+	// Measured from the home position, so this under-reports for art drawn
+	// without clearing first — it warns on art that is too tall no matter where
+	// it starts, and stays quiet otherwise rather than crying wolf.
+	if ansi.ArtOverflowsHeight(data, 80, termHeight) {
+		rows, lastCols := ansi.ArtGeometry(data, 80)
+		slog.Warn("ANSI art extends past the bottom of the terminal and will scroll or be clipped",
+			"file", filename, "termHeight", termHeight, "artRows", rows, "lastRowCols", lastCols)
+	}
 
 	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 	var writeErr error

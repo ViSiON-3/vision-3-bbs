@@ -67,7 +67,7 @@ func runImmediateLogoffCommand(c *cmdCtx, args string) (*user.User, string, erro
 	nodeNumber := c.nodeNumber
 	outputMode := c.outputMode
 
-	if displayErr := e.displayFile(terminal, "GOODBYE.ANS", outputMode); displayErr != nil {
+	if displayErr := e.displayFile(terminal, "GOODBYE.ANS", outputMode, c.termHeight); displayErr != nil {
 		slog.Warn("failed to display GOODBYE.ANS before logoff", "node", nodeNumber, "error", displayErr)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecGoodbye)), outputMode)
 	}

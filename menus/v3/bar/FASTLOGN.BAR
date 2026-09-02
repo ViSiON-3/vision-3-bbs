@@ -2,7 +2,8 @@
 ; with the extension .BAR .. file name must match the ???????.ANS file..
 ; FORMAT: X,Y,HiLitedColor,RegularColor,HotKey,ReturnValue,HiLitedString
 ;
-7,8,31,7,1,1,1. Normal Login
-7,9,31,7,2,2,2. Main Menu
-7,10,31,7,3,3,3. Transfer Menu
-7,11,31,7,4,4,4. Message Menu
+; Coordinates track the selection list baked into FASTLOGN.ANS (rows 14-17, col 30).
+30,14,31,7,1,1,1. Normal Login
+30,15,31,7,2,2,2. Main Menu
+30,16,31,7,3,3,3. Transfer Menu
+30,17,31,7,4,4,4. Message Menu
