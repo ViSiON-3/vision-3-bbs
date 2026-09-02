@@ -97,11 +97,18 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 				GroupLocation: "ViSiON/3",
 				PrivateNote:   "SysOp",
 				PasswordHash:  string(hashedPw),
-				AccessLevel:   10,
-				Validated:     true,
-				TimeLimit:     60,
-				CreatedAt:     now,
-				UpdatedAt:     now,
+				// Sysop level. This account is the only one a fresh install
+				// has, and every sysop function (the ADMIN menu, user
+				// validation) gates on S255, so anything less locks the
+				// operator out of their own board with no in-BBS way back --
+				// raising a level needs the admin menu, which needs the level.
+				// setup.sh and dev-setup.sh already write 255 here; this path
+				// runs when neither did, such as a Docker first start.
+				AccessLevel: 255,
+				Validated:   true,
+				TimeLimit:   60,
+				CreatedAt:   now,
+				UpdatedAt:   now,
 			}
 			um.mu.Lock()
 			um.users[strings.ToLower(defaultUser.Handle)] = defaultUser
