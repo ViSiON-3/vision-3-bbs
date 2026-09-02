@@ -133,6 +133,12 @@ func TestLog_ProbeRejections(t *testing.T) {
 		if rec["level"] != "DEBUG" {
 			t.Errorf("%v level = %v, want DEBUG", want["reason"], rec["level"])
 		}
+		// Every rejection shares one shape, so probe traffic stays correlatable.
+		for _, field := range []string{"remote", "method", "path", "agent"} {
+			if _, ok := rec[field]; !ok {
+				t.Errorf("%v record missing %q field: %v", want["reason"], field, rec)
+			}
+		}
 	}
 }
 
@@ -192,7 +198,7 @@ func TestLog_ReplyRateLimited(t *testing.T) {
 func TestLog_ServerErrorWriter(t *testing.T) {
 	logs := captureLogs(t)
 
-	line := "http: TLS handshake error from 1.2.3.4:5678: remote error: tls: bad certificate\n"
+	line := "http: TLS handshake error from 1.2.3.4:5678: remote error: tls: bad certificate\r\n"
 	n, err := serverErrorWriter{}.Write([]byte(line))
 	if err != nil || n != len(line) {
 		t.Fatalf("Write = (%d, %v), want (%d, nil)", n, err, len(line))
@@ -201,8 +207,12 @@ func TestLog_ServerErrorWriter(t *testing.T) {
 	if rec["level"] != "WARN" {
 		t.Errorf("level = %v, want WARN", rec["level"])
 	}
-	if got, _ := rec["error"].(string); !strings.Contains(got, "TLS handshake error") || strings.HasSuffix(got, "\n") {
-		t.Errorf("error = %q, want the trimmed handshake line", got)
+	got, _ := rec["error"].(string)
+	if !strings.Contains(got, "TLS handshake error") {
+		t.Errorf("error = %q, want the handshake line", got)
+	}
+	if strings.HasSuffix(got, "\n") || strings.HasSuffix(got, "\r") {
+		t.Errorf("error = %q, want CR and LF trimmed", got)
 	}
 }
 

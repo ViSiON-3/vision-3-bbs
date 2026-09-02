@@ -136,6 +136,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 type serverErrorWriter struct{}
 
 func (serverErrorWriter) Write(p []byte) (int, error) {
-	slog.Warn("qwk api server", "error", strings.TrimRight(string(p), "\n"))
+	slog.Warn("qwk api server", "error", strings.TrimRight(string(p), "\r\n"))
 	return len(p), nil
 }

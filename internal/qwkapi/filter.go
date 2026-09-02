@@ -37,10 +37,12 @@ func clientRejectReason(r *http.Request) string {
 	return ""
 }
 
-// logProbe records a request rejected before it reached a handler. A public
-// port collects constant scanner traffic, so this sits at DEBUG: a sysop turns
-// the log level down to investigate rather than having every probe flood the
-// normal log.
+// logProbe records a request the API turned away without doing any work —
+// filtered by requireClient, aimed at an unknown path, or using the wrong method
+// on a real endpoint. Every such record shares one shape so probe traffic can be
+// correlated. A public port collects constant scanner traffic, so this sits at
+// DEBUG: a sysop turns the log level down to investigate rather than having
+// every probe flood the normal log.
 func logProbe(r *http.Request, reason string) {
 	slog.Debug("qwk api rejected",
 		"remote", clientIP(r), "method", r.Method, "path", r.URL.Path,

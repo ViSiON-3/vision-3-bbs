@@ -91,7 +91,7 @@ you the full picture of API activity.
 | Level | `msg` | When |
 |-------|-------|------|
 | INFO | `QWK API listening` | Startup: listen address and TLS cert fingerprint. |
-| INFO | `qwk api login` | `outcome=success` / `outcome=fail` / `outcome=badRequest`, with `handle` and `remote`. |
+| INFO | `qwk api login` | `outcome=success` / `outcome=fail`, with `handle` and `remote`. A malformed body logs `outcome=badRequest` with `remote` and `error` but **no** `handle` — on a decode failure that field may be partial or hold the password. |
 | WARN | `qwk api login` | `outcome=rateLimited` — too many login attempts from one IP. |
 | ERROR | `qwk api login: token issue failed` | The server could not mint a token. |
 | INFO | `qwk api auth` | `outcome=noToken` / `outcome=badToken` — a request with a missing, invalid, or expired bearer token. |
@@ -100,7 +100,7 @@ you the full picture of API activity.
 | WARN | `qwk api reply` | `outcome=tooLarge` — an upload over the 16 MiB cap. |
 | ERROR | `qwk api build packet` / `qwk api import rep` | A packet failed to build or import. |
 | WARN | `qwk api server` | Connection-level trouble from Go's HTTP server, e.g. `http: TLS handshake error from ...`. |
-| DEBUG | `qwk api rejected` | A request turned away before any handler: `reason=noClientHeader`, `browser`, `htmlAccept`, `unknownPath`, or `badMethod`. |
+| DEBUG | `qwk api rejected` | A request turned away without doing any work: `reason=noClientHeader`, `browser`, `htmlAccept`, `unknownPath`, or `badMethod`. Each carries `remote`, `method`, `path`, and `agent`. |
 
 Failed logins, bad tokens, oversized uploads, and rate-limit trips are all
 recorded at INFO or WARN, so they are visible with the default log level.

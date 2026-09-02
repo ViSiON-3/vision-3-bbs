@@ -13,7 +13,7 @@ import (
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		logBadMethod(r)
+		logProbe(r, "badMethod")
 		writeError(w, http.StatusMethodNotAllowed, "method", "POST required")
 		return
 	}
@@ -52,7 +52,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		logBadMethod(r)
+		logProbe(r, "badMethod")
 		writeError(w, http.StatusMethodNotAllowed, "method", "GET required")
 		return
 	}
@@ -98,7 +98,7 @@ func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		logBadMethod(r)
+		logProbe(r, "badMethod")
 		writeError(w, http.StatusMethodNotAllowed, "method", "POST required")
 		return
 	}
@@ -145,11 +145,4 @@ func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 	slog.Info("qwk api reply", "handle", u.Handle, "remote", clientIP(r),
 		"posted", res.Posted, "skipped", res.Skipped, "duplicate", res.Duplicate)
 	writeJSON(w, http.StatusOK, replyResponse{Posted: res.Posted, Skipped: res.Skipped, Duplicate: res.Duplicate})
-}
-
-// logBadMethod records a request that reached a real endpoint with the wrong
-// HTTP method — a client bug or a probe, not a normal event.
-func logBadMethod(r *http.Request) {
-	slog.Debug("qwk api rejected",
-		"remote", clientIP(r), "method", r.Method, "path", r.URL.Path, "reason", "badMethod")
 }
