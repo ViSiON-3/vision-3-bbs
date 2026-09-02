@@ -64,8 +64,13 @@ func TestNewUserManager_EmptyDir_CreatesDefault(t *testing.T) {
 	if u.Handle != "Felonius" {
 		t.Errorf("expected handle Felonius, got %q", u.Handle)
 	}
-	if u.AccessLevel != 10 {
-		t.Errorf("expected access level 10, got %d", u.AccessLevel)
+	// Must be sysop level: this is the only account a fresh install has, and
+	// the ADMIN menu and user validation both gate on S255. Anything less
+	// locks the operator out of their own board, with no in-BBS way to raise
+	// it. Keep in step with the users.json that setup.sh and dev-setup.sh
+	// write, which has always used 255.
+	if u.AccessLevel != 255 {
+		t.Errorf("expected default sysop access level 255, got %d", u.AccessLevel)
 	}
 	if !u.Validated {
 		t.Error("expected default user to be validated")

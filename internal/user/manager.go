@@ -97,11 +97,18 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 				GroupLocation: "ViSiON/3",
 				PrivateNote:   "SysOp",
 				PasswordHash:  string(hashedPw),
-				AccessLevel:   10,
-				Validated:     true,
-				TimeLimit:     60,
-				CreatedAt:     now,
-				UpdatedAt:     now,
+				// Sysop level. This account is the only one a fresh install
+				// has, and every sysop function (the ADMIN menu, user
+				// validation) gates on S255, so anything less locks the
+				// operator out of their own board with no in-BBS way back --
+				// raising a level needs the admin menu, which needs the level.
+				// setup.sh and dev-setup.sh already write 255 here; this path
+				// runs when neither did, such as a Docker first start.
+				AccessLevel: 255,
+				Validated:   true,
+				TimeLimit:   60,
+				CreatedAt:   now,
+				UpdatedAt:   now,
 			}
 			um.mu.Lock()
 			um.users[strings.ToLower(defaultUser.Handle)] = defaultUser
@@ -111,7 +118,12 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 			if saveErr != nil {
 				return nil, fmt.Errorf("failed to save default felonius user: %w", saveErr)
 			}
-			slog.Info("default felonius user created (felonius/password)")
+			// Warn, not Info: this account has a published default password
+			// and now holds sysop rights, so the operator needs to see this on
+			// a first start they may not be watching closely.
+			slog.Warn("created default sysop account with the published default password — change it now",
+				"handle", defaultUser.Handle, "password", "password", "accessLevel", defaultUser.AccessLevel,
+				"how", "log in and use the change-password option, or run ./ue")
 			// Determine next user ID after creating the default user
 			um.determineNextUserID()
 			return um, nil // Return successfully after creating default
