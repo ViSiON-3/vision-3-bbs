@@ -5,8 +5,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,6 +73,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/qwk/login", requireClient(s.handleLogin))
 	mux.HandleFunc("/api/qwk/packet", requireClient(s.tokens.requireBearer(s.handlePacket)))
 	mux.HandleFunc("/api/qwk/reply", requireClient(s.tokens.requireBearer(s.handleReply)))
+	// Catch-all so requests to unknown paths are visible too; without it the
+	// mux's own 404 would leave scanner traffic entirely unrecorded.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		logProbe(r, "unknownPath")
+		http.NotFound(w, r)
+	})
 	return mux
 }
 
@@ -80,6 +88,10 @@ func (s *Server) Start() error {
 		Addr:      s.deps.Config.ListenAddr(),
 		Handler:   s.Handler(),
 		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.cert}},
+		// Route net/http's own connection-level errors (TLS handshake failures,
+		// malformed requests) through slog instead of the stdlib log bridge, so
+		// they land in the rolling log as structured records like everything else.
+		ErrorLog: log.New(serverErrorWriter{}, "", 0),
 	}
 	slog.Info("QWK API listening", "addr", s.deps.Config.ListenAddr(), "fingerprint", s.fingerprint)
 	go s.sweepLoop()
@@ -116,4 +128,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	return s.httpSrv.Shutdown(ctx)
+}
+
+// serverErrorWriter adapts http.Server's stdlib logger to slog. Each line net/http
+// writes (e.g. "http: TLS handshake error from 1.2.3.4:5678: ...") becomes one
+// WARN record: these are connection-level problems, not BBS-level failures.
+type serverErrorWriter struct{}
+
+func (serverErrorWriter) Write(p []byte) (int, error) {
+	slog.Warn("qwk api server", "error", strings.TrimRight(string(p), "\n"))
+	return len(p), nil
 }

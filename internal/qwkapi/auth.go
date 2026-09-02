@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -101,11 +102,15 @@ func (ts *tokenStore) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 		auth := r.Header.Get("Authorization")
 		tok := strings.TrimPrefix(auth, "Bearer ")
 		if tok == auth || tok == "" {
+			slog.Info("qwk api auth", "remote", clientIP(r), "path", r.URL.Path, "outcome", "noToken")
 			writeError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
 			return
 		}
 		u, ok := ts.Resolve(tok)
 		if !ok {
+			// Routine after a restart (tokens are in-memory), but also what a
+			// forged or replayed token looks like, so it is always recorded.
+			slog.Info("qwk api auth", "remote", clientIP(r), "path", r.URL.Path, "outcome", "badToken")
 			writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
 			return
 		}
