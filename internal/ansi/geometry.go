@@ -3,10 +3,12 @@ package ansi
 // ArtGeometry reports the screen geometry ANSI art occupies when written to a
 // terminal `width` columns wide.
 //
-// rows is the lowest 1-based screen row the cursor reaches, including the row it
-// is pushed onto by the autowrap that follows a character written in the final
-// column, or by a trailing line feed. lastRowCols is the number of columns
-// occupied on the last row that actually received a printable character.
+// rows is the lowest 1-based screen row the art actually reaches — one that
+// receives a character, or that the cursor is pushed onto by the autowrap
+// following a character in the final column, or by a line feed. Bare cursor
+// positioning is deliberately not counted, because terminals clamp a CUP past
+// the bottom row instead of scrolling to it. lastRowCols is the number of
+// columns occupied on the last row that received a printable character.
 //
 // Art authored without CR/LF relies entirely on autowrap for its line breaks, so
 // filling the last column of its last row advances the cursor one row further
@@ -61,6 +63,14 @@ func ArtGeometry(data []byte, width int) (rows, lastRowCols int) {
 		if y < 1 {
 			y = 1
 		}
+	}
+
+	// touch records a row as reached. Only output and the cursor motion that
+	// scrolls a terminal — printing, autowrap, line feed — counts. Bare
+	// positioning does not: terminals clamp a CUP past the bottom row rather
+	// than scrolling to it, so counting it would warn about art that renders
+	// perfectly well.
+	touch := func() {
 		if y > maxRow {
 			maxRow = y
 		}
@@ -126,6 +136,7 @@ func ArtGeometry(data []byte, width int) (rows, lastRowCols int) {
 		case b == '\n':
 			y++
 			clamp()
+			touch()
 
 		case b == '\r':
 			x = 1
@@ -142,19 +153,19 @@ func ArtGeometry(data []byte, width int) (rows, lastRowCols int) {
 			// no-op
 
 		default: // printable — CP437 art is single-width, one byte per cell
-			if x > lastPrintedCol || y > lastPrintedRow {
-				if y > lastPrintedRow {
-					lastPrintedRow, lastPrintedCol = y, x
-				} else {
-					lastPrintedCol = x
-				}
-			}
 			clamp()
+			touch()
+			if y > lastPrintedRow {
+				lastPrintedRow, lastPrintedCol = y, x
+			} else if x > lastPrintedCol {
+				lastPrintedCol = x
+			}
 			x++
 			if x > width { // autowrap
 				x = 1
 				y++
 				clamp()
+				touch()
 			}
 		}
 	}
@@ -166,11 +177,10 @@ func ArtGeometry(data []byte, width int) (rows, lastRowCols int) {
 // terminal would take the cursor past the bottom row, so the art either scrolls
 // the screen or is clipped at the bottom.
 //
-// The answer is a lower bound in two respects, both of which cost a missed
-// warning rather than a false one. The art is measured from the home position,
-// so art drawn without clearing first starts lower down and can overflow
-// without being reported; and art that only overshoots via absolute
-// positioning is clamped rather than scrolled by most terminals.
+// The answer is a lower bound: the art is measured from the home position, so
+// art drawn without clearing first starts lower down and can overflow without
+// being reported. That direction is deliberate — a diagnostic that cries wolf
+// is one sysops learn to ignore.
 func ArtOverflowsHeight(data []byte, width, height int) bool {
 	if height <= 0 {
 		return false // height unknown — nothing to check against

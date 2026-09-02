@@ -128,6 +128,29 @@ func TestArtGeometry(t *testing.T) {
 			wantRows: 2,
 			wantCols: 80,
 		},
+		{
+			// Terminals clamp a CUP past the bottom row rather than scrolling
+			// to it, so parking the cursor low must not report a tall image.
+			name:     "cursor positioning alone does not claim a row",
+			data:     []byte("hi\x1b[25;1H"),
+			width:    80,
+			wantRows: 1,
+			wantCols: 2,
+		},
+		{
+			name:     "cursor positioning claims a row once something prints there",
+			data:     []byte("hi\x1b[25;1Hx"),
+			width:    80,
+			wantRows: 25,
+			wantCols: 1,
+		},
+		{
+			name:     "line feeds past the bottom do claim a row, since they scroll",
+			data:     []byte("hi\n\n\n"),
+			width:    80,
+			wantRows: 4,
+			wantCols: 2,
+		},
 	}
 
 	for _, tc := range tests {
@@ -151,6 +174,12 @@ func TestArtOverflowsHeight(t *testing.T) {
 	}
 	if ArtOverflowsHeight(full24, 80, 0) {
 		t.Error("unknown height should never report an overflow")
+	}
+
+	// Art that merely parks the cursor at the bottom of a 25-row layout is
+	// clamped by the terminal, not scrolled, and must not warn.
+	if ArtOverflowsHeight([]byte("art\x1b[25;1H"), 80, 24) {
+		t.Error("cursor positioning alone should not report an overflow")
 	}
 }
 
