@@ -96,18 +96,29 @@ func (s *ftnWizardState) unsubscribedTagCount() int {
 	if s == nil || len(s.subscribedTags) == 0 {
 		return 0
 	}
-	stillSelected := make(map[string]bool, len(s.availableAreas))
-	for i, sel := range s.selectedAreas {
-		if sel && i < len(s.availableAreas) {
-			stillSelected[strings.ToUpper(s.availableAreas[i].Tag)] = true
-		}
-	}
 	// Without a downloaded echolist nothing was reviewed, so nothing dropped.
 	if !s.areasFetched {
 		return 0
 	}
+
+	available := make(map[string]bool, len(s.availableAreas))
+	stillSelected := make(map[string]bool, len(s.availableAreas))
+	for i, area := range s.availableAreas {
+		tag := strings.ToUpper(area.Tag)
+		available[tag] = true
+		if i < len(s.selectedAreas) && s.selectedAreas[i] {
+			stillSelected[tag] = true
+		}
+	}
+
 	n := 0
 	for tag := range s.subscribedTags {
+		// A tag the echolist no longer offers could not have been unticked,
+		// so it was not a decision the operator made and must not be
+		// reported as one. The area is still configured and still works.
+		if !available[tag] {
+			continue
+		}
 		if !stillSelected[tag] {
 			n++
 		}

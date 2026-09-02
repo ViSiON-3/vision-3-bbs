@@ -1,6 +1,8 @@
 package configeditor
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -202,5 +204,82 @@ func TestConfirmFTNWizardAddRefusesDuplicate(t *testing.T) {
 	}
 	if !strings.Contains(m.message, "edit") {
 		t.Errorf("message = %q, should point the sysop at editing", m.message)
+	}
+}
+
+// TestConfirmFTNWizardEditUpdatesAreaOriginAddr covers changing your own FTN
+// address on an existing network. Areas carry the origin they were created
+// with and createFTNMsgAreaIfNeeded leaves existing ones alone, so without an
+// explicit update every area would keep stamping outbound mail with the old
+// address while ftn.json showed the new one.
+func TestConfirmFTNWizardEditUpdatesAreaOriginAddr(t *testing.T) {
+	m, _ := configuredModel().startFTNWizardEdit("fsxnet")
+	for i := range m.configs.MsgAreas {
+		m.configs.MsgAreas[i].OriginAddr = "21:4/158"
+	}
+	m.ftnWizard.ownAddress = "21:4/159"
+	m.configPath = t.TempDir()
+
+	m, _ = m.confirmFTNWizard()
+
+	for _, area := range m.configs.MsgAreas {
+		if !strings.EqualFold(area.Network, "fsxnet") {
+			continue
+		}
+		if area.OriginAddr != "21:4/159" {
+			t.Errorf("area %s OriginAddr = %q, want the edited address", area.Tag, area.OriginAddr)
+		}
+	}
+}
+
+// TestConfirmFTNWizardKeepsBinkdWarning makes sure a binkd.conf failure is not
+// buried by the success message. Telling the operator to restart when the
+// mailer never got the new details is worse than saying nothing.
+func TestConfirmFTNWizardKeepsBinkdWarning(t *testing.T) {
+	m, _ := configuredModel().startFTNWizardEdit("fsxnet")
+
+	// configPath must be writable so the config save succeeds and we reach the
+	// success message -- that is the path the warning used to be lost on.
+	// binkd.conf resolves to configPath/../data/ftn/binkd.conf, so making
+	// "data" a regular file fails only the binkd write.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "configs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "data"), []byte("not a directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m.configPath = filepath.Join(dir, "configs")
+
+	m, _ = m.confirmFTNWizard()
+
+	if strings.HasPrefix(m.message, "SAVE ERROR") {
+		t.Fatalf("config save failed, so this did not exercise the success path: %q", m.message)
+	}
+	if !strings.Contains(m.message, "updated") {
+		t.Errorf("message = %q, want the success result retained", m.message)
+	}
+	if !strings.Contains(m.message, "binkd.conf update failed") {
+		t.Errorf("message = %q, want the binkd warning kept alongside the success result", m.message)
+	}
+}
+
+// TestUnsubscribedTagCountIgnoresAreasAbsentFromEcholist: an area the echolist
+// no longer offers cannot be unticked, so it was never the operator's decision
+// and must not be reported as one.
+func TestUnsubscribedTagCountIgnoresAreasAbsentFromEcholist(t *testing.T) {
+	w := &ftnWizardState{
+		subscribedTags: map[string]bool{"FSX_GEN": true, "FSX_RETIRED": true},
+		areasFetched:   true,
+		availableAreas: []ftn.EchoArea{{Tag: "FSX_GEN"}},
+		selectedAreas:  []bool{true},
+	}
+	if n := w.unsubscribedTagCount(); n != 0 {
+		t.Errorf("dropped = %d, want 0 — FSX_RETIRED is not in the echolist so it was never unticked", n)
+	}
+
+	w.selectedAreas = []bool{false}
+	if n := w.unsubscribedTagCount(); n != 1 {
+		t.Errorf("dropped = %d, want 1 — FSX_GEN was offered and unticked", n)
 	}
 }

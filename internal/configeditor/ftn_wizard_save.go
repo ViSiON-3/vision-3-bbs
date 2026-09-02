@@ -79,6 +79,16 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		existing.OwnAddress = w.ownAddress
 		existing.Links = replaceHubLink(existing.Links, link)
 		m.configs.FTN.Networks[netKey] = existing
+
+		// Areas carry the origin address they were created with, and
+		// createFTNMsgAreaIfNeeded leaves existing ones alone. Without this,
+		// editing the address updates ftn.json while every area keeps stamping
+		// outbound mail with the old one.
+		for i := range m.configs.MsgAreas {
+			if strings.EqualFold(m.configs.MsgAreas[i].Network, netKey) {
+				m.configs.MsgAreas[i].OriginAddr = w.ownAddress
+			}
+		}
 	} else {
 		m.configs.FTN.Networks[netKey] = config.FTNNetworkConfig{
 			InternalTosserEnabled: true,
@@ -162,9 +172,12 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 			NetworkName: w.networkName,
 		},
 	}
+	// Non-fatal: binkd.conf update is best-effort, but the operator has to be
+	// told, because the final status below otherwise says "restart to
+	// activate" for a mailer that never got the new details.
+	binkdWarning := ""
 	if err := ftn.UpdateBinkdConf(binkdPath, binkdCfg); err != nil {
-		// Non-fatal: binkd.conf update is best-effort.
-		m.message = fmt.Sprintf("Warning: binkd.conf update failed: %v (network saved OK)", err)
+		binkdWarning = fmt.Sprintf(" Warning: binkd.conf update failed: %v — fix it before restarting.", err)
 	}
 
 	// 6. Wire scheduler events for mail flow (hub poll + supporting events).
@@ -174,6 +187,7 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 	m.dirty = true
 	m.saveAll()
 	if strings.HasPrefix(m.message, "SAVE ERROR") {
+		m.message += binkdWarning
 		return m, nil
 	}
 
@@ -194,6 +208,7 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 	} else {
 		m.message = fmt.Sprintf("FTN network %q saved — %d area(s) created. Restart BBS to activate.", w.networkName, selectedCount)
 	}
+	m.message += binkdWarning
 	m.mode = modeCategoryMenu
 	return m, nil
 }

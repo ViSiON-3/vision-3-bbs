@@ -30,9 +30,10 @@ func (m Model) viewFTNWizardPicker() string {
 
 			hub := "(no link configured)"
 			if len(net.Links) > 0 {
-				hub = net.Links[0].Hostname
-				if net.Links[0].Port > 0 {
-					hub = fmt.Sprintf("%s:%d", hub, net.Links[0].Port)
+				if hp := net.Links[0].HostPort(); hp != "" {
+					hub = hp
+				} else {
+					hub = "(no hostname)"
 				}
 			}
 
@@ -57,8 +58,14 @@ func (m Model) viewFTNWizardPicker() string {
 
 		if len(net.Links) > 0 {
 			link := net.Links[0]
+			// HostPort fills in the default port, so an unset one reads as
+			// 24554 rather than the ":0" a raw Port would print.
+			where := link.HostPort()
+			if where == "" {
+				where = "(no hostname)"
+			}
 			lb.row(editInfoValueStyle.Render(padRight(
-				fmt.Sprintf("  Hub: %s at %s:%d", link.Address, link.Hostname, link.Port), boxW)))
+				fmt.Sprintf("  Hub: %s at %s", link.Address, where), boxW)))
 		} else {
 			lb.row(editInfoValueStyle.Render(padRight("  Hub: none configured", boxW)))
 		}
