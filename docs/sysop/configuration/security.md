@@ -109,6 +109,13 @@ correctly-pluralized noun ("time" for a count of 1, "times" otherwise), so
 custom art always reflects the current configuration and renders grammatically
 correct prompts instead of hardcoding values that can drift out of sync.
 
+Because the substituted text is rarely the same width as the tokens it
+replaces, a line that ends in a box border (any trailing run of frame
+characters, such as `|`, separated from the text by a space) is re-padded in
+the gap before that border, so framed art stays square whatever the configured
+key and press count render as. Lines that simply end in words — the built-in
+fallback prompt, for example — are left exactly as substituted.
+
 ### Connection-Rate Limiter
 
 The connection-rate limiter closes a gap the existing

@@ -126,15 +126,123 @@ func substituteCountdown(prompt []byte, seconds, width int) []byte {
 // respectively. This allows custom gate art (and the built-in fallback) to
 // render the configured challenge key and required press count without
 // drifting from config. Any "##" countdown field is left untouched.
+//
+// Substitution is done line by line so a line whose width changed can be
+// re-padded against a trailing box border (see realignBorder), keeping framed
+// art square no matter how wide the configured key and press count render.
 func substituteGateTokens(prompt []byte, keyDisplay string, presses int) []byte {
-	out := bytes.ReplaceAll(prompt, []byte("{KEY}"), []byte(keyDisplay))
-	out = bytes.ReplaceAll(out, []byte("{PRESSES}"), []byte(strconv.Itoa(presses)))
 	timesWord := "times"
 	if presses == 1 {
 		timesWord = "time"
 	}
-	out = bytes.ReplaceAll(out, []byte("{TIMES}"), []byte(timesWord))
+	lines := bytes.SplitAfter(prompt, []byte("\n"))
+	for i, line := range lines {
+		out := bytes.ReplaceAll(line, []byte("{KEY}"), []byte(keyDisplay))
+		out = bytes.ReplaceAll(out, []byte("{PRESSES}"), []byte(strconv.Itoa(presses)))
+		out = bytes.ReplaceAll(out, []byte("{TIMES}"), []byte(timesWord))
+		if len(out) != len(line) {
+			out = realignBorder(out, len(line)-len(out))
+		}
+		lines[i] = out
+	}
+	return bytes.Join(lines, nil)
+}
+
+// realignBorder restores a substituted line to its original width by adding
+// (delta > 0) or absorbing (delta < 0) spaces in the gap in front of the
+// line's trailing border decoration, so art like
+//
+//	| Press {KEY} {PRESSES} {TIMES} if you're not a bot. |
+//
+// keeps its right-hand border in the same column after the tokens shrink. The
+// trailing run is only treated as a border when it is made purely of frame
+// characters (no letters or digits) and a space separates it from the text, so
+// a plain sentence line — the built-in fallback prompt, for instance — is
+// returned untouched rather than gaining a gap mid-sentence. Color codes are
+// not text: escape sequences trailing the border (a closing reset, say) or
+// colouring it are skipped when looking for the border.
+func realignBorder(line []byte, delta int) []byte {
+	body := line
+	for len(body) > 0 && (body[len(body)-1] == '\n' || body[len(body)-1] == '\r') {
+		body = body[:len(body)-1]
+	}
+	tail := trimGateTail(body) // trailing escape sequences and spaces, kept as-is
+	suffix := line[len(body)-len(tail):]
+	body = body[:len(body)-len(tail)]
+
+	border := len(body)
+	for border > 0 && !isGateSpace(body[border-1]) {
+		border--
+	}
+	if border == len(body) || border == 0 || !isGateBorder(body[border:]) {
+		return line // no trailing border to align against
+	}
+	gap := border
+	for gap > 0 && isGateSpace(body[gap-1]) {
+		gap--
+	}
+
+	pad := delta
+	if pad < 0 {
+		if avail := border - gap; -pad > avail {
+			pad = -avail // line outgrew its gap; close it up as far as it goes
+		}
+	}
+
+	out := make([]byte, 0, len(line)+pad)
+	out = append(out, body[:border]...)
+	if pad > 0 {
+		out = append(out, bytes.Repeat([]byte{' '}, pad)...)
+	} else {
+		out = out[:len(out)+pad]
+	}
+	out = append(out, body[border:]...)
+	out = append(out, suffix...)
 	return out
+}
+
+func isGateSpace(b byte) bool { return b == ' ' || b == '\t' }
+
+// trimGateTail returns the run of escape sequences and spaces at the end of
+// body — everything past the last visible character — so border detection can
+// look at the border itself rather than at a trailing reset code.
+func trimGateTail(body []byte) []byte {
+	end := len(body)
+	for end > 0 {
+		if isGateSpace(body[end-1]) {
+			end--
+			continue
+		}
+		esc := bytes.LastIndexByte(body[:end], 0x1B)
+		if esc < 0 || esc+escapeSeqLen(body[esc:end]) != end {
+			break
+		}
+		end = esc
+	}
+	return body[end:]
+}
+
+// isGateBorder reports whether run is a frame decoration rather than words:
+// no ASCII letters or digits, and no sentence punctuation, which keeps text
+// ending in "." or "!" from being mistaken for a border. Escape sequences
+// within the run (a color set on the border) are ignored.
+func isGateBorder(run []byte) bool {
+	visible := 0
+	for i := 0; i < len(run); i++ {
+		b := run[i]
+		if b == 0x1B {
+			i += escapeSeqLen(run[i:]) - 1 // -1: the loop's i++ passes the last byte
+			continue
+		}
+		switch {
+		case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9':
+			return false
+		case b == '.' || b == ',' || b == '!' || b == '?' || b == ';' || b == '\'' || b == '"':
+			return false
+		}
+		visible++
+	}
+	return visible > 0
 }
 
 // challengeInput is the subset of editor.InputHandler the loop needs.
