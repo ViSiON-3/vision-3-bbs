@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -46,11 +47,8 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		numMsgs = cnt
 	}
 
-	hiColor := e.Theme.YesNoHighlightColor
-	loColor := e.Theme.YesNoRegularColor
-
 	// Show scan setup menu
-	scanCfg, err := runGetScanType(reader, e, terminal, outputMode, numMsgs, currentOnly, hiColor, loColor)
+	scanCfg, err := runGetScanType(scanIH, e, terminal, outputMode, numMsgs, currentOnly)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
@@ -60,6 +58,14 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	if scanCfg.Aborted {
 		return nil, "", nil
 	}
+
+	hiColor := e.Theme.YesNoHighlightColor
+	loColor := e.Theme.YesNoRegularColor
+
+	// Per-message To/From/date/range filter (nil for a plain newscan). The
+	// reader and its message list both apply it, so navigation never lands on
+	// a message the scan settings exclude.
+	msgFilter := scanCfg.filter()
 
 	// Display "Scanning Messages..."
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
@@ -84,6 +90,16 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		}
 
 		startMsg := determineStartMessage(e, scanCfg, currentAreaID, currentUser.Handle, totalCount)
+		if startMsg > totalCount {
+			// Same outcome as the multi-area scan: a search that matched
+			// nothing says so, a plain newscan with nothing new completes.
+			if msgFilter != nil {
+				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
+			} else {
+				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanComplete)
+			}
+			return nil, "", nil
+		}
 
 		// Get terminal dimensions: prefer passed params, then user preferences, then defaults
 		tw := termWidth
@@ -101,8 +117,10 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			th = 24
 		}
 
+		restoreLastRead := preserveLastRead(e, scanCfg, currentAreaID, currentUser.Handle, nodeNumber)
 		_, action, readErr := runMessageReader(e, s, terminal, userManager, currentUser,
-			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, nil)
+			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, msgFilter)
+		restoreLastRead()
 		if readErr != nil || action == "LOGOFF" {
 			return nil, "LOGOFF", readErr
 		}
@@ -139,7 +157,20 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		}
 	}
 
+	// With "Update NewScan Pointers: No", every area's last-read pointer is
+	// put back once that area is finished with, whatever path (read, jump,
+	// skip, quit, disconnect) finished it.
+	restoreLastRead := func() {}
+	defer func() { restoreLastRead() }()
+
+	// scannedAny records whether any area had a qualifying message, so a
+	// filtered scan that skipped every area can say "no matches" rather
+	// than "complete".
+	scannedAny := false
+
 	for _, area := range allAreas {
+		restoreLastRead()
+		restoreLastRead = func() {}
 		if quitNewScan {
 			break
 		}
@@ -168,6 +199,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		if startMsg > totalCount {
 			continue // No messages to show for this area
 		}
+		scannedAny = true
 
 		// Resolve terminal dimensions once per iteration: prefer passed params, then user prefs, then defaults
 		tw := termWidth
@@ -189,6 +221,8 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		currentUser.CurrentMessageAreaID = area.ID
 		currentUser.CurrentMessageAreaTag = area.Tag
 		e.setUserMsgConference(currentUser, area.ConferenceID)
+
+		restoreLastRead = preserveLastRead(e, scanCfg, area.ID, currentUser.Handle, nodeNumber)
 
 		// Clear screen before showing area progress to avoid overwriting
 		// the message reader's separator/lightbar left on screen.
@@ -254,7 +288,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		// Read messages in this area
 		_, action, readErr := runMessageReader(e, s, terminal, userManager, currentUser,
-			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, nil)
+			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, msgFilter)
 		if readErr != nil || action == "LOGOFF" {
 			return nil, "LOGOFF", readErr
 		}
@@ -281,8 +315,11 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		slog.Error("failed to restore user area after newscan", "node", nodeNumber, "error", err)
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanComplete)), outputMode)
-	time.Sleep(1 * time.Second)
+	if msgFilter != nil && !scannedAny {
+		showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
+	} else {
+		showScanNotice(terminal, outputMode, e.LoadedStrings.ScanComplete)
+	}
 
 	return currentUser, "", nil
 }
@@ -305,7 +342,6 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	}
 
 	scanIH := getSessionIH(s)
-	reader := bufio.NewReader(scanIH)
 
 	cancel := func() (*user.User, string, error) {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.UpdatePtrsCancelled)), outputMode)
@@ -315,7 +351,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 
 	// Prompt for target date
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.UpdatePtrsDatePrompt)), outputMode)
-	dateInput, err := readLineInput(reader, terminal, outputMode, 10)
+	dateInput, err := readScanLine(scanIH, terminal, outputMode, 10)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
@@ -339,8 +375,9 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	case 'N':
 		scanDate = -2 // none new — mark all read
 	default:
-		t, tErr := time.Parse("01/02/06", dateInput)
-		if tErr != nil {
+		t, ok := parseScanDate(dateInput)
+		if !ok {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanInvalidDate)), outputMode)
 			return cancel()
 		}
 		scanDate = t.Unix()
@@ -348,7 +385,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 
 	// Prompt for scope: current conference or all
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.UpdatePtrsScopePrompt)), outputMode)
-	scopeKey, keyErr := readSingleKey(reader)
+	scopeKey, keyErr := scanIH.ReadKey()
 	if keyErr != nil {
 		if errors.Is(keyErr, io.EOF) {
 			return nil, "LOGOFF", io.EOF
@@ -357,11 +394,11 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	}
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 
-	if unicode.ToUpper(scopeKey) == rune(0x1B) { // ESC
+	if scopeKey == editor.KeyEsc {
 		return cancel()
 	}
 
-	allConferences := unicode.ToUpper(scopeKey) == 'A'
+	allConferences := scopeKey <= 0x7F && unicode.ToUpper(rune(scopeKey)) == 'A'
 
 	// Iterate areas and update pointers
 	allAreas := e.MessageMgr.ListAreas()
@@ -421,19 +458,71 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	return currentUser, "", nil
 }
 
-// determineStartMessage calculates the starting message number based on scan config.
+// preserveLastRead snapshots the user's last-read pointer for an area and
+// returns a func that puts it back. The reader advances the pointer as it
+// displays messages (and Jump sets it directly), so when the scan was
+// configured with "Update NewScan Pointers: No" this is what makes that
+// setting true. With pointer updates enabled the returned func is a no-op.
+func preserveLastRead(e *MenuExecutor, cfg *ScanConfig, areaID int, username string, nodeNumber int) func() {
+	if cfg.UpdatePointers {
+		return func() {}
+	}
+	orig, err := e.MessageMgr.GetLastRead(areaID, username)
+	if err != nil {
+		slog.Warn("failed to snapshot lastread; pointer may advance despite update=no",
+			"node", nodeNumber, "area", areaID, "error", err)
+		return func() {}
+	}
+	return func() {
+		if err := e.MessageMgr.SetLastRead(areaID, username, orig); err != nil {
+			slog.Error("failed to restore lastread", "node", nodeNumber, "area", areaID, "error", err)
+		}
+	}
+}
+
+// determineStartMessage calculates the starting message number based on scan
+// config: the first message that is inside the range, past the last-read
+// pointer (new-only) or on/after the scan date, AND matches any To/From
+// search. It returns totalCount+1 when nothing in the area qualifies, which
+// callers treat as "skip this area".
 func determineStartMessage(e *MenuExecutor, cfg *ScanConfig, areaID int, username string, totalCount int) int {
+	start := scanBaseStart(e, cfg, areaID, username, totalCount)
+	if start > totalCount {
+		return totalCount + 1
+	}
+
+	filter := cfg.filter()
+	if filter == nil {
+		return start
+	}
+	end := totalCount
+	if cfg.RangeEnd > 0 && cfg.RangeEnd < end {
+		end = cfg.RangeEnd
+	}
+	for i := start; i <= end; i++ {
+		msg, err := e.MessageMgr.GetMessage(areaID, i)
+		if err != nil || msg.IsDeleted {
+			continue
+		}
+		if filter(msg) {
+			return i
+		}
+	}
+	return totalCount + 1
+}
+
+// scanBaseStart returns where the scan would begin before any To/From
+// matching: the range start, message 1 (all), the first unread message
+// (new-only), or the first message dated on/after the scan date.
+func scanBaseStart(e *MenuExecutor, cfg *ScanConfig, areaID int, username string, totalCount int) int {
 	if cfg.RangeStart > 0 {
 		return cfg.RangeStart
 	}
 
-	if cfg.ScanDate == 0 {
-		// All messages
+	switch cfg.ScanDate {
+	case scanDateAll:
 		return 1
-	}
-
-	if cfg.ScanDate == -1 {
-		// New messages only
+	case scanDateNewOnly:
 		newCount, err := e.MessageMgr.GetNewMessageCount(areaID, username)
 		if err != nil || newCount == 0 {
 			return totalCount + 1 // No new messages, skip area
@@ -441,16 +530,16 @@ func determineStartMessage(e *MenuExecutor, cfg *ScanConfig, areaID int, usernam
 		return totalCount - newCount + 1
 	}
 
-	// Date-based scan: find the first message on or after the target date.
+	// Date-based scan: find the first message on or after the target day.
 	// Messages in a JAM base are stored chronologically, so we scan forward
-	// until we find one with DateTime >= start of the target day.
-	targetDate := time.Unix(cfg.ScanDate, 0).Truncate(24 * time.Hour)
+	// until we find one with DateTime >= local midnight of the target day.
+	since := cfg.since()
 	for i := 1; i <= totalCount; i++ {
 		msg, err := e.MessageMgr.GetMessage(areaID, i)
 		if err != nil || msg.IsDeleted {
 			continue
 		}
-		if !msg.DateTime.Truncate(24 * time.Hour).Before(targetDate) {
+		if !msg.DateTime.Before(since) {
 			return i
 		}
 	}

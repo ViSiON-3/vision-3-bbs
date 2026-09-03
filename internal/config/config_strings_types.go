@@ -328,6 +328,9 @@ type StringsConfig struct {
 	ScanDatePrompt          string `json:"scanDatePrompt"`
 	ScanToPrompt            string `json:"scanToPrompt"`
 	ScanFromPrompt          string `json:"scanFromPrompt"`
+	ScanInvalidDate         string `json:"scanInvalidDate"`
+	ScanInvalidRange        string `json:"scanInvalidRange"`
+	ScanNoMatches           string `json:"scanNoMatches"`
 	ScanRangeStartPrompt    string `json:"scanRangeStartPrompt"`
 	ScanRangeEndPrompt      string `json:"scanRangeEndPrompt"`
 	ScanWhichPrompt         string `json:"scanWhichPrompt"`

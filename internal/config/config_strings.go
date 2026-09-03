@@ -38,6 +38,12 @@ func applyStringDefaults(c *StringsConfig) {
 		}
 	}
 
+	// Message newscan notices (added after the scan strings shipped; keep
+	// existing strings.json files working without them)
+	d(&c.ScanInvalidDate, "\r\n|12Invalid date. Enter MM/DD/YY, MM/DD/YYYY, MM-DD-YY, MM-DD-YYYY, YYYY-MM-DD, MMDDYY or MMDDYYYY.|07\r\n")
+	d(&c.ScanInvalidRange, "\r\n|12Invalid range; range cleared.|07\r\n")
+	d(&c.ScanNoMatches, "\r\n|07No messages match the scan settings.|07\r\n")
+
 	// File search
 	d(&c.SearchFilesPrompt, "\r\n|15Enter search text |07(min 3 chars)|15: |07")
 	d(&c.SearchFilesMinChars, "\r\n|12Search text must be at least 3 characters.|07\r\n")
