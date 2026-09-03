@@ -130,6 +130,22 @@ func TestSubstituteGateTokens(t *testing.T) {
 		t.Errorf("substituteGateTokens wide key: got %q, want %q", got, want)
 	}
 
+	// A trailing reset code after the border does not hide the border.
+	reset := []byte(" | Press {KEY} {PRESSES} {TIMES} if you're not a bot. |\x1b[0m\r\n")
+	got = string(substituteGateTokens(reset, "ESC", 2))
+	want = " | Press ESC 2 times if you're not a bot.             |\x1b[0m\r\n"
+	if got != want {
+		t.Errorf("substituteGateTokens with trailing reset: got %q, want %q", got, want)
+	}
+
+	// Neither does a color code on the border itself.
+	colored := []byte(" | Press {KEY} {PRESSES} {TIMES} if you're not a bot. \x1b[36m|\r\n")
+	got = string(substituteGateTokens(colored, "ESC", 2))
+	want = " | Press ESC 2 times if you're not a bot.             \x1b[36m|\r\n"
+	if got != want {
+		t.Errorf("substituteGateTokens with colored border: got %q, want %q", got, want)
+	}
+
 	// A plain sentence has no border to align against, so it is not padded.
 	sentence := []byte(" Press {KEY} {PRESSES} {TIMES} if you're not a bot.\r\n")
 	got = string(substituteGateTokens(sentence, "ESC", 2))

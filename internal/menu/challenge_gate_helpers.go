@@ -158,13 +158,17 @@ func substituteGateTokens(prompt []byte, keyDisplay string, presses int) []byte 
 // trailing run is only treated as a border when it is made purely of frame
 // characters (no letters or digits) and a space separates it from the text, so
 // a plain sentence line — the built-in fallback prompt, for instance — is
-// returned untouched rather than gaining a gap mid-sentence.
+// returned untouched rather than gaining a gap mid-sentence. Color codes are
+// not text: escape sequences trailing the border (a closing reset, say) or
+// colouring it are skipped when looking for the border.
 func realignBorder(line []byte, delta int) []byte {
 	body := line
 	for len(body) > 0 && (body[len(body)-1] == '\n' || body[len(body)-1] == '\r') {
 		body = body[:len(body)-1]
 	}
-	eol := line[len(body):]
+	tail := trimGateTail(body) // trailing escape sequences and spaces, kept as-is
+	suffix := line[len(body)-len(tail):]
+	body = body[:len(body)-len(tail)]
 
 	border := len(body)
 	for border > 0 && !isGateSpace(body[border-1]) {
@@ -193,25 +197,52 @@ func realignBorder(line []byte, delta int) []byte {
 		out = out[:len(out)+pad]
 	}
 	out = append(out, body[border:]...)
-	out = append(out, eol...)
+	out = append(out, suffix...)
 	return out
 }
 
 func isGateSpace(b byte) bool { return b == ' ' || b == '\t' }
 
+// trimGateTail returns the run of escape sequences and spaces at the end of
+// body — everything past the last visible character — so border detection can
+// look at the border itself rather than at a trailing reset code.
+func trimGateTail(body []byte) []byte {
+	end := len(body)
+	for end > 0 {
+		if isGateSpace(body[end-1]) {
+			end--
+			continue
+		}
+		esc := bytes.LastIndexByte(body[:end], 0x1B)
+		if esc < 0 || esc+escapeSeqLen(body[esc:end]) != end {
+			break
+		}
+		end = esc
+	}
+	return body[end:]
+}
+
 // isGateBorder reports whether run is a frame decoration rather than words:
 // no ASCII letters or digits, and no sentence punctuation, which keeps text
-// ending in "." or "!" from being mistaken for a border.
+// ending in "." or "!" from being mistaken for a border. Escape sequences
+// within the run (a color set on the border) are ignored.
 func isGateBorder(run []byte) bool {
-	for _, b := range run {
+	visible := 0
+	for i := 0; i < len(run); i++ {
+		b := run[i]
+		if b == 0x1B {
+			i += escapeSeqLen(run[i:]) - 1 // -1: the loop's i++ passes the last byte
+			continue
+		}
 		switch {
 		case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9':
 			return false
 		case b == '.' || b == ',' || b == '!' || b == '?' || b == ';' || b == '\'' || b == '"':
 			return false
 		}
+		visible++
 	}
-	return len(run) > 0
+	return visible > 0
 }
 
 // challengeInput is the subset of editor.InputHandler the loop needs.
