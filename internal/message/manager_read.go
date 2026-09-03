@@ -263,3 +263,43 @@ func (mm *MessageManager) DeleteMessage(areaID, msgNum int) error {
 	mm.invalidateThreadIndex(areaID)
 	return nil
 }
+
+// AreaCounts holds the per-area message tallies shown in area listings.
+type AreaCounts struct {
+	Total    int // messages in the base
+	New      int // messages past the user's lastread pointer
+	Personal int // messages addressed to the user
+}
+
+// GetAreaCounts returns the total, unread and personal message counts for an
+// area in a single pass, opening the JAM base once. A missing base yields zero
+// counts rather than an error, matching GetMessageCountForArea.
+func (mm *MessageManager) GetAreaCounts(areaID int, username string) (AreaCounts, error) {
+	b, _, err := mm.openBase(areaID)
+	if err != nil {
+		if errors.Is(err, ErrAreaNotFound) {
+			return AreaCounts{}, nil
+		}
+		return AreaCounts{}, err
+	}
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
+
+	var counts AreaCounts
+	if counts.Total, err = b.GetMessageCount(); err != nil {
+		return AreaCounts{}, err
+	}
+	if username == "" {
+		return counts, nil
+	}
+	if counts.New, err = b.GetUnreadCount(username); err != nil {
+		return AreaCounts{}, err
+	}
+	if counts.Personal, err = b.CountMessagesToUser(username); err != nil {
+		return AreaCounts{}, err
+	}
+	return counts, nil
+}

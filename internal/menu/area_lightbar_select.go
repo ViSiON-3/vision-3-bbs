@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -47,6 +46,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 		return runSelectMessageArea(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
 	}
 
+	topBytes = injectAreaColumnHeader(topBytes)
 	processedMidTemplate := string(ansi.ReplacePipeCodes(midBytes))
 
 	// Build accessible conference list for left/right navigation.
@@ -60,6 +60,10 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 	}
 
 	filterConfID := currentUser.CurrentMsgConferenceID
+
+	// Message counts are read once per area list, not per rendered row: each
+	// lookup opens the area's JAM base.
+	var areaCounts map[int]message.AreaCounts
 
 	buildAreaList := func(confID int) []*message.MessageArea {
 		var areas []*message.MessageArea
@@ -75,6 +79,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 		sort.Slice(areas, func(i, j int) bool {
 			return areas[i].Position < areas[j].Position
 		})
+		areaCounts = collectAreaCounts(e, areas, currentUser, nodeNumber)
 		return areas
 	}
 
@@ -95,10 +100,17 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 		nodeNumber:  nodeNumber,
 		items:       buildAreaList(filterConfID),
 		buildItemLine: func(area *message.MessageArea, displayIdx int) string {
+			counts := areaCounts[area.ID]
+			// The picker has no visible row numbers, so the ^ID gutter carries
+			// the NEW flag for areas holding unread messages.
+			gutter := padRight("", areaGutterWidth)
+			if counts.New > 0 {
+				gutter = string(ansi.ReplacePipeCodes([]byte(newFlagColor))) + padRight(areaNewFlag, areaGutterWidth)
+			}
 			line := processedMidTemplate
-			line = strings.ReplaceAll(line, "^ID", padRight(strconv.Itoa(displayIdx), 3))
+			line = strings.ReplaceAll(line, "^ID", gutter)
+			line = applyAreaColumnTokens(line, e, area, counts)
 			line = strings.ReplaceAll(line, "^TAG", padRight(truncateStr(area.Tag, 16), 16))
-			line = strings.ReplaceAll(line, "^NA", padRight(truncateStr(area.Name, 14), 14))
 			line = strings.ReplaceAll(line, "^DE", padRight(truncateStr(area.Description, 32), 32))
 			line = strings.ReplaceAll(line, "^DS", truncateStr(area.AreaType, 8))
 			return strings.TrimRight(line, "\r\n")

@@ -292,7 +292,9 @@ The `LISTMSGAR` function shows areas the user has read access to, grouped by con
 
 ### Selecting a Message Area
 
-The `SELECTMSGAREA` function displays the area list, prompts for a tag or ID, validates read ACS, and updates the user's current area and conference.
+The `SELECTMSGAREA` function displays the area list as a full-screen lightbar picker (arrow keys navigate, left/right switch conference, Enter joins), validates read ACS, and updates the user's current area and conference. When the `MSGAREA` templates are missing it falls back to a text listing that prompts for a tag or ID.
+
+Both forms show a `Total` / `New` / `Yours` column set per area, and the picker flags areas holding unread messages with `NEW` to the left of the area name.
 
 ### Quick Navigation
 
@@ -468,10 +470,27 @@ The read prompt at the bottom of the message reader is a hardcoded lightbar rend
 #### Area List Template Placeholders
 
 - `|CA` — Current area tag
-- `^ID` — Area ID
+- `^COLS` — (`MSGAREA.TOP` only) The rendered column-title row
+- `^ID` — Left gutter: the list number in the text listing, or the `NEW` flag in
+  the `SELECTMSGAREA` lightbar picker (shown when the area holds unread
+  messages). 3 columns wide.
 - `^TAG` — Area tag
-- `^NA` — Area name
+- `^NA` — Area name, 34 columns
+- `^CF` — Conference the area belongs to, 12 columns
+- `^TM` — Total messages in the area, right-aligned in 7 columns
+- `^NM` — Messages past the user's last-read pointer, right-aligned in 6 columns
+- `^YM` — Messages addressed to the user, right-aligned in 6 columns
 - `^DS` — Area description
+
+`MSGAREA.TOP` places the column titles with the `^COLS` placeholder. The BBS
+renders that row itself from the widths above — `Area`, `Conf`, `Total`, `New`,
+`Yours` — so the titles always line up with the data columns. Put `^COLS` on its
+own line where the titles belong; a `MSGAREA.TOP` without the token is drawn
+unchanged, so hand-written title rows still work, they just have to be aligned
+by hand.
+
+`^YM` counts every message ever addressed to the user's handle in that area,
+read or not, matched on the recipient CRC stored in the JAM `.jdx` index.
 
 ### API Reference
 
@@ -487,6 +506,7 @@ The read prompt at the bottom of the message reader is a hardcoded lightbar rend
 - `GetMessage(areaID, msgNum)` — Read single message by number
 - `GetMessageCountForArea(areaID)` — Total message count
 - `GetNewMessageCount(areaID, username)` — Unread count for user
+- `GetAreaCounts(areaID, username)` — Total, unread and personal counts in one base open (used by the area lists)
 - `GetLastRead(areaID, username)` — Last read message number
 - `SetLastRead(areaID, username, msgNum)` — Update lastread pointer
 - `GetNextUnreadMessage(areaID, username)` — Next unread message number

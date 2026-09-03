@@ -325,7 +325,7 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 	}
 
 	// Substitute conference name in TOP template
-	topStr := string(topTemplateBytes)
+	topStr := string(injectAreaColumnHeader(topTemplateBytes))
 	confName := "All"
 	if filterConfID >= 0 && e.ConferenceMgr != nil {
 		if conf, found := e.ConferenceMgr.GetByID(filterConfID); found {
@@ -390,12 +390,13 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 			}
 		}
 
+		areaCounts := collectAreaCounts(e, areasInConf, currentUser, nodeNumber)
 		for _, area := range areasInConf {
 			displayedAreas = append(displayedAreas, area)
 			line := processedMidTemplate
-			line = strings.ReplaceAll(line, "^ID", padRight(strconv.Itoa(len(displayedAreas)), 3))
+			line = strings.ReplaceAll(line, "^ID", padRight(strconv.Itoa(len(displayedAreas)), areaGutterWidth))
+			line = applyAreaColumnTokens(line, e, area, areaCounts[area.ID])
 			line = strings.ReplaceAll(line, "^TAG", padRight(truncateStr(area.Tag, 16), 16))
-			line = strings.ReplaceAll(line, "^NA", padRight(truncateStr(area.Name, 38), 38))
 			line = strings.ReplaceAll(line, "^DS", area.AreaType)
 			outputBuffer.WriteString(line)
 		}
