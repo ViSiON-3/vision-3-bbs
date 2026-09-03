@@ -114,6 +114,29 @@ func TestSubstituteGateTokens(t *testing.T) {
 		t.Errorf("substituteGateTokens with no tokens = %q, want unchanged %q", got, noTokens)
 	}
 
+	// Boxed art keeps its right border in the same column: the line is
+	// re-padded in the gap before the border when the tokens shrink...
+	boxed := []byte(" | Press {KEY} {PRESSES} {TIMES} if you're not a bot. |\r\n")
+	got = string(substituteGateTokens(boxed, "ESC", 2))
+	want := " | Press ESC 2 times if you're not a bot.             |\r\n"
+	if got != want {
+		t.Errorf("substituteGateTokens boxed art: got %q, want %q", got, want)
+	}
+
+	// ...and the gap is absorbed when they grow past the original width.
+	got = string(substituteGateTokens(boxed, "PRESS-THE-ESCAPE-KEY", 10))
+	want = " | Press PRESS-THE-ESCAPE-KEY 10 times if you're not a bot.|\r\n"
+	if got != want {
+		t.Errorf("substituteGateTokens wide key: got %q, want %q", got, want)
+	}
+
+	// A plain sentence has no border to align against, so it is not padded.
+	sentence := []byte(" Press {KEY} {PRESSES} {TIMES} if you're not a bot.\r\n")
+	got = string(substituteGateTokens(sentence, "ESC", 2))
+	if got != " Press ESC 2 times if you're not a bot.\r\n" {
+		t.Errorf("substituteGateTokens sentence: got %q", got)
+	}
+
 	// Test with countdown field (## should remain unchanged)
 	withCountdown := []byte(" Press {KEY} {PRESSES} {TIMES}. You have ## seconds.")
 	got = string(substituteGateTokens(withCountdown, "ESC", 2))
