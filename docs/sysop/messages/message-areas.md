@@ -328,11 +328,12 @@ this:
 
 - **[D] Date** — what to scan. `N` (the default) reads only messages past your
   last-read pointer, `A` reads every message, or enter a date to read messages
-  written on or after that day. Accepted formats: `MM/DD/YY`, `MM/DD/YYYY`,
-  `MM-DD-YY`, `MM-DD-YYYY`, `YYYY-MM-DD`, `MMDDYY` and `MMDDYYYY`. Month and
-  day may drop their leading zero in the separated forms (`9/1/26`); the
-  all-digit forms need every digit (`090126`). An unrecognised date is
-  reported and the setting is left unchanged.
+  written on or after that day. Accepted formats, exactly as the invalid-date
+  notice lists them: `MM/DD/YY`, `MM/DD/YYYY`, `MM-DD-YY`, `MM-DD-YYYY`,
+  `YYYY-MM-DD`, `MMDDYY` and `MMDDYYYY`. Month and day may drop their leading
+  zero in the separated forms (`9/1/26`); the all-digit forms need every digit
+  (`090126`). An unrecognised date is reported and the setting is left
+  unchanged.
 - **[T] To** — show only messages whose To field contains the text
   (case-insensitive substring). Enter on its own clears it.
 - **[F] From** — the same for the From field, so `bob` matches "Bob Jones".
@@ -351,7 +352,8 @@ this:
 
 Date, To, From and range combine: a message must satisfy all of them. The
 reader and its **L**ist show only matching messages, areas with no match are
-skipped, and a scan in which nothing matches says so.
+skipped, and a scan in which nothing matches says so. A plain newscan with
+nothing new simply reports "Newscan complete".
 
 The `UPDATENEWSCAN` pointer command accepts the same date formats when moving
 pointers to a date.

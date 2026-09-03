@@ -19,8 +19,8 @@ func TestParseScanDate(t *testing.T) {
 	want := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.Local)
 	for _, in := range []string{
 		"09/01/26", "9/1/26", "09/01/2026", "9/1/2026",
-		"09-01-26", "9-1-2026", "09.01.26", "9.1.2026",
-		"2026-09-01", "2026-9-1", "2026/09/01",
+		"09-01-26", "9-1-2026",
+		"2026-09-01", "2026-9-1",
 		"090126", "09012026", "  09/01/26  ",
 	} {
 		got, ok := parseScanDate(in)
@@ -32,7 +32,9 @@ func TestParseScanDate(t *testing.T) {
 			t.Errorf("parseScanDate(%q) = %v, want %v", in, got, want)
 		}
 	}
-	for _, in := range []string{"", "foo", "13/01/26", "09/32/26", "2026", "9/1", "09/01/26/1"} {
+	// Dotted and year-first-with-slash forms are deliberately not accepted:
+	// the layout list is exactly what the notice and docs quote.
+	for _, in := range []string{"", "foo", "13/01/26", "09/32/26", "2026", "9/1", "09/01/26/1", "09.01.26", "2026/09/01", "90126"} {
 		if got, ok := parseScanDate(in); ok {
 			t.Errorf("parseScanDate(%q) accepted as %v, want rejection", in, got)
 		}
@@ -360,6 +362,48 @@ func TestNewScanMultiAreaReportsNoMatches(t *testing.T) {
 	}
 	if strings.Contains(out, "Newscan complete") {
 		t.Errorf("filtered scan with no matches should not report completion; output:\n%s", out)
+	}
+}
+
+// TestNewScanCurrentAreaNothingNewCompletes checks a plain current-area
+// newscan with nothing unread ends with "Newscan complete", matching the
+// multi-area scan, rather than the no-matches notice reserved for searches.
+func TestNewScanCurrentAreaNothingNewCompletes(t *testing.T) {
+	scanNoticePause = 0
+	t.Cleanup(func() { scanNoticePause = time.Second })
+
+	mm, areaID := newScanTestArea(t)
+	if err := mm.SetLastRead(areaID, "Tester", 4); err != nil {
+		t.Fatalf("SetLastRead: %v", err)
+	}
+	um, err := user.NewUserManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewUserManager: %v", err)
+	}
+	u, err := um.AddUser("password", "Tester", "Real Name", "Loc")
+	if err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	u.CurrentMessageAreaID = areaID
+	u.CurrentMessageAreaTag = "GENERAL"
+
+	e := &MenuExecutor{MessageMgr: mm, MenuSetPath: t.TempDir(), LoadedStrings: loadTestStrings(t)}
+
+	// Defaults (new messages, current area only), Enter to scan.
+	ts := newTestSession("\r")
+	terminal := newTestTerminal(ts)
+	t.Cleanup(func() { resetSessionIH(ts) })
+
+	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, true, 80, 24); err != nil || action == "LOGOFF" {
+		t.Fatalf("runNewScanAll: action=%q err=%v", action, err)
+	}
+
+	out := testAnsiEscape.ReplaceAllString(ts.output(), "")
+	if !strings.Contains(out, "Newscan complete") {
+		t.Errorf("plain newscan with nothing new should report completion; output:\n%s", out)
+	}
+	if strings.Contains(out, "No messages match") {
+		t.Errorf("plain newscan must not show the search no-matches notice; output:\n%s", out)
 	}
 }
 

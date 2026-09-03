@@ -91,7 +91,13 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		startMsg := determineStartMessage(e, scanCfg, currentAreaID, currentUser.Handle, totalCount)
 		if startMsg > totalCount {
-			showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
+			// Same outcome as the multi-area scan: a search that matched
+			// nothing says so, a plain newscan with nothing new completes.
+			if msgFilter != nil {
+				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
+			} else {
+				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanComplete)
+			}
 			return nil, "", nil
 		}
 
@@ -311,10 +317,9 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	if msgFilter != nil && !scannedAny {
 		showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
-		return currentUser, "", nil
+	} else {
+		showScanNotice(terminal, outputMode, e.LoadedStrings.ScanComplete)
 	}
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanComplete)), outputMode)
-	time.Sleep(1 * time.Second)
 
 	return currentUser, "", nil
 }

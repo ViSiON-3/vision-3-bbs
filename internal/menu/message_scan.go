@@ -54,15 +54,18 @@ var scanAreaOptions = []MsgLightbarOption{
 	{Label: " NonStop ", HotKey: 'N'},
 }
 
-// scanDateLayouts lists the date formats accepted at the scan date prompts.
-// Go's "1" and "2" verbs accept both zero-padded and bare month/day digits,
-// so "9/1/26" and "09/01/26" both match the first layout. A two-digit year
-// follows Go's pivot (69–99 → 19xx, 00–68 → 20xx).
+// scanDateLayouts lists the date formats accepted at the scan date prompts:
+// month/day/year with a slash or dash and a 2- or 4-digit year, ISO
+// year-month-day, and the all-digit MMDDYY / MMDDYYYY forms. This is the
+// exact list the invalid-date notice and the sysop docs quote, so keep the
+// three in step. Go's "1" and "2" verbs accept both zero-padded and bare
+// month/day digits, so "9/1/26" and "09/01/26" both match the first layout;
+// the all-digit layouts are fixed width. A two-digit year follows Go's pivot
+// (69–99 → 19xx, 00–68 → 20xx).
 var scanDateLayouts = []string{
 	"1/2/06", "1/2/2006",
 	"1-2-06", "1-2-2006",
-	"1.2.06", "1.2.2006",
-	"2006-1-2", "2006/1/2",
+	"2006-1-2",
 	"010206", "01022006",
 }
 
