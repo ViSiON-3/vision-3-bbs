@@ -44,7 +44,8 @@ func (b *Base) CountMessagesToUser(username string) (int, error) {
 		}
 		size := batch * IndexRecordSize
 		n, err := b.jdxFile.ReadAt(buf[:size], int64(scanned*IndexRecordSize))
-		if err != nil && !(err == io.EOF && n == size) {
+		// ReadAt reports EOF when the read ends exactly at the file end.
+		if err != nil && (err != io.EOF || n != size) {
 			return 0, fmt.Errorf("jam: failed to read index records at %d: %w", scanned, err)
 		}
 		if n != size {
