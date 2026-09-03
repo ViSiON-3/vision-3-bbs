@@ -191,15 +191,28 @@ func (ch *CommandHandler) HandleAbort(inputHandler *InputHandler) bool {
 // Returns the cursor position the editor should resume at.
 func (ch *CommandHandler) HandleQuote(inputHandler *InputHandler, currentLine, currentCol int) (int, int) {
 	if ch.quoteData == nil || len(ch.quoteData.Lines) == 0 {
-		promptRow := ch.screen.PromptRow()
-		ch.screen.GoXY(1, promptRow)
-		ch.screen.ClearEOL()
-		ch.screen.WriteDirectProcessed("|12You are not replying to anything! Press any key...")
-		_, _ = inputHandler.ReadKey() // wait for any key
+		ch.quoteNotice(inputHandler, "|12You are not replying to anything! Press any key...")
 		return currentLine, currentCol
 	}
 
-	return ch.runQuoteMode(inputHandler, currentLine)
+	// A message that is nothing but an FTN trailer leaves no quotable lines.
+	// Say so rather than opening a picker over an empty list, and rather than
+	// falling back to offering the trailer itself.
+	src := prepareQuoteSource(ch.quoteData.Lines)
+	if len(src) == 0 {
+		ch.quoteNotice(inputHandler, "|12Nothing to quote in that message! Press any key...")
+		return currentLine, currentCol
+	}
+
+	return ch.runQuoteMode(inputHandler, src, currentLine)
+}
+
+// quoteNotice writes a message to the prompt row and waits for a keypress.
+func (ch *CommandHandler) quoteNotice(inputHandler *InputHandler, text string) {
+	ch.screen.GoXY(1, ch.screen.PromptRow())
+	ch.screen.ClearEOL()
+	ch.screen.WriteDirectProcessed(text)
+	_, _ = inputHandler.ReadKey() // wait for any key
 }
 
 // processQuoteCodes processes ^N, ^T, ^D, ^W and ^I codes in quote strings

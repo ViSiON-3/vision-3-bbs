@@ -326,6 +326,29 @@ func TestQuoteModeDimmingTracksRepeatedQuotes(t *testing.T) {
 	}
 }
 
+// A message whose whole body is an FTN trailer has nothing quotable in it. The
+// picker must not open over an empty list, and must not offer the trailer.
+func TestQuoteModeWithOnlyTrailerShowsNotice(t *testing.T) {
+	tt, ch, ih, cleanup := newQuoteHarness(t, "x", []string{
+		"--- Mystic BBS v1.12",
+		" * Origin: The Wrong Number (21:4/131)",
+	})
+	defer cleanup()
+	ch.buffer.LoadContent("draft")
+
+	line, col := ch.HandleQuote(ih, 1, 4)
+
+	if line != 1 || col != 4 {
+		t.Errorf("cursor = (%d,%d), want (1,4) — nothing was quoted", line, col)
+	}
+	if got := stripANSI(ch.buffer.GetContent()); got != "draft" {
+		t.Errorf("buffer = %q, want %q — no trailer line should be insertable", got, "draft")
+	}
+	if got := tt.Row(24); !strings.Contains(got, "Nothing to quote") {
+		t.Errorf("Row(24) = %q, want the 'nothing to quote' notice", got)
+	}
+}
+
 func TestQuoteModeWithoutDataShowsNotice(t *testing.T) {
 	tt, ch, ih, cleanup := newQuoteHarness(t, "x", nil)
 	defer cleanup()

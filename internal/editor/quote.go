@@ -63,15 +63,9 @@ type quoteSession struct {
 	width                 int
 }
 
-// runQuoteMode drives the split-pane picker and returns the cursor position the
-// editor should resume at.
-func (ch *CommandHandler) runQuoteMode(inputHandler *InputHandler, currentLine int) (int, int) {
-	src := prepareQuoteSource(ch.quoteData.Lines)
-	if len(src) == 0 {
-		// Everything was trailer/blank — quote the raw body rather than nothing.
-		src = ch.quoteData.Lines
-	}
-
+// runQuoteMode drives the split-pane picker over src and returns the cursor
+// position the editor should resume at.
+func (ch *CommandHandler) runQuoteMode(inputHandler *InputHandler, src []string, currentLine int) (int, int) {
 	qs := &quoteSession{
 		ch:       ch,
 		src:      src,
