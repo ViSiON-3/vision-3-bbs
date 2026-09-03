@@ -42,7 +42,7 @@ type quoteSession struct {
 	ch *CommandHandler
 
 	src    []string // source lines, cruft filtered out
-	used   []bool   // src[i] has been quoted into the message
+	quoted []int    // how many times src[i] has been quoted into the message
 	prefix string   // per-line quote prefix, e.g. "Bu> "
 
 	sel int // selected source index (0-based)
@@ -75,7 +75,7 @@ func (ch *CommandHandler) runQuoteMode(inputHandler *InputHandler, currentLine i
 	qs := &quoteSession{
 		ch:       ch,
 		src:      src,
-		used:     make([]bool, len(src)),
+		quoted:   make([]int, len(src)),
 		prefix:   ch.quotePrefix(),
 		origLine: currentLine,
 	}
@@ -274,7 +274,7 @@ func (qs *quoteSession) quoteSelected() {
 		return
 	}
 
-	qs.used[qs.sel] = true
+	qs.quoted[qs.sel]++
 	qs.stack = append(qs.stack, quoteEntry{srcIdx: qs.sel, bufLines: written})
 
 	if qs.sel < len(qs.src)-1 {
@@ -301,7 +301,7 @@ func (qs *quoteSession) undoLast() {
 		qs.ch.buffer.DeleteLine(qs.insertAt - 1)
 		qs.insertAt--
 	}
-	qs.used[entry.srcIdx] = false
+	qs.quoted[entry.srcIdx]--
 	qs.sel = entry.srcIdx
 	qs.scrollToSelection()
 
@@ -506,7 +506,7 @@ func (qs *quoteSession) drawQuotePane() {
 		case idx == qs.sel:
 			// Paint the full row so the bar reads as one continuous block.
 			s.WriteDirect(qpBarGutter + num + qpBar + padRunes(text, textWidth))
-		case qs.used[idx]:
+		case qs.quoted[idx] > 0:
 			s.WriteDirect(qpGutter + num + qpUsed + text)
 		default:
 			s.WriteDirect(qpGutter + num + qpText + text)
@@ -609,16 +609,15 @@ func wrapQuoted(prefix, text string, max int) []string {
 
 	for _, word := range strings.Fields(text) {
 		for runeLen(word) > avail {
-			// A single word longer than the line: emit what fits, keep the rest.
-			room := avail - runeLen(cur)
-			if room < 4 {
+			// A word longer than the line (a URL, usually) starts on a line of
+			// its own rather than being jammed onto the words already buffered,
+			// then spills a full line at a time until the remainder fits.
+			if !empty {
 				flush()
-				room = avail
 			}
-			out = append(out, prefix+cur+truncRunes(word, room))
-			word = string([]rune(word)[room:])
-			cur = ""
-			empty = true
+			chunk := truncRunes(word, avail)
+			out = append(out, prefix+chunk)
+			word = string([]rune(word)[runeLen(chunk):])
 		}
 		switch {
 		case empty:

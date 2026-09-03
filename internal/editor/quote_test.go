@@ -78,6 +78,29 @@ func TestWrapQuotedCollapsesSourceIndent(t *testing.T) {
 	}
 }
 
+// An oversized word must not be welded onto the words already on the line:
+// "see <200-char-url>" used to wrap as "Bu> seehttps://...".
+func TestWrapQuotedOversizedWordAfterText(t *testing.T) {
+	url := "https://" + strings.Repeat("a", 200)
+	got := wrapQuoted("Bu> ", "see "+url+" ok", MaxLineLength)
+
+	if got[0] != "Bu> see" {
+		t.Errorf("line 0 = %q, want %q — the long word should start a new line", got[0], "Bu> see")
+	}
+	var payloads []string
+	for i, line := range got {
+		if runeLen(line) > MaxLineLength {
+			t.Errorf("line %d is %d cells wide, want <= %d", i, runeLen(line), MaxLineLength)
+		}
+		payloads = append(payloads, strings.TrimPrefix(line, "Bu> "))
+	}
+	// The long word's chunks rejoin into it exactly, and the text after it
+	// rides along on the last chunk's line rather than being dropped.
+	if joined := strings.Join(payloads[1:], ""); joined != url+" ok" {
+		t.Errorf("rejoined long word = %q, want %q", joined, url+" ok")
+	}
+}
+
 // Multibyte text must not be cut mid-rune the way the old byte slicing did.
 func TestWrapQuotedIsRuneSafe(t *testing.T) {
 	text := strings.Repeat("héllo wörld ", 10)
@@ -280,6 +303,29 @@ func TestQuoteModeBackspaceUndoesTheBlock(t *testing.T) {
 	}
 }
 
+// Quoting the same source line twice then undoing once must leave it marked as
+// still quoted — a copy of it is still in the reply.
+func TestQuoteModeDimmingTracksRepeatedQuotes(t *testing.T) {
+	_, ch, _, cleanup := newQuoteHarness(t, "", quoteBody)
+	defer cleanup()
+
+	// Driving the session directly keeps the key script out of the assertion.
+	qs := &quoteSession{ch: ch, src: quoteBody[:3], quoted: make([]int, 3), prefix: "Bu> ", origLine: 1}
+	qs.layout()
+	qs.quoteSelected() // quotes line 1, bar steps to line 2
+	qs.moveTo(0)
+	qs.quoteSelected() // quotes line 1 a second time
+	qs.undoLast()
+
+	if qs.quoted[0] != 1 {
+		t.Errorf("quoted[0] = %d, want 1 — one copy is still in the reply", qs.quoted[0])
+	}
+	body := stripANSI(ch.buffer.GetContent())
+	if n := strings.Count(body, "Bu> On 28 Aug 2026"); n != 1 {
+		t.Errorf("reply contains %d copies of the line, want 1:\n%s", n, body)
+	}
+}
+
 func TestQuoteModeWithoutDataShowsNotice(t *testing.T) {
 	tt, ch, ih, cleanup := newQuoteHarness(t, "x", nil)
 	defer cleanup()
@@ -287,8 +333,9 @@ func TestQuoteModeWithoutDataShowsNotice(t *testing.T) {
 
 	line, col := ch.HandleQuote(ih, 3, 7)
 
-	if line != 3 || col != 1 {
-		t.Errorf("cursor = (%d,%d), want (3,1)", line, col)
+	// Nothing was quoted, so the cursor must not move — column included.
+	if line != 3 || col != 7 {
+		t.Errorf("cursor = (%d,%d), want (3,7)", line, col)
 	}
 	if got := tt.Row(24); !strings.Contains(got, "not replying") {
 		t.Errorf("Row(24) = %q, want the 'not replying to anything' notice", got)

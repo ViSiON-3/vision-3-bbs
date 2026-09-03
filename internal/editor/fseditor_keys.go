@@ -111,7 +111,15 @@ func (e *FSEditor) handleCommand(cmdType CommandType) {
 		// the main loop repaint the text from a cleared cache. A FullRedraw here
 		// would clear the screen and flash the header for no reason.
 		e.screen.ClearCache()
-		e.screen.DisplayFooter()
+		if e.screen.HasFooter() {
+			e.screen.DisplayFooter()
+		} else {
+			// Without a footer template the prompt row is a bare terminal row
+			// outside the editing area, so a notice left there is never
+			// repainted over — clear it explicitly.
+			e.screen.GoXY(1, e.screen.PromptRow())
+			e.screen.ClearEOL()
+		}
 
 	case CommandHelp:
 		e.commands.HandleHelp(e.input)

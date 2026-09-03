@@ -196,7 +196,7 @@ func (ch *CommandHandler) HandleQuote(inputHandler *InputHandler, currentLine, c
 		ch.screen.ClearEOL()
 		ch.screen.WriteDirectProcessed("|12You are not replying to anything! Press any key...")
 		_, _ = inputHandler.ReadKey() // wait for any key
-		return currentLine, 1
+		return currentLine, currentCol
 	}
 
 	return ch.runQuoteMode(inputHandler, currentLine)
@@ -302,7 +302,6 @@ func (ch *CommandHandler) displayBuiltInHelp() {
   Ctrl+P or End          - Move to end of line
   Ctrl+R or Page Up      - Scroll up one page
   Ctrl+C or Page Down    - Scroll down one page
-  Ctrl+A                 - Move left one word
   Ctrl+F                 - Move right one word
 
 |11Edit Commands:|07
