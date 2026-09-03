@@ -272,8 +272,9 @@ type AreaCounts struct {
 }
 
 // GetAreaCounts returns the total, unread and personal message counts for an
-// area in a single pass, opening the JAM base once. A missing base yields zero
-// counts rather than an error, matching GetMessageCountForArea.
+// area, opening the JAM base once for all three rather than once each. A
+// missing base yields zero counts rather than an error, matching
+// GetMessageCountForArea.
 func (mm *MessageManager) GetAreaCounts(areaID int, username string) (AreaCounts, error) {
 	b, _, err := mm.openBase(areaID)
 	if err != nil {

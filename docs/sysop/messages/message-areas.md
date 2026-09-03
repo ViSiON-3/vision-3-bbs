@@ -474,13 +474,14 @@ The read prompt at the bottom of the message reader is a hardcoded lightbar rend
 - `^ID` — Left gutter: the list number in the text listing, or the `NEW` flag in
   the `SELECTMSGAREA` lightbar picker (shown when the area holds unread
   messages). 3 columns wide.
-- `^TAG` — Area tag
 - `^NA` — Area name, 34 columns
 - `^CF` — Conference the area belongs to, 12 columns
 - `^TM` — Total messages in the area, right-aligned in 7 columns
 - `^NM` — Messages past the user's last-read pointer, right-aligned in 6 columns
 - `^YM` — Messages addressed to the user, right-aligned in 6 columns
-- `^DS` — Area description
+- `^TAG` — Area tag, 16 columns
+- `^DE` — Area description, 32 columns
+- `^DS` — Area type (`local`, `echomail`, …), up to 8 columns
 
 `MSGAREA.TOP` places the column titles with the `^COLS` placeholder. The BBS
 renders that row itself from the widths above — `Area`, `Conf`, `Total`, `New`,

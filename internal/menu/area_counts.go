@@ -67,23 +67,39 @@ func confNameForArea(e *MenuExecutor, area *message.MessageArea) string {
 	return ""
 }
 
-// applyAreaColumnTokens substitutes the area name, conference and message-count
-// tokens of a MSGAREA row template.
-func applyAreaColumnTokens(line string, e *MenuExecutor, area *message.MessageArea, counts message.AreaCounts) string {
-	line = strings.ReplaceAll(line, "^NA", padRight(truncateStr(area.Name, areaNameWidth), areaNameWidth))
-	line = strings.ReplaceAll(line, "^CF", padRight(truncateStr(confNameForArea(e, area), areaConfWidth), areaConfWidth))
-	line = strings.ReplaceAll(line, "^TM", ansi.PadLeft(strconv.Itoa(counts.Total), areaTotalWidth))
-	line = strings.ReplaceAll(line, "^NM", ansi.PadLeft(strconv.Itoa(counts.New), areaNewWidth))
-	line = strings.ReplaceAll(line, "^YM", ansi.PadLeft(strconv.Itoa(counts.Personal), areaYoursWidth))
-	return line
+// renderAreaRow fills one MSGAREA row template for an area. gutter is the
+// leading ^ID column — the list number in the text listing, the NEW flag in the
+// lightbar picker.
+//
+// Every token is substituted in a single pass: replacing them one after another
+// would let a value that happens to contain a later token (an area named
+// "^TM", say) be rewritten by that later replacement.
+func renderAreaRow(line string, e *MenuExecutor, area *message.MessageArea, counts message.AreaCounts, gutter string) string {
+	return strings.NewReplacer(
+		"^ID", gutter,
+		"^NA", padRight(truncateStr(area.Name, areaNameWidth), areaNameWidth),
+		"^CF", padRight(truncateStr(confNameForArea(e, area), areaConfWidth), areaConfWidth),
+		"^TM", ansi.PadLeft(strconv.Itoa(counts.Total), areaTotalWidth),
+		"^NM", ansi.PadLeft(strconv.Itoa(counts.New), areaNewWidth),
+		"^YM", ansi.PadLeft(strconv.Itoa(counts.Personal), areaYoursWidth),
+		// Legacy tokens, still honoured for customized templates.
+		"^TAG", padRight(truncateStr(area.Tag, 16), 16),
+		"^DE", padRight(truncateStr(area.Description, 32), 32),
+		"^DS", truncateStr(area.AreaType, 8),
+	).Replace(line)
 }
 
 // areaColumnHeaderToken is the MSGAREA.TOP placeholder replaced with the
 // column-title row.
 const areaColumnHeaderToken = "^COLS"
 
-// areaColumnHeaderColor is the pipe code the column titles are drawn in.
-const areaColumnHeaderColor = "|05"
+// areaColumnHeaderColor is the pipe code the column titles are drawn in, and
+// areaColumnHeaderEndColor closes the row so the rule line below it in
+// MSGAREA.TOP does not inherit the title color.
+const (
+	areaColumnHeaderColor    = "|05"
+	areaColumnHeaderEndColor = "|08"
+)
 
 // areaColumnHeader renders the column-title row from the same widths the row
 // template uses, so the titles cannot drift out of alignment with the data.
@@ -94,7 +110,8 @@ func areaColumnHeader() string {
 		padRight("Conf", areaConfWidth) + " " +
 		ansi.PadLeft("Total", areaTotalWidth) + " " +
 		ansi.PadLeft("New", areaNewWidth) + " " +
-		ansi.PadLeft("Yours", areaYoursWidth)
+		ansi.PadLeft("Yours", areaYoursWidth) +
+		areaColumnHeaderEndColor
 }
 
 // injectAreaColumnHeader substitutes the ^COLS token in a MSGAREA.TOP template

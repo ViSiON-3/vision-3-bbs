@@ -393,12 +393,8 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 		areaCounts := collectAreaCounts(e, areasInConf, currentUser, nodeNumber)
 		for _, area := range areasInConf {
 			displayedAreas = append(displayedAreas, area)
-			line := processedMidTemplate
-			line = strings.ReplaceAll(line, "^ID", padRight(strconv.Itoa(len(displayedAreas)), areaGutterWidth))
-			line = applyAreaColumnTokens(line, e, area, areaCounts[area.ID])
-			line = strings.ReplaceAll(line, "^TAG", padRight(truncateStr(area.Tag, 16), 16))
-			line = strings.ReplaceAll(line, "^DS", area.AreaType)
-			outputBuffer.WriteString(line)
+			gutter := padRight(strconv.Itoa(len(displayedAreas)), areaGutterWidth)
+			outputBuffer.WriteString(renderAreaRow(processedMidTemplate, e, area, areaCounts[area.ID], gutter))
 		}
 	}
 

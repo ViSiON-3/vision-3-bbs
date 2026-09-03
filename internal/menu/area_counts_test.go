@@ -45,19 +45,14 @@ func TestAreaRowColumnsMatchHeader(t *testing.T) {
 	}
 
 	row := renderPlain(shippedTemplate(t, "MSGAREA.MID"))
-	row = strings.ReplaceAll(row, "^ID", padRight(areaNewFlag, areaGutterWidth))
-	row = strings.ReplaceAll(row, "^NA", padRight("Area Name", areaNameWidth))
-	row = strings.ReplaceAll(row, "^CF", padRight("Conf Name", areaConfWidth))
-	row = strings.ReplaceAll(row, "^TM", ansi.PadLeft("987", areaTotalWidth))
-	row = strings.ReplaceAll(row, "^NM", ansi.PadLeft("45", areaNewWidth))
-	row = strings.ReplaceAll(row, "^YM", ansi.PadLeft("6", areaYoursWidth))
-	row = strings.TrimRight(row, "\r\n")
+	area := &message.MessageArea{Name: "Area Name"}
+	counts := message.AreaCounts{Total: 987, New: 45, Personal: 6}
+	row = strings.TrimRight(renderAreaRow(row, &MenuExecutor{}, area, counts, padRight(areaNewFlag, areaGutterWidth)), "\r\n")
 
 	// Left-aligned columns start under their label; right-aligned counts end
 	// under theirs.
 	leftAligned := []struct{ label, value string }{
 		{"Area", "Area Name"},
-		{"Conf", "Conf Name"},
 	}
 	for _, c := range leftAligned {
 		if got, want := strings.Index(row, c.value), strings.Index(header, c.label); got != want {
@@ -84,12 +79,12 @@ func TestAreaRowColumnsMatchHeader(t *testing.T) {
 	}
 }
 
-func TestApplyAreaColumnTokensFormatsCounts(t *testing.T) {
+func TestRenderAreaRowFormatsCounts(t *testing.T) {
 	e := &MenuExecutor{} // no ConferenceMgr: the Conf column renders empty
 	area := &message.MessageArea{Name: "BBS Support/Dev"}
 	counts := message.AreaCounts{Total: 325, New: 4, Personal: 2}
 
-	got := applyAreaColumnTokens("[^NA][^CF][^TM][^NM][^YM]", e, area, counts)
+	got := renderAreaRow("[^NA][^CF][^TM][^NM][^YM]", e, area, counts, "")
 	want := "[" + padRight("BBS Support/Dev", areaNameWidth) + "]" +
 		"[" + strings.Repeat(" ", areaConfWidth) + "]" +
 		"[" + ansi.PadLeft("325", areaTotalWidth) + "]" +
@@ -100,10 +95,10 @@ func TestApplyAreaColumnTokensFormatsCounts(t *testing.T) {
 	}
 }
 
-func TestApplyAreaColumnTokensTruncatesLongName(t *testing.T) {
+func TestRenderAreaRowTruncatesLongName(t *testing.T) {
 	e := &MenuExecutor{}
 	longName := strings.Repeat("x", areaNameWidth+10)
-	got := applyAreaColumnTokens("^NA|", e, &message.MessageArea{Name: longName}, message.AreaCounts{})
+	got := renderAreaRow("^NA|", e, &message.MessageArea{Name: longName}, message.AreaCounts{}, "")
 	if idx := strings.Index(got, "|"); idx != areaNameWidth {
 		t.Errorf("name column width = %d, want %d (%q)", idx, areaNameWidth, got)
 	}
@@ -113,5 +108,31 @@ func TestCollectAreaCountsWithoutMessageManager(t *testing.T) {
 	e := &MenuExecutor{}
 	if counts := collectAreaCounts(e, []*message.MessageArea{{ID: 1}}, nil, 1); len(counts) != 0 {
 		t.Errorf("no message manager: got %d entries, want 0", len(counts))
+	}
+}
+
+// The rendered header must close with a color code: the rule line below it in
+// MSGAREA.TOP has no color of its own and would otherwise inherit the title
+// color.
+func TestAreaColumnHeaderEndsWithColor(t *testing.T) {
+	processed := string(ansi.ReplacePipeCodes([]byte(areaColumnHeader())))
+	if stripAreaAnsi(processed) != strings.TrimRight(stripAreaAnsi(processed), " ") {
+		t.Fatalf("header has trailing spaces: %q", processed)
+	}
+	trailing := areaLightbarAnsiRe.FindAllString(processed, -1)
+	if len(trailing) == 0 || !strings.HasSuffix(processed, trailing[len(trailing)-1]) {
+		t.Errorf("header does not end with a color sequence: %q", processed)
+	}
+}
+
+// A value that happens to contain another token must survive intact: the row is
+// filled in one pass, not by chained replacements.
+func TestRenderAreaRowDoesNotRescanValues(t *testing.T) {
+	area := &message.MessageArea{Name: "^TM ^YM"}
+	counts := message.AreaCounts{Total: 325, New: 4, Personal: 2}
+
+	got := renderAreaRow("[^NA]", &MenuExecutor{}, area, counts, "")
+	if want := "[" + padRight("^TM ^YM", areaNameWidth) + "]"; got != want {
+		t.Errorf("renderAreaRow rescanned a substituted value:\n got %q\nwant %q", got, want)
 	}
 }

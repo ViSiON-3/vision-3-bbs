@@ -107,12 +107,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 			if counts.New > 0 {
 				gutter = string(ansi.ReplacePipeCodes([]byte(newFlagColor))) + padRight(areaNewFlag, areaGutterWidth)
 			}
-			line := processedMidTemplate
-			line = strings.ReplaceAll(line, "^ID", gutter)
-			line = applyAreaColumnTokens(line, e, area, counts)
-			line = strings.ReplaceAll(line, "^TAG", padRight(truncateStr(area.Tag, 16), 16))
-			line = strings.ReplaceAll(line, "^DE", padRight(truncateStr(area.Description, 32), 32))
-			line = strings.ReplaceAll(line, "^DS", truncateStr(area.AreaType, 8))
+			line := renderAreaRow(processedMidTemplate, e, area, counts, gutter)
 			return strings.TrimRight(line, "\r\n")
 		},
 		hint:       "|08[ |15Up|08/|15Dn|08 ] Nav  [ |15Lt|08/|15Rt|08 ] Conf  [ |15PgUp|08/|15PgDn|08 ] Page  [ |15Enter|08 ] Select  [ |15Q|08 ] Quit",
