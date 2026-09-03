@@ -595,15 +595,11 @@ func wrapQuoted(prefix, text string, max int) []string {
 		return []string{strings.TrimRight(prefix, " ")}
 	}
 
-	// Preserve the line's own leading indent on the first output line only.
-	indent := text[:len(text)-len(strings.TrimLeft(text, " \t"))]
-	indent = strings.ReplaceAll(indent, "\t", "    ")
-	if runeLen(indent) > avail/2 {
-		indent = ""
-	}
-
+	// The source line's own leading indent is dropped: it is almost always the
+	// margin left by a previous round of quoting, and keeping it would stack an
+	// extra space into the nesting on every reply ("Bu>  Sh> ...").
 	var out []string
-	cur := indent
+	cur := ""
 	empty := true // cur holds no words yet, so the next one needs no space
 	flush := func() {
 		out = append(out, strings.TrimRight(prefix+cur, " "))

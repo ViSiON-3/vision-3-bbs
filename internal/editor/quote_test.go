@@ -68,6 +68,16 @@ func TestWrapQuotedBlankAndOversizedWords(t *testing.T) {
 	}
 }
 
+// Nesting must not accumulate a space per reply: the margin a previous quoter
+// left on the source line is dropped rather than carried through.
+func TestWrapQuotedCollapsesSourceIndent(t *testing.T) {
+	got := wrapQuoted("Bu> ", " Sh> I'd be interested in this as well", MaxLineLength)
+	want := "Bu> Sh> I'd be interested in this as well"
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("wrapQuoted() = %q, want [%q]", got, want)
+	}
+}
+
 // Multibyte text must not be cut mid-rune the way the old byte slicing did.
 func TestWrapQuotedIsRuneSafe(t *testing.T) {
 	text := strings.Repeat("héllo wörld ", 10)
@@ -223,7 +233,7 @@ func TestQuoteModeInsertsSelectedLinesWithBannerAndPrefix(t *testing.T) {
 	want := []string{
 		"--- Bucko Said ---",
 		"Bu> On 28 Aug 2026, Shurato said the following...",
-		"Bu>  Sh> I'd be interested in this as well", // the source line's own indent is kept
+		"Bu> Sh> I'd be interested in this as well", // the source line's own indent is dropped
 		"--- Bucko Done ---",
 	}
 	gotLines := strings.Split(got, "\n")
