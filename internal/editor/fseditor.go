@@ -120,6 +120,12 @@ func (e *FSEditor) SetQuoteData(data *QuoteData) {
 	e.commands.SetQuoteData(data)
 }
 
+// SetQuoteStrings overrides the quote block styling (banners and per-line
+// prefix) with the values configured in strings.json.
+func (e *FSEditor) SetQuoteStrings(top, bottom, prefix string) {
+	e.commands.SetQuoteStrings(top, bottom, prefix)
+}
+
 // LoadContent loads initial content into the editor
 func (e *FSEditor) LoadContent(content string) {
 	e.buffer.LoadContent(content)

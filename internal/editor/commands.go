@@ -1,9 +1,7 @@
 package editor
 
 import (
-	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -50,7 +48,19 @@ type CommandHandler struct {
 	yesText     string     // Configurable Yes label
 	noText      string     // Configurable No label
 	abortText   string     // Configurable abort confirmation prompt
+
+	// Quote block styling, from strings.json (empty = use the built-in default).
+	quoteTopStr    string // banner above the quoted lines, supports ^N/^T/^D/^W
+	quoteBottomStr string // banner below the quoted lines
+	quotePrefixStr string // per-line prefix template, supports ^I (initials) and ^N
 }
+
+// Built-in quote block styling, used when strings.json supplies none.
+const (
+	defaultQuoteTop    = "|08--- |15^N |07Said |08---"
+	defaultQuoteBottom = "|08--- |15^N |07Done |08---|07"
+	defaultQuotePrefix = "^I> "
+)
 
 // NewCommandHandler creates a new command handler
 func NewCommandHandler(screen *Screen, buffer *MessageBuffer, menuSetPath, yesNoHi, yesNoLo, yesText, noText, abortText string) *CommandHandler {
@@ -84,6 +94,14 @@ func NewCommandHandler(screen *Screen, buffer *MessageBuffer, menuSetPath, yesNo
 // SetQuoteData sets the message data to be used for the /Q quote command
 func (ch *CommandHandler) SetQuoteData(data *QuoteData) {
 	ch.quoteData = data
+}
+
+// SetQuoteStrings overrides the quote block styling from strings.json.
+// Empty values keep the built-in defaults.
+func (ch *CommandHandler) SetQuoteStrings(top, bottom, prefix string) {
+	ch.quoteTopStr = top
+	ch.quoteBottomStr = bottom
+	ch.quotePrefixStr = prefix
 }
 
 // HandleSave handles the Save command (CTRL-Z).
@@ -166,12 +184,14 @@ func (ch *CommandHandler) HandleAbort(inputHandler *InputHandler) bool {
 }
 
 // HandleQuote handles the Quote command (CTRL-Q).
-// Follows Pascal flow: display message inline, prompt for line range, insert quote.
-// Prompts appear in PromptRow (last footer row); footer is restored by the caller's FullRedraw.
+// Opens the split-pane quote picker: the message being composed stays on screen
+// above a divider, the message being replied to is listed below it under a
+// lightbar, and each selected line is inserted immediately. Everything paints
+// inside the editing area, so the header and footer stay put.
+// Returns the cursor position the editor should resume at.
 func (ch *CommandHandler) HandleQuote(inputHandler *InputHandler, currentLine, currentCol int) (int, int) {
-	promptRow := ch.screen.PromptRow()
-
 	if ch.quoteData == nil || len(ch.quoteData.Lines) == 0 {
+		promptRow := ch.screen.PromptRow()
 		ch.screen.GoXY(1, promptRow)
 		ch.screen.ClearEOL()
 		ch.screen.WriteDirectProcessed("|12You are not replying to anything! Press any key...")
@@ -179,168 +199,10 @@ func (ch *CommandHandler) HandleQuote(inputHandler *InputHandler, currentLine, c
 		return currentLine, 1
 	}
 
-	// Display quote UI inline at current position (no screen clear).
-	screenY := ch.screen.GetEditingStartY() + (currentLine - 1)
-	ch.screen.GoXY(1, screenY)
-	ch.screen.WriteDirectProcessed("|09Message # to Quote |03(|15Cr/1|03)|09: |151\r\n\r\n")
-	ch.screen.WriteDirectProcessed("|09You are quoting |15" + ch.quoteData.Title + " |09by |15" + ch.quoteData.From + "\r\n\r\n")
-
-	maxLines := len(ch.quoteData.Lines)
-	for i := 0; i < maxLines && i < 99; i++ {
-		lineText := ch.quoteData.Lines[i]
-		if len(lineText) > 75 {
-			lineText = lineText[:75]
-		}
-		ch.screen.WriteDirectProcessed(fmt.Sprintf("|12%d|10: |15%s\r\n", i+1, lineText))
-	}
-
-	// Prompt for start line in the last footer row.
-	ch.screen.GoXY(1, promptRow)
-	ch.screen.ClearEOL()
-	ch.screen.WriteDirectProcessed(fmt.Sprintf("|09Start Quoting @ |03(|151|03-|15%d|03)|09, |03Q|09=quit |09: ", maxLines))
-
-	clearPrompt := func() {
-		ch.screen.GoXY(1, promptRow)
-		ch.screen.ClearEOL()
-	}
-
-	startStr := ""
-	key, err := inputHandler.ReadKey()
-	if err != nil {
-		clearPrompt()
-		return currentLine, 1
-	}
-	for key != KeyEnter && key != KeyEsc {
-		if key >= '0' && key <= '9' {
-			startStr += string(rune(key))
-			ch.screen.WriteDirect(string(rune(key)))
-		} else if key == KeyBackspace && len(startStr) > 0 {
-			startStr = startStr[:len(startStr)-1]
-			ch.screen.WriteDirect("\b \b")
-		} else if key == 'Q' || key == 'q' {
-			clearPrompt()
-			return currentLine, 1
-		}
-		key, err = inputHandler.ReadKey()
-		if err != nil {
-			clearPrompt()
-			return currentLine, 1
-		}
-	}
-	if key == KeyEsc {
-		clearPrompt()
-		return currentLine, 1
-	}
-	if startStr == "" {
-		startStr = "1"
-	}
-
-	startLine := 1
-	if n, err := strconv.Atoi(startStr); err == nil && n > 0 && n <= maxLines {
-		startLine = n
-	}
-
-	// Prompt for end line.
-	maxEnd := startLine + 20
-	if maxEnd > maxLines {
-		maxEnd = maxLines
-	}
-	ch.screen.GoXY(1, promptRow)
-	ch.screen.ClearEOL()
-	ch.screen.WriteDirectProcessed(fmt.Sprintf("|09End Quoting @ |03(|15%d|03-|15%d|03)|09, |03Q|09=quit |09: ", startLine, maxEnd))
-
-	endStr := ""
-	key, err = inputHandler.ReadKey()
-	if err != nil {
-		clearPrompt()
-		return currentLine, 1
-	}
-	for key != KeyEnter && key != KeyEsc {
-		if key >= '0' && key <= '9' {
-			endStr += string(rune(key))
-			ch.screen.WriteDirect(string(rune(key)))
-		} else if key == KeyBackspace && len(endStr) > 0 {
-			endStr = endStr[:len(endStr)-1]
-			ch.screen.WriteDirect("\b \b")
-		} else if key == 'Q' || key == 'q' {
-			clearPrompt()
-			return currentLine, 1
-		}
-		key, err = inputHandler.ReadKey()
-		if err != nil {
-			clearPrompt()
-			return currentLine, 1
-		}
-	}
-	if key == KeyEsc {
-		clearPrompt()
-		return currentLine, 1
-	}
-	if endStr == "" {
-		endStr = strconv.Itoa(maxEnd)
-	}
-
-	endLine := maxEnd
-	if n, err := strconv.Atoi(endStr); err == nil && n >= startLine && n <= maxEnd {
-		endLine = n
-	}
-
-	clearPrompt()
-
-	// Format the quote with header and footer
-	insertLine := currentLine
-
-	// Insert quote header: "--- [Name] Said ---"
-	// Using ASCII hyphens (CP437 box drawing character 0xC4 causes UTF-8 issues)
-	// Colors: |08 = dark gray, |15 = bright white, |07 = light gray
-	quoteTop := ch.processQuoteCodes("|08--- |15^N |07Said |08---")
-	quoteTop = ch.processForBuffer(quoteTop)
-	if insertLine <= MaxLines {
-		if insertLine > ch.buffer.GetLineCount() {
-			ch.buffer.InsertLine(insertLine)
-		}
-		ch.buffer.SetLine(insertLine, quoteTop)
-		ch.buffer.SetHardNewline(insertLine, true) // prevent reflow across quote boundary
-		insertLine++
-	}
-
-	// Insert quoted lines with space prefix
-	for i := startLine - 1; i < endLine && i < len(ch.quoteData.Lines); i++ {
-		if insertLine > MaxLines {
-			break
-		}
-		if insertLine > ch.buffer.GetLineCount() {
-			ch.buffer.InsertLine(insertLine)
-		}
-
-		// Prefix with space and truncate to 79 chars
-		quotedLine := " " + ch.filterPipeCodes(ch.quoteData.Lines[i])
-		if len(quotedLine) > 79 {
-			quotedLine = quotedLine[:79]
-		}
-		ch.buffer.SetLine(insertLine, quotedLine)
-		ch.buffer.SetHardNewline(insertLine, true) // prevent reflow across quote lines
-		insertLine++
-	}
-
-	// Insert quote footer: "--- [Name] Done ---"
-	// Add |07 at end to reset color to light gray for continued editing
-	quoteBottom := ch.processQuoteCodes("|08--- |15^N |07Done |08---|07")
-	quoteBottom = ch.processForBuffer(quoteBottom)
-	if insertLine <= MaxLines {
-		if insertLine > ch.buffer.GetLineCount() {
-			ch.buffer.InsertLine(insertLine)
-		}
-		ch.buffer.SetLine(insertLine, quoteBottom)
-		ch.buffer.SetHardNewline(insertLine, true) // prevent reflow across quote boundary
-		insertLine++
-	}
-
-	// Position cursor after quoted text
-	return insertLine, 1
+	return ch.runQuoteMode(inputHandler, currentLine)
 }
 
-// processQuoteCodes processes ^N, ^T, ^D, ^W codes in quote strings
+// processQuoteCodes processes ^N, ^T, ^D, ^W and ^I codes in quote strings
 func (ch *CommandHandler) processQuoteCodes(text string) string {
 	result := ""
 	i := 0
@@ -354,6 +216,9 @@ func (ch *CommandHandler) processQuoteCodes(text string) string {
 				} else {
 					result += ch.quoteData.From
 				}
+				i += 2
+			case 'I', 'i':
+				result += quoteInitials(ch.quoteAuthor())
 				i += 2
 			case 'T', 't':
 				result += ch.quoteData.Title
@@ -453,10 +318,18 @@ func (ch *CommandHandler) displayBuiltInHelp() {
   Tab                    - Insert tab (spaces)
 
 |11Special Commands:|07
-  /S                     - Save message and exit
-  /A                     - Abort message (with confirmation)
-  /Q                     - Quote previous message (when replying)
-  /H or /?               - Display this help
+  Ctrl+Z                 - Save message and exit
+  Ctrl+A                 - Abort message (with confirmation)
+  Ctrl+Q                 - Quote previous message (when replying)
+  Escape                 - Option menu (Save/Abort/Edit/Help/Quote)
+
+|11Quote Mode (Ctrl+Q when replying):|07
+  Up/Down                - Move the bar over the message you are quoting
+  PgUp/PgDn, Home/End    - Jump through the message
+  Space or Enter         - Add the highlighted line to your reply
+  Backspace              - Remove the line you added last
+  Tab                    - Switch between your reply and the quoted message
+  Escape                 - Leave quote mode and carry on writing
 
 |11Word Wrapping:|07
   Lines automatically wrap at 79 characters.
