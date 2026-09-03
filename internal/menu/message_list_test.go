@@ -149,20 +149,21 @@ func TestBuildMessageList_CountOrderingAndLastRead(t *testing.T) {
 		t.Fatalf("len(entries) = %d, want 3", len(entries))
 	}
 
-	// Ascending by message number, matching post order.
-	wantSubjects := []string{"first", "second", "third"}
+	// Newest first: descending by message number, reverse of post order.
+	wantSubjects := []string{"third", "second", "first"}
 	for i, e := range entries {
-		if e.MsgNum != i+1 {
-			t.Errorf("entries[%d].MsgNum = %d, want %d", i, e.MsgNum, i+1)
+		wantNum := len(entries) - i
+		if e.MsgNum != wantNum {
+			t.Errorf("entries[%d].MsgNum = %d, want %d", i, e.MsgNum, wantNum)
 		}
 		if e.Subject != wantSubjects[i] {
 			t.Errorf("entries[%d].Subject = %q, want %q", i, e.Subject, wantSubjects[i])
 		}
 	}
-	if !entries[0].IsRead || !entries[1].IsRead {
+	if !entries[1].IsRead || !entries[2].IsRead {
 		t.Error("messages 1 and 2 should be read (msgNum <= lastRead)")
 	}
-	if entries[2].IsRead {
+	if entries[0].IsRead {
 		t.Error("message 3 should be unread (msgNum > lastRead)")
 	}
 }
