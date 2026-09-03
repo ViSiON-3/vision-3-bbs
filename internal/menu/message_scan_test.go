@@ -287,6 +287,13 @@ func TestRunGetScanTypeRangeValidation(t *testing.T) {
 		t.Errorf("clearing with Enter should not report an invalid range; output:\n%s", out)
 	}
 
+	// A new start followed by Enter alone at the end prompt is an abandoned
+	// edit: the old range must not stay in effect.
+	cfg, _ = runScanTypeWithInput(t, "R2\r5\rR3\r\r\r", 10)
+	if cfg.RangeStart != 0 || cfg.RangeEnd != 0 {
+		t.Errorf("range after abandoned edit = %d-%d, want cleared", cfg.RangeStart, cfg.RangeEnd)
+	}
+
 	// Bad end must not leave a stale start bound in effect while the menu says "All".
 	cfg, out = runScanTypeWithInput(t, "R2\r99\r\r", 10)
 	if cfg.RangeStart != 0 || cfg.RangeEnd != 0 {

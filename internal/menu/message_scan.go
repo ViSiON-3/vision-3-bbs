@@ -350,10 +350,11 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 
 		case 'R': // Range
 			// ESC at either prompt leaves the range as it was, like the other
-			// prompts. Enter alone at the start prompt clears it (Cr/none). An
-			// out-of-bounds entry clears it with a notice, so the menu never
-			// shows "All" while a stale bound is still in effect. The range is
-			// only ever stored as a validated pair.
+			// prompts. Enter alone at either prompt clears it (Cr/none): an
+			// edit abandoned half-way must not leave the previous range in
+			// effect. An out-of-bounds entry clears it with a notice, so the
+			// menu never shows "All" while a stale bound is still in effect.
+			// The range is only ever stored as a validated pair.
 			if numMsgs <= 0 {
 				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMessages)
 				continue
@@ -380,7 +381,11 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			if err != nil {
 				return nil, err
 			}
-			if !ok || endInput == "" {
+			if !ok {
+				continue
+			}
+			if endInput == "" {
+				cfg.RangeStart, cfg.RangeEnd = 0, 0
 				continue
 			}
 			endNum, convErr := strconv.Atoi(endInput)

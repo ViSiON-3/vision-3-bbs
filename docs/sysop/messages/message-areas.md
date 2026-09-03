@@ -337,7 +337,7 @@ this:
   (case-insensitive substring). Enter on its own clears it.
 - **[F] From** — the same for the From field, so `bob` matches "Bob Jones".
 - **[R] Range** — first and last message number to read, validated against the
-  current area's message count. Enter on its own at the start prompt clears the
+  current area's message count. Enter on its own at either prompt clears the
   range, ESC leaves it unchanged, and an out-of-range entry clears it with a
   notice. A range overrides the New/All choice: the numbered messages are shown
   whether or not they have been read. In a multi-area scan the same numbers
