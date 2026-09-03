@@ -42,7 +42,7 @@ func applyStringDefaults(c *StringsConfig) {
 	// existing strings.json files working without them)
 	d(&c.ScanInvalidDate, "\r\n|12Invalid date. Enter MM/DD/YY, MM/DD/YYYY or YYYY-MM-DD.|07\r\n")
 	d(&c.ScanInvalidRange, "\r\n|12Invalid range; range cleared.|07\r\n")
-	d(&c.ScanNoMatches, "\r\n|07No messages in this area match the scan settings.|07\r\n")
+	d(&c.ScanNoMatches, "\r\n|07No messages match the scan settings.|07\r\n")
 
 	// File search
 	d(&c.SearchFilesPrompt, "\r\n|15Enter search text |07(min 3 chars)|15: |07")

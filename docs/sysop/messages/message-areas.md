@@ -347,7 +347,7 @@ this:
 
 Date, To, From and range combine: a message must satisfy all of them. The
 reader and its **L**ist show only matching messages, areas with no match are
-skipped, and a current-area scan with no match says so.
+skipped, and a scan in which nothing matches says so.
 
 The `UPDATENEWSCAN` pointer command accepts the same date formats when moving
 pointers to a date.

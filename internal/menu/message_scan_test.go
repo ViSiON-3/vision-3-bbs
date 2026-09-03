@@ -297,6 +297,46 @@ func TestRunGetScanTypeArrowKeysAreNotHotkeys(t *testing.T) {
 	}
 }
 
+// TestNewScanMultiAreaReportsNoMatches drives an all-areas-in-conference
+// scan whose From search matches nothing: every area is skipped and the scan
+// must end with the no-matches notice, not "Newscan complete".
+func TestNewScanMultiAreaReportsNoMatches(t *testing.T) {
+	scanNoticePause = 0
+	t.Cleanup(func() { scanNoticePause = time.Second })
+
+	mm, areaID := newScanTestArea(t)
+	um, err := user.NewUserManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewUserManager: %v", err)
+	}
+	u, err := um.AddUser("password", "Tester", "Real Name", "Loc")
+	if err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	u.CurrentMessageAreaID = areaID
+	u.CurrentMessageAreaTag = "GENERAL"
+
+	e := &MenuExecutor{MessageMgr: mm, MenuSetPath: t.TempDir(), LoadedStrings: loadTestStrings(t)}
+
+	// Scan menu: Date=All, From=zed (no such author), S then A = all areas
+	// in the conference, Enter to scan.
+	ts := newTestSession("Dall\rFzed\rSA\r")
+	terminal := newTestTerminal(ts)
+	t.Cleanup(func() { resetSessionIH(ts) })
+
+	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, false, 80, 24); err != nil || action == "LOGOFF" {
+		t.Fatalf("runNewScanAll: action=%q err=%v", action, err)
+	}
+
+	out := testAnsiEscape.ReplaceAllString(ts.output(), "")
+	if !strings.Contains(out, "No messages match") {
+		t.Errorf("filtered scan with no matches should say so; output:\n%s", out)
+	}
+	if strings.Contains(out, "Newscan complete") {
+		t.Errorf("filtered scan with no matches should not report completion; output:\n%s", out)
+	}
+}
+
 // TestNewScanCurrentAreaAppliesFromSearchAndKeepsPointers drives the whole
 // current-area scan: From search "bob" must show only Bob's messages, and with
 // Update Pointers off the last-read pointer must be back where it started.

@@ -158,6 +158,11 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	restoreLastRead := func() {}
 	defer func() { restoreLastRead() }()
 
+	// scannedAny records whether any area had a qualifying message, so a
+	// filtered scan that skipped every area can say "no matches" rather
+	// than "complete".
+	scannedAny := false
+
 	for _, area := range allAreas {
 		restoreLastRead()
 		restoreLastRead = func() {}
@@ -189,6 +194,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		if startMsg > totalCount {
 			continue // No messages to show for this area
 		}
+		scannedAny = true
 
 		// Resolve terminal dimensions once per iteration: prefer passed params, then user prefs, then defaults
 		tw := termWidth
@@ -304,7 +310,11 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		slog.Error("failed to restore user area after newscan", "node", nodeNumber, "error", err)
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanComplete)), outputMode)
+	if msgFilter != nil && !scannedAny {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoMatches)), outputMode)
+	} else {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanComplete)), outputMode)
+	}
 	time.Sleep(1 * time.Second)
 
 	return currentUser, "", nil
