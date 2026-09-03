@@ -40,7 +40,7 @@ func applyStringDefaults(c *StringsConfig) {
 
 	// Message newscan notices (added after the scan strings shipped; keep
 	// existing strings.json files working without them)
-	d(&c.ScanInvalidDate, "\r\n|12Invalid date. Enter MM/DD/YY, MM/DD/YYYY or YYYY-MM-DD.|07\r\n")
+	d(&c.ScanInvalidDate, "\r\n|12Invalid date. Enter MM/DD/YY, MM/DD/YYYY, MM-DD-YY, YYYY-MM-DD or MMDDYY.|07\r\n")
 	d(&c.ScanInvalidRange, "\r\n|12Invalid range; range cleared.|07\r\n")
 	d(&c.ScanNoMatches, "\r\n|07No messages match the scan settings.|07\r\n")
 

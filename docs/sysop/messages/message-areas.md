@@ -329,8 +329,10 @@ this:
 - **[D] Date** — what to scan. `N` (the default) reads only messages past your
   last-read pointer, `A` reads every message, or enter a date to read messages
   written on or after that day. Accepted formats: `MM/DD/YY`, `MM/DD/YYYY`,
-  `MM-DD-YY`, `YYYY-MM-DD`, `MMDDYY` (leading zeros optional). An unrecognised
-  date is reported and the setting is left unchanged.
+  `MM-DD-YY`, `MM-DD-YYYY`, `YYYY-MM-DD`, `MMDDYY` and `MMDDYYYY`. Month and
+  day may drop their leading zero in the separated forms (`9/1/26`); the
+  all-digit forms need every digit (`090126`). An unrecognised date is
+  reported and the setting is left unchanged.
 - **[T] To** — show only messages whose To field contains the text
   (case-insensitive substring). Enter on its own clears it.
 - **[F] From** — the same for the From field, so `bob` matches "Bob Jones".

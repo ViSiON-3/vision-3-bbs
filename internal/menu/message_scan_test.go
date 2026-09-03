@@ -241,8 +241,11 @@ func TestRunGetScanTypeDateAcceptsCommonFormatsAndReportsBadOnes(t *testing.T) {
 	if !strings.Contains(out, "Since 09/01/26") {
 		t.Errorf("menu should show the chosen date; output:\n%s", out)
 	}
-	if !strings.Contains(out, "(MM/DD/YY)") {
-		t.Errorf("date prompt should state the expected format; output:\n%s", out)
+	if !strings.Contains(out, "MM/DD/YY") {
+		t.Errorf("date prompt should show an example format; output:\n%s", out)
+	}
+	if !strings.Contains(out, "Since 09/01/26") {
+		t.Errorf("menu should show the chosen date; output:\n%s", out)
 	}
 
 	// "xyz" (not "not-a-date": a leading N means New, like a leading A means All)
