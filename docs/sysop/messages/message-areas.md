@@ -322,14 +322,35 @@ The `COMPOSEMSG` function launches the built-in editor. Subject line required. F
 
 ### New Message Scan
 
-The `NEWSCAN` function scans for new messages across areas:
+The `NEWSCAN` function (or `NEWSCAN CURRENT` for the current area only) opens a
+scan setup menu before reading. Enter starts the scan; each option does exactly
+this:
 
-- Shows count of new messages per area
-- Offers to jump directly to reading
-- During scan setup, user can choose:
-  - **All Tagged Areas** — Scans only areas tagged in newscan config
-  - **ALL Areas in Conference** — Scans all areas in current conference
-  - **Current Area Only** — Scans only the current message area
+- **[D] Date** — what to scan. `N` (the default) reads only messages past your
+  last-read pointer, `A` reads every message, or enter a date to read messages
+  written on or after that day. Accepted formats: `MM/DD/YY`, `MM/DD/YYYY`,
+  `MM-DD-YY`, `YYYY-MM-DD`, `MMDDYY` (leading zeros optional). An unrecognised
+  date is reported and the setting is left unchanged.
+- **[T] To** — show only messages whose To field contains the text
+  (case-insensitive substring). Enter on its own clears it.
+- **[F] From** — the same for the From field, so `bob` matches "Bob Jones".
+- **[R] Range** — first and last message number to read, validated against the
+  current area's message count. An out-of-range entry clears the range. A range
+  overrides the New/All choice: the numbered messages are shown whether or not
+  they have been read. In a multi-area scan the same numbers apply to each area.
+- **[U] Update NewScan Pointers** — `Yes` (the default) leaves the last-read
+  pointer where reading stopped. `No` puts each area's pointer back where it was
+  once that area is finished, so the messages stay new for the next scan.
+- **[S] Scan Which Areas** — `M`arked (areas tagged in newscan config), `A`ll
+  areas in the current conference, or the `C`urrent area only.
+- **[A] Abort** — leave without scanning (`Q` and ESC do the same).
+
+Date, To, From and range combine: a message must satisfy all of them. The
+reader and its **L**ist show only matching messages, areas with no match are
+skipped, and a current-area scan with no match says so.
+
+The `UPDATENEWSCAN` pointer command accepts the same date formats when moving
+pointers to a date.
 
 ### Newscan Configuration
 
@@ -351,7 +372,7 @@ Tagged areas are saved to the user's profile in `users.json`.
 
 - Message deletion/moderation UI (sponsor can edit area settings; per-message delete/edit coming later)
 - Anonymous posting
-- Message search
+- Full-text message search (newscan can filter by To, From, date and range)
 - File attachments
 
 ### In Development

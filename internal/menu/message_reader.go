@@ -45,7 +45,8 @@ var msgReaderDeleteOption = MsgLightbarOption{Label: " Delete ", HotKey: 'D', Lo
 // msgOwnershipFilter reports whether a message may be shown to the current user.
 // A nil filter means no filtering (all non-deleted messages are visible); a
 // non-nil filter is used for areas like PRIVMAIL where a user may only see their
-// own messages, regardless of how navigation arrives at a message number.
+// own messages, and for newscan To/From/date/range searches (ScanConfig.filter),
+// regardless of how navigation arrives at a message number.
 type msgOwnershipFilter func(*message.DisplayMessage) bool
 
 // runMessageReader is the core message reading loop matching Pascal's Scanboard + Readcurbul.
