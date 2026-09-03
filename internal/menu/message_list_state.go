@@ -91,10 +91,11 @@ func buildMessageList(msgMgr *message.MessageManager, areaID int, username strin
 		lastRead = 0 // Default to all unread
 	}
 
-	// Build list of message entries
+	// Build list of message entries, newest first (descending message number)
+	// so the most recent posts appear at the top of the list.
 	entries := make([]MessageListEntry, 0, totalCount)
 
-	for msgNum := 1; msgNum <= totalCount; msgNum++ {
+	for msgNum := totalCount; msgNum >= 1; msgNum-- {
 		msg, err := msgMgr.GetMessage(areaID, msgNum)
 		if err != nil {
 			// Skip deleted or unreadable messages
