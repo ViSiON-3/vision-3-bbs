@@ -293,7 +293,7 @@
   "scanInvalidRange": "\r\n|12Invalid range; range cleared.|07\r\n",
   "scanNoMatches": "\r\n|07No messages match the scan settings.|07\r\n",
   "scanRangeStartPrompt": "\r\n|07Range Start (|151-%d|07, Cr/none) : |15",
-  "scanRangeEndPrompt": "\r\n|07Range End (|15%d-%d|07) : |15",
+  "scanRangeEndPrompt": "\r\n|07Range End (|15%d-%d|07, Cr/none) : |15",
   "scanWhichPrompt": "\r\n|15M|07arked Areas, |15A|07ll Areas, |15C|07urrent Area : |15",
   "scanHeader": "\r\n|15Scanning Messages...|07\r\n",
   "scanNoAreaSelected": "\r\n|01No message area selected.|07\r\n",

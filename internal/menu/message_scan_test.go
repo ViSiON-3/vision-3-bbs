@@ -258,6 +258,18 @@ func TestRunGetScanTypeDateAcceptsCommonFormatsAndReportsBadOnes(t *testing.T) {
 	if !strings.Contains(out, "Invalid date") {
 		t.Errorf("bad date should be reported; output:\n%s", out)
 	}
+	// The notice is the one place the full accepted list is shown to the
+	// user, so it must name every layout the parser accepts and nothing else.
+	for _, want := range []string{"MM/DD/YY", "MM/DD/YYYY", "MM-DD-YY", "MM-DD-YYYY", "YYYY-MM-DD", "MMDDYY", "MMDDYYYY"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("invalid-date notice should list %s; output:\n%s", want, out)
+		}
+	}
+	for _, unwanted := range []string{"MM.DD", "YYYY/MM"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("invalid-date notice lists unsupported form %s; output:\n%s", unwanted, out)
+		}
+	}
 
 	cfg, _ = runScanTypeWithInput(t, "Dall\r\r", 10)
 	if cfg.ScanDate != scanDateAll {
@@ -294,6 +306,13 @@ func TestRunGetScanTypeRangeValidation(t *testing.T) {
 	cfg, _ = runScanTypeWithInput(t, "R2\r5\rR3\r\r\r", 10)
 	if cfg.RangeStart != 0 || cfg.RangeEnd != 0 {
 		t.Errorf("range after abandoned edit = %d-%d, want cleared", cfg.RangeStart, cfg.RangeEnd)
+	}
+
+	// ESC at the end prompt, like ESC at the start prompt, keeps the
+	// previous range.
+	cfg, _ = runScanTypeWithInput(t, "R2\r5\rR3\r\x1b\r", 10)
+	if cfg.RangeStart != 2 || cfg.RangeEnd != 5 {
+		t.Errorf("range after ESC at end prompt = %d-%d, want 2-5 kept", cfg.RangeStart, cfg.RangeEnd)
 	}
 
 	// Bad end must not leave a stale start bound in effect while the menu says "All".
