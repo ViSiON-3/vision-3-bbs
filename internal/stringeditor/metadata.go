@@ -228,7 +228,7 @@ func StringEntries() []StringEntry {
 		{Label: "Yes Prompt Text", Key: "yesPromptText", Description: "Text for 'Yes' in yes/no prompts"},
 		{Label: "No Prompt Text", Key: "noPromptText", Description: "Text for 'No' in yes/no prompts"},
 		{Label: "Abort Message Prompt", Key: "abortMessagePrompt", Description: "Confirmation prompt when aborting a message"},
-		{Label: "Quote Prefix", Key: "QuotePrefix", Description: "Prefix added to quoted lines in messages"},
+		{Label: "Quote Prefix", Key: "QuotePrefix", Description: "Prefix on quoted lines; ^I = author initials, ^N = author name"},
 		{Label: "One-Liner Legend", Key: "One_Liner_Legend", Description: "Color code legend shown when entering one-liners"},
 		{Label: "One-Liner Anon Prompt", Key: "oneLinerAnonymousPrompt", Description: "Asks if user wants to post one-liner anonymously"},
 

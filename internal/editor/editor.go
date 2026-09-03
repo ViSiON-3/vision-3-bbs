@@ -98,7 +98,11 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	yesText := "Yes"
 	noText := "No"
 	abortText := "|07Abort Message & Quit, Are You Sure|09?"
+	var quoteTop, quoteBottom, quotePrefix string
 	if stringsErr == nil {
+		quoteTop = strings.TrimRight(stringsCfg.QuoteTop, " ")
+		quoteBottom = strings.TrimRight(stringsCfg.QuoteBottom, " ")
+		quotePrefix = stringsCfg.QuotePrefix
 		if v := strings.TrimSpace(stringsCfg.YesPromptText); v != "" {
 			yesText = v
 		}
@@ -129,6 +133,9 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	if len(ctx) > 0 {
 		editor.SetEditorContext(ctx[0])
 	}
+
+	// Quote block styling from strings.json (empty values keep the defaults)
+	editor.SetQuoteStrings(quoteTop, quoteBottom, quotePrefix)
 
 	// Set quote data for /Q command
 	if len(quoteLines) > 0 {

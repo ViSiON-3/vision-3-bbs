@@ -106,7 +106,20 @@ func (e *FSEditor) handleCommand(cmdType CommandType) {
 		e.currentLine = line
 		e.currentCol = col
 		e.modified = true
-		e.screen.FullRedraw(e.buffer, e.topLine, e.currentLine, e.currentCol, e.insertMode)
+		// Quote mode repaints only the editing area, so the header and footer are
+		// still intact — restore the footer row (it may carry a notice) and let
+		// the main loop repaint the text from a cleared cache. A FullRedraw here
+		// would clear the screen and flash the header for no reason.
+		e.screen.ClearCache()
+		if e.screen.HasFooter() {
+			e.screen.DisplayFooter()
+		} else {
+			// Without a footer template the prompt row is a bare terminal row
+			// outside the editing area, so a notice left there is never
+			// repainted over — clear it explicitly.
+			e.screen.GoXY(1, e.screen.PromptRow())
+			e.screen.ClearEOL()
+		}
 
 	case CommandHelp:
 		e.commands.HandleHelp(e.input)
