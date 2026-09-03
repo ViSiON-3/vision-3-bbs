@@ -13,6 +13,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
+// TestParseScanDate checks every accepted date layout yields local midnight of
+// the same day and that malformed or ambiguous input is rejected.
 func TestParseScanDate(t *testing.T) {
 	want := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.Local)
 	for _, in := range []string{
@@ -37,6 +39,9 @@ func TestParseScanDate(t *testing.T) {
 	}
 }
 
+// TestScanConfigFilter checks that To/From match case-insensitively on their
+// own field only, that range and date bounds are inclusive, and that a scan
+// with no search settings has no filter at all.
 func TestScanConfigFilter(t *testing.T) {
 	msg := func(n int, from, to string, when time.Time) *message.DisplayMessage {
 		return &message.DisplayMessage{MsgNum: n, From: from, To: to, DateTime: when}
@@ -110,6 +115,9 @@ func newScanTestArea(t *testing.T) (*message.MessageManager, int) {
 	return mm, areaID
 }
 
+// TestDetermineStartMessageHonoursSearchAndRange checks the start message
+// against a real JAM area for each combination of date mode, search and range,
+// including the "skip this area" result when nothing matches.
 func TestDetermineStartMessageHonoursSearchAndRange(t *testing.T) {
 	mm, areaID := newScanTestArea(t)
 	e := &MenuExecutor{MessageMgr: mm}
@@ -142,6 +150,8 @@ func TestDetermineStartMessageHonoursSearchAndRange(t *testing.T) {
 	}
 }
 
+// TestPreserveLastReadRestoresPointerWhenUpdatesAreOff checks that the restore
+// func puts the last-read pointer back only when pointer updates are off.
 func TestPreserveLastReadRestoresPointerWhenUpdatesAreOff(t *testing.T) {
 	mm, areaID := newScanTestArea(t)
 	e := &MenuExecutor{MessageMgr: mm}
@@ -179,6 +189,8 @@ func loadTestStrings(t *testing.T) config.StringsConfig {
 	return strs
 }
 
+// runScanTypeWithInput drives runGetScanType with scripted keystrokes and
+// returns the resulting config plus the rendered output with ANSI stripped.
 func runScanTypeWithInput(t *testing.T, input string, numMsgs int) (*ScanConfig, string) {
 	t.Helper()
 	scanNoticePause = 0
@@ -197,6 +209,8 @@ func runScanTypeWithInput(t *testing.T, input string, numMsgs int) (*ScanConfig,
 	return cfg, testAnsiEscape.ReplaceAllString(ts.output(), "")
 }
 
+// TestRunGetScanTypeCollectsSearchFields checks the T, F and U options are
+// stored and echoed back on the menu.
 func TestRunGetScanTypeCollectsSearchFields(t *testing.T) {
 	cfg, out := runScanTypeWithInput(t, "Fbob jones\rTsysop\rU\r", 10)
 	if cfg.Aborted {
@@ -213,6 +227,10 @@ func TestRunGetScanTypeCollectsSearchFields(t *testing.T) {
 	}
 }
 
+// TestRunGetScanTypeDateAcceptsCommonFormatsAndReportsBadOnes checks the D
+// option: an ISO date is accepted and displayed, the prompt states the
+// format, a bad date is reported and leaves the setting alone, and "all"
+// selects every message.
 func TestRunGetScanTypeDateAcceptsCommonFormatsAndReportsBadOnes(t *testing.T) {
 	want := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.Local)
 
@@ -242,6 +260,8 @@ func TestRunGetScanTypeDateAcceptsCommonFormatsAndReportsBadOnes(t *testing.T) {
 	}
 }
 
+// TestRunGetScanTypeRangeValidation checks a valid range is stored and an
+// out-of-bounds end clears the whole range with a notice.
 func TestRunGetScanTypeRangeValidation(t *testing.T) {
 	cfg, _ := runScanTypeWithInput(t, "R2\r5\r\r", 10)
 	if cfg.RangeStart != 2 || cfg.RangeEnd != 5 {
@@ -258,6 +278,8 @@ func TestRunGetScanTypeRangeValidation(t *testing.T) {
 	}
 }
 
+// TestRunGetScanTypeArrowKeysAreNotHotkeys checks decoded arrow keys are
+// ignored by the menu while a lone ESC aborts it.
 func TestRunGetScanTypeArrowKeysAreNotHotkeys(t *testing.T) {
 	// Up arrow (ESC [ A) used to be read byte-by-byte, so its "A" aborted the
 	// scan; left arrow (ESC [ D) opened the date prompt.
