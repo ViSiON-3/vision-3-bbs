@@ -269,16 +269,17 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 	}
 
 	// promptLine shows a prompt and reads one line. A nil error with ok=false
-	// means the user pressed ESC (or the line could not be read) and the
-	// caller should simply redraw the menu; io.EOF is passed through.
+	// means the user pressed ESC and the caller should leave the setting
+	// alone and redraw the menu. Any other read error (EOF, idle timeout) is
+	// returned so the session can disconnect as it would from any input loop.
 	promptLine := func(prompt string, maxLen int) (string, bool, error) {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 		input, err := readScanLine(ih, terminal, outputMode, maxLen)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return "", false, io.EOF
+			if errors.Is(err, errInputAborted) {
+				return "", false, nil
 			}
-			return "", false, nil
+			return "", false, err
 		}
 		return input, true, nil
 	}
@@ -348,9 +349,11 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			}
 
 		case 'R': // Range
-			// Any invalid or empty entry clears the range so the menu never
-			// shows "All" while a stale start bound is still in effect.
-			cfg.RangeStart, cfg.RangeEnd = 0, 0
+			// ESC at either prompt leaves the range as it was, like the other
+			// prompts. Enter alone at the start prompt clears it (Cr/none). An
+			// out-of-bounds entry clears it with a notice, so the menu never
+			// shows "All" while a stale bound is still in effect. The range is
+			// only ever stored as a validated pair.
 			if numMsgs <= 0 {
 				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMessages)
 				continue
@@ -359,11 +362,16 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			if err != nil {
 				return nil, err
 			}
-			if !ok || startInput == "" {
+			if !ok {
+				continue
+			}
+			if startInput == "" {
+				cfg.RangeStart, cfg.RangeEnd = 0, 0
 				continue
 			}
 			startNum, convErr := strconv.Atoi(startInput)
 			if convErr != nil || startNum < 1 || startNum > numMsgs {
+				cfg.RangeStart, cfg.RangeEnd = 0, 0
 				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanInvalidRange)
 				continue
 			}
@@ -377,6 +385,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			}
 			endNum, convErr := strconv.Atoi(endInput)
 			if convErr != nil || endNum < startNum || endNum > numMsgs {
+				cfg.RangeStart, cfg.RangeEnd = 0, 0
 				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanInvalidRange)
 				continue
 			}
@@ -389,10 +398,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanWhichPrompt)), outputMode)
 			aKey, aErr := ih.ReadKey()
 			if aErr != nil {
-				if errors.Is(aErr, io.EOF) {
-					return nil, io.EOF
-				}
-				continue
+				return nil, aErr
 			}
 			if aKey < 0 || aKey > 0x7F {
 				continue

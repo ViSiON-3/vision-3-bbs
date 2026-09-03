@@ -260,7 +260,8 @@ func TestRunGetScanTypeDateAcceptsCommonFormatsAndReportsBadOnes(t *testing.T) {
 	}
 }
 
-// TestRunGetScanTypeRangeValidation checks a valid range is stored and an
+// TestRunGetScanTypeRangeValidation checks a valid range is stored, ESC at
+// the prompt keeps an existing range, Enter alone clears it, and an
 // out-of-bounds end clears the whole range with a notice.
 func TestRunGetScanTypeRangeValidation(t *testing.T) {
 	cfg, _ := runScanTypeWithInput(t, "R2\r5\r\r", 10)
@@ -268,8 +269,23 @@ func TestRunGetScanTypeRangeValidation(t *testing.T) {
 		t.Errorf("range = %d-%d, want 2-5", cfg.RangeStart, cfg.RangeEnd)
 	}
 
+	// ESC at the start prompt must leave the previously set range alone.
+	cfg, _ = runScanTypeWithInput(t, "R2\r5\rR\x1b\r", 10)
+	if cfg.RangeStart != 2 || cfg.RangeEnd != 5 {
+		t.Errorf("range after ESC = %d-%d, want 2-5 kept", cfg.RangeStart, cfg.RangeEnd)
+	}
+
+	// Enter alone at the start prompt clears the range without a notice.
+	cfg, out := runScanTypeWithInput(t, "R2\r5\rR\r\r", 10)
+	if cfg.RangeStart != 0 || cfg.RangeEnd != 0 {
+		t.Errorf("range after Enter = %d-%d, want cleared", cfg.RangeStart, cfg.RangeEnd)
+	}
+	if strings.Contains(out, "Invalid range") {
+		t.Errorf("clearing with Enter should not report an invalid range; output:\n%s", out)
+	}
+
 	// Bad end must not leave a stale start bound in effect while the menu says "All".
-	cfg, out := runScanTypeWithInput(t, "R2\r99\r\r", 10)
+	cfg, out = runScanTypeWithInput(t, "R2\r99\r\r", 10)
 	if cfg.RangeStart != 0 || cfg.RangeEnd != 0 {
 		t.Errorf("range after bad end = %d-%d, want cleared", cfg.RangeStart, cfg.RangeEnd)
 	}

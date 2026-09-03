@@ -91,8 +91,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		startMsg := determineStartMessage(e, scanCfg, currentAreaID, currentUser.Handle, totalCount)
 		if startMsg > totalCount {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoMatches)), outputMode)
-			time.Sleep(1 * time.Second)
+			showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
 			return nil, "", nil
 		}
 
@@ -311,10 +310,10 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	if msgFilter != nil && !scannedAny {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoMatches)), outputMode)
-	} else {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanComplete)), outputMode)
+		showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
+		return currentUser, "", nil
 	}
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanComplete)), outputMode)
 	time.Sleep(1 * time.Second)
 
 	return currentUser, "", nil
