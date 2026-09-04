@@ -44,9 +44,10 @@ func (t *Tosser) resolveOrigAddr(pktHdr *ftn.PacketHeader, msg *ftn.PackedMessag
 // packed header's destination fields).
 //
 // A netmail destination is spread across three places: the packed header
-// (FTS-0001) carries net and node, INTL (FSC-0004) carries the zone, and TOPT
-// carries the point. Nothing used to read them, so inbound netmail reached the
-// reader with the addressee's name but no address at all.
+// (FTS-0001) carries net and node, while the zone and point arrive as
+// addressing control paragraphs in the message body (FTS-4001) — INTL for the
+// zone, TOPT for the point. Nothing used to read them, so inbound netmail
+// reached the reader with the addressee's name but no address at all.
 func (t *Tosser) resolveDestAddr(pktHdr *ftn.PacketHeader, msg *ftn.PackedMessage, parsed *ftn.ParsedBody) string {
 	if msg.DestNet == 0 && msg.DestNode == 0 {
 		return ""
@@ -77,7 +78,8 @@ func (t *Tosser) resolveDestAddr(pktHdr *ftn.PacketHeader, msg *ftn.PackedMessag
 // header is only trusted when the packet was addressed to the same net/node as
 // the message itself.
 func destPoint(base jam.FidoAddress, pktHdr *ftn.PacketHeader, parsed *ftn.ParsedBody) int {
-	// TOPT (FTS-0001) is the destination point, written on netmail to a point.
+	// The TOPT control paragraph (FTS-4001) is the destination point, written
+	// into the body of netmail addressed to a point.
 	if p, ok := kludgePoint(parsed.Kludges, "TOPT "); ok {
 		return p
 	}
@@ -87,14 +89,15 @@ func destPoint(base jam.FidoAddress, pktHdr *ftn.PacketHeader, parsed *ftn.Parse
 	return 0
 }
 
-// Field positions in an "INTL <destination> <origin>" kludge (FSC-0004).
+// Field positions in an "INTL <destination> <origin>" control paragraph
+// (FTS-4001).
 const (
 	intlDest = 1
 	intlOrig = 2
 )
 
-// intlAddr returns the INTL kludge address at the given field position, or nil
-// when there is no usable INTL line. INTL is netmail-only and never carries a
+// intlAddr returns the INTL address at the given field position, or nil when
+// there is no usable INTL line. INTL is netmail-only and never carries a
 // point, so it is read for its zone alone.
 func intlAddr(kludges []string, field int) *jam.FidoAddress {
 	for _, k := range kludges {
@@ -155,7 +158,8 @@ func origPoint(base jam.FidoAddress, pktHdr *ftn.PacketHeader, parsed *ftn.Parse
 		}
 	}
 
-	// FMPT (FTS-0001) is the sender's point, written on netmail from a point.
+	// The FMPT control paragraph (FTS-4001) is the sender's point, written
+	// into the body of netmail sent from a point.
 	if p, ok := kludgePoint(parsed.Kludges, "FMPT "); ok {
 		return p
 	}
