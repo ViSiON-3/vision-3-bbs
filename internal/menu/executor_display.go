@@ -402,6 +402,12 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		}
 	} // End if currentUser != nil
 
+	// Drop |{...|} groups whose placeholders are all empty, so decoration around
+	// an unset field (parentheses, a label) goes away with it instead of being
+	// left stranded as "()". Must run before substitution, while the
+	// placeholder tokens are still present to test.
+	promptString = expandOptionalGroups(promptString, placeholders)
+
 	// Replace longer placeholders before shorter ones to avoid prefix collisions (e.g. |CAN vs |CA).
 	replacementPairs := make([]string, 0, len(placeholders)*2)
 	orderedKeys := make([]string, 0, len(placeholders))

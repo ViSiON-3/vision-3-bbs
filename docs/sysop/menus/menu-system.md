@@ -330,6 +330,50 @@ Dynamic content placeholders in prompts and ANSI files:
 - `|UN` - User note (privateNote from user profile)
 - `|NEWUSERS` - New user registration status (`YES` or `NO`)
 
+#### Optional Groups
+
+Wrap part of a prompt in `|{ ... |}` to drop it when the placeholders inside it
+are empty. Use this for decoration that should disappear along with its value —
+parentheses, a label, a separator — instead of being left stranded.
+
+```json
+"PROMPT1": "|10|UH|{|12 from |GL|}|{ (|04|UN|12)|}|07"
+```
+
+| User record | Renders |
+| ----------- | ------- |
+| location and note both set | `Felonius from ViSiON/3 (SysOp)` |
+| note empty | `Felonius from ViSiON/3` |
+| both empty | `Felonius` |
+
+Without the groups, a user with no note sees `Felonius from ViSiON/3 ()`.
+
+This matters most for `|UN` (the SysOp-only `privateNote`) and `|GL`
+(Group/Location), which are empty for most ordinary users. A SysOp testing on
+their own account usually has both set and never sees the empty form.
+
+Rules:
+
+- A group is removed only when it contains at least one placeholder and **all**
+  of them are empty; whitespace counts as empty.
+- A group containing no placeholder is kept — its literal text still renders.
+- Placeholders with a non-empty default (`|CC`, `|CAN`, `|TL`, `|LCALL` …) never
+  trigger removal, since they are never blank.
+- Groups do not nest. An unmatched `|{` is left as visible text rather than
+  swallowing the rest of the prompt.
+
+Groups are resolved on the prompt string itself, before `%%file.ans%%` includes
+are expanded — so `|{...|}` works in `PROMPT1`/`PROMPT2` but not inside an
+included ANSI file. This is not specific to groups: **no** `|XX` placeholder
+expands inside an included file, and the markup renders as literal text rather
+than failing loudly. See issue #211.
+
+The `|{P}` and `|{O}` login position markers share the `|{` prefix but are not
+groups; they are stepped over and pass through untouched.
+
+> Currently available in menu prompts. Message header templates use a separate
+> substitution path and do not support this yet — see issue #209.
+
 ### AT-Code Placeholders
 
 Dynamic `@CODE@` placeholders are available in prompts, ANSI files, and templates. They support multiple width formats and alignment modifiers for precise layout control — especially useful in ANSI art where character positioning matters.
