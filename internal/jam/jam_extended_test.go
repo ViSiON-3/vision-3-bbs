@@ -896,6 +896,47 @@ func TestMessageTypeMethods(t *testing.T) {
 	}
 }
 
+// Netmail is private mail: WriteMessageExt must stamp MSG_PRIVATE on it
+// whatever the caller passes, so tossed inbound mail and locally written mail
+// are both marked. Echomail is public and must not be.
+func TestWriteMessageExtMarksNetmailPrivate(t *testing.T) {
+	b, _ := openCovTestBase(t)
+
+	msg := NewMessage()
+	msg.From = "Remote User"
+	msg.To = "Local Sysop"
+	msg.Subject = "Private Note"
+	msg.Text = "Secret content"
+	n, err := b.WriteMessageExt(msg, MsgTypeNetmailMsg, "", "")
+	if err != nil {
+		t.Fatalf("WriteMessageExt: %v", err)
+	}
+	got, err := b.ReadMessage(n)
+	if err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+	if !got.IsPrivate() {
+		t.Errorf("netmail attribute = 0x%08x, want MsgPrivate set", got.GetAttribute())
+	}
+
+	echo := NewMessage()
+	echo.From = "Remote User"
+	echo.To = "All"
+	echo.Subject = "Public Note"
+	echo.Text = "Open content"
+	en, err := b.WriteMessageExt(echo, MsgTypeEchomailMsg, "TESTAREA", "")
+	if err != nil {
+		t.Fatalf("WriteMessageExt echomail: %v", err)
+	}
+	gotEcho, err := b.ReadMessage(en)
+	if err != nil {
+		t.Fatalf("ReadMessage echomail: %v", err)
+	}
+	if gotEcho.IsPrivate() {
+		t.Error("echomail must not be marked private")
+	}
+}
+
 func TestGetJAMAttribute(t *testing.T) {
 	tests := []struct {
 		mt   MessageType
@@ -903,7 +944,7 @@ func TestGetJAMAttribute(t *testing.T) {
 	}{
 		{MsgTypeLocalMsg, MsgLocal | MsgTypeLocal},
 		{MsgTypeEchomailMsg, MsgLocal | MsgTypeEcho},
-		{MsgTypeNetmailMsg, MsgLocal | MsgTypeNet},
+		{MsgTypeNetmailMsg, MsgLocal | MsgTypeNet | MsgPrivate},
 	}
 	for _, tt := range tests {
 		got := tt.mt.GetJAMAttribute()
