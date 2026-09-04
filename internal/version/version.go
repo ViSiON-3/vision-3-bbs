@@ -8,7 +8,7 @@ import (
 // Number is the global ViSiON/3 version.
 // Set this at build time with:
 // -ldflags "-X github.com/ViSiON-3/vision-3-bbs/internal/version.Number=1.0.0"
-var Number = "0.8.1"
+var Number = "0.8.2"
 
 // Display returns the version prefixed with "v", e.g. "v0.8.0". A Number that
 // already carries the prefix (a build stamped from a git tag) is left alone.
