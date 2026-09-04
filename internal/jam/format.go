@@ -20,10 +20,27 @@ const softwareName = "ViSiON/3"
 // and is assigned by that software, not by the sysop. The sysop-configurable
 // line is the origin line; see AddOriginLine.
 func AddTearline(text string) string {
+	tearline := fmt.Sprintf("--- %s", DefaultTearlineText())
+	lines := strings.Split(text, "\n")
+	foundTearline := false
+	formattedLines := make([]string, 0, len(lines))
+	for index, line := range lines {
+		if strings.HasPrefix(line, "--- ") {
+			if !foundTearline {
+				formattedLines = append(formattedLines, tearline)
+				foundTearline = true
+			}
+			continue
+		}
+		formattedLines = append(formattedLines, lines[index])
+	}
+	if foundTearline {
+		return strings.Join(formattedLines, "\n")
+	}
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	return text + fmt.Sprintf("--- %s\n", DefaultTearlineText())
+	return text + tearline + "\n"
 }
 
 // AddOriginLine appends an origin line to the message text.
@@ -38,7 +55,13 @@ func AddOriginLine(text, systemName, address string) string {
 // DefaultTearlineText returns the tearline body carrying the running
 // version and platform, e.g. "ViSiON/3 v0.8.0/macOS".
 func DefaultTearlineText() string {
-	return fmt.Sprintf("%s %s/%s", softwareName, version.Display(), version.Platform())
+	platform := version.Platform()
+	versionText := version.Display()
+	maxVersionLength := 35 - len(softwareName) - len(" //") - len(platform)
+	if len(versionText) > maxVersionLength {
+		versionText = versionText[:maxVersionLength]
+	}
+	return fmt.Sprintf("%s %s/%s", softwareName, versionText, platform)
 }
 
 // FormatPID returns the PID kludge value.

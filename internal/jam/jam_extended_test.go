@@ -716,6 +716,17 @@ func TestAddTearlineIsAlwaysTheSoftwareStamp(t *testing.T) {
 	}
 }
 
+func TestAddTearlineReplacesExistingTearline(t *testing.T) {
+	text := "Relayed text\n--- " + DefaultTearlineText() + "\n--- Other BBS v1.0\n * Origin: Remote (1:2/3)\n"
+	want := "Relayed text\n--- " + DefaultTearlineText() + "\n * Origin: Remote (1:2/3)\n"
+	if got := AddTearline(text); got != want {
+		t.Errorf("AddTearline() = %q, want %q", got, want)
+	}
+	if got := strings.Count(AddTearline(text), "--- "); got != 1 {
+		t.Errorf("AddTearline() produced %d tearlines, want 1", got)
+	}
+}
+
 func TestDefaultTearlineTextFormat(t *testing.T) {
 	got := DefaultTearlineText()
 	if !strings.Contains(got, version.Display()) {
@@ -727,6 +738,23 @@ func TestDefaultTearlineTextFormat(t *testing.T) {
 	// FTS-0004 caps the text after "--- " at 35 characters.
 	if len(got) > 35 {
 		t.Errorf("DefaultTearlineText() = %q is %d chars, FTS-0004 allows 35", got, len(got))
+	}
+}
+
+func TestDefaultTearlineTextCapsLongBuildVersion(t *testing.T) {
+	originalVersion := version.Number
+	version.Number = "1.2.3-rc.12345678901234567890"
+	t.Cleanup(func() { version.Number = originalVersion })
+
+	got := DefaultTearlineText()
+	if len(got) > 35 {
+		t.Errorf("DefaultTearlineText() = %q is %d bytes, FTS-0004 allows 35", got, len(got))
+	}
+	if !strings.HasPrefix(got, softwareName+" v") {
+		t.Errorf("DefaultTearlineText() = %q, want %q software and version prefix", got, softwareName)
+	}
+	if !strings.HasSuffix(got, "/"+version.Platform()) {
+		t.Errorf("DefaultTearlineText() = %q, want it to end with /%s", got, version.Platform())
 	}
 }
 
