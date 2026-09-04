@@ -355,7 +355,9 @@ Rules:
 
 Groups are resolved on the prompt string itself, before `%%file.ans%%` includes
 are expanded — so `|{...|}` works in `PROMPT1`/`PROMPT2` but not inside an
-included ANSI file.
+included ANSI file. This is not specific to groups: **no** `|XX` placeholder
+expands inside an included file, and the markup renders as literal text rather
+than failing loudly. See issue #211.
 
 The `|{P}` and `|{O}` login position markers share the `|{` prefix but are not
 groups; they are stepped over and pass through untouched.
