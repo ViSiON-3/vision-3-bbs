@@ -353,6 +353,13 @@ Rules:
 - Groups do not nest. An unmatched `|{` is left as visible text rather than
   swallowing the rest of the prompt.
 
+Groups are resolved on the prompt string itself, before `%%file.ans%%` includes
+are expanded — so `|{...|}` works in `PROMPT1`/`PROMPT2` but not inside an
+included ANSI file.
+
+The `|{P}` and `|{O}` login position markers share the `|{` prefix but are not
+groups; they are stepped over and pass through untouched.
+
 > Currently available in menu prompts. Message header templates use a separate
 > substitution path and do not support this yet — see issue #209.
 

@@ -133,3 +133,52 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+// Regression: |{P} and |{O} login position markers share the "|{" prefix with
+// an optional group. Before this was handled, a prompt containing a marker and
+// a group paired the marker's "|{" with the group's "|}" and deleted the whole
+// prompt.
+func TestExpandOptionalGroupsCoordinateMarkers(t *testing.T) {
+	ph := map[string]string{"|UH": "Felonius", "|UN": "", "|GL": "ViSiON/3"}
+
+	cases := []struct{ name, in, want string }{
+		{"marker then empty group", "|{P}user |{(|UN)|}", "|{P}user "},
+		{"marker then kept group", "|{P}user |{[|GL]|}", "|{P}user [|GL]"},
+		{"both markers survive alone", "|{P}|{O}", "|{P}|{O}"},
+		{"marker inside a kept group", "|{|GL |{P}|}", "|GL |{P}"},
+		{"password marker then group", "|{O}pw |{(|UN)|}", "|{O}pw "},
+		{"marker after a group", "|{(|UN)|}|{P}", "|{P}"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := expandOptionalGroups(c.in, ph); got != c.want {
+				t.Errorf("expandOptionalGroups(%q)\n got  %q\n want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// Regression: |CA is a prefix of |CAN. A group containing |CAN must be judged
+// on |CAN's value alone, not kept alive by a populated |CA.
+func TestExpandOptionalGroupsPrefixCollision(t *testing.T) {
+	ph := map[string]string{
+		"|CA":  "GENERAL", // populated
+		"|CAN": "",        // the one actually in the group
+		"|CC":  "None",
+		"|CCN": "",
+	}
+
+	if got, want := expandOptionalGroups("a|{[|CAN]|}b", ph), "ab"; got != want {
+		t.Errorf("empty |CAN should drop despite populated |CA: got %q, want %q", got, want)
+	}
+	if got, want := expandOptionalGroups("a|{[|CA]|}b", ph), "a[|CA]b"; got != want {
+		t.Errorf("populated |CA should be kept: got %q, want %q", got, want)
+	}
+	if got, want := expandOptionalGroups("a|{[|CCN]|}b", ph), "ab"; got != want {
+		t.Errorf("empty |CCN should drop despite |CC default: got %q, want %q", got, want)
+	}
+	// Both in one group: |CA has a value, so the group survives.
+	if got, want := expandOptionalGroups("a|{|CA/|CAN|}b", ph), "a|CA/|CANb"; got != want {
+		t.Errorf("mixed group should survive: got %q, want %q", got, want)
+	}
+}
