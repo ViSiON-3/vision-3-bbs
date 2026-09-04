@@ -3,6 +3,7 @@ package jam
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
@@ -96,8 +97,11 @@ func DefaultTearlineText() string {
 	if maxVersionLength < 0 {
 		maxVersionLength = 0
 	}
-	if len(versionText) > maxVersionLength {
-		versionText = versionText[:maxVersionLength]
+	// Trim whole runes: a build could stamp a non-ASCII version, and cutting
+	// one in half would put invalid UTF-8 on the wire.
+	for len(versionText) > maxVersionLength {
+		_, size := utf8.DecodeLastRuneInString(versionText)
+		versionText = versionText[:len(versionText)-size]
 	}
 	return fmt.Sprintf("%s %s/%s", softwareName, versionText, platform)
 }

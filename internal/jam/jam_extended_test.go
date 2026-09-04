@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
@@ -802,6 +803,25 @@ func TestDefaultTearlineTextCapsLongBuildVersion(t *testing.T) {
 	}
 	if !strings.HasPrefix(got, softwareName+" v") {
 		t.Errorf("DefaultTearlineText() = %q, want %q software and version prefix", got, softwareName)
+	}
+	if !strings.HasSuffix(got, "/"+version.Platform()) {
+		t.Errorf("DefaultTearlineText() = %q, want it to end with /%s", got, version.Platform())
+	}
+}
+
+func TestDefaultTearlineTextTruncatesOnRuneBoundaries(t *testing.T) {
+	originalVersion := version.Number
+	// version.Number is whatever -ldflags stamps in, so it is not guaranteed
+	// to be ASCII. Each of these is 3 bytes per rune.
+	version.Number = "1.0.0-" + strings.Repeat("\u00e9\u00e9\u4e16", 12)
+	t.Cleanup(func() { version.Number = originalVersion })
+
+	got := DefaultTearlineText()
+	if !utf8.ValidString(got) {
+		t.Errorf("DefaultTearlineText() = %q is not valid UTF-8", got)
+	}
+	if len(got) > maxTearlineLength {
+		t.Errorf("DefaultTearlineText() = %q is %d bytes, FTS-0004 allows %d", got, len(got), maxTearlineLength)
 	}
 	if !strings.HasSuffix(got, "/"+version.Platform()) {
 		t.Errorf("DefaultTearlineText() = %q, want it to end with /%s", got, version.Platform())
