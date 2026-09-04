@@ -252,7 +252,7 @@ func TestExtractAddressFromOriginLine(t *testing.T) {
 		{" * Origin: Missing parens", ""},
 	}
 	for _, tt := range tests {
-		got := extractAddressFromOriginLine(tt.text)
+		got := ExtractOriginAddress(tt.text)
 		if got != tt.want {
 			t.Errorf("extractAddress(%q) = %q, want %q", tt.text, got, tt.want)
 		}

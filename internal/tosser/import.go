@@ -430,16 +430,9 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (
 	}
 	jamMsg.DateTime = dt
 
-	// Set origin address from the packet header and message
-	origZone := pktHdr.OrigZone
-	if origZone == 0 {
-		origZone = pktHdr.QOrigZone // Fallback to QMail zone field
-	}
-	if origZone == 0 {
-		origZone = uint16(t.ownAddr.Zone) // Last resort: assume same zone
-	}
-	origAddr := fmt.Sprintf("%d:%d/%d", origZone, msg.OrigNet, msg.OrigNode)
-	jamMsg.OrigAddr = origAddr
+	// Set origin address from the packet header and message, recovering the
+	// author's point number from the kludges that carry it.
+	jamMsg.OrigAddr = t.resolveOrigAddr(pktHdr, msg, parsed, msgID)
 
 	// Set MSGID if we have one
 	if msgID != "" {
@@ -532,14 +525,10 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 	}
 	jamMsg.DateTime = dt
 
-	origZone := pktHdr.OrigZone
-	if origZone == 0 {
-		origZone = pktHdr.QOrigZone
-	}
-	if origZone == 0 {
-		origZone = uint16(t.ownAddr.Zone)
-	}
-	jamMsg.OrigAddr = fmt.Sprintf("%d:%d/%d", origZone, msg.OrigNet, msg.OrigNode)
+	jamMsg.OrigAddr = t.resolveOrigAddr(pktHdr, msg, parsed, msgID)
+	// Only netmail keeps a destination address — WriteMessageExt drops it for
+	// every other message type, so the bad and dupe areas are unaffected.
+	jamMsg.DestAddr = t.resolveDestAddr(pktHdr, msg, parsed)
 
 	// Preserve kludges (excluding MSGID/REPLY which are handled separately)
 	for _, k := range parsed.Kludges {

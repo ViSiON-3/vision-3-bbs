@@ -38,9 +38,9 @@ func buildSubfields(msg *Message) []Subfield {
 	return sfs
 }
 
-// extractAddressFromOriginLine parses a FidoNet address from the origin line.
+// ExtractOriginAddress parses a FidoNet address from the origin line.
 // Format: " * Origin: BBS Name (address)"
-func extractAddressFromOriginLine(text string) string {
+func ExtractOriginAddress(text string) string {
 	normalized := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 	for _, line := range strings.Split(normalized, "\n") {
 		line = strings.TrimSpace(line)
