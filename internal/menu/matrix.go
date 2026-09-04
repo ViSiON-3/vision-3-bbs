@@ -132,32 +132,15 @@ func (e *MenuExecutor) RunMatrixScreen(
 			if key < 32 || key > 126 {
 				continue // ignore non-printable / special keys
 			}
-			r := rune(key)
-
-			// Direct selection by number
-			if r >= '1' && r <= '9' {
-				numIndex := int(r - '1')
-				if numIndex < len(options) {
-					selectedIndex = numIndex
-					_ = drawMatrixOptions(terminal, options, selectedIndex, outputMode) // best-effort redraw
-					selectionMade = true
-				}
-				break
-			}
-
-			// Check for hotkey match (explicit HotKey field from BAR file)
-			keyStr := strings.ToUpper(string(r))
-			matchedHotkey := false
-			for i, opt := range options {
-				if keyStr == opt.HotKey {
-					selectedIndex = i
-					_ = drawMatrixOptions(terminal, options, selectedIndex, outputMode) // best-effort redraw
-					selectionMade = true
-					matchedHotkey = true
-					break
-				}
-			}
-			if !matchedHotkey {
+			// The move has to go through newIndex: the shared "did the
+			// highlight move?" block below copies newIndex back over
+			// selectedIndex, so assigning selectedIndex here would be
+			// undone and every hotkey press would act on whatever was
+			// already highlighted instead of what was typed.
+			if idx, ok := matrixPrintableKey(rune(key), options); ok {
+				newIndex = idx
+				selectionMade = true
+			} else {
 				e.showUndefinedMenuInput(terminal, outputMode, nodeNumber)
 				_ = drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode) // best-effort redraw
 			}
@@ -197,6 +180,29 @@ func (e *MenuExecutor) RunMatrixScreen(
 	// Max tries exceeded
 	slog.Info("matrix max tries exceeded, disconnecting", "node", nodeNumber)
 	return "DISCONNECT", nil
+}
+
+// matrixPrintableKey resolves a printable keypress against the matrix options:
+// 1-9 pick by position, anything else matches the HotKey column of the .BAR
+// file (case-insensitively). It returns the option index to select and false
+// if the key matches nothing, in which case the caller reports undefined
+// input.
+func matrixPrintableKey(r rune, options []LightbarOption) (int, bool) {
+	if r >= '1' && r <= '9' {
+		idx := int(r - '1')
+		if idx < len(options) {
+			return idx, true
+		}
+		return 0, false
+	}
+
+	keyStr := strings.ToUpper(string(r))
+	for i, opt := range options {
+		if keyStr == opt.HotKey {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // processMatrixAction handles the selected matrix menu action.

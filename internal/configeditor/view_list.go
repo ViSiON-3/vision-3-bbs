@@ -81,9 +81,14 @@ func (m Model) viewRecordList() string {
 
 		var rowContent string
 		if idx < 0 || idx >= total {
-			if i == 0 && total == 0 && m.recordType == "v3nethub" {
-				hint := " Only operators running their own hub/network will have entries here."
-				rowContent = menuItemStyle.Render(padRight(hint, boxW))
+			// An empty list is otherwise a blank box, leaving the only way
+			// forward buried in the help bar at the foot of the screen.
+			if i == 0 && total == 0 {
+				if hint := m.emptyRecordListHint(); hint != "" {
+					rowContent = listEmptyHintStyle.Render(padRight(" "+hint, boxW))
+				} else {
+					rowContent = menuItemStyle.Render(strings.Repeat(" ", boxW))
+				}
 			} else {
 				rowContent = menuItemStyle.Render(strings.Repeat(" ", boxW))
 			}
@@ -161,6 +166,26 @@ func (m Model) viewRecordList() string {
 	b.WriteString(helpBarStyle.Render(helpText))
 
 	return b.String()
+}
+
+// emptyRecordListHint returns the line shown in place of the first list row
+// when a record list has nothing in it, telling the operator what the empty
+// box means and which key fills it. Returns "" for record types that need no
+// explanation.
+func (m Model) emptyRecordListHint() string {
+	switch m.recordType {
+	case "v3nethub":
+		return "Only operators running their own hub/network will have entries here."
+	case "ftn":
+		return "No networks yet — press I to add one (FTN setup wizard)."
+	case "ftnlink":
+		return "No links yet — press I to add this network's uplink."
+	case "v3netleaf":
+		return "No subscriptions yet — press I for the wizard, or B to browse the registry."
+	case "msgarea", "filearea", "conference", "door", "event", "protocol", "archiver", "login":
+		return "Nothing configured yet — press I to insert the first entry."
+	}
+	return ""
 }
 
 // recordTypeTitle returns a human-readable title for the current record type.

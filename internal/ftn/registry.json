@@ -8,7 +8,7 @@
     "coordinator_email": "nandre@net229.org",
     "coordinator_ftn": "1:229/426",
     "dns_suffix": "binkp.net",
-    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
+    "echolist_url": "http://ambrosia60.spdns.eu/53f8ee03/drv_q/div13/backbone/BACKBONE.NA",
     "nodelist_url": "https://nodelist.fidonet.cc/download/latest"
   },
   {
@@ -19,14 +19,14 @@
     "coordinator_email": "wd@skynet.be",
     "coordinator_ftn": "2:292/854",
     "dns_suffix": "binkp.net",
-    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
+    "echolist_url": "http://ambrosia60.spdns.eu/53f8ee03/drv_q/div13/backbone/BACKBONE.NA",
     "nodelist_url": "https://nodelist.fidonet.cc/download/latest"
   },
   {
     "zone": 3,
     "name": "FidoNet",
     "description": "Australasia",
-    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
+    "echolist_url": "http://ambrosia60.spdns.eu/53f8ee03/drv_q/div13/backbone/BACKBONE.NA",
     "nodelist_url": "https://nodelist.fidonet.cc/download/latest"
   },
   {
@@ -38,7 +38,7 @@
     "coordinator_email": "ragnarok@docksud.com.ar",
     "coordinator_ftn": "4:902/26",
     "dns_suffix": "binkp.net",
-    "echolist_url": "http://web.synchro.net/files/FidoNet/ECHOLIST/BACKBONE.NA",
+    "echolist_url": "http://ambrosia60.spdns.eu/53f8ee03/drv_q/div13/backbone/BACKBONE.NA",
     "nodelist_url": "https://nodelist.fidonet.cc/download/latest"
   },
   {

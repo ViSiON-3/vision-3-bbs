@@ -217,9 +217,11 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 // only side effect is debug logging.
 //
 // Special cases: "/G" is the global hangup shortcut (matches unconditionally,
-// no ACS check); "^M" matches Enter with no input (classic BBS default
-// command); "##" matches any all-numeric input (classic BBS numeric
-// wildcard), appending the entered number to the command as args.
+// no ACS check); "G" is the global confirmed-logoff shortcut, applied only
+// after every menu command has failed to match so a menu that binds G itself
+// keeps it; "^M" matches Enter with no input (classic BBS default command);
+// "##" matches any all-numeric input (classic BBS numeric wildcard),
+// appending the entered number to the command as args.
 //
 // hasAccess takes both the command's ACS string and its Keys string (rather
 // than just the ACS string) so that the closure Run constructs — which has
@@ -288,6 +290,18 @@ func matchCommand(commands []CommandRecord, userInput string, hasAccess func(acs
 				break // Break outer command loop
 			}
 		}
+	}
+
+	// Classic BBS convention: G is Goodbye from anywhere. Only menus that
+	// happen to list it get it otherwise, so on the ones that don't (the
+	// email, QWK and sysop menus among them) the only way out was the /G
+	// hangup. Running last means a menu's own G still wins — USERCFG binds
+	// it to the custom-prompt editor — because this is reached only when
+	// nothing in the menu matched.
+	if !matched && userInput == "G" {
+		nextAction = "RUN:MAINLOGOFF"
+		matched = true
+		slog.Debug("matched global G shortcut to confirmed logoff")
 	}
 
 	return nextAction, matchedNodeActivity, matched

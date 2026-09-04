@@ -83,6 +83,17 @@ func CleanEcholist(areas []EchoArea, excludeTags []string, titlePrefix string) [
 	return result
 }
 
+// EcholistIsDownloadable reports whether a registry echolist_url is something
+// the wizard can actually fetch. Several networks hand their .NA file out over
+// the network itself rather than the web, and the registry records only that
+// filename (for example "metronet.na"). Passing one of those to an HTTP client
+// fails with an opaque "unsupported protocol scheme" error, so callers check
+// here first and explain where the file really comes from instead.
+func EcholistIsDownloadable(url string) bool {
+	lower := strings.ToLower(strings.TrimSpace(url))
+	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
+}
+
 // DownloadEcholist fetches an echolist from a URL, parses it, and returns
 // the areas. The request is bounded by the given context.
 func DownloadEcholist(ctx context.Context, url string) ([]EchoArea, error) {

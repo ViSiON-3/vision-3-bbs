@@ -92,3 +92,33 @@ func TestMatchCommandHasAccessReceivesKeys(t *testing.T) {
 		t.Fatalf("hasAccess called with (%q, %q), want (\"s10\", \"Q W\")", gotACS, gotKeys)
 	}
 }
+
+func TestMatchCommandGlobalGoodbye(t *testing.T) {
+	allow := func(string, string) bool { return true }
+
+	// A menu that lists no G (the email, QWK and sysop menus) still logs off
+	// on G, instead of leaving /G as the only way out.
+	cmds := []CommandRecord{
+		{Keys: "S", Command: "RUN:SENDPRIVMAIL"},
+		{Keys: "Q", Command: "GOTO:MAIN"},
+	}
+	action, _, matched := matchCommand(cmds, "G", allow)
+	if !matched || action != "RUN:MAINLOGOFF" {
+		t.Fatalf("got (%q, %v), want (RUN:MAINLOGOFF, true)", action, matched)
+	}
+
+	// A menu that binds G itself keeps it: the fallback only runs when
+	// nothing in the menu matched.
+	own := []CommandRecord{
+		{Keys: "G", Command: "RUN:CFG_CUSTOMPROMPT", NodeActivity: "User Settings"},
+	}
+	action, nodeActivity, matched := matchCommand(own, "G", allow)
+	if !matched || action != "RUN:CFG_CUSTOMPROMPT" || nodeActivity != "User Settings" {
+		t.Fatalf("got (%q, %q, %v), want (RUN:CFG_CUSTOMPROMPT, User Settings, true)", action, nodeActivity, matched)
+	}
+
+	// The fallback is exact: it must not swallow other input starting with G.
+	if _, _, m := matchCommand(cmds, "GO", allow); m {
+		t.Fatal("GO should not match the global goodbye shortcut")
+	}
+}
