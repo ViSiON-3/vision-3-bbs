@@ -18,6 +18,35 @@ import (
 	"golang.org/x/term"
 )
 
+// replyAddressee returns who a reply to msg goes to: name for display in the
+// editor header, and to for the message's To field.
+//
+// Netmail is delivered by FTN address, not by name. AddReply splits
+// "user@zone:net/node" into the To and destination-address fields, and a To
+// with no address leaves the JAM message without a DADDRESS subfield, so the
+// tosser has nothing to address the outbound packet with — the reply is
+// written but can never be delivered. Every other area type replies to the
+// bare name.
+//
+// The addressee is normally the parent's author, at the address the message
+// came from. Netmail the user sent themselves is the exception: its origin is
+// this system, so the reply follows the parent to its addressee instead of
+// looping back here.
+func replyAddressee(area *message.MessageArea, msg *message.DisplayMessage) (name, to string) {
+	if area == nil || area.AreaType != "netmail" {
+		return msg.From, msg.From
+	}
+
+	name, addr := msg.From, msg.OrigAddr
+	if msg.DestAddr != "" && area.OriginAddr != "" && addr == area.OriginAddr {
+		name, addr = msg.To, msg.DestAddr
+	}
+	if addr == "" {
+		return name, name // unaddressable, but the reply is still worth keeping
+	}
+	return name, fmt.Sprintf("%s@%s", name, addr)
+}
+
 // handleReply manages the reply flow matching Pascal's reply handling.
 func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
@@ -42,6 +71,11 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 
 	terminalio.WriteProcessedBytes(terminal, []byte(e.LoadedStrings.MsgLaunchingEditor), outputMode)
 
+	// Work out who the reply is addressed to before opening the editor, so the
+	// header shows the reply's own addressee rather than the parent's.
+	replyArea, _ := e.MessageMgr.GetAreaByID(currentAreaID)
+	replyName, replyTo := replyAddressee(replyArea, currentMsg)
+
 	// Start with empty editor - user will use /Q command to quote if desired
 	// Pass message metadata for quoting (from, title, date, time, isAnon, lines)
 	replyNextMsg := *totalMsgCount + 1
@@ -50,7 +84,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		NextMsgNum: replyNextMsg,
 		ConfArea:   fmt.Sprintf("%s > %s", confName, areaName),
 	}
-	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, s, outputMode, newSubject, currentMsg.To, currentUser.Handle, false,
+	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, s, outputMode, newSubject, replyName, currentUser.Handle, false,
 		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, replyCtx)
 	if editErr != nil {
 		slog.Error("editor failed", "node", nodeNumber, "error", editErr)
@@ -75,10 +109,10 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	replyMsgID := currentMsg.MsgID
 	var err error
 	if currentMsg.IsPrivate {
-		_, err = e.MessageMgr.AddPrivateReply(currentAreaID, currentUser.Handle, currentMsg.From,
+		_, err = e.MessageMgr.AddPrivateReply(currentAreaID, currentUser.Handle, replyTo,
 			newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
 	} else {
-		_, err = e.MessageMgr.AddReply(currentAreaID, currentUser.Handle, currentMsg.From,
+		_, err = e.MessageMgr.AddReply(currentAreaID, currentUser.Handle, replyTo,
 			newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
 	}
 	if err != nil {
