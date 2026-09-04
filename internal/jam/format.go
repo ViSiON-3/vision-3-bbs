@@ -13,34 +13,66 @@ var Version = version.Number
 // softwareName is the product name stamped into tearlines and PID/TID kludges.
 const softwareName = "ViSiON/3"
 
-// AddTearline appends the software tearline to the message text.
+// maxTearlineLength is the FTS-0004 limit on the text following "--- ".
+const maxTearlineLength = 35
+
+// AddTearline stamps the software tearline onto the message text.
 // Format: "--- ViSiON/3 v0.8.0/macOS"
 //
 // Per FTS-0004 the tearline identifies the software that produced the message
 // and is assigned by that software, not by the sysop. The sysop-configurable
 // line is the origin line; see AddOriginLine.
+//
+// The tearline belongs at the end of the message, directly above the origin
+// line, so any tearline already sitting in that trailing block is replaced
+// rather than duplicated. Only the trailer is rewritten: a "--- " line inside
+// the body — a quoted separator, a list item, an e-mail-style signature cut —
+// is message content and is left exactly where the author put it.
 func AddTearline(text string) string {
-	tearline := fmt.Sprintf("--- %s", DefaultTearlineText())
-	lines := strings.Split(text, "\n")
-	foundTearline := false
-	formattedLines := make([]string, 0, len(lines))
-	for index, line := range lines {
-		if strings.HasPrefix(line, "--- ") {
-			if !foundTearline {
-				formattedLines = append(formattedLines, tearline)
-				foundTearline = true
-			}
-			continue
+	tearline := "--- " + DefaultTearlineText()
+
+	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	start := trailerStart(lines)
+
+	out := make([]string, 0, len(lines)+1)
+	out = append(out, lines[:start]...)
+	out = append(out, tearline)
+	for _, line := range lines[start:] {
+		// Tearlines in the trailer are superseded by the one just added;
+		// origin lines and any other trailer content survive.
+		if !isTearlineLine(line) {
+			out = append(out, line)
 		}
-		formattedLines = append(formattedLines, lines[index])
 	}
-	if foundTearline {
-		return strings.Join(formattedLines, "\n")
+
+	return strings.Join(out, "\n") + "\n"
+}
+
+// trailerStart returns the index at which the message's trailing tearline and
+// origin block begins, or len(lines) when the message has no such block. Only
+// an unbroken run of tearline and origin lines at the very end counts, so body
+// text is never mistaken for a trailer.
+func trailerStart(lines []string) int {
+	start := len(lines)
+	for i := len(lines) - 1; i >= 0; i-- {
+		if !isTearlineLine(lines[i]) && !isOriginLine(lines[i]) {
+			break
+		}
+		start = i
 	}
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	return text + tearline + "\n"
+	return start
+}
+
+// isTearlineLine reports whether a line is a tearline: "---" alone, or "---"
+// followed by a software identifier.
+func isTearlineLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return trimmed == "---" || strings.HasPrefix(trimmed, "--- ")
+}
+
+// isOriginLine reports whether a line is an FTN origin line.
+func isOriginLine(line string) bool {
+	return strings.HasPrefix(strings.TrimSpace(line), "* Origin:")
 }
 
 // AddOriginLine appends an origin line to the message text.
@@ -57,7 +89,13 @@ func AddOriginLine(text, systemName, address string) string {
 func DefaultTearlineText() string {
 	platform := version.Platform()
 	versionText := version.Display()
-	maxVersionLength := 35 - len(softwareName) - len(" //") - len(platform)
+	// FTS-0004 caps the text after "--- " at 35 characters, and version.Number
+	// takes whatever a -ldflags build stamps into it. The separators are the
+	// space and the slash in the format string below.
+	maxVersionLength := maxTearlineLength - len(softwareName) - len(" /") - len(platform)
+	if maxVersionLength < 0 {
+		maxVersionLength = 0
+	}
 	if len(versionText) > maxVersionLength {
 		versionText = versionText[:maxVersionLength]
 	}

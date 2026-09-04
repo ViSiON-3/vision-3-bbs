@@ -727,6 +727,56 @@ func TestAddTearlineReplacesExistingTearline(t *testing.T) {
 	}
 }
 
+// Only the trailing tearline/origin block is rewritten. A "--- " line the
+// author typed in the body is message content: rewriting it would move the
+// tearline above the rest of the message and drop whatever followed.
+func TestAddTearlineLeavesBodyDashLinesAlone(t *testing.T) {
+	stamp := "--- " + DefaultTearlineText() + "\n"
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			name: "dashes used as list markers",
+			text: "Here are my picks:\n--- item one\n--- item two\nThanks!\n",
+			want: "Here are my picks:\n--- item one\n--- item two\nThanks!\n" + stamp,
+		},
+		{
+			name: "signature cut mid-message",
+			text: "See you at the meetup.\n--- \nRobbie, sysop\n",
+			want: "See you at the meetup.\n--- \nRobbie, sysop\n" + stamp,
+		},
+		{
+			name: "no trailing newline",
+			text: "Body",
+			want: "Body\n" + stamp,
+		},
+		{
+			name: "trailing separator is a tearline and is replaced",
+			text: "Bye\n--- \n",
+			want: "Bye\n" + stamp,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := AddTearline(tt.text); got != tt.want {
+				t.Errorf("AddTearline(%q) = %q, want %q", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+// The tearline must end up directly above the origin line, which is what the
+// echomail writer appends next.
+func TestAddTearlineSitsAboveOriginLine(t *testing.T) {
+	got := AddOriginLine(AddTearline("Body text.\n"), "My BBS", "21:4/158.1")
+	want := "Body text.\n--- " + DefaultTearlineText() + "\n * Origin: My BBS (21:4/158.1)\n"
+	if got != want {
+		t.Errorf("trailer = %q, want %q", got, want)
+	}
+}
+
 func TestDefaultTearlineTextFormat(t *testing.T) {
 	got := DefaultTearlineText()
 	if !strings.Contains(got, version.Display()) {
@@ -736,8 +786,8 @@ func TestDefaultTearlineTextFormat(t *testing.T) {
 		t.Errorf("DefaultTearlineText() = %q, want it to end with /%s", got, version.Platform())
 	}
 	// FTS-0004 caps the text after "--- " at 35 characters.
-	if len(got) > 35 {
-		t.Errorf("DefaultTearlineText() = %q is %d chars, FTS-0004 allows 35", got, len(got))
+	if len(got) > maxTearlineLength {
+		t.Errorf("DefaultTearlineText() = %q is %d chars, FTS-0004 allows %d", got, len(got), maxTearlineLength)
 	}
 }
 
@@ -747,8 +797,8 @@ func TestDefaultTearlineTextCapsLongBuildVersion(t *testing.T) {
 	t.Cleanup(func() { version.Number = originalVersion })
 
 	got := DefaultTearlineText()
-	if len(got) > 35 {
-		t.Errorf("DefaultTearlineText() = %q is %d bytes, FTS-0004 allows 35", got, len(got))
+	if len(got) > maxTearlineLength {
+		t.Errorf("DefaultTearlineText() = %q is %d bytes, FTS-0004 allows %d", got, len(got), maxTearlineLength)
 	}
 	if !strings.HasPrefix(got, softwareName+" v") {
 		t.Errorf("DefaultTearlineText() = %q, want %q software and version prefix", got, softwareName)
