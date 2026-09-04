@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"golang.org/x/term"
@@ -155,6 +156,36 @@ func initNewsSeen(u *user.User, items []NewsItem, seen map[int]bool) {
 		}
 	}
 	u.NewsSeenInitialized = true
+}
+
+// WarnIfNewsUnwired logs a one-time startup warning when the system has news
+// items to show but no PRINTNEWS step to show them with.
+//
+// PRINTNEWS ships in the default login sequence, but setup only copies a
+// template config when the target file does not already exist, so a system
+// installed before PRINTNEWS was added keeps its old configs/login.json and
+// silently never displays news. There is no config migration framework, and
+// rewriting a sysop-owned file to add the step would not be able to tell
+// "never had it" from "deliberately removed it" — so this only reports.
+func WarnIfNewsUnwired(rootConfigPath string, loginSequence []config.LoginItem) {
+	for _, item := range loginSequence {
+		if strings.EqualFold(item.Command, "PRINTNEWS") {
+			return
+		}
+	}
+
+	newsMu.Lock()
+	nd, err := loadNewsData(rootConfigPath)
+	newsMu.Unlock()
+	if err != nil || len(nd.Items) == 0 {
+		// No news to show, so nothing is being missed.
+		return
+	}
+
+	slog.Warn("system news items exist but will never be displayed at login",
+		"items", len(nd.Items),
+		"reason", "the login sequence has no PRINTNEWS step",
+		"fix", `add {"command": "PRINTNEWS"} to configs/login.json`)
 }
 
 // displayNewsItem renders NEWSHDR.ANS with substitution vars, then the body text.

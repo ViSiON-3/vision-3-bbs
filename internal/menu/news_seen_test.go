@@ -1,9 +1,16 @@
 package menu
 
 import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -105,5 +112,74 @@ func TestInitNewsSeenNewUserSeesEverything(t *testing.T) {
 	initNewsSeen(u, []NewsItem{{ID: 1, When: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)}}, seen)
 	if seen[1] {
 		t.Error("first-time caller should not have news marked as already seen")
+	}
+}
+
+// newsWarningFor writes newsItems to a temp system and returns whatever
+// WarnIfNewsUnwired logged for the given login sequence.
+func newsWarningFor(t *testing.T, newsItems []NewsItem, seq []config.LoginItem) string {
+	t.Helper()
+
+	root := t.TempDir()
+	configPath := filepath.Join(root, "configs")
+	dataPath := filepath.Join(root, "data")
+	for _, d := range []string{configPath, dataPath} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+	}
+	if newsItems != nil {
+		body, err := json.Marshal(NewsData{Items: newsItems})
+		if err != nil {
+			t.Fatalf("marshal news: %v", err)
+		}
+		// newsFilePath resolves to <configPath>/../data/news.json
+		if err := os.WriteFile(filepath.Join(dataPath, "news.json"), body, 0o644); err != nil {
+			t.Fatalf("write news.json: %v", err)
+		}
+	}
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	WarnIfNewsUnwired(configPath, seq)
+	return buf.String()
+}
+
+func TestWarnIfNewsUnwiredFiresWhenNewsIsStranded(t *testing.T) {
+	got := newsWarningFor(t,
+		[]NewsItem{{ID: 1, Title: "Welcome"}},
+		[]config.LoginItem{{Command: "LASTCALLS"}, {Command: "USERSTATS"}})
+
+	if !strings.Contains(got, "never be displayed at login") {
+		t.Errorf("expected a warning about stranded news, got %q", got)
+	}
+	if !strings.Contains(got, "PRINTNEWS") {
+		t.Errorf("warning should name the fix, got %q", got)
+	}
+}
+
+func TestWarnIfNewsUnwiredSilentWhenWired(t *testing.T) {
+	// Command matching is case-insensitive: LoadLoginSequence upper-cases, but
+	// a hand-edited file read by another path may not have been normalized.
+	for _, cmd := range []string{"PRINTNEWS", "printnews"} {
+		got := newsWarningFor(t,
+			[]NewsItem{{ID: 1, Title: "Welcome"}},
+			[]config.LoginItem{{Command: "LASTCALLS"}, {Command: cmd}})
+		if got != "" {
+			t.Errorf("command %q: expected silence, got %q", cmd, got)
+		}
+	}
+}
+
+func TestWarnIfNewsUnwiredSilentWhenNoNews(t *testing.T) {
+	// Nothing is being missed on a system with no news, wired or not.
+	if got := newsWarningFor(t, nil, []config.LoginItem{{Command: "LASTCALLS"}}); got != "" {
+		t.Errorf("no news.json: expected silence, got %q", got)
+	}
+	if got := newsWarningFor(t, []NewsItem{}, []config.LoginItem{{Command: "LASTCALLS"}}); got != "" {
+		t.Errorf("empty news.json: expected silence, got %q", got)
 	}
 }

@@ -1668,6 +1668,7 @@ func main() {
 	if err != nil {
 		logging.Fatal("failed to load login sequence configuration", "error", err)
 	}
+	menu.WarnIfNewsUnwired(rootConfigPath, loginSequence)
 
 	// Initialize session registry for who's online tracking
 	sessionRegistry = session.NewSessionRegistry()
