@@ -36,6 +36,13 @@ func runEditNews(c *cmdCtx, args string) (*user.User, string, error) {
 
 		newsMu.Lock()
 		nd, err := loadNewsData(e.RootConfigPath)
+		if err == nil && normalizeNewsIDs(nd) {
+			// Repair data written before IDs were required to be unique;
+			// best-effort, non-fatal.
+			if saveErr := saveNewsData(e.RootConfigPath, nd); saveErr != nil {
+				slog.Warn("failed to persist normalized news IDs", "error", saveErr)
+			}
+		}
 		newsMu.Unlock()
 		if err != nil {
 			wv(terminal, "\r\n|04Error loading news.\r\n", outputMode)
@@ -153,7 +160,7 @@ func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return
 	}
 	item := NewsItem{
-		ID:       len(fresh.Items) + 1,
+		ID:       allocNewsID(fresh),
 		Title:    title,
 		From:     from,
 		When:     time.Now(),

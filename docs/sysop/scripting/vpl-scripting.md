@@ -362,6 +362,12 @@ Read-only access to the user database. Returns safe fields only — no passwords
 | `lastLogin` | number (Unix timestamp) |
 | `createdAt` | number (Unix timestamp) |
 
+> **`lastLogin` is the current session, not the caller's previous visit.** It is
+> stamped at authentication, before any script runs, so a script comparing
+> against it to find "what is new since this user was last here" will always
+> come up empty. The user record's `previousLogin` field holds the prior visit
+> but is not yet exposed to scripts — see issue #208.
+
 ---
 
 ### v3.data

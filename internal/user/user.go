@@ -16,14 +16,20 @@ type LoginEvent struct {
 
 // User represents a user account.
 type User struct {
-	ID               int       `json:"id"`           // Added User ID for ACS 'U' check
-	PasswordHash     string    `json:"passwordHash"` // Changed from []byte to string
-	Handle           string    `json:"handle"`
-	LegacyUsername   string    `json:"username,omitempty"` // Migration only: used during load when Handle is absent; cleared on save
-	AccessLevel      int       `json:"accessLevel"`
-	Flags            string    `json:"flags"`                // Added Flags string for ACS 'F' check (e.g., "XYZ")
-	PublicKeys       []string  `json:"publicKeys,omitempty"` // OpenSSH authorized_keys lines authorized for WFC admin
-	LastLogin        time.Time `json:"lastLogin"`
+	ID             int       `json:"id"`           // Added User ID for ACS 'U' check
+	PasswordHash   string    `json:"passwordHash"` // Changed from []byte to string
+	Handle         string    `json:"handle"`
+	LegacyUsername string    `json:"username,omitempty"` // Migration only: used during load when Handle is absent; cleared on save
+	AccessLevel    int       `json:"accessLevel"`
+	Flags          string    `json:"flags"`                // Added Flags string for ACS 'F' check (e.g., "XYZ")
+	PublicKeys     []string  `json:"publicKeys,omitempty"` // OpenSSH authorized_keys lines authorized for WFC admin
+	LastLogin      time.Time `json:"lastLogin"`
+	// PreviousLogin is the LastLogin value from before the current session's
+	// authentication. Authenticate() overwrites LastLogin with time.Now()
+	// before the login sequence runs, so anything asking "what is new since
+	// this user was last here?" (news, rumors, file newscan) must compare
+	// against PreviousLogin, not LastLogin.
+	PreviousLogin    time.Time `json:"previousLogin,omitempty"`
 	TimesCalled      int       `json:"timesCalled"` // Used for E (NumLogons)
 	LastBulletinRead time.Time `json:"lastBulletinRead"`
 	RealName         string    `json:"realName"`
@@ -59,6 +65,10 @@ type User struct {
 	SeenNewscanNetworks    []string `json:"seen_newscan_networks,omitempty"`    // Lowercase network names already offered for newscan auto-join
 	SeenNewscanAreaTags    []string `json:"seen_newscan_area_tags,omitempty"`   // Area tags already offered/added for newscan auto-join
 	NewscanSeenInitialized bool     `json:"newscan_seen_initialized,omitempty"` // Seen-set tracking has been initialized for this user
+
+	// System News tracking
+	SeenNewsIDs         []int `json:"seen_news_ids,omitempty"`         // News item IDs already shown to this user (non-"always" items only)
+	NewsSeenInitialized bool  `json:"news_seen_initialized,omitempty"` // SeenNewsIDs has been back-filled from PreviousLogin
 
 	// Terminal Preferences
 	ScreenWidth       int    `json:"screenWidth,omitempty"`       // Detected/preferred terminal width (default 80)

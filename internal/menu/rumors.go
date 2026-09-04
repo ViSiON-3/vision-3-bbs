@@ -169,13 +169,13 @@ func runRumorsNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 
 	wv(terminal, "\r\n|15Rumors Newscan\r\n|08"+strings.Repeat("\xc4", 50)+"\r\n", outputMode)
 
-	lastLogin := currentUser.LastLogin
+	since := newscanSince(currentUser)
 	found := 0
 	for _, r := range rd.Rumors {
 		if userLevel < r.MinLevel {
 			continue
 		}
-		if !r.PostedAt.After(lastLogin) && !lastLogin.IsZero() {
+		if !isNewSince(r.PostedAt, since) {
 			continue
 		}
 		found++

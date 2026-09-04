@@ -303,6 +303,10 @@ ANSI files contain the visual display for menus. They support:
 Dynamic content placeholders in prompts and ANSI files:
 
 - `|UH` - User handle
+- `|ALIAS` - User handle (alias for `|UH`)
+- `|HANDLE` - User handle (alias for `|UH`)
+- `|NAME` - User's real name
+- `|LEVEL` - User's access level
 - `|TL` - Time left (in minutes)
 - `|CA` - Current message area tag
 - `|CAN` - Current message area name (resolved display name)
@@ -315,6 +319,11 @@ Dynamic content placeholders in prompts and ANSI files:
 - `|DATE` - Current date (MM/DD/YY)
 - `|TIME` - Current time (HH:MM)
 - `|CALLS` - User's total calls
+- `|LCALL` - Date of the user's previous call (MM/DD/YY), or `Never` on a first call
+- `|UPLDS` - User's upload count
+- `|DNLDS` - User's download count
+- `|POSTS` - Number of messages the user has posted
+- `|PV` - Number of users pending validation. Only populated on the **MAIN** menu and only for users at CoSysOp level or above; it renders as `0` in every other prompt.
 - `|NODE` - Current node number
 - `|MN` - Current menu name
 - `|GL` - Group/Location (from user profile)
@@ -700,7 +709,7 @@ Functions available via `RUN:` command:
 
 ### News
 
-- `PRINTNEWS` - Display news items new since last login (login sequence use)
+- `PRINTNEWS` - Display news items the user has not seen yet (login sequence use)
 - `LISTNEWS` - Browse all visible news items; user selects to read
 - `EDITNEWS` - SysOp news management: add, delete, edit, list, view (SysOp only)
 

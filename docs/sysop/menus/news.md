@@ -27,11 +27,21 @@ News items are stored in `data/news.json`. Each item has:
 When `PRINTNEWS` is in the login sequence, ViSiON/3 checks each news item against:
 
 1. **Access level** — user's level must be `>= Level` and `<= MaxLevel` (if set)
-2. **Date filter** — item's `When` must be after the user's `lastLogin`, **or** `Always` is `true`
+2. **Already seen** — the item must not already be in the user's seen list, **or** `Always` is `true`
 
 Each qualifying item is displayed using `NEWSHDR.ANS` (header) followed by the body text. The user presses a key after each item to continue. If no qualifying items exist, the login step is silent.
 
-This matches ViSiON/2's `PrintNews(0, True)` call.
+This matches ViSiON/2's `PrintNews(0, True)` call, with one deliberate difference: V2 decided what was new by comparing the item's date to the user's last login. ViSiON/3 instead records which item **IDs** each user has actually been shown, in `seen_news_ids` on the user record.
+
+The date comparison could not work reliably here — the login timestamp is written at authentication, before the login sequence runs — and it also lost items whenever a caller dropped carrier or fast-logged past the news. With ID tracking, an item that was never displayed is still waiting on the next call.
+
+Consequences:
+
+- An item marked `always: false` is shown **exactly once per user**, whenever that user next completes the news step.
+- Reading an item from `RUN:LISTNEWS` also marks it seen, so it will not reappear at the next login.
+- `always: true` items are never recorded and display on every login.
+- Deleting a news item prunes its ID from every user's seen list on their next news step, so the list cannot grow without bound.
+- On a system upgrading to seen-tracking, each user's list is back-filled once from their previous login timestamp, so existing callers are not shown the entire news backlog.
 
 ---
 
@@ -53,7 +63,7 @@ After reading an item, the list is redisplayed. This matches ViSiON/2's `PrintNe
 
 Opens the news management interface. Requires SysOp access (`isCoSysOpOrAbove`).
 
-```
+```text
 System News Management (N items)
 ──────────────────────────────────────────────────
 [A]dd  [D]el  [E]dit  [L]ist  [V]iew  [Q]uit:
@@ -154,13 +164,13 @@ Items are stored newest-first. The file is created automatically when the first 
 
 ## Login Sequence Configuration
 
-To display news at login, add `PRINTNEWS` to `configs/login.json`:
+`PRINTNEWS` ships in the default `configs/login.json` and in the built-in default sequence, so news displays at login out of the box. Installs created before it was added keep their existing `login.json`; add the item by hand:
 
 ```json
 {"command": "PRINTNEWS"}
 ```
 
-`PRINTNEWS` does not support `clear_screen` or `pause_after` — it handles its own display and pausing internally.
+Leave `clear_screen` and `pause_after` off. `NEWSHDR.ANS` begins with `|CL`, so each item already clears the screen, and `PRINTNEWS` pauses after every item itself. Setting `clear_screen` would blank the previous step's output even on logins where there is no news to show.
 
 ---
 
@@ -192,8 +202,49 @@ To display news at login, add `PRINTNEWS` to `configs/login.json`:
 
 ---
 
+## Troubleshooting
+
+### News items exist but never appear at login
+
+If the log shows this at startup:
+
+```text
+level=WARN msg="system news items exist but will never be displayed at login"
+  items=4 reason="the login sequence has no PRINTNEWS step"
+  fix="add {\"command\": \"PRINTNEWS\"} to configs/login.json"
+```
+
+your `configs/login.json` has no `PRINTNEWS` step. `PRINTNEWS` ships in the
+default login sequence, but setup only copies a template config when the target
+file does not already exist — so a system installed before `PRINTNEWS` was added
+keeps its original `login.json`. Add the step by hand:
+
+```json
+{"command": "PRINTNEWS"}
+```
+
+The warning only appears when there are news items to show, and clears once the
+step is present.
+
+### An item shows for some users but not others
+
+Check the item's `level` and `max_level` against those users' access levels. An
+item with `max_level: 100` is hidden from anyone above level 100 — this is
+intended for new-user notices, and is easy to trip over when testing as SysOp.
+
+### An item will not show again
+
+Once displayed, an `always: false` item is recorded in the user's
+`seen_news_ids` and will not be shown to that user again. To re-show it, either
+set `always: true`, or delete the item and add it back — a new item gets a new
+ID, which no user has seen. See [User Management](users/user-management.md) for
+the user record fields.
+
+---
+
 ## See Also
 
 - [Login Sequence](users/login-sequence.md) — configuring `PRINTNEWS` in `login.json`
 - [Admin Menu](users/admin-menu.md) — `W` key for news management
 - [Pipe Color Codes](menus/menu-system.md#pipe-color-codes) — colors in `NEWSHDR.ANS`
+- [User Management](users/user-management.md) — `seen_news_ids` and `previousLogin` on the user record

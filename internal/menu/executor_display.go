@@ -255,6 +255,33 @@ func (e *MenuExecutor) deliverPendingPages(terminal *term.Terminal, nodeNumber i
 
 // displayPrompt handles rendering the menu prompt, including file includes and placeholder substitution.
 // Added currentAreaName parameter
+// applyUserPlaceholders fills in the placeholders taken straight off the user
+// record. Callers seed the map with logged-out defaults first; every key set
+// here overwrites one of those defaults, except |LCALL, which is deliberately
+// left at "Never" when there is no previous call to report.
+func applyUserPlaceholders(placeholders map[string]string, u *user.User) {
+	if u == nil {
+		return
+	}
+	placeholders["|UH"] = u.Handle
+	placeholders["|ALIAS"] = u.Handle
+	placeholders["|HANDLE"] = u.Handle
+	placeholders["|LEVEL"] = strconv.Itoa(u.AccessLevel)
+	placeholders["|NAME"] = u.RealName
+	placeholders["|GL"] = u.GroupLocation
+	placeholders["|UN"] = u.PrivateNote
+	placeholders["|UPLDS"] = strconv.Itoa(u.NumUploads)
+	placeholders["|DNLDS"] = strconv.Itoa(u.NumDownloads)
+	placeholders["|POSTS"] = strconv.Itoa(u.MessagesPosted)
+	placeholders["|CALLS"] = strconv.Itoa(u.TimesCalled)
+	// PreviousLogin, not LastLogin: Authenticate() stamps LastLogin with "now"
+	// at the start of the session, so |LCALL would otherwise always read as
+	// today. A first-time caller has no previous visit and keeps "Never".
+	if !u.PreviousLogin.IsZero() {
+		placeholders["|LCALL"] = u.PreviousLogin.Format("01/02/06")
+	}
+}
+
 func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string) error {
 	promptParts := make([]string, 0, 2)
 	if strings.TrimSpace(menu.Prompt1) != "" {
@@ -334,18 +361,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 
 	// Populate user-specific placeholders if logged in
 	if currentUser != nil {
-		placeholders["|UH"] = currentUser.Handle
-		placeholders["|ALIAS"] = currentUser.Handle
-		placeholders["|HANDLE"] = currentUser.Handle
-		placeholders["|LEVEL"] = strconv.Itoa(currentUser.AccessLevel)
-		placeholders["|NAME"] = currentUser.RealName
-		placeholders["|GL"] = currentUser.GroupLocation
-		placeholders["|UN"] = currentUser.PrivateNote
-		placeholders["|UPLDS"] = strconv.Itoa(currentUser.NumUploads)
-		placeholders["|CALLS"] = strconv.Itoa(currentUser.TimesCalled)
-		if !currentUser.LastLogin.IsZero() {
-			placeholders["|LCALL"] = currentUser.LastLogin.Format("01/02/06")
-		}
+		applyUserPlaceholders(placeholders, currentUser)
 
 		// Set |CC/|CCN based on user's current message conference
 		if currentUser.CurrentMsgConferenceTag != "" {

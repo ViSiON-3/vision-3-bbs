@@ -36,9 +36,9 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	slog.Info("file newscan", "node", nodeNumber, "handle", currentUser.Handle,
-		"last_login", currentUser.LastLogin.Format(time.RFC3339), "args", args)
+		"since", currentUser.PreviousLogin.Format(time.RFC3339), "args", args)
 
-	since := currentUser.LastLogin
+	since := newscanSince(currentUser)
 
 	// Determine which areas to scan
 	var areas []file.FileArea
