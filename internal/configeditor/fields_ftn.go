@@ -2,10 +2,12 @@ package configeditor
 
 import (
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
 // fieldsFTNLink returns fields for editing a single FTN network configuration.
@@ -24,6 +26,12 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 	save := func() {
 		m.configs.FTN.Networks[key] = *netPtr
 	}
+
+	// Outcome of the last Own Address edit, reported to the sysop by that
+	// field's AfterSet. The address is captured as stored rather than as
+	// typed, because the field editor hands AfterSet the raw input.
+	syncedAreas := 0
+	syncedAddr := ""
 
 	return []fieldDef{
 		{
@@ -71,9 +79,46 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			},
 		},
 		{
-			Label: "Own Address", Help: "Your FTN address (e.g. 21:1/100)", Type: ftString, Col: 3, Row: 2, Width: 30,
+			Label: "Own Address", Help: "Your FTN address, with your point if you have one (e.g. 21:1/100 or 21:1/100.5)", Type: ftString, Col: 3, Row: 2, Width: 30,
 			Get: func() string { return netPtr.OwnAddress },
-			Set: func(val string) error { netPtr.OwnAddress = val; save(); return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := ftn.ValidateAddress(val); err != nil {
+					return err
+				}
+				prev := netPtr.OwnAddress
+				netPtr.OwnAddress = val
+				syncedAddr = val
+				save()
+
+				// Echomail stamps its origin line, MSGID and message-header
+				// address from the area's own OriginAddr, not from this
+				// field, so an address changed here alone would leave every
+				// echo posting the old one — the way adding a point used to
+				// go missing from outbound mail. Areas still carrying the
+				// previous address (or none at all) follow it; an area the
+				// sysop pointed at a different AKA is left alone.
+				syncedAreas = 0
+				for i := range m.configs.MsgAreas {
+					a := &m.configs.MsgAreas[i]
+					if !strings.EqualFold(a.Network, key) || a.OriginAddr == val {
+						continue
+					}
+					if a.OriginAddr != "" && !strings.EqualFold(a.OriginAddr, prev) {
+						continue
+					}
+					a.OriginAddr = val
+					syncedAreas++
+				}
+				return nil
+			},
+			// AfterSet runs on the current model, so the notice lands on the
+			// model that actually gets rendered.
+			AfterSet: func(cur *Model, _ string) {
+				if syncedAreas > 0 {
+					cur.message = fmt.Sprintf("Own address set to %s — origin address updated on %d message area(s)", syncedAddr, syncedAreas)
+				}
+			},
 		},
 		{
 			Label: "Tosser Enabled", Help: "Enable built-in echomail tosser", Type: ftYesNo, Col: 3, Row: 3, Width: 1,

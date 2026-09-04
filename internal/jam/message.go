@@ -65,7 +65,7 @@ func (b *Base) ReadMessage(msgNum int) (*Message, error) {
 	isEcho := (hdr.Attribute & MsgTypeEcho) != 0
 	isNet := (hdr.Attribute & MsgTypeNet) != 0
 	if (isEcho || isNet) && msg.OrigAddr == "" {
-		msg.OrigAddr = extractAddressFromOriginLine(text)
+		msg.OrigAddr = ExtractOriginAddress(text)
 	}
 
 	return msg, nil

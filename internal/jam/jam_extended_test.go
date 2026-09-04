@@ -1874,7 +1874,7 @@ func TestDetermineMessageTypeWhitespace(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// extractAddressFromOriginLine: LF vs CR vs CRLF
+// ExtractOriginAddress: LF vs CR vs CRLF
 // ---------------------------------------------------------------------------
 
 func TestExtractAddressFromOriginLineVariousLineEndings(t *testing.T) {
@@ -1887,7 +1887,7 @@ func TestExtractAddressFromOriginLineVariousLineEndings(t *testing.T) {
 		{"Hello\r * Origin: BBS (3:3/3)\r", "3:3/3"},
 	}
 	for _, tt := range tests {
-		got := extractAddressFromOriginLine(tt.text)
+		got := ExtractOriginAddress(tt.text)
 		if got != tt.want {
 			t.Errorf("extractAddress(%q) = %q, want %q", tt.text, got, tt.want)
 		}
