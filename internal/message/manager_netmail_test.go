@@ -89,8 +89,9 @@ func TestAddPrivateReply_NetmailKeepsDestAddr(t *testing.T) {
 }
 
 // Netmail written through the public (non-private) entry point still has to be
-// private: inbound mail arrives without the flag, so a reply to it takes the
-// AddReply path, and the reply is mail to one person all the same.
+// private. Composing netmail from the menu takes that path, and so does a reply
+// to any netmail already in a base from before netmail was stored private.
+// Either way the result is mail to one person.
 func TestAddMessage_NetmailIsPrivate(t *testing.T) {
 	mm := newNetmailTestManager(t)
 
