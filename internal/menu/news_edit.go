@@ -76,7 +76,7 @@ func runEditNews(c *cmdCtx, args string) (*user.User, string, error) {
 		default:
 			n, nerr := strconv.Atoi(cmd)
 			if nerr == nil && n >= 1 && n <= len(nd.Items) {
-				displayNewsItem(e, terminal, &nd.Items[n-1], n, outputMode)
+				displayNewsItem(e, terminal, &nd.Items[n-1], n, outputMode, termWidth)
 				e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 			}
 		}
@@ -358,11 +358,11 @@ func newsViewItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 	if n == 0 {
 		for i := range nd.Items {
-			displayNewsItem(e, terminal, &nd.Items[i], i+1, outputMode)
+			displayNewsItem(e, terminal, &nd.Items[i], i+1, outputMode, termWidth)
 			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 		}
 	} else if n >= 1 && n <= len(nd.Items) {
-		displayNewsItem(e, terminal, &nd.Items[n-1], n, outputMode)
+		displayNewsItem(e, terminal, &nd.Items[n-1], n, outputMode, termWidth)
 		e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 	}
 }

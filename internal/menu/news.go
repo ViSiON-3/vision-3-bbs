@@ -213,7 +213,7 @@ func WarnIfNewsUnwired(rootConfigPath string, loginSequence []config.LoginItem) 
 //
 //	^NM = item number   ^TI = title    ^FR = from/author
 //	^DT = date          ^TM = time     ^LV = min level   ^MX = max level
-func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, idx int, outputMode ansi.OutputMode) {
+func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, idx int, outputMode ansi.OutputMode, termWidth int) {
 	ansiPath := filepath.Join(e.MenuSetPath, "ansi", "NEWSHDR.ANS")
 	if raw, err := os.ReadFile(ansiPath); err == nil {
 		maxStr := strconv.Itoa(item.MaxLevel)
@@ -236,10 +236,48 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 			strings.Repeat("\xc4", 70)), outputMode)
 	}
 	if item.Body != "" {
-		for _, line := range strings.Split(item.Body, "\n") {
-			wv(terminal, strings.TrimRight(line, "\r")+"\r\n", outputMode)
+		// Word-wrap to the terminal, the same way the message reader renders a
+		// message body. Without this the terminal hard-wraps at its own margin
+		// and breaks words mid-word.
+		//
+		// Pipe codes are converted to ANSI *before* wrapping, matching the
+		// reader. wrapAnsiString measures width with ANSI escapes stripped but
+		// knows nothing about pipe codes, so wrapping first would count "|04"
+		// as three visible columns and break lines far too early.
+		//
+		// wrapAnsiString leaves ANSI art alone, so a sysop who pastes art into
+		// an item still gets it positioned correctly.
+		body := ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body)))
+		for _, line := range wrapAnsiString(string(body), newsBodyWidth(termWidth)) {
+			// Already pipe-converted, so write straight through rather than
+			// running it past ReplacePipeCodes a second time.
+			terminalio.WriteProcessedBytes(terminal, []byte(line+"\r\n"), outputMode)
 		}
 	}
+}
+
+// normalizeNewsBody converts stored CRLF line endings to LF so wrapping sees
+// clean lines; a stray CR would otherwise count toward the visible width.
+func normalizeNewsBody(body string) string {
+	return strings.ReplaceAll(body, "\r\n", "\n")
+}
+
+// newsBodyWidth is the column budget for a wrapped news line.
+//
+// One column short of the terminal, because the body is written as a sequence
+// of lines each ending in CRLF: a line filling the full width would trigger the
+// terminal's own auto-wrap and the CRLF would then land on the next row,
+// showing up as a blank line between every wrapped line. The same reservation
+// is made elsewhere for sequentially written output.
+//
+// Falls back to 79 when the width is unknown, rather than to "do not wrap":
+// 80 columns is the safe assumption for a BBS, and no wrapping is what
+// produced broken words in the first place.
+func newsBodyWidth(termWidth int) int {
+	if termWidth <= 1 {
+		return 79
+	}
+	return termWidth - 1
 }
 
 // runPrintNews displays news items the user has not seen yet, plus any
@@ -307,7 +345,7 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		}
 
-		displayNewsItem(e, terminal, &nd.Items[i], i+1, outputMode)
+		displayNewsItem(e, terminal, &nd.Items[i], i+1, outputMode, termWidth)
 		e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 		shown++
 
@@ -425,7 +463,7 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 		idx := visible[n-1]
-		displayNewsItem(e, terminal, &nd.Items[idx], n, outputMode)
+		displayNewsItem(e, terminal, &nd.Items[idx], n, outputMode, termWidth)
 		if item := nd.Items[idx]; !item.Always && item.ID > 0 {
 			seen[item.ID] = true
 		}
