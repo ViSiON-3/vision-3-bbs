@@ -34,6 +34,12 @@ type NewsItem struct {
 // NewsData holds all news items.
 type NewsData struct {
 	Items []NewsItem `json:"items"`
+	// NextID is the monotonic ID allocator. IDs must never be reused: users
+	// carry seen-state keyed by ID, and handing a deleted item's ID to a new
+	// one would hide the new item from everyone who had seen the old.
+	// Deriving IDs from the live list alone is not enough, because deleting
+	// the highest-numbered item frees its ID again.
+	NextID int `json:"next_id,omitempty"`
 }
 
 var newsMu sync.Mutex
@@ -65,22 +71,36 @@ func saveNewsData(rootConfigPath string, nd *NewsData) error {
 	return os.WriteFile(newsFilePath(rootConfigPath), data, 0644)
 }
 
-// nextNewsID returns an unused ID for a new item. IDs must be unique and
-// stable for the life of an item: per-user "already seen" tracking keys off
-// them, and reusing an ID would silently hide a fresh item.
-func nextNewsID(items []NewsItem) int {
-	max := 0
-	for _, it := range items {
-		if it.ID > max {
-			max = it.ID
+// allocNewsID reserves the next unused ID and advances the allocator. IDs are
+// never reused, including after the highest-numbered item is deleted.
+//
+// The floor is taken from the live items as well as NextID so that news.json
+// files written before NextID existed cannot collide on the first allocation.
+func allocNewsID(nd *NewsData) int {
+	id := nd.NextID
+	for _, it := range nd.Items {
+		if it.ID >= id {
+			id = it.ID + 1
 		}
 	}
-	return max + 1
+	if id < 1 {
+		id = 1
+	}
+	nd.NextID = id + 1
+	return id
 }
 
 // normalizeNewsIDs assigns unique IDs to items missing one (ID <= 0) or
 // sharing one with an earlier item. Earlier entries keep their ID so existing
 // seen-sets stay valid. Reports whether anything changed.
+//
+// Repaired items draw from the monotonic allocator rather than filling the
+// lowest free gap: a gap usually means a deleted item, and reusing its number
+// would hide the repaired item from every user who had seen the original.
+//
+// This is deterministic for a given file, so callers that cannot write (user
+// sessions) may normalize in memory and still agree with what the sysop editor
+// eventually persists.
 func normalizeNewsIDs(nd *NewsData) bool {
 	used := make(map[int]bool, len(nd.Items))
 	changed := false
@@ -90,12 +110,12 @@ func normalizeNewsIDs(nd *NewsData) bool {
 			used[id] = true
 			continue
 		}
-		next := 1
-		for used[next] {
-			next++
+		fresh := allocNewsID(nd)
+		for used[fresh] {
+			fresh = allocNewsID(nd)
 		}
-		nd.Items[i].ID = next
-		used[next] = true
+		nd.Items[i].ID = fresh
+		used[fresh] = true
 		changed = true
 	}
 	return changed
@@ -247,6 +267,11 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Warn("failed to load news data", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
+	// Repair duplicate or missing IDs in memory. Seen-state is keyed by ID, so
+	// duplicates would collapse several items under one key. This is
+	// deterministic for a given file, so every session agrees; only the sysop
+	// editor writes the repair back to disk.
+	normalizeNewsIDs(nd)
 
 	userLevel := currentUser.AccessLevel
 	seen := newsSeenSet(currentUser, nd.Items)
@@ -332,9 +357,18 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 		wv(terminal, "\r\n|04Error loading news.\r\n", outputMode)
 		return currentUser, "", nil
 	}
+	normalizeNewsIDs(nd)
 
 	userLevel := currentUser.AccessLevel
 	seen := newsSeenSet(currentUser, nd.Items)
+	// Reaching the list before ever reaching PRINTNEWS still counts as the
+	// user's first contact with seen-tracking; without the back-fill here the
+	// entire backlog would be tagged [NEW].
+	backfilled := false
+	if !currentUser.NewsSeenInitialized {
+		initNewsSeen(currentUser, nd.Items, seen)
+		backfilled = true
+	}
 	var visible []int
 	for i, item := range nd.Items {
 		if userLevel < item.Level {
@@ -369,7 +403,7 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 	// Reading an item here counts as having seen it, so it does not reappear
 	// at the next login.
 	saveSeen := func() {
-		if storeNewsSeen(currentUser, seen) && c.userManager != nil {
+		if (storeNewsSeen(currentUser, seen) || backfilled) && c.userManager != nil {
 			if err := c.userManager.UpdateUser(currentUser); err != nil {
 				slog.Error("failed to save news seen-set", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 			}

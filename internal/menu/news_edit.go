@@ -160,7 +160,7 @@ func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return
 	}
 	item := NewsItem{
-		ID:       nextNewsID(fresh.Items),
+		ID:       allocNewsID(fresh),
 		Title:    title,
 		From:     from,
 		When:     time.Now(),

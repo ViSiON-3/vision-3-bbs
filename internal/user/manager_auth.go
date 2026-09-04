@@ -50,6 +50,12 @@ func (um *UserMgr) Authenticate(handle, password string) (*User, bool) {
 	user.PreviousLogin = user.LastLogin
 	user.LastLogin = time.Now()
 	user.TimesCalled++
+	// Snapshot under the same lock that set the fields. Re-reading after the
+	// unlock would let a concurrent login for this handle overwrite
+	// PreviousLogin first, and this session would then measure "new since your
+	// last visit" against the other session's timestamp — hiding news, rumors
+	// and files posted since this caller was actually last on.
+	userCopy := *user
 	um.mu.Unlock()
 
 	// Save outside the write lock to avoid blocking other user operations
@@ -57,10 +63,6 @@ func (um *UserMgr) Authenticate(handle, password string) (*User, bool) {
 		slog.Error("failed to save user data after login", "handle", handle, "error", err)
 	}
 
-	// Return a copy
-	um.mu.RLock()
-	userCopy := *um.users[lowerHandle]
-	um.mu.RUnlock()
 	return &userCopy, true
 }
 

@@ -63,7 +63,7 @@ After reading an item, the list is redisplayed. This matches ViSiON/2's `PrintNe
 
 Opens the news management interface. Requires SysOp access (`isCoSysOpOrAbove`).
 
-```
+```text
 System News Management (N items)
 ──────────────────────────────────────────────────
 [A]dd  [D]el  [E]dit  [L]ist  [V]iew  [Q]uit:
@@ -208,7 +208,7 @@ Leave `clear_screen` and `pause_after` off. `NEWSHDR.ANS` begins with `|CL`, so 
 
 If the log shows this at startup:
 
-```
+```text
 level=WARN msg="system news items exist but will never be displayed at login"
   items=4 reason="the login sequence has no PRINTNEWS step"
   fix="add {\"command\": \"PRINTNEWS\"} to configs/login.json"

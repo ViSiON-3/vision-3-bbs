@@ -323,7 +323,7 @@ Dynamic content placeholders in prompts and ANSI files:
 - `|UPLDS` - User's upload count
 - `|DNLDS` - User's download count
 - `|POSTS` - Number of messages the user has posted
-- `|PV` - Number of users pending validation
+- `|PV` - Number of users pending validation. Only populated on the **MAIN** menu and only for users at CoSysOp level or above; it renders as `0` in every other prompt.
 - `|NODE` - Current node number
 - `|MN` - Current menu name
 - `|GL` - Group/Location (from user profile)

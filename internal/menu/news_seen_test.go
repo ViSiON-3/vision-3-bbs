@@ -14,13 +14,35 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-func TestNextNewsIDSurvivesDeletion(t *testing.T) {
-	items := []NewsItem{{ID: 3}, {ID: 1}}
-	if got := nextNewsID(items); got != 4 {
-		t.Fatalf("nextNewsID = %d, want 4 (must not reuse a live ID)", got)
+func TestAllocNewsIDNeverReuses(t *testing.T) {
+	nd := &NewsData{Items: []NewsItem{{ID: 3}, {ID: 1}}}
+	if got := allocNewsID(nd); got != 4 {
+		t.Fatalf("allocNewsID = %d, want 4 (must not reuse a live ID)", got)
 	}
-	if got := nextNewsID(nil); got != 1 {
-		t.Fatalf("nextNewsID(nil) = %d, want 1", got)
+
+	// The regression this exists for: deleting the highest-numbered item must
+	// not free its ID, or a user holding it in their seen-set never sees the
+	// replacement.
+	nd.Items = []NewsItem{{ID: 1}} // sysop deletes 3 (and the just-allocated 4)
+	if got := allocNewsID(nd); got == 3 || got == 4 {
+		t.Fatalf("allocNewsID reused a retired ID: %d", got)
+	}
+
+	empty := &NewsData{}
+	if got := allocNewsID(empty); got != 1 {
+		t.Fatalf("first ID on an empty file = %d, want 1", got)
+	}
+	if got := allocNewsID(empty); got != 2 {
+		t.Fatalf("second ID = %d, want 2", got)
+	}
+}
+
+// A news.json written before NextID existed has no allocator value; the first
+// allocation must still clear every live ID.
+func TestAllocNewsIDLegacyFileWithoutNextID(t *testing.T) {
+	nd := &NewsData{Items: []NewsItem{{ID: 7}, {ID: 2}}} // NextID zero
+	if got := allocNewsID(nd); got != 8 {
+		t.Fatalf("allocNewsID on a legacy file = %d, want 8", got)
 	}
 }
 
@@ -42,6 +64,13 @@ func TestNormalizeNewsIDs(t *testing.T) {
 	// The first holder of an ID keeps it so existing seen-sets stay valid.
 	if nd.Items[0].ID != 2 || nd.Items[3].ID != 5 {
 		t.Fatalf("normalization moved IDs it should have kept: %+v", nd.Items)
+	}
+	// Repaired items must not be given a low free number like 1 or 3: those
+	// gaps usually mean a deleted item whose ID users may still be holding.
+	for _, i := range []int{1, 2} {
+		if nd.Items[i].ID <= 5 {
+			t.Errorf("repaired item %d got recycled ID %d; expected a fresh one above 5", i, nd.Items[i].ID)
+		}
 	}
 	if normalizeNewsIDs(nd) {
 		t.Fatal("normalizeNewsIDs is not idempotent")
