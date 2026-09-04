@@ -108,7 +108,7 @@ Per-network fields (`networks.<key>`):
 | `own_address`               | This node's FTN address (zone:net/node.point)                   |
 | `internal_tosser_enabled`   | Set `true` to enable `v3mail` for this network                  |
 | `poll_interval_seconds`     | Auto-poll interval; `0` = manual only                           |
-| `tearline`                  | Custom tearline text (empty = use default)                      |
+| `origin`                    | Origin line text (empty = board name)                           |
 
 Per-link fields (`networks.<key>.links[]`):
 

@@ -72,7 +72,7 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	var msgNum int
 	if msgType.IsEchomail() || msgType.IsNetmail() {
 		msg.OrigAddr = area.OriginAddr
-		msgNum, err = b.WriteMessageExt(msg, msgType, area.EchoTag, mm.boardName, mm.tearlineForNetwork(area.Network))
+		msgNum, err = b.WriteMessageExt(msg, msgType, area.EchoTag, mm.originTextForNetwork(area.Network))
 	} else {
 		msgNum, err = b.WriteMessage(msg)
 	}

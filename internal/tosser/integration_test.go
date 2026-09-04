@@ -265,7 +265,7 @@ func TestScanExportCreatesPacket(t *testing.T) {
 	// Use the echomail write path so DateProcessed=0 (pending export)
 	area, _ := env.msgMgr.GetAreaByTag("FSX_TEST")
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
-	_, err = base.WriteMessageExt(msg, msgType, area.EchoTag, "TestBBS", "")
+	_, err = base.WriteMessageExt(msg, msgType, area.EchoTag, "TestBBS")
 	if err != nil {
 		t.Fatalf("WriteMessageExt: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestHighWaterMarkAdvances(t *testing.T) {
 
 	area, _ := env.msgMgr.GetAreaByTag("FSX_TEST")
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
-	base.WriteMessageExt(msg, msgType, area.EchoTag, "TestBBS", "")
+	base.WriteMessageExt(msg, msgType, area.EchoTag, "TestBBS")
 	base.Close()
 
 	tosser, err := New("testnet", env.netCfg, env.globalCfg, env.dupeDB, env.msgMgr)
@@ -680,7 +680,7 @@ func TestScanExportNetmail(t *testing.T) {
 
 	area, _ := env.msgMgr.GetAreaByTag("NETMAIL")
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
-	_, err = base.WriteMessageExt(msg, msgType, area.EchoTag, "TestBBS", "")
+	_, err = base.WriteMessageExt(msg, msgType, area.EchoTag, "TestBBS")
 	if err != nil {
 		t.Fatalf("WriteMessageExt: %v", err)
 	}

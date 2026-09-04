@@ -2,7 +2,6 @@ package jam
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
@@ -11,27 +10,20 @@ import (
 // Version is kept for compatibility; use internal/version.Number for new code.
 var Version = version.Number
 
-// AddTearline appends a tearline to the message text.
-// Format: "--- ViSiON/3 0.1.0/darwin"
-func AddTearline(text string) string {
-	return AddCustomTearline(text, "")
-}
+// softwareName is the product name stamped into tearlines and PID/TID kludges.
+const softwareName = "ViSiON/3"
 
-// AddCustomTearline appends a tearline to the message text.
-// If tearline is empty, it uses the default ViSiON/3 tearline.
-// If tearline already starts with "---", it is used as-is.
-func AddCustomTearline(text, tearline string) string {
+// AddTearline appends the software tearline to the message text.
+// Format: "--- ViSiON/3 v0.8.0/macOS"
+//
+// Per FTS-0004 the tearline identifies the software that produced the message
+// and is assigned by that software, not by the sysop. The sysop-configurable
+// line is the origin line; see AddOriginLine.
+func AddTearline(text string) string {
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	trimmed := strings.TrimSpace(tearline)
-	if trimmed == "" {
-		trimmed = fmt.Sprintf("ViSiON/3 %s/%s", version.Number, runtime.GOOS)
-	}
-	if strings.HasPrefix(trimmed, "---") {
-		return text + trimmed + "\n"
-	}
-	return text + fmt.Sprintf("--- %s\n", trimmed)
+	return text + fmt.Sprintf("--- %s\n", DefaultTearlineText())
 }
 
 // AddOriginLine appends an origin line to the message text.
@@ -43,9 +35,15 @@ func AddOriginLine(text, systemName, address string) string {
 	return text + fmt.Sprintf(" * Origin: %s (%s)\n", systemName, address)
 }
 
+// DefaultTearlineText returns the tearline body carrying the running
+// version and platform, e.g. "ViSiON/3 v0.8.0/macOS".
+func DefaultTearlineText() string {
+	return fmt.Sprintf("%s %s/%s", softwareName, version.Display(), version.Platform())
+}
+
 // FormatPID returns the PID kludge value.
 func FormatPID() string {
-	return fmt.Sprintf("ViSiON/3 %s/%s", version.Number, runtime.GOOS)
+	return DefaultTearlineText()
 }
 
 // FormatTID returns the TID kludge value.

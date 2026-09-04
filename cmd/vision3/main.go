@@ -1610,22 +1610,22 @@ func main() {
 		logging.Fatal("failed to load door configuration", "error", err)
 	}
 
-	// Load FTN configuration early so message manager can use per-network tearlines.
+	// Load FTN configuration early so message manager can use per-network origins.
 	ftnConfig, ftnErr := config.LoadFTNConfig(rootConfigPath)
 	if ftnErr != nil {
 		slog.Error("failed to load FTN config, echomail disabled", "error", ftnErr)
 	}
-	networkTearlines := make(map[string]string)
+	networkOrigins := make(map[string]string)
 	if ftnErr == nil {
 		for name, netCfg := range ftnConfig.Networks {
-			if strings.TrimSpace(netCfg.Tearline) == "" {
+			if strings.TrimSpace(netCfg.Origin) == "" {
 				continue
 			}
-			networkTearlines[strings.ToLower(strings.TrimSpace(name))] = netCfg.Tearline
+			networkOrigins[strings.ToLower(strings.TrimSpace(name))] = netCfg.Origin
 		}
 	}
-	if len(networkTearlines) == 0 {
-		networkTearlines = nil
+	if len(networkOrigins) == 0 {
+		networkOrigins = nil
 	}
 
 	// Oneliners are loaded by the runnable; start with an empty list here.
@@ -1640,7 +1640,7 @@ func main() {
 	userMgr.SetNewUserLevel(serverConfig.NewUserLevel)
 
 	// Initialize MessageManager (areas config from configs/, message data from data/)
-	messageMgr, err = message.NewMessageManager(dataPath, rootConfigPath, serverConfig.BoardName, networkTearlines)
+	messageMgr, err = message.NewMessageManager(dataPath, rootConfigPath, serverConfig.BoardName, networkOrigins)
 	if err != nil {
 		logging.Fatal("failed to initialize message manager", "error", err)
 	}

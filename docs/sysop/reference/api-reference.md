@@ -641,7 +641,7 @@ type FTNNetworkConfig struct {
     InternalTosserEnabled bool
     OwnAddress            string
     PollSeconds           int
-    Tearline              string
+    Origin                string
     Links                 []FTNLinkConfig
 }
 

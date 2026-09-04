@@ -214,10 +214,10 @@ func loadFTNDeps(configDir, dataDir string) (config.FTNConfig, *message.MessageM
 	// Resolve relative FTN paths against BBS root
 	ftnCfg.ResolvePaths(bbsRoot)
 
-	// Build tearlines map for MessageManager
-	tearlines := make(map[string]string)
+	// Build per-network origin line text for MessageManager
+	origins := make(map[string]string)
 	for name, net := range ftnCfg.Networks {
-		tearlines[name] = net.Tearline
+		origins[name] = net.Origin
 	}
 
 	// Load server config for board name
@@ -227,7 +227,7 @@ func loadFTNDeps(configDir, dataDir string) (config.FTNConfig, *message.MessageM
 		boardName = serverCfg.BoardName
 	}
 
-	msgMgr, err := message.NewMessageManager(dataDir, configDir, boardName, tearlines)
+	msgMgr, err := message.NewMessageManager(dataDir, configDir, boardName, origins)
 	if err != nil {
 		return config.FTNConfig{}, nil, nil, fmt.Errorf("init message manager: %w", err)
 	}

@@ -29,7 +29,7 @@ When writing echomail/netmail with `WriteMessageExt`, Vision3 automatically appe
 - `AREA:` kludge for echomail
 - `MSGID` (unique serial per base)
 - `PID`/`TID` identifiers
-- Tearline (`--- Vision3 ...`)
+- Tearline (`--- ViSiON/3 vX.Y.Z/Platform`, assigned by the software)
 - Origin line (`* Origin: ... (address)`)
 - `SEEN-BY` and `PATH` for echomail
 
@@ -40,7 +40,7 @@ Implementation: `internal/jam/echomail.go`, `internal/jam/format.go`, `internal/
 These values come from configuration and are applied during message creation:
 
 - **Origin address**: `configs/message_areas.json` (`origin_addr` per area)
-- **Network tearline**: `configs/ftn.json` (`tearline` per network)
+- **Network origin text**: `configs/ftn.json` (`origin` per network; empty = board name)
 - **BBS name**: `configs/config.json` (`boardName`)
 
 The message manager passes these into the JAM writer.
