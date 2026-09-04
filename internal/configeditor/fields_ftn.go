@@ -27,9 +27,11 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 		m.configs.FTN.Networks[key] = *netPtr
 	}
 
-	// Count of message areas whose origin address followed an Own Address
-	// edit, reported to the sysop by that field's AfterSet.
+	// Outcome of the last Own Address edit, reported to the sysop by that
+	// field's AfterSet. The address is captured as stored rather than as
+	// typed, because the field editor hands AfterSet the raw input.
 	syncedAreas := 0
+	syncedAddr := ""
 
 	return []fieldDef{
 		{
@@ -86,6 +88,7 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 				}
 				prev := netPtr.OwnAddress
 				netPtr.OwnAddress = val
+				syncedAddr = val
 				save()
 
 				// Echomail stamps its origin line, MSGID and message-header
@@ -111,9 +114,9 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			},
 			// AfterSet runs on the current model, so the notice lands on the
 			// model that actually gets rendered.
-			AfterSet: func(cur *Model, val string) {
+			AfterSet: func(cur *Model, _ string) {
 				if syncedAreas > 0 {
-					cur.message = fmt.Sprintf("Own address set to %s — origin address updated on %d message area(s)", val, syncedAreas)
+					cur.message = fmt.Sprintf("Own address set to %s — origin address updated on %d message area(s)", syncedAddr, syncedAreas)
 				}
 			},
 		},

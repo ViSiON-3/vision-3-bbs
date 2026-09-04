@@ -7,6 +7,8 @@ import (
 )
 
 // FidoAddress represents a parsed FidoNet 4D address (Zone:Net/Node.Point).
+// Every component is held in the range FTN gives it on the wire, so callers
+// converting to the uint16 packet fields cannot wrap.
 type FidoAddress struct {
 	Zone  int
 	Net   int
@@ -14,7 +16,9 @@ type FidoAddress struct {
 	Point int
 }
 
-// ParseAddress parses a FidoNet address string in the format "Z:N/N" or "Z:N/N.P".
+// ParseAddress parses a FidoNet address string in the format "Z:N/N" or
+// "Z:N/N.P". Components outside the range of the 16-bit fields they occupy in
+// an FTN packet are rejected rather than silently wrapped once converted.
 func ParseAddress(addr string) (*FidoAddress, error) {
 	addr = strings.TrimSpace(addr)
 
@@ -24,7 +28,7 @@ func ParseAddress(addr string) (*FidoAddress, error) {
 	}
 
 	zone, err := strconv.Atoi(parts[0])
-	if err != nil {
+	if err != nil || zone < 1 || zone > 65535 {
 		return nil, fmt.Errorf("jam: invalid zone: %s", parts[0])
 	}
 
@@ -34,20 +38,20 @@ func ParseAddress(addr string) (*FidoAddress, error) {
 	}
 
 	net, err := strconv.Atoi(netNode[0])
-	if err != nil {
+	if err != nil || net < 0 || net > 65535 {
 		return nil, fmt.Errorf("jam: invalid net: %s", netNode[0])
 	}
 
 	nodePoint := strings.SplitN(netNode[1], ".", 2)
 	node, err := strconv.Atoi(nodePoint[0])
-	if err != nil {
+	if err != nil || node < 0 || node > 65535 {
 		return nil, fmt.Errorf("jam: invalid node: %s", nodePoint[0])
 	}
 
 	point := 0
 	if len(nodePoint) == 2 {
 		point, err = strconv.Atoi(nodePoint[1])
-		if err != nil {
+		if err != nil || point < 0 || point > 65535 {
 			return nil, fmt.Errorf("jam: invalid point: %s", nodePoint[1])
 		}
 	}

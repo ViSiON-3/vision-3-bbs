@@ -22,7 +22,9 @@ func (t *Tosser) resolveOrigAddr(pktHdr *ftn.PacketHeader, msg *ftn.PackedMessag
 		zone = pktHdr.QOrigZone // Fallback to QMail zone field
 	}
 	if zone == 0 {
-		zone = uint16(t.ownAddr.Zone) // Last resort: assume same zone
+		// Last resort: assume same zone. jam.ParseAddress holds ownAddr's zone
+		// inside the 16-bit range, so the conversion cannot wrap.
+		zone = uint16(t.ownAddr.Zone)
 	}
 
 	addr := jam.FidoAddress{
@@ -35,7 +37,9 @@ func (t *Tosser) resolveOrigAddr(pktHdr *ftn.PacketHeader, msg *ftn.PackedMessag
 	if a := intlAddr(parsed.Kludges, intlOrig); a != nil && a.Net == addr.Net && a.Node == addr.Node {
 		addr.Zone = a.Zone
 	}
-	addr.Point = origPoint(addr, pktHdr, parsed, msgID)
+	if origAddr, ok := origPoint(addr, pktHdr, parsed, msgID); ok {
+		addr = origAddr
+	}
 	return addr.String()
 }
 
@@ -130,16 +134,16 @@ func kludgePoint(kludges []string, prefix string) (int, bool) {
 	return 0, false
 }
 
-// origPoint digs the author's point number out of an inbound message, or
-// returns 0 when the author is a full node.
+// origPoint finds the author's complete address in an inbound message, or
+// returns false when no authoritative address is available.
 //
 // Every candidate is checked against the packed header's net/node before it is
 // trusted: echomail reaches us relayed, so the packet was written by a link
 // rather than the author, and a point link's own packet header must not stamp
 // its point number onto everyone else's mail.
-func origPoint(base jam.FidoAddress, pktHdr *ftn.PacketHeader, parsed *ftn.ParsedBody, msgID string) int {
+func origPoint(base jam.FidoAddress, pktHdr *ftn.PacketHeader, parsed *ftn.ParsedBody, msgID string) (jam.FidoAddress, bool) {
 	matches := func(a *jam.FidoAddress) bool {
-		return a.Point != 0 && a.Net == base.Net && a.Node == base.Node
+		return a.Net == base.Net && a.Node == base.Node
 	}
 
 	// MSGID (FTS-0009) is "<address> <serial>" and names the author, making it
@@ -147,28 +151,30 @@ func origPoint(base jam.FidoAddress, pktHdr *ftn.PacketHeader, parsed *ftn.Parse
 	// than an FTN address, which simply fails to parse and falls through.
 	if fields := strings.Fields(msgID); len(fields) > 0 {
 		if a, err := jam.ParseAddress(fields[0]); err == nil && matches(a) {
-			return a.Point
+			return *a, true
 		}
 	}
 
 	// The origin line (FTS-0004) carries the author's 4D address.
 	if origin := jam.ExtractOriginAddress(parsed.Text); origin != "" {
 		if a, err := jam.ParseAddress(origin); err == nil && matches(a) {
-			return a.Point
+			return *a, true
 		}
 	}
 
 	// The FMPT control paragraph (FTS-4001) is the sender's point, written
 	// into the body of netmail sent from a point.
 	if p, ok := kludgePoint(parsed.Kludges, "FMPT "); ok {
-		return p
+		base.Point = p
+		return base, true
 	}
 
 	// The Type-2+ packet header, but only when the packet was written by the
 	// author itself — direct netmail from a point, typically.
 	if pktHdr.OrigPoint != 0 && int(pktHdr.OrigNet) == base.Net && int(pktHdr.OrigNode) == base.Node {
-		return int(pktHdr.OrigPoint)
+		base.Point = int(pktHdr.OrigPoint)
+		return base, true
 	}
 
-	return 0
+	return base, false
 }

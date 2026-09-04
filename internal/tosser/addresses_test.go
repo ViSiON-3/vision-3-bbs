@@ -71,6 +71,22 @@ func TestResolveOrigAddrRecoversPoint(t *testing.T) {
 			want:   "21:4/158",
 		},
 		{
+			name:   "three dimensional msgid wins over an origin point",
+			pktHdr: hubPkt,
+			msg:    authored,
+			parsed: &ftn.ParsedBody{Text: "Hello\r * Origin: My BBS (21:4/158.9)\r"},
+			msgID:  "21:4/158 1a2b3c4d",
+			want:   "21:4/158",
+		},
+		{
+			name:   "msgid zone wins over the packet zone",
+			pktHdr: hubPkt,
+			msg:    authored,
+			parsed: &ftn.ParsedBody{},
+			msgID:  "1:4/158.1 1a2b3c4d",
+			want:   "1:4/158.1",
+		},
+		{
 			name:   "relaying point's packet does not stamp its point on the author",
 			pktHdr: &ftn.PacketHeader{OrigZone: 21, OrigNet: 4, OrigNode: 100, OrigPoint: 3},
 			msg:    authored,

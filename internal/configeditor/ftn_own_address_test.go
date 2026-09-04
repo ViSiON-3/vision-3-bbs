@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -86,13 +87,18 @@ func TestOwnAddressReportsSyncedAreaCount(t *testing.T) {
 	if own == nil {
 		t.Fatal("Own Address field not found")
 	}
-	if err := own.Set("21:4/158.1"); err != nil {
+	// The field editor hands both Set and AfterSet the raw input, so the
+	// notice has to report the address as stored, not as typed.
+	if err := own.Set("  21:4/158.1  "); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	own.AfterSet(m, "21:4/158.1")
+	own.AfterSet(m, "  21:4/158.1  ")
 
-	if m.message == "" {
-		t.Fatal("sysop must be told the areas moved with the address")
+	if want := "2 message area(s)"; !strings.Contains(m.message, want) {
+		t.Errorf("message = %q, want it to contain %q", m.message, want)
+	}
+	if want := "set to 21:4/158.1 "; !strings.Contains(m.message, want) {
+		t.Errorf("message = %q, want the trimmed address %q", m.message, want)
 	}
 }
 
@@ -105,14 +111,18 @@ func TestOwnAddressRejectsInvalidAddress(t *testing.T) {
 	)
 
 	fields := m.fieldsFTNLink()
-	for _, f := range fields {
-		if f.Label != "Own Address" {
-			continue
+	var own *fieldDef
+	for i := range fields {
+		if fields[i].Label == "Own Address" {
+			own = &fields[i]
 		}
-		for _, bad := range []string{"", "21:4", "not-an-address", "21:4/158.x"} {
-			if err := f.Set(bad); err == nil {
-				t.Errorf("Set(%q) must fail", bad)
-			}
+	}
+	if own == nil {
+		t.Fatal("Own Address field not found")
+	}
+	for _, bad := range []string{"", "21:4", "not-an-address", "21:4/158.x"} {
+		if err := own.Set(bad); err == nil {
+			t.Errorf("Set(%q) must fail", bad)
 		}
 	}
 	if got := m.configs.FTN.Networks["fsxnet"].OwnAddress; got != "21:4/158" {
