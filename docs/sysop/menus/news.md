@@ -27,11 +27,21 @@ News items are stored in `data/news.json`. Each item has:
 When `PRINTNEWS` is in the login sequence, ViSiON/3 checks each news item against:
 
 1. **Access level** — user's level must be `>= Level` and `<= MaxLevel` (if set)
-2. **Date filter** — item's `When` must be after the user's `lastLogin`, **or** `Always` is `true`
+2. **Already seen** — the item must not already be in the user's seen list, **or** `Always` is `true`
 
 Each qualifying item is displayed using `NEWSHDR.ANS` (header) followed by the body text. The user presses a key after each item to continue. If no qualifying items exist, the login step is silent.
 
-This matches ViSiON/2's `PrintNews(0, True)` call.
+This matches ViSiON/2's `PrintNews(0, True)` call, with one deliberate difference: V2 decided what was new by comparing the item's date to the user's last login. ViSiON/3 instead records which item **IDs** each user has actually been shown, in `seen_news_ids` on the user record.
+
+The date comparison could not work reliably here — the login timestamp is written at authentication, before the login sequence runs — and it also lost items whenever a caller dropped carrier or fast-logged past the news. With ID tracking, an item that was never displayed is still waiting on the next call.
+
+Consequences:
+
+- An item marked `always: false` is shown **exactly once per user**, whenever that user next completes the news step.
+- Reading an item from `RUN:LISTNEWS` also marks it seen, so it will not reappear at the next login.
+- `always: true` items are never recorded and display on every login.
+- Deleting a news item prunes its ID from every user's seen list on their next news step, so the list cannot grow without bound.
+- On a system upgrading to seen-tracking, each user's list is back-filled once from their previous login timestamp, so existing callers are not shown the entire news backlog.
 
 ---
 
@@ -154,13 +164,13 @@ Items are stored newest-first. The file is created automatically when the first 
 
 ## Login Sequence Configuration
 
-To display news at login, add `PRINTNEWS` to `configs/login.json`:
+`PRINTNEWS` ships in the default `configs/login.json` and in the built-in default sequence, so news displays at login out of the box. Installs created before it was added keep their existing `login.json`; add the item by hand:
 
 ```json
 {"command": "PRINTNEWS"}
 ```
 
-`PRINTNEWS` does not support `clear_screen` or `pause_after` — it handles its own display and pausing internally.
+Leave `clear_screen` and `pause_after` off. `NEWSHDR.ANS` begins with `|CL`, so each item already clears the screen, and `PRINTNEWS` pauses after every item itself. Setting `clear_screen` would blank the previous step's output even on logins where there is no news to show.
 
 ---
 

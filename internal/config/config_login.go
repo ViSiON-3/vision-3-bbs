@@ -47,9 +47,13 @@ func LoadLoginSequence(configPath string) ([]LoginItem, error) {
 	return items, nil
 }
 
-// defaultLoginSequence returns the built-in default login sequence matching legacy behavior.
+// defaultLoginSequence returns the built-in default login sequence used when
+// login.json is missing: system news first (it clears the screen via
+// NEWSHDR.ANS and is silent when there is nothing new), then the legacy
+// last callers / oneliners / user stats trio.
 func defaultLoginSequence() []LoginItem {
 	return []LoginItem{
+		{Command: "PRINTNEWS"},
 		{Command: "LASTCALLS"},
 		{Command: "ONELINERS"},
 		{Command: "USERSTATS"},

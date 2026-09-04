@@ -44,6 +44,10 @@ func (um *UserMgr) Authenticate(handle, password string) (*User, bool) {
 		um.mu.Unlock()
 		return nil, false
 	}
+	// Preserve the prior login stamp before overwriting it; "new since last
+	// login" checks during the login sequence need the previous visit, not
+	// this one.
+	user.PreviousLogin = user.LastLogin
 	user.LastLogin = time.Now()
 	user.TimesCalled++
 	um.mu.Unlock()

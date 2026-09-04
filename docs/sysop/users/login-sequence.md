@@ -15,7 +15,7 @@ The login sequence provides:
 
 ## Configuration
 
-The login sequence is configured in `configs/login.json`. If the file is missing, a built-in default sequence is used (Last Callers, Oneliners, User Stats) to maintain backward compatibility.
+The login sequence is configured in `configs/login.json`. If the file is missing, a built-in default sequence is used (System News, Last Callers, Oneliners, User Stats).
 
 ### Basic Structure
 
@@ -140,13 +140,21 @@ Place this after `VOTEMANDATORY` so standard voting and NUV both run in the same
 
 ### PRINTNEWS
 
-Displays system news items that are new since the user's last login, or flagged as `always` (shown every login). Items are filtered by the user's access level. Each item is displayed using the `NEWSHDR.ANS` header template, followed by its body text. The user presses a key after each item to continue.
+Displays system news items the user has not seen yet, plus any flagged as `always` (shown every login). Items are filtered by the user's access level. Which items a user has seen is tracked per-item on the user record, so an item is not lost if the caller drops before it is displayed. Each item is displayed using the `NEWSHDR.ANS` header template, followed by its body text. The user presses a key after each item to continue.
 
 ```json
 {"command": "PRINTNEWS"}
 ```
 
-If no new news items exist, this step is silently skipped. See [News](menus/news.md) for details on creating and managing news items.
+If no new news items exist, this step is silently skipped. `NEWSHDR.ANS` starts
+with `|CL`, so each item clears the screen itself — do not set `clear_screen` on
+this item, or the screen is wiped even when there is no news to show.
+
+`PRINTNEWS` is part of the shipped `configs/login.json` and of the built-in
+default sequence. Installs created before it was added still have the old
+`login.json`; add the item by hand to enable news at login.
+
+See [News](menus/news.md) for details on creating and managing news items.
 
 ### WHOISONLINE
 
@@ -175,17 +183,19 @@ In this example, `SYSOP_NEWS.ANS` is only shown to users with access level 200 o
 
 ## Examples
 
-### Default (Legacy-Compatible)
-
-This matches the original hard-coded behavior:
+### Default (Used When `login.json` Is Missing)
 
 ```json
 [
+    {"command": "PRINTNEWS"},
     {"command": "LASTCALLS"},
     {"command": "ONELINERS"},
     {"command": "USERSTATS"}
 ]
 ```
+
+`PRINTNEWS` is silent when the user has no unread news, so this behaves like the
+legacy three-item sequence on a system with no news items.
 
 ### Full-Featured Login
 
@@ -265,7 +275,7 @@ The login sequence is loaded at BBS startup from `configs/login.json` and stored
 - **Missing PRIVMAIL area**: NMAILSCAN silently skips if the area is not configured
 - **User disconnect**: Detected via EOF and properly handled (session ends)
 - **Script errors**: RUNDOOR logs the error but continues with the next item
-- **Missing login.json**: The built-in default sequence (LASTCALLS, ONELINERS, USERSTATS) is used
+- **Missing login.json**: The built-in default sequence (PRINTNEWS, LASTCALLS, ONELINERS, USERSTATS) is used
 
 ## Menu System Integration
 

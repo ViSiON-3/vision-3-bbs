@@ -8,6 +8,9 @@
         "pause_after": true
     },
     {
+        "command": "PRINTNEWS"
+    },
+    {
         "command": "LASTCALLS"
     },
     {

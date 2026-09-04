@@ -206,11 +206,14 @@ func TestLoadLoginSequence_MissingFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should return default sequence
-	if len(result) != 3 {
-		t.Fatalf("expected default 3-item sequence, got %d", len(result))
+	want := []string{"PRINTNEWS", "LASTCALLS", "ONELINERS", "USERSTATS"}
+	if len(result) != len(want) {
+		t.Fatalf("expected default %d-item sequence, got %d", len(want), len(result))
 	}
-	if result[0].Command != "LASTCALLS" {
-		t.Errorf("expected LASTCALLS as first default item, got %s", result[0].Command)
+	for i, cmd := range want {
+		if result[i].Command != cmd {
+			t.Errorf("default item %d: expected %s, got %s", i, cmd, result[i].Command)
+		}
 	}
 }
 
