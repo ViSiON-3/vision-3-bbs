@@ -63,7 +63,7 @@ Choosing **System Configuration** (key 1) opens an inner menu with nine numbered
 
 | Item | What it edits |
 |------|---------------|
-| Echomail Networks | Global FTN paths (inbound, outbound, temp, bad/dupe tags) and per-network settings (own address, poll interval, tearline) |
+| Echomail Networks | Global FTN paths (inbound, outbound, temp, bad/dupe tags) and per-network settings (own address, poll interval, origin line) |
 | Echomail Links | Per-hub link settings (address, packet/session/AreaFix passwords, flavour) |
 | FTN Setup Wizard | Guided flow: downloads a network's echolist, lets you browse and subscribe to areas, then writes `ftn.json`, `message_areas.json`, and `conferences.json` automatically |
 
@@ -626,7 +626,7 @@ See [Message Areas Guide](messages/message-areas.md) for detailed configuration.
 
 > *Use the [Configuration Editor](#configuration-editor-tui) (key 3 → Echomail Networks / Echomail Links) to manage FTN settings interactively. The JSON structure below is for reference.*
 
-Located in the `configs/` directory. Configures the internal FTN tosser (v3mail) for echomail. Global fields include directory paths (`inbound_path`, `outbound_path`, `binkd_outbound_path`, `temp_path`) and routing tags (`bad_area_tag`, `dupe_area_tag`). Per-network fields include `own_address`, `internal_tosser_enabled`, `poll_interval_seconds`, and `tearline`. Per-link fields include `address`, `packet_password`, `areafix_password`, `name`, and `flavour`.
+Located in the `configs/` directory. Configures the internal FTN tosser (v3mail) for echomail. Global fields include directory paths (`inbound_path`, `outbound_path`, `binkd_outbound_path`, `temp_path`) and routing tags (`bad_area_tag`, `dupe_area_tag`). Per-network fields include `own_address`, `internal_tosser_enabled`, `poll_interval_seconds`, and `origin`. Per-link fields include `address`, `packet_password`, `areafix_password`, `name`, and `flavour`.
 
 See [FTN Echomail Guide](messages/ftn-echomail.md) for setup and full field reference.
 

@@ -94,9 +94,9 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			},
 		},
 		{
-			Label: "Tearline", Help: "Tearline text appended to outgoing messages", Type: ftString, Col: 3, Row: 5, Width: 40,
-			Get: func() string { return netPtr.Tearline },
-			Set: func(val string) error { netPtr.Tearline = val; save(); return nil },
+			Label: "Origin", Help: "Origin line text for outgoing echomail (empty = board name)", Type: ftString, Col: 3, Row: 5, Width: 40,
+			Get: func() string { return netPtr.Origin },
+			Set: func(val string) error { netPtr.Origin = val; save(); return nil },
 		},
 	}
 }

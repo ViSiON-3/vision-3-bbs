@@ -3,7 +3,6 @@ package v3net
 import (
 	"crypto/rand"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -38,7 +37,7 @@ func BuildWireMessage(network, areaTag, originNode, originBoard, from, to, subje
 
 // DefaultTearline returns the standard ViSiON/3 software tearline.
 func DefaultTearline() string {
-	return fmt.Sprintf("--- ViSiON/3 %s/%s", version.Number, runtime.GOOS)
+	return fmt.Sprintf("--- ViSiON/3 %s/%s", version.Display(), version.Platform())
 }
 
 func newUUID() string {

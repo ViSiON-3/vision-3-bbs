@@ -47,7 +47,7 @@ func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 // AppendV3NetOrigin appends a tearline and origin line to the message body,
 // matching the FTN convention:
 //
-//	--- ViSiON/3 0.1.0/linux
+//	--- ViSiON/3 v0.8.0/Linux
 //	 * Origin: My Cool BBS (a1b2c3d4e5f6a7b8)
 func AppendV3NetOrigin(body, tearline, origin, nodeID string) string {
 	// Nothing to append if both are empty.

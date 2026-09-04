@@ -172,7 +172,7 @@ Three behaviours are worth knowing before you rely on it:
   conference, every area tag and every message base path on disk. Add a new
   network instead.
 - **Settings the wizard does not ask about are left alone.** Tosser enable, poll
-  interval and tearline belong to **Echomail Networks**, and an edit here will
+  interval and origin belong to **Echomail Networks**, and an edit here will
   not reset them. Links other than the hub — downstream systems you feed — are
   likewise untouched.
 
@@ -470,7 +470,7 @@ verify the directory paths are correct for your installation:
         "fsxnet": {
             "internal_tosser_enabled": true,
             "own_address": "21:4/158.1",
-            "tearline": "",
+            "origin": "",
             "links": [
                 {
                     "address": "21:4/158",
@@ -627,7 +627,7 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
 | `internal_tosser_enabled` | Set `true` to enable `v3mail` for this network      |
 | `own_address`             | Your FTN address (e.g., `21:4/158.1`)               |
 | `poll_interval_seconds`   | Auto-poll interval; `0` = manual only               |
-| `tearline`                | Optional tearline suffix (empty = use default)      |
+| `origin`                  | Origin line text (empty = board name)               |
 
 **Per-link fields (`networks.<key>.links[]`):**
 
@@ -657,7 +657,7 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
         "fsxnet": {
             "internal_tosser_enabled": true,
             "own_address": "21:4/158.1",
-            "tearline": "",
+            "origin": "",
             "links": [
                 {
                     "address": "21:4/158",

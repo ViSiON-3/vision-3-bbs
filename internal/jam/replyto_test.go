@@ -62,7 +62,7 @@ func TestWriteMessageExt_PreservesReplyTo(t *testing.T) {
 	msg.From, msg.To, msg.Subject, msg.Text = "u1", "u2", "Re", "reply"
 	msg.ReplyTo = 3
 
-	n, err := b.WriteMessageExt(msg, MsgTypeLocalMsg, "", "Test BBS", "")
+	n, err := b.WriteMessageExt(msg, MsgTypeLocalMsg, "", "Test BBS")
 	if err != nil {
 		t.Fatalf("WriteMessageExt: %v", err)
 	}

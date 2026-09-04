@@ -22,16 +22,22 @@ Message type is derived from the area configuration:
 
 Logic lives in `internal/jam/msgtype.go` and is called by `internal/message/manager.go`.
 
-## What Gets Added for Echomail/Netmail
+## What Gets Added for Echomail
 
-When writing echomail/netmail with `WriteMessageExt`, Vision3 automatically appends:
+When writing **echomail** with `WriteMessageExt`, Vision3 automatically adds:
 
-- `AREA:` kludge for echomail
-- `MSGID` (unique serial per base)
+- `AREA:` kludge
+- `MSGID` (unique serial per base), generated when the message has none
 - `PID`/`TID` identifiers
-- Tearline (`--- Vision3 ...`)
+- Tearline (`--- ViSiON/3 vX.Y.Z/Platform`, assigned by the software)
 - Origin line (`* Origin: ... (address)`)
-- `SEEN-BY` and `PATH` for echomail
+
+`SEEN-BY` and `PATH` are the tosser's job and are not added here.
+
+**Netmail** takes none of the above: `WriteMessageExt` writes an `MSGID`
+subfield only when the message already carries one, and adds no kludges,
+tearline, or origin line. Netmail is point-to-point, so the origin line — which
+identifies a message's source conference-wide — does not apply.
 
 Implementation: `internal/jam/echomail.go`, `internal/jam/format.go`, `internal/jam/msgid.go`.
 
@@ -40,7 +46,7 @@ Implementation: `internal/jam/echomail.go`, `internal/jam/format.go`, `internal/
 These values come from configuration and are applied during message creation:
 
 - **Origin address**: `configs/message_areas.json` (`origin_addr` per area)
-- **Network tearline**: `configs/ftn.json` (`tearline` per network)
+- **Network origin text**: `configs/ftn.json` (`origin` per network; empty = board name)
 - **BBS name**: `configs/config.json` (`boardName`)
 
 The message manager passes these into the JAM writer.

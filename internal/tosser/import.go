@@ -473,7 +473,7 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (
 
 	// Write to JAM base with echomail handling
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
-	msgNum, err := base.WriteMessageExt(jamMsg, msgType, area.EchoTag, "", "")
+	msgNum, err := base.WriteMessageExt(jamMsg, msgType, area.EchoTag, "")
 	if err != nil {
 		return fmt.Errorf("write to JAM: %w", err)
 	}
@@ -566,7 +566,7 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 	}
 
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
-	msgNum, err := base.WriteMessageExt(jamMsg, msgType, area.EchoTag, "", "")
+	msgNum, err := base.WriteMessageExt(jamMsg, msgType, area.EchoTag, "")
 	if err != nil {
 		return err
 	}

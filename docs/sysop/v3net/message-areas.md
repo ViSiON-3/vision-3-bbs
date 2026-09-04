@@ -65,7 +65,7 @@ When a leaf syncs the NAL from the hub, any network areas you are subscribed to 
 V3Net messages in JAM bases look like standard echomail messages with a few additions:
 
 - A `V3NETUUID` kludge line (hidden from users) stores the message's unique identifier for deduplication
-- A tearline (`--- ViSiON/3 x.y.z/platform`) identifies the posting software
+- A tearline (`--- ViSiON/3 vX.Y.Z/Platform`) identifies the posting software
 - An origin line (`* Origin: BBS Name (node_id)`) identifies the posting node
 
 ## Area Proposals

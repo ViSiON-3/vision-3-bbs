@@ -22,7 +22,7 @@ func configuredModel() Model {
 						InternalTosserEnabled: true,
 						OwnAddress:            "21:4/158",
 						PollSeconds:           900,
-						Tearline:              "Custom Tearline",
+						Origin:                "Custom Origin Line",
 						Links: []config.FTNLinkConfig{{
 							Address:         "21:1/100",
 							Hostname:        "agency.bbs.nz",
@@ -120,8 +120,8 @@ func TestConfirmFTNWizardEditPreservesUnaskedSettings(t *testing.T) {
 	if net.PollSeconds != 900 {
 		t.Errorf("PollSeconds = %d, want 900 preserved", net.PollSeconds)
 	}
-	if net.Tearline != "Custom Tearline" {
-		t.Errorf("Tearline = %q, want preserved", net.Tearline)
+	if net.Origin != "Custom Origin Line" {
+		t.Errorf("Origin = %q, want preserved", net.Origin)
 	}
 	if !net.InternalTosserEnabled {
 		t.Error("InternalTosserEnabled should be preserved")

@@ -54,11 +54,11 @@ type MessageManager struct {
 	// across networks; AddArea/UpdateAreaByID reject same-network duplicates and
 	// the load path warns about any collision it finds in an existing config.
 	areasByEchoTag map[string]*MessageArea
-	boardName      string // BBS name for echomail origin lines
-	// networkTearlines maps network key -> custom tearline text.
-	networkTearlines map[string]string
-	threadIndex      map[int]*threadIndex
-	msgidIndex       map[int]*msgidIndex
+	boardName      string // BBS name, the default echomail origin line text
+	// networkOrigins maps network key -> origin line text, overriding boardName.
+	networkOrigins map[string]string
+	threadIndex    map[int]*threadIndex
+	msgidIndex     map[int]*msgidIndex
 
 	// OnMessagePosted is called after a message is successfully written to a JAM base.
 	// The callback receives the area and the message details. May be nil.
@@ -74,19 +74,21 @@ type MessageManager struct {
 // NewMessageManager creates and initializes a new MessageManager.
 // dataPath is the directory where JAM base files are stored.
 // configPath is the directory containing message_areas.json.
-// boardName is the BBS name used in echomail origin lines.
-// networkTearlines maps network name -> custom tearline text for echomail.
-func NewMessageManager(dataPath, configPath, boardName string, networkTearlines map[string]string) (*MessageManager, error) {
+// boardName is the BBS name used in echomail origin lines by default.
+// networkOrigins maps network name -> origin line text, overriding boardName
+// for areas on that network. The tearline is not configurable: FTS-0004 makes
+// it the producing software's identifier, so jam stamps it.
+func NewMessageManager(dataPath, configPath, boardName string, networkOrigins map[string]string) (*MessageManager, error) {
 	mm := &MessageManager{
-		dataPath:         dataPath,
-		areasPath:        filepath.Join(configPath, messageAreaFile),
-		areasByID:        make(map[int]*MessageArea),
-		areasByTag:       make(map[string]*MessageArea),
-		areasByEchoTag:   make(map[string]*MessageArea),
-		boardName:        boardName,
-		networkTearlines: normalizeNetworkTearlines(networkTearlines),
-		threadIndex:      make(map[int]*threadIndex),
-		msgidIndex:       make(map[int]*msgidIndex),
+		dataPath:       dataPath,
+		areasPath:      filepath.Join(configPath, messageAreaFile),
+		areasByID:      make(map[int]*MessageArea),
+		areasByTag:     make(map[string]*MessageArea),
+		areasByEchoTag: make(map[string]*MessageArea),
+		boardName:      boardName,
+		networkOrigins: normalizeNetworkOrigins(networkOrigins),
+		threadIndex:    make(map[int]*threadIndex),
+		msgidIndex:     make(map[int]*msgidIndex),
 	}
 
 	if err := mm.loadMessageAreas(); err != nil {
@@ -108,17 +110,18 @@ func (mm *MessageManager) DataPath() string {
 	return mm.dataPath
 }
 
-func normalizeNetworkTearlines(input map[string]string) map[string]string {
+func normalizeNetworkOrigins(input map[string]string) map[string]string {
 	if len(input) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(input))
 	for k, v := range input {
 		key := strings.ToLower(strings.TrimSpace(k))
-		if key == "" {
+		val := strings.TrimSpace(v)
+		if key == "" || val == "" {
 			continue
 		}
-		out[key] = strings.TrimSpace(v)
+		out[key] = val
 	}
 	if len(out) == 0 {
 		return nil
@@ -126,15 +129,16 @@ func normalizeNetworkTearlines(input map[string]string) map[string]string {
 	return out
 }
 
-func (mm *MessageManager) tearlineForNetwork(network string) string {
-	if mm.networkTearlines == nil {
-		return ""
-	}
+// originTextForNetwork returns the origin line text for an area on the given
+// network, falling back to the board name when the network sets none.
+func (mm *MessageManager) originTextForNetwork(network string) string {
 	key := strings.ToLower(strings.TrimSpace(network))
-	if key == "" {
-		return ""
+	if key != "" && mm.networkOrigins != nil {
+		if origin := mm.networkOrigins[key]; origin != "" {
+			return origin
+		}
 	}
-	return mm.networkTearlines[key]
+	return mm.boardName
 }
 
 // Close is a no-op now that bases are opened on-demand.

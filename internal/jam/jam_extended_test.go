@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
 // ---------------------------------------------------------------------------
@@ -702,28 +705,126 @@ func TestAddTearline(t *testing.T) {
 	}
 }
 
-func TestAddCustomTearlineEmpty(t *testing.T) {
-	result := AddCustomTearline("Text", "")
-	if !strings.Contains(result, "--- ViSiON/3") {
-		t.Error("empty custom tearline should use default")
+// The tearline is the producing software's identifier (FTS-0004), so it is
+// fixed: no config, no caller, and no sysop can substitute their own text.
+func TestAddTearlineIsAlwaysTheSoftwareStamp(t *testing.T) {
+	want := "--- " + DefaultTearlineText() + "\n"
+	if got := AddTearline("Text"); !strings.HasSuffix(got, want) {
+		t.Errorf("AddTearline() = %q, want suffix %q", got, want)
+	}
+	if strings.Count(AddTearline("Text"), "--- ") != 1 {
+		t.Error("tearline prefix should appear exactly once")
 	}
 }
 
-func TestAddCustomTearlineWithPrefix(t *testing.T) {
-	result := AddCustomTearline("Text", "--- MyTearline")
-	if !strings.Contains(result, "--- MyTearline") {
-		t.Error("tearline starting with --- should be used as-is")
+func TestAddTearlineReplacesExistingTearline(t *testing.T) {
+	text := "Relayed text\n--- " + DefaultTearlineText() + "\n--- Other BBS v1.0\n * Origin: Remote (1:2/3)\n"
+	want := "Relayed text\n--- " + DefaultTearlineText() + "\n * Origin: Remote (1:2/3)\n"
+	if got := AddTearline(text); got != want {
+		t.Errorf("AddTearline() = %q, want %q", got, want)
 	}
-	// Should NOT add an extra "--- " prefix
-	if strings.Contains(result, "--- --- ") {
-		t.Error("should not double the --- prefix")
+	if got := strings.Count(AddTearline(text), "--- "); got != 1 {
+		t.Errorf("AddTearline() produced %d tearlines, want 1", got)
 	}
 }
 
-func TestAddCustomTearlineCustom(t *testing.T) {
-	result := AddCustomTearline("Text", "CustomSoft 1.0")
-	if !strings.Contains(result, "--- CustomSoft 1.0") {
-		t.Errorf("expected custom tearline, got %q", result)
+// Only the trailing tearline/origin block is rewritten. A "--- " line the
+// author typed in the body is message content: rewriting it would move the
+// tearline above the rest of the message and drop whatever followed.
+func TestAddTearlineLeavesBodyDashLinesAlone(t *testing.T) {
+	stamp := "--- " + DefaultTearlineText() + "\n"
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			name: "dashes used as list markers",
+			text: "Here are my picks:\n--- item one\n--- item two\nThanks!\n",
+			want: "Here are my picks:\n--- item one\n--- item two\nThanks!\n" + stamp,
+		},
+		{
+			name: "signature cut mid-message",
+			text: "See you at the meetup.\n--- \nRobbie, sysop\n",
+			want: "See you at the meetup.\n--- \nRobbie, sysop\n" + stamp,
+		},
+		{
+			name: "no trailing newline",
+			text: "Body",
+			want: "Body\n" + stamp,
+		},
+		{
+			name: "trailing separator is a tearline and is replaced",
+			text: "Bye\n--- \n",
+			want: "Bye\n" + stamp,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := AddTearline(tt.text); got != tt.want {
+				t.Errorf("AddTearline(%q) = %q, want %q", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+// The tearline must end up directly above the origin line, which is what the
+// echomail writer appends next.
+func TestAddTearlineSitsAboveOriginLine(t *testing.T) {
+	got := AddOriginLine(AddTearline("Body text.\n"), "My BBS", "21:4/158.1")
+	want := "Body text.\n--- " + DefaultTearlineText() + "\n * Origin: My BBS (21:4/158.1)\n"
+	if got != want {
+		t.Errorf("trailer = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultTearlineTextFormat(t *testing.T) {
+	got := DefaultTearlineText()
+	if !strings.Contains(got, version.Display()) {
+		t.Errorf("DefaultTearlineText() = %q, want it to contain version %q", got, version.Display())
+	}
+	if !strings.HasSuffix(got, "/"+version.Platform()) {
+		t.Errorf("DefaultTearlineText() = %q, want it to end with /%s", got, version.Platform())
+	}
+	// FTS-0004 caps the text after "--- " at 35 characters.
+	if len(got) > maxTearlineLength {
+		t.Errorf("DefaultTearlineText() = %q is %d chars, FTS-0004 allows %d", got, len(got), maxTearlineLength)
+	}
+}
+
+func TestDefaultTearlineTextCapsLongBuildVersion(t *testing.T) {
+	originalVersion := version.Number
+	version.Number = "1.2.3-rc.12345678901234567890"
+	t.Cleanup(func() { version.Number = originalVersion })
+
+	got := DefaultTearlineText()
+	if len(got) > maxTearlineLength {
+		t.Errorf("DefaultTearlineText() = %q is %d bytes, FTS-0004 allows %d", got, len(got), maxTearlineLength)
+	}
+	if !strings.HasPrefix(got, softwareName+" v") {
+		t.Errorf("DefaultTearlineText() = %q, want %q software and version prefix", got, softwareName)
+	}
+	if !strings.HasSuffix(got, "/"+version.Platform()) {
+		t.Errorf("DefaultTearlineText() = %q, want it to end with /%s", got, version.Platform())
+	}
+}
+
+func TestDefaultTearlineTextTruncatesOnRuneBoundaries(t *testing.T) {
+	originalVersion := version.Number
+	// version.Number is whatever -ldflags stamps in, so it is not guaranteed
+	// to be ASCII. Each of these is 3 bytes per rune.
+	version.Number = "1.0.0-" + strings.Repeat("\u00e9\u00e9\u4e16", 12)
+	t.Cleanup(func() { version.Number = originalVersion })
+
+	got := DefaultTearlineText()
+	if !utf8.ValidString(got) {
+		t.Errorf("DefaultTearlineText() = %q is not valid UTF-8", got)
+	}
+	if len(got) > maxTearlineLength {
+		t.Errorf("DefaultTearlineText() = %q is %d bytes, FTS-0004 allows %d", got, len(got), maxTearlineLength)
+	}
+	if !strings.HasSuffix(got, "/"+version.Platform()) {
+		t.Errorf("DefaultTearlineText() = %q, want it to end with /%s", got, version.Platform())
 	}
 }
 
@@ -1162,7 +1263,7 @@ func TestWriteMessageExtNetmail(t *testing.T) {
 	msg.OrigAddr = "1:103/705"
 	msg.DestAddr = "1:103/706"
 
-	_, err := b.WriteMessageExt(msg, MsgTypeNetmailMsg, "", "BBS", "")
+	_, err := b.WriteMessageExt(msg, MsgTypeNetmailMsg, "", "BBS")
 	if err != nil {
 		t.Fatalf("WriteMessageExt netmail: %v", err)
 	}
@@ -1180,10 +1281,10 @@ func TestWriteMessageExtNetmail(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// WriteMessageExt: echomail with custom tearline
+// WriteMessageExt: echomail stamps the software tearline
 // ---------------------------------------------------------------------------
 
-func TestWriteMessageExtCustomTearline(t *testing.T) {
+func TestWriteMessageExtTearline(t *testing.T) {
 	b := openExtTestBase(t)
 
 	msg := NewMessage()
@@ -1193,14 +1294,14 @@ func TestWriteMessageExtCustomTearline(t *testing.T) {
 	msg.Text = "Body text"
 	msg.OrigAddr = "1:1/1"
 
-	_, err := b.WriteMessageExt(msg, MsgTypeEchomailMsg, "TEST", "BBS", "MySoft 2.0")
+	_, err := b.WriteMessageExt(msg, MsgTypeEchomailMsg, "TEST", "BBS")
 	if err != nil {
 		t.Fatalf("WriteMessageExt: %v", err)
 	}
 
 	got, _ := b.ReadMessage(1)
-	if !strings.Contains(got.Text, "--- MySoft 2.0") {
-		t.Errorf("custom tearline not found in %q", got.Text)
+	if !strings.Contains(got.Text, "--- "+DefaultTearlineText()) {
+		t.Errorf("software tearline not found in %q", got.Text)
 	}
 }
 
@@ -1220,7 +1321,7 @@ func TestWriteMessageExtSeenByPath(t *testing.T) {
 	msg.SeenBy = "103/705"
 	msg.Path = "103/705"
 
-	b.WriteMessageExt(msg, MsgTypeEchomailMsg, "TEST", "BBS", "")
+	b.WriteMessageExt(msg, MsgTypeEchomailMsg, "TEST", "BBS")
 
 	got, _ := b.ReadMessage(1)
 	if got.SeenBy != "103/705" {
@@ -1538,7 +1639,7 @@ func TestWriteMessageExtKludges(t *testing.T) {
 	msg.Text = "Body"
 	msg.Kludges = []string{"CUSTOM: value1", "CUSTOM: value2"}
 
-	b.WriteMessageExt(msg, MsgTypeLocalMsg, "", "", "")
+	b.WriteMessageExt(msg, MsgTypeLocalMsg, "", "")
 
 	got, _ := b.ReadMessage(1)
 	found := 0
@@ -1724,7 +1825,7 @@ func TestWriteMessageExtPreservesExistingAttributes(t *testing.T) {
 	msg.OrigAddr = "1:1/1"
 	msg.Header = &MessageHeader{Attribute: MsgPrivate}
 
-	b.WriteMessageExt(msg, MsgTypeEchomailMsg, "TEST", "BBS", "")
+	b.WriteMessageExt(msg, MsgTypeEchomailMsg, "TEST", "BBS")
 
 	got, _ := b.ReadMessage(1)
 	if got.Header.Attribute&MsgPrivate == 0 {
