@@ -146,26 +146,43 @@ func origPoint(base jam.FidoAddress, pktHdr *ftn.PacketHeader, parsed *ftn.Parse
 		return a.Net == base.Net && a.Node == base.Node
 	}
 
+	// The FMPT control paragraph (FTS-4001) is the sender's point, written
+	// into the body of netmail sent from a point. It is a bare number with no
+	// address to check it against, so it is read on netmail alone — echomail
+	// reaches us relayed, and a paragraph a transit system failed to strip
+	// would otherwise be stamped onto the author. Echomail is the mail that
+	// names an area; netmail names none.
+	fmpt := 0
+	if parsed.Area == "" {
+		fmpt, _ = kludgePoint(parsed.Kludges, "FMPT ")
+	}
+	// A candidate that names no point is silent about one rather than denying
+	// it, so a point FMPT declares outright fills that silence.
+	declared := func(a jam.FidoAddress) jam.FidoAddress {
+		if a.Point == 0 {
+			a.Point = fmpt
+		}
+		return a
+	}
+
 	// MSGID (FTS-0009) is "<address> <serial>" and names the author, making it
 	// the most reliable source. The address half can be an @-style ID rather
 	// than an FTN address, which simply fails to parse and falls through.
 	if fields := strings.Fields(msgID); len(fields) > 0 {
 		if a, err := jam.ParseAddress(fields[0]); err == nil && matches(a) {
-			return *a, true
+			return declared(*a), true
 		}
 	}
 
 	// The origin line (FTS-0004) carries the author's 4D address.
 	if origin := jam.ExtractOriginAddress(parsed.Text); origin != "" {
 		if a, err := jam.ParseAddress(origin); err == nil && matches(a) {
-			return *a, true
+			return declared(*a), true
 		}
 	}
 
-	// The FMPT control paragraph (FTS-4001) is the sender's point, written
-	// into the body of netmail sent from a point.
-	if p, ok := kludgePoint(parsed.Kludges, "FMPT "); ok {
-		base.Point = p
+	if fmpt > 0 {
+		base.Point = fmpt
 		return base, true
 	}
 
