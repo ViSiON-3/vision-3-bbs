@@ -2,6 +2,10 @@ package ftn
 
 import (
 	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -93,5 +97,56 @@ func TestEmbeddedRegistryFsxNetHasNodelistURL(t *testing.T) {
 	}
 	if !found {
 		t.Error("fsxNet registry entry not found")
+	}
+}
+
+func TestLoadOverrideRegistryTrimsURLs(t *testing.T) {
+	// A sysop hand-editing ftn_networks.json can easily leave a stray space.
+	// Untrimmed it passes EcholistIsDownloadable (which trims) and then fails
+	// in url.Parse, and a whitespace-only value reads as "configured" instead
+	// of "absent", sending the wizard down the wrong message branch.
+	dir := t.TempDir()
+	body := `[{"zone": 21, "name": "fsxNet",
+	  "echolist_url": "  https://example.test/fsxnet.na  ",
+	  "nodelist_url": "\thttps://example.test/fsxnet.zip\n"},
+	 {"zone": 25, "name": "Blank", "echolist_url": "   "}]`
+	if err := os.WriteFile(filepath.Join(dir, "ftn_networks.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	networks, err := LoadOverrideRegistry(dir)
+	if err != nil {
+		t.Fatalf("LoadOverrideRegistry() error: %v", err)
+	}
+	if len(networks) != 2 {
+		t.Fatalf("got %d networks, want 2", len(networks))
+	}
+
+	if got := networks[0].EcholistURL; got != "https://example.test/fsxnet.na" {
+		t.Errorf("EcholistURL = %q, want it trimmed", got)
+	}
+	if got := networks[0].NodelistURL; got != "https://example.test/fsxnet.zip" {
+		t.Errorf("NodelistURL = %q, want it trimmed", got)
+	}
+	if _, err := http.NewRequest(http.MethodGet, networks[0].EcholistURL, nil); err != nil {
+		t.Errorf("trimmed URL should build a request: %v", err)
+	}
+	if got := networks[1].EcholistURL; got != "" {
+		t.Errorf("whitespace-only EcholistURL = %q, want empty so it reads as absent", got)
+	}
+}
+
+func TestEmbeddedRegistryURLsAreTrimmed(t *testing.T) {
+	networks, err := LoadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range networks {
+		if n.EcholistURL != strings.TrimSpace(n.EcholistURL) {
+			t.Errorf("%s zone %d: echolist_url has surrounding whitespace: %q", n.Name, n.Zone, n.EcholistURL)
+		}
+		if n.NodelistURL != strings.TrimSpace(n.NodelistURL) {
+			t.Errorf("%s zone %d: nodelist_url has surrounding whitespace: %q", n.Name, n.Zone, n.NodelistURL)
+		}
 	}
 }

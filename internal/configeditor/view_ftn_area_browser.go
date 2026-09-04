@@ -22,8 +22,16 @@ func (m Model) viewFTNAreaBrowser() string {
 	}
 
 	if m.ftnAreaBrowserError != "" && total == 0 {
-		return lb.statusScreen(lb.errorRow(m.ftnAreaBrowserError),
-			ftnAreaBrowserListVisible, 2, "R - Retry  |  ESC - Back")
+		// A failed download is not a dead end: say so here, because the
+		// wizard form behind this screen still holds everything typed so
+		// far and saving no longer needs a single echo area.
+		lb.row(lb.errorRow(m.ftnAreaBrowserError))
+		lb.row(menuItemStyle.Render(padRight("  ESC keeps what you entered — you can save the network now", boxW)))
+		lb.row(menuItemStyle.Render(padRight("  and add echo areas later under Message Areas.", boxW)))
+		lb.emptyRows(ftnAreaBrowserListVisible - 1)
+		lb.bottomBorder()
+		lb.bgRows(lb.bottomPad + 2)
+		return lb.finish("R - Retry  |  ESC - Back")
 	}
 
 	lb.colHeader(fmt.Sprintf("   %-4s %-16s %s", " ", "Tag", "Description"))

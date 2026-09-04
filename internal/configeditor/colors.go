@@ -124,5 +124,10 @@ var reorderSourceStyle = dosColor(2, 15)
 // --- Separator style ---
 var separatorStyle = dosColor(1, 9)
 
+// listEmptyHintStyle draws the "nothing here yet, press I" line an empty
+// record list shows in place of its first row. Yellow, not the list's own
+// white, so it reads as guidance rather than as a record.
+var listEmptyHintStyle = dosColor(1, 14)
+
 // --- Edit field fill character ---
 const fieldFillChar = '░'

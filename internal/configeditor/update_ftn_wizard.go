@@ -422,13 +422,17 @@ func (m *Model) applyFTNWizardFieldValue(f fieldDef) error {
 }
 
 // submitFTNWizardForm validates the form and triggers save.
+//
+// Echo areas are deliberately not required. The echolist is a convenience —
+// several networks have no downloadable one at all, and the hosted ones do go
+// offline — so demanding at least one area turned a failed download into a
+// dead end where the only way out of the wizard discarded everything typed so
+// far. The network, its hub link, the netmail area and binkd.conf are all
+// worth saving on their own; echoes can be added later by re-entering the
+// wizard or by hand under Message Areas.
 func (m Model) submitFTNWizardForm() (Model, tea.Cmd) {
 	if err := m.validateFTNWizard(); err != nil {
 		m.message = err.Error()
-		return m, nil
-	}
-	if m.ftnWizard.selectedAreaCount() == 0 {
-		m.message = "Select at least one echo area"
 		return m, nil
 	}
 	return m.confirmFTNWizard()
@@ -450,10 +454,14 @@ func (m Model) enterFTNAreaBrowser() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Need an echolist URL.
+	// Need an echolist URL we can actually fetch.
 	url := w.echolistURL
 	if url == "" {
-		m.message = "No echolist URL available for this network"
+		m.message = "No echolist for this network — save now and add echo areas under Message Areas"
+		return m, nil
+	}
+	if !ftn.EcholistIsDownloadable(url) {
+		m.message = fmt.Sprintf("%s comes from your hub, not the web — request it via AreaFix, then add areas under Message Areas", url)
 		return m, nil
 	}
 

@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
 // ftnAreaBrowserListVisible is the number of rows visible in the FTN area browser.
@@ -79,7 +81,7 @@ func (m Model) updateFTNAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		default:
 			key := strings.ToUpper(msg.String())
-			if key == "R" && m.ftnWizard.echolistURL != "" {
+			if key == "R" && ftn.EcholistIsDownloadable(m.ftnWizard.echolistURL) {
 				m.ftnAreaBrowserLoading = true
 				m.ftnAreaBrowserError = ""
 				m.mode = modeFTNAreaDownloading

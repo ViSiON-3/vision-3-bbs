@@ -71,6 +71,8 @@ Choosing **System Configuration** (key 1) opens an inner menu with nine numbered
 
 **Node Lookup.** After entering your FTN address, select the *Node Lookup* row and press Enter. The wizard downloads the network's nodelist, finds your node, and fills in your uplink hub's address, hostname, and BinkP port automatically. If your node isn't listed yet (new nodes appear in the next weekly nodelist), the hub is inferred from your net's Host/Hub entries. Networks without a published nodelist URL skip this feature; hub details can always be entered manually.
 
+**Echo Areas.** Selecting the *Echo Areas* row downloads the network's echolist so you can tick the echoes you want. Echo areas are optional: not every network publishes its `.NA` file on the web (some hand it out through the network itself, via AreaFix), and web-hosted lists do go offline. If the download fails, press ESC — everything you entered is still on the form — and save. You get the network, its hub link, the netmail area and an updated `binkd.conf`; echoes can be added later under *Message Areas*, or by re-entering the wizard and choosing the network to edit.
+
 ### ViSiON/3 Networking (V3Net) Sub-menu
 
 | Item | What it edits |
