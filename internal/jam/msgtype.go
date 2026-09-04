@@ -21,12 +21,18 @@ func (mt MessageType) IsNetmail() bool { return mt == MsgTypeNetmailMsg }
 func (mt MessageType) IsLocal() bool { return mt == MsgTypeLocalMsg }
 
 // GetJAMAttribute returns the JAM attribute flags for this message type.
+//
+// Netmail carries MsgPrivate: it is mail addressed to one person, private by
+// definition, and the tosser stamps MSGPRIVATE on every netmail it packs. Every
+// netmail reaches a base through WriteMessageExt, so setting the flag here
+// covers inbound tossed mail and locally written mail alike, without each
+// caller having to remember.
 func (mt MessageType) GetJAMAttribute() uint32 {
 	switch mt {
 	case MsgTypeEchomailMsg:
 		return MsgLocal | MsgTypeEcho
 	case MsgTypeNetmailMsg:
-		return MsgLocal | MsgTypeNet
+		return MsgLocal | MsgTypeNet | MsgPrivate
 	default:
 		return MsgLocal | MsgTypeLocal
 	}

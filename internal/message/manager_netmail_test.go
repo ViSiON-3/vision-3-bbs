@@ -87,3 +87,25 @@ func TestAddPrivateReply_NetmailKeepsDestAddr(t *testing.T) {
 		t.Errorf("ReplyToNum = %d, want %d", reply.ReplyToNum, parent)
 	}
 }
+
+// Netmail written through the public (non-private) entry point still has to be
+// private: inbound mail arrives without the flag, so a reply to it takes the
+// AddReply path, and the reply is mail to one person all the same.
+func TestAddMessage_NetmailIsPrivate(t *testing.T) {
+	mm := newNetmailTestManager(t)
+
+	num, err := mm.AddMessage(1, "Alice", "Bob@21:1/100", "Re: Hello", "hi back", "")
+	if err != nil {
+		t.Fatalf("AddMessage: %v", err)
+	}
+	msg, err := mm.GetMessage(1, num)
+	if err != nil {
+		t.Fatalf("GetMessage: %v", err)
+	}
+	if !msg.IsPrivate {
+		t.Error("netmail must be stored private")
+	}
+	if msg.DestAddr != "21:1/100" {
+		t.Errorf("DestAddr = %q, want %q", msg.DestAddr, "21:1/100")
+	}
+}

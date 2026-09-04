@@ -454,6 +454,11 @@ func TestTossNetmail(t *testing.T) {
 	if msg.From != "Remote User" {
 		t.Errorf("netmail From: got %q, want %q", msg.From, "Remote User")
 	}
+	// Netmail is mail to one person: it has to land private, or the reader
+	// treats it as a public post and replies to it lose the private flag.
+	if !msg.IsPrivate() {
+		t.Error("inbound netmail must be stored private")
+	}
 }
 
 // TestTossBadArea verifies that a message for an unknown area is routed to the bad area.
