@@ -120,14 +120,17 @@ func intlAddr(kludges []string, field int) *jam.FidoAddress {
 }
 
 // kludgePoint returns the point number carried by the first kludge with the
-// given prefix ("FMPT " or "TOPT ").
+// given prefix ("FMPT " or "TOPT "). Values outside the 16-bit point field are
+// ignored: they reach FidoAddress.Point without passing through
+// jam.ParseAddress, and would otherwise build an address that cannot be parsed
+// back.
 func kludgePoint(kludges []string, prefix string) (int, bool) {
 	for _, k := range kludges {
 		v, ok := strings.CutPrefix(k, prefix)
 		if !ok {
 			continue
 		}
-		if p, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && p > 0 {
+		if p, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && p > 0 && p <= 65535 {
 			return p, true
 		}
 	}

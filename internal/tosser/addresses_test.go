@@ -118,6 +118,20 @@ func TestResolveOrigAddrRecoversPoint(t *testing.T) {
 			want:   "21:4/158",
 		},
 		{
+			name:   "out-of-range fmpt is ignored rather than stored unparseable",
+			pktHdr: hubPkt,
+			msg:    authored,
+			parsed: &ftn.ParsedBody{Kludges: []string{"FMPT 65536"}},
+			want:   "21:4/158",
+		},
+		{
+			name:   "largest valid fmpt is kept",
+			pktHdr: hubPkt,
+			msg:    authored,
+			parsed: &ftn.ParsedBody{Kludges: []string{"FMPT 65535"}},
+			want:   "21:4/158.65535",
+		},
+		{
 			name:   "relaying point's packet does not stamp its point on the author",
 			pktHdr: &ftn.PacketHeader{OrigZone: 21, OrigNet: 4, OrigNode: 100, OrigPoint: 3},
 			msg:    authored,
@@ -225,6 +239,13 @@ func TestResolveDestAddr(t *testing.T) {
 			pktHdr: &ftn.PacketHeader{DestZone: 21, DestNet: 4, DestNode: 100, DestPoint: 3},
 			msg:    &ftn.PackedMessage{OrigNet: 4, OrigNode: 100, DestNet: 4, DestNode: 158},
 			parsed: &ftn.ParsedBody{},
+			want:   "21:4/158",
+		},
+		{
+			name:   "out-of-range topt is ignored rather than stored unparseable",
+			pktHdr: &ftn.PacketHeader{DestZone: 21, DestNet: 4, DestNode: 158},
+			msg:    &ftn.PackedMessage{OrigNet: 4, OrigNode: 100, DestNet: 4, DestNode: 158},
+			parsed: &ftn.ParsedBody{Kludges: []string{"TOPT 65536"}},
 			want:   "21:4/158",
 		},
 		{
