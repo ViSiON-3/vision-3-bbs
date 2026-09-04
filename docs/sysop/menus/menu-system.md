@@ -207,7 +207,7 @@ Command files are JSON arrays that define what happens when users press keys.
 
 ### Built-in Shortcuts
 
-Two keys work from every menu without appearing in any `.CFG`:
+Two keys work on every standard command menu without appearing in any `.CFG`:
 
 - `/G` - Hang up immediately, no confirmation
 - `G` - Log off with confirmation and `GOODBYE.ANS`
@@ -215,6 +215,11 @@ Two keys work from every menu without appearing in any `.CFG`:
 `G` is a fallback, checked only after every command in the menu has failed to
 match, so a menu that binds `G` to something of its own keeps it — `USERCFG`
 uses it for the custom prompt editor.
+
+Both are matched by the standard menu input loop. The pre-login matrix
+(`PDMATRIX`) reads keys itself and recognises only its own hotkeys, so neither
+shortcut applies there; give it a `DISCONNECT` option instead, as the shipped
+`PDMATRIX.CFG` does.
 
 ### Command Actions
 

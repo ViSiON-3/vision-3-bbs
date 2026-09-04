@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed registry.json
@@ -35,13 +36,28 @@ type RegistryNetwork struct {
 	AreaManager      string   `json:"area_manager,omitempty"`
 }
 
+// normalizeRegistry trims the fields that get handed to a URL parser. Both
+// registries are hand-maintained JSON — the embedded one ported from an ini
+// file that indents some values, the override one edited by the sysop — so a
+// stray space is easy to introduce. Untrimmed it survives
+// EcholistIsDownloadable (which trims) and then fails in url.Parse, where a
+// leading space makes "https:" a relative path segment; a whitespace-only
+// value would likewise read as "configured" rather than "absent".
+func normalizeRegistry(networks []RegistryNetwork) []RegistryNetwork {
+	for i := range networks {
+		networks[i].EcholistURL = strings.TrimSpace(networks[i].EcholistURL)
+		networks[i].NodelistURL = strings.TrimSpace(networks[i].NodelistURL)
+	}
+	return networks
+}
+
 // LoadRegistry returns the embedded FTN network registry.
 func LoadRegistry() ([]RegistryNetwork, error) {
 	var networks []RegistryNetwork
 	if err := json.Unmarshal(registryJSON, &networks); err != nil {
 		return nil, fmt.Errorf("parsing embedded FTN registry: %w", err)
 	}
-	return networks, nil
+	return normalizeRegistry(networks), nil
 }
 
 // LoadOverrideRegistry loads an optional sysop-provided ftn_networks.json
@@ -59,5 +75,5 @@ func LoadOverrideRegistry(configPath string) ([]RegistryNetwork, error) {
 	if err := json.Unmarshal(data, &networks); err != nil {
 		return nil, fmt.Errorf("parsing ftn_networks.json: %w", err)
 	}
-	return networks, nil
+	return normalizeRegistry(networks), nil
 }
