@@ -1045,7 +1045,7 @@ type LoginItem struct {
 | ------------------------- | ------------------------------------------ |
 | `FULL_LOGIN_SEQUENCE`     | Complete login flow                        |
 | `FASTLOGIN`               | Inline fast login menu                     |
-| `PRINTNEWS`               | Display news since last login              |
+| `PRINTNEWS`               | Display news items the user has not seen   |
 | `PENDINGVALIDATIONNOTICE` | SysOp notice for users awaiting validation |
 
 #### System Information

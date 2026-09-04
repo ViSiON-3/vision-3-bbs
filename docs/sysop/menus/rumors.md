@@ -80,7 +80,9 @@ Results show the rumor number, text, and author. Case-insensitive matching.
 
 ### Rumors Newscan (`RUN:RUMORSNEWSCAN`)
 
-Clears the screen and displays all rumors posted since the user's last login. Shows rumor number, text, and author for each new rumor.
+Clears the screen and displays all rumors posted since the user's *previous* call. Shows rumor number, text, and author for each new rumor.
+
+The comparison is against `previousLogin`, not `lastLogin` — the latter is stamped at authentication, before the login sequence runs, so it always reads as the current session. Rumors posted since the caller was last on the board are the ones shown.
 
 **Default menu binding:** `N` on the Rumors Menu.
 

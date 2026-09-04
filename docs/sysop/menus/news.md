@@ -202,8 +202,49 @@ Leave `clear_screen` and `pause_after` off. `NEWSHDR.ANS` begins with `|CL`, so 
 
 ---
 
+## Troubleshooting
+
+### News items exist but never appear at login
+
+If the log shows this at startup:
+
+```
+level=WARN msg="system news items exist but will never be displayed at login"
+  items=4 reason="the login sequence has no PRINTNEWS step"
+  fix="add {\"command\": \"PRINTNEWS\"} to configs/login.json"
+```
+
+your `configs/login.json` has no `PRINTNEWS` step. `PRINTNEWS` ships in the
+default login sequence, but setup only copies a template config when the target
+file does not already exist — so a system installed before `PRINTNEWS` was added
+keeps its original `login.json`. Add the step by hand:
+
+```json
+{"command": "PRINTNEWS"}
+```
+
+The warning only appears when there are news items to show, and clears once the
+step is present.
+
+### An item shows for some users but not others
+
+Check the item's `level` and `max_level` against those users' access levels. An
+item with `max_level: 100` is hidden from anyone above level 100 — this is
+intended for new-user notices, and is easy to trip over when testing as SysOp.
+
+### An item will not show again
+
+Once displayed, an `always: false` item is recorded in the user's
+`seen_news_ids` and will not be shown to that user again. To re-show it, either
+set `always: true`, or delete the item and add it back — a new item gets a new
+ID, which no user has seen. See [User Management](users/user-management.md) for
+the user record fields.
+
+---
+
 ## See Also
 
 - [Login Sequence](users/login-sequence.md) — configuring `PRINTNEWS` in `login.json`
 - [Admin Menu](users/admin-menu.md) — `W` key for news management
 - [Pipe Color Codes](menus/menu-system.md#pipe-color-codes) — colors in `NEWSHDR.ANS`
+- [User Management](users/user-management.md) — `seen_news_ids` and `previousLogin` on the user record

@@ -709,7 +709,7 @@ Functions available via `RUN:` command:
 
 ### News
 
-- `PRINTNEWS` - Display news items new since last login (login sequence use)
+- `PRINTNEWS` - Display news items the user has not seen yet (login sequence use)
 - `LISTNEWS` - Browse all visible news items; user selects to read
 - `EDITNEWS` - SysOp news management: add, delete, edit, list, view (SysOp only)
 

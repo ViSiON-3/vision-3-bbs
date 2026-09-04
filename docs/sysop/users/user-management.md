@@ -20,6 +20,7 @@ Users are stored as a JSON array. Each user account contains:
   "accessLevel": 10,
   "flags": "",
   "lastLogin": "2025-05-01T15:13:20Z",
+  "previousLogin": "2025-04-28T09:02:11Z",
   "timesCalled": 220,
   "lastBulletinRead": "0001-01-01T00:00:00Z",
   "realName": "Felonius",
@@ -77,7 +78,10 @@ Users are stored as a JSON array. Each user account contains:
 #### Statistics
 
 - `timesCalled` - Login count
-- `lastLogin` - Last login timestamp
+- `lastLogin` - Timestamp of the **current** session, written at authentication
+- `previousLogin` - Timestamp of the call before this one; what "new since your last visit" is measured against (see below)
+- `seen_news_ids` - System News item IDs already shown to this user
+- `news_seen_initialized` - Whether `seen_news_ids` has been back-filled yet
 - `lastBulletinRead` - Last time bulletins were read
 - `filePoints` - File area points
 - `numUploads` - Number of file uploads
@@ -350,7 +354,21 @@ function, so an account below 255 cannot promote itself from inside the BBS.
 
 - Usernames are case-insensitive for login
 - Passwords are hashed using bcrypt
-- Login increments `timesCalled` and updates `lastLogin`
+- Login increments `timesCalled`, rolls `lastLogin` into `previousLogin`, and sets `lastLogin` to now
+
+#### `lastLogin` vs `previousLogin`
+
+`lastLogin` is stamped with the current time **at authentication** — before the
+login sequence runs and before the user reaches a menu. For the whole session it
+therefore reads as "a moment ago", not as the caller's previous visit.
+
+Anything answering *"what is new since this user was last here?"* must compare
+against `previousLogin` instead. That includes System News, the rumors newscan,
+the file newscan, and the `|LCALL` display placeholder.
+
+`previousLogin` is absent on an account that has not logged in since the field
+was introduced, and is zero for a first-time caller. Treat a zero value as "no
+previous visit" rather than as the epoch — `|LCALL` renders it as `Never`.
 
 ### Adding Users
 
