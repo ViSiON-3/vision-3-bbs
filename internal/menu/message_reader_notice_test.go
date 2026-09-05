@@ -28,10 +28,10 @@ func TestTrimNoticeLeadingBlank(t *testing.T) {
 	}
 }
 
-// Every notice routed through the helper must begin with a break in its
-// stored form — that is what made them scroll — and must have none once
-// trimmed. If a string is ever rewritten without the leading newline this
-// still passes; the point is that the trimmed form never starts with one.
+// Whatever the stored strings look like, the form actually written to the
+// lightbar row must not open with a line break — that break is what scrolled
+// the screen. Sysops can edit these strings, so this pins the property at the
+// point of use rather than assuming any particular stored shape.
 func TestNoticeStringsCarryNoLeadingBreakAfterTrim(t *testing.T) {
 	for _, s := range []string{
 		"\r\n|07End of messages.|07",
@@ -48,13 +48,11 @@ func TestNoticeStringsCarryNoLeadingBreakAfterTrim(t *testing.T) {
 	}
 }
 
-// The erase-line sequence must not move the cursor: the notice is written
-// immediately after it, on the row the helper just positioned to.
-func TestEraseLineDoesNotMoveTheCursor(t *testing.T) {
+// The helper positions to the lightbar row and then erases it, so the erase
+// must be CSI 2K — erase-in-line, which clears without moving the cursor.
+// Anything that repositions would land the notice somewhere else.
+func TestEraseLineIsEraseInLine(t *testing.T) {
 	if eraseLine != "\x1b[2K" {
 		t.Errorf("eraseLine = %q, want the CSI 2K erase-in-line sequence", eraseLine)
-	}
-	if strings.ContainsAny(eraseLine, "Hf") {
-		t.Errorf("eraseLine %q contains a cursor-positioning final byte", eraseLine)
 	}
 }
