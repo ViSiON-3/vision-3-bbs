@@ -213,9 +213,15 @@ func WarnIfNewsUnwired(rootConfigPath string, loginSequence []config.LoginItem) 
 //
 //	^NM = item number   ^TI = title    ^FR = from/author
 //	^DT = date          ^TM = time     ^LV = min level   ^MX = max level
-func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, idx int, outputMode ansi.OutputMode) {
+func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, idx int, outputMode ansi.OutputMode, termWidth int) {
+	// Width of the header frame the body should line up under. Measured from
+	// the header actually rendered, so a customized NEWSHDR.ANS or a different
+	// menu set stays self-consistent instead of being hard-coded to 78.
+	headerWidth := newsFallbackHeaderWidth
+
 	ansiPath := filepath.Join(e.MenuSetPath, "ansi", "NEWSHDR.ANS")
 	if raw, err := os.ReadFile(ansiPath); err == nil {
+		headerWidth = headerTemplateWidth(string(raw))
 		maxStr := strconv.Itoa(item.MaxLevel)
 		if item.MaxLevel <= 0 {
 			maxStr = "All"
@@ -233,13 +239,96 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 		// Fallback plain header if NEWSHDR.ANS is missing
 		wv(terminal, fmt.Sprintf("\r\n|15News #%d: |11%s\r\n|07From: |11%s |07  Date: |11%s\r\n|08%s\r\n",
 			idx, item.Title, item.From, item.When.Format("01/02/2006"),
-			strings.Repeat("\xc4", 70)), outputMode)
+			strings.Repeat("\xc4", newsFallbackHeaderWidth)), outputMode)
 	}
 	if item.Body != "" {
-		for _, line := range strings.Split(item.Body, "\n") {
-			wv(terminal, strings.TrimRight(line, "\r")+"\r\n", outputMode)
+		// Word-wrap to the terminal, the same way the message reader renders a
+		// message body. Without this the terminal hard-wraps at its own margin
+		// and breaks words mid-word.
+		//
+		// Pipe codes are converted to ANSI *before* wrapping, matching the
+		// reader. wrapAnsiString measures width with ANSI escapes stripped but
+		// knows nothing about pipe codes, so wrapping first would count "|04"
+		// as three visible columns and break lines far too early.
+		//
+		// wrapAnsiString leaves ANSI art alone, so a sysop who pastes art into
+		// an item still gets it positioned correctly.
+		width := newsBodyWidth(headerWidth, termWidth)
+		body := string(ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body))))
+		lines := wrapAnsiString(body, width)
+		// wrapAnsiString breaks on spaces, so a token with no break opportunity
+		// (a long URL, a path) comes back oversized; break those explicitly
+		// rather than leaving the client terminal to chop them mid-token.
+		//
+		// Not for ANSI art: wrapAnsiString leaves art rows alone because they
+		// are positioned absolutely, and hard-breaking a full-width row would
+		// push everything below it down a line and wreck the picture.
+		if !containsAnsiArt(body) {
+			lines = breakOversizedLines(lines, width)
+		}
+		for _, line := range lines {
+			// Already pipe-converted, so write straight through rather than
+			// running it past ReplacePipeCodes a second time.
+			terminalio.WriteProcessedBytes(terminal, []byte(line+"\r\n"), outputMode)
 		}
 	}
+}
+
+// normalizeNewsBody converts stored CRLF line endings to LF so wrapping sees
+// clean lines; a stray CR would otherwise count toward the visible width.
+func normalizeNewsBody(body string) string {
+	return strings.ReplaceAll(body, "\r\n", "\n")
+}
+
+// newsFallbackHeaderWidth is the rule width of the built-in plain header used
+// when NEWSHDR.ANS is missing, and the assumed frame width when a header
+// cannot be measured.
+const newsFallbackHeaderWidth = 70
+
+// newsTerminalBudget is the widest a body line may be on this terminal.
+//
+// One column short of the terminal, because the body is written as a sequence
+// of lines each ending in CRLF: a line filling the full width would trigger the
+// terminal's own auto-wrap and the CRLF would then land on the next row,
+// showing up as a blank line between every wrapped line. The same reservation
+// is made elsewhere for sequentially written output.
+//
+// Falls back to 79 when the width is unknown, rather than to "do not wrap":
+// 80 columns is the safe assumption for a BBS, and no wrapping is what
+// produced broken words in the first place.
+func newsTerminalBudget(termWidth int) int {
+	if termWidth <= 1 {
+		return 79
+	}
+	return termWidth - 1
+}
+
+// newsBodyWidth is the column budget for a wrapped news line: the header's
+// frame width, so the text lines up under the rules NEWSHDR.ANS draws rather
+// than running past them, but never wider than the terminal can show.
+func newsBodyWidth(headerWidth, termWidth int) int {
+	budget := newsTerminalBudget(termWidth)
+	if headerWidth > 0 && headerWidth < budget {
+		return headerWidth
+	}
+	return budget
+}
+
+// headerTemplateWidth is the visible width of the widest line in a header
+// template — in practice the horizontal rules, which define the frame.
+//
+// Measured on the template before substitution: that is the width the header
+// was designed to, and it keeps the body budget stable from item to item
+// instead of drifting with the length of a title or author name.
+func headerTemplateWidth(tmpl string) int {
+	converted := string(ansi.ReplacePipeCodes([]byte(strings.ReplaceAll(tmpl, "\r\n", "\n"))))
+	widest := 0
+	for _, line := range strings.Split(converted, "\n") {
+		if w := visibleWidth(line); w > widest {
+			widest = w
+		}
+	}
+	return widest
 }
 
 // runPrintNews displays news items the user has not seen yet, plus any
@@ -307,7 +396,7 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		}
 
-		displayNewsItem(e, terminal, &nd.Items[i], i+1, outputMode)
+		displayNewsItem(e, terminal, &nd.Items[i], i+1, outputMode, termWidth)
 		e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 		shown++
 
@@ -425,7 +514,7 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 		idx := visible[n-1]
-		displayNewsItem(e, terminal, &nd.Items[idx], n, outputMode)
+		displayNewsItem(e, terminal, &nd.Items[idx], n, outputMode, termWidth)
 		if item := nd.Items[idx]; !item.Always && item.ID > 0 {
 			seen[item.ID] = true
 		}
