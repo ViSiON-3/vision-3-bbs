@@ -504,16 +504,14 @@ readerLoop:
 						currentMsgNum = nxt
 						break scrollLoop
 					}
-					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgEndOfMessages)), outputMode)
-					time.Sleep(500 * time.Millisecond)
+					showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgEndOfMessages, termHeight)
 					break readerLoop
 				}
 				if currentMsgNum < totalMsgCount {
 					currentMsgNum++
 					break scrollLoop // Exit scroll loop to load next message
 				} else {
-					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgEndOfMessages)), outputMode)
-					time.Sleep(500 * time.Millisecond)
+					showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgEndOfMessages, termHeight)
 					break readerLoop
 				}
 
@@ -548,8 +546,7 @@ readerLoop:
 						break scrollLoop
 					}
 					// Already at the first visible message: stay put.
-					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgFirstMessage)), outputMode)
-					time.Sleep(500 * time.Millisecond)
+					showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgFirstMessage, termHeight)
 					needsRedraw = true
 					continue
 				}
@@ -557,8 +554,7 @@ readerLoop:
 					currentMsgNum--
 					break scrollLoop
 				} else {
-					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgFirstMessage)), outputMode)
-					time.Sleep(500 * time.Millisecond)
+					showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgFirstMessage, termHeight)
 					needsRedraw = true
 					continue
 				}
@@ -577,8 +573,7 @@ readerLoop:
 				break scrollLoop
 
 			case 'M': // Mail reply (deferred)
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgMailReplyDeferred)), outputMode)
-				time.Sleep(1 * time.Second)
+				showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgMailReplyDeferred, termHeight)
 				needsRedraw = true
 				continue
 
