@@ -165,3 +165,108 @@ func TestNewsBodyLongColouredParagraphWrapsWithinBudget(t *testing.T) {
 		}
 	}
 }
+
+// wrapAnsiString breaks on spaces only, so a token with no break opportunity
+// comes back oversized and the client terminal chops it — the exact mid-word
+// splitting this wrapping exists to prevent. Every emitted line must fit.
+func TestNewsBodyBreaksOversizedTokens(t *testing.T) {
+	url := "https://example.com/downloads/" + strings.Repeat("abcdefghij", 10) + "/file.zip"
+	if len(url) <= newsBodyWidth(80) {
+		t.Fatalf("test URL is only %d cols; it must exceed the budget", len(url))
+	}
+	body := "Grab it from " + url + " today."
+	width := newsBodyWidth(80)
+
+	lines := breakOversizedLines(wrapNewsBodyForTest(body, 80), width)
+
+	for i, ln := range lines {
+		if got := visibleCols(ln); got > width {
+			t.Errorf("line %d is %d visible columns, over the %d budget: %q", i, got, width, ln)
+		}
+	}
+
+	// The URL must survive intact once the line breaks are removed.
+	if joined := strings.Join(lines, ""); !strings.Contains(strings.ReplaceAll(joined, " ", ""),
+		strings.ReplaceAll(url, " ", "")) {
+		t.Errorf("URL was corrupted by breaking; not found in reassembled output")
+	}
+}
+
+func TestBreakOversizedLinesKeepsShortLinesUntouched(t *testing.T) {
+	in := []string{"short", "also short", ""}
+	got := breakOversizedLines(in, 79)
+	if len(got) != len(in) {
+		t.Fatalf("short lines were altered: %q", got)
+	}
+	for i := range in {
+		if got[i] != in[i] {
+			t.Errorf("line %d changed from %q to %q", i, in[i], got[i])
+		}
+	}
+}
+
+// Breaking must never split an ANSI escape sequence, and escapes must not
+// count toward the column budget.
+func TestBreakOversizedLinesIsAnsiAware(t *testing.T) {
+	// 100 visible columns, with a colour change every 10.
+	var b strings.Builder
+	for i := 0; i < 10; i++ {
+		b.WriteString("\x1b[1;3" + string(rune('0'+i%8)) + "m")
+		b.WriteString(strings.Repeat("x", 10))
+	}
+	line := b.String()
+	if visibleCols(line) != 100 {
+		t.Fatalf("fixture is %d visible cols, expected 100", visibleCols(line))
+	}
+
+	got := breakOversizedLines([]string{line}, 40)
+
+	for i, ln := range got {
+		if w := visibleCols(ln); w > 40 {
+			t.Errorf("chunk %d is %d visible columns, over 40", i, w)
+		}
+		// A split escape would leave a bare ESC or an unterminated CSI.
+		if strings.Contains(ln, "\x1b") && !reWrapEsc.MatchString(ln) {
+			t.Errorf("chunk %d contains a broken escape sequence: %q", i, ln)
+		}
+	}
+
+	// No visible character may be lost.
+	total := 0
+	for _, ln := range got {
+		total += visibleCols(ln)
+	}
+	if total != 100 {
+		t.Errorf("visible columns after breaking = %d, want 100", total)
+	}
+}
+
+func TestBreakOversizedLinesInvalidWidthIsANoOp(t *testing.T) {
+	in := []string{strings.Repeat("x", 200)}
+	for _, w := range []int{0, -1} {
+		got := breakOversizedLines(in, w)
+		if len(got) != 1 || got[0] != in[0] {
+			t.Errorf("width %d should be a no-op, got %q", w, got)
+		}
+	}
+}
+
+// Art rows are positioned absolutely, so hard-breaking a full-width row would
+// push everything below it down a line. displayNewsItem skips the break pass
+// for art; this pins the detection that gate relies on.
+func TestNewsBodyArtIsExemptFromHardBreaking(t *testing.T) {
+	art := "\x1b[5;1H" + strings.Repeat("\xB0", 80) + "\n\x1b[6;1H" + strings.Repeat("\xB1", 80)
+
+	if !containsAnsiArt(art) {
+		t.Fatal("fixture is not detected as ANSI art; the exemption would not apply")
+	}
+
+	lines := wrapAnsiString(art, newsBodyWidth(80))
+	if len(lines) != 2 {
+		t.Fatalf("art should stay 2 rows, got %d", len(lines))
+	}
+	// Demonstrates why the gate exists: breaking would double the row count.
+	if broken := breakOversizedLines(lines, newsBodyWidth(80)); len(broken) == len(lines) {
+		t.Skip("break pass no longer splits these rows; gate may be redundant")
+	}
+}

@@ -247,8 +247,20 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 		//
 		// wrapAnsiString leaves ANSI art alone, so a sysop who pastes art into
 		// an item still gets it positioned correctly.
-		body := ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body)))
-		for _, line := range wrapAnsiString(string(body), newsBodyWidth(termWidth)) {
+		width := newsBodyWidth(termWidth)
+		body := string(ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body))))
+		lines := wrapAnsiString(body, width)
+		// wrapAnsiString breaks on spaces, so a token with no break opportunity
+		// (a long URL, a path) comes back oversized; break those explicitly
+		// rather than leaving the client terminal to chop them mid-token.
+		//
+		// Not for ANSI art: wrapAnsiString leaves art rows alone because they
+		// are positioned absolutely, and hard-breaking a full-width row would
+		// push everything below it down a line and wreck the picture.
+		if !containsAnsiArt(body) {
+			lines = breakOversizedLines(lines, width)
+		}
+		for _, line := range lines {
 			// Already pipe-converted, so write straight through rather than
 			// running it past ReplacePipeCodes a second time.
 			terminalio.WriteProcessedBytes(terminal, []byte(line+"\r\n"), outputMode)
