@@ -214,8 +214,14 @@ func WarnIfNewsUnwired(rootConfigPath string, loginSequence []config.LoginItem) 
 //	^NM = item number   ^TI = title    ^FR = from/author
 //	^DT = date          ^TM = time     ^LV = min level   ^MX = max level
 func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, idx int, outputMode ansi.OutputMode, termWidth int) {
+	// Width of the header frame the body should line up under. Measured from
+	// the header actually rendered, so a customized NEWSHDR.ANS or a different
+	// menu set stays self-consistent instead of being hard-coded to 78.
+	headerWidth := newsFallbackHeaderWidth
+
 	ansiPath := filepath.Join(e.MenuSetPath, "ansi", "NEWSHDR.ANS")
 	if raw, err := os.ReadFile(ansiPath); err == nil {
+		headerWidth = headerTemplateWidth(string(raw))
 		maxStr := strconv.Itoa(item.MaxLevel)
 		if item.MaxLevel <= 0 {
 			maxStr = "All"
@@ -233,7 +239,7 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 		// Fallback plain header if NEWSHDR.ANS is missing
 		wv(terminal, fmt.Sprintf("\r\n|15News #%d: |11%s\r\n|07From: |11%s |07  Date: |11%s\r\n|08%s\r\n",
 			idx, item.Title, item.From, item.When.Format("01/02/2006"),
-			strings.Repeat("\xc4", 70)), outputMode)
+			strings.Repeat("\xc4", newsFallbackHeaderWidth)), outputMode)
 	}
 	if item.Body != "" {
 		// Word-wrap to the terminal, the same way the message reader renders a
@@ -247,7 +253,7 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 		//
 		// wrapAnsiString leaves ANSI art alone, so a sysop who pastes art into
 		// an item still gets it positioned correctly.
-		width := newsBodyWidth(termWidth)
+		width := newsBodyWidth(headerWidth, termWidth)
 		body := string(ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body))))
 		lines := wrapAnsiString(body, width)
 		// wrapAnsiString breaks on spaces, so a token with no break opportunity
@@ -274,7 +280,12 @@ func normalizeNewsBody(body string) string {
 	return strings.ReplaceAll(body, "\r\n", "\n")
 }
 
-// newsBodyWidth is the column budget for a wrapped news line.
+// newsFallbackHeaderWidth is the rule width of the built-in plain header used
+// when NEWSHDR.ANS is missing, and the assumed frame width when a header
+// cannot be measured.
+const newsFallbackHeaderWidth = 70
+
+// newsTerminalBudget is the widest a body line may be on this terminal.
 //
 // One column short of the terminal, because the body is written as a sequence
 // of lines each ending in CRLF: a line filling the full width would trigger the
@@ -285,11 +296,39 @@ func normalizeNewsBody(body string) string {
 // Falls back to 79 when the width is unknown, rather than to "do not wrap":
 // 80 columns is the safe assumption for a BBS, and no wrapping is what
 // produced broken words in the first place.
-func newsBodyWidth(termWidth int) int {
+func newsTerminalBudget(termWidth int) int {
 	if termWidth <= 1 {
 		return 79
 	}
 	return termWidth - 1
+}
+
+// newsBodyWidth is the column budget for a wrapped news line: the header's
+// frame width, so the text lines up under the rules NEWSHDR.ANS draws rather
+// than running past them, but never wider than the terminal can show.
+func newsBodyWidth(headerWidth, termWidth int) int {
+	budget := newsTerminalBudget(termWidth)
+	if headerWidth > 0 && headerWidth < budget {
+		return headerWidth
+	}
+	return budget
+}
+
+// headerTemplateWidth is the visible width of the widest line in a header
+// template — in practice the horizontal rules, which define the frame.
+//
+// Measured on the template before substitution: that is the width the header
+// was designed to, and it keeps the body budget stable from item to item
+// instead of drifting with the length of a title or author name.
+func headerTemplateWidth(tmpl string) int {
+	converted := string(ansi.ReplacePipeCodes([]byte(strings.ReplaceAll(tmpl, "\r\n", "\n"))))
+	widest := 0
+	for _, line := range strings.Split(converted, "\n") {
+		if w := visibleWidth(line); w > widest {
+			widest = w
+		}
+	}
+	return widest
 }
 
 // runPrintNews displays news items the user has not seen yet, plus any

@@ -16,10 +16,14 @@ func visibleCols(s string) int { return len(reWrapEsc.ReplaceAllString(s, "")) }
 // wrapNewsBodyForTest mirrors what displayNewsItem does to a body.
 func wrapNewsBodyForTest(body string, termWidth int) []string {
 	converted := ansi.ReplacePipeCodes([]byte(normalizeNewsBody(body)))
-	return wrapAnsiString(string(converted), newsBodyWidth(termWidth))
+	return wrapAnsiString(string(converted), newsBodyWidth(shippedHeaderWidth, termWidth))
 }
 
-func TestNewsBodyWidthReservesAColumn(t *testing.T) {
+// shippedHeaderWidth is the rule width of the NEWSHDR.ANS that ships in
+// menus/v3, which the body now aligns to.
+const shippedHeaderWidth = 78
+
+func TestNewsTerminalBudgetReservesAColumn(t *testing.T) {
 	cases := []struct{ term, want int }{
 		{80, 79}, // the common case: one column short of the margin
 		{132, 131},
@@ -29,9 +33,52 @@ func TestNewsBodyWidthReservesAColumn(t *testing.T) {
 		{-5, 79}, // degenerate
 	}
 	for _, c := range cases {
-		if got := newsBodyWidth(c.term); got != c.want {
-			t.Errorf("newsBodyWidth(%d) = %d, want %d", c.term, got, c.want)
+		if got := newsTerminalBudget(c.term); got != c.want {
+			t.Errorf("newsTerminalBudget(%d) = %d, want %d", c.term, got, c.want)
 		}
+	}
+}
+
+// The body lines up under the header's rules rather than running past them,
+// but never exceeds what the terminal can show.
+func TestNewsBodyWidthAlignsToHeader(t *testing.T) {
+	cases := []struct {
+		name               string
+		header, term, want int
+	}{
+		{"shipped NEWSHDR on an 80-col terminal", 78, 80, 78},
+		{"narrow terminal wins over a wide header", 78, 40, 39},
+		{"wide header clamped to the terminal", 200, 80, 79},
+		{"header exactly at the terminal budget", 79, 80, 79},
+		{"plain fallback header", newsFallbackHeaderWidth, 80, 70},
+		{"unmeasurable header falls back to the terminal", 0, 80, 79},
+		{"unknown terminal still wraps", 78, 0, 78},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := newsBodyWidth(c.header, c.term); got != c.want {
+				t.Errorf("newsBodyWidth(header=%d, term=%d) = %d, want %d",
+					c.header, c.term, got, c.want)
+			}
+		})
+	}
+}
+
+// The width must come from the header the sysop actually has, so a customized
+// NEWSHDR.ANS stays self-consistent.
+func TestHeaderTemplateWidthMeasuresTheRules(t *testing.T) {
+	// Mirrors the shipped NEWSHDR.ANS shape: pipe-coded rules plus short
+	// substitution lines. Pipe codes must not count toward the width.
+	tmpl := "|CL|08" + strings.Repeat("\xc4", 78) + "\r\n" +
+		"|15 News #^NM|15: |11^TI\r\n" +
+		"|08" + strings.Repeat("\xc4", 78) + "\r\n"
+
+	if got := headerTemplateWidth(tmpl); got != 78 {
+		t.Errorf("headerTemplateWidth = %d, want 78 (the rule width)", got)
+	}
+
+	if got := headerTemplateWidth(""); got != 0 {
+		t.Errorf("empty template width = %d, want 0", got)
 	}
 }
 
@@ -52,7 +99,7 @@ func TestNewsBodyWrapsOnWordBoundaries(t *testing.T) {
 		"enterprising aardvark contemplates its considerable misfortune " +
 		"in the general vicinity of the woodpile."
 
-	width := newsBodyWidth(80)
+	width := newsBodyWidth(shippedHeaderWidth, 80)
 	lines := wrapAnsiString(normalizeNewsBody(body), width)
 
 	if len(lines) < 2 {
@@ -83,7 +130,7 @@ func TestNewsBodyWrapsOnWordBoundaries(t *testing.T) {
 // Explicit newlines the sysop typed are paragraph breaks and must survive.
 func TestNewsBodyPreservesAuthoredLineBreaks(t *testing.T) {
 	body := "First paragraph.\n\nSecond paragraph."
-	lines := wrapAnsiString(normalizeNewsBody(body), newsBodyWidth(80))
+	lines := wrapAnsiString(normalizeNewsBody(body), newsBodyWidth(shippedHeaderWidth, 80))
 
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 lines (para, blank, para), got %d: %q", len(lines), lines)
@@ -97,7 +144,7 @@ func TestNewsBodyPreservesAuthoredLineBreaks(t *testing.T) {
 // art relies on absolute positioning.
 func TestNewsBodyLeavesAnsiArtAlone(t *testing.T) {
 	art := "\x1b[5;10Hsome art\n\x1b[6;10Hmore art"
-	lines := wrapAnsiString(normalizeNewsBody(art), newsBodyWidth(80))
+	lines := wrapAnsiString(normalizeNewsBody(art), newsBodyWidth(shippedHeaderWidth, 80))
 	if len(lines) != 2 {
 		t.Fatalf("art should split on newlines only, got %d lines: %q", len(lines), lines)
 	}
@@ -116,7 +163,7 @@ func TestNewsBodyWrapsOnVisibleWidthNotPipeCodeBytes(t *testing.T) {
 	}
 	body := strings.Join(words, " ")
 
-	if len(body) <= newsBodyWidth(80) {
+	if len(body) <= newsBodyWidth(shippedHeaderWidth, 80) {
 		t.Fatalf("test body is only %d raw bytes; it must exceed the budget to be meaningful", len(body))
 	}
 
@@ -126,8 +173,8 @@ func TestNewsBodyWrapsOnVisibleWidthNotPipeCodeBytes(t *testing.T) {
 			visibleCols(string(ansi.ReplacePipeCodes([]byte(body)))), len(lines))
 	}
 	for i, ln := range lines {
-		if got := visibleCols(ln); got > newsBodyWidth(80) {
-			t.Errorf("line %d is %d visible columns, over the %d budget", i, got, newsBodyWidth(80))
+		if got := visibleCols(ln); got > newsBodyWidth(shippedHeaderWidth, 80) {
+			t.Errorf("line %d is %d visible columns, over the %d budget", i, got, newsBodyWidth(shippedHeaderWidth, 80))
 		}
 	}
 }
@@ -153,7 +200,7 @@ func TestNewsBodyWrappingPreservesColour(t *testing.T) {
 // visible budget.
 func TestNewsBodyLongColouredParagraphWrapsWithinBudget(t *testing.T) {
 	body := strings.TrimSpace(strings.Repeat("|15colourful |07prose about aardvarks ", 12))
-	width := newsBodyWidth(80)
+	width := newsBodyWidth(shippedHeaderWidth, 80)
 
 	lines := wrapNewsBodyForTest(body, 80)
 	if len(lines) < 3 {
@@ -171,11 +218,11 @@ func TestNewsBodyLongColouredParagraphWrapsWithinBudget(t *testing.T) {
 // splitting this wrapping exists to prevent. Every emitted line must fit.
 func TestNewsBodyBreaksOversizedTokens(t *testing.T) {
 	url := "https://example.com/downloads/" + strings.Repeat("abcdefghij", 10) + "/file.zip"
-	if len(url) <= newsBodyWidth(80) {
+	if len(url) <= newsBodyWidth(shippedHeaderWidth, 80) {
 		t.Fatalf("test URL is only %d cols; it must exceed the budget", len(url))
 	}
 	body := "Grab it from " + url + " today."
-	width := newsBodyWidth(80)
+	width := newsBodyWidth(shippedHeaderWidth, 80)
 
 	lines := breakOversizedLines(wrapNewsBodyForTest(body, 80), width)
 
@@ -261,12 +308,12 @@ func TestNewsBodyArtIsExemptFromHardBreaking(t *testing.T) {
 		t.Fatal("fixture is not detected as ANSI art; the exemption would not apply")
 	}
 
-	lines := wrapAnsiString(art, newsBodyWidth(80))
+	lines := wrapAnsiString(art, newsBodyWidth(shippedHeaderWidth, 80))
 	if len(lines) != 2 {
 		t.Fatalf("art should stay 2 rows, got %d", len(lines))
 	}
 	// Demonstrates why the gate exists: breaking would double the row count.
-	if broken := breakOversizedLines(lines, newsBodyWidth(80)); len(broken) == len(lines) {
+	if broken := breakOversizedLines(lines, newsBodyWidth(shippedHeaderWidth, 80)); len(broken) == len(lines) {
 		t.Skip("break pass no longer splits these rows; gate may be redundant")
 	}
 }
