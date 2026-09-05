@@ -1,6 +1,7 @@
 package user
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +12,14 @@ import (
 // saveUsersLocked performs the actual saving without acquiring locks.
 // Uses um.path (which should point to data/users.json)
 func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
+	// This rewrites the whole file from memory, so anything a separate process
+	// wrote since we last read it would be lost. Fold those edits in first.
+	// ./ue is the one that does this, when a sysop changes a level or
+	// validates an account while the BBS is running.
+	if um.externallyModified() {
+		um.mergeExternalEdits()
+	}
+
 	// Convert map back to slice for saving as JSON array.
 	// Clear LegacyUsername before marshaling so the old "username" key is not written back.
 	usersList := make([]*User, 0, len(um.users))
@@ -41,6 +50,16 @@ func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
 	// write-to-temp-then-rename.
 	if err = os.WriteFile(um.path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write users file %s: %w", um.path, err) // Include path in error
+	}
+	// Record what we just wrote, so the next save does not mistake our own
+	// write for somebody else's edit. Fingerprint the bytes we produced rather
+	// than re-reading: identical content, and it cannot pick up a write that
+	// landed in between.
+	um.fileState = fileFingerprint{size: int64(len(data)), sum: sha256.Sum256(data)}
+	// Everything now in the map has reached disk, so a later absence from the
+	// file means an external delete rather than a registration in flight.
+	for _, u := range um.users {
+		u.persisted = true
 	}
 	return nil
 }

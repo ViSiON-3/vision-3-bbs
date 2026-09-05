@@ -16,6 +16,18 @@ type LoginEvent struct {
 
 // User represents a user account.
 type User struct {
+	// gen tracks how many times this record has been refreshed from an
+	// external edit. Sessions carry a copy taken at some point in the past; if
+	// the authoritative record has since moved ahead, that copy must not be
+	// allowed to write sysop-owned fields back. Unexported, so it is never
+	// serialized to users.json.
+	gen uint64
+	// persisted records whether this account has ever reached users.json.
+	// It distinguishes a record the editor deleted from one this process
+	// created and has not written out yet. Unexported, so it is never
+	// serialized.
+	persisted bool
+
 	ID             int       `json:"id"`           // Added User ID for ACS 'U' check
 	PasswordHash   string    `json:"passwordHash"` // Changed from []byte to string
 	Handle         string    `json:"handle"`
