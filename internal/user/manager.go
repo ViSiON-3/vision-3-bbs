@@ -1,6 +1,7 @@
 package user
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,11 +50,11 @@ type UserMgr struct {
 	callHistory    []CallRecord   // Added slice for call history
 	nextCallNumber uint64         // Added counter for overall calls
 	activeUserIDs  map[int32]bool // Track which user IDs are currently online
-	// fileMtime is users.json's modification time as of the last read or
-	// write. A mismatch means something outside this process (./ue) edited the
-	// file, and the save path merges those edits back in rather than
-	// overwriting them. Guarded by mu, like every other field here.
-	fileMtime time.Time
+	// fileState fingerprints users.json as of the last read or write. A
+	// mismatch means something outside this process (./ue) edited the file,
+	// and the save path merges those edits back in rather than overwriting
+	// them. Guarded by mu, like every other field here.
+	fileState fileFingerprint
 }
 
 // NewUserManager creates and initializes a new user manager
@@ -144,15 +145,13 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 
 // loadUsers loads user data from the JSON file.
 func (um *UserMgr) loadUsers() error { // Receiver uses renamed type
-	// Stat before reading: if a writer lands between the two, the recorded
-	// mtime is older than the content, so the next save re-reads rather than
-	// assuming it is current. The reverse order could miss an edit entirely.
-	mtime := fileMtimeOf(um.path)
-
 	data, err := os.ReadFile(um.path)
 	if err != nil {
 		return err // Return error to NewUserManager to handle
 	}
+	// Fingerprint exactly the bytes we are about to parse, so a writer landing
+	// between read and fingerprint cannot make a changed file look current.
+	state := fileFingerprint{size: int64(len(data)), sum: sha256.Sum256(data)}
 	data = StripUTF8BOM(data)
 
 	// Temporary slice to hold users from JSON array
@@ -164,7 +163,7 @@ func (um *UserMgr) loadUsers() error { // Receiver uses renamed type
 
 	um.mu.Lock()
 	defer um.mu.Unlock()
-	um.fileMtime = mtime
+	um.fileState = state
 	// Ensure map is initialized
 	if um.users == nil {
 		um.users = make(map[string]*User)
@@ -189,6 +188,7 @@ func (um *UserMgr) loadUsers() error { // Receiver uses renamed type
 			slog.Warn("duplicate handle; skipping subsequent entry", "handle", user.Handle)
 			continue
 		}
+		user.persisted = true // came from the file, so an absence later is a delete
 		um.users[lowerHandle] = user
 		slog.Debug("loaded user", "handle", user.Handle, "group", user.GroupLocation)
 	}

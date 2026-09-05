@@ -37,9 +37,10 @@ func mgrWithUser(t *testing.T, u *User) (*UserMgr, string) {
 	writeUsersFile(t, path, u)
 
 	cp := *u
+	cp.persisted = true
 	um := NewUserMgrForTest(&cp)
 	um.path = path
-	um.fileMtime = fileMtimeOf(path)
+	um.fileState = fingerprintOf(path)
 	return um, path
 }
 
@@ -52,7 +53,6 @@ func TestExternalEditSurvivesSave(t *testing.T) {
 	})
 
 	// ./ue writes the file directly while the BBS holds its own copy.
-	time.Sleep(10 * time.Millisecond) // ensure a distinct mtime
 	writeUsersFile(t, path, &User{
 		ID: 1, Handle: "Felonius", AccessLevel: 100, Validated: false,
 		GroupLocation: "EDITED-BY-UE", TimesCalled: 11,
@@ -91,7 +91,6 @@ func TestSessionStateSurvivesExternalEdit(t *testing.T) {
 	um.mu.Unlock()
 
 	// Meanwhile the sysop demotes them on disk.
-	time.Sleep(10 * time.Millisecond)
 	writeUsersFile(t, path, &User{ID: 1, Handle: "Felonius", AccessLevel: 20})
 
 	if err := um.SaveUsers(); err != nil {
@@ -120,7 +119,6 @@ func TestSessionStateSurvivesExternalEdit(t *testing.T) {
 func TestUserAddedExternallyIsAdopted(t *testing.T) {
 	um, path := mgrWithUser(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
 
-	time.Sleep(10 * time.Millisecond)
 	writeUsersFile(t, path,
 		&User{ID: 1, Handle: "Felonius", AccessLevel: 255},
 		&User{ID: 2, Handle: "Newbie", AccessLevel: 10},
@@ -148,13 +146,12 @@ func TestUserDeletedExternallyIsNotResurrected(t *testing.T) {
 		&User{ID: 2, Handle: "Doomed", AccessLevel: 10},
 	)
 	um := NewUserMgrForTest(
-		&User{ID: 1, Handle: "Felonius", AccessLevel: 255},
-		&User{ID: 2, Handle: "Doomed", AccessLevel: 10},
+		&User{ID: 1, Handle: "Felonius", AccessLevel: 255, persisted: true},
+		&User{ID: 2, Handle: "Doomed", AccessLevel: 10, persisted: true},
 	)
 	um.path = path
-	um.fileMtime = fileMtimeOf(path)
+	um.fileState = fingerprintOf(path)
 
-	time.Sleep(10 * time.Millisecond)
 	writeUsersFile(t, path, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
 
 	if err := um.SaveUsers(); err != nil {
@@ -201,7 +198,6 @@ func TestSaveUpdatesRecordedMtime(t *testing.T) {
 func TestMergeSkippedWhenFileUnreadable(t *testing.T) {
 	um, path := mgrWithUser(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
 
-	time.Sleep(10 * time.Millisecond)
 	if err := os.WriteFile(path, []byte("{not json"), 0600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -233,7 +229,6 @@ func TestStaleSessionCopyCannotRevertExternalEdit(t *testing.T) {
 	}
 
 	// The sysop demotes them in ./ue.
-	time.Sleep(10 * time.Millisecond)
 	writeUsersFile(t, path, &User{
 		ID: 1, Handle: "Felonius", AccessLevel: 100, Validated: false,
 		GroupLocation: "EDITED-BY-UE",
@@ -296,5 +291,149 @@ func TestSessionCanStillChangeSysopFieldsNormally(t *testing.T) {
 	if got.AccessLevel != 30 || !got.Validated || got.ScreenWidth != 132 {
 		t.Errorf("legitimate session changes were discarded: level=%d validated=%v width=%d",
 			got.AccessLevel, got.Validated, got.ScreenWidth)
+	}
+}
+
+// Review finding: TimesCalled and FilePoints are advanced continuously by the
+// BBS, so taking them from disk would discard a session's activity on any
+// external edit, however unrelated to those fields.
+func TestCountersStaySessionOwned(t *testing.T) {
+	um, path := mgrWithUser(t, &User{
+		ID: 1, Handle: "Felonius", AccessLevel: 255, TimesCalled: 11, FilePoints: 5,
+	})
+
+	// The session records a login and a transfer.
+	um.mu.Lock()
+	um.users["felonius"].TimesCalled = 12
+	um.users["felonius"].FilePoints = 9
+	um.mu.Unlock()
+
+	// The sysop edits an unrelated field, saving the older counts alongside it.
+	writeUsersFile(t, path, &User{
+		ID: 1, Handle: "Felonius", AccessLevel: 100, TimesCalled: 11, FilePoints: 5,
+	})
+
+	if err := um.SaveUsers(); err != nil {
+		t.Fatalf("SaveUsers: %v", err)
+	}
+
+	got := readUsersFile(t, path)["felonius"]
+	if got.AccessLevel != 100 {
+		t.Errorf("AccessLevel = %d, want 100 (sysop field from disk)", got.AccessLevel)
+	}
+	if got.TimesCalled != 12 {
+		t.Errorf("TimesCalled = %d, want 12 — the session's login was discarded", got.TimesCalled)
+	}
+	if got.FilePoints != 9 {
+		t.Errorf("FilePoints = %d, want 9 — the session's transfer was discarded", got.FilePoints)
+	}
+}
+
+// Review finding: mtime is not reliable change identity. A filesystem with
+// coarse resolution, or an editor writing within the same tick as our own
+// write, would report an unchanged file and the merge would be skipped.
+func TestChangeDetectedWhenMtimeIsUnchanged(t *testing.T) {
+	um, path := mgrWithUser(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+
+	writeUsersFile(t, path, &User{ID: 1, Handle: "Felonius", AccessLevel: 100})
+	// Force the mtime back to exactly what it was, simulating a same-tick write.
+	if err := os.Chtimes(path, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	if after, _ := os.Stat(path); !after.ModTime().Equal(before.ModTime()) {
+		t.Fatal("could not pin the mtime; the test would not prove anything")
+	}
+
+	if !um.externallyModified() {
+		t.Fatal("change went undetected with an unchanged mtime")
+	}
+	if err := um.SaveUsers(); err != nil {
+		t.Fatalf("SaveUsers: %v", err)
+	}
+	if got := readUsersFile(t, path)["felonius"].AccessLevel; got != 100 {
+		t.Errorf("AccessLevel = %d, want 100 — the edit was clobbered", got)
+	}
+}
+
+// Review finding: rebuilding the map purely from disk drops accounts that
+// exist only in memory, losing a registration that is mid-save.
+func TestInFlightRegistrationSurvivesMerge(t *testing.T) {
+	um, path := mgrWithUser(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+
+	// A registration in progress: in the map, not yet on disk.
+	um.mu.Lock()
+	um.users["newbie"] = &User{ID: 2, Handle: "Newbie", AccessLevel: 10}
+	um.mu.Unlock()
+
+	// Meanwhile the sysop edits someone else.
+	writeUsersFile(t, path, &User{ID: 1, Handle: "Felonius", AccessLevel: 100})
+
+	if err := um.SaveUsers(); err != nil {
+		t.Fatalf("SaveUsers: %v", err)
+	}
+
+	got := readUsersFile(t, path)
+	if _, ok := got["newbie"]; !ok {
+		t.Error("registration in flight was dropped by the merge")
+	}
+	if got["felonius"].AccessLevel != 100 {
+		t.Error("sysop edit was lost")
+	}
+}
+
+// Review finding: adopted records must advance the ID counter, or the next
+// registration reuses an ID that is already taken.
+func TestAdoptedUsersAdvanceNextUserID(t *testing.T) {
+	um, path := mgrWithUser(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+	um.mu.Lock()
+	um.nextUserID = 2
+	um.mu.Unlock()
+
+	// The editor adds two accounts while we were running.
+	writeUsersFile(t, path,
+		&User{ID: 1, Handle: "Felonius", AccessLevel: 255},
+		&User{ID: 2, Handle: "Alpha", AccessLevel: 10},
+		&User{ID: 7, Handle: "Beta", AccessLevel: 10},
+	)
+
+	if err := um.SaveUsers(); err != nil {
+		t.Fatalf("SaveUsers: %v", err)
+	}
+
+	um.mu.RLock()
+	next := um.nextUserID
+	um.mu.RUnlock()
+	if next <= 7 {
+		t.Errorf("nextUserID = %d, want > 7 — a new registration would reuse an adopted ID", next)
+	}
+}
+
+// Review finding: a legacy record keyed off "username" must have Handle
+// promoted on adoption. Saving clears LegacyUsername, so without it the record
+// is written back with no handle at all and skipped by the next load.
+func TestAdoptedLegacyRecordKeepsItsHandle(t *testing.T) {
+	um, path := mgrWithUser(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+
+	// An account written in the old shape: username set, handle absent.
+	writeUsersFile(t, path,
+		&User{ID: 1, Handle: "Felonius", AccessLevel: 255},
+		&User{ID: 2, LegacyUsername: "OldTimer", AccessLevel: 10},
+	)
+
+	if err := um.SaveUsers(); err != nil {
+		t.Fatalf("SaveUsers: %v", err)
+	}
+
+	got := readUsersFile(t, path)["oldtimer"]
+	if got == nil {
+		t.Fatal("legacy record was not adopted")
+	}
+	if got.Handle != "OldTimer" {
+		t.Errorf("Handle = %q, want OldTimer — the record would be skipped on the next load", got.Handle)
 	}
 }

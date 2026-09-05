@@ -1,6 +1,7 @@
 package user
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -51,8 +52,15 @@ func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
 		return fmt.Errorf("failed to write users file %s: %w", um.path, err) // Include path in error
 	}
 	// Record what we just wrote, so the next save does not mistake our own
-	// write for somebody else's edit and re-read the file for nothing.
-	um.fileMtime = fileMtimeOf(um.path)
+	// write for somebody else's edit. Fingerprint the bytes we produced rather
+	// than re-reading: identical content, and it cannot pick up a write that
+	// landed in between.
+	um.fileState = fileFingerprint{size: int64(len(data)), sum: sha256.Sum256(data)}
+	// Everything now in the map has reached disk, so a later absence from the
+	// file means an external delete rather than a registration in flight.
+	for _, u := range um.users {
+		u.persisted = true
+	}
 	return nil
 }
 
