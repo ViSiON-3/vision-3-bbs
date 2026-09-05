@@ -26,9 +26,11 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 
 	// Locate existing map entry by stable ID.
 	var oldKey string
+	var current *User
 	for k, existing := range um.users {
 		if existing.ID == u.ID {
 			oldKey = k
+			current = existing
 			break
 		}
 	}
@@ -50,6 +52,12 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 	}
 
 	userCopy := *u
+	// Same guard as UpdateUser: a copy taken before an external edit must not
+	// carry the pre-edit sysop fields back over what ./ue wrote.
+	if current != nil && current.gen > userCopy.gen {
+		sysopOwnedFields(&userCopy, current)
+		userCopy.gen = current.gen
+	}
 	um.users[newKey] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {
 		// Rollback in-memory map to match what is still on disk.
@@ -78,6 +86,15 @@ func (um *UserMgr) UpdateUser(u *User) error {
 	// Create a defensive copy to prevent external mutations from bypassing locks
 	userCopy := *u
 	previous := um.users[lowerHandle]
+	// The caller is writing a copy it took earlier in the session. If the
+	// record has been refreshed from an external edit since then (./ue
+	// changing a level or validating an account), that copy still carries the
+	// pre-edit values, and storing it wholesale would revert the sysop.
+	// Keep the caller's session state, restore the sysop's fields.
+	if previous != nil && previous.gen > userCopy.gen {
+		sysopOwnedFields(&userCopy, previous)
+		userCopy.gen = previous.gen
+	}
 	um.users[lowerHandle] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {
 		// Restore the previous entry so the cache never serves a value that

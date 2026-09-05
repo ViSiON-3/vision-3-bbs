@@ -11,6 +11,14 @@ import (
 // saveUsersLocked performs the actual saving without acquiring locks.
 // Uses um.path (which should point to data/users.json)
 func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
+	// This rewrites the whole file from memory, so anything a separate process
+	// wrote since we last read it would be lost. Fold those edits in first.
+	// ./ue is the one that does this, when a sysop changes a level or
+	// validates an account while the BBS is running.
+	if um.externallyModified() {
+		um.mergeExternalEdits()
+	}
+
 	// Convert map back to slice for saving as JSON array.
 	// Clear LegacyUsername before marshaling so the old "username" key is not written back.
 	usersList := make([]*User, 0, len(um.users))
@@ -42,6 +50,9 @@ func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
 	if err = os.WriteFile(um.path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write users file %s: %w", um.path, err) // Include path in error
 	}
+	// Record what we just wrote, so the next save does not mistake our own
+	// write for somebody else's edit and re-read the file for nothing.
+	um.fileMtime = fileMtimeOf(um.path)
 	return nil
 }
 
