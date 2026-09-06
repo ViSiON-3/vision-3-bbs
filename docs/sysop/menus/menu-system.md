@@ -383,12 +383,19 @@ border out of line. **In a header, a dropped group is replaced by spaces
 occupying the width it would have rendered at** — nothing moves, the decoration
 simply goes blank.
 
-```
+```text
 |{ Note: @U#####@|}
 ```
 
-renders as `` Note: sysop  `` when the note is set, and as blanks of the same
-width when it is not — so a `│` border after it stays in its column.
+The trailing blanks matter, so both states are shown here rather than inline:
+
+```text
+note set     Note: sysop
+note empty
+```
+
+Both occupy the same number of columns, so a `│` border after the group stays
+where it is.
 
 Width is counted the way the templates already pad: a `#` token reserves the
 length of the whole token (`@U#####@` is eight characters and reserves eight
