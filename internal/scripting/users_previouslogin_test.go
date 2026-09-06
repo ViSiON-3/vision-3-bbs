@@ -93,9 +93,16 @@ func TestScriptNewSinceLastVisitWorksWithPreviousLogin(t *testing.T) {
 		prev.Add(-48*time.Hour).Unix(), prev.Add(-time.Hour).Unix(),
 		prev.Add(time.Hour).Unix(), prev.Add(24*time.Hour).Unix())
 
-	res := evalWithUser(t, u, expr).Export().([]interface{})
-	withPrev := toInt(res[0])
-	withLast := toInt(res[1])
+	exported := evalWithUser(t, u, expr).Export()
+	res, ok := exported.([]interface{})
+	if !ok {
+		t.Fatalf("script returned %T (%v), want a two-element array", exported, exported)
+	}
+	if len(res) != 2 {
+		t.Fatalf("script returned %d values, want 2: %v", len(res), res)
+	}
+	withPrev := toInt(t, res[0])
+	withLast := toInt(t, res[1])
 
 	if withPrev != 2 {
 		t.Errorf("using previousLogin found %d new items, want 2", withPrev)
@@ -105,13 +112,17 @@ func TestScriptNewSinceLastVisitWorksWithPreviousLogin(t *testing.T) {
 	}
 }
 
-func toInt(v interface{}) int {
+// toInt converts a value exported from goja, which may arrive as either
+// integer or float depending on how the VM represents the number.
+func toInt(t *testing.T, v interface{}) int {
+	t.Helper()
 	switch n := v.(type) {
 	case int64:
 		return int(n)
 	case float64:
 		return int(n)
 	default:
-		return -1
+		t.Fatalf("expected a number from the script, got %T (%v)", v, v)
+		return 0
 	}
 }
