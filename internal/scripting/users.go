@@ -1,6 +1,8 @@
 package scripting
 
 import (
+	"time"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/dop251/goja"
@@ -71,8 +73,24 @@ func userToJS(vm *goja.Runtime, u *user.User) goja.Value {
 	jsutil.Set(obj, "filePoints", u.FilePoints)
 	jsutil.Set(obj, "validated", u.Validated)
 	jsutil.Set(obj, "lastLogin", u.LastLogin.Unix())
+	jsutil.Set(obj, "previousLogin", unixOrZero(u.PreviousLogin))
 	jsutil.Set(obj, "createdAt", u.CreatedAt.Unix())
 	return obj
+}
+
+// unixOrZero converts a timestamp for JS, mapping the zero time to 0 rather
+// than to time.Time{}.Unix(), which is -62135596800.
+//
+// 0 is the useful value for a caller with no previous visit. It is falsy, so
+// `if (user.previousLogin)` reads naturally, and it is early enough that a
+// script comparing `postedAt > user.previousLogin` treats everything as new —
+// which is the right answer for someone who has never called before. The raw
+// negative would behave the same numerically but is baffling to print or log.
+func unixOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
 }
 
 func intToStr(i int) string {

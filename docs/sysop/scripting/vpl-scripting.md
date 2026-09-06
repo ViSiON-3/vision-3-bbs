@@ -360,13 +360,34 @@ Read-only access to the user database. Returns safe fields only — no passwords
 | `filePoints` | number |
 | `validated` | boolean |
 | `lastLogin` | number (Unix timestamp) |
+| `previousLogin` | number (Unix timestamp, `0` if never) |
 | `createdAt` | number (Unix timestamp) |
 
-> **`lastLogin` is the current session, not the caller's previous visit.** It is
-> stamped at authentication, before any script runs, so a script comparing
-> against it to find "what is new since this user was last here" will always
-> come up empty. The user record's `previousLogin` field holds the prior visit
-> but is not yet exposed to scripts — see issue #208.
+#### `lastLogin` vs `previousLogin`
+
+`lastLogin` is **the current session**, not the caller's previous visit. It is
+stamped at authentication, before any script runs, so it always reads as "a
+moment ago".
+
+To ask *"what is new since this user was last here?"* — a custom newscan, a
+bulletin gate, a welcome-back banner — compare against `previousLogin`:
+
+```javascript
+// Right: finds everything posted since the caller was last on.
+var fresh = items.filter(function (i) { return i.postedAt > user.previousLogin; });
+
+// Wrong: lastLogin is this session, so this is always empty.
+var none = items.filter(function (i) { return i.postedAt > user.lastLogin; });
+```
+
+The failure is silent — the second form returns an empty list rather than an
+error — which is what made the same mistake go unnoticed in the BBS itself for
+system news, the rumors newscan, and the `|LCALL` display placeholder.
+
+`previousLogin` is **`0`** for a caller with no previous visit. That is falsy,
+so `if (user.previousLogin)` reads naturally, and it is early enough that a
+`>` comparison treats everything as new — the right answer for a first-time
+caller.
 
 ---
 
