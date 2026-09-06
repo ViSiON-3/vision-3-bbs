@@ -8,6 +8,11 @@ package menu
 // Format detection is based on presence of @-delimited codes (@T@, @F@, @S@).
 // autoWidths is optional (nil = no auto-width support for @CODE*@ placeholders).
 func processTemplate(fileBytes []byte, substitutions map[byte]string, autoWidths map[byte]int) []byte {
+	// Resolve |{...|} optional groups first, while the placeholder tokens are
+	// still present to test. Blanked groups leave spaces behind, so column
+	// positions and box borders are unaffected.
+	fileBytes = expandHeaderOptionalGroups(fileBytes, substitutions)
+
 	// Check for new @CODE@ format using the shared regex.
 	// This catches all forms: @T@, @T:20@, @T###@, @T*@, @T|R8@, @G@, etc.
 	if placeholderRegex.Match(fileBytes) {
