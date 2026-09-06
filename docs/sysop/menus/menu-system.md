@@ -371,8 +371,33 @@ than failing loudly. See issue #211.
 The `|{P}` and `|{O}` login position markers share the `|{` prefix but are not
 groups; they are stepped over and pass through untouched.
 
-> Currently available in menu prompts. Message header templates use a separate
-> substitution path and do not support this yet — see issue #209.
+#### Optional Groups in Message Headers
+
+Message header templates (`MSGHDR.<n>.ans`) support the same `|{ ... |}` syntax
+with one difference in what "drop" means.
+
+A prompt is flowing text, so a dropped group is removed and the rest of the line
+closes up. A header is not: it draws boxes, pads values to fixed columns, and
+some templates position the cursor absolutely. Removing characters would pull a
+border out of line. **In a header, a dropped group is replaced by spaces
+occupying the width it would have rendered at** — nothing moves, the decoration
+simply goes blank.
+
+```
+|{ Note: @U#####@|}
+```
+
+renders as `` Note: sysop  `` when the note is set, and as blanks of the same
+width when it is not — so a `│` border after it stays in its column.
+
+Width is counted the way the templates already pad: a `#` token reserves the
+length of the whole token (`@U#####@` is eight characters and reserves eight
+columns), and a bare `@U@` collapses to nothing when empty. ANSI escapes take
+no columns.
+
+One limitation: a group must be contiguous. If a label lives in the static box
+art and its value is placed elsewhere by absolute positioning, no single group
+can cover both — `MSGHDR.8` is shipped in that shape and is left as-is.
 
 ### AT-Code Placeholders
 
