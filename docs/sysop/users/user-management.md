@@ -156,12 +156,20 @@ ViSiON/3 uses several key configuration values in `configs/config.json` to contr
 {
   "sysOpLevel": 255,
   "coSysOpLevel": 250,
-  "newUserLevel": 1,
-  "regularUserLevel": 10,
+  "invisibleLevel": 250,
+  "newUserLevel": 10,
+  "regularUserLevel": 25,
   "logonLevel": 10,
-  "anonymousLevel": 5
+  "anonymousLevel": 50
 }
 ```
+
+These are the values in the shipped `templates/configs/config.json`, which
+setup copies into `configs/` — so they are what a normal install runs. If a key
+is missing from your `config.json` the loader falls back to a built-in value
+instead, and several of those differ (`newUserLevel` 1, `regularUserLevel` 10,
+`anonymousLevel` 5). [Configuration](../configuration/configuration.md#access-levels)
+lists both sets side by side.
 
 **Configuration Values:**
 
@@ -171,11 +179,11 @@ ViSiON/3 uses several key configuration values in `configs/config.json` to contr
 
 - **newUserLevel (10)**: The access level assigned to users when they first sign up. This is an *assignment value* — when someone registers a new account, they get this level. Default is 10 (allows immediate login after registration).
 
-- **regularUserLevel (20)**: The access level assigned to users when they are validated by the SysOp. This is an *assignment value* — when you validate a user, their level is upgraded to this value (if they're below it).
+- **regularUserLevel (25)**: The access level assigned to users when they are validated by the SysOp. This is an *assignment value* — when you validate a user, their level is upgraded to this value (if they're below it).
 
 - **logonLevel (10)**: Minimum access level required to log in to the BBS. This is a *threshold check* — users below this level are denied login even if their password is correct. Set to `0` to disable this check.
 
-- **anonymousLevel (5)**: Minimum access level required to post messages/oneliners anonymously. This is a *threshold check* — users at or above this level can choose to post as "Anonymous" instead of their real name. Set to `0` to disable anonymous posting entirely, or `255` to restrict to SysOps only.
+- **anonymousLevel (50)**: Minimum access level required to post messages/oneliners anonymously. This is a *threshold check* — users at or above this level can choose to post as "Anonymous" instead of their real name. Set to `0` to disable anonymous posting entirely, or `255` to restrict to SysOps only.
 
 ### Login Flow and Level Checks
 
@@ -185,6 +193,32 @@ When a user attempts to log in, the system performs two checks in order:
 2. **Meets LogonLevel** → If fails: "Access Denied"
 
 Access control is based solely on the user's **access level**. The `validated` flag is used for administrative purposes but does **not** block login.
+
+### What a New Account Starts With
+
+Every account created through the signup flow starts as:
+
+| Field | Value |
+| ----- | ----- |
+| `accessLevel` | `newUserLevel` — `10` in the shipped config |
+| `validated` | **`false`**, always |
+
+`validated: false` is **not configurable**. It is set unconditionally when the
+account is created (`internal/user/manager_users.go`), so there is no setting
+that makes signups arrive pre-validated. Sysops looking for auto-validation
+will not find a switch for it — the options are:
+
+- **Raise `newUserLevel`** so new accounts can already do what you want without
+  being validated. Access is controlled by level, not by the flag (see below),
+  so this is the setting that actually governs what a new caller can reach.
+- **Validate by hand** afterwards, from `./ue` or the admin menu, which also
+  upgrades the account to `regularUserLevel`.
+- **Turn on New User Voting** (`useNuv`) and let existing users vote newcomers
+  in. Off by default. See [New User Voting](nuv.md).
+
+Note that `accessLevel` and `validated` move independently. Raising a user's
+level does not validate them, so an ACS check written against validation status
+still fails for a high-level unvalidated account.
 
 ### What the `validated` Flag Does
 
@@ -196,33 +230,33 @@ The `validated` flag serves these purposes:
 
 **Key Point:** If you want to prevent new users from logging in until you review them, set `newUserLevel` below `logonLevel` (e.g., `newUserLevel: 1, logonLevel: 10`). Don't rely on the `validated` flag for access control.
 
-**Example with default config (newUserLevel=10, logonLevel=10, regularUserLevel=20):**
+**Example with the shipped config (newUserLevel=10, logonLevel=10, regularUserLevel=25):**
 
-- User registers → Gets AccessLevel: 10, Validated: false
+- User registers → Gets AccessLevel: 10, Validated: **false**
 - User logs in → Passes (level 10 meets logonLevel 10)
 - User has limited access via ACS `s10` restrictions
-- SysOp validates user → AccessLevel upgraded to 20, Validated: true
-- User now has full access via ACS `s20` permissions
+- SysOp validates user → AccessLevel upgraded to 25, Validated: true
+- User now has full access via ACS `s25` permissions
 
 ### Creating Tiered Access Systems
 
 By adjusting `newUserLevel`, `logonLevel`, and `regularUserLevel`, you can create sophisticated multi-tier access systems:
 
-**Simple Configuration (Default - Immediate Login, Tiered Access):**
+**Simple Configuration (what ships — immediate login, tiered access):**
 ```json
 {
   "newUserLevel": 10,
   "logonLevel": 10,
-  "regularUserLevel": 20
+  "regularUserLevel": 25
 }
 ```
 
 - Level 0: Banned (cannot log in)
 - Level 1-9: Locked out (below logonLevel threshold)
-- Level 10-19: New users (can log in with limited access via ACS `s10`)
-- Level 20+: Validated users (full access via ACS `s20`)
+- Level 10-24: New users (can log in with limited access via ACS `s10`)
+- Level 25+: Validated users (full access via ACS `s25`)
 
-**Workflow:** User signs up (level 10) → can log in immediately with limited access → SysOp validates → upgraded to level 20 → full access granted
+**Workflow:** User signs up (level 10) → can log in immediately with limited access → SysOp validates → upgraded to level 25 → full access granted
 
 **Manual Validation Required (Secure - No Auto-Login):**
 ```json
