@@ -169,7 +169,7 @@ setup copies into `configs/` — so they are what a normal install runs. If a ke
 is missing from your `config.json` the loader falls back to a built-in value
 instead, and four of these differ that way (`invisibleLevel` 0, `newUserLevel` 1,
 `regularUserLevel` 10, `anonymousLevel` 5).
-[Configuration](../configuration/configuration.md#access-levels) lists both sets
+[Configuration](configuration/configuration.md#access-levels) lists both sets
 side by side.
 
 **Configuration Values:**
@@ -215,7 +215,7 @@ will not find a switch for it — the options are:
 - **Validate by hand** afterwards, from `./ue` or the admin menu, which also
   upgrades the account to `regularUserLevel`.
 - **Turn on New User Voting** (`useNuv`) and let existing users vote newcomers
-  in. Off by default. See [New User Voting](nuv.md).
+  in. Off by default. See [New User Voting](users/nuv.md).
 
 Note that `accessLevel` and `validated` move independently. Raising a user's
 level does not validate them, so an ACS check written against validation status
@@ -255,7 +255,7 @@ By adjusting `newUserLevel`, `logonLevel`, and `regularUserLevel`, you can creat
 - Level 0: Banned (cannot log in)
 - Level 1-9: Locked out (below logonLevel threshold)
 - Level 10-24: New users (can log in with limited access via ACS `s10`)
-- Level 25+: Validated users (full access via ACS `s25`)
+- Level 25+: Users at level 25+ (full access via ACS `s25`)
 
 **Workflow:** User signs up (level 10) → can log in immediately with limited access → SysOp validates → upgraded to level 25 → full access granted
 
@@ -451,7 +451,7 @@ The application can also be invoked from a menu command via `RUN:NEWUSER`.
 8. **Account Creation** — Calls `UserMgr.AddUser()` which:
    - Assigns the next available user ID
    - Hashes the password with bcrypt
-   - Sets `accessLevel` to 1 and `validated` to false
+   - Sets `accessLevel` to `um.newUserLevel` (`newUserLevel` from config, shipped default `10`; falls back to `1` if unset) and `validated` to false
    - Sets `timeLimit` to 60 minutes
    - Saves to `data/users/users.json`
 10. **User Number** — Displays the assigned ID using `yourUserNum`
@@ -486,8 +486,8 @@ Place a `NEWUSER.ANS` file in `menus/v3/ansi/` to display a welcome screen befor
 
 New accounts are created with:
 
-- `validated: false` — user cannot log in until a SysOp sets this to `true`
-- `accessLevel: 1` — minimal access level
+- `validated: false` — set unconditionally; it does **not** block login (see [What the `validated` Flag Does](#what-the-validated-flag-does))
+- `accessLevel: um.newUserLevel` — `10` in the shipped config; falls back to `1` if `newUserLevel` is unset
 - `timeLimit: 60` — 60-minute time limit per call
 
 The SysOp can validate users in-BBS from the Admin Menu (`%` from MAIN → `V`). See [Admin Menu](users/admin-menu.md) for the full key reference.

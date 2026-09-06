@@ -446,7 +446,7 @@ built-in defaults and overlays whatever the file provides.
 | `logonLevel` | `10` | `10` | Minimum level required to log in |
 | `anonymousLevel` | `50` | `5` | Minimum level to post anonymously (`0` = disabled) |
 
-See [User Management](../users/user-management.md#system-access-levels) for how
+See [User Management](users/user-management.md#system-access-levels) for how
 these interact, and what happens at signup.
 
 **Default Settings:**
