@@ -193,7 +193,11 @@ func editFields() []fieldDef {
 			Set: func(u *user.User, val string) error { u.PreferredEncoding = val; return nil },
 		},
 		{
-			Label: "Msg Header", Type: ftInteger, Col: 50, Row: 10, Width: 2, Min: 0, Max: 14,
+			// Max is the field width rather than a real ceiling: this editor
+			// has no menu-set path and so cannot discover which MSGHDR.<n>.ans
+			// templates exist. The BBS validates the stored value on read and
+			// re-opens the selector if it names a template it does not have.
+			Label: "Msg Header", Type: ftInteger, Col: 50, Row: 10, Width: 2, Min: 0, Max: 99,
 			Get: func(u *user.User) string { return strconv.Itoa(u.MsgHdr) },
 			Set: func(u *user.User, val string) error {
 				n, err := strconv.Atoi(val)
