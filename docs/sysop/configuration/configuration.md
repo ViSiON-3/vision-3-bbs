@@ -426,21 +426,34 @@ General BBS configuration. All settings in this file are managed through the **S
 - `sessionIdleTimeoutMinutes` — Idle session cutoff (default: `5`)
 - `transferTimeoutMinutes` — File transfer timeout (default: `10`)
 
+<a id="access-levels"></a>
+
 **Access Levels:**
 
-- `sysOpLevel` — Security level for SysOp access (default: `255`)
-- `coSysOpLevel` — Security level for Co-SysOp access (default: `250`)
-- `invisibleLevel` — Level at which a user is invisible in the who's-online list (default: `0`, falls back to `coSysOpLevel`)
-- `newUserLevel` — Level assigned to a brand-new account (default: `1`)
-- `regularUserLevel` — Level for validated/regular users (default: `10`)
-- `logonLevel` — Level granted on successful login (default: `10`)
-- `anonymousLevel` — Level for guest/anonymous access (default: `5`, `0` = disabled)
+Two different sets of values are called "defaults" here, and they differ. The
+**shipped** value is what a normal install gets, since setup copies
+`templates/configs/config.json` into `configs/`. The **fallback** applies only
+when a key is absent from your `config.json` — the loader starts from the
+built-in defaults and overlays whatever the file provides.
+
+| Setting | Shipped | Fallback | Meaning |
+| ------- | ------- | -------- | ------- |
+| `sysOpLevel` | `255` | `255` | SysOp access |
+| `coSysOpLevel` | `250` | `250` | Co-SysOp access |
+| `invisibleLevel` | `250` | `0` | Minimum level offered the Invisible Logon prompt, letting the caller keep the session off the Last Callers list (`0` falls back to `coSysOpLevel`) |
+| `newUserLevel` | `10` | `1` | Assigned to a brand-new account |
+| `regularUserLevel` | `25` | `10` | Assigned when a user is validated |
+| `logonLevel` | `10` | `10` | Minimum level required to log in |
+| `anonymousLevel` | `50` | `5` | Minimum level to post anonymously (`0` = disabled) |
+
+See [User Management](users/user-management.md#system-access-levels) for how
+these interact, and what happens at signup.
 
 **Default Settings:**
 
-- `allowNewUsers` — Accept new user registrations (default: `true`)
+- `allowNewUsers` — Accept new user registrations (shipped and fallback: `true`)
 - `fileListingMode` — `""` or `"lightbar"` (default) / `"classic"`
-- `deletedUserRetentionDays` — Days to keep soft-deleted user records before `helper users purge` removes them (default: `30`, `-1` = keep forever)
+- `deletedUserRetentionDays` — Days to keep soft-deleted user records before `helper users purge` removes them (shipped: `-1`, keep forever; fallback: `30`)
 
 **IP Blocklist/Allowlist:**
 
