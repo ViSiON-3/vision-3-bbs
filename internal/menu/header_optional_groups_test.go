@@ -110,3 +110,19 @@ func TestHeaderGroupTreatsWhitespaceAsEmpty(t *testing.T) {
 		t.Errorf("whitespace-only value should blank the group, got %q", got)
 	}
 }
+
+// Review finding: not every recognised placeholder draws from the substitution
+// map. @G@ is gap fill, expanded later against the terminal width, so a group
+// holding it must not be blanked just because a neighbouring value is empty —
+// that would silently destroy the gap fill.
+func TestHeaderGroupKeepsContentWithUnevaluatablePlaceholder(t *testing.T) {
+	subs := map[byte]string{'U': ""} // 'G' deliberately absent, as in the real map
+
+	if got, want := expandHdr(t, "|{@U@@G@|}", subs), "@U@@G@"; got != want {
+		t.Errorf("group holding a gap fill was blanked: got %q, want %q", got, want)
+	}
+	// A group with only the empty value still blanks.
+	if got := expandHdr(t, "|{[@U@]|}", subs); strings.TrimSpace(got) != "" {
+		t.Errorf("group with only an empty value should blank, got %q", got)
+	}
+}

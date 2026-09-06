@@ -75,6 +75,13 @@ func expandHeaderOptionalGroups(template []byte, substitutions map[byte]string) 
 // substitution map knows about and every one of them resolves to blank.
 // Whitespace counts as blank, so a value padded to a fixed width does not keep
 // a group alive.
+//
+// A placeholder the map does not know about keeps the group, rather than being
+// ignored. Not every recognised code draws from the substitution map: @G@ is
+// gap fill, expanded later against the terminal width, so skipping it would let
+// a group blank away a gap fill that had nothing to do with the empty value.
+// More generally, "this group holds something we cannot evaluate" is not a
+// basis for deciding it renders as nothing.
 func groupValuesAllEmpty(inner []byte, substitutions map[byte]string) bool {
 	matches := parsePlaceholders(inner)
 	found := false
@@ -84,7 +91,7 @@ func groupValuesAllEmpty(inner []byte, substitutions map[byte]string) bool {
 		}
 		value, known := substitutions[m.Code[0]]
 		if !known {
-			continue
+			return false
 		}
 		found = true
 		if len(bytes.TrimSpace([]byte(value))) > 0 {
