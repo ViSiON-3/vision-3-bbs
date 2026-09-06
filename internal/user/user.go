@@ -86,7 +86,7 @@ type User struct {
 	ScreenWidth       int    `json:"screenWidth,omitempty"`       // Detected/preferred terminal width (default 80)
 	ScreenHeight      int    `json:"screenHeight,omitempty"`      // Detected/preferred terminal height (default 25)
 	PreferredEncoding string `json:"preferredEncoding,omitempty"` // User's encoding preference: "utf8", "cp437", or "" (not set)
-	MsgHdr            int    `json:"msgHdr,omitempty"`            // Selected message header style (1-14, 0=unset)
+	MsgHdr            int    `json:"msgHdr,omitempty"`            // Selected message header style; valid values are whatever MSGHDR.<n>.ans templates the menu set ships (0 = unset)
 
 	// User Configuration Preferences
 	HotKeys         bool   `json:"hotKeys,omitempty"`

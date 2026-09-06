@@ -38,6 +38,35 @@ func extractHeaderNumber(filename string) (int, error) {
 	return strconv.Atoi(name)
 }
 
+// headerStyleAvailable reports whether the given style number corresponds to a
+// template that actually exists in this menu set.
+//
+// The selector discovers templates by globbing MSGHDR.*.ans, so the set adapts
+// to whatever a menu set ships. Anything that validates a stored preference
+// must ask the same question rather than compare against a fixed ceiling, or a
+// style the selector happily offers is rejected on the next read — which is
+// what happened to MSGHDR.15 against a hardcoded upper bound of 14.
+//
+// Membership rather than a maximum, so a menu set with a gap in its numbering
+// is handled too.
+func headerStyleAvailable(menuSetPath string, style int) bool {
+	if style < 1 {
+		return false
+	}
+	templates, err := discoverMessageHeaders(filepath.Join(menuSetPath, "templates"))
+	if err != nil || len(templates) == 0 {
+		// Discovery failed: fall back to accepting any positive style rather
+		// than forcing the selector open on every read.
+		return true
+	}
+	for _, t := range templates {
+		if t.Number == style {
+			return true
+		}
+	}
+	return false
+}
+
 // discoverMessageHeaders finds all MSGHDR.*.ans template files in the templates/message_headers directory.
 // Returns templates sorted by number (1, 2, ..., 14, 15, etc.).
 func discoverMessageHeaders(templatesPath string) ([]MessageHeaderTemplate, error) {

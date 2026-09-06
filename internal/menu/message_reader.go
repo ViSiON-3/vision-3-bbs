@@ -77,9 +77,13 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// Determine message header style
 	hdrStyle := currentUser.MsgHdr
-	if hdrStyle < 1 || hdrStyle > 14 {
+	if hdrStyle < 1 {
 		hdrStyle = defaultMsgHdrStyle
 	}
+	// No upper bound: a style numbered above any fixed ceiling was silently
+	// redrawn as the default, so a caller who picked it saw a different header
+	// than the one they chose. If the template turns out not to exist, the
+	// load below already falls back.
 
 	// Load the MSGHDR template file
 	hdrTemplatePath := filepath.Join(e.MenuSetPath, "templates", "message_headers",

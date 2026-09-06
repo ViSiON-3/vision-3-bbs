@@ -49,8 +49,11 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	// Prompt for header selection if not yet set
-	if currentUser.MsgHdr < 1 || currentUser.MsgHdr > 14 {
+	// Prompt for header selection if the stored style is unset or names a
+	// template this menu set does not have. A fixed upper bound would reject
+	// styles the selector offers — MSGHDR.BAR ships fifteen and describes
+	// itself as supporting an unlimited number.
+	if !headerStyleAvailable(e.MenuSetPath, currentUser.MsgHdr) {
 		// Check if MSGHDR.ANS exists for selection screen
 		selPath := filepath.Join(e.MenuSetPath, "templates", "message_headers", "MSGHDR.ANS")
 		if _, statErr := os.Stat(selPath); statErr == nil {
