@@ -241,6 +241,7 @@ type StringsConfig struct {
 	NewUserInvalidRealName  string `json:"newUserInvalidRealName"`
 	NewUserTooManyAttempts  string `json:"newUserTooManyAttempts"`
 	NewUserAccountCreated   string `json:"newUserAccountCreated"`
+	NewUserAccountReady     string `json:"newUserAccountReady"`
 	NewUserCreationError    string `json:"newUserCreationError"`
 	NewUserMaybeAnotherTime string `json:"newUserMaybeAnotherTime"`
 

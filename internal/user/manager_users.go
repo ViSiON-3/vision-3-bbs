@@ -185,7 +185,7 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 		GroupLocation: groupLocation,
 		AccessLevel:   um.newUserLevel,
 		TimeLimit:     60,
-		Validated:     false,
+		Validated:     um.autoValidate,
 		LastLogin:     time.Time{},
 	}
 
@@ -222,4 +222,17 @@ func (um *UserMgr) SetNewUserLevel(level int) {
 	}
 
 	um.newUserLevel = level
+}
+
+// SetAutoValidateNewUsers controls whether accounts created by AddUser are
+// marked validated straight away. Called after loading the server config, and
+// again when it is reloaded.
+//
+// This does not decide whether a new caller can log in — that is AccessLevel
+// against LogonLevel. It sets the reviewed flag, which suppresses the
+// required-infoforms prompt and clears the account from the pending list.
+func (um *UserMgr) SetAutoValidateNewUsers(auto bool) {
+	um.mu.Lock()
+	defer um.mu.Unlock()
+	um.autoValidate = auto
 }

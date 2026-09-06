@@ -246,6 +246,8 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 	if cw.userMgr != nil {
 		cw.userMgr.SetNewUserLevel(newServerConfig.NewUserLevel)
 		slog.Info("updated new user level", "level", newServerConfig.NewUserLevel)
+		cw.userMgr.SetAutoValidateNewUsers(newServerConfig.AutoValidateNewUsers)
+		slog.Info("updated auto-validate new users", "enabled", newServerConfig.AutoValidateNewUsers)
 	}
 
 	slog.Info("config.json reloaded")

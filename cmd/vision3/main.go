@@ -1638,6 +1638,8 @@ func main() {
 	}
 	// Set the new user level from config
 	userMgr.SetNewUserLevel(serverConfig.NewUserLevel)
+	// LoadServerConfig has already resolved the NUV conflict if both were set.
+	userMgr.SetAutoValidateNewUsers(serverConfig.AutoValidateNewUsers)
 
 	// Initialize MessageManager (areas config from configs/, message data from data/)
 	messageMgr, err = message.NewMessageManager(dataPath, rootConfigPath, serverConfig.BoardName, networkOrigins)

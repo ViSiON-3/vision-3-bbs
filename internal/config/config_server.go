@@ -11,34 +11,40 @@ import (
 
 // ServerConfig defines server-wide settings
 type ServerConfig struct {
-	BoardName           string `json:"boardName"`
-	SysOpName           string `json:"sysOpName"`
-	QWKID               string `json:"qwkID,omitempty"` // Explicit QWK packet ID; blank = derive from BoardName
-	BBSLocation         string `json:"bbsLocation,omitempty"`
-	Timezone            string `json:"timezone,omitempty"`
-	SysOpLevel          int    `json:"sysOpLevel"`
-	CoSysOpLevel        int    `json:"coSysOpLevel"`
-	WFCEnabled          bool   `json:"wfcEnabled"`     // Allow remote WFC sysop console (wfc-admin subsystem)
-	InvisibleLevel      int    `json:"invisibleLevel"` // Access level for invisible logon prompt; 0 = use coSysOpLevel
-	NewUserLevel        int    `json:"newUserLevel"`   // Access level assigned to new signups
-	RegularUserLevel    int    `json:"regularUserLevel"`
-	LogonLevel          int    `json:"logonLevel"`
-	AnonymousLevel      int    `json:"anonymousLevel"`
-	SSHPort             int    `json:"sshPort"`
-	SSHHost             string `json:"sshHost"`
-	SSHEnabled          bool   `json:"sshEnabled"`
-	TelnetPort          int    `json:"telnetPort"`
-	TelnetHost          string `json:"telnetHost"`
-	TelnetEnabled       bool   `json:"telnetEnabled"`
-	MaxNodes            int    `json:"maxNodes"`
-	MaxConnectionsPerIP int    `json:"maxConnectionsPerIP"`
-	IPBlocklistPath     string `json:"ipBlocklistPath"`
-	IPAllowlistPath     string `json:"ipAllowlistPath"`
-	MaxFailedLogins     int    `json:"maxFailedLogins"`
-	LockoutMinutes      int    `json:"lockoutMinutes"`
-	FileListingMode     string `json:"fileListingMode"`
-	LegacySSHAlgorithms bool   `json:"legacySSHAlgorithms"`
-	AllowNewUsers       bool   `json:"allowNewUsers"`
+	BoardName      string `json:"boardName"`
+	SysOpName      string `json:"sysOpName"`
+	QWKID          string `json:"qwkID,omitempty"` // Explicit QWK packet ID; blank = derive from BoardName
+	BBSLocation    string `json:"bbsLocation,omitempty"`
+	Timezone       string `json:"timezone,omitempty"`
+	SysOpLevel     int    `json:"sysOpLevel"`
+	CoSysOpLevel   int    `json:"coSysOpLevel"`
+	WFCEnabled     bool   `json:"wfcEnabled"`     // Allow remote WFC sysop console (wfc-admin subsystem)
+	InvisibleLevel int    `json:"invisibleLevel"` // Access level for invisible logon prompt; 0 = use coSysOpLevel
+	NewUserLevel   int    `json:"newUserLevel"`   // Access level assigned to new signups
+	// AutoValidateNewUsers marks signups validated on creation. Off by
+	// default, so an upgrading system keeps its current behaviour. Note this
+	// does not affect whether they can log in — that is decided by
+	// AccessLevel against LogonLevel — it sets the reviewed flag, which the
+	// required-infoforms prompt keys off.
+	AutoValidateNewUsers bool   `json:"autoValidateNewUsers"`
+	RegularUserLevel     int    `json:"regularUserLevel"`
+	LogonLevel           int    `json:"logonLevel"`
+	AnonymousLevel       int    `json:"anonymousLevel"`
+	SSHPort              int    `json:"sshPort"`
+	SSHHost              string `json:"sshHost"`
+	SSHEnabled           bool   `json:"sshEnabled"`
+	TelnetPort           int    `json:"telnetPort"`
+	TelnetHost           string `json:"telnetHost"`
+	TelnetEnabled        bool   `json:"telnetEnabled"`
+	MaxNodes             int    `json:"maxNodes"`
+	MaxConnectionsPerIP  int    `json:"maxConnectionsPerIP"`
+	IPBlocklistPath      string `json:"ipBlocklistPath"`
+	IPAllowlistPath      string `json:"ipAllowlistPath"`
+	MaxFailedLogins      int    `json:"maxFailedLogins"`
+	LockoutMinutes       int    `json:"lockoutMinutes"`
+	FileListingMode      string `json:"fileListingMode"`
+	LegacySSHAlgorithms  bool   `json:"legacySSHAlgorithms"`
+	AllowNewUsers        bool   `json:"allowNewUsers"`
 
 	// Challenge Gate — optional pre-login bot challenge (botgate-style).
 	EnableChallengeGate          bool   `json:"enableChallengeGate"`          // master on/off
@@ -155,6 +161,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		CoSysOpLevel:                 250,
 		WFCEnabled:                   true,
 		NewUserLevel:                 1,
+		AutoValidateNewUsers:         false,
 		RegularUserLevel:             10,
 		LogonLevel:                   10,
 		AnonymousLevel:               5,
@@ -221,6 +228,20 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 
 	config.SanitizeChallengeGate()
 	slog.Info("loaded server configuration", "path", filePath)
+	// New User Voting and auto-validation are mutually exclusive: a candidate
+	// that arrives already validated leaves the vote nothing to decide. The
+	// config editor refuses to enable either while the other is on, but a
+	// hand-edited file can still set both, so enforce it here too.
+	//
+	// Auto-validation loses. Keeping the review process is the safer of the
+	// two outcomes; silently validating every signup is not something to fall
+	// into by way of a typo.
+	if config.UseNUV && config.AutoValidateNewUsers {
+		slog.Error("autoValidateNewUsers and useNuv are mutually exclusive; disabling autoValidateNewUsers for this run",
+			"path", filePath, "fix", "set one of them to false in config.json")
+		config.AutoValidateNewUsers = false
+	}
+
 	return config, nil
 }
 

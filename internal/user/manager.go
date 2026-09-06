@@ -46,6 +46,7 @@ type UserMgr struct {
 	path           string         // Path to users.json
 	dataPath       string         // Path to the data directory (for callhistory.json etc)
 	newUserLevel   int            // Access level assigned to new signups (from config)
+	autoValidate   bool           // Mark new signups validated on creation (from config)
 	nextUserID     int            // Added to track the next available user ID
 	callHistory    []CallRecord   // Added slice for call history
 	nextCallNumber uint64         // Added counter for overall calls
