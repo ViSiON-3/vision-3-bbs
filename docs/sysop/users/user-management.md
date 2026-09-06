@@ -167,9 +167,10 @@ ViSiON/3 uses several key configuration values in `configs/config.json` to contr
 These are the values in the shipped `templates/configs/config.json`, which
 setup copies into `configs/` — so they are what a normal install runs. If a key
 is missing from your `config.json` the loader falls back to a built-in value
-instead, and several of those differ (`newUserLevel` 1, `regularUserLevel` 10,
-`anonymousLevel` 5). [Configuration](../configuration/configuration.md#access-levels)
-lists both sets side by side.
+instead, and four of these differ that way (`invisibleLevel` 0, `newUserLevel` 1,
+`regularUserLevel` 10, `anonymousLevel` 5).
+[Configuration](../configuration/configuration.md#access-levels) lists both sets
+side by side.
 
 **Configuration Values:**
 

@@ -426,6 +426,8 @@ General BBS configuration. All settings in this file are managed through the **S
 - `sessionIdleTimeoutMinutes` — Idle session cutoff (default: `5`)
 - `transferTimeoutMinutes` — File transfer timeout (default: `10`)
 
+<a id="access-levels"></a>
+
 **Access Levels:**
 
 Two different sets of values are called "defaults" here, and they differ. The
@@ -438,7 +440,7 @@ built-in defaults and overlays whatever the file provides.
 | ------- | ------- | -------- | ------- |
 | `sysOpLevel` | `255` | `255` | SysOp access |
 | `coSysOpLevel` | `250` | `250` | Co-SysOp access |
-| `invisibleLevel` | `250` | `0` | Invisible in who's-online (`0` falls back to `coSysOpLevel`) |
+| `invisibleLevel` | `250` | `0` | Minimum level offered the Invisible Logon prompt, letting the caller keep the session off the Last Callers list (`0` falls back to `coSysOpLevel`) |
 | `newUserLevel` | `10` | `1` | Assigned to a brand-new account |
 | `regularUserLevel` | `25` | `10` | Assigned when a user is validated |
 | `logonLevel` | `10` | `10` | Minimum level required to log in |
