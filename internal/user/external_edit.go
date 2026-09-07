@@ -86,6 +86,14 @@ func readUsersFromDisk(path string) (map[string]*User, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseUsersJSON(data)
+}
+
+// parseUsersJSON turns users.json content into a handle-keyed map. Split out of
+// readUsersFromDisk so a caller that has already read and fingerprinted the
+// bytes can merge exactly those, rather than reading the file a second time and
+// risking a merge of different content than it recorded.
+func parseUsersJSON(data []byte) (map[string]*User, error) {
 	var list []*User
 	if err := json.Unmarshal(StripUTF8BOM(data), &list); err != nil {
 		return nil, err
@@ -164,7 +172,12 @@ func (um *UserMgr) mergeExternalEdits() {
 		// session's state. The write that follows restores a valid file.
 		return
 	}
+	um.mergeExternalEditsFrom(onDisk)
+}
 
+// mergeExternalEditsFrom performs the merge against an already-parsed view of
+// users.json. Called with um.mu already held.
+func (um *UserMgr) mergeExternalEditsFrom(onDisk map[string]*User) {
 	merged := make(map[string]*User, len(onDisk))
 	for key, diskUser := range onDisk {
 		if memUser, ok := um.users[key]; ok {

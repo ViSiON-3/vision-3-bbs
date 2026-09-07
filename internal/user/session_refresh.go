@@ -1,7 +1,9 @@
 package user
 
 import (
+	"crypto/sha256"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -65,25 +67,51 @@ func (um *UserMgr) RefreshSessionUser(current *User) (*User, bool) {
 
 	um.syncFromDisk()
 
-	key := strings.ToLower(strings.TrimSpace(current.Handle))
-	um.mu.RLock()
-	stored := um.users[key]
-	var snapshot User
-	if stored != nil {
-		snapshot = *stored
-	}
-	um.mu.RUnlock()
-
-	if stored == nil || snapshot.DeletedUser {
+	snapshot, found := um.lookupForRefresh(current)
+	if !found || snapshot.DeletedUser {
 		return nil, false
 	}
 
 	refreshed := *current
 	sysopOwnedFields(&refreshed, &snapshot)
+	// Follow a rename. The handle is the map key, so a sysop changing it in
+	// ./ue re-keys the record; taking the stored handle here keeps the session
+	// pointing at its own account instead of a name nothing answers to.
+	refreshed.Handle = snapshot.Handle
 	// Carry the generation forward so a later UpdateUser with this copy is not
 	// mistaken for one taken before the edit and made to re-merge over it.
 	refreshed.gen = snapshot.gen
 	return &refreshed, true
+}
+
+// lookupForRefresh finds the stored record for a session, by handle first and
+// by ID when that misses.
+//
+// The ID fallback is what makes a rename survivable. mergeExternalEdits keys
+// off the handle, so renaming an account in ./ue drops the old key and adds a
+// new one; a handle-only lookup would then miss and the call would be dropped
+// as though the account had been deleted. ID is stable across a rename, and is
+// how UpdateUserByID already locates records for the same reason.
+func (um *UserMgr) lookupForRefresh(current *User) (User, bool) {
+	key := strings.ToLower(strings.TrimSpace(current.Handle))
+
+	um.mu.RLock()
+	defer um.mu.RUnlock()
+
+	if stored := um.users[key]; stored != nil {
+		return *stored, true
+	}
+	// Handle miss: the account may have been renamed rather than removed.
+	// ID 0 is not a real account, so it must not match one.
+	if current.ID == 0 {
+		return User{}, false
+	}
+	for _, stored := range um.users {
+		if stored.ID == current.ID {
+			return *stored, true
+		}
+	}
+	return User{}, false
 }
 
 // syncFromDisk folds in any external edit to users.json, at most once per
@@ -111,13 +139,33 @@ func (um *UserMgr) syncFromDisk() {
 	}
 	defer lock.Release() // nil-safe
 
-	um.mu.Lock()
-	defer um.mu.Unlock()
-	if !um.externallyModified() {
+	// Read and fingerprint once, outside um.mu. This runs on the path of every
+	// menu change on every node, so holding the manager's write lock across
+	// file I/O would put each session's disk read in the way of all the others.
+	data, err := os.ReadFile(um.path)
+	if err != nil {
+		return // missing or unreadable: nothing to fold in
+	}
+	current := fileFingerprint{size: int64(len(data)), sum: sha256.Sum256(data)}
+
+	um.mu.RLock()
+	unchanged := current == um.fileState
+	um.mu.RUnlock()
+	if unchanged {
 		return
 	}
-	um.mergeExternalEdits()
-	// Record what we just merged, so the next poll does not keep re-reading
-	// the same file and rebuilding the map on every interval.
-	um.fileState = fingerprintOf(um.path)
+
+	// Parse before taking the write lock, for the same reason.
+	onDisk, err := parseUsersJSON(data)
+	if err != nil {
+		return // malformed: keep what we have rather than lose session state
+	}
+
+	um.mu.Lock()
+	defer um.mu.Unlock()
+	um.mergeExternalEditsFrom(onDisk)
+	// Record the fingerprint of the bytes actually merged, not a fresh read of
+	// the file, which could have moved on in between and would leave the map
+	// and the recorded state describing different content.
+	um.fileState = current
 }

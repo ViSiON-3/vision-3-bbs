@@ -274,3 +274,82 @@ func TestExternalSoftDeleteSurvivesABbsSave(t *testing.T) {
 		t.Error("DeletedAt was dropped, so retention/purge would not know when it happened")
 	}
 }
+
+// Renaming an account in ./ue re-keys the map, since the handle is the key.
+// A handle-only lookup misses and the session would be dropped as though the
+// account had been deleted -- so the session follows the rename instead.
+func TestRefreshFollowsAnExternalRename(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+	session, ok := um.BeginSession("Felonius")
+	if !ok {
+		t.Fatal("BeginSession failed")
+	}
+
+	editOnDisk(t, um.path, func(u *User) {
+		u.Handle = "Renamed"
+		u.AccessLevel = 20
+	})
+	allowImmediateSync()
+
+	refreshed, stillValid := um.RefreshSessionUser(session)
+	if !stillValid {
+		t.Fatal("a rename dropped the call as though the account had been deleted")
+	}
+	if refreshed.Handle != "Renamed" {
+		t.Errorf("Handle = %q, want Renamed — the session kept a name nothing answers to",
+			refreshed.Handle)
+	}
+	if refreshed.AccessLevel != 20 {
+		t.Errorf("AccessLevel = %d, want 20", refreshed.AccessLevel)
+	}
+	// And the renamed record must still be reachable for later saves.
+	refreshed.TimesCalled = 33
+	if err := um.UpdateUser(refreshed); err != nil {
+		t.Fatalf("UpdateUser after a rename: %v", err)
+	}
+	stored, ok := um.GetUser("Renamed")
+	if !ok {
+		t.Fatal("the renamed account could not be looked up after a save")
+	}
+	if stored.TimesCalled != 33 {
+		t.Errorf("TimesCalled = %d, want 33", stored.TimesCalled)
+	}
+}
+
+// The ID fallback must not match a record just because both IDs are zero,
+// which is what an unsaved or synthetic record looks like.
+func TestRefreshDoesNotMatchOnAZeroID(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 0, Handle: "Ghost"})
+
+	orphan := &User{ID: 0, Handle: "NoSuchAccount"}
+	if _, ok := um.RefreshSessionUser(orphan); ok {
+		t.Error("a zero ID matched an unrelated record")
+	}
+}
+
+// Concurrent refreshes must be safe: this runs on every menu change on every
+// node at once.
+func TestRefreshIsSafeUnderConcurrency(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+	session, ok := um.BeginSession("Felonius")
+	if !ok {
+		t.Fatal("BeginSession failed")
+	}
+
+	done := make(chan struct{})
+	for i := range 8 {
+		go func(n int) {
+			defer func() { done <- struct{}{} }()
+			for range 25 {
+				allowImmediateSync()
+				if _, ok := um.RefreshSessionUser(session); !ok {
+					t.Errorf("goroutine %d saw the account vanish", n)
+					return
+				}
+			}
+		}(i)
+	}
+	for range 8 {
+		<-done
+	}
+}
