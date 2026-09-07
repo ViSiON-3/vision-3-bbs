@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -52,14 +53,22 @@ func LoadUsers(path string) ([]*user.User, string, error) {
 // reads as unchanged and the next save silently overwrites it -- the exact
 // loss this guard exists to prevent.
 //
-// An unreadable file reports unchanged: there is nothing there to overwrite,
+// A file that is not there reports unchanged: there is nothing to overwrite,
 // and refusing to save would strand the sysop's edits with no way out.
+//
+// A file that exists but cannot be read reports changed, which is the opposite
+// call and deliberately so. Its contents are unknown, the save that follows
+// would replace them, and "unknown" is not a reason to assume "ours". Better to
+// raise the overwrite prompt and let the sysop decide than to quietly destroy
+// whatever was in a file we could not open.
 func CheckFileChanged(path string, storedFingerprint string) bool {
-	current := user.FingerprintFile(path)
-	if current == "" {
+	if current := user.FingerprintFile(path); current != "" {
+		return current != storedFingerprint
+	}
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		return false
 	}
-	return current != storedFingerprint
+	return true
 }
 
 // SaveUsers writes the user slice to disk atomically, taking the cross-process
