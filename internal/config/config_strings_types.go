@@ -241,6 +241,8 @@ type StringsConfig struct {
 	NewUserInvalidRealName  string `json:"newUserInvalidRealName"`
 	NewUserTooManyAttempts  string `json:"newUserTooManyAttempts"`
 	NewUserAccountCreated   string `json:"newUserAccountCreated"`
+	NewUserAccountReady     string `json:"newUserAccountReady"`
+	NewUserPendingReview    string `json:"newUserPendingReview"`
 	NewUserCreationError    string `json:"newUserCreationError"`
 	NewUserMaybeAnotherTime string `json:"newUserMaybeAnotherTime"`
 
@@ -436,7 +438,12 @@ type StringsConfig struct {
 	MatrixUserNotFound        string `json:"matrixUserNotFound"`
 	MatrixAccountValidated    string `json:"matrixAccountValidated"`
 	MatrixAccountNotValidated string `json:"matrixAccountNotValidated"`
-	IdleTimeout               string `json:"idleTimeout"`
+	// MatrixAccountCannotLogon replaces MatrixAccountNotValidated for the
+	// "check your access" reply. It is a separate key because it takes three
+	// verbs where the old one took one: reusing that key would have appended
+	// "%!(EXTRA int=..., int=...)" to every strings.json already in the wild.
+	MatrixAccountCannotLogon string `json:"matrixAccountCannotLogon"`
+	IdleTimeout              string `json:"idleTimeout"`
 
 	// Conference menu strings (V3-specific)
 	ConfLoginRequired           string `json:"confLoginRequired"`

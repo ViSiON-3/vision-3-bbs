@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -108,7 +109,16 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 		{
 			Label: "Use NUV", Help: "Enable New User Voting system", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.UseNUV) },
-			Set: func(val string) error { cfg.UseNUV = uitext.YNToBool(val); return nil },
+			Set: func(val string) error {
+				on := uitext.YNToBool(val)
+				// The reverse of the guard on Auto Validate: enabling both
+				// would queue candidates whose outcome cannot matter.
+				if on && cfg.AutoValidateNewUsers {
+					return fmt.Errorf("cannot enable New User Voting while Auto Validate is on; turn Auto Validate off first")
+				}
+				cfg.UseNUV = on
+				return nil
+			},
 		},
 		{
 			Label: "Auto Add NUV", Help: "Automatically queue new registrations for voting", Type: ftYesNo, Col: 3, Row: 2, Width: 1,

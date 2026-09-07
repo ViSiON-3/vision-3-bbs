@@ -6,6 +6,7 @@
   "coSysOpLevel": 250,
   "invisibleLevel": 250,
   "newUserLevel": 10,
+  "autoValidateNewUsers": false,
   "regularUserLevel": 25,
   "logonLevel": 10,
   "anonymousLevel": 50,
@@ -46,5 +47,12 @@
   "nuvKill": false,
   "nuvLevel": 25,
   "nuvForm": 1,
-  "qwkAPI": { "enabled": false, "host": "0.0.0.0", "port": 8666, "certFile": "", "keyFile": "", "tokenTTLHours": 24 }
+  "qwkAPI": {
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 8666,
+    "certFile": "",
+    "keyFile": "",
+    "tokenTTLHours": 24
+  }
 }

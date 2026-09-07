@@ -243,8 +243,23 @@ func (e *MenuExecutor) handleNewUserApplication(
 		}
 	}
 
-	// 11. Show validation message
-	validationMsg := e.LoadedStrings.NewUserAccountCreated
+	// 11. Tell them what actually happens next.
+	//
+	// This used to say "requires SysOp validation, please call back later" to
+	// everyone, unconditionally. Validation gates nothing — login is decided by
+	// access level against logonLevel — so with the shipped defaults a caller
+	// was told to wait and could then log straight in.
+	validationMsg := e.LoadedStrings.NewUserAccountReady
+	if !canLogonAtLevel(cfg, newUser.AccessLevel) {
+		validationMsg = e.LoadedStrings.NewUserAccountCreated
+	}
+	// Saying only "you can log on now" would imply nothing further happens.
+	// An account that is not yet reviewed still gets looked at, so say so —
+	// unless autoValidateNewUsers already marked it reviewed, in which case
+	// there is nothing pending.
+	if !newUser.Validated {
+		validationMsg += e.LoadedStrings.NewUserPendingReview
+	}
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(validationMsg)), outputMode)
 
 	// Pause before returning

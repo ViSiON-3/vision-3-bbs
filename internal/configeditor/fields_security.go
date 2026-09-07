@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -63,6 +64,20 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 					return err
 				}
 				cfg.NewUserLevel = n
+				return nil
+			},
+		},
+		{
+			Label: "Auto Validate", Help: "Mark new signups validated (cannot be used with New User Voting)", Type: ftYesNo, Col: 50, Row: 5, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.AutoValidateNewUsers) },
+			Set: func(val string) error {
+				on := uitext.YNToBool(val)
+				// Mutually exclusive with NUV: a candidate that arrives already
+				// validated leaves the vote nothing to decide.
+				if on && cfg.UseNUV {
+					return fmt.Errorf("cannot auto-validate while New User Voting is enabled; turn Use NUV off first")
+				}
+				cfg.AutoValidateNewUsers = on
 				return nil
 			},
 		},

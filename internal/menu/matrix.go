@@ -276,15 +276,20 @@ func (e *MenuExecutor) handleCheckAccess(
 
 	if !exists {
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MatrixUserNotFound)), outputMode)
-	} else if foundUser.Validated {
+	} else if cfg := e.GetServerConfig(); canLogonAtLevel(cfg, foundUser.AccessLevel) {
+		// This option answers "check your access", so it reports whether the
+		// caller can get on. It used to branch on the validated flag, which
+		// decides nothing about login, and so told people waiting for approval
+		// they did not need.
 		msg := fmt.Sprintf(e.LoadedStrings.MatrixAccountValidated, foundUser.Handle, foundUser.AccessLevel)
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	} else {
-		msg := fmt.Sprintf(e.LoadedStrings.MatrixAccountNotValidated, foundUser.Handle)
+		cfg := e.GetServerConfig()
+		msg := fmt.Sprintf(e.LoadedStrings.MatrixAccountCannotLogon,
+			foundUser.Handle, foundUser.AccessLevel, cfg.LogonLevel)
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 
 		// If NUV is enabled, show voting progress for this candidate.
-		cfg := e.GetServerConfig()
 		if cfg.UseNUV {
 			nuvMu.Lock()
 			nd, err := loadNUVData(e.RootConfigPath)
