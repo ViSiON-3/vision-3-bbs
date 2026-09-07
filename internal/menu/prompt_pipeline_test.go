@@ -125,9 +125,16 @@ func TestSelfIncludingFileTerminates(t *testing.T) {
 
 	select {
 	case got := <-done:
-		// It stops, and stops having expanded a bounded number of rounds.
-		if strings.Count(got, "x") > 16 {
-			t.Errorf("expanded %d rounds before stopping: %q", strings.Count(got, "x"), got)
+		// Each round appends one "x", so the count is the number of rounds that
+		// ran. Asserting the configured bound exactly, rather than some larger
+		// ceiling, means a regression that expands seven times is caught.
+		if rounds := strings.Count(got, "x"); rounds != maxIncludeRounds {
+			t.Errorf("expanded %d rounds, want exactly %d: %q", rounds, maxIncludeRounds, got)
+		}
+		// The unexpanded tag is left in place rather than silently dropped, so
+		// a menu set that hits the cap shows evidence of it.
+		if !strings.Contains(got, "%%loop.ans%%") {
+			t.Errorf("the tag that hit the cap was dropped rather than left visible: %q", got)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("a self-including file did not terminate")

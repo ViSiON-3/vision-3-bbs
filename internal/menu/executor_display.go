@@ -486,15 +486,18 @@ func (e *MenuExecutor) renderPromptText(prompt string, placeholders map[string]s
 	return ansi.ReplacePipeCodes(out)
 }
 
+// maxIncludeRounds bounds how many times processFileIncludes will expand.
+//
+// depth counts rounds already completed, so the bound is exclusive: rounds 0
+// through maxIncludeRounds-1 run. Named for what it counts, because "maxDepth"
+// with a `>` test read as one lower than it actually allowed. The value is
+// unchanged from that version -- an include nested this far is already a
+// mistake, and the cap exists to stop a cycle rather than to be a useful limit.
+const maxIncludeRounds = 6
+
 // processFileIncludes recursively replaces %%filename.ans tags with file content.
 // It now looks for included files within the MENU SET's ansi directory.
 func (e *MenuExecutor) processFileIncludes(prompt string, depth int) string {
-	// depth counts rounds already completed, so the bound is exclusive: rounds
-	// 0 through maxIncludeRounds-1 run. Named for what it counts, because
-	// "maxDepth" with a `>` test read as one lower than it actually allowed.
-	// The value is unchanged -- an include nested this far is already a
-	// mistake, and the cap exists to stop a cycle, not to be a useful limit.
-	const maxIncludeRounds = 6
 	if depth >= maxIncludeRounds {
 		slog.Warn("exceeded maximum file inclusion depth, stopping processing", "maxRounds", maxIncludeRounds)
 		return prompt
