@@ -26,8 +26,13 @@ import (
 //
 // The set is the editable field list from internal/usereditor/fields.go, minus
 // the running totals. Display-only entries there (last login, uploads, posts,
-// created/updated stamps, deletion state) are the BBS's to maintain and are
-// left alone.
+// created/updated stamps) are the BBS's to maintain and are left alone.
+//
+// Deletion state is included, and did not used to be. ./ue soft-deletes by
+// setting DeletedUser on disk, so leaving it out meant the next save from a
+// running BBS wrote the record back undeleted -- a sysop removing an abusive
+// user mid-call had it quietly undone. It is a sysop decision like any other
+// here, so the on-disk value wins.
 //
 // TimesCalled and FilePoints are editable in ./ue but deliberately excluded:
 // the BBS advances them continuously — every login, every transfer — so taking
@@ -48,6 +53,16 @@ func sysopOwnedFields(dst, src *User) {
 	dst.TimeLimit = src.TimeLimit
 	dst.GroupLocation = src.GroupLocation
 	dst.PrivateNote = src.PrivateNote
+
+	// Deletion state. DeletedAt is copied by value rather than by pointer, so
+	// the merged record does not alias the one just parsed off disk.
+	dst.DeletedUser = src.DeletedUser
+	if src.DeletedAt != nil {
+		at := *src.DeletedAt
+		dst.DeletedAt = &at
+	} else {
+		dst.DeletedAt = nil
+	}
 
 	// Credentials
 	dst.PasswordHash = src.PasswordHash
