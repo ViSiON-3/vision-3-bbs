@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func mgrWithAccount(t *testing.T, u *User) *UserMgr {
@@ -56,23 +58,57 @@ func TestBeginSessionRollsPreviousLogin(t *testing.T) {
 }
 
 // Authenticate delegates here, so the signup path and the password path record
-// a call identically. This pins that they cannot drift apart.
+// a call identically. The point of extracting rather than duplicating was that
+// they cannot drift, so this actually drives both and compares.
 func TestAuthenticateAndBeginSessionAgree(t *testing.T) {
-	um := mgrWithAccount(t, &User{ID: 1, Handle: "Same", AccessLevel: 10, TimesCalled: 7})
+	const pw = "pw123456"
+	hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("bcrypt: %v", err)
+	}
+	prior := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 
-	got, ok := um.BeginSession("Same")
+	viaAuth := mgrWithAccount(t, &User{
+		ID: 1, Handle: "Same", PasswordHash: string(hash), LastLogin: prior, TimesCalled: 7,
+	})
+	viaBegin := mgrWithAccount(t, &User{
+		ID: 1, Handle: "Same", PasswordHash: string(hash), LastLogin: prior, TimesCalled: 7,
+	})
+
+	a, ok := viaAuth.Authenticate("Same", pw)
+	if !ok {
+		t.Fatal("Authenticate failed")
+	}
+	b, ok := viaBegin.BeginSession("Same")
 	if !ok {
 		t.Fatal("BeginSession failed")
 	}
-	if got.TimesCalled != 8 {
-		t.Errorf("TimesCalled = %d, want 8", got.TimesCalled)
-	}
 
+	if a.TimesCalled != b.TimesCalled {
+		t.Errorf("TimesCalled differs: Authenticate=%d BeginSession=%d", a.TimesCalled, b.TimesCalled)
+	}
+	if !a.PreviousLogin.Equal(b.PreviousLogin) {
+		t.Errorf("PreviousLogin differs: Authenticate=%v BeginSession=%v", a.PreviousLogin, b.PreviousLogin)
+	}
+	if a.LastLogin.IsZero() || b.LastLogin.IsZero() {
+		t.Error("one of the paths did not stamp LastLogin")
+	}
+}
+
+// The deleted-user guard belongs to the shared entry point, not only to
+// Authenticate: a caller reaching BeginSession another way must not be able to
+// open a session on a deleted account.
+func TestBeginSessionDeniesDeletedAccounts(t *testing.T) {
+	um := mgrWithAccount(t, &User{ID: 1, Handle: "Ghost", DeletedUser: true, TimesCalled: 3})
+
+	if _, ok := um.BeginSession("Ghost"); ok {
+		t.Fatal("BeginSession opened a session on a deleted account")
+	}
 	um.mu.RLock()
-	stored := *um.users["same"]
+	stored := *um.users["ghost"]
 	um.mu.RUnlock()
-	if stored.TimesCalled != got.TimesCalled || !stored.LastLogin.Equal(got.LastLogin) {
-		t.Error("the returned snapshot does not match what was stored")
+	if stored.TimesCalled != 3 {
+		t.Errorf("TimesCalled = %d, want 3 — a rejected session must not stamp bookkeeping", stored.TimesCalled)
 	}
 }
 

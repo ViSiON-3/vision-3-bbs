@@ -85,7 +85,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 			}
 			slog.Error("new user application error", "node", nodeNumber, "error", err)
 		}
-		if started := e.continueAsNewUser(userManager, newUser, nodeNumber); started != nil {
+		if started := e.continueAsNewUser(s, userManager, newUser, nodeNumber); started != nil {
 			return started, nil
 		}
 		return nil, nil // Could not continue: back to the LOGIN screen

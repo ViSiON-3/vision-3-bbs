@@ -3,7 +3,9 @@ package menu
 import (
 	"log/slog"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 )
 
 // continueAsNewUser decides whether a caller who has just created an account
@@ -19,9 +21,22 @@ import (
 // makes once a password verifies. Stamping lastLogin and timesCalled here by
 // hand would work until the two drifted, and a first call that goes unrecorded
 // is exactly the kind of gap that stays invisible.
-func (e *MenuExecutor) continueAsNewUser(userManager *user.UserMgr, newUser *user.User, nodeNumber int) *user.User {
+func (e *MenuExecutor) continueAsNewUser(s ssh.Session, userManager *user.UserMgr, newUser *user.User, nodeNumber int) *user.User {
 	if newUser == nil {
 		return nil
+	}
+	// The login paths check the IP lockout after the "new" branch, which was
+	// harmless while signup could not authenticate anyone. Now that it can,
+	// skipping the check would let a locked-out client register an account and
+	// walk straight in — so it is enforced here, covering every caller.
+	if e.IPLockoutCheck != nil {
+		remoteIP := remoteIPFromSession(s)
+		if locked, until, attempts := e.IPLockoutCheck.IsIPLockedOut(remoteIP); locked {
+			logging.Security("blocked session continuation for a locked IP after signup",
+				"node", nodeNumber, "ip", remoteIP, "handle", newUser.Handle,
+				"locked_until", until.Format("2006-01-02 15:04:05"), "attempts", attempts)
+			return nil
+		}
 	}
 	if !canLogonAtLevel(e.GetServerConfig(), newUser.AccessLevel) {
 		slog.Info("new account cannot log on yet; returning to the login prompt",

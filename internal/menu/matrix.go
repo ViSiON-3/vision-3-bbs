@@ -236,7 +236,7 @@ func (e *MenuExecutor) processMatrixAction(
 			}
 			slog.Error("new user application error from matrix", "node", nodeNumber, "error", err)
 		}
-		if started := e.continueAsNewUser(userManager, newUser, nodeNumber); started != nil {
+		if started := e.continueAsNewUser(s, userManager, newUser, nodeNumber); started != nil {
 			return "LOGIN", started, nil
 		}
 		return "MATRIX", nil, nil // Could not continue: back to the matrix

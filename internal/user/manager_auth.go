@@ -57,6 +57,14 @@ func (um *UserMgr) BeginSession(handle string) (*User, bool) {
 		um.mu.Unlock()
 		return nil, false
 	}
+	// Authenticate checks this before verifying the password, but the guard
+	// belongs here too: this is the shared entry point, and any future caller
+	// that reaches it another way must not be able to open a session on a
+	// deleted account or stamp login bookkeeping onto one.
+	if user.DeletedUser {
+		um.mu.Unlock()
+		return nil, false
+	}
 	// Preserve the prior login stamp before overwriting it; "new since last
 	// login" checks during the login sequence need the previous visit, not
 	// this one. A brand-new account has a zero LastLogin, so its PreviousLogin

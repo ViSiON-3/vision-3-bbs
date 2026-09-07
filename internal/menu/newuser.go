@@ -268,7 +268,15 @@ func (e *MenuExecutor) handleNewUserApplication(
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+pausePrompt)), outputMode)
-	_, _ = readLineFromSessionIH(s, terminal)
+	if _, pauseErr := readLineFromSessionIH(s, terminal); pauseErr != nil {
+		// The account is created and saved either way, but a caller who has
+		// dropped must not have a session opened for them: the callers' io.EOF
+		// handling has to run before they reach continueAsNewUser.
+		if errors.Is(pauseErr, io.EOF) {
+			return newUser, io.EOF
+		}
+		slog.Warn("error reading the signup pause", "node", nodeNumber, "handle", newUser.Handle, "error", pauseErr)
+	}
 
 	return newUser, nil
 }
