@@ -3,6 +3,7 @@ package user
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -188,4 +189,30 @@ func (um *UserMgr) mergeExternalEdits() {
 			um.nextUserID = u.ID + 1
 		}
 	}
+}
+
+// FingerprintFile returns a short content fingerprint of path, or "" when the
+// file cannot be read. Two calls returning the same non-empty value mean the
+// contents are identical.
+//
+// Exported for ./ue, which needs the same notion of "has this changed
+// underneath me" as the BBS. Sharing the definition matters: the editor
+// originally compared modification times, which cannot see a write that lands
+// in the same clock tick as the one it recorded, and the two processes
+// disagreeing about whether a file had changed is precisely how an edit gets
+// silently overwritten.
+func FingerprintFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return FingerprintBytes(data)
+}
+
+// FingerprintBytes returns the fingerprint of content already in hand, so a
+// caller that has just read or written the bytes need not read them back --
+// and cannot accidentally fingerprint a different write that landed in
+// between.
+func FingerprintBytes(data []byte) string {
+	return fmt.Sprintf("%d-%x", len(data), sha256.Sum256(data))
 }

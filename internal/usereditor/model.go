@@ -1,6 +1,7 @@
 package usereditor
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,8 +56,9 @@ type Model struct {
 	users         []*user.User // All users (sorted by ID)
 	origUsers     []*user.User // Snapshot at load time (for dirty tracking)
 	filePath      string
-	dataDir       string    // Root data directory (parent of users/, infoforms/, etc.)
-	fileMtime     time.Time // mtime at load for optimistic concurrency
+	dataDir       string // Root data directory (parent of users/, infoforms/, etc.)
+	fileFP        string // content fingerprint at load, for optimistic concurrency
+	quitAfterSave bool   // an exit raised the overwrite prompt; quit once it is answered
 	dirty         bool
 	retentionDays int // Deleted user retention days from config (-1 = never purge)
 
@@ -103,7 +105,7 @@ type Model struct {
 // New creates a new user editor model.
 // dataDir is the root data directory (e.g., "data/") containing users/, infoforms/, etc.
 func New(filePath string, dataDir ...string) (Model, error) {
-	users, mtime, err := LoadUsers(filePath)
+	users, fingerprint, err := LoadUsers(filePath)
 	if err != nil {
 		return Model{}, fmt.Errorf("loading users: %w", err)
 	}
@@ -180,7 +182,7 @@ func New(filePath string, dataDir ...string) (Model, error) {
 		origUsers:     origUsers,
 		filePath:      filePath,
 		dataDir:       dd,
-		fileMtime:     mtime,
+		fileFP:        fingerprint,
 		retentionDays: retDays,
 		cursor:        0,
 		listType:      1,
@@ -1039,28 +1041,37 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		m.mode = modeList
 		return m, nil
 
-	case modeExitConfirm:
-		// Save and quit
-		m.saveAllToDisk()
-		return m, tea.Quit
+	case modeExitConfirm, modeSaveConfirm:
+		// Quitting only once the save has actually landed. Returning tea.Quit
+		// unconditionally drops the sysop back to the shell over the top of the
+		// "modified externally" prompt, so it can never be answered, and over a
+		// save error, so it is never read -- losing the edits either way.
+		m.saveAllToDisk(false)
+		return m.afterSaveOnExit()
 
 	case modeExitClean:
 		// No unsaved changes, just quit
 		return m, tea.Quit
 
-	case modeSaveConfirm:
-		m.saveAllToDisk()
-		return m, tea.Quit
-
 	case modeFileChanged:
-		// Force overwrite
-		m.saveAllToDisk()
+		// The sysop has been shown the warning and chosen to overwrite, so this
+		// save skips the changed-file check. Passing false here would re-run
+		// the very check that raised this prompt, fail it again, and drop the
+		// edits without saving or warning a second time.
+		m.saveAllToDisk(true)
 		m.mode = modeList
+		// If the prompt interrupted an exit, finish the exit now that it has
+		// been answered, rather than stranding the sysop back in the list.
+		if m.quitAfterSave && !m.dirty {
+			m.quitAfterSave = false
+			return m, tea.Quit
+		}
+		m.quitAfterSave = false
 		return m, nil
 
 	case modeSaveOnLeave:
 		// Save to disk and return to list
-		m.saveAllToDisk()
+		m.saveAllToDisk(false)
 		// Only go to list if saveAllToDisk didn't switch to modeFileChanged
 		if m.mode == modeSaveOnLeave {
 			m.mode = modeList
@@ -1217,25 +1228,51 @@ func (m *Model) saveCurrentUser() {
 	// Dirty flag is already set by field edits
 }
 
-func (m *Model) saveAllToDisk() {
+// saveAllToDisk writes the edited users out, refusing if the file changed
+// underneath us since it was loaded. Pass force to overwrite anyway, which is
+// what the "modified externally" prompt does when the sysop confirms.
+//
+// The check and the write happen inside SaveUsersChecked, under one
+// cross-process lock. Doing them here as two calls would leave a window for a
+// running BBS to save in between, and this write would then destroy it.
+// afterSaveOnExit decides what happens once a save made on the way out has
+// run: quit if it landed, otherwise stay so the sysop can see why not.
+//
+// A conflict leaves mode at modeFileChanged and the prompt is rendered;
+// answering it quits, because quitAfterSave is still set. Any other failure
+// leaves the editor in the list with the error message showing, still dirty,
+// so the work is recoverable rather than gone.
+func (m Model) afterSaveOnExit() (tea.Model, tea.Cmd) {
+	if !m.dirty {
+		m.quitAfterSave = false
+		return m, tea.Quit
+	}
+	if m.mode == modeFileChanged {
+		m.quitAfterSave = true // answered in the modeFileChanged branch
+		return m, nil
+	}
+	m.quitAfterSave = false
+	m.mode = modeList
+	return m, nil
+}
+
+func (m *Model) saveAllToDisk(force bool) {
 	if !m.dirty {
 		return
 	}
 
-	// Check for external modification
-	if CheckFileChanged(m.filePath, m.fileMtime) {
+	newFP, err := SaveUsersChecked(m.filePath, m.users, m.fileFP, force)
+	if errors.Is(err, ErrFileChanged) {
 		m.mode = modeFileChanged
 		m.confirmYes = false
 		m.message = "File modified externally! Overwrite?"
 		return
 	}
-
-	newMtime, err := SaveUsers(m.filePath, m.users)
 	if err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
 	}
-	m.fileMtime = newMtime
+	m.fileFP = newFP
 	m.dirty = false
 	m.message = "Saved successfully"
 
