@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -204,5 +205,55 @@ func TestSaveUsers_AtomicNoTempLeftBehind(t *testing.T) {
 		if filepath.Ext(e.Name()) == ".tmp" || filepath.Base(e.Name()) != "users.json" {
 			t.Errorf("unexpected leftover file after atomic save: %s", e.Name())
 		}
+	}
+}
+
+// A users.json that exists but cannot be read is not the same as one that is
+// gone. Its contents are unknown and a save would replace them, so it has to
+// raise the prompt rather than be assumed unchanged and quietly overwritten.
+func TestCheckFileChangedTreatsUnreadableAsChanged(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root; permission bits do not prevent reads")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Chmod cannot make a file unreadable on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "users.json")
+	fp, err := SaveUsers(path, []*user.User{{ID: 1, Handle: "A"}})
+	if err != nil {
+		t.Fatalf("SaveUsers: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+	if err := os.Chmod(path, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	if !CheckFileChanged(path, fp) {
+		t.Error("an unreadable users.json reported unchanged; the next save would overwrite it blind")
+	}
+}
+
+// And a guarded save over one refuses rather than writing.
+func TestSaveUsersCheckedRefusesOverAnUnreadableFile(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root; permission bits do not prevent reads")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Chmod cannot make a file unreadable on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "users.json")
+	fp, err := SaveUsers(path, []*user.User{{ID: 1, Handle: "A"}})
+	if err != nil {
+		t.Fatalf("SaveUsers: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+	if err := os.Chmod(path, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	if _, err := SaveUsersChecked(path, []*user.User{{ID: 1, Handle: "B"}}, fp, false); !errors.Is(err, ErrFileChanged) {
+		t.Errorf("guarded save error = %v, want ErrFileChanged", err)
 	}
 }
