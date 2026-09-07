@@ -141,6 +141,24 @@ Runtime placeholder codes like `|MN` (menu name), `|TL` (time left), `|CB` (curr
 
 Keys prefixed with `_` (e.g., `_extra3`) are reserved placeholders and cannot be edited.
 
+### Format verbs
+
+Some strings carry `%s` / `%d` **format verbs**, which the BBS fills in at runtime. These are
+different from `|XX` placeholder codes: a placeholder can be moved or removed freely, but a format
+verb must stay, and the **number and order of verbs must not change**. The editor's description line
+names the verbs a string expects, for example:
+
+```
+Exec: Version String    Version string format (%s=version)
+```
+
+Removing or adding a verb does not fail — it prints `%!d(MISSING)` or `%!(EXTRA int=3)` into the
+middle of the message the user sees. If you want a literal percent sign in one of these strings,
+write it as `%%`.
+
+`execVersionString` is the exception that repairs itself: with no `%s` it prints unchanged and logs
+why, rather than showing a mangled banner.
+
 When saving, the editor writes keys in sorted order and omits internal `_`-prefixed keys, producing clean deterministic output.
 
 ## String Descriptions
