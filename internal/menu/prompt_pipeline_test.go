@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // promptExecutor builds an executor whose menu set contains the given ANSI
@@ -109,5 +110,26 @@ func TestMissingIncludeLeavesTheRestIntact(t *testing.T) {
 
 	if !strings.Contains(got, "Felonius") {
 		t.Errorf("a missing include broke the rest of the prompt: %q", got)
+	}
+}
+
+// The include cap has to stop a cycle rather than recursing until the stack
+// gives out. A file that includes itself is the shape that matters.
+func TestSelfIncludingFileTerminates(t *testing.T) {
+	e := promptExecutor(t, map[string]string{
+		"loop.ans": "x%%loop.ans%%",
+	})
+
+	done := make(chan string, 1)
+	go func() { done <- visibleText(e.renderPromptText("%%loop.ans%%", nil, 0, 0, 1)) }()
+
+	select {
+	case got := <-done:
+		// It stops, and stops having expanded a bounded number of rounds.
+		if strings.Count(got, "x") > 16 {
+			t.Errorf("expanded %d rounds before stopping: %q", strings.Count(got, "x"), got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a self-including file did not terminate")
 	}
 }

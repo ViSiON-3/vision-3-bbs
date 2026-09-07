@@ -469,15 +469,12 @@ func (e *MenuExecutor) renderPromptText(prompt string, placeholders map[string]s
 	prompt = e.processFileIncludes(prompt, 0)
 	prompt = expandOptionalGroups(prompt, placeholders)
 
+	// Longest key first, so |CAN is matched before |CA. The ordering is shared
+	// with optional-group scanning rather than repeated here: the two have to
+	// agree on how prefix collisions resolve, and keeping one copy is what
+	// stops them drifting apart.
 	replacementPairs := make([]string, 0, len(placeholders)*2)
-	orderedKeys := make([]string, 0, len(placeholders))
-	for key := range placeholders {
-		orderedKeys = append(orderedKeys, key)
-	}
-	sort.SliceStable(orderedKeys, func(i, j int) bool {
-		return len(orderedKeys[i]) > len(orderedKeys[j])
-	})
-	for _, key := range orderedKeys {
+	for _, key := range placeholderKeysLongestFirst(placeholders) {
 		replacementPairs = append(replacementPairs, key, placeholders[key])
 	}
 	prompt = strings.NewReplacer(replacementPairs...).Replace(prompt)
@@ -492,9 +489,14 @@ func (e *MenuExecutor) renderPromptText(prompt string, placeholders map[string]s
 // processFileIncludes recursively replaces %%filename.ans tags with file content.
 // It now looks for included files within the MENU SET's ansi directory.
 func (e *MenuExecutor) processFileIncludes(prompt string, depth int) string {
-	const maxDepth = 5 // Limit recursion depth
-	if depth > maxDepth {
-		slog.Warn("exceeded maximum file inclusion depth, stopping processing", "maxDepth", maxDepth)
+	// depth counts rounds already completed, so the bound is exclusive: rounds
+	// 0 through maxIncludeRounds-1 run. Named for what it counts, because
+	// "maxDepth" with a `>` test read as one lower than it actually allowed.
+	// The value is unchanged -- an include nested this far is already a
+	// mistake, and the cap exists to stop a cycle, not to be a useful limit.
+	const maxIncludeRounds = 6
+	if depth >= maxIncludeRounds {
+		slog.Warn("exceeded maximum file inclusion depth, stopping processing", "maxRounds", maxIncludeRounds)
 		return prompt
 	}
 
