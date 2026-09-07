@@ -78,14 +78,17 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 	// Check if user wants to apply as a new user
 	if strings.EqualFold(username, "new") {
 		slog.Info("user typed 'new' - starting new user application", "node", nodeNumber)
-		err := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
+		newUser, err := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil, io.EOF
 			}
 			slog.Error("new user application error", "node", nodeNumber, "error", err)
 		}
-		return nil, nil // Return to LOGIN screen after signup
+		if started := e.continueAsNewUser(userManager, newUser, nodeNumber); started != nil {
+			return started, nil
+		}
+		return nil, nil // Could not continue: back to the LOGIN screen
 	}
 
 	// Move to Password position (coordinates are accurate since display is truncated to fit)

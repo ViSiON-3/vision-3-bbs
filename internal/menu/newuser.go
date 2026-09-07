@@ -78,7 +78,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	outputMode ansi.OutputMode,
 	termWidth int,
 	termHeight int,
-) error {
+) (*user.User, error) {
 	slog.Info("starting new user application", "node", nodeNumber)
 
 	// Check if new user registration is allowed
@@ -96,7 +96,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		}
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(pausePrompt)), outputMode)
 		_, _ = readLineFromSessionIH(s, terminal)
-		return nil
+		return nil, nil
 	}
 
 	// 1. "Apply for access?" prompt (before showing the ANS screen, matching Pascal flow)
@@ -107,14 +107,14 @@ func (e *MenuExecutor) handleNewUserApplication(
 	applyYes, err := e.PromptYesNo(s, terminal, applyPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return io.EOF
+			return nil, io.EOF
 		}
 		slog.Error("error during apply prompt", "node", nodeNumber, "error", err)
-		return err
+		return nil, err
 	}
 	if !applyYes {
 		slog.Info("user declined new user application", "node", nodeNumber)
-		return nil
+		return nil, nil
 	}
 
 	// Show blinking underline cursor for form input
@@ -133,10 +133,10 @@ func (e *MenuExecutor) handleNewUserApplication(
 	// 3. Handle/Alias entry
 	handle, err := e.promptForHandle(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if handle == "" {
-		return nil // User cancelled
+		return nil, nil // User cancelled
 	}
 
 	// 4. Clear screen, show welcome and user number (matching Pascal: AnsiCls → Welcome → UserNum)
@@ -160,31 +160,31 @@ func (e *MenuExecutor) handleNewUserApplication(
 	// 5. Password creation with confirmation
 	password, err := e.promptForPassword(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if password == "" {
-		return nil // User cancelled
+		return nil, nil // User cancelled
 	}
 
 	// 6. Real name
 	realName, err := e.promptForRealName(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if realName == "" {
-		return nil // User cancelled
+		return nil, nil // User cancelled
 	}
 
 	// 7. User Note (optional)
 	userNote, err := e.promptForUserNote(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// 8. Location
 	location, err := e.promptForLocation(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// 9. Create account
@@ -199,7 +199,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		errMsg := e.LoadedStrings.NewUserCreationError
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		time.Sleep(2 * time.Second)
-		return nil
+		return nil, nil
 	}
 
 	// Set the private note with creation date
@@ -270,7 +270,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+pausePrompt)), outputMode)
 	_, _ = readLineFromSessionIH(s, terminal)
 
-	return nil
+	return newUser, nil
 }
 
 // displayNewUserScreen loads and displays NEWUSER.ANS.
@@ -685,7 +685,9 @@ func runNewUser(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	err := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
+	// Invoked from a menu, so the caller is already in a session; the created
+	// account is not this session's user.
+	_, err := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
