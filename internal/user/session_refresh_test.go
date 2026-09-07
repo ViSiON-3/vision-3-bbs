@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 )
 
 // refreshMgr builds a manager over a real users.json and clears the poll
@@ -351,5 +353,37 @@ func TestRefreshIsSafeUnderConcurrency(t *testing.T) {
 	}
 	for range 8 {
 		<-done
+	}
+}
+
+// The refresh runs on the menu path, so it must not wait on the cross-process
+// lock. Waiting the save path's timeout would stall a caller's screen behind an
+// editor that happens to be mid-save -- a stall observed live at five seconds
+// before this was made a single attempt.
+func TestRefreshDoesNotWaitOnAHeldLock(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+	session, ok := um.BeginSession("Felonius")
+	if !ok {
+		t.Fatal("BeginSession failed")
+	}
+
+	// Stand in for ./ue holding the lock across its own save.
+	lock, err := filelock.Acquire(um.path, time.Second)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	defer lock.Release()
+
+	allowImmediateSync()
+	start := time.Now()
+	if _, ok := um.RefreshSessionUser(session); !ok {
+		t.Fatal("RefreshSessionUser reported the account gone")
+	}
+	waited := time.Since(start)
+
+	// Generous bound: the point is that it does not sit out a multi-second
+	// timeout, not that it finishes in any particular number of milliseconds.
+	if waited > time.Second {
+		t.Errorf("refresh blocked %s on a held lock; it must not wait on the menu path", waited)
 	}
 }

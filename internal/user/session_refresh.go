@@ -40,6 +40,10 @@ import (
 // from scaling with the number of nodes.
 const diskSyncInterval = time.Second
 
+// refreshLockTimeout is deliberately zero: a single attempt, never a wait.
+// See syncFromDisk for why this path must not block on the lock.
+const refreshLockTimeout = 0
+
 // refreshState tracks when users.json was last polled on the read path. It is
 // separate from UserMgr's own mutex-guarded fields because it is written on
 // what is otherwise a read, from many session goroutines at once.
@@ -54,8 +58,12 @@ var sessionRefresh refreshState
 // anything a sysop has changed on disk, leaving the session's own running
 // state alone.
 //
-// It reports false when the account has gone — deleted in ./ue, or removed
-// from users.json — which the caller should treat as grounds to end the call.
+// It reports false when there is no session record to refresh: current is nil,
+// as during the login phase before anyone has authenticated, or the account has
+// gone — deleted in ./ue, or removed from users.json. A caller holding a real
+// user should treat false as grounds to end the call; one that may not have a
+// user yet should read it as "nothing to do".
+//
 // Refusing to keep serving a deleted account is the point of checking: a sysop
 // removing an abusive user while they are online expects them gone.
 //
@@ -133,7 +141,13 @@ func (um *UserMgr) syncFromDisk() {
 	// midway through replacing. On failure, read anyway: writes land by rename,
 	// so the worst case is merging a version that is one save old, and the next
 	// poll picks it up.
-	lock, err := filelock.Acquire(um.path, filelock.DefaultTimeout)
+	// Try for the lock once and carry on without it. This is a read on the menu
+	// path, so waiting the save path's five seconds would stall the caller's
+	// screen behind an editor that happens to be mid-save, and there is nothing
+	// to gain by waiting: the poll comes round again in a second. Reads are safe
+	// unlocked in any case, because writers replace the file by rename, so the
+	// worst an unlocked read sees is the version one save old.
+	lock, err := filelock.Acquire(um.path, refreshLockTimeout)
 	if err != nil {
 		slog.Debug("refreshing users without the cross-process lock", "path", um.path, "error", err)
 	}
