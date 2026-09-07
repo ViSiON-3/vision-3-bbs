@@ -387,3 +387,48 @@ func TestRefreshDoesNotWaitOnAHeldLock(t *testing.T) {
 		t.Errorf("refresh blocked %s on a held lock; it must not wait on the menu path", waited)
 	}
 }
+
+// Every other test here clears the throttle, so nothing exercised it: removing
+// diskSyncInterval entirely would leave this suite green while syncFromDisk
+// went back to reading and hashing users.json on every menu change on every
+// node. This is the test that would notice.
+func TestRefreshThrottlesDiskReads(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+	session, ok := um.BeginSession("Felonius")
+	if !ok {
+		t.Fatal("BeginSession failed")
+	}
+
+	editOnDisk(t, um.path, func(u *User) { u.AccessLevel = 20 })
+	allowImmediateSync()
+	first, ok := um.RefreshSessionUser(session)
+	if !ok {
+		t.Fatal("RefreshSessionUser reported the account gone")
+	}
+	if first.AccessLevel != 20 {
+		t.Fatalf("AccessLevel = %d, want 20 before the throttle is tested", first.AccessLevel)
+	}
+
+	// A second edit inside the interval must not be read. The throttle was set
+	// by the refresh above, so this one is inside it.
+	editOnDisk(t, um.path, func(u *User) { u.AccessLevel = 30 })
+	throttled, ok := um.RefreshSessionUser(first)
+	if !ok {
+		t.Fatal("RefreshSessionUser reported the account gone")
+	}
+	if throttled.AccessLevel != 20 {
+		t.Errorf("AccessLevel = %d, want 20 — the throttle did not suppress the second read",
+			throttled.AccessLevel)
+	}
+
+	// Once it expires, the edit lands.
+	allowImmediateSync()
+	after, ok := um.RefreshSessionUser(throttled)
+	if !ok {
+		t.Fatal("RefreshSessionUser reported the account gone")
+	}
+	if after.AccessLevel != 30 {
+		t.Errorf("AccessLevel = %d, want 30 — the edit never arrived after the throttle expired",
+			after.AccessLevel)
+	}
+}
