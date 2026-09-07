@@ -58,6 +58,7 @@ type Model struct {
 	filePath      string
 	dataDir       string // Root data directory (parent of users/, infoforms/, etc.)
 	fileFP        string // content fingerprint at load, for optimistic concurrency
+	quitAfterSave bool   // an exit raised the overwrite prompt; quit once it is answered
 	dirty         bool
 	retentionDays int // Deleted user retention days from config (-1 = never purge)
 
@@ -1040,17 +1041,16 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		m.mode = modeList
 		return m, nil
 
-	case modeExitConfirm:
-		// Save and quit
+	case modeExitConfirm, modeSaveConfirm:
+		// Quitting only once the save has actually landed. Returning tea.Quit
+		// unconditionally drops the sysop back to the shell over the top of the
+		// "modified externally" prompt, so it can never be answered, and over a
+		// save error, so it is never read -- losing the edits either way.
 		m.saveAllToDisk(false)
-		return m, tea.Quit
+		return m.afterSaveOnExit()
 
 	case modeExitClean:
 		// No unsaved changes, just quit
-		return m, tea.Quit
-
-	case modeSaveConfirm:
-		m.saveAllToDisk(false)
 		return m, tea.Quit
 
 	case modeFileChanged:
@@ -1060,6 +1060,13 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		// edits without saving or warning a second time.
 		m.saveAllToDisk(true)
 		m.mode = modeList
+		// If the prompt interrupted an exit, finish the exit now that it has
+		// been answered, rather than stranding the sysop back in the list.
+		if m.quitAfterSave && !m.dirty {
+			m.quitAfterSave = false
+			return m, tea.Quit
+		}
+		m.quitAfterSave = false
 		return m, nil
 
 	case modeSaveOnLeave:
@@ -1228,6 +1235,27 @@ func (m *Model) saveCurrentUser() {
 // The check and the write happen inside SaveUsersChecked, under one
 // cross-process lock. Doing them here as two calls would leave a window for a
 // running BBS to save in between, and this write would then destroy it.
+// afterSaveOnExit decides what happens once a save made on the way out has
+// run: quit if it landed, otherwise stay so the sysop can see why not.
+//
+// A conflict leaves mode at modeFileChanged and the prompt is rendered;
+// answering it quits, because quitAfterSave is still set. Any other failure
+// leaves the editor in the list with the error message showing, still dirty,
+// so the work is recoverable rather than gone.
+func (m Model) afterSaveOnExit() (tea.Model, tea.Cmd) {
+	if !m.dirty {
+		m.quitAfterSave = false
+		return m, tea.Quit
+	}
+	if m.mode == modeFileChanged {
+		m.quitAfterSave = true // answered in the modeFileChanged branch
+		return m, nil
+	}
+	m.quitAfterSave = false
+	m.mode = modeList
+	return m, nil
+}
+
 func (m *Model) saveAllToDisk(force bool) {
 	if !m.dirty {
 		return

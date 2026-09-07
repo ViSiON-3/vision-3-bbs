@@ -3,6 +3,7 @@ package menu
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -132,6 +133,12 @@ func TestRunCfgToggle_NilUserReturnsNilWithoutPanic(t *testing.T) {
 // where an atomic write actually fails.
 func breakUserStore(t *testing.T, dir string) {
 	t.Helper()
+	// Windows does not honour a POSIX mode here, so the directory stays
+	// writable and the save under test would succeed. Skipping is honest;
+	// silently passing a test that never exercised the failure path is not.
+	if runtime.GOOS == "windows" {
+		t.Skip("cannot make a directory unwritable with os.Chmod on Windows")
+	}
 	if _, err := os.Stat(filepath.Join(dir, "users.json")); err != nil {
 		t.Fatalf("stat users.json before breaking it: %v", err)
 	}
@@ -142,7 +149,7 @@ func breakUserStore(t *testing.T, dir string) {
 	}
 }
 
-// reloadPersistedUser restores write access to users.json and opens a fresh
+// reloadPersistedUser restores write access to the data directory and opens a fresh
 // *user.UserMgr over the same data directory, so the returned user reflects
 // what genuinely made it to disk. A second GetUser on the ORIGINAL manager
 // would not prove this: UserMgr.UpdateUser writes its in-memory map entry
