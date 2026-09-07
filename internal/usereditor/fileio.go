@@ -136,6 +136,14 @@ func writeUsers(path string, users []*user.User) (string, error) {
 		_ = os.Remove(tmpPath) // cleanup on error path
 		return "", fmt.Errorf("close temp file: %w", err)
 	}
+	// Set the mode explicitly. os.CreateTemp asks for 0600 but the umask still
+	// applies, so a restrictive one can leave the file unreadable -- and rename
+	// carries that mode onto users.json, after which the BBS and this editor
+	// both fail to load it. The BBS-side writer does the same.
+	if err := os.Chmod(tmpPath, 0600); err != nil {
+		_ = os.Remove(tmpPath) // cleanup on error path
+		return "", fmt.Errorf("chmod temp file: %w", err)
+	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath) // cleanup on error path

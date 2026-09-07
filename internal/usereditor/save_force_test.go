@@ -160,3 +160,78 @@ func TestConfirmingTheOverwritePromptWrites(t *testing.T) {
 		t.Errorf("mode = %v after confirming, want modeList", got.mode)
 	}
 }
+
+// Quitting with unsaved edits while the BBS has written underneath must not
+// drop the sysop back to the shell over the top of the overwrite prompt. The
+// prompt has to be answerable, and answering it has to finish the exit.
+func TestExitConfirmStaysOpenOnAConflictThenQuits(t *testing.T) {
+	m, path := editorOver(t, &user.User{ID: 1, Handle: "Alice", AccessLevel: 10})
+
+	if _, err := SaveUsers(path, []*user.User{{ID: 1, Handle: "Alice", AccessLevel: 99}}); err != nil {
+		t.Fatalf("external SaveUsers: %v", err)
+	}
+
+	m.users[0].AccessLevel = 42
+	m.dirty = true
+	m.mode = modeExitConfirm
+
+	updated, cmd := m.executeConfirm()
+	got, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("executeConfirm returned %T, want Model", updated)
+	}
+	if cmd != nil {
+		t.Error("the editor quit over the top of the overwrite prompt, losing the edits")
+	}
+	if got.mode != modeFileChanged {
+		t.Fatalf("mode = %v, want modeFileChanged so the prompt is shown", got.mode)
+	}
+	if !got.dirty {
+		t.Error("edits were marked saved even though the save was refused")
+	}
+
+	// The sysop answers "overwrite".
+	final, cmd2 := got.executeConfirm()
+	fin, ok := final.(Model)
+	if !ok {
+		t.Fatalf("executeConfirm returned %T, want Model", final)
+	}
+	if cmd2 == nil {
+		t.Error("answering the prompt did not finish the exit that raised it")
+	}
+	if fin.dirty {
+		t.Error("still dirty after the forced save")
+	}
+	onDisk, _, err := LoadUsers(path)
+	if err != nil {
+		t.Fatalf("LoadUsers: %v", err)
+	}
+	if onDisk[0].AccessLevel != 42 {
+		t.Errorf("the exit-time overwrite never reached disk: level = %d, want 42", onDisk[0].AccessLevel)
+	}
+}
+
+// An ordinary quit with no conflict still quits, and saves on the way.
+func TestExitConfirmQuitsWhenTheSaveLands(t *testing.T) {
+	m, path := editorOver(t, &user.User{ID: 1, Handle: "Alice", AccessLevel: 10})
+
+	m.users[0].AccessLevel = 42
+	m.dirty = true
+	m.mode = modeExitConfirm
+
+	updated, cmd := m.executeConfirm()
+	got := updated.(Model)
+	if cmd == nil {
+		t.Error("a clean save on exit did not quit")
+	}
+	if got.dirty {
+		t.Error("still dirty after a successful save")
+	}
+	onDisk, _, err := LoadUsers(path)
+	if err != nil {
+		t.Fatalf("LoadUsers: %v", err)
+	}
+	if onDisk[0].AccessLevel != 42 {
+		t.Errorf("level on disk = %d, want 42", onDisk[0].AccessLevel)
+	}
+}
