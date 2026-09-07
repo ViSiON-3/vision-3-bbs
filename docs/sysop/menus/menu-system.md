@@ -362,11 +362,9 @@ Rules:
 - Groups do not nest. An unmatched `|{` is left as visible text rather than
   swallowing the rest of the prompt.
 
-Groups are resolved on the prompt string itself, before `%%file.ans%%` includes
-are expanded — so `|{...|}` works in `PROMPT1`/`PROMPT2` but not inside an
-included ANSI file. This is not specific to groups: **no** `|XX` placeholder
-expands inside an included file, and the markup renders as literal text rather
-than failing loudly. See issue #211.
+`%%file.ans%%` includes are resolved first, so an included file behaves exactly
+like text written inline in the prompt: groups, `|XX` placeholders and `@CODE@`
+AT-codes all work inside one.
 
 The `|{P}` and `|{O}` login position markers share the `|{` prefix but are not
 groups; they are stepped over and pass through untouched.

@@ -402,6 +402,23 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		}
 	} // End if currentUser != nil
 
+	// Pull in %%file.ans%% content first, so everything below treats it exactly
+	// like text written inline in the prompt. Includes used to run after
+	// substitution, which meant no |XX placeholder inside an included file was
+	// ever expanded — and since an unrecognised code passes through
+	// ReplacePipeCodes untouched, the markup appeared verbatim on screen with
+	// nothing in the log to explain it.
+	//
+	// Front rather than back for safety as well as simplicity: with includes
+	// resolved before substitution, a placeholder whose *value* happens to
+	// contain "%%something.ans%%" cannot pull in a file. |GL and |UN are
+	// user-settable, so that ordering matters.
+	promptString, err := e.processFileIncludes(promptString, 0)
+	if err != nil {
+		slog.Error("failed processing file includes in prompt", "menu", currentMenuName, "error", err)
+		return err
+	}
+
 	// Drop |{...|} groups whose placeholders are all empty, so decoration around
 	// an unset field (parentheses, a label) goes away with it instead of being
 	// left stranded as "()". Must run before substitution, while the
@@ -427,22 +444,12 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 	promptBytes = replaceMenuATCode(promptBytes, "U", strconv.Itoa(e.SessionRegistry.ActiveCount()))
 	substitutedPrompt = string(promptBytes)
 
-	processedPrompt, err := e.processFileIncludes(substitutedPrompt, 0) // Pass 'e'
-	if err != nil {
-		slog.Error("failed processing file includes in prompt", "menu", currentMenuName, "error", err)
-
-		// Use RootAssetsPath for global assets if needed, or MenuSetPath for set-specific
-		// pausePrompt := e.LoadedStrings.PauseString // This comes from global strings
-		// ... (rest of pause logic) ...
-		return err // Use original error if includes fail
-	}
-
-	// 2b. Expand @RR@ after file includes so %%file.ans%% content is also processed.
+	// Includes were resolved above, so @RR@ covers included content here too.
 	rumorLevel := 1 // default MinLevel when no user context
 	if currentUser != nil {
 		rumorLevel = currentUser.AccessLevel
 	}
-	processedPromptBytes := expandRandomRumorATCode([]byte(processedPrompt), e.RootConfigPath, rumorLevel)
+	processedPromptBytes := expandRandomRumorATCode([]byte(substitutedPrompt), e.RootConfigPath, rumorLevel)
 
 	// 3. Process pipe codes in the final string (includes/placeholders already processed)
 	rawPromptBytes := ansi.ReplacePipeCodes(processedPromptBytes)
