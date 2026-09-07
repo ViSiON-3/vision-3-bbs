@@ -37,16 +37,39 @@ func (um *UserMgr) Authenticate(handle, password string) (*User, bool) {
 		return nil, false
 	}
 
-	// Authentication successful - update LastLogin and TimesCalled
+	// Password verified; record the call.
+	return um.BeginSession(handle)
+}
+
+// BeginSession stamps the login bookkeeping for a handle and returns a
+// snapshot of the record, without checking any credential.
+//
+// Authenticate calls this once the password verifies. The signup flow calls it
+// directly for an account it has just created, which has no password to
+// re-check — the caller set it moments ago. Both paths must record a call
+// identically, so the bookkeeping lives here rather than being written twice.
+func (um *UserMgr) BeginSession(handle string) (*User, bool) {
+	lowerHandle := strings.ToLower(handle)
+
 	um.mu.Lock()
-	user = um.users[lowerHandle] // Re-fetch under write lock
+	user := um.users[lowerHandle]
 	if user == nil {
+		um.mu.Unlock()
+		return nil, false
+	}
+	// Authenticate checks this before verifying the password, but the guard
+	// belongs here too: this is the shared entry point, and any future caller
+	// that reaches it another way must not be able to open a session on a
+	// deleted account or stamp login bookkeeping onto one.
+	if user.DeletedUser {
 		um.mu.Unlock()
 		return nil, false
 	}
 	// Preserve the prior login stamp before overwriting it; "new since last
 	// login" checks during the login sequence need the previous visit, not
-	// this one.
+	// this one. A brand-new account has a zero LastLogin, so its PreviousLogin
+	// stays zero and everything reads as new — which is correct for a first
+	// call.
 	user.PreviousLogin = user.LastLogin
 	user.LastLogin = time.Now()
 	user.TimesCalled++

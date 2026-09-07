@@ -84,14 +84,19 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	// Check if user wants to apply as a new user
 	if strings.EqualFold(username, "new") {
 		slog.Info("user typed 'new' in AUTHENTICATE - starting new user application", "node", nodeNumber)
-		newUserErr := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
+		newUser, newUserErr := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 		if newUserErr != nil {
 			if errors.Is(newUserErr, io.EOF) {
 				return nil, "LOGOFF", io.EOF
 			}
 			slog.Error("new user application error", "node", nodeNumber, "error", newUserErr)
 		}
-		return nil, "", nil // Return to LOGIN screen after signup
+		// Carry them into the session rather than making them re-enter the
+		// handle and password they set moments ago.
+		if started := e.continueAsNewUser(s, userManager, newUser, nodeNumber); started != nil {
+			return started, "", nil
+		}
+		return nil, "", nil // Could not continue: back to the LOGIN screen
 	}
 
 	// Move to Password position, display prompt, and read input securely

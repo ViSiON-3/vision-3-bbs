@@ -1072,7 +1072,7 @@ func sessionHandler(s ssh.Session) {
 			}
 		}
 
-		matrixAction, matrixErr := menuExecutor.RunMatrixScreen(s, terminal, userMgr, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
+		matrixAction, matrixUser, matrixErr := menuExecutor.RunMatrixScreen(s, terminal, userMgr, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
 		if matrixErr != nil {
 			slog.Error("matrix screen error", "node", nodeID, "error", matrixErr)
 			return
@@ -1080,6 +1080,18 @@ func sessionHandler(s ssh.Session) {
 		if matrixAction == "DISCONNECT" {
 			slog.Info("user selected disconnect from matrix", "node", nodeID)
 			return
+		}
+		// A completed signup hands back the account to continue as, so the
+		// caller is not asked for credentials they set moments ago. The login
+		// loop below is skipped, but everything after it — including the login
+		// sequence — runs exactly as for any other caller.
+		if matrixUser != nil {
+			authenticatedUser = matrixUser
+			bbsSession.Mutex.Lock()
+			bbsSession.User = authenticatedUser
+			bbsSession.Mutex.Unlock()
+			userMgr.MarkUserOnline(authenticatedUser.ID)
+			slog.Info("continuing as newly created user", "node", nodeID, "user", authenticatedUser.Handle)
 		}
 		// matrixAction == "LOGIN" — proceed to normal login loop
 	}

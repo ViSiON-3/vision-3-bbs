@@ -30,18 +30,18 @@ func (e *MenuExecutor) RunMatrixScreen(
 	outputMode ansi.OutputMode,
 	termWidth int,
 	termHeight int,
-) (string, error) {
+) (string, *user.User, error) {
 	const menuName = "PDMATRIX"
 
 	// Load lightbar options from PDMATRIX.BAR
 	options, err := loadLightbarOptions(menuName, e)
 	if err != nil {
 		slog.Warn("failed to load BAR file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
-		return "LOGIN", nil
+		return "LOGIN", nil, nil
 	}
 	if len(options) == 0 {
 		slog.Warn("no options in BAR file, skipping matrix", "node", nodeNumber, "menu", menuName)
-		return "LOGIN", nil
+		return "LOGIN", nil, nil
 	}
 
 	// Load commands from PDMATRIX.CFG to map hotkeys to actions
@@ -49,7 +49,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 	commands, err := LoadCommands(menuName, cfgPath)
 	if err != nil {
 		slog.Warn("failed to load CFG file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
-		return "LOGIN", nil
+		return "LOGIN", nil, nil
 	}
 
 	// Build hotkey → command map
@@ -64,7 +64,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 	ansBackground, err := ansi.GetAnsiFileContent(ansPath)
 	if err != nil {
 		slog.Warn("failed to load ANS file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
-		return "LOGIN", nil
+		return "LOGIN", nil, nil
 	}
 
 	slog.Info("displaying pre-login matrix screen", "node", nodeNumber, "count", len(options))
@@ -81,7 +81,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 	// Draw the initial screen
 	if err := drawMatrixScreen(terminal, ansBackground, options, selectedIndex, outputMode); err != nil {
 		slog.Error("failed to draw matrix screen", "node", nodeNumber, "error", err)
-		return "LOGIN", nil
+		return "LOGIN", nil, nil
 	}
 
 	// Apply the pre-login idle timeout on the shared InputHandler.
@@ -94,12 +94,12 @@ func (e *MenuExecutor) RunMatrixScreen(
 		if err != nil {
 			if errors.Is(err, editor.ErrIdleTimeout) {
 				e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
-				return "DISCONNECT", nil
+				return "DISCONNECT", nil, nil
 			}
 			if errors.Is(err, io.EOF) {
-				return "DISCONNECT", io.EOF
+				return "DISCONNECT", nil, io.EOF
 			}
-			return "DISCONNECT", fmt.Errorf("failed reading matrix input: %w", err)
+			return "DISCONNECT", nil, fmt.Errorf("failed reading matrix input: %w", err)
 		}
 
 		newIndex := selectedIndex
@@ -161,12 +161,15 @@ func (e *MenuExecutor) RunMatrixScreen(
 			}
 			slog.Info("matrix selection", "node", nodeNumber, "text", options[selectedIndex].Text, "action", action)
 
-			result, err := e.processMatrixAction(action, s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
+			result, authed, err := e.processMatrixAction(action, s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 			if err != nil {
-				return result, err
+				return result, authed, err
 			}
-			if result == "LOGIN" || result == "DISCONNECT" {
-				return result, nil
+			// A completed signup can hand back an account to continue as, so
+			// the caller is not sent round to type the credentials they just
+			// chose.
+			if result == "LOGIN" || result == "DISCONNECT" || authed != nil {
+				return result, authed, nil
 			}
 
 			// For actions that return to the matrix (like NEWUSER, CHECKACCESS),
@@ -179,7 +182,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 
 	// Max tries exceeded
 	slog.Info("matrix max tries exceeded, disconnecting", "node", nodeNumber)
-	return "DISCONNECT", nil
+	return "DISCONNECT", nil, nil
 }
 
 // matrixPrintableKey resolves a printable keypress against the matrix options:
@@ -215,38 +218,41 @@ func (e *MenuExecutor) processMatrixAction(
 	outputMode ansi.OutputMode,
 	termWidth int,
 	termHeight int,
-) (string, error) {
+) (string, *user.User, error) {
 	switch action {
 	case "LOGIN":
 		// Show PRELOGON ANSI file before login screen (matches Pascal: Printfile(PRELOGON.x) + HoldScreen)
 		e.showPrelogon(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
-		return "LOGIN", nil
+		return "LOGIN", nil, nil
 
 	case "NEWUSER":
 		// Clear screen immediately when transitioning from matrix to new user flow
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h"), outputMode) // Show cursor
-		err := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
+		newUser, err := e.handleNewUserApplication(s, terminal, userManager, nodeNumber, outputMode, termWidth, termHeight)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return "DISCONNECT", io.EOF
+				return "DISCONNECT", nil, io.EOF
 			}
 			slog.Error("new user application error from matrix", "node", nodeNumber, "error", err)
 		}
-		return "MATRIX", nil // Return to matrix after signup
+		if started := e.continueAsNewUser(s, userManager, newUser, nodeNumber); started != nil {
+			return "LOGIN", started, nil
+		}
+		return "MATRIX", nil, nil // Could not continue: back to the matrix
 
 	case "CHECKACCESS":
 		e.handleCheckAccess(s, terminal, userManager, nodeNumber, outputMode)
-		return "MATRIX", nil // Return to matrix after check
+		return "MATRIX", nil, nil // Return to matrix after check
 
 	case "DISCONNECT":
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MatrixDisconnecting)), outputMode)
-		return "DISCONNECT", nil
+		return "DISCONNECT", nil, nil
 
 	default:
 		slog.Warn("unknown matrix action", "node", nodeNumber, "action", action)
 		e.showUndefinedMenuInput(terminal, outputMode, nodeNumber)
-		return "MATRIX", nil
+		return "MATRIX", nil, nil
 	}
 }
 
