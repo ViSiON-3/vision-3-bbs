@@ -103,6 +103,14 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	for {
 		slog.Info("running menu", "menu", st.currentMenuName, "previous", st.previousMenuName, "node", nodeNumber)
 
+		// Pick up anything a sysop changed on disk since the last screen. The
+		// session's user record is a copy taken at authentication, so without
+		// this an edit made while the caller is online does nothing until they
+		// dial back.
+		if !st.refreshCurrentUser() {
+			return "LOGOFF", nil, nil
+		}
+
 		st.userInput = "" // Reset per iteration (Keep this one)
 		// Removed authenticatedUserResult declaration from here
 		// Numeric commands must be explicitly defined in KEYS tokens (no positional matching)

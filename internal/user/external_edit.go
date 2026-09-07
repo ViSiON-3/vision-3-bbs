@@ -26,8 +26,13 @@ import (
 //
 // The set is the editable field list from internal/usereditor/fields.go, minus
 // the running totals. Display-only entries there (last login, uploads, posts,
-// created/updated stamps, deletion state) are the BBS's to maintain and are
-// left alone.
+// created/updated stamps) are the BBS's to maintain and are left alone.
+//
+// Deletion state is included, and did not used to be. ./ue soft-deletes by
+// setting DeletedUser on disk, so leaving it out meant the next save from a
+// running BBS wrote the record back undeleted -- a sysop removing an abusive
+// user mid-call had it quietly undone. It is a sysop decision like any other
+// here, so the on-disk value wins.
 //
 // TimesCalled and FilePoints are editable in ./ue but deliberately excluded:
 // the BBS advances them continuously — every login, every transfer — so taking
@@ -48,6 +53,16 @@ func sysopOwnedFields(dst, src *User) {
 	dst.TimeLimit = src.TimeLimit
 	dst.GroupLocation = src.GroupLocation
 	dst.PrivateNote = src.PrivateNote
+
+	// Deletion state. DeletedAt is copied by value rather than by pointer, so
+	// the merged record does not alias the one just parsed off disk.
+	dst.DeletedUser = src.DeletedUser
+	if src.DeletedAt != nil {
+		at := *src.DeletedAt
+		dst.DeletedAt = &at
+	} else {
+		dst.DeletedAt = nil
+	}
 
 	// Credentials
 	dst.PasswordHash = src.PasswordHash
@@ -71,6 +86,14 @@ func readUsersFromDisk(path string) (map[string]*User, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseUsersJSON(data)
+}
+
+// parseUsersJSON turns users.json content into a handle-keyed map. Split out of
+// readUsersFromDisk so a caller that has already read and fingerprinted the
+// bytes can merge exactly those, rather than reading the file a second time and
+// risking a merge of different content than it recorded.
+func parseUsersJSON(data []byte) (map[string]*User, error) {
 	var list []*User
 	if err := json.Unmarshal(StripUTF8BOM(data), &list); err != nil {
 		return nil, err
@@ -149,7 +172,12 @@ func (um *UserMgr) mergeExternalEdits() {
 		// session's state. The write that follows restores a valid file.
 		return
 	}
+	um.mergeExternalEditsFrom(onDisk)
+}
 
+// mergeExternalEditsFrom performs the merge against an already-parsed view of
+// users.json. Called with um.mu already held.
+func (um *UserMgr) mergeExternalEditsFrom(onDisk map[string]*User) {
 	merged := make(map[string]*User, len(onDisk))
 	for key, diskUser := range onDisk {
 		if memUser, ok := um.users[key]; ok {
