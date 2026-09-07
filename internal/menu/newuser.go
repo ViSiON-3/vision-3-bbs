@@ -253,6 +253,13 @@ func (e *MenuExecutor) handleNewUserApplication(
 	if !canLogonAtLevel(cfg, newUser.AccessLevel) {
 		validationMsg = e.LoadedStrings.NewUserAccountCreated
 	}
+	// Saying only "you can log on now" would imply nothing further happens.
+	// An account that is not yet reviewed still gets looked at, so say so —
+	// unless autoValidateNewUsers already marked it reviewed, in which case
+	// there is nothing pending.
+	if !newUser.Validated {
+		validationMsg += e.LoadedStrings.NewUserPendingReview
+	}
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(validationMsg)), outputMode)
 
 	// Pause before returning

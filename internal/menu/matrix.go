@@ -285,7 +285,7 @@ func (e *MenuExecutor) handleCheckAccess(
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	} else {
 		cfg := e.GetServerConfig()
-		msg := fmt.Sprintf(e.LoadedStrings.MatrixAccountNotValidated,
+		msg := fmt.Sprintf(e.LoadedStrings.MatrixAccountCannotLogon,
 			foundUser.Handle, foundUser.AccessLevel, cfg.LogonLevel)
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 

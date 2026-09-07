@@ -38,6 +38,13 @@ func applyStringDefaults(c *StringsConfig) {
 		}
 	}
 
+	// New user signup outcome (added with autoValidateNewUsers; an upgraded
+	// strings.json will not have these, and the ready path would otherwise
+	// print nothing at all)
+	d(&c.NewUserAccountReady, "\r\n|15Your account has been created. |10You can log on now.|07\r\n")
+	d(&c.NewUserPendingReview, "|08A SysOp will review your account.|07\r\n")
+	d(&c.MatrixAccountCannotLogon, "\r\n|14Account '%s' cannot log on yet |08(level |15%d|08, minimum |15%d|08)|14.\r\n|08A SysOp must raise your access.|07\r\n")
+
 	// Message newscan notices (added after the scan strings shipped; keep
 	// existing strings.json files working without them)
 	d(&c.ScanInvalidDate, "\r\n|12Invalid date. Enter MM/DD/YY, MM/DD/YYYY, MM-DD-YY, MM-DD-YYYY, YYYY-MM-DD, MMDDYY or MMDDYYYY.|07\r\n")
