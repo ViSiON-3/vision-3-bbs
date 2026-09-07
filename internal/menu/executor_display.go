@@ -402,50 +402,12 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		}
 	} // End if currentUser != nil
 
-	// Drop |{...|} groups whose placeholders are all empty, so decoration around
-	// an unset field (parentheses, a label) goes away with it instead of being
-	// left stranded as "()". Must run before substitution, while the
-	// placeholder tokens are still present to test.
-	promptString = expandOptionalGroups(promptString, placeholders)
-
-	// Replace longer placeholders before shorter ones to avoid prefix collisions (e.g. |CAN vs |CA).
-	replacementPairs := make([]string, 0, len(placeholders)*2)
-	orderedKeys := make([]string, 0, len(placeholders))
-	for key := range placeholders {
-		orderedKeys = append(orderedKeys, key)
-	}
-	sort.SliceStable(orderedKeys, func(i, j int) bool {
-		return len(orderedKeys[i]) > len(orderedKeys[j])
-	})
-	for _, key := range orderedKeys {
-		replacementPairs = append(replacementPairs, key, placeholders[key])
-	}
-	substitutedPrompt := strings.NewReplacer(replacementPairs...).Replace(promptString)
-
-	// Replace @CODE@ AT-codes with width support (@UC@, @UC:5@, @UC##@, @U@, etc.)
-	promptBytes := replaceMenuATCode([]byte(substitutedPrompt), "UC", strconv.Itoa(userManager.GetUserCount()))
-	promptBytes = replaceMenuATCode(promptBytes, "U", strconv.Itoa(e.SessionRegistry.ActiveCount()))
-	substitutedPrompt = string(promptBytes)
-
-	processedPrompt, err := e.processFileIncludes(substitutedPrompt, 0) // Pass 'e'
-	if err != nil {
-		slog.Error("failed processing file includes in prompt", "menu", currentMenuName, "error", err)
-
-		// Use RootAssetsPath for global assets if needed, or MenuSetPath for set-specific
-		// pausePrompt := e.LoadedStrings.PauseString // This comes from global strings
-		// ... (rest of pause logic) ...
-		return err // Use original error if includes fail
-	}
-
-	// 2b. Expand @RR@ after file includes so %%file.ans%% content is also processed.
 	rumorLevel := 1 // default MinLevel when no user context
 	if currentUser != nil {
 		rumorLevel = currentUser.AccessLevel
 	}
-	processedPromptBytes := expandRandomRumorATCode([]byte(processedPrompt), e.RootConfigPath, rumorLevel)
-
-	// 3. Process pipe codes in the final string (includes/placeholders already processed)
-	rawPromptBytes := ansi.ReplacePipeCodes(processedPromptBytes)
+	rawPromptBytes := e.renderPromptText(promptString, placeholders,
+		userManager.GetUserCount(), e.SessionRegistry.ActiveCount(), rumorLevel)
 
 	// 4. Process character encoding based on outputMode (Reverted to manual loop)
 	var finalBuf bytes.Buffer
@@ -468,7 +430,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 	}
 
 	// 5. Write the final processed bytes using the terminal's standard Write (Reverted)
-	err = terminalio.WriteProcessedBytes(terminal, finalBuf.Bytes(), outputMode)
+	err := terminalio.WriteProcessedBytes(terminal, finalBuf.Bytes(), outputMode)
 	if err != nil {
 		slog.Error("failed writing processed prompt", "menu", currentMenuName, "error", err)
 		return err
@@ -481,18 +443,67 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 // renders don't recompile it on every call and recursion level.
 var includeTagRe = regexp.MustCompile(`%%[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+%%`)
 
+// renderPromptText turns a raw prompt into the bytes to write, applying every
+// expansion in the order they must happen.
+//
+// Extracted from displayPrompt so the ordering can be tested directly: it is
+// load-bearing and fails quietly when wrong. Includes used to run last, which
+// meant nothing inside an included file was ever expanded and the markup
+// reached the screen verbatim.
+//
+// The order is:
+//
+//  1. %%file.ans%% includes, so included content is treated exactly like text
+//     written inline. First rather than last for safety too: a placeholder
+//     whose value happens to contain an include tag cannot pull in a file,
+//     and |GL and |UN are user-settable.
+//  2. |{...|} optional groups, while the placeholder tokens are still present
+//     to test for emptiness.
+//  3. |XX placeholders, longest first so |CAN is not eaten by |CA.
+//  4. @CODE@ AT-codes.
+//  5. @RR@ random rumor.
+//  6. Pipe colour codes, once everything else has resolved.
+func (e *MenuExecutor) renderPromptText(prompt string, placeholders map[string]string,
+	userCount, activeCount, rumorLevel int) []byte {
+
+	prompt = e.processFileIncludes(prompt, 0)
+	prompt = expandOptionalGroups(prompt, placeholders)
+
+	// Longest key first, so |CAN is matched before |CA. The ordering is shared
+	// with optional-group scanning rather than repeated here: the two have to
+	// agree on how prefix collisions resolve, and keeping one copy is what
+	// stops them drifting apart.
+	replacementPairs := make([]string, 0, len(placeholders)*2)
+	for _, key := range placeholderKeysLongestFirst(placeholders) {
+		replacementPairs = append(replacementPairs, key, placeholders[key])
+	}
+	prompt = strings.NewReplacer(replacementPairs...).Replace(prompt)
+
+	out := replaceMenuATCode([]byte(prompt), "UC", strconv.Itoa(userCount))
+	out = replaceMenuATCode(out, "U", strconv.Itoa(activeCount))
+	out = expandRandomRumorATCode(out, e.RootConfigPath, rumorLevel)
+
+	return ansi.ReplacePipeCodes(out)
+}
+
+// maxIncludeRounds bounds how many times processFileIncludes will expand.
+//
+// depth counts rounds already completed, so the bound is exclusive: rounds 0
+// through maxIncludeRounds-1 run. Named for what it counts, because "maxDepth"
+// with a `>` test read as one lower than it actually allowed. The value is
+// unchanged from that version -- an include nested this far is already a
+// mistake, and the cap exists to stop a cycle rather than to be a useful limit.
+const maxIncludeRounds = 6
+
 // processFileIncludes recursively replaces %%filename.ans tags with file content.
 // It now looks for included files within the MENU SET's ansi directory.
-func (e *MenuExecutor) processFileIncludes(prompt string, depth int) (string, error) {
-	const maxDepth = 5 // Limit recursion depth
-	if depth > maxDepth {
-		slog.Warn("exceeded maximum file inclusion depth, stopping processing", "maxDepth", maxDepth)
-		return prompt, nil
+func (e *MenuExecutor) processFileIncludes(prompt string, depth int) string {
+	if depth >= maxIncludeRounds {
+		slog.Warn("exceeded maximum file inclusion rounds, stopping processing", "maxRounds", maxIncludeRounds)
+		return prompt
 	}
 
-	processedAny := false
 	result := includeTagRe.ReplaceAllStringFunc(prompt, func(match string) string {
-		processedAny = true
 		// match is "%%name.ext%%"; strip the delimiters instead of re-matching.
 		fileName := strings.TrimSuffix(strings.TrimPrefix(match, "%%"), "%%")
 		// Look for included file in MenuSetPath/ansi
@@ -507,9 +518,14 @@ func (e *MenuExecutor) processFileIncludes(prompt string, depth int) (string, er
 		return string(data)
 	})
 
-	if processedAny {
+	// Recurse on what is left to do, not on what was just done. Recursing
+	// because this round expanded something costs a wasted scan on every
+	// prompt with includes, and worse, a legitimate nest exactly at the cap
+	// would expand its last tag and then recurse once more purely to trip the
+	// limit -- logging "exceeded maximum" about a file set that was fine.
+	if includeTagRe.MatchString(result) {
 		return e.processFileIncludes(result, depth+1)
 	}
 
-	return result, nil
+	return result
 }

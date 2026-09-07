@@ -43,10 +43,7 @@ func TestProcessFileIncludes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := e.processFileIncludes(tt.prompt, 0)
-			if err != nil {
-				t.Fatalf("processFileIncludes: %v", err)
-			}
+			got := e.processFileIncludes(tt.prompt, 0)
 			if got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
@@ -54,10 +51,7 @@ func TestProcessFileIncludes(t *testing.T) {
 	}
 
 	t.Run("self-referential include stops at depth cap", func(t *testing.T) {
-		got, err := e.processFileIncludes("%%loop.ans%%", 0)
-		if err != nil {
-			t.Fatalf("processFileIncludes: %v", err)
-		}
+		got := e.processFileIncludes("%%loop.ans%%", 0)
 		// Must terminate; the unresolved tag from the final depth remains.
 		if !strings.Contains(got, "%%loop.ans%%") {
 			t.Errorf("expected unresolved tag after depth cap, got %q", got)
