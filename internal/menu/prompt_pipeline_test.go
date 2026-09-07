@@ -1,6 +1,9 @@
 package menu
 
 import (
+	"bytes"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,5 +141,35 @@ func TestSelfIncludingFileTerminates(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("a self-including file did not terminate")
+	}
+}
+
+// A legitimate chain nested right up to the cap must expand fully and quietly.
+// Recursing because a round did work, rather than because work remains, made
+// the last expansion recurse once more purely to trip the limit -- so a valid
+// menu set logged "exceeded maximum" and looked broken.
+func TestNestingExactlyAtTheCapExpandsWithoutWarning(t *testing.T) {
+	files := map[string]string{}
+	for i := 1; i < maxIncludeRounds; i++ {
+		files[fmt.Sprintf("n%d.ans", i)] = fmt.Sprintf("%%%%n%d.ans%%%%", i+1)
+	}
+	files[fmt.Sprintf("n%d.ans", maxIncludeRounds)] = "BOTTOM"
+	e := promptExecutor(t, files)
+
+	var logged bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(restore)
+
+	got := visibleText(e.renderPromptText("%%n1.ans%%", nil, 0, 0, 1))
+
+	if !strings.Contains(got, "BOTTOM") {
+		t.Errorf("a chain nested to the cap did not expand fully: %q", got)
+	}
+	if strings.Contains(got, "%%") {
+		t.Errorf("an include tag survived: %q", got)
+	}
+	if strings.Contains(logged.String(), "exceeded maximum") {
+		t.Errorf("a valid nest warned about the cap: %s", logged.String())
 	}
 }

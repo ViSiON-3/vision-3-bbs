@@ -499,13 +499,11 @@ const maxIncludeRounds = 6
 // It now looks for included files within the MENU SET's ansi directory.
 func (e *MenuExecutor) processFileIncludes(prompt string, depth int) string {
 	if depth >= maxIncludeRounds {
-		slog.Warn("exceeded maximum file inclusion depth, stopping processing", "maxRounds", maxIncludeRounds)
+		slog.Warn("exceeded maximum file inclusion rounds, stopping processing", "maxRounds", maxIncludeRounds)
 		return prompt
 	}
 
-	processedAny := false
 	result := includeTagRe.ReplaceAllStringFunc(prompt, func(match string) string {
-		processedAny = true
 		// match is "%%name.ext%%"; strip the delimiters instead of re-matching.
 		fileName := strings.TrimSuffix(strings.TrimPrefix(match, "%%"), "%%")
 		// Look for included file in MenuSetPath/ansi
@@ -520,7 +518,12 @@ func (e *MenuExecutor) processFileIncludes(prompt string, depth int) string {
 		return string(data)
 	})
 
-	if processedAny {
+	// Recurse on what is left to do, not on what was just done. Recursing
+	// because this round expanded something costs a wasted scan on every
+	// prompt with includes, and worse, a legitimate nest exactly at the cap
+	// would expand its last tag and then recurse once more purely to trip the
+	// limit -- logging "exceeded maximum" about a file set that was fine.
+	if includeTagRe.MatchString(result) {
 		return e.processFileIncludes(result, depth+1)
 	}
 
