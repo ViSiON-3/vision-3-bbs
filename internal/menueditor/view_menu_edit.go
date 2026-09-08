@@ -6,7 +6,6 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
-	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
 // viewMenuEditScreen renders the per-menu field editor.
@@ -128,15 +127,13 @@ func (m Model) renderMenuField(fieldIdx int, f fieldDef, d *MenuData, boxW int) 
 
 	// Actively editing this field
 	if isActive && m.mode == modeMenuEditField {
-		// Measure what the widget actually renders rather than assuming it
-		// occupies textInput.Width cells: it appends a cursor cell after the
-		// text, so assuming Width overflowed the box by exactly one column.
-		inputW := uitext.ApproximateVisibleLen(m.textInput.View())
-		if inputW > maxW {
-			inputW = maxW
-		}
+		// Bound the widget's own output, not just the padding around it. It
+		// appends a cursor cell after the text, so a value that fills the
+		// field renders Width+1 cells; clamping only the padding leaves the
+		// oversized view to overrun the box.
+		view, inputW := tuiart.FitInput(m.textInput.View(), boxW-lpad-labelLen)
 		fillW := max(0, boxW-lpad-labelLen-inputW)
-		return leftPad + fieldLabelStyle.Render(label) + m.textInput.View() +
+		return leftPad + fieldLabelStyle.Render(label) + view +
 			fieldDisplayStyle.Render(strings.Repeat(" ", fillW))
 	}
 
