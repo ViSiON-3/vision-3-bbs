@@ -135,20 +135,22 @@ Configure it in `configs/ftn.json` (separate from the main `config.json`):
 ```json
 {
   "dupe_db_path": "data/ftn/dupes.json",
+  "inbound_path": "data/ftn/in",
+  "outbound_path": "data/ftn/temp_out",
+  "binkd_outbound_path": "data/ftn/out",
+  "temp_path": "data/ftn/temp_in",
   "networks": {
     "fsxnet": {
-      "enabled": true,
+      "internal_tosser_enabled": true,
       "own_address": "21:3/110",
-      "inbound_path": "data/ftn/fsxnet/inbound",
-      "outbound_path": "data/ftn/fsxnet/outbound",
-      "temp_path": "data/ftn/fsxnet/temp",
       "origin": "My BBS - bbs.example.com",
       "links": [
         {
           "address": "21:1/100",
-          "password": "secret",
+          "packet_password": "secret",
           "name": "FSXNet Hub",
-          "echo_areas": ["FSX_GEN", "FSX_BOT", "FSX_MYS"]
+          "hostname": "hub.example.com",
+          "port": 24554
         }
       ]
     }
@@ -165,12 +167,12 @@ Configure it in `configs/ftn.json` (separate from the main `config.json`):
 
 Each network key (e.g., `"fsxnet"`) contains:
 
-- `enabled` — Set to `true` to activate the tosser for this network
+- `internal_tosser_enabled` — Set to `true` to enable `v3mail` processing for this network
 - `own_address` — Your FTN address on this network (e.g., `"21:3/110"`)
-- `inbound_path` — Directory for incoming .PKT files
-- `outbound_path` — Directory for outgoing .PKT files
-- `temp_path` — Temp directory for failed packets
 - `origin` — Optional origin line text for new echomail posts (empty = the board name). The address is appended automatically.
+
+The inbound, outbound, binkd outbound, and temporary paths are top-level
+settings because they are shared by all configured networks.
 
 Configure hub polling under **Events**; the FTN wizard creates an
 `echomail_poll_<network>` event with a cron schedule. See
@@ -183,9 +185,16 @@ The tearline is not configurable: FTS-0004 reserves it for the software that pro
 Each link defines a connected FTN node:
 
 - `address` — Node's FTN address
-- `password` — Packet password (shared secret)
+- `packet_password` — Packet password (shared secret)
+- `session_password` — Optional BinkP session password
+- `areafix_password` — Optional AreaFix password
 - `name` — Human-readable label
-- `echo_areas` — List of echo tags to route to this link (use `"*"` for all)
+- `hostname` — Hub hostname used to generate the binkd node configuration
+- `port` — Hub BinkP port (defaults to 24554)
+
+Echo area routing is configured through `message_areas.json`: set each area's
+`network` field to the network key and use the area editor to manage the
+subscriptions. It is not stored on individual links.
 
 ### Message Area Network Field
 
