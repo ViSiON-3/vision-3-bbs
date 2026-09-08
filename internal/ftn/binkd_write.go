@@ -2,6 +2,7 @@ package ftn
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"os"
 	"path/filepath"
 	"sort"
@@ -176,30 +177,14 @@ func rewriteBinkdConf(out *strings.Builder, content string, cfg BinkdConfig, out
 // writeFileAtomic creates the parent directory if needed and writes content via
 // a temp file + rename, so callers never see a partial/empty binkd.conf and
 // fresh installs (where data/ftn doesn't exist yet) don't fail.
+//
+// The replace itself is internal/atomicfile's, which retries on Windows while
+// another handle holds the destination open.
 func writeFileAtomic(path, content string, perm os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating dir for %s: %w", path, err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp.*")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.WriteString(content); err != nil {
-		_ = tmp.Close()        // cleanup on error path
-		_ = os.Remove(tmpName) // cleanup on error path
-		return fmt.Errorf("writing %s: %w", path, err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName) // cleanup on error path
-		return fmt.Errorf("closing %s: %w", path, err)
-	}
-	if err := os.Chmod(tmpName, perm); err != nil {
-		_ = os.Remove(tmpName) // cleanup on error path
-		return fmt.Errorf("chmod %s: %w", path, err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName) // cleanup on error path
+	if err := atomicfile.WriteFile(path, []byte(content), perm); err != nil {
 		return fmt.Errorf("installing %s: %w", path, err)
 	}
 	return nil

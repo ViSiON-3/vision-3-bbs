@@ -3,6 +3,7 @@ package keystore
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -230,7 +231,11 @@ func TestRecoverToFile_Permissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat failed: %v", err)
 	}
-	if info.Mode().Perm() != 0600 {
+	// Windows has no POSIX mode bits: os.Stat reports 0666 for every ordinary
+	// file, so this asserts nothing there. The restriction still matters on
+	// unix, where these files hold secrets, so the check stays rather than
+	// being softened for both platforms.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Errorf("expected 0600, got %o", info.Mode().Perm())
 	}
 }

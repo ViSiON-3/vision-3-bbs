@@ -2,6 +2,7 @@ package ziplab
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"io"
 	"log/slog"
 	"os"
@@ -186,7 +187,7 @@ func (p *Processor) handleScanFailure(archivePath string) {
 				return
 			}
 			dest := filepath.Join(p.config.QuarantinePath, filepath.Base(archivePath))
-			if err := os.Rename(archivePath, dest); err != nil {
+			if err := atomicfile.Replace(archivePath, dest); err != nil {
 				slog.Error("failed to quarantine file", "path", archivePath, "error", err)
 				if rmErr := os.Remove(archivePath); rmErr != nil {
 					slog.Error("failed to remove infected file after quarantine failure", "path", archivePath, "error", rmErr)

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"io"
 	"os"
 	"strings"
@@ -296,13 +297,15 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 	_ = b.jdtFile.Close()
 	_ = b.jdxFile.Close()
 
-	// Atomic rename
+	// Atomic rename. Via atomicfile so that on Windows a reader holding one of
+	// the three files open only delays the swap rather than failing the pack
+	// and leaving the base closed.
 	for _, pair := range [][2]string{
 		{tmpJhr, b.BasePath + ".jhr"},
 		{tmpJdt, b.BasePath + ".jdt"},
 		{tmpJdx, b.BasePath + ".jdx"},
 	} {
-		if err := os.Rename(pair[0], pair[1]); err != nil {
+		if err := atomicfile.Replace(pair[0], pair[1]); err != nil {
 			// Try to clean up remaining temp files
 			_ = os.Remove(tmpJhr) // cleanup on error path
 			_ = os.Remove(tmpJdt) // cleanup on error path

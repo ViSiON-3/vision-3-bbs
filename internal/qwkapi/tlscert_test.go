@@ -3,6 +3,7 @@ package qwkapi
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -24,7 +25,11 @@ func TestLoadOrCreateCert_GeneratesAndReloads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("key file missing: %v", err)
 	}
-	if keyInfo.Mode().Perm() != 0o600 {
+	// Windows has no POSIX mode bits: os.Stat reports 0666 for every ordinary
+	// file, so this asserts nothing there. The restriction still matters on
+	// unix, where these files hold secrets, so the check stays rather than
+	// being softened for both platforms.
+	if runtime.GOOS != "windows" && keyInfo.Mode().Perm() != 0o600 {
 		t.Errorf("key mode = %o, want 600", keyInfo.Mode().Perm())
 	}
 

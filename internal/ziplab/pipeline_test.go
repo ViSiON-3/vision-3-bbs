@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -119,7 +120,14 @@ func TestRunPipeline_StepTimingRecorded(t *testing.T) {
 
 	result := p.RunPipeline(zipPath, nil)
 	for _, sr := range result.StepResults {
-		if sr.Elapsed <= 0 {
+		if sr.Elapsed < 0 {
+			t.Errorf("step %d recorded a negative elapsed time: %v", sr.Step, sr.Elapsed)
+		}
+		// A step faster than one tick of the clock measures zero. Windows'
+		// timer granularity is around 15ms, which a no-op step comfortably
+		// beats, so require a positive reading only where the clock is fine
+		// enough to guarantee one.
+		if runtime.GOOS != "windows" && sr.Elapsed <= 0 {
 			t.Errorf("step %d should have positive elapsed time", sr.Step)
 		}
 	}

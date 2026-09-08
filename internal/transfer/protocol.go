@@ -231,7 +231,11 @@ func expandArgs(template []string, filePaths []string, targetDir string) ([]stri
 	// Some external programs (e.g. Synchronet sexyz) concatenate the directory
 	// path + filename without inserting a separator, producing a mangled path
 	// like "/tmp/.incoming-123MYFILE.ZIP" instead of "/tmp/.incoming-123/MYFILE.ZIP".
-	if targetDir != "" && !strings.HasSuffix(targetDir, string(filepath.Separator)) {
+	//
+	// Test for either separator rather than the native one: Windows accepts
+	// both, so a targetDir that already ends in "/" is terminated, and
+	// appending "\\" to it would produce "C:/upload/tmp/\\".
+	if targetDir != "" && !os.IsPathSeparator(targetDir[len(targetDir)-1]) {
 		targetDir += string(filepath.Separator)
 	}
 

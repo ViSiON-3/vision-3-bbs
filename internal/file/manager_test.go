@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -67,13 +68,24 @@ func TestNewFileManager_ValidAreas(t *testing.T) {
 	}
 }
 
+// absAreaPath is absolute on whichever platform is running. "/etc" is not
+// absolute on Windows -- absolute there needs a drive or a UNC share -- so it
+// would be joined to the files root and accepted, and the case would test
+// nothing.
+var absAreaPath = func() string {
+	if runtime.GOOS == "windows" {
+		return `C:\Windows`
+	}
+	return "/etc"
+}()
+
 func TestNewFileManager_SkipsInvalidAreas(t *testing.T) {
 	areas := []FileArea{
-		{ID: 0, Tag: "BAD", Name: "Zero ID", Path: "bad"},          // ID <= 0
-		{ID: 1, Tag: "", Name: "Empty Tag", Path: "empty"},         // empty tag
-		{ID: 2, Tag: "ABS", Name: "Absolute Path", Path: "/etc"},   // absolute path
-		{ID: 3, Tag: "TRAV", Name: "Traversal", Path: "../escape"}, // path traversal
-		{ID: 4, Tag: "GOOD", Name: "Valid Area", Path: "good"},     // valid
+		{ID: 0, Tag: "BAD", Name: "Zero ID", Path: "bad"},             // ID <= 0
+		{ID: 1, Tag: "", Name: "Empty Tag", Path: "empty"},            // empty tag
+		{ID: 2, Tag: "ABS", Name: "Absolute Path", Path: absAreaPath}, // absolute path
+		{ID: 3, Tag: "TRAV", Name: "Traversal", Path: "../escape"},    // path traversal
+		{ID: 4, Tag: "GOOD", Name: "Valid Area", Path: "good"},        // valid
 	}
 	fm := setupTestFileManager(t, areas)
 
