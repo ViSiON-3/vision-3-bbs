@@ -21,7 +21,6 @@ func configuredModel() Model {
 					"fsxnet": {
 						InternalTosserEnabled: true,
 						OwnAddress:            "21:4/158",
-						PollSeconds:           900,
 						Origin:                "Custom Origin Line",
 						Links: []config.FTNLinkConfig{{
 							Address:         "21:1/100",
@@ -117,9 +116,6 @@ func TestConfirmFTNWizardEditPreservesUnaskedSettings(t *testing.T) {
 	m, _ = m.confirmFTNWizard()
 
 	net := m.configs.FTN.Networks["fsxnet"]
-	if net.PollSeconds != 900 {
-		t.Errorf("PollSeconds = %d, want 900 preserved", net.PollSeconds)
-	}
 	if net.Origin != "Custom Origin Line" {
 		t.Errorf("Origin = %q, want preserved", net.Origin)
 	}

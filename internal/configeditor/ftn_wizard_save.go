@@ -72,8 +72,8 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 	}
 
 	if existing, ok := m.configs.FTN.Networks[netKey]; ok && editing {
-		// Keep the settings this wizard does not ask about. Tosser, poll
-		// interval and origin are all editable under Echomail Networks, and
+		// Keep the settings this wizard does not ask about. Tosser enable
+		// and origin are editable under Echomail Networks, and
 		// rewriting them with the wizard's create-time defaults would throw
 		// away whatever the sysop set there.
 		existing.OwnAddress = w.ownAddress
@@ -93,7 +93,6 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		m.configs.FTN.Networks[netKey] = config.FTNNetworkConfig{
 			InternalTosserEnabled: true,
 			OwnAddress:            w.ownAddress,
-			PollSeconds:           300,
 			// Origin left empty: echomail then falls back to the board name.
 			// The tearline is not configurable — the software stamps it.
 			Links: []config.FTNLinkConfig{link},

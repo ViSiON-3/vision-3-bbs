@@ -727,9 +727,6 @@ func cmdFTNSetup(args []string) {
 	if ftn.TempPath == "" {
 		ftn.TempPath = "data/ftn/temp_in"
 	}
-	if netCfg.PollSeconds == 0 {
-		netCfg.PollSeconds = 300
-	}
 
 	if existingLinkIdx < 0 {
 		// Add link if not already present; echo area routing is managed via Message Areas.

@@ -142,7 +142,6 @@ Configure it in `configs/ftn.json` (separate from the main `config.json`):
       "inbound_path": "data/ftn/fsxnet/inbound",
       "outbound_path": "data/ftn/fsxnet/outbound",
       "temp_path": "data/ftn/fsxnet/temp",
-      "poll_interval_seconds": 300,
       "origin": "My BBS - bbs.example.com",
       "links": [
         {
@@ -171,8 +170,11 @@ Each network key (e.g., `"fsxnet"`) contains:
 - `inbound_path` — Directory for incoming .PKT files
 - `outbound_path` — Directory for outgoing .PKT files
 - `temp_path` — Temp directory for failed packets
-- `poll_interval_seconds` — How often to scan for packets (0 = manual only)
 - `origin` — Optional origin line text for new echomail posts (empty = the board name). The address is appended automatically.
+
+Configure hub polling under **Events**; the FTN wizard creates an
+`echomail_poll_<network>` event with a cron schedule. See
+[FTN mail polling](../advanced/event-scheduler.md#ftn-mail-polling-binkd).
 
 The tearline is not configurable: FTS-0004 reserves it for the software that produced the message, so ViSiON/3 always stamps `--- ViSiON/3 vX.Y.Z/Platform`.
 

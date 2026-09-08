@@ -179,6 +179,13 @@ cd /home/bbs/git/vision3
 
 ### FTN Mail Polling (Binkd)
 
+**Events** is where you configure scheduled FTN hub polling. The FTN wizard
+creates an enabled `echomail_poll_<network>` event with a `*/15 * * * *` schedule.
+Edit that event's schedule for a different cadence or polling window, or disable
+it to stop scheduled hub polls. The former **Poll Seconds** field in Echomail
+Networks did not control hub polling and has been removed; legacy
+`poll_interval_seconds` values in `ftn.json` are ignored.
+
 > **Note:** If the integrated binkd mailer is enabled (Server Setup → Binkd
 > Mailer), the scan/toss/ftn-pack scheduler events above **should be
 > disabled**. The integrated mailer already runs its own export loop against

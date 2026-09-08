@@ -171,10 +171,10 @@ Three behaviours are worth knowing before you rely on it:
 - **The network name cannot be changed.** Renaming would have to migrate the
   conference, every area tag and every message base path on disk. Add a new
   network instead.
-- **Settings the wizard does not ask about are left alone.** Tosser enable, poll
-  interval and origin belong to **Echomail Networks**, and an edit here will
-  not reset them. Links other than the hub — downstream systems you feed — are
-  likewise untouched.
+- **Settings the wizard does not ask about are left alone.** Tosser enable and
+  origin belong to **Echomail Networks**; hub poll schedules belong to **Events**.
+  An edit here will not reset them. Links other than the hub — downstream
+  systems you feed — are likewise untouched.
 
 Changing **Your Address** also restamps the origin address on every message area
 belonging to that network, so outbound mail matches the new address.
@@ -626,8 +626,20 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
 | ------------------------- | --------------------------------------------------- |
 | `internal_tosser_enabled` | Set `true` to enable `v3mail` for this network      |
 | `own_address`             | Your FTN address (e.g., `21:4/158.1`)               |
-| `poll_interval_seconds`   | Auto-poll interval; `0` = manual only               |
 | `origin`                  | Origin line text (empty = board name)               |
+
+Hub polling is controlled by the per-network `echomail_poll_<network>` event
+under **Events**. The wizard creates it with a 15-minute cron schedule; edit
+that schedule to change when the hub is contacted, or disable the event to
+stop scheduled hub polls. See
+[FTN mail polling](../advanced/event-scheduler.md#ftn-mail-polling-binkd).
+
+The former **Poll Seconds** setting (`poll_interval_seconds`) was unused by the
+BBS and has been removed. Older `ftn.json` files still load; that field is ignored
+and omitted the next time the configuration is saved. Existing event schedules
+are unaffected. Inbound processing still runs through binkd's receive hook, and
+the integrated mailer's `binkd.export_interval_seconds` still controls outbound
+scan/pack frequency; neither is a hub poll schedule.
 
 **Per-link fields (`networks.<key>.links[]`):**
 

@@ -126,20 +126,7 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			Set: func(val string) error { netPtr.InternalTosserEnabled = uitext.YNToBool(val); save(); return nil },
 		},
 		{
-			Label: "Poll Seconds", Help: "Seconds between inbound directory polls", Type: ftInteger, Col: 3, Row: 4, Width: 6, Min: 0, Max: 999999,
-			Get: func() string { return strconv.Itoa(netPtr.PollSeconds) },
-			Set: func(val string) error {
-				n, err := strconv.Atoi(val)
-				if err != nil {
-					return err
-				}
-				netPtr.PollSeconds = n
-				save()
-				return nil
-			},
-		},
-		{
-			Label: "Origin", Help: "Origin line text for outgoing echomail (empty = board name)", Type: ftString, Col: 3, Row: 5, Width: 40,
+			Label: "Origin", Help: "Origin line text for outgoing echomail (empty = board name)", Type: ftString, Col: 3, Row: 4, Width: 40,
 			Get: func() string { return netPtr.Origin },
 			Set: func(val string) error { netPtr.Origin = val; save(); return nil },
 		},

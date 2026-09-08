@@ -85,7 +85,7 @@ func (m Model) viewFTNWizardPicker() string {
 			tosser = "on"
 		}
 		lb.row(editInfoValueStyle.Render(padRight(
-			fmt.Sprintf("  Tosser: %s   Poll: %ds", tosser, net.PollSeconds), boxW)))
+			fmt.Sprintf("  Tosser: %s   Hub polling: see Events", tosser), boxW)))
 	}
 
 	lb.bottomBorder()

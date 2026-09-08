@@ -354,7 +354,6 @@ type DupeDB struct { /* Message ID duplicate tracker */ }
 func New(networkName string, cfg networkConfig, globalCfg config.FTNConfig,
     dupeDB *DupeDB, msgMgr *message.MessageManager) *Tosser
 func NewDupeDBFromPath(dupeDBPath string) (*DupeDB, error)
-func (t *Tosser) Start(ctx context.Context)
 func (t *Tosser) RunOnce() TossResult
 func (t *Tosser) ProcessInbound() error
 func (t *Tosser) ScanAndExport() error
@@ -640,7 +639,6 @@ type FTNConfig struct {
 type FTNNetworkConfig struct {
     InternalTosserEnabled bool
     OwnAddress            string
-    PollSeconds           int
     Origin                string
     Links                 []FTNLinkConfig
 }
