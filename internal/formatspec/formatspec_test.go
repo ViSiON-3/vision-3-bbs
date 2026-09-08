@@ -160,7 +160,12 @@ func TestCompatible(t *testing.T) {
 		{"zero padding added", "%d", "%03d", false},
 		{"reordered by index", "%s from %s", "%[2]s to %[1]s", false},
 		{"widened to any", "%d", "%v", false},
-		{"narrowed from any", "%v", "%d", false},
+		// %v is supplied an error here; %s happens to render one, but the
+		// validator cannot know the type, and %d prints &{%!d(...)}. Only %v is
+		// provably safe, so narrowing away from it is reported.
+		{"narrowed from any to int", "%v", "%d", true},
+		{"narrowed from any to string", "%v", "%s", true},
+		{"any kept as any", "%v", "%v", false},
 		{"literal percent added", "%d done", "%d%% done", false},
 		{"verb dropped", "Node %d: %s", "Node: %s", true},
 		{"verb added", "%s", "%s %s", true},
@@ -206,6 +211,58 @@ func TestCompatibleMessagesReadInTheRightDirection(t *testing.T) {
 	}
 	if got, want := err.Error(), "argument 1 is used as integer but string is supplied"; got != want {
 		t.Errorf("type message = %q, want %q", got, want)
+	}
+
+	// Narrowing away from a supplied %v gets its own wording, because the fix
+	// is to restore %v rather than to match some other type.
+	err = Compatible(mustParse("%d"), mustParse("%v"))
+	if err == nil {
+		t.Fatal("narrowing from a supplied any-kind verb was accepted")
+	}
+	if got, want := err.Error(), "argument 1 is used as integer, but the supplied "+
+		"value has no fixed type; use %v, which renders any value"; got != want {
+		t.Errorf("narrowing message = %q, want %q", got, want)
+	}
+}
+
+// TestNarrowingFromAnyIsUnsafe is why the relation is not symmetric. The three
+// shipped %v strings are handed an error; rendering one with %d does not print
+// the message, it prints &{%!d(string=boom)}.
+func TestNarrowingFromAnyIsUnsafe(t *testing.T) {
+	supplied := Spec{Args: []ArgKind{KindAny}}
+
+	if (Spec{Args: []ArgKind{KindAny}}).Args[0].Accepts(KindAny) != true {
+		t.Error("an any-kind verb must still accept a value of unknown type")
+	}
+	for _, k := range []ArgKind{KindString, KindInt, KindFloat, KindBool} {
+		if err := Compatible(Spec{Args: []ArgKind{k}}, supplied); err == nil {
+			t.Errorf("narrowing a supplied any to %s was accepted", k)
+		}
+	}
+}
+
+// TestMergeKindsIsSymmetric covers the other relation: two directives binding
+// the same argument are two views of one value, so neither supplies the other.
+func TestMergeKindsIsSymmetric(t *testing.T) {
+	// %[1]v %[1]d is fine: the argument is an integer, printed two ways.
+	spec, err := Parse("%[1]v and %[1]d")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(spec.Args) != 1 || spec.Args[0] != KindInt {
+		t.Errorf("args = %v, want one integer", spec.Args)
+	}
+	// Order must not matter.
+	spec, err = Parse("%[1]d and %[1]v")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(spec.Args) != 1 || spec.Args[0] != KindInt {
+		t.Errorf("args = %v, want one integer", spec.Args)
+	}
+	// Genuinely conflicting uses are still refused.
+	if _, err := Parse("%[1]s and %[1]d"); err == nil {
+		t.Error("a string/integer conflict was accepted")
 	}
 }
 

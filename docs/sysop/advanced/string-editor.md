@@ -332,7 +332,7 @@ cmd/strings/main.go
        └─ stores shippedDefaults      (F4 restore source)
 ```
 
-- `loadShippedDefaults()` in `cmd/strings/main.go` attempts to read the template file from two locations: first relative to the working directory, then relative to the executable path. This allows the editor to work both during development (`cd /opt/vision3 && ./strings`) and from an installed location.
+- `loadShippedDefaults()` in `cmd/strings/main.go` tries three on-disk locations in order: relative to the working directory (`cd /opt/vision3 && ./strings` during development), next to the executable, and one level up from it — the last covers an installed layout where the binary lives in `bin/` and the templates sit beside it in the install root. If you are diagnosing why `F4` offers an unexpected default on an installed system, those are the three files to check, in that order.
 - An on-disk template wins so a distribution can ship adjusted defaults, but the templates directory is not present in every installation, so `templates/configs/embed.go` embeds the same file into the binary as a guaranteed fallback. There is one canonical copy: the Go file sits alongside the JSON rather than the JSON being duplicated into a package.
 - The template file (`templates/configs/strings.json`) must be kept in sync with `configs/strings.json` when new string keys are added to the system.
 

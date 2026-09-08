@@ -167,28 +167,29 @@ func (m Model) View() string {
 	return b.String()
 }
 
-// panelWidth returns the width of the DOS list panel. It is 80 columns on a
-// minimum terminal, widens on a larger one while keeping artMargin columns of
-// backdrop on each side, and stops at maxPanelWidth.
-func (m Model) panelWidth() int {
-	w := m.width - 2*artMargin
+// panelWidth returns the width of the DOS list panel for this terminal.
+func (m Model) panelWidth() int { return panelWidthFor(m.width) }
+
+// panelWidthFor is 80 columns on a minimum terminal, widens on a larger one
+// while keeping artMargin columns of background on each side, and stops at
+// maxPanelWidth.
+func panelWidthFor(width int) int {
+	w := width - 2*artMargin
 	if w > maxPanelWidth {
 		w = maxPanelWidth
 	}
 	if w < minWidth {
 		w = minWidth
 	}
-	if w > m.width {
-		w = m.width
+	if w > width {
+		w = width
 	}
 	return w
 }
 
 // valueWidth returns the terminal cells available for a value preview, which is
 // everything in the panel to the right of the label column.
-func (m Model) valueWidth() int {
-	return max(10, m.panelWidth()-labelCol-markerWidth)
-}
+func (m Model) valueWidth() int { return valueWidthFor(m.width) }
 
 // renderStatusBar creates the panel's status bar, following the Pascal
 // original's SetColor/Write sequence:

@@ -63,18 +63,51 @@ func (k ArgKind) String() string {
 	return "unknown"
 }
 
-// Accepts reports whether a value of kind got satisfies a directive wanting k.
-func (k ArgKind) Accepts(got ArgKind) bool {
-	if k == got || k == KindAny || got == KindAny {
+// Accepts reports whether a directive of kind k can safely render a supplied
+// value of kind supplied.
+//
+// The relation is deliberately not symmetric. %v renders any value, so a
+// directive of KindAny accepts anything. The reverse does not hold: when the
+// supplied kind is KindAny the value's type is unknown, and every concrete verb
+// can fail on it -- Sprintf("%d", err) prints &{%!d(string=boom)} rather than
+// the error. Only %v is safe there, so narrowing away from a supplied KindAny
+// is refused.
+func (k ArgKind) Accepts(supplied ArgKind) bool {
+	if k == KindAny {
+		return true
+	}
+	if supplied == KindAny {
+		return false
+	}
+	if k == supplied {
 		return true
 	}
 	switch k {
 	case KindIntOrString:
-		return got == KindInt || got == KindString
+		return supplied == KindInt || supplied == KindString
 	case KindInt, KindString:
-		return got == KindIntOrString
+		return supplied == KindIntOrString
 	}
 	return false
+}
+
+// mergeKinds combines two directives that bind the same argument, returning the
+// more specific kind. Unlike Accepts this is symmetric: neither directive is
+// the supplier, they are two views of one value.
+func mergeKinds(a, b ArgKind) (ArgKind, bool) {
+	switch {
+	case a == b:
+		return a, true
+	case a == KindAny:
+		return b, true
+	case b == KindAny:
+		return a, true
+	case a == KindIntOrString && (b == KindInt || b == KindString):
+		return b, true
+	case b == KindIntOrString && (a == KindInt || a == KindString):
+		return a, true
+	}
+	return a, false
 }
 
 // Spec is the argument signature of a format string: the kind required at each
@@ -115,14 +148,11 @@ func Parse(format string) (Spec, error) {
 		if prev, seen := kinds[pos]; seen {
 			// Two directives on the same argument must agree, or no single
 			// value can satisfy both.
-			switch {
-			case prev.Accepts(kind) && kind.Accepts(prev):
-				if prev == KindAny {
-					kinds[pos] = kind
-				}
-			default:
+			merged, ok := mergeKinds(prev, kind)
+			if !ok {
 				return fmt.Errorf("argument %d is used as both %s and %s", pos, prev, kind)
 			}
+			kinds[pos] = merged
 		} else {
 			kinds[pos] = kind
 		}
@@ -298,11 +328,19 @@ func Compatible(configured, supplied Spec) error {
 	}
 	var problems []string
 	for i := range configured.Args {
-		if !configured.Args[i].Accepts(supplied.Args[i]) {
-			problems = append(problems, fmt.Sprintf(
-				"argument %d is used as %s but %s is supplied",
-				i+1, configured.Args[i], supplied.Args[i]))
+		if configured.Args[i].Accepts(supplied.Args[i]) {
+			continue
 		}
+		if supplied.Args[i] == KindAny {
+			// The call site's value has no known type here, so only %v is safe.
+			problems = append(problems, fmt.Sprintf(
+				"argument %d is used as %s, but the supplied value has no fixed "+
+					"type; use %%v, which renders any value", i+1, configured.Args[i]))
+			continue
+		}
+		problems = append(problems, fmt.Sprintf(
+			"argument %d is used as %s but %s is supplied",
+			i+1, configured.Args[i], supplied.Args[i]))
 	}
 	if len(problems) > 0 {
 		sort.Strings(problems)

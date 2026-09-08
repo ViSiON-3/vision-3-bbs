@@ -290,3 +290,67 @@ func TestFormattedDefaultsParse(t *testing.T) {
 		}
 	}
 }
+
+// TestFallbackOnlyKeysAreCheckable covers a gap in the load-time validation:
+// a key that lives only in config.StringFallbacks, never in the template, had
+// no signature for Validate to compare a sysop's override against, so a
+// malformed value for it reached runtime without a warning.
+func TestFallbackOnlyKeysAreCheckable(t *testing.T) {
+	shipped := shippedDefaults(t)
+
+	// searchResultsHeader is formatted, absent from the template, and covered
+	// only by the fallback table -- exactly the shape that used to slip past.
+	const key = "searchResultsHeader"
+	if _, inTemplate := shipped[key]; inTemplate {
+		t.Skipf("%s is now in the template; pick another fallback-only key", key)
+	}
+	if config.StringFallbacks[key] == "" {
+		t.Fatalf("%s is not in StringFallbacks; the test premise is stale", key)
+	}
+
+	// Start from a healthy install and break exactly one key, so anything
+	// reported is attributable to that edit.
+	values := installValues(t, shipped)
+	values[key] = "|15Search results|07" // the %s dropped
+
+	reportedFor := func(defaults map[string]string) bool {
+		for _, p := range stringformat.Validate(values, config.StringFallbacks, defaults) {
+			if p.Key == key {
+				return true
+			}
+		}
+		return false
+	}
+
+	if reportedFor(shipped) {
+		t.Log("already reported against the template alone; the merge is belt and braces")
+	}
+	if !reportedFor(stringformat.MergeDefaults(config.StringFallbacks, shipped)) {
+		t.Errorf("a malformed override of the fallback-only key %q was not reported", key)
+	}
+}
+
+// TestHealthyInstallReportsNothing checks the validator is silent on a stock
+// configuration, so any warning an operator sees is a real one.
+func TestHealthyInstallReportsNothing(t *testing.T) {
+	shipped := shippedDefaults(t)
+	values := installValues(t, shipped)
+	defaults := stringformat.MergeDefaults(config.StringFallbacks, shipped)
+
+	if problems := stringformat.Validate(values, config.StringFallbacks, defaults); len(problems) > 0 {
+		for _, p := range problems {
+			t.Errorf("stock configuration reports: %v", p)
+		}
+	}
+}
+
+// installValues returns what a freshly installed strings.json holds: the
+// shipped template, which setup.sh copies into configs/.
+func installValues(t *testing.T, shipped map[string]string) map[string]string {
+	t.Helper()
+	values := make(map[string]string, len(shipped))
+	for k, v := range shipped {
+		values[k] = v
+	}
+	return values
+}

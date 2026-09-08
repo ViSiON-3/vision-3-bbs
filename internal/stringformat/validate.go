@@ -134,6 +134,27 @@ func effectiveValue(key string, values, fallbacks map[string]string) string {
 	return fallbacks[key]
 }
 
+// MergeDefaults combines the shipped template with the runtime's fallback table
+// into the signature source Validate compares against.
+//
+// Both are needed. A key added after the template last shipped lives only in
+// the fallback table, and without its signature here Validate would have
+// nothing to compare a sysop's override against and would skip it silently.
+// The template wins where both carry a key, so a distribution can adjust a
+// default without the compiled-in value overriding it.
+func MergeDefaults(fallbacks, shipped map[string]string) map[string]string {
+	merged := make(map[string]string, len(fallbacks)+len(shipped))
+	for k, v := range fallbacks {
+		merged[k] = v
+	}
+	for k, v := range shipped {
+		if v != "" {
+			merged[k] = v
+		}
+	}
+	return merged
+}
+
 // IsFormatted reports whether a key's value is passed to fmt at some call site.
 func IsFormatted(key string) bool {
 	_, ok := formattedKeySet[key]

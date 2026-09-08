@@ -49,9 +49,15 @@ func warnFormatMismatches(data []byte, filePath string) {
 	if err != nil {
 		return // the caller already surfaced any parse failure
 	}
-	defaults, err := configtemplates.StringDefaults()
+	shipped, err := configtemplates.StringDefaults()
 	if err != nil {
+		// The embedded template is unreadable, but the compiled-in fallbacks
+		// still describe the keys they cover, so validate against those rather
+		// than skipping the check entirely.
 		slog.Debug("no embedded defaults to validate strings against", "error", err)
+	}
+	defaults := stringformat.MergeDefaults(StringFallbacks, shipped)
+	if len(defaults) == 0 {
 		return
 	}
 	for _, p := range stringformat.Validate(values, StringFallbacks, defaults) {

@@ -46,6 +46,12 @@ const (
 	maxItemsPerPage = 60
 )
 
+// valueWidthFor returns the cells available for a value preview on a terminal
+// of the given width: everything in the panel right of the label column.
+func valueWidthFor(width int) int {
+	return max(10, panelWidthFor(width)-labelCol-markerWidth)
+}
+
 // pageSizeFor returns the number of list rows a terminal of the given height
 // can show, clamped to the documented minimum and maximum.
 func pageSizeFor(height int) int {
@@ -133,9 +139,11 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	// escaped form of a long string is longer than the string itself.
 	ti.CharLimit = 0
 	// The input is drawn inline in the value column, so it carries no prompt of
-	// its own; Width leaves one cell for the cursor.
+	// its own; Width leaves one cell for the cursor. The first WindowSizeMsg
+	// replaces this, but a key can arrive before it, so the initial value is
+	// the value column at the minimum terminal size rather than a placeholder.
 	ti.Prompt = ""
-	ti.Width = pageSizeFor(minHeight) // replaced by the first WindowSizeMsg
+	ti.Width = valueWidthFor(minWidth) - 1
 
 	si := textinput.New()
 	si.Placeholder = "Search..."
@@ -547,13 +555,7 @@ func (m Model) formatProblem(key, value string) error {
 // formatProblems reports every configured string whose directives no longer
 // match the arguments its call site passes.
 func (m Model) formatProblems() []stringformat.Problem {
-	defaults := make(map[string]string, len(m.shippedDefaults)+len(config.StringFallbacks))
-	for k, v := range config.StringFallbacks {
-		defaults[k] = v
-	}
-	for k, v := range m.shippedDefaults {
-		defaults[k] = v
-	}
+	defaults := stringformat.MergeDefaults(config.StringFallbacks, m.shippedDefaults)
 	return stringformat.Validate(m.values, config.StringFallbacks, defaults)
 }
 
