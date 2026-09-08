@@ -73,6 +73,7 @@ the picture completely. It uses the shared shaded fill instead.
 | `F10` | Save changes and exit |
 | `Esc` | Abort — shows confirmation dialog if unsaved changes |
 | `/` | Search/filter strings by name |
+| `Ctrl-R` | Show or hide reserved placeholder entries |
 
 ### Edit Mode
 
@@ -191,7 +192,9 @@ Runtime placeholder codes like `|MN` (menu name), `|TL` (time left), `|CB` (curr
 }
 ```
 
-Keys prefixed with `_` (e.g., `_extra3`) are reserved placeholders and cannot be edited.
+Keys prefixed with `_` (e.g., `_extra3`) are reserved placeholders and cannot be edited. They are
+hidden from the list by default; `Ctrl-R` shows them. Entry numbers come from the full catalog, so
+they do not shift when reserved entries are hidden — "string 199" always means the same string.
 
 ### Format verbs
 
@@ -212,6 +215,28 @@ write it as `%%`.
 why, rather than showing a mangled banner.
 
 When saving, the editor writes keys in sorted order and omits internal `_`-prefixed keys, producing clean deterministic output.
+
+## Value States
+
+A blank value column does not mean the string is unused. The marker between the label and the value
+says which of five states an entry is in, and the message row above the description spells it out
+for the selected entry.
+
+| Marker | State | Meaning |
+|--------|-------|---------|
+| (none) | ViSiON/3 default | The value matches the shipped default |
+| `*` | Custom | You have changed it from the shipped default |
+| `~` | Runtime fallback | Blank in `strings.json`, but the BBS prints a built-in default. The list shows that default, dimmed |
+| `0` | Explicitly empty | Present in `strings.json` and set to nothing. The BBS prints nothing |
+| `-` | Not set | Absent from `strings.json` with no built-in default. The BBS prints nothing |
+
+The `~` state is the common one after an upgrade: a release adds a string, your existing
+`strings.json` does not have it, and the BBS falls back to the value compiled into the binary.
+Nothing is broken — pressing `F4` writes that default into your file if you want it there
+explicitly.
+
+Keys in `strings.json` that the editor has no entry for — a leftover from Vision/2, or something you
+added by hand — are written back unchanged when you save. Nothing is dropped.
 
 ## String Descriptions
 
@@ -265,7 +290,7 @@ The editor supports two layers of value restoration:
 
 1. **Last-Saved Values (F3 "Revert")** — When the editor starts, it snapshots all values from `configs/strings.json` into `origValues`. F3 restores the currently selected string to the value it had when the editor was opened (i.e., whatever is on disk). This snapshot lives in memory only and is set in `stringeditor.New()`.
 
-2. **ViSiON/3 Defaults (F4 "Restore")** — A separate set of shipped default values loaded from `templates/configs/strings.json`. This file represents the canonical out-of-the-box string values that ship with ViSiON/3. F4 restores the selected string to this shipped value.
+2. **ViSiON/3 Defaults (F4 "Restore")** — A separate set of shipped default values loaded from `templates/configs/strings.json`, with the copy embedded in the binary as a fallback. This represents the canonical out-of-the-box string values that ship with ViSiON/3. F4 restores the selected string to this shipped value; where the template has no entry for a key, F4 offers the runtime fallback from `config.StringFallbacks` instead.
 
 ### Default Loading Flow
 
@@ -274,7 +299,8 @@ cmd/strings/main.go
   ├─ loadShippedDefaults()
        ├─ Try:  ./templates/configs/strings.json  (relative to CWD)
        ├─ Try:  <exe-dir>/templates/configs/strings.json  (relative to binary)
-       └─ Returns: map[string]string (or nil if not found)
+       ├─ Try:  <exe-dir>/../templates/configs/strings.json  (bin/ layout)
+       └─ Else: the copy embedded in the binary (templates/configs/embed.go)
 
   └─ stringeditor.New(configPath, shippedDefaults)
        ├─ loads configs/strings.json into values
@@ -283,12 +309,18 @@ cmd/strings/main.go
 ```
 
 - `loadShippedDefaults()` in `cmd/strings/main.go` attempts to read the template file from two locations: first relative to the working directory, then relative to the executable path. This allows the editor to work both during development (`cd /opt/vision3 && ./strings`) and from an installed location.
-- If the template file is missing or unparseable, `shippedDefaults` is `nil` and F4 will display "No shipped defaults available".
+- An on-disk template wins so a distribution can ship adjusted defaults, but the templates directory is not present in every installation, so `templates/configs/embed.go` embeds the same file into the binary as a guaranteed fallback. There is one canonical copy: the Go file sits alongside the JSON rather than the JSON being duplicated into a package.
 - The template file (`templates/configs/strings.json`) must be kept in sync with `configs/strings.json` when new string keys are added to the system.
 
 ### Adding a New String
 
-1. Add a `StringEntry` struct to the appropriate position in `internal/stringeditor/metadata.go` (Label, Key, Description)
-2. Add the key with its default value to `configs/strings.json`
-3. Add the same key and value to `templates/configs/strings.json` (the ViSiON/3 defaults template)
-4. The editor will pick up the new entry automatically on next run
+1. Add the field to `StringsConfig` in `internal/config/config_strings_types.go`
+2. Add a `StringEntry` struct to the appropriate position in `internal/stringeditor/metadata.go` (Label, Key, Description — name the format arguments in the description)
+3. Add the key with its default value to `configs/strings.json`
+4. Add the same key and value to `templates/configs/strings.json` (the ViSiON/3 defaults template)
+5. If existing installations must keep working without the key, add it to `config.StringFallbacks`
+6. The editor will pick up the new entry automatically on next run
+
+`TestCatalogCoversRuntimeStrings` fails if step 2 is skipped, so a new string cannot ship without
+being editable. `TestCatalogHasNoDeadEntries` fails in the other direction if an entry names no
+runtime field.

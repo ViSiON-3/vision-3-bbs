@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
@@ -16,8 +17,11 @@ const (
 	// labelWidth is the room left for the label between the item number and
 	// the value column, after the two bracket characters around it.
 	labelWidth = labelCol - numWidth - 2
-	minWidth   = 80 // Minimum terminal width
-	minHeight  = 25 // Minimum terminal height (matching 80x25 DOS)
+	// markerWidth is the single column between the label and the value that
+	// flags the entry's state.
+	markerWidth = 1
+	minWidth    = 80 // Minimum terminal width
+	minHeight   = 25 // Minimum terminal height (matching 80x25 DOS)
 
 	// The DOS list panel is 80 columns at the minimum terminal size and widens
 	// on a larger one, but never past maxPanelWidth and never without leaving
@@ -69,7 +73,9 @@ const (
 // Model is the BubbleTea model for the string editor TUI.
 type Model struct {
 	// Data
-	entries         []StringEntry     // Ordered metadata entries
+	catalog         []StringEntry     // Full ordered metadata catalog
+	entries         []StringEntry     // Catalog entries currently listed
+	showReserved    bool              // Whether reserved placeholders are listed
 	values          map[string]string // Current string values (key -> value)
 	origValues      map[string]string // Values as loaded from disk (for revert)
 	shippedDefaults map[string]string // Factory defaults (for F4 restore)
@@ -111,8 +117,8 @@ type Model struct {
 // New creates a new string editor model.
 // shippedDefaults, if non-nil, provides factory default values for F4 restore.
 func New(filePath string, shippedDefaults map[string]string) (Model, error) {
-	entries := StringEntries()
-	values, err := LoadStrings(filePath)
+	catalog := StringEntries()
+	values, err := LoadStrings(filePath, shippedDefaults)
 	if err != nil {
 		return Model{}, fmt.Errorf("loading strings: %w", err)
 	}
@@ -132,7 +138,6 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	si.Width = 30
 
 	pageSize := pageSizeFor(minHeight)
-	numPages := (len(entries) + pageSize - 1) / pageSize
 
 	// Snapshot original values for revert support
 	origValues := make(map[string]string, len(values))
@@ -140,8 +145,8 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		origValues[k] = v
 	}
 
-	return Model{
-		entries:         entries,
+	m := Model{
+		catalog:         catalog,
 		values:          values,
 		origValues:      origValues,
 		shippedDefaults: shippedDefaults,
@@ -149,7 +154,6 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		cursor:          0,
 		page:            0,
 		pageSize:        pageSize,
-		numPages:        numPages,
 		mode:            modeNavigate,
 		width:           minWidth,
 		height:          minHeight,
@@ -157,7 +161,54 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		searchInput:     si,
 		confirmYes:      false,
 		backdrop:        tuiart.Shaded(minWidth, minHeight),
-	}, nil
+	}
+	m.rebuildEntries()
+	return m, nil
+}
+
+// rebuildEntries refreshes the listed entries from the catalog, applying the
+// reserved filter, and keeps the cursor on the same string where it can.
+func (m *Model) rebuildEntries() {
+	var keepKey string
+	if m.cursor >= 0 && m.cursor < len(m.entries) {
+		keepKey = m.entries[m.cursor].Key
+	}
+
+	m.entries = m.entries[:0]
+	for _, e := range m.catalog {
+		if !m.showReserved && isReservedKey(e.Key) {
+			continue
+		}
+		m.entries = append(m.entries, e)
+	}
+	if len(m.entries) == 0 {
+		// Never present an empty list: with every entry filtered out there
+		// would be nothing to select and no way back.
+		m.entries = append(m.entries, m.catalog...)
+	}
+
+	m.numPages = (len(m.entries) + m.pageSize - 1) / m.pageSize
+	m.cursor = 0
+	if keepKey != "" {
+		for i, e := range m.entries {
+			if e.Key == keepKey {
+				m.cursor = i
+				break
+			}
+		}
+	}
+	m.clampCursor()
+}
+
+// clampCursor keeps the cursor in range and the page showing it.
+func (m *Model) clampCursor() {
+	if m.cursor >= len(m.entries) {
+		m.cursor = len(m.entries) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	m.page = m.cursor / m.pageSize
 }
 
 // Init implements tea.Model.
@@ -183,7 +234,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// page size changes.
 		m.pageSize = pageSizeFor(m.height)
 		m.numPages = (len(m.entries) + m.pageSize - 1) / m.pageSize
-		m.page = m.cursor / m.pageSize
+		m.clampCursor()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -248,7 +299,7 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyF3:
 		// Revert current item to original (on-disk) value
 		entry := m.entries[m.cursor]
-		if entry.Key[0] == '_' {
+		if isReservedKey(entry.Key) {
 			m.message = "This field is reserved"
 			return m, nil
 		}
@@ -262,15 +313,11 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyF4:
 		// Restore current item to ViSiON/3 default
 		entry := m.entries[m.cursor]
-		if entry.Key[0] == '_' {
+		if isReservedKey(entry.Key) {
 			m.message = "This field is reserved"
 			return m, nil
 		}
-		if m.shippedDefaults == nil {
-			m.message = "No shipped defaults available"
-			return m, nil
-		}
-		if _, ok := m.shippedDefaults[entry.Key]; !ok {
+		if _, ok := m.defaultFor(entry.Key); !ok {
 			m.message = "No ViSiON/3 default for this string"
 			return m, nil
 		}
@@ -287,6 +334,16 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	default:
 		switch msg.String() {
+		case "ctrl+r":
+			// Toggle listing of reserved placeholder entries.
+			m.showReserved = !m.showReserved
+			m.rebuildEntries()
+			if m.showReserved {
+				m.message = "Showing reserved placeholders"
+			} else {
+				m.message = "Hiding reserved placeholders"
+			}
+			return m, nil
 		case "/":
 			// Enter search mode
 			m.mode = modeSearch
@@ -308,7 +365,7 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // characters survive a round trip through the single-line input.
 func (m Model) startEdit(prefill string) (tea.Model, tea.Cmd) {
 	entry := m.entries[m.cursor]
-	if entry.Key[0] == '_' {
+	if isReservedKey(entry.Key) {
 		// Can't edit placeholder entries
 		m.message = "This field is reserved and cannot be edited"
 		return m, nil
@@ -398,7 +455,7 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 
 	case modeDefaultConfirm:
 		entry := m.entries[m.cursor]
-		if def, ok := m.shippedDefaults[entry.Key]; ok {
+		if def, ok := m.defaultFor(entry.Key); ok {
 			m.values[entry.Key] = def
 			m.message = fmt.Sprintf("Restored default: %s", entry.Label)
 			m.recomputeDirty()
@@ -444,6 +501,19 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		return m, cmd
 	}
+}
+
+// defaultFor returns the factory value for a key. The shipped template wins;
+// where it has no entry the runtime's compiled-in fallback is offered instead,
+// so F4 still works for a string added after the template was last updated.
+func (m Model) defaultFor(key string) (string, bool) {
+	if def, ok := m.shippedDefaults[key]; ok {
+		return def, true
+	}
+	if def, ok := config.StringFallbacks[key]; ok {
+		return def, true
+	}
+	return "", false
 }
 
 // recomputeDirty re-derives the dirty flag by comparing every current value

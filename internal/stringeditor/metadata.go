@@ -7,12 +7,26 @@ type StringEntry struct {
 	Label       string // Display name shown in the editor list
 	Key         string // JSON key in strings.json
 	Description string // Help text shown in the description bar
+
+	// Number is the entry's 1-based position in the full catalog. It is shown
+	// in the list and stays fixed when reserved entries are filtered out, so a
+	// sysop's note that "string 199 is wrong" keeps meaning the same string.
+	Number int
 }
 
-// StringEntries returns the ordered list of all editable strings.
+// StringEntries returns the ordered catalog with stable numbering applied.
+func StringEntries() []StringEntry {
+	entries := stringCatalog()
+	for i := range entries {
+		entries[i].Number = i + 1
+	}
+	return entries
+}
+
+// stringCatalog returns the ordered list of all editable strings.
 // The first 178 entries match the original Pascal STRINGS.EXE ordering.
 // V3-specific strings follow in logical groups.
-func StringEntries() []StringEntry {
+func stringCatalog() []StringEntry {
 	return []StringEntry{
 		// === Original Vision/2 Strings (matching Pascal things[] order) ===
 
@@ -46,7 +60,7 @@ func StringEntries() []StringEntry {
 		{Label: "Post on Current Board", Key: "postOnBoardStr", Description: "Used when asking if a user wants to leave a Post ( |CB=Current Board )"},
 		{Label: "Message Title String", Key: "msgTitleStr", Description: "This is displayed when a user is asked what he wishes to title a message"},
 		{Label: "Send Message To String", Key: "msgToStr", Description: "This is displayed when a user is asked who he wishes to send the msg to"},
-		{Label: "Upload a Message String", Key: "uploadMsgStr", Description: "This is displayed when asking a user if he wishes to upload a message"},
+		{Label: "Upload a Message String", Key: "uploadMsgStr", Description: "Legacy Vision/2 string - upload-a-message is not implemented in ViSiON/3"},
 		{Label: "Post Anonymous String", Key: "msgAnonStr", Description: "This is displayed when asking a user if he wished to post Anonymous"},
 		{Label: "Save/Quote/Abort String", Key: "slashStr", Description: "This String is displayed in the message editor Save/Quote/Abort prompt"},
 		{Label: "Not Used (extra7a)", Key: "_extra7a", Description: "Reserved - not currently used"},
@@ -510,5 +524,44 @@ func StringEntries() []StringEntry {
 		{Label: "WantList: Empty", Key: "wantListEmpty", Description: "Shown when want list has no requests"},
 		{Label: "WantList: Header", Key: "wantListHeader", Description: "Header displayed above want list entries"},
 		{Label: "WantList: Cleared", Key: "wantListCleared", Description: "Shown after want list is cleared"},
+
+		// === Strings that shipped in strings.json but had no catalog entry ===
+		// These are live: the BBS reads every one of them. Without an entry
+		// here they were invisible in the editor and could only be changed by
+		// hand-editing strings.json.
+
+		// Chat networks and rooms (V3)
+		{Label: "Chat: Network Header", Key: "chatNetworkPickerHeader", Description: "Header above the chat network picker"},
+		{Label: "Chat: Network Entry", Key: "chatNetworkPickerEntry", Description: "One row of the chat network picker (%d=number, %s=name, %s=address)"},
+		{Label: "Chat: Room Header", Key: "chatRoomListHeader", Description: "Header above the active chat room list"},
+		{Label: "Chat: Room Entry", Key: "chatRoomListEntry", Description: "One row of the chat room list (%s=room, %d=user count, %s=topic)"},
+		{Label: "Chat: Private Message", Key: "chatPrivateMsgFormat", Description: "A private chat message sent to you (%s=sender, %s=message)"},
+		{Label: "Chat: User Joined", Key: "chatJoinMsg", Description: "Announced when a user joins a room (%s=user, %s=room)"},
+		{Label: "Chat: User Left", Key: "chatLeaveMsg", Description: "Announced when a user leaves a room (%s=user, %s=room)"},
+		{Label: "Chat: Room Topic", Key: "chatTopicMsg", Description: "Announced when a room topic is shown (%s=room, %s=topic)"},
+		{Label: "Chat: Reconnected", Key: "chatReconnected", Description: "Shown when the chat connection is re-established"},
+
+		// Door access control (V3)
+		{Label: "Door: Access Denied", Key: "doorAccessDenied", Description: "Shown when a user lacks access to a door (%s=door name)"},
+		{Label: "Door: In Use", Key: "doorBusyFormat", Description: "Shown when a door is already in use (%s=door name)"},
+
+		// Matrix login outcome (V3)
+		{Label: "Matrix: Cannot Log On", Key: "matrixAccountCannotLogon", Description: "Account exists but access is too low (%s=alias, %d=level, %d=minimum)"},
+
+		// New user signup outcome (V3)
+		{Label: "New User: Ready", Key: "newUserAccountReady", Description: "Shown when a new account can log on immediately"},
+		{Label: "New User: Pending", Key: "newUserPendingReview", Description: "Shown when a new account awaits SysOp review"},
+
+		// Newscan network join prompt (V3)
+		{Label: "NewScan: New Network", Key: "newscanNewNetworkPrompt", Description: "Asks whether to add a newly available network to newscan (%s=network)"},
+
+		// Conference navigation (V3)
+		{Label: "Conf: Current Format", Key: "confCurrentConfFormat", Description: "Current conference banner (%s=conference name, %s=tag)"},
+		{Label: "Conf: No Accessible", Key: "confNoAccessibleConfs", Description: "Shown when no conferences are accessible to the user"},
+
+		// Declared in the runtime config but with no call site in ViSiON/3.
+		// Kept so the key is documented rather than silently dropped on save.
+		{Label: "Enter Number Header", Key: "enterNumberHeader", Description: "Legacy - declared in strings.json but not currently used"},
+		{Label: "Enter Number Prompt", Key: "enterNumber", Description: "Legacy - declared in strings.json but not currently used"},
 	}
 }

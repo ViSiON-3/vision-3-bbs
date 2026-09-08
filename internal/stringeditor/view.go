@@ -46,6 +46,14 @@ var (
 	// Panel background for value text and blank filler
 	panelStyle = tuiart.Color(dosBlack, dosLightGray)
 
+	// A fallback preview is what the BBS prints, not what the file holds, so
+	// it is drawn dimmed to read as informational rather than as a value.
+	fallbackStyle = tuiart.Color(dosBlack, dosDarkGray)
+
+	// State marker column, between the label and the value.
+	markerStyle          = tuiart.Color(dosBlack, dosLightCyan)
+	markerHighlightStyle = tuiart.Color(dosMagenta, dosLightCyan)
+
 	// Description caption, drawn over the backdrop below the panel
 	descriptionStyle = tuiart.Color(dosBlack, dosLightMagenta)
 
@@ -75,8 +83,8 @@ const headerTitle = "-- ViSiON/3 String Configuration v1.0 --"
 // the same set of keys tightened to fit an 80-column terminal, so no shortcut
 // is ever truncated away at the minimum size.
 const (
-	helpText        = "Enter Edit  |  F1 Prefill  |  F3 Revert  |  F4 Default  |  F10 Save  |  / Search  |  Esc Quit"
-	helpTextCompact = "Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  / Search  Esc Quit"
+	helpText        = "Enter Edit  |  F1 Prefill  |  F3 Revert  |  F4 Default  |  F10 Save  |  / Search  |  ^R Reserved  |  Esc Quit"
+	helpTextCompact = "Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  / Search  ^R  Esc Quit"
 )
 
 // helpBarText picks the widest help variant that fits the terminal.
@@ -178,7 +186,7 @@ func (m Model) panelWidth() int {
 // valueWidth returns the terminal cells available for a value preview, which is
 // everything in the panel to the right of the label column.
 func (m Model) valueWidth() int {
-	return max(10, m.panelWidth()-labelCol)
+	return max(10, m.panelWidth()-labelCol-markerWidth)
 }
 
 // renderStatusBar creates the panel's status bar, following the Pascal
@@ -196,7 +204,10 @@ func (m Model) valueWidth() int {
 // right edge of an 80-column terminal, so this bar carries only the position.
 func (m Model) renderStatusBar(panelW int) string {
 	// First item on current page (1-based, matching Pascal's top variable)
-	topItem := m.page*m.pageSize + 1
+	topItem := 0
+	if start := m.page * m.pageSize; start < len(m.entries) {
+		topItem = m.entries[start].Number
+	}
 	pageNum := m.page + 1
 
 	content := statusBarLabelStyle.Render(" Current Topic Number:") +
@@ -222,6 +233,7 @@ func (m Model) renderColumnHeader(panelW int) string {
 	const nameHeading = "  # Name"
 	header := nameHeading +
 		strings.Repeat(" ", labelCol-len(nameHeading)) +
+		strings.Repeat(" ", markerWidth) +
 		"Value"
 	if pad := panelW - cellWidth(header); pad > 0 {
 		header += strings.Repeat(" ", pad)
@@ -229,53 +241,46 @@ func (m Model) renderColumnHeader(panelW int) string {
 	return bracketStyle.Render(header)
 }
 
-// renderItem renders a single list item.
+// renderItem renders a single list item: number, label, a one-character state
+// marker, and the value preview.
 func (m Model) renderItem(idx, panelW int) string {
 	entry := m.entries[idx]
 	isSelected := idx == m.cursor
-	itemNum := idx + 1
-	value := m.getValue(entry.Key)
+	value, isFallback := m.previewValue(entry.Key)
+	state := m.stateOf(entry.Key)
 	valueWidth := m.valueWidth()
 
-	// Format item number, right-aligned in numWidth columns
-	numStr := fmt.Sprintf("%*d", numWidth, itemNum)
+	// The item number is the entry's stable position in the catalog, so it
+	// does not shift when reserved entries are filtered out of the view.
+	numStr := fmt.Sprintf("%*d", numWidth, entry.Number)
 
-	var line string
+	numStyle, labelStyle, markStyle := bracketStyle, labelNormalStyle, markerStyle
 	if isSelected {
-		if m.mode == modeEdit {
-			// Show text input in the value area
-			numPart := bracketHighlightStyle.Render(numStr)
-			bracket1 := bracketHighlightStyle.Render("[")
-			label := labelHighlightStyle.Render(padOrTrunc(entry.Label, labelWidth))
-			bracket2 := bracketHighlightStyle.Render("]")
-			// Clip the input to the value column so a long escaped value can
-			// never push the row past the last terminal cell.
-			input := m.textInput.View()
-			if visualLen(input) > valueWidth {
-				input = truncateVisual(input, valueWidth)
-			}
-			line = numPart + bracket1 + label + bracket2 + input
-		} else {
-			// Highlighted item
-			numPart := bracketHighlightStyle.Render(numStr)
-			bracket1 := bracketHighlightStyle.Render("[")
-			label := labelHighlightStyle.Render(padOrTrunc(entry.Label, labelWidth))
-			bracket2 := bracketHighlightStyle.Render("]")
-			renderedVal := RenderColorString(value, valueWidth)
-			line = numPart + bracket1 + label + bracket2 + renderedVal
+		numStyle, labelStyle, markStyle = bracketHighlightStyle, labelHighlightStyle, markerHighlightStyle
+	}
+
+	line := numStyle.Render(numStr) +
+		numStyle.Render("[") +
+		labelStyle.Render(padOrTrunc(entry.Label, labelWidth)) +
+		numStyle.Render("]") +
+		markStyle.Render(state.marker())
+
+	if isSelected && m.mode == modeEdit {
+		// Clip the input to the value column so a long escaped value can never
+		// push the row past the panel edge.
+		input := m.textInput.View()
+		if visualLen(input) > valueWidth {
+			input = truncateVisual(input, valueWidth)
 		}
+		line += input
+	} else if isFallback {
+		line += renderDimString(value, valueWidth)
 	} else {
-		// Normal item
-		numPart := bracketStyle.Render(numStr)
-		bracket1 := bracketStyle.Render("[")
-		label := labelNormalStyle.Render(padOrTrunc(entry.Label, labelWidth))
-		bracket2 := bracketStyle.Render("]")
-		renderedVal := RenderColorString(value, valueWidth)
-		line = numPart + bracket1 + label + bracket2 + renderedVal
+		line += RenderColorString(value, valueWidth)
 	}
 
 	// Pad the value column out to the panel edge so the row is opaque against
-	// the backdrop art behind it.
+	// the background behind it.
 	if pad := panelW - visualLen(line); pad > 0 {
 		line += panelStyle.Render(strings.Repeat(" ", pad))
 	}
@@ -301,16 +306,33 @@ func (m Model) renderMessageBar(panelW int) string {
 		return padRowStyled(searchLabelStyle.Render(" Search: ")+m.searchInput.View(),
 			panelW, panelStyle)
 	default:
-		if m.message == "" {
-			return panelStyle.Render(strings.Repeat(" ", panelW))
+		switch {
+		case m.message != "":
+			text = " " + m.message
+		default:
+			// With no flash message, use the row to name the selected entry's
+			// state, so a blank value column is never ambiguous.
+			state := m.currentState()
+			if state == stateDefault || state == stateCustom {
+				return panelStyle.Render(strings.Repeat(" ", panelW))
+			}
+			text = " " + state.marker() + "  " + state.label()
+			style = fallbackStyle
 		}
-		text = " " + m.message
 	}
 
 	if cellWidth(text) > panelW {
 		text = truncateVisual(text, panelW)
 	}
 	return style.Render(text) + panelStyle.Render(strings.Repeat(" ", panelW-cellWidth(text)))
+}
+
+// currentState classifies the entry under the cursor.
+func (m Model) currentState() valueState {
+	if m.cursor < 0 || m.cursor >= len(m.entries) {
+		return stateDefault
+	}
+	return m.stateOf(m.entries[m.cursor].Key)
 }
 
 // padRowStyled clips or pads an already-styled row to exactly width cells,
@@ -328,9 +350,10 @@ func padRowStyled(rendered string, width int, fill lipgloss.Style) string {
 func (m Model) renderDescriptionBar(row int) string {
 	desc := ""
 	if m.cursor >= 0 && m.cursor < len(m.entries) {
-		desc = m.entries[m.cursor].Description
+		entry := m.entries[m.cursor]
+		desc = entry.Description
 		if desc == "" {
-			desc = m.entries[m.cursor].Key
+			desc = entry.Key
 		}
 	}
 	if desc == "" {

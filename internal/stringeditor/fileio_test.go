@@ -8,11 +8,19 @@ import (
 	"testing"
 )
 
+// testDefaults is a small stand-in for the shipped factory values.
+func testDefaults() map[string]string {
+	return map[string]string{
+		"defPrompt":   "|08factory prompt",
+		"pauseString": "|15factory pause",
+	}
+}
+
 // TestLoadStrings_MissingFileCreatesDefaults checks that a missing file is
 // created with default strings and no placeholder keys.
 func TestLoadStrings_MissingFileCreatesDefaults(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "strings.json")
-	got, err := LoadStrings(path)
+	got, err := LoadStrings(path, testDefaults())
 	if err != nil {
 		t.Fatalf("LoadStrings: %v", err)
 	}
@@ -42,7 +50,7 @@ func TestLoadStrings_InvalidJSON(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{broken"), 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := LoadStrings(path); err == nil {
+	if _, err := LoadStrings(path, testDefaults()); err == nil {
 		t.Fatal("invalid JSON should return an error")
 	}
 }
@@ -61,7 +69,7 @@ func TestSaveStrings_RoundTripSortedAndFiltered(t *testing.T) {
 		t.Fatalf("SaveStrings: %v", err)
 	}
 
-	got, err := LoadStrings(path)
+	got, err := LoadStrings(path, testDefaults())
 	if err != nil {
 		t.Fatalf("LoadStrings: %v", err)
 	}
@@ -103,7 +111,7 @@ func TestMarshalOrdered_Empty(t *testing.T) {
 // TestDefaultStrings_SkipsPlaceholders checks defaults exclude placeholder
 // keys but cover every non-placeholder metadata entry.
 func TestDefaultStrings_SkipsPlaceholders(t *testing.T) {
-	defaults := DefaultStrings()
+	defaults := DefaultStrings(testDefaults())
 	if len(defaults) == 0 {
 		t.Fatal("expected non-empty defaults")
 	}

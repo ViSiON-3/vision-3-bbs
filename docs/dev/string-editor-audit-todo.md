@@ -1,8 +1,9 @@
 # String editor and configuration TUI audit
 
 Created: 2026-09-08. Status: in progress. Investigation complete; section 2
-(safe preview and lossless editing) and the shared-chrome half of section 1
-implemented; sections 3 and 4 pending.
+(safe preview and lossless editing), section 1 (cross-binary audit and shared
+chrome) and section 3 (value states and catalog coverage) implemented; section 4
+pending.
 
 Related issues:
 
@@ -49,10 +50,10 @@ not modify the BBS's live configuration or repository implementation files.
 
 ## 1. Audit ./strings and ./config together
 
-- [ ] Run both binaries against disposable copies of configuration, including
+- [x] Run both binaries against disposable copies of configuration, including
   a copy of `~/bbs-dev/` configuration when useful. Avoid saving test changes
   to the live development BBS.
-- [ ] Capture before/after screens for the same terminal sizes and interaction
+- [x] Capture before/after screens for the same terminal sizes and interaction
   states. Record each discrepancy and the intended shared behavior.
 - [x] Review the following surfaces in both binaries:
 
@@ -69,13 +70,13 @@ not modify the BBS's live configuration or repository implementation files.
 
 - [x] Exercise at least 80×25, 100×30, 120×45, and 160×60, plus a terminal below
   the supported minimum. Resize repeatedly between small and large dimensions.
-- [ ] Exercise list navigation, the last page, search, editing, confirmation
+- [x] Exercise list navigation, the last page, search, editing, confirmation
   dialogs, long descriptions, and error/status messages during resizing.
 - [ ] Verify display widths with box-drawing characters, wide Unicode characters,
   combining characters, and color-coded values.
 - [x] Decide whether shared layout helpers are warranted. Extract only behavior
   both editors need; avoid a broad TUI rewrite to fix a localized problem.
-- [ ] Fix directly related `./config` inconsistencies discovered by the audit,
+- [x] Fix directly related `./config` inconsistencies discovered by the audit,
   or record larger findings as separate follow-ups with reproduction steps.
 
 ### Cross-binary audit results
@@ -126,7 +127,7 @@ have been archived.
   required, report it explicitly and retain the user's original content.
 - [x] Derive pagination from available height, with a documented maximum. Keep
   the current selection visible when the page size changes.
-- [ ] Use a coherent full-screen layout for the list, background, footer, and
+- [x] Use a coherent full-screen layout for the list, background, footer, and
   overlays, following the decisions from the cross-binary audit.
 - [x] Add regressions using actual multiline shipped values around entries
   199–220, long custom values, and resize transitions.
@@ -162,21 +163,59 @@ rows, so the minimum page is 19 entries.
 
 ## 3. Clarify reserved, missing, and empty values
 
-- [ ] Hide reserved placeholders by default, with an optional way to inspect
+- [x] Hide reserved placeholders by default, with an optional way to inspect
   them if useful. Preserve stable identifiers/original numbering when filtering.
-- [ ] Distinguish an absent key, an explicitly empty value, a runtime fallback,
+- [x] Distinguish an absent key, an explicitly empty value, a runtime fallback,
   and a custom value. Do not treat all visually blank rows as unused.
-- [ ] Audit catalog coverage against runtime string fields and shipped defaults;
+- [x] Audit catalog coverage against runtime string fields and shipped defaults;
   classify legacy entries rather than deleting them based only on absence from
   the template.
-- [ ] Add missing active entries, including `matrixAccountCannotLogon`, with
+- [x] Add missing active entries, including `matrixAccountCannotLogon`, with
   meaningful descriptions of their arguments.
-- [ ] Make factory defaults available reliably in installed binaries. Avoid
+- [x] Make factory defaults available reliably in installed binaries. Avoid
   depending solely on a template path relative to the current directory.
-- [ ] Preserve unrelated/custom keys when saving, and document what restoring
+- [x] Preserve unrelated/custom keys when saving, and document what restoring
   a default or clearing a value means for each supported state.
-- [ ] Check these states against runtime fallback behavior before changing how
+- [x] Check these states against runtime fallback behavior before changing how
   blank or missing strings are saved.
+
+### Implemented so far
+
+Classification of the 446 catalog entries and 399 template keys against the
+runtime `StringsConfig`:
+
+| Class | Count | Handling |
+| --- | --- | --- |
+| Live, catalogued, in template | 358 | unchanged |
+| Live, catalogued, template-less | 40 | runtime fallback, marked `~` |
+| Live but **missing from the catalog** | 19 | entries added |
+| Catalogued but no runtime field | 1 | `uploadMsgStr`, recorded as legacy |
+| Template-only Vision/2 leftovers | 5 | recorded as legacy, preserved on save |
+| Reserved placeholders | 7 | hidden by default, `Ctrl-R` reveals |
+
+The 19 additions include `matrixAccountCannotLogon`, both door access-control
+strings, all nine chat network/room strings, the two new-user outcome strings,
+the newscan network prompt and two conference strings. `defColor1`-`defColor7`
+turned out to be `uint8`, not editable text, so they are correctly absent.
+
+`applyStringDefaults` was a hand-written list of 36 assignments. It is now the
+exported `config.StringFallbacks` table applied by reflection over the struct's
+json tags, so the loader and the editor read the same source rather than two
+that drift.
+
+`valueState` distinguishes custom, default, runtime fallback, explicitly empty,
+not set and reserved. A fallback row previews what the BBS actually prints,
+dimmed, instead of appearing blank and unused.
+
+Factory defaults are now reliable in an installed binary: `templates/configs`
+gained an `embed.go`, so the Go file sits beside the JSON and there is still
+exactly one canonical copy of each template. `F4` falls back to the runtime
+default where the template has no entry, and a missing `strings.json` is created
+from the shipped defaults rather than from 420 empty values.
+
+Four coverage tests now fail the build if a new runtime string has no catalog
+entry, if a catalog entry names no runtime field, if a template key is neither
+editable nor recorded as legacy, or if a recorded legacy key becomes live.
 
 ## 4. Validate format contracts (#237)
 

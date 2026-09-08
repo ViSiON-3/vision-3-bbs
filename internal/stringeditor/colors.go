@@ -254,6 +254,34 @@ func cellWidth(s string) int {
 	return w
 }
 
+// renderDimString previews a value the BBS supplies rather than the file, with
+// its color codes stripped: the codes describe how the BBS will draw it, but
+// the row itself is informational and reads as one dimmed run.
+func renderDimString(s string, maxWidth int) string {
+	var b strings.Builder
+	used := 0
+	budget := maxWidth - 1
+	for _, span := range parseColorCodes(s) {
+		for _, ch := range span.text {
+			text := string(ch)
+			if esc, escaped := escapeRune(ch); escaped {
+				text = esc
+			}
+			w := cellWidth(text)
+			if used+w > budget {
+				b.WriteString(tuiart.Color(dosMagenta, dosWhite).Render("»"))
+				return b.String()
+			}
+			b.WriteString(dimStyle.Render(text))
+			used += w
+		}
+	}
+	return b.String()
+}
+
+// dimStyle draws a runtime-supplied preview.
+var dimStyle = tuiart.Color(dosBlack, dosDarkGray)
+
 // PlainTextLength returns the number of terminal cells a BBS pipe-coded string
 // occupies once color codes are stripped and control characters are shown in
 // their escaped form, matching what RenderColorString draws.
