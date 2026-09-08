@@ -95,6 +95,22 @@ func stringValues(data []byte) (map[string]string, error) {
 // upgraded installation will not have it and the feature would otherwise print
 // nothing at all.
 var StringFallbacks = map[string]string{
+	// Conference and new-user notices whose defaults lived as literals at the
+	// call site. Lifting them here changes nothing at runtime and makes them
+	// editable rather than invisible.
+	"confCurrentConfFormat": "\r\n|07(|15%s|07) [|14%s|07]\r\n",
+	"confNoAccessibleConfs": "\r\n|12No accessible conferences.|07\r\n",
+	"newUsersClosedStr":     "\r\n|12This BBS is not accepting new users at this time.|07\r\n",
+
+	// The rest of the batch download group. These are written straight to the
+	// terminal, so shipping them blank printed nothing where a message belongs
+	// -- an empty queue, or a failed save, looked like the command did nothing.
+	"batchQueueEmpty":   "\r\n|14Your batch queue is empty.|07\r\n",
+	"noFilesTagged":     "\r\n|14No files are tagged for download.|07\r\n",
+	"filesResolveError": "\r\n|12None of the tagged files could be found; the queue has been cleared.|07\r\n",
+	"fileAreaNotFound":  "\r\n|12File area not found.|07\r\n",
+	"saveUserError":     "\r\n|12Error saving your account; please try again.|07\r\n",
+
 	// Batch download queue. These four are formatted, and every call site
 	// passes their arguments unconditionally, so an empty value does not print
 	// nothing -- fmt renders "%!(EXTRA string=FILENAME.ZIP)" onto the caller's

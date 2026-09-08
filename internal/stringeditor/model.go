@@ -24,13 +24,12 @@ const (
 	minWidth    = 80 // Minimum terminal width
 	minHeight   = 25 // Minimum terminal height (matching 80x25 DOS)
 
-	// The DOS list panel is 80 columns at the minimum terminal size and widens
-	// on a larger one, but never past maxPanelWidth and never without leaving
-	// artMargin columns of backdrop on each side. Past maxPanelWidth the value
-	// column is wider than any string needs and the eye has too far to travel
-	// from the label.
-	maxPanelWidth = 120
-	artMargin     = 10
+	// The DOS list panel is 80 columns at the minimum terminal size and fills a
+	// larger one, leaving artMargin columns of background as a border on each
+	// side. The border is deliberately thin: a wide band of fill around a flat
+	// list reads as wasted screen rather than as framing, and the extra columns
+	// are better spent on the value preview.
+	artMargin = 1
 
 	// chromeRows counts the rows the list cannot use: the global header bar,
 	// the status bar, the column header, and the message, description and help
