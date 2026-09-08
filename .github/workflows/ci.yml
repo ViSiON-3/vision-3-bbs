@@ -38,8 +38,17 @@ jobs:
         with:
           only-new-issues: true
 
+  # Windows is a released platform (README: "Windows x86_64 Released") but had
+  # no test execution at all, so five windows-tagged files shipped without ever
+  # being run -- including internal/filelock, whose whole purpose is excluding
+  # a second process. A lock that silently fails to exclude is worse than none,
+  # because the callers now assume it works. See issue #235.
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +56,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # vet on Linux never analyses the windows-tagged files, since the build
+      # constraints exclude them; this is their first vet coverage.
+      - name: go vet
+        run: go vet ./...
       - name: go test
         run: go test ./...
       - name: go test -race

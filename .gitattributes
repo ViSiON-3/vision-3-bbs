@@ -6,7 +6,9 @@
 menus/v3/templates/* binary
 menus/v3/ansi/* binary
 
-# Golden files are captured terminal screens: every row is padded to the full
-# width, so trailing whitespace is content rather than a mistake. Exempt them
-# from the whitespace checks so `git diff --check` stays useful elsewhere.
-*.golden -whitespace
+# Golden files are captured terminal screens compared byte for byte. Every row
+# is padded to the full width, so trailing whitespace is content rather than a
+# mistake; and the line endings are content too, so they must survive a
+# checkout on Windows unconverted. Without -text, a runner with autocrlf turns
+# every LF into CRLF and the comparisons fail on Windows alone.
+*.golden -text -whitespace
