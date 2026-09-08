@@ -89,9 +89,10 @@ func (m Model) viewListScreen() string {
 	sc.Line(sc.Pad(padL, padR, listBorderStyle.Render("╘"+strings.Repeat("═", boxW)+"╛")))
 
 	// === Message, search prompt, or background ===
+	// modeSearch is tested before m.message: both draw on this row, and a flash
+	// message left over from a previous action would otherwise hide the prompt
+	// the user just opened.
 	switch {
-	case m.message != "":
-		sc.Line(sc.Pad(padL, padR, flashMessageStyle.Render(" "+padRight(m.message, boxW+1))))
 	case m.mode == modeSearch:
 		// Pad against what the widget actually renders: it appends a cursor
 		// cell after the text, so its width is not searchInput.Width.
@@ -100,6 +101,8 @@ func (m Model) viewListScreen() string {
 		used := len(searchLabel) + uitext.ApproximateVisibleLen(inputView)
 		sc.Line(sc.Pad(padL, padR, flashMessageStyle.Render(searchLabel)+inputView+
 			flashMessageStyle.Render(strings.Repeat(" ", max(0, boxW+2-used)))))
+	case m.message != "":
+		sc.Line(sc.Pad(padL, padR, flashMessageStyle.Render(" "+padRight(m.message, boxW+1))))
 	default:
 		sc.BgLine()
 	}

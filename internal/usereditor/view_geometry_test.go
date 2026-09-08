@@ -70,11 +70,8 @@ func enterMode(t *testing.T, m Model, mode editorMode) Model {
 		}
 		press(tea.KeyEnter)
 	case modeSearch:
-		// modeSearch has no key that reaches it today: nothing assigns it.
-		// The row it renders is still exercised here so its width math cannot
-		// rot unnoticed if it is ever wired up.
-		m.mode = modeSearch
-		m.searchInput.Focus()
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		m = updated.(Model)
 	default:
 		m.mode = mode
 		m.alertTitle, m.alertMessage = "-- Alert --", "message"

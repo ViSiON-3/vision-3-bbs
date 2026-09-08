@@ -30,6 +30,10 @@ Displays all users in a scrollable list. Four column views are available, toggle
 
 Deleted users appear at the bottom of the list below a `--- DELETED USERS ---` separator. Users can be tagged with Space for bulk operations (validate, delete, purge).
 
+Press `/` to search by handle. The match is a case-insensitive substring, and the search runs forward from the highlighted user and wraps around the end of the list, so repeating the same search steps to the next match rather than returning to the first. Enter jumps to the match and reports it; if nothing matches, the cursor stays where it is and the status line says so. Esc abandons the search. The prompt opens empty each time, so a repeated search means retyping the term.
+
+The field editor lays its fields out in two columns. Up and Down move within the column you are in, wrapping at its ends; Left and Right move to the other column, landing on the field nearest the row you were on. Tab and Enter still advance in field order regardless of column.
+
 ### Field Editor
 
 Press Enter on any user to open the field editor. Displays 29 fields across two columns:
@@ -55,6 +59,7 @@ The Password field opens a dialog — new password is bcrypt-hashed before savin
 | PgUp / PgDn | Scroll by 13 users |
 | Left / Right | Cycle column views |
 | Space | Toggle tag on current user |
+| / | Search users by handle |
 | Enter | Open field editor |
 | F2 | Soft-delete highlighted user (confirm); if confirmed, immediately offers purge |
 | Shift-F2 | Soft-delete all tagged users (confirm) |
@@ -72,8 +77,9 @@ The Password field opens a dialog — new password is bcrypt-hashed before savin
 
 | Key | Action |
 |-----|--------|
-| Tab / Enter / Down | Edit current field, advance to next |
-| Up | Move to previous field |
+| Tab / Enter | Edit current field, advance in field order |
+| Up / Down | Move within the current column |
+| Left / Right | Move to the other column, nearest row |
 | Ctrl-Home | Jump to first field |
 | Ctrl-End | Jump to last field |
 | PgDn | Save changes + open next user |

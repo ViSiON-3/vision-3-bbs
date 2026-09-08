@@ -422,6 +422,13 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Untag all
 			m.tagged = make(map[int]bool)
 			return m, nil
+		case "/":
+			// Enter search mode. Same key as ./strings, which has the same
+			// search-forward-and-wrap behavior.
+			m.mode = modeSearch
+			m.searchInput.SetValue("")
+			m.searchInput.Focus()
+			return m, textinput.Blink
 		case "alt+h":
 			m.mode = modeHelp
 			return m, nil
@@ -833,15 +840,24 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		query := strings.ToLower(m.searchInput.Value())
 		if query != "" {
-			// Search from current position forward, wrapping
+			// Search from current position forward, wrapping. offset runs to
+			// len(m.users), so the cursor's own row is examined last rather
+			// than skipped.
+			found := false
 			for offset := 0; offset < len(m.users); offset++ {
 				idx := (m.cursor + offset + 1) % len(m.users)
 				u := m.users[idx]
 				if strings.Contains(strings.ToLower(u.Handle), query) {
 					m.cursor = idx
 					m.message = fmt.Sprintf("Found: %s", u.Handle)
+					found = true
 					break
 				}
+			}
+			if !found {
+				// Say so. Returning to the list unchanged and silent reads as
+				// the key not having worked.
+				m.message = fmt.Sprintf("No user matching %q", m.searchInput.Value())
 			}
 		}
 		m.clampScroll()

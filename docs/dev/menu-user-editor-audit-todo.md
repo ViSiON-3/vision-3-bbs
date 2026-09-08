@@ -250,12 +250,25 @@ Two incidental findings while in the file:
 - `renderField` now measures `textinput.View()` rather than assuming `Width+1`,
   reconciling it with `overlayPasswordDialog` as this audit recommended. The
   same assumption was a live one-column overflow in `./menuedit`.
-- **`modeSearch` is unreachable.** Nothing assigns it — `m.mode = modeSearch`
-  appears nowhere — so the search prompt row in `view.go` is dead code, though
-  `updateSearch` exists to handle it. Left in place rather than deleted, since
-  the intent is clearly that it be wired up; the geometry test exercises the row
-  by setting the mode directly so its width math cannot rot unnoticed. Worth its
-  own issue: either finish it or remove it.
+- **`modeSearch` was unreachable, and is now finished.** Nothing assigned it, so
+  the search prompt row in `view.go` was dead code even though `updateSearch`,
+  the configured `searchInput`, and the prompt row itself were all complete. The
+  only missing piece was an entry point. `/` now opens it — the same key
+  `./strings` binds, for the same forward-and-wrap search — so this was six
+  lines to finish rather than a feature to remove.
+
+  Three things came with it. A miss now says so: `updateSearch` returned to the
+  list silently when nothing matched, which reads as the key not having worked.
+  The view tests `modeSearch` before `m.message` because both draw on the same
+  row, and a flash message left from a previous action would otherwise hide the
+  prompt the user just opened. And the help overlay's `dialogH` is now
+  `len(helpLines)` rather than a hand-maintained `19`, because adding the line
+  advertising `/` would otherwise have left the box off-centre — the same defect
+  that had `./menuedit`'s menu edit screen sized for seven fields after the list
+  grew to thirteen.
+
+  `./strings` shares the silent-miss gap; it was left alone here rather than
+  widening this PR, and is worth a small follow-up.
 
 All of `./ue`'s dialog overlays already preserved the screen behind them with
 the `padToCol` / `skipToCol` pair, so adopting the backdrop needed no change
