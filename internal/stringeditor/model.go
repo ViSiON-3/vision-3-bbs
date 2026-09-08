@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringformat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
@@ -112,6 +113,10 @@ type Model struct {
 
 	// Message (flash message shown briefly)
 	message string
+
+	// warnedFormat records that the save-time format warning has been shown,
+	// so a second F10 saves rather than repeating it forever.
+	warnedFormat bool
 }
 
 // New creates a new string editor model.
@@ -325,7 +330,15 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.confirmYes = false
 		return m, nil
 	case tea.KeyF10:
-		// Save and exit
+		// Save and exit. Report format mismatches once before writing, but do
+		// not block: an older file may already contain one, and refusing to
+		// save would trap every unrelated edit behind someone else's mistake.
+		if problems := m.formatProblems(); len(problems) > 0 && !m.warnedFormat {
+			m.warnedFormat = true
+			m.message = fmt.Sprintf("%d string(s) do not match their arguments (%s%s) - F10 again to save anyway",
+				len(problems), problems[0].Key, plural(len(problems)))
+			return m, nil
+		}
 		if err := SaveStrings(m.filePath, m.values); err != nil {
 			m.message = fmt.Sprintf("ERROR: %v", err)
 			return m, nil
@@ -398,6 +411,12 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeNavigate
 		m.editErr = ""
 		m.textInput.Blur()
+		// Warn but accept. The sysop may be mid-way through a rewrite, and
+		// refusing the edit would lose the text they just typed; the warning
+		// stays visible on the message bar and the save check repeats it.
+		if err := m.formatProblem(m.editKey, newVal); err != nil {
+			m.message = "WARNING: " + err.Error()
+		}
 		return m, nil
 	case tea.KeyEscape:
 		// Cancel edit
@@ -514,6 +533,36 @@ func (m Model) defaultFor(key string) (string, bool) {
 		return def, true
 	}
 	return "", false
+}
+
+// formatProblem checks one value's directives against the shipped default's.
+func (m Model) formatProblem(key, value string) error {
+	def, ok := m.defaultFor(key)
+	if !ok {
+		return nil
+	}
+	return stringformat.ValidateValue(key, value, def)
+}
+
+// formatProblems reports every configured string whose directives no longer
+// match the arguments its call site passes.
+func (m Model) formatProblems() []stringformat.Problem {
+	defaults := make(map[string]string, len(m.shippedDefaults)+len(config.StringFallbacks))
+	for k, v := range config.StringFallbacks {
+		defaults[k] = v
+	}
+	for k, v := range m.shippedDefaults {
+		defaults[k] = v
+	}
+	return stringformat.Validate(m.values, defaults)
+}
+
+// plural renders a "and N more" suffix for a warning naming one example.
+func plural(n int) string {
+	if n <= 1 {
+		return ""
+	}
+	return fmt.Sprintf(" and %d more", n-1)
 }
 
 // recomputeDirty re-derives the dirty flag by comparing every current value

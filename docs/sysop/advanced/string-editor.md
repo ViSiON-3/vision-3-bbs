@@ -200,16 +200,40 @@ they do not shift when reserved entries are hidden — "string 199" always means
 
 Some strings carry `%s` / `%d` **format verbs**, which the BBS fills in at runtime. These are
 different from `|XX` placeholder codes: a placeholder can be moved or removed freely, but a format
-verb must stay, and the **number and order of verbs must not change**. The editor's description line
-names the verbs a string expects, for example:
-
-```text
-Exec: Version String    Version string format (%s=version)
-```
+verb must stay, and the **number and types of arguments must not change**.
 
 Removing or adding a verb does not fail — it prints `%!d(MISSING)` or `%!(EXTRA int=3)` into the
 middle of the message the user sees. If you want a literal percent sign in one of these strings,
 write it as `%%`.
+
+The editor checks this for you. For a formatted string, the description line ends with the
+signature the BBS supplies:
+
+```text
+Format for each node in the list (%d=node, %s=user)  [2 argument(s): integer, string]
+```
+
+If your edit no longer matches, the editor **warns but keeps your text** — you may be halfway
+through a rewrite, and discarding what you just typed would be worse than the warning:
+
+```text
+WARNING: takes 2 argument(s) but 0 are supplied
+```
+
+`F10` reports any remaining mismatches once before saving. Pressing `F10` again saves anyway, so one
+bad string never traps every unrelated edit behind it.
+
+Cosmetic changes are fine and raise no warning: adding padding (`%s` → `%-20s`), zero-filling
+(`%d` → `%03d`), adding a literal `%%`, or reordering with explicit argument indexes
+(`%s from %s` → `%[2]s to %[1]s`).
+
+Only strings the BBS actually passes to a formatter are checked. A string that is printed verbatim
+may contain a bare percent sign — `badUDRatio` ends `(|15|RA%|09)`, where the `%` is literal text
+followed by a colour code — and is left alone.
+
+The BBS performs the same check when it loads `strings.json`, at startup and on hot reload. A
+mismatch is written to the log with the key, the expected arguments and what is wrong; it never
+blocks startup and never rewrites your string.
 
 `execVersionString` is the exception that repairs itself: with no `%s` it prints unchanged and logs
 why, rather than showing a mangled banner.

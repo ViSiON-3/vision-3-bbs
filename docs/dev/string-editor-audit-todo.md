@@ -1,9 +1,7 @@
 # String editor and configuration TUI audit
 
 Created: 2026-09-08. Status: in progress. Investigation complete; section 2
-(safe preview and lossless editing), section 1 (cross-binary audit and shared
-chrome) and section 3 (value states and catalog coverage) implemented; section 4
-pending.
+all four sections implemented.
 
 Related issues:
 
@@ -219,48 +217,93 @@ editable nor recorded as legacy, or if a recorded legacy key becomes live.
 
 ## 4. Validate format contracts (#237)
 
-- [ ] Inventory actual formatted-string call sites, including aliases and helper
+- [x] Inventory actual formatted-string call sites, including aliases and helper
   wrappers. Distinguish strings passed to `fmt` from plain text and other BBS
   placeholder syntaxes.
-- [ ] Establish shared expected arguments/defaults for formatted keys, available
+- [x] Establish shared expected arguments/defaults for formatted keys, available
   to the runtime, editor, and tests. Avoid importing the menu package into the
   config loader or creating another independently maintained source of defaults.
-- [ ] Implement parsing that understands `%%`, flags, width, precision, argument
+- [x] Implement parsing that understands `%%`, flags, width, precision, argument
   indexes, and width/precision arguments supplied through `*`. Detect malformed
   directives, including a trailing `%`.
-- [ ] Define compatibility rules: count and argument types must agree; cosmetic
+- [x] Define compatibility rules: count and argument types must agree; cosmetic
   padding must not cause false warnings. Explicit indexed reordering should be
   evaluated by argument binding, not just textual verb order.
-- [ ] Keep argument descriptions: type validation cannot detect swapping the
+- [x] Keep argument descriptions: type validation cannot detect swapping the
   meanings of two arguments that both use `%s`.
-- [ ] Validate on runtime load and hot reload. Log the key, expected arguments,
+- [x] Validate on runtime load and hot reload. Log the key, expected arguments,
   and specific mismatch without preventing BBS startup or silently rewriting
   custom strings.
-- [ ] Add editor feedback at edit acceptance and save. Agree on warning versus
+- [x] Add editor feedback at edit acceptance and save. Agree on warning versus
   rejection behavior, and avoid blocking unrelated edits because an older file
   already contains a mismatch.
-- [ ] Ensure restoring a default provides a clear recovery path for an invalid
+- [x] Ensure restoring a default provides a clear recovery path for an invalid
   template without losing the user's current edit unexpectedly.
-- [ ] Add CI checks tying shipped defaults to actual call-site arguments. A
+- [x] Add CI checks tying shipped defaults to actual call-site arguments. A
   comparison between two copies of a default does not prove the call site is
   correct. Ensure newly introduced formatted keys cannot bypass coverage.
-- [ ] Retain the specific version-string compatibility behavior from PR #236.
+- [x] Retain the specific version-string compatibility behavior from PR #236.
   Any reuse of the new parser must preserve its supported legacy cases.
-- [ ] Avoid changing every render call site as part of this work unless a
+- [x] Avoid changing every render call site as part of this work unless a
   demonstrated mismatch requires a targeted fix.
+
+### Implemented
+
+`internal/formatspec` parses what fmt parses: escaped `%%`, the flags `+-# 0`,
+width and precision given literally or as `*` arguments, and explicit argument
+indexes in `[n]` form. It returns an argument signature keyed by binding
+position, not textual order, so `%[2]s to %[1]s` compares equal to `%s from %s`.
+Malformed directives are reported: a trailing bare `%`, an unterminated or
+non-numeric index, an unknown verb, and a single argument used as two
+incompatible types. A property test fills every parsed signature through Sprintf
+and asserts no `%!` marker appears in the output.
+
+Validation is scoped by `internal/stringformat`. Not every BBS string is a
+format string, and some legitimately contain a bare percent sign -- `badUDRatio`
+ends `(|15|RA%|09)`, a literal `%` followed by a pipe colour code -- so running
+every value through the parser would report working prompts as broken.
+`FormattedKeys` lists the 89 keys a call site actually hands to fmt.
+
+That list is derived from the source, not maintained by hand. An AST test walks
+the repository for `fmt.Sprintf`/`Printf`/`Errorf`/`Fprintf` calls whose format
+argument is a `LoadedStrings` field, maps the field to its json key by reflection
+over the struct tags, and fails if the committed list and the discovered set
+differ in either direction. A second test compares each call site's argument
+count against the arity of that key's shipped default -- the check the audit
+asked for, since comparing two copies of a default proves nothing about the call
+site. All 118 call sites were checked with none skipped; a site spreading a
+slice would be logged rather than silently passed over.
+
+The runtime validates in `config.LoadStrings`, which is the single entry point
+for both startup and hot reload. Each mismatch is logged with the key, the
+expected signature and the specific problem. It never blocks startup and never
+rewrites a sysop's string.
+
+The editor warns at edit acceptance and keeps the text, since the sysop may be
+mid-rewrite and discarding what they just typed would be worse than the warning.
+F10 reports remaining mismatches once and saves on a second press, so an older
+file's mistake cannot trap unrelated edits. The description bar shows the
+expected signature while editing, and argument descriptions are retained in the
+catalog because type validation cannot detect two `%s` arguments being swapped.
+
+`renderVersionString` now uses the shared parser instead of `formatVerbCounts`.
+Every behavior from PR #236 is preserved and still tested, including the
+`100% Go` case where the verb is `%<space>G` rather than `%s`, the superseded
+template upgrade, and the exact-match rule that treats a whitespace difference
+as a sysop edit. No other render call site was changed.
 
 ## Delivery and verification
 
 - [ ] Prefer two coordinated PRs: #234 for safe editing and visual consistency,
   followed by #237 for shared validation and call-site/default checks. Place any
   shared metadata/default groundwork deliberately and document the dependency.
-- [ ] Update the string-editor guide with escape editing, blank/default states,
+- [x] Update the string-editor guide with escape editing, blank/default states,
   adaptive sizing, and format-validation behavior.
-- [ ] Verify preview safety, no-op edit round trips, save/reload round trips,
+- [x] Verify preview safety, no-op edit round trips, save/reload round trips,
   missing-template installations, and legacy/custom configurations.
-- [ ] Verify runtime load and hot reload warnings, malformed format strings,
+- [x] Verify runtime load and hot reload warnings, malformed format strings,
   escaped percentages, padded verbs, indexed arguments, and argument order.
-- [ ] Run relevant package tests, the repository test suite and race checks,
+- [x] Run relevant package tests, the repository test suite and race checks,
   `go vet`, formatting checks, and `git diff --check`.
 - [ ] Perform final visual checks of **both** `./strings` and `./config`; automated
   non-empty-view smoke tests alone do not establish layout correctness.

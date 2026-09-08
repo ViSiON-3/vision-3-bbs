@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringformat"
+	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
 
 // LoadStrings loads the string configuration from a JSON file.
@@ -28,8 +31,52 @@ func LoadStrings(configPath string) (StringsConfig, error) { // Return the loade
 	}
 
 	applyStringDefaults(&loadedConfig)
+	warnFormatMismatches(data, filePath)
 	slog.Info("successfully loaded strings configuration")
 	return loadedConfig, nil // Return the loaded struct
+}
+
+// warnFormatMismatches reports any configured string whose format directives no
+// longer match the arguments its call site passes.
+//
+// It only warns. Sprintf does not fail on a mismatch, it prints %!d(MISSING)
+// into the middle of the message, so the sysop needs to be told -- but refusing
+// to start the BBS over a cosmetic prompt would be worse than the prompt, and
+// silently rewriting their string would discard an edit they meant to make.
+// This runs on hot reload too, since that path calls LoadStrings.
+func warnFormatMismatches(data []byte, filePath string) {
+	values, err := stringValues(data)
+	if err != nil {
+		return // the caller already surfaced any parse failure
+	}
+	defaults, err := configtemplates.StringDefaults()
+	if err != nil {
+		slog.Debug("no embedded defaults to validate strings against", "error", err)
+		return
+	}
+	for _, p := range stringformat.Validate(values, defaults) {
+		slog.Warn("configured string does not match the arguments the BBS passes it; "+
+			"it will print a malformed message until corrected",
+			"path", filePath, "key", p.Key, "expected", p.Expected, "problem", p.Detail)
+	}
+}
+
+// stringValues extracts the string-valued entries of a strings.json document.
+// Numeric entries such as the defColorN fields are skipped rather than failing
+// the whole extraction.
+func stringValues(data []byte) (map[string]string, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(raw))
+	for key, msg := range raw {
+		var s string
+		if err := json.Unmarshal(msg, &s); err == nil {
+			out[key] = s
+		}
+	}
+	return out, nil
 }
 
 // StringFallbacks maps a strings.json key to the value the runtime substitutes

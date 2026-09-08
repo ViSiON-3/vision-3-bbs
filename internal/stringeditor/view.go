@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringformat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
@@ -327,6 +328,19 @@ func (m Model) renderMessageBar(panelW int) string {
 	return style.Render(text) + panelStyle.Render(strings.Repeat(" ", panelW-cellWidth(text)))
 }
 
+// signatureFor describes the arguments a formatted key must consume, or "" for
+// a string that is printed verbatim.
+func (m Model) signatureFor(key string) string {
+	if !stringformat.IsFormatted(key) {
+		return ""
+	}
+	def, ok := m.defaultFor(key)
+	if !ok {
+		return ""
+	}
+	return stringformat.Signature(key, def)
+}
+
 // currentState classifies the entry under the cursor.
 func (m Model) currentState() valueState {
 	if m.cursor < 0 || m.cursor >= len(m.entries) {
@@ -354,6 +368,11 @@ func (m Model) renderDescriptionBar(row int) string {
 		desc = entry.Description
 		if desc == "" {
 			desc = entry.Key
+		}
+		// Name the arguments a formatted string must keep, so the sysop can
+		// see the contract while editing rather than after breaking it.
+		if sig := m.signatureFor(entry.Key); sig != "" {
+			desc += "  [" + sig + "]"
 		}
 	}
 	if desc == "" {
