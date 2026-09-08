@@ -24,11 +24,6 @@ func dosColor(bg, fg int) lipgloss.Style { return tuiart.Color(bg, fg) }
 var titleBarStyle = tuiart.HeaderBarStyle
 var helpBarStyle = tuiart.HelpBarStyle
 
-// --- Background fill ---
-// MENUEDIT.PAS: Fill_Screen('░',7,1) → light gray fg, blue bg. Used only when
-// the backdrop art is unavailable; tuiart.Backdrop renders this fill itself.
-var bgFillStyle = tuiart.FillStyle
-
 // --- Menu list box ---
 // MENUEDIT.PAS Open_Screen: Color(3,11) GrowBox → cyan bg, light cyan fg
 var listBorderStyle = dosColor(3, 11)
