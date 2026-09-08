@@ -1,7 +1,7 @@
 # String editor and configuration TUI audit
 
-Created: 2026-09-08. Status: in progress. Investigation complete; section 2
-all four sections implemented.
+Created: 2026-09-08. Status: implemented. All four sections are done; two
+delivery items remain, both noted at the end of this document.
 
 Related issues:
 
