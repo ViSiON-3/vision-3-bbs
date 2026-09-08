@@ -142,3 +142,73 @@ func TestViewGeometry(t *testing.T) {
 		}
 	}
 }
+
+// TestViewGeometryWithFilledInputs re-runs the width check with each text input
+// carrying a value that fills, and overflows, its field.
+//
+// TestViewGeometry drives real keystrokes but types nothing, so every input it
+// renders is empty. That blind spot hid two real overruns in ./menuedit, where
+// bubbles/textinput's trailing cursor cell pushed a filled field past its box.
+// No ./ue field is wide enough to do the same today; this pins that it stays
+// true as fields are added or widened.
+func TestViewGeometryWithFilledInputs(t *testing.T) {
+	sizes := []struct{ w, h int }{{80, 25}, {120, 45}}
+	cases := []struct {
+		name  string
+		mode  editorMode
+		typed string
+	}{
+		{"edit_field", modeEditField, strings.Repeat("X", 80)},
+		{"password", modePasswordEntry, strings.Repeat("P", 80)},
+		{"search", modeSearch, strings.Repeat("S", 40)},
+	}
+
+	for _, size := range sizes {
+		for _, mc := range cases {
+			t.Run(mc.name+"_"+fmt.Sprintf("%dx%d", size.w, size.h), func(t *testing.T) {
+				m, _ := editorOver(t,
+					&user.User{ID: 1, Handle: "Alice", AccessLevel: 10},
+					&user.User{ID: 2, Handle: "Bob", AccessLevel: 20})
+				updated, _ := m.Update(tea.WindowSizeMsg{Width: size.w, Height: size.h})
+				m = updated.(Model)
+				m = enterMode(t, m, mc.mode)
+				for _, r := range mc.typed {
+					u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+					m = u.(Model)
+				}
+
+				lines := strings.Split(m.View(), "\n")
+				if len(lines) != m.height {
+					t.Fatalf("rendered %d rows, want %d", len(lines), m.height)
+				}
+				for i, line := range lines {
+					if got := screenCells(line); got != m.width {
+						t.Errorf("row %d is %d cells wide, want %d", i, got, m.width)
+					}
+				}
+			})
+		}
+	}
+}
+
+// The edit screen's columns are 42 and boxW-42 cells. A field whose label plus
+// value exceeds its column overruns the row, because renderEditRow can only
+// skip the padding, not claw back the content. Pin that every field still fits.
+func TestEveryFieldFitsItsColumn(t *testing.T) {
+	m, _ := editorOver(t, &user.User{ID: 1, Handle: "Alice"})
+	const boxW, leftW = 76, 42
+	for _, f := range m.fields {
+		budget := leftW
+		if f.Col == rightCol {
+			budget = boxW - leftW
+		}
+		labelW := 14
+		if f.Col == rightCol {
+			labelW = 13
+		}
+		need := labelW + len(" : ") + f.Width
+		if need > budget {
+			t.Errorf("field %q needs %d cells but its column allows %d", f.Label, need, budget)
+		}
+	}
+}

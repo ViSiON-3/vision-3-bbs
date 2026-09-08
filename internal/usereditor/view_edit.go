@@ -97,21 +97,23 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 	var leftField, rightField string
 	var leftRawW, rightRawW int
 
+	// Column budgets, declared once and also handed to renderField so an
+	// active input is bounded by the space it actually has. Emitting more than
+	// the budget only skips the padding below; the row overruns regardless.
+	leftW := 42 // Left column width (41 content + 1 gap before right column)
+	rightW := boxW - leftW
+
 	// Find fields that belong to this row
 	for i, f := range m.fields {
 		if f.Row != row {
 			continue
 		}
 
-		rendered, rawW := m.renderField(i, f, u)
-
 		switch f.Col {
-		case 3:
-			leftField = rendered
-			leftRawW = rawW
-		case 50:
-			rightField = rendered
-			rightRawW = rawW
+		case leftCol:
+			leftField, leftRawW = m.renderField(i, f, u, leftW)
+		case rightCol:
+			rightField, rightRawW = m.renderField(i, f, u, rightW)
 		}
 	}
 
@@ -142,9 +144,6 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 	}
 
 	// Build the row using pre-computed raw widths (not ANSI measurement).
-	leftW := 42 // Left column width (41 content + 1 gap before right column)
-	rightW := boxW - leftW
-
 	var result string
 	if leftField != "" {
 		result = leftField
@@ -169,7 +168,8 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 
 // renderField renders a single field (label + value).
 // Returns the styled string and the raw (unstyled) visible character width.
-func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) {
+// budget is the column width the field must fit inside.
+func (m Model) renderField(fieldIdx int, f fieldDef, u *userType, budget int) (string, int) {
 	isActive := m.editField == fieldIdx
 
 	// Pad labels to consistent widths so colons align vertically.
@@ -193,15 +193,16 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) 
 	// Raw width is always label + field width (value is padded/clamped to f.Width)
 	rawW := labelLen + f.Width
 
-	// If actively editing this field, measure what the widget actually renders
-	// rather than deriving it from f.Width. It appends a cursor cell after the
-	// text, so its width is Width+1 today, but overlayPasswordDialog already
-	// measures rather than assumes ("textinput.View() width varies") and the
-	// two sites should not disagree about the same widget.
+	// If actively editing this field, bound the widget's output to the column
+	// budget and report what it actually occupies, rather than deriving either
+	// from f.Width. It appends a cursor cell after the text, so a value that
+	// fills the field renders Width+1 cells. No ./ue field is wide enough to
+	// overrun its column today, but ./menuedit's were, and measuring alone was
+	// not enough there: when the view exceeds the space, the padding falls to
+	// zero and the oversized view still overruns.
 	if isActive && m.mode == modeEditField {
-		view := m.textInput.View()
-		return fieldLabelStyle.Render(label) + view,
-			labelLen + uitext.ApproximateVisibleLen(view)
+		view, w := tuiart.FitInput(m.textInput.View(), max(0, budget-labelLen))
+		return fieldLabelStyle.Render(label) + view, labelLen + w
 	}
 
 	// Display the value
