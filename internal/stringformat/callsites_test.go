@@ -133,6 +133,10 @@ func funcBody(n ast.Node) *ast.BlockStmt {
 
 // scanFuncBody finds the fmt calls in one function that format a configured
 // string, directly or through a local alias.
+//
+// It does not descend into nested function literals. Each closure is scanned in
+// its own right by scanCallSites, so descending would report its calls twice
+// and would let its assignments bind names in the enclosing function.
 func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys map[string]string) []callSite {
 	t.Helper()
 
@@ -147,6 +151,12 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 	}
 	aliases := map[string][]binding{}
 	ast.Inspect(body, func(n ast.Node) bool {
+		if _, isClosure := n.(*ast.FuncLit); isClosure {
+			// A closure is its own function: scanCallSites visits it
+			// separately, and letting its assignments land here would bind
+			// names the enclosing function never sets.
+			return false
+		}
 		assign, ok := n.(*ast.AssignStmt)
 		if !ok {
 			return true
@@ -176,6 +186,11 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 
 	var sites []callSite
 	ast.Inspect(body, func(n ast.Node) bool {
+		if _, isClosure := n.(*ast.FuncLit); isClosure {
+			// Scanned separately, so descending here would report every call
+			// inside a closure twice.
+			return false
+		}
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
@@ -460,6 +475,21 @@ func TestAliasedFormatSitesAreFound(t *testing.T) {
 	} {
 		if !found[key] {
 			t.Errorf("%q is formatted through a local alias but the scanner did not find it", key)
+		}
+	}
+}
+
+// TestCallSitesAreNotDoubleCounted covers the closure boundary: a call inside a
+// function literal belongs to that literal, and scanning it again as part of the
+// enclosing function reported it twice.
+func TestCallSitesAreNotDoubleCounted(t *testing.T) {
+	seen := map[string]int{}
+	for _, s := range scanCallSites(t) {
+		seen[s.Pos+" "+s.Key]++
+	}
+	for site, n := range seen {
+		if n > 1 {
+			t.Errorf("call site reported %d times: %s", n, site)
 		}
 	}
 }

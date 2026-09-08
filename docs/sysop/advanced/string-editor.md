@@ -16,20 +16,20 @@ The editor uses a fullscreen layout based on the DOS original. It requires at le
 to fill a larger terminal:
 
 ```text
-            -- ViSiON/3 String Configuration v1.0 --
-░░░░ Current Topic Number: 1 │ ViSiON/3 BBS String Config │ Page: 1 ░░░░
-░░░░  # Name                      Value                             ░░░░
-░░░░  1[Default User's Prompt  ]██ |MN ██ |TL Left:                 ░░░░
-░░░░  2[System Pause String    ]███ ► Stroke Me! ►███               ░░░░
-░░░░  3[System Password String ]███ Login Password:                 ░░░░
-░░░░  ...                                                           ░░░░
-░░░░                                                                ░░░░
-░░░░░░░░░░ This is the Default prompt for new users ░░░░░░░░░░░░░░░░░░░░
+           -- ViSiON/3 String Configuration v1.0 --
+░ Current Topic Number: 1 │ Current Page: 1 of 21                   ░
+░   # Name                       Value                              ░
+░   1[Default User's Prompt  ]  ██ |MN ██ |TL Left:                 ░
+░   2[System Pause String    ]  ███ ► Stroke Me! ►███               ░
+░   3[System Password String ]  ███ Login Password:                 ░
+░   ...                                                             ░
+░                                                                   ░
+░░░░░░░░░ This is the Default prompt for new users ░░░░░░░░░░░░░░░░░░░
   Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  Esc Quit
 ```
 
 - **First row** — Title bar, shared with `./config`
-- **List panel** — The DOS list, centered over the shaded background:
+- **List panel** — The DOS list, filling the terminal inside a one-column border:
   - Status bar showing current topic number, title, and page
   - Column headers (Name / Value)
   - One string per row, with label and color-rendered value
