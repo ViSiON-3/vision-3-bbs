@@ -21,10 +21,6 @@ func dosColor(bg, fg int) lipgloss.Style { return tuiart.Color(bg, fg) }
 // --- Global header bar (white text on dark gray bg) ---
 var globalHeaderBarStyle = tuiart.HeaderBarStyle
 
-// --- Background fill ---
-// Fill_Screen('░',7,1) → gray on blue
-var bgFillStyle = tuiart.FillStyle
-
 // --- Menu box border ---
 var menuBorderStyle = dosColor(1, 9)
 
