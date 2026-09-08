@@ -20,15 +20,25 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
+	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
 
-// loadShippedDefaults reads the factory default strings from the templates directory.
+// loadShippedDefaults returns the factory default strings used by F4 restore
+// and by the creation of a missing strings.json.
+//
+// An on-disk template wins so a distribution can ship adjusted defaults, but
+// the templates directory is not present in every installation, so the copy
+// embedded in this binary is the guaranteed fallback rather than giving up.
 func loadShippedDefaults() map[string]string {
 	candidates := []string{
 		"templates/configs/strings.json",
 	}
 	if exe, err := os.Executable(); err == nil {
-		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "templates", "configs", "strings.json"))
+		dir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(dir, "templates", "configs", "strings.json"),
+			filepath.Join(dir, "..", "templates", "configs", "strings.json"),
+		)
 	}
 	for _, path := range candidates {
 		data, err := os.ReadFile(path)
@@ -40,7 +50,14 @@ func loadShippedDefaults() map[string]string {
 			return defaults
 		}
 	}
-	return nil
+
+	defaults, err := configtemplates.StringDefaults()
+	if err != nil {
+		// Unreachable unless the embedded asset itself is corrupt.
+		fmt.Fprintf(os.Stderr, "Warning: no factory defaults available: %v\n", err)
+		return nil
+	}
+	return defaults
 }
 
 func main() {
@@ -65,7 +82,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load factory defaults from templates/
+	// Load factory defaults from templates/, falling back to the embedded copy
 	shippedDefaults := loadShippedDefaults()
 
 	// Create the editor model

@@ -81,32 +81,50 @@ func TestMalformedTemplatesNeverRenderSprintfNoise(t *testing.T) {
 	}
 }
 
-// formatVerbCounts has to see past %%, which renders as a literal percent and
-// is not a verb, and has to tell %s from any other verb: "100% Go" carries one
-// verb by a naive count, but it is %<space> and filling it mangles the banner.
-func TestFormatVerbCounts(t *testing.T) {
+// The renderer has to see past %%, which is a literal percent and not a verb,
+// and has to tell a verb that takes a string from one that does not: "100% Go"
+// carries one verb by a naive count, but it is %<space>G, wants a number, and
+// filling it mangles the banner.
+func TestOnlyASingleStringVerbIsFilled(t *testing.T) {
 	cases := []struct {
-		template   string
-		total, str int
+		template string
+		filled   bool // whether the version is substituted in
 	}{
-		{"", 0, 0},
-		{"no verbs", 0, 0},
-		{"%s", 1, 1},
-		{"%d and %s", 2, 1},
-		{"100%% pure", 0, 0},
-		{"100%% pure %s", 1, 1},
-		{"%%%s", 1, 1},
-		{"trailing %", 0, 0},
-		{"%%", 0, 0},
-		// The case that caught a bug here: the verb is %<space>, not %s.
-		{"100% Go", 1, 0},
-		{"|15Trailing percent %|07", 1, 0},
+		{"%s", true},
+		{"100%% pure %s", true},
+		{"%%%s", true},
+		{"|15Escaped 100%% and one %s|07", true},
+		// Padded and general forms are filled too. The original check looked
+		// only at the byte after %, so it printed a sysop's padded banner
+		// literally; the editor calls padding cosmetic, so the runtime must
+		// agree with it rather than refuse the same edit.
+		{"|15ViSiON/3 - %-20s|07", true},
+		{"|15ViSiON/3 - %20s|07", true},
+		{"|15ViSiON/3 - %v|07", true},
+		{"|15ViSiON/3 - %q|07", true},
+		{"", false},
+		{"no verbs", false},
+		{"100%% pure", false},
+		{"%d and %s", false},
+		{"trailing %", false},
+		{"%%", false},
+		// The case that caught a bug here: the verb is %<space>G, not %s.
+		{"100% Go", false},
+		{"|15Trailing percent %|07", false},
+		// One argument, but not one a version string can satisfy.
+		{"|15ViSiON/3 - %d|07", false},
+		{"|15ViSiON/3 - %f|07", false},
+		{"|15ViSiON/3 - %t|07", false},
 	}
 	for _, c := range cases {
-		total, str := formatVerbCounts(c.template)
-		if total != c.total || str != c.str {
-			t.Errorf("formatVerbCounts(%q) = (%d, %d), want (%d, %d)",
-				c.template, total, str, c.total, c.str)
+		got := renderVersionString(c.template)
+		filled := got != c.template
+		if filled != c.filled {
+			t.Errorf("renderVersionString(%q) = %q; filled = %v, want %v",
+				c.template, got, filled, c.filled)
+		}
+		if strings.Contains(got, "%!") {
+			t.Errorf("renderVersionString(%q) rendered Sprintf noise: %q", c.template, got)
 		}
 	}
 }

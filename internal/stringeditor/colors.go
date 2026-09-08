@@ -4,40 +4,35 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
-// DOS CGA color palette mapped to ANSI 256-color indices.
-// These are the standard 16 DOS colors (0-15).
-var dosColors = [16]string{
-	"0",  // 0:  Black
-	"4",  // 1:  Blue (DOS blue = ANSI 4)
-	"2",  // 2:  Green
-	"6",  // 3:  Cyan (DOS cyan = ANSI 6)
-	"1",  // 4:  Red (DOS red = ANSI 1)
-	"5",  // 5:  Magenta
-	"3",  // 6:  Brown/Yellow (DOS brown = ANSI 3)
-	"7",  // 7:  Light Gray
-	"8",  // 8:  Dark Gray
-	"12", // 9:  Light Blue (DOS light blue = ANSI 12)
-	"10", // 10: Light Green
-	"14", // 11: Light Cyan (DOS light cyan = ANSI 14)
-	"9",  // 12: Light Red (DOS light red = ANSI 9)
-	"13", // 13: Light Magenta
-	"11", // 14: Yellow (DOS yellow = ANSI 11)
-	"15", // 15: White
-}
+// DOS palette index names, used by the editor's own chrome styles.
+const (
+	dosBlack        = 0
+	dosBlue         = 1
+	dosRed          = 4
+	dosMagenta      = 5
+	dosLightGray    = 7
+	dosDarkGray     = 8
+	dosLightBlue    = 9
+	dosLightCyan    = 11
+	dosLightMagenta = 13
+	dosYellow       = 14
+	dosWhite        = 15
+)
 
-// DOS CGA background colors mapped to ANSI 256-color indices.
-var dosBgColors = [8]string{
-	"0", // 0: Black BG
-	"1", // 1: Red BG (DOS B1 = Red BG; maps to ANSI BG 1)
-	"2", // 2: Green BG
-	"3", // 3: Brown BG
-	"4", // 4: Blue BG
-	"5", // 5: Magenta BG
-	"6", // 6: Cyan BG
-	"7", // 7: Light Gray BG
-}
+// dosColors is the shared VGA palette, indexed by DOS color number. Pipe codes
+// |00-|15 and the $x dollar codes both index straight into it, so a string
+// previews here in the same colors the BBS sends to a caller — and in the same
+// colors ./config uses for its own chrome.
+var dosColors = tuiart.Palette
+
+// dosBgColors indexes the same palette for the eight DOS background colors.
+// Background codes |B0-|B7 cannot address the bright half of the palette.
+var dosBgColors = tuiart.Palette[:8]
 
 // styledSpan represents a chunk of text with a specific style.
 type styledSpan struct {
@@ -59,8 +54,8 @@ func RenderColorString(s string, maxWidth int) string {
 // parseColorCodes parses a BBS string with pipe/dollar color codes into spans.
 func parseColorCodes(s string) []styledSpan {
 	var spans []styledSpan
-	curFG := dosColors[9] // Default: light blue (DOS color 9)
-	curBG := ""           // Default: no background (terminal default)
+	curFG := dosColors[dosLightBlue] // Pascal DataColor = 9
+	curBG := ""                      // Default: the panel's own background
 
 	i := 0
 	textBuf := strings.Builder{}
@@ -193,46 +188,114 @@ func dollarColorIndex(ch byte) int {
 	}
 }
 
-// renderSpans converts styled spans to a lipgloss-rendered string,
-// truncating to maxWidth visible characters.
+// renderSpans converts styled spans to a lipgloss-rendered string, fitting the
+// result into maxWidth terminal cells.
+//
+// Control characters are never emitted raw: a stored CR, LF, tab or escape
+// would move the cursor and corrupt the surrounding list, so each one is drawn
+// as the same backslash sequence the editor accepts as input, in a contrasting
+// style so it reads as a marker rather than as literal text.
 func renderSpans(spans []styledSpan, maxWidth int) string {
 	if maxWidth <= 0 {
 		maxWidth = 80
 	}
 
+	// Leave the last cell for the overflow marker.
+	budget := maxWidth - 1
+
 	var result strings.Builder
-	visibleLen := 0
+	used := 0
+
+	overflow := tuiart.Color(dosMagenta, dosWhite)
 
 	for _, span := range spans {
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color(span.fg))
-		if span.bg != "" {
-			style = style.Background(lipgloss.Color(span.bg))
+		// The panel sits on the backdrop art, so a span with no background of
+		// its own still paints the panel's black ground rather than letting
+		// the art show through.
+		bg := span.bg
+		if bg == "" {
+			bg = dosColors[dosBlack]
 		}
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(span.fg)).
+			Background(lipgloss.Color(bg))
 
 		for _, ch := range span.text {
-			if visibleLen >= maxWidth-1 {
-				// Overflow indicator
-				overflow := lipgloss.NewStyle().
-					Foreground(lipgloss.Color(dosColors[15])).
-					Background(lipgloss.Color(dosColors[5]))
+			text := string(ch)
+			chStyle := style
+			if esc, escaped := escapeRune(ch); escaped {
+				text = esc
+				chStyle = controlStyle
+			}
+			w := cellWidth(text)
+			if used+w > budget {
 				result.WriteString(overflow.Render("»"))
 				return result.String()
 			}
-			result.WriteString(style.Render(string(ch)))
-			visibleLen++
+			result.WriteString(chStyle.Render(text))
+			used += w
 		}
 	}
 
 	return result.String()
 }
 
-// PlainTextLength returns the visible character count of a BBS pipe-coded string,
-// stripping all color codes.
+// controlStyle marks escaped control characters in a preview so they are
+// distinguishable from a value that literally contains "\r".
+var controlStyle = tuiart.Color(dosLightGray, dosBlack)
+
+// cellWidth returns the number of terminal cells s occupies, counting wide
+// characters as two and combining marks as zero.
+func cellWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		w += runewidth.RuneWidth(r)
+	}
+	return w
+}
+
+// renderDimString previews a value the BBS supplies rather than the file, with
+// its color codes stripped: the codes describe how the BBS will draw it, but
+// the row itself is informational and reads as one dimmed run.
+func renderDimString(s string, maxWidth int) string {
+	var b strings.Builder
+	used := 0
+	budget := maxWidth - 1
+	for _, span := range parseColorCodes(s) {
+		for _, ch := range span.text {
+			text := string(ch)
+			if esc, escaped := escapeRune(ch); escaped {
+				text = esc
+			}
+			w := cellWidth(text)
+			if used+w > budget {
+				b.WriteString(tuiart.Color(dosMagenta, dosWhite).Render("»"))
+				return b.String()
+			}
+			b.WriteString(dimStyle.Render(text))
+			used += w
+		}
+	}
+	return b.String()
+}
+
+// dimStyle draws a runtime-supplied preview.
+var dimStyle = tuiart.Color(dosBlack, dosDarkGray)
+
+// PlainTextLength returns the number of terminal cells a BBS pipe-coded string
+// occupies once color codes are stripped and control characters are shown in
+// their escaped form, matching what RenderColorString draws.
 func PlainTextLength(s string) int {
 	spans := parseColorCodes(s)
 	total := 0
 	for _, span := range spans {
-		total += len([]rune(span.text))
+		for _, r := range span.text {
+			if esc, escaped := escapeRune(r); escaped {
+				total += cellWidth(esc)
+				continue
+			}
+			total += runewidth.RuneWidth(r)
+		}
 	}
 	return total
 }

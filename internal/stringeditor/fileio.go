@@ -7,14 +7,15 @@ import (
 	"sort"
 )
 
-// LoadStrings reads strings.json and returns a map of key -> value.
-// If the file doesn't exist, it creates it with defaults from metadata.
-func LoadStrings(path string) (map[string]string, error) {
+// LoadStrings reads strings.json and returns a map of key -> value. If the file
+// doesn't exist it is created from shippedDefaults, so a fresh install starts
+// with the factory strings rather than a file full of empty values that the
+// sysop would have to fill in by hand.
+func LoadStrings(path string, shippedDefaults map[string]string) (map[string]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Create with defaults
-			defaults := DefaultStrings()
+			defaults := DefaultStrings(shippedDefaults)
 			if writeErr := SaveStrings(path, defaults); writeErr != nil {
 				return nil, fmt.Errorf("creating default strings.json: %w", writeErr)
 			}
@@ -30,8 +31,9 @@ func LoadStrings(path string) (map[string]string, error) {
 	return result, nil
 }
 
-// SaveStrings writes the string map back to the JSON file with sorted keys
-// and pretty formatting. It preserves any keys not in the editor metadata.
+// SaveStrings writes the string map back to the JSON file with sorted keys and
+// pretty formatting. Keys the editor has no metadata for are written back
+// unchanged, so a legacy or hand-added string is never dropped by a save.
 func SaveStrings(path string, strings map[string]string) error {
 	// Use sorted keys for deterministic output
 	keys := make([]string, 0, len(strings))
@@ -93,14 +95,20 @@ func marshalOrdered(pairs []keyValue) ([]byte, error) {
 	return buf, nil
 }
 
-// DefaultStrings returns the default string values matching the original
-// Pascal FormatStrings() procedure defaults.
-func DefaultStrings() map[string]string {
-	entries := StringEntries()
-	defaults := make(map[string]string, len(entries))
-	for _, e := range entries {
-		if len(e.Key) > 0 && e.Key[0] != '_' {
-			defaults[e.Key] = "" // Empty default; actual defaults come from the JSON file
+// DefaultStrings returns the values a brand-new strings.json should hold: every
+// shipped default, plus an empty entry for each catalog key the shipped set does
+// not cover so the file lists everything the editor can edit.
+func DefaultStrings(shippedDefaults map[string]string) map[string]string {
+	defaults := make(map[string]string, len(shippedDefaults))
+	for k, v := range shippedDefaults {
+		defaults[k] = v
+	}
+	for _, e := range StringEntries() {
+		if isReservedKey(e.Key) {
+			continue
+		}
+		if _, ok := defaults[e.Key]; !ok {
+			defaults[e.Key] = ""
 		}
 	}
 	return defaults

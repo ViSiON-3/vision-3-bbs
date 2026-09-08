@@ -12,26 +12,52 @@ The string editor (`strings`) is a TUI tool for editing `configs/strings.json`, 
 
 ## Interface
 
-The editor uses a fullscreen 80×25 terminal layout matching the DOS original:
+The editor uses a fullscreen layout based on the DOS original. It requires at least 80×25 and grows
+to fill a larger terminal:
 
 ```text
- Current Topic Number: 1 │ ViSiON/3 BBS String Configuration │ Current Page: 1
-  #  Name                     Value
-  1 [Default User's Prompt ] |08██ |15|MN |08██ |13|TL |05Left|08:
-  2 [System Pause String   ] |15█|07█|08█|B1|09█ |15Stroke Me! |09█...
-  3 [System Password String] |08█|07█|15█ |09Login Password|01:
-  ...
- (20 items per page)
-
- This is the Default prompt for new users
- ↑↓ Navigate │ PgUp/PgDn Pages │ Enter Edit │ F1 Edit(Prefill) │ F10 Save │ ...
+            -- ViSiON/3 String Configuration v1.0 --
+░░░░ Current Topic Number: 1 │ ViSiON/3 BBS String Config │ Page: 1 ░░░░
+░░░░  # Name                      Value                             ░░░░
+░░░░  1[Default User's Prompt  ]██ |MN ██ |TL Left:                 ░░░░
+░░░░  2[System Pause String    ]███ ► Stroke Me! ►███               ░░░░
+░░░░  3[System Password String ]███ Login Password:                 ░░░░
+░░░░  ...                                                           ░░░░
+░░░░                                                                ░░░░
+░░░░░░░░░░ This is the Default prompt for new users ░░░░░░░░░░░░░░░░░░░░
+  Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  Esc Quit
 ```
 
-- **Row 1** — Blue status bar showing current topic number, title, and page
-- **Row 2** — Column headers (Name / Value)
-- **Rows 3–22** — 20 items per page with label and color-rendered value
-- **Row 24** — Description of the currently highlighted string
-- **Row 25** — Yellow-on-blue keyboard shortcut reference
+- **First row** — Title bar, shared with `./config`
+- **List panel** — The DOS list, centered over the shaded background:
+  - Status bar showing current topic number, title, and page
+  - Column headers (Name / Value)
+  - One string per row, with label and color-rendered value
+  - Flash messages, the edit indicator, or the search box
+- **Second-from-last row** — Description of the currently highlighted string
+- **Last row** — Keyboard shortcut reference, shared with `./config`
+
+The title bar, help bar, DOS color palette and background fill come from `internal/tuiart`, so both
+editors render in the same colors and the same chrome. The list panel itself keeps the Pascal
+original's flat three-column layout.
+
+### Sizing
+
+Six rows are reserved for the title bar, status bar, column headers, message bar, description bar
+and help bar; every remaining row shows one string. An 80×25 terminal gives 19 items per page, a
+100×30 terminal gives 24, and so on up to a cap of **60 items per page** — past that the description
+bar sits too far from the selection to read as its caption, and the leftover rows become background
+above and below the panel.
+
+The panel is 80 columns wide at the minimum terminal size and widens on a larger one, always leaving
+10 columns of background on each side, up to a maximum panel width of **120 columns**.
+
+Resizing re-pages around the current selection, so the highlighted string stays on screen. Terminals
+smaller than 80×25 are not supported: the editor draws at 80×25 and the terminal clips it.
+
+`./config` paints its embedded ANSI art as its background. `./strings` cannot: that art is 80 columns
+wide and centered, and this editor's list panel is never narrower than 80, so the panel would cover
+the picture completely. It uses the shared shaded fill instead.
 
 ## Keyboard Shortcuts
 
@@ -47,6 +73,7 @@ The editor uses a fullscreen 80×25 terminal layout matching the DOS original:
 | `F10` | Save changes and exit |
 | `Esc` | Abort — shows confirmation dialog if unsaved changes |
 | `/` | Search/filter strings by name |
+| `Ctrl-R` | Show or hide reserved placeholder entries |
 
 ### Edit Mode
 
@@ -54,6 +81,32 @@ When editing a string value:
 
 - **Enter** — Save the new value
 - **Esc** — Cancel editing without changes
+
+Values are edited on a single line, so control characters are shown and typed as **escape
+sequences**. `F1` pre-fills the input with the escaped form of the current value, and `Enter`
+converts it back before storing, so opening a string and accepting it unchanged leaves it exactly as
+it was.
+
+| Sequence | Character |
+|----------|-----------|
+| `\r` | Carriage return |
+| `\n` | Line feed |
+| `\t` | Tab |
+| `\e` | Escape (ESC, 0x1B) |
+| `\xNN` | Any other control character, as two hex digits |
+| `\\` | A literal backslash |
+
+A backslash always starts an escape sequence, so to store a literal backslash — in a DOS path, for
+example — type it twice. Anything else after a backslash is rejected: the editor keeps you in the
+input with your text intact and shows the problem on the message bar, rather than guessing and
+writing something you did not mean to disk.
+
+The same escapes appear in the value column of the list, drawn in inverse video so a stored carriage
+return is visible as `\r` instead of breaking the row. Every string occupies exactly one row; a
+value too wide for the column ends with a magenta `»`.
+
+Values are not length-limited. A long custom string is stored in full, and the input scrolls
+horizontally rather than truncating it.
 
 ### Confirmation Dialogs
 
@@ -112,7 +165,7 @@ String values support BBS pipe codes that are rendered with color in the editor.
 
 | Code | Meaning |
 |------|---------|
-| `\|CR` | Carriage return / newline |
+| `\|CR` | Carriage return / newline (rendered as a space in the editor's preview) |
 | `\|CL` | Clear screen |
 | `\|DE` | Clear to end of line |
 | `@` | Yes/No selection bar |
@@ -139,27 +192,75 @@ Runtime placeholder codes like `|MN` (menu name), `|TL` (time left), `|CB` (curr
 }
 ```
 
-Keys prefixed with `_` (e.g., `_extra3`) are reserved placeholders and cannot be edited.
+Keys prefixed with `_` (e.g., `_extra3`) are reserved placeholders and cannot be edited. They are
+hidden from the list by default; `Ctrl-R` shows them. Entry numbers come from the full catalog, so
+they do not shift when reserved entries are hidden — "string 199" always means the same string.
 
 ### Format verbs
 
 Some strings carry `%s` / `%d` **format verbs**, which the BBS fills in at runtime. These are
 different from `|XX` placeholder codes: a placeholder can be moved or removed freely, but a format
-verb must stay, and the **number and order of verbs must not change**. The editor's description line
-names the verbs a string expects, for example:
-
-```text
-Exec: Version String    Version string format (%s=version)
-```
+verb must stay, and the **number and types of arguments must not change**.
 
 Removing or adding a verb does not fail — it prints `%!d(MISSING)` or `%!(EXTRA int=3)` into the
 middle of the message the user sees. If you want a literal percent sign in one of these strings,
 write it as `%%`.
 
+The editor checks this for you. For a formatted string, the description line ends with the
+signature the BBS supplies:
+
+```text
+Format for each node in the list (%d=node, %s=user)  [2 argument(s): integer, string]
+```
+
+If your edit no longer matches, the editor **warns but keeps your text** — you may be halfway
+through a rewrite, and discarding what you just typed would be worse than the warning:
+
+```text
+WARNING: takes 2 argument(s) but 0 are supplied
+```
+
+`F10` reports any remaining mismatches once before saving. Pressing `F10` again saves anyway, so one
+bad string never traps every unrelated edit behind it.
+
+Cosmetic changes are fine and raise no warning: adding padding (`%s` → `%-20s`), zero-filling
+(`%d` → `%03d`), adding a literal `%%`, or reordering with explicit argument indexes
+(`%s from %s` → `%[2]s to %[1]s`).
+
+Only strings the BBS actually passes to a formatter are checked. A string that is printed verbatim
+may contain a bare percent sign — `badUDRatio` ends `(|15|RA%|09)`, where the `%` is literal text
+followed by a colour code — and is left alone.
+
+The BBS performs the same check when it loads `strings.json`, at startup and on hot reload. A
+mismatch is written to the log with the key, the expected arguments and what is wrong; it never
+blocks startup and never rewrites your string.
+
 `execVersionString` is the exception that repairs itself: with no `%s` it prints unchanged and logs
 why, rather than showing a mangled banner.
 
 When saving, the editor writes keys in sorted order and omits internal `_`-prefixed keys, producing clean deterministic output.
+
+## Value States
+
+A blank value column does not mean the string is unused. The marker between the label and the value
+says which of five states an entry is in, and the message row above the description spells it out
+for the selected entry.
+
+| Marker | State | Meaning |
+|--------|-------|---------|
+| (none) | ViSiON/3 default | The value matches the shipped default |
+| `*` | Custom | You have changed it from the shipped default |
+| `~` | Runtime fallback | Blank in `strings.json`, but the BBS prints a built-in default. The list shows that default, dimmed |
+| `0` | Explicitly empty | Present in `strings.json` and set to nothing. The BBS prints nothing |
+| `-` | Not set | Absent from `strings.json` with no built-in default. The BBS prints nothing |
+
+The `~` state is the common one after an upgrade: a release adds a string, your existing
+`strings.json` does not have it, and the BBS falls back to the value compiled into the binary.
+Nothing is broken — pressing `F4` writes that default into your file if you want it there
+explicitly.
+
+Keys in `strings.json` that the editor has no entry for — a leftover from Vision/2, or something you
+added by hand — are written back unchanged when you save. Nothing is dropped.
 
 ## String Descriptions
 
@@ -203,7 +304,7 @@ go build -o strings ./cmd/strings
 
 ## Origin
 
-This tool is a faithful recreation of the Vision/2 BBS `STRINGS.EXE` (Turbo Pascal, ~1400 lines in `SRC/STRINGS.PAS`). The Go version preserves the original's 20-item paginated layout, DOS color scheme, and editing workflow while adding search functionality and BubbleTea-based modern terminal rendering.
+This tool is a faithful recreation of the Vision/2 BBS `STRINGS.EXE` (Turbo Pascal, ~1400 lines in `SRC/STRINGS.PAS`). The Go version preserves the original's paginated three-column layout, DOS color scheme, and editing workflow while adding search, escape-safe editing of control characters, terminal-adaptive sizing, and chrome shared with `./config`.
 
 ## Developer Reference
 
@@ -213,7 +314,7 @@ The editor supports two layers of value restoration:
 
 1. **Last-Saved Values (F3 "Revert")** — When the editor starts, it snapshots all values from `configs/strings.json` into `origValues`. F3 restores the currently selected string to the value it had when the editor was opened (i.e., whatever is on disk). This snapshot lives in memory only and is set in `stringeditor.New()`.
 
-2. **ViSiON/3 Defaults (F4 "Restore")** — A separate set of shipped default values loaded from `templates/configs/strings.json`. This file represents the canonical out-of-the-box string values that ship with ViSiON/3. F4 restores the selected string to this shipped value.
+2. **ViSiON/3 Defaults (F4 "Restore")** — A separate set of shipped default values loaded from `templates/configs/strings.json`, with the copy embedded in the binary as a fallback. This represents the canonical out-of-the-box string values that ship with ViSiON/3. F4 restores the selected string to this shipped value; where the template has no entry for a key, F4 offers the runtime fallback from `config.StringFallbacks` instead.
 
 ### Default Loading Flow
 
@@ -222,7 +323,8 @@ cmd/strings/main.go
   ├─ loadShippedDefaults()
        ├─ Try:  ./templates/configs/strings.json  (relative to CWD)
        ├─ Try:  <exe-dir>/templates/configs/strings.json  (relative to binary)
-       └─ Returns: map[string]string (or nil if not found)
+       ├─ Try:  <exe-dir>/../templates/configs/strings.json  (bin/ layout)
+       └─ Else: the copy embedded in the binary (templates/configs/embed.go)
 
   └─ stringeditor.New(configPath, shippedDefaults)
        ├─ loads configs/strings.json into values
@@ -230,13 +332,19 @@ cmd/strings/main.go
        └─ stores shippedDefaults      (F4 restore source)
 ```
 
-- `loadShippedDefaults()` in `cmd/strings/main.go` attempts to read the template file from two locations: first relative to the working directory, then relative to the executable path. This allows the editor to work both during development (`cd /opt/vision3 && ./strings`) and from an installed location.
-- If the template file is missing or unparseable, `shippedDefaults` is `nil` and F4 will display "No shipped defaults available".
+- `loadShippedDefaults()` in `cmd/strings/main.go` tries three on-disk locations in order: relative to the working directory (`cd /opt/vision3 && ./strings` during development), next to the executable, and one level up from it — the last covers an installed layout where the binary lives in `bin/` and the templates sit beside it in the install root. If you are diagnosing why `F4` offers an unexpected default on an installed system, those are the three files to check, in that order.
+- An on-disk template wins so a distribution can ship adjusted defaults, but the templates directory is not present in every installation, so `templates/configs/embed.go` embeds the same file into the binary as a guaranteed fallback. There is one canonical copy: the Go file sits alongside the JSON rather than the JSON being duplicated into a package.
 - The template file (`templates/configs/strings.json`) must be kept in sync with `configs/strings.json` when new string keys are added to the system.
 
 ### Adding a New String
 
-1. Add a `StringEntry` struct to the appropriate position in `internal/stringeditor/metadata.go` (Label, Key, Description)
-2. Add the key with its default value to `configs/strings.json`
-3. Add the same key and value to `templates/configs/strings.json` (the ViSiON/3 defaults template)
-4. The editor will pick up the new entry automatically on next run
+1. Add the field to `StringsConfig` in `internal/config/config_strings_types.go`
+2. Add a `StringEntry` struct to the appropriate position in `internal/stringeditor/metadata.go` (Label, Key, Description — name the format arguments in the description)
+3. Add the key with its default value to `configs/strings.json`
+4. Add the same key and value to `templates/configs/strings.json` (the ViSiON/3 defaults template)
+5. If existing installations must keep working without the key, add it to `config.StringFallbacks`
+6. The editor will pick up the new entry automatically on next run
+
+`TestCatalogCoversRuntimeStrings` fails if step 2 is skipped, so a new string cannot ship without
+being editable. `TestCatalogHasNoDeadEntries` fails in the other direction if an entry names no
+runtime field.

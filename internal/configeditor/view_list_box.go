@@ -49,8 +49,8 @@ func (lb *listBox) line(s string) {
 // pad surrounds box content with the background fill on both sides, sourced
 // from the backdrop at the current row.
 func (lb *listBox) pad(s string) string {
-	return lb.bd.segment(lb.rowIdx, 0, lb.padL) + s +
-		lb.bd.segment(lb.rowIdx, lb.width-maxInt(0, lb.padR), maxInt(0, lb.padR))
+	return lb.bd.Segment(lb.rowIdx, 0, lb.padL) + s +
+		lb.bd.Segment(lb.rowIdx, lb.width-maxInt(0, lb.padR), maxInt(0, lb.padR))
 }
 
 // row writes styled inner content wrapped in │ │ side borders.
@@ -92,7 +92,7 @@ func (lb *listBox) emptyRows(n int) {
 // bgRows writes n full-width background lines.
 func (lb *listBox) bgRows(n int) {
 	for i := 0; i < n; i++ {
-		lb.line(lb.bd.segment(lb.rowIdx, 0, lb.width))
+		lb.line(lb.bd.Segment(lb.rowIdx, 0, lb.width))
 	}
 }
 
@@ -124,12 +124,12 @@ func (lb *listBox) list(visible, scroll, cursor, total int, format func(i int) s
 // background line when the message is empty.
 func (lb *listBox) messageRow(msg string) {
 	if msg == "" {
-		lb.line(lb.bd.segment(lb.rowIdx, 0, lb.width))
+		lb.line(lb.bd.Segment(lb.rowIdx, 0, lb.width))
 		return
 	}
-	lb.line(lb.bd.segment(lb.rowIdx, 0, lb.padL) +
+	lb.line(lb.bd.Segment(lb.rowIdx, 0, lb.padL) +
 		flashMessageStyle.Render(" "+padRight(msg, lb.boxW)) +
-		lb.bd.segment(lb.rowIdx, lb.width-(lb.padR+1), lb.padR+1))
+		lb.bd.Segment(lb.rowIdx, lb.width-(lb.padR+1), lb.padR+1))
 }
 
 // errorRow returns the styled inner content for an error status row,

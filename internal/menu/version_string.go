@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/formatspec"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
@@ -17,54 +18,34 @@ import (
 // into strings.json instead is how it came to advertise v0.1.0 (Pre-Alpha) from
 // a 0.8.2 build, since nothing updates a config file on upgrade.
 //
-// A template carrying anything other than exactly one verb is printed as-is
-// rather than fed to Sprintf. Sprintf with the wrong arity does not fail, it
-// renders %!s(MISSING) or (EXTRA ...) into the middle of the sysop's banner,
-// which is worse than leaving their text alone and saying why in the log.
+// A template is filled only when it consumes exactly one argument and that
+// argument accepts a string, which covers %s and its padded forms (%-20s), %q,
+// and %v. Anything else -- no verb, several verbs, a verb wanting a number --
+// is printed as-is. Sprintf with the wrong arity does not fail, it renders
+// %!s(MISSING) or (EXTRA ...) into the middle of the sysop's banner, which is
+// worse than leaving their text alone and saying why in the log.
+//
+// Accepting the padded forms is a deliberate widening from the original
+// character-by-character check, which looked only at the byte after % and so
+// printed a sysop's "%-20s" banner literally. The string editor treats padding
+// as cosmetic and raises no warning when a sysop adds it, so the runtime has to
+// fill it or the two would disagree about the same edit.
 func renderVersionString(template string) string {
-	total, strVerbs := formatVerbCounts(template)
+	spec, err := formatspec.Parse(template)
 	switch {
-	case total == 1 && strVerbs == 1:
+	case err != nil:
+		slog.Warn("execVersionString is not a valid format string; printing it unchanged to avoid a malformed banner",
+			"error", err, "template", template)
+	case spec.Arity() == 1 && spec.Args[0].Accepts(formatspec.KindString):
 		return fmt.Sprintf(template, version.Display())
-	case total == 0:
+	case spec.Arity() == 0:
 		slog.Warn("execVersionString has no %s, so the version cannot be shown; add one where the version should appear",
 			"template", template, "version", version.Display())
 	default:
-		slog.Warn("execVersionString must contain exactly one %s and nothing else; printing it unchanged to avoid a malformed banner",
-			"verbs", total, "stringVerbs", strVerbs, "template", template)
+		slog.Warn("execVersionString must consume exactly one string argument; printing it unchanged to avoid a malformed banner",
+			"signature", spec.String(), "template", template)
 	}
 	return template
-}
-
-// formatVerbCounts reports how many format verbs a template holds and how many
-// of those are %s.
-//
-// Both numbers are needed. Counting verbs alone is not enough to know Sprintf
-// is safe: a banner ending "100% Go" has one verb by that measure, but the verb
-// is %<space> and filling it renders %!(string=v0.8.2) into the output. Only a
-// template whose single verb is %s can be filled.
-//
-// An escaped %% is a literal percent sign, not a verb, and a trailing % has no
-// verb character after it.
-func formatVerbCounts(template string) (total, stringVerbs int) {
-	for i := 0; i < len(template); i++ {
-		if template[i] != '%' {
-			continue
-		}
-		if i+1 >= len(template) {
-			break // a trailing % is not a verb
-		}
-		if template[i+1] == '%' {
-			i++ // escaped percent, consume both
-			continue
-		}
-		total++
-		if template[i+1] == 's' {
-			stringVerbs++
-		}
-		i++
-	}
-	return total, stringVerbs
 }
 
 // defaultVersionTemplate is the shipped banner. Kept here beside the renderer
