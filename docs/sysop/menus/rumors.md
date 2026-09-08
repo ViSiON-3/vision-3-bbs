@@ -45,7 +45,9 @@ Prompts the user through:
 
 1. **Anonymous?** — Only shown if the user's access level meets the configured `AnonymousLevel` threshold. Yes/No lightbar prompt.
 2. **Minimum Level** — Security level required to view this rumor (1–255). Validates input and re-prompts on invalid entries. Defaults to 1 if left blank.
-3. **Enter Rumor** — The rumor text. Empty input aborts.
+3. **Enter Rumor** — The rumor text, up to 56 characters. Input stops accepting keystrokes at the limit, and surrounding whitespace is trimmed. Empty input aborts.
+
+The 56-character limit matches the width of the `@RR|C####...@` field in the stock `MAIN.ANS`, `MSGMENU.ANS`, and `DOORSM.ANS` screens, so a rumor is never clipped when displayed there.
 
 After saving, displays a confirmation message for 1 second.
 

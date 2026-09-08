@@ -104,14 +104,15 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		enterPrompt = "|09Enter Rumor |08(|15Enter|08/|15Abort|08)|07:\r\n"
 	}
 	wv(terminal, enterPrompt, outputMode)
-	rumorText, err := readLineFromSessionIH(s, terminal)
+	rumorText, err := readLineFromSessionIHMax(s, terminal, rumorMaxLength)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
 		}
 		return currentUser, "", nil
 	}
-	if strings.TrimSpace(rumorText) == "" {
+	rumorText = clampRumorText(rumorText)
+	if rumorText == "" {
 		return currentUser, "", nil
 	}
 

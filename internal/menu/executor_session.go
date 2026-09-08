@@ -223,18 +223,28 @@ func (e *MenuExecutor) holdScreen(s ssh.Session, terminal *term.Terminal, output
 // readLineFromSessionIH reads a simple command line from the shared session
 // InputHandler so menu input never races with other session readers.
 func readLineFromSessionIH(s ssh.Session, terminal *term.Terminal) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, false)
+	return readLineFromSessionIHImpl(s, terminal, false, 0)
+}
+
+// readLineFromSessionIHMax reads a simple command line like
+// readLineFromSessionIH, but stops accepting characters once the line holds
+// maxLen runes: further printable or extended keystrokes are dropped without
+// echo, so the caller never sees a value longer than maxLen. A maxLen of 0
+// means unlimited.
+func readLineFromSessionIHMax(s ssh.Session, terminal *term.Terminal, maxLen int) (string, error) {
+	return readLineFromSessionIHImpl(s, terminal, false, maxLen)
 }
 
 // readLineFromSessionIHAllowAbort reads a simple command line like
 // readLineFromSessionIH, but returns errInputAborted when ESC is pressed.
 func readLineFromSessionIHAllowAbort(s ssh.Session, terminal *term.Terminal) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, true)
+	return readLineFromSessionIHImpl(s, terminal, true, 0)
 }
 
 // readLineFromSessionIHImpl is the shared implementation behind
-// readLineFromSessionIH and readLineFromSessionIHAllowAbort; the two differ
-// only in whether ESC aborts the read.
+// readLineFromSessionIH, readLineFromSessionIHMax and
+// readLineFromSessionIHAllowAbort; they differ only in whether ESC aborts the
+// read and whether the line length is capped (maxLen > 0, counted in runes).
 //
 // Extended keystrokes (byte >= 128) are decoded per the session's output
 // mode via decodeExtendedKey: a CP437 byte is a complete character on its
@@ -243,11 +253,14 @@ func readLineFromSessionIHAllowAbort(s ssh.Session, terminal *term.Terminal) (st
 // reports it complete. Backspace deletes one whole rune (see backspaceRune)
 // rather than one byte, and clears any in-progress utf8Pending sequence
 // without touching line or echoing, since nothing was displayed for it yet.
-func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbort bool) (string, error) {
+func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbort bool, maxLen int) (string, error) {
 	ih := getSessionIH(s)
 	mode := sessionOutputMode(s)
 	line := make([]byte, 0, 64)
 	var utf8Pending []byte
+	atLimit := func() bool {
+		return maxLen > 0 && utf8.RuneCount(line) >= maxLen
+	}
 
 	for {
 		key, err := ih.ReadKey()
@@ -276,7 +289,12 @@ func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbor
 			// comes next.
 			utf8Pending = nil
 		default:
-			if key >= 32 && key < 127 {
+			if atLimit() && ((key >= 32 && key < 127) || (key >= 128 && key <= 255)) {
+				// Line is full: swallow the keystroke silently. Any partial
+				// multi-byte sequence is abandoned too, since its remaining
+				// bytes would otherwise be treated as fresh input.
+				utf8Pending = nil
+			} else if key >= 32 && key < 127 {
 				line = append(line, byte(key))
 				_, _ = terminal.Write([]byte{byte(key)})
 				// A completed ASCII keystroke means any partial multi-byte

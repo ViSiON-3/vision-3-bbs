@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -32,7 +33,19 @@ type rumorsData struct {
 	NextID int           `json:"next_id"`
 }
 
+// rumorMaxLength is the maximum rumor text length in runes. It matches the
+// width of the @RR|C####...@ field in the stock MAIN/MSGMENU/DOORSM screens,
+// so a rumor never gets clipped when shown there.
+const rumorMaxLength = 56
+
 var rumorsMu sync.Mutex
+
+// clampRumorText trims surrounding whitespace and hard-cuts the text to
+// rumorMaxLength runes. Input entry already stops at the limit; this is the
+// backstop for any path (pasted input, scripts) that bypasses it.
+func clampRumorText(s string) string {
+	return ansi.TruncateRunes(strings.TrimSpace(s), rumorMaxLength, "")
+}
 
 // backfillRumorUserIDs populates UserID for legacy records where UserID == 0
 // by looking up RealUser as a handle. Returns true if any records were updated.

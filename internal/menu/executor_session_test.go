@@ -226,3 +226,134 @@ func TestReadLineFromSessionIH_ResyncsAfterStrayLeadByte(t *testing.T) {
 		t.Errorf("line = %q, want %q — the stray lead byte swallowed the next character", got, "日")
 	}
 }
+
+// --- readLineFromSessionIHMax: rune-counted input cap ---
+
+// TestReadLineFromSessionIHMax_ASCIIStopsAtLimit is the basic contract: once
+// the line holds maxLen runes, further printable keystrokes are dropped and
+// not echoed, and Enter still terminates the read normally.
+func TestReadLineFromSessionIHMax_ASCIIStopsAtLimit(t *testing.T) {
+	ts := newTestSession("abcde\r")
+	terminal := newTestTerminal(ts)
+
+	line, err := readLineFromSessionIHMax(ts, terminal, 3)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIHMax: %v", err)
+	}
+	if line != "abc" {
+		t.Errorf("line = %q, want %q", line, "abc")
+	}
+	if out := ts.output(); strings.ContainsAny(out, "de") {
+		t.Errorf("output = %q, dropped keystrokes must not be echoed", out)
+	}
+}
+
+// TestReadLineFromSessionIHMax_BackspaceAfterLimitFreesRoom verifies the
+// limit is a live check on the current line, not a latch: after a dropped
+// keystroke, Backspace still removes a rune and typing resumes into the
+// freed slot.
+func TestReadLineFromSessionIHMax_BackspaceAfterLimitFreesRoom(t *testing.T) {
+	// 'a','b','c' fill the line; 'd' is dropped; Backspace removes 'c';
+	// 'e' is accepted into the freed slot.
+	ts := newTestSession("abcd\x08e\r")
+	terminal := newTestTerminal(ts)
+
+	line, err := readLineFromSessionIHMax(ts, terminal, 3)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIHMax: %v", err)
+	}
+	if line != "abe" {
+		t.Errorf("line = %q, want %q", line, "abe")
+	}
+	if n := strings.Count(ts.output(), "\b \b"); n != 1 {
+		t.Errorf("output contains %d \\b \\b sequences, want exactly 1", n)
+	}
+}
+
+// TestReadLineFromSessionIHMax_CP437CountsRunesNotBytes types three CP437
+// 'é' (0x82) with a cap of 2. Each is stored as a 2-byte UTF-8 rune, so a
+// byte-counted limit would stop after one; a rune-counted one keeps two.
+func TestReadLineFromSessionIHMax_CP437CountsRunesNotBytes(t *testing.T) {
+	ts := newTestSession("\x82\x82\x82\r")
+	SetSessionOutputMode(ts, ansi.OutputModeCP437)
+	terminal := newTestTerminal(ts)
+
+	line, err := readLineFromSessionIHMax(ts, terminal, 2)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIHMax: %v", err)
+	}
+	if line != "éé" {
+		t.Errorf("line = %q, want %q", line, "éé")
+	}
+	if n := utf8.RuneCountInString(line); n != 2 {
+		t.Errorf("line has %d runes, want 2", n)
+	}
+	if n := strings.Count(ts.output(), "\x82"); n != 2 {
+		t.Errorf("output echoed 0x82 %d times, want 2 (third must be dropped)", n)
+	}
+}
+
+// TestReadLineFromSessionIHMax_UTF8RuneCompletesAtLimit drives 'a' then the
+// three bytes of "日" with a cap of 2. The rune starts while there is still
+// room and must be assembled whole, taking the line to exactly maxLen; the
+// following 'b' must then be dropped.
+func TestReadLineFromSessionIHMax_UTF8RuneCompletesAtLimit(t *testing.T) {
+	ts := newTestSession("a\xe6\x97\xa5b\r")
+	SetSessionOutputMode(ts, ansi.OutputModeUTF8)
+	terminal := newTestTerminal(ts)
+
+	line, err := readLineFromSessionIHMax(ts, terminal, 2)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIHMax: %v", err)
+	}
+	if !utf8.ValidString(line) {
+		t.Fatalf("line is not valid UTF-8: %q", line)
+	}
+	if line != "a日" {
+		t.Errorf("line = %q, want %q", line, "a日")
+	}
+	if strings.Contains(ts.output(), "b") {
+		t.Errorf("output = %q, 'b' past the limit must not be echoed", ts.output())
+	}
+}
+
+// TestReadLineFromSessionIHMax_UTF8SequenceAfterLimitFullyDropped sends a
+// complete 2-byte "é" (C3 A9) once the line is already full. Both bytes must
+// be swallowed: the lead byte must not be buffered as pending, and the
+// continuation byte must not survive to corrupt or extend the line.
+func TestReadLineFromSessionIHMax_UTF8SequenceAfterLimitFullyDropped(t *testing.T) {
+	ts := newTestSession("a\xc3\xa9\r")
+	SetSessionOutputMode(ts, ansi.OutputModeUTF8)
+	terminal := newTestTerminal(ts)
+
+	line, err := readLineFromSessionIHMax(ts, terminal, 1)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIHMax: %v", err)
+	}
+	if line != "a" {
+		t.Errorf("line = %q, want %q", line, "a")
+	}
+	if !utf8.ValidString(line) {
+		t.Fatalf("line is not valid UTF-8: %q", line)
+	}
+	if strings.Contains(ts.output(), "\xc3") || strings.Contains(ts.output(), "\xa9") {
+		t.Errorf("output = %q, dropped multi-byte sequence must not be echoed", ts.output())
+	}
+}
+
+// TestReadLineFromSessionIHMax_ZeroMeansUnlimited guards the default used by
+// readLineFromSessionIH and readLineFromSessionIHAllowAbort: maxLen 0 must
+// impose no cap at all.
+func TestReadLineFromSessionIHMax_ZeroMeansUnlimited(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	ts := newTestSession(long + "\r")
+	terminal := newTestTerminal(ts)
+
+	line, err := readLineFromSessionIHMax(ts, terminal, 0)
+	if err != nil {
+		t.Fatalf("readLineFromSessionIHMax: %v", err)
+	}
+	if line != long {
+		t.Errorf("line has %d runes, want 200 (maxLen 0 must be unlimited)", utf8.RuneCountInString(line))
+	}
+}
