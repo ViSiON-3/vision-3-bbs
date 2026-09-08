@@ -2,6 +2,8 @@ package menueditor
 
 import (
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
 // overlayConfirmDialog renders a Y/N confirm dialog centered over the background.
@@ -116,10 +118,15 @@ func (m Model) overlayInputDialog(background, title, prompt, inputView string) s
 		inputDialogTextStyle.Render(promptContent+strings.Repeat(" ", max(0, innerW-len(promptContent)))) +
 		side
 
+	// Bound the widget's output and pad from what it actually occupies. Using
+	// m.textInput.Width assumed the view was exactly that wide; it renders a
+	// cursor cell after the text, so a filled field pushed this row one column
+	// past the dialog border.
+	fittedInput, inputW := tuiart.FitInput(inputView, innerW-2)
 	inputLine := side +
 		inputDialogTextStyle.Render("  ") +
-		inputView +
-		inputDialogTextStyle.Render(strings.Repeat(" ", max(0, dialogW-4-m.textInput.Width))) +
+		fittedInput +
+		inputDialogTextStyle.Render(strings.Repeat(" ", max(0, innerW-2-inputW))) +
 		side
 
 	hintLine := side +

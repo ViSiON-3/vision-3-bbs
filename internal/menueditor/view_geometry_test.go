@@ -138,3 +138,86 @@ func TestViewGeometry(t *testing.T) {
 }
 
 func mustUpdate(m tea.Model, _ tea.Cmd) tea.Model { return m }
+
+// TestViewGeometryWithFilledInputs re-runs the width check with every text
+// input carrying a value that fills its field.
+//
+// TestViewGeometry drives real keystrokes but types nothing, so every input it
+// renders is empty. Two overflows hid behind that: bubbles/textinput appends a
+// cursor cell after the text, so a field whose value fills its configured Width
+// renders Width+1 cells. The menu edit row ran 2 cells past its box and the Add
+// Menu dialog 1 cell past its border, and only once something was typed.
+func TestViewGeometryWithFilledInputs(t *testing.T) {
+	sizes := []struct{ w, h int }{{80, 25}, {120, 45}}
+	// Each case names the field to open, because the overflow only appears on
+	// the widest one: a 20-column field's view still fits its row with the
+	// cursor cell attached, so opening the first field would prove nothing.
+	cases := []struct {
+		name  string
+		mode  editorMode
+		field string
+		typed string
+	}{
+		{"menu_edit_field", modeMenuEditField, "Prompt Line 1", strings.Repeat("X", 80)},
+		{"command_edit_field", modeCommandEditField, "", strings.Repeat("X", 80)},
+		{"add_menu", modeAddMenu, "", "ABCDEFGH"},
+	}
+
+	for _, size := range sizes {
+		for _, mc := range cases {
+			t.Run(mc.name+"_"+sizeLabel(size.w, size.h), func(t *testing.T) {
+				m := newTestEditor(t)
+				m = asModel(t, mustUpdate(m.Update(tea.WindowSizeMsg{Width: size.w, Height: size.h})))
+				if mc.field != "" {
+					m = openWidestField(t, m, mc.field)
+				} else {
+					m = enterMode(t, m, mc.mode)
+				}
+				if m.mode != mc.mode {
+					t.Fatalf("landed in mode %v, want %v", m.mode, mc.mode)
+				}
+				m = typeText(t, m, mc.typed)
+
+				lines := strings.Split(m.View(), "\n")
+				if len(lines) != m.height {
+					t.Fatalf("rendered %d rows, want %d", len(lines), m.height)
+				}
+				for i, line := range lines {
+					if got := screenCells(line); got != m.width {
+						t.Errorf("row %d is %d cells wide, want %d", i, got, m.width)
+					}
+				}
+			})
+		}
+	}
+}
+
+// The widest menu field is Prompt Line 1 at 55 columns, the case that actually
+// overflowed. Pin that it is the field the filled-input test reaches, so the
+// coverage cannot quietly move to a narrower field.
+func TestPromptLineIsTheWidestMenuField(t *testing.T) {
+	m := newTestEditor(t)
+	widest := 0
+	for _, f := range m.menuFields {
+		if f.Width > widest {
+			widest = f.Width
+		}
+	}
+	if widest != 55 {
+		t.Errorf("widest menu field is %d columns, expected 55 (Prompt Line)", widest)
+	}
+}
+
+// openWidestField enters the menu editor and opens the named field for editing.
+func openWidestField(t *testing.T, m Model, label string) Model {
+	t.Helper()
+	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // menu list -> menu edit
+	for i := 0; i < len(m.menuFields); i++ {
+		if strings.TrimSpace(m.menuFields[m.menuEditFld].Label) == label {
+			return press(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // -> edit field
+		}
+		m = press(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	t.Fatalf("no menu field labelled %q", label)
+	return m
+}
