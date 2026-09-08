@@ -43,7 +43,9 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 	cursorFound := false
 
 	for i := startLine; i <= endLine; i++ {
-		line := strings.TrimRight(ww.buffer.GetLine(i), " ")
+		// Spaces in the buffer are editable content. Trimming them here would
+		// make a single Backspace delete extra characters and move the cursor.
+		line := ww.buffer.GetLine(i)
 		if i > startLine && collected.Len() > 0 && len(line) > 0 {
 			collected.WriteByte(' ')
 			if !cursorFound {
@@ -88,11 +90,12 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 			wrapPos = MaxLineLength
 		}
 
-		outputLines = append(outputLines, strings.TrimRight(remaining[:wrapPos], " "))
+		outputLines = append(outputLines, remaining[:wrapPos])
 
-		// Advance past the wrap point and any spaces at the boundary
+		// The soft line break represents one separator space (restored when
+		// collecting above). Preserve any additional spaces on either side.
 		pos += wrapPos
-		for pos < len(text) && text[pos] == ' ' {
+		if pos < len(text) && text[pos] == ' ' {
 			pos++
 		}
 	}

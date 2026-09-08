@@ -241,6 +241,57 @@ func TestWrapAfterInsert_WrapsLongLine(t *testing.T) {
 
 // --- HandleBackspace Tests ---
 
+func TestHandleBackspace_PreservesSpaces(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		col  int
+		want string
+	}{
+		{"last letter", "hello w", 8, "hello "},
+		{"one of several spaces", "hello   ", 9, "hello  "},
+		{"indentation", "    ", 5, "   "},
+		{"mid-line with trailing spaces", "hello world  ", 6, "hell world  "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mb, ww := setupBuffer([]string{tt.text}, 1)
+			line, col, changed := ww.HandleBackspace(1, tt.col)
+			if !changed || line != 1 || col != tt.col-1 {
+				t.Errorf("Backspace = (%d,%d,%v), want (1,%d,true)", line, col, changed, tt.col-1)
+			}
+			if got := mb.GetLine(1); got != tt.want {
+				t.Errorf("text = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHandleBackspace_PreservesSpacesDuringReflow(t *testing.T) {
+	// Deleting in the first line must preserve spaces on the continuation,
+	// including a run of spaces that straddles the new wrap boundary.
+	prefix := strings.Repeat("a", 75)
+	mb, ww := setupBuffer([]string{prefix + "x", "     tail  "}, 2)
+	line, col, changed := ww.HandleBackspace(1, 77)
+	if !changed || line != 1 || col != 76 {
+		t.Errorf("Backspace = (%d,%d,%v), want (1,76,true)", line, col, changed)
+	}
+	want := prefix + "      tail  " // soft wrap represents one additional space
+	for pass := 0; pass < 2; pass++ {
+		var lines []string
+		for i := 1; i <= mb.GetLineCount(); i++ {
+			lines = append(lines, mb.GetLine(i))
+			if mb.GetLineLength(i) > MaxLineLength {
+				t.Errorf("line %d exceeds wrap width", i)
+			}
+		}
+		if got := strings.Join(lines, " "); got != want {
+			t.Errorf("reflow pass %d: text = %q, want %q", pass, got, want)
+		}
+		ww.ReflowRange(1, line, col)
+	}
+}
+
 func TestHandleBackspace_MidLine(t *testing.T) {
 	// Delete char mid-line, reflow pulls words up
 	mb, ww := setupBuffer([]string{"hello world", "next line"})
