@@ -2,64 +2,28 @@ package configeditor
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
-// DOS CGA/VGA color palette as explicit truecolor hex values.
-//
-// These are the canonical IBM VGA RGB values for the standard 16 DOS colors.
-// We pin them to explicit hex (rather than ANSI palette indices 0-15) so the
-// editor targets the VGA palette instead of the host terminal's themed ANSI
-// slots. Most Mac terminal themes map ANSI "blue" to a bright, low-contrast
-// shade, which washed out the white/yellow-on-blue UI; the authentic VGA navy
-// (#0000AA) restores the intended contrast. lipgloss renders these as
-// truecolor where available and degrades to the fixed 256-color cube
-// otherwise, which preserves the palette on modern terminals more reliably
-// than themed 16-color ANSI slots.
-var dosColors = [16]string{
-	"#000000", // 0:  Black
-	"#0000AA", // 1:  Blue
-	"#00AA00", // 2:  Green
-	"#00AAAA", // 3:  Cyan
-	"#AA0000", // 4:  Red
-	"#AA00AA", // 5:  Magenta
-	"#AA5500", // 6:  Brown
-	"#AAAAAA", // 7:  Light Gray
-	"#555555", // 8:  Dark Gray
-	"#5555FF", // 9:  Light Blue
-	"#55FF55", // 10: Light Green
-	"#55FFFF", // 11: Light Cyan
-	"#FF5555", // 12: Light Red
-	"#FF55FF", // 13: Light Magenta
-	"#FFFF55", // 14: Yellow
-	"#FFFFFF", // 15: White
-}
+// The DOS palette and its style constructors live in internal/tuiart so the
+// string editor renders in the same colors. These aliases keep the config
+// editor's call sites unchanged.
+var dosColors = tuiart.Palette
 
 // dosStyle creates a lipgloss style from a DOS TextAttr byte (bg*16 + fg).
-func dosStyle(attr byte) lipgloss.Style {
-	fg := attr & 0x0F
-	bg := (attr >> 4) & 0x07
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(dosColors[fg])).
-		Background(lipgloss.Color(dosColors[bg]))
-}
+func dosStyle(attr byte) lipgloss.Style { return tuiart.Style(attr) }
 
 // dosColor creates a lipgloss style from separate DOS bg, fg values
 // matching the Pascal Color(bg, fg) procedure.
-func dosColor(bg, fg int) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(dosColors[fg&0x0F])).
-		Background(lipgloss.Color(dosColors[bg&0x07]))
-}
+func dosColor(bg, fg int) lipgloss.Style { return tuiart.Color(bg, fg) }
 
 // --- Global header bar (white text on dark gray bg) ---
-var globalHeaderBarStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color(dosColors[15])).
-	Background(lipgloss.Color(dosColors[8])).
-	Bold(true)
+var globalHeaderBarStyle = tuiart.HeaderBarStyle
 
 // --- Background fill ---
 // Fill_Screen('░',7,1) → gray on blue
-var bgFillStyle = dosColor(1, 7)
+var bgFillStyle = tuiart.FillStyle
 
 // --- Menu box border ---
 var menuBorderStyle = dosColor(1, 9)
@@ -102,7 +66,7 @@ var helpBoxStyle = dosColor(4, 15)
 var helpTitleStyle = dosColor(4, 14)
 
 // --- Bottom help bar ---
-var helpBarStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color(dosColors[8]))
+var helpBarStyle = tuiart.HelpBarStyle
 
 // --- Flash message ---
 var flashMessageStyle = lipgloss.NewStyle().

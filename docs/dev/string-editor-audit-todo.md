@@ -1,7 +1,8 @@
 # String editor and configuration TUI audit
 
 Created: 2026-09-08. Status: in progress. Investigation complete; section 2
-(safe preview and lossless editing) implemented, sections 1, 3 and 4 pending.
+(safe preview and lossless editing) and the shared-chrome half of section 1
+implemented; sections 3 and 4 pending.
 
 Related issues:
 
@@ -53,7 +54,7 @@ not modify the BBS's live configuration or repository implementation files.
   to the live development BBS.
 - [ ] Capture before/after screens for the same terminal sizes and interaction
   states. Record each discrepancy and the intended shared behavior.
-- [ ] Review the following surfaces in both binaries:
+- [x] Review the following surfaces in both binaries:
 
 | Surface | Audit and acceptance criteria |
 | --- | --- |
@@ -66,16 +67,48 @@ not modify the BBS's live configuration or repository implementation files.
 | Dialogs | Center within the current layout; keep prompts and buttons visible; restore the underlying view cleanly when dismissed. |
 | Terminal lifecycle | Verify alternate-screen entry/exit, cursor visibility, and restoration of the terminal after save, cancel, or error. |
 
-- [ ] Exercise at least 80×25, 100×30, 120×45, and 160×60, plus a terminal below
+- [x] Exercise at least 80×25, 100×30, 120×45, and 160×60, plus a terminal below
   the supported minimum. Resize repeatedly between small and large dimensions.
 - [ ] Exercise list navigation, the last page, search, editing, confirmation
   dialogs, long descriptions, and error/status messages during resizing.
 - [ ] Verify display widths with box-drawing characters, wide Unicode characters,
   combining characters, and color-coded values.
-- [ ] Decide whether shared layout helpers are warranted. Extract only behavior
+- [x] Decide whether shared layout helpers are warranted. Extract only behavior
   both editors need; avoid a broad TUI rewrite to fix a localized problem.
 - [ ] Fix directly related `./config` inconsistencies discovered by the audit,
   or record larger findings as separate follow-ups with reproduction steps.
+
+### Cross-binary audit results
+
+`./config` was probed with the same row/column exactness test as `./strings`
+(`view_geometry_test.go`), across the top menu, the system menu, all three
+confirm dialogs and the help overlay, at 80×25, 100×30, 120×45, 160×60, 200×100
+and an undersized 60×15. It fills its terminal exactly at every size, so it is
+sound as a reference. `./strings` did not, and the defects are recorded in
+section 2.
+
+Both binaries already agreed on terminal lifecycle (alt screen plus input TTY)
+and on the 80×25 minimum with clamping below it.
+
+They disagreed on everything visual, so the shared parts were extracted into
+**`internal/tuiart`**: the DOS/VGA truecolor palette and its `Color`/`Style`
+constructors, the title-bar and help-bar styles, `CenterText`/`PadRight`, and
+the backdrop rasterizer with its embedded ANSI art. `./config` now aliases these
+and its golden tests still pass byte-identically.
+
+`./strings` gained the shared title bar, help bar, palette and background fill,
+and its DOS list is now a centered panel with a background margin. Its list
+keeps the flat three-column layout rather than becoming a bordered box: the
+decision was to share chrome, not to rewrite the editor.
+
+One thing deliberately not shared: `./config` paints the embedded ANSI art,
+which is 80 columns wide and centered. The string list panel is never narrower
+than 80 columns, so the art would be completely hidden behind it; `./strings`
+uses `tuiart.Shaded` instead.
+
+Still open in this section: the record-list and field-edit screens of `./config`
+are not yet covered by the geometry probe, and no before/after screen captures
+have been archived.
 
 ## 2. Fix string preview and preserve editing data (#234)
 
@@ -122,8 +155,10 @@ the status bar measured itself with a hand-maintained parallel plain-text copy
 that drifted, overflowing the last column at three-digit topic numbers. Every
 chrome row is now clipped and padded to the terminal width.
 
-Still open in this section: the shared full-screen layout decisions, which
-depend on the cross-binary audit in section 1.
+The full-screen layout follows the section 1 decisions: a shared title bar, the
+DOS list as a centered panel over the shared background fill, the description
+caption below it, and the shared help bar on the last row. Chrome now costs six
+rows, so the minimum page is 19 entries.
 
 ## 3. Clarify reserved, missing, and empty values
 

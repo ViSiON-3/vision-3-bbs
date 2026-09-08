@@ -26,7 +26,7 @@ func (m Model) viewCategoryMenu() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
@@ -35,9 +35,9 @@ func (m Model) viewCategoryMenu() string {
 	padR := maxInt(0, m.width-padL-boxW-2)
 
 	// Top border
-	b.WriteString(m.backdrop.segment(row, 0, padL) +
+	b.WriteString(m.backdrop.Segment(row, 0, padL) +
 		menuBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
 	row++
 
@@ -45,17 +45,17 @@ func (m Model) viewCategoryMenu() string {
 	headerLine := menuBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(m.catMenuTitle, boxW)) +
 		menuBorderStyle.Render("│")
-	b.WriteString(m.backdrop.segment(row, 0, padL) + headerLine +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
+	b.WriteString(m.backdrop.Segment(row, 0, padL) + headerLine +
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
 	row++
 
 	// Empty line
-	emptyLine := m.backdrop.segment(row, 0, padL) +
+	emptyLine := m.backdrop.Segment(row, 0, padL) +
 		menuBorderStyle.Render("│") +
 		menuItemStyle.Render(strings.Repeat(" ", boxW)) +
 		menuBorderStyle.Render("│") +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	b.WriteString(emptyLine)
 	b.WriteByte('\n')
 	row++
@@ -72,11 +72,11 @@ func (m Model) viewCategoryMenu() string {
 			styled = menuItemStyle.Render(content)
 		}
 
-		line := m.backdrop.segment(row, 0, padL) +
+		line := m.backdrop.Segment(row, 0, padL) +
 			menuBorderStyle.Render("│") +
 			styled +
 			menuBorderStyle.Render("│") +
-			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+			m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 		b.WriteString(line)
 		b.WriteByte('\n')
 		row++
@@ -86,47 +86,47 @@ func (m Model) viewCategoryMenu() string {
 	{
 		content := padRight("  Q. Return", boxW)
 		styled := menuItemStyle.Render(content)
-		line := m.backdrop.segment(row, 0, padL) +
+		line := m.backdrop.Segment(row, 0, padL) +
 			menuBorderStyle.Render("│") +
 			styled +
 			menuBorderStyle.Render("│") +
-			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+			m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 		b.WriteString(line)
 		b.WriteByte('\n')
 		row++
 	}
 
 	// Empty line
-	emptyLine = m.backdrop.segment(row, 0, padL) +
+	emptyLine = m.backdrop.Segment(row, 0, padL) +
 		menuBorderStyle.Render("│") +
 		menuItemStyle.Render(strings.Repeat(" ", boxW)) +
 		menuBorderStyle.Render("│") +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	b.WriteString(emptyLine)
 	b.WriteByte('\n')
 	row++
 
 	// Bottom border
-	b.WriteString(m.backdrop.segment(row, 0, padL) +
+	b.WriteString(m.backdrop.Segment(row, 0, padL) +
 		menuBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
 	row++
 
 	// Message/fill
 	if m.message != "" {
-		msgLine := m.backdrop.segment(row, 0, padL) +
+		msgLine := m.backdrop.Segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			m.backdrop.segment(row, m.width-(padR+1), padR+1)
+			m.backdrop.Segment(row, m.width-(padR+1), padR+1)
 		b.WriteString(msgLine)
 	} else {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 	}
 	b.WriteByte('\n')
 	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}

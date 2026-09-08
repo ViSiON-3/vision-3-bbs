@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
 const (
@@ -17,12 +19,20 @@ const (
 	minWidth   = 80 // Minimum terminal width
 	minHeight  = 25 // Minimum terminal height (matching 80x25 DOS)
 
-	// chromeRows counts the rows the list cannot use: the status bar, the
-	// column header, and the message, description and help bars.
-	chromeRows = 5
+	// The DOS list panel is 80 columns at the minimum terminal size and widens
+	// on a larger one, but never past maxPanelWidth and never without leaving
+	// artMargin columns of backdrop on each side. Past maxPanelWidth the value
+	// column is wider than any string needs and the eye has too far to travel
+	// from the label.
+	maxPanelWidth = 120
+	artMargin     = 10
 
-	// minItemsPerPage is the page size at the minimum 80x25 terminal, which is
-	// also the Pascal original's fixed 20-item page.
+	// chromeRows counts the rows the list cannot use: the global header bar,
+	// the status bar, the column header, and the message, description and help
+	// bars.
+	chromeRows = 6
+
+	// minItemsPerPage is the page size at the minimum 80x25 terminal.
 	minItemsPerPage = minHeight - chromeRows
 
 	// maxItemsPerPage caps how far a page grows on a tall terminal. Beyond
@@ -76,6 +86,12 @@ type Model struct {
 	mode   editorMode
 	width  int
 	height int
+
+	// Background painted in the margins around the list panel. The config
+	// editor's ANSI art is 80 columns wide and centered, so a list panel that
+	// is itself at least 80 wide would hide it completely; this editor uses
+	// the shared shaded fill instead.
+	backdrop *tuiart.Backdrop
 
 	// Editing
 	textInput textinput.Model
@@ -140,6 +156,7 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		textInput:       ti,
 		searchInput:     si,
 		confirmYes:      false,
+		backdrop:        tuiart.Shaded(minWidth, minHeight),
 	}, nil
 }
 
@@ -160,6 +177,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.height < minHeight {
 			m.height = minHeight
 		}
+		m.backdrop = tuiart.Shaded(m.width, m.height)
 		m.textInput.Width = m.valueWidth() - 1
 		// Re-page around the cursor so the selection stays on screen when the
 		// page size changes.

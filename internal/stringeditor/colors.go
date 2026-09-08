@@ -5,40 +5,34 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
-// DOS CGA color palette mapped to ANSI 256-color indices.
-// These are the standard 16 DOS colors (0-15).
-var dosColors = [16]string{
-	"0",  // 0:  Black
-	"4",  // 1:  Blue (DOS blue = ANSI 4)
-	"2",  // 2:  Green
-	"6",  // 3:  Cyan (DOS cyan = ANSI 6)
-	"1",  // 4:  Red (DOS red = ANSI 1)
-	"5",  // 5:  Magenta
-	"3",  // 6:  Brown/Yellow (DOS brown = ANSI 3)
-	"7",  // 7:  Light Gray
-	"8",  // 8:  Dark Gray
-	"12", // 9:  Light Blue (DOS light blue = ANSI 12)
-	"10", // 10: Light Green
-	"14", // 11: Light Cyan (DOS light cyan = ANSI 14)
-	"9",  // 12: Light Red (DOS light red = ANSI 9)
-	"13", // 13: Light Magenta
-	"11", // 14: Yellow (DOS yellow = ANSI 11)
-	"15", // 15: White
-}
+// DOS palette index names, used by the editor's own chrome styles.
+const (
+	dosBlack        = 0
+	dosBlue         = 1
+	dosRed          = 4
+	dosMagenta      = 5
+	dosLightGray    = 7
+	dosDarkGray     = 8
+	dosLightBlue    = 9
+	dosLightCyan    = 11
+	dosLightMagenta = 13
+	dosYellow       = 14
+	dosWhite        = 15
+)
 
-// DOS CGA background colors mapped to ANSI 256-color indices.
-var dosBgColors = [8]string{
-	"0", // 0: Black BG
-	"1", // 1: Red BG (DOS B1 = Red BG; maps to ANSI BG 1)
-	"2", // 2: Green BG
-	"3", // 3: Brown BG
-	"4", // 4: Blue BG
-	"5", // 5: Magenta BG
-	"6", // 6: Cyan BG
-	"7", // 7: Light Gray BG
-}
+// dosColors is the shared VGA palette, indexed by DOS color number. Pipe codes
+// |00-|15 and the $x dollar codes both index straight into it, so a string
+// previews here in the same colors the BBS sends to a caller — and in the same
+// colors ./config uses for its own chrome.
+var dosColors = tuiart.Palette
+
+// dosBgColors indexes the same palette for the eight DOS background colors.
+// Background codes |B0-|B7 cannot address the bright half of the palette.
+var dosBgColors = tuiart.Palette[:8]
 
 // styledSpan represents a chunk of text with a specific style.
 type styledSpan struct {
@@ -60,8 +54,8 @@ func RenderColorString(s string, maxWidth int) string {
 // parseColorCodes parses a BBS string with pipe/dollar color codes into spans.
 func parseColorCodes(s string) []styledSpan {
 	var spans []styledSpan
-	curFG := dosColors[9] // Default: light blue (DOS color 9)
-	curBG := ""           // Default: no background (terminal default)
+	curFG := dosColors[dosLightBlue] // Pascal DataColor = 9
+	curBG := ""                      // Default: the panel's own background
 
 	i := 0
 	textBuf := strings.Builder{}
@@ -212,15 +206,19 @@ func renderSpans(spans []styledSpan, maxWidth int) string {
 	var result strings.Builder
 	used := 0
 
-	overflow := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(dosColors[15])).
-		Background(lipgloss.Color(dosColors[5]))
+	overflow := tuiart.Color(dosMagenta, dosWhite)
 
 	for _, span := range spans {
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color(span.fg))
-		if span.bg != "" {
-			style = style.Background(lipgloss.Color(span.bg))
+		// The panel sits on the backdrop art, so a span with no background of
+		// its own still paints the panel's black ground rather than letting
+		// the art show through.
+		bg := span.bg
+		if bg == "" {
+			bg = dosColors[dosBlack]
 		}
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(span.fg)).
+			Background(lipgloss.Color(bg))
 
 		for _, ch := range span.text {
 			text := string(ch)
@@ -244,9 +242,7 @@ func renderSpans(spans []styledSpan, maxWidth int) string {
 
 // controlStyle marks escaped control characters in a preview so they are
 // distinguishable from a value that literally contains "\r".
-var controlStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color(dosColors[0])).
-	Background(lipgloss.Color(dosBgColors[7]))
+var controlStyle = tuiart.Color(dosLightGray, dosBlack)
 
 // cellWidth returns the number of terminal cells s occupies, counting wide
 // characters as two and combining marks as zero.

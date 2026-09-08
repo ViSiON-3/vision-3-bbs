@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
 // Styles matching the Pascal original's color scheme:
@@ -17,130 +19,131 @@ import (
 //	ChoiceColor  = 15 (White)
 //	DataColor    = 9  (Light Blue)
 var (
-	// Status bar styles matching Pascal's SetColor() attributes:
-	//   SetColor(16) = bg=blue, fg=black  (fill + separators)
-	//   SetColor(25) = bg=blue, fg=light blue (labels)
-	//   SetColor(31) = bg=blue, fg=white (values)
-	//   SetColor(27) = bg=blue, fg=light cyan (page label)
-	statusBarFillStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("0")).
-				Background(lipgloss.Color("4"))
+	// Panel styles follow the Pascal original's SetColor() attributes, now
+	// expressed in the shared DOS palette so ./strings and ./config render the
+	// same colors. Every panel style names an explicit background: the panel
+	// sits on top of the backdrop art and must be opaque.
+	//
+	//   SetColor(16) = bg=blue, fg=black       (fill + separators)
+	//   SetColor(25) = bg=blue, fg=light blue  (labels)
+	//   SetColor(31) = bg=blue, fg=white       (values)
+	//   SetColor(27) = bg=blue, fg=light cyan  (page label)
+	statusBarFillStyle      = tuiart.Color(dosBlue, dosBlack)
+	statusBarLabelStyle     = tuiart.Color(dosBlue, dosLightBlue)
+	statusBarValueStyle     = tuiart.Color(dosBlue, dosWhite).Bold(true)
+	statusBarPageLabelStyle = tuiart.Color(dosBlue, dosLightCyan)
 
-	statusBarLabelStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("12")).
-				Background(lipgloss.Color("4"))
-
-	statusBarValueStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("4")).
-				Bold(true)
-
-	statusBarPageLabelStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("14")).
-				Background(lipgloss.Color("4"))
-
-	// Item label in bracket: dark gray
-	bracketStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8"))
+	// Item number and brackets: dark gray on the panel's black ground
+	bracketStyle = tuiart.Color(dosBlack, dosDarkGray)
 
 	// Normal item label
-	labelNormalStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("7"))
+	labelNormalStyle = tuiart.Color(dosBlack, dosLightGray)
 
-	// Highlighted item: white on magenta bar (Pascal BarColor=95 → bg=5, fg=15)
-	labelHighlightStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("5")).
-				Bold(true)
+	// Highlighted item: white on the magenta bar (Pascal BarColor=95)
+	labelHighlightStyle   = tuiart.Color(dosMagenta, dosWhite).Bold(true)
+	bracketHighlightStyle = tuiart.Color(dosMagenta, dosLightCyan)
 
-	bracketHighlightStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("14")).
-				Background(lipgloss.Color("5"))
+	// Panel background for value text and blank filler
+	panelStyle = tuiart.Color(dosBlack, dosLightGray)
 
-	// Description bar (row 24): magenta text, centered
-	descriptionStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("13"))
+	// Description caption, drawn over the backdrop below the panel
+	descriptionStyle = tuiart.Color(dosBlack, dosLightMagenta)
 
 	// Dialog box styles
-	dialogBorderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("4"))
-
-	dialogTextStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("14")).
-			Background(lipgloss.Color("4"))
-
-	dialogButtonStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("7")).
-				Background(lipgloss.Color("4"))
-
-	dialogButtonActiveStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("5")).
-				Bold(true)
+	dialogBorderStyle       = tuiart.Color(dosBlue, dosWhite)
+	dialogTextStyle         = tuiart.Color(dosBlue, dosLightCyan)
+	dialogButtonStyle       = tuiart.Color(dosBlue, dosLightGray)
+	dialogButtonActiveStyle = tuiart.Color(dosMagenta, dosWhite).Bold(true)
 
 	// Search bar
-	searchLabelStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("11")).
-				Bold(true)
+	searchLabelStyle = tuiart.Color(dosBlack, dosYellow).Bold(true)
 
 	// Message flash
-	messageStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("14"))
+	messageStyle = tuiart.Color(dosBlack, dosLightCyan)
 
 	// Edit mode indicator
-	editingStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("11")).
-			Background(lipgloss.Color("4")).
-			Bold(true)
+	editingStyle = tuiart.Color(dosBlue, dosYellow).Bold(true)
 
 	// Rejected input (malformed escape sequence)
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15")).
-			Background(lipgloss.Color("1")).
-			Bold(true)
+	errorStyle = tuiart.Color(dosRed, dosWhite).Bold(true)
 )
 
+// headerTitle is the persistent title bar text, matching ./config's format.
+const headerTitle = "-- ViSiON/3 String Configuration v1.0 --"
+
+// helpText is the keyboard reference drawn on the last row; helpTextCompact is
+// the same set of keys tightened to fit an 80-column terminal, so no shortcut
+// is ever truncated away at the minimum size.
+const (
+	helpText        = "Enter Edit  |  F1 Prefill  |  F3 Revert  |  F4 Default  |  F10 Save  |  / Search  |  Esc Quit"
+	helpTextCompact = "Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  / Search  Esc Quit"
+)
+
+// helpBarText picks the widest help variant that fits the terminal.
+func helpBarText(width int) string {
+	if cellWidth(helpText) <= width {
+		return helpText
+	}
+	return helpTextCompact
+}
+
 // View implements tea.Model.
+//
+// The screen is a global header bar, the DOS list panel centered over the
+// backdrop art, the message and description rows, and the help bar on the last
+// line. The panel keeps the Pascal original's flat three-column layout; only
+// the surrounding chrome is shared with ./config.
 func (m Model) View() string {
 	var b strings.Builder
 
-	// === Row 1: Status Bar ===
-	b.WriteString(m.renderStatusBar())
-	b.WriteByte('\n')
+	panelW := m.panelWidth()
+	padL := max(0, (m.width-panelW)/2)
+	padR := max(0, m.width-padL-panelW)
+	row := 0
 
-	// === Row 2: Separator / Column Headers ===
-	b.WriteString(m.renderColumnHeader())
-	b.WriteByte('\n')
-
-	// === Item list: as many rows as the terminal height allows ===
-	pageStart := m.page * m.pageSize
-	pageEnd := pageStart + m.pageSize
-	if pageEnd > len(m.entries) {
-		pageEnd = len(m.entries)
-	}
-
-	for row := 0; row < m.pageSize; row++ {
-		idx := pageStart + row
-		if idx < pageEnd {
-			b.WriteString(m.renderItem(idx))
-		} else {
-			// Empty row filler
-			b.WriteString(strings.Repeat(" ", m.width))
-		}
+	line := func(s string) {
+		b.WriteString(s)
 		b.WriteByte('\n')
+		row++
+	}
+	// panelLine draws one panel row with backdrop art filling both margins.
+	panelLine := func(content string) {
+		line(m.backdrop.Segment(row, 0, padL) + content +
+			m.backdrop.Segment(row, m.width-padR, padR))
+	}
+	bgLines := func(n int) {
+		for i := 0; i < n; i++ {
+			line(m.backdrop.Line(row))
+		}
 	}
 
-	// === Row 23: Message / Mode indicator ===
-	b.WriteString(m.renderMessageBar())
-	b.WriteByte('\n')
+	// Vertical centering: the panel grows with the terminal until the page size
+	// caps out, and the leftover rows become backdrop above and below it.
+	extraV := max(0, m.height-chromeRows-m.pageSize)
+	topPad := extraV / 2
+	bottomPad := extraV - topPad
 
-	// === Row 24: Description Bar ===
-	b.WriteString(m.renderDescriptionBar())
-	b.WriteByte('\n')
+	line(tuiart.HeaderBarStyle.Render(tuiart.CenterText(headerTitle, m.width)))
+	bgLines(topPad)
 
-	// === Row 25: Help Bar ===
-	b.WriteString(m.renderHelpBar())
+	panelLine(m.renderStatusBar(panelW))
+	panelLine(m.renderColumnHeader(panelW))
+
+	pageStart := m.page * m.pageSize
+	pageEnd := min(pageStart+m.pageSize, len(m.entries))
+	for i := 0; i < m.pageSize; i++ {
+		idx := pageStart + i
+		if idx < pageEnd {
+			panelLine(m.renderItem(idx, panelW))
+		} else {
+			panelLine(panelStyle.Render(strings.Repeat(" ", panelW)))
+		}
+	}
+
+	panelLine(m.renderMessageBar(panelW))
+	line(m.renderDescriptionBar(row))
+	bgLines(bottomPad)
+	b.WriteString(tuiart.HelpBarStyle.Render(tuiart.CenterText(helpBarText(m.width), m.width)))
 
 	// === Overlay: Confirm Dialog ===
 	switch m.mode {
@@ -155,6 +158,29 @@ func (m Model) View() string {
 	return b.String()
 }
 
+// panelWidth returns the width of the DOS list panel. It is 80 columns on a
+// minimum terminal, widens on a larger one while keeping artMargin columns of
+// backdrop on each side, and stops at maxPanelWidth.
+func (m Model) panelWidth() int {
+	w := m.width - 2*artMargin
+	if w > maxPanelWidth {
+		w = maxPanelWidth
+	}
+	if w < minWidth {
+		w = minWidth
+	}
+	if w > m.width {
+		w = m.width
+	}
+	return w
+}
+
+// valueWidth returns the terminal cells available for a value preview, which is
+// everything in the panel to the right of the label column.
+func (m Model) valueWidth() int {
+	return max(10, m.panelWidth()-labelCol)
+}
+
 // renderStatusBar creates the top status bar matching the Pascal original.
 // Pascal gotopage procedure row 1 layout:
 //
@@ -166,7 +192,7 @@ func (m Model) View() string {
 //	SetColor(16); Write(' │');
 //	SetColor(27); Write(' Current Page:');
 //	SetColor(31); Write(' '+strr(page));
-func (m Model) renderStatusBar() string {
+func (m Model) renderStatusBar(panelW int) string {
 	// First item on current page (1-based, matching Pascal's top variable)
 	topItem := m.page*m.pageSize + 1
 	pageNum := m.page + 1
@@ -186,38 +212,28 @@ func (m Model) renderStatusBar() string {
 	// drifts out of sync. A narrow terminal or a three-digit topic number can
 	// push the bar past the last column, so clip it instead of overflowing.
 	visLen := visualLen(content)
-	if visLen > m.width {
-		return truncateVisual(content, m.width)
+	if visLen > panelW {
+		return truncateVisual(content, panelW)
 	}
 
-	return content + statusBarFillStyle.Render(strings.Repeat(" ", m.width-visLen))
+	return content + statusBarFillStyle.Render(strings.Repeat(" ", panelW-visLen))
 }
 
 // renderColumnHeader creates a subtle column header line. Its columns line up
 // with renderItem: the name sits over the labels and "Value" over labelCol.
-func (m Model) renderColumnHeader() string {
+func (m Model) renderColumnHeader(panelW int) string {
 	const nameHeading = "  # Name"
 	header := nameHeading +
 		strings.Repeat(" ", labelCol-len(nameHeading)) +
 		"Value"
-	if pad := m.width - cellWidth(header); pad > 0 {
+	if pad := panelW - cellWidth(header); pad > 0 {
 		header += strings.Repeat(" ", pad)
 	}
 	return bracketStyle.Render(header)
 }
 
-// valueWidth returns the terminal cells available for a value preview, which
-// is everything to the right of the label column.
-func (m Model) valueWidth() int {
-	w := m.width - labelCol
-	if w < 10 {
-		w = 10
-	}
-	return w
-}
-
 // renderItem renders a single list item.
-func (m Model) renderItem(idx int) string {
+func (m Model) renderItem(idx, panelW int) string {
 	entry := m.entries[idx]
 	isSelected := idx == m.cursor
 	itemNum := idx + 1
@@ -261,13 +277,18 @@ func (m Model) renderItem(idx int) string {
 		line = numPart + bracket1 + label + bracket2 + renderedVal
 	}
 
+	// Pad the value column out to the panel edge so the row is opaque against
+	// the backdrop art behind it.
+	if pad := panelW - visualLen(line); pad > 0 {
+		line += panelStyle.Render(strings.Repeat(" ", pad))
+	}
 	return line
 }
 
 // renderMessageBar renders the message/mode indicator line. Every branch is
-// clipped and padded to exactly the terminal width so a long key, a long escape
+// clipped and padded to exactly the panel width so a long key, a long escape
 // error, or a narrow terminal cannot wrap the row.
-func (m Model) renderMessageBar() string {
+func (m Model) renderMessageBar(panelW int) string {
 	var text string
 	style := messageStyle
 
@@ -280,59 +301,55 @@ func (m Model) renderMessageBar() string {
 			style = editingStyle
 		}
 	case modeSearch:
-		return padRow(searchLabelStyle.Render(" Search: ")+m.searchInput.View(), m.width)
+		return padRowStyled(searchLabelStyle.Render(" Search: ")+m.searchInput.View(),
+			panelW, panelStyle)
 	default:
 		if m.message == "" {
-			return strings.Repeat(" ", m.width)
+			return panelStyle.Render(strings.Repeat(" ", panelW))
 		}
 		text = " " + m.message
 	}
 
-	if cellWidth(text) > m.width {
-		text = truncateVisual(text, m.width)
+	if cellWidth(text) > panelW {
+		text = truncateVisual(text, panelW)
 	}
-	return style.Render(text) + strings.Repeat(" ", m.width-cellWidth(text))
+	return style.Render(text) + panelStyle.Render(strings.Repeat(" ", panelW-cellWidth(text)))
 }
 
-// padRow clips or pads an already-styled row to exactly width cells.
-func padRow(rendered string, width int) string {
+// padRowStyled clips or pads an already-styled row to exactly width cells,
+// filling any shortfall with the given background style.
+func padRowStyled(rendered string, width int, fill lipgloss.Style) string {
 	vis := visualLen(rendered)
 	if vis > width {
 		return truncateVisual(rendered, width)
 	}
-	return rendered + strings.Repeat(" ", width-vis)
+	return rendered + fill.Render(strings.Repeat(" ", width-vis))
 }
 
-// renderDescriptionBar renders the description for the current item (row 24).
-// In the Pascal original, this is centered magenta text.
-func (m Model) renderDescriptionBar() string {
+// renderDescriptionBar renders the caption for the current item, centered over
+// the backdrop art on the given screen row.
+func (m Model) renderDescriptionBar(row int) string {
+	desc := ""
 	if m.cursor >= 0 && m.cursor < len(m.entries) {
-		desc := m.entries[m.cursor].Description
+		desc = m.entries[m.cursor].Description
 		if desc == "" {
 			desc = m.entries[m.cursor].Key
 		}
-		// Center the description text
-		pad := (m.width - cellWidth(desc)) / 2
-		if pad < 0 {
-			pad = 0
-		}
-		return padRow(strings.Repeat(" ", pad)+descriptionStyle.Render(desc), m.width)
 	}
-	return strings.Repeat(" ", m.width)
-}
-
-// renderHelpBar renders the bottom help bar.
-func (m Model) renderHelpBar() string {
-	help := " Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  Esc Quit  / Search"
-	if cellWidth(help) > m.width {
-		help = truncateVisual(help, m.width)
+	if desc == "" {
+		return m.backdrop.Line(row)
 	}
-	padded := help + strings.Repeat(" ", m.width-cellWidth(help))
-	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("11")).
-		Background(lipgloss.Color("4")).
-		Bold(true)
-	return style.Render(padded)
+	// Pad with a space either side so the caption does not butt up against the
+	// shaded background.
+	desc = " " + desc + " "
+	if cellWidth(desc) > m.width {
+		desc = truncateVisual(desc, m.width)
+	}
+	left := (m.width - cellWidth(desc)) / 2
+	right := m.width - left - cellWidth(desc)
+	return m.backdrop.Segment(row, 0, left) +
+		descriptionStyle.Render(desc) +
+		m.backdrop.Segment(row, m.width-right, right)
 }
 
 // overlayDialog renders a confirmation dialog centered over the content.

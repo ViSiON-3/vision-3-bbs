@@ -186,13 +186,46 @@ func checkView(t *testing.T, m Model, page int) {
 		t.Fatalf("page %d: view contains a raw carriage return", page)
 	}
 	lines := strings.Split(out, "\n")
-	if want := m.pageSize + chromeRows; len(lines) != want {
-		t.Fatalf("page %d: view has %d rows, want %d", page, len(lines), want)
+	if len(lines) != m.height {
+		t.Fatalf("page %d: view has %d rows, want the full terminal height %d",
+			page, len(lines), m.height)
 	}
 	for i, line := range lines {
-		if w := visualLen(line); w > m.width {
-			t.Fatalf("page %d row %d: width %d exceeds terminal width %d",
+		if w := visualLen(line); w != m.width {
+			t.Fatalf("page %d row %d: width %d, want exactly %d",
 				page, i, w, m.width)
+		}
+	}
+}
+
+// TestDialogGeometry checks that a confirmation dialog stays centered on the
+// screen and never disturbs the row or column count, at every audited size.
+func TestDialogGeometry(t *testing.T) {
+	for _, size := range []struct{ w, h int }{
+		{80, 25}, {100, 30}, {120, 45}, {160, 60}, {60, 15}, {200, 100},
+	} {
+		for _, mode := range []editorMode{modeAbortConfirm, modeRevertConfirm, modeDefaultConfirm} {
+			m := newShippedModel(t)
+			m = resize(t, m, size.w, size.h)
+			m.mode = mode
+
+			out := m.View()
+			lines := strings.Split(out, "\n")
+			if len(lines) != m.height {
+				t.Fatalf("%dx%d mode %v: %d rows, want %d", size.w, size.h, mode, len(lines), m.height)
+			}
+			for i, line := range lines {
+				if w := visualLen(line); w != m.width {
+					t.Fatalf("%dx%d mode %v row %d: width %d, want exactly %d",
+						size.w, size.h, mode, i, w, m.width)
+				}
+			}
+			// The box top border must land on the vertically centered row.
+			wantRow := (m.height - 5) / 2
+			if !strings.Contains(stripANSI(lines[wantRow]), "╔") {
+				t.Errorf("%dx%d mode %v: no dialog border on centered row %d",
+					size.w, size.h, mode, wantRow)
+			}
 		}
 	}
 }
@@ -206,7 +239,7 @@ func TestViewShowsControlCharactersEscaped(t *testing.T) {
 	m.cursor = idx
 	m.page = idx / m.pageSize
 
-	row := m.renderItem(idx)
+	row := m.renderItem(idx, m.panelWidth())
 	if strings.ContainsAny(row, "\r\n") {
 		t.Fatalf("rendered row contains a raw control character: %q", row)
 	}
@@ -241,9 +274,9 @@ func TestPageSizeFor(t *testing.T) {
 	tests := []struct{ height, want int }{
 		{10, minItemsPerPage}, // below the supported minimum
 		{25, minItemsPerPage}, // the 80x25 baseline
-		{30, 25},
-		{45, 40},
-		{60, 55},
+		{30, 24},
+		{45, 39},
+		{60, 54},
 		{100, maxItemsPerPage}, // capped
 	}
 	for _, tt := range tests {

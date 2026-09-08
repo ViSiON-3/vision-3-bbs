@@ -16,34 +16,48 @@ The editor uses a fullscreen layout based on the DOS original. It requires at le
 to fill a larger terminal:
 
 ```text
- Current Topic Number: 1 │ ViSiON/3 BBS String Configuration │ Current Page: 1
-  #  Name                     Value
-  1 [Default User's Prompt ] |08██ |15|MN |08██ |13|TL |05Left|08:
-  2 [System Pause String   ] |15█|07█|08█|B1|09█ |15Stroke Me! |09█...
-  3 [System Password String] |08█|07█|15█ |09Login Password|01:
-  ...
- (20 items per page at 80x25; more on a taller terminal)
-
- This is the Default prompt for new users
- ↑↓ Navigate │ PgUp/PgDn Pages │ Enter Edit │ F1 Edit(Prefill) │ F10 Save │ ...
+            -- ViSiON/3 String Configuration v1.0 --
+░░░░ Current Topic Number: 1 │ ViSiON/3 BBS String Config │ Page: 1 ░░░░
+░░░░  # Name                      Value                             ░░░░
+░░░░  1[Default User's Prompt  ]██ |MN ██ |TL Left:                 ░░░░
+░░░░  2[System Pause String    ]███ ► Stroke Me! ►███               ░░░░
+░░░░  3[System Password String ]███ Login Password:                 ░░░░
+░░░░  ...                                                           ░░░░
+░░░░                                                                ░░░░
+░░░░░░░░░░ This is the Default prompt for new users ░░░░░░░░░░░░░░░░░░░░
+  Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  Esc Quit
 ```
 
-- **Row 1** — Blue status bar showing current topic number, title, and page
-- **Row 2** — Column headers (Name / Value)
-- **Middle rows** — The item list, one string per row, with label and color-rendered value
-- **Third-from-last row** — Flash messages, the edit indicator, or the search box
+- **First row** — Title bar, shared with `./config`
+- **List panel** — The DOS list, centered over the shaded background:
+  - Status bar showing current topic number, title, and page
+  - Column headers (Name / Value)
+  - One string per row, with label and color-rendered value
+  - Flash messages, the edit indicator, or the search box
 - **Second-from-last row** — Description of the currently highlighted string
-- **Last row** — Yellow-on-blue keyboard shortcut reference
+- **Last row** — Keyboard shortcut reference, shared with `./config`
+
+The title bar, help bar, DOS color palette and background fill come from `internal/tuiart`, so both
+editors render in the same colors and the same chrome. The list panel itself keeps the Pascal
+original's flat three-column layout.
 
 ### Sizing
 
-Five rows are reserved for the status bar, column headers, message bar, description bar and help
-bar; every remaining row shows one string. An 80×25 terminal therefore gives the original's 20 items
-per page, a 100×30 terminal gives 25, and so on up to a cap of **60 items per page** — past that the
-description bar sits too far from the selection to read as its caption.
+Six rows are reserved for the title bar, status bar, column headers, message bar, description bar
+and help bar; every remaining row shows one string. An 80×25 terminal gives 19 items per page, a
+100×30 terminal gives 24, and so on up to a cap of **60 items per page** — past that the description
+bar sits too far from the selection to read as its caption, and the leftover rows become background
+above and below the panel.
+
+The panel is 80 columns wide at the minimum terminal size and widens on a larger one, always leaving
+10 columns of background on each side, up to a maximum panel width of **120 columns**.
 
 Resizing re-pages around the current selection, so the highlighted string stays on screen. Terminals
 smaller than 80×25 are not supported: the editor draws at 80×25 and the terminal clips it.
+
+`./config` paints its embedded ANSI art as its background. `./strings` cannot: that art is 80 columns
+wide and centered, and this editor's list panel is never narrower than 80, so the panel would cover
+the picture completely. It uses the shared shaded fill instead.
 
 ## Keyboard Shortcuts
 
@@ -241,7 +255,7 @@ go build -o strings ./cmd/strings
 
 ## Origin
 
-This tool is a faithful recreation of the Vision/2 BBS `STRINGS.EXE` (Turbo Pascal, ~1400 lines in `SRC/STRINGS.PAS`). The Go version preserves the original's 20-item paginated layout, DOS color scheme, and editing workflow while adding search functionality and BubbleTea-based modern terminal rendering.
+This tool is a faithful recreation of the Vision/2 BBS `STRINGS.EXE` (Turbo Pascal, ~1400 lines in `SRC/STRINGS.PAS`). The Go version preserves the original's paginated three-column layout, DOS color scheme, and editing workflow while adding search, escape-safe editing of control characters, terminal-adaptive sizing, and chrome shared with `./config`.
 
 ## Developer Reference
 

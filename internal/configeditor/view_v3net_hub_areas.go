@@ -29,7 +29,7 @@ func (m Model) viewV3NetHubAreas() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
@@ -40,8 +40,8 @@ func (m Model) viewV3NetHubAreas() string {
 	// border reads the live row counter, so it must be called at the row it
 	// is meant to render (rather than cached in a variable).
 	border := func(s string) string {
-		return m.backdrop.segment(row, 0, padL) + s +
-			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+		return m.backdrop.Segment(row, 0, padL) + s +
+			m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	}
 
 	// Top border.
@@ -115,24 +115,24 @@ func (m Model) viewV3NetHubAreas() string {
 	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
 
 	// Help row (message or blank).
 	if m.message != "" {
-		msgLine := m.backdrop.segment(row, 0, padL) +
+		msgLine := m.backdrop.Segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			m.backdrop.segment(row, m.width-(padR+1), padR+1)
+			m.backdrop.Segment(row, m.width-(padR+1), padR+1)
 		b.WriteString(msgLine)
 	} else {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 	}
 	b.WriteByte('\n')
 	row++
 
-	b.WriteString(m.backdrop.line(row))
+	b.WriteString(m.backdrop.Line(row))
 	b.WriteByte('\n')
 	row++
 
@@ -170,7 +170,7 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
@@ -180,8 +180,8 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 	// border reads the live row counter, so it must be called at the row it
 	// is meant to render (rather than cached in a variable).
 	border := func(s string) string {
-		return m.backdrop.segment(row, 0, padL) + s +
-			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+		return m.backdrop.Segment(row, 0, padL) + s +
+			m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	}
 	rowLine := func(content string) string {
 		return border(editBorderStyle.Render("│") +
@@ -229,24 +229,24 @@ func (m Model) viewV3NetAreaForm(title string, fields []areaFormField, activeSte
 	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
 
 	// Help row (message or blank).
 	if m.message != "" {
-		msgLine := m.backdrop.segment(row, 0, padL) +
+		msgLine := m.backdrop.Segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			m.backdrop.segment(row, m.width-(padR+1), padR+1)
+			m.backdrop.Segment(row, m.width-(padR+1), padR+1)
 		b.WriteString(msgLine)
 	} else {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 	}
 	b.WriteByte('\n')
 	row++
 
-	b.WriteString(m.backdrop.line(row))
+	b.WriteString(m.backdrop.Line(row))
 	b.WriteByte('\n')
 	row++
 

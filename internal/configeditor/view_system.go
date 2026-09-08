@@ -43,7 +43,7 @@ func (m Model) viewSysConfigEdit() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
@@ -52,9 +52,9 @@ func (m Model) viewSysConfigEdit() string {
 	padR := maxInt(0, m.width-padL-boxW-2)
 
 	// Top border
-	b.WriteString(m.backdrop.segment(row, 0, padL) +
+	b.WriteString(m.backdrop.Segment(row, 0, padL) +
 		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
 	row++
 
@@ -62,8 +62,8 @@ func (m Model) viewSysConfigEdit() string {
 	headerLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(screenName, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(m.backdrop.segment(row, 0, padL) + headerLine +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
+	b.WriteString(m.backdrop.Segment(row, 0, padL) + headerLine +
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
 	row++
 
@@ -71,11 +71,11 @@ func (m Model) viewSysConfigEdit() string {
 	// used at multiple, differently-numbered rows below, so it must be
 	// recomputed each time rather than cached in a variable.
 	emptyFieldLine := func() string {
-		return m.backdrop.segment(row, 0, padL) +
+		return m.backdrop.Segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
 			fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
 			editBorderStyle.Render("│") +
-			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+			m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	}
 
 	// Empty line
@@ -91,11 +91,11 @@ func (m Model) viewSysConfigEdit() string {
 	}
 	for fr := firstRow; fr <= lastRow; fr++ {
 		rowContent := m.renderSysEditRow(fr, boxW)
-		line := m.backdrop.segment(row, 0, padL) +
+		line := m.backdrop.Segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
 			rowContent +
 			editBorderStyle.Render("│") +
-			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+			m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 		b.WriteString(line)
 		b.WriteByte('\n')
 		row++
@@ -127,20 +127,20 @@ func (m Model) viewSysConfigEdit() string {
 	infoLine := editBorderStyle.Render("│") +
 		editInfoLabelStyle.Render(centerText(infoText, boxW)) +
 		editBorderStyle.Render("│")
-	b.WriteString(m.backdrop.segment(row, 0, padL) + infoLine +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
+	b.WriteString(m.backdrop.Segment(row, 0, padL) + infoLine +
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
 	row++
 
 	// Bottom border
-	b.WriteString(m.backdrop.segment(row, 0, padL) +
+	b.WriteString(m.backdrop.Segment(row, 0, padL) +
 		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
+		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
 	b.WriteByte('\n')
 	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
@@ -150,7 +150,7 @@ func (m Model) viewSysConfigEdit() string {
 	b.WriteByte('\n')
 	row++
 
-	b.WriteString(m.backdrop.line(row))
+	b.WriteString(m.backdrop.Line(row))
 	b.WriteByte('\n')
 	row++
 

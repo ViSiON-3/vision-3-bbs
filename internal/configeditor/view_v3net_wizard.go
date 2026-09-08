@@ -41,7 +41,7 @@ func (m Model) viewHubAreasStep() string {
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
@@ -51,8 +51,8 @@ func (m Model) viewHubAreasStep() string {
 	// border reads the live row counter, so it must be called at the row it
 	// is meant to render (rather than cached in a variable).
 	border := func(s string) string {
-		return m.backdrop.segment(row, 0, padL) + s +
-			m.backdrop.segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
+		return m.backdrop.Segment(row, 0, padL) + s +
+			m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR))
 	}
 	rowLine := func(content string) string {
 		return border(editBorderStyle.Render("│") +
@@ -129,7 +129,7 @@ func (m Model) viewHubAreasStep() string {
 	row++
 
 	for i := 0; i < bottomPad; i++ {
-		b.WriteString(m.backdrop.line(row))
+		b.WriteString(m.backdrop.Line(row))
 		b.WriteByte('\n')
 		row++
 	}
@@ -139,17 +139,17 @@ func (m Model) viewHubAreasStep() string {
 		helpText = "Enter Confirm  |  ESC Cancel"
 	}
 	if m.message != "" {
-		b.WriteString(m.backdrop.segment(row, 0, padL) +
+		b.WriteString(m.backdrop.Segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			m.backdrop.segment(row, m.width-(padR+1), padR+1))
+			m.backdrop.Segment(row, m.width-(padR+1), padR+1))
 	} else {
-		b.WriteString(m.backdrop.segment(row, 0, padL) +
+		b.WriteString(m.backdrop.Segment(row, 0, padL) +
 			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
-			m.backdrop.segment(row, m.width-(padR+1), padR+1))
+			m.backdrop.Segment(row, m.width-(padR+1), padR+1))
 	}
 	b.WriteByte('\n')
 	row++
-	b.WriteString(m.backdrop.line(row))
+	b.WriteString(m.backdrop.Line(row))
 	b.WriteByte('\n')
 	row++
 	b.WriteString(helpBarStyle.Render(centerText(helpText, m.width)))
