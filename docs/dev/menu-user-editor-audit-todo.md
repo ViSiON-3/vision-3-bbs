@@ -267,8 +267,12 @@ Two incidental findings while in the file:
   that had `./menuedit`'s menu edit screen sized for seven fields after the list
   grew to thirteen.
 
-  `./strings` shares the silent-miss gap; it was left alone here rather than
-  widening this PR, and is worth a small follow-up.
+  `./strings` shared the silent-miss gap — its `updateSearch` is near-identical,
+  including the absent not-found branch — and is fixed alongside. It needed
+  nothing else: it already switches on `m.mode` before `m.message`, so its
+  prompt was never maskable. Its sysop guide described `/` as "search/filter
+  strings by name", which was wrong twice over: it searches name, key **and**
+  description, and it jumps the cursor rather than filtering the list.
 
 All of `./ue`'s dialog overlays already preserved the screen behind them with
 the `padToCol` / `skipToCol` pair, so adopting the backdrop needed no change
