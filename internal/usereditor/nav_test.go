@@ -137,3 +137,58 @@ func TestArrowKeysReachEveryEditableField(t *testing.T) {
 		}
 	}
 }
+
+// An arrow key must mean the same thing whether or not a field is open for
+// editing. Down used to confirm and walk the field slice linearly from inside
+// the input, while outside it moved within the column — so pressing Down twice
+// landed you in different places depending on a mode you could not see.
+func TestArrowsMeanTheSameThingWhileEditing(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyType
+		dir  int
+	}{{"down", tea.KeyDown, 1}, {"up", tea.KeyUp, -1}} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := editing(t)
+			m.editField = m.at(t, leftCol, 6) // Access Level, mid-column
+			want := m.verticalField(tc.dir)
+
+			// Open the field, then press the arrow to confirm and move.
+			updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			m = updated.(Model)
+			if m.mode != modeEditField {
+				t.Fatalf("Enter did not open the field, mode = %v", m.mode)
+			}
+			updated, _ = m.Update(tea.KeyMsg{Type: tc.key})
+			m = updated.(Model)
+
+			if m.mode != modeEdit {
+				t.Fatalf("%s left mode %v, want modeEdit", tc.name, m.mode)
+			}
+			if m.editField != want {
+				t.Errorf("%s from inside the input selected %q, but from outside it selects %q",
+					tc.name, m.fields[m.editField].Label, m.fields[want].Label)
+			}
+			if f := m.fields[m.editField]; f.Col != leftCol {
+				t.Errorf("%s escaped its column, landed on %q in column %d", tc.name, f.Label, f.Col)
+			}
+		})
+	}
+}
+
+// Tab and Enter keep advancing in field order, which is the older muscle
+// memory and is deliberately not column-scoped.
+func TestTabAdvancesInFieldOrderFromInsideTheInput(t *testing.T) {
+	m := editing(t)
+	m.editField = m.at(t, leftCol, 6)
+	want := m.nextEditableField(1)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+
+	if m.editField != want {
+		t.Errorf("Tab selected %q, want %q", m.fields[m.editField].Label, m.fields[want].Label)
+	}
+}

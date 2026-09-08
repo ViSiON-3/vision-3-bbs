@@ -94,11 +94,18 @@ The Password field opens a dialog — new password is bcrypt-hashed before savin
 
 | Key | Action |
 |-----|--------|
+| Enter / Tab | Confirm, advance in field order |
+| Up / Down | Confirm, move within the current column |
+| Esc | Cancel, discard the edit |
 | Left / Right | Move cursor |
 | Home / End | Start / end of field |
 | Insert | Toggle insert / overwrite |
 | Delete | Delete character at cursor |
 | Backspace | Delete character before cursor |
+
+An arrow key means the same thing whether or not a field is open for editing:
+Up and Down move within the column either way, confirming the edit first. Y/N
+fields confirm as soon as you press `Y` or `N`.
 
 ---
 

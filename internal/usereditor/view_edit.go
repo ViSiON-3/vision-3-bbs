@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -183,7 +184,10 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType, budget int) (s
 		labelText = padRight(labelText, 13)
 	}
 	label := labelText + " : "
-	labelLen := len(label)
+	// Count runes, not bytes: every other width helper here is rune-based
+	// (padRight, centerText). Labels are ASCII today, so the two agree, but a
+	// mixed basis is how geometry drift gets reintroduced.
+	labelLen := utf8.RuneCountInString(label)
 
 	var value string
 	if f.Get != nil {

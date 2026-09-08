@@ -731,8 +731,8 @@ func (m Model) updateEditField(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	f := m.fields[m.editField]
 
 	switch msg.Type {
-	case tea.KeyEnter, tea.KeyTab, tea.KeyDown:
-		// Confirm and move to next field
+	case tea.KeyEnter, tea.KeyTab:
+		// Confirm and advance in field order.
 		if err := m.applyFieldValue(f); err != nil {
 			m.message = fmt.Sprintf("Invalid: %v", err)
 			return m, nil
@@ -742,15 +742,21 @@ func (m Model) updateEditField(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editField = m.nextEditableField(1)
 		return m, nil
 
-	case tea.KeyUp:
-		// Confirm and move to previous field
+	case tea.KeyDown, tea.KeyUp:
+		// Confirm and move the way the same arrow moves outside the input:
+		// within this field's column. Leaving these on the linear walk made an
+		// arrow mean one thing while editing and another while not.
 		if err := m.applyFieldValue(f); err != nil {
 			m.message = fmt.Sprintf("Invalid: %v", err)
 			return m, nil
 		}
 		m.textInput.Blur()
 		m.mode = modeEdit
-		m.editField = m.nextEditableField(-1)
+		dir := 1
+		if msg.Type == tea.KeyUp {
+			dir = -1
+		}
+		m.editField = m.verticalField(dir)
 		return m, nil
 
 	case tea.KeyEscape:
