@@ -3,6 +3,7 @@ package menu
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -384,4 +385,27 @@ func TestBackfillRumorUserIDs(t *testing.T) {
 			t.Errorf("UserID should remain 0, got %d", rd.Rumors[0].UserID)
 		}
 	})
+}
+
+func TestClampRumorText(t *testing.T) {
+	long := strings.Repeat("x", rumorMaxLength+10)
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"short unchanged", "short rumor", "short rumor"},
+		{"whitespace trimmed", "  padded  ", "padded"},
+		{"exactly max kept", strings.Repeat("a", rumorMaxLength), strings.Repeat("a", rumorMaxLength)},
+		{"over max hard-cut", long, strings.Repeat("x", rumorMaxLength)},
+		{"multibyte counted as runes", strings.Repeat("é", rumorMaxLength+3), strings.Repeat("é", rumorMaxLength)},
+		{"empty stays empty", "   ", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := clampRumorText(tt.in); got != tt.want {
+				t.Errorf("clampRumorText(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
 }
