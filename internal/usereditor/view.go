@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // View implements tea.Model.
@@ -297,14 +296,6 @@ func (m Model) cursorToDisplayRow(cursor int) int {
 // literal, so this was unreachable in practice, but a byte-offset slice on
 // multi-byte input would emit a partial UTF-8 sequence and render as garbage.
 func centerText(s string, width int) string { return tuiart.CenterText(s, width) }
-
-// centerInBox centers text inside the box area between borders.
-func centerInBox(text string, boxW int, textStyle, borderStyle lipgloss.Style, padL, padR int) string {
-	centered := centerText(text, boxW)
-	return borderStyle.Render("│") +
-		textStyle.Render(centered) +
-		borderStyle.Render("│")
-}
 
 func max(a, b int) int {
 	if a > b {

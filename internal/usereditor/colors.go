@@ -23,11 +23,6 @@ func dosColor(bg, fg int) lipgloss.Style { return tuiart.Color(bg, fg) }
 // UE.PAS: Color(8,15) for title and bottom bar
 var titleBarStyle = tuiart.HeaderBarStyle
 
-// --- Background fill ---
-// UE.PAS: Fill_Screen('░',7,1) → gray on blue. Used only where the backdrop
-// art is unavailable; tuiart.Backdrop renders this fill itself.
-var bgFillStyle = tuiart.FillStyle
-
 // --- List box border ---
 // UE.PAS: Color(1,9) GrowBox
 var listBorderStyle = dosColor(1, 9)
