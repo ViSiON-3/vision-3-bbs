@@ -38,25 +38,19 @@ jobs:
         with:
           only-new-issues: true
 
-  # Windows is a released platform (README: "Windows x86_64 Released") but had
-  # no test execution at all, so five windows-tagged files shipped without ever
-  # being run -- including internal/filelock, whose whole purpose is excluding
-  # a second process. A lock that silently fails to exclude is worse than none,
-  # because the callers now assume it works. See issue #235.
+  # Windows is a released platform (README: "Windows x86_64 Released") and now
+  # gates like Linux does. It went untested for a long time, and turning it on
+  # found four product bugs at once: FTN mail could not start there at all
+  # (#248), a concurrent read made every users.json save fail (#249), a path
+  # ending in "/" gained a second separator, and ziplab held its own source
+  # file open while renaming over it. None was visible from a Linux run, a
+  # GOOS=windows build, or vet. See #235.
   test:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    # Windows reports but does not gate, for now. Turning it on surfaced
-    # failures in 11 packages: two product bugs (#248 binkd's executable check
-    # uses unix permission bits; #249 os.Rename fails while another handle is
-    # open) and a set of test assumptions that do not hold there (#250).
-    # Blocking on those would stop every unrelated PR, and excluding the
-    # packages would hide the bugs. Drop this line once #248, #249 and #250
-    # are closed -- #250 tracks that.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
