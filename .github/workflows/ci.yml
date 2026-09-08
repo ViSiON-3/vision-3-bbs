@@ -64,9 +64,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # vet on Linux never analyses the windows-tagged files, since the build
-      # constraints exclude them; this is their first vet coverage.
+      # Windows only: the lint job already vets on Linux, and a Linux vet never
+      # analyses the windows-tagged files anyway, since the build constraints
+      # exclude them. This is their first vet coverage.
       - name: go vet
+        if: matrix.os == 'windows-latest'
         run: go vet ./...
       - name: go test
         run: go test ./...
