@@ -178,9 +178,9 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType, budget int) (s
 	// Right column: longest is "Screen Height" at 13 chars.
 	labelText := f.Label
 	switch f.Col {
-	case 3:
+	case leftCol:
 		labelText = padRight(labelText, 14)
-	case 50:
+	case rightCol:
 		labelText = padRight(labelText, 13)
 	}
 	label := labelText + " : "
