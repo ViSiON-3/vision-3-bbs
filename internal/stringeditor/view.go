@@ -181,41 +181,38 @@ func (m Model) valueWidth() int {
 	return max(10, m.panelWidth()-labelCol)
 }
 
-// renderStatusBar creates the top status bar matching the Pascal original.
-// Pascal gotopage procedure row 1 layout:
+// renderStatusBar creates the panel's status bar, following the Pascal
+// original's SetColor/Write sequence:
 //
 //	SetColor(16); ClrEOL;  (fill entire row blue)
 //	SetColor(25); Write(' Current Topic Number:');
 //	SetColor(31); Write(' '+strr(top));
-//	SetColor(16); Write('│');
-//	SetColor(25); Write(' ViSiON/2 BBS String Configuration');
 //	SetColor(16); Write(' │');
 //	SetColor(27); Write(' Current Page:');
 //	SetColor(31); Write(' '+strr(page));
+//
+// The original also wrote the program name here. That now lives in the shared
+// title bar one row above, and repeating it pushed the page number off the
+// right edge of an 80-column terminal, so this bar carries only the position.
 func (m Model) renderStatusBar(panelW int) string {
 	// First item on current page (1-based, matching Pascal's top variable)
 	topItem := m.page*m.pageSize + 1
 	pageNum := m.page + 1
 
-	// Build segments exactly matching Pascal's SetColor/Write sequence
-	seg1 := statusBarLabelStyle.Render(" Current Topic Number:")
-	seg2 := statusBarValueStyle.Render(fmt.Sprintf(" %d", topItem))
-	sep1 := statusBarFillStyle.Render(" │")
-	seg3 := statusBarLabelStyle.Render(" ViSiON/3 BBS String Configuration")
-	sep2 := statusBarFillStyle.Render(" │")
-	seg4 := statusBarPageLabelStyle.Render(" Current Page:")
-	seg5 := statusBarValueStyle.Render(fmt.Sprintf(" %d", pageNum))
-
-	content := seg1 + seg2 + sep1 + seg3 + sep2 + seg4 + seg5
+	content := statusBarLabelStyle.Render(" Current Topic Number:") +
+		statusBarValueStyle.Render(fmt.Sprintf(" %d", topItem)) +
+		statusBarFillStyle.Render(" │") +
+		statusBarPageLabelStyle.Render(" Current Page:") +
+		statusBarValueStyle.Render(fmt.Sprintf(" %d", pageNum)) +
+		statusBarPageLabelStyle.Render(" of") +
+		statusBarValueStyle.Render(fmt.Sprintf(" %d", m.numPages))
 
 	// Measure the styled text directly rather than a parallel plain copy, which
-	// drifts out of sync. A narrow terminal or a three-digit topic number can
-	// push the bar past the last column, so clip it instead of overflowing.
+	// drifts out of sync.
 	visLen := visualLen(content)
 	if visLen > panelW {
 		return truncateVisual(content, panelW)
 	}
-
 	return content + statusBarFillStyle.Render(strings.Repeat(" ", panelW-visLen))
 }
 
