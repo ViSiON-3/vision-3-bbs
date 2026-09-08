@@ -19,7 +19,11 @@ func (p *Processor) testZipIntegrity(zipPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open zip %s: %w", zipPath, err)
 	}
-	defer func() { _ = r.Close() }() // read-only zip reader
+	defer func() {
+		if r != nil {
+			_ = r.Close() // no-op after the explicit close on the success path
+		}
+	}()
 
 	for _, f := range r.File {
 		rc, err := f.Open()
@@ -41,7 +45,11 @@ func (p *Processor) extractZip(zipPath, destDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open zip %s: %w", zipPath, err)
 	}
-	defer func() { _ = r.Close() }() // read-only zip reader
+	defer func() {
+		if r != nil {
+			_ = r.Close() // no-op after the explicit close on the success path
+		}
+	}()
 
 	for _, f := range r.File {
 		targetPath := filepath.Join(destDir, f.Name)
@@ -111,7 +119,11 @@ func (p *Processor) setZipComment(zipPath, comment string) (retErr error) {
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer func() { _ = r.Close() }() // read-only zip reader
+	defer func() {
+		if r != nil {
+			_ = r.Close() // no-op after the explicit close on the success path
+		}
+	}()
 
 	tmpPath := zipPath + ".tmp"
 	outFile, err := os.Create(tmpPath)
@@ -145,6 +157,14 @@ func (p *Processor) setZipComment(zipPath, comment string) (retErr error) {
 	if err := outFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp zip: %w", err)
 	}
+	// Release the source before replacing it. Windows refuses to rename over a
+	// file that anyone still holds open, and here the holder is this function:
+	// the deferred close would not run until after the rename. No amount of
+	// retrying in atomicfile can help when we are the one holding it.
+	if err := r.Close(); err != nil {
+		return fmt.Errorf("failed to close source zip: %w", err)
+	}
+	r = nil
 	return atomicfile.Replace(tmpPath, zipPath)
 }
 
@@ -154,7 +174,11 @@ func (p *Processor) addFileToZip(zipPath, name string, data []byte) (retErr erro
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer func() { _ = r.Close() }() // read-only zip reader
+	defer func() {
+		if r != nil {
+			_ = r.Close() // no-op after the explicit close on the success path
+		}
+	}()
 
 	tmpPath := zipPath + ".tmp"
 	outFile, err := os.Create(tmpPath)
@@ -208,5 +232,13 @@ func (p *Processor) addFileToZip(zipPath, name string, data []byte) (retErr erro
 	if err := outFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp zip: %w", err)
 	}
+	// Release the source before replacing it. Windows refuses to rename over a
+	// file that anyone still holds open, and here the holder is this function:
+	// the deferred close would not run until after the rename. No amount of
+	// retrying in atomicfile can help when we are the one holding it.
+	if err := r.Close(); err != nil {
+		return fmt.Errorf("failed to close source zip: %w", err)
+	}
+	r = nil
 	return atomicfile.Replace(tmpPath, zipPath)
 }
