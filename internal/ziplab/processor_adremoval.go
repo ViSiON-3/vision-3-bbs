@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -19,7 +20,11 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer func() { _ = r.Close() }() // read-only zip reader
+	defer func() {
+		if r != nil {
+			_ = r.Close() // no-op after the explicit close on the success path
+		}
+	}()
 
 	tmpPath := zipPath + ".tmp"
 	outFile, err := os.Create(tmpPath)
@@ -72,7 +77,15 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 	if err := outFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp zip: %w", err)
 	}
-	return os.Rename(tmpPath, zipPath)
+	// Release the source before replacing it. Windows refuses to rename over a
+	// file that anyone still holds open, and here the holder is this function:
+	// the deferred close would not run until after the rename. No amount of
+	// retrying in atomicfile can help when we are the one holding it.
+	if err := r.Close(); err != nil {
+		return fmt.Errorf("failed to close source zip: %w", err)
+	}
+	r = nil
+	return atomicfile.Replace(tmpPath, zipPath)
 }
 
 // shouldRemoveFile checks if a filename matches any removal pattern (case-insensitive).

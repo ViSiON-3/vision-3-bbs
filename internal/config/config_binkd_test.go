@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -63,6 +64,14 @@ func TestLoadFTNConfigBinkdPartialDefaults(t *testing.T) {
 	}
 }
 
+// absTestPath is an absolute path on whichever platform is running.
+var absTestPath = func() string {
+	if runtime.GOOS == "windows" {
+		return `C:\abs\secure_in`
+	}
+	return "/abs/secure_in"
+}()
+
 func TestFTNConfigResolvePaths(t *testing.T) {
 	cfg := FTNConfig{
 		InboundPath:       "data/ftn/in",
@@ -71,11 +80,15 @@ func TestFTNConfigResolvePaths(t *testing.T) {
 		BinkdOutboundPath: "data/ftn/out",
 		TempPath:          "data/ftn/temp",
 	}
+	// "/abs/..." is not an absolute path on Windows -- absolute there means a
+	// drive or a UNC share -- so ResolvePaths would rightly join it to the
+	// root. Use a path that is absolute on the platform running the test.
+	cfg.SecureInboundPath = absTestPath
 	cfg.ResolvePaths("/bbs")
 	if cfg.InboundPath != filepath.Join("/bbs", "data/ftn/in") {
 		t.Errorf("InboundPath = %q", cfg.InboundPath)
 	}
-	if cfg.SecureInboundPath != "/abs/secure_in" {
+	if cfg.SecureInboundPath != absTestPath {
 		t.Errorf("absolute path must be untouched, got %q", cfg.SecureInboundPath)
 	}
 	if cfg.BinkdOutboundPath != filepath.Join("/bbs", "data/ftn/out") {

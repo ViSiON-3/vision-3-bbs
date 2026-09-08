@@ -68,8 +68,8 @@ func New(cfg Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("binkd binary not found at %s: %w", binkdPath, err)
 	}
-	if info.Mode()&0111 == 0 {
-		return nil, fmt.Errorf("binkd binary %s is not executable", binkdPath)
+	if err := checkExecutable(binkdPath, info); err != nil {
+		return nil, err
 	}
 
 	confPath := filepath.Join(cfg.BBSRoot, "data", "ftn", "binkd.conf")

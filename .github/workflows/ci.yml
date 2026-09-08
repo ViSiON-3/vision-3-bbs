@@ -38,8 +38,19 @@ jobs:
         with:
           only-new-issues: true
 
+  # Windows is a released platform (README: "Windows x86_64 Released") and now
+  # gates like Linux does. It went untested for a long time, and turning it on
+  # found four product bugs at once: FTN mail could not start there at all
+  # (#248), a concurrent read made every users.json save fail (#249), a path
+  # ending in "/" gained a second separator, and ziplab held its own source
+  # file open while renaming over it. None was visible from a Linux run, a
+  # GOOS=windows build, or vet. See #235.
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +58,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # Windows only: the lint job already vets on Linux, and a Linux vet never
+      # analyses the windows-tagged files anyway, since the build constraints
+      # exclude them. This is their first vet coverage.
+      - name: go vet
+        if: matrix.os == 'windows-latest'
+        run: go vet ./...
       - name: go test
         run: go test ./...
       - name: go test -race
