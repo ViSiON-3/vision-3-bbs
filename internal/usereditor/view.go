@@ -5,7 +5,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -27,138 +27,91 @@ func (m Model) View() string {
 // viewListScreen renders the main user list browser.
 // Faithfully recreates UE.PAS v1.3 Init_Pick_Screen + Display_Group.
 func (m Model) viewListScreen() string {
-	var b strings.Builder
+	// Fixed rows: title(1) + box(border, header, empty, column title, empty,
+	// listVisible, border = listVisible+6) + message(1) + help(1).
+	topPad, bottomPad := tuiart.Split(m.height, listVisible+9)
+
+	sc := tuiart.NewScreen(m.width, m.backdrop)
 
 	// === Row 1: Title bar ===
 	// UE.PAS: Color(8,15) Center_Write('╌╌ ViSiON/2 User Editor v1.3...')
-	title := centerText("-- ViSiON/3 User Editor v1.0 --", m.width)
-	b.WriteString(titleBarStyle.Render(title))
-	b.WriteByte('\n')
+	sc.Line(titleBarStyle.Render(centerText("-- ViSiON/3 User Editor v1.0 --", m.width)))
+	sc.BgRows(topPad)
 
-	// Background fill line (reused throughout)
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
-
-	// Vertical centering: distribute extra rows above and below box.
-	// Fixed content: 1 title + box(19) + message(1) + help(1) = 22 rows
-	extraV := max(0, m.height-22)
-	topPad := max(1, extraV/2)
-	bottomPad := max(1, extraV-topPad)
-
-	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
-
-	// === Top border of list box ===
+	// === List box ===
 	// UE.PAS: GrowBox(10,5,70,22) with Mixed_Border
 	boxW := 60 // columns 10-70
 	padL := max(0, (m.width-boxW-2)/2)
 	padR := max(0, m.width-padL-boxW-2)
 
-	topBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("╒"+strings.Repeat("═", boxW)+"╕") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(topBorder)
-	b.WriteByte('\n')
+	box := func(content string) {
+		sc.Line(sc.Pad(padL, padR,
+			listBorderStyle.Render("│")+content+listBorderStyle.Render("│")))
+	}
+	emptyBox := func() { box(listItemStyle.Render(strings.Repeat(" ", boxW))) }
 
-	// === Row 6: Header text inside box ===
+	// === Top border ===
+	sc.Line(sc.Pad(padL, padR, listBorderStyle.Render("╒"+strings.Repeat("═", boxW)+"╕")))
+
+	// === Header text inside box ===
 	// UE.PAS: Color(1,14) Center_Write('╌╌ Bash (CR) to Edit...')
-	headerText := "-- Press Enter to Edit Highlighted User --"
-	headerLine := centerInBox(headerText, boxW, listHeaderStyle, listBorderStyle, padL, padR)
-	b.WriteString(bgFillStyle.Render(strings.Repeat("░", padL)) + headerLine + bgFillStyle.Render(strings.Repeat("░", max(0, padR))))
-	b.WriteByte('\n')
+	box(listHeaderStyle.Render(centerText("-- Press Enter to Edit Highlighted User --", boxW)))
 
-	// === Row 7: Empty row inside box ===
-	emptyBoxLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("│") +
-		listItemStyle.Render(strings.Repeat(" ", boxW)) +
-		listBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(emptyBoxLine)
-	b.WriteByte('\n')
+	// === Empty row inside box ===
+	emptyBox()
 
-	// === Row 8: Column title row ===
+	// === Column title row ===
 	// UE.PAS: Color(9,15) Tab(NameStr + Title[ListType], 58)
-	colHeader := m.renderColumnTitle(boxW)
-	colLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("│") +
-		columnTitleStyle.Render(padRight(colHeader, boxW)) +
-		listBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(colLine)
-	b.WriteByte('\n')
+	box(columnTitleStyle.Render(padRight(m.renderColumnTitle(boxW), boxW)))
 
 	// === Blank separator row between column header and list ===
-	b.WriteString(emptyBoxLine)
-	b.WriteByte('\n')
+	emptyBox()
 
-	// === User list (13 rows, traditional scrolling lightbar) ===
+	// === User list (listVisible rows, traditional scrolling lightbar) ===
 	// Build display list: user indices with a separator (-1) before deleted users.
 	displayRows := m.buildDisplayRows()
 	totalDisplay := len(displayRows)
-	startIdx := m.scrollOffset
 	for row := 0; row < listVisible; row++ {
-		dIdx := startIdx + row
-
-		var rowContent string
-		if dIdx < 0 || dIdx >= totalDisplay {
-			rowContent = listItemStyle.Render(strings.Repeat(" ", boxW))
-		} else if displayRows[dIdx] == -1 {
+		dIdx := m.scrollOffset + row
+		switch {
+		case dIdx < 0 || dIdx >= totalDisplay:
+			emptyBox()
+		case displayRows[dIdx] == -1:
 			// Separator row for deleted users
-			sepText := "--- DELETED USERS ---"
-			rowContent = separatorStyle.Render(centerText(sepText, boxW))
-		} else {
+			box(separatorStyle.Render(centerText("--- DELETED USERS ---", boxW)))
+		default:
 			idx := displayRows[dIdx]
-			isHighlight := idx == m.cursor
-			rowContent = m.renderUserRow(idx, isHighlight, boxW)
+			box(m.renderUserRow(idx, idx == m.cursor, boxW))
 		}
-
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			listBorderStyle.Render("│") +
-			rowContent +
-			listBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(line)
-		b.WriteByte('\n')
 	}
 
-	// === Row 22: Bottom border ===
-	botBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("╘"+strings.Repeat("═", boxW)+"╛") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(botBorder)
-	b.WriteByte('\n')
+	// === Bottom border ===
+	sc.Line(sc.Pad(padL, padR, listBorderStyle.Render("╘"+strings.Repeat("═", boxW)+"╛")))
 
-	// === Row 23: Message or background ===
-	if m.message != "" {
-		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			flashMessageStyle.Render(" "+padRight(m.message, boxW+1)) +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(msgLine)
-	} else if m.mode == modeSearch {
-		searchLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			flashMessageStyle.Render(" Search: ") +
-			m.searchInput.View() +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(searchLine)
-	} else {
-		b.WriteString(bgLine)
+	// === Message, search prompt, or background ===
+	switch {
+	case m.message != "":
+		sc.Line(sc.Pad(padL, padR, flashMessageStyle.Render(" "+padRight(m.message, boxW+1))))
+	case m.mode == modeSearch:
+		// Pad against what the widget actually renders: it appends a cursor
+		// cell after the text, so its width is not searchInput.Width.
+		const searchLabel = " Search: "
+		inputView := m.searchInput.View()
+		used := len(searchLabel) + uitext.ApproximateVisibleLen(inputView)
+		sc.Line(sc.Pad(padL, padR, flashMessageStyle.Render(searchLabel)+inputView+
+			flashMessageStyle.Render(strings.Repeat(" ", max(0, boxW+2-used)))))
+	default:
+		sc.BgLine()
 	}
-	b.WriteByte('\n')
 
-	// Bottom fill rows (vertically centers content)
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
+	sc.BgRows(bottomPad)
 
 	// === Bottom help bar ===
 	// UE.PAS: Color(8,15) Center_Write('Press Alt-H for Pop-Up Help Screen.')
-	helpText := centerText("Press Alt-H for Pop-Up Help Screen.", m.width)
-	b.WriteString(helpBarStyle.Render(helpText))
+	sc.Last(helpBarStyle.Render(centerText("Press Alt-H for Pop-Up Help Screen.", m.width)))
 
 	// === Overlay dialogs ===
-	result := b.String()
+	result := sc.String()
 	switch m.mode {
 	case modeDeleteConfirm:
 		handle := ""
@@ -340,9 +293,7 @@ func (m Model) cursorToDisplayRow(cursor int) int {
 // This is rune-based, not byte-based: every caller today passes an ASCII
 // literal, so this was unreachable in practice, but a byte-offset slice on
 // multi-byte input would emit a partial UTF-8 sequence and render as garbage.
-func centerText(s string, width int) string {
-	return ansi.Center(ansi.TruncateRunes(s, width, ""), width)
-}
+func centerText(s string, width int) string { return tuiart.CenterText(s, width) }
 
 // centerInBox centers text inside the box area between borders.
 func centerInBox(text string, boxW int, textStyle, borderStyle lipgloss.Style, padL, padR int) string {

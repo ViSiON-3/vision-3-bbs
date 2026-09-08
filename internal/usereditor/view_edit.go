@@ -5,6 +5,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -16,65 +17,37 @@ func (m Model) viewEditScreen() string {
 	}
 	u := m.users[m.editIndex]
 
-	var b strings.Builder
+	// Fixed rows: title(1) + box(border, 19 field rows, border = 21) + help(1).
+	const editRowFirst, editRowLast = 4, 22
+	boxRows := (editRowLast - editRowFirst + 1) + 2
+	topPad, bottomPad := tuiart.Split(m.height, boxRows+2)
+
+	sc := tuiart.NewScreen(m.width, m.backdrop)
 
 	// === Row 1: Title bar ===
 	// UE.PAS: Color(8,15) Center_Write('╌╌ ViSiON/3 Quick & Easy User Editor v1.0 ╌╌')
-	title := centerText("-- ViSiON/3 Quick & Easy User Editor v1.0 --", m.width)
-	b.WriteString(editTitleStyle.Render(title))
-	b.WriteByte('\n')
+	sc.Line(editTitleStyle.Render(centerText("-- ViSiON/3 Quick & Easy User Editor v1.0 --", m.width)))
+	sc.BgRows(topPad)
 
-	// Background fill line (reused throughout)
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
-
-	// Vertical centering: distribute extra rows above and below box.
-	// Fixed content: 1 title + box(21) + help(1) = 23 rows
-	extraV := max(0, m.height-23)
-	topPad := max(1, extraV/2)
-	bottomPad := max(1, extraV-topPad)
-
-	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
-
-	// === Top border of edit box ===
+	// === Edit box ===
 	// UE.PAS: GrowBOX(2,3,78,23) Color(1,9)
 	boxW := 76 // columns 2-78
 	padL := max(0, (m.width-boxW-2)/2)
 	padR := max(0, m.width-padL-boxW-2)
 
-	topBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("╒"+strings.Repeat("═", boxW)+"╕") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(topBorder)
-	b.WriteByte('\n')
+	// === Top border ===
+	sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("╒"+strings.Repeat("═", boxW)+"╕")))
 
-	// === Rows 4-22: Field area (19 rows inside box) ===
-	// Render each row of the edit area
-	for row := 4; row <= 22; row++ {
-		rowContent := m.renderEditRow(row, u, boxW)
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			editBorderStyle.Render("│") +
-			rowContent +
-			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(line)
-		b.WriteByte('\n')
+	// === Field area ===
+	for row := editRowFirst; row <= editRowLast; row++ {
+		sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("│")+
+			m.renderEditRow(row, u, boxW)+editBorderStyle.Render("│")))
 	}
 
-	// === Row 23: Bottom border ===
-	botBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("╘"+strings.Repeat("═", boxW)+"╛") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(botBorder)
-	b.WriteByte('\n')
+	// === Bottom border ===
+	sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("╘"+strings.Repeat("═", boxW)+"╛")))
 
-	// Bottom fill rows (vertically centers content)
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
+	sc.BgRows(bottomPad)
 
 	// === Bottom help bar ===
 	// UE.PAS: 'F2 - Delete  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes'
@@ -88,11 +61,10 @@ func (m Model) viewEditScreen() string {
 	} else {
 		helpItems = fmt.Sprintf("F2 - %s  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes", f2Label)
 	}
-	helpText := centerText(helpItems, m.width)
-	b.WriteString(helpBarStyle.Render(helpText))
+	sc.Last(helpBarStyle.Render(centerText(helpItems, m.width)))
 
 	// Overlay for password entry and WFC key-manager dialogs
-	result := b.String()
+	result := sc.String()
 	switch m.mode {
 	case modePasswordEntry:
 		result = m.overlayPasswordDialog(result)
@@ -221,11 +193,15 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) 
 	// Raw width is always label + field width (value is padded/clamped to f.Width)
 	rawW := labelLen + f.Width
 
-	// If actively editing this field.
-	// textInput.View() renders Width+1 visible chars (cursor appended after text),
-	// so report rawW+1 to keep the row padding correct and avoid overflowing boxW.
+	// If actively editing this field, measure what the widget actually renders
+	// rather than deriving it from f.Width. It appends a cursor cell after the
+	// text, so its width is Width+1 today, but overlayPasswordDialog already
+	// measures rather than assumes ("textinput.View() width varies") and the
+	// two sites should not disagree about the same widget.
 	if isActive && m.mode == modeEditField {
-		return fieldLabelStyle.Render(label) + m.textInput.View(), rawW + 1
+		view := m.textInput.View()
+		return fieldLabelStyle.Render(label) + view,
+			labelLen + uitext.ApproximateVisibleLen(view)
 	}
 
 	// Display the value

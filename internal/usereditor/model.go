@@ -100,6 +100,11 @@ type Model struct {
 	height  int
 	mode    editorMode
 	message string // Flash message
+
+	// Backdrop art painted behind every screen. backdropArt holds the raw
+	// bytes chosen at startup, reused when the backdrop is rebuilt on resize.
+	backdrop    *backdrop
+	backdropArt []byte
 }
 
 // New creates a new user editor model.
@@ -109,6 +114,11 @@ func New(filePath string, dataDir ...string) (Model, error) {
 	if err != nil {
 		return Model{}, fmt.Errorf("loading users: %w", err)
 	}
+
+	// Choose the backdrop screen once per startup; the bytes are reused on
+	// resize so the picture behind the boxes does not change as the terminal
+	// is dragged.
+	art := pickBackdropArt()
 
 	ti := textinput.New()
 	ti.Prompt = ""
@@ -192,6 +202,8 @@ func New(filePath string, dataDir ...string) (Model, error) {
 		searchInput:   si,
 		width:         minWidth,
 		height:        minHeight,
+		backdropArt:   art,
+		backdrop:      loadBackdropFrom(art, minWidth, minHeight),
 		mode:          modeList,
 	}, nil
 }
@@ -213,6 +225,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.height < minHeight {
 			m.height = minHeight
 		}
+		m.backdrop = loadBackdropFrom(m.backdropArt, m.width, m.height)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -449,10 +462,16 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startFieldEdit()
 
 	case tea.KeyDown:
-		m.editField = m.nextEditableField(1)
+		m.editField = m.verticalField(1)
 
 	case tea.KeyUp:
-		m.editField = m.nextEditableField(-1)
+		m.editField = m.verticalField(-1)
+
+	case tea.KeyLeft:
+		m.editField = m.horizontalField(leftCol)
+
+	case tea.KeyRight:
+		m.editField = m.horizontalField(rightCol)
 
 	case tea.KeyEscape:
 		// Only prompt to save if changes were made during this edit session
@@ -555,6 +574,88 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// The edit screen lays its fields out in two columns, whose x positions
+// fieldDef.Col records verbatim from UE.PAS Proc_Entry.
+const (
+	leftCol  = 3
+	rightCol = 50
+)
+
+// verticalField returns the next editable field above (dir -1) or below
+// (dir +1) the cursor *within its own column*, wrapping at that column's ends.
+//
+// Up and Down used to walk the field slice linearly, which meant leaving the
+// left column required pressing Down through all of it — eleven presses to get
+// from Handle to Validated, the field directly beside it. Moving between
+// columns is now Left and Right's job (see horizontalField).
+func (m Model) verticalField(dir int) int {
+	cur := m.fields[m.editField]
+	col := m.columnOf(cur)
+
+	best, bestRow := -1, 0 // nearest field in the direction of travel
+	wrap, wrapRow := -1, 0 // furthest field the other way, for wrapping
+	for i, f := range m.fields {
+		if f.Type == ftDisplay || m.columnOf(f) != col || f.Row == cur.Row {
+			continue
+		}
+		if (f.Row-cur.Row)*dir > 0 {
+			if best < 0 || (f.Row-cur.Row)*dir < (bestRow-cur.Row)*dir {
+				best, bestRow = i, f.Row
+			}
+			continue
+		}
+		if wrap < 0 || (f.Row-wrapRow)*dir < 0 {
+			wrap, wrapRow = i, f.Row
+		}
+	}
+	if best >= 0 {
+		return best
+	}
+	if wrap >= 0 {
+		return wrap
+	}
+	return m.editField
+}
+
+// horizontalField moves to the given column, landing on the editable field
+// whose row is nearest the cursor's. With only two columns, pressing Left in
+// the left column (or Right in the right) is a no-op rather than a wrap:
+// arrow keys read as spatial movement, and teleporting across the screen from
+// an edge would not.
+func (m Model) horizontalField(col int) int {
+	cur := m.fields[m.editField]
+	if m.columnOf(cur) == col {
+		return m.editField
+	}
+	best, bestDist := -1, 0
+	for i, f := range m.fields {
+		if f.Type == ftDisplay || m.columnOf(f) != col {
+			continue
+		}
+		d := f.Row - cur.Row
+		if d < 0 {
+			d = -d
+		}
+		if best < 0 || d < bestDist {
+			best, bestDist = i, d
+		}
+	}
+	if best < 0 {
+		return m.editField
+	}
+	return best
+}
+
+// columnOf reports which column a field sits in. Anything that is not the
+// right column counts as the left one, so a field with an unexpected Col still
+// navigates rather than becoming unreachable.
+func (m Model) columnOf(f fieldDef) int {
+	if f.Col == rightCol {
+		return rightCol
+	}
+	return leftCol
 }
 
 // nextEditableField finds the next non-display field in the given direction (+1 or -1).

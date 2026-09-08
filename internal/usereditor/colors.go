@@ -2,65 +2,31 @@ package usereditor
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
-// DOS CGA color palette mapped to ANSI 256-color indices.
-// These are the standard 16 DOS colors (0-15).
-var dosColors = [16]string{
-	"0",  // 0:  Black
-	"4",  // 1:  Blue (DOS blue = ANSI 4)
-	"2",  // 2:  Green
-	"6",  // 3:  Cyan (DOS cyan = ANSI 6)
-	"1",  // 4:  Red (DOS red = ANSI 1)
-	"5",  // 5:  Magenta
-	"3",  // 6:  Brown/Yellow (DOS brown = ANSI 3)
-	"7",  // 7:  Light Gray
-	"8",  // 8:  Dark Gray
-	"12", // 9:  Light Blue (DOS light blue = ANSI 12)
-	"10", // 10: Light Green
-	"14", // 11: Light Cyan (DOS light cyan = ANSI 14)
-	"9",  // 12: Light Red (DOS light red = ANSI 9)
-	"13", // 13: Light Magenta
-	"11", // 14: Yellow (DOS yellow = ANSI 11)
-	"15", // 15: White
-}
-
-// DOS CGA background colors mapped to ANSI 256-color indices.
-var dosBgColors = [8]string{
-	"0", // 0: Black BG
-	"4", // 1: Blue BG
-	"2", // 2: Green BG
-	"6", // 3: Cyan BG
-	"1", // 4: Red BG
-	"5", // 5: Magenta BG
-	"3", // 6: Brown BG
-	"7", // 7: Light Gray BG
-}
+// The DOS palette and its style constructors live in internal/tuiart so every
+// editor renders in the same colors. These aliases keep the user editor's call
+// sites unchanged; only the palette underneath changes, from ANSI 256 indices
+// to the pinned VGA hex values.
+var dosColors = tuiart.Palette
 
 // dosStyle creates a lipgloss style from a DOS TextAttr byte (bg*16 + fg).
-func dosStyle(attr byte) lipgloss.Style {
-	fg := attr & 0x0F
-	bg := (attr >> 4) & 0x07
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(dosColors[fg])).
-		Background(lipgloss.Color(dosBgColors[bg]))
-}
+func dosStyle(attr byte) lipgloss.Style { return tuiart.Style(attr) }
 
 // dosColor creates a lipgloss style from separate DOS bg, fg values
 // matching the Pascal Color(bg, fg) procedure.
-func dosColor(bg, fg int) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(dosColors[fg&0x0F])).
-		Background(lipgloss.Color(dosBgColors[bg&0x07]))
-}
+func dosColor(bg, fg int) lipgloss.Style { return tuiart.Color(bg, fg) }
 
 // --- Title/Status bars ---
 // UE.PAS: Color(8,15) for title and bottom bar
-var titleBarStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color("8"))
+var titleBarStyle = tuiart.HeaderBarStyle
 
 // --- Background fill ---
-// UE.PAS: Fill_Screen('░',7,1) → gray on blue
-var bgFillStyle = dosColor(1, 7)
+// UE.PAS: Fill_Screen('░',7,1) → gray on blue. Used only where the backdrop
+// art is unavailable; tuiart.Backdrop renders this fill itself.
+var bgFillStyle = tuiart.FillStyle
 
 // --- List box border ---
 // UE.PAS: Color(1,9) GrowBox
@@ -107,8 +73,8 @@ var fieldDisplayStyle = dosStyle(30)
 var fieldEditStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color(dosColors[14]))
 
-// Edit screen title bar
-var editTitleStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color("8"))
+// Edit screen title bar — the same bar as the list screen, not a near-duplicate.
+var editTitleStyle = tuiart.HeaderBarStyle
 
 // Edit screen border: Color(1,9) same as list
 var editBorderStyle = dosColor(1, 9)
@@ -132,7 +98,7 @@ var helpBoxStyle = dosColor(4, 15)
 var helpTitleStyle = dosColor(4, 14)
 
 // --- Bottom help bar ---
-var helpBarStyle = dosColor(0, 15).Bold(true).Background(lipgloss.Color("8"))
+var helpBarStyle = tuiart.HelpBarStyle
 
 // --- Flash message ---
 var flashMessageStyle = lipgloss.NewStyle().
