@@ -70,7 +70,7 @@ not modify the BBS's live configuration or repository implementation files.
   the supported minimum. Resize repeatedly between small and large dimensions.
 - [x] Exercise list navigation, the last page, search, editing, confirmation
   dialogs, long descriptions, and error/status messages during resizing.
-- [ ] Verify display widths with box-drawing characters, wide Unicode characters,
+- [x] Verify display widths with box-drawing characters, wide Unicode characters,
   combining characters, and color-coded values.
 - [x] Decide whether shared layout helpers are warranted. Extract only behavior
   both editors need; avoid a broad TUI rewrite to fix a localized problem.
@@ -105,9 +105,17 @@ which is 80 columns wide and centered. The string list panel is never narrower
 than 80 columns, so the art would be completely hidden behind it; `./strings`
 uses `tuiart.Shaded` instead.
 
-Still open in this section: the record-list and field-edit screens of `./config`
-are not yet covered by the geometry probe, and no before/after screen captures
-have been archived.
+The geometry probe was later extended to `./config`'s record list, reorder,
+record edit, field edit, delete confirm, system config edit/field and category
+menu — 60 further cases, all exact. Screen captures for `./strings` are archived
+as golden files in `internal/stringeditor/testdata`, covering navigate, edit,
+edit error, search, dialog and last-page states at 80×25 and 120×45.
+
+The first capture immediately earned its keep: on the last page at 80 columns
+the status bar rendered "Current Page: 2" for page 23, because the bar was one
+cell too long and the clip ate the second digit. It repeated the program name,
+which the shared title bar now carries, so that segment was dropped and the
+freed columns hold a page count instead.
 
 ## 2. Fix string preview and preserve editing data (#234)
 
@@ -297,6 +305,11 @@ as a sysop edit. No other render call site was changed.
 - [ ] Prefer two coordinated PRs: #234 for safe editing and visual consistency,
   followed by #237 for shared validation and call-site/default checks. Place any
   shared metadata/default groundwork deliberately and document the dependency.
+  **Status:** the work sits on `fix/strings-safe-editing-234` as five commits,
+  the first four for #234 and the last for #237. #237 depends on the #234 work
+  only through `config.StringFallbacks`, which the third commit introduces, so
+  splitting into two PRs means opening the second on top of the first rather
+  than in parallel.
 - [x] Update the string-editor guide with escape editing, blank/default states,
   adaptive sizing, and format-validation behavior.
 - [x] Verify preview safety, no-op edit round trips, save/reload round trips,
@@ -305,8 +318,13 @@ as a sysop edit. No other render call site was changed.
   escaped percentages, padded verbs, indexed arguments, and argument order.
 - [x] Run relevant package tests, the repository test suite and race checks,
   `go vet`, formatting checks, and `git diff --check`.
-- [ ] Perform final visual checks of **both** `./strings` and `./config`; automated
-  non-empty-view smoke tests alone do not establish layout correctness.
+- [ ] Perform final visual checks of **both** `./strings` and `./config` in a real
+  terminal; automated non-empty-view smoke tests alone do not establish layout
+  correctness. **Status:** geometry is now proven mechanically -- every row of
+  every screen is exactly the terminal width at 80x25, 100x30, 120x45, 160x60,
+  200x100 and an undersized 60x15, with box drawing, CJK, combining marks and
+  emoji -- and the golden captures in `internal/stringeditor/testdata` archive
+  the rendering. Colour and legibility on a real terminal still need a human.
 
 ## Starting points in the code
 

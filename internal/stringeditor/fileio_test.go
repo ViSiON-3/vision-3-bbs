@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
 
 // testDefaults is a small stand-in for the shipped factory values.
@@ -128,5 +130,71 @@ func TestDefaultStrings_SkipsPlaceholders(t *testing.T) {
 		if _, ok := defaults[e.Key]; !ok {
 			t.Errorf("metadata key %q missing from defaults", e.Key)
 		}
+	}
+}
+
+// TestMissingTemplateInstallation covers an installed binary with no templates
+// directory on disk: F4 must still offer a factory value, and a missing
+// strings.json must still be created with real defaults rather than blanks.
+//
+// The editor binary passes the copy embedded in templates/configs/embed.go when
+// no file is found, which is what this simulates.
+func TestMissingTemplateInstallation(t *testing.T) {
+	embedded, err := configtemplates.StringDefaults()
+	if err != nil {
+		t.Fatalf("embedded defaults unavailable: %v", err)
+	}
+	if len(embedded) == 0 {
+		t.Fatal("embedded defaults are empty")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "strings.json")
+	m, err := New(path, embedded)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// The file was created from the shipped values, not from blanks.
+	if got := m.values["pageOnlineNodesHeader"]; got != embedded["pageOnlineNodesHeader"] {
+		t.Errorf("created file has %q for pageOnlineNodesHeader, want the shipped default %q",
+			got, embedded["pageOnlineNodesHeader"])
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("strings.json not created: %v", err)
+	}
+	var onDisk map[string]string
+	if err := json.Unmarshal(written, &onDisk); err != nil {
+		t.Fatalf("created file is not valid JSON: %v", err)
+	}
+	if onDisk["pageOnlineNodesHeader"] != embedded["pageOnlineNodesHeader"] {
+		t.Error("the created file does not carry the shipped defaults")
+	}
+
+	// And every catalog entry is present, so nothing is missing from the editor.
+	for _, e := range StringEntries() {
+		if isReservedKey(e.Key) {
+			continue
+		}
+		if _, ok := onDisk[e.Key]; !ok {
+			t.Errorf("catalog key %q missing from the created file", e.Key)
+		}
+	}
+}
+
+// TestNoDefaultsAtAllStillOpens checks the editor opens against a file with no
+// factory defaults available, rather than failing.
+func TestNoDefaultsAtAllStillOpens(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "strings.json")
+	m, err := New(path, nil)
+	if err != nil {
+		t.Fatalf("New with no defaults: %v", err)
+	}
+	if len(m.entries) == 0 {
+		t.Error("no entries listed")
+	}
+	if m.View() == "" {
+		t.Error("View rendered nothing")
 	}
 }

@@ -322,3 +322,58 @@ func stripANSI(s string) string {
 	}
 	return b.String()
 }
+
+// TestWideAndCombiningCharacterWidths covers the audit's display-width check:
+// truncation must count terminal cells, not runes, or a value containing CJK
+// text, box drawing or combining marks pushes the row past the panel edge.
+func TestWideAndCombiningCharacterWidths(t *testing.T) {
+	values := map[string]string{
+		"box drawing":     "|08" + strings.Repeat("─", 200) + "|07",
+		"double width":    "|15" + strings.Repeat("日本語", 60) + "|07",
+		"combining marks": "|15" + strings.Repeat("é", 120) + "|07",
+		"mixed":           "|15日本語 ─── é %s |08" + strings.Repeat("█", 80),
+		"emoji":           strings.Repeat("🚀", 60),
+	}
+
+	for name, value := range values {
+		t.Run(name, func(t *testing.T) {
+			for _, size := range []struct{ w, h int }{{80, 25}, {100, 30}, {160, 60}} {
+				m := newShippedModel(t)
+				m = resize(t, m, size.w, size.h)
+				m.values["pageOnlineNodesHeader"] = value
+				idx := indexOfKey(t, m, "pageOnlineNodesHeader")
+				m.cursor = idx
+				m.page = idx / m.pageSize
+
+				// The value column must never overflow its budget.
+				if got := visualLen(m.renderItem(idx, m.panelWidth())); got != m.panelWidth() {
+					t.Errorf("at %dx%d: row width %d, want exactly %d",
+						size.w, size.h, got, m.panelWidth())
+				}
+				// And the whole screen must stay rectangular.
+				for i, line := range strings.Split(m.View(), "\n") {
+					if got := visualLen(line); got != m.width {
+						t.Fatalf("at %dx%d row %d: width %d, want exactly %d",
+							size.w, size.h, i, got, m.width)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestWideCharactersSurviveEditing checks that non-ASCII text round-trips
+// through the escaped editing form unchanged.
+func TestWideCharactersSurviveEditing(t *testing.T) {
+	m := newShippedModel(t)
+	want := "|15日本語 ─ café é 🚀|07\r\n"
+	m.values["pageOnlineNodesHeader"] = want
+	m.cursor = indexOfKey(t, m, "pageOnlineNodesHeader")
+
+	m = key2(t, m, tea.KeyMsg{Type: tea.KeyF1})
+	m = key2(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if got := m.values["pageOnlineNodesHeader"]; got != want {
+		t.Errorf("value changed by a no-op edit:\n got %q\nwant %q", got, want)
+	}
+}
