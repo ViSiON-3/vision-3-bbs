@@ -331,8 +331,8 @@ as a sysop edit. No other render call site was changed.
 ### Why the manual pass was not redundant
 
 Geometry is proven mechanically: every row of every screen is exactly the
-terminal width at 80x25, 100x30, 120x45, 160x60, 200x100 and an undersized
-60x15, with box-drawing characters, CJK text, combining marks and emoji, and the
+terminal width at 80×25, 100×30, 120×45, 160×60, 200×100 and an undersized
+60×15, with box-drawing characters, CJK text, combining marks and emoji, and the
 golden captures in `internal/stringeditor/testdata` archive the rendering.
 
 The manual pass still found two defects that every one of those checks passed
