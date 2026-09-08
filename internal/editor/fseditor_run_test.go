@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -8,6 +9,29 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
 )
+
+func TestRunBackspacePreservesSpaces(t *testing.T) {
+	for _, backspace := range []string{"\x08", "\x7f"} {
+		t.Run(fmt.Sprintf("key_%x", backspace[0]), func(t *testing.T) {
+			for _, initial := range []string{"", "hello w"} {
+				t.Run(fmt.Sprintf("initial_%q", initial), func(t *testing.T) {
+					keys := backspace + "world\x1a"
+					if initial == "" {
+						keys = "hello w" + keys
+					}
+					sess := testterm.NewSession(nil, keys)
+					ed := NewFSEditor(sess, io.Discard, ansi.OutputModeUTF8, 80, 24,
+						"", "", "", "", "", "", nil)
+					ed.LoadContent(initial)
+					content, saved, err := ed.Run()
+					if err != nil || !saved || content != "hello world" {
+						t.Fatalf("Run = (%q,%v,%v), want (%q,true,nil)", content, saved, err, "hello world")
+					}
+				})
+			}
+		})
+	}
+}
 
 // TestRunClosesSelfCreatedInputHandler guards against the "double key press"
 // bug: when NewFSEditor is passed a nil InputHandler it creates its own, and
