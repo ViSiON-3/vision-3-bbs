@@ -1,7 +1,8 @@
 # String editor and configuration TUI audit
 
-Created: 2026-09-08. Status: implemented. All four sections are done; two
-delivery items remain, both noted at the end of this document.
+Created: 2026-09-08. Status: complete. All four sections shipped in
+[#241](https://github.com/ViSiON-3/vision-3-bbs/pull/241) and
+[#243](https://github.com/ViSiON-3/vision-3-bbs/pull/243).
 
 Related issues:
 
@@ -96,9 +97,14 @@ the backdrop rasterizer with its embedded ANSI art. `./config` now aliases these
 and its golden tests still pass byte-identically.
 
 `./strings` gained the shared title bar, help bar, palette and background fill,
-and its DOS list is now a centered panel with a background margin. Its list
+and its DOS list became a centered panel with a background margin. Its list
 keeps the flat three-column layout rather than becoming a bordered box: the
 decision was to share chrome, not to rewrite the editor.
+
+The margin shipped at ten columns each side with the panel capped at 120. The
+visual pass judged that a wide band of fill around a flat list reads as wasted
+screen rather than as framing, so #243 reduced it to a one-column border and
+retired the cap, which existed only to stop the panel swallowing the margin.
 
 One thing deliberately not shared: `./config` paints the embedded ANSI art,
 which is 80 columns wide and centered. The string list panel is never narrower
@@ -302,14 +308,14 @@ as a sysop edit. No other render call site was changed.
 
 ## Delivery and verification
 
-- [ ] Prefer two coordinated PRs: #234 for safe editing and visual consistency,
+- [x] Prefer two coordinated PRs: #234 for safe editing and visual consistency,
   followed by #237 for shared validation and call-site/default checks. Place any
   shared metadata/default groundwork deliberately and document the dependency.
-  **Status:** the work sits on `fix/strings-safe-editing-234` as five commits,
-  the first four for #234 and the last for #237. #237 depends on the #234 work
-  only through `config.StringFallbacks`, which the third commit introduces, so
-  splitting into two PRs means opening the second on top of the first rather
-  than in parallel.
+  **Outcome:** shipped as two PRs, but split by review round rather than by
+  issue. #237's validation depends on #234's work through
+  `config.StringFallbacks`, so the two could only stack, not run in parallel;
+  keeping them in one PR (#241) avoided a review cycle spent on that ordering.
+  #243 then carried the fixes the visual pass and its follow-up questions found.
 - [x] Update the string-editor guide with escape editing, blank/default states,
   adaptive sizing, and format-validation behavior.
 - [x] Verify preview safety, no-op edit round trips, save/reload round trips,
@@ -318,13 +324,34 @@ as a sysop edit. No other render call site was changed.
   escaped percentages, padded verbs, indexed arguments, and argument order.
 - [x] Run relevant package tests, the repository test suite and race checks,
   `go vet`, formatting checks, and `git diff --check`.
-- [ ] Perform final visual checks of **both** `./strings` and `./config` in a real
+- [x] Perform final visual checks of **both** `./strings` and `./config` in a real
   terminal; automated non-empty-view smoke tests alone do not establish layout
-  correctness. **Status:** geometry is now proven mechanically -- every row of
-  every screen is exactly the terminal width at 80x25, 100x30, 120x45, 160x60,
-  200x100 and an undersized 60x15, with box drawing, CJK, combining marks and
-  emoji -- and the golden captures in `internal/stringeditor/testdata` archive
-  the rendering. Colour and legibility on a real terminal still need a human.
+  correctness. **Outcome:** done, and it earned its place. See below.
+
+### Why the manual pass was not redundant
+
+Geometry is proven mechanically: every row of every screen is exactly the
+terminal width at 80×25, 100×30, 120×45, 160×60, 200×100 and an undersized
+60×15, with box-drawing characters, CJK text, combining marks and emoji, and the
+golden captures in `internal/stringeditor/testdata` archive the rendering.
+
+The manual pass still found two defects that every one of those checks passed
+cleanly:
+
+- the selection bar ran one cell past the closing bracket, colouring the state
+  marker as though it were part of the label;
+- the background border was ten columns on each side, which read as wasted
+  screen rather than as framing.
+
+Both rendered at exactly the correct width. Row and column arithmetic cannot
+distinguish a bar that stops in the right place from one that stops one cell
+late, or a border that frames from one that crowds. Keep the manual check when
+this area changes again; the automated suite does not retire it.
+
+The same pass prompted the question that found the remaining gaps: three keys
+formatted through a local alias that the call-site scanner never saw, and eight
+strings with no value in either the template or the fallback table, five of them
+printing nothing at all where a message belonged.
 
 ## Starting points in the code
 
