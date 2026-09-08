@@ -170,14 +170,11 @@ func (m Model) View() string {
 // panelWidth returns the width of the DOS list panel for this terminal.
 func (m Model) panelWidth() int { return panelWidthFor(m.width) }
 
-// panelWidthFor is 80 columns on a minimum terminal, widens on a larger one
-// while keeping artMargin columns of background on each side, and stops at
-// maxPanelWidth.
+// panelWidthFor fills the terminal apart from a one-column border of
+// background on each side, and never drops below the 80 columns the DOS layout
+// needs.
 func panelWidthFor(width int) int {
 	w := width - 2*artMargin
-	if w > maxPanelWidth {
-		w = maxPanelWidth
-	}
 	if w < minWidth {
 		w = minWidth
 	}
@@ -256,16 +253,20 @@ func (m Model) renderItem(idx, panelW int) string {
 	// does not shift when reserved entries are filtered out of the view.
 	numStr := fmt.Sprintf("%*d", numWidth, entry.Number)
 
-	numStyle, labelStyle, markStyle := bracketStyle, labelNormalStyle, markerStyle
+	// The selection bar covers the number and the bracketed label and stops at
+	// the closing bracket. The state marker and the value beyond it keep the
+	// panel's own background, so the bar reads as the label's highlight rather
+	// than as a stripe running into the value column.
+	numStyle, labelStyle := bracketStyle, labelNormalStyle
 	if isSelected {
-		numStyle, labelStyle, markStyle = bracketHighlightStyle, labelHighlightStyle, markerHighlightStyle
+		numStyle, labelStyle = bracketHighlightStyle, labelHighlightStyle
 	}
 
 	line := numStyle.Render(numStr) +
 		numStyle.Render("[") +
 		labelStyle.Render(padOrTrunc(entry.Label, labelWidth)) +
 		numStyle.Render("]") +
-		markStyle.Render(state.marker())
+		markerStyle.Render(state.marker())
 
 	if isSelected && m.mode == modeEdit {
 		// Clip the input to the value column so a long escaped value can never

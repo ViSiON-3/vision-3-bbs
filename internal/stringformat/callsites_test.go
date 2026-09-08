@@ -65,7 +65,20 @@ func stringsFieldName(expr ast.Expr) (string, bool) {
 }
 
 // scanCallSites walks the repository for calls that pass a configured string to
-// a fmt function.
+// a fmt function, following single-assignment aliases within a function.
+//
+// The direct form is not the only one. Several call sites copy the string into
+// a local first so they can substitute an inline default:
+//
+//	msg := e.LoadedStrings.ConfCurrentConfFormat
+//	if msg == "" {
+//		msg = "\r\n|07(|15%s|07) [|14%s|07]\r\n"
+//	}
+//	formatted := fmt.Sprintf(msg, newConf.Name, newConf.Tag)
+//
+// Matching only fmt.Sprintf(x.LoadedStrings.Field, ...) misses those, and the
+// keys they use then look unformatted and go unvalidated. Aliases are resolved
+// per function, so the same variable name in two functions cannot be confused.
 func scanCallSites(t *testing.T) []callSite {
 	t.Helper()
 	keys := fieldToKey(t)
@@ -92,30 +105,108 @@ func scanCallSites(t *testing.T) []callSite {
 			return nil // not our concern here; the build catches syntax errors
 		}
 		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
+			body := funcBody(n)
+			if body == nil {
 				return true
 			}
-			fn, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
+			sites = append(sites, scanFuncBody(t, fset, body, keys)...)
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking source: %v", err)
+	}
+	return sites
+}
+
+// funcBody returns the body of a function declaration or literal.
+func funcBody(n ast.Node) *ast.BlockStmt {
+	switch fn := n.(type) {
+	case *ast.FuncDecl:
+		return fn.Body
+	case *ast.FuncLit:
+		return fn.Body
+	}
+	return nil
+}
+
+// scanFuncBody finds the fmt calls in one function that format a configured
+// string, directly or through a local alias.
+func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys map[string]string) []callSite {
+	t.Helper()
+
+	// Which locals hold a configured string, and where each was assigned. A
+	// name can be assigned from different fields in different branches of one
+	// function -- navigateMsgConf uses "msg" for both ConfNoAccessibleConfs and
+	// ConfCurrentConfFormat -- so a call resolves to the nearest assignment
+	// above it rather than to every assignment in the function.
+	type binding struct {
+		pos   token.Pos
+		field string
+	}
+	aliases := map[string][]binding{}
+	ast.Inspect(body, func(n ast.Node) bool {
+		assign, ok := n.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for i, lhs := range assign.Lhs {
+			id, ok := lhs.(*ast.Ident)
+			if !ok || i >= len(assign.Rhs) {
+				continue
 			}
-			pkg, ok := fn.X.(*ast.Ident)
-			if !ok || pkg.Name != "fmt" {
-				return true
+			if field, ok := stringsFieldName(assign.Rhs[i]); ok {
+				aliases[id.Name] = append(aliases[id.Name], binding{assign.Pos(), field})
 			}
-			at, ok := formatFuncs[fn.Sel.Name]
-			if !ok || len(call.Args) <= at {
-				return true
+		}
+		return true
+	})
+
+	// nearestField returns the field a name held at the given position.
+	nearestField := func(name string, use token.Pos) (string, bool) {
+		best, found := binding{}, false
+		for _, b := range aliases[name] {
+			if b.pos < use && (!found || b.pos > best.pos) {
+				best, found = b, true
 			}
-			field, ok := stringsFieldName(call.Args[at])
-			if !ok {
-				return true
+		}
+		return best.field, found
+	}
+
+	var sites []callSite
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		fn, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		pkg, ok := fn.X.(*ast.Ident)
+		if !ok || pkg.Name != "fmt" {
+			return true
+		}
+		at, ok := formatFuncs[fn.Sel.Name]
+		if !ok || len(call.Args) <= at {
+			return true
+		}
+
+		var fields []string
+		if field, ok := stringsFieldName(call.Args[at]); ok {
+			fields = []string{field}
+		} else if id, ok := call.Args[at].(*ast.Ident); ok {
+			if field, ok := nearestField(id.Name, call.Pos()); ok {
+				fields = []string{field}
 			}
+		}
+
+		for _, field := range fields {
 			key, ok := keys[field]
 			if !ok {
 				t.Errorf("%s: LoadedStrings.%s has no json tag", fset.Position(call.Pos()), field)
-				return true
+				continue
 			}
 			sites = append(sites, callSite{
 				Key:      key,
@@ -124,13 +215,9 @@ func scanCallSites(t *testing.T) []callSite {
 				Args:     len(call.Args) - at - 1,
 				Variadic: call.Ellipsis.IsValid(),
 			})
-			return true
-		})
-		return nil
+		}
+		return true
 	})
-	if err != nil {
-		t.Fatalf("walking source: %v", err)
-	}
 	return sites
 }
 
@@ -353,4 +440,40 @@ func installValues(t *testing.T, shipped map[string]string) map[string]string {
 		values[k] = v
 	}
 	return values
+}
+
+// TestAliasedFormatSitesAreFound guards the alias-following in scanCallSites.
+// Matching only fmt.Sprintf(x.LoadedStrings.Field, ...) missed three keys that
+// copy the string into a local first, so they looked unformatted and went
+// unvalidated. If the scanner regresses to the direct form these disappear from
+// the discovered set and TestFormattedKeysMatchCallSites starts passing for the
+// wrong reason, so assert them by name.
+func TestAliasedFormatSitesAreFound(t *testing.T) {
+	found := map[string]bool{}
+	for _, s := range scanCallSites(t) {
+		found[s.Key] = true
+	}
+	for _, key := range []string{
+		"confCurrentConfFormat",   // msg := ...; fmt.Sprintf(msg, name, tag)
+		"doorBusyFormat",          // busyFmt := ...; fmt.Sprintf(busyFmt, ...)
+		"newscanNewNetworkPrompt", // promptTpl := ...; fmt.Sprintf(promptTpl, ...)
+	} {
+		if !found[key] {
+			t.Errorf("%q is formatted through a local alias but the scanner did not find it", key)
+		}
+	}
+}
+
+// TestAliasResolvesToNearestAssignment covers the case that made naive alias
+// tracking wrong. navigateMsgConf assigns "msg" from ConfNoAccessibleConfs in
+// one branch and from ConfCurrentConfFormat further down, then formats the
+// second. Attributing the call to both keys claimed ConfNoAccessibleConfs takes
+// two arguments when it takes none.
+func TestAliasResolvesToNearestAssignment(t *testing.T) {
+	for _, s := range scanCallSites(t) {
+		if s.Key == "confNoAccessibleConfs" {
+			t.Errorf("%s: confNoAccessibleConfs is written directly, not formatted; "+
+				"the alias resolved to the wrong assignment", s.Pos)
+		}
+	}
 }

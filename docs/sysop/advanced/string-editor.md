@@ -49,8 +49,8 @@ and help bar; every remaining row shows one string. An 80×25 terminal gives 19 
 bar sits too far from the selection to read as its caption, and the leftover rows become background
 above and below the panel.
 
-The panel is 80 columns wide at the minimum terminal size and widens on a larger one, always leaving
-10 columns of background on each side, up to a maximum panel width of **120 columns**.
+The panel is 80 columns wide at the minimum terminal size and fills a larger one, leaving a
+one-column border of background on each side.
 
 Resizing re-pages around the current selection, so the highlighted string stays on screen. Terminals
 smaller than 80×25 are not supported: the editor draws at 80×25 and the terminal clips it.
@@ -242,8 +242,8 @@ When saving, the editor writes keys in sorted order and omits internal `_`-prefi
 
 ## Value States
 
-A blank value column does not mean the string is unused. The marker between the label and the value
-says which of five states an entry is in, and the message row above the description spells it out
+A blank value column does not mean the string is unused. The marker just right of the closing
+bracket says which of five states an entry is in, and the message row above the description spells it out
 for the selected entry.
 
 | Marker | State | Meaning |
