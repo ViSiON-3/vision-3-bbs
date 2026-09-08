@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 // Styles matching the Pascal original's color scheme:
@@ -92,6 +93,12 @@ var (
 			Foreground(lipgloss.Color("11")).
 			Background(lipgloss.Color("4")).
 			Bold(true)
+
+	// Rejected input (malformed escape sequence)
+	errorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("15")).
+			Background(lipgloss.Color("1")).
+			Bold(true)
 )
 
 // View implements tea.Model.
@@ -106,14 +113,14 @@ func (m Model) View() string {
 	b.WriteString(m.renderColumnHeader())
 	b.WriteByte('\n')
 
-	// === Rows 3-22: Item List (20 items per page) ===
-	pageStart := m.page * itemsPerPage
-	pageEnd := pageStart + itemsPerPage
+	// === Item list: as many rows as the terminal height allows ===
+	pageStart := m.page * m.pageSize
+	pageEnd := pageStart + m.pageSize
 	if pageEnd > len(m.entries) {
 		pageEnd = len(m.entries)
 	}
 
-	for row := 0; row < itemsPerPage; row++ {
+	for row := 0; row < m.pageSize; row++ {
 		idx := pageStart + row
 		if idx < pageEnd {
 			b.WriteString(m.renderItem(idx))
@@ -161,7 +168,7 @@ func (m Model) View() string {
 //	SetColor(31); Write(' '+strr(page));
 func (m Model) renderStatusBar() string {
 	// First item on current page (1-based, matching Pascal's top variable)
-	topItem := m.page*itemsPerPage + 1
+	topItem := m.page*m.pageSize + 1
 	pageNum := m.page + 1
 
 	// Build segments exactly matching Pascal's SetColor/Write sequence
@@ -175,30 +182,38 @@ func (m Model) renderStatusBar() string {
 
 	content := seg1 + seg2 + sep1 + seg3 + sep2 + seg4 + seg5
 
-	// Calculate visible length (display columns, not bytes) to pad the rest with blue background.
-	// Use a plain ASCII format string so len() == display width.
-	plainText := fmt.Sprintf(" Current Topic Number: %d | ViSiON/3 BBS String Configuration | Current Page: %d", topItem, pageNum)
-	visLen := len(plainText)
-
-	padding := m.width - visLen
-	if padding < 0 {
-		padding = 0
+	// Measure the styled text directly rather than a parallel plain copy, which
+	// drifts out of sync. A narrow terminal or a three-digit topic number can
+	// push the bar past the last column, so clip it instead of overflowing.
+	visLen := visualLen(content)
+	if visLen > m.width {
+		return truncateVisual(content, m.width)
 	}
 
-	return content + statusBarFillStyle.Render(strings.Repeat(" ", padding))
+	return content + statusBarFillStyle.Render(strings.Repeat(" ", m.width-visLen))
 }
 
-// renderColumnHeader creates a subtle column header line.
+// renderColumnHeader creates a subtle column header line. Its columns line up
+// with renderItem: the name sits over the labels and "Value" over labelCol.
 func (m Model) renderColumnHeader() string {
-	header := bracketStyle.Render("  # ") +
-		bracketStyle.Render("Name") +
-		bracketStyle.Render(strings.Repeat(" ", labelCol-9)) +
-		bracketStyle.Render("Value")
-	pad := m.width - labelCol - 5 + 4
-	if pad > 0 {
-		header += bracketStyle.Render(strings.Repeat(" ", pad))
+	const nameHeading = "  # Name"
+	header := nameHeading +
+		strings.Repeat(" ", labelCol-len(nameHeading)) +
+		"Value"
+	if pad := m.width - cellWidth(header); pad > 0 {
+		header += strings.Repeat(" ", pad)
 	}
-	return header
+	return bracketStyle.Render(header)
+}
+
+// valueWidth returns the terminal cells available for a value preview, which
+// is everything to the right of the label column.
+func (m Model) valueWidth() int {
+	w := m.width - labelCol
+	if w < 10 {
+		w = 10
+	}
+	return w
 }
 
 // renderItem renders a single list item.
@@ -207,13 +222,10 @@ func (m Model) renderItem(idx int) string {
 	isSelected := idx == m.cursor
 	itemNum := idx + 1
 	value := m.getValue(entry.Key)
-	valueWidth := m.width - labelCol - 1
-	if valueWidth < 10 {
-		valueWidth = 10
-	}
+	valueWidth := m.valueWidth()
 
-	// Format item number (3 chars wide)
-	numStr := fmt.Sprintf("%3d", itemNum)
+	// Format item number, right-aligned in numWidth columns
+	numStr := fmt.Sprintf("%*d", numWidth, itemNum)
 
 	var line string
 	if isSelected {
@@ -221,14 +233,20 @@ func (m Model) renderItem(idx int) string {
 			// Show text input in the value area
 			numPart := bracketHighlightStyle.Render(numStr)
 			bracket1 := bracketHighlightStyle.Render("[")
-			label := labelHighlightStyle.Render(padOrTrunc(entry.Label, labelCol-7))
+			label := labelHighlightStyle.Render(padOrTrunc(entry.Label, labelWidth))
 			bracket2 := bracketHighlightStyle.Render("]")
-			line = numPart + bracket1 + label + bracket2 + m.textInput.View()
+			// Clip the input to the value column so a long escaped value can
+			// never push the row past the last terminal cell.
+			input := m.textInput.View()
+			if visualLen(input) > valueWidth {
+				input = truncateVisual(input, valueWidth)
+			}
+			line = numPart + bracket1 + label + bracket2 + input
 		} else {
 			// Highlighted item
 			numPart := bracketHighlightStyle.Render(numStr)
 			bracket1 := bracketHighlightStyle.Render("[")
-			label := labelHighlightStyle.Render(padOrTrunc(entry.Label, labelCol-7))
+			label := labelHighlightStyle.Render(padOrTrunc(entry.Label, labelWidth))
 			bracket2 := bracketHighlightStyle.Render("]")
 			renderedVal := RenderColorString(value, valueWidth)
 			line = numPart + bracket1 + label + bracket2 + renderedVal
@@ -237,7 +255,7 @@ func (m Model) renderItem(idx int) string {
 		// Normal item
 		numPart := bracketStyle.Render(numStr)
 		bracket1 := bracketStyle.Render("[")
-		label := labelNormalStyle.Render(padOrTrunc(entry.Label, labelCol-7))
+		label := labelNormalStyle.Render(padOrTrunc(entry.Label, labelWidth))
 		bracket2 := bracketStyle.Render("]")
 		renderedVal := RenderColorString(value, valueWidth)
 		line = numPart + bracket1 + label + bracket2 + renderedVal
@@ -246,22 +264,43 @@ func (m Model) renderItem(idx int) string {
 	return line
 }
 
-// renderMessageBar renders the message/mode indicator line.
+// renderMessageBar renders the message/mode indicator line. Every branch is
+// clipped and padded to exactly the terminal width so a long key, a long escape
+// error, or a narrow terminal cannot wrap the row.
 func (m Model) renderMessageBar() string {
+	var text string
+	style := messageStyle
+
 	switch m.mode {
 	case modeEdit:
-		key := m.editKey
-		return editingStyle.Render(fmt.Sprintf(" Editing: %s (Enter=Save, Esc=Cancel)", key)) +
-			strings.Repeat(" ", max(0, m.width-50-len(key)))
-	case modeSearch:
-		return searchLabelStyle.Render(" Search: ") + m.searchInput.View() +
-			strings.Repeat(" ", max(0, m.width-40))
-	default:
-		if m.message != "" {
-			return messageStyle.Render(" "+m.message) + strings.Repeat(" ", max(0, m.width-len(m.message)-2))
+		if m.editErr != "" {
+			text, style = " "+m.editErr, errorStyle
+		} else {
+			text = fmt.Sprintf(` Editing: %s  \r \n \t = control chars  Enter=Save  Esc=Cancel`, m.editKey)
+			style = editingStyle
 		}
-		return strings.Repeat(" ", m.width)
+	case modeSearch:
+		return padRow(searchLabelStyle.Render(" Search: ")+m.searchInput.View(), m.width)
+	default:
+		if m.message == "" {
+			return strings.Repeat(" ", m.width)
+		}
+		text = " " + m.message
 	}
+
+	if cellWidth(text) > m.width {
+		text = truncateVisual(text, m.width)
+	}
+	return style.Render(text) + strings.Repeat(" ", m.width-cellWidth(text))
+}
+
+// padRow clips or pads an already-styled row to exactly width cells.
+func padRow(rendered string, width int) string {
+	vis := visualLen(rendered)
+	if vis > width {
+		return truncateVisual(rendered, width)
+	}
+	return rendered + strings.Repeat(" ", width-vis)
 }
 
 // renderDescriptionBar renders the description for the current item (row 24).
@@ -273,11 +312,11 @@ func (m Model) renderDescriptionBar() string {
 			desc = m.entries[m.cursor].Key
 		}
 		// Center the description text
-		pad := (m.width - len(desc)) / 2
+		pad := (m.width - cellWidth(desc)) / 2
 		if pad < 0 {
 			pad = 0
 		}
-		return strings.Repeat(" ", pad) + descriptionStyle.Render(desc)
+		return padRow(strings.Repeat(" ", pad)+descriptionStyle.Render(desc), m.width)
 	}
 	return strings.Repeat(" ", m.width)
 }
@@ -285,16 +324,10 @@ func (m Model) renderDescriptionBar() string {
 // renderHelpBar renders the bottom help bar.
 func (m Model) renderHelpBar() string {
 	help := " Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  Esc Quit  / Search"
-	visLen := 0
-	for _, r := range help {
-		_ = r
-		visLen++
+	if cellWidth(help) > m.width {
+		help = truncateVisual(help, m.width)
 	}
-	pad := m.width - visLen
-	if pad < 0 {
-		pad = 0
-	}
-	padded := help + strings.Repeat(" ", pad)
+	padded := help + strings.Repeat(" ", m.width-cellWidth(help))
 	style := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("11")).
 		Background(lipgloss.Color("4")).
@@ -381,9 +414,9 @@ func padOrTrunc(s string, width int) string {
 	return s + strings.Repeat(" ", width-len(runes))
 }
 
-// visualLen returns an approximate visible length (counting runes, ignoring ANSI).
+// visualLen returns the width in terminal cells of s, ignoring ANSI escape
+// sequences.
 func visualLen(s string) int {
-	// Strip ANSI escape sequences for length calculation
 	inEsc := false
 	count := 0
 	for _, r := range s {
@@ -397,7 +430,7 @@ func visualLen(s string) int {
 			}
 			continue
 		}
-		count++
+		count += runewidth.RuneWidth(r)
 	}
 	return count
 }
@@ -431,7 +464,7 @@ func truncateVisual(s string, n int) string {
 			}
 			continue
 		}
-		count++
+		count += runewidth.RuneWidth(r)
 	}
 	return b.String()
 }
@@ -462,7 +495,7 @@ func skipVisual(s string, n int) string {
 		if count >= n {
 			return lastESC.String() + s[i:]
 		}
-		count++
+		count += runewidth.RuneWidth(r)
 	}
 	return ""
 }

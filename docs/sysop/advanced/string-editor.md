@@ -12,7 +12,8 @@ The string editor (`strings`) is a TUI tool for editing `configs/strings.json`, 
 
 ## Interface
 
-The editor uses a fullscreen 80×25 terminal layout matching the DOS original:
+The editor uses a fullscreen layout based on the DOS original. It requires at least 80×25 and grows
+to fill a larger terminal:
 
 ```text
  Current Topic Number: 1 │ ViSiON/3 BBS String Configuration │ Current Page: 1
@@ -21,7 +22,7 @@ The editor uses a fullscreen 80×25 terminal layout matching the DOS original:
   2 [System Pause String   ] |15█|07█|08█|B1|09█ |15Stroke Me! |09█...
   3 [System Password String] |08█|07█|15█ |09Login Password|01:
   ...
- (20 items per page)
+ (20 items per page at 80x25; more on a taller terminal)
 
  This is the Default prompt for new users
  ↑↓ Navigate │ PgUp/PgDn Pages │ Enter Edit │ F1 Edit(Prefill) │ F10 Save │ ...
@@ -29,9 +30,20 @@ The editor uses a fullscreen 80×25 terminal layout matching the DOS original:
 
 - **Row 1** — Blue status bar showing current topic number, title, and page
 - **Row 2** — Column headers (Name / Value)
-- **Rows 3–22** — 20 items per page with label and color-rendered value
-- **Row 24** — Description of the currently highlighted string
-- **Row 25** — Yellow-on-blue keyboard shortcut reference
+- **Middle rows** — The item list, one string per row, with label and color-rendered value
+- **Third-from-last row** — Flash messages, the edit indicator, or the search box
+- **Second-from-last row** — Description of the currently highlighted string
+- **Last row** — Yellow-on-blue keyboard shortcut reference
+
+### Sizing
+
+Five rows are reserved for the status bar, column headers, message bar, description bar and help
+bar; every remaining row shows one string. An 80×25 terminal therefore gives the original's 20 items
+per page, a 100×30 terminal gives 25, and so on up to a cap of **60 items per page** — past that the
+description bar sits too far from the selection to read as its caption.
+
+Resizing re-pages around the current selection, so the highlighted string stays on screen. Terminals
+smaller than 80×25 are not supported: the editor draws at 80×25 and the terminal clips it.
 
 ## Keyboard Shortcuts
 
@@ -54,6 +66,32 @@ When editing a string value:
 
 - **Enter** — Save the new value
 - **Esc** — Cancel editing without changes
+
+Values are edited on a single line, so control characters are shown and typed as **escape
+sequences**. `F1` pre-fills the input with the escaped form of the current value, and `Enter`
+converts it back before storing, so opening a string and accepting it unchanged leaves it exactly as
+it was.
+
+| Sequence | Character |
+|----------|-----------|
+| `\r` | Carriage return |
+| `\n` | Line feed |
+| `\t` | Tab |
+| `\e` | Escape (ESC, 0x1B) |
+| `\xNN` | Any other control character, as two hex digits |
+| `\\` | A literal backslash |
+
+A backslash always starts an escape sequence, so to store a literal backslash — in a DOS path, for
+example — type it twice. Anything else after a backslash is rejected: the editor keeps you in the
+input with your text intact and shows the problem on the message bar, rather than guessing and
+writing something you did not mean to disk.
+
+The same escapes appear in the value column of the list, drawn in inverse video so a stored carriage
+return is visible as `\r` instead of breaking the row. Every string occupies exactly one row; a
+value too wide for the column ends with a magenta `»`.
+
+Values are not length-limited. A long custom string is stored in full, and the input scrolls
+horizontally rather than truncating it.
 
 ### Confirmation Dialogs
 
@@ -112,7 +150,7 @@ String values support BBS pipe codes that are rendered with color in the editor.
 
 | Code | Meaning |
 |------|---------|
-| `\|CR` | Carriage return / newline |
+| `\|CR` | Carriage return / newline (rendered as a space in the editor's preview) |
 | `\|CL` | Clear screen |
 | `\|DE` | Clear to end of line |
 | `@` | Yes/No selection bar |

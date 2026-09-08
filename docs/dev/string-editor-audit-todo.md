@@ -1,0 +1,215 @@
+# String editor and configuration TUI audit
+
+Created: 2026-09-08. Status: in progress. Investigation complete; section 2
+(safe preview and lossless editing) implemented, sections 1, 3 and 4 pending.
+
+Related issues:
+
+- [#234: Investigate ./strings odd behavior](https://github.com/ViSiON-3/vision-3-bbs/issues/234)
+- [#237: A sysop editing a format string can silently break it](https://github.com/ViSiON-3/vision-3-bbs/issues/237)
+
+## Objective
+
+Make `./strings` safe to view and edit, give it consistent terminal behavior with
+`./config`, and detect incompatible format strings before they reach BBS users.
+The work explicitly includes an audit of **both binaries**: sizing, positioning,
+backgrounds, colors, scrolling, dialogs, and terminal resizing. Treat `./config`
+as a reference to inspect, not an assumption that its behavior is already correct.
+
+## Confirmed findings
+
+- String entry 199, `pageOnlineNodesHeader`, contains actual `\r\n` characters.
+  The preview emits them directly instead of keeping each item on one row.
+  With shipped defaults, page 11 produces 43 newline-delimited rows in an 80×25
+  terminal, and carriage returns overwrite parts of the displayed rows.
+- `./strings` always displays 20 entries per page. Larger terminals change its
+  width but do not increase the number of entries or center the content.
+- Dialog positioning uses terminal height while the normal view assumes 25 rows.
+  This mismatch needs explicit coverage at larger sizes.
+- Pressing F1 and then Enter without modifying entry 199 replaces its line breaks
+  with spaces. The single-line input sanitizes the stored value during prefill.
+- The input has a 200-character limit, creating a truncation risk for longer
+  custom values, including their format placeholders.
+- The inspected metadata has 427 entries: 7 reserved placeholders, 41 editable
+  entries absent from the shipped template, and 2 explicitly empty template values.
+  These counts describe the inspected revision, not a permanent schema guarantee.
+- Editor metadata, shipped defaults, and runtime defaults are separate sources.
+  For example, `matrixAccountCannotLogon` exists in the runtime and template but
+  is absent from the editor catalog. The editor's `DefaultStrings()` supplies
+  empty values, while factory restore depends on finding a template file.
+- Neither edit acceptance, file saving, nor runtime string loading validates
+  format arguments. Runtime loading is also used during hot reload.
+- `formatVerbCounts` only examines the character immediately after `%` and is
+  insufficient as a general parser. Existing strings include `%02d`, `%-20s`,
+  and `%3d`.
+
+Investigation used the shipped template and temporary Go test overlays. It did
+not modify the BBS's live configuration or repository implementation files.
+
+## 1. Audit ./strings and ./config together
+
+- [ ] Run both binaries against disposable copies of configuration, including
+  a copy of `~/bbs-dev/` configuration when useful. Avoid saving test changes
+  to the live development BBS.
+- [ ] Capture before/after screens for the same terminal sizes and interaction
+  states. Record each discrepancy and the intended shared behavior.
+- [ ] Review the following surfaces in both binaries:
+
+| Surface | Audit and acceptance criteria |
+| --- | --- |
+| Window sizing | Respect actual terminal dimensions; document minimum supported dimensions and behavior below them. |
+| Content sizing | Define content width and maximum visible row count. `./strings` must use additional height for more entries, up to the chosen cap. |
+| Positioning | Use consistent horizontal and vertical centering, outer margins, and placement of headers, messages, and help bars. |
+| Backgrounds | Inspect backdrop art, scaling/cropping or centering rules, blank-area fill, and foreground/background contrast. No stale or unpainted areas after navigation or resizing. |
+| Colors and borders | Align the roles of selection, input, help, warnings, and dialogs; preserve intentional application-specific styling. |
+| Lists and fields | Keep selection visible and navigation predictable when resizing, changing pages, or opening an editor. Use terminal cell width for truncation. |
+| Dialogs | Center within the current layout; keep prompts and buttons visible; restore the underlying view cleanly when dismissed. |
+| Terminal lifecycle | Verify alternate-screen entry/exit, cursor visibility, and restoration of the terminal after save, cancel, or error. |
+
+- [ ] Exercise at least 80×25, 100×30, 120×45, and 160×60, plus a terminal below
+  the supported minimum. Resize repeatedly between small and large dimensions.
+- [ ] Exercise list navigation, the last page, search, editing, confirmation
+  dialogs, long descriptions, and error/status messages during resizing.
+- [ ] Verify display widths with box-drawing characters, wide Unicode characters,
+  combining characters, and color-coded values.
+- [ ] Decide whether shared layout helpers are warranted. Extract only behavior
+  both editors need; avoid a broad TUI rewrite to fix a localized problem.
+- [ ] Fix directly related `./config` inconsistencies discovered by the audit,
+  or record larger findings as separate follow-ups with reproduction steps.
+
+## 2. Fix string preview and preserve editing data (#234)
+
+- [x] Make every list item occupy exactly one terminal row. Display control
+  characters safely without executing raw CR, LF, tab, or escape sequences.
+- [x] Preserve supported pipe/dollar color previews while enforcing the row's
+  terminal cell budget, including its overflow marker.
+- [x] Choose and document a lossless editing representation, such as escaped
+  `\r`, `\n`, and `\t`. Define literal backslash handling so ordinary text does
+  not unexpectedly become a control sequence.
+- [x] Keep preview conversion separate from stored content. Do not fix rendering
+  by deleting legitimate control characters from the BBS strings themselves.
+- [x] Ensure F1 → Enter without changes preserves the exact original value.
+- [x] Remove silent truncation during prefill and editing. If a length limit is
+  required, report it explicitly and retain the user's original content.
+- [x] Derive pagination from available height, with a documented maximum. Keep
+  the current selection visible when the page size changes.
+- [ ] Use a coherent full-screen layout for the list, background, footer, and
+  overlays, following the decisions from the cross-binary audit.
+- [x] Add regressions using actual multiline shipped values around entries
+  199–220, long custom values, and resize transitions.
+
+### Implemented so far
+
+`internal/stringeditor/escape.go` defines the lossless editing representation:
+control characters become `\r`, `\n`, `\t`, `\e` or `\xNN`, and a literal
+backslash is doubled. `EscapeForEdit` and `UnescapeFromEdit` are exact inverses,
+verified against every value in the shipped template. A malformed escape is
+reported on the message bar and leaves the sysop in the input with their text,
+rather than being guessed at and written to disk.
+
+The preview draws those same escapes in inverse video, so no control character
+reaches the terminal and every entry stays on one row. Width budgeting now uses
+terminal cells (`go-runewidth`) instead of rune counts.
+
+Pagination derives from terminal height: `chromeRows` (5) are reserved and the
+rest of the screen is list, clamped between 20 and 60 entries per page. A resize
+re-pages around the cursor so the selection stays visible.
+
+Two layout defects surfaced while adding the row-exactness regression and were
+fixed with it: the column header was three cells too wide while item rows were
+three cells too short (the header, label and value arithmetic disagreed), and
+the status bar measured itself with a hand-maintained parallel plain-text copy
+that drifted, overflowing the last column at three-digit topic numbers. Every
+chrome row is now clipped and padded to the terminal width.
+
+Still open in this section: the shared full-screen layout decisions, which
+depend on the cross-binary audit in section 1.
+
+## 3. Clarify reserved, missing, and empty values
+
+- [ ] Hide reserved placeholders by default, with an optional way to inspect
+  them if useful. Preserve stable identifiers/original numbering when filtering.
+- [ ] Distinguish an absent key, an explicitly empty value, a runtime fallback,
+  and a custom value. Do not treat all visually blank rows as unused.
+- [ ] Audit catalog coverage against runtime string fields and shipped defaults;
+  classify legacy entries rather than deleting them based only on absence from
+  the template.
+- [ ] Add missing active entries, including `matrixAccountCannotLogon`, with
+  meaningful descriptions of their arguments.
+- [ ] Make factory defaults available reliably in installed binaries. Avoid
+  depending solely on a template path relative to the current directory.
+- [ ] Preserve unrelated/custom keys when saving, and document what restoring
+  a default or clearing a value means for each supported state.
+- [ ] Check these states against runtime fallback behavior before changing how
+  blank or missing strings are saved.
+
+## 4. Validate format contracts (#237)
+
+- [ ] Inventory actual formatted-string call sites, including aliases and helper
+  wrappers. Distinguish strings passed to `fmt` from plain text and other BBS
+  placeholder syntaxes.
+- [ ] Establish shared expected arguments/defaults for formatted keys, available
+  to the runtime, editor, and tests. Avoid importing the menu package into the
+  config loader or creating another independently maintained source of defaults.
+- [ ] Implement parsing that understands `%%`, flags, width, precision, argument
+  indexes, and width/precision arguments supplied through `*`. Detect malformed
+  directives, including a trailing `%`.
+- [ ] Define compatibility rules: count and argument types must agree; cosmetic
+  padding must not cause false warnings. Explicit indexed reordering should be
+  evaluated by argument binding, not just textual verb order.
+- [ ] Keep argument descriptions: type validation cannot detect swapping the
+  meanings of two arguments that both use `%s`.
+- [ ] Validate on runtime load and hot reload. Log the key, expected arguments,
+  and specific mismatch without preventing BBS startup or silently rewriting
+  custom strings.
+- [ ] Add editor feedback at edit acceptance and save. Agree on warning versus
+  rejection behavior, and avoid blocking unrelated edits because an older file
+  already contains a mismatch.
+- [ ] Ensure restoring a default provides a clear recovery path for an invalid
+  template without losing the user's current edit unexpectedly.
+- [ ] Add CI checks tying shipped defaults to actual call-site arguments. A
+  comparison between two copies of a default does not prove the call site is
+  correct. Ensure newly introduced formatted keys cannot bypass coverage.
+- [ ] Retain the specific version-string compatibility behavior from PR #236.
+  Any reuse of the new parser must preserve its supported legacy cases.
+- [ ] Avoid changing every render call site as part of this work unless a
+  demonstrated mismatch requires a targeted fix.
+
+## Delivery and verification
+
+- [ ] Prefer two coordinated PRs: #234 for safe editing and visual consistency,
+  followed by #237 for shared validation and call-site/default checks. Place any
+  shared metadata/default groundwork deliberately and document the dependency.
+- [ ] Update the string-editor guide with escape editing, blank/default states,
+  adaptive sizing, and format-validation behavior.
+- [ ] Verify preview safety, no-op edit round trips, save/reload round trips,
+  missing-template installations, and legacy/custom configurations.
+- [ ] Verify runtime load and hot reload warnings, malformed format strings,
+  escaped percentages, padded verbs, indexed arguments, and argument order.
+- [ ] Run relevant package tests, the repository test suite and race checks,
+  `go vet`, formatting checks, and `git diff --check`.
+- [ ] Perform final visual checks of **both** `./strings` and `./config`; automated
+  non-empty-view smoke tests alone do not establish layout correctness.
+
+## Starting points in the code
+
+- [`internal/stringeditor/model.go`](../../internal/stringeditor/model.go):
+  navigation, fixed page size, resize handling, edit acceptance, and input limit.
+- [`internal/stringeditor/view.go`](../../internal/stringeditor/view.go) and
+  [`colors.go`](../../internal/stringeditor/colors.go): list rendering, color
+  previews, backgrounds, footers, and dialog positioning.
+- [`internal/stringeditor/metadata.go`](../../internal/stringeditor/metadata.go),
+  [`fileio.go`](../../internal/stringeditor/fileio.go), and
+  [`cmd/strings/main.go`](../../cmd/strings/main.go): catalog, persistence, and
+  factory-default discovery.
+- [`internal/configeditor/view.go`](../../internal/configeditor/view.go),
+  [`view_list_box.go`](../../internal/configeditor/view_list_box.go),
+  [`backdrop.go`](../../internal/configeditor/backdrop.go), and
+  [`model.go`](../../internal/configeditor/model.go): configuration TUI reference.
+- [`internal/config/config_strings.go`](../../internal/config/config_strings.go)
+  and [`cmd/vision3/config_watcher.go`](../../cmd/vision3/config_watcher.go):
+  runtime defaults, loading, and hot reload.
+- [`internal/menu/version_string.go`](../../internal/menu/version_string.go):
+  existing narrow validation and legacy version-template handling.
+- [`templates/configs/strings.json`](../../templates/configs/strings.json):
+  shipped values used to reproduce the rendering failures.

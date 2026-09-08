@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 // DOS CGA color palette mapped to ANSI 256-color indices.
@@ -193,15 +194,27 @@ func dollarColorIndex(ch byte) int {
 	}
 }
 
-// renderSpans converts styled spans to a lipgloss-rendered string,
-// truncating to maxWidth visible characters.
+// renderSpans converts styled spans to a lipgloss-rendered string, fitting the
+// result into maxWidth terminal cells.
+//
+// Control characters are never emitted raw: a stored CR, LF, tab or escape
+// would move the cursor and corrupt the surrounding list, so each one is drawn
+// as the same backslash sequence the editor accepts as input, in a contrasting
+// style so it reads as a marker rather than as literal text.
 func renderSpans(spans []styledSpan, maxWidth int) string {
 	if maxWidth <= 0 {
 		maxWidth = 80
 	}
 
+	// Leave the last cell for the overflow marker.
+	budget := maxWidth - 1
+
 	var result strings.Builder
-	visibleLen := 0
+	used := 0
+
+	overflow := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(dosColors[15])).
+		Background(lipgloss.Color(dosColors[5]))
 
 	for _, span := range spans {
 		style := lipgloss.NewStyle().Foreground(lipgloss.Color(span.fg))
@@ -210,29 +223,55 @@ func renderSpans(spans []styledSpan, maxWidth int) string {
 		}
 
 		for _, ch := range span.text {
-			if visibleLen >= maxWidth-1 {
-				// Overflow indicator
-				overflow := lipgloss.NewStyle().
-					Foreground(lipgloss.Color(dosColors[15])).
-					Background(lipgloss.Color(dosColors[5]))
+			text := string(ch)
+			chStyle := style
+			if esc, escaped := escapeRune(ch); escaped {
+				text = esc
+				chStyle = controlStyle
+			}
+			w := cellWidth(text)
+			if used+w > budget {
 				result.WriteString(overflow.Render("»"))
 				return result.String()
 			}
-			result.WriteString(style.Render(string(ch)))
-			visibleLen++
+			result.WriteString(chStyle.Render(text))
+			used += w
 		}
 	}
 
 	return result.String()
 }
 
-// PlainTextLength returns the visible character count of a BBS pipe-coded string,
-// stripping all color codes.
+// controlStyle marks escaped control characters in a preview so they are
+// distinguishable from a value that literally contains "\r".
+var controlStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color(dosColors[0])).
+	Background(lipgloss.Color(dosBgColors[7]))
+
+// cellWidth returns the number of terminal cells s occupies, counting wide
+// characters as two and combining marks as zero.
+func cellWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		w += runewidth.RuneWidth(r)
+	}
+	return w
+}
+
+// PlainTextLength returns the number of terminal cells a BBS pipe-coded string
+// occupies once color codes are stripped and control characters are shown in
+// their escaped form, matching what RenderColorString draws.
 func PlainTextLength(s string) int {
 	spans := parseColorCodes(s)
 	total := 0
 	for _, span := range spans {
-		total += len([]rune(span.text))
+		for _, r := range span.text {
+			if esc, escaped := escapeRune(r); escaped {
+				total += cellWidth(esc)
+				continue
+			}
+			total += runewidth.RuneWidth(r)
+		}
 	}
 	return total
 }

@@ -9,11 +9,40 @@ import (
 )
 
 const (
-	itemsPerPage = 20 // Matches the Pascal original's 20-item pages
-	labelCol     = 30 // Column where values start (dcol in Pascal)
-	minWidth     = 80 // Minimum terminal width
-	minHeight    = 25 // Minimum terminal height (matching 80x25 DOS)
+	numWidth = 3  // Right-aligned item number
+	labelCol = 30 // Column where values start (dcol in Pascal)
+	// labelWidth is the room left for the label between the item number and
+	// the value column, after the two bracket characters around it.
+	labelWidth = labelCol - numWidth - 2
+	minWidth   = 80 // Minimum terminal width
+	minHeight  = 25 // Minimum terminal height (matching 80x25 DOS)
+
+	// chromeRows counts the rows the list cannot use: the status bar, the
+	// column header, and the message, description and help bars.
+	chromeRows = 5
+
+	// minItemsPerPage is the page size at the minimum 80x25 terminal, which is
+	// also the Pascal original's fixed 20-item page.
+	minItemsPerPage = minHeight - chromeRows
+
+	// maxItemsPerPage caps how far a page grows on a tall terminal. Beyond
+	// this the description bar is too far from the selection to read as its
+	// caption, and a page stops being a useful navigation unit.
+	maxItemsPerPage = 60
 )
+
+// pageSizeFor returns the number of list rows a terminal of the given height
+// can show, clamped to the documented minimum and maximum.
+func pageSizeFor(height int) int {
+	size := height - chromeRows
+	if size < minItemsPerPage {
+		return minItemsPerPage
+	}
+	if size > maxItemsPerPage {
+		return maxItemsPerPage
+	}
+	return size
+}
 
 // editorMode represents the current interaction state.
 type editorMode int
@@ -40,6 +69,7 @@ type Model struct {
 	// Navigation
 	cursor   int // Current item index (0-based, across all pages)
 	page     int // Current page (0-based)
+	pageSize int // List rows on the current terminal
 	numPages int
 
 	// UI state
@@ -50,6 +80,7 @@ type Model struct {
 	// Editing
 	textInput textinput.Model
 	editKey   string // The key being edited
+	editErr   string // Escape-syntax error blocking the current edit
 
 	// Confirm dialog
 	confirmYes bool // true = Yes selected in confirm dialog
@@ -71,15 +102,21 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	}
 
 	ti := textinput.New()
-	ti.CharLimit = 200
-	ti.Width = 48
+	// No CharLimit: a limit here silently truncates the sysop's value, and the
+	// escaped form of a long string is longer than the string itself.
+	ti.CharLimit = 0
+	// The input is drawn inline in the value column, so it carries no prompt of
+	// its own; Width leaves one cell for the cursor.
+	ti.Prompt = ""
+	ti.Width = pageSizeFor(minHeight) // replaced by the first WindowSizeMsg
 
 	si := textinput.New()
 	si.Placeholder = "Search..."
 	si.CharLimit = 40
 	si.Width = 30
 
-	numPages := (len(entries) + itemsPerPage - 1) / itemsPerPage
+	pageSize := pageSizeFor(minHeight)
+	numPages := (len(entries) + pageSize - 1) / pageSize
 
 	// Snapshot original values for revert support
 	origValues := make(map[string]string, len(values))
@@ -95,6 +132,7 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		filePath:        filePath,
 		cursor:          0,
 		page:            0,
+		pageSize:        pageSize,
 		numPages:        numPages,
 		mode:            modeNavigate,
 		width:           minWidth,
@@ -122,7 +160,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.height < minHeight {
 			m.height = minHeight
 		}
-		m.textInput.Width = m.width - labelCol - 4
+		m.textInput.Width = m.valueWidth() - 1
+		// Re-page around the cursor so the selection stays on screen when the
+		// page size changes.
+		m.pageSize = pageSizeFor(m.height)
+		m.numPages = (len(m.entries) + m.pageSize - 1) / m.pageSize
+		m.page = m.cursor / m.pageSize
 		return m, nil
 
 	case tea.KeyMsg:
@@ -146,25 +189,25 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyUp:
 		if m.cursor > 0 {
 			m.cursor--
-			m.page = m.cursor / itemsPerPage
+			m.page = m.cursor / m.pageSize
 		}
 	case tea.KeyDown:
 		if m.cursor < len(m.entries)-1 {
 			m.cursor++
-			m.page = m.cursor / itemsPerPage
+			m.page = m.cursor / m.pageSize
 		}
 	case tea.KeyPgUp:
 		m.page--
 		if m.page < 0 {
 			m.page = 0
 		}
-		m.cursor = m.page * itemsPerPage
+		m.cursor = m.page * m.pageSize
 	case tea.KeyPgDown:
 		m.page++
 		if m.page >= m.numPages {
 			m.page = m.numPages - 1
 		}
-		m.cursor = m.page * itemsPerPage
+		m.cursor = m.page * m.pageSize
 		if m.cursor >= len(m.entries) {
 			m.cursor = len(m.entries) - 1
 		}
@@ -242,7 +285,9 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// startEdit enters edit mode for the currently selected item.
+// startEdit enters edit mode for the currently selected item. prefill is a raw
+// (unescaped) value; it is converted to the editable escaped form so control
+// characters survive a round trip through the single-line input.
 func (m Model) startEdit(prefill string) (tea.Model, tea.Cmd) {
 	entry := m.entries[m.cursor]
 	if entry.Key[0] == '_' {
@@ -252,7 +297,8 @@ func (m Model) startEdit(prefill string) (tea.Model, tea.Cmd) {
 	}
 	m.mode = modeEdit
 	m.editKey = entry.Key
-	m.textInput.SetValue(prefill)
+	m.editErr = ""
+	m.textInput.SetValue(EscapeForEdit(prefill))
 	m.textInput.CursorEnd()
 	m.textInput.Focus()
 	m.message = ""
@@ -263,23 +309,31 @@ func (m Model) startEdit(prefill string) (tea.Model, tea.Cmd) {
 func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
-		// Confirm edit
-		newVal := m.textInput.Value()
-		if newVal != "" || m.textInput.Value() != m.getValue(m.editKey) {
+		// Confirm edit. A malformed escape keeps the sysop in the input with
+		// their text intact rather than writing a guess to disk.
+		newVal, err := UnescapeFromEdit(m.textInput.Value())
+		if err != nil {
+			m.editErr = err.Error()
+			return m, nil
+		}
+		if newVal != m.getValue(m.editKey) {
 			m.values[m.editKey] = newVal
-			m.dirty = true
+			m.recomputeDirty()
 		}
 		m.mode = modeNavigate
+		m.editErr = ""
 		m.textInput.Blur()
 		return m, nil
 	case tea.KeyEscape:
 		// Cancel edit
 		m.mode = modeNavigate
+		m.editErr = ""
 		m.textInput.Blur()
 		return m, nil
 	default:
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
+		m.editErr = ""
 		return m, cmd
 	}
 }
@@ -319,13 +373,7 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		if orig, ok := m.origValues[entry.Key]; ok {
 			m.values[entry.Key] = orig
 			m.message = fmt.Sprintf("Reverted: %s", entry.Label)
-			m.dirty = false
-			for k, v := range m.values {
-				if ov, ok := m.origValues[k]; !ok || v != ov {
-					m.dirty = true
-					break
-				}
-			}
+			m.recomputeDirty()
 		}
 		m.mode = modeNavigate
 		return m, nil
@@ -335,13 +383,7 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		if def, ok := m.shippedDefaults[entry.Key]; ok {
 			m.values[entry.Key] = def
 			m.message = fmt.Sprintf("Restored default: %s", entry.Label)
-			m.dirty = false
-			for k, v := range m.values {
-				if ov, ok := m.origValues[k]; !ok || v != ov {
-					m.dirty = true
-					break
-				}
-			}
+			m.recomputeDirty()
 		}
 		m.mode = modeNavigate
 		return m, nil
@@ -366,7 +408,7 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					strings.Contains(strings.ToLower(entry.Key), query) ||
 					strings.Contains(strings.ToLower(entry.Description), query) {
 					m.cursor = idx
-					m.page = idx / itemsPerPage
+					m.page = idx / m.pageSize
 					m.message = fmt.Sprintf("Found: %s", entry.Label)
 					break
 				}
@@ -383,6 +425,18 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		return m, cmd
+	}
+}
+
+// recomputeDirty re-derives the dirty flag by comparing every current value
+// against the snapshot loaded from disk, so undoing an edit clears it.
+func (m *Model) recomputeDirty() {
+	m.dirty = false
+	for k, v := range m.values {
+		if ov, ok := m.origValues[k]; !ok || v != ov {
+			m.dirty = true
+			return
+		}
 	}
 }
 

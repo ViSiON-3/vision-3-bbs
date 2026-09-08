@@ -58,8 +58,8 @@ func TestModelNavigation(t *testing.T) {
 	}
 
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
-	if m.page != 1 || m.cursor != itemsPerPage {
-		t.Errorf("after pgdown: page/cursor = %d/%d, want 1/%d", m.page, m.cursor, itemsPerPage)
+	if m.page != 1 || m.cursor != m.pageSize {
+		t.Errorf("after pgdown: page/cursor = %d/%d, want 1/%d", m.page, m.cursor, m.pageSize)
 	}
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyPgUp})
 	if m.page != 0 || m.cursor != 0 {
@@ -165,7 +165,7 @@ func TestModelRestoreDefault(t *testing.T) {
 		t.Fatal("defPrompt entry not found in metadata")
 	}
 	m.cursor = idx
-	m.page = idx / itemsPerPage
+	m.page = idx / m.pageSize
 
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyF4})
 	if m.mode != modeDefaultConfirm {
