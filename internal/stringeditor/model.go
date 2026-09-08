@@ -541,7 +541,7 @@ func (m Model) formatProblem(key, value string) error {
 	if !ok {
 		return nil
 	}
-	return stringformat.ValidateValue(key, value, def)
+	return stringformat.ValidateValue(key, value, config.StringFallbacks[key], def)
 }
 
 // formatProblems reports every configured string whose directives no longer
@@ -554,7 +554,7 @@ func (m Model) formatProblems() []stringformat.Problem {
 	for k, v := range m.shippedDefaults {
 		defaults[k] = v
 	}
-	return stringformat.Validate(m.values, defaults)
+	return stringformat.Validate(m.values, config.StringFallbacks, defaults)
 }
 
 // plural renders a "and N more" suffix for a warning naming one example.

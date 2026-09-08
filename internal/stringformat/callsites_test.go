@@ -224,6 +224,58 @@ func TestCallSiteArgsMatchShippedDefaults(t *testing.T) {
 	}
 }
 
+// TestFormattedStringsAlwaysHaveADefault is the guard for a live bug this PR
+// found: addedToBatchFormat, batchClearedFormat, batchCountFormat and
+// downloadFinishedFormat shipped with no template value and no runtime
+// fallback, so their fields were empty on a stock install. Their call sites
+// pass arguments unconditionally, so fmt rendered "%!(EXTRA string=FILE.ZIP)"
+// onto the caller's screen every time they tagged a file.
+//
+// Every formatted key must therefore resolve to a non-empty value from either
+// the shipped template or config.StringFallbacks.
+func TestFormattedStringsAlwaysHaveADefault(t *testing.T) {
+	defaults := shippedDefaults(t)
+	for _, key := range stringformat.FormattedKeys {
+		if defaults[key] != "" || config.StringFallbacks[key] != "" {
+			continue
+		}
+		t.Errorf("formatted key %q has no shipped default and no runtime fallback, "+
+			"so the BBS will print %%!(EXTRA ...) wherever it is used; add a value "+
+			"to templates/configs/strings.json or to config.StringFallbacks", key)
+	}
+}
+
+// TestEmptyFormattedStringIsReported checks the validator no longer treats an
+// empty formatted value as "not configured". It is configured -- to print
+// fmt's error marker.
+func TestEmptyFormattedStringIsReported(t *testing.T) {
+	defaults := shippedDefaults(t)
+	values := map[string]string{"pageNodeListEntry": ""}
+
+	problems := stringformat.Validate(values, nil, defaults)
+
+	var found bool
+	for _, p := range problems {
+		if p.Key == "pageNodeListEntry" {
+			found = true
+			if !strings.Contains(p.Detail, "EXTRA") {
+				t.Errorf("detail %q does not explain what the caller will see", p.Detail)
+			}
+		}
+	}
+	if !found {
+		t.Error("an emptied formatted string was not reported")
+	}
+
+	// But an empty value with a runtime fallback is fine: the BBS substitutes.
+	fallbacks := map[string]string{"pageNodeListEntry": defaults["pageNodeListEntry"]}
+	for _, p := range stringformat.Validate(values, fallbacks, defaults) {
+		if p.Key == "pageNodeListEntry" {
+			t.Errorf("a fallback-covered empty value was reported: %v", p)
+		}
+	}
+}
+
 // TestFormattedDefaultsParse checks that every formatted key's shipped default
 // is well-formed, which the unformatted keys deliberately need not be.
 func TestFormattedDefaultsParse(t *testing.T) {

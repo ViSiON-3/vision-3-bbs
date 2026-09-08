@@ -54,7 +54,7 @@ func warnFormatMismatches(data []byte, filePath string) {
 		slog.Debug("no embedded defaults to validate strings against", "error", err)
 		return
 	}
-	for _, p := range stringformat.Validate(values, defaults) {
+	for _, p := range stringformat.Validate(values, StringFallbacks, defaults) {
 		slog.Warn("configured string does not match the arguments the BBS passes it; "+
 			"it will print a malformed message until corrected",
 			"path", filePath, "key", p.Key, "expected", p.Expected, "problem", p.Detail)
@@ -89,6 +89,16 @@ func stringValues(data []byte) (map[string]string, error) {
 // upgraded installation will not have it and the feature would otherwise print
 // nothing at all.
 var StringFallbacks = map[string]string{
+	// Batch download queue. These four are formatted, and every call site
+	// passes their arguments unconditionally, so an empty value does not print
+	// nothing -- fmt renders "%!(EXTRA string=FILENAME.ZIP)" onto the caller's
+	// screen. They shipped without defaults, so this is what an install has
+	// been showing; see TestFormattedStringsAlwaysHaveADefault.
+	"addedToBatchFormat":     "|10Added |15%s|10 to the batch queue.|07\r\n",
+	"batchClearedFormat":     "|10Cleared |15%d|10 file(s) from the batch queue.|07\r\n",
+	"batchCountFormat":       "|07Batch queue: |15%d|07 file(s).|07\r\n",
+	"downloadFinishedFormat": "|10Download complete: |15%d|10 succeeded, |15%d|10 failed.|07\r\n",
+
 	// New user signup outcome (added with autoValidateNewUsers; an upgraded
 	// strings.json will not have these, and the ready path would otherwise
 	// print nothing at all)

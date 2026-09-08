@@ -150,10 +150,10 @@ func TestCompatible(t *testing.T) {
 		return spec
 	}
 	tests := []struct {
-		name    string
-		def     string // what the call site supplies
-		edited  string // what the sysop wrote
-		wantErr bool
+		name     string
+		supplied string // the arguments the call site passes
+		edited   string // what the sysop wrote
+		wantErr  bool
 	}{
 		{"identical", "Node %d: %s", "Node %d: %s", false},
 		{"padding added", "%s", "%-20s", false},
@@ -169,12 +169,43 @@ func TestCompatible(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Compatible(parse(t, tt.edited), parse(t, tt.def))
+			err := Compatible(parse(t, tt.edited), parse(t, tt.supplied))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Compatible(%q against %q) error = %v, wantErr %v",
-					tt.edited, tt.def, err, tt.wantErr)
+					tt.edited, tt.supplied, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestCompatibleMessagesReadInTheRightDirection pins the wording, which a
+// sysop reads to work out what they broke. Reporting the supplied count as
+// what the string takes sends them to fix the wrong end.
+func TestCompatibleMessagesReadInTheRightDirection(t *testing.T) {
+	mustParse := func(s string) Spec {
+		spec, err := Parse(s)
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", s, err)
+		}
+		return spec
+	}
+
+	// The call site supplies two arguments; the edited string consumes none.
+	err := Compatible(mustParse("Node: plain"), mustParse("Node %d: %s"))
+	if err == nil {
+		t.Fatal("dropping both verbs was accepted")
+	}
+	if got, want := err.Error(), "takes 0 argument(s) but 2 are supplied"; got != want {
+		t.Errorf("arity message = %q, want %q", got, want)
+	}
+
+	// The edited string wants a number where a string is supplied.
+	err = Compatible(mustParse("%d"), mustParse("%s"))
+	if err == nil {
+		t.Fatal("changing the verb type was accepted")
+	}
+	if got, want := err.Error(), "argument 1 is used as integer but string is supplied"; got != want {
+		t.Errorf("type message = %q, want %q", got, want)
 	}
 }
 

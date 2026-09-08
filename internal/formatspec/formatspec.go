@@ -283,18 +283,25 @@ func verbKind(r rune) (ArgKind, bool) {
 	return KindAny, false
 }
 
-// Compatible reports whether a string with signature got can stand in for one
-// with signature want. Both must consume the same number of arguments, and
-// each argument must accept the value the call site passes.
-func Compatible(want, got Spec) error {
-	if len(want.Args) != len(got.Args) {
-		return fmt.Errorf("takes %d argument(s) but %d are supplied", len(got.Args), len(want.Args))
+// Compatible reports whether a configured string can safely receive the
+// arguments a call site supplies.
+//
+// The parameters are named for the roles they play rather than for a generic
+// want/got pair: `configured` is the signature of the string as it stands in
+// strings.json, and `supplied` is the signature of the arguments the code
+// passes it, taken from the shipped default. Getting them the wrong way round
+// produces a message that reads backwards, so the names say which is which.
+func Compatible(configured, supplied Spec) error {
+	if len(configured.Args) != len(supplied.Args) {
+		return fmt.Errorf("takes %d argument(s) but %d are supplied",
+			len(configured.Args), len(supplied.Args))
 	}
 	var problems []string
-	for i := range want.Args {
-		if !got.Args[i].Accepts(want.Args[i]) {
+	for i := range configured.Args {
+		if !configured.Args[i].Accepts(supplied.Args[i]) {
 			problems = append(problems, fmt.Sprintf(
-				"argument %d is used as %s but %s is supplied", i+1, got.Args[i], want.Args[i]))
+				"argument %d is used as %s but %s is supplied",
+				i+1, configured.Args[i], supplied.Args[i]))
 		}
 	}
 	if len(problems) > 0 {
