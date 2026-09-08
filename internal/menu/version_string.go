@@ -83,12 +83,21 @@ var supersededVersionTemplates = []string{
 // upgradeVersionTemplate returns the template to use, replacing a superseded
 // shipped default with the current one and leaving anything else untouched.
 func upgradeVersionTemplate(configured string) string {
-	trimmed := strings.TrimSpace(configured)
-	if trimmed == "" {
+	// Nothing configured at all: the command would print a blank line, so fall
+	// back rather than show the sysop nothing.
+	if strings.TrimSpace(configured) == "" {
 		return defaultVersionTemplate
 	}
+	// Match exactly, without trimming. Whitespace is not incidental in a banner
+	// -- leading spaces indent it on screen -- so a value that differs from a
+	// shipped default by so much as a space is an edit, and edits are the
+	// sysop's. Trimming here would quietly overwrite one.
+	//
+	// The cost is that such a sysop keeps a banner with the old version baked
+	// in. They are not left guessing: it has no %s, so renderVersionString logs
+	// exactly why no version appears and what to add.
 	for _, old := range supersededVersionTemplates {
-		if trimmed == old {
+		if configured == old {
 			return defaultVersionTemplate
 		}
 	}

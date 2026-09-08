@@ -110,3 +110,30 @@ func TestFormatVerbCounts(t *testing.T) {
 		}
 	}
 }
+
+// Whitespace is not incidental in a banner: leading spaces indent it on screen.
+// A value differing from a shipped default by only whitespace is therefore an
+// edit, and must not be overwritten by the upgrade.
+func TestSupersededMatchIsExactNotTrimmed(t *testing.T) {
+	for _, old := range supersededVersionTemplates {
+		for _, edited := range []string{"  " + old, old + "  ", "\t" + old} {
+			if got := upgradeVersionTemplate(edited); got != edited {
+				t.Errorf("an indented banner was overwritten:\n  had  %q\n  got  %q", edited, got)
+			}
+		}
+	}
+}
+
+// And such a sysop is told why no version shows, rather than left guessing.
+func TestAnEditedStaleBannerStillWarns(t *testing.T) {
+	edited := "  " + supersededVersionTemplates[0]
+
+	got := renderVersionString(upgradeVersionTemplate(edited))
+
+	if got != edited {
+		t.Errorf("the sysop's banner was altered: %q", got)
+	}
+	if strings.Contains(got, "%!") {
+		t.Errorf("Sprintf noise rendered into an unfillable banner: %q", got)
+	}
+}
