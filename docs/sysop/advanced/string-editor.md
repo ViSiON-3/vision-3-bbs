@@ -148,7 +148,7 @@ different from `|XX` placeholder codes: a placeholder can be moved or removed fr
 verb must stay, and the **number and order of verbs must not change**. The editor's description line
 names the verbs a string expects, for example:
 
-```
+```text
 Exec: Version String    Version string format (%s=version)
 ```
 
