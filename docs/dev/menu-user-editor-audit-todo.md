@@ -1,7 +1,8 @@
 # Menu editor and user editor TUI audit
 
-Created: 2026-09-08. Status: code complete; the manual visual pass over both
-binaries is the one item still open.
+Created: 2026-09-08. Status: code complete. The manual visual pass over both
+binaries is deferred to its own ticket by the maintainer, along with the golden
+captures that should follow it.
 
 Related issues:
 
@@ -288,14 +289,15 @@ there. `./menuedit`'s two dialogs did not, and were fixed in the first PR.
   `internal/stringeditor/view_golden_test.go`. **Deferred, deliberately.** The
   geometry probes cover 66 and 114 mode/size combinations respectively, and the
   screens are still settling; captures taken now would mostly record churn.
-  Worth adding once the manual pass has confirmed the visual result.
+  Worth adding once the manual pass has confirmed the visual result — so this
+  belongs with the deferred visual-pass ticket, not before it.
 - [x] Add coverage for the new navigation: each arrow from each column, the
   edges, and that `ftDisplay` fields stay unreachable.
 - [x] Run the package tests, the repository suite with race checks, `go vet`,
   formatting checks, and `git diff --check`.
-- [ ] Perform a manual visual pass over `./menuedit` and `./ue` in a real
-  terminal, at small and large sizes, resizing repeatedly. **The automated
-  suite does not retire this.** The prior audit's manual pass found two defects
+- [ ] **Deferred to a separate ticket.** Perform a manual visual pass over
+  `./menuedit` and `./ue` in a real terminal, at small and large sizes, resizing
+  repeatedly. **The automated suite does not retire this.** The prior audit's manual pass found two defects
   that every geometry and golden check passed cleanly, because row and column
   arithmetic cannot tell a bar that stops in the right place from one that stops
   a cell late. See
@@ -303,6 +305,14 @@ there. `./menuedit`'s two dialogs did not, and were fixed in the first PR.
 - [x] Run both editors against disposable copies of configuration. Do not save
   test changes to the live development BBS. The test suites build every model
   over a `t.TempDir()` fixture; nothing reads or writes the live BBS.
+
+## Known dead code, deliberately left
+
+- `internal/stringeditor/view.go:56`, `markerHighlightStyle`: unused since #243
+  trimmed the selection bar. Predates this audit and sits in a file neither PR
+  touches, so it is out of scope here; `golangci-lint` reports it on a full run
+  but CI's `only-new-issues` does not. Worth a one-line cleanup whenever that
+  file is next opened.
 
 ## Starting points in the code
 
