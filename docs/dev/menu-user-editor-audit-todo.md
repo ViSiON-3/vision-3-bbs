@@ -1,6 +1,7 @@
 # Menu editor and user editor TUI audit
 
-Created: 2026-09-08. Status: in progress.
+Created: 2026-09-08. Status: in progress. Section 1 and 2 shipped for
+`./menuedit`; `./ue` outstanding.
 
 Related issues:
 
@@ -46,8 +47,10 @@ Established by static reading plus a throwaway geometry probe modelled on
 `internal/configeditor/view_geometry_test.go`, run over both editors at 80×25,
 100×30, 120×45, 160×60, 200×100 and an undersized 60×15. The probe drove real
 keystrokes into each screen rather than assigning `m.mode` directly; assigning
-the mode leaves `textInput.Width` unset and produces false width failures that
-are artifacts of the probe, not defects in the editors.
+the mode leaves `textInput.Width` unset and produces width failures that are
+artifacts of the probe. Two of the first pass's hits were exactly that. Note the
+inverse trap as well: the first probe never entered the field-edit modes at all,
+and so missed a real one-column overflow there. See the section 2 results.
 
 ### Shared chrome not adopted (both editors)
 
@@ -135,16 +138,18 @@ Recorded so a later reader does not re-audit them:
 
 ## 1. Adopt the shared chrome
 
-- [ ] Replace both local `dosColors` / `dosBgColors` tables and their
+Done for `./menuedit`. `./ue` follows in the second PR.
+
+- [x] Replace both local `dosColors` / `dosBgColors` tables and their
   `dosStyle` / `dosColor` constructors with aliases onto `internal/tuiart`,
   following the pattern in `internal/configeditor/colors.go:13-20`. Keep every
   screen-specific style variable and its `MENUEDIT.PAS` / `UE.PAS` provenance
   comment; only the palette underneath changes.
-- [ ] Alias the backdrop the way `internal/configeditor/backdrop.go` does, load
+- [x] Alias the backdrop the way `internal/configeditor/backdrop.go` does, load
   it in each model's constructor and resize handler, and source the background
   fill from `backdrop.Segment(row, col, width)` instead of
   `strings.Repeat("░", …)`.
-- [ ] Judge, per screen, whether the art or `tuiart.Shaded` is right, because
+- [x] Judge, per screen, whether the art or `tuiart.Shaded` is right, because
   the art is 80 columns wide and centered, so a centered box occludes all but a
   sliver of it. This is not a defect: `./config` itself caps every box at 70
   columns (72 with borders) and therefore never shows more than 4 columns of art
@@ -155,24 +160,58 @@ Recorded so a later reader does not re-audit them:
   columns) are well clear. Check on the manual pass whether a 1-column sliver
   frames or just reads as a stray line; if it does not read as framing, use
   `tuiart.Shaded` for that screen alone, as `./strings` does.
-- [ ] Point the title and help bars at `tuiart.HeaderBarStyle` and
+- [x] Point the title and help bars at `tuiart.HeaderBarStyle` and
   `tuiart.HelpBarStyle`; collapse `./ue`'s `editTitleStyle` onto the same style.
-- [ ] Delete the local `centerText` / `padRight` and delegate to
+- [x] Delete the local `centerText` / `padRight` and delegate to
   `tuiart.CenterText` / `tuiart.PadRight`. `internal/usereditor/view_test.go`
   already pins the current behavior of `centerText`, including the rune-safe
   truncation case — keep those assertions passing.
 
 ## 2. Fix ./menuedit geometry (#252)
 
-- [ ] Rework the three broken screens to derive top and bottom padding from one
+Done.
+
+- [x] Rework the three broken screens to derive top and bottom padding from one
   declared fixed-row count, as `newListBox` does, rather than from independent
   magic constants. Do not floor `bottomPad` at 1; that floor is what turns a
   miscount into an overflow instead of a visible gap.
-- [ ] Decide whether the menu editor's list screens should use
+- [x] Decide whether the menu editor's list screens should use
   `configeditor.listBox` directly. It currently lives in `internal/configeditor`
   and is documented as keeping each screen's exact byte output. Extract it to a
   shared package **only** if both editors genuinely need it; the prior audit's
   standing instruction is to share chrome, not to rewrite editors.
+
+### Results
+
+All three row-count defects are fixed, and the cause of the first two turned out
+to be more specific than "magic constants". `menuFields()` returns **13** fields,
+but `model.go` declared `menuEditFields = 7` and the menu edit screen's box
+height was written for that smaller list. The field list grew; the hardcoded
+geometry did not follow. Both `menuEditFields` and `cmdEditFields` were dead
+code — nothing read either one — so they are deleted and both edit screens now
+size their box from `len(m.menuFields)` / `len(m.cmdFields)`.
+
+The shared scaffold landed as **`tuiart.Screen`** rather than by extracting
+`configeditor.listBox`: `listBox` also owns that editor's box styling, and
+moving it would put its byte-identical golden captures at risk for no gain.
+`tuiart.Screen` carries only the parts both remaining editors need — row-tracked
+background fill and `Split`, which derives both paddings from one declared
+fixed-row count and deliberately does **not** floor either at 1. That floor is
+what turned a miscount into an off-screen overflow instead of a visible gap.
+
+A fourth defect surfaced only once the geometry test entered the field-edit
+modes, which the initial probe never did: the actively-edited field row was one
+cell too wide on both edit screens, because the code padded against
+`m.textInput.Width` while `textinput.View()` renders a cursor cell after the
+text. Both sites now measure `uitext.ApproximateVisibleLen(m.textInput.View())`
+instead — the approach `./ue`'s password dialog already used, and the one the
+`./ue` finding above recommends adopting there too.
+
+Adopting the backdrop also exposed that the two confirm/input dialog overlays
+rebuilt the row to the right of the dialog as flat `░` fill, which erases the
+art from those rows. They now preserve both sides with the `padToCol` /
+`skipToCol` pair, which `./config` and this editor's own help overlay already
+used; `skipToCol` was defined in `view.go` but had no callers.
 
 ## 3. Two-dimensional field navigation in ./ue (#242)
 
@@ -190,7 +229,7 @@ Recorded so a later reader does not re-audit them:
 
 ## 4. Verification
 
-- [ ] Add `view_geometry_test.go` to both packages, covering every reachable
+- [x] Add `view_geometry_test.go` to both packages (`./menuedit` done), covering every reachable
   mode at 80×25, 100×30, 120×45, 160×60, 200×100 and 60×15. Drive real
   keystrokes into each mode; assigning `m.mode` directly leaves `textInput`
   unconfigured and reports width failures that do not exist.

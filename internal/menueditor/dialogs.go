@@ -64,12 +64,13 @@ func (m Model) overlayConfirmDialog(background, title, question string) string {
 
 	dialogLines := []string{border, titleLine, emptyLine, questionLine, emptyLine, buttonLine, borderBot}
 
-	tailW := max(0, m.width-startCol-dialogW)
-	tail := bgFillStyle.Render(strings.Repeat("░", tailW))
+	// Keep the screen behind the dialog on both sides. Rebuilding the right
+	// side as flat fill would erase the backdrop art from those rows.
+	endCol := startCol + dialogW
 	for i, dl := range dialogLines {
 		row := startRow + i
 		if row >= 0 && row < len(lines) {
-			lines[row] = padToCol(lines[row], startCol) + dl + tail
+			lines[row] = padToCol(lines[row], startCol) + dl + skipToCol(lines[row], endCol)
 		}
 	}
 
@@ -127,12 +128,13 @@ func (m Model) overlayInputDialog(background, title, prompt, inputView string) s
 
 	dialogLines := []string{border, titleLine, emptyLine, promptLine, inputLine, hintLine, borderBot}
 
-	tailW := max(0, m.width-startCol-dialogW)
-	tail := bgFillStyle.Render(strings.Repeat("░", tailW))
+	// Keep the screen behind the dialog on both sides. Rebuilding the right
+	// side as flat fill would erase the backdrop art from those rows.
+	endCol := startCol + dialogW
 	for i, dl := range dialogLines {
 		row := startRow + i
 		if row >= 0 && row < len(lines) {
-			lines[row] = padToCol(lines[row], startCol) + dl + tail
+			lines[row] = padToCol(lines[row], startCol) + dl + skipToCol(lines[row], endCol)
 		}
 	}
 

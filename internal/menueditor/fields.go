@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
 // fieldType defines the edit behaviour for a field.
@@ -170,11 +170,7 @@ func cmdFields() []fieldDef {
 }
 
 // padRight pads a string to width with spaces, truncating if longer.
-func padRight(s string, width int) string {
-	return ansi.PadRight(ansi.TruncateRunes(s, width, ""), width)
-}
+func padRight(s string, width int) string { return tuiart.PadRight(s, width) }
 
 // centerText centers a string within a given width.
-func centerText(s string, width int) string {
-	return ansi.Center(ansi.TruncateRunes(s, width, ""), width)
-}
+func centerText(s string, width int) string { return tuiart.CenterText(s, width) }

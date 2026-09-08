@@ -3,6 +3,8 @@ package menueditor
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
 // viewCommandListScreen renders the command list browser for the selected menu.
@@ -17,118 +19,74 @@ func (m Model) viewCommandListScreen() string {
 		}
 	}
 
-	var b strings.Builder
+	// Fixed rows: title(1) + box(border, section title, column header, empty,
+	// listVisible, border = listVisible+5) + message(1) + help(1). The previous
+	// count was 24 against an actual 23, which left the bottom row of any
+	// terminal taller than 25 unpainted.
+	topPad, bottomPad := tuiart.Split(m.height, listVisible+8)
+
+	sc := tuiart.NewScreen(m.width, m.backdrop)
 
 	// === Row 1: Title bar ===
-	title := centerText("-- ViSiON/3 Menu Editor v1.0 --", m.width)
-	b.WriteString(titleBarStyle.Render(title))
-	b.WriteByte('\n')
-
-	bg := m.bgLine()
+	sc.Line(titleBarStyle.Render(centerText("-- ViSiON/3 Menu Editor v1.0 --", m.width)))
+	sc.BgRows(topPad)
 
 	// Box dimensions: MENUEDIT.PAS GrowBox(4,4,76,22) → 70 cols wide
 	boxW := 70
 	padL := max(0, (m.width-boxW-2)/2)
 	padR := max(0, m.width-padL-boxW-2)
 
-	// Vertical centering: title(1) + box(21) + message(1) + help(1) = 24 rows
-	extraV := max(0, m.height-24)
-	topPad := max(1, extraV/2)
-	bottomPad := max(1, extraV-topPad)
-
-	for i := 0; i < topPad; i++ {
-		b.WriteString(bg)
-		b.WriteByte('\n')
+	box := func(content string) {
+		sc.Line(sc.Pad(padL, padR,
+			listBorderStyle.Render("│")+content+listBorderStyle.Render("│")))
 	}
 
 	// === Top border ===
 	// MENUEDIT.PAS: Color(4,12) GrowBox → red bg, light red fg
-	topBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(topBorder)
-	b.WriteByte('\n')
+	sc.Line(sc.Pad(padL, padR, listBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐")))
 
 	// === Section title inside box ===
 	// MENUEDIT.PAS: Color(4,14) Center_Write('Editing Menu Commands for: ...')
-	sectionTitle := fmt.Sprintf("Editing Menu Commands for: %s", menuTitle)
-	titleRow := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("│") +
-		listHeaderStyle.Render(centerText(sectionTitle, boxW)) +
-		listBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(titleRow)
-	b.WriteByte('\n')
+	box(listHeaderStyle.Render(centerText(
+		fmt.Sprintf("Editing Menu Commands for: %s", menuTitle), boxW)))
 
 	// === Column header ===
 	// MENUEDIT.PAS: 'Command Description   Keystroke(s)    Command(s)'
-	colText := padRight("   Node Activity          Keys       Command", boxW)
-	colLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("│") +
-		listColTitleStyle.Render(colText) +
-		listBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(colLine)
-	b.WriteByte('\n')
+	box(listColTitleStyle.Render(padRight("   Node Activity          Keys       Command", boxW)))
 
 	// === Empty separator ===
-	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("│") +
-		listItemStyle.Render(strings.Repeat(" ", boxW)) +
-		listBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(emptyLine)
-	b.WriteByte('\n')
+	box(listItemStyle.Render(strings.Repeat(" ", boxW)))
 
 	// === Command list (listVisible rows) ===
 	total := len(m.cmds)
 	for row := 0; row < listVisible; row++ {
 		idx := m.cmdScroll + row
-		var rowContent string
 		if idx < 0 || idx >= total {
-			rowContent = listItemStyle.Render(strings.Repeat(" ", boxW))
-		} else {
-			rowContent = m.renderCmdRow(idx, boxW)
+			box(listItemStyle.Render(strings.Repeat(" ", boxW)))
+			continue
 		}
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			listBorderStyle.Render("│") +
-			rowContent +
-			listBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(line)
-		b.WriteByte('\n')
+		box(m.renderCmdRow(idx, boxW))
 	}
 
 	// === Bottom border ===
-	botBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(botBorder)
-	b.WriteByte('\n')
+	sc.Line(sc.Pad(padL, padR, listBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘")))
 
 	// === Message or fill ===
 	if m.message != "" {
-		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR+1)))
-		b.WriteString(msgLine)
+		sc.Line(sc.Pad(padL, padR+1, flashMessageStyle.Render(" "+padRight(m.message, boxW))))
 	} else {
-		b.WriteString(bg)
+		sc.BgLine()
 	}
-	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bg)
-		b.WriteByte('\n')
-	}
+	sc.BgRows(bottomPad)
 
 	// === Help bar ===
 	// MENUEDIT.PAS: 'F2 Delete Command  F5 Add New Command  ALT-H Help  ESC Exits'
-	helpText := centerText("(Enter) Edit  F2 Delete  F5 Add New Command  ESC Back", m.width)
-	b.WriteString(helpBarStyle.Render(helpText))
+	sc.Last(helpBarStyle.Render(centerText(
+		"(Enter) Edit  F2 Delete  F5 Add New Command  ESC Back", m.width)))
 
 	// Overlay dialogs
-	result := b.String()
+	result := sc.String()
 	if m.mode == modeDeleteCmdConfirm {
 		desc := ""
 		if m.cmdCursor >= 0 && m.cmdCursor < len(m.cmds) {

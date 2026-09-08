@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
 // viewMenuEditScreen renders the per-menu field editor.
@@ -15,38 +17,35 @@ func (m Model) viewMenuEditScreen() string {
 	}
 	entry := m.menus[m.menuEditIdx]
 
-	var b strings.Builder
+	// Fixed rows: title(1) + box(border, box title, empty, fields, empty, info,
+	// empty, border = len(fields)+7) + help(1). Derived from the live field
+	// count: this screen used to hardcode a box height for seven fields, and
+	// silently overflowed the terminal once the list grew to thirteen.
+	boxRows := len(m.menuFields) + 7
+	topPad, bottomPad := tuiart.Split(m.height, boxRows+2)
+
+	sc := tuiart.NewScreen(m.width, m.backdrop)
 
 	// === Row 1: Title bar ===
-	title := centerText("-- ViSiON/3 Menu Editor v1.0 --", m.width)
-	b.WriteString(titleBarStyle.Render(title))
-	b.WriteByte('\n')
-
-	bg := m.bgLine()
+	sc.Line(titleBarStyle.Render(centerText("-- ViSiON/3 Menu Editor v1.0 --", m.width)))
+	sc.BgRows(topPad)
 
 	// Box dimensions matching Pascal GrowBOX(2,6,78,20)
-	// width = 78-2-2 = 74 interior, height ~15 rows
+	// width = 78-2-2 = 74 interior
 	boxW := 74
 	padL := max(0, (m.width-boxW-2)/2)
 	padR := max(0, m.width-padL-boxW-2)
 
-	// Vertical centering: title(1) + gap(2) + box(20) + gap(2) + help(1) = 26
-	extraV := max(0, m.height-26)
-	topPad := max(2, extraV/2+2)
-	bottomPad := max(1, m.height-1-topPad-20)
-
-	for i := 0; i < topPad; i++ {
-		b.WriteString(bg)
-		b.WriteByte('\n')
+	// box writes one row of box content wrapped in the side borders.
+	box := func(content string) {
+		sc.Line(sc.Pad(padL, padR,
+			editBorderStyle.Render("│")+content+editBorderStyle.Render("│")))
 	}
+	emptyRow := func() { box(fieldDisplayStyle.Render(strings.Repeat(" ", boxW))) }
 
 	// === Top border ===
 	// MENUEDIT.PAS: Color(15,8) → dark gray bg, white fg for box
-	topBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(topBorder)
-	b.WriteByte('\n')
+	sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐")))
 
 	// === Title row inside box ===
 	// MENUEDIT.PAS: Color(15,12) center_write 'Command Editing...'
@@ -54,71 +53,37 @@ func (m Model) viewMenuEditScreen() string {
 	if entry.Data.Title != "" {
 		boxTitle = entry.Data.Title + " (" + entry.Name + ".MNU)"
 	}
-	titleRow := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		editTitleStyle.Render(centerText(boxTitle, boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(titleRow)
-	b.WriteByte('\n')
+	box(editTitleStyle.Render(centerText(boxTitle, boxW)))
 
 	// === Empty separator ===
-	emptyRow := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(emptyRow)
-	b.WriteByte('\n')
+	emptyRow()
 
 	// === Field rows ===
 	for i, f := range m.menuFields {
-		row := m.renderMenuField(i, f, &entry.Data, boxW)
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			editBorderStyle.Render("│") +
-			row +
-			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(line)
-		b.WriteByte('\n')
+		box(m.renderMenuField(i, f, &entry.Data, boxW))
 	}
 
 	// === Empty row above info ===
-	b.WriteString(emptyRow)
-	b.WriteByte('\n')
+	emptyRow()
 
 	// === Info row: current file + number (centered) ===
-	infoText := centerText(fmt.Sprintf("Menu %d of %d", m.menuEditIdx+1, len(m.menus)), boxW)
-	infoRow := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		editInfoLabelStyle.Render(infoText) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(infoRow)
-	b.WriteByte('\n')
+	box(editInfoLabelStyle.Render(
+		centerText(fmt.Sprintf("Menu %d of %d", m.menuEditIdx+1, len(m.menus)), boxW)))
 
 	// === Empty row below info ===
-	b.WriteString(emptyRow)
-	b.WriteByte('\n')
+	emptyRow()
 
 	// === Bottom border ===
-	botBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(botBorder)
-	b.WriteByte('\n')
+	sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘")))
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bg)
-		b.WriteByte('\n')
-	}
+	sc.BgRows(bottomPad)
 
 	// === Help bar ===
-	helpText := centerText("PgUp/PgDn Prev/Next  F2 Delete  F5 Add New  F10 Edit Commands  ESC Back", m.width)
-	b.WriteString(helpBarStyle.Render(helpText))
+	sc.Last(helpBarStyle.Render(centerText(
+		"PgUp/PgDn Prev/Next  F2 Delete  F5 Add New  F10 Edit Commands  ESC Back", m.width)))
 
 	// Overlay dialogs
-	result := b.String()
+	result := sc.String()
 	switch m.mode {
 	case modeDeleteMenuConfirm:
 		result = m.overlayConfirmDialog(result,
@@ -163,7 +128,10 @@ func (m Model) renderMenuField(fieldIdx int, f fieldDef, d *MenuData, boxW int) 
 
 	// Actively editing this field
 	if isActive && m.mode == modeMenuEditField {
-		inputW := m.textInput.Width
+		// Measure what the widget actually renders rather than assuming it
+		// occupies textInput.Width cells: it appends a cursor cell after the
+		// text, so assuming Width overflowed the box by exactly one column.
+		inputW := uitext.ApproximateVisibleLen(m.textInput.View())
 		if inputW > maxW {
 			inputW = maxW
 		}
