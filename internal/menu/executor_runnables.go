@@ -14,7 +14,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
 func runPlaceholderCommand(c *cmdCtx, args string) (*user.User, string, error) {
@@ -202,11 +201,7 @@ func runShowVersion(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running showversion", "node", nodeNumber)
 
-	versionTemplate := e.LoadedStrings.ExecVersionString
-	versionString := versionTemplate
-	if strings.Contains(versionTemplate, "%s") {
-		versionString = fmt.Sprintf(versionTemplate, version.Number)
-	}
+	versionString := renderVersionString(upgradeVersionTemplate(e.LoadedStrings.ExecVersionString))
 
 	// Display the version
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode) // Optional: Clear screen
