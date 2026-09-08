@@ -299,9 +299,12 @@ func TestEngineLiveLoadPathList(t *testing.T) {
 	os.MkdirAll(subDir, 0o755)
 	os.WriteFile(filepath.Join(subDir, "helper.js"), []byte(`var HELPER_VAL = 99;`), 0o644)
 
-	// Main script mutates js.load_path_list at runtime, then requires the module
+	// Main script mutates js.load_path_list at runtime, then requires the module.
+	// The path goes into a JS string literal, so it needs forward slashes: a
+	// Windows path pasted in raw turns \U, \A and \T into escape sequences and
+	// the module is never found. Windows file APIs accept forward slashes.
 	os.WriteFile(filepath.Join(eng.cfg.WorkingDir, "test.js"), []byte(`
-		js.load_path_list.unshift("`+subDir+`/");
+		js.load_path_list.unshift("`+filepath.ToSlash(subDir)+`/");
 		load("helper.js");
 		console.write("helper:" + HELPER_VAL);
 		js.load_path_list.shift();

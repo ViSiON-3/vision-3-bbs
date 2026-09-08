@@ -36,7 +36,9 @@ func TestExpandArgs_no_filePaths_no_placeholder(t *testing.T) {
 func TestExpandArgs_targetDir_standalone(t *testing.T) {
 	tmpl := []string{"-r", "{targetDir}"}
 	got, _, _ := expandArgs(tmpl, nil, "/upload/tmp")
-	want := []string{"-r", "/upload/tmp/"}
+	// The separator appended is the native one, so the expectation is native
+	// too: "\\" on Windows, "/" elsewhere.
+	want := []string{"-r", "/upload/tmp" + string(filepath.Separator)}
 	assertStringSlice(t, want, got)
 }
 

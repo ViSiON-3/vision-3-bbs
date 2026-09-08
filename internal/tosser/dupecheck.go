@@ -2,9 +2,9 @@ package tosser
 
 import (
 	"encoding/json"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -112,32 +112,7 @@ func (db *DupeDB) saveLocked() error {
 // atomicWriteFile writes data to a temp file then renames it to path,
 // ensuring the target file is never left in a partially-written state.
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()        // cleanup on error path
-		_ = os.Remove(tmpPath) // cleanup on error path
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()        // cleanup on error path
-		_ = os.Remove(tmpPath) // cleanup on error path
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath) // cleanup on error path
-		return err
-	}
-	if err := os.Chmod(tmpPath, perm); err != nil {
-		_ = os.Remove(tmpPath) // cleanup on error path
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return atomicfile.WriteFile(path, data, perm)
 }
 
 // Count returns the number of entries in the database.

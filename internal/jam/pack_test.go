@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -280,6 +281,15 @@ func TestPackRenameFailureMarksBaseClosed(t *testing.T) {
 	// non-empty directory. The open handle still reads the unlinked file,
 	// but os.Rename onto a non-empty directory fails, and the recovery
 	// reopen of the original path fails too.
+	//
+	// The injection depends on unlinking a file that is still open, which
+	// Windows refuses -- os.Remove there fails with a sharing violation while
+	// the base holds the handle. The behaviour under test (a failed rename
+	// leaves the base closed rather than open with nil handles) is
+	// platform-independent; only this way of provoking it is not.
+	if runtime.GOOS == "windows" {
+		t.Skip("cannot unlink an open file on Windows, so the rename failure cannot be injected this way")
+	}
 	jhrPath := basePath + ".jhr"
 	if err := os.Remove(jhrPath); err != nil {
 		t.Fatalf("remove .jhr: %v", err)

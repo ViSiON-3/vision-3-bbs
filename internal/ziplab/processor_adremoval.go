@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -72,7 +73,7 @@ func (p *Processor) removeFilesFromZip(zipPath string, patterns []string) (retEr
 	if err := outFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp zip: %w", err)
 	}
-	return os.Rename(tmpPath, zipPath)
+	return atomicfile.Replace(tmpPath, zipPath)
 }
 
 // shouldRemoveFile checks if a filename matches any removal pattern (case-insensitive).

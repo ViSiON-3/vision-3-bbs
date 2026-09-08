@@ -3,6 +3,7 @@ package menueditor
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -217,31 +218,8 @@ func atomicWriteJSON(path string, v any) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 	data = append(data, '\n')
-
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".menueditor-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create temp: %w", err)
-	}
-	tmpPath := tmp.Name()
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()        // best-effort; already returning a write error
-		_ = os.Remove(tmpPath) // best-effort cleanup
-		return fmt.Errorf("write temp: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()        // best-effort
-		_ = os.Remove(tmpPath) // best-effort cleanup
-		return fmt.Errorf("sync temp: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath) // best-effort cleanup
-		return fmt.Errorf("close temp: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath) // best-effort cleanup
-		return fmt.Errorf("rename to %s: %w", path, err)
+	if err := atomicfile.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
 }

@@ -87,8 +87,13 @@ func TestAuthenticateSnapshotIsSelfConsistent(t *testing.T) {
 		if u == nil {
 			t.Fatalf("session %d failed to authenticate", i)
 		}
-		if !u.PreviousLogin.Before(u.LastLogin) {
-			t.Errorf("session %d: PreviousLogin %v is not before its own LastLogin %v",
+		// The invariant is that a session never reports a PreviousLogin newer
+		// than its own LastLogin, which is what a torn read would produce.
+		// Equality is legitimate: two of these logins can land in the same
+		// clock tick, and Windows' wall clock ticks about every 15ms, so there
+		// it is routine rather than a freak race.
+		if u.PreviousLogin.After(u.LastLogin) {
+			t.Errorf("session %d: PreviousLogin %v is after its own LastLogin %v",
 				i, u.PreviousLogin, u.LastLogin)
 		}
 	}

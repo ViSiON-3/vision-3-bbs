@@ -2,6 +2,7 @@ package ftn
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -112,11 +113,11 @@ func TestRegenerateBinkdConfFromConfig(t *testing.T) {
 	}
 	got := readConf(t, confPath)
 	for _, want := range []string{
-		"domain fsxnet /real/root/data/ftn/out 21",
+		"domain fsxnet " + filepath.Join("/real/root", "data/ftn/out") + " 21",
 		"address 21:4/999@fsxnet",
 		"sysname \"Test Board\"",
 		"node 21:4/158@fsxnet pointhub.example.org:24556 s3cret",
-		"log /real/root/data/logs/binkd.log",
+		"log " + filepath.Join("/real/root", "data/logs/binkd.log"),
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("regenerated conf missing %q:\n%s", want, got)

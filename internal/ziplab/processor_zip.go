@@ -3,6 +3,7 @@ package ziplab
 import (
 	"archive/zip"
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"io"
 	"os"
 	"path/filepath"
@@ -144,7 +145,7 @@ func (p *Processor) setZipComment(zipPath, comment string) (retErr error) {
 	if err := outFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp zip: %w", err)
 	}
-	return os.Rename(tmpPath, zipPath)
+	return atomicfile.Replace(tmpPath, zipPath)
 }
 
 // addFileToZip rewrites a ZIP adding a new file entry.
@@ -207,5 +208,5 @@ func (p *Processor) addFileToZip(zipPath, name string, data []byte) (retErr erro
 	if err := outFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp zip: %w", err)
 	}
-	return os.Rename(tmpPath, zipPath)
+	return atomicfile.Replace(tmpPath, zipPath)
 }

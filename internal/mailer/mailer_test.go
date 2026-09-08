@@ -13,6 +13,19 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
+// binkdName is what the fake binkd is called. Windows decides executability by
+// extension rather than by a mode bit, so the fixture has to carry one there or
+// the preflight check rightly rejects it.
+var binkdName = func() string {
+	if runtime.GOOS == "windows" {
+		return "binkd.exe"
+	}
+	return "binkd"
+}()
+
+// binkdRelPath is the same name as the configured relative BinaryPath.
+var binkdRelPath = filepath.ToSlash(filepath.Join("bin", binkdName))
+
 // newTestRoot builds a BBS root with a fake binkd binary and a binkd.conf.
 func newTestRoot(t *testing.T) string {
 	t.Helper()
@@ -24,9 +37,11 @@ func newTestRoot(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	// Fake binkd: a shell script that sleeps.
+	// Fake binkd: a shell script that sleeps. Only the unix tests actually run
+	// it; the Windows ones exercise the preflight checks, which care about the
+	// name rather than the contents.
 	script := "#!/bin/sh\nsleep 60\n"
-	if err := os.WriteFile(filepath.Join(binDir, "binkd"), []byte(script), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(binDir, binkdName), []byte(script), 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(ftnDir, "binkd.conf"), []byte("iport 24554\nloglevel 4\n"), 0600); err != nil {
@@ -41,7 +56,7 @@ func testFTNConfig() config.FTNConfig {
 			"fsxnet": {OwnAddress: "21:4/158", InternalTosserEnabled: true},
 		},
 		Binkd: config.BinkdServerConfig{
-			Enabled: true, Port: 24554, BinaryPath: "bin/binkd", LogLevel: 4, ExportSecs: 300,
+			Enabled: true, Port: 24554, BinaryPath: binkdRelPath, LogLevel: 4, ExportSecs: 300,
 		},
 	}
 }
@@ -59,7 +74,7 @@ func TestNewPreflightOK(t *testing.T) {
 
 func TestNewPreflightMissingBinary(t *testing.T) {
 	root := newTestRoot(t)
-	if err := os.Remove(filepath.Join(root, "bin", "binkd")); err != nil {
+	if err := os.Remove(filepath.Join(root, "bin", binkdName)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := New(Config{BBSRoot: root, FTN: testFTNConfig()}); err == nil {
@@ -237,7 +252,7 @@ func TestNewValidatesFTNPathsForExport(t *testing.T) {
 func TestNewPreflightAbsoluteBinaryPath(t *testing.T) {
 	root := newTestRoot(t)
 	cfg := testFTNConfig()
-	cfg.Binkd.BinaryPath = filepath.Join(root, "bin", "binkd") // absolute
+	cfg.Binkd.BinaryPath = filepath.Join(root, "bin", binkdName) // absolute
 	if _, err := New(Config{BBSRoot: root, FTN: cfg}); err != nil {
 		t.Fatalf("absolute binary path must work: %v", err)
 	}
