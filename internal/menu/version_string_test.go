@@ -82,8 +82,9 @@ func TestMalformedTemplatesNeverRenderSprintfNoise(t *testing.T) {
 }
 
 // The renderer has to see past %%, which is a literal percent and not a verb,
-// and has to tell %s from any other verb: "100% Go" carries one verb by a naive
-// count, but it is %<space>G and filling it mangles the banner.
+// and has to tell a verb that takes a string from one that does not: "100% Go"
+// carries one verb by a naive count, but it is %<space>G, wants a number, and
+// filling it mangles the banner.
 func TestOnlyASingleStringVerbIsFilled(t *testing.T) {
 	cases := []struct {
 		template string
@@ -93,6 +94,14 @@ func TestOnlyASingleStringVerbIsFilled(t *testing.T) {
 		{"100%% pure %s", true},
 		{"%%%s", true},
 		{"|15Escaped 100%% and one %s|07", true},
+		// Padded and general forms are filled too. The original check looked
+		// only at the byte after %, so it printed a sysop's padded banner
+		// literally; the editor calls padding cosmetic, so the runtime must
+		// agree with it rather than refuse the same edit.
+		{"|15ViSiON/3 - %-20s|07", true},
+		{"|15ViSiON/3 - %20s|07", true},
+		{"|15ViSiON/3 - %v|07", true},
+		{"|15ViSiON/3 - %q|07", true},
 		{"", false},
 		{"no verbs", false},
 		{"100%% pure", false},
@@ -102,6 +111,10 @@ func TestOnlyASingleStringVerbIsFilled(t *testing.T) {
 		// The case that caught a bug here: the verb is %<space>G, not %s.
 		{"100% Go", false},
 		{"|15Trailing percent %|07", false},
+		// One argument, but not one a version string can satisfy.
+		{"|15ViSiON/3 - %d|07", false},
+		{"|15ViSiON/3 - %f|07", false},
+		{"|15ViSiON/3 - %t|07", false},
 	}
 	for _, c := range cases {
 		got := renderVersionString(c.template)

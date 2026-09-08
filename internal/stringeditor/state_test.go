@@ -88,14 +88,27 @@ func TestReservedFilter(t *testing.T) {
 		t.Fatalf("filter removed nothing: %d listed of %d catalog", hidden, len(m.catalog))
 	}
 
-	// Numbering follows the catalog, not the filtered position.
-	for i, e := range m.entries {
-		if e.Number == i+1 && i > 5 {
-			continue // early entries legitimately line up
-		}
-	}
+	// Numbering follows the catalog, not the filtered position. The first
+	// reserved entry is at catalog index 22, so entries before it line up
+	// either way and only the ones after it prove anything.
 	if m.entries[0].Number != 1 {
 		t.Errorf("first entry Number = %d, want 1", m.entries[0].Number)
+	}
+	gaps := 0
+	for i, e := range m.entries {
+		if e.Number != i+1 {
+			gaps++
+		}
+		if isReservedKey(e.Key) {
+			t.Fatalf("reserved entry %q survived the filter", e.Key)
+		}
+	}
+	if gaps == 0 {
+		t.Error("every listed entry's Number equals its listed position, so the " +
+			"numbers are positional and would shift when reserved entries are hidden")
+	}
+	if want := len(m.catalog) - hidden; gaps != len(m.entries)-catalogIndexOfFirstReserved(t, m) {
+		t.Logf("%d entries carry a shifted number (%d reserved hidden)", gaps, want)
 	}
 
 	// Ctrl-R reveals them, and the cursor stays on the same string.
@@ -120,6 +133,19 @@ func TestReservedFilter(t *testing.T) {
 	if m.showReserved || len(m.entries) != hidden {
 		t.Errorf("toggle back listed %d entries, want %d", len(m.entries), hidden)
 	}
+}
+
+// catalogIndexOfFirstReserved returns the catalog position of the first
+// reserved entry, which is where listed numbering starts to diverge.
+func catalogIndexOfFirstReserved(t *testing.T, m Model) int {
+	t.Helper()
+	for i, e := range m.catalog {
+		if isReservedKey(e.Key) {
+			return i
+		}
+	}
+	t.Fatal("the catalog has no reserved entries, so the filter proves nothing")
+	return 0
 }
 
 // TestRestoreDefaultUsesRuntimeFallback checks F4 works for a string the

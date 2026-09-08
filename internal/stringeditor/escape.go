@@ -91,7 +91,18 @@ func UnescapeFromEdit(s string) (string, error) {
 			if !ok {
 				return "", fmt.Errorf(`invalid escape: \x%c%c is not two hex digits`, runes[i+1], runes[i+2])
 			}
-			b.WriteByte(byte(hi<<4 | lo))
+			v := byte(hi<<4 | lo)
+			// \x is for control characters only. A byte of 0x80 or above is
+			// not valid UTF-8 on its own, and strings.json is UTF-8: writing
+			// one would come back as U+FFFD on the next load, silently
+			// corrupting the value this codec exists to preserve. Printable
+			// characters are typed literally, so nothing legitimate is lost by
+			// refusing them here.
+			if v >= 0x20 && v != 0x7f {
+				return "", fmt.Errorf(`invalid escape: \x%02X is not a control character; `+
+					`type printable characters directly and non-ASCII text as itself`, v)
+			}
+			b.WriteByte(v)
 			i += 2
 		default:
 			return "", fmt.Errorf(`unknown escape: \%c (use \\ for a literal backslash)`, runes[i])

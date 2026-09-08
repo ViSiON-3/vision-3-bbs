@@ -18,10 +18,18 @@ import (
 // into strings.json instead is how it came to advertise v0.1.0 (Pre-Alpha) from
 // a 0.8.2 build, since nothing updates a config file on upgrade.
 //
-// A template carrying anything other than exactly one verb is printed as-is
-// rather than fed to Sprintf. Sprintf with the wrong arity does not fail, it
-// renders %!s(MISSING) or (EXTRA ...) into the middle of the sysop's banner,
-// which is worse than leaving their text alone and saying why in the log.
+// A template is filled only when it consumes exactly one argument and that
+// argument accepts a string, which covers %s and its padded forms (%-20s), %q,
+// and %v. Anything else -- no verb, several verbs, a verb wanting a number --
+// is printed as-is. Sprintf with the wrong arity does not fail, it renders
+// %!s(MISSING) or (EXTRA ...) into the middle of the sysop's banner, which is
+// worse than leaving their text alone and saying why in the log.
+//
+// Accepting the padded forms is a deliberate widening from the original
+// character-by-character check, which looked only at the byte after % and so
+// printed a sysop's "%-20s" banner literally. The string editor treats padding
+// as cosmetic and raises no warning when a sysop adds it, so the runtime has to
+// fill it or the two would disagree about the same edit.
 func renderVersionString(template string) string {
 	spec, err := formatspec.Parse(template)
 	switch {
@@ -34,7 +42,7 @@ func renderVersionString(template string) string {
 		slog.Warn("execVersionString has no %s, so the version cannot be shown; add one where the version should appear",
 			"template", template, "version", version.Display())
 	default:
-		slog.Warn("execVersionString must contain exactly one %s and nothing else; printing it unchanged to avoid a malformed banner",
+		slog.Warn("execVersionString must consume exactly one string argument; printing it unchanged to avoid a malformed banner",
 			"signature", spec.String(), "template", template)
 	}
 	return template
