@@ -11,6 +11,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
+)
+
+// Retry budget for a rename blocked by another handle. Only the Windows
+// implementation waits, but the values live here so the shared test can state
+// how long it has to hold a file for the retry to be under test at all.
+//
+// A reader holds a file only for as long as it takes to read it, so the block
+// is brief. Half a second is far longer than any read of a config or user file,
+// and still short enough that a genuine permission problem surfaces promptly
+// rather than hanging a save.
+const (
+	replaceAttempts = 20
+	replacePause    = 25 * time.Millisecond
 )
 
 // Replace moves src onto dst, replacing dst if it exists.

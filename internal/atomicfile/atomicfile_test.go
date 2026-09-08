@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestWriteFileReplacesContents covers the ordinary case.
@@ -154,9 +155,16 @@ func TestReplaceOverExistingFile(t *testing.T) {
 	}
 }
 
-// TestReplaceWhileDestinationIsOpen is the Windows case stated directly. On
-// unix an open handle never blocks a rename, so this passes trivially there;
-// on Windows it fails without the retry.
+// TestReplaceWhileDestinationIsOpen is the Windows case stated directly: a
+// rename over a file someone else holds open is refused there, and Replace has
+// to wait them out.
+//
+// The hold has to outlast at least one retry interval, or the test passes
+// whether or not Replace retries at all -- releasing the handle immediately
+// lets even a single attempt succeed. Holding for several intervals means a
+// non-retrying Replace fails here on Windows.
+//
+// On unix an open handle never blocks a rename, so this passes trivially.
 func TestReplaceWhileDestinationIsOpen(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
@@ -168,21 +176,38 @@ func TestReplaceWhileDestinationIsOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Hold the destination open, then let go while Replace is retrying.
 	f, err := os.Open(dst)
 	if err != nil {
 		t.Fatal(err)
 	}
-	done := make(chan error, 1)
-	go func() { done <- Replace(src, dst) }()
 
-	// Close after long enough that Windows has refused at least once.
-	closed := make(chan struct{})
-	go func() { _ = f.Close(); close(closed) }()
-	<-closed
+	// Hold it well past a single retry interval, but comfortably inside the
+	// total budget so Replace still has attempts left when it is released.
+	hold := 4 * replacePause
+	released := make(chan struct{})
+	go func() {
+		time.Sleep(hold)
+		_ = f.Close()
+		close(released)
+	}()
 
-	if err := <-done; err != nil {
-		t.Errorf("Replace failed with the destination briefly open (GOOS=%s): %v",
+	start := time.Now()
+	err = Replace(src, dst)
+	<-released
+
+	if err != nil {
+		t.Fatalf("Replace failed while the destination was briefly open (GOOS=%s): %v",
 			runtime.GOOS, err)
+	}
+	if got, err := os.ReadFile(dst); err != nil || string(got) != "new" {
+		t.Errorf("dst = %q (err %v), want %q", got, err, "new")
+	}
+	// On Windows the call cannot have succeeded before the handle went away,
+	// which is the retry doing its job. Elsewhere it should not have waited.
+	waited := time.Since(start)
+	if runtime.GOOS == "windows" && waited < hold {
+		t.Errorf("Replace returned after %v, before the handle was released at %v; "+
+			"it cannot have been blocked, so this test is not exercising the retry",
+			waited, hold)
 	}
 }

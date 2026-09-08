@@ -11,15 +11,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Retry budget for a blocked rename. A reader holds the file only for as long
-// as it takes to read it, so the block is brief; half a second is far longer
-// than any read of a config or user file and still short enough that a genuine
-// permission problem surfaces promptly rather than hanging a save.
-const (
-	replaceAttempts = 20
-	replacePause    = 25 * time.Millisecond
-)
-
 // replace renames src onto dst, retrying while another handle blocks it.
 //
 // Windows refuses to replace a file that anyone else has open unless every

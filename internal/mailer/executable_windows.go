@@ -17,43 +17,43 @@ import (
 // Windows installation and took FTN mail down with it.
 //
 // What decides executability on Windows is the extension, so check that
-// instead. PATHEXT is the authority and is honoured here rather than a fixed
-// list, since a site can extend it.
+// instead, along with the file being an ordinary file: a directory, device or
+// named pipe cannot be run whatever it is called.
 func checkExecutable(path string, info os.FileInfo) error {
-	if info.IsDir() {
-		return fmt.Errorf("binkd binary %s is a directory", path)
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("binkd binary %s is not a regular file", path)
 	}
+	exts := executableExts()
 	ext := strings.ToLower(filepath.Ext(path))
-	if ext == "" {
-		return fmt.Errorf("binkd binary %s has no executable extension; "+
-			"Windows needs one of %s", path, strings.Join(executableExts(), " "))
-	}
-	for _, allowed := range executableExts() {
+	for _, allowed := range exts {
 		if ext == allowed {
 			return nil
 		}
 	}
 	return fmt.Errorf("binkd binary %s does not have an executable extension; "+
-		"Windows needs one of %s", path, strings.Join(executableExts(), " "))
+		"Windows needs one of %s", path, strings.Join(exts, " "))
 }
 
+// defaultExecutableExts is what Windows treats as runnable when PATHEXT says
+// nothing.
+var defaultExecutableExts = []string{".com", ".exe", ".bat", ".cmd"}
+
 // executableExts returns the extensions Windows treats as runnable, from
-// PATHEXT where it is set and a conventional list otherwise. Everything is
-// lower-cased so comparisons are case-insensitive, as the filesystem is.
+// PATHEXT where it is set. Everything is lower-cased so comparisons are
+// case-insensitive, as the filesystem is.
 func executableExts() []string {
 	raw := os.Getenv("PATHEXT")
 	if raw == "" {
-		return []string{".com", ".exe", ".bat", ".cmd"}
+		return defaultExecutableExts
 	}
 	var exts []string
 	for _, e := range strings.Split(raw, ";") {
-		e = strings.ToLower(strings.TrimSpace(e))
-		if e != "" {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
 			exts = append(exts, e)
 		}
 	}
 	if len(exts) == 0 {
-		return []string{".com", ".exe", ".bat", ".cmd"}
+		return defaultExecutableExts
 	}
 	return exts
 }
