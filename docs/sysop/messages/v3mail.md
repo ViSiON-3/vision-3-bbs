@@ -107,8 +107,12 @@ Per-network fields (`networks.<key>`):
 | --------------------------- | --------------------------------------------------------------- |
 | `own_address`               | This node's FTN address (zone:net/node.point)                   |
 | `internal_tosser_enabled`   | Set `true` to enable `v3mail` for this network                  |
-| `poll_interval_seconds`     | Auto-poll interval; `0` = manual only                           |
 | `origin`                    | Origin line text (empty = board name)                           |
+
+Hub polling is scheduled through **Events**, using the per-network
+`echomail_poll_<network>` event created by the FTN wizard. See
+[FTN mail polling](../advanced/event-scheduler.md#ftn-mail-polling-binkd).
+The obsolete `poll_interval_seconds` field is ignored when loading older configs.
 
 Per-link fields (`networks.<key>.links[]`):
 

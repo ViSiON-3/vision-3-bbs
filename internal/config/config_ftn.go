@@ -73,7 +73,6 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 type FTNNetworkConfig struct {
 	InternalTosserEnabled bool            `json:"internal_tosser_enabled"` // Enable internal tosser
 	OwnAddress            string          `json:"own_address"`             // e.g., "21:4/158.1"
-	PollSeconds           int             `json:"poll_interval_seconds"`   // 0 = manual only (v3mail toss/scan)
 	Origin                string          `json:"origin,omitempty"`        // Origin line text for echomail (empty = board name)
 	Links                 []FTNLinkConfig `json:"links"`
 }
