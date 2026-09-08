@@ -13,9 +13,7 @@ const (
 	minWidth  = 80
 	minHeight = 25
 
-	listVisible    = 15 // rows visible in the menu/command list
-	menuEditFields = 7  // number of editable menu fields
-	cmdEditFields  = 6  // number of editable command fields
+	listVisible = 15 // rows visible in the menu/command list
 )
 
 // editorMode represents the current interaction state.
@@ -80,6 +78,11 @@ type Model struct {
 	height int
 	mode   editorMode
 
+	// Backdrop art painted behind every screen. backdropArt holds the raw
+	// bytes chosen at startup, reused when the backdrop is rebuilt on resize.
+	backdrop    *backdrop
+	backdropArt []byte
+
 	message string // flash message (cleared on next key)
 }
 
@@ -95,6 +98,11 @@ func New(menuBase string) (Model, error) {
 	ti.CharLimit = 80
 	ti.Width = 40
 
+	// Choose the backdrop screen once per startup; the bytes are reused on
+	// resize so the picture behind the boxes does not change as the terminal
+	// is dragged.
+	art := pickBackdropArt()
+
 	return Model{
 		menuBase:             menuBase,
 		menus:                menus,
@@ -105,6 +113,8 @@ func New(menuBase string) (Model, error) {
 		pendingDeleteMenuIdx: -1,
 		width:                minWidth,
 		height:               minHeight,
+		backdropArt:          art,
+		backdrop:             loadBackdropFrom(art, minWidth, minHeight),
 		mode:                 modeMenuList,
 	}, nil
 }
@@ -126,6 +136,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.height < minHeight {
 			m.height = minHeight
 		}
+		m.backdrop = loadBackdropFrom(m.backdropArt, m.width, m.height)
 		return m, nil
 
 	case tea.KeyMsg:

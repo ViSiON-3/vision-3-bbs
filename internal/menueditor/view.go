@@ -19,11 +19,6 @@ func (m Model) View() string {
 	}
 }
 
-// bgLine returns a full-width background fill line.
-func (m Model) bgLine() string {
-	return bgFillStyle.Render(strings.Repeat("░", m.width))
-}
-
 // padToCol truncates or pads a line to reach a specific visible column.
 func padToCol(line string, col int) string {
 	vis := uitext.ApproximateVisibleLen(line)

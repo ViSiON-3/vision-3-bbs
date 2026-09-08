@@ -2,6 +2,8 @@ package menueditor
 
 import (
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
 // overlayConfirmDialog renders a Y/N confirm dialog centered over the background.
@@ -64,12 +66,13 @@ func (m Model) overlayConfirmDialog(background, title, question string) string {
 
 	dialogLines := []string{border, titleLine, emptyLine, questionLine, emptyLine, buttonLine, borderBot}
 
-	tailW := max(0, m.width-startCol-dialogW)
-	tail := bgFillStyle.Render(strings.Repeat("░", tailW))
+	// Keep the screen behind the dialog on both sides. Rebuilding the right
+	// side as flat fill would erase the backdrop art from those rows.
+	endCol := startCol + dialogW
 	for i, dl := range dialogLines {
 		row := startRow + i
 		if row >= 0 && row < len(lines) {
-			lines[row] = padToCol(lines[row], startCol) + dl + tail
+			lines[row] = padToCol(lines[row], startCol) + dl + skipToCol(lines[row], endCol)
 		}
 	}
 
@@ -115,10 +118,15 @@ func (m Model) overlayInputDialog(background, title, prompt, inputView string) s
 		inputDialogTextStyle.Render(promptContent+strings.Repeat(" ", max(0, innerW-len(promptContent)))) +
 		side
 
+	// Bound the widget's output and pad from what it actually occupies. Using
+	// m.textInput.Width assumed the view was exactly that wide; it renders a
+	// cursor cell after the text, so a filled field pushed this row one column
+	// past the dialog border.
+	fittedInput, inputW := tuiart.FitInput(inputView, innerW-2)
 	inputLine := side +
 		inputDialogTextStyle.Render("  ") +
-		inputView +
-		inputDialogTextStyle.Render(strings.Repeat(" ", max(0, dialogW-4-m.textInput.Width))) +
+		fittedInput +
+		inputDialogTextStyle.Render(strings.Repeat(" ", max(0, innerW-2-inputW))) +
 		side
 
 	hintLine := side +
@@ -127,12 +135,13 @@ func (m Model) overlayInputDialog(background, title, prompt, inputView string) s
 
 	dialogLines := []string{border, titleLine, emptyLine, promptLine, inputLine, hintLine, borderBot}
 
-	tailW := max(0, m.width-startCol-dialogW)
-	tail := bgFillStyle.Render(strings.Repeat("░", tailW))
+	// Keep the screen behind the dialog on both sides. Rebuilding the right
+	// side as flat fill would erase the backdrop art from those rows.
+	endCol := startCol + dialogW
 	for i, dl := range dialogLines {
 		row := startRow + i
 		if row >= 0 && row < len(lines) {
-			lines[row] = padToCol(lines[row], startCol) + dl + tail
+			lines[row] = padToCol(lines[row], startCol) + dl + skipToCol(lines[row], endCol)
 		}
 	}
 

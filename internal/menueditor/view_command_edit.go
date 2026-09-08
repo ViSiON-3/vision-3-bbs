@@ -3,6 +3,8 @@ package menueditor
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
 // viewCommandEditScreen renders the per-command field editor.
@@ -24,67 +26,43 @@ func (m Model) viewCommandEditScreen() string {
 	}
 
 	cmd := m.cmds[m.cmdEditIdx]
-	var b strings.Builder
+
+	// Fixed rows: title(1) + box(border, box title, empty, fields, info, empty,
+	// border = len(fields)+6) + help(1). Derived from the live field count for
+	// the same reason as the menu edit screen.
+	boxRows := len(m.cmdFields) + 6
+	topPad, bottomPad := tuiart.Split(m.height, boxRows+2)
+
+	sc := tuiart.NewScreen(m.width, m.backdrop)
 
 	// === Row 1: Title bar ===
-	title := centerText("-- ViSiON/3 Menu Editor v1.0 --", m.width)
-	b.WriteString(titleBarStyle.Render(title))
-	b.WriteByte('\n')
-
-	bg := m.bgLine()
+	sc.Line(titleBarStyle.Render(centerText("-- ViSiON/3 Menu Editor v1.0 --", m.width)))
+	sc.BgRows(topPad)
 
 	// Box dimensions: MENUEDIT.PAS GrowBox(2,9,78,16) → 74 cols wide
 	boxW := 74
 	padL := max(0, (m.width-boxW-2)/2)
 	padR := max(0, m.width-padL-boxW-2)
 
-	// Vertical centering
-	extraV := max(0, m.height-24)
-	topPad := max(4, extraV/2+4)
-	bottomPad := max(1, m.height-1-topPad-12)
-
-	for i := 0; i < topPad; i++ {
-		b.WriteString(bg)
-		b.WriteByte('\n')
+	box := func(content string) {
+		sc.Line(sc.Pad(padL, padR,
+			editBorderStyle.Render("│")+content+editBorderStyle.Render("│")))
 	}
+	emptyRow := func() { box(fieldDisplayStyle.Render(strings.Repeat(" ", boxW))) }
 
 	// === Top border ===
-	topBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(topBorder)
-	b.WriteByte('\n')
+	sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐")))
 
 	// === Title row inside box ===
 	// MENUEDIT.PAS: Color(15,12) Center_Write('Command Editing (MenuTitle)')
-	boxTitle := fmt.Sprintf("Command Editing (%s)", menuTitle)
-	titleRow := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		editTitleStyle.Render(centerText(boxTitle, boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(titleRow)
-	b.WriteByte('\n')
+	box(editTitleStyle.Render(centerText(fmt.Sprintf("Command Editing (%s)", menuTitle), boxW)))
 
 	// === Empty separator ===
-	emptyRow := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		fieldDisplayStyle.Render(strings.Repeat(" ", boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(emptyRow)
-	b.WriteByte('\n')
+	emptyRow()
 
 	// === Field rows ===
 	for i, f := range m.cmdFields {
-		row := m.renderCmdField(i, f, &cmd, boxW)
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			editBorderStyle.Render("│") +
-			row +
-			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(line)
-		b.WriteByte('\n')
+		box(m.renderCmdField(i, f, &cmd, boxW))
 	}
 
 	// === Info row: file + command number ===
@@ -92,37 +70,22 @@ func (m Model) viewCommandEditScreen() string {
 	// consolidated here to avoid per-field right-column overflow.
 	infoFile := fmt.Sprintf("  File: %s.CFG", menuName)
 	infoNum := fmt.Sprintf("Cmd: %d of %d", m.cmdEditIdx+1, len(m.cmds))
-	infoText := padRight(infoFile, 40) + infoNum
-	infoRow := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("│") +
-		editInfoLabelStyle.Render(padRight(infoText, boxW)) +
-		editBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(infoRow)
-	b.WriteByte('\n')
+	box(editInfoLabelStyle.Render(padRight(padRight(infoFile, 40)+infoNum, boxW)))
 
 	// === Empty bottom row ===
-	b.WriteString(emptyRow)
-	b.WriteByte('\n')
+	emptyRow()
 
 	// === Bottom border ===
-	botBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(botBorder)
-	b.WriteByte('\n')
+	sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘")))
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bg)
-		b.WriteByte('\n')
-	}
+	sc.BgRows(bottomPad)
 
 	// === Help bar ===
-	helpText := centerText("PgUp/PgDn Prev/Next  F2 Delete  F5 Add New  F8 Abort  ESC Save+Back", m.width)
-	b.WriteString(helpBarStyle.Render(helpText))
+	sc.Last(helpBarStyle.Render(centerText(
+		"PgUp/PgDn Prev/Next  F2 Delete  F5 Add New  F8 Abort  ESC Save+Back", m.width)))
 
 	// Overlay dialogs
-	result := b.String()
+	result := sc.String()
 	if m.mode == modeDeleteCmdConfirm {
 		desc := cmd.NodeActivity
 		if desc == "" {
@@ -165,12 +128,13 @@ func (m Model) renderCmdField(fieldIdx int, f fieldDef, d *CmdData, boxW int) st
 
 	// Actively editing this field
 	if isActive && m.mode == modeCommandEditField {
-		inputW := m.textInput.Width
-		if inputW > maxW {
-			inputW = maxW
-		}
+		// Bound the widget's own output, not just the padding around it. It
+		// appends a cursor cell after the text, so a value that fills the
+		// field renders Width+1 cells; clamping only the padding leaves the
+		// oversized view to overrun the box.
+		view, inputW := tuiart.FitInput(m.textInput.View(), boxW-lpad-labelLen)
 		fillW := max(0, boxW-lpad-labelLen-inputW)
-		return leftPadStr + fieldLabelStyle.Render(label) + m.textInput.View() +
+		return leftPadStr + fieldLabelStyle.Render(label) + view +
 			fieldDisplayStyle.Render(strings.Repeat(" ", fillW))
 	}
 

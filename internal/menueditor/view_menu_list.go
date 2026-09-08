@@ -3,114 +3,77 @@ package menueditor
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
 // viewMenuListScreen renders the main menu browser.
 // Faithfully recreates MENUEDIT.PAS Open_Screen + Select_Menu.
 func (m Model) viewMenuListScreen() string {
-	var b strings.Builder
+	// Fixed rows: title(1) + box(border, column header, empty, listVisible,
+	// border = listVisible+4) + message(1) + help(1). This screen has no
+	// section-title row, so it is one shorter than the command list.
+	topPad, bottomPad := tuiart.Split(m.height, listVisible+7)
+
+	sc := tuiart.NewScreen(m.width, m.backdrop)
 
 	// === Row 1: Title bar ===
 	// MENUEDIT.PAS: Color(8,15) Center_Write('ViSiON/2 MENU EDITOR v1.0')
-	title := centerText("-- ViSiON/3 Menu Editor v1.0 --", m.width)
-	b.WriteString(titleBarStyle.Render(title))
-	b.WriteByte('\n')
-
-	bg := m.bgLine()
-
-	// Vertical centering: 1 title + box(19) + message(1) + help(1) = 22 rows
-	extraV := max(0, m.height-22)
-	topPad := extraV / 2
-	bottomPad := extraV - topPad
-
-	for i := 0; i < topPad; i++ {
-		b.WriteString(bg)
-		b.WriteByte('\n')
-	}
+	sc.Line(titleBarStyle.Render(centerText("-- ViSiON/3 Menu Editor v1.0 --", m.width)))
+	sc.BgRows(topPad)
 
 	// Box dimensions: MENUEDIT.PAS GrowBox(15,5,65,22) → 50 cols wide
 	boxW := 50
 	padL := max(0, (m.width-boxW-2)/2)
 	padR := max(0, m.width-padL-boxW-2)
 
+	box := func(content string) {
+		sc.Line(sc.Pad(padL, padR,
+			listBorderStyle.Render("│")+content+listBorderStyle.Render("│")))
+	}
+
 	// === Top border ===
 	// MENUEDIT.PAS: Color(3,11) GrowBox → cyan bg, light cyan fg
-	topBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(topBorder)
-	b.WriteByte('\n')
+	sc.Line(sc.Pad(padL, padR, listBorderStyle.Render("┌"+strings.Repeat("─", boxW)+"┐")))
 
 	// === Column header ===
 	// MENUEDIT.PAS: Color(11,3) ' Menu Title           File Names'
 	// nameColW=14: 3+14+1=18 chars before file column, leaving 32 for filenames
-	colHeader := padRight("   Menu Title     File Names", boxW)
-	colLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("│") +
-		listColTitleStyle.Render(colHeader) +
-		listBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(colLine)
-	b.WriteByte('\n')
+	box(listColTitleStyle.Render(padRight("   Menu Title     File Names", boxW)))
 
 	// === Empty separator ===
-	emptyLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("│") +
-		listItemStyle.Render(strings.Repeat(" ", boxW)) +
-		listBorderStyle.Render("│") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(emptyLine)
-	b.WriteByte('\n')
+	box(listItemStyle.Render(strings.Repeat(" ", boxW)))
 
 	// === Menu list (listVisible rows) ===
 	total := len(m.menus)
 	for row := 0; row < listVisible; row++ {
 		idx := m.menuScroll + row
-		var rowContent string
 		if idx < 0 || idx >= total {
-			rowContent = listItemStyle.Render(strings.Repeat(" ", boxW))
-		} else {
-			rowContent = m.renderMenuRow(idx, boxW)
+			box(listItemStyle.Render(strings.Repeat(" ", boxW)))
+			continue
 		}
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			listBorderStyle.Render("│") +
-			rowContent +
-			listBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(line)
-		b.WriteByte('\n')
+		box(m.renderMenuRow(idx, boxW))
 	}
 
 	// === Bottom border ===
-	botBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		listBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(botBorder)
-	b.WriteByte('\n')
+	sc.Line(sc.Pad(padL, padR, listBorderStyle.Render("└"+strings.Repeat("─", boxW)+"┘")))
 
 	// === Message or fill ===
 	if m.message != "" {
-		msgLine := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR+1)))
-		b.WriteString(msgLine)
+		sc.Line(sc.Pad(padL, padR+1, flashMessageStyle.Render(" "+padRight(m.message, boxW))))
 	} else {
-		b.WriteString(bg)
+		sc.BgLine()
 	}
-	b.WriteByte('\n')
 
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bg)
-		b.WriteByte('\n')
-	}
+	sc.BgRows(bottomPad)
 
 	// === Help bar ===
 	// MENUEDIT.PAS: '(CR) Edits Menu  F10 Edits Menu Commands  F2 Delete  F5 Add Menu  ESC Exits'
-	helpText := centerText("(Enter) Edit Menu  F10 Commands  F2 Delete  F5 Add Menu  ESC Exit", m.width)
-	b.WriteString(helpBarStyle.Render(helpText))
+	sc.Last(helpBarStyle.Render(centerText(
+		"(Enter) Edit Menu  F10 Commands  F2 Delete  F5 Add Menu  ESC Exit", m.width)))
 
 	// Overlay dialogs
-	result := b.String()
+	result := sc.String()
 	switch m.mode {
 	case modeDeleteMenuConfirm:
 		name := ""
