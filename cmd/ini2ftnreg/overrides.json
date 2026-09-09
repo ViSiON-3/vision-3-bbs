@@ -1,0 +1,97 @@
+[
+  {
+    "zone": 1,
+    "name": "FidoNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it. Upstream points at Vertrauen, which stopped serving files anonymously and answers 401. This is a mirror still serving BACKBONE.NA.",
+    "nodelist_url": "https://nodelist.fidonet.cc/download/latest",
+    "echolist_url": "http://ambrosia60.spdns.eu/53f8ee03/drv_q/div13/backbone/BACKBONE.NA"
+  },
+  {
+    "zone": 2,
+    "name": "FidoNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it. Upstream points at Vertrauen, which stopped serving files anonymously and answers 401. This is a mirror still serving BACKBONE.NA.",
+    "nodelist_url": "https://nodelist.fidonet.cc/download/latest",
+    "echolist_url": "http://ambrosia60.spdns.eu/53f8ee03/drv_q/div13/backbone/BACKBONE.NA"
+  },
+  {
+    "zone": 3,
+    "name": "FidoNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it. Upstream points at Vertrauen, which stopped serving files anonymously and answers 401. This is a mirror still serving BACKBONE.NA.",
+    "nodelist_url": "https://nodelist.fidonet.cc/download/latest",
+    "echolist_url": "http://ambrosia60.spdns.eu/53f8ee03/drv_q/div13/backbone/BACKBONE.NA"
+  },
+  {
+    "zone": 4,
+    "name": "FidoNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it. Upstream points at Vertrauen, which stopped serving files anonymously and answers 401. This is a mirror still serving BACKBONE.NA.",
+    "nodelist_url": "https://nodelist.fidonet.cc/download/latest",
+    "echolist_url": "http://ambrosia60.spdns.eu/53f8ee03/drv_q/div13/backbone/BACKBONE.NA"
+  },
+  {
+    "zone": 11,
+    "name": "WWIVnet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "https://raw.githubusercontent.com/wwivbbs/wwivnet/master/wwivnet/wwivftn.286"
+  },
+  {
+    "zone": 21,
+    "name": "fsxNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "https://fsxnet.nz/fsxnet.zip"
+  },
+  {
+    "zone": 39,
+    "name": "AmigaNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "https://amiganet.fidoweb.net/amylist.zip"
+  },
+  {
+    "zone": 40,
+    "name": "CyberNet",
+    "reason": "Upstream appends an @domain the address parser does not accept.",
+    "hub_address": "40:1/1"
+  },
+  {
+    "zone": 42,
+    "name": "SFNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "http://wiki.capitolcityonline.net/sfnet.zip"
+  },
+  {
+    "zone": 44,
+    "name": "DoRENET",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "https://www.dreamlandbbs.org/wp-content/uploads/2020/04/dorenet.zip"
+  },
+  {
+    "zone": 432,
+    "name": "VKRadio",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "https://vkradio.com/vkradio.zip"
+  },
+  {
+    "zone": 618,
+    "name": "Micronet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "https://minftn.net/MININFO.ZIP"
+  },
+  {
+    "zone": 911,
+    "name": "Zer0net",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "https://jackphla.sh/files/zeronet/ZER0NET.ZIP"
+  },
+  {
+    "zone": 954,
+    "name": "HobbyNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it.",
+    "nodelist_url": "https://hobbynet.hobbyline.com/docs/HobbyNet.zip"
+  },
+  {
+    "zone": 1337,
+    "name": "tqwNet",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it. Upstream's value is unusable; corrected here. Upstream records the echolist as the bare filename \"tqwnet.na\", which cannot be fetched, so the wizard reports the area list as unavailable (ViSiON-3/vision-3-bbs#275). tqwNet does publish it, in the infopack repo. Note that repo also carries tqw_file.na, the *file* echo list; this is the echomail list.",
+    "nodelist_url": "https://www.erb.pw/tqwinfo.zip",
+    "echolist_url": "https://raw.githubusercontent.com/christiansacks/tqwnet_infopack/master/tqwnet.na"
+  }
+]

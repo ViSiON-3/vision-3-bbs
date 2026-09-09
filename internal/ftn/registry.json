@@ -305,7 +305,7 @@
     "coordinator_email": "ml@erb.pw",
     "hub_address": "1337:3/100",
     "hub_hostname": "hub.ca.erb.pw",
-    "echolist_url": "tqwnet.na",
+    "echolist_url": "https://raw.githubusercontent.com/christiansacks/tqwnet_infopack/master/tqwnet.na",
     "nodelist_url": "https://www.erb.pw/tqwinfo.zip",
     "areatag_prefix": "TQW_"
   },
