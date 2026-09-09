@@ -155,22 +155,13 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	// 4. Prompt for Anonymous (if user level >= AnonymousLevel)
 	isAnonymous := false
-	allowAnon := currentUser.AccessLevel >= e.ServerCfg.AnonymousLevel
-	if allowAnon {
-		areaAllowsAnon := true
-		if area.AllowAnon != nil {
-			areaAllowsAnon = *area.AllowAnon
+	var confAllowAnon *bool
+	if e.ConferenceMgr != nil && area.ConferenceID != 0 {
+		if conf, ok := e.ConferenceMgr.GetByID(area.ConferenceID); ok {
+			confAllowAnon = conf.AllowAnon
 		}
-		confAllowsAnon := true
-		if e.ConferenceMgr != nil && area.ConferenceID != 0 {
-			if conf, ok := e.ConferenceMgr.GetByID(area.ConferenceID); ok {
-				if conf.AllowAnon != nil {
-					confAllowsAnon = *conf.AllowAnon
-				}
-			}
-		}
-		allowAnon = areaAllowsAnon && confAllowsAnon
 	}
+	allowAnon := anonymousPostingAllowed(currentUser.AccessLevel, e.ServerCfg.AnonymousLevel, area.AllowAnon, confAllowAnon)
 	if allowAnon {
 		anonPrompt := e.LoadedStrings.MsgAnonStr
 		if anonPrompt == "" {
@@ -278,4 +269,24 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	time.Sleep(1 * time.Second)
 
 	return nil, "", nil
+}
+
+// anonymousPostingAllowed reports whether the anonymous-post prompt should be
+// offered. The user must meet the anonymous access level; the area must opt in
+// (an unset AllowAnon means no — anonymous is off unless an area enables it);
+// and the conference must not forbid it (an unset conference AllowAnon means
+// yes, so a conference only restricts when explicitly set to no).
+func anonymousPostingAllowed(userLevel, anonLevel int, area, conf *bool) bool {
+	if userLevel < anonLevel {
+		return false
+	}
+	areaAllows := false
+	if area != nil {
+		areaAllows = *area
+	}
+	confAllows := true
+	if conf != nil {
+		confAllows = *conf
+	}
+	return areaAllows && confAllows
 }
