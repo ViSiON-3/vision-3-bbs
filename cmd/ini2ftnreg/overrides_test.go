@@ -18,7 +18,7 @@ func TestOverridesApplyToParsedNetworks(t *testing.T) {
 	overridesJSON = []byte(`[{"zone":1337,"echolist_url":"https://example.org/real.na"}]`)
 	t.Cleanup(resetOverrides)
 
-	applied, err := applyOverrides(networks)
+	networks, applied, err := applyOverrides(networks)
 	if err != nil {
 		t.Fatalf("applyOverrides: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestOverrideForMissingZoneIsAnError(t *testing.T) {
 	overridesJSON = []byte(`[{"zone":9999,"echolist_url":"https://example.org/x.na"}]`)
 	t.Cleanup(resetOverrides)
 
-	if _, err := applyOverrides([]Network{{Zone: 21}}); err == nil {
+	if _, _, err := applyOverrides([]Network{{Zone: 21}}); err == nil {
 		t.Fatal("an override matching no network should be an error, not a silent no-op")
 	}
 }
@@ -76,6 +76,17 @@ func TestEveryOverrideMatchesAShippedNetwork(t *testing.T) {
 	}
 
 	for _, o := range overrides {
+		if o.Remove {
+			// A removed network is intentionally absent from the shipped
+			// registry, so the presence check does not apply.
+			if _, present := zones[o.Zone]; present {
+				t.Errorf("zone %d (%s) is marked remove but is still in registry.json", o.Zone, o.Name)
+			}
+			if o.Reason == "" {
+				t.Errorf("remove override for zone %d (%s) has no reason recorded", o.Zone, o.Name)
+			}
+			continue
+		}
 		n, ok := zones[o.Zone]
 		if !ok {
 			t.Errorf("override for zone %d matches no network in registry.json", o.Zone)
@@ -107,5 +118,27 @@ func TestEveryOverrideMatchesAShippedNetwork(t *testing.T) {
 					o.Zone, n.Name, f.name, f.shipped, f.override)
 			}
 		}
+	}
+}
+
+// TestOverrideRemovesNetwork covers dropping a defunct network: the entry is
+// filtered out of the returned list, and other networks are untouched.
+func TestOverrideRemovesNetwork(t *testing.T) {
+	networks := []Network{
+		{Zone: 77, Name: "SciNet"},
+		{Zone: 21, Name: "fsxNet"},
+	}
+	overridesJSON = []byte(`[{"zone":77,"name":"SciNet","remove":true}]`)
+	t.Cleanup(resetOverrides)
+
+	kept, applied, err := applyOverrides(networks)
+	if err != nil {
+		t.Fatalf("applyOverrides: %v", err)
+	}
+	if len(kept) != 1 || kept[0].Zone != 21 {
+		t.Errorf("removed network still present: %+v", kept)
+	}
+	if len(applied) != 1 {
+		t.Errorf("removal should be logged, got %v", applied)
 	}
 }

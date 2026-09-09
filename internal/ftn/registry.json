@@ -169,21 +169,6 @@
     "areatag_prefix": "CNT_"
   },
   {
-    "zone": 77,
-    "name": "SciNet",
-    "description": "Active network for the BBS scene",
-    "info_url": "https://scinet-ftn.org/",
-    "pack_url": "https://scinet-ftn.org/sciinfo.zip",
-    "coordinator": "Frank Linhares",
-    "coordinator_email": "scinet@diskshop.ca",
-    "coordinator_ftn": "1:229/101",
-    "hub_address": "77:1/100",
-    "hub_hostname": "bbs.diskshop.ca",
-    "dns_suffix": "scinet-ftn.org",
-    "echolist_url": "https://scinet-ftn.org/scinet.na",
-    "areatitle_prefix": "SciNet:"
-  },
-  {
     "zone": 256,
     "name": "DevNet",
     "description": "developer oriented network",

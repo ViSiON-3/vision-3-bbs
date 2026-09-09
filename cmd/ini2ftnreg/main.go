@@ -67,7 +67,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Warning: no networks found in %s\n", *inPath)
 	}
 
-	applied, err := applyOverrides(networks)
+	networks, applied, err := applyOverrides(networks)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error applying overrides: %v\n", err)
 		os.Exit(1)
