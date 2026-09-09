@@ -192,7 +192,7 @@ Networks did not control hub polling and has been removed; legacy
 > the same JAM message bases; leaving both enabled risks two processes
 > concurrently exporting the same bases (double-export). Scheduler events
 > remain useful for forced polls (`binkd -p`) of specific hubs. See
-> [ftn-echomail.md](../messages/ftn-echomail.md#enabling-the-integrated-mailer-recommended).
+> [ftn-echomail.md](messages/ftn-echomail.md#enabling-the-integrated-mailer-recommended).
 
 **Simple poll all nodes every 30 minutes:**
 

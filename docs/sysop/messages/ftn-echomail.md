@@ -632,7 +632,7 @@ Hub polling is controlled by the per-network `echomail_poll_<network>` event
 under **Events**. The wizard creates it with a 15-minute cron schedule; edit
 that schedule to change when the hub is contacted, or disable the event to
 stop scheduled hub polls. See
-[FTN mail polling](../advanced/event-scheduler.md#ftn-mail-polling-binkd).
+[FTN mail polling](advanced/event-scheduler.md#ftn-mail-polling-binkd).
 
 The former **Poll Seconds** setting (`poll_interval_seconds`) was unused by the
 BBS and has been removed. Older `ftn.json` files still load; that field is ignored

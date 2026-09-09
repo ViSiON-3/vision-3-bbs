@@ -1,6 +1,6 @@
 # Technical Reference
 
-This document covers implementation patterns and subsystem details beyond what's in [Architecture](architecture.md).
+This document covers implementation patterns and subsystem details beyond what's in [Architecture](reference/architecture.md).
 
 ## File Area System
 

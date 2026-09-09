@@ -10,7 +10,7 @@ not affect your existing FTN configuration.
 > may change without notice. Use it only if you are testing or contributing
 > to V3Net development. Do not rely on it for a live BBS.
 
-> **Security note:** All messages and NALs are signed with Ed25519 keys, preventing impersonation and forgery. However, traffic between leaf nodes and the hub is **unencrypted on the wire** (plain HTTP) — signatures guarantee authenticity, not confidentiality. Messages are also stored unencrypted on disk at both leaf and hub nodes. FelonyNet is a public network — treat everything you post as public and permanent. See [Security Considerations](configuration.md#security-considerations) for full details.
+> **Security note:** All messages and NALs are signed with Ed25519 keys, preventing impersonation and forgery. However, traffic between leaf nodes and the hub is **unencrypted on the wire** (plain HTTP) — signatures guarantee authenticity, not confidentiality. Messages are also stored unencrypted on disk at both leaf and hub nodes. FelonyNet is a public network — treat everything you post as public and permanent. See [Security Considerations](v3net/configuration.md#security-considerations) for full details.
 
 ## What You Get
 
@@ -161,7 +161,7 @@ S - Show  |  E - Export  |  R - Recover  |  Q - Return
 Press **E** to export the seed phrase to a file. Move that file off-server
 immediately — password manager, encrypted USB, or printed copy in a safe.
 
-See [V3Net Key Recovery](recovery.md) for full details.
+See [V3Net Key Recovery](v3net/recovery.md) for full details.
 
 ---
 
@@ -211,13 +211,13 @@ you must re-subscribe to all hubs.
 ## Hosting Your Own Network
 
 To run your own V3Net hub (not FelonyNet), see the
-[V3Net Configuration](configuration.md#hosting-a-hub) guide.
+[V3Net Configuration](v3net/configuration.md#hosting-a-hub) guide.
 
 ---
 
 ## Related Documentation
 
-- [V3Net Configuration](configuration.md) — all V3Net config screens in the TUI
-- [Network Area List (NAL)](nal.md) — area subscriptions, access modes, proposals
-- [V3Net Key Recovery](recovery.md) — backing up and restoring your node identity
-- [Manual Configuration Reference](manual-config.md) — direct JSON editing
+- [V3Net Configuration](v3net/configuration.md) — all V3Net config screens in the TUI
+- [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, proposals
+- [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
+- [Manual Configuration Reference](v3net/manual-config.md) — direct JSON editing

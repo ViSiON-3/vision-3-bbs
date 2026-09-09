@@ -9,7 +9,7 @@ Configure server access and inter-BBS message networking.
 
 ## Message Networking
 
-- **[V3Net Networking](../v3net/message-areas.md)** — native inter-BBS message exchange over HTTPS using REST+SSE with Ed25519 authentication
-- **[V3Net Configuration](../v3net/configuration.md)** — field-by-field reference for `v3net.json`
-- **[Joining FelonyNet](../v3net/felonynet.md)** — step-by-step guide to joining the FelonyNet network
+- **[V3Net Networking](v3net/message-areas.md)** — native inter-BBS message exchange over HTTPS using REST+SSE with Ed25519 authentication
+- **[V3Net Configuration](v3net/configuration.md)** — field-by-field reference for `v3net.json`
+- **[Joining FelonyNet](v3net/felonynet.md)** — step-by-step guide to joining the FelonyNet network
 - **[FTN Echomail](messages/ftn-echomail.md)** — traditional FidoNet echomail via binkd and the built-in tosser

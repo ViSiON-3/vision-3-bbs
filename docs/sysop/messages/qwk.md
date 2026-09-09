@@ -182,7 +182,7 @@ An optional HTTPS API can expose QWK download/upload to the ViSiON/3 QWK Mobile
 companion client, without a terminal session. It is **off by default and
 experimental** — the companion app is **not yet available for download**, so
 there is nothing to connect to it yet. Leave it disabled until the app ships.
-See [QWK Packet API](qwk-api.md).
+See [QWK Packet API](messages/qwk-api.md).
 
 ## Troubleshooting
 
