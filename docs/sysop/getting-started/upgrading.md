@@ -305,3 +305,28 @@ worse off than before.
 
 Follow [Restarting](#restarting). The new `vision3` and the new `bin/binkd` both
 take effect only once you restart.
+
+## Worked example: upgrading past v0.9.0
+
+The release after v0.9.0 changes one default you may be relying on.
+
+### Anonymous posting is off by default
+
+Anonymous posting is now a per-area opt-in. Each message area has an **Allow
+Anonymous** setting, and an area that has never set it is treated as **No** —
+where before, anonymous posting was offered in every area to any user who met
+the `anonymousLevel` access level.
+
+Nothing in your config files changes on upgrade, and nothing needs migrating.
+But if you had areas where users posted anonymously, that stops until you turn
+it back on:
+
+- In `./config` → **Message Areas**, edit each area that should allow it and set
+  **Allow Anonymous** to `Y`.
+- The access-level gate still applies on top: a user is offered the anonymous
+  prompt only if they meet `anonymousLevel` **and** the area allows it.
+- A conference can still veto it — an area set to `Y` inside a conference whose
+  own Allow Anonymous is `N` stays off.
+
+`message_areas.json` is read at startup, so restart the BBS after editing areas
+for the change to take effect.
