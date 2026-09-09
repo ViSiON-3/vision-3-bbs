@@ -62,6 +62,19 @@ func displayOnelinerScreen(e *MenuExecutor, terminal *term.Terminal, outputMode 
 		return wErr
 	}
 
+	// ONELINER.TOP.ANS is SAUCE-terminated art with no trailing newline, so the
+	// cursor is left at the end of the header's last row. Without a break here
+	// the first one-liner is written onto that row and its colon sits out of
+	// column — while every later line starts fresh after the preceding |CR, so
+	// only the first looks wrong. Start the list on a new line when the header
+	// did not already end with one.
+	if len(processedTopTemplate) > 0 && !strings.HasSuffix(string(processedTopTemplate), "\n") {
+		if wErr = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode); wErr != nil {
+			slog.Error("failed writing separator after ONELINER top template", "node", nodeNumber, "error", wErr)
+			return wErr
+		}
+	}
+
 	if numLiners == 0 {
 		line := strings.ReplaceAll(midTemplateRaw, "^NU", formatOnelinerDisplayName("System"))
 		line = strings.ReplaceAll(line, "^OL", "No one-liners yet. Be the first!")
