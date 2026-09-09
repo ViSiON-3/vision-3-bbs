@@ -98,7 +98,7 @@ func stringCatalog() []StringEntry {
 
 		// Page 4: Items 61-80
 		{Label: "Enter User Note", Key: "enterUserNote", Description: "When prompting for a User Note"},
-		{Label: "New User Welcome", Key: "welcomeNewUser", Description: "Displayed to New Users before User Number"},
+		{Label: "New User Welcome", Key: "welcomeNewUser", Description: "Displayed to New Users before User Number (|BN = board name)"},
 		{Label: "Your User Number", Key: "yourUserNum", Description: "When giving user his User Number (|UN = User Number)"},
 		{Label: "New User Current Prompt", Key: "yourCurrentPrompt", Description: "Displayed to new users before displaying their prompt"},
 		{Label: "Create new Prompt?", Key: "designNewPrompt", Description: "Displayed when asking if new user wants to re-configure his prompt"},
