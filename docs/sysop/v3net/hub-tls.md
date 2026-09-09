@@ -17,7 +17,7 @@ in the hub configuration, the server switches to HTTPS automatically.
 > connections between leaf nodes and your hub. It does not encrypt messages
 > stored in the hub database — hub operators have full read access to all
 > messages in plaintext. See
-> [Security Considerations](configuration.md#security-considerations) for
+> [Security Considerations](v3net/configuration.md#security-considerations) for
 > the full picture.
 
 You have two options:

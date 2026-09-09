@@ -445,9 +445,24 @@ built-in defaults and overlays whatever the file provides.
 | `regularUserLevel` | `25` | `10` | Assigned when a user is validated |
 | `logonLevel` | `10` | `10` | Minimum level required to log in |
 | `anonymousLevel` | `50` | `5` | Minimum level to post anonymously (`0` = disabled) |
+| `notifySysopNewUser` | `true` | `true` | Page every co-sysop-or-above who is online when a signup completes |
 
 See [User Management](users/user-management.md#system-access-levels) for how
 these interact, and what happens at signup.
+
+`notifySysopNewUser` is deliberately independent of `autoValidateNewUsers`. An
+auto-validated signup leaves nothing to review, but somebody joining is still
+worth knowing at the time it happens, so the page fires either way. The notice
+goes to anyone at `coSysOpLevel` or above who is online, and is delivered
+through the same queue as a user page: it appears at their next menu prompt
+rather than interrupting whatever they are doing. Nobody online means nobody is
+paged — the login-sequence notice below is what covers that case. Edit the text
+in `./strings` under **New User: SysOp Page**.
+
+The fallback is `true`, so an existing system picks this up on upgrade without
+editing `config.json`. That is deliberate for a notice that only ever adds a
+line at a SysOp's own prompt; set it to `false`, or turn **Notify SysOp** off
+under Security Levels in `./config`, to silence it.
 
 **Default Settings:**
 

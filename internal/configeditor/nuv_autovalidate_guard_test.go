@@ -55,3 +55,21 @@ func TestEditorAllowsTurningEitherOff(t *testing.T) {
 		t.Errorf("unexpected state: useNuv=%v autoValidate=%v", cfg.UseNUV, cfg.AutoValidateNewUsers)
 	}
 }
+
+// Both switches refused each other already, but only Auto Validate said so in
+// its help line. A sysop reading the NUV screen got no warning at all until the
+// editor rejected the keystroke. Enforcement and warning should be symmetric,
+// since the help text is the part you read before deciding.
+func TestBothSwitchesWarnAboutEachOther(t *testing.T) {
+	cfg := &config.ServerConfig{}
+
+	autoValidate := fieldByLabel(t, sysFieldsLevels(cfg), "Auto Validate")
+	if !strings.Contains(autoValidate.Help, "New User Voting") {
+		t.Errorf("Auto Validate help does not mention New User Voting: %q", autoValidate.Help)
+	}
+
+	useNUV := fieldByLabel(t, sysFieldsNUV(cfg), "Use NUV")
+	if !strings.Contains(useNUV.Help, "Auto Validate") {
+		t.Errorf("Use NUV help does not mention Auto Validate: %q", useNUV.Help)
+	}
+}

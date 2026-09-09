@@ -57,6 +57,14 @@ func defaultLoginSequence() []LoginItem {
 		{Command: "LASTCALLS"},
 		{Command: "ONELINERS"},
 		{Command: "USERSTATS"},
+		// No SecLevel: this fallback runs when login.json is missing, so the
+		// configured sysOpLevel is not in reach here. NEWUSERVAL gates itself
+		// on sysop ACS, and shows nothing when no users are pending.
+		//
+		// No ClearScreen either: the runner clears before the handler decides
+		// whether it has anything to say, so setting it would blank a sysop's
+		// screen on every quiet login for a command that then prints nothing.
+		{Command: "NEWUSERVAL"},
 	}
 }
 

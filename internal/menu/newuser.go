@@ -235,6 +235,11 @@ func (e *MenuExecutor) handleNewUserApplication(
 
 	slog.Info("new user created", "node", nodeNumber, "handle", newUser.Handle, "id", newUser.ID)
 
+	// Tell any sysop who is online right now. Fires regardless of
+	// AutoValidateNewUsers: an auto-validated signup leaves nothing to review,
+	// but somebody joining is still worth knowing at the time it happens.
+	e.notifySysopsOfNewUser(newUser, nodeNumber)
+
 	// Add to NUV queue if configured.
 	cfg := e.GetServerConfig()
 	if cfg.UseNUV && cfg.AutoAddNUV {

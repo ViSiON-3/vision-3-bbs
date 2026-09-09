@@ -107,7 +107,7 @@ func sysFieldsBotDefense(cfg *config.ServerConfig) []fieldDef {
 func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 	return []fieldDef{
 		{
-			Label: "Use NUV", Help: "Enable New User Voting system", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
+			Label: "Use NUV", Help: "Enable New User Voting (cannot be used with Auto Validate)", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.UseNUV) },
 			Set: func(val string) error {
 				on := uitext.YNToBool(val)

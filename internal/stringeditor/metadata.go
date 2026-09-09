@@ -563,5 +563,11 @@ func stringCatalog() []StringEntry {
 		// Kept so the key is documented rather than silently dropped on save.
 		{Label: "Enter Number Header", Key: "enterNumberHeader", Description: "Legacy - declared in strings.json but not currently used"},
 		{Label: "Enter Number Prompt", Key: "enterNumber", Description: "Legacy - declared in strings.json but not currently used"},
+
+		// Appended, not inserted. Number is an entry's position in this slice
+		// and is shown in the list, so a sysop's note that "string 199 is
+		// wrong" only keeps meaning the same string while new entries go on
+		// the end.
+		{Label: "New User: SysOp Page", Key: "newUserSysopPage", Description: "Paged to online SysOps when a signup completes (%s=handle, %d=node)"},
 	}
 }

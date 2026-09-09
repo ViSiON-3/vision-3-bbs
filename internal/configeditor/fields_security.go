@@ -82,6 +82,17 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
+			Label: "Notify SysOp", Help: "Page online CoSysOps+ when a new user signs up", Type: ftYesNo, Col: 50, Row: 6, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.NotifySysopNewUser) },
+			Set: func(val string) error {
+				// Deliberately independent of Auto Validate. An auto-validated
+				// signup leaves nothing to review, but a sysop still wants to
+				// know somebody joined.
+				cfg.NotifySysopNewUser = uitext.YNToBool(val)
+				return nil
+			},
+		},
+		{
 			Label: "Regular Level", Help: "Level assigned when user is validated", Type: ftInteger, Col: 3, Row: 6, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.RegularUserLevel) },
 			Set: func(val string) error {

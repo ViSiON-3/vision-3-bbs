@@ -137,6 +137,6 @@ lobby
 
 ## Related Documentation
 
-- [FelonyNet Setup](felonynet.md) — joining the public V3Net chat network
-- [V3Net Configuration](configuration.md) — configuring V3Net leaf nodes
-- [Menus & ACS](../menus/menu-system.md) — adding the chat command to a menu
+- [FelonyNet Setup](v3net/felonynet.md) — joining the public V3Net chat network
+- [V3Net Configuration](v3net/configuration.md) — configuring V3Net leaf nodes
+- [Menus & ACS](menus/menu-system.md) — adding the chat command to a menu

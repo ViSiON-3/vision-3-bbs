@@ -176,7 +176,7 @@ settings because they are shared by all configured networks.
 
 Configure hub polling under **Events**; the FTN wizard creates an
 `echomail_poll_<network>` event with a cron schedule. See
-[FTN mail polling](../advanced/event-scheduler.md#ftn-mail-polling-binkd).
+[FTN mail polling](advanced/event-scheduler.md#ftn-mail-polling-binkd).
 
 The tearline is not configurable: FTS-0004 reserves it for the software that produced the message, so ViSiON/3 always stamps `--- ViSiON/3 vX.Y.Z/Platform`.
 
