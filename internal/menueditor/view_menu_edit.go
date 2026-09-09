@@ -65,9 +65,11 @@ func (m Model) viewMenuEditScreen() string {
 	// === Empty row above info ===
 	emptyRow()
 
-	// === Info row: current file + number (centered) ===
+	// === Info row: current file + number, and the F10 hint (centered) ===
+	// The command editor (F10) is the least discoverable action on this screen,
+	// so it is surfaced here in the eyeline, not only in the footer bar (#259).
 	box(editInfoLabelStyle.Render(
-		centerText(fmt.Sprintf("Menu %d of %d", m.menuEditIdx+1, len(m.menus)), boxW)))
+		centerText(fmt.Sprintf("Menu %d of %d  -  F10: Edit Commands", m.menuEditIdx+1, len(m.menus)), boxW)))
 
 	// === Empty row below info ===
 	emptyRow()
