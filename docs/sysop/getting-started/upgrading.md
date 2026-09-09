@@ -33,7 +33,7 @@ ls -l /opt/vision3/vision3
 
 Take the BBS down, and copy these somewhere safe:
 
-```
+```text
 configs/      your settings — the thing an upgrade must not lose
 data/         users, messages, files, logs
 menus/        if you have edited any menu, .ANS or .CFG file
@@ -78,9 +78,15 @@ already point at the rebuilt binaries. If they were **copied**, copy them again:
 ```bash
 cd /opt/vision3
 for b in vision3 helper v3mail strings ue config menuedit wfc; do
-  cp ~/git/vision3/$b . 2>/dev/null
+  src=~/git/vision3/$b
+  [[ -f $src ]] || { echo "missing from the repo: $b"; continue; }
+  cp "$src" . || echo "FAILED to copy: $b"
 done
 ```
+
+Do not silence that loop with `2>/dev/null`. A copy that fails on permissions
+leaves the old program in place, and an upgrade that half happened is worse
+than one that visibly did not.
 
 **Your `menus/` does not track the repo.** `dev-setup.sh` copies the menu set
 once, when the instance is created, and skips it on every later run — regardless
@@ -181,11 +187,16 @@ so new programs do nothing until it does.
 
 Once it is running, these reload on save with no restart:
 
-- `config.json`
 - `strings.json`
 - `login.json`
 - `doors.json`
 - `theme.json` (in the menu set)
+
+`config.json` reloads too, but **not every setting in it takes effect**. Access
+levels, new-user settings and the like apply immediately; ports, host keys and
+the IP connection limits are read once at startup and keep their old values
+until you restart. The BBS logs a reminder to that effect on every reload of
+that file.
 
 `events.json` needs a restart, because the scheduler is built at startup.
 
