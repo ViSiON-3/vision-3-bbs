@@ -34,6 +34,22 @@ type TossResult struct {
 	MessagesExported int
 	DupesSkipped     int
 	Errors           []string
+
+	// SkippedOrigins counts packets left for another network's tosser, keyed by
+	// the origin address that matched none of this network's links. Skipping is
+	// routine — networks sharing an inbound directory each pass over the
+	// others' mail — so it is recorded rather than logged per packet, and only
+	// becomes news once every network has passed and the mail is still there.
+	// See ReportUnclaimed.
+	SkippedOrigins map[string]int
+}
+
+// noteSkipped records a packet this network declined, keyed by origin address.
+func (r *TossResult) noteSkipped(origin string) {
+	if r.SkippedOrigins == nil {
+		r.SkippedOrigins = make(map[string]int)
+	}
+	r.SkippedOrigins[origin]++
 }
 
 // ScannerUser is the synthetic username stored in each JAM base's .jlr file
@@ -212,9 +228,11 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 // tossPktFile processes a single .PKT file at path and updates result.
 // Returns true if the packet was skipped (foreign network).
 func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) bool {
-	imported, dupes, errs, skipped := t.tossPacket(path)
-	if skipped {
-		return true // packet doesn't belong to this network; leave for correct tosser
+	imported, dupes, errs, skippedOrigin := t.tossPacket(path)
+	if skippedOrigin != "" {
+		// Not ours; leave it for the tosser whose links include that origin.
+		result.noteSkipped(skippedOrigin)
+		return true
 	}
 
 	result.PacketsProcessed++
@@ -240,21 +258,24 @@ func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) bool 
 // source address is checked against the network's known links. If the packet
 // doesn't originate from a known link, it is skipped (returned with skipped=true)
 // so the correct network's tosser can process it later.
-func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, skipped bool) {
+func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, skippedOrigin string) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, 0, []string{fmt.Sprintf("open %s: %v", path, err)}, false
+		return 0, 0, []string{fmt.Sprintf("open %s: %v", path, err)}, ""
 	}
 	defer func() { _ = f.Close() }() // read-only
 
 	pktHdr, msgs, err := ftn.ReadPacket(f)
 	if err != nil {
-		if len(msgs) == 0 {
-			return 0, 0, []string{fmt.Sprintf("parse %s: %v", path, err)}, false
-		}
-		// Partial parse: packet is truncated but some messages were read before the
-		// bad offset. Process what we have and treat the truncation as a warning.
-		slog.Warn("truncated packet, processing available messages", "network", t.networkName, "packet", filepath.Base(path), "error", err, "count", len(msgs))
+		// Import nothing from a packet that failed to parse, even when some
+		// messages were read before the failing offset. Whatever corrupted the
+		// packet can have desynced the reader well earlier, in which case those
+		// "messages" are mid-body bytes wearing a message's shape — a real one
+		// reached a sysop's netmail inbox with ANSI art as its subject line.
+		// tossPktFile quarantines a packet its caller reports errors for, so the
+		// data is held for inspection rather than half-imported and deleted.
+		return 0, 0, []string{fmt.Sprintf("parse %s: %v (%d message(s) recovered from the prefix, none imported)",
+			filepath.Base(path), err, len(msgs))}, ""
 	}
 
 	// Check if this packet belongs to our network by matching the source address
@@ -265,8 +286,9 @@ func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, sk
 		if pktZone == 0 {
 			pktZone = pktHdr.QOrigZone
 		}
-		slog.Debug("skipping packet from unknown link", "network", t.networkName, "packet", filepath.Base(path), "zone", pktZone, "net", pktHdr.OrigNet, "node", pktHdr.OrigNode)
-		return 0, 0, nil, true
+		origin := fmt.Sprintf("%d:%d/%d", pktZone, pktHdr.OrigNet, pktHdr.OrigNode)
+		slog.Debug("skipping packet from unknown link", "network", t.networkName, "packet", filepath.Base(path), "origin", origin)
+		return 0, 0, nil, origin
 	}
 
 	for i, msg := range msgs {
@@ -281,7 +303,7 @@ func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, sk
 		imported++
 	}
 
-	return imported, dupes, errs, false
+	return imported, dupes, errs, ""
 }
 
 var errDupe = fmt.Errorf("duplicate message")
