@@ -56,7 +56,10 @@ func writeUTF8Mode(writer io.Writer, data []byte) error {
 			if mapped == 0 {
 				out = append(out, '?')
 			} else {
-				out = append(out, []byte(string(mapped))...)
+				// AppendRune encodes straight into out; converting via string
+				// would allocate twice for every mapped byte, and a screen of
+				// CP437 art is nothing but mapped bytes.
+				out = utf8.AppendRune(out, mapped)
 			}
 		}
 	}
