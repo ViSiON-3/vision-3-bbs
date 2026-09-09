@@ -28,29 +28,35 @@ func writeUTF8Mode(writer io.Writer, data []byte) error {
 		}
 		span := data[spanStart:i]
 
-		// Process span rune-by-rune to preserve valid UTF-8 while mapping invalid bytes to CP437
-		// This handles mixed UTF-8 + CP437 content correctly
-		pos := 0
-		for pos < len(span) {
-			r, size := utf8.DecodeRune(span[pos:])
-			if r == utf8.RuneError && size == 1 {
-				// Invalid UTF-8 byte - treat as CP437
-				sb := span[pos]
-				if sb < 0x80 {
-					out = append(out, sb)
-				} else {
-					mapped := ansi.Cp437ToUnicode[sb]
-					if mapped == 0 {
-						out = append(out, '?')
-					} else {
-						out = append(out, []byte(string(mapped))...)
-					}
-				}
-				pos++
+		// Decide the span's encoding as a whole rather than rune by rune.
+		//
+		// Deciding per rune looks like it handles mixed content, but the two
+		// encodings are not separable that way: plenty of adjacent CP437 pairs
+		// form a structurally valid UTF-8 sequence, and the decoder then
+		// swallows both bytes and emits one unrelated character. CP437 line
+		// art is full of such pairs — ▄│ (DC B3) decodes as U+0733, a Syriac
+		// combining mark — so exactly the content most likely to be CP437 was
+		// the content most likely to be misread (#280).
+		//
+		// A span that is valid UTF-8 throughout is taken as UTF-8; anything
+		// else is taken as CP437 and mapped byte for byte. Where a span is
+		// valid under both this still guesses, and only the message's own CHRS
+		// kludge can settle it — but it no longer mangles art that is
+		// unambiguously CP437.
+		if utf8.Valid(span) {
+			out = append(out, span...)
+			continue
+		}
+		for _, sb := range span {
+			if sb < 0x80 {
+				out = append(out, sb)
+				continue
+			}
+			mapped := ansi.Cp437ToUnicode[sb]
+			if mapped == 0 {
+				out = append(out, '?')
 			} else {
-				// Valid UTF-8 rune - preserve as-is
-				out = append(out, span[pos:pos+size]...)
-				pos += size
+				out = append(out, []byte(string(mapped))...)
 			}
 		}
 	}
