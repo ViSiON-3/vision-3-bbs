@@ -29,6 +29,29 @@ func TestLoadFTNConfigBinkdDefaults(t *testing.T) {
 	if b.ExportSecs != 300 {
 		t.Errorf("ExportSecs = %d, want 300", b.ExportSecs)
 	}
+	// CRAM-MD5 stays on unless a sysop turns it off for a specific hub.
+	if b.DisableCramMD5 {
+		t.Error("DisableCramMD5 should default to false")
+	}
+}
+
+func TestLoadFTNConfigBinkdDisableCramMD5(t *testing.T) {
+	dir := t.TempDir()
+	body := `{"networks":{},"binkd":{"enabled":true,"disable_cram_md5":true}}`
+	if err := os.WriteFile(filepath.Join(dir, "ftn.json"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFTNConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadFTNConfig: %v", err)
+	}
+	if !cfg.Binkd.DisableCramMD5 {
+		t.Error("DisableCramMD5 = false, want true")
+	}
+	// Defaults must still fill the omitted numeric fields.
+	if cfg.Binkd.Port != 24554 || cfg.Binkd.LogLevel != 4 {
+		t.Errorf("defaults not applied: %+v", cfg.Binkd)
+	}
 }
 
 func TestLoadFTNConfigBinkdRoundTrip(t *testing.T) {
