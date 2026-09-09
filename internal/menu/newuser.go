@@ -238,7 +238,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	// Tell any sysop who is online right now. Fires regardless of
 	// AutoValidateNewUsers: an auto-validated signup leaves nothing to review,
 	// but somebody joining is still worth knowing at the time it happens.
-	e.notifySysopsOfNewUser(newUser, nodeNumber)
+	e.notifySysopsOfNewUser(userManager, newUser, nodeNumber)
 
 	// Add to NUV queue if configured.
 	cfg := e.GetServerConfig()

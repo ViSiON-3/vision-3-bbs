@@ -28,6 +28,9 @@
         "sec_level": 255
     },
     {
+        "command": "SYSOPNOTICES"
+    },
+    {
         "command": "CHECKNUV"
     }
 ]

@@ -360,3 +360,22 @@ This pairs well with leaving `autoValidateNewUsers` off: the signup-time message
 is your one chance to hear from a caller before you validate them, and the
 requirement now follows them across reconnects until they either introduce
 themselves or the account ages out.
+
+### New: new-user notices reach an offline SysOp, and a "read mail now?" prompt
+
+Two login-sequence quality-of-life changes. **Both require an edit to
+`configs/login.json` if you maintain your own** (installs without the file get
+them from the built-in default automatically):
+
+- **`SYSOPNOTICES`** — the "new user signed up" notice (`notifySysopNewUser`)
+  used to be a live page only, so it was lost whenever no SysOp was online at
+  signup time (which is most of the time). It is now also **queued and shown at
+  the SysOp's next login**. Add a `{"command": "SYSOPNOTICES"}` item to your
+  login sequence (a good spot is right after `NEWUSERVAL`). It is informational
+  and fires regardless of `autoValidateNewUsers` — unlike `NEWUSERVAL`, which is
+  silent when nothing is pending validation. Queued notices live in
+  `data/sysop_notices.json`.
+- **"Read it now?" after `NMAILSCAN`** — when the login mail scan reports new
+  private mail, the caller is now asked whether to read it immediately, dropping
+  them into the reader (reply/skip per message). No config change needed beyond
+  already having `NMAILSCAN` in your sequence.

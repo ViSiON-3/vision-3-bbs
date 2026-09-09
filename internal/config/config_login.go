@@ -65,6 +65,9 @@ func defaultLoginSequence() []LoginItem {
 		// whether it has anything to say, so setting it would blank a sysop's
 		// screen on every quiet login for a command that then prints nothing.
 		{Command: "NEWUSERVAL"},
+		// Delivers queued sysop notices (e.g. a new user who signed up while no
+		// sysop was online). Self-gates on sysop ACS and is silent otherwise.
+		{Command: "SYSOPNOTICES"},
 	}
 }
 

@@ -87,6 +87,11 @@ Scans the PRIVMAIL message area for unread private mail addressed to the current
 You have 3 new private mail message(s).
 ```
 
+When there is new mail, the caller is then asked **"Read it now?"** — answering
+yes drops them straight into the private-mail reader (where each message can be
+replied to with `R` or skipped with `N`), so they need not hunt for the mail
+menu. Answering no leaves the count as the only notice.
+
 ### DISPLAYFILE
 
 Displays an ANSI art file from the `menus/v3/ansi/` directory. The **data** field specifies the filename. Useful for bulletins, welcome screens, system news, or any custom display.
@@ -148,8 +153,31 @@ blank the screen on every quiet login. Use `VALIDATEUSER` on a menu when you
 want to open the queue deliberately — that one reports an empty queue and waits,
 which is right when a keystroke would otherwise appear to have done nothing.
 
-This covers the SysOp who was not online when someone signed up. For the case
-where they are, see `notifySysopNewUser` in
+`NEWUSERVAL` only speaks up when something is **pending validation** — so with
+`autoValidateNewUsers` on, where signups need no review, it stays silent and a
+SysOp never learns a user joined. For a "somebody joined" notice that fires
+regardless of validation state, see `SYSOPNOTICES` below.
+
+### SYSOPNOTICES
+
+Delivers any queued SysOp notices to a co-SysOp-or-above caller at login, then
+clears them. Today the only producer is the new-user notice: when someone signs
+up, `notifySysopNewUser` pages each co-SysOp+ account that is online and queues
+the notice for each one that is not — so an offline co-SysOp is caught up here
+even when another SysOp was online and paged in real time. It is purely
+informational — with `autoValidateNewUsers` on there is nothing to do
+but perhaps view the user; with it off, `NEWUSERVAL` (above) is where the
+validation actually happens.
+
+```json
+{"command": "SYSOPNOTICES"}
+```
+
+Silent for ordinary users and when the queue is empty — it checks co-SysOp
+access itself, so no `sec_level` is required (though you may set one to remove
+it for a SysOp who does not want it). This is the asynchronous half of
+`notifySysopNewUser`: online SysOps are paged in real time, offline ones catch
+up here. See `notifySysopNewUser` in
 [Configuration](configuration/configuration.md).
 
 ### CHECKNUV
