@@ -2,7 +2,9 @@ package menu
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -71,9 +73,15 @@ func drawMessageListScreen(terminal *term.Terminal, state *MessageListState, are
 		return err
 	}
 
-	// Column headers (bright white text, total interior: 77 chars)
-	// Layout: Status(1) + " N#" (3) + "  " (2) + "Subject" + pad (33) + "    " (4) + "From" + pad (17) + "  " (2) + "To" + pad (15) = 77
-	columnHeaders := "|11│|15 N#  Subject                               From               To             |11│|07\r\n"
+	// Column headers, built from the same widths as the rows so the two cannot
+	// drift apart. The status column has no label.
+	columnHeaders := fmt.Sprintf("|11│|15%s%s %s %s %s %s |11│|07\r\n",
+		strings.Repeat(" ", listStatusWidth),
+		ansi.PadLeft("N#", listNumWidth),
+		listCell("Subject", listSubjectWidth),
+		listCell("From", listFromWidth),
+		listCell("To", listToWidth),
+		listCell("Date", listDateWidth))
 	if err := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(columnHeaders)), outputMode); err != nil {
 		return err
 	}
@@ -155,46 +163,86 @@ func drawMessageListScreen(terminal *term.Terminal, state *MessageListState, are
 	return nil
 }
 
-// drawMessageListLine renders a single message line with optional highlighting
-func drawMessageListLine(terminal *term.Terminal, entry MessageListEntry, isHighlighted bool, outputMode ansi.OutputMode) error {
-	// Format status character (aware of highlight state)
-	statusStr := formatStatusChar(entry, isHighlighted)
+// Message list column widths. They sum, with the single-space separators
+// between them, to listInteriorWidth.
+//
+// Every cell is built to its exact width by listCell rather than with a %-Ns
+// verb. Two reasons, both of which had already gone wrong here: fmt's width is
+// a *minimum*, so "%3d" quietly grew to four columns at message 1000 and walked
+// the right border out of the frame; and its padding counts bytes, so a
+// multi-byte name padded short and pulled the border the other way.
+const (
+	listStatusWidth   = 1
+	listNumWidth      = 5 // up to 99999; see listNumCell for what happens beyond
+	listSubjectWidth  = 31
+	listFromWidth     = 16
+	listToWidth       = 11
+	listDateWidth     = 8 // 01/02/06
+	listInteriorWidth = 77
 
-	// Format message number (right-aligned, 3 chars)
-	numStr := fmt.Sprintf("%3d", entry.MsgNum)
+	// Four single-space separators between the six columns, plus one trailing
+	// space so the date does not touch the right border.
+	listSeparators = 5
+)
 
-	// Truncate fields to fit columns
-	// Layout: Status(1) + Num(3) + Sep(2) + Subject(33) + Sep(4) + From(17) + Sep(2) + To(15) = 77 chars
+// listCell renders s as exactly width columns, truncating with an ellipsis and
+// padding with spaces. Both halves count runes, so the result is exact for
+// multi-byte input as well as ASCII.
+func listCell(s string, width int) string {
+	return ansi.PadRight(ansi.TruncateRunes(s, width, "..."), width)
+}
+
+// listNumCell right-aligns a message number in listNumWidth columns.
+//
+// A number too large for the column keeps its leading digits rather than
+// widening the row: the frame holding is worth more than the last digit of a
+// six-figure message number, and the number is only a label here — the reader
+// shows it in full.
+func listNumCell(n int) string {
+	return ansi.PadLeft(ansi.TruncateRunes(strconv.Itoa(n), listNumWidth, ""), listNumWidth)
+}
+
+// listDateCell formats a message date for the list. A zero time renders blank
+// rather than as year 1, which is what a message with no usable date carries.
+func listDateCell(t time.Time) string {
+	if t.IsZero() {
+		return strings.Repeat(" ", listDateWidth)
+	}
+	return listCell(t.Format("01/02/06"), listDateWidth)
+}
+
+// messageListRow builds the 77-column interior of one message row, without the
+// status character, which is written separately because it carries pipe codes
+// in the unhighlighted case and is always exactly one column.
+func messageListRow(entry MessageListEntry, outputMode ansi.OutputMode) string {
 	subjectVal, fromVal, toVal := entry.Subject, entry.From, entry.To
 	if outputMode == ansi.OutputModeCP437 {
 		subjectVal = toCP437Safe(subjectVal)
 		fromVal = toCP437Safe(fromVal)
 		toVal = toCP437Safe(toVal)
 	}
-	subject := truncateString(subjectVal, 33)
-	from := truncateString(fromVal, 17)
-	to := truncateString(toVal, 15)
+	// Trailing space so the date does not butt against the right border, the
+	// way the status column keeps the number off the left one.
+	return listNumCell(entry.MsgNum) + " " +
+		listCell(subjectVal, listSubjectWidth) + " " +
+		listCell(fromVal, listFromWidth) + " " +
+		listCell(toVal, listToWidth) + " " +
+		listDateCell(entry.Date) + " "
+}
 
-	// Format the line (total width: 79 chars including borders)
-	// Interior: Status(1) + Num(3) + Spaces(2) + Subject(33) + Spaces(4) + From(17) + Spaces(2) + To(15) = 77
-	// Total: Border(1) + Interior(77) + Border(1) = 79
+// drawMessageListLine renders a single message line with optional highlighting
+func drawMessageListLine(terminal *term.Terminal, entry MessageListEntry, isHighlighted bool, outputMode ansi.OutputMode) error {
+	// Format status character (aware of highlight state)
+	statusStr := formatStatusChar(entry, isHighlighted)
+	row := messageListRow(entry, outputMode)
+
 	var line string
 	if isHighlighted {
 		// Use ANSI reverse video for highlighting (black on white)
-		line = fmt.Sprintf("|11│\x1b[7m%s%s  %-33s    %-17s  %-15s\x1b[27m|11│|07\r\n",
-			statusStr,
-			numStr,
-			subject,
-			from,
-			to)
+		line = fmt.Sprintf("|11│\x1b[7m%s%s\x1b[27m|11│|07\r\n", statusStr, row)
 	} else {
 		// Normal display (bright white text on black)
-		line = fmt.Sprintf("|11│|15%s%s  %-33s    %-17s  %-15s|11│|07\r\n",
-			statusStr,
-			numStr,
-			subject,
-			from,
-			to)
+		line = fmt.Sprintf("|11│|15%s%s|11│|07\r\n", statusStr, row)
 	}
 
 	return terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
