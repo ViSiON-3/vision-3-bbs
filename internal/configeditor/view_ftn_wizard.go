@@ -138,7 +138,7 @@ func (m Model) viewFTNWizardForm() string {
 	}
 
 	// Message or field help text.
-	b.WriteString(m.renderFieldHelpLine(m.ftnWizardFields, padL, padR, boxW, row))
+	b.WriteString(m.renderFieldHelpLine(m.ftnWizardFields, padL, padR, boxW, row, helpRegionRows))
 	b.WriteByte('\n')
 	row += helpRegionRows
 

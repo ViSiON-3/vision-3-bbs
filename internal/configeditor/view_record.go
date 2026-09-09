@@ -186,7 +186,7 @@ func (m Model) viewRecordEdit() string {
 
 	// Help area: active field help (wraps to a second line when long) plus a
 	// blank separator; fieldHelpRegionRows above budgeted its height.
-	b.WriteString(m.renderFieldHelpLine(m.recordFields, padL, padR, boxW, row))
+	b.WriteString(m.renderFieldHelpLine(m.recordFields, padL, padR, boxW, row, helpRegionRows))
 	b.WriteByte('\n')
 	row += helpRegionRows
 
@@ -352,12 +352,13 @@ func (m Model) renderRecordField(fieldIdx int, f fieldDef) (string, int) {
 // sourcing its background fill from m.backdrop. Priority: flash message >
 // active field help text > blank fill. row is the absolute screen row this
 // line occupies.
-func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row int) string {
+func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row, region int) string {
 	// Renders the help area: the active field's help (one line, or two when it
-	// is long enough to wrap — #274), or a flash message, followed by one blank
-	// separator row before the footer. The separator is always present, so the
-	// gap below the help is preserved whether or not the help wrapped. Callers
-	// budget the row count with fieldHelpRegionRows and advance row by it.
+	// wraps — #274), or a flash message, padded with blank backdrop rows to the
+	// fixed region height so the trailing blank(s) always sit above the footer.
+	// The caller passes region (from fieldHelpRegionRows, used for its layout
+	// math), which is sized to the tallest help in this field set — not the
+	// active field — so moving between fields never shifts the box or footer.
 	helpLine := func(text string, r int) string {
 		return m.backdrop.Segment(r, 0, padL) +
 			editInfoLabelStyle.Render(centerText(text, boxW+1)) +
@@ -376,45 +377,56 @@ func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row int)
 		if line2 != "" {
 			rows = append(rows, helpLine(line2, row+len(rows)))
 		}
-	default:
-		rows = append(rows, m.backdrop.Line(row))
 	}
-	// Trailing blank separator between the help and the footer.
-	rows = append(rows, m.backdrop.Line(row+len(rows)))
+	// Pad to the fixed region height. The trailing blank(s) are the gap above
+	// the footer; there is always at least one because region > max content.
+	for len(rows) < region {
+		rows = append(rows, m.backdrop.Line(row+len(rows)))
+	}
 	return strings.Join(rows, "\n")
 }
 
 // activeFieldHelp returns the help text for the field being edited, with its
-// interaction hint appended, or "" when there is no active help. Shared by the
-// renderer and the row-count budget so the two agree on when help wraps.
+// interaction hint appended, or "" when there is no active help.
 func (m Model) activeFieldHelp(fields []fieldDef) string {
-	if m.editField < 0 || m.editField >= len(fields) || fields[m.editField].Help == "" {
+	if m.editField < 0 || m.editField >= len(fields) {
 		return ""
 	}
-	help := fields[m.editField].Help
-	switch fields[m.editField].Type {
-	case ftYesNo:
-		help += " (Space toggles)"
-	case ftLookup:
-		help += " (Enter to select)"
-	}
-	return help
+	return fieldHelpText(fields[m.editField])
 }
 
-// fieldHelpRegionRows is how many screen rows renderFieldHelpLine occupies for
-// the given state: the help/message content (one row, or two when the active
-// help wraps) plus one blank separator row. Views use it to keep the footer
-// position and the vertical padding math exact.
+// fieldHelpText is a field's help with its interaction hint appended.
+func fieldHelpText(f fieldDef) string {
+	if f.Help == "" {
+		return ""
+	}
+	switch f.Type {
+	case ftYesNo:
+		return f.Help + " (Space toggles)"
+	case ftLookup:
+		return f.Help + " (Enter to select)"
+	}
+	return f.Help
+}
+
+// fieldHelpRegionRows is the fixed number of screen rows the help area occupies
+// for this field set: the tallest field help (one line, or two when it wraps)
+// plus one blank separator row. It depends only on the fields and box width —
+// not on which field is active — so the footer and box stay put as the user
+// moves between fields, and the blank gap above the footer is always present.
 func (m Model) fieldHelpRegionRows(fields []fieldDef, boxW int) int {
-	content := 1
-	if m.message == "" {
-		if help := m.activeFieldHelp(fields); help != "" {
-			if _, line2 := wrapHelpTwoLines(help, boxW+1); line2 != "" {
-				content = 2
-			}
+	maxContent := 1
+	for i := range fields {
+		help := fieldHelpText(fields[i])
+		if help == "" {
+			continue
+		}
+		if _, line2 := wrapHelpTwoLines(help, boxW+1); line2 != "" {
+			maxContent = 2
+			break
 		}
 	}
-	return content + 1 // + separator
+	return maxContent + 1 // + separator
 }
 
 // wrapHelpTwoLines splits help text to fit a field-help area that is at most
