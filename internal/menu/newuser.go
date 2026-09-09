@@ -144,8 +144,11 @@ func (e *MenuExecutor) handleNewUserApplication(
 
 	welcomeStr := e.LoadedStrings.WelcomeNewUser
 	if welcomeStr == "" {
-		welcomeStr = "|15Welcome to the system!"
+		welcomeStr = "|04W|12e|14lcome |04T|12o |14|BN|08!"
 	}
+	// |BN expands to the configured board name, so the welcome names this BBS
+	// rather than the shipped placeholder.
+	welcomeStr = strings.ReplaceAll(welcomeStr, "|BN", e.GetServerConfig().BoardName)
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(welcomeStr+"\r\n")), outputMode)
 
 	userNumStr := e.LoadedStrings.YourUserNum
