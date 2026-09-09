@@ -28,6 +28,14 @@ func cmdToss(args []string) {
 
 	totalImported, totalDupes, totalPackets := 0, 0, 0
 	hadErrors := false
+	// Merged across networks and keyed by inbound file, so the whole-pass
+	// check can discard the origins of anything a later network claimed.
+	skippedByFile := map[string]map[string]int{}
+	// The whole-pass check is only sound once every enabled network has
+	// actually tossed: a tosser that failed to construct might have been the
+	// one to claim the mail, so its absence has to suppress the check as
+	// surely as --network does.
+	ranAllNetworks := *networkName == ""
 
 	for name, netCfg := range ftnCfg.Networks {
 		if !netCfg.InternalTosserEnabled {
@@ -41,6 +49,7 @@ func cmdToss(args []string) {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating tosser for %s: %v\n", name, err)
 			hadErrors = true
+			ranAllNetworks = false
 			continue
 		}
 
@@ -48,6 +57,14 @@ func cmdToss(args []string) {
 		totalPackets += result.PacketsProcessed
 		totalImported += result.MessagesImported
 		totalDupes += result.DupesSkipped
+		// Replace rather than sum: every enabled network passes over the same
+		// packets in a shared inbound directory and reports the same origins
+		// for the same file.
+		for file, origins := range result.SkippedByFile {
+			if _, seen := skippedByFile[file]; !seen {
+				skippedByFile[file] = origins
+			}
+		}
 
 		if !*quiet {
 			fmt.Printf("[%s] toss: %d packets, %d imported, %d dupes",
@@ -63,9 +80,34 @@ func cmdToss(args []string) {
 		}
 	}
 
+	// Only meaningful once every enabled network has had its turn: a bundle is
+	// removed by whichever tosser takes it, so what remains is mail nobody
+	// would take. Limiting the run to one network with --network says nothing
+	// about what the others would have claimed.
+	var unclaimed tosser.UnclaimedReport
+	if ranAllNetworks {
+		unclaimed = tosser.FindUnclaimed(ftnCfg, skippedByFile)
+		unclaimed.QuarantineStale(ftnCfg.TempPath)
+		unclaimed.Log()
+	}
+
 	if !*quiet {
 		fmt.Printf("Toss complete: %d packets, %d messages imported, %d dupes skipped\n",
 			totalPackets, totalImported, totalDupes)
+		if n := len(unclaimed.Files) + len(unclaimed.Quarantined); n > 0 {
+			// Without this the run looks identical to one that had no mail
+			// waiting, which is how a backlog goes unnoticed for weeks.
+			fmt.Printf("WARNING: %d inbound file(s) matched no configured network", n)
+			if origins := unclaimed.OriginList(); origins != "" {
+				fmt.Printf(" — from %s", origins)
+			}
+			fmt.Println()
+			fmt.Println("         Check that each network's links list the address its mail comes from.")
+			if len(unclaimed.Quarantined) > 0 {
+				fmt.Printf("         %d moved to %s\n",
+					len(unclaimed.Quarantined), filepath.Dir(unclaimed.Quarantined[0]))
+			}
+		}
 	}
 
 	if hadErrors {
