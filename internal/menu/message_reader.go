@@ -22,8 +22,10 @@ import (
 	"golang.org/x/term"
 )
 
-// Default message header style if user hasn't selected one
-const defaultMsgHdrStyle = 5
+// Default message header style if user hasn't selected one. Style 1 is the
+// clean "ViSiON/3 Message Header"; the previous default (5) shipped with
+// alignment glitches ("Sent To" and an empty, misplaced "Total Msg"). See #301.
+const defaultMsgHdrStyle = 1
 
 // Message reader navigation options (Pascal's 10-option bar)
 var msgReaderOptions = []MsgLightbarOption{
