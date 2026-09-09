@@ -36,10 +36,14 @@ func (m Model) updateRecordReorder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyPgDown:
 		target = m.recordCursor + listVisible
 	case tea.KeyEnter:
-		// Commit: the slice is already in its final order from the live moves;
-		// renumber positions once.
-		m.renumberReorderedPositions()
-		m.dirty = true
+		// Commit. The slice is already in its final order from the live moves;
+		// renumber positions once. Only if the item actually ended up somewhere
+		// new — pressing P then Enter without moving (or after moving back) must
+		// not renumber or dirty the config.
+		if m.recordCursor != m.reorderSourceIdx {
+			m.renumberReorderedPositions()
+			m.dirty = true
+		}
 		m.reorderSourceIdx = -1
 		m.mode = modeRecordList
 		m.clampRecordScroll()

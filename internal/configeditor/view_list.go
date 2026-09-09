@@ -97,9 +97,9 @@ func (m Model) viewRecordList() string {
 		} else {
 			content := m.renderRecordRow(idx, boxW)
 			switch {
-			case isSource && isHighlight:
-				rowContent = reorderSourceStyle.Render(content)
 			case isSource:
+				// In reorder mode the moving item rides the cursor, so this is
+				// also the highlighted row.
 				rowContent = reorderSourceStyle.Render(content)
 			case isHighlight:
 				rowContent = menuHighlightStyle.Render(content)

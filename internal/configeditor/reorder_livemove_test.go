@@ -131,3 +131,33 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// TestReorderNoOpDoesNotDirty covers the review finding: pressing P then Enter
+// without moving (or after moving back to the start) must not renumber
+// positions or mark the config dirty — otherwise a look-but-don't-touch
+// reorder would normalize positions and prompt an unwanted save.
+func TestReorderNoOpDoesNotDirty(t *testing.T) {
+	m := configuredModel()
+	m.mode = modeRecordList
+	m.recordType = "msgarea"
+	m.recordCursor = 1
+	m.recordFields = m.buildRecordFields()
+	m.dirty = false
+
+	// P then Enter, no movement.
+	m = key(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	m = key(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.dirty {
+		t.Error("a no-move reorder should not mark the config dirty")
+	}
+
+	// P, down, back up (net no-op), Enter.
+	m.dirty = false
+	m = key(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	m = key(m, tea.KeyMsg{Type: tea.KeyDown})
+	m = key(m, tea.KeyMsg{Type: tea.KeyUp})
+	m = key(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.dirty {
+		t.Error("moving an item and back to its start should not mark dirty")
+	}
+}
