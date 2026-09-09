@@ -21,25 +21,29 @@ import (
 
 // Network represents a single FTN network entry in the registry.
 type Network struct {
-	Zone             int      `json:"zone"`
-	Name             string   `json:"name"`
-	Description      string   `json:"description"`
-	InfoURL          string   `json:"info_url,omitempty"`
-	PackURL          string   `json:"pack_url,omitempty"`
-	Coordinator      string   `json:"coordinator,omitempty"`
-	CoordinatorEmail string   `json:"coordinator_email,omitempty"`
-	CoordinatorFTN   string   `json:"coordinator_ftn,omitempty"`
-	AlsoContact      string   `json:"also_contact,omitempty"`
-	HubAddress       string   `json:"hub_address,omitempty"`
-	HubHostname      string   `json:"hub_hostname,omitempty"`
-	HubPort          int      `json:"hub_port,omitempty"`
-	DNSSuffix        string   `json:"dns_suffix,omitempty"`
-	EcholistURL      string   `json:"echolist_url,omitempty"`
-	AreatagPrefix    string   `json:"areatag_prefix,omitempty"`
-	AreatagExclude   []string `json:"areatag_exclude,omitempty"`
-	AreatitlePrefix  string   `json:"areatitle_prefix,omitempty"`
-	HandlesAllowed   bool     `json:"handles_allowed,omitempty"`
-	AreaManager      string   `json:"area_manager,omitempty"`
+	Zone             int    `json:"zone"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	InfoURL          string `json:"info_url,omitempty"`
+	PackURL          string `json:"pack_url,omitempty"`
+	Coordinator      string `json:"coordinator,omitempty"`
+	CoordinatorEmail string `json:"coordinator_email,omitempty"`
+	CoordinatorFTN   string `json:"coordinator_ftn,omitempty"`
+	AlsoContact      string `json:"also_contact,omitempty"`
+	HubAddress       string `json:"hub_address,omitempty"`
+	HubHostname      string `json:"hub_hostname,omitempty"`
+	HubPort          int    `json:"hub_port,omitempty"`
+	DNSSuffix        string `json:"dns_suffix,omitempty"`
+	EcholistURL      string `json:"echolist_url,omitempty"`
+	// NodelistURL has no counterpart in init-fidonet.ini; every value comes
+	// from overrides.json. Without the field here, regenerating the registry
+	// would drop the nodelist URL of every network that has one.
+	NodelistURL     string   `json:"nodelist_url,omitempty"`
+	AreatagPrefix   string   `json:"areatag_prefix,omitempty"`
+	AreatagExclude  []string `json:"areatag_exclude,omitempty"`
+	AreatitlePrefix string   `json:"areatitle_prefix,omitempty"`
+	HandlesAllowed  bool     `json:"handles_allowed,omitempty"`
+	AreaManager     string   `json:"area_manager,omitempty"`
 }
 
 // main converts a Synchronet init-fidonet.ini file into the embedded FTN registry JSON.
@@ -61,6 +65,15 @@ func main() {
 
 	if len(networks) == 0 {
 		fmt.Fprintf(os.Stderr, "Warning: no networks found in %s\n", *inPath)
+	}
+
+	applied, err := applyOverrides(networks)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error applying overrides: %v\n", err)
+		os.Exit(1)
+	}
+	for _, line := range applied {
+		fmt.Fprintf(os.Stderr, "override: %s\n", line)
 	}
 
 	data, err := json.MarshalIndent(networks, "", "  ")
