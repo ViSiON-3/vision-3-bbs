@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -14,6 +15,7 @@ type MessageListEntry struct {
 	Subject   string
 	From      string
 	To        string
+	Date      time.Time // When the message was written; blank in the list if zero
 	IsPrivate bool
 	IsRead    bool // Based on JAM lastread pointer
 }
@@ -119,6 +121,7 @@ func buildMessageList(msgMgr *message.MessageManager, areaID int, username strin
 			Subject:   msg.Subject,
 			From:      msg.From,
 			To:        msg.To,
+			Date:      msg.DateTime,
 			IsPrivate: isPrivate,
 			IsRead:    isRead,
 		}

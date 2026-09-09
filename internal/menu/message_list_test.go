@@ -1,11 +1,14 @@
 package menu
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -379,5 +382,166 @@ func TestDrawMessageListScreenNonASCIITitleDoesNotPanic(t *testing.T) {
 	stripped := testAnsiEscape.ReplaceAllString(titleLine, "")
 	if got := utf8.RuneCountInString(stripped); got != 79 {
 		t.Errorf("title line visible width = %d runes, want 79 (line %q)", got, stripped)
+	}
+}
+
+// The column widths and their separators must add up to the frame's interior.
+// Nothing enforces this at compile time, and getting it wrong moves the right
+// border on message rows only — the header and separators keep their width, so
+// the frame looks torn rather than simply narrow.
+func TestMessageListColumnWidthsFillTheFrame(t *testing.T) {
+	sum := listStatusWidth + listNumWidth + listSubjectWidth +
+		listFromWidth + listToWidth + listDateWidth + listSeparators
+	if sum != listInteriorWidth {
+		t.Errorf("columns plus separators = %d, want %d (the frame interior)", sum, listInteriorWidth)
+	}
+}
+
+// Every message row is exactly 79 visible columns, whatever it contains.
+//
+// The number column used to be "%3d", and fmt's width is a minimum rather than
+// a maximum: at message 1000 the row grew to 80 columns and the right border
+// stepped outside the frame, which is what a busy area looks like all the time.
+// The other fields had the mirror-image problem — they were truncated by rune
+// but padded by byte, so a multi-byte name pulled the border inward instead.
+func TestMessageListRowWidthIsExact(t *testing.T) {
+	sample := time.Date(2026, 9, 9, 5, 18, 0, 0, time.UTC)
+	cases := []struct {
+		name  string
+		entry MessageListEntry
+	}{
+		{"single digit", MessageListEntry{MsgNum: 7, Subject: "Hi", From: "a", To: "All", Date: sample}},
+		{"three digits", MessageListEntry{MsgNum: 375, Subject: "Hi", From: "a", To: "All", Date: sample}},
+		{"four digits", MessageListEntry{MsgNum: 3754, Subject: "Hi", From: "a", To: "All", Date: sample}},
+		{"five digits", MessageListEntry{MsgNum: 37541, Subject: "Hi", From: "a", To: "All", Date: sample}},
+		{"more digits than the column", MessageListEntry{MsgNum: 1234567, Subject: "Hi", From: "a", To: "All", Date: sample}},
+		{"zero date renders blank", MessageListEntry{MsgNum: 12, Subject: "Hi", From: "a", To: "All"}},
+		{"every field overlong", MessageListEntry{
+			MsgNum:  9999,
+			Subject: strings.Repeat("subject ", 20),
+			From:    strings.Repeat("sender ", 10),
+			To:      strings.Repeat("recipient ", 10),
+			Date:    sample,
+		}},
+		{"multi-byte fields", MessageListEntry{
+			MsgNum:  4242,
+			Subject: "Ünïcödé sübjéct with åccents everywhere",
+			From:    "Jörg Müller",
+			To:      "Renée",
+			Date:    sample,
+		}},
+	}
+
+	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
+		for _, tc := range cases {
+			for _, hl := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%v/hl=%v", tc.name, mode, hl), func(t *testing.T) {
+					ts := newTestSession("")
+					terminal := newTestTerminal(ts)
+					if err := drawMessageListLine(terminal, tc.entry, hl, mode); err != nil {
+						t.Fatalf("drawMessageListLine: %v", err)
+					}
+					line := strings.TrimRight(strings.Split(ts.output(), "\n")[0], "\r")
+					stripped := testAnsiEscape.ReplaceAllString(line, "")
+					if got := utf8.RuneCountInString(stripped); got != 79 {
+						t.Errorf("row width = %d runes, want 79\n%q", got, stripped)
+					}
+				})
+			}
+		}
+	}
+}
+
+// The header must line up with the rows it labels; it is built from the same
+// widths so that it cannot drift, and this pins that it did not.
+func TestMessageListHeaderMatchesRowWidth(t *testing.T) {
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	state := &MessageListState{Entries: []MessageListEntry{}, CurrentPage: 1, ItemsPerPage: 5}
+	if err := drawMessageListScreen(terminal, state, "General", "Main", ansi.OutputModeUTF8); err != nil {
+		t.Fatalf("drawMessageListScreen: %v", err)
+	}
+	for _, line := range strings.Split(ts.output(), "\n") {
+		stripped := testAnsiEscape.ReplaceAllString(strings.TrimRight(line, "\r"), "")
+		if stripped == "" {
+			continue
+		}
+		if got := utf8.RuneCountInString(stripped); got != 79 {
+			t.Errorf("screen line is %d runes, want 79\n%q", got, stripped)
+		}
+	}
+}
+
+// The date column shows the message's own date, not today's.
+func TestMessageListShowsTheMessageDate(t *testing.T) {
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	entry := MessageListEntry{
+		MsgNum: 42, Subject: "Hi", From: "a", To: "All",
+		Date: time.Date(2019, 3, 7, 12, 0, 0, 0, time.UTC),
+	}
+	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeUTF8); err != nil {
+		t.Fatalf("drawMessageListLine: %v", err)
+	}
+	stripped := testAnsiEscape.ReplaceAllString(ts.output(), "")
+	if !strings.Contains(stripped, "03/07/19") {
+		t.Errorf("row does not carry the message date 03/07/19:\n%q", stripped)
+	}
+}
+
+// In CP437 mode the row must carry real CP437 bytes, not replacement
+// characters.
+//
+// toCP437Safe emits one byte per rune, and CP437's high bytes are not valid
+// UTF-8. Converting before truncating meant TruncateRunes decoded those bytes,
+// turned every accented character into U+FFFD, and left the column count
+// correct — so a width check passed over corrupted text. é (0x82) came out as
+// ef bf bd.
+func TestMessageListCP437FieldsSurviveTruncation(t *testing.T) {
+	entry := MessageListEntry{
+		MsgNum:  1234,
+		Subject: "Café Ñoño über Grüße and more text than the column can hold",
+		From:    "Jörg Müller with an overlong name",
+		To:      "Renée",
+		Date:    time.Date(2026, 9, 9, 5, 0, 0, 0, time.UTC),
+	}
+
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeCP437); err != nil {
+		t.Fatalf("drawMessageListLine: %v", err)
+	}
+	out := []byte(ts.output())
+
+	// Compare bytes, not runes. Ranging a Go string over CP437's high bytes
+	// yields RuneError for each one, so a rune-level check for U+FFFD cannot
+	// tell a corrupted character from a correctly encoded é.
+	if bytes.Contains(out, []byte{0xef, 0xbf, 0xbd}) {
+		t.Error("row contains an encoded U+FFFD: CP437 bytes were decoded as UTF-8 somewhere")
+	}
+	// 0x82 is é in CP437, 0xa5 is ñ. Both must reach the terminal as one byte.
+	for _, b := range []byte{0x82, 0xa5} {
+		if !bytes.Contains(out, []byte{b}) {
+			t.Errorf("row lost the CP437 byte %#x:\n% x", b, out)
+		}
+	}
+}
+
+// The same subject in UTF-8 mode keeps its accents as UTF-8.
+func TestMessageListUTF8FieldsKeepAccents(t *testing.T) {
+	entry := MessageListEntry{
+		MsgNum: 1234, Subject: "Café Ñoño über", From: "Jörg", To: "Renée",
+		Date: time.Date(2026, 9, 9, 5, 0, 0, 0, time.UTC),
+	}
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeUTF8); err != nil {
+		t.Fatalf("drawMessageListLine: %v", err)
+	}
+	out := ts.output()
+	for _, want := range []string{"Café", "Jörg", "Renée"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("row lost %q in UTF-8 mode", want)
+		}
 	}
 }
