@@ -119,13 +119,10 @@ func (m Model) viewWizardForm() string {
 	}
 
 	// Message or field help text
+	// Field help; renders two rows (wraps long help onto the second).
 	b.WriteString(m.renderFieldHelpLine(m.wizardFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
-	row++
-
-	b.WriteString(m.backdrop.Line(row))
-	b.WriteByte('\n')
-	row++
+	row += 2
 
 	helpBarStr := "Enter - Edit  |  S - Save  |  ESC - Back"
 	helpText := centerText(helpBarStr, m.width)

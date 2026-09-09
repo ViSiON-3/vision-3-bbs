@@ -87,6 +87,7 @@ func TestStartFTNWizardEditLoadsExistingConfig(t *testing.T) {
 		{"areafixPassword", w.areafixPassword, "afpw"},
 		{"sessionPassword", w.sessionPassword, "sesspw"},
 		{"packetPassword", w.packetPassword, "pktpw"},
+		{"originLine", w.originLine, "Custom Origin Line"},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %q, want %q", tc.name, tc.got, tc.want)
@@ -277,5 +278,42 @@ func TestUnsubscribedTagCountIgnoresAreasAbsentFromEcholist(t *testing.T) {
 	w.selectedAreas = []bool{false}
 	if n := w.unsubscribedTagCount(); n != 1 {
 		t.Errorf("dropped = %d, want 1 — FSX_GEN was offered and unticked", n)
+	}
+}
+
+// TestConfirmFTNWizardEditSavesEditedOrigin covers #273 on the edit path: the
+// wizard shows an Origin Line field, so a value the sysop changes there must
+// reach ftn.json — the field used to be write-only in the UI and dropped on save.
+func TestConfirmFTNWizardEditSavesEditedOrigin(t *testing.T) {
+	m, _ := configuredModel().startFTNWizardEdit("fsxnet")
+	m.ftnWizard.originLine = "Reworded Origin"
+	m.configPath = t.TempDir()
+
+	m, _ = m.confirmFTNWizard()
+
+	if got := m.configs.FTN.Networks["fsxnet"].Origin; got != "Reworded Origin" {
+		t.Errorf("Origin = %q, want the edited value saved", got)
+	}
+}
+
+// TestConfirmFTNWizardAddSavesOrigin covers #273 on the create path: a new
+// network must persist the origin entered in the wizard rather than always
+// leaving it empty.
+func TestConfirmFTNWizardAddSavesOrigin(t *testing.T) {
+	m := configuredModel()
+	m.ftnWizard = &ftnWizardState{
+		networkName: "tqwnet",
+		ownAddress:  "1337:3/123",
+		hubAddress:  "1337:3/100",
+		hubHostname: "hub.example.org",
+		hubPort:     24554,
+		originLine:  "My Board - example.org",
+	}
+	m.configPath = t.TempDir()
+
+	m, _ = m.confirmFTNWizard()
+
+	if got := m.configs.FTN.Networks["tqwnet"].Origin; got != "My Board - example.org" {
+		t.Errorf("Origin = %q, want the entered value saved", got)
 	}
 }

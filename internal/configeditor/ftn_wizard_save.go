@@ -77,6 +77,7 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		// rewriting them with the wizard's create-time defaults would throw
 		// away whatever the sysop set there.
 		existing.OwnAddress = w.ownAddress
+		existing.Origin = w.originLine
 		existing.Links = replaceHubLink(existing.Links, link)
 		m.configs.FTN.Networks[netKey] = existing
 
@@ -93,9 +94,10 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		m.configs.FTN.Networks[netKey] = config.FTNNetworkConfig{
 			InternalTosserEnabled: true,
 			OwnAddress:            w.ownAddress,
-			// Origin left empty: echomail then falls back to the board name.
-			// The tearline is not configurable — the software stamps it.
-			Links: []config.FTNLinkConfig{link},
+			// Origin as entered in the wizard; blank falls back to the board
+			// name. The tearline is not configurable — the software stamps it.
+			Origin: w.originLine,
+			Links:  []config.FTNLinkConfig{link},
 		}
 	}
 

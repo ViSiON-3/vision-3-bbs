@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -183,13 +184,10 @@ func (m Model) viewRecordEdit() string {
 	}
 
 	// Message or field help text
+	// Field help; renders two rows (wraps long help onto the second).
 	b.WriteString(m.renderFieldHelpLine(m.recordFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
-	row++
-
-	b.WriteString(m.backdrop.Line(row))
-	b.WriteByte('\n')
-	row++
+	row += 2
 
 	helpBarStr := "Enter - Edit  |  PgUp/PgDn - Records  |  ESC - Return"
 	if m.recordEditIdx < 0 {
@@ -354,10 +352,22 @@ func (m Model) renderRecordField(fieldIdx int, f fieldDef) (string, int) {
 // active field help text > blank fill. row is the absolute screen row this
 // line occupies.
 func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row int) string {
+	// Returns TWO screen rows: `row` and `row+1`. Help text that overruns the
+	// box wraps onto the second row instead of being cut mid-word at the box
+	// edge (#274); the second row is otherwise a blank backdrop line, which is
+	// what used to follow this line anyway. Callers advance row by 2 and emit
+	// no blank line of their own.
+	helpLine := func(text string, r int) string {
+		return m.backdrop.Segment(r, 0, padL) +
+			editInfoLabelStyle.Render(centerText(text, boxW+1)) +
+			m.backdrop.Segment(r, m.width-(padR+1), padR+1)
+	}
+
 	if m.message != "" {
-		return m.backdrop.Segment(row, 0, padL) +
+		first := m.backdrop.Segment(row, 0, padL) +
 			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
 			m.backdrop.Segment(row, m.width-(padR+1), padR+1)
+		return first + "\n" + m.backdrop.Line(row+1)
 	}
 	if m.editField >= 0 && m.editField < len(fields) && fields[m.editField].Help != "" {
 		helpText := fields[m.editField].Help
@@ -368,9 +378,44 @@ func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row int)
 		case ftLookup:
 			helpText += " (Enter to select)"
 		}
-		return m.backdrop.Segment(row, 0, padL) +
-			editInfoLabelStyle.Render(centerText(helpText, boxW+1)) +
-			m.backdrop.Segment(row, m.width-(padR+1), padR+1)
+		line1, line2 := wrapHelpTwoLines(helpText, boxW+1)
+		second := m.backdrop.Line(row + 1)
+		if line2 != "" {
+			second = helpLine(line2, row+1)
+		}
+		return helpLine(line1, row) + "\n" + second
 	}
-	return m.backdrop.Line(row)
+	return m.backdrop.Line(row) + "\n" + m.backdrop.Line(row+1)
+}
+
+// wrapHelpTwoLines splits help text to fit a field-help area that is at most
+// two lines of the given display width. It breaks on spaces where it can; the
+// second line is truncated with an ellipsis only if the text is too long even
+// for two lines. Returns the whole text as line1 (line2 empty) when it fits.
+func wrapHelpTwoLines(s string, width int) (string, string) {
+	if lipgloss.Width(s) <= width {
+		return s, ""
+	}
+	words := strings.Fields(s)
+	var line1 string
+	i := 0
+	for ; i < len(words); i++ {
+		cand := words[i]
+		if line1 != "" {
+			cand = line1 + " " + words[i]
+		}
+		if lipgloss.Width(cand) > width {
+			break
+		}
+		line1 = cand
+	}
+	if line1 == "" {
+		// A single word wider than the line — hard-cut it with an ellipsis.
+		return ansi.TruncateRunes(s, width, "…"), ""
+	}
+	line2 := strings.Join(words[i:], " ")
+	if lipgloss.Width(line2) > width {
+		line2 = ansi.TruncateRunes(line2, width, "…")
+	}
+	return line1, line2
 }
