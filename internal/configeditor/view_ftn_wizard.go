@@ -29,7 +29,8 @@ func (m Model) viewFTNWizardForm() string {
 	if visibleRows > maxFieldRows {
 		visibleRows = maxFieldRows
 	}
-	extraV := maxInt(0, m.height-visibleRows-10)
+	helpRegionRows := m.fieldHelpRegionRows(m.ftnWizardFields, boxW)
+	extraV := maxInt(0, m.height-visibleRows-8-helpRegionRows)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -137,10 +138,9 @@ func (m Model) viewFTNWizardForm() string {
 	}
 
 	// Message or field help text.
-	// Field help; renders two rows (wraps long help onto the second).
 	b.WriteString(m.renderFieldHelpLine(m.ftnWizardFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
-	row += 2
+	row += helpRegionRows
 
 	helpBarStr := "Enter - Edit  |  S - Save  |  ESC - Back"
 	helpText := centerText(helpBarStr, m.width)

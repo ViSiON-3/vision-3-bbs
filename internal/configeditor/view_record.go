@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -56,9 +55,11 @@ func (m Model) viewRecordEdit() string {
 	if visibleRows > maxFieldRows {
 		visibleRows = maxFieldRows
 	}
-	// Fixed rows: globalheader(1) + box(border+boxtitle+header+empty+visibleRows+empty+info+border = visibleRows+7) + helptxt(1) + bgline(1) + helpbar(1)
-	// Total fixed = visibleRows + 11
-	extraV := maxInt(0, m.height-visibleRows-11)
+	// Fixed rows: header(1) + box(visibleRows+7) + helpbar(1) = visibleRows+9,
+	// plus the help region (help content + a blank separator), which is 2 rows
+	// unless the active field's help wraps to a second line.
+	helpRegionRows := m.fieldHelpRegionRows(m.recordFields, boxW)
+	extraV := maxInt(0, m.height-visibleRows-9-helpRegionRows)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -183,11 +184,11 @@ func (m Model) viewRecordEdit() string {
 		row++
 	}
 
-	// Message or field help text
-	// Field help; renders two rows (wraps long help onto the second).
+	// Help area: active field help (wraps to a second line when long) plus a
+	// blank separator; fieldHelpRegionRows above budgeted its height.
 	b.WriteString(m.renderFieldHelpLine(m.recordFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
-	row += 2
+	row += helpRegionRows
 
 	helpBarStr := "Enter - Edit  |  PgUp/PgDn - Records  |  ESC - Return"
 	if m.recordEditIdx < 0 {
@@ -352,46 +353,76 @@ func (m Model) renderRecordField(fieldIdx int, f fieldDef) (string, int) {
 // active field help text > blank fill. row is the absolute screen row this
 // line occupies.
 func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row int) string {
-	// Returns TWO screen rows: `row` and `row+1`. Help text that overruns the
-	// box wraps onto the second row instead of being cut mid-word at the box
-	// edge (#274); the second row is otherwise a blank backdrop line, which is
-	// what used to follow this line anyway. Callers advance row by 2 and emit
-	// no blank line of their own.
+	// Renders the help area: the active field's help (one line, or two when it
+	// is long enough to wrap — #274), or a flash message, followed by one blank
+	// separator row before the footer. The separator is always present, so the
+	// gap below the help is preserved whether or not the help wrapped. Callers
+	// budget the row count with fieldHelpRegionRows and advance row by it.
 	helpLine := func(text string, r int) string {
 		return m.backdrop.Segment(r, 0, padL) +
 			editInfoLabelStyle.Render(centerText(text, boxW+1)) +
 			m.backdrop.Segment(r, m.width-(padR+1), padR+1)
 	}
 
-	if m.message != "" {
-		first := m.backdrop.Segment(row, 0, padL) +
-			flashMessageStyle.Render(" "+padRight(m.message, boxW)) +
-			m.backdrop.Segment(row, m.width-(padR+1), padR+1)
-		return first + "\n" + m.backdrop.Line(row+1)
-	}
-	if m.editField >= 0 && m.editField < len(fields) && fields[m.editField].Help != "" {
-		helpText := fields[m.editField].Help
-		// Add interaction hints
-		switch fields[m.editField].Type {
-		case ftYesNo:
-			helpText += " (Space toggles)"
-		case ftLookup:
-			helpText += " (Enter to select)"
-		}
-		line1, line2 := wrapHelpTwoLines(helpText, boxW+1)
-		second := m.backdrop.Line(row + 1)
+	var rows []string
+	switch {
+	case m.message != "":
+		rows = append(rows, m.backdrop.Segment(row, 0, padL)+
+			flashMessageStyle.Render(" "+padRight(m.message, boxW))+
+			m.backdrop.Segment(row, m.width-(padR+1), padR+1))
+	case m.activeFieldHelp(fields) != "":
+		line1, line2 := wrapHelpTwoLines(m.activeFieldHelp(fields), boxW+1)
+		rows = append(rows, helpLine(line1, row))
 		if line2 != "" {
-			second = helpLine(line2, row+1)
+			rows = append(rows, helpLine(line2, row+len(rows)))
 		}
-		return helpLine(line1, row) + "\n" + second
+	default:
+		rows = append(rows, m.backdrop.Line(row))
 	}
-	return m.backdrop.Line(row) + "\n" + m.backdrop.Line(row+1)
+	// Trailing blank separator between the help and the footer.
+	rows = append(rows, m.backdrop.Line(row+len(rows)))
+	return strings.Join(rows, "\n")
+}
+
+// activeFieldHelp returns the help text for the field being edited, with its
+// interaction hint appended, or "" when there is no active help. Shared by the
+// renderer and the row-count budget so the two agree on when help wraps.
+func (m Model) activeFieldHelp(fields []fieldDef) string {
+	if m.editField < 0 || m.editField >= len(fields) || fields[m.editField].Help == "" {
+		return ""
+	}
+	help := fields[m.editField].Help
+	switch fields[m.editField].Type {
+	case ftYesNo:
+		help += " (Space toggles)"
+	case ftLookup:
+		help += " (Enter to select)"
+	}
+	return help
+}
+
+// fieldHelpRegionRows is how many screen rows renderFieldHelpLine occupies for
+// the given state: the help/message content (one row, or two when the active
+// help wraps) plus one blank separator row. Views use it to keep the footer
+// position and the vertical padding math exact.
+func (m Model) fieldHelpRegionRows(fields []fieldDef, boxW int) int {
+	content := 1
+	if m.message == "" {
+		if help := m.activeFieldHelp(fields); help != "" {
+			if _, line2 := wrapHelpTwoLines(help, boxW+1); line2 != "" {
+				content = 2
+			}
+		}
+	}
+	return content + 1 // + separator
 }
 
 // wrapHelpTwoLines splits help text to fit a field-help area that is at most
 // two lines of the given display width. It breaks on spaces where it can; the
 // second line is truncated with an ellipsis only if the text is too long even
 // for two lines. Returns the whole text as line1 (line2 empty) when it fits.
+// All measurement and truncation is by display width, so wide (e.g. CJK)
+// glyphs cannot push a line past the box edge.
 func wrapHelpTwoLines(s string, width int) (string, string) {
 	if lipgloss.Width(s) <= width {
 		return s, ""
@@ -410,12 +441,25 @@ func wrapHelpTwoLines(s string, width int) (string, string) {
 		line1 = cand
 	}
 	if line1 == "" {
-		// A single word wider than the line — hard-cut it with an ellipsis.
-		return ansi.TruncateRunes(s, width, "…"), ""
+		// A single word wider than the line — hard-cut it by display width.
+		return truncateWithEllipsis(s, width), ""
 	}
 	line2 := strings.Join(words[i:], " ")
 	if lipgloss.Width(line2) > width {
-		line2 = ansi.TruncateRunes(line2, width, "…")
+		line2 = truncateWithEllipsis(line2, width)
 	}
 	return line1, line2
+}
+
+// truncateWithEllipsis cuts s to at most width display cells, reserving room
+// for a one-cell ellipsis. Rune-based truncation would overshoot width when s
+// contains wide glyphs, so measure in display cells throughout.
+func truncateWithEllipsis(s string, width int) string {
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	if width <= 1 {
+		return truncateToDisplayWidth(s, width)
+	}
+	return truncateToDisplayWidth(s, width-1) + "…"
 }

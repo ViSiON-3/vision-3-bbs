@@ -32,7 +32,8 @@ func (m Model) viewWizardForm() string {
 	visibleRows := maxRow
 	// Fixed rows: globalheader(1) + box(border+title+empty+rows+empty+info+border = rows+6) + helptxt(1) + bgline(1) + helpbar(1)
 	// Total fixed = rows + 10
-	extraV := maxInt(0, m.height-visibleRows-10)
+	helpRegionRows := m.fieldHelpRegionRows(m.wizardFields, boxW)
+	extraV := maxInt(0, m.height-visibleRows-8-helpRegionRows)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -119,10 +120,9 @@ func (m Model) viewWizardForm() string {
 	}
 
 	// Message or field help text
-	// Field help; renders two rows (wraps long help onto the second).
 	b.WriteString(m.renderFieldHelpLine(m.wizardFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
-	row += 2
+	row += helpRegionRows
 
 	helpBarStr := "Enter - Edit  |  S - Save  |  ESC - Back"
 	helpText := centerText(helpBarStr, m.width)

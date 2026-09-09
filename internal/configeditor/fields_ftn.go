@@ -35,7 +35,7 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 
 	return []fieldDef{
 		{
-			Label: "Network Name", Help: "Network identifier (e.g. fsxnet, fidonet) — also the binkd domain; stored lowercase", Type: ftString, Col: 3, Row: 1, Width: 30,
+			Label: "Network Name", Help: "Network name; also the binkd domain, stored lowercase (e.g. fsxnet)", Type: ftString, Col: 3, Row: 1, Width: 30,
 			Get: func() string { return key },
 			Set: func(val string) error {
 				// The key is the binkd domain (addresses are <addr>@<key> and
@@ -79,7 +79,7 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			},
 		},
 		{
-			Label: "Own Address", Help: "Your FTN address, with your point if you have one (e.g. 21:1/100 or 21:1/100.5)", Type: ftString, Col: 3, Row: 2, Width: 30,
+			Label: "Own Address", Help: "Your FTN address with point if any (e.g. 21:1/100 or 21:1/100.5)", Type: ftString, Col: 3, Row: 2, Width: 30,
 			Get: func() string { return netPtr.OwnAddress },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
