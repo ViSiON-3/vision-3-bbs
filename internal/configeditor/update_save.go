@@ -90,7 +90,8 @@ func (m *Model) saveAll() {
 			binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
 		}
 		if binkdSyncErr == nil {
-			binkdSyncErr = ftn.SyncBinkdSettings(binkdPath, m.configs.FTN.Binkd.Port, m.configs.FTN.Binkd.LogLevel)
+			binkdSyncErr = ftn.SyncBinkdSettings(binkdPath, m.configs.FTN.Binkd.Port, m.configs.FTN.Binkd.LogLevel,
+				ftn.BinkdOutboundDir(bbsRoot, m.configs.FTN.BinkdOutboundPath))
 		}
 	}
 	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {
