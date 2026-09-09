@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -56,8 +57,9 @@ func loadSysopNotices(path string) (map[int][]sysopNotice, error) {
 	return m, nil
 }
 
-// saveSysopNotices writes the queues atomically (temp file + rename) so a crash
-// mid-write cannot corrupt the store.
+// saveSysopNotices writes the queues atomically so a crash mid-write cannot
+// corrupt the store. It uses the shared atomicfile helper, which also handles
+// the Windows case where the destination is briefly open.
 func saveSysopNotices(path string, m map[int][]sysopNotice) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -66,11 +68,7 @@ func saveSysopNotices(path string, m map[int][]sysopNotice) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return atomicfile.WriteFile(path, data, 0o644)
 }
 
 // enqueueSysopNotice appends a notice to one user's queue.
@@ -86,9 +84,9 @@ func enqueueSysopNotice(path string, userID int, text string) error {
 	return saveSysopNotices(path, m)
 }
 
-// drainSysopNotices returns and removes one user's queued notices, so each is
-// shown exactly once.
-func drainSysopNotices(path string, userID int) ([]sysopNotice, error) {
+// peekSysopNotices returns one user's queued notices without removing them, so a
+// caller can display them and clear the queue only once delivery has succeeded.
+func peekSysopNotices(path string, userID int) ([]sysopNotice, error) {
 	sysopNoticesMu.Lock()
 	defer sysopNoticesMu.Unlock()
 
@@ -96,12 +94,34 @@ func drainSysopNotices(path string, userID int) ([]sysopNotice, error) {
 	if err != nil {
 		return nil, err
 	}
-	notices := m[userID]
-	if len(notices) == 0 {
-		return nil, nil
+	return m[userID], nil
+}
+
+// clearSysopNotices removes one user's queued notices.
+func clearSysopNotices(path string, userID int) error {
+	sysopNoticesMu.Lock()
+	defer sysopNoticesMu.Unlock()
+
+	m, err := loadSysopNotices(path)
+	if err != nil {
+		return err
+	}
+	if _, ok := m[userID]; !ok {
+		return nil
 	}
 	delete(m, userID)
-	if err := saveSysopNotices(path, m); err != nil {
+	return saveSysopNotices(path, m)
+}
+
+// drainSysopNotices returns and removes one user's queued notices in a single
+// step. runSysopNotices deliberately does not use this — it peeks, displays,
+// then clears, so a disconnect mid-display does not drop undelivered notices.
+func drainSysopNotices(path string, userID int) ([]sysopNotice, error) {
+	notices, err := peekSysopNotices(path, userID)
+	if err != nil || len(notices) == 0 {
+		return notices, err
+	}
+	if err := clearSysopNotices(path, userID); err != nil {
 		return nil, err
 	}
 	return notices, nil
@@ -125,8 +145,14 @@ func runSysopNotices(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	path := sysopNoticesPath(e.ServerCfg.DataDir)
-	notices, err := drainSysopNotices(path, currentUser.ID)
+	// Read config under lock: the executor hot-reloads it, so a direct field
+	// read would race an update (and trip the race detector).
+	path := sysopNoticesPath(e.GetServerConfig().DataDir)
+
+	// Peek, not drain: the queue is cleared only after the notices are actually
+	// written, so a disconnect or write error mid-display leaves them queued for
+	// the next login rather than losing them.
+	notices, err := peekSysopNotices(path, currentUser.ID)
 	if err != nil {
 		slog.Warn("failed to read sysop notices", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		return currentUser, "", nil
@@ -135,10 +161,23 @@ func runSysopNotices(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+	if werr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode); werr != nil {
+		return currentUser, "", nil // not delivered — leave queued
+	}
 	for _, n := range notices {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(n.Text)), outputMode)
-		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+		if werr := terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(n.Text)), outputMode); werr != nil {
+			slog.Warn("failed to write a sysop notice; leaving the queue for next login",
+				"node", nodeNumber, "handle", currentUser.Handle, "error", werr)
+			return currentUser, "", nil
+		}
+		if werr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode); werr != nil {
+			return currentUser, "", nil // leave queued
+		}
+	}
+
+	// Delivered — safe to clear now.
+	if cerr := clearSysopNotices(path, currentUser.ID); cerr != nil {
+		slog.Warn("failed to clear delivered sysop notices", "node", nodeNumber, "handle", currentUser.Handle, "error", cerr)
 	}
 	slog.Info("delivered queued sysop notices at login", "node", nodeNumber, "handle", currentUser.Handle, "count", len(notices))
 

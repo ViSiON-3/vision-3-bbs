@@ -162,9 +162,10 @@ regardless of validation state, see `SYSOPNOTICES` below.
 
 Delivers any queued SysOp notices to a co-SysOp-or-above caller at login, then
 clears them. Today the only producer is the new-user notice: when someone signs
-up and no SysOp is online to be paged (`notifySysopNewUser`), the notice is
-queued for every co-SysOp+ account and shown here at their next login. It is
-purely informational — with `autoValidateNewUsers` on there is nothing to do
+up, `notifySysopNewUser` pages each co-SysOp+ account that is online and queues
+the notice for each one that is not — so an offline co-SysOp is caught up here
+even when another SysOp was online and paged in real time. It is purely
+informational — with `autoValidateNewUsers` on there is nothing to do
 but perhaps view the user; with it off, `NEWUSERVAL` (above) is where the
 validation actually happens.
 
