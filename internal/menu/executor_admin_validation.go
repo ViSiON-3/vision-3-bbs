@@ -70,9 +70,13 @@ func runNewUserValidation(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if pendingCount == 0 {
-		msg := "\r\n|08No new users to validate...|07\r\n"
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		// Silent, and no pause. This runs on every sysop login now that it
+		// ships in the default sequence, and "no new users" plus a one-second
+		// sleep is a delay and a line of noise on every quiet day. VALIDATEUSER
+		// is the command for asking the question deliberately; it reports an
+		// empty queue and waits, which is right when a keystroke would
+		// otherwise appear to have done nothing.
+		slog.Debug("NEWUSERVAL: nothing pending", "node", nodeNumber)
 		return nil, "", nil
 	}
 

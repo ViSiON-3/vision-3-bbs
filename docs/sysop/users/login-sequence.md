@@ -135,14 +135,18 @@ pending-validation queue, where each user can be viewed, validated (`G`), or
 have their access level set (`F`).
 
 ```json
-{"command": "NEWUSERVAL", "sec_level": 255, "clear_screen": true}
+{"command": "NEWUSERVAL", "sec_level": 255}
 ```
 
 Silent for everyone else. The command checks SysOp access itself, so a missing
 or too-low `sec_level` cannot leak the pending count to an ordinary caller;
 `sec_level` remains the way to remove the item for a SysOp who does not want it.
 It is also silent when nothing is pending, so it costs a SysOp nothing on a
-quiet day.
+quiet day. Leave `clear_screen` off for the same reason: the sequence clears
+before the command decides whether it has anything to say, so setting it would
+blank the screen on every quiet login. Use `VALIDATEUSER` on a menu when you
+want to open the queue deliberately — that one reports an empty queue and waits,
+which is right when a keystroke would otherwise appear to have done nothing.
 
 This covers the SysOp who was not online when someone signed up. For the case
 where they are, see `notifySysopNewUser` in

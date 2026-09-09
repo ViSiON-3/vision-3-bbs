@@ -994,3 +994,46 @@ func TestNotifySysopNewUserCanBeTurnedOff(t *testing.T) {
 		t.Error("notifySysopNewUser=false was overridden by the default")
 	}
 }
+
+// NEWUSERVAL is a notice, not a screen. The login runner clears the screen
+// before the handler decides whether it has anything to say, so clear_screen
+// would blank a sysop's display on every quiet login for a command that then
+// prints nothing. Pin that neither the shipped sequence nor the code-level
+// fallback sets it.
+func TestNewUserValDoesNotClearTheScreen(t *testing.T) {
+	for _, item := range defaultLoginSequence() {
+		if item.Command == "NEWUSERVAL" && item.ClearScreen {
+			t.Error("the default login sequence clears the screen for NEWUSERVAL")
+		}
+	}
+
+	// The shipped template, read as a sysop's config.json would be.
+	dir := t.TempDir()
+	src, err := os.ReadFile(filepath.Join("..", "..", "templates", "configs", "login.json"))
+	if err != nil {
+		t.Skipf("shipped login.json not readable from here: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "login.json"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	seq, err := LoadLoginSequence(dir)
+	if err != nil {
+		t.Fatalf("LoadLoginSequence: %v", err)
+	}
+	found := false
+	for _, item := range seq {
+		if item.Command != "NEWUSERVAL" {
+			continue
+		}
+		found = true
+		if item.ClearScreen {
+			t.Error("the shipped login.json clears the screen for NEWUSERVAL")
+		}
+		if item.SecLevel == 0 {
+			t.Error("the shipped login.json leaves NEWUSERVAL ungated by sec_level")
+		}
+	}
+	if !found {
+		t.Error("the shipped login.json no longer includes NEWUSERVAL")
+	}
+}

@@ -60,7 +60,11 @@ func defaultLoginSequence() []LoginItem {
 		// No SecLevel: this fallback runs when login.json is missing, so the
 		// configured sysOpLevel is not in reach here. NEWUSERVAL gates itself
 		// on sysop ACS, and shows nothing when no users are pending.
-		{Command: "NEWUSERVAL", ClearScreen: true},
+		//
+		// No ClearScreen either: the runner clears before the handler decides
+		// whether it has anything to say, so setting it would blank a sysop's
+		// screen on every quiet login for a command that then prints nothing.
+		{Command: "NEWUSERVAL"},
 	}
 }
 
