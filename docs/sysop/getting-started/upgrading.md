@@ -1,13 +1,15 @@
 # Upgrading
 
-Upgrading ViSiON/3 replaces the programs. It does **not** touch your
-configuration, your users, or your menus — which is what makes it safe, and also
-what makes two steps necessary:
+Upgrading ViSiON/3 replaces the programs. Your settings in `configs/` and your
+`data/` are never touched by any upgrade path — which is what makes it safe, and
+also what makes two steps necessary:
 
 - Settings added since your version are not applied to your existing config
   files.
-- Depending on how you installed, menu and artwork fixes may not reach your
-  BBS either.
+- Your menu set is a different story, and which story depends on how you
+  installed. A repo-in-place upgrade **will** update `menus/`, and can
+  overwrite menu edits you made in the repo. An instance or bundle install
+  never updates it, so artwork fixes do not reach you at all.
 
 Nothing warns you about either one, so this is the part of an upgrade worth
 reading.
@@ -34,8 +36,13 @@ Take the BBS down, and copy these somewhere safe:
 ```
 configs/      your settings — the thing an upgrade must not lose
 data/         users, messages, files, logs
-menus/        only if you have edited any menu, .ANS or .CFG file
+menus/        if you have edited any menu, .ANS or .CFG file
 ```
+
+`configs/` and `data/` survive every path below, so those copies are insurance
+rather than necessity. `menus/` is the one genuinely at risk, and only on a
+repo-in-place install, where the menu set is version-controlled and a pull can
+overwrite edits made in place.
 
 ## Repo in place
 
