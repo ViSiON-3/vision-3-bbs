@@ -11,7 +11,7 @@ type MessageArea struct {
 	Description  string `json:"description"`               // Longer description
 	ACSRead      string `json:"acs_read"`                  // ACS string required to read
 	ACSWrite     string `json:"acs_write"`                 // ACS string required to post
-	AllowAnon    *bool  `json:"allow_anonymous,omitempty"` // Optional: allow anonymous posts (nil defaults to true)
+	AllowAnon    *bool  `json:"allow_anonymous,omitempty"` // Optional: allow anonymous posts (nil = no; area must opt in)
 	RealNameOnly bool   `json:"real_name_only,omitempty"`  // Require real name for posts in this area
 	ConferenceID int    `json:"conference_id,omitempty"`   // Conference this area belongs to (0=ungrouped)
 	BasePath     string `json:"base_path"`                 // Relative path to JAM base (e.g., "msgbases/general")
