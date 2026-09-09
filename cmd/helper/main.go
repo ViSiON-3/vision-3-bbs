@@ -547,10 +547,14 @@ func cmdFTNSetup(args []string) {
 	// 3. Build existing tag set for duplicate detection
 	existingTags := make(map[string]int) // tag -> area ID
 	maxAreaID := 0
+	maxAreaPos := 0
 	for _, a := range existingAreas {
 		existingTags[strings.ToUpper(a.Tag)] = a.ID
 		if a.ID > maxAreaID {
 			maxAreaID = a.ID
+		}
+		if a.Position > maxAreaPos {
+			maxAreaPos = a.Position
 		}
 	}
 
@@ -692,13 +696,18 @@ func cmdFTNSetup(args []string) {
 		})
 	}
 
-	// 8b. Add message areas
+	// 8b. Add message areas. Each gets the next position after the existing
+	// areas, so imported areas land at the end of the list in order rather
+	// than all at position 0 (which sorts them to the top, away from their
+	// conference).
 	nextID := maxAreaID + 1
+	nextPos := maxAreaPos + 1
 	for _, a := range newAreas {
 		effectiveTag := strings.ToUpper(*tagPrefix + a.Tag)
 		basePath := "msgbases/" + strings.ToLower(effectiveTag)
 		existingAreas = append(existingAreas, message.MessageArea{
 			ID:           nextID,
+			Position:     nextPos,
 			Tag:          effectiveTag,
 			Name:         a.Description,
 			Description:  a.Description,
@@ -714,6 +723,7 @@ func cmdFTNSetup(args []string) {
 			MaxAge:       365,
 		})
 		nextID++
+		nextPos++
 	}
 
 	// 8c. Update FTN network config
