@@ -5,30 +5,38 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
-// reorderRecord performs the slice manipulation for the current record type:
-// removes the source item and inserts it at the cursor position, then renumbers positions.
-func (m *Model) reorderRecord() {
-	src := m.reorderSourceIdx
-	dst := m.recordCursor
+// moveRecordSlice moves the item at src to dst in the current record type's
+// slice, without renumbering. Reorder mode calls this on each arrow key so the
+// item travels live with the cursor; positions are renumbered once, on commit.
+func (m *Model) moveRecordSlice(src, dst int) {
 	if src == dst {
 		return
 	}
-
 	switch m.recordType {
 	case "msgarea":
 		m.configs.MsgAreas = reorderSlice(m.configs.MsgAreas, src, dst)
-		renumberMsgAreaPositions(m.configs.MsgAreas)
 	case "filearea":
 		m.configs.FileAreas = reorderSlice(m.configs.FileAreas, src, dst)
 	case "conference":
 		m.configs.Conferences = reorderSlice(m.configs.Conferences, src, dst)
-		renumberConferencePositions(m.configs.Conferences)
 	case "protocol":
 		m.configs.Protocols = reorderSlice(m.configs.Protocols, src, dst)
 	case "archiver":
 		m.configs.Archivers.Archivers = reorderSlice(m.configs.Archivers.Archivers, src, dst)
 	case "login":
 		m.configs.LoginSeq = reorderSlice(m.configs.LoginSeq, src, dst)
+	}
+}
+
+// renumberReorderedPositions renumbers the position field of the record types
+// that carry one, after a reorder is committed. Called on Enter only, so a
+// cancelled (Esc) reorder leaves positions exactly as they were.
+func (m *Model) renumberReorderedPositions() {
+	switch m.recordType {
+	case "msgarea":
+		renumberMsgAreaPositions(m.configs.MsgAreas)
+	case "conference":
+		renumberConferencePositions(m.configs.Conferences)
 	}
 }
 

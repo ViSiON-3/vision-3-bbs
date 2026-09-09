@@ -77,7 +77,9 @@ func (m Model) viewRecordList() string {
 	for i := 0; i < listVisible; i++ {
 		idx := m.recordScroll + i
 		isHighlight := idx == m.recordCursor
-		isSource := inReorder && idx == m.reorderSourceIdx
+		// In reorder mode the item being moved travels with the cursor, so it is
+		// painted green at its live position rather than its original one.
+		isSource := inReorder && idx == m.recordCursor
 
 		var rowContent string
 		if idx < 0 || idx >= total {
@@ -95,9 +97,9 @@ func (m Model) viewRecordList() string {
 		} else {
 			content := m.renderRecordRow(idx, boxW)
 			switch {
-			case isSource && isHighlight:
-				rowContent = reorderSourceStyle.Render(content)
 			case isSource:
+				// In reorder mode the moving item rides the cursor, so this is
+				// also the highlighted row.
 				rowContent = reorderSourceStyle.Render(content)
 			case isHighlight:
 				rowContent = menuHighlightStyle.Render(content)
