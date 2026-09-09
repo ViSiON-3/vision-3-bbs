@@ -150,15 +150,21 @@ func TestFieldHelpAreaStableLayout(t *testing.T) {
 		}
 		return b.String()
 	}
-	layout := func(label string) (boxTop, total int) {
+	layout := func(t *testing.T, label string) (boxTop, total int) {
+		t.Helper()
 		m := configuredModel()
 		m.width, m.height, m.mode = 78, 40, modeRecordEdit
 		m.recordType, m.recordEditIdx = "msgarea", 0
 		m.recordFields = m.buildRecordFields()
+		found := false
 		for i, f := range m.recordFields {
 			if f.Label == label {
 				m.editField = i
+				found = true
 			}
+		}
+		if !found {
+			t.Fatalf("field %q not found in the record fields", label)
 		}
 		lines := strings.Split(m.viewRecordEdit(), "\n")
 		boxTop = -1
@@ -168,11 +174,14 @@ func TestFieldHelpAreaStableLayout(t *testing.T) {
 				break
 			}
 		}
+		if boxTop < 0 {
+			t.Fatalf("box header row not found in rendered output for field %q", label)
+		}
 		return boxTop, len(lines)
 	}
 	// "Tag" has one-line help; "Area Type" wraps to two.
-	topShort, nShort := layout("Tag")
-	topWrap, nWrap := layout("Area Type")
+	topShort, nShort := layout(t, "Tag")
+	topWrap, nWrap := layout(t, "Area Type")
 	if topShort != topWrap {
 		t.Errorf("box jumped between fields: top row %d vs %d", topShort, topWrap)
 	}

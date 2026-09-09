@@ -186,7 +186,7 @@ func (m Model) viewRecordEdit() string {
 
 	// Help area: active field help (wraps to a second line when long) plus a
 	// blank separator; fieldHelpRegionRows above budgeted its height.
-	b.WriteString(m.renderFieldHelpLine(m.recordFields, padL, padR, boxW, row))
+	b.WriteString(m.renderFieldHelpLine(m.recordFields, padL, padR, boxW, row, helpRegionRows))
 	b.WriteByte('\n')
 	row += helpRegionRows
 
@@ -352,20 +352,19 @@ func (m Model) renderRecordField(fieldIdx int, f fieldDef) (string, int) {
 // sourcing its background fill from m.backdrop. Priority: flash message >
 // active field help text > blank fill. row is the absolute screen row this
 // line occupies.
-func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row int) string {
+func (m Model) renderFieldHelpLine(fields []fieldDef, padL, padR, boxW, row, region int) string {
 	// Renders the help area: the active field's help (one line, or two when it
-	// wraps — #274), or a flash message, padded with blank backdrop rows to a
+	// wraps — #274), or a flash message, padded with blank backdrop rows to the
 	// fixed region height so the trailing blank(s) always sit above the footer.
-	// The region is sized to the tallest help in this field set, not the active
-	// field (fieldHelpRegionRows), so moving between fields never shifts the box
-	// or the footer — no jump when a field's help happens to wrap.
+	// The caller passes region (from fieldHelpRegionRows, used for its layout
+	// math), which is sized to the tallest help in this field set — not the
+	// active field — so moving between fields never shifts the box or footer.
 	helpLine := func(text string, r int) string {
 		return m.backdrop.Segment(r, 0, padL) +
 			editInfoLabelStyle.Render(centerText(text, boxW+1)) +
 			m.backdrop.Segment(r, m.width-(padR+1), padR+1)
 	}
 
-	region := m.fieldHelpRegionRows(fields, boxW)
 	var rows []string
 	switch {
 	case m.message != "":
