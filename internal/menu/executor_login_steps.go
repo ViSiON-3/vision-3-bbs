@@ -1,7 +1,9 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -16,10 +18,13 @@ import (
 // runNewMailScan checks for new private mail and displays a count to the user.
 func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
+	s := c.s
 	terminal := c.terminal
 	currentUser := c.currentUser
 	nodeNumber := c.nodeNumber
 	outputMode := c.outputMode
+	termWidth := c.termWidth
+	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return nil, "", nil
@@ -89,6 +94,21 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	if newMailCount > 0 {
 		mailMsg := fmt.Sprintf(e.LoadedStrings.ExecNewMailCount, newMailCount)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(mailMsg)), outputMode)
+
+		// Offer to read it now rather than making the caller find the mail menu.
+		// Saying yes drops them straight into the private-mail reader, where they
+		// can reply to or skip each message; no leaves the count as the notice.
+		readNow, err := e.PromptYesNo(s, terminal, "|07Read it now? @", outputMode, nodeNumber, termWidth, termHeight, true)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, "LOGOFF", io.EOF
+			}
+			slog.Warn("read-now prompt failed", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
+			return currentUser, "", nil
+		}
+		if readNow {
+			return runReadPrivateMail(c, "")
+		}
 	} else {
 		msg := e.LoadedStrings.ExecNoNewMail
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)

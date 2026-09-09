@@ -206,7 +206,7 @@ func TestLoadLoginSequence_MissingFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should return default sequence
-	want := []string{"PRINTNEWS", "LASTCALLS", "ONELINERS", "USERSTATS", "NEWUSERVAL"}
+	want := []string{"PRINTNEWS", "LASTCALLS", "ONELINERS", "USERSTATS", "NEWUSERVAL", "SYSOPNOTICES"}
 	if len(result) != len(want) {
 		t.Fatalf("expected default %d-item sequence, got %d", len(want), len(result))
 	}

@@ -152,6 +152,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["PENDINGVALIDATIONNOTICE"] = runPendingValidationNotice // SysOp notice for new users awaiting validation
 	registry["VALIDATEUSER"] = runValidateUser                       // Validate user accounts from admin menu
 	registry["NEWUSERVAL"] = runNewUserValidation                    // Prompt to validate new users if any pending
+	registry["SYSOPNOTICES"] = runSysopNotices                       // Show queued sysop notices (e.g. new-user joins) at login
 	registry["UNVALIDATEUSER"] = runUnvalidateUser                   // Remove validation from user accounts
 	registry["BANUSER"] = runBanUser                                 // Quick-ban user accounts
 	registry["DELETEUSER"] = runDeleteUser                           // Soft-delete user accounts (data preserved)
