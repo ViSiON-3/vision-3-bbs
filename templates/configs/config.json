@@ -7,6 +7,7 @@
   "invisibleLevel": 250,
   "newUserLevel": 10,
   "autoValidateNewUsers": false,
+  "notifySysopNewUser": true,
   "regularUserLevel": 25,
   "logonLevel": 10,
   "anonymousLevel": 50,

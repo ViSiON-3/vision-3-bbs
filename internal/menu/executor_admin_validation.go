@@ -47,7 +47,18 @@ func runNewUserValidation(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	// Security level check is handled by login.json sec_level field
+	// Gate here, not only through login.json's sec_level.
+	//
+	// This used to trust the config entirely, but the prompt ran before any
+	// check: a non-sysop reaching this item was shown the pending count, and
+	// only discovered they could not act on it after answering yes, when the
+	// editor behind it refused them. The count is the sysop's business, so a
+	// misconfigured sec_level must not leak it. sec_level still works, and is
+	// still the way to remove the item for sysops who do not want it.
+	if !checkACS(fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel), currentUser, s, terminal, sessionStartTime) {
+		slog.Debug("NEWUSERVAL skipped: not a sysop", "node", nodeNumber, "handle", currentUser.Handle)
+		return nil, "", nil
+	}
 
 	// Get all unvalidated users (skip deleted and banned users)
 	allUsers := userManager.GetAllUsers()

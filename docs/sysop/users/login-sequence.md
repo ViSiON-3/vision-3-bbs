@@ -128,6 +128,26 @@ Displays `FASTLOGN.ANS` and loads options from `menus/v3/cfg/FASTLOGN.CFG`. The 
 
 If the user selects a jump option (e.g., skip to MAIN), the remaining login items are skipped and the user goes directly to the chosen menu. Placing FASTLOGIN as the first item lets users skip the entire sequence upfront. Placing it at the end lets users jump to a submenu instead of MAIN after seeing everything.
 
+### NEWUSERVAL
+
+Tells a SysOp how many accounts are waiting for review and offers to open the
+pending-validation queue, where each user can be viewed, validated (`G`), or
+have their access level set (`F`).
+
+```json
+{"command": "NEWUSERVAL", "sec_level": 255, "clear_screen": true}
+```
+
+Silent for everyone else. The command checks SysOp access itself, so a missing
+or too-low `sec_level` cannot leak the pending count to an ordinary caller;
+`sec_level` remains the way to remove the item for a SysOp who does not want it.
+It is also silent when nothing is pending, so it costs a SysOp nothing on a
+quiet day.
+
+This covers the SysOp who was not online when someone signed up. For the case
+where they are, see `notifySysopNewUser` in
+[Configuration](../configuration/configuration.md).
+
 ### CHECKNUV
 
 Checks whether the current user is eligible to vote in the New User Voting system (`useNuv` enabled and access level `>= nuvUseLevel`). If there are candidates they haven't voted on, a brief notification is shown with a Y/N prompt to vote immediately. If there are no unvoted candidates, this step is completely silent.
@@ -293,6 +313,7 @@ All login sequence commands are also registered as menu runnables and can be use
 | WHOISONLINE    | `RUN:WHOISONLINE` (existing) |
 | PRINTNEWS      | `RUN:PRINTNEWS`              |
 | CHECKNUV       | `RUN:CHECKNUV`               |
+| NEWUSERVAL     | `RUN:NEWUSERVAL`             |
 
 ## File Locations
 

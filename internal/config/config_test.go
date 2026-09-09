@@ -206,7 +206,7 @@ func TestLoadLoginSequence_MissingFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should return default sequence
-	want := []string{"PRINTNEWS", "LASTCALLS", "ONELINERS", "USERSTATS"}
+	want := []string{"PRINTNEWS", "LASTCALLS", "ONELINERS", "USERSTATS", "NEWUSERVAL"}
 	if len(result) != len(want) {
 		t.Fatalf("expected default %d-item sequence, got %d", len(want), len(result))
 	}
@@ -956,5 +956,41 @@ func TestSanitizeChallengeGate(t *testing.T) {
 	}
 	if cfg.ChallengeGateKey != "ESC" {
 		t.Errorf("key not defaulted: %q", cfg.ChallengeGateKey)
+	}
+}
+
+// An existing config.json that predates notifySysopNewUser must still get the
+// notice: the key is absent, so it has to inherit the default rather than the
+// bool zero value. The notice only ever adds a line at a SysOp's own prompt,
+// which is why it defaults on rather than requiring an edit to pick up.
+func TestNotifySysopNewUserDefaultsOnForOlderConfigs(t *testing.T) {
+	dir := t.TempDir()
+	// A config with no mention of the key at all.
+	if err := os.WriteFile(filepath.Join(dir, "config.json"),
+		[]byte(`{"boardName":"Old Board","sysOpLevel":255}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+	if !cfg.NotifySysopNewUser {
+		t.Error("an upgrading config did not inherit notifySysopNewUser=true")
+	}
+}
+
+// And an explicit false is still honoured.
+func TestNotifySysopNewUserCanBeTurnedOff(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.json"),
+		[]byte(`{"boardName":"Quiet","notifySysopNewUser":false}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+	if cfg.NotifySysopNewUser {
+		t.Error("notifySysopNewUser=false was overridden by the default")
 	}
 }

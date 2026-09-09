@@ -24,6 +24,11 @@
         "clear_screen": true
     },
     {
+        "command": "NEWUSERVAL",
+        "sec_level": 255,
+        "clear_screen": true
+    },
+    {
         "command": "CHECKNUV"
     }
 ]

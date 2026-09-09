@@ -26,25 +26,30 @@ type ServerConfig struct {
 	// does not affect whether they can log in — that is decided by
 	// AccessLevel against LogonLevel — it sets the reviewed flag, which the
 	// required-infoforms prompt keys off.
-	AutoValidateNewUsers bool   `json:"autoValidateNewUsers"`
-	RegularUserLevel     int    `json:"regularUserLevel"`
-	LogonLevel           int    `json:"logonLevel"`
-	AnonymousLevel       int    `json:"anonymousLevel"`
-	SSHPort              int    `json:"sshPort"`
-	SSHHost              string `json:"sshHost"`
-	SSHEnabled           bool   `json:"sshEnabled"`
-	TelnetPort           int    `json:"telnetPort"`
-	TelnetHost           string `json:"telnetHost"`
-	TelnetEnabled        bool   `json:"telnetEnabled"`
-	MaxNodes             int    `json:"maxNodes"`
-	MaxConnectionsPerIP  int    `json:"maxConnectionsPerIP"`
-	IPBlocklistPath      string `json:"ipBlocklistPath"`
-	IPAllowlistPath      string `json:"ipAllowlistPath"`
-	MaxFailedLogins      int    `json:"maxFailedLogins"`
-	LockoutMinutes       int    `json:"lockoutMinutes"`
-	FileListingMode      string `json:"fileListingMode"`
-	LegacySSHAlgorithms  bool   `json:"legacySSHAlgorithms"`
-	AllowNewUsers        bool   `json:"allowNewUsers"`
+	AutoValidateNewUsers bool `json:"autoValidateNewUsers"`
+	// NotifySysopNewUser pages any co-sysop or above who is online when a
+	// signup completes, delivered at their next menu prompt. Independent of
+	// AutoValidateNewUsers: an auto-validated signup raises nothing to review,
+	// but a sysop still wants to know somebody joined.
+	NotifySysopNewUser  bool   `json:"notifySysopNewUser"`
+	RegularUserLevel    int    `json:"regularUserLevel"`
+	LogonLevel          int    `json:"logonLevel"`
+	AnonymousLevel      int    `json:"anonymousLevel"`
+	SSHPort             int    `json:"sshPort"`
+	SSHHost             string `json:"sshHost"`
+	SSHEnabled          bool   `json:"sshEnabled"`
+	TelnetPort          int    `json:"telnetPort"`
+	TelnetHost          string `json:"telnetHost"`
+	TelnetEnabled       bool   `json:"telnetEnabled"`
+	MaxNodes            int    `json:"maxNodes"`
+	MaxConnectionsPerIP int    `json:"maxConnectionsPerIP"`
+	IPBlocklistPath     string `json:"ipBlocklistPath"`
+	IPAllowlistPath     string `json:"ipAllowlistPath"`
+	MaxFailedLogins     int    `json:"maxFailedLogins"`
+	LockoutMinutes      int    `json:"lockoutMinutes"`
+	FileListingMode     string `json:"fileListingMode"`
+	LegacySSHAlgorithms bool   `json:"legacySSHAlgorithms"`
+	AllowNewUsers       bool   `json:"allowNewUsers"`
 
 	// Challenge Gate — optional pre-login bot challenge (botgate-style).
 	EnableChallengeGate          bool   `json:"enableChallengeGate"`          // master on/off
@@ -162,6 +167,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		WFCEnabled:                   true,
 		NewUserLevel:                 1,
 		AutoValidateNewUsers:         false,
+		NotifySysopNewUser:           true,
 		RegularUserLevel:             10,
 		LogonLevel:                   10,
 		AnonymousLevel:               5,

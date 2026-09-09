@@ -232,6 +232,9 @@ type StringsConfig struct {
 	PageInvalidNode       string `json:"pageInvalidNode"`
 	PageSelfError         string `json:"pageSelfError"`
 	PageNodeOffline       string `json:"pageNodeOffline"`
+	// NewUserSysopPage is queued to every online co-sysop when a signup
+	// completes, and delivered through the same page queue as PageMessageFormat.
+	NewUserSysopPage string `json:"newUserSysopPage"`
 
 	// Newuser strings (V3-specific)
 	NewUsersClosedStr       string `json:"newUsersClosedStr"`
