@@ -65,3 +65,27 @@ func TestMatrixMessageKeysHaveDistinctArity(t *testing.T) {
 		t.Errorf("replacement key should take three verbs, found %d", n)
 	}
 }
+
+// An upgrade must not need a strings.json edit to get the new-user notice.
+// notifySysopNewUser defaults on so no config change is required; if the string
+// it formats has no fallback, an older strings.json leaves it empty and
+// notifySysopsOfNewUser skips silently — the setting would read as enabled
+// while nothing ever arrived.
+func TestNewUserSysopPageSurvivesAnOlderStringsFile(t *testing.T) {
+	dir := t.TempDir()
+	// A strings.json with no mention of the key, as any pre-upgrade file has.
+	if err := os.WriteFile(filepath.Join(dir, "strings.json"),
+		[]byte(`{"pauseString":"press a key"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadStrings(dir)
+	if err != nil {
+		t.Fatalf("LoadStrings: %v", err)
+	}
+	if cfg.NewUserSysopPage == "" {
+		t.Fatal("newUserSysopPage is empty for an older strings.json; the notice would be skipped silently")
+	}
+	if !strings.Contains(cfg.NewUserSysopPage, "%s") || !strings.Contains(cfg.NewUserSysopPage, "%d") {
+		t.Errorf("fallback %q lacks the handle/node verbs the call site passes", cfg.NewUserSysopPage)
+	}
+}
