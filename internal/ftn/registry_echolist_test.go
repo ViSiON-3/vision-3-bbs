@@ -14,12 +14,12 @@ func TestRegistryEcholistURLsAreFetchable(t *testing.T) {
 		t.Fatalf("LoadRegistry: %v", err)
 	}
 
-	// Zones whose echolist really is only available over FTN, so a bare
-	// filename is the correct record. Anything else with an unfetchable
-	// echolist should be looked at rather than silently accepted.
-	knownFTNOnly := map[int]bool{}
+	// Many networks legitimately hand their .NA file out over FTN and record
+	// only a filename, which the wizard explains rather than treating as an
+	// error. These are logged, not failed: the list is a prompt for anyone who
+	// knows a network does publish its echolist on the web.
 	for _, n := range networks {
-		if n.EcholistURL == "" || knownFTNOnly[n.Zone] {
+		if n.EcholistURL == "" {
 			continue
 		}
 		if !EcholistIsDownloadable(n.EcholistURL) {

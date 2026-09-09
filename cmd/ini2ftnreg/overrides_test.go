@@ -86,14 +86,26 @@ func TestEveryOverrideMatchesAShippedNetwork(t *testing.T) {
 		}
 		// The shipped registry is generated with these applied, so each value
 		// must already be present in it. A mismatch means registry.json was
-		// hand-edited and the next regeneration would undo the edit.
-		if o.EcholistURL != "" && n.EcholistURL != o.EcholistURL {
-			t.Errorf("zone %d echolist_url: registry has %q, override says %q — registry.json looks hand-edited",
-				o.Zone, n.EcholistURL, o.EcholistURL)
-		}
-		if o.NodelistURL != "" && n.NodelistURL != o.NodelistURL {
-			t.Errorf("zone %d nodelist_url: registry has %q, override says %q — registry.json looks hand-edited",
-				o.Zone, n.NodelistURL, o.NodelistURL)
+		// hand-edited and the next regeneration would undo the edit. Every
+		// overrideable field is checked, not just the ones in use today, so
+		// adding a field to the override struct cannot quietly escape the
+		// guard.
+		for _, f := range []struct {
+			name     string
+			override string
+			shipped  string
+		}{
+			{"echolist_url", o.EcholistURL, n.EcholistURL},
+			{"nodelist_url", o.NodelistURL, n.NodelistURL},
+			{"pack_url", o.PackURL, n.PackURL},
+			{"info_url", o.InfoURL, n.InfoURL},
+			{"hub_address", o.HubAddress, n.HubAddress},
+			{"hub_hostname", o.HubHostname, n.HubHostname},
+		} {
+			if f.override != "" && f.shipped != f.override {
+				t.Errorf("zone %d (%s) %s: registry has %q, override says %q — registry.json looks hand-edited",
+					o.Zone, n.Name, f.name, f.shipped, f.override)
+			}
 		}
 	}
 }
