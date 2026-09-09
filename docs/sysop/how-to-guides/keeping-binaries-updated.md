@@ -2,6 +2,10 @@
 
 This guide is for sysops who want to track active development — running the latest unreleased code without downloading a new release archive each time.
 
+> For upgrading a BBS you already run — what a new version does and does not
+> bring with it, and which settings you have to add by hand — see
+> [Upgrading](getting-started/upgrading.md).
+
 > **Prerequisites:** Go 1.24+ ([install Go](https://golang.org/dl/)), Git.
 
 ---
