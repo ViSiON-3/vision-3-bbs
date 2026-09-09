@@ -10,18 +10,23 @@ import (
 )
 
 func TestBinkdOutboundDir(t *testing.T) {
+	root := t.TempDir()
+	// t.TempDir is absolute on every platform; a literal "/srv/mail/out" is
+	// not absolute on Windows and would be joined to the root instead.
+	absolute := filepath.Join(t.TempDir(), "mailout")
+
 	tests := []struct {
 		name       string
 		configured string
 		want       string
 	}{
-		{"unset falls back", "", filepath.Join("/bbs", "data", "ftn", "out")},
-		{"relative resolves against root", "data/ftn/out", filepath.Join("/bbs", "data/ftn/out")},
-		{"absolute kept as-is", "/srv/mail/out", "/srv/mail/out"},
+		{"unset falls back", "", filepath.Join(root, "data", "ftn", "out")},
+		{"relative resolves against root", "data/ftn/out", filepath.Join(root, "data/ftn/out")},
+		{"absolute kept as-is", absolute, absolute},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := BinkdOutboundDir("/bbs", tc.configured); got != tc.want {
+			if got := BinkdOutboundDir(root, tc.configured); got != tc.want {
 				t.Errorf("BinkdOutboundDir(%q) = %q, want %q", tc.configured, got, tc.want)
 			}
 		})
@@ -62,19 +67,21 @@ func TestUpdateBinkdConfHonorsOutboundPath(t *testing.T) {
 func TestRegenerateBinkdConfHonorsOutboundPath(t *testing.T) {
 	dir := t.TempDir()
 	conf := filepath.Join(dir, "binkd.conf")
+	outside := filepath.Join(t.TempDir(), "mailout") // absolute on every platform
 
 	cfg := BinkdConfig{
 		BBSRoot:      dir,
 		BoardName:    "Test BBS",
 		Domains:      map[string]int{"fsxnet": 21},
 		Addresses:    []string{"21:4/158@fsxnet"},
-		OutboundPath: "/srv/mail/out",
+		OutboundPath: outside,
 	}
 	if err := RegenerateBinkdConf(conf, cfg, nil); err != nil {
 		t.Fatalf("RegenerateBinkdConf: %v", err)
 	}
-	if got := readConf(t, conf); !strings.Contains(got, "domain fsxnet /srv/mail/out 21") {
-		t.Errorf("configured outbound path missing from:\n%s", got)
+	want := "domain fsxnet " + outside + " 21"
+	if got := readConf(t, conf); !strings.Contains(got, want) {
+		t.Errorf("want %q in:\n%s", want, got)
 	}
 }
 
