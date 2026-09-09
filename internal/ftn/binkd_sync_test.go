@@ -228,3 +228,51 @@ func TestSyncBinkdConfPreservesNodeOptions(t *testing.T) {
 		})
 	}
 }
+
+// TestSyncBinkdConfUpdatesShortNodeLine covers a node directive that names
+// only its address — legal binkd config for a listed node with no host or
+// password. Matching such a line needs the address alone, so the sync used to
+// skip it entirely and the append pass then wrote a second directive for the
+// same node.
+func TestSyncBinkdConfUpdatesShortNodeLine(t *testing.T) {
+	links := map[string]BinkdLinkSync{
+		"21:4/999@fsxnet": {SessionPwd: "newpw", HostPort: "new.example.org:24556"},
+	}
+	for _, line := range []string{
+		"node 21:4/999@fsxnet",
+		"node 21:4/999@fsxnet old.example.org:24554",
+		"node -nomd 21:4/999@fsxnet",
+	} {
+		t.Run(line, func(t *testing.T) {
+			path := writeConf(t, "iport 24554\n"+line+"\n")
+			if err := SyncBinkdConf(path, BinkdIdentity{}, links); err != nil {
+				t.Fatalf("SyncBinkdConf: %v", err)
+			}
+			got := readConf(t, path)
+			if n := strings.Count(got, "node "); n != 1 {
+				t.Errorf("expected the line to be updated in place, got %d node lines:\n%s", n, got)
+			}
+			if !strings.Contains(got, "new.example.org:24556 newpw") {
+				t.Errorf("host and password not synced:\n%s", got)
+			}
+		})
+	}
+}
+
+// TestSyncBinkdConfKeepsHostWhenLinkHasNone covers a link configured without a
+// hostname: only the password is synced, and the host already on the line is
+// left as it is.
+func TestSyncBinkdConfKeepsHostWhenLinkHasNone(t *testing.T) {
+	path := writeConf(t, "iport 24554\nnode 21:4/999@fsxnet hub.example.org:24554 oldpw\n")
+	links := map[string]BinkdLinkSync{
+		"21:4/999@fsxnet": {SessionPwd: "newpw"},
+	}
+	if err := SyncBinkdConf(path, BinkdIdentity{}, links); err != nil {
+		t.Fatalf("SyncBinkdConf: %v", err)
+	}
+	got := readConf(t, path)
+	want := "node 21:4/999@fsxnet hub.example.org:24554 newpw"
+	if !strings.Contains(got, want+"\n") {
+		t.Errorf("got:\n%s\nwant line: %s", got, want)
+	}
+}

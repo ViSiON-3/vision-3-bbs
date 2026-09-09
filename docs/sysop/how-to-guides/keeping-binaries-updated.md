@@ -146,6 +146,6 @@ Switch back to main at any time with `git checkout main && ./build.sh`.
 ## Notes
 
 - **Data and configs are not affected.** Symlinks only replace the Go binaries.
-- **`bin/` binaries (`sexyz`, `binkd`) are not built from Go source.** If you need these, download them from a [release archive](https://github.com/ViSiON-3/vision-3-bbs/releases) and copy them into your instance's `bin/` directory. To build binkd yourself, use `./scripts/build-binkd.sh` rather than compiling it by hand — a binkd built without its `configure` script has a broken MD5 and cannot authenticate CRAM-MD5 sessions ([details](../messages/ftn-echomail.md#cram-md5-authentication-fails)).
+- **`bin/` binaries (`sexyz`, `binkd`) are not built from Go source.** If you need these, download them from a [release archive](https://github.com/ViSiON-3/vision-3-bbs/releases) and copy them into your instance's `bin/` directory. To build binkd yourself, use `./scripts/build-binkd.sh` rather than compiling it by hand — a binkd built without its `configure` script has a broken MD5 and cannot authenticate CRAM-MD5 sessions ([details](messages/ftn-echomail.md#cram-md5-authentication-fails)).
 - **Windows users** can use `dev-setup.sh` under WSL, or copy binaries manually after each build. Symlinks on Windows require Developer Mode.
 - **After major updates**, check release notes for new config keys or migration steps.

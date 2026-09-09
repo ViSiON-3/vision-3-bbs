@@ -97,9 +97,12 @@ make CFLAGS="-Wall -Wno-char-subscripts -O2 -g $DIALECT" >/dev/null || fail "mak
 
 # ── Verify the MD5 that was actually compiled in ─────────────────
 # Rebuild md5b.c with the same defines the binary used and check hmac_md5
-# against RFC 2202 test case 1: a key of twenty 0x0b bytes over "Hi There".
+# against RFC 2202 HMAC-MD5 test case 1: a 16-byte key of 0x0b over "Hi There".
 info "Verifying CRAM-MD5 against the RFC 2202 test vector"
-DEFINES="$(sed -n 's/^AUTODEFS=//p' Makefile)"
+# Split on whitespace rather than eval'ing the line: the value comes from a
+# generated Makefile in a checkout the caller may have supplied. Nothing we
+# compile here reads the PACKAGE_* defines whose quoting eval would resolve.
+read -ra DEFINES < <(sed -n 's/^AUTODEFS=//p' Makefile)
 cat > md5-selftest.c <<'EOF'
 #include <stdio.h>
 #include <stdlib.h>
@@ -127,8 +130,7 @@ int main(void) {
     return 0;
 }
 EOF
-# shellcheck disable=SC2086  # DEFINES is a pre-quoted list of -D flags
-eval gcc $DIALECT -w $DEFINES -DHAVE_FORK -DUNIX '-DOS=\"UNIX\"' -I. \
+gcc "$DIALECT" -w "${DEFINES[@]}" -DHAVE_FORK -DUNIX -DOS='"UNIX"' -I. \
     -o md5-selftest md5-selftest.c || fail "could not build the MD5 self-test"
 
 EXPECTED="9294727a3638bb1c13f48ef8158bfc9d"
