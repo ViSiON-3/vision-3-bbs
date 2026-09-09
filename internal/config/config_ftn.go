@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
 // FTNLinkConfig defines an FTN link (uplink/downlink node).
@@ -161,12 +163,50 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 		if net.InternalTosserEnabled {
 			enabledCount++
 			slog.Info("ftn network internal tosser enabled", "network", name, "address", net.OwnAddress)
+			warnPointWithoutBossLink(name, net)
 		}
 	}
 	slog.Info("loaded FTN configuration", "networks", len(config.Networks), "tosserEnabled", enabledCount)
 
 	applyBinkdDefaults(&config.Binkd)
 	return config, nil
+}
+
+// warnPointWithoutBossLink logs a warning when a network posts from a point
+// address (e.g. 1337:3/123.1) whose boss node (1337:3/123) is not among its
+// links. Inbound echomail arrives from the boss node, so if it is not a link
+// the tosser matches nothing and the mail piles up unclaimed — the exact
+// misconfiguration behind #276, surfaced here at load instead of silently at
+// toss time. Point-numbers and a mismatched boss are common enough to warn,
+// not fail: the config still loads.
+func warnPointWithoutBossLink(name string, net FTNNetworkConfig) {
+	if !pointBossMissing(net) {
+		return
+	}
+	own, _ := jam.ParseAddress(net.OwnAddress)
+	slog.Warn("ftn network posts from a point but its boss node is not a link — "+
+		"inbound mail from the boss will match no link and pile up unclaimed; add it under Echomail Links",
+		"network", name,
+		"own_address", net.OwnAddress,
+		"boss_node", fmt.Sprintf("%d:%d/%d", own.Zone, own.Net, own.Node))
+}
+
+// pointBossMissing reports whether the network's own_address is a point whose
+// boss node matches none of its links. Link matching compares zone/net/node
+// and ignores the point, the same way the tosser matches an inbound packet's
+// origin, so a link recorded as another point of the boss node still counts.
+func pointBossMissing(net FTNNetworkConfig) bool {
+	own, err := jam.ParseAddress(net.OwnAddress)
+	if err != nil || own.Point == 0 {
+		return false // not a point, or unparseable (validated elsewhere)
+	}
+	for _, l := range net.Links {
+		la, err := jam.ParseAddress(l.Address)
+		if err == nil && la.Zone == own.Zone && la.Net == own.Net && la.Node == own.Node {
+			return false // the boss node is a configured link
+		}
+	}
+	return true
 }
 
 // ValidateFTNConfig checks that all required global path fields are set for any

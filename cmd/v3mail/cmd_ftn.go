@@ -110,7 +110,11 @@ func cmdToss(args []string) {
 		}
 	}
 
-	if hadErrors {
+	// A persistent backlog — mail unclaimed long enough to be quarantined —
+	// exits non-zero so a scheduler surfaces it. Freshly unclaimed files only
+	// warn (exit 0): they are usually a network briefly misconfigured and will
+	// toss once it is fixed, so failing on them would be noise.
+	if hadErrors || len(unclaimed.Quarantined) > 0 {
 		os.Exit(1)
 	}
 }
