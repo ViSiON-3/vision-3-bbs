@@ -152,7 +152,13 @@ func (m Model) overlayInputDialog(background, title, prompt, inputView string) s
 func (m Model) overlayHelpScreen(background string) string {
 	lines := strings.Split(background, "\n")
 
-	dialogW := 50
+	// Wider than the menu list box (50 inner + 2 border = 52) so the dialog
+	// covers it outright. At 50 the two were centred within a column of each
+	// other and the list's side borders showed through, rendering "┌╔" and
+	// "║│" pairs that read as a broken frame rather than a dialog on a panel.
+	// It still sits comfortably inside the wider command list (72) and edit
+	// (76) boxes, where a visible surround is the intended look.
+	dialogW := 54
 	startCol := (m.width - dialogW) / 2
 	if startCol < 0 {
 		startCol = 0

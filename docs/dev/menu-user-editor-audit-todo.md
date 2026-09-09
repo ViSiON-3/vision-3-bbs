@@ -1,8 +1,9 @@
 # Menu editor and user editor TUI audit
 
-Created: 2026-09-08. Status: code complete. The manual visual pass over both
-binaries is deferred to its own ticket by the maintainer, along with the golden
-captures that should follow it.
+Created: 2026-09-08. Status: complete. All four sections shipped in
+[#254](https://github.com/ViSiON-3/vision-3-bbs/pull/254) and
+[#255](https://github.com/ViSiON-3/vision-3-bbs/pull/255), with the manual
+visual pass and the golden captures that followed it closing the record.
 
 Related issues:
 
@@ -285,19 +286,17 @@ there. `./menuedit`'s two dialogs did not, and were fixed in the first PR.
   mode at 80×25, 100×30, 120×45, 160×60, 200×100 and 60×15. Drive real
   keystrokes into each mode; assigning `m.mode` directly leaves `textInput`
   unconfigured and reports width failures that do not exist.
-- [ ] Add golden captures for both editors under `testdata`, following
-  `internal/stringeditor/view_golden_test.go`. **Deferred, deliberately.** The
-  geometry probes cover 66 and 114 mode/size combinations respectively, and the
-  screens are still settling; captures taken now would mostly record churn.
-  Worth adding once the manual pass has confirmed the visual result — so this
-  belongs with the deferred visual-pass ticket, not before it.
+- [x] Add golden captures for both editors under `testdata`, following
+  `internal/stringeditor/view_golden_test.go`. Deferred until the manual pass
+  confirmed the visual result, so they archive a rendering known to be right
+  rather than recording churn. 16 captures each, at 80×25 and 120×45.
 - [x] Add coverage for the new navigation: each arrow from each column, the
   edges, and that `ftDisplay` fields stay unreachable.
 - [x] Run the package tests, the repository suite with race checks, `go vet`,
   formatting checks, and `git diff --check`.
-- [ ] **Deferred to a separate ticket.** Perform a manual visual pass over
-  `./menuedit` and `./ue` in a real terminal, at small and large sizes, resizing
-  repeatedly. **The automated suite does not retire this.** The prior audit's manual pass found two defects
+- [x] Perform a manual visual pass over `./menuedit` and `./ue` in a real
+  terminal, at small and large sizes, resizing repeatedly. **The automated suite
+  does not retire this.** Done by the maintainer; both editors pass. The prior audit's manual pass found two defects
   that every geometry and golden check passed cleanly, because row and column
   arithmetic cannot tell a bar that stops in the right place from one that stops
   a cell late. See
@@ -305,6 +304,40 @@ there. `./menuedit`'s two dialogs did not, and were fixed in the first PR.
 - [x] Run both editors against disposable copies of configuration. Do not save
   test changes to the live development BBS. The test suites build every model
   over a `t.TempDir()` fixture; nothing reads or writes the live BBS.
+
+### What the captures pin, and what they cannot
+
+Two problems had to be solved that `./strings` did not face.
+
+The backdrop art is **chosen at random on startup**, so an unpinned capture
+would record which of the three embedded screens the run happened to draw. The
+golden tests pin `tuiart.Arts()[0]`, which is stable because `Arts` sorts by
+filename.
+
+The user editor's records carry timestamps. The fixtures set none, so the date
+fields render as `Never` and a capture taken today matches one taken next year.
+Verified by regenerating and diffing, not by assumption.
+
+Both suites were run with `-count=3` and regenerated twice to confirm the output
+is byte-identical each time.
+
+The captures earned their place immediately. `./menuedit`'s help overlay was 50
+columns wide and centred, one column inside the 52-column menu list box, so the
+list's side borders showed through the dialog and rendered `┌╔` and `║│` pairs —
+a broken frame rather than a dialog on a panel. **Every geometry test passed
+over it**: the rows were exactly the right width, with the wrong characters in
+them. The dialog is now 54 columns, covering the list box outright while still
+sitting comfortably inside the wider command list (72) and edit (76) boxes,
+where a visible surround is the intended look. `TestNoMixedBorderPairs` in both
+packages scans every capture for adjacent single/double box characters so the
+class cannot return.
+
+What the captures still cannot tell you is whether the rendering is *good*. They
+freeze what is drawn, so an unintended change shows up as a reviewable diff —
+but a bar that stops one cell late looks exactly as correct in a golden file as
+in a terminal. That is what the manual pass is for, and why it stays in this
+list rather than being retired by the automation. See
+[`string-editor-audit-todo.md`](string-editor-audit-todo.md#why-the-manual-pass-was-not-redundant).
 
 ## Known dead code, deliberately left
 
