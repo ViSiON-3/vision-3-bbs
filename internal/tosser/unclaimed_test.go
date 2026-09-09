@@ -136,12 +136,58 @@ func TestSkippedOriginsAreRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	writeGoodPacket(t, env.inboundDir, "foreign.pkt", 1337, 3, 123)
+	path := writeGoodPacket(t, env.inboundDir, "foreign.pkt", 1337, 3, 123)
 
 	result := tsr.ProcessInbound()
 
-	if got := result.SkippedOrigins["1337:3/123"]; got != 1 {
-		t.Errorf("SkippedOrigins[1337:3/123] = %d, want 1 (got %v)", got, result.SkippedOrigins)
+	if got := result.SkippedByFile[path]["1337:3/123"]; got != 1 {
+		t.Errorf("SkippedByFile[%s][1337:3/123] = %d, want 1 (got %v)",
+			path, got, result.SkippedByFile)
+	}
+}
+
+// TestSkippedOriginsAreDroppedForClaimedFiles covers the reporting rule that
+// matters when networks share an inbound directory. Every network declines the
+// others' mail, so an origin recorded during one pass says nothing on its own.
+// Only files still present after the whole pass are unclaimed, and only their
+// origins may be named — otherwise a single genuinely stuck file would drag
+// every address any network ever declined into the warning.
+func TestSkippedOriginsAreDroppedForClaimedFiles(t *testing.T) {
+	env := setupTestEnv(t)
+
+	claimed := filepath.Join(env.inboundDir, "claimed.pkt")
+	stuck := writeGoodPacket(t, env.inboundDir, "stuck.pkt", 1337, 3, 123)
+
+	// Pretend one network declined both files, then another took the first —
+	// which is what removing it from the inbound directory represents.
+	skipped := map[string]map[string]int{
+		claimed: {"21:4/158": 9},
+		stuck:   {"1337:3/123": 2},
+	}
+
+	report := FindUnclaimed(env.globalCfg, skipped)
+
+	if _, named := report.Origins["21:4/158"]; named {
+		t.Errorf("origin of a file that was claimed must not be reported: %v", report.Origins)
+	}
+	if got := report.Origins["1337:3/123"]; got != 2 {
+		t.Errorf("Origins[1337:3/123] = %d, want 2: %v", got, report.Origins)
+	}
+}
+
+// TestSkippedCountsAreNotMultipliedByNetworkCount pins the counting rule. Each
+// enabled network passes over the same packets, so summing their reports would
+// multiply the total by the number of networks configured.
+func TestSkippedCountsAreNotMultipliedByNetworkCount(t *testing.T) {
+	env := setupTestEnv(t)
+	stuck := writeGoodPacket(t, env.inboundDir, "stuck.pkt", 1337, 3, 123)
+
+	report := FindUnclaimed(env.globalCfg, map[string]map[string]int{
+		stuck: {"1337:3/123": 5},
+	})
+
+	if got := report.Origins["1337:3/123"]; got != 5 {
+		t.Errorf("Origins[1337:3/123] = %d, want the per-file count of 5", got)
 	}
 }
 
@@ -152,7 +198,9 @@ func TestFindUnclaimedReportsLeftoverMail(t *testing.T) {
 	env := setupTestEnv(t)
 	writeGoodPacket(t, env.inboundDir, "leftover.pkt", 1337, 3, 123)
 
-	report := FindUnclaimed(env.globalCfg, map[string]int{"1337:3/123": 42})
+	report := FindUnclaimed(env.globalCfg, map[string]map[string]int{
+		filepath.Join(env.inboundDir, "leftover.pkt"): {"1337:3/123": 42},
+	})
 
 	if report.Empty() {
 		t.Fatal("expected the leftover packet to be reported")

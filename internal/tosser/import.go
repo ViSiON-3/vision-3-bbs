@@ -35,21 +35,31 @@ type TossResult struct {
 	DupesSkipped     int
 	Errors           []string
 
-	// SkippedOrigins counts packets left for another network's tosser, keyed by
-	// the origin address that matched none of this network's links. Skipping is
-	// routine — networks sharing an inbound directory each pass over the
-	// others' mail — so it is recorded rather than logged per packet, and only
-	// becomes news once every network has passed and the mail is still there.
-	// See ReportUnclaimed.
-	SkippedOrigins map[string]int
+	// SkippedByFile records packets left for another network's tosser: inbound
+	// file path, then origin address that matched none of this network's
+	// links, then packet count. Skipping is routine — networks sharing an
+	// inbound directory each pass over the others' mail — so it is recorded
+	// rather than logged per packet, and only becomes news once every network
+	// has passed and the file is still there.
+	//
+	// Keyed by file rather than by origin alone because a network that
+	// declines a packet says nothing about whether a later network took it.
+	// Attributing the origins to the file lets the whole-pass check discard
+	// everything that was subsequently claimed, instead of naming addresses
+	// whose mail arrived perfectly well. See FindUnclaimed.
+	SkippedByFile map[string]map[string]int
 }
 
-// noteSkipped records a packet this network declined, keyed by origin address.
-func (r *TossResult) noteSkipped(origin string) {
-	if r.SkippedOrigins == nil {
-		r.SkippedOrigins = make(map[string]int)
+// noteSkipped records that inboundFile held a packet from origin that this
+// network declined.
+func (r *TossResult) noteSkipped(inboundFile, origin string) {
+	if r.SkippedByFile == nil {
+		r.SkippedByFile = make(map[string]map[string]int)
 	}
-	r.SkippedOrigins[origin]++
+	if r.SkippedByFile[inboundFile] == nil {
+		r.SkippedByFile[inboundFile] = make(map[string]int)
+	}
+	r.SkippedByFile[inboundFile][origin]++
 }
 
 // ScannerUser is the synthetic username stored in each JAM base's .jlr file
@@ -146,8 +156,10 @@ func (t *Tosser) processInboundDir(dir string, result *TossResult) {
 		path := filepath.Join(dir, name)
 
 		if strings.HasSuffix(nameLower, ".pkt") {
-			// Direct .PKT file
-			t.tossPktFile(path, name, result)
+			// Direct .PKT file: it is its own inbound file.
+			if origin := t.tossPktFile(path, name, result); origin != "" {
+				result.noteSkipped(path, origin)
+			}
 			continue
 		}
 
@@ -185,12 +197,14 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 	// tossPktFile handles cleanup of each extracted .PKT (removes on success, moves to temp on error).
 	allSkipped := true
 	var skippedPkts []string
+	skippedOrigins := map[string]int{}
 	for _, pktPath := range pktPaths {
-		skipped := t.tossPktFile(pktPath, filepath.Base(pktPath), result)
-		if !skipped {
+		origin := t.tossPktFile(pktPath, filepath.Base(pktPath), result)
+		if origin == "" {
 			allSkipped = false
 		} else {
 			skippedPkts = append(skippedPkts, pktPath)
+			skippedOrigins[origin]++
 		}
 	}
 
@@ -199,6 +213,13 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 	if allSkipped && len(pktPaths) > 0 {
 		for _, pktPath := range pktPaths {
 			_ = os.Remove(pktPath) // best-effort cleanup of skipped packets
+		}
+		// The bundle stays, so its origins are attributed to it. A bundle any
+		// network claims is removed by that network and never reaches here.
+		for origin, n := range skippedOrigins {
+			for i := 0; i < n; i++ {
+				result.noteSkipped(path, origin)
+			}
 		}
 		slog.Debug("skipping foreign bundle", "network", t.networkName, "bundle", name)
 		return
@@ -227,12 +248,14 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 
 // tossPktFile processes a single .PKT file at path and updates result.
 // Returns true if the packet was skipped (foreign network).
-func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) bool {
+// It returns the origin address when the packet was declined, empty otherwise;
+// the caller attributes that to whichever inbound file the packet came from,
+// which for a bundle is the bundle rather than the extracted packet.
+func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) string {
 	imported, dupes, errs, skippedOrigin := t.tossPacket(path)
 	if skippedOrigin != "" {
 		// Not ours; leave it for the tosser whose links include that origin.
-		result.noteSkipped(skippedOrigin)
-		return true
+		return skippedOrigin
 	}
 
 	result.PacketsProcessed++
@@ -250,7 +273,7 @@ func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) bool 
 			slog.Warn("failed to move bad packet", "path", path, "dest", badPath, "error", err)
 		}
 	}
-	return false
+	return ""
 }
 
 // tossPacket processes a single .PKT file, returning counts and errors.

@@ -28,9 +28,13 @@ func cmdToss(args []string) {
 
 	totalImported, totalDupes, totalPackets := 0, 0, 0
 	hadErrors := false
-	// Merged across networks: a packet every network declined is the signal
-	// that no configured link matches the address sending it.
-	skippedOrigins := map[string]int{}
+	// Merged across networks and keyed by inbound file, so the whole-pass
+	// check can discard the origins of anything a later network claimed.
+	skippedByFile := map[string]map[string]int{}
+	// The whole-pass check is only sound once every enabled network has
+	// actually tossed: a tosser that failed to construct might have been the
+	// one to claim the mail, so its absence has to suppress the check as
+	// surely as --network does.
 	ranAllNetworks := *networkName == ""
 
 	for name, netCfg := range ftnCfg.Networks {
@@ -45,6 +49,7 @@ func cmdToss(args []string) {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating tosser for %s: %v\n", name, err)
 			hadErrors = true
+			ranAllNetworks = false
 			continue
 		}
 
@@ -52,8 +57,13 @@ func cmdToss(args []string) {
 		totalPackets += result.PacketsProcessed
 		totalImported += result.MessagesImported
 		totalDupes += result.DupesSkipped
-		for origin, n := range result.SkippedOrigins {
-			skippedOrigins[origin] += n
+		// Replace rather than sum: every enabled network passes over the same
+		// packets in a shared inbound directory and reports the same origins
+		// for the same file.
+		for file, origins := range result.SkippedByFile {
+			if _, seen := skippedByFile[file]; !seen {
+				skippedByFile[file] = origins
+			}
 		}
 
 		if !*quiet {
@@ -76,7 +86,7 @@ func cmdToss(args []string) {
 	// about what the others would have claimed.
 	var unclaimed tosser.UnclaimedReport
 	if ranAllNetworks {
-		unclaimed = tosser.FindUnclaimed(ftnCfg, skippedOrigins)
+		unclaimed = tosser.FindUnclaimed(ftnCfg, skippedByFile)
 		unclaimed.QuarantineStale(ftnCfg.TempPath)
 		unclaimed.Log()
 	}

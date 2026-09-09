@@ -78,10 +78,12 @@ func (r UnclaimedReport) OriginList() string {
 // It must be called only after every enabled network has run, because a
 // bundle is removed by whichever tosser processes it: anything still present
 // is therefore mail that no configured network would take. skipped merges the
-// SkippedOrigins of every network's result, which is what turns "nobody wanted
-// this" into a message naming the address whose mail is piling up.
-func FindUnclaimed(ftnCfg config.FTNConfig, skipped map[string]int) UnclaimedReport {
-	report := UnclaimedReport{Origins: skipped}
+// SkippedByFile maps of every network's result, which is what turns "nobody
+// wanted this" into a message naming the address whose mail is piling up.
+// Counts are taken per file rather than summed, since each enabled network
+// passes over the same packets and would otherwise multiply the total.
+func FindUnclaimed(ftnCfg config.FTNConfig, skippedByFile map[string]map[string]int) UnclaimedReport {
+	report := UnclaimedReport{Origins: map[string]int{}}
 
 	seen := make(map[string]bool)
 	for _, dir := range []string{ftnCfg.SecureInboundPath, ftnCfg.InboundPath} {
@@ -104,6 +106,17 @@ func FindUnclaimed(ftnCfg config.FTNConfig, skipped map[string]int) UnclaimedRep
 			}
 			path := filepath.Join(dir, entry.Name())
 			report.Files = append(report.Files, path)
+			// Only the origins of files still present are reported. A file a
+			// later network claimed has been removed by it, so the addresses
+			// an earlier network declined it under are not news.
+			for origin, n := range skippedByFile[path] {
+				if n > report.Origins[origin] {
+					// Every network that declined this file saw the same
+					// packets in it, so take the count rather than summing
+					// one pass per enabled network.
+					report.Origins[origin] = n
+				}
+			}
 			if info, err := entry.Info(); err == nil {
 				if report.Oldest.IsZero() || info.ModTime().Before(report.Oldest) {
 					report.Oldest = info.ModTime()
