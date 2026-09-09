@@ -1,7 +1,8 @@
 # Menu editor and user editor TUI audit
 
-Created: 2026-09-08. Status: in progress. Section 1 and 2 shipped for
-`./menuedit`; `./ue` outstanding.
+Created: 2026-09-08. Status: code complete. The manual visual pass over both
+binaries is deferred to its own ticket by the maintainer, along with the golden
+captures that should follow it.
 
 Related issues:
 
@@ -138,7 +139,7 @@ Recorded so a later reader does not re-audit them:
 
 ## 1. Adopt the shared chrome
 
-Done for `./menuedit`. `./ue` follows in the second PR.
+Done for both editors.
 
 - [x] Replace both local `dosColors` / `dosBgColors` tables and their
   `dosStyle` / `dosColor` constructors with aliases onto `internal/tuiart`,
@@ -215,39 +216,103 @@ used; `skipToCol` was defined in `view.go` but had no callers.
 
 ## 3. Two-dimensional field navigation in ./ue (#242)
 
-- [ ] Move Up and Down to walk within the current column by `Row`, and map Left
+- [x] Move Up and Down to walk within the current column by `Row`, and map Left
   and Right to move to the nearest editable field in the adjacent column,
   preserving the row where one exists there.
-- [ ] Decide and document the edge behavior: what Up does on the top row, what
+- [x] Decide and document the edge behavior: what Up does on the top row, what
   Right does from the right column, and whether the read-only footer block
   (rows 18-21, `Type: ftDisplay`) participates. `nextEditableField` currently
   wraps and skips `ftDisplay`; keep skipping, and state the wrap rule.
-- [ ] Keep Tab, Enter, `ctrl+home`, and `ctrl+end` behaving as they do now. Tab
+- [x] Keep Tab, Enter, `ctrl+home`, and `ctrl+end` behaving as they do now. Tab
   and Enter advance in field order and are the existing muscle memory; the
   arrow keys are additive.
-- [ ] Update the help bar only if a key's meaning changes.
+- [x] Update the help bar only if a key's meaning changes. No key changed
+  meaning, so the bar is untouched.
+
+### Results
+
+Both items shipped. Up and Down now walk `Row` within the field's own column
+and wrap at that column's ends; Left and Right move to the other column, landing
+on the editable field whose row is nearest. With only two columns, Left in the
+left column and Right in the right hold position rather than wrapping around —
+arrow keys read as spatial movement, and teleporting across the screen from an
+edge would not. `ftDisplay` fields stay unreachable, as before.
+
+Tab, Enter, `ctrl+home` and `ctrl+end` are untouched: they still advance in
+field order, which is the existing muscle memory. The arrow keys are additive,
+so no help-bar text changed.
+
+`columnOf` treats anything that is not `Col == 50` as the left column, so a
+field added with an unexpected `Col` still navigates rather than silently
+becoming unreachable.
+
+Two incidental findings while in the file:
+
+- `renderField` now measures `textinput.View()` rather than assuming `Width+1`,
+  reconciling it with `overlayPasswordDialog` as this audit recommended. The
+  same assumption was a live one-column overflow in `./menuedit`.
+- **`modeSearch` was unreachable, and is now finished.** Nothing assigned it, so
+  the search prompt row in `view.go` was dead code even though `updateSearch`,
+  the configured `searchInput`, and the prompt row itself were all complete. The
+  only missing piece was an entry point. `/` now opens it — the same key
+  `./strings` binds, for the same forward-and-wrap search — so this was six
+  lines to finish rather than a feature to remove.
+
+  Three things came with it. A miss now says so: `updateSearch` returned to the
+  list silently when nothing matched, which reads as the key not having worked.
+  The view tests `modeSearch` before `m.message` because both draw on the same
+  row, and a flash message left from a previous action would otherwise hide the
+  prompt the user just opened. And the help overlay's `dialogH` is now
+  `len(helpLines)` rather than a hand-maintained `19`, because adding the line
+  advertising `/` would otherwise have left the box off-centre — the same defect
+  that had `./menuedit`'s menu edit screen sized for seven fields after the list
+  grew to thirteen.
+
+  `./strings` shared the silent-miss gap — its `updateSearch` is near-identical,
+  including the absent not-found branch — and is fixed alongside. It needed
+  nothing else: it already switches on `m.mode` before `m.message`, so its
+  prompt was never maskable. Its sysop guide described `/` as "search/filter
+  strings by name", which was wrong twice over: it searches name, key **and**
+  description, and it jumps the cursor rather than filtering the list.
+
+All of `./ue`'s dialog overlays already preserved the screen behind them with
+the `padToCol` / `skipToCol` pair, so adopting the backdrop needed no change
+there. `./menuedit`'s two dialogs did not, and were fixed in the first PR.
 
 ## 4. Verification
 
-- [x] Add `view_geometry_test.go` to both packages (`./menuedit` done), covering every reachable
+- [x] Add `view_geometry_test.go` to both packages, covering every reachable
   mode at 80×25, 100×30, 120×45, 160×60, 200×100 and 60×15. Drive real
   keystrokes into each mode; assigning `m.mode` directly leaves `textInput`
   unconfigured and reports width failures that do not exist.
 - [ ] Add golden captures for both editors under `testdata`, following
-  `internal/stringeditor/view_golden_test.go`.
-- [ ] Add coverage for the new navigation: each arrow from each column, the
+  `internal/stringeditor/view_golden_test.go`. **Deferred, deliberately.** The
+  geometry probes cover 66 and 114 mode/size combinations respectively, and the
+  screens are still settling; captures taken now would mostly record churn.
+  Worth adding once the manual pass has confirmed the visual result — so this
+  belongs with the deferred visual-pass ticket, not before it.
+- [x] Add coverage for the new navigation: each arrow from each column, the
   edges, and that `ftDisplay` fields stay unreachable.
-- [ ] Run the package tests, the repository suite with race checks, `go vet`,
+- [x] Run the package tests, the repository suite with race checks, `go vet`,
   formatting checks, and `git diff --check`.
-- [ ] Perform a manual visual pass over `./menuedit` and `./ue` in a real
-  terminal, at small and large sizes, resizing repeatedly. **The automated
-  suite does not retire this.** The prior audit's manual pass found two defects
+- [ ] **Deferred to a separate ticket.** Perform a manual visual pass over
+  `./menuedit` and `./ue` in a real terminal, at small and large sizes, resizing
+  repeatedly. **The automated suite does not retire this.** The prior audit's manual pass found two defects
   that every geometry and golden check passed cleanly, because row and column
   arithmetic cannot tell a bar that stops in the right place from one that stops
   a cell late. See
   [`string-editor-audit-todo.md`](string-editor-audit-todo.md#why-the-manual-pass-was-not-redundant).
-- [ ] Run both editors against disposable copies of configuration. Do not save
-  test changes to the live development BBS.
+- [x] Run both editors against disposable copies of configuration. Do not save
+  test changes to the live development BBS. The test suites build every model
+  over a `t.TempDir()` fixture; nothing reads or writes the live BBS.
+
+## Known dead code, deliberately left
+
+- `internal/stringeditor/view.go:56`, `markerHighlightStyle`: unused since #243
+  trimmed the selection bar. Predates this audit and sits in a file neither PR
+  touches, so it is out of scope here; `golangci-lint` reports it on a full run
+  but CI's `only-new-issues` does not. Worth a one-line cleanup whenever that
+  file is next opened.
 
 ## Starting points in the code
 

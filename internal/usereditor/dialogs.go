@@ -306,12 +306,6 @@ func (m Model) overlayHelpScreen(background string) string {
 	lines := strings.Split(background, "\n")
 
 	dialogW := 46
-	dialogH := 19 // number of lines in helpLines below
-	startRow := (m.height - dialogH) / 2
-	startCol := (m.width - dialogW) / 2
-	if startRow < 0 {
-		startRow = 0
-	}
 
 	// Help box styles: Red bg, white fg
 	helpBorder := helpBoxStyle
@@ -337,10 +331,22 @@ func (m Model) overlayHelpScreen(background string) string {
 		side + helpBorder.Render(centerText("Shift-F5 - Validate All Tagged Users", dialogW-2)) + side,
 		side + helpBorder.Render(centerText("F10 - Tag All  /  Shift-F10 - Untag All", dialogW-2)) + side,
 		side + helpBorder.Render(centerText("Space - Toggle Tag on User", dialogW-2)) + side,
+		side + helpBorder.Render(centerText("/ - Search Users by Handle", dialogW-2)) + side,
 		side + helpBorder.Render(centerText("ESC - Exit Program", dialogW-2)) + side,
 		side + helpBorder.Render(strings.Repeat(" ", dialogW-2)) + side,
 		side + helpTitle.Render(centerText("HIT A KEY.", dialogW-2)) + side,
 		borderBot,
+	}
+
+	// Derived, not declared. A hand-maintained line count is the same defect
+	// that left ./menuedit's menu edit screen sized for seven fields after the
+	// list grew to thirteen: add a help line, forget the constant, and the box
+	// silently stops being centred.
+	dialogH := len(helpLines)
+	startRow := (m.height - dialogH) / 2
+	startCol := (m.width - dialogW) / 2
+	if startRow < 0 {
+		startRow = 0
 	}
 
 	// Overlay dialog on background, preserving content on both sides

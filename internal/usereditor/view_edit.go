@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -16,65 +18,37 @@ func (m Model) viewEditScreen() string {
 	}
 	u := m.users[m.editIndex]
 
-	var b strings.Builder
+	// Fixed rows: title(1) + box(border, 19 field rows, border = 21) + help(1).
+	const editRowFirst, editRowLast = 4, 22
+	boxRows := (editRowLast - editRowFirst + 1) + 2
+	topPad, bottomPad := tuiart.Split(m.height, boxRows+2)
+
+	sc := tuiart.NewScreen(m.width, m.backdrop)
 
 	// === Row 1: Title bar ===
 	// UE.PAS: Color(8,15) Center_Write('╌╌ ViSiON/3 Quick & Easy User Editor v1.0 ╌╌')
-	title := centerText("-- ViSiON/3 Quick & Easy User Editor v1.0 --", m.width)
-	b.WriteString(editTitleStyle.Render(title))
-	b.WriteByte('\n')
+	sc.Line(editTitleStyle.Render(centerText("-- ViSiON/3 Quick & Easy User Editor v1.0 --", m.width)))
+	sc.BgRows(topPad)
 
-	// Background fill line (reused throughout)
-	bgLine := bgFillStyle.Render(strings.Repeat("░", m.width))
-
-	// Vertical centering: distribute extra rows above and below box.
-	// Fixed content: 1 title + box(21) + help(1) = 23 rows
-	extraV := max(0, m.height-23)
-	topPad := max(1, extraV/2)
-	bottomPad := max(1, extraV-topPad)
-
-	for i := 0; i < topPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
-
-	// === Top border of edit box ===
+	// === Edit box ===
 	// UE.PAS: GrowBOX(2,3,78,23) Color(1,9)
 	boxW := 76 // columns 2-78
 	padL := max(0, (m.width-boxW-2)/2)
 	padR := max(0, m.width-padL-boxW-2)
 
-	topBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("╒"+strings.Repeat("═", boxW)+"╕") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(topBorder)
-	b.WriteByte('\n')
+	// === Top border ===
+	sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("╒"+strings.Repeat("═", boxW)+"╕")))
 
-	// === Rows 4-22: Field area (19 rows inside box) ===
-	// Render each row of the edit area
-	for row := 4; row <= 22; row++ {
-		rowContent := m.renderEditRow(row, u, boxW)
-		line := bgFillStyle.Render(strings.Repeat("░", padL)) +
-			editBorderStyle.Render("│") +
-			rowContent +
-			editBorderStyle.Render("│") +
-			bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-		b.WriteString(line)
-		b.WriteByte('\n')
+	// === Field area ===
+	for row := editRowFirst; row <= editRowLast; row++ {
+		sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("│")+
+			m.renderEditRow(row, u, boxW)+editBorderStyle.Render("│")))
 	}
 
-	// === Row 23: Bottom border ===
-	botBorder := bgFillStyle.Render(strings.Repeat("░", padL)) +
-		editBorderStyle.Render("╘"+strings.Repeat("═", boxW)+"╛") +
-		bgFillStyle.Render(strings.Repeat("░", max(0, padR)))
-	b.WriteString(botBorder)
-	b.WriteByte('\n')
+	// === Bottom border ===
+	sc.Line(sc.Pad(padL, padR, editBorderStyle.Render("╘"+strings.Repeat("═", boxW)+"╛")))
 
-	// Bottom fill rows (vertically centers content)
-	for i := 0; i < bottomPad; i++ {
-		b.WriteString(bgLine)
-		b.WriteByte('\n')
-	}
+	sc.BgRows(bottomPad)
 
 	// === Bottom help bar ===
 	// UE.PAS: 'F2 - Delete  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes'
@@ -88,11 +62,10 @@ func (m Model) viewEditScreen() string {
 	} else {
 		helpItems = fmt.Sprintf("F2 - %s  F5 - Set Defaults  F10 - Aborts  ESC - Save Changes", f2Label)
 	}
-	helpText := centerText(helpItems, m.width)
-	b.WriteString(helpBarStyle.Render(helpText))
+	sc.Last(helpBarStyle.Render(centerText(helpItems, m.width)))
 
 	// Overlay for password entry and WFC key-manager dialogs
-	result := b.String()
+	result := sc.String()
 	switch m.mode {
 	case modePasswordEntry:
 		result = m.overlayPasswordDialog(result)
@@ -125,21 +98,23 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 	var leftField, rightField string
 	var leftRawW, rightRawW int
 
+	// Column budgets, declared once and also handed to renderField so an
+	// active input is bounded by the space it actually has. Emitting more than
+	// the budget only skips the padding below; the row overruns regardless.
+	leftW := 42 // Left column width (41 content + 1 gap before right column)
+	rightW := boxW - leftW
+
 	// Find fields that belong to this row
 	for i, f := range m.fields {
 		if f.Row != row {
 			continue
 		}
 
-		rendered, rawW := m.renderField(i, f, u)
-
 		switch f.Col {
-		case 3:
-			leftField = rendered
-			leftRawW = rawW
-		case 50:
-			rightField = rendered
-			rightRawW = rawW
+		case leftCol:
+			leftField, leftRawW = m.renderField(i, f, u, leftW)
+		case rightCol:
+			rightField, rightRawW = m.renderField(i, f, u, rightW)
 		}
 	}
 
@@ -170,9 +145,6 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 	}
 
 	// Build the row using pre-computed raw widths (not ANSI measurement).
-	leftW := 42 // Left column width (41 content + 1 gap before right column)
-	rightW := boxW - leftW
-
 	var result string
 	if leftField != "" {
 		result = leftField
@@ -197,7 +169,8 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 
 // renderField renders a single field (label + value).
 // Returns the styled string and the raw (unstyled) visible character width.
-func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) {
+// budget is the column width the field must fit inside.
+func (m Model) renderField(fieldIdx int, f fieldDef, u *userType, budget int) (string, int) {
 	isActive := m.editField == fieldIdx
 
 	// Pad labels to consistent widths so colons align vertically.
@@ -205,13 +178,16 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) 
 	// Right column: longest is "Screen Height" at 13 chars.
 	labelText := f.Label
 	switch f.Col {
-	case 3:
+	case leftCol:
 		labelText = padRight(labelText, 14)
-	case 50:
+	case rightCol:
 		labelText = padRight(labelText, 13)
 	}
 	label := labelText + " : "
-	labelLen := len(label)
+	// Count runes, not bytes: every other width helper here is rune-based
+	// (padRight, centerText). Labels are ASCII today, so the two agree, but a
+	// mixed basis is how geometry drift gets reintroduced.
+	labelLen := utf8.RuneCountInString(label)
 
 	var value string
 	if f.Get != nil {
@@ -221,11 +197,16 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType) (string, int) 
 	// Raw width is always label + field width (value is padded/clamped to f.Width)
 	rawW := labelLen + f.Width
 
-	// If actively editing this field.
-	// textInput.View() renders Width+1 visible chars (cursor appended after text),
-	// so report rawW+1 to keep the row padding correct and avoid overflowing boxW.
+	// If actively editing this field, bound the widget's output to the column
+	// budget and report what it actually occupies, rather than deriving either
+	// from f.Width. It appends a cursor cell after the text, so a value that
+	// fills the field renders Width+1 cells. No ./ue field is wide enough to
+	// overrun its column today, but ./menuedit's were, and measuring alone was
+	// not enough there: when the view exceeds the space, the padding falls to
+	// zero and the oversized view still overruns.
 	if isActive && m.mode == modeEditField {
-		return fieldLabelStyle.Render(label) + m.textInput.View(), rawW + 1
+		view, w := tuiart.FitInput(m.textInput.View(), max(0, budget-labelLen))
+		return fieldLabelStyle.Render(label) + view, labelLen + w
 	}
 
 	// Display the value

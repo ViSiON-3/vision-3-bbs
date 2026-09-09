@@ -501,7 +501,10 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Find first match
 		query := strings.ToLower(m.searchInput.Value())
 		if query != "" {
-			// Search from current position forward, wrapping
+			// Search from current position forward, wrapping. offset runs to
+			// len(m.entries), so the cursor's own entry is examined last
+			// rather than skipped.
+			found := false
 			for offset := 0; offset < len(m.entries); offset++ {
 				idx := (m.cursor + offset + 1) % len(m.entries)
 				entry := m.entries[idx]
@@ -511,8 +514,14 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.cursor = idx
 					m.page = idx / m.pageSize
 					m.message = fmt.Sprintf("Found: %s", entry.Label)
+					found = true
 					break
 				}
+			}
+			if !found {
+				// Say so. Returning to the list unchanged and silent reads as
+				// the search key not having worked.
+				m.message = fmt.Sprintf("No entry matching %q", m.searchInput.Value())
 			}
 		}
 		m.mode = modeNavigate

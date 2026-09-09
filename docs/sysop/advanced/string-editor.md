@@ -72,8 +72,17 @@ the picture completely. It uses the shared shaded fill instead.
 | `F4` | Restore selected string to ViSiON/3 default (from templates/) |
 | `F10` | Save changes and exit |
 | `Esc` | Abort — shows confirmation dialog if unsaved changes |
-| `/` | Search/filter strings by name |
+| `/` | Search entries by name, key, or description |
 | `Ctrl-R` | Show or hide reserved placeholder entries |
+
+`/` searches rather than filters: the list is unchanged and the cursor jumps to
+the match, turning to its page. The term is matched case-insensitively as a
+substring against an entry's name, its key, and its description. The scan runs
+forward from the highlighted entry and wraps around the end of the list, so
+repeating the same search steps to the next match rather than returning to the
+first. `Enter` jumps to the match and names it; if nothing matches, the cursor
+stays where it is and the status row says so. `Esc` abandons the search. The
+prompt opens empty each time, so a repeated search means retyping the term.
 
 ### Edit Mode
 
