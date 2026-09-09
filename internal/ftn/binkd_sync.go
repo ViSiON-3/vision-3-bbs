@@ -85,28 +85,36 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 			}
 		}
 
-		// Sync node hostname and session password.
+		// Sync node hostname and session password. The address, host and
+		// password are located by positional rank, not by offset: binkd lets
+		// options like -nomd or -ip sit anywhere on a node line and drops them
+		// from the positional stream, so a flag ahead of the host shifts both
+		// of the fields synced here.
 		if strings.HasPrefix(trimmed, "node ") {
 			fields := strings.Fields(trimmed)
-			if len(fields) >= 4 {
-				addr := fields[1] // e.g. "21:1/100@fsxnet"
+			// One positional argument is enough to identify the line: a
+			// directive naming only an address still has to be recognised, or
+			// the append pass below adds a second line for the same node.
+			if idx := nodePositionalIdx(fields, 2); len(idx) >= 1 {
+				addr := fields[idx[0]] // e.g. "21:1/100@fsxnet"
 				if link, ok := links[addr]; ok {
 					seenNodes[addr] = true
-					newPwd := link.SessionPwd
-					if newPwd == "" {
-						newPwd = "-"
+					// A link with no hostname configured leaves whatever host
+					// the line already carries alone.
+					host := link.HostPort
+					if host == "" {
+						host = "-"
+						if len(idx) >= 2 {
+							host = fields[idx[1]]
+						}
 					}
-					lineChanged := false
-					if link.HostPort != "" && fields[2] != link.HostPort {
-						fields[2] = link.HostPort
-						lineChanged = true
-					}
-					if fields[3] != newPwd {
-						fields[3] = newPwd
-						lineChanged = true
-					}
-					if lineChanged {
-						out.WriteString(strings.Join(fields, " "))
+					// mergeNodeFields writes the address, host and password
+					// into their positional slots and appends placeholders for
+					// any the line is missing, leaving binkd options and the
+					// trailing flavour and fileboxes untouched.
+					newLine := strings.Join(mergeNodeFields(fields, addr, host, link.SessionPwd), " ")
+					if newLine != trimmed {
+						out.WriteString(newLine)
 						out.WriteByte('\n')
 						changed = true
 						continue

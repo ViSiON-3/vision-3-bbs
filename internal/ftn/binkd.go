@@ -151,26 +151,72 @@ func nodePassword(pwd string) string {
 	return pwd
 }
 
+// nodeOptionTakesValue reports whether a binkd node option consumes the word
+// after it as its argument.
+func nodeOptionTakesValue(opt string) bool {
+	switch strings.ToLower(opt) {
+	case "-pipe", "-bw":
+		return true
+	}
+	return false
+}
+
+// nodePositionalIdx returns the index in fields of each of the first want
+// positional arguments of a binkd "node" directive, in order: address, then
+// host, then password, then flavour and the fileboxes.
+//
+// The positions are not fixed offsets. binkd (readcfg.c) drops every word
+// beginning with "-" from the positional stream wherever it appears, so
+// "node 21:1/100@fsxnet -nomd hub.example.com:24554 secret" is a perfectly
+// ordinary directive in which the host is fields[3] and the password
+// fields[4]. Options may equally precede the address. A lone "-" is a
+// positional placeholder meaning "unset", not an option.
+//
+// Fewer than want indices are returned when the line carries fewer
+// positional arguments than that.
+func nodePositionalIdx(fields []string, want int) []int {
+	idx := make([]int, 0, want)
+	for i := 1; i < len(fields) && len(idx) < want; i++ {
+		f := fields[i]
+		if len(f) > 1 && f[0] == '-' {
+			if nodeOptionTakesValue(f) {
+				i++ // skip the option's argument
+			}
+			continue
+		}
+		idx = append(idx, i)
+	}
+	return idx
+}
+
 // mergeNodeFields rewrites the host and password of an existing binkd node
 // directive while keeping everything else on the line.
 //
-// The directive is "node <address> [host[:port]] [password] [flags...]", and
-// binkd accepts trailing options such as -md, -ip or filebox settings that the
-// wizard knows nothing about. Rewriting the whole line would silently drop a
-// sysop's hand-added flags, so only the two fields the wizard owns are
-// replaced and any beyond them are carried across untouched.
+// binkd accepts options such as -md, -ip or filebox settings that the wizard
+// knows nothing about. Rewriting the whole line would silently drop a sysop's
+// hand-added flags, so only the two fields the wizard owns are replaced and
+// everything else is carried across untouched — which means finding those two
+// fields by their positional rank rather than their offset, since an option
+// anywhere earlier on the line shifts them.
 func mergeNodeFields(existing []string, address, hostname, pwd string) []string {
 	merged := append([]string(nil), existing...)
-
-	// Grow to at least "node <address> <host> <pwd>" so a short directive can
-	// still take the values.
-	for len(merged) < 4 {
-		merged = append(merged, "-")
+	if len(merged) == 0 {
+		merged = append(merged, "node")
 	}
 	merged[0] = "node"
-	merged[1] = address
-	merged[2] = hostname
-	merged[3] = nodePassword(pwd)
+
+	// A short directive is grown by appending placeholders. Options are
+	// stripped from the positional stream wherever they sit, so a value
+	// appended after them still lands in the slot it is meant for.
+	idx := nodePositionalIdx(merged, 3)
+	for len(idx) < 3 {
+		merged = append(merged, "-")
+		idx = append(idx, len(merged)-1)
+	}
+
+	merged[idx[0]] = address
+	merged[idx[1]] = hostname
+	merged[idx[2]] = nodePassword(pwd)
 	return merged
 }
 
@@ -187,7 +233,8 @@ func replaceNodeLine(content, address, hostname, pwd string) (string, bool) {
 			continue
 		}
 		fields := strings.Fields(trimmed)
-		if len(fields) < 2 || fields[1] != address {
+		idx := nodePositionalIdx(fields, 1)
+		if len(idx) == 0 || fields[idx[0]] != address {
 			continue
 		}
 
@@ -215,7 +262,7 @@ func nodeExists(content, address string) bool {
 		line := strings.TrimSpace(l)
 		if strings.HasPrefix(line, "node ") {
 			fields := strings.Fields(line)
-			if len(fields) >= 2 && fields[1] == address {
+			if idx := nodePositionalIdx(fields, 1); len(idx) > 0 && fields[idx[0]] == address {
 				return true
 			}
 		}
