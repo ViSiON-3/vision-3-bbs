@@ -75,7 +75,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	cmd := os.Args[1]
+	// Match the command case-insensitively. printUsage lists every command in
+	// upper case, so a sysop who types what the help screen shows —
+	// `helper FTNSETUP` — was told "Unknown command" and shown that same
+	// screen again, with nothing to indicate the name had to be lower case.
+	// Errors quote os.Args[1] rather than cmd, so a typo is echoed back as the
+	// sysop typed it.
+	cmd := strings.ToLower(os.Args[1])
 	if cmd == "--version" || cmd == "-version" {
 		printHeader()
 		return
@@ -95,7 +101,7 @@ func main() {
 	case "files":
 		cmdFiles(os.Args[2:])
 	default:
-		printUsage(fmt.Sprintf("Unknown command: %s", cmd))
+		printUsage(fmt.Sprintf("Unknown command: %s", os.Args[1]))
 		os.Exit(1)
 	}
 }
@@ -1003,10 +1009,14 @@ func parseNAFile(path string) ([]naArea, error) {
 	defer func() { _ = f.Close() }() // read-only
 
 	var areas []naArea
+	seen := make(map[string]bool)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+		// "%" starts a comment in the area lists several networks publish,
+		// tqwNet's among them.
+		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") ||
+			strings.HasPrefix(line, "%") {
 			continue
 		}
 
@@ -1017,10 +1027,23 @@ func parseNAFile(path string) ([]naArea, error) {
 
 		tag := parts[0]
 		desc := strings.Join(parts[1:], " ")
+		// Some lists separate the tag from its description with a dash
+		// ("TQW_ADS  - BBS Adverts"); without this the dash ends up in the
+		// area name shown to users.
+		desc = strings.TrimSpace(strings.TrimPrefix(desc, "-"))
 
 		if !isValidEchoTag(tag) {
 			continue
 		}
+		// A repeated tag means this is not an echo list in the expected
+		// "<tag> <description>" form — a file echo list ("Area TQW_NODE 0 !
+		// Weekly Nodelists") parses as the tag "Area" on every line, and
+		// importing it would silently create that many junk areas.
+		if seen[strings.ToUpper(tag)] {
+			return nil, fmt.Errorf("duplicate area tag %q on line %q — this does not look like an echomail area list "+
+				"(a file echo list will do this, its lines starting with the literal word \"Area\")", tag, line)
+		}
+		seen[strings.ToUpper(tag)] = true
 
 		areas = append(areas, naArea{Tag: tag, Description: desc})
 	}
