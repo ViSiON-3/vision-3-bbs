@@ -102,6 +102,13 @@ var StringFallbacks = map[string]string{
 	"confNoAccessibleConfs": "\r\n|12No accessible conferences.|07\r\n",
 	"newUsersClosedStr":     "\r\n|12This BBS is not accepting new users at this time.|07\r\n",
 
+	// Without a fallback, an existing strings.json that predates this key
+	// yields an empty value, and the notice is skipped silently: the sysop sees
+	// notifySysopNewUser defaulting to true and nothing ever arriving. The
+	// setting defaults on precisely so an upgrade needs no edits, so the string
+	// it depends on has to as well.
+	"newUserSysopPage": "|12New user|07: |15%s|07 just signed up from node %d.",
+
 	// The rest of the batch download group. These are written straight to the
 	// terminal, so shipping them blank printed nothing where a message belongs
 	// -- an empty queue, or a failed save, looked like the command did nothing.
