@@ -142,3 +142,52 @@ func TestReplaceNodeLineGrowsShortDirective(t *testing.T) {
 		t.Errorf("got %q, want an empty password rendered as -", got)
 	}
 }
+
+// TestUpdateBinkdConfPreservesNodeOptions covers re-running the wizard over a
+// node line a sysop has added binkd options to. The options sit in the same
+// word stream as the address, host and password but are stripped from it by
+// binkd, so writing the host and password at fixed offsets overwrote the
+// option and shifted every later field along — producing a line binkd rejects
+// with "incorrect flavour" and refuses to start on.
+func TestUpdateBinkdConfPreservesNodeOptions(t *testing.T) {
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "binkd.conf")
+
+	existing := strings.Join([]string{
+		"domain fsxnet /home/bbs/data/ftn/out 21",
+		"address 21:4/158@fsxnet",
+		"node 21:1/100@fsxnet -nomd agency.bbs.nz:24554 oldpassword",
+		"",
+	}, "\n")
+	if err := os.WriteFile(conf, []byte(existing), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := BinkdConfig{
+		BBSRoot:   dir,
+		BoardName: "Test BBS",
+		Domains:   map[string]int{"fsxnet": 21},
+		Addresses: []string{"21:4/158@fsxnet"},
+		Node: BinkdNode{
+			Address:     "21:1/100@fsxnet",
+			Hostname:    "new.agency.example:24554",
+			SessionPwd:  "newpassword",
+			NetworkName: "fsxnet",
+		},
+	}
+	if err := UpdateBinkdConf(conf, cfg); err != nil {
+		t.Fatalf("UpdateBinkdConf: %v", err)
+	}
+
+	got, err := os.ReadFile(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "node 21:1/100@fsxnet -nomd new.agency.example:24554 newpassword"
+	if !strings.Contains(string(got), want+"\n") {
+		t.Errorf("node line not updated in place:\ngot:\n%s\nwant line: %s", got, want)
+	}
+	if n := strings.Count(string(got), "node "); n != 1 {
+		t.Errorf("expected exactly one node line, got %d:\n%s", n, got)
+	}
+}

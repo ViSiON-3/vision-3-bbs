@@ -85,11 +85,15 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 			}
 		}
 
-		// Sync node hostname and session password.
+		// Sync node hostname and session password. The address, host and
+		// password are located by positional rank, not by offset: binkd lets
+		// options like -nomd or -ip sit anywhere on a node line and drops them
+		// from the positional stream, so a flag ahead of the host shifts both
+		// of the fields synced here.
 		if strings.HasPrefix(trimmed, "node ") {
 			fields := strings.Fields(trimmed)
-			if len(fields) >= 4 {
-				addr := fields[1] // e.g. "21:1/100@fsxnet"
+			if idx := nodePositionalIdx(fields, 3); len(idx) == 3 {
+				addr := fields[idx[0]] // e.g. "21:1/100@fsxnet"
 				if link, ok := links[addr]; ok {
 					seenNodes[addr] = true
 					newPwd := link.SessionPwd
@@ -97,12 +101,12 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 						newPwd = "-"
 					}
 					lineChanged := false
-					if link.HostPort != "" && fields[2] != link.HostPort {
-						fields[2] = link.HostPort
+					if link.HostPort != "" && fields[idx[1]] != link.HostPort {
+						fields[idx[1]] = link.HostPort
 						lineChanged = true
 					}
-					if fields[3] != newPwd {
-						fields[3] = newPwd
+					if fields[idx[2]] != newPwd {
+						fields[idx[2]] = newPwd
 						lineChanged = true
 					}
 					if lineChanged {

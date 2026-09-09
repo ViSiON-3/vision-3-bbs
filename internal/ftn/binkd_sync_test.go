@@ -167,3 +167,64 @@ func TestSyncBinkdConfNoChangeLeavesFileUntouched(t *testing.T) {
 		t.Errorf("file rewritten on no-op sync")
 	}
 }
+
+// TestSyncBinkdConfPreservesNodeOptions covers node lines carrying binkd
+// options. binkd strips any "-word" from a node line's positional stream
+// wherever it appears, so "node <addr> -nomd <host> <pwd>" is ordinary — but
+// reading the host and password at fixed offsets 2 and 3 wrote the host over
+// the option and the password over the host, leaving the real password parked
+// in the flavour slot where binkd rejects the config outright.
+func TestSyncBinkdConfPreservesNodeOptions(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "option before host",
+			line: "node 21:4/999@fsxnet -nomd old.example.org:24554 oldpw",
+			want: "node 21:4/999@fsxnet -nomd new.example.org:24556 newpw",
+		},
+		{
+			name: "option before address",
+			line: "node -ip 21:4/999@fsxnet old.example.org:24554 oldpw",
+			want: "node -ip 21:4/999@fsxnet new.example.org:24556 newpw",
+		},
+		{
+			name: "options either side of the password",
+			line: "node 21:4/999@fsxnet -nr old.example.org:24554 oldpw -nd",
+			want: "node 21:4/999@fsxnet -nr new.example.org:24556 newpw -nd",
+		},
+		{
+			// -pipe takes the next word as its argument, so that word is not
+			// the host however much it looks like one.
+			name: "option with an argument",
+			line: "node 21:4/999@fsxnet -pipe ssh-tunnel old.example.org:24554 oldpw",
+			want: "node 21:4/999@fsxnet -pipe ssh-tunnel new.example.org:24556 newpw",
+		},
+		{
+			name: "trailing flavour is left alone",
+			line: "node 21:4/999@fsxnet old.example.org:24554 oldpw c",
+			want: "node 21:4/999@fsxnet new.example.org:24556 newpw c",
+		},
+	}
+
+	links := map[string]BinkdLinkSync{
+		"21:4/999@fsxnet": {SessionPwd: "newpw", HostPort: "new.example.org:24556"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeConf(t, "iport 24554\n"+tt.line+"\n")
+			if err := SyncBinkdConf(path, BinkdIdentity{}, links); err != nil {
+				t.Fatalf("SyncBinkdConf: %v", err)
+			}
+			got := readConf(t, path)
+			if !strings.Contains(got, tt.want+"\n") {
+				t.Errorf("node line not synced in place:\ngot:\n%s\nwant line: %s", got, tt.want)
+			}
+			if strings.Count(got, "node ") != 1 {
+				t.Errorf("expected exactly one node line, got:\n%s", got)
+			}
+		})
+	}
+}
