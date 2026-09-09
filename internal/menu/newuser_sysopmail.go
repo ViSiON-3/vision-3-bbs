@@ -202,9 +202,14 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 		if _, err := e.MessageMgr.AddPrivateMessage(privmailArea.ID, newUser.Handle, sysop.Handle, subject, body, ""); err != nil {
 			slog.Error("failed to save new-user sysop email", "node", nodeNumber, "handle", newUser.Handle, "error", err)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
-				[]byte("\r\n|01Error saving your message. Please try again.|07\r\n")), outputMode)
+				[]byte("\r\n|01Error saving your message.|07\r\n")), outputMode)
 			time.Sleep(2 * time.Second)
-			continue
+			// The store, not the caller, is at fault, and retrying cannot fix a
+			// persistent fault. Give up the same way a non-EOF editor failure
+			// does: don't trap them in an undeliverable loop whose only exit is
+			// a disconnect that would count against them and eventually delete
+			// the account.
+			return false, nil
 		}
 
 		slog.Info("new user left a message for the sysop", "node", nodeNumber, "handle", newUser.Handle, "sysop", sysop.Handle)
