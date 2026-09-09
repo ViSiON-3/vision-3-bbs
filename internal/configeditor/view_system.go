@@ -38,7 +38,8 @@ func (m Model) viewSysConfigEdit() string {
 	}
 	// Fixed rows: globalheader(1) + box(border+header+empty+visibleRows+empty+info+border = visibleRows+6) + helptxt(1) + bgline(1) + helpbar(1)
 	// Total fixed = visibleRows + 10
-	extraV := maxInt(0, m.height-visibleRows-10)
+	helpRegionRows := m.fieldHelpRegionRows(m.sysFields, boxW)
+	extraV := maxInt(0, m.height-visibleRows-8-helpRegionRows)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
 
@@ -148,11 +149,7 @@ func (m Model) viewSysConfigEdit() string {
 	// Message or field help text
 	b.WriteString(m.renderFieldHelpLine(m.sysFields, padL, padR, boxW, row))
 	b.WriteByte('\n')
-	row++
-
-	b.WriteString(m.backdrop.Line(row))
-	b.WriteByte('\n')
-	row++
+	row += helpRegionRows
 
 	helpText := centerText("Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return", m.width)
 	b.WriteString(helpBarStyle.Render(helpText))

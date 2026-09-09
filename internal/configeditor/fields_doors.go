@@ -173,7 +173,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 			// Code is the door's identity: doors.json is saved as an array and
 			// re-keyed by Code on load, and DOOR:CODE menu lookups uppercase the
 			// input — so renaming re-keys the map and normalizes to uppercase.
-			Label: "Code", Help: "Internal code used in DOOR:CODE menu commands (A-Z, 0-9, _ or -, max 16)", Type: ftString, Col: 3, Row: row, Width: 16,
+			Label: "Code", Help: "Code for DOOR:CODE menu commands (A-Z 0-9 _ - , max 16)", Type: ftString, Col: 3, Row: row, Width: 16,
 			Get: func() string { return dPtr.Code },
 			Set: func(rawVal string) error {
 				val, err := config.NormalizeDoorCode(rawVal)
@@ -219,7 +219,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 	// Door type selector — determines which type-specific fields are shown
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Type", Help: "Door type: Native binary, DOS (dosemu2), Synchronet JS, or VPL script", Type: ftLookup, Col: 3, Row: row, Width: 20,
+		Label: "Type", Help: "Door type: Native, DOS (dosemu2), Synchronet JS, or VPL script", Type: ftLookup, Col: 3, Row: row, Width: 20,
 		Get: func() string {
 			switch dPtr.Type {
 			case "synchronet_js":

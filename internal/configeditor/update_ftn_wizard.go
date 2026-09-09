@@ -111,6 +111,7 @@ func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
 		editingKey:     netKey,
 		networkName:    netKey,
 		ownAddress:     net.OwnAddress,
+		originLine:     net.Origin,
 		hubPort:        24554,
 		autoJoinAreas:  true,
 		subscribedTags: make(map[string]bool),
