@@ -1,8 +1,8 @@
 # Upgrading
 
-Upgrading ViSiON/3 replaces the programs. Your settings in `configs/` and your
-`data/` are never touched by any upgrade path — which is what makes it safe, and
-also what makes two steps necessary:
+Upgrading ViSiON/3 replaces the programs. Followed as written, none of the
+procedures below touch your settings in `configs/` or your `data/` — which is
+what makes upgrading safe, and also what makes two steps necessary:
 
 - Settings added since your version are not applied to your existing config
   files.
@@ -39,10 +39,19 @@ data/         users, messages, files, logs
 menus/        if you have edited any menu, .ANS or .CFG file
 ```
 
-`configs/` and `data/` survive every path below, so those copies are insurance
-rather than necessity. `menus/` is the one genuinely at risk, and only on a
-repo-in-place install, where the menu set is version-controlled and a pull can
-overwrite edits made in place.
+Two ways to lose work, both avoidable:
+
+- **`menus/` on a repo-in-place install.** The menu set is version-controlled,
+  so a pull can overwrite edits you made in place. This one bites even when you
+  do everything else right.
+- **`configs/` and `data/` if you extract a release bundle over your existing
+  directory.** A bundle contains both, so extracting in place replaces your
+  settings and can overwrite your data. The bundle section below says how to
+  avoid this; it is the single most destructive thing you can do while
+  upgrading.
+
+Follow the procedures below and the backups are insurance. Deviate from the
+bundle one and they are the only thing between you and starting over.
 
 ## Repo in place
 
