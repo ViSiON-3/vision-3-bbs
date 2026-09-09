@@ -1009,9 +1009,12 @@ func TestNewUserValDoesNotClearTheScreen(t *testing.T) {
 
 	// The shipped template, read as a sysop's config.json would be.
 	dir := t.TempDir()
+	// Fatal, not Skip. The template is committed, so an unreadable fixture
+	// means something is wrong; skipping would quietly retire both assertions
+	// below rather than reporting it.
 	src, err := os.ReadFile(filepath.Join("..", "..", "templates", "configs", "login.json"))
 	if err != nil {
-		t.Skipf("shipped login.json not readable from here: %v", err)
+		t.Fatalf("read shipped login.json: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "login.json"), src, 0o644); err != nil {
 		t.Fatal(err)

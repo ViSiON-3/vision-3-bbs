@@ -150,7 +150,7 @@ which is right when a keystroke would otherwise appear to have done nothing.
 
 This covers the SysOp who was not online when someone signed up. For the case
 where they are, see `notifySysopNewUser` in
-[Configuration](../configuration/configuration.md).
+[Configuration](configuration/configuration.md).
 
 ### CHECKNUV
 
