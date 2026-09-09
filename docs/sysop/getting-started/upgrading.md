@@ -333,19 +333,30 @@ for the change to take effect.
 
 ### New: optionally require new users to message the SysOp
 
-Signup can now end by making the caller leave you a private message. It is
-**off by default**, so nothing changes unless you turn it on.
+Signup can now end by making the caller leave you a private message — the
+classic "leave the SysOp feedback to finish registration" gate. It is **off by
+default**, so nothing changes unless you turn it on.
 
 - In `./config` → **System** → **Default Settings**, set **Require Email** to
   `Y` (or set `"requireNewUserEmail": true` in `config.json`).
 - With it on, once an account is created the caller is shown `NUEMAIL.ANS`,
-  paused, then dropped straight into the message editor addressed to the SysOp
-  (user #1). The message lands in **Private Mail** like any other.
+  paused, then dropped into the message editor addressed to the SysOp (user #1).
+  The message lands in **Private Mail** like any other.
+- **It cannot be skipped.** Aborting the editor (Ctrl-A) or saving an empty
+  message re-prompts and returns them to the editor. The only ways out are to
+  send a message or to drop the connection.
+- **Dropping the connection doesn't dodge it.** The obligation is stored on the
+  account, so on their next login they are sent straight back into the editor —
+  even if their access level is below `logonLevel` and they otherwise couldn't
+  get on yet. After **three** abandoned attempts (the signup plus two
+  reconnects) the account is soft-deleted, and is removed for good by the usual
+  deleted-user purge.
 - Customize the screen by dropping a `NUEMAIL.ANS` into your menu set's `ansi`
   directory (a starter one ships with the `v3` set). With no file present, a
   configurable string (`newUserEmailPrompt`) is shown instead; the default
   subject line comes from `newUserEmailSubject`.
 
-This pairs well with leaving `autoValidateNewUsers` off: a caller whose new
-account cannot log on yet is returned to the login prompt, so the signup-time
-message is your one chance to hear from them before you validate.
+This pairs well with leaving `autoValidateNewUsers` off: the signup-time message
+is your one chance to hear from a caller before you validate them, and the
+requirement now follows them across reconnects until they either introduce
+themselves or the account ages out.

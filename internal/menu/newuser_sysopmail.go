@@ -18,6 +18,73 @@ import (
 	"golang.org/x/term"
 )
 
+// newUserIntroMaxAttempts is how many times a caller may reach the required
+// intro gate and leave without sending before the account is soft-deleted. The
+// signup itself counts as the first, so this allows the signup plus two
+// reconnects.
+const newUserIntroMaxAttempts = 3
+
+// runNewUserIntroGate runs the required-intro gate for a user who still owes the
+// SysOp a message and applies the persistent consequences. It is called both at
+// signup and, on reconnect, from the login flow.
+//
+// Returns (proceed, sent, err):
+//   - proceed=false with io.EOF: the caller disconnected without sending. The
+//     attempt has been counted and persisted; when it reaches the limit the
+//     account is soft-deleted. The session must end.
+//   - proceed=true, sent=true: a message was sent; IntroPending is cleared.
+//   - proceed=true, sent=false: the gate could not be delivered (no distinct
+//     SysOp, no PRIVMAIL area, or a non-EOF editor failure). IntroPending is
+//     cleared so a sysop misconfiguration does not trap the caller forever, and
+//     login/signup is allowed to continue.
+func (e *MenuExecutor) runNewUserIntroGate(
+	s ssh.Session,
+	terminal *term.Terminal,
+	userManager *user.UserMgr,
+	u *user.User,
+	nodeNumber int,
+	outputMode ansi.OutputMode,
+	termWidth, termHeight int,
+) (proceed, sent bool, err error) {
+	sent, err = e.requireNewUserSysopEmail(s, terminal, userManager, u, nodeNumber, outputMode, termWidth, termHeight)
+	if errors.Is(err, io.EOF) {
+		if recordAbandonedIntroAttempt(u, time.Now()) {
+			slog.Info("soft-deleting new user who never left the required sysop message",
+				"node", nodeNumber, "handle", u.Handle, "attempts", u.IntroAttempts)
+		}
+		if upErr := userManager.UpdateUser(u); upErr != nil {
+			slog.Error("failed to persist new-user intro state", "node", nodeNumber, "handle", u.Handle, "error", upErr)
+		}
+		return false, false, io.EOF
+	}
+
+	// Sent, or undeliverable: clear the obligation either way.
+	if u.IntroPending {
+		u.IntroPending = false
+		if upErr := userManager.UpdateUser(u); upErr != nil {
+			slog.Error("failed to clear new-user intro pending", "node", nodeNumber, "handle", u.Handle, "error", upErr)
+		}
+	}
+	return true, sent, nil
+}
+
+// recordAbandonedIntroAttempt bumps the attempt counter for a caller who left
+// the required intro gate without sending, and reports whether that tips the
+// account over the limit — in which case it is soft-deleted. Split out from
+// runNewUserIntroGate so the counting and removal rule is unit-testable without
+// a live editor session.
+func recordAbandonedIntroAttempt(u *user.User, now time.Time) (removed bool) {
+	u.IntroAttempts++
+	if u.IntroAttempts >= newUserIntroMaxAttempts {
+		u.DeletedUser = true
+		u.DeletedAt = &now
+		u.IntroPending = false
+		return true
+	}
+	u.IntroPending = true
+	return false
+}
+
 // newUserSysopRecipient resolves the SysOp account a new-user introduction
 // message is addressed to. By convention that is user #1 (the same account the
 // user editor treats as the SysOp). excludeID is the freshly created account:
@@ -33,15 +100,20 @@ func newUserSysopRecipient(um *user.UserMgr, excludeID int) (*user.User, bool) {
 
 // requireNewUserSysopEmail is the optional final step of signup, gated by
 // requireNewUserEmail. It shows the caller NUEMAIL.ANS (or a configured
-// fallback string), pauses, and then drops them straight into the message
-// editor addressed to the SysOp, saving the result as private mail.
+// fallback string), pauses, and then drops them into the message editor
+// addressed to the SysOp, saving the result as private mail.
 //
-// It is deliberately forgiving past that point: the account already exists, so
-// a caller who aborts or writes nothing is not trapped — the requirement is
-// expressed by putting the step in front of every new user, not by refusing to
-// let them leave. Only a dropped connection (io.EOF) propagates, so the
-// caller's logoff bookkeeping runs; anything else is logged and swallowed so a
-// misconfiguration cannot break signup.
+// This is the classic BBS "leave the SysOp feedback to finish" gate: the caller
+// cannot skip past it. Aborting the editor or saving an empty body re-prompts
+// and returns them to the editor — the only way out is to send a message or to
+// drop the connection. It returns (sent, err): sent is true once a message is
+// saved, so the caller can tell them they are being logged in.
+//
+// Only a dropped connection (io.EOF) propagates as an error, so the caller's
+// logoff bookkeeping runs. The gate is skipped (returning false) only when it
+// cannot possibly be satisfied — no distinct SysOp account, no PRIVMAIL area,
+// or a non-EOF editor failure — since trapping a caller in a loop that can
+// never deliver would be worse than letting signup finish.
 func (e *MenuExecutor) requireNewUserSysopEmail(
 	s ssh.Session,
 	terminal *term.Terminal,
@@ -50,21 +122,22 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 	nodeNumber int,
 	outputMode ansi.OutputMode,
 	termWidth, termHeight int,
-) error {
+) (bool, error) {
 	sysop, ok := newUserSysopRecipient(userManager, newUser.ID)
 	if !ok {
 		slog.Info("skipping new-user sysop email: no distinct sysop account (user #1)",
 			"node", nodeNumber, "handle", newUser.Handle)
-		return nil
+		return false, nil
 	}
 
 	privmailArea, exists := e.MessageMgr.GetAreaByTag("PRIVMAIL")
 	if !exists {
 		slog.Error("skipping new-user sysop email: PRIVMAIL area not configured", "node", nodeNumber)
-		return nil
+		return false, nil
 	}
 
-	// Introduce the step: the customizable art if present, otherwise the string.
+	// Introduce the step once: the customizable art if present, otherwise the
+	// string. The retry loop below does not re-show it — only a short reminder.
 	if err := e.displayNewUserEmailScreen(terminal, outputMode, nodeNumber); err != nil {
 		slog.Warn("failed to display NUEMAIL.ANS", "node", nodeNumber, "error", err)
 	}
@@ -92,8 +165,6 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 		subject = fmt.Sprintf(subjectFmt, newUser.Handle)
 	}
 
-	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-
 	nextMsg := 0
 	if msgCount, mcErr := e.MessageMgr.GetMessageCountForArea(privmailArea.ID); mcErr == nil {
 		nextMsg = msgCount + 1
@@ -103,39 +174,52 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 		NextMsgNum: nextMsg,
 		ConfArea:   "Private Mail",
 	}
-	body, saved, err := editor.RunEditorWithMetadata("", s, s, outputMode, subject,
-		sysop.Handle, newUser.Handle, false, "", "", "", "", false, nil, getSessionIH(s), editorCtx)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return io.EOF
+
+	// No-escape loop: keep returning them to the editor until they save a
+	// non-empty message. The connection dropping (io.EOF) is the only exit that
+	// is not a sent message.
+	for {
+		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
+
+		body, saved, err := editor.RunEditorWithMetadata("", s, s, outputMode, subject,
+			sysop.Handle, newUser.Handle, false, "", "", "", "", false, nil, getSessionIH(s), editorCtx)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return false, io.EOF
+			}
+			// A non-EOF editor failure cannot be recovered by retrying; do not
+			// trap the caller in a broken loop.
+			slog.Error("editor failed during new-user sysop email", "node", nodeNumber, "handle", newUser.Handle, "error", err)
+			return false, nil
 		}
-		slog.Error("editor failed during new-user sysop email", "node", nodeNumber, "handle", newUser.Handle, "error", err)
-		return nil
-	}
 
-	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
+		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
-	if !saved || strings.TrimSpace(body) == "" {
-		slog.Info("new user left no sysop message", "node", nodeNumber, "handle", newUser.Handle, "saved", saved)
+		if !saved || strings.TrimSpace(body) == "" {
+			slog.Info("new user tried to skip the sysop message", "node", nodeNumber, "handle", newUser.Handle, "saved", saved)
+			required := e.LoadedStrings.NewUserEmailRequired
+			if required == "" {
+				required = "\r\n|12A message to the SysOp is required to complete your registration.|07\r\n"
+			}
+			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(required)), outputMode)
+			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+			continue
+		}
+
+		if _, err := e.MessageMgr.AddPrivateMessage(privmailArea.ID, newUser.Handle, sysop.Handle, subject, body, ""); err != nil {
+			slog.Error("failed to save new-user sysop email", "node", nodeNumber, "handle", newUser.Handle, "error", err)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
+				[]byte("\r\n|01Error saving your message. Please try again.|07\r\n")), outputMode)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		slog.Info("new user left a message for the sysop", "node", nodeNumber, "handle", newUser.Handle, "sysop", sysop.Handle)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
-			[]byte("\r\n|08No message left for the SysOp.|07\r\n")), outputMode)
+			[]byte(fmt.Sprintf("\r\n|02Your message has been sent to %s.|07\r\n", sysop.Handle))), outputMode)
 		time.Sleep(1 * time.Second)
-		return nil
+		return true, nil
 	}
-
-	if _, err := e.MessageMgr.AddPrivateMessage(privmailArea.ID, newUser.Handle, sysop.Handle, subject, body, ""); err != nil {
-		slog.Error("failed to save new-user sysop email", "node", nodeNumber, "handle", newUser.Handle, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
-			[]byte("\r\n|01Error saving your message.|07\r\n")), outputMode)
-		time.Sleep(2 * time.Second)
-		return nil
-	}
-
-	slog.Info("new user left a message for the sysop", "node", nodeNumber, "handle", newUser.Handle, "sysop", sysop.Handle)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
-		[]byte(fmt.Sprintf("\r\n|02Your message has been sent to %s.|07\r\n", sysop.Handle))), outputMode)
-	time.Sleep(1 * time.Second)
-	return nil
 }
 
 // newUserEmailArtPath is the customizable art shown at the start of the

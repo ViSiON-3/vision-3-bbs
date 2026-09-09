@@ -467,7 +467,7 @@ under Security Levels in `./config`, to silence it.
 **Default Settings:**
 
 - `allowNewUsers` — Accept new user registrations (shipped and fallback: `true`)
-- `requireNewUserEmail` — End signup by making the caller leave the SysOp (user #1) a private message: they are shown `NUEMAIL.ANS` in the menu set's `ansi` dir (or the `newUserEmailPrompt` string when the file is absent), paused, then dropped into the message editor addressed to the SysOp (shipped and fallback: `false`)
+- `requireNewUserEmail` — End signup by making the caller leave the SysOp (user #1) a private message: they are shown `NUEMAIL.ANS` in the menu set's `ansi` dir (or the `newUserEmailPrompt` string when the file is absent), paused, then dropped into the message editor addressed to the SysOp. The gate cannot be skipped — aborting or an empty message re-prompts; the obligation is stored on the account and resumed at next login, and after three abandoned attempts (signup + two reconnects) the account is soft-deleted (shipped and fallback: `false`)
 - `fileListingMode` — `""` or `"lightbar"` (default) / `"classic"`
 - `deletedUserRetentionDays` — Days to keep soft-deleted user records before `helper users purge` removes them (shipped: `-1`, keep forever; fallback: `30`)
 

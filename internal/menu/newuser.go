@@ -249,12 +249,23 @@ func (e *MenuExecutor) handleNewUserApplication(
 	}
 
 	// Optionally require the caller to introduce themselves to the SysOp by
-	// private mail before finishing. Only io.EOF (a dropped connection) is
-	// fatal; anything else is logged and the signup completes regardless.
+	// private mail before finishing. This is a no-escape gate: they cannot skip
+	// past it, and a caller who disconnects without sending is flagged so the
+	// login flow resumes the gate on reconnect (and soft-deletes the account
+	// after too many abandoned attempts). Only io.EOF propagates.
+	introSent := false
 	if cfg.RequireNewUserEmail {
-		if err := e.requireNewUserSysopEmail(s, terminal, userManager, newUser, nodeNumber, outputMode, termWidth, termHeight); errors.Is(err, io.EOF) {
+		// Persist the obligation before running the gate so a disconnect during
+		// it leaves a record for the login flow to resume from.
+		newUser.IntroPending = true
+		if err := userManager.UpdateUser(newUser); err != nil {
+			slog.Error("failed to flag new user intro pending", "node", nodeNumber, "handle", newUser.Handle, "error", err)
+		}
+		_, sent, gErr := e.runNewUserIntroGate(s, terminal, userManager, newUser, nodeNumber, outputMode, termWidth, termHeight)
+		if errors.Is(gErr, io.EOF) {
 			return newUser, io.EOF
 		}
+		introSent = sent
 	}
 
 	// 11. Tell them what actually happens next.
@@ -263,18 +274,29 @@ func (e *MenuExecutor) handleNewUserApplication(
 	// everyone, unconditionally. Validation gates nothing — login is decided by
 	// access level against logonLevel — so with the shipped defaults a caller
 	// was told to wait and could then log straight in.
-	validationMsg := e.LoadedStrings.NewUserAccountReady
-	if !canLogonAtLevel(cfg, newUser.AccessLevel) {
-		validationMsg = e.LoadedStrings.NewUserAccountCreated
+	if introSent && canLogonAtLevel(cfg, newUser.AccessLevel) {
+		// They just sent the required message and their account can get on, so
+		// they are about to be carried straight into a session — say so rather
+		// than "you can log on now", which implies a separate step.
+		loggingIn := e.LoadedStrings.NewUserLoggingIn
+		if loggingIn == "" {
+			loggingIn = "\r\n|10Thanks! You're all set — logging you in now...|07\r\n"
+		}
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(loggingIn)), outputMode)
+	} else {
+		validationMsg := e.LoadedStrings.NewUserAccountReady
+		if !canLogonAtLevel(cfg, newUser.AccessLevel) {
+			validationMsg = e.LoadedStrings.NewUserAccountCreated
+		}
+		// Saying only "you can log on now" would imply nothing further happens.
+		// An account that is not yet reviewed still gets looked at, so say so —
+		// unless autoValidateNewUsers already marked it reviewed, in which case
+		// there is nothing pending.
+		if !newUser.Validated {
+			validationMsg += e.LoadedStrings.NewUserPendingReview
+		}
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(validationMsg)), outputMode)
 	}
-	// Saying only "you can log on now" would imply nothing further happens.
-	// An account that is not yet reviewed still gets looked at, so say so —
-	// unless autoValidateNewUsers already marked it reviewed, in which case
-	// there is nothing pending.
-	if !newUser.Validated {
-		validationMsg += e.LoadedStrings.NewUserPendingReview
-	}
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(validationMsg)), outputMode)
 
 	// Pause before returning
 	pausePrompt := e.LoadedStrings.PauseString
