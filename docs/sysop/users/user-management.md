@@ -102,7 +102,7 @@ Users are stored as a JSON array. Each user account contains:
 - `screenWidth` - Preferred terminal width (0 = use detected PTY width)
 - `screenHeight` - Preferred terminal height (0 = use detected PTY height)
 - `preferredEncoding` - Encoding preference: `"utf8"`, `"cp437"`, or `""` (not set)
-- `msgHdr` - Selected message header style (1-14, 0 = unset)
+- `msgHdr` - Selected message header style; valid values are whatever `MSGHDR.<n>.ans` templates the menu set ships (0 = unset, defaults to style 1)
 
 After authentication, the system applies these preferences: if a user's stored screen dimensions are smaller than the detected PTY size (or the PTY defaults to 80x25), the stored values cap the effective terminal dimensions. ANSI art is truncated to fit the effective height to prevent scrolling.
 
@@ -455,9 +455,10 @@ The application can also be invoked from a menu command via `RUN:NEWUSER`.
    - Sets `timeLimit` to 60 minutes
    - Saves to `data/users/users.json`
 10. **User Number** — Displays the assigned ID using `yourUserNum`
-11. **Welcome** — Displays `welcomeNewUser` message
-12. **Validation Notice** — Informs the user that SysOp validation is required
-13. **Return to Login** — User presses Enter and returns to the LOGIN screen
+11. **Welcome** — Displays `welcomeNewUser` (supports `\|BN` = board name)
+12. **SysOp Notification** — Online co-SysOps are paged; offline ones get a notice queued for their next login (`notifySysopNewUser`, delivered by the `SYSOPNOTICES` login step). See [Login Sequence](users/login-sequence.md).
+13. **Required SysOp Message** *(optional)* — When `requireNewUserEmail` is on, the caller is shown `NUEMAIL.ANS` (or the `newUserEmailPrompt` string), paused, then dropped into a no-escape message editor addressed to the SysOp (user #1). See [Upgrading](getting-started/upgrading.md) for the reconnect and account-removal behavior.
+14. **Outcome** — If the account meets `logonLevel` it is carried straight into a session (shown `newUserLoggingIn` when a required message was just sent); otherwise the user is told the account is pending review and returned to the LOGIN screen.
 
 ### Configurable Strings
 
@@ -472,15 +473,21 @@ All prompts are configurable in `configs/strings.json`:
 | `enterRealName`     | Real name entry prompt                                           |
 | `enterUserNote`     | User note entry prompt                                           |
 | `yourUserNum`       | "Your user # is" display (supports `\|UN` placeholder)           |
-| `welcomeNewUser`    | Welcome message after account creation                           |
+| `welcomeNewUser`    | Welcome message after account creation (supports `\|BN` = board name) |
 | `checkingUserBase`  | "Finding a place for you" message shown during handle validation |
 | `nameAlreadyUsed`   | Duplicate name error message                                     |
 | `invalidUserName`   | Invalid name error message                                       |
+| `newUserEmailPrompt`   | Require-email prompt shown when `NUEMAIL.ANS` is absent (`requireNewUserEmail`) |
+| `newUserEmailSubject`  | Default subject of the required SysOp message (`%s` = handle)    |
+| `newUserEmailRequired` | Shown when a caller tries to skip the required message           |
+| `newUserLoggingIn`     | Shown as a logged-in new user is carried into their session      |
 | `pauseString`       | Press Enter to continue prompt                                   |
 
 ### ANSI Art
 
 Place a `NEWUSER.ANS` file in `menus/v3/ansi/` to display a welcome screen before the application begins. If the file does not exist, the application proceeds without it.
+
+When `requireNewUserEmail` is enabled, a `NUEMAIL.ANS` in the same directory customizes the required-SysOp-message screen; without it the `newUserEmailPrompt` string is shown instead.
 
 ### After Signup
 
