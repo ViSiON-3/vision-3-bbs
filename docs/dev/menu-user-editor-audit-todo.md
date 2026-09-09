@@ -321,6 +321,17 @@ Verified by regenerating and diffing, not by assumption.
 Both suites were run with `-count=3` and regenerated twice to confirm the output
 is byte-identical each time.
 
+The captures earned their place immediately. `./menuedit`'s help overlay was 50
+columns wide and centred, one column inside the 52-column menu list box, so the
+list's side borders showed through the dialog and rendered `┌╔` and `║│` pairs —
+a broken frame rather than a dialog on a panel. **Every geometry test passed
+over it**: the rows were exactly the right width, with the wrong characters in
+them. The dialog is now 54 columns, covering the list box outright while still
+sitting comfortably inside the wider command list (72) and edit (76) boxes,
+where a visible surround is the intended look. `TestNoMixedBorderPairs` in both
+packages scans every capture for adjacent single/double box characters so the
+class cannot return.
+
 What the captures still cannot tell you is whether the rendering is *good*. They
 freeze what is drawn, so an unintended change shows up as a reviewable diff —
 but a bar that stops one cell late looks exactly as correct in a golden file as

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -97,4 +98,66 @@ func TestViewGolden(t *testing.T) {
 			})
 		}
 	}
+}
+
+// mixedBorderPairs are adjacent single-line and double-line box characters.
+// A dialog drawn over a panel of almost the same width leaves a one-column
+// sliver of the panel's border showing, which renders as one of these pairs and
+// reads as a broken frame rather than a dialog on a panel.
+var mixedBorderPairs = []string{
+	"┌╔", "╗┐", "└╚", "╝┘", "│║", "║│", "─═", "═─",
+}
+
+// TestNoMixedBorderPairs checks every archived capture for that artifact.
+//
+// The help overlay had it: at 50 columns the dialog was centred within a column
+// of the 52-column menu list box, so the list's side borders showed through.
+// The geometry tests all passed — every row was exactly the right width, with
+// the wrong characters in it.
+func TestNoMixedBorderPairs(t *testing.T) {
+	entries, err := os.ReadDir("testdata")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("no captures to check")
+	}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".golden" {
+			continue
+		}
+		t.Run(e.Name(), func(t *testing.T) {
+			b, err := os.ReadFile(filepath.Join("testdata", e.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			plain := stripANSI(string(b))
+			for _, pair := range mixedBorderPairs {
+				if strings.Contains(plain, pair) {
+					t.Errorf("capture contains %q: a dialog is leaving a sliver of the panel behind it", pair)
+				}
+			}
+		})
+	}
+}
+
+// stripANSI removes SGR escape sequences so the box characters can be compared
+// as plain text.
+func stripANSI(s string) string {
+	var b strings.Builder
+	inEsc := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEsc = true
+			continue
+		}
+		if inEsc {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
