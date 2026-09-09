@@ -170,5 +170,10 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 				return nil
 			},
 		},
+		{
+			Label: "No CRAM-MD5", Help: "Plaintext binkp passwords both ways; only for a hub whose CRAM-MD5 fails", Type: ftYesNo, Col: 3, Row: 26, Width: 1,
+			Get: func() string { return uitext.BoolToYN(binkd.DisableCramMD5) },
+			Set: func(val string) error { binkd.DisableCramMD5 = uitext.YNToBool(val); return nil },
+		},
 	}
 }

@@ -85,6 +85,13 @@ type BinkdServerConfig struct {
 	BinaryPath string `json:"binary_path"`             // Path to binkd binary, relative to BBS root (default "bin/binkd")
 	LogLevel   int    `json:"log_level"`               // binkd loglevel (default 4)
 	ExportSecs int    `json:"export_interval_seconds"` // Outbound scan/pack cadence (default 300)
+
+	// DisableCramMD5 launches binkd with -m, which both stops it offering
+	// CRAM-MD5 to callers and stops it answering a remote's offer, so
+	// sessions authenticate with a plaintext password in both directions.
+	// Needed for hubs whose CRAM-MD5 rejects an otherwise-correct password;
+	// leave off unless a link actually fails that way (see issue #268).
+	DisableCramMD5 bool `json:"disable_cram_md5,omitempty"`
 }
 
 // FTNConfig holds all FTN (FidoNet Technology Network) echomail settings.

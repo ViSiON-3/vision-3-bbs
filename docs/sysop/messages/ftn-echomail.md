@@ -48,8 +48,11 @@ Restart the BBS afterward. On startup, Vision/3 launches `bin/binkd` as a superv
 | `binary_path`             | `bin/binkd`    | Path to the binkd binary, relative to the BBS root              |
 | `log_level`               | `4`            | binkd log verbosity (synced to `binkd.conf`'s `loglevel`)       |
 | `export_interval_seconds` | `300`          | How often Vision/3 scans+packs outbound mail into binkd's outbound queue |
+| `disable_cram_md5`        | `false`        | Launch binkd with `-m`, forcing plaintext binkp passwords in both directions |
 
-These same fields appear in the Configuration Editor under **Server Setup** as "Binkd Mailer", "Binkd Port", "Binkd Binary", "Binkd Log Lvl", and "Export Secs". Saving from the config editor also re-syncs identity fields, link passwords, `iport`, and `loglevel` into `binkd.conf`.
+These same fields appear in the Configuration Editor under **Server Setup** as "Binkd Mailer", "Binkd Port", "Binkd Binary", "Binkd Log Lvl", "Export Secs", and "No CRAM-MD5". Saving from the config editor also re-syncs identity fields, link passwords, `iport`, and `loglevel` into `binkd.conf`.
+
+**About `disable_cram_md5`:** binkp normally negotiates CRAM-MD5, so the password is never sent in the clear. Leave this off. Turn it on only for a hub whose CRAM-MD5 rejects a password you have otherwise confirmed correct — the giveaway is `ERR Bad address or password` on your outgoing calls *and* `'CRAM-MD5-...': incorrect password` on the hub's incoming calls, while the same password succeeds once MD5 is out of the picture. `-m` both stops binkd offering CRAM-MD5 to callers and stops it answering a remote's offer, so it repairs both directions; the cost is that the session password crosses the network in plaintext.
 
 **Preflight checks:** before starting binkd, Vision/3 verifies the binary is present and executable, that `data/ftn/binkd.conf` exists and contains no unconfigured template placeholders (the wizard creates and fills it), and that at least one configured network has an `own_address` set. If any check fails, the BBS logs a warning and continues running without the mailer — it never blocks startup.
 

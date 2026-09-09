@@ -116,6 +116,20 @@ func (s *Service) superviseLoop(ctx context.Context) {
 	}
 }
 
+// binkdArgs is binkd's argv after the binary name. Flags must precede the
+// positional config path, which binkd expects last.
+func (s *Service) binkdArgs() []string {
+	args := make([]string, 0, 2)
+	if s.cfg.FTN.Binkd.DisableCramMD5 {
+		// -m stops binkd both offering CRAM-MD5 to callers and answering a
+		// remote's offer, so both directions fall back to a plaintext
+		// password. Only useful against a peer whose CRAM-MD5 rejects an
+		// otherwise-correct password (issue #268).
+		args = append(args, "-m")
+	}
+	return append(args, s.confPath)
+}
+
 // runOnce starts binkd and blocks until it exits or ctx is cancelled.
 // On cancellation it sends SIGTERM, waits termGrace, then kills.
 func (s *Service) runOnce(ctx context.Context) error {
@@ -123,7 +137,7 @@ func (s *Service) runOnce(ctx context.Context) error {
 	// BBS's signal-driven shutdown (SIGTERM, then a grace period, then
 	// SIGKILL) is what stops it on exit; on Unix an orphaned child process
 	// can otherwise outlive its parent.
-	cmd := exec.Command(s.binkdPath, s.confPath)
+	cmd := exec.Command(s.binkdPath, s.binkdArgs()...)
 	cmd.Stdout = nil // binkd logs to file per binkd.conf
 	// Startup failures (config errors, unopenable log file, port in use) go
 	// to stderr before binkd ever opens its log file, so keep a bounded tail
