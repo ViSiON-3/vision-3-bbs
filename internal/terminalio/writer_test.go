@@ -53,3 +53,130 @@ func TestWriteProcessedBytes_UTF8Mode_PreservesANSIAndMapsCP437(t *testing.T) {
 		t.Fatalf("unexpected output with ANSI: got %q want %q", out.String(), want)
 	}
 }
+
+// TestWriteProcessedBytes_UTF8Mode_CP437PairsThatLookLikeUTF8 covers the pairs
+// that made CP437 art unreadable. Deciding the encoding one rune at a time
+// looks like it separates mixed content, but adjacent CP437 bytes routinely
+// form a structurally valid UTF-8 sequence — the decoder then consumes both
+// and emits one unrelated character. Line art is dense with such pairs, so the
+// content most likely to be CP437 was the content most likely to be misread
+// (#280).
+func TestWriteProcessedBytes_UTF8Mode_CP437PairsThatLookLikeUTF8(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []byte
+		want string
+	}{
+		{
+			// DC B3 is a well-formed two-byte UTF-8 sequence for U+0733, a
+			// Syriac combining mark, and used to be emitted as one. In a span
+			// that is CP437 overall it is two characters.
+			name: "lower half block then vertical line",
+			in:   []byte{0xDA, 0xC4, 0xDC, 0xB3},
+			want: "┌─▄│",
+		},
+		{
+			// C4 B3 decodes as U+0133 on its own.
+			name: "horizontal line then vertical line",
+			in:   []byte{0xDA, 0xC4, 0xB3, 0xBF},
+			want: "┌─│┐",
+		},
+		{
+			// A real line lifted from an fsxNet message that rendered as
+			// mojibake on a live board.
+			name: "art line from a real message",
+			in: []byte{
+				0x3a, 0x20, 0x20, 0x20, 0x3a, 0x20,
+				0xda, 0xc4, 0xdc, 0xb3, 0x20, 0xda, 0xc4, 0xdc,
+				0xda, 0xc4, 0xdc, 0xde, 0xc4, 0xdc,
+			},
+			want: ":   : ┌─▄│ ┌─▄┌─▄▐─▄",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := WriteProcessedBytes(&buf, tt.in, ansi.OutputModeUTF8); err != nil {
+				t.Fatalf("WriteProcessedBytes: %v", err)
+			}
+			if got := buf.String(); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWriteProcessedBytes_UTF8Mode_MixedSpanPrefersCP437 pins the trade-off
+// made when a span cannot be both. A span carrying any invalid sequence is
+// read as CP437 throughout, because a body that is truly UTF-8 is valid
+// throughout and takes the passthrough path above.
+func TestWriteProcessedBytes_UTF8Mode_MixedSpanPrefersCP437(t *testing.T) {
+	// "é" as UTF-8 (C3 A9) followed by a byte that cannot continue any
+	// sequence, so the span as a whole is invalid.
+	in := []byte{0xC3, 0xA9, 0xDB}
+	var buf bytes.Buffer
+	if err := WriteProcessedBytes(&buf, in, ansi.OutputModeUTF8); err != nil {
+		t.Fatalf("WriteProcessedBytes: %v", err)
+	}
+	want := "├⌐█" // C3, A9 and DB each read as CP437
+	if got := buf.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestWriteProcessedBytes_UTF8Mode_ShortAmbiguousSpanStaysUTF8 records what
+// this heuristic cannot do. A span short enough to be valid under both
+// encodings is genuinely ambiguous — DC B3 is both "▄│" in CP437 and U+0733 in
+// UTF-8 — and is read as UTF-8. Only the message's own CHRS kludge can settle
+// it, so plumbing that through to the writer is the real fix; until then this
+// is the residual case, pinned here so a future change to it is deliberate.
+func TestWriteProcessedBytes_UTF8Mode_ShortAmbiguousSpanStaysUTF8(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteProcessedBytes(&buf, []byte{0xDC, 0xB3}, ansi.OutputModeUTF8); err != nil {
+		t.Fatalf("WriteProcessedBytes: %v", err)
+	}
+	if got, want := buf.String(), "\u0733"; got != want {
+		t.Errorf("got %q, want %q — a two-byte span valid under both encodings is read as UTF-8", got, want)
+	}
+}
+
+// TestWriteStringCP437_LeavesCP437ArtUntouched covers the other half of the
+// same defect, on the path a CP437 terminal actually takes. A CP437 pair that
+// forms a valid UTF-8 sequence was decoded as one rune and converted back —
+// and with nothing like U+0733 in CP437, the pair collapsed to a single '?'.
+// That is the mojibake in #280, produced on a terminal that would have
+// rendered the original bytes correctly had they been passed through.
+func TestWriteStringCP437_LeavesCP437ArtUntouched(t *testing.T) {
+	// A real art line from the fsxNet message in the report. DC B3 sits in the
+	// middle of it.
+	art := []byte{
+		0x3a, 0x20, 0x20, 0x20, 0x3a, 0x20,
+		0xda, 0xc4, 0xdc, 0xb3, 0x20, 0xda, 0xc4, 0xdc,
+		0xda, 0xc4, 0xdc, 0xde, 0xc4, 0xdc,
+	}
+	var buf bytes.Buffer
+	if err := WriteStringCP437(&buf, art, ansi.OutputModeCP437); err != nil {
+		t.Fatalf("WriteStringCP437: %v", err)
+	}
+	if got := buf.Bytes(); !bytes.Equal(got, art) {
+		t.Errorf("CP437 art must reach a CP437 terminal unchanged\n in: %x\nout: %x", art, got)
+	}
+	if n := bytes.Count(buf.Bytes(), []byte("?")); n != 0 {
+		t.Errorf("%d byte(s) were replaced with '?'", n)
+	}
+}
+
+// TestWriteStringCP437_ConvertsUTF8Strings covers the case this function
+// exists for: text from strings.json, which is UTF-8, being rendered on a
+// CP437 terminal.
+func TestWriteStringCP437_ConvertsUTF8Strings(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteStringCP437(&buf, []byte("┌─▄│"), ansi.OutputModeCP437); err != nil {
+		t.Fatalf("WriteStringCP437: %v", err)
+	}
+	want := []byte{0xDA, 0xC4, 0xDC, 0xB3}
+	if got := buf.Bytes(); !bytes.Equal(got, want) {
+		t.Errorf("got %x, want %x", got, want)
+	}
+}
