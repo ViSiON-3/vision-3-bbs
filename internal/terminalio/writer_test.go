@@ -140,3 +140,43 @@ func TestWriteProcessedBytes_UTF8Mode_ShortAmbiguousSpanStaysUTF8(t *testing.T) 
 		t.Errorf("got %q, want %q — a two-byte span valid under both encodings is read as UTF-8", got, want)
 	}
 }
+
+// TestWriteStringCP437_LeavesCP437ArtUntouched covers the other half of the
+// same defect, on the path a CP437 terminal actually takes. A CP437 pair that
+// forms a valid UTF-8 sequence was decoded as one rune and converted back —
+// and with nothing like U+0733 in CP437, the pair collapsed to a single '?'.
+// That is the mojibake in #280, produced on a terminal that would have
+// rendered the original bytes correctly had they been passed through.
+func TestWriteStringCP437_LeavesCP437ArtUntouched(t *testing.T) {
+	// A real art line from the fsxNet message in the report. DC B3 sits in the
+	// middle of it.
+	art := []byte{
+		0x3a, 0x20, 0x20, 0x20, 0x3a, 0x20,
+		0xda, 0xc4, 0xdc, 0xb3, 0x20, 0xda, 0xc4, 0xdc,
+		0xda, 0xc4, 0xdc, 0xde, 0xc4, 0xdc,
+	}
+	var buf bytes.Buffer
+	if err := WriteStringCP437(&buf, art, ansi.OutputModeCP437); err != nil {
+		t.Fatalf("WriteStringCP437: %v", err)
+	}
+	if got := buf.Bytes(); !bytes.Equal(got, art) {
+		t.Errorf("CP437 art must reach a CP437 terminal unchanged\n in: %x\nout: %x", art, got)
+	}
+	if n := bytes.Count(buf.Bytes(), []byte("?")); n != 0 {
+		t.Errorf("%d byte(s) were replaced with '?'", n)
+	}
+}
+
+// TestWriteStringCP437_ConvertsUTF8Strings covers the case this function
+// exists for: text from strings.json, which is UTF-8, being rendered on a
+// CP437 terminal.
+func TestWriteStringCP437_ConvertsUTF8Strings(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteStringCP437(&buf, []byte("┌─▄│"), ansi.OutputModeCP437); err != nil {
+		t.Fatalf("WriteStringCP437: %v", err)
+	}
+	want := []byte{0xDA, 0xC4, 0xDC, 0xB3}
+	if got := buf.Bytes(); !bytes.Equal(got, want) {
+		t.Errorf("got %x, want %x", got, want)
+	}
+}

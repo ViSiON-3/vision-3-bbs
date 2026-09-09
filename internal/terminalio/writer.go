@@ -148,19 +148,21 @@ func WriteStringCP437(writer io.Writer, data []byte, mode ansi.OutputMode) error
 		}
 		span := data[spanStart:i]
 
-		// Process span rune-by-rune to handle mixed UTF-8 + raw CP437 content
-		pos := 0
-		for pos < len(span) {
-			r, size := utf8.DecodeRune(span[pos:])
-			if r == utf8.RuneError && size == 1 {
-				// Invalid UTF-8 byte - pass through as raw CP437
-				out = append(out, span[pos])
-				pos++
-				continue
-			}
+		// Decide the span's encoding as a whole, as the comment above always
+		// claimed and the rune-by-rune loop here did not. The same CP437 pairs
+		// that form valid UTF-8 sequences were decoded as one rune and then
+		// converted back — and since nothing like U+0733 exists in CP437, the
+		// pair came out as a single '?'. That is the mojibake #280 reported,
+		// on a terminal that would have rendered the original bytes correctly
+		// had they simply been left alone.
+		if !utf8.Valid(span) {
+			// Already CP437: hand it to the terminal untouched.
+			out = append(out, span...)
+			continue
+		}
+		for _, r := range string(span) {
 			if r < 0x80 {
 				out = append(out, byte(r))
-				pos += size
 				continue
 			}
 			if cp437Byte, ok := ansi.UnicodeToCP437[r]; ok {
@@ -168,7 +170,6 @@ func WriteStringCP437(writer io.Writer, data []byte, mode ansi.OutputMode) error
 			} else {
 				out = append(out, '?')
 			}
-			pos += size
 		}
 	}
 
