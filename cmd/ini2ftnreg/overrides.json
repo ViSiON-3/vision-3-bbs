@@ -93,5 +93,11 @@
     "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it. Upstream's value is unusable; corrected here. Upstream records the echolist as the bare filename \"tqwnet.na\", which cannot be fetched, so the wizard reports the area list as unavailable (ViSiON-3/vision-3-bbs#275). tqwNet does publish it, in the infopack repo. Note that repo also carries tqw_file.na, the *file* echo list; this is the echomail list.",
     "nodelist_url": "https://www.erb.pw/tqwinfo.zip",
     "echolist_url": "https://raw.githubusercontent.com/christiansacks/tqwnet_infopack/master/tqwnet.na"
+  },
+  {
+    "zone": 77,
+    "name": "SciNet",
+    "reason": "Defunct: scinet-ftn.org no longer resolves and the network is listed defunct in the community FTN listing. Dropped so the wizard does not show a network whose echolist and infopack are both gone.",
+    "remove": true
   }
 ]

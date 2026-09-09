@@ -29,6 +29,11 @@ type override struct {
 	Name   string `json:"name"`   // the network this zone is, for readability; not applied
 	Reason string `json:"reason"` // why upstream's value cannot be used; not applied
 
+	// Remove drops the network from the registry entirely — for a network that
+	// is defunct upstream (dead domain, no working list). Field overrides on the
+	// same entry are ignored when Remove is set.
+	Remove bool `json:"remove,omitempty"`
+
 	EcholistURL string `json:"echolist_url,omitempty"`
 	NodelistURL string `json:"nodelist_url,omitempty"`
 	PackURL     string `json:"pack_url,omitempty"`
@@ -37,15 +42,16 @@ type override struct {
 	HubHostname string `json:"hub_hostname,omitempty"`
 }
 
-// applyOverrides patches the parsed networks in place and reports what it
-// changed, so a build log shows which values did not come from upstream. An
+// applyOverrides patches the parsed networks and reports what it changed, so a
+// build log shows which values did not come from upstream. It returns the
+// (possibly filtered) network list — a `remove` override drops that network. An
 // override whose zone is absent from the ini is an error rather than a silent
 // no-op: it means upstream renumbered or dropped the network and the entry
 // needs revisiting.
-func applyOverrides(networks []Network) ([]string, error) {
+func applyOverrides(networks []Network) ([]Network, []string, error) {
 	var overrides []override
 	if err := json.Unmarshal(overridesJSON, &overrides); err != nil {
-		return nil, fmt.Errorf("parsing overrides.json: %w", err)
+		return nil, nil, fmt.Errorf("parsing overrides.json: %w", err)
 	}
 
 	byZone := make(map[int]*Network, len(networks))
@@ -54,11 +60,17 @@ func applyOverrides(networks []Network) ([]string, error) {
 	}
 
 	var applied []string
+	removeZones := make(map[int]bool)
 	for _, o := range overrides {
 		n, ok := byZone[o.Zone]
 		if !ok {
-			return nil, fmt.Errorf("override for zone %d matches no network in the ini "+
+			return nil, nil, fmt.Errorf("override for zone %d matches no network in the ini "+
 				"— upstream may have renumbered or dropped it, so the override needs revisiting", o.Zone)
+		}
+		if o.Remove {
+			removeZones[o.Zone] = true
+			applied = append(applied, fmt.Sprintf("zone %d (%s): removed", n.Zone, n.Name))
+			continue
 		}
 		for _, f := range []struct {
 			name string
@@ -79,7 +91,17 @@ func applyOverrides(networks []Network) ([]string, error) {
 			*f.dst = f.val
 		}
 	}
-	return applied, nil
+
+	if len(removeZones) == 0 {
+		return networks, applied, nil
+	}
+	kept := make([]Network, 0, len(networks))
+	for _, n := range networks {
+		if !removeZones[n.Zone] {
+			kept = append(kept, n)
+		}
+	}
+	return kept, applied, nil
 }
 
 // resetOverrides restores the embedded overrides after a test replaces them.
