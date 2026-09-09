@@ -126,3 +126,57 @@ func TestFieldHelpAreaKeepsGap(t *testing.T) {
 		})
 	}
 }
+
+// TestFieldHelpAreaStableLayout covers the no-jump requirement: within one
+// editor, moving between a short-help field and a field whose help wraps must
+// not shift the box or change the total height. The help region is sized to the
+// tallest field, not the active one, so the layout is fixed.
+func TestFieldHelpAreaStableLayout(t *testing.T) {
+	strip := func(s string) string {
+		var b strings.Builder
+		esc := false
+		for _, r := range s {
+			if r == 0x1b {
+				esc = true
+				continue
+			}
+			if esc {
+				if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+					esc = false
+				}
+				continue
+			}
+			b.WriteRune(r)
+		}
+		return b.String()
+	}
+	layout := func(label string) (boxTop, total int) {
+		m := configuredModel()
+		m.width, m.height, m.mode = 78, 40, modeRecordEdit
+		m.recordType, m.recordEditIdx = "msgarea", 0
+		m.recordFields = m.buildRecordFields()
+		for i, f := range m.recordFields {
+			if f.Label == label {
+				m.editField = i
+			}
+		}
+		lines := strings.Split(m.viewRecordEdit(), "\n")
+		boxTop = -1
+		for i, ln := range lines {
+			if strings.Contains(strip(ln), "Edit ") {
+				boxTop = i
+				break
+			}
+		}
+		return boxTop, len(lines)
+	}
+	// "Tag" has one-line help; "Area Type" wraps to two.
+	topShort, nShort := layout("Tag")
+	topWrap, nWrap := layout("Area Type")
+	if topShort != topWrap {
+		t.Errorf("box jumped between fields: top row %d vs %d", topShort, topWrap)
+	}
+	if nShort != nWrap {
+		t.Errorf("total height changed between fields: %d vs %d", nShort, nWrap)
+	}
+}
