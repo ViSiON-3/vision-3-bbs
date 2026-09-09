@@ -16,11 +16,12 @@ import (
 // parseable own address — then there is nothing meaningful to write.
 func buildBinkdRegen(ftnCfg config.FTNConfig, server config.ServerConfig, bbsRoot string) (BinkdConfig, []BinkdNode, bool) {
 	cfg := BinkdConfig{
-		BBSRoot:   bbsRoot,
-		BoardName: server.BoardName,
-		SysopName: server.SysOpName,
-		Location:  server.BBSLocation,
-		Domains:   make(map[string]int),
+		BBSRoot:      bbsRoot,
+		BoardName:    server.BoardName,
+		SysopName:    server.SysOpName,
+		Location:     server.BBSLocation,
+		Domains:      make(map[string]int),
+		OutboundPath: ftnCfg.BinkdOutboundPath,
 	}
 	var nodes []BinkdNode
 
@@ -81,7 +82,7 @@ func EnsureBinkdConf(bbsRoot string, ftnCfg config.FTNConfig, server config.Serv
 	}
 	// The regenerated conf carries template defaults for port/loglevel;
 	// bring them in line with the configured values.
-	if err := SyncBinkdSettings(confPath, ftnCfg.Binkd.Port, ftnCfg.Binkd.LogLevel); err != nil {
+	if err := SyncBinkdSettings(confPath, ftnCfg.Binkd.Port, ftnCfg.Binkd.LogLevel, cfg.outboundPath()); err != nil {
 		return true, err
 	}
 	return true, nil

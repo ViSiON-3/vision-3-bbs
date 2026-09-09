@@ -34,6 +34,36 @@ type BinkdConfig struct {
 
 	// Node is the new hub node to add.
 	Node BinkdNode
+
+	// OutboundPath is binkd's BSO outbound directory, written into the
+	// "domain" lines. Empty falls back to <BBSRoot>/data/ftn/out.
+	OutboundPath string
+}
+
+// outboundPath returns the BSO outbound directory for the domain lines,
+// resolving a relative configured path against the BBS root.
+//
+// This must be the same directory the tosser packs bundles into (ftn.json's
+// binkd_outbound_path). binkd only sends what it finds in its own outbound,
+// and a mismatch is silent: the tosser reports bundles created, binkd reports
+// an empty queue, and echomail sits unsent with no error on either side.
+func (c BinkdConfig) outboundPath() string {
+	return BinkdOutboundDir(c.BBSRoot, c.OutboundPath)
+}
+
+// BinkdOutboundDir resolves ftn.json's binkd_outbound_path to the absolute
+// directory binkd uses as its BSO outbound, falling back to the historical
+// <bbsRoot>/data/ftn/out when unset. Callers hold the path in either form:
+// config.FTNConfig.ResolvePaths has already made it absolute for the running
+// BBS, while the config editor keeps the raw relative value.
+func BinkdOutboundDir(bbsRoot, configured string) string {
+	if configured == "" {
+		return filepath.Join(bbsRoot, "data", "ftn", "out")
+	}
+	if filepath.IsAbs(configured) {
+		return configured
+	}
+	return filepath.Join(bbsRoot, configured)
 }
 
 // identityOrDefaults fills fallback values for blank BBS identity fields.
@@ -84,7 +114,7 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 		return writeFileAtomic(confPath, updated, 0600)
 	}
 
-	outPath := filepath.Join(cfg.BBSRoot, "data", "ftn", "out")
+	outPath := cfg.outboundPath()
 	logPath := filepath.Join(cfg.BBSRoot, "data", "logs", "binkd.log")
 	secureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "secure_in")
 	insecureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "in")

@@ -13,7 +13,7 @@ import (
 // could not be recreated. The caller supplies real values; iport/loglevel are
 // template defaults here and are corrected by SyncBinkdSettings afterwards.
 func RegenerateBinkdConf(confPath string, cfg BinkdConfig, nodes []BinkdNode) error {
-	outPath := filepath.Join(cfg.BBSRoot, "data", "ftn", "out")
+	outPath := cfg.outboundPath()
 	logPath := filepath.Join(cfg.BBSRoot, "data", "logs", "binkd.log")
 	secureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "secure_in")
 	insecureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "in")
