@@ -79,6 +79,8 @@ func main() {
 	// upper case, so a sysop who types what the help screen shows —
 	// `helper FTNSETUP` — was told "Unknown command" and shown that same
 	// screen again, with nothing to indicate the name had to be lower case.
+	// Errors quote os.Args[1] rather than cmd, so a typo is echoed back as the
+	// sysop typed it.
 	cmd := strings.ToLower(os.Args[1])
 	if cmd == "--version" || cmd == "-version" {
 		printHeader()
@@ -99,7 +101,7 @@ func main() {
 	case "files":
 		cmdFiles(os.Args[2:])
 	default:
-		printUsage(fmt.Sprintf("Unknown command: %s", cmd))
+		printUsage(fmt.Sprintf("Unknown command: %s", os.Args[1]))
 		os.Exit(1)
 	}
 }
