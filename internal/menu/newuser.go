@@ -248,6 +248,15 @@ func (e *MenuExecutor) handleNewUserApplication(
 		}
 	}
 
+	// Optionally require the caller to introduce themselves to the SysOp by
+	// private mail before finishing. Only io.EOF (a dropped connection) is
+	// fatal; anything else is logged and the signup completes regardless.
+	if cfg.RequireNewUserEmail {
+		if err := e.requireNewUserSysopEmail(s, terminal, userManager, newUser, nodeNumber, outputMode, termWidth, termHeight); errors.Is(err, io.EOF) {
+			return newUser, io.EOF
+		}
+	}
+
 	// 11. Tell them what actually happens next.
 	//
 	// This used to say "requires SysOp validation, please call back later" to

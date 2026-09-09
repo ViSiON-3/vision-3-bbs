@@ -43,7 +43,7 @@ Choosing **System Configuration** (key 1) opens an inner menu with nine numbered
 | 1 | Server Setup | SSH enabled/host/port/legacy-algorithms, Telnet enabled/host/port, V3Net enabled + hub settings |
 | 2 | Connection Limits | Max Nodes, Max Per IP, Failed Logins (0=off), Lockout Minutes, Idle Timeout, Transfer Timeout |
 | 3 | Access Levels | SysOp Level, CoSysOp Level, Invisible Level, New User Level, Regular Level, Logon Level, Anonymous Level |
-| 4 | Default Settings | Allow New Users (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days |
+| 4 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days |
 | 5 | IP Blocklist/Allowlist | Blocklist Path, Allowlist Path |
 | 6 | New User Voting (NUV) | Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
 | 7 | DOS Emulation | DOSemu Path |
@@ -467,6 +467,7 @@ under Security Levels in `./config`, to silence it.
 **Default Settings:**
 
 - `allowNewUsers` — Accept new user registrations (shipped and fallback: `true`)
+- `requireNewUserEmail` — End signup by making the caller leave the SysOp (user #1) a private message: they are shown `NUEMAIL.ANS` in the menu set's `ansi` dir (or the `newUserEmailPrompt` string when the file is absent), paused, then dropped into the message editor addressed to the SysOp (shipped and fallback: `false`)
 - `fileListingMode` — `""` or `"lightbar"` (default) / `"classic"`
 - `deletedUserRetentionDays` — Days to keep soft-deleted user records before `helper users purge` removes them (shipped: `-1`, keep forever; fallback: `30`)
 

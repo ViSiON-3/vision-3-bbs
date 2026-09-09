@@ -269,6 +269,8 @@
   "newUserAccountCreated": "\r\n|15Your account has been created, but a |13SysOp must raise your access|15\r\n|15before you can log on.\r\n|08Please call back later.|07\r\n",
   "newUserAccountReady": "\r\n|15Your account has been created. |10You can log on now.|07\r\n",
   "newUserCreationError": "\r\n|13Error creating account. Please try again later.|07\r\n",
+  "newUserEmailPrompt": "\r\n|15Before you go, please leave the |14SysOp|15 a private message.|07\r\n|07Tell them a bit about yourself and why you'd like access.\r\n|08Your account may not be validated without it.|07\r\n",
+  "newUserEmailSubject": "New user application - %s",
   "newUserInvalidRealName": "\r\n|05Please enter your |10first |05and |10last |05name.|07\r\n",
   "newUserLocationPrompt": "|08G|07r|15oup|08/|07L|15ocation |09: ",
   "newUserMaybeAnotherTime": "\r\n|07Maybe another time... Bye!|07\r\n",
