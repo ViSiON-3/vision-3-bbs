@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -485,5 +486,62 @@ func TestMessageListShowsTheMessageDate(t *testing.T) {
 	stripped := testAnsiEscape.ReplaceAllString(ts.output(), "")
 	if !strings.Contains(stripped, "03/07/19") {
 		t.Errorf("row does not carry the message date 03/07/19:\n%q", stripped)
+	}
+}
+
+// In CP437 mode the row must carry real CP437 bytes, not replacement
+// characters.
+//
+// toCP437Safe emits one byte per rune, and CP437's high bytes are not valid
+// UTF-8. Converting before truncating meant TruncateRunes decoded those bytes,
+// turned every accented character into U+FFFD, and left the column count
+// correct — so a width check passed over corrupted text. é (0x82) came out as
+// ef bf bd.
+func TestMessageListCP437FieldsSurviveTruncation(t *testing.T) {
+	entry := MessageListEntry{
+		MsgNum:  1234,
+		Subject: "Café Ñoño über Grüße and more text than the column can hold",
+		From:    "Jörg Müller with an overlong name",
+		To:      "Renée",
+		Date:    time.Date(2026, 9, 9, 5, 0, 0, 0, time.UTC),
+	}
+
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeCP437); err != nil {
+		t.Fatalf("drawMessageListLine: %v", err)
+	}
+	out := []byte(ts.output())
+
+	// Compare bytes, not runes. Ranging a Go string over CP437's high bytes
+	// yields RuneError for each one, so a rune-level check for U+FFFD cannot
+	// tell a corrupted character from a correctly encoded é.
+	if bytes.Contains(out, []byte{0xef, 0xbf, 0xbd}) {
+		t.Error("row contains an encoded U+FFFD: CP437 bytes were decoded as UTF-8 somewhere")
+	}
+	// 0x82 is é in CP437, 0xa5 is ñ. Both must reach the terminal as one byte.
+	for _, b := range []byte{0x82, 0xa5} {
+		if !bytes.Contains(out, []byte{b}) {
+			t.Errorf("row lost the CP437 byte %#x:\n% x", b, out)
+		}
+	}
+}
+
+// The same subject in UTF-8 mode keeps its accents as UTF-8.
+func TestMessageListUTF8FieldsKeepAccents(t *testing.T) {
+	entry := MessageListEntry{
+		MsgNum: 1234, Subject: "Café Ñoño über", From: "Jörg", To: "Renée",
+		Date: time.Date(2026, 9, 9, 5, 0, 0, 0, time.UTC),
+	}
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeUTF8); err != nil {
+		t.Fatalf("drawMessageListLine: %v", err)
+	}
+	out := ts.output()
+	for _, want := range []string{"Café", "Jörg", "Renée"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("row lost %q in UTF-8 mode", want)
+		}
 	}
 }

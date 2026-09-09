@@ -78,10 +78,10 @@ func drawMessageListScreen(terminal *term.Terminal, state *MessageListState, are
 	columnHeaders := fmt.Sprintf("|11│|15%s%s %s %s %s %s |11│|07\r\n",
 		strings.Repeat(" ", listStatusWidth),
 		ansi.PadLeft("N#", listNumWidth),
-		listCell("Subject", listSubjectWidth),
-		listCell("From", listFromWidth),
-		listCell("To", listToWidth),
-		listCell("Date", listDateWidth))
+		listCell("Subject", listSubjectWidth, outputMode),
+		listCell("From", listFromWidth, outputMode),
+		listCell("To", listToWidth, outputMode),
+		listCell("Date", listDateWidth, outputMode))
 	if err := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(columnHeaders)), outputMode); err != nil {
 		return err
 	}
@@ -186,10 +186,24 @@ const (
 )
 
 // listCell renders s as exactly width columns, truncating with an ellipsis and
-// padding with spaces. Both halves count runes, so the result is exact for
-// multi-byte input as well as ASCII.
-func listCell(s string, width int) string {
-	return ansi.PadRight(ansi.TruncateRunes(s, width, "..."), width)
+// padding with spaces.
+//
+// Order matters. toCP437Safe emits one byte per rune, and CP437's high bytes
+// are not valid UTF-8, so anything that decodes runes must run before the
+// conversion: truncating afterwards turns every accented character into U+FFFD
+// while leaving the column count correct, which is corruption a width check
+// cannot see. Truncate and measure in Unicode, convert, then pad with ASCII
+// spaces that are the same byte either way.
+func listCell(s string, width int, outputMode ansi.OutputMode) string {
+	s = ansi.TruncateRunes(s, width, "...")
+	n := utf8.RuneCountInString(s)
+	if outputMode == ansi.OutputModeCP437 {
+		s = toCP437Safe(s)
+	}
+	if n < width {
+		s += strings.Repeat(" ", width-n)
+	}
+	return s
 }
 
 // listNumCell right-aligns a message number in listNumWidth columns.
@@ -204,29 +218,25 @@ func listNumCell(n int) string {
 
 // listDateCell formats a message date for the list. A zero time renders blank
 // rather than as year 1, which is what a message with no usable date carries.
+// The format is ASCII, so it needs no output-mode handling.
 func listDateCell(t time.Time) string {
 	if t.IsZero() {
 		return strings.Repeat(" ", listDateWidth)
 	}
-	return listCell(t.Format("01/02/06"), listDateWidth)
+	return ansi.PadRight(ansi.TruncateRunes(t.Format("01/02/06"), listDateWidth, ""), listDateWidth)
 }
 
-// messageListRow builds the 77-column interior of one message row, without the
-// status character, which is written separately because it carries pipe codes
-// in the unhighlighted case and is always exactly one column.
+// messageListRow builds every column of one message row except the status
+// character, which the caller writes separately because it carries pipe codes
+// in the unhighlighted case. The result is listInteriorWidth - listStatusWidth
+// columns wide.
 func messageListRow(entry MessageListEntry, outputMode ansi.OutputMode) string {
-	subjectVal, fromVal, toVal := entry.Subject, entry.From, entry.To
-	if outputMode == ansi.OutputModeCP437 {
-		subjectVal = toCP437Safe(subjectVal)
-		fromVal = toCP437Safe(fromVal)
-		toVal = toCP437Safe(toVal)
-	}
 	// Trailing space so the date does not butt against the right border, the
 	// way the status column keeps the number off the left one.
 	return listNumCell(entry.MsgNum) + " " +
-		listCell(subjectVal, listSubjectWidth) + " " +
-		listCell(fromVal, listFromWidth) + " " +
-		listCell(toVal, listToWidth) + " " +
+		listCell(entry.Subject, listSubjectWidth, outputMode) + " " +
+		listCell(entry.From, listFromWidth, outputMode) + " " +
+		listCell(entry.To, listToWidth, outputMode) + " " +
 		listDateCell(entry.Date) + " "
 }
 
