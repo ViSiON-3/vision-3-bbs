@@ -52,7 +52,7 @@ Restart the BBS afterward. On startup, Vision/3 launches `bin/binkd` as a superv
 
 These same fields appear in the Configuration Editor under **Server Setup** as "Binkd Mailer", "Binkd Port", "Binkd Binary", "Binkd Log Lvl", "Export Secs", and "No CRAM-MD5". Saving from the config editor also re-syncs identity fields, link passwords, `iport`, and `loglevel` into `binkd.conf`.
 
-**About `disable_cram_md5`:** binkp normally negotiates CRAM-MD5, so the password is never sent in the clear. Leave this off. Turn it on only for a hub whose CRAM-MD5 rejects a password you have otherwise confirmed correct — the giveaway is `ERR Bad address or password` on your outgoing calls *and* `'CRAM-MD5-...': incorrect password` on the hub's incoming calls, while the same password succeeds once MD5 is out of the picture. `-m` both stops binkd offering CRAM-MD5 to callers and stops it answering a remote's offer, so it repairs both directions; the cost is that the session password crosses the network in plaintext.
+**About `disable_cram_md5`:** binkp normally negotiates CRAM-MD5, so the password is never sent in the clear. Leave this off. `-m` both stops binkd offering CRAM-MD5 to callers and stops it answering a remote's offer, so it repairs a failing handshake in both directions; the cost is that the session password crosses the network in plaintext on every link, not just the one that misbehaves. It is a workaround, not a fix — if CRAM-MD5 is failing, read [CRAM-MD5 authentication fails](#cram-md5-authentication-fails) first, because the usual cause is a miscompiled binkd binary that you can simply replace.
 
 **Preflight checks:** before starting binkd, Vision/3 verifies the binary is present and executable, that `data/ftn/binkd.conf` exists and contains no unconfigured template placeholders (the wizard creates and fills it), and that at least one configured network has an `own_address` set. If any check fails, the BBS logs a warning and continues running without the mailer — it never blocks startup.
 
@@ -249,14 +249,23 @@ that uses standard inbound/outbound directories will work the same way.
 To build binkd from source or install via package manager instead:
 
 ```bash
-# From source
-git clone https://github.com/pgul/binkd && cd binkd && make
-cp binkd /path/to/vision3/bin/
+# From source — use the script, it builds binkd correctly and self-tests it
+./scripts/build-binkd.sh --out /path/to/vision3/bin/binkd
 
 # Or via package manager (Debian/Ubuntu)
 apt install binkd
 cp $(which binkd) bin/
 ```
+
+**Do not build binkd with a bare `git clone && make`.** binkd picks the 32-bit
+integer type for its MD5 code from `SIZEOF_INT`, which only its `configure`
+script defines; without it the fallback makes every MD5 word 64 bits wide on
+any 64-bit platform and MD5 silently computes wrong digests. Plaintext binkp
+passwords still work, so the only symptom is CRAM-MD5 failing against every
+peer — see [CRAM-MD5 authentication fails](#cram-md5-authentication-fails)
+below. The correct sequence is `cp mkfls/unix/* . && ./configure && make`,
+which is what `scripts/build-binkd.sh` runs before verifying the result
+against the RFC 2202 HMAC-MD5 test vector.
 
 ### Step 3: Import Echo Areas with `helper`
 
@@ -789,6 +798,52 @@ node 46:1/100@agoranet hub-hostname:24554 HUBPASS -
 - Run `./v3mail scan --config configs --data data` to create outbound packets
 - Run `./v3mail ftn-pack --config configs --data data` to bundle them
 - Check that `binkd_outbound_path` in `ftn.json` matches the domain path in binkd.conf
+
+### CRAM-MD5 authentication fails
+
+The symptom is a session password that works in plaintext but is rejected the
+moment MD5 is negotiated, in both directions and against every peer:
+
+```
+send message PWD CRAM-MD5-4cabd69d0a2cc73b8a19928e70f31a46
+rcvd msg ERR Bad address or password
+```
+
+with `'CRAM-MD5-...': incorrect password` appearing in your own log when that
+peer calls you, while `binkd -m` (plaintext) succeeds with the same password.
+
+This is almost always a **miscompiled binkd binary**, not a password or a
+remote-end problem. binkd's `md5b.h` chooses the 32-bit type its MD5 code
+needs from `SIZEOF_INT`, which only binkd's `configure` script defines.
+Built without configure — a bare `git clone && make` will do it — the
+fallback `typedef unsigned long int UINT4` makes every MD5 word 64 bits wide
+on any LP64 platform, and MD5 returns wrong digests. Nothing else in binkd
+uses MD5, so plaintext sessions are unaffected and the binary looks healthy.
+
+Rebuild and replace the binary:
+
+```bash
+./scripts/build-binkd.sh --out /path/to/vision3/bin/binkd
+```
+
+The script refuses to install a binary whose HMAC-MD5 does not match the
+RFC 2202 test vector. Restart the BBS afterwards so the supervisor picks up
+the new binkd, and clear any `-m` workaround you put in place: set
+`disable_cram_md5` back to `false` in `configs/ftn.json` and drop `-m` from
+the poll events in `configs/events.json`. A repaired link logs
+`pwd protected session (MD5)` instead of `(plain text)`.
+
+If a rebuilt binkd still fails against one specific peer while working with
+others, that peer is the problem. Prefer binkd's per-node `-nomd` option to the
+global `disable_cram_md5`, so only that one link falls back to a plaintext
+password:
+
+```
+node 21:4/158@fsxnet -nomd hub.example.org:24554 secret
+```
+
+Options may sit anywhere on a node line; Vision/3 preserves them when it syncs
+the host and password from your link settings.
 
 ### Duplicate messages
 
