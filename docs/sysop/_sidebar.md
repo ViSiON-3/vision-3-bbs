@@ -4,6 +4,7 @@
 * [Overview](getting-started/README.md)
 * [Installation](getting-started/installation.md)
 * [Docker](getting-started/docker.md)
+* [Upgrading](getting-started/upgrading.md)
 
 * **CONFIGURATION**
 * [Configuration](configuration/configuration.md)

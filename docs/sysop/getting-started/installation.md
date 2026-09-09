@@ -203,3 +203,4 @@ This builds all binaries, creates a full BBS directory at the target path, and s
 - Review [File Transfer Protocols](files/file-transfer.md) (sexyz ZModem 8k)
 - Refer to [User Management](users/user-management.md) for managing users
 - Set up the [WFC Sysop Console](how-to-guides/wfc-console.md) to monitor live callers remotely over SSH
+- When a new version lands, follow [Upgrading](getting-started/upgrading.md) — config settings added since your version are not merged into your files automatically
