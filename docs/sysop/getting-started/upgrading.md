@@ -10,8 +10,13 @@ what makes upgrading safe, and also what makes two steps necessary:
   installed. A repo-in-place upgrade **will** update `menus/`, and can
   overwrite menu edits you made in the repo. An instance or bundle install
   never updates it, so artwork fixes do not reach you at all.
+- The binaries in `bin/` (`binkd`, `sexyz`) are prebuilt — a source build
+  (`git pull` + `build.sh`) never touches them, so they stay at the version you
+  first installed. Most releases don't change them; when one does, the release
+  notes and the worked example below say so. **v0.9.0 is one that does** — its
+  binkd fixes a broken build, and every install has to take the new one.
 
-Nothing warns you about either one, so this is the part of an upgrade worth
+Nothing warns you about any of these, so this is the part of an upgrade worth
 reading.
 
 ## Which install do you have
@@ -129,10 +134,14 @@ mkdir -p /tmp/v3new
 tar xzf vision3-bundle-linux-amd64-vX.Y.Z.tar.gz -C /tmp/v3new
 cd /opt/vision3
 cp /tmp/v3new/{vision3,ue,strings,config,menuedit,helper,v3mail} .
+cp /tmp/v3new/bin/{binkd,sexyz} bin/    # the bundle carries these; a source build does not
 ```
 
 Then compare `/tmp/v3new/configs/` against your own, as below, and copy across
 any menu or artwork files you have not customised.
+
+A bundle is the simplest way to get the new `bin/binkd` this release requires:
+it is already in the archive, so the `cp` above is all it takes.
 
 ## Settings added since your version
 
@@ -209,26 +218,90 @@ that file.
 
 `events.json` needs a restart, because the scheduler is built at startup.
 
-## Worked example: upgrading past v0.8.2
+## Worked example: upgrading to v0.9.0
 
-The release after v0.8.2 added a SysOp notice for new users, which happens to
-show all three config cases at once:
+v0.9.0 is a large release, and it touches every category above — a prebuilt
+binary, config keys, login steps and menu artwork. Work through it in this
+order.
 
-- **`config.json`** gained `notifySysopNewUser`. It defaults to `true`, so the
-  real-time page works after upgrading with no edit at all.
-- **`strings.json`** gained `newUserSysopPage`. It has a fallback, so the notice
-  has text without an edit; add the key only if you want to reword it.
-- **`login.json`** gained `NEWUSERVAL`, and this one you must add yourself:
+### 1. Replace `bin/binkd` — required for FidoNet
 
-  ```json
-  { "command": "NEWUSERVAL", "sec_level": 255 }
-  ```
+Every Unix binkd shipped before v0.9.0 was built with a broken MD5, so binkp
+sessions that negotiated CRAM-MD5 failed against every peer, in both directions,
+with a correct password. v0.9.0 fixes the build. Because `bin/binkd` is a
+prebuilt binary a source build never rebuilds, you must take the new one
+yourself:
 
-  Place it before `CHECKNUV`, and use your own `sysOpLevel` if it is not 255.
-  Without it you still get the real-time page; you lose only the "N users
-  pending" prompt at login.
+- **Bundle upgrade:** already done — the `cp .../bin/{binkd,sexyz}` step above
+  installed it.
+- **Repo-in-place or instance upgrade:** copy `bin/binkd` from a v0.9.0 release
+  bundle, or build it with `./scripts/build-binkd.sh --out bin/binkd` (it
+  verifies the result against the RFC 2202 test vector and refuses to install a
+  broken one).
 
-The same release corrected a hotkey in `menus/v3/ansi/MSGMENU.ANS`, where the
-artwork advertised `[Z]` for an entry the menu binds to `U`. Whether that
-reaches your BBS depends entirely on your layout: a repo-in-place install gets
-it from the pull, while an instance or a bundle needs the file copied across.
+If you had worked around the old bug, undo the workaround now, or CRAM-MD5 stays
+off: set `disable_cram_md5` back to `false` under `ftn.binkd` in
+`configs/ftn.json`, and drop any `-m` you added to the poll events in
+`configs/events.json`. A repaired link logs `pwd protected session (MD5)`
+instead of `(plain text)`. Windows binkd was never affected.
+
+### 2. `config.json` — new keys, all with working defaults
+
+Two keys were added; both default to something sensible, so the BBS runs
+correctly with no edit. Read them so you know they exist:
+
+- `notifySysopNewUser` (default `true`) — real-time SysOp page when a new user
+  signs up.
+- `autoValidateNewUsers` (default `false`) — when `true`, new users are granted
+  their full access immediately instead of waiting for validation. Leave it off
+  unless you want an open board.
+
+### 3. `login.json` — two new steps you must add yourself
+
+Neither runs unless you list it (a login step that is not present simply does
+not execute):
+
+```json
+{ "command": "NEWUSERVAL", "sec_level": 255 }
+```
+
+Place `NEWUSERVAL` before `CHECKNUV`, using your own `sysOpLevel` if it is not
+255. Without it the real-time new-user page still works; you lose only the
+"N users pending" prompt at login.
+
+```json
+{ "command": "PRINTNEWS" }
+```
+
+`PRINTNEWS` shows System News at login. Add it wherever you want the news to
+appear in the sequence; without it, news is reachable only from the menus.
+
+### 4. `strings.json` — new text, mostly with fallbacks
+
+v0.9.0 adds a batch of strings (new-user flow, file-area and batch messages,
+conference prompts). Most carry a built-in fallback, so they print sensible
+text with no edit; `./strings` marks which are genuinely empty versus falling
+back. Add or reword only what you want to change — see the listing script above
+to see exactly which keys your `strings.json` is missing.
+
+### 5. Menu artwork and layout — copy for non-repo installs
+
+v0.9.0 changed several menu files. A **repo-in-place** install gets them from
+the pull (mind your own edits); an **instance or bundle** install needs each one
+copied across by hand:
+
+| File(s) | What changed |
+| ------- | ------------ |
+| `menus/v3/ansi/MAIN.ANS`, `cfg/MAIN.CFG`, `mnu/MAIN.MNU` | Main menu cleaned up; Newscan Pointers moved off it |
+| `menus/v3/ansi/MSGMENU.ANS` | Corrected scan labels and a wrong hotkey (artwork advertised `[Z]` for an entry bound to `U`) |
+| `menus/v3/ansi/DOORSM.ANS`, `cfg/DOORSM.CFG` | Doors menu now advertises only doors that actually run |
+| `menus/v3/templates/message_headers/MSGHDR.*.ans` | Header templates: every one is now reachable, MSGHDR.3 shows the subject, and MSGHDR.9's title row is fixed |
+
+Copy a screen's files as a set — the `.ANS`, `.CFG` and `.MNU`/template that
+make up one menu must agree, so taking one and not the others can leave you
+worse off than before.
+
+### 6. Restart
+
+Follow [Restarting](#restarting). The new `vision3` and the new `bin/binkd` both
+take effect only once you restart.
