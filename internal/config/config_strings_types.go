@@ -248,6 +248,17 @@ type StringsConfig struct {
 	NewUserPendingReview    string `json:"newUserPendingReview"`
 	NewUserCreationError    string `json:"newUserCreationError"`
 	NewUserMaybeAnotherTime string `json:"newUserMaybeAnotherTime"`
+	// Shown (in place of a missing NUEMAIL.ANS) when requireNewUserEmail is on,
+	// telling the caller to leave the SysOp a message before continuing.
+	NewUserEmailPrompt string `json:"newUserEmailPrompt"`
+	// Default subject for that message; "%s" is replaced with the new handle.
+	NewUserEmailSubject string `json:"newUserEmailSubject"`
+	// Shown when a caller tries to skip the required message (abort/empty),
+	// before returning them to the editor.
+	NewUserEmailRequired string `json:"newUserEmailRequired"`
+	// Shown after a new user who can log on finishes signup, as they are carried
+	// straight into a session.
+	NewUserLoggingIn string `json:"newUserLoggingIn"`
 
 	// System stats strings (V3-specific)
 	StatsBBSName     string `json:"statsBBSName"`

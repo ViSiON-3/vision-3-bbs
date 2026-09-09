@@ -569,5 +569,9 @@ func stringCatalog() []StringEntry {
 		// wrong" only keeps meaning the same string while new entries go on
 		// the end.
 		{Label: "New User: SysOp Page", Key: "newUserSysopPage", Description: "Paged to online SysOps when a signup completes (%s=handle, %d=node)"},
+		{Label: "New User: Email Prompt", Key: "newUserEmailPrompt", Description: "Require-email fallback shown when NUEMAIL.ANS is absent, asking the caller to message the SysOp"},
+		{Label: "New User: Email Subject", Key: "newUserEmailSubject", Description: "Default subject of the required new-user message (%s=handle)"},
+		{Label: "New User: Email Required", Key: "newUserEmailRequired", Description: "Shown when a caller tries to skip the required message, before returning them to the editor"},
+		{Label: "New User: Logging In", Key: "newUserLoggingIn", Description: "Shown after a new user who can log on finishes signup, as they are carried into a session"},
 	}
 }

@@ -108,6 +108,15 @@ type User struct {
 	// Soft Delete (user marked as deleted but data preserved)
 	DeletedUser bool       `json:"deletedUser,omitempty"` // True if user is soft-deleted
 	DeletedAt   *time.Time `json:"deletedAt,omitempty"`   // Timestamp when user was deleted (nil if not deleted)
+
+	// New-user intro gate (requireNewUserEmail). IntroPending means the account
+	// still owes the SysOp an introduction message; the login flow forces the
+	// editor before the account can go any further, even below logon level.
+	// IntroAttempts counts sessions where the caller reached that gate and left
+	// without sending; the account is soft-deleted once it hits the limit.
+	// Session-owned state (not carried in the sysop external-edit merge).
+	IntroPending  bool `json:"introPending,omitempty"`
+	IntroAttempts int  `json:"introAttempts,omitempty"`
 }
 
 // CallRecord stores information about a single call session.

@@ -165,6 +165,20 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		return nil, nil             // Failed auth, but not a critical error. Let LOGIN menu handle retries.
 	}
 
+	// A new user who owes the SysOp the required introduction message is sent
+	// back into that gate before anything else — deliberately ahead of the
+	// logon-level check, so a not-yet-validated account cannot dodge it by
+	// reconnecting. runNewUserIntroGate handles the attempt count and account
+	// removal; proceed=false means they disconnected, so end the session.
+	if authUser.IntroPending {
+		if proceed, _, gErr := e.runNewUserIntroGate(s, terminal, userManager, authUser, nodeNumber, outputMode, termWidth, termHeight); !proceed {
+			if errors.Is(gErr, io.EOF) {
+				return nil, io.EOF
+			}
+			return nil, nil
+		}
+	}
+
 	// Check if user meets minimum logon level (if LogonLevel > 0)
 	// Note: We rely on accessLevel for access control, not the validated flag.
 	// The validated flag is used for auto-upgrading to regularUserLevel and showing validation status.

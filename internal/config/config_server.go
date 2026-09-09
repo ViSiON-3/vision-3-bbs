@@ -50,6 +50,13 @@ type ServerConfig struct {
 	FileListingMode     string `json:"fileListingMode"`
 	LegacySSHAlgorithms bool   `json:"legacySSHAlgorithms"`
 	AllowNewUsers       bool   `json:"allowNewUsers"`
+	// RequireNewUserEmail makes the final step of signup a private message to
+	// the SysOp: the caller is shown NUEMAIL.ANS (customizable) with a pause,
+	// then dropped straight into the message editor addressed to the SysOp.
+	// Off by default. Useful when signups are not auto-validated, since a caller
+	// whose new account cannot log on yet is bounced to the login prompt and
+	// would otherwise have no chance to introduce themselves.
+	RequireNewUserEmail bool `json:"requireNewUserEmail"`
 
 	// Challenge Gate — optional pre-login bot challenge (botgate-style).
 	EnableChallengeGate          bool   `json:"enableChallengeGate"`          // master on/off
@@ -182,6 +189,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		MaxFailedLogins:              5,
 		LockoutMinutes:               30,
 		AllowNewUsers:                true,
+		RequireNewUserEmail:          false,
 		EnableChallengeGate:          false,
 		ChallengeGateFile:            "BOTCHECK.ASC",
 		ChallengeGateKey:             "ESC",

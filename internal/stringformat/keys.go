@@ -80,6 +80,7 @@ var FormattedKeys = []string{
 	"matrixAccountValidated",
 	"msgNoThreadFound",
 	"newscanNewNetworkPrompt",
+	"newUserEmailSubject",
 	"newUserSysopPage",
 	"pageMessageFormat",
 	"pageNodeListEntry",

@@ -73,7 +73,12 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 			Set: func(val string) error { cfg.AllowNewUsers = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "File List Mode", Help: "File listing style", Type: ftLookup, Col: 3, Row: 2, Width: 15,
+			Label: "Require Email", Help: "New users must leave the SysOp a private message to finish signup (shows NUEMAIL.ANS)", Type: ftYesNo, Col: 3, Row: 2, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.RequireNewUserEmail) },
+			Set: func(val string) error { cfg.RequireNewUserEmail = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "File List Mode", Help: "File listing style", Type: ftLookup, Col: 3, Row: 3, Width: 15,
 			Get: func() string { return cfg.FileListingMode },
 			Set: func(val string) error { cfg.FileListingMode = val; return nil },
 			LookupItems: func() []LookupItem {
@@ -84,7 +89,7 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Del User Days", Help: "Days to keep deleted user records (0=purge now, -1=forever)", Type: ftInteger, Col: 3, Row: 3, Width: 5, Min: -1, Max: 9999,
+			Label: "Del User Days", Help: "Days to keep deleted user records (0=purge now, -1=forever)", Type: ftInteger, Col: 3, Row: 4, Width: 5, Min: -1, Max: 9999,
 			Get: func() string { return strconv.Itoa(cfg.DeletedUserRetentionDays) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
