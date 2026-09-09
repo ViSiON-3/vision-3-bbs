@@ -278,11 +278,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		// They just sent the required message and their account can get on, so
 		// they are about to be carried straight into a session — say so rather
 		// than "you can log on now", which implies a separate step.
-		loggingIn := e.LoadedStrings.NewUserLoggingIn
-		if loggingIn == "" {
-			loggingIn = "\r\n|10Thanks! You're all set — logging you in now...|07\r\n"
-		}
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(loggingIn)), outputMode)
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NewUserLoggingIn)), outputMode)
 	} else {
 		validationMsg := e.LoadedStrings.NewUserAccountReady
 		if !canLogonAtLevel(cfg, newUser.AccessLevel) {

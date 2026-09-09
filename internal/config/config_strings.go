@@ -135,6 +135,14 @@ var StringFallbacks = map[string]string{
 	"newUserPendingReview":     "|08A SysOp will review your account.|07\r\n",
 	"matrixAccountCannotLogon": "\r\n|14Account '%s' cannot log on yet |08(level |15%d|08, minimum |15%d|08)|14.\r\n|08A SysOp must raise your access.|07\r\n",
 
+	// Require-email signup gate (requireNewUserEmail). Shipped so an upgraded
+	// strings.json without these keys still shows the prompts rather than blank
+	// lines, and so they appear in the string editor.
+	"newUserEmailPrompt":   "\r\n|15Before you go, please leave the |14SysOp|15 a private message.|07\r\n|07Tell them a bit about yourself and why you'd like access.\r\n|08Your account may not be validated without it.|07\r\n",
+	"newUserEmailSubject":  "New user application - %s",
+	"newUserEmailRequired": "\r\n|12A message to the SysOp is required to complete your registration.|07\r\n",
+	"newUserLoggingIn":     "\r\n|10Thanks! You're all set - logging you in now...|07\r\n",
+
 	// Message newscan notices (added after the scan strings shipped; keep
 	// existing strings.json files working without them)
 	"scanInvalidDate":  "\r\n|12Invalid date. Enter MM/DD/YY, MM/DD/YYYY, MM-DD-YY, MM-DD-YYYY, YYYY-MM-DD, MMDDYY or MMDDYYYY.|07\r\n",

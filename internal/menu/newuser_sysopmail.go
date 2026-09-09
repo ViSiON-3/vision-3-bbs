@@ -136,18 +136,17 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 		return false, nil
 	}
 
-	// Introduce the step once: the customizable art if present, otherwise the
-	// string. The retry loop below does not re-show it — only a short reminder.
-	if err := e.displayNewUserEmailScreen(terminal, outputMode, nodeNumber); err != nil {
+	// Introduce the step once: the customizable art if it actually renders,
+	// otherwise the string. Basing the fallback on whether the art was shown
+	// (not merely present) covers a transient read error, which would otherwise
+	// leave the caller with no instruction before the editor. The retry loop
+	// below does not re-show it — only a short reminder.
+	displayed, err := e.displayNewUserEmailScreen(terminal, outputMode, nodeNumber)
+	if err != nil {
 		slog.Warn("failed to display NUEMAIL.ANS", "node", nodeNumber, "error", err)
 	}
-	if !e.newUserEmailScreenExists() {
-		prompt := e.LoadedStrings.NewUserEmailPrompt
-		if prompt == "" {
-			prompt = "\r\n|15Before you go, please leave the |14SysOp|15 a private message so they\r\n" +
-				"know who you are. Your account may not be validated without it.|07\r\n"
-		}
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+	if !displayed {
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NewUserEmailPrompt)), outputMode)
 	}
 
 	// Auto-pause before proceeding into the editor.
@@ -155,11 +154,9 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 	e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 
 	// Default subject carries the handle so the SysOp can tell applications
-	// apart at a glance in their inbox.
+	// apart at a glance in their inbox. The %s guard tolerates a sysop who
+	// edited the subject string and removed the placeholder.
 	subjectFmt := e.LoadedStrings.NewUserEmailSubject
-	if subjectFmt == "" {
-		subjectFmt = "New user application - %s"
-	}
 	subject := subjectFmt
 	if strings.Contains(subjectFmt, "%s") {
 		subject = fmt.Sprintf(subjectFmt, newUser.Handle)
@@ -197,11 +194,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 
 		if !saved || strings.TrimSpace(body) == "" {
 			slog.Info("new user tried to skip the sysop message", "node", nodeNumber, "handle", newUser.Handle, "saved", saved)
-			required := e.LoadedStrings.NewUserEmailRequired
-			if required == "" {
-				required = "\r\n|12A message to the SysOp is required to complete your registration.|07\r\n"
-			}
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(required)), outputMode)
+			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NewUserEmailRequired)), outputMode)
 			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 			continue
 		}
@@ -229,23 +222,18 @@ func (e *MenuExecutor) newUserEmailArtPath() string {
 	return filepath.Join(e.MenuSetPath, "ansi", "NUEMAIL.ANS")
 }
 
-// newUserEmailScreenExists reports whether the customizable art is present, so
-// the caller can fall back to the configured string when it is not.
-func (e *MenuExecutor) newUserEmailScreenExists() bool {
-	_, err := os.Stat(e.newUserEmailArtPath())
-	return err == nil
-}
-
-// displayNewUserEmailScreen loads and displays NUEMAIL.ANS if present. A
-// missing file is not an error — the caller shows the fallback string instead.
-func (e *MenuExecutor) displayNewUserEmailScreen(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) error {
+// displayNewUserEmailScreen loads and displays NUEMAIL.ANS. It returns
+// displayed=true only when the art was actually written, so the caller shows
+// the fallback string on both a missing file (no error) and a read failure
+// (error), rather than leaving the caller with no instruction at all.
+func (e *MenuExecutor) displayNewUserEmailScreen(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) (displayed bool, err error) {
 	rawContent, err := ansi.GetAnsiFileContent(e.newUserEmailArtPath())
 	if err != nil {
 		if os.IsNotExist(err) {
 			slog.Debug("NUEMAIL.ANS not found, using fallback string", "node", nodeNumber)
-			return nil
+			return false, nil
 		}
-		return fmt.Errorf("failed to read NUEMAIL.ANS: %w", err)
+		return false, fmt.Errorf("failed to read NUEMAIL.ANS: %w", err)
 	}
 
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
@@ -256,5 +244,5 @@ func (e *MenuExecutor) displayNewUserEmailScreen(terminal *term.Terminal, output
 	} else {
 		terminalio.WriteProcessedBytes(terminal, rawContent, outputMode)
 	}
-	return nil
+	return true, nil
 }
