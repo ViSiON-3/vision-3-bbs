@@ -983,7 +983,7 @@ saving the file does not re-fire them.
 - Enabling or disabling a protocol (`sshEnabled`, `telnetEnabled`)
 - SSH host keys
 - The QWK API listener
-- Logging directory and rolling settings (the log *level* also needs a restart today)
+- Logging directory and rolling settings (the log *level* is applied live)
 - `configs/message_areas.json`, `configs/file_areas.json`, `configs/v3net.json`
 
 ### Triggering a reload by hand

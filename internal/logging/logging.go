@@ -26,6 +26,11 @@ import (
 //
 // An unrecognized cfg.Level does not fail startup: Init falls back to INFO and
 // logs a warning through the freshly installed logger.
+// activeLevel is the level of the handler Init installed. It is a LevelVar so
+// SetLevel can change the effective level of a running process; nil until Init
+// has run.
+var activeLevel *slog.LevelVar
+
 func Init(cfg config.LoggingConfig, defaultFile string, console bool) (*slog.Logger, func() error, error) {
 	cfg.Normalize()
 
@@ -48,8 +53,14 @@ func Init(cfg config.LoggingConfig, defaultFile string, console bool) (*slog.Log
 		bridgeOut = io.MultiWriter(flushWriter{w}, os.Stderr)
 	}
 
+	// The handler reads its level through a LevelVar so SetLevel can adjust
+	// it while the process runs (config.json's logging.level is hot-reloaded).
+	lv := new(slog.LevelVar)
+	lv.Set(level)
+	activeLevel = lv
+
 	handler := &flushHandler{
-		Handler: slog.NewJSONHandler(slogOut, &slog.HandlerOptions{Level: level}),
+		Handler: slog.NewJSONHandler(slogOut, &slog.HandlerOptions{Level: lv}),
 		w:       w,
 	}
 	logger := slog.New(handler)
