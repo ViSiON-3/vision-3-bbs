@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -76,7 +77,12 @@ func (e *MenuExecutor) notifySysopsOfNewUser(userManager *user.UserMgr, newUser 
 			if !e.isCoSysOpOrAbove(u) {
 				continue
 			}
-			if err := enqueueSysopNotice(path, u.ID, msg); err != nil {
+			// Handle and node travel with the notice so the login step can
+			// render it against the clock it is read on: "just signed up" is
+			// true of the page above, not of a notice read on the sysop's next
+			// call. msg is kept as the fallback text — see sysopNotice.
+			notice := sysopNotice{Text: msg, Handle: newUser.Handle, Node: nodeNumber, CreatedAt: time.Now()}
+			if err := enqueueSysopNotice(path, u.ID, notice); err != nil {
 				slog.Warn("failed to queue new-user notice for offline sysop",
 					"node", nodeNumber, "recipient", u.Handle, "error", err)
 				continue

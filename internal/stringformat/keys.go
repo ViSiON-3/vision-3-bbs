@@ -81,6 +81,7 @@ var FormattedKeys = []string{
 	"msgNoThreadFound",
 	"newscanNewNetworkPrompt",
 	"newUserEmailSubject",
+	"newUserSysopNotice",
 	"newUserSysopPage",
 	"pageMessageFormat",
 	"pageNodeListEntry",

@@ -41,6 +41,33 @@ func (e *MenuExecutor) RunLoginSequence(s ssh.Session, terminal *term.Terminal, 
 	return "MAIN", nil
 }
 
+// loginHandler runs one step of the login sequence.
+type loginHandler func(c *cmdCtx, args string) (*user.User, string, error)
+
+// loginSequenceHandlers is the dispatch table for login.json commands. It is
+// deliberately separate from MenuExecutor.RunRegistry (which serves menu RUN:
+// actions): a command may be valid in one context and not the other. Anything
+// shipped in templates/configs/login.json or in config.defaultLoginSequence()
+// must appear here, or the runner logs "unknown login sequence command" and
+// silently skips the step — see TestShippedLoginSequencesAreDispatchable.
+var loginSequenceHandlers = map[string]loginHandler{
+	"LASTCALLS":        runLastCallers,
+	"ONELINERS":        runOneliners,
+	"USERSTATS":        runShowStats,
+	"NMAILSCAN":        runNewMailScan,
+	"DISPLAYFILE":      runLoginDisplayFile,
+	"RUNDOOR":          runLoginDoor,
+	"FASTLOGIN":        runFastLogin,
+	"NEWUSERVAL":       runNewUserValidation,
+	"WHOISONLINE":      runLoginWhosOnline,
+	"PRINTNEWS":        runPrintNews,
+	"VOTEMANDATORY":    runVoteOnMandatory,
+	"CHECKNUV":         runCheckNUV,
+	"SYSOPNOTICES":     runSysopNotices,
+	"RANDOMRUMOR":      runRandomRumor,
+	"INFOFORMREQUIRED": runInfoFormRequired,
+}
+
 // runFullLoginSequence executes the configurable login sequence from login.json.
 func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
@@ -65,26 +92,6 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("newscan auto-join failed", "node", nodeNumber, "error", njErr)
 	} else if updated != nil {
 		currentUser = updated
-	}
-
-	// Build dispatch map for login item commands
-	type loginHandler func(c *cmdCtx, args string) (*user.User, string, error)
-
-	handlers := map[string]loginHandler{
-		"LASTCALLS":        runLastCallers,
-		"ONELINERS":        runOneliners,
-		"USERSTATS":        runShowStats,
-		"NMAILSCAN":        runNewMailScan,
-		"DISPLAYFILE":      runLoginDisplayFile,
-		"RUNDOOR":          runLoginDoor,
-		"FASTLOGIN":        runFastLogin,
-		"NEWUSERVAL":       runNewUserValidation,
-		"WHOISONLINE":      runLoginWhosOnline,
-		"PRINTNEWS":        runPrintNews,
-		"VOTEMANDATORY":    runVoteOnMandatory,
-		"CHECKNUV":         runCheckNUV,
-		"RANDOMRUMOR":      runRandomRumor,
-		"INFOFORMREQUIRED": runInfoFormRequired,
 	}
 
 	for i, item := range loginSequence {
@@ -121,8 +128,8 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 				continue
 			}
 		} else {
-			// Look up and execute the handler from the local handlers map
-			handler, exists := handlers[item.Command]
+			// Look up and execute the handler from the login dispatch table
+			handler, exists := loginSequenceHandlers[item.Command]
 			if !exists {
 				slog.Warn("unknown login sequence command", "node", nodeNumber, "command", item.Command)
 				continue
