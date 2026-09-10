@@ -125,21 +125,13 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 			continue
 		}
 
-		// Update user conference
-		e.setUserMsgConference(currentUser, confID)
-
-		// Find first accessible area in new conference
-		firstArea := findFirstAccessibleAreaInConference(e, s, terminal, currentUser, confID, sessionStartTime)
-		if firstArea != nil {
-			currentUser.CurrentMessageAreaID = firstArea.ID
-			currentUser.CurrentMessageAreaTag = firstArea.Tag
-		} else {
-			currentUser.CurrentMessageAreaID = 0
-			currentUser.CurrentMessageAreaTag = ""
-		}
-
-		if err := userManager.UpdateUser(currentUser); err != nil {
-			slog.Error("failed to save user after conference change", "node", nodeNumber, "error", err)
+		// Join the conference for both messages and files (#304), persisting it
+		// and reverting on a save failure. The text-mode path must share this
+		// behavior with the lightbar path or the two menus can desync.
+		if !e.commitConferenceJoin(s, terminal, userManager, currentUser, confID, sessionStartTime) {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Could not save the conference change.|07\r\n")), outputMode)
+			time.Sleep(1 * time.Second)
+			return currentUser, "", nil
 		}
 
 		// Display confirmation

@@ -73,6 +73,45 @@ func (e *MenuExecutor) joinConferenceForBoth(s ssh.Session, terminal *term.Termi
 	}
 }
 
+// confSelection captures the conference/area fields joinConferenceForBoth
+// changes, so a failed save can be rolled back rather than leaving the session
+// showing a conference it did not persist (which would vanish on reconnect).
+type confSelection struct {
+	msgConfID, msgAreaID, fileConfID, fileAreaID     int
+	msgConfTag, msgAreaTag, fileConfTag, fileAreaTag string
+}
+
+func snapshotConfSelection(u *user.User) confSelection {
+	return confSelection{
+		msgConfID: u.CurrentMsgConferenceID, msgConfTag: u.CurrentMsgConferenceTag,
+		msgAreaID: u.CurrentMessageAreaID, msgAreaTag: u.CurrentMessageAreaTag,
+		fileConfID: u.CurrentFileConferenceID, fileConfTag: u.CurrentFileConferenceTag,
+		fileAreaID: u.CurrentFileAreaID, fileAreaTag: u.CurrentFileAreaTag,
+	}
+}
+
+func restoreConfSelection(u *user.User, s confSelection) {
+	u.CurrentMsgConferenceID, u.CurrentMsgConferenceTag = s.msgConfID, s.msgConfTag
+	u.CurrentMessageAreaID, u.CurrentMessageAreaTag = s.msgAreaID, s.msgAreaTag
+	u.CurrentFileConferenceID, u.CurrentFileConferenceTag = s.fileConfID, s.fileConfTag
+	u.CurrentFileAreaID, u.CurrentFileAreaTag = s.fileAreaID, s.fileAreaTag
+}
+
+// commitConferenceJoin joins a conference for both menus and persists it. If the
+// save fails it rolls the in-memory selection back to what it was and returns
+// false, so the caller does not report a change that will not survive the
+// session — the active conference stays consistent with what is on disk.
+func (e *MenuExecutor) commitConferenceJoin(s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, u *user.User, conferenceID int, sessionStartTime time.Time) bool {
+	prev := snapshotConfSelection(u)
+	e.joinConferenceForBoth(s, terminal, u, conferenceID, sessionStartTime)
+	if err := userManager.UpdateUser(u); err != nil {
+		restoreConfSelection(u, prev)
+		slog.Error("failed to save conference change; reverting selection", "handle", u.Handle, "error", err)
+		return false
+	}
+	return true
+}
+
 // runChangeFileConferenceLightbar is the file-menu counterpart to
 // runChangeMsgConferenceLightbar: it lets the caller pick a conference from the
 // same shared conference list and joins it for both files and messages. It
@@ -108,8 +147,10 @@ func runChangeFileConferenceLightbar(c *cmdCtx, args string) (*user.User, string
 	templateDir := filepath.Join(e.MenuSetPath, "templates")
 	topBytes, midBytes := loadFileConfTemplates(templateDir)
 	if topBytes == nil || midBytes == nil {
+		// Conferences may well exist — the templates are what's missing — so
+		// report a template error rather than "no conferences".
 		slog.Warn("FILECONF/MSGCONF templates unavailable for CHANGEFILECONF", "node", nodeNumber)
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfNoConferences)), outputMode)
+		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfTemplateError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -166,10 +207,9 @@ func runChangeFileConferenceLightbar(c *cmdCtx, args string) (*user.User, string
 
 	p.onSelect = func(idx int) (bool, *user.User, string, error) {
 		chosen := confs[idx]
-		e.joinConferenceForBoth(s, terminal, currentUser, chosen.id, sessionStartTime)
-
-		if err := userManager.UpdateUser(currentUser); err != nil {
-			slog.Error("failed to save user after file conference change", "node", nodeNumber, "error", err)
+		if !e.commitConferenceJoin(s, terminal, userManager, currentUser, chosen.id, sessionStartTime) {
+			p.showConfirm("|12Could not save the conference change.|07")
+			return true, currentUser, "", nil
 		}
 
 		confName := chosen.name

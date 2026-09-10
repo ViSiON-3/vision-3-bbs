@@ -110,11 +110,11 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 	p.onSelect = func(idx int) (bool, *user.User, string, error) {
 		chosen := confs[idx]
 		// Joins the conference for both messages and files (#304), so the active
-		// conference stays in step across the two menus.
-		e.joinConferenceForBoth(s, terminal, currentUser, chosen.id, sessionStartTime)
-
-		if err := userManager.UpdateUser(currentUser); err != nil {
-			slog.Error("failed to save user after conference change", "node", nodeNumber, "error", err)
+		// conference stays in step across the two menus. Reverts if the save
+		// fails rather than showing a change that won't survive the session.
+		if !e.commitConferenceJoin(s, terminal, userManager, currentUser, chosen.id, sessionStartTime) {
+			p.showConfirm("|12Could not save the conference change.|07")
+			return true, currentUser, "", nil
 		}
 
 		confName := chosen.name
