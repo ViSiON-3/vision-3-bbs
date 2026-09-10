@@ -178,3 +178,84 @@ func TestConcurrentDeleteAndMoveSameRecord(t *testing.T) {
 		}
 	}
 }
+
+// TestDeleteUsesCurrentFilenameAfterRename covers the stale-filename hazard
+// Copilot flagged on PR #330: the disk delete must target the record's
+// filename as it stands under the write lock, not a copy captured earlier.
+// Sequentially: rename the record (and its disk file), then delete — the
+// renamed file must be removed and no stray remains.
+func TestDeleteUsesCurrentFilenameAfterRename(t *testing.T) {
+	fm, ids := lockTestManager(t, 1)
+	dir := filepath.Join(fm.basePath, "one")
+
+	if err := os.Rename(filepath.Join(dir, "file000.zip"), filepath.Join(dir, "renamed.zip")); err != nil {
+		t.Fatal(err)
+	}
+	if err := fm.UpdateFileRecord(ids[0], func(r *FileRecord) { r.Filename = "renamed.zip" }); err != nil {
+		t.Fatalf("UpdateFileRecord: %v", err)
+	}
+
+	if err := fm.DeleteFileRecord(ids[0], true); err != nil {
+		t.Fatalf("DeleteFileRecord: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "renamed.zip")); !os.IsNotExist(err) {
+		t.Error("renamed.zip still on disk; delete used a stale filename")
+	}
+}
+
+// TestDeleteAfterConcurrentRenameTargetsCurrentFile deterministically forces
+// the interleave behind the stale-filename hazard from PR #330's review: a
+// rename lands between DeleteFileRecord's read phase and its write phase.
+//
+// The interleave is forced through the locks themselves: the test holds
+// muAreas.Lock before starting the delete, so the delete completes its read
+// phase (capturing the pre-rename state) and parks at the area lookup. While
+// it is parked, the record and its disk file are renamed, and a bystander
+// file is created under the old name. On release, a correct delete removes
+// the file the record NOW names; the pre-fix code removed the bystander.
+func TestDeleteAfterConcurrentRenameTargetsCurrentFile(t *testing.T) {
+	fm, ids := lockTestManager(t, 1)
+	dir := filepath.Join(fm.basePath, "one")
+
+	fm.muAreas.Lock() // park the delete between its phases
+
+	done := make(chan error, 1)
+	go func() { done <- fm.DeleteFileRecord(ids[0], true) }()
+
+	// Let the delete finish its read phase and block on muAreas.
+	time.Sleep(100 * time.Millisecond)
+
+	// Rename record + disk file, then plant a bystander under the old name.
+	// The record is mutated directly under muFiles rather than through
+	// UpdateFileRecord: that method's save path takes muAreas.RLock, which
+	// the test itself is holding exclusively — calling it here would
+	// deadlock the test (an instructive demonstration of why this package
+	// never nests these locks).
+	fm.muFiles.Lock()
+	for i := range fm.fileRecords[1] {
+		if fm.fileRecords[1][i].ID == ids[0] {
+			fm.fileRecords[1][i].Filename = "renamed.zip"
+		}
+	}
+	fm.muFiles.Unlock()
+	if err := os.Rename(filepath.Join(dir, "file000.zip"), filepath.Join(dir, "renamed.zip")); err != nil {
+		fm.muAreas.Unlock()
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "file000.zip"), []byte("bystander"), 0644); err != nil {
+		fm.muAreas.Unlock()
+		t.Fatal(err)
+	}
+
+	fm.muAreas.Unlock()
+	if err := <-done; err != nil {
+		t.Fatalf("DeleteFileRecord: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "renamed.zip")); !os.IsNotExist(err) {
+		t.Error("renamed.zip still on disk: the delete did not target the record's current filename")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "file000.zip")); err != nil {
+		t.Error("bystander file000.zip was deleted: the delete used the stale pre-rename filename")
+	}
+}
