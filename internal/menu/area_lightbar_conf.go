@@ -109,16 +109,9 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 
 	p.onSelect = func(idx int) (bool, *user.User, string, error) {
 		chosen := confs[idx]
-		e.setUserMsgConference(currentUser, chosen.id)
-
-		firstArea := findFirstAccessibleAreaInConference(e, s, terminal, currentUser, chosen.id, sessionStartTime)
-		if firstArea != nil {
-			currentUser.CurrentMessageAreaID = firstArea.ID
-			currentUser.CurrentMessageAreaTag = firstArea.Tag
-		} else {
-			currentUser.CurrentMessageAreaID = 0
-			currentUser.CurrentMessageAreaTag = ""
-		}
+		// Joins the conference for both messages and files (#304), so the active
+		// conference stays in step across the two menus.
+		e.joinConferenceForBoth(s, terminal, currentUser, chosen.id, sessionStartTime)
 
 		if err := userManager.UpdateUser(currentUser); err != nil {
 			slog.Error("failed to save user after conference change", "node", nodeNumber, "error", err)
