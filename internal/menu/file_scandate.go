@@ -67,6 +67,7 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil // cancel
 	}
 
+	prevSince := currentUser.FileNewscanSince // for rollback if the save fails
 	var confirm string
 	switch unicode.ToUpper(rune(input[0])) {
 	case 'A': // all files are new
@@ -93,6 +94,7 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if err := c.userManager.UpdateUser(currentUser); err != nil {
+		currentUser.FileNewscanSince = prevSince // revert so the session doesn't show an unsaved change
 		slog.Error("failed to save file newscan date", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Could not save the setting.|07\r\n")), outputMode)
 		time.Sleep(1 * time.Second)

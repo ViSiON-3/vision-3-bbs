@@ -35,10 +35,10 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	slog.Info("file newscan", "node", nodeNumber, "handle", currentUser.Handle,
-		"since", currentUser.PreviousLogin.Format(time.RFC3339), "args", args)
-
 	since := fileNewscanCutoff(currentUser)
+
+	slog.Info("file newscan", "node", nodeNumber, "handle", currentUser.Handle,
+		"since", since.Format(time.RFC3339), "args", args)
 
 	// Determine which areas to scan
 	var areas []file.FileArea
@@ -87,7 +87,13 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	botRendered := ansi.ReplacePipeCodes(e.applyCommonTemplateTokens(botBytes, currentUser, nodeNumber))
 
 	// Replace date placeholder in header
-	topRendered := strings.ReplaceAll(string(topBytes), "@DATE@", since.Format("01/02/2006"))
+	dateLabel := since.Format("01/02/2006")
+	if since.IsZero() {
+		// A zero cutoff (SETFILESCANDATE "all") includes every file; showing
+		// 01/01/0001 in the header would be nonsense.
+		dateLabel = "all files"
+	}
+	topRendered := strings.ReplaceAll(string(topBytes), "@DATE@", dateLabel)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(topRendered)), outputMode)
 
 	totalNew := 0
