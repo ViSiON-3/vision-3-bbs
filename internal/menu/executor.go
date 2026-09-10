@@ -83,9 +83,12 @@ type MenuExecutor struct {
 	// read is a data race, and the compiler cannot catch one. Snapshots make
 	// the safe form the only form the accessors offer.
 	//
-	// The values behind these pointers MUST be treated as read-only. They are
-	// shared by every reader that loaded the same snapshot; mutating one is a
-	// race regardless of the atomics.
+	// The struct-valued snapshots (strings, theme, server config) are shared
+	// by every reader that loaded them and must be treated as read-only. The
+	// map- and slice-valued ones (doors, login sequence, protocols) are
+	// cloned at both the setter and the collection accessor, so no caller
+	// ever holds a reference into a shared snapshot; GetDoorConfig reads the
+	// shared map without cloning, which is safe because it returns a value.
 	stringsCfg atomic.Pointer[config.StringsConfig]
 	themeCfg   atomic.Pointer[config.ThemeConfig]
 	serverCfg  atomic.Pointer[config.ServerConfig]
@@ -128,17 +131,30 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 // Each setter stores a new immutable snapshot; each accessor loads whatever
 // snapshot is current. Readers must not mutate what an accessor returns.
 
-// SetDoorRegistry atomically updates the door registry.
+// SetDoorRegistry atomically updates the door registry. The map is cloned on
+// store, so the caller keeping (and mutating) its own reference cannot reach
+// the shared snapshot.
 func (e *MenuExecutor) SetDoorRegistry(doors map[string]config.DoorConfig) {
-	e.doorReg.Store(&doors)
+	cloned := make(map[string]config.DoorConfig, len(doors))
+	for k, v := range doors {
+		cloned[k] = v
+	}
+	e.doorReg.Store(&cloned)
 }
 
-// DoorRegistry returns the current door registry. Read-only.
+// DoorRegistry returns a copy of the current door registry, safe for the
+// caller to hold or mutate. Per-door lookups should use GetDoorConfig, which
+// reads the shared snapshot without copying.
 func (e *MenuExecutor) DoorRegistry() map[string]config.DoorConfig {
-	if p := e.doorReg.Load(); p != nil {
-		return *p
+	p := e.doorReg.Load()
+	if p == nil {
+		return nil
 	}
-	return nil
+	cloned := make(map[string]config.DoorConfig, len(*p))
+	for k, v := range *p {
+		cloned[k] = v
+	}
+	return cloned
 }
 
 // GetDoorConfig atomically retrieves a door configuration.
@@ -147,17 +163,22 @@ func (e *MenuExecutor) GetDoorConfig(name string) (config.DoorConfig, bool) {
 	return cfg, ok
 }
 
-// SetLoginSequence atomically updates the login sequence.
+// SetLoginSequence atomically updates the login sequence. The slice is
+// cloned on store, so the caller keeping its own reference cannot reach the
+// shared snapshot.
 func (e *MenuExecutor) SetLoginSequence(sequence []config.LoginItem) {
-	e.loginSeq.Store(&sequence)
+	cloned := append([]config.LoginItem(nil), sequence...)
+	e.loginSeq.Store(&cloned)
 }
 
-// GetLoginSequence atomically retrieves the login sequence. Read-only.
+// GetLoginSequence returns a copy of the login sequence, safe for the caller
+// to hold or mutate.
 func (e *MenuExecutor) GetLoginSequence() []config.LoginItem {
-	if p := e.loginSeq.Load(); p != nil {
-		return *p
+	p := e.loginSeq.Load()
+	if p == nil {
+		return nil
 	}
-	return nil
+	return append([]config.LoginItem(nil), (*p)...)
 }
 
 // SetStrings atomically updates the strings configuration.
@@ -210,17 +231,22 @@ func (e *MenuExecutor) GetServerConfig() config.ServerConfig {
 	return config.ServerConfig{}
 }
 
-// SetProtocols atomically updates the transfer protocol configurations.
+// SetProtocols atomically updates the transfer protocol configurations. The
+// slice is cloned on store, so the caller keeping its own reference cannot
+// reach the shared snapshot.
 func (e *MenuExecutor) SetProtocols(protocols []transfer.ProtocolConfig) {
-	e.protocols.Store(&protocols)
+	cloned := append([]transfer.ProtocolConfig(nil), protocols...)
+	e.protocols.Store(&cloned)
 }
 
-// Protocols returns the current transfer protocol configurations. Read-only.
+// Protocols returns a copy of the transfer protocol configurations, safe for
+// the caller to hold or mutate.
 func (e *MenuExecutor) Protocols() []transfer.ProtocolConfig {
-	if p := e.protocols.Load(); p != nil {
-		return *p
+	p := e.protocols.Load()
+	if p == nil {
+		return nil
 	}
-	return nil
+	return append([]transfer.ProtocolConfig(nil), (*p)...)
 }
 
 // idleTimeout returns the effective idle timeout duration for the given user.

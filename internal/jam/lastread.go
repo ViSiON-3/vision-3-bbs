@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -229,4 +230,77 @@ func (b *Base) GetUnreadCount(username string) (int, error) {
 		unread = 0
 	}
 	return unread, nil
+}
+
+// remapLastReadLocked rewrites every lastread pointer from the pre-pack
+// numbering to the post-pack numbering. survivors holds the old message numbers
+// that were kept, in ascending order.
+//
+// Packing renumbers surviving messages from 1, so a pointer left alone silently
+// changes meaning: after messages are removed, "I have read up to #3" starts
+// describing a message the user has never seen — or, once the base is smaller
+// than the pointer, every message in it. The login mail scan counts from
+// lastread+1, so a stranded pointer reports no new mail no matter what arrives,
+// and new private mail becomes invisible.
+//
+// A pointer at old message N becomes the number of survivors at or below N: the
+// user has still read everything up to that point, whatever it is now numbered.
+// Pointers past the end of the old base (already stale) collapse to the new
+// message count, and a base packed empty leaves every pointer at 0, which is
+// correct — there is nothing left to have read.
+//
+// The caller must hold b.mu and have the base open on the packed files.
+func (b *Base) remapLastReadLocked(survivors []int) error {
+	if !b.isOpen {
+		return ErrBaseNotOpen
+	}
+
+	info, err := b.jlrFile.Stat()
+	if err != nil {
+		return fmt.Errorf("jam: failed to stat .jlr: %w", err)
+	}
+	if info.Size()%LastReadSize != 0 {
+		return fmt.Errorf("jam: invalid .jlr size %d (not aligned to record size %d)", info.Size(), LastReadSize)
+	}
+	recordCount := info.Size() / LastReadSize
+
+	// remap counts the survivors at or below an old message number. survivors is
+	// ascending, so that is the first position holding a larger number.
+	//
+	// The search key stays a uint32: a stale pointer can hold any value the file
+	// happens to contain, and converting one above math.MaxInt32 to int would
+	// wrap negative on a 32-bit build and collapse the pointer to zero.
+	remap := func(old uint32) uint32 {
+		return uint32(sort.Search(len(survivors), func(i int) bool {
+			return uint32(survivors[i]) > old
+		}))
+	}
+
+	buf := make([]byte, LastReadSize)
+	for i := int64(0); i < recordCount; i++ {
+		pos := i * LastReadSize
+		n, err := b.jlrFile.ReadAt(buf, pos)
+		if err != nil && err != io.EOF {
+			return fmt.Errorf("jam: read failed in .jlr: %w", err)
+		}
+		// A short read would leave stale bytes in the reused buffer, and the
+		// record is written back below — remapping partial data would corrupt a
+		// pointer rather than merely misplace it.
+		if n != int(LastReadSize) {
+			return fmt.Errorf("jam: short read in .jlr: got %d bytes", n)
+		}
+		lastRead := binary.LittleEndian.Uint32(buf[8:12])
+		highRead := binary.LittleEndian.Uint32(buf[12:16])
+
+		newLastRead, newHighRead := remap(lastRead), remap(highRead)
+		if newLastRead == lastRead && newHighRead == highRead {
+			continue
+		}
+		binary.LittleEndian.PutUint32(buf[8:12], newLastRead)
+		binary.LittleEndian.PutUint32(buf[12:16], newHighRead)
+		if _, err := b.jlrFile.WriteAt(buf, pos); err != nil {
+			return fmt.Errorf("jam: write failed in .jlr: %w", err)
+		}
+	}
+	return nil
 }

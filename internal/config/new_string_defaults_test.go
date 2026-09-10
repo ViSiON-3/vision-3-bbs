@@ -88,4 +88,16 @@ func TestNewUserSysopPageSurvivesAnOlderStringsFile(t *testing.T) {
 	if !strings.Contains(cfg.NewUserSysopPage, "%s") || !strings.Contains(cfg.NewUserSysopPage, "%d") {
 		t.Errorf("fallback %q lacks the handle/node verbs the call site passes", cfg.NewUserSysopPage)
 	}
+	// The queued half of the same feature: with no fallback, the SYSOPNOTICES
+	// step renders nothing for a sysop who was offline at signup — the case the
+	// queue exists to cover.
+	if cfg.NewUserSysopNotice == "" {
+		t.Fatal("newUserSysopNotice is empty for an older strings.json; queued notices would fall back to the live page wording")
+	}
+	if n := strings.Count(cfg.NewUserSysopNotice, "%s"); n != 2 {
+		t.Errorf("fallback %q takes %d %%s verbs, want 2 (handle and age)", cfg.NewUserSysopNotice, n)
+	}
+	if !strings.Contains(cfg.NewUserSysopNotice, "%d") {
+		t.Errorf("fallback %q lacks the node verb the call site passes", cfg.NewUserSysopNotice)
+	}
 }
