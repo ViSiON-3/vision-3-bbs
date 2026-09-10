@@ -9,6 +9,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 )
 
@@ -226,5 +227,66 @@ func TestFileAreasReloadEndToEnd(t *testing.T) {
 	cw.poll()
 	if _, ok := fileMgr.GetAreaByTag("TWO"); !ok {
 		t.Error("new area not visible after the board went idle")
+	}
+}
+
+// TestMessageAreasReloadEndToEnd drives the real message_areas.json target
+// through the watcher: queued while online, applied at idle.
+func TestMessageAreasReloadEndToEnd(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := filepath.Join(tmp, "configs")
+	dataDir := filepath.Join(tmp, "data")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "message_areas.json"),
+		[]byte(`[{"id":1,"tag":"GEN","name":"General"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	msgMgr, err := message.NewMessageManager(dataDir, configDir, "TestBBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := session.NewSessionRegistry()
+	e := &menu.MenuExecutor{SessionRegistry: reg, MessageMgr: msgMgr}
+
+	cw := &ConfigWatcher{
+		rootConfigPath:    configDir,
+		menuExecutor:      e,
+		interval:          defaultPollInterval,
+		sentinelPath:      config.ReloadSentinelPath(configDir),
+		forceSentinelPath: config.ReloadForceSentinelPath(configDir),
+		mtimes:            make(map[string]time.Time),
+		pending:           make(map[string]bool),
+		stop:              make(chan struct{}),
+		done:              make(chan struct{}),
+	}
+	cw.deferredTargets = []deferredTarget{{
+		name:     "message_areas.json",
+		path:     filepath.Join(configDir, "message_areas.json"),
+		validate: cw.validateMessageAreas,
+		apply:    cw.applyMessageAreas,
+	}}
+	cw.seed()
+
+	reg.Register(&session.BbsSession{ID: 1, NodeID: 1})
+	if err := os.WriteFile(filepath.Join(configDir, "message_areas.json"),
+		[]byte(`[{"id":1,"tag":"GEN","name":"General"},{"id":2,"tag":"TECH","name":"Tech"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ts := time.Now().Add(time.Second)
+	if err := os.Chtimes(filepath.Join(configDir, "message_areas.json"), ts, ts); err != nil {
+		t.Fatal(err)
+	}
+
+	cw.poll()
+	if _, ok := msgMgr.GetAreaByTag("TECH"); ok {
+		t.Fatal("new message area visible while a caller was online")
+	}
+
+	reg.Unregister(1)
+	cw.poll()
+	if _, ok := msgMgr.GetAreaByTag("TECH"); !ok {
+		t.Error("new message area not visible after the board went idle")
 	}
 }

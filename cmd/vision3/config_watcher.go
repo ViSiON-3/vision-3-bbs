@@ -14,6 +14,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -131,6 +132,12 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 			path:     filepath.Join(rootConfigPath, "file_areas.json"),
 			validate: cw.validateFileAreas,
 			apply:    cw.applyFileAreas,
+		},
+		{
+			name:     "message_areas.json",
+			path:     filepath.Join(rootConfigPath, "message_areas.json"),
+			validate: cw.validateMessageAreas,
+			apply:    cw.applyMessageAreas,
 		},
 	}
 
@@ -357,6 +364,30 @@ func (cw *ConfigWatcher) applyFileAreas() error {
 		return fmt.Errorf("file manager not running")
 	}
 	return cw.menuExecutor.FileMgr.Reload()
+}
+
+// validateMessageAreas is the signal-time check for message_areas.json:
+// parse only, touch nothing.
+func (cw *ConfigWatcher) validateMessageAreas() error {
+	data, err := os.ReadFile(filepath.Join(cw.rootConfigPath, "message_areas.json"))
+	if err != nil {
+		return err
+	}
+	var areas []message.MessageArea
+	if err := json.Unmarshal(data, &areas); err != nil {
+		return fmt.Errorf("parsing message_areas.json: %w", err)
+	}
+	return nil
+}
+
+// applyMessageAreas reloads the message manager's area definitions. Runs
+// only at an idle window (or under the force sentinel), per the reload
+// constraint documented on MessageManager.Reload.
+func (cw *ConfigWatcher) applyMessageAreas() error {
+	if cw.menuExecutor == nil || cw.menuExecutor.MessageMgr == nil {
+		return fmt.Errorf("message manager not running")
+	}
+	return cw.menuExecutor.MessageMgr.Reload()
 }
 
 // changed reports whether path's modification time differs from the one last

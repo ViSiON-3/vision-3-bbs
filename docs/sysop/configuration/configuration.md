@@ -985,6 +985,9 @@ seconds of the last caller logging off:
 
 - `configs/file_areas.json` — areas added, removed, or re-pathed; each
   area's file records are re-read from its `metadata.json`
+- `configs/message_areas.json` — areas added, removed, or re-pathed; the
+  message bases on disk are untouched. V3Net area routing is bound at
+  startup, so changing a V3Net-subscribed area still needs a restart
 
 A queued change is logged when it queues and again when it applies. The
 change is validated the moment you save — a file that doesn't parse is
@@ -1007,7 +1010,7 @@ difference is that nothing touches it automatically, so it is the explicit
 - SSH host keys
 - The QWK API listener
 - Logging directory and rolling settings (the log *level* is applied live)
-- `configs/message_areas.json`, `configs/v3net.json`
+- `configs/v3net.json`
 
 ### Triggering a reload by hand
 
