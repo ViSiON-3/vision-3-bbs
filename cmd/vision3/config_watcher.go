@@ -139,6 +139,12 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 			validate: cw.validateMessageAreas,
 			apply:    cw.applyMessageAreas,
 		},
+		{
+			name:     "v3net.json",
+			path:     filepath.Join(rootConfigPath, "v3net.json"),
+			validate: cw.validateV3Net,
+			apply:    cw.applyV3Net,
+		},
 	}
 
 	// Record current timestamps so the first poll does not reload everything
@@ -388,6 +394,25 @@ func (cw *ConfigWatcher) applyMessageAreas() error {
 		return fmt.Errorf("message manager not running")
 	}
 	return cw.menuExecutor.MessageMgr.Reload()
+}
+
+// validateV3Net is the signal-time check for v3net.json: parse only.
+func (cw *ConfigWatcher) validateV3Net() error {
+	_, err := config.LoadV3NetConfig(cw.rootConfigPath)
+	return err
+}
+
+// applyV3Net rebuilds the leaf subscriptions from v3net.json via the hook
+// main wires when the V3Net service is running. Deferred to an idle window
+// for hand edits because a rebuild cancels any chat riding a leaf; the area
+// browser's own subscribe/unsubscribe applies immediately instead, as an
+// explicit sysop action. Hub settings and the enabled flag still require a
+// restart.
+func (cw *ConfigWatcher) applyV3Net() error {
+	if cw.menuExecutor == nil || cw.menuExecutor.V3NetReload == nil {
+		return fmt.Errorf("V3Net service not running, restart required to apply v3net.json")
+	}
+	return cw.menuExecutor.V3NetReload()
 }
 
 // changed reports whether path's modification time differs from the one last

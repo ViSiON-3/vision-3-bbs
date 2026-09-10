@@ -986,8 +986,12 @@ seconds of the last caller logging off:
 - `configs/file_areas.json` — areas added, removed, or re-pathed; each
   area's file records are re-read from its `metadata.json`
 - `configs/message_areas.json` — areas added, removed, or re-pathed; the
-  message bases on disk are untouched. V3Net area routing is bound at
-  startup, so changing a V3Net-subscribed area still needs a restart
+  message bases on disk are untouched
+- `configs/v3net.json` — leaf subscriptions are torn down and rebuilt
+  (a caller mid-chat on a V3Net leaf loses that chat's stream). Subscribing
+  from the in-BBS area browser applies immediately instead of waiting for
+  idle. Hub settings, the `enabled` flag, and keystore/dedup paths still
+  require a restart
 
 A queued change is logged when it queues and again when it applies. The
 change is validated the moment you save — a file that doesn't parse is
@@ -1010,7 +1014,6 @@ difference is that nothing touches it automatically, so it is the explicit
 - SSH host keys
 - The QWK API listener
 - Logging directory and rolling settings (the log *level* is applied live)
-- `configs/v3net.json`
 
 ### Triggering a reload by hand
 
