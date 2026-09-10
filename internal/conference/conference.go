@@ -59,13 +59,13 @@ func (cm *ConferenceManager) loadConferences() error {
 		return err
 	}
 
-	if len(data) == 0 {
-		slog.Info("conferences file is empty; none loaded", "path", cm.configPath)
-		return nil
-	}
-
 	var confList []*Conference
-	if err := json.Unmarshal(data, &confList); err != nil {
+	if len(data) == 0 {
+		// An empty file means no conferences. Falling through with a nil list
+		// (rather than returning early) matters on reload: the maps below must
+		// be rebuilt empty, not left holding the previous contents.
+		slog.Info("conferences file is empty; none loaded", "path", cm.configPath)
+	} else if err := json.Unmarshal(data, &confList); err != nil {
 		return fmt.Errorf("failed to unmarshal conferences from %s: %w", cm.configPath, err)
 	}
 
@@ -121,6 +121,34 @@ func (cm *ConferenceManager) loadConferences() error {
 		slog.Info("auto-assigned conference positions (migration)", "count", len(sorted))
 	}
 
+	return nil
+}
+
+// Reload re-reads conferences.json, replacing the in-memory definitions.
+//
+// A file that fails to read or parse leaves the current definitions in place
+// (loadConferences only swaps the maps after a successful parse). Sessions
+// whose current conference disappears are already handled: every caller
+// guards GetByID/GetByTag lookups, because the manager itself can be absent.
+func (cm *ConferenceManager) Reload() error {
+	if err := cm.loadConferences(); err != nil {
+		if os.IsNotExist(err) {
+			// Boot treats a missing conferences.json as "no conferences", so a
+			// reload after the file is deleted converges to the same state
+			// instead of erroring and keeping stale definitions.
+			cm.mu.Lock()
+			cm.conferencesByID = make(map[int]*Conference)
+			cm.conferencesByTag = make(map[string]*Conference)
+			cm.mu.Unlock()
+			slog.Info("conferences file removed; conferences cleared", "path", cm.configPath)
+			return nil
+		}
+		return err
+	}
+	cm.mu.RLock()
+	count := len(cm.conferencesByID)
+	cm.mu.RUnlock()
+	slog.Info("conferences reloaded", "count", count)
 	return nil
 }
 

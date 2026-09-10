@@ -10,6 +10,8 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
+	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -53,6 +55,7 @@ type ConfigWatcher struct {
 	serverConfig   *config.ServerConfig
 	serverConfigMu *sync.RWMutex // External mutex for server config
 	connTracker    *ConnectionTracker
+	scheduler      *scheduler.Scheduler // set via SetScheduler after startup; nil until then
 
 	interval     time.Duration
 	targets      []reloadTarget
@@ -97,6 +100,9 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		{name: "login.json", path: filepath.Join(rootConfigPath, "login.json"), reload: cw.reloadLoginSequence},
 		{name: "strings.json", path: filepath.Join(rootConfigPath, "strings.json"), reload: cw.reloadStrings},
 		{name: "theme.json", path: filepath.Join(menuSetPath, "theme.json"), reload: cw.reloadTheme},
+		{name: "protocols.json", path: filepath.Join(rootConfigPath, "protocols.json"), reload: cw.reloadProtocols},
+		{name: "events.json", path: filepath.Join(rootConfigPath, "events.json"), reload: cw.reloadEvents},
+		{name: "conferences.json", path: filepath.Join(rootConfigPath, "conferences.json"), reload: cw.reloadConferences},
 	}
 
 	// Record current timestamps so the first poll does not reload everything
@@ -278,6 +284,73 @@ func (cw *ConfigWatcher) reloadTheme() {
 	slog.Info("theme.json reloaded")
 }
 
+// reloadProtocols reloads the transfer protocol configurations.
+func (cw *ConfigWatcher) reloadProtocols() {
+	slog.Info("reloading protocols.json")
+
+	protocolsPath := filepath.Join(cw.rootConfigPath, "protocols.json")
+	newProtocols, err := transfer.LoadProtocols(protocolsPath)
+	if err != nil {
+		slog.Error("failed to reload protocols.json", "error", err)
+		return
+	}
+
+	cw.menuExecutor.SetProtocols(newProtocols)
+	slog.Info("protocols.json reloaded", "count", len(newProtocols))
+}
+
+// reloadConferences reloads the conference definitions.
+func (cw *ConfigWatcher) reloadConferences() {
+	slog.Info("reloading conferences.json")
+
+	confMgr := cw.menuExecutor.ConferenceMgr
+	if confMgr == nil {
+		// Conferences were disabled at boot (conferences.json failed to load),
+		// so there is no manager to reload into.
+		slog.Warn("conference manager not running, restart required to apply conferences.json")
+		return
+	}
+	if err := confMgr.Reload(); err != nil {
+		slog.Error("failed to reload conferences.json", "error", err)
+		return
+	}
+	slog.Info("conferences.json reloaded")
+}
+
+// SetScheduler hands the watcher the event scheduler once main has created
+// it. The scheduler is constructed after the watcher, so it cannot be a
+// constructor argument; until this is called, events.json changes are noted
+// as requiring a restart.
+func (cw *ConfigWatcher) SetScheduler(s *scheduler.Scheduler) {
+	cw.mu.Lock()
+	cw.scheduler = s
+	cw.mu.Unlock()
+}
+
+// reloadEvents reloads the event scheduler configuration.
+func (cw *ConfigWatcher) reloadEvents() {
+	slog.Info("reloading events.json")
+
+	cw.mu.Lock()
+	sched := cw.scheduler
+	cw.mu.Unlock()
+	if sched == nil {
+		// Either main has not reached scheduler startup yet, or the scheduler
+		// was never created because events.json failed to load at boot.
+		slog.Warn("event scheduler not running, restart required to apply events.json")
+		return
+	}
+
+	newEvents, err := config.LoadEventsConfig(cw.rootConfigPath)
+	if err != nil {
+		slog.Error("failed to reload events.json", "error", err)
+		return
+	}
+
+	sched.Reload(newEvents)
+	slog.Info("events.json reloaded", "count", len(newEvents.Events))
+}
+
 // reloadServerConfig reloads the server configuration.
 func (cw *ConfigWatcher) reloadServerConfig() {
 	slog.Info("reloading config.json")
@@ -317,6 +390,5 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 	}
 
 	slog.Info("config.json reloaded")
-	slog.Warn("some config.json changes still require a restart",
-		"fields", "listener ports and hosts, sshEnabled/telnetEnabled, SSH host keys, QWK API, logging")
+	slog.Info("note: listener ports/hosts, sshEnabled/telnetEnabled, SSH host keys, QWK API, and logging changes still require a restart")
 }

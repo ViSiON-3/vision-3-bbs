@@ -1865,6 +1865,11 @@ func main() {
 
 		go eventScheduler.Start(schedulerCtx)
 		slog.Info("event scheduler started", "count", len(eventsConfig.Events))
+
+		// Let the config watcher hot-reload events.json into the scheduler.
+		if configWatcher != nil {
+			configWatcher.SetScheduler(eventScheduler)
+		}
 	}
 
 	// Load V3Net configuration from v3net.json (separate from main config, like ftn.json).

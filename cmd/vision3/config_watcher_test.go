@@ -7,7 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
 )
 
 // recorder counts reload invocations per target name.
@@ -258,4 +261,109 @@ func TestStopIsIdempotent(t *testing.T) {
 
 	cw.Stop()
 	cw.Stop() // must not panic or block
+}
+
+// TestReloadProtocolsUpdatesExecutor covers the protocols.json reload path
+// end to end: file on disk → LoadProtocols → MenuExecutor.SetProtocols.
+func TestReloadProtocolsUpdatesExecutor(t *testing.T) {
+	dir := t.TempDir()
+	write := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "protocols.json"), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(`[{"name":"ZModem","enabled":true}]`)
+
+	e := &menu.MenuExecutor{}
+	cw := &ConfigWatcher{rootConfigPath: dir, menuExecutor: e}
+
+	cw.reloadProtocols()
+	if got := e.Protocols(); len(got) != 1 || got[0].Name != "ZModem" {
+		t.Fatalf("Protocols() = %+v, want the one loaded entry", got)
+	}
+
+	write(`[{"name":"ZModem","enabled":true},{"name":"YModem","enabled":true}]`)
+	cw.reloadProtocols()
+	if got := e.Protocols(); len(got) != 2 {
+		t.Errorf("Protocols() has %d entries after reload, want 2", len(got))
+	}
+
+	// A malformed file must leave the last good config in place.
+	write(`{not json`)
+	cw.reloadProtocols()
+	if got := e.Protocols(); len(got) != 2 {
+		t.Errorf("Protocols() has %d entries after a bad reload, want 2 (unchanged)", len(got))
+	}
+}
+
+// TestReloadEventsWithoutScheduler covers the watcher noticing events.json
+// before main has wired the scheduler in (or when it never starts): it must
+// log and return, not panic.
+func TestReloadEventsWithoutScheduler(t *testing.T) {
+	cw := &ConfigWatcher{rootConfigPath: t.TempDir()}
+	cw.reloadEvents() // must not panic
+}
+
+// TestReloadEventsReschedules covers the events.json reload path end to end:
+// file on disk → LoadEventsConfig → Scheduler.Reload.
+func TestReloadEventsReschedules(t *testing.T) {
+	dir := t.TempDir()
+	write := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "events.json"), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(`{"events":[{"id":"nightly","name":"nightly","schedule":"0 3 * * *","command":"true","enabled":true}]}`)
+
+	sched := scheduler.NewScheduler(config.EventsConfig{}, filepath.Join(dir, "history.json"))
+	cw := &ConfigWatcher{rootConfigPath: dir}
+	cw.SetScheduler(sched)
+
+	cw.reloadEvents()
+	if got := sched.ScheduledCount(); got != 1 {
+		t.Fatalf("scheduled = %d after reload, want 1", got)
+	}
+
+	write(`{"events":[]}`)
+	cw.reloadEvents()
+	if got := sched.ScheduledCount(); got != 0 {
+		t.Errorf("scheduled = %d after emptying events.json, want 0", got)
+	}
+}
+
+// TestReloadConferencesWithoutManager covers a BBS whose conference manager
+// never started (conferences.json failed at boot): the reload must log and
+// return, not panic.
+func TestReloadConferencesWithoutManager(t *testing.T) {
+	cw := &ConfigWatcher{rootConfigPath: t.TempDir(), menuExecutor: &menu.MenuExecutor{}}
+	cw.reloadConferences() // must not panic
+}
+
+// TestReloadConferencesUpdatesManager covers the conferences.json reload path
+// end to end: file on disk → ConferenceManager.Reload → new definitions live.
+func TestReloadConferencesUpdatesManager(t *testing.T) {
+	dir := t.TempDir()
+	write := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "conferences.json"), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(`[{"id":1,"tag":"GEN","name":"General"}]`)
+
+	confMgr, err := conference.NewConferenceManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &menu.MenuExecutor{ConferenceMgr: confMgr}
+	cw := &ConfigWatcher{rootConfigPath: dir, menuExecutor: e}
+
+	write(`[{"id":1,"tag":"GEN","name":"General"},{"id":2,"tag":"TECH","name":"Tech"}]`)
+	cw.reloadConferences()
+
+	if _, ok := confMgr.GetByTag("TECH"); !ok {
+		t.Error("conference TECH missing after reload")
+	}
 }
