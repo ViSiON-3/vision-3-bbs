@@ -141,6 +141,7 @@ var StringFallbacks = map[string]string{
 	"newUserEmailPrompt":   "\r\n|15Before you go, please leave the |14SysOp|15 a private message.|07\r\n|07Tell them a bit about yourself and why you'd like access.\r\n|08Your account may not be validated without it.|07\r\n",
 	"newUserEmailSubject":  "New user application - %s",
 	"newUserEmailRequired": "\r\n|12A message to the SysOp is required to complete your registration.|07\r\n",
+	"fileScanDatePrompt":   "\r\n|07File newscan since |08(|15MM/DD/YY|08, |15A|08=all files, |15R|08=reset to last logon|08)|07: |15",
 	"newUserLoggingIn":     "\r\n|10Thanks! You're all set - logging you in now...|07\r\n",
 
 	// Message newscan notices (added after the scan strings shipped; keep

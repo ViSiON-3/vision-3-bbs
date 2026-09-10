@@ -41,17 +41,22 @@ type User struct {
 	// before the login sequence runs, so anything asking "what is new since
 	// this user was last here?" (news, rumors, file newscan) must compare
 	// against PreviousLogin, not LastLogin.
-	PreviousLogin    time.Time `json:"previousLogin,omitempty"`
-	TimesCalled      int       `json:"timesCalled"` // Used for E (NumLogons)
-	LastBulletinRead time.Time `json:"lastBulletinRead"`
-	RealName         string    `json:"realName"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"` // For optimistic locking - tracks last modification
-	Validated        bool      `json:"validated"`
-	FilePoints       int       `json:"filePoints"`               // Added for P
-	NumUploads       int       `json:"numUploads"`               // Added for E
-	NumDownloads     int       `json:"numDownloads,omitempty"`   // Download count for ACS 'B' ratio
-	MessagesPosted   int       `json:"messagesPosted,omitempty"` // Number of messages posted by user
+	PreviousLogin time.Time `json:"previousLogin,omitempty"`
+	// FileNewscanSince overrides the file newscan cutoff. When nil, the file
+	// newscan scans "since your previous logon" (PreviousLogin); when set, it
+	// scans files uploaded on/after this date. The SETFILESCANDATE command sets
+	// it (a date or "all"), and "reset" clears it back to the default.
+	FileNewscanSince *time.Time `json:"fileNewscanSince,omitempty"`
+	TimesCalled      int        `json:"timesCalled"` // Used for E (NumLogons)
+	LastBulletinRead time.Time  `json:"lastBulletinRead"`
+	RealName         string     `json:"realName"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	UpdatedAt        time.Time  `json:"updatedAt"` // For optimistic locking - tracks last modification
+	Validated        bool       `json:"validated"`
+	FilePoints       int        `json:"filePoints"`               // Added for P
+	NumUploads       int        `json:"numUploads"`               // Added for E
+	NumDownloads     int        `json:"numDownloads,omitempty"`   // Download count for ACS 'B' ratio
+	MessagesPosted   int        `json:"messagesPosted,omitempty"` // Number of messages posted by user
 	// NumLogons is TimesCalled
 	TimeLimit   int    `json:"timeLimit"`   // Added for T (in minutes)
 	PrivateNote string `json:"privateNote"` // Added for Z

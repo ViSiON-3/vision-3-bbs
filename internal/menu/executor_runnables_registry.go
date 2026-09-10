@@ -205,6 +205,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["EDITFILERECORD"] = runEditFileRecord                   // Sysop file review queue
 	registry["WANTLIST"] = runWantList                               // File want list
 	registry["FILENEWSCANCONFIG"] = runFileNewscanConfig             // File newscan area config
+	registry["SETFILESCANDATE"] = runSetFileScanDate                 // Set the file newscan cutoff date
 	registry["CFG_FILECOLUMNS"] = runCfgFileColumns                  // Configure file listing columns
 	registry["LISTFILES_EXTENDED"] = runListFilesExtended            // Extended file listing (all columns)
 	registry["QWKDOWNLOAD"] = runQWKDownload                         // QWK mail packet download

@@ -256,6 +256,8 @@ type StringsConfig struct {
 	// Shown when a caller tries to skip the required message (abort/empty),
 	// before returning them to the editor.
 	NewUserEmailRequired string `json:"newUserEmailRequired"`
+	// FileScanDatePrompt asks for the file newscan cutoff (SETFILESCANDATE).
+	FileScanDatePrompt string `json:"fileScanDatePrompt"`
 	// Shown after a new user who can log on finishes signup, as they are carried
 	// straight into a session.
 	NewUserLoggingIn string `json:"newUserLoggingIn"`

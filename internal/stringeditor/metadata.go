@@ -573,5 +573,6 @@ func stringCatalog() []StringEntry {
 		{Label: "New User: Email Subject", Key: "newUserEmailSubject", Description: "Default subject of the required new-user message (%s=handle)"},
 		{Label: "New User: Email Required", Key: "newUserEmailRequired", Description: "Shown when a caller tries to skip the required message, before returning them to the editor"},
 		{Label: "New User: Logging In", Key: "newUserLoggingIn", Description: "Shown after a new user who can log on finishes signup, as they are carried into a session"},
+		{Label: "File: Scan Date Prompt", Key: "fileScanDatePrompt", Description: "Prompts for the file newscan cutoff (SETFILESCANDATE): a date, A=all, R=reset"},
 	}
 }
