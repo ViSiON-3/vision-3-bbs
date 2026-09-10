@@ -50,3 +50,29 @@ func Fatal(msg string, args ...any) {
 func Security(msg string, args ...any) {
 	slog.Warn(msg, append([]any{slog.String("category", securityCategory)}, args...)...)
 }
+
+// SetLevel changes the minimum level of the logger Init installed, so a
+// config.json logging.level edit takes effect without a restart. The level
+// string is validated the same way Init validates it; an unknown name returns
+// an error and leaves the current level unchanged. Calling SetLevel before
+// Init has run is an error rather than a silent no-op.
+func SetLevel(s string) error {
+	level, err := ParseLevel(s)
+	if err != nil {
+		return err
+	}
+	if activeLevel == nil {
+		return fmt.Errorf("logging not initialized")
+	}
+	activeLevel.Set(level)
+	return nil
+}
+
+// Level reports the current minimum level of the logger Init installed. It
+// exists for tests and diagnostics; before Init it reports slog.LevelInfo.
+func Level() slog.Level {
+	if activeLevel == nil {
+		return slog.LevelInfo
+	}
+	return activeLevel.Level()
+}

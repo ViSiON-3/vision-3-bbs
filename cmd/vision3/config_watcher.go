@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
@@ -389,6 +390,19 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 		cw.connTracker.ApplyServerConfig(newServerConfig)
 	}
 
+	// Apply the log level live. Only the level is hot — the log directory and
+	// rolling settings belong to the writer built at startup. Normalize a
+	// local copy first, exactly as Init does: an absent logging block means
+	// the default level, not an invalid one to warn about on every reload.
+	logCfg := newServerConfig.Logging
+	logCfg.Normalize()
+	before := logging.Level()
+	if err := logging.SetLevel(logCfg.Level); err != nil {
+		slog.Warn("config.json logging.level not applied", "level", logCfg.Level, "error", err)
+	} else if after := logging.Level(); after != before {
+		slog.Info("log level changed", "from", before.String(), "to", after.String())
+	}
+
 	slog.Info("config.json reloaded")
-	slog.Info("note: listener ports/hosts, sshEnabled/telnetEnabled, SSH host keys, QWK API, and logging changes still require a restart")
+	slog.Info("note: listener ports/hosts, sshEnabled/telnetEnabled, SSH host keys, QWK API, and logging dir/rolling changes still require a restart")
 }
