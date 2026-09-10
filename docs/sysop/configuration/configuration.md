@@ -964,6 +964,12 @@ the TUI signals the BBS once every file in the save has been written.
 | IP blocklist/allowlist files | Watched separately, reloaded on save |
 | `configs/ftn.json` | Picked up by the binkd mailer on its next cycle |
 
+Connection-security settings in `config.json` — `maxNodes`, `maxConnectionsPerIP`,
+`maxFailedLogins`, `lockoutMinutes`, the connection rate limiter, and the
+`ipBlocklistPath` / `ipAllowlistPath` settings — are applied live. Lowering a
+limit below current usage never disconnects anyone: new connections are refused
+until callers log off and usage falls back under the limit.
+
 **Still requires a restart:**
 
 - Listening ports and hosts (`sshPort`, `sshHost`, `telnetPort`, `telnetHost`)
@@ -973,10 +979,6 @@ the TUI signals the BBS once every file in the save has been written.
 - Logging directory and rolling settings (the log *level* also needs a restart today)
 - `configs/events.json`, `configs/message_areas.json`, `configs/file_areas.json`,
   `configs/conferences.json`, `configs/protocols.json`, `configs/v3net.json`
-
-Node and connection limits (`maxNodes`, `maxConnectionsPerIP`, `maxFailedLogins`,
-`lockoutMinutes`, and the connection rate limiter) are re-read into the running
-config but are **not yet applied** to the connection tracker; they need a restart.
 
 ### Triggering a reload by hand
 

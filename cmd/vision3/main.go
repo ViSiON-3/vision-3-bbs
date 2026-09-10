@@ -379,6 +379,77 @@ func (ct *ConnectionTracker) SetConnRateLimit(enabled bool, hits, windowSeconds,
 	ct.connRateBan = time.Duration(banMinutes) * time.Minute
 }
 
+// ApplyServerConfig pushes the connection-security settings from a reloaded
+// config.json into the tracker. Called by the config watcher, so that editing
+// these values takes effect without a restart.
+func (ct *ConnectionTracker) ApplyServerConfig(cfg config.ServerConfig) {
+	ct.SetLimits(cfg.MaxNodes, cfg.MaxConnectionsPerIP, cfg.MaxFailedLogins, cfg.LockoutMinutes)
+	ct.SetConnRateLimit(
+		cfg.EnableConnRateLimit,
+		cfg.ConnRateLimitHits,
+		cfg.ConnRateLimitWindowSeconds,
+		cfg.ConnRateLimitBanMinutes,
+	)
+	ct.SetIPListPaths(cfg.IPBlocklistPath, cfg.IPAllowlistPath)
+}
+
+// SetLimits updates the node, per-IP, and failed-login limits.
+//
+// Lowering a limit below current usage never disconnects anyone: the new value
+// applies to subsequent accept checks, so the board drains down to the new
+// limit as callers log off rather than dropping live sessions.
+func (ct *ConnectionTracker) SetLimits(maxNodes, maxConnectionsPerIP, maxFailedLogins, lockoutMinutes int) {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+
+	if maxNodes > 0 && ct.totalConnections > maxNodes {
+		slog.Warn("max nodes lowered below the number of active connections; "+
+			"no callers are disconnected, but new connections are refused until usage drops",
+			"max_nodes", maxNodes, "active", ct.totalConnections)
+	}
+
+	ct.maxNodes = maxNodes
+	ct.maxConnectionsPerIP = maxConnectionsPerIP
+	ct.maxFailedLogins = maxFailedLogins
+	ct.lockoutMinutes = lockoutMinutes
+}
+
+// SetIPListPaths points the tracker at (possibly different) blocklist and
+// allowlist files. When either path changes the lists are re-read and the file
+// watcher is restarted against the new files. A no-op when both are unchanged,
+// so the watcher is not torn down on every config.json reload.
+func (ct *ConnectionTracker) SetIPListPaths(blocklistPath, allowlistPath string) {
+	ct.mu.Lock()
+	unchanged := blocklistPath == ct.blocklistPath && allowlistPath == ct.allowlistPath
+	if unchanged {
+		ct.mu.Unlock()
+		return
+	}
+	ct.blocklistPath = blocklistPath
+	ct.allowlistPath = allowlistPath
+	// Drop a list whose path was cleared; reloadIPLists only overwrites lists
+	// that still have a path, so without this a removed file would keep
+	// filtering from the copy loaded at startup.
+	if blocklistPath == "" {
+		ct.blocklist = nil
+	}
+	if allowlistPath == "" {
+		ct.allowlist = nil
+	}
+	ct.mu.Unlock()
+
+	slog.Info("IP filter paths changed, reloading",
+		"blocklist", blocklistPath, "allowlist", allowlistPath)
+
+	ct.reloadIPLists()
+
+	// Re-point the watcher at the new files.
+	ct.StopWatching()
+	if err := ct.startWatching(); err != nil {
+		slog.Error("failed to restart IP list file watcher", "error", err)
+	}
+}
+
 // connRateSweepThreshold gates the opportunistic global prune in
 // recordConnAttemptLocked: the sweep only runs once connAttempts grows past
 // this size, keeping the common-case record path O(1) while still bounding
@@ -610,22 +681,29 @@ func (ct *ConnectionTracker) ClearFailedLoginAttempts(ip string) {
 func (ct *ConnectionTracker) reloadIPLists() {
 	slog.Info("reloading IP filter lists")
 
+	// Snapshot the paths under the lock: SetIPListPaths can change them when
+	// config.json is reloaded, so they are no longer fixed after construction.
+	ct.mu.Lock()
+	blocklistPath := ct.blocklistPath
+	allowlistPath := ct.allowlistPath
+	ct.mu.Unlock()
+
 	// Load both lists outside the lock (I/O can be slow)
 	var newBlocklist, newAllowlist *IPList
 
-	if ct.blocklistPath != "" {
-		bl, err := LoadIPList(ct.blocklistPath)
+	if blocklistPath != "" {
+		bl, err := LoadIPList(blocklistPath)
 		if err != nil {
-			slog.Error("failed to reload blocklist", "file", ct.blocklistPath, "error", err)
+			slog.Error("failed to reload blocklist", "file", blocklistPath, "error", err)
 		} else {
 			newBlocklist = bl
 		}
 	}
 
-	if ct.allowlistPath != "" {
-		al, err := LoadIPList(ct.allowlistPath)
+	if allowlistPath != "" {
+		al, err := LoadIPList(allowlistPath)
 		if err != nil {
-			slog.Error("failed to reload allowlist", "file", ct.allowlistPath, "error", err)
+			slog.Error("failed to reload allowlist", "file", allowlistPath, "error", err)
 		} else {
 			newAllowlist = al
 		}
@@ -633,10 +711,10 @@ func (ct *ConnectionTracker) reloadIPLists() {
 
 	// Swap both lists atomically under a single lock
 	ct.mu.Lock()
-	if ct.blocklistPath != "" {
+	if blocklistPath != "" {
 		ct.blocklist = newBlocklist
 	}
-	if ct.allowlistPath != "" {
+	if allowlistPath != "" {
 		ct.allowlist = newAllowlist
 	}
 	ct.mu.Unlock()
@@ -652,13 +730,16 @@ func (ct *ConnectionTracker) startWatching() error {
 		return nil
 	}
 
-	var err error
-	ct.watcher, err = fsnotify.NewWatcher()
+	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
-	ct.watcherDone = make(chan bool)
+	done := make(chan bool)
+	ct.mu.Lock()
+	ct.watcher = w
+	ct.watcherDone = done
+	ct.mu.Unlock()
 
 	// Add files to watch
 	filesToWatch := []string{}
@@ -678,28 +759,31 @@ func (ct *ConnectionTracker) startWatching() error {
 	}
 
 	for _, file := range filesToWatch {
-		if err := ct.watcher.Add(file); err != nil {
+		if err := w.Add(file); err != nil {
 			slog.Error("failed to watch file", "file", file, "error", err)
 		} else {
 			slog.Info("watching file for changes", "file", file)
 		}
 	}
 
-	// Start watching in a goroutine
-	go ct.watchLoop()
+	// Start watching in a goroutine. The watcher and its stop channel are
+	// passed in rather than read from ct: StopWatching clears both fields so
+	// that it can be called more than once, and the loop must keep using the
+	// instance it was started with.
+	go ct.watchLoop(w, done)
 
 	return nil
 }
 
 // watchLoop handles file system events
-func (ct *ConnectionTracker) watchLoop() {
+func (ct *ConnectionTracker) watchLoop(w *fsnotify.Watcher, done chan bool) {
 	// Debounce timer to avoid reloading on rapid successive writes
 	var debounceTimer *time.Timer
 	debounceDuration := 500 * time.Millisecond
 
 	for {
 		select {
-		case event, ok := <-ct.watcher.Events:
+		case event, ok := <-w.Events:
 			if !ok {
 				return
 			}
@@ -717,24 +801,35 @@ func (ct *ConnectionTracker) watchLoop() {
 				})
 			}
 
-		case err, ok := <-ct.watcher.Errors:
+		case err, ok := <-w.Errors:
 			if !ok {
 				return
 			}
 			slog.Error("file watcher error", "error", err)
 
-		case <-ct.watcherDone:
+		case <-done:
 			slog.Info("stopping IP list file watcher")
 			return
 		}
 	}
 }
 
-// StopWatching stops the file watcher
+// StopWatching stops the file watcher. It is safe to call more than once, and
+// safe to call when no watcher was ever started — SetIPListPaths restarts the
+// watcher on a path change, so shutdown is no longer the only caller.
 func (ct *ConnectionTracker) StopWatching() {
-	if ct.watcher != nil {
-		close(ct.watcherDone)
-		_ = ct.watcher.Close() // best-effort watcher shutdown
+	ct.mu.Lock()
+	w := ct.watcher
+	done := ct.watcherDone
+	ct.watcher = nil
+	ct.watcherDone = nil
+	ct.mu.Unlock()
+
+	if done != nil {
+		close(done)
+	}
+	if w != nil {
+		_ = w.Close() // best-effort watcher shutdown
 	}
 }
 
@@ -1717,7 +1812,7 @@ func main() {
 
 	// Initialize configuration file watcher for hot reload
 	var serverConfigMu sync.RWMutex
-	configWatcher, err := NewConfigWatcher(rootConfigPath, menuSetPath, menuExecutor, userMgr, &serverConfig, &serverConfigMu)
+	configWatcher, err := NewConfigWatcher(rootConfigPath, menuSetPath, menuExecutor, userMgr, &serverConfig, &serverConfigMu, connectionTracker)
 	if err != nil {
 		slog.Warn("failed to start config file watcher, hot reload disabled", "error", err)
 	} else {

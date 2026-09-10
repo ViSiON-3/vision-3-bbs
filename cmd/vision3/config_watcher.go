@@ -52,6 +52,7 @@ type ConfigWatcher struct {
 	userMgr        *user.UserMgr
 	serverConfig   *config.ServerConfig
 	serverConfigMu *sync.RWMutex // External mutex for server config
+	connTracker    *ConnectionTracker
 
 	interval     time.Duration
 	targets      []reloadTarget
@@ -64,7 +65,7 @@ type ConfigWatcher struct {
 }
 
 // NewConfigWatcher creates a configuration file watcher and starts polling.
-func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.MenuExecutor, userMgr *user.UserMgr, serverConfig *config.ServerConfig, serverConfigMu *sync.RWMutex) (*ConfigWatcher, error) {
+func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.MenuExecutor, userMgr *user.UserMgr, serverConfig *config.ServerConfig, serverConfigMu *sync.RWMutex, connTracker *ConnectionTracker) (*ConfigWatcher, error) {
 	// Polling a directory that does not exist would silently never fire, so
 	// fail loudly instead of starting a watcher that can never do anything.
 	info, err := os.Stat(rootConfigPath)
@@ -82,6 +83,7 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		userMgr:        userMgr,
 		serverConfig:   serverConfig,
 		serverConfigMu: serverConfigMu,
+		connTracker:    connTracker,
 		interval:       defaultPollInterval,
 		sentinelPath:   config.ReloadSentinelPath(rootConfigPath),
 		mtimes:         make(map[string]time.Time),
@@ -307,6 +309,14 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 		slog.Info("updated auto-validate new users", "enabled", newServerConfig.AutoValidateNewUsers)
 	}
 
+	// Push connection-security settings into the tracker. Without this the
+	// node/IP/lockout limits and the connection rate limiter would be updated
+	// in the config struct but never reach the code that enforces them.
+	if cw.connTracker != nil {
+		cw.connTracker.ApplyServerConfig(newServerConfig)
+	}
+
 	slog.Info("config.json reloaded")
-	slog.Warn("some config.json changes require a full restart", "fields", "ports, keys, IP limits")
+	slog.Warn("some config.json changes still require a restart",
+		"fields", "listener ports and hosts, sshEnabled/telnetEnabled, SSH host keys, QWK API, logging")
 }
