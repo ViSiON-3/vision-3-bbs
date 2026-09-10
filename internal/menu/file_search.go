@@ -32,7 +32,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Prompt for search text
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SearchFilesPrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SearchFilesPrompt)), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -48,7 +48,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(query) < 3 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SearchFilesMinChars)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SearchFilesMinChars)), outputMode)
 		return currentUser, "", nil
 	}
 
@@ -83,12 +83,12 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(filtered) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SearchNoResults)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SearchNoResults)), outputMode)
 		return currentUser, "", nil
 	}
 
 	// Display header
-	header := fmt.Sprintf(e.LoadedStrings.SearchResultsHeader, query)
+	header := fmt.Sprintf(e.Strings().SearchResultsHeader, query)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header)), outputMode)
 
 	// Paginate results: leave room for header/pause prompt
@@ -109,7 +109,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		lineCount++
 
 		if lineCount >= linesPerPage {
-			if err := writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight); err != nil {
+			if err := writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight); err != nil {
 				return currentUser, "", nil
 			}
 			lineCount = 0
@@ -117,9 +117,9 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(
-		fmt.Sprintf(e.LoadedStrings.SearchResultsSummary, len(filtered)),
+		fmt.Sprintf(e.Strings().SearchResultsSummary, len(filtered)),
 	)), outputMode)
 
-	_ = writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
+	_ = writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
 	return currentUser, "", nil
 }

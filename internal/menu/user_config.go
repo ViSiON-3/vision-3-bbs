@@ -46,7 +46,7 @@ func runCfgToggle(
 	if err := userManager.UpdateUser(currentUser); err != nil {
 		setter(currentUser, original)
 		slog.Error("failed to save field", "node", nodeNumber, "name", fieldName, "error", err)
-		msg := fmt.Sprintf(e.LoadedStrings.CfgSaveError, fieldName)
+		msg := fmt.Sprintf(e.Strings().CfgSaveError, fieldName)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
@@ -54,11 +54,11 @@ func runCfgToggle(
 
 	newVal := !original
 
-	stateStr := e.LoadedStrings.CfgToggleOff
+	stateStr := e.Strings().CfgToggleOff
 	if newVal {
-		stateStr = e.LoadedStrings.CfgToggleOn
+		stateStr = e.Strings().CfgToggleOn
 	}
-	msg := fmt.Sprintf(e.LoadedStrings.CfgToggleFormat, fieldName, stateStr)
+	msg := fmt.Sprintf(e.Strings().CfgToggleFormat, fieldName, stateStr)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 	return currentUser, "", nil
@@ -78,9 +78,9 @@ func runCfgStringInput(
 	}
 
 	current := getter(currentUser)
-	prompt := fmt.Sprintf(e.LoadedStrings.CfgStringPrompt, fieldName, maxLen)
+	prompt := fmt.Sprintf(e.Strings().CfgStringPrompt, fieldName, maxLen)
 	if current != "" {
-		prompt = fmt.Sprintf(e.LoadedStrings.CfgStringPromptCurrent, fieldName, current, maxLen)
+		prompt = fmt.Sprintf(e.Strings().CfgStringPromptCurrent, fieldName, current, maxLen)
 	}
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
@@ -109,7 +109,7 @@ func runCfgStringInput(
 		return currentUser, "", nil
 	}
 
-	msg := fmt.Sprintf(e.LoadedStrings.CfgStringUpdated, fieldName)
+	msg := fmt.Sprintf(e.Strings().CfgStringUpdated, fieldName)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 	return currentUser, "", nil

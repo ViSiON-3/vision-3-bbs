@@ -46,7 +46,7 @@ func runV3NetCoordinator(c *cmdCtx, args string) (*user.User, string, error) {
 
 	terminalio.WriteProcessedBytes(terminal, buf.Bytes(), outputMode)
 
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}

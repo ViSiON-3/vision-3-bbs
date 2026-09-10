@@ -55,14 +55,14 @@ func runCheckNUV(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	waitingStr := e.LoadedStrings.NewUsersWaiting
+	waitingStr := e.Strings().NewUsersWaiting
 	if waitingStr == "" {
 		waitingStr = "\r\n|15New User Voting: |11|NE candidate(s)|15 awaiting your vote!"
 	}
 	waitingStr = strings.ReplaceAll(waitingStr, "|NE", fmt.Sprintf("%d", unvoted))
 	wv(terminal, waitingStr+"\r\n", outputMode)
 
-	voteNowStr := e.LoadedStrings.VoteOnNewUsers
+	voteNowStr := e.Strings().VoteOnNewUsers
 	if voteNowStr == "" {
 		voteNowStr = "|07Vote now? |15[Y/N]|07: "
 	}
@@ -124,7 +124,7 @@ func runNUVScan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(nd.Candidates) == 0 {
-		noPendingStr := e.LoadedStrings.NoNewUsersPending
+		noPendingStr := e.Strings().NoNewUsersPending
 		if noPendingStr == "" {
 			noPendingStr = "|07No candidates pending in NUV queue."
 		}

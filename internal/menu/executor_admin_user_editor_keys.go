@@ -98,7 +98,7 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 		if newVal, editErr := st.readFieldInput("Level", levelStr, 3, false); editErr == nil {
 			if level, parseErr := strconv.Atoi(newVal); parseErr == nil {
 				// Protect User #1 from level reduction
-				if sel.ID == 1 && level < st.e.ServerCfg.SysOpLevel {
+				if sel.ID == 1 && level < st.e.GetServerConfig().SysOpLevel {
 					st.statusMessage = "|01Cannot lower User #1 below SysOp level!|07"
 					refresh = true
 				} else if level != sel.AccessLevel {
@@ -174,8 +174,8 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 			if isBanned {
 				// Unban: restore to regular user level and validate
 				st.pendingChanges["validated"] = true
-				st.pendingChanges["level"] = st.e.ServerCfg.RegularUserLevel
-				st.statusMessage = fmt.Sprintf("|10Un-ban marked for update (level %d, validated).|07", st.e.ServerCfg.RegularUserLevel)
+				st.pendingChanges["level"] = st.e.GetServerConfig().RegularUserLevel
+				st.statusMessage = fmt.Sprintf("|10Un-ban marked for update (level %d, validated).|07", st.e.GetServerConfig().RegularUserLevel)
 			} else {
 				// Ban: set level 0 and unvalidated
 				st.pendingChanges["validated"] = false

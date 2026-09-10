@@ -29,7 +29,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Show online nodes
 	sessions := e.SessionRegistry.ListActive()
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.PageOnlineNodesHeader)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageOnlineNodesHeader)), outputMode)
 	for _, sess := range sessions {
 		sess.Mutex.RLock()
 		sessHandle := "Unknown"
@@ -47,12 +47,12 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 		if sessInvisible && !e.isCoSysOpOrAbove(currentUser) {
 			continue
 		}
-		line := fmt.Sprintf(e.LoadedStrings.PageNodeListEntry, sessNodeID, sessHandle)
+		line := fmt.Sprintf(e.Strings().PageNodeListEntry, sessNodeID, sessHandle)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 	}
 
 	// Prompt for target node
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.PageWhichNodePrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageWhichNodePrompt)), outputMode)
 	nodeInput, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		if err == io.EOF {
@@ -67,20 +67,20 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 
 	targetNodeID, err := strconv.Atoi(nodeInput)
 	if err != nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.PageInvalidNode)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageInvalidNode)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	if targetNodeID == nodeNumber {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.PageSelfError)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageSelfError)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	targetSession := e.SessionRegistry.Get(targetNodeID)
 	if targetSession == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.PageNodeOffline)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageNodeOffline)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return nil, "", nil
 	}
@@ -88,13 +88,13 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	targetInvisible := targetSession.Invisible
 	targetSession.Mutex.RUnlock()
 	if targetInvisible && !e.isCoSysOpOrAbove(currentUser) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.PageNodeOffline)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageNodeOffline)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	// Prompt for message
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.PageMessagePrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageMessagePrompt)), outputMode)
 	msgInput, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		if err == io.EOF {
@@ -104,17 +104,17 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	msgInput = strings.TrimSpace(msgInput)
 	if msgInput == "" {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.PageCancelled)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageCancelled)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	// Queue the page on target session
-	pageMsg := fmt.Sprintf(e.LoadedStrings.PageMessageFormat, handle, msgInput)
+	pageMsg := fmt.Sprintf(e.Strings().PageMessageFormat, handle, msgInput)
 	targetSession.AddPage(pageMsg)
 
 	slog.Info("paged node", "node", nodeNumber, "handle", handle, "target", targetNodeID, "chars", len(msgInput))
-	confirm := fmt.Sprintf(e.LoadedStrings.PageSent, targetNodeID)
+	confirm := fmt.Sprintf(e.Strings().PageSent, targetNodeID)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(confirm)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 

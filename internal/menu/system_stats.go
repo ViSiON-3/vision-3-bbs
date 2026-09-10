@@ -53,9 +53,9 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 		sysopName = sysopUser.Handle
 	}
 
-	now := config.NowIn(e.ServerCfg.Timezone)
+	now := config.NowIn(e.GetServerConfig().Timezone)
 	tokens := map[string]string{
-		"BBSNAME":     e.ServerCfg.BoardName,
+		"BBSNAME":     e.GetServerConfig().BoardName,
 		"SYSOP":       sysopName,
 		"VERSION":     version.Number,
 		"TOTALUSERS":  strconv.Itoa(userManager.GetUserCount()),
@@ -63,7 +63,7 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 		"TOTALMSGS":   strconv.Itoa(e.MessageMgr.GetTotalMessageCount()),
 		"TOTALFILES":  strconv.Itoa(e.FileMgr.GetTotalFileCount()),
 		"ACTIVENODES": strconv.Itoa(e.SessionRegistry.ActiveCount()),
-		"MAXNODES":    strconv.Itoa(e.ServerCfg.MaxNodes),
+		"MAXNODES":    strconv.Itoa(e.GetServerConfig().MaxNodes),
 		"DATE":        now.Format("01/02/2006"),
 		"TIME":        now.Format("03:04 PM"),
 	}
@@ -80,18 +80,18 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 	botBytes = replaceTokens(botBytes)
 
 	lines := []string{
-		fmt.Sprintf(e.LoadedStrings.StatsBBSName, tokens["BBSNAME"]),
-		fmt.Sprintf(e.LoadedStrings.StatsSysOp, tokens["SYSOP"]),
-		fmt.Sprintf(e.LoadedStrings.StatsVersion, tokens["VERSION"]),
+		fmt.Sprintf(e.Strings().StatsBBSName, tokens["BBSNAME"]),
+		fmt.Sprintf(e.Strings().StatsSysOp, tokens["SYSOP"]),
+		fmt.Sprintf(e.Strings().StatsVersion, tokens["VERSION"]),
 		"",
-		fmt.Sprintf(e.LoadedStrings.StatsTotalUsers, tokens["TOTALUSERS"]),
-		fmt.Sprintf(e.LoadedStrings.StatsTotalCalls, tokens["TOTALCALLS"]),
-		fmt.Sprintf(e.LoadedStrings.StatsTotalMsgs, tokens["TOTALMSGS"]),
-		fmt.Sprintf(e.LoadedStrings.StatsTotalFiles, tokens["TOTALFILES"]),
-		fmt.Sprintf(e.LoadedStrings.StatsActiveNodes, tokens["ACTIVENODES"], tokens["MAXNODES"]),
+		fmt.Sprintf(e.Strings().StatsTotalUsers, tokens["TOTALUSERS"]),
+		fmt.Sprintf(e.Strings().StatsTotalCalls, tokens["TOTALCALLS"]),
+		fmt.Sprintf(e.Strings().StatsTotalMsgs, tokens["TOTALMSGS"]),
+		fmt.Sprintf(e.Strings().StatsTotalFiles, tokens["TOTALFILES"]),
+		fmt.Sprintf(e.Strings().StatsActiveNodes, tokens["ACTIVENODES"], tokens["MAXNODES"]),
 		"",
-		fmt.Sprintf(e.LoadedStrings.StatsDate, tokens["DATE"]),
-		fmt.Sprintf(e.LoadedStrings.StatsTime, tokens["TIME"]),
+		fmt.Sprintf(e.Strings().StatsDate, tokens["DATE"]),
+		fmt.Sprintf(e.Strings().StatsTime, tokens["TIME"]),
 	}
 
 	var buf bytes.Buffer
@@ -114,7 +114,7 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 
 	terminalio.WriteProcessedBytes(terminal, buf.Bytes(), outputMode)
 
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}

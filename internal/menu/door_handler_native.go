@@ -72,7 +72,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 		if genErr != nil {
 			slog.Error("failed to write dropfile", "path", dropfilePath, "error", genErr)
-			errMsg := fmt.Sprintf(ctx.Executor.LoadedStrings.DoorDropfileError, ctx.DoorName)
+			errMsg := fmt.Sprintf(ctx.Executor.Strings().DoorDropfileError, ctx.DoorName)
 			if wErr := terminalio.WriteProcessedBytes(ctx.Session.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), ctx.OutputMode); wErr != nil {
 				slog.Error("failed writing dropfile creation error message", "error", wErr)
 			}

@@ -246,7 +246,7 @@ func (e *MenuExecutor) processMatrixAction(
 		return "MATRIX", nil, nil // Return to matrix after check
 
 	case "DISCONNECT":
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MatrixDisconnecting)), outputMode)
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MatrixDisconnecting)), outputMode)
 		return "DISCONNECT", nil, nil
 
 	default:
@@ -266,7 +266,7 @@ func (e *MenuExecutor) handleCheckAccess(
 ) {
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MatrixCheckAccessPrompt)), outputMode)
+	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MatrixCheckAccessPrompt)), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -281,17 +281,17 @@ func (e *MenuExecutor) handleCheckAccess(
 	foundUser, exists := userManager.GetUser(handle)
 
 	if !exists {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MatrixUserNotFound)), outputMode)
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MatrixUserNotFound)), outputMode)
 	} else if cfg := e.GetServerConfig(); canLogonAtLevel(cfg, foundUser.AccessLevel) {
 		// This option answers "check your access", so it reports whether the
 		// caller can get on. It used to branch on the validated flag, which
 		// decides nothing about login, and so told people waiting for approval
 		// they did not need.
-		msg := fmt.Sprintf(e.LoadedStrings.MatrixAccountValidated, foundUser.Handle, foundUser.AccessLevel)
+		msg := fmt.Sprintf(e.Strings().MatrixAccountValidated, foundUser.Handle, foundUser.AccessLevel)
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	} else {
 		cfg := e.GetServerConfig()
-		msg := fmt.Sprintf(e.LoadedStrings.MatrixAccountCannotLogon,
+		msg := fmt.Sprintf(e.Strings().MatrixAccountCannotLogon,
 			foundUser.Handle, foundUser.AccessLevel, cfg.LogonLevel)
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 
@@ -321,7 +321,7 @@ func (e *MenuExecutor) handleCheckAccess(
 	}
 
 	// Pause
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}

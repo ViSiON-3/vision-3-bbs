@@ -37,7 +37,7 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Ask whether to scan all areas or current only.
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SysopReviewScanAll)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewScanAll)), outputMode)
 	scanInput, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		return currentUser, "", err
@@ -59,7 +59,7 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(unreviewed) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SysopReviewNoFiles+"\r\n")), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewNoFiles+"\r\n")), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -130,7 +130,7 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 				if updateErr != nil {
 					slog.Error("failed to mark file as reviewed", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 				} else {
-					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SysopReviewMarked+"\r\n")), outputMode)
+					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewMarked+"\r\n")), outputMode)
 				}
 			}
 		}
@@ -144,7 +144,7 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, areaName string, outputMode ansi.OutputMode) (string, error) {
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
-	header := e.LoadedStrings.SysopReviewHeader
+	header := e.Strings().SysopReviewHeader
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header+"\r\n")), outputMode)
 
 	sizeStr := formatReviewSize(rec.Size)
@@ -162,7 +162,7 @@ func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 	)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(info+"\r\n")), outputMode)
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SysopReviewPrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewPrompt)), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -235,7 +235,7 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		return nil
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SysopReviewRenamed+"\r\n")), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewRenamed+"\r\n")), outputMode)
 	return nil
 }
 

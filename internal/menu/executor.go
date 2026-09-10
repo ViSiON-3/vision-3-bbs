@@ -7,7 +7,7 @@ import (
 	"net"
 	"path/filepath"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -61,21 +61,37 @@ type MenuExecutor struct {
 	RootConfigPath  string                        // NEW: Path to global configs (e.g., "configs")
 	RootAssetsPath  string                        // NEW: Path to global assets (e.g., "assets")
 	RunRegistry     map[string]RunnableFunc       // Map RUN: targets to functions (Use local RunnableFunc)
-	DoorRegistry    map[string]config.DoorConfig  // Map DOOR: targets to configurations
 	OneLiners       []string                      // Loaded oneliners (Consider if these should be menu-set specific)
-	LoadedStrings   config.StringsConfig          // Loaded global strings configuration
-	Theme           config.ThemeConfig            // Loaded theme configuration
-	ServerCfg       config.ServerConfig           // Server configuration (NEW)
 	MessageMgr      *message.MessageManager       // <-- ADDED FIELD
 	FileMgr         *file.FileManager             // <-- ADDED FIELD: File manager instance
 	ConferenceMgr   *conference.ConferenceManager // Conference grouping manager
 	IPLockoutCheck  IPLockoutChecker              // IP-based authentication lockout checker
-	LoginSequence   []config.LoginItem            // Configurable login sequence from login.json
 	SessionRegistry *session.SessionRegistry      // Session registry for who's online
 	ChatLeaves      ChatLeafProvider              // V3Net chat leaf provider (nil = local only)
-	Protocols       []transfer.ProtocolConfig     // Loaded transfer protocol configurations
 	V3NetStatus     V3NetStatusProvider           // V3Net service status (nil if disabled)
-	configMu        sync.RWMutex                  // Mutex for thread-safe config updates
+
+	// Hot-reloadable configuration.
+	//
+	// Each of these is replaced wholesale when its file is re-read, while
+	// sessions are actively reading it. They are held as atomic pointers to
+	// immutable snapshots rather than as plain fields: a reload stores a
+	// freshly loaded value and readers keep whatever snapshot they loaded, so
+	// no reader ever observes a half-updated config.
+	//
+	// A mutex would not work here in practice. There are several hundred read
+	// sites, and every one of them would have to take it — a single missed
+	// read is a data race, and the compiler cannot catch one. Snapshots make
+	// the safe form the only form the accessors offer.
+	//
+	// The values behind these pointers MUST be treated as read-only. They are
+	// shared by every reader that loaded the same snapshot; mutating one is a
+	// race regardless of the atomics.
+	stringsCfg atomic.Pointer[config.StringsConfig]
+	themeCfg   atomic.Pointer[config.ThemeConfig]
+	serverCfg  atomic.Pointer[config.ServerConfig]
+	doorReg    atomic.Pointer[map[string]config.DoorConfig]
+	loginSeq   atomic.Pointer[[]config.LoginItem]
+	protocols  atomic.Pointer[[]transfer.ProtocolConfig]
 }
 
 // NewExecutor creates a new MenuExecutor.
@@ -86,83 +102,125 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	registerPlaceholderRunnables(runRegistry)    // Add placeholder registrations
 	registerAppRunnables(runRegistry)            // Add application-specific runnables
 
-	return &MenuExecutor{
+	e := &MenuExecutor{
 		MenuSetPath:     menuSetPath,
 		RootConfigPath:  rootConfigPath,
 		RootAssetsPath:  rootAssetsPath,
 		RunRegistry:     runRegistry,
-		DoorRegistry:    doorRegistry,
 		OneLiners:       oneLiners,
-		LoadedStrings:   loadedStrings,
-		Theme:           theme,
-		ServerCfg:       serverCfg,
 		MessageMgr:      msgMgr,
 		FileMgr:         fileMgr,
 		ConferenceMgr:   confMgr,
 		IPLockoutCheck:  ipLockoutCheck,
-		LoginSequence:   loginSequence,
 		SessionRegistry: sessionRegistry,
-		Protocols:       protocols,
 	}
+	e.SetDoorRegistry(doorRegistry)
+	e.SetStrings(loadedStrings)
+	e.SetTheme(theme)
+	e.SetServerConfig(serverCfg)
+	e.SetLoginSequence(loginSequence)
+	e.SetProtocols(protocols)
+	return e
 }
 
 // --- Hot Reload Methods ---
+//
+// Each setter stores a new immutable snapshot; each accessor loads whatever
+// snapshot is current. Readers must not mutate what an accessor returns.
 
 // SetDoorRegistry atomically updates the door registry.
 func (e *MenuExecutor) SetDoorRegistry(doors map[string]config.DoorConfig) {
-	e.configMu.Lock()
-	defer e.configMu.Unlock()
-	e.DoorRegistry = doors
+	e.doorReg.Store(&doors)
+}
+
+// DoorRegistry returns the current door registry. Read-only.
+func (e *MenuExecutor) DoorRegistry() map[string]config.DoorConfig {
+	if p := e.doorReg.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // GetDoorConfig atomically retrieves a door configuration.
 func (e *MenuExecutor) GetDoorConfig(name string) (config.DoorConfig, bool) {
-	e.configMu.RLock()
-	defer e.configMu.RUnlock()
-	cfg, ok := e.DoorRegistry[name]
+	cfg, ok := e.DoorRegistry()[name]
 	return cfg, ok
 }
 
 // SetLoginSequence atomically updates the login sequence.
 func (e *MenuExecutor) SetLoginSequence(sequence []config.LoginItem) {
-	e.configMu.Lock()
-	defer e.configMu.Unlock()
-	e.LoginSequence = sequence
+	e.loginSeq.Store(&sequence)
 }
 
-// GetLoginSequence atomically retrieves the login sequence.
+// GetLoginSequence atomically retrieves the login sequence. Read-only.
 func (e *MenuExecutor) GetLoginSequence() []config.LoginItem {
-	e.configMu.RLock()
-	defer e.configMu.RUnlock()
-	return e.LoginSequence
+	if p := e.loginSeq.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // SetStrings atomically updates the strings configuration.
 func (e *MenuExecutor) SetStrings(strings config.StringsConfig) {
-	e.configMu.Lock()
-	defer e.configMu.Unlock()
-	e.LoadedStrings = strings
+	e.stringsCfg.Store(&strings)
+}
+
+// Strings returns the current strings configuration.
+//
+// A pointer, not a copy: StringsConfig is several hundred fields and this is
+// the hottest accessor in the package, called once per displayed string. The
+// value behind it is shared and must not be mutated.
+func (e *MenuExecutor) Strings() *config.StringsConfig {
+	if p := e.stringsCfg.Load(); p != nil {
+		return p
+	}
+	// Only reachable if an executor was built without NewExecutor. Returning a
+	// zero config keeps callers from dereferencing nil; every string reads as
+	// empty, which their existing empty-string fallbacks already handle.
+	return &config.StringsConfig{}
 }
 
 // SetTheme atomically updates the theme configuration.
 func (e *MenuExecutor) SetTheme(theme config.ThemeConfig) {
-	e.configMu.Lock()
-	defer e.configMu.Unlock()
-	e.Theme = theme
+	e.themeCfg.Store(&theme)
+}
+
+// Theme returns the current theme configuration. Read-only.
+func (e *MenuExecutor) Theme() *config.ThemeConfig {
+	if p := e.themeCfg.Load(); p != nil {
+		return p
+	}
+	return &config.ThemeConfig{}
 }
 
 // SetServerConfig atomically updates the server configuration.
 func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
-	e.configMu.Lock()
-	defer e.configMu.Unlock()
-	e.ServerCfg = serverCfg
+	e.serverCfg.Store(&serverCfg)
 }
 
 // GetServerConfig atomically retrieves the server configuration.
+//
+// Returns a copy, unlike the other accessors: callers routinely assign the
+// result to a local and some adjust fields on it before use, which would
+// corrupt the shared snapshot if they held a pointer into it.
 func (e *MenuExecutor) GetServerConfig() config.ServerConfig {
-	e.configMu.RLock()
-	defer e.configMu.RUnlock()
-	return e.ServerCfg
+	if p := e.serverCfg.Load(); p != nil {
+		return *p
+	}
+	return config.ServerConfig{}
+}
+
+// SetProtocols atomically updates the transfer protocol configurations.
+func (e *MenuExecutor) SetProtocols(protocols []transfer.ProtocolConfig) {
+	e.protocols.Store(&protocols)
+}
+
+// Protocols returns the current transfer protocol configurations. Read-only.
+func (e *MenuExecutor) Protocols() []transfer.ProtocolConfig {
+	if p := e.protocols.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // idleTimeout returns the effective idle timeout duration for the given user.
@@ -198,7 +256,7 @@ func (e *MenuExecutor) transferContext(sessionCtx context.Context) (context.Cont
 
 // isCoSysOpOrAbove returns true if the user has CoSysOp or SysOp access level.
 func (e *MenuExecutor) isCoSysOpOrAbove(u *user.User) bool {
-	return u != nil && u.AccessLevel >= e.ServerCfg.CoSysOpLevel
+	return u != nil && u.AccessLevel >= e.GetServerConfig().CoSysOpLevel
 }
 
 // handleIdleTimeout displays TIMEOUT.ANS (if available) or falls back to the
@@ -216,7 +274,7 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 		}
 	} else {
 		// Fall back to the configured string.
-		msg := e.LoadedStrings.IdleTimeout
+		msg := e.Strings().IdleTimeout
 		if msg == "" {
 			msg = "\r\n|09You've been idle too long... Come back when you are there!|07\r\n"
 		}
@@ -243,7 +301,7 @@ func remoteIPFromSession(s ssh.Session) string {
 }
 
 func (e *MenuExecutor) showUndefinedMenuInput(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) {
-	errMsg := e.LoadedStrings.ExecUnknownCommand
+	errMsg := e.Strings().ExecUnknownCommand
 	processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
 	if wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode); wErr != nil {
 		slog.Error("failed writing unknown command message", "node", nodeNumber, "error", wErr)

@@ -41,7 +41,7 @@ func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	sysOpACS := fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel)
+	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		msg := "\r\n|01Access denied.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -162,7 +162,7 @@ func runDeleteUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	sysOpACS := fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel)
+	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		msg := "\r\n|01Access denied.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)

@@ -177,7 +177,7 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 	// Protect User ID 1 from critical changes.
 	if target.ID == 1 {
 		if val, ok := pendingChanges["level"]; ok {
-			if val.(int) < e.ServerCfg.SysOpLevel {
+			if val.(int) < e.GetServerConfig().SysOpLevel {
 				delete(pendingChanges, "level")
 				return "|01Cannot lower User #1 below SysOp level!|07", false
 			}

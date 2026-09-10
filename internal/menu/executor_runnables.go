@@ -39,7 +39,7 @@ func runMainLogoffCommand(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	prompt := e.LoadedStrings.LogOffStr
+	prompt := e.Strings().LogOffStr
 	if prompt == "" {
 		prompt = "\r\n|07Log off now? @"
 	}
@@ -68,7 +68,7 @@ func runImmediateLogoffCommand(c *cmdCtx, args string) (*user.User, string, erro
 
 	if displayErr := e.displayFile(terminal, "GOODBYE.ANS", outputMode, c.termHeight); displayErr != nil {
 		slog.Warn("failed to display GOODBYE.ANS before logoff", "node", nodeNumber, "error", displayErr)
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecGoodbye)), outputMode)
+		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecGoodbye)), outputMode)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -89,7 +89,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if currentUser == nil {
 		slog.Warn("showstats called without logged in user", "node", nodeNumber)
-		msg := e.LoadedStrings.ExecStatsLogin
+		msg := e.Strings().ExecStatsLogin
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
 			slog.Error("failed writing showstats error message", "error", wErr)
@@ -104,7 +104,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	rawAnsiContent, readErr := ansi.GetAnsiFileContent(fullAnsPath)
 	if readErr != nil {
 		slog.Error("failed to read file for showstats", "node", nodeNumber, "path", fullAnsPath, "error", readErr)
-		msg := fmt.Sprintf(e.LoadedStrings.ExecStatsError, ansFilename)
+		msg := fmt.Sprintf(e.Strings().ExecStatsError, ansFilename)
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
 			slog.Error("failed writing showstats file read error message", "error", wErr)
@@ -171,7 +171,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// 5. Wait for Enter key press
-	pausePrompt := e.LoadedStrings.PauseString // Use configured pause string
+	pausePrompt := e.Strings().PauseString // Use configured pause string
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
 	}
@@ -201,7 +201,7 @@ func runShowVersion(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running showversion", "node", nodeNumber)
 
-	versionString := renderVersionString(upgradeVersionTemplate(e.LoadedStrings.ExecVersionString))
+	versionString := renderVersionString(upgradeVersionTemplate(e.Strings().ExecVersionString))
 
 	// Display the version
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode) // Optional: Clear screen
@@ -213,7 +213,7 @@ func runShowVersion(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Wait for Enter
-	pausePrompt := e.LoadedStrings.PauseString // Use configured pause string
+	pausePrompt := e.Strings().PauseString // Use configured pause string
 	if pausePrompt == "" {
 		slog.Warn("pausestring empty, no pause prompt will be shown for showversion", "node", nodeNumber)
 		// Don't use a hardcoded fallback. If it's empty, it's empty.

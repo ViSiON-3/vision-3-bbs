@@ -25,12 +25,10 @@ func TestRunShowStats(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	e := &MenuExecutor{
-		MenuSetPath: root,
-		LoadedStrings: config.StringsConfig{
-			PauseString: "|07Press [ENTER]",
-		},
-	}
+	e := &MenuExecutor{MenuSetPath: root}
+	e.SetStrings(config.StringsConfig{
+		PauseString: "|07Press [ENTER]",
+	})
 	currentUser := &user.User{
 		Handle:      "TestUser",
 		AccessLevel: 50,

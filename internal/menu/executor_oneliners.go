@@ -48,7 +48,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", err
 	}
 	// --- Ask to Add New One ---
-	askPrompt := e.LoadedStrings.AskOneLiner
+	askPrompt := e.Strings().AskOneLiner
 	if askPrompt == "" {
 		slog.Error("required string 'AskOneLiner' is missing or empty in strings configuration")
 		return nil, "", fmt.Errorf("missing AskOneLiner string in configuration")

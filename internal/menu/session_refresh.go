@@ -28,7 +28,7 @@ func (st *runLoopState) refreshCurrentUser() bool {
 	if !stillValid {
 		slog.Info("account removed or deleted while online; ending the call",
 			"handle", before.Handle, "node", st.nodeNumber)
-		if msg := st.e.LoadedStrings.ExecAccessDenied; msg != "" {
+		if msg := st.e.Strings().ExecAccessDenied; msg != "" {
 			_ = terminalio.WriteProcessedBytes(st.terminal,
 				ansi.ReplacePipeCodes([]byte(msg)), st.outputMode)
 		}

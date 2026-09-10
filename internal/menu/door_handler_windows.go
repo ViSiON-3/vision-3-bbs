@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -72,7 +71,7 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 
 		if genErr != nil {
 			slog.Error("failed to write dropfile", "path", dropfilePath, "error", genErr)
-			errMsg := fmt.Sprintf(ctx.Executor.LoadedStrings.DoorDropfileError, ctx.DoorName)
+			errMsg := fmt.Sprintf(ctx.Executor.Strings().DoorDropfileError, ctx.DoorName)
 			if wErr := terminalio.WriteProcessedBytes(ctx.Session.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), ctx.OutputMode); wErr != nil {
 				slog.Error("failed writing dropfile creation error message", "error", wErr)
 			}
@@ -275,7 +274,7 @@ func executeCleanupWindows(ctx *DoorCtx) {
 
 // doorErrorMessage writes a formatted error message to the session.
 func doorErrorMessage(ctx *DoorCtx, msg string) {
-	errMsg := fmt.Sprintf(ctx.Executor.LoadedStrings.DoorErrorFormat, msg)
+	errMsg := fmt.Sprintf(ctx.Executor.Strings().DoorErrorFormat, msg)
 	wErr := terminalio.WriteProcessedBytes(ctx.Session.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), ctx.OutputMode)
 	if wErr != nil {
 		slog.Error("failed writing door error message", "error", wErr)
@@ -293,7 +292,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running LISTDOORS (Windows)", "node", nodeNumber)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorLoginRequired)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -309,7 +308,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load DOORLIST templates", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorTemplateError)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorTemplateError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -322,13 +321,9 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 		terminalio.WriteProcessedBytes(terminal, processedTop, outputMode)
 	}
 
-	// Get door registry
-	e.configMu.RLock()
-	doorRegistryCopy := make(map[string]config.DoorConfig, len(e.DoorRegistry))
-	for k, v := range e.DoorRegistry {
-		doorRegistryCopy[k] = v
-	}
-	e.configMu.RUnlock()
+	// One snapshot for the whole listing: calling the accessor twice could
+	// straddle a reload and mix entries from two different registries.
+	doorRegistryCopy := e.DoorRegistry()
 
 	doorCodes := make([]string, 0, len(doorRegistryCopy))
 	for code := range doorRegistryCopy {
@@ -353,7 +348,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if displayIdx == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorNoneConfigured)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorNoneConfigured)), outputMode)
 	}
 
 	// Display footer
@@ -383,12 +378,12 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running OPENDOOR (Windows)", "node", nodeNumber)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorLoginRequired)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
 
-	renderedPrompt := ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorPrompt))
+	renderedPrompt := ansi.ReplacePipeCodes([]byte(e.Strings().DoorPrompt))
 	curUpClear := "\x1b[A\r\x1b[2K"
 
 	terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
@@ -424,7 +419,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		doorConfig, exists := e.GetDoorConfig(upperInput)
 		if !exists {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
-			msg := fmt.Sprintf(e.LoadedStrings.DoorNotFoundFormat, inputClean)
+			msg := fmt.Sprintf(e.Strings().DoorNotFoundFormat, inputClean)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
@@ -436,7 +431,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
 			slog.Warn("user denied access to door",
 				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
-			msg := fmt.Sprintf(e.LoadedStrings.DoorAccessDenied, upperInput)
+			msg := fmt.Sprintf(e.Strings().DoorAccessDenied, upperInput)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
@@ -458,7 +453,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		if cmdErr != nil {
 			if errors.Is(cmdErr, ErrDoorBusy) {
 				slog.Info("door is busy for user", "node", nodeNumber, "door", upperInput, "handle", currentUser.Handle)
-				busyFmt := e.LoadedStrings.DoorBusyFormat
+				busyFmt := e.Strings().DoorBusyFormat
 				if strings.TrimSpace(busyFmt) == "" {
 					busyFmt = "\r\n|14Door is currently in use: |11%s|07\r\n"
 				}
@@ -493,12 +488,12 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running DOORINFO (Windows)", "node", nodeNumber)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorInfoLoginRequired)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorInfoLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
 
-	renderedPrompt := ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DoorPrompt))
+	renderedPrompt := ansi.ReplacePipeCodes([]byte(e.Strings().DoorPrompt))
 	curUpClear := "\x1b[A\r\x1b[2K"
 
 	terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
@@ -533,7 +528,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		doorConfig, exists := e.GetDoorConfig(upperInput)
 		if !exists {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
-			msg := fmt.Sprintf(e.LoadedStrings.DoorNotFoundFormat, inputClean)
+			msg := fmt.Sprintf(e.Strings().DoorNotFoundFormat, inputClean)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
@@ -545,7 +540,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
 			slog.Warn("user denied access to door info",
 				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
-			msg := fmt.Sprintf(e.LoadedStrings.DoorAccessDenied, upperInput)
+			msg := fmt.Sprintf(e.Strings().DoorAccessDenied, upperInput)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)

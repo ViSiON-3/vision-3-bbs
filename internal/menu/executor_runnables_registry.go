@@ -26,7 +26,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 
 		if currentUser == nil {
 			slog.Warn("readmail called without logged in user", "node", nodeNumber)
-			msg := e.LoadedStrings.ExecReadmailLogin
+			msg := e.Strings().ExecReadmailLogin
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil {
 				slog.Error("failed writing readmail error message", "error", wErr)
@@ -34,7 +34,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			time.Sleep(1 * time.Second)
 			return nil, "", nil // No user change, no next action, no error
 		}
-		msg := fmt.Sprintf(e.LoadedStrings.ExecReadmailPlaceholder, currentUser.Handle)
+		msg := fmt.Sprintf(e.Strings().ExecReadmailPlaceholder, currentUser.Handle)
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
 			slog.Error("failed writing readmail placeholder message", "error", wErr)
@@ -58,7 +58,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 
 		if currentUser == nil {
 			slog.Warn("door called without logged in user", "node", nodeNumber, "door", doorName)
-			msg := e.LoadedStrings.ExecDoorLogin
+			msg := e.Strings().ExecDoorLogin
 			wErr := terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil {
 				slog.Error("failed writing door error message (not logged in)", "error", wErr)
@@ -71,7 +71,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		doorConfig, exists := e.GetDoorConfig(strings.ToUpper(doorName))
 		if !exists {
 			slog.Warn("door configuration not found", "door", doorName)
-			errMsg := fmt.Sprintf(e.LoadedStrings.ExecDoorNotConfigured, doorName)
+			errMsg := fmt.Sprintf(e.Strings().ExecDoorNotConfigured, doorName)
 			wErr := terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
 				slog.Error("failed writing door error message (not configured) to stderr", "error", wErr)
@@ -82,7 +82,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		// Check per-door access level
 		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
 			slog.Warn("user denied access to door", "node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", doorName, "requires", doorConfig.MinAccessLevel)
-			errFmt := e.LoadedStrings.DoorAccessDenied
+			errFmt := e.Strings().DoorAccessDenied
 			if strings.TrimSpace(errFmt) == "" {
 				errFmt = "\r\n|14Access denied to door: |11%s|07\r\n"
 			}
@@ -116,7 +116,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		if cmdErr != nil {
 			if errors.Is(cmdErr, ErrDoorBusy) {
 				slog.Info("door is busy", "node", nodeNumber, "door", doorName, "handle", currentUser.Handle)
-				busyFmt := e.LoadedStrings.DoorBusyFormat
+				busyFmt := e.Strings().DoorBusyFormat
 				if strings.TrimSpace(busyFmt) == "" {
 					busyFmt = "\r\n|14Door is currently in use: |11%s|07\r\n"
 				}

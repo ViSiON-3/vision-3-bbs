@@ -31,7 +31,7 @@ func runCfgScreenWidth(c *cmdCtx, args string) (*user.User, string, error) {
 	if current == 0 {
 		current = 80
 	}
-	prompt := fmt.Sprintf(e.LoadedStrings.CfgScreenWidthPrompt, current)
+	prompt := fmt.Sprintf(e.Strings().CfgScreenWidthPrompt, current)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)
@@ -49,7 +49,7 @@ func runCfgScreenWidth(c *cmdCtx, args string) (*user.User, string, error) {
 
 	val, parseErr := strconv.Atoi(input)
 	if parseErr != nil || val < 40 || val > 255 {
-		msg := e.LoadedStrings.CfgScreenWidthInvalid
+		msg := e.Strings().CfgScreenWidthInvalid
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return currentUser, "", nil
@@ -63,7 +63,7 @@ func runCfgScreenWidth(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	msg := fmt.Sprintf(e.LoadedStrings.CfgScreenWidthSet, val)
+	msg := fmt.Sprintf(e.Strings().CfgScreenWidthSet, val)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 	return currentUser, "", nil
@@ -86,7 +86,7 @@ func runCfgScreenHeight(c *cmdCtx, args string) (*user.User, string, error) {
 	if current == 0 {
 		current = 25
 	}
-	prompt := fmt.Sprintf(e.LoadedStrings.CfgScreenHeightPrompt, current)
+	prompt := fmt.Sprintf(e.Strings().CfgScreenHeightPrompt, current)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)
@@ -104,7 +104,7 @@ func runCfgScreenHeight(c *cmdCtx, args string) (*user.User, string, error) {
 
 	val, parseErr := strconv.Atoi(input)
 	if parseErr != nil || val < 21 || val > 60 {
-		msg := e.LoadedStrings.CfgScreenHeightInvalid
+		msg := e.Strings().CfgScreenHeightInvalid
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return currentUser, "", nil
@@ -118,7 +118,7 @@ func runCfgScreenHeight(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	msg := fmt.Sprintf(e.LoadedStrings.CfgScreenHeightSet, val)
+	msg := fmt.Sprintf(e.Strings().CfgScreenHeightSet, val)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 	return currentUser, "", nil
@@ -154,7 +154,7 @@ func runCfgTermType(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	msg := fmt.Sprintf(e.LoadedStrings.CfgTermTypeSet, strings.ToUpper(currentUser.OutputMode))
+	msg := fmt.Sprintf(e.Strings().CfgTermTypeSet, strings.ToUpper(currentUser.OutputMode))
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 	return currentUser, "", nil

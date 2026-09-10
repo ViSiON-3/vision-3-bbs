@@ -179,7 +179,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 	if currentUser == nil || userManager == nil {
 		return nil, "", nil
 	}
-	sysOpACS := fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel)
+	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Access denied.|07\r\n")), outputMode)
 		time.Sleep(1 * time.Second)

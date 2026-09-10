@@ -17,17 +17,16 @@ func notifyFixture(t *testing.T, notify bool, sessions ...*session.BbsSession) *
 	for _, s := range sessions {
 		reg.Register(s)
 	}
-	return &MenuExecutor{
-		SessionRegistry: reg,
-		ServerCfg: config.ServerConfig{
-			SysOpLevel:         255,
-			CoSysOpLevel:       250,
-			NotifySysopNewUser: notify,
-		},
-		LoadedStrings: config.StringsConfig{
-			NewUserSysopPage: "New user: %s signed up from node %d.",
-		},
-	}
+	e := &MenuExecutor{SessionRegistry: reg}
+	e.SetServerConfig(config.ServerConfig{
+		SysOpLevel:         255,
+		CoSysOpLevel:       250,
+		NotifySysopNewUser: notify,
+	})
+	e.SetStrings(config.StringsConfig{
+		NewUserSysopPage: "New user: %s signed up from node %d.",
+	})
+	return e
 }
 
 func sess(node, level int) *session.BbsSession {
@@ -112,7 +111,7 @@ func TestNotifyFiresRegardlessOfAutoValidate(t *testing.T) {
 	for _, autoValidate := range []bool{false, true} {
 		sysop := sess(2, 255)
 		e := notifyFixture(t, true, sysop)
-		e.ServerCfg.AutoValidateNewUsers = autoValidate
+		setServerField(e, func(c *config.ServerConfig) { c.AutoValidateNewUsers = autoValidate })
 
 		newUser := &user.User{Handle: "Newbie", Validated: autoValidate}
 		if paged, _ := e.notifySysopsOfNewUser(nil, newUser, 1); paged != 1 {
@@ -126,7 +125,7 @@ func TestNotifyFiresRegardlessOfAutoValidate(t *testing.T) {
 func TestNotifySkipsWhenTheStringIsEmpty(t *testing.T) {
 	sysop := sess(2, 255)
 	e := notifyFixture(t, true, sysop)
-	e.LoadedStrings.NewUserSysopPage = ""
+	setStringsField(e, func(c *config.StringsConfig) { c.NewUserSysopPage = "" })
 
 	if paged, queued := e.notifySysopsOfNewUser(nil, &user.User{Handle: "Newbie"}, 1); paged != 0 || queued != 0 {
 		t.Errorf("paged %d/queued %d with no configured string, want 0/0", paged, queued)
@@ -142,7 +141,8 @@ func TestNotifyToleratesMissingPieces(t *testing.T) {
 	if paged, _ := e.notifySysopsOfNewUser(nil, nil, 1); paged != 0 {
 		t.Errorf("nil user paged %d sessions", paged)
 	}
-	noReg := &MenuExecutor{ServerCfg: config.ServerConfig{NotifySysopNewUser: true}}
+	noReg := &MenuExecutor{}
+	noReg.SetServerConfig(config.ServerConfig{NotifySysopNewUser: true})
 	if paged, _ := noReg.notifySysopsOfNewUser(nil, &user.User{Handle: "Newbie"}, 1); paged != 0 {
 		t.Errorf("nil registry paged %d sessions", paged)
 	}
@@ -152,7 +152,7 @@ func TestNotifyToleratesMissingPieces(t *testing.T) {
 // online ones (paged) and non-sysops do not.
 func TestNotifyQueuesForOfflineSysops(t *testing.T) {
 	e := notifyFixture(t, true) // empty registry: nobody online
-	e.ServerCfg.DataDir = t.TempDir()
+	setServerField(e, func(c *config.ServerConfig) { c.DataDir = t.TempDir() })
 
 	offlineSysop := &user.User{ID: 1, Handle: "SysOp", AccessLevel: 255}
 	offlineCoSysop := &user.User{ID: 2, Handle: "Co", AccessLevel: 250}
@@ -168,7 +168,7 @@ func TestNotifyQueuesForOfflineSysops(t *testing.T) {
 		t.Fatalf("queued %d, want 2 (the two live sysop accounts)", queued)
 	}
 
-	path := sysopNoticesPath(e.ServerCfg.DataDir)
+	path := sysopNoticesPath(e.GetServerConfig().DataDir)
 	for _, u := range []*user.User{offlineSysop, offlineCoSysop} {
 		notices, err := drainSysopNotices(path, u.ID)
 		if err != nil {
@@ -190,7 +190,7 @@ func TestNotifyDoesNotDoubleNotifyOnlineSysops(t *testing.T) {
 	onlineSysop := sess(2, 255)
 	onlineSysop.User.ID = 1
 	e := notifyFixture(t, true, onlineSysop)
-	e.ServerCfg.DataDir = t.TempDir()
+	setServerField(e, func(c *config.ServerConfig) { c.DataDir = t.TempDir() })
 
 	sysopAccount := &user.User{ID: 1, Handle: "SysOp", AccessLevel: 255}
 	um := user.NewUserMgrForTest(sysopAccount)
@@ -199,7 +199,7 @@ func TestNotifyDoesNotDoubleNotifyOnlineSysops(t *testing.T) {
 	if paged != 1 || queued != 0 {
 		t.Fatalf("paged %d/queued %d, want 1/0 (paged online sysop must not also be queued)", paged, queued)
 	}
-	if notices, _ := drainSysopNotices(sysopNoticesPath(e.ServerCfg.DataDir), 1); len(notices) != 0 {
+	if notices, _ := drainSysopNotices(sysopNoticesPath(e.GetServerConfig().DataDir), 1); len(notices) != 0 {
 		t.Errorf("online sysop was also queued a login notice: %v", notices)
 	}
 }

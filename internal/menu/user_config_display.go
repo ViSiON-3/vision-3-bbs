@@ -74,14 +74,14 @@ func runCfgColor(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Display color palette
 	var palette strings.Builder
-	fmt.Fprintf(&palette, e.LoadedStrings.CfgColorSelectPrompt, slotName)
+	fmt.Fprintf(&palette, e.Strings().CfgColorSelectPrompt, slotName)
 	for i := 0; i < 16; i++ {
 		fmt.Fprintf(&palette, "|%02d  %2d  ", i, i)
 		if i == 7 {
 			palette.WriteString("\r\n")
 		}
 	}
-	palette.WriteString(e.LoadedStrings.CfgColorInputPrompt)
+	palette.WriteString(e.Strings().CfgColorInputPrompt)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(palette.String())), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)
@@ -99,7 +99,7 @@ func runCfgColor(c *cmdCtx, args string) (*user.User, string, error) {
 
 	val, parseErr := strconv.Atoi(input)
 	if parseErr != nil || val < 0 || val > 15 {
-		msg := e.LoadedStrings.CfgColorInvalid
+		msg := e.Strings().CfgColorInvalid
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return currentUser, "", nil
@@ -113,7 +113,7 @@ func runCfgColor(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	msg := fmt.Sprintf(e.LoadedStrings.CfgColorSet, slotName, val, val)
+	msg := fmt.Sprintf(e.Strings().CfgColorSet, slotName, val, val)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 	return currentUser, "", nil
@@ -144,7 +144,7 @@ func runCfgFileListMode(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	msg := fmt.Sprintf(e.LoadedStrings.CfgFileListModeSet, fileListModeDisplay(currentUser.FileListingMode))
+	msg := fmt.Sprintf(e.Strings().CfgFileListModeSet, fileListModeDisplay(currentUser.FileListingMode))
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 	return currentUser, "", nil
@@ -167,9 +167,9 @@ func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
 
 	boolStr := func(v bool) string {
 		if v {
-			return e.LoadedStrings.CfgToggleOn
+			return e.Strings().CfgToggleOn
 		}
-		return e.LoadedStrings.CfgToggleOff
+		return e.Strings().CfgToggleOff
 	}
 
 	for {
@@ -184,14 +184,14 @@ func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		var buf strings.Builder
-		buf.WriteString(e.LoadedStrings.CfgFileColumnsHeader)
-		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "N", "Name", displayState(c.Name))
-		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "S", "Size", displayState(c.Size))
-		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "D", "Date", displayState(c.Date))
-		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "L", "Downloads", displayState(c.Downloads))
-		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "U", "Uploader", displayState(c.Uploader))
-		fmt.Fprintf(&buf, e.LoadedStrings.CfgFileColumnsToggle, "E", "Description", displayState(c.Description))
-		buf.WriteString(e.LoadedStrings.CfgFileColumnsHeader) // reuse as prompt separator
+		buf.WriteString(e.Strings().CfgFileColumnsHeader)
+		fmt.Fprintf(&buf, e.Strings().CfgFileColumnsToggle, "N", "Name", displayState(c.Name))
+		fmt.Fprintf(&buf, e.Strings().CfgFileColumnsToggle, "S", "Size", displayState(c.Size))
+		fmt.Fprintf(&buf, e.Strings().CfgFileColumnsToggle, "D", "Date", displayState(c.Date))
+		fmt.Fprintf(&buf, e.Strings().CfgFileColumnsToggle, "L", "Downloads", displayState(c.Downloads))
+		fmt.Fprintf(&buf, e.Strings().CfgFileColumnsToggle, "U", "Uploader", displayState(c.Uploader))
+		fmt.Fprintf(&buf, e.Strings().CfgFileColumnsToggle, "E", "Description", displayState(c.Description))
+		buf.WriteString(e.Strings().CfgFileColumnsHeader) // reuse as prompt separator
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(buf.String())), outputMode)
 
 		input, err := readLineFromSessionIH(s, terminal)
@@ -208,7 +208,7 @@ func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
 				currentUser.FileListColumns = originalColumns
 				slog.Error("failed to save file column preferences", "node", nodeNumber, "error", err)
 			}
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.CfgFileColumnsSaved)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().CfgFileColumnsSaved)), outputMode)
 			time.Sleep(500 * time.Millisecond)
 			return currentUser, "", nil
 		}

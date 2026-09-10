@@ -118,7 +118,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	// 4. Dispatch based on file listing mode (user pref overrides server default)
 	fileListMode := st.currentUser.FileListingMode
 	if fileListMode == "" {
-		fileListMode = st.e.ServerCfg.FileListingMode
+		fileListMode = st.e.GetServerConfig().FileListingMode
 	}
 	if !strings.EqualFold(fileListMode, "classic") {
 		return runListFilesLightbar(st)

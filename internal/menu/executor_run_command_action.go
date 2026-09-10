@@ -47,7 +47,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 					return "LOGOFF", "", nil, nil
 				}
 				slog.Error("RUN function failed", "target", runTarget, "error", runErr)
-				errMsg := fmt.Sprintf(e.LoadedStrings.ExecRunCommandError, runTarget, runErr)
+				errMsg := fmt.Sprintf(e.Strings().ExecRunCommandError, runTarget, runErr)
 				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 				if wErr != nil {
 					slog.Error("failed writing RUN command error message", "error", wErr)
@@ -73,7 +73,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			return "CONTINUE", "", authUser, nil
 		} else {
 			slog.Warn("no internal function registered for RUN", "target", runTarget)
-			msg := fmt.Sprintf(e.LoadedStrings.ExecRunCommandNotFound, runTarget)
+			msg := fmt.Sprintf(e.Strings().ExecRunCommandNotFound, runTarget)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			if wErr != nil {
 				slog.Error("failed writing missing RUN command message", "error", wErr)
@@ -93,7 +93,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 					return "LOGOFF", "", nil, nil
 				}
 				slog.Error("DOOR execution failed", "door", doorTarget, "error", doorErr)
-				errMsg := fmt.Sprintf(e.LoadedStrings.ExecRunDoorError, doorTarget, doorErr)
+				errMsg := fmt.Sprintf(e.Strings().ExecRunDoorError, doorTarget, doorErr)
 				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 				if wErr != nil {
 					slog.Error("failed writing DOOR command error message", "error", wErr)

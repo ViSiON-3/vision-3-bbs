@@ -98,7 +98,7 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 
 	totalNew := 0
 	lineCount := 0
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	pageLines := termHeight - 4
 	if pageLines < 5 {
 		pageLines = 5
@@ -170,9 +170,9 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	// Summary
 	if totalNew == 0 {
 		terminalio.WriteProcessedBytes(terminal,
-			ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileNewscanNoNew)), outputMode)
+			ansi.ReplacePipeCodes([]byte(e.Strings().FileNewscanNoNew)), outputMode)
 	} else {
-		msg := fmt.Sprintf(e.LoadedStrings.FileNewscanComplete, totalNew)
+		msg := fmt.Sprintf(e.Strings().FileNewscanComplete, totalNew)
 		terminalio.WriteProcessedBytes(terminal,
 			ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	}
@@ -203,7 +203,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	termHeight := c.termHeight
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanConfigLoginRequired)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanConfigLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -212,7 +212,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 
 	allAreas := e.FileMgr.ListAreas()
 	if len(allAreas) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoAreasAvailable)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAreasAvailable)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -264,7 +264,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(accessibleAreas) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoAccessibleAreas)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAccessibleAreas)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -435,7 +435,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, headerContent, outputMode)
 		}
 	} else {
-		header := e.LoadedStrings.FileNewscanConfigHeader
+		header := e.Strings().FileNewscanConfigHeader
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header)), outputMode)
 	}
 
@@ -552,9 +552,9 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			if err := userManager.UpdateUser(currentUser); err != nil {
 				slog.Error("failed to save file newscan config", "node", nodeNumber, "error", err)
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanConfigError)), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanConfigError)), outputMode)
 			} else {
-				msg := fmt.Sprintf(e.LoadedStrings.FileNewscanConfigSaved, len(taggedTags))
+				msg := fmt.Sprintf(e.Strings().FileNewscanConfigSaved, len(taggedTags))
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			}
 			time.Sleep(1 * time.Second)

@@ -54,12 +54,12 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	currentAreaID := currentUser.CurrentFileAreaID
 	if currentAreaID <= 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileNoAreaSelected)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", currentUser, "", nil
 	}
 
-	prompt := fmt.Sprintf(e.LoadedStrings.FilePromptFormat, promptVerb)
+	prompt := fmt.Sprintf(e.Strings().FilePromptFormat, promptVerb)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)
@@ -77,7 +77,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	record, err := findFileInArea(e.FileMgr, currentAreaID, filename)
 	if err != nil {
-		msg := fmt.Sprintf(e.LoadedStrings.FileNotFoundFormat, filename)
+		msg := fmt.Sprintf(e.Strings().FileNotFoundFormat, filename)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", currentUser, "", nil
@@ -86,7 +86,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	filePath, err := e.FileMgr.GetFilePath(record.ID)
 	if err != nil {
 		slog.Error("failed to get path for file", "node", nodeNumber, "id", record.ID, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileLocateError)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileLocateError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", currentUser, "", nil
 	}
@@ -121,9 +121,9 @@ func runViewFile(c *cmdCtx, args string) (*user.User, string, error) {
 			_, termHeight = getTerminalSize(s)
 		}
 		displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight,
-			e.LoadedStrings.FileViewingHeader, e.LoadedStrings.FileEndOfFile,
-			e.LoadedStrings.FileMorePrompt, e.LoadedStrings.FilePausePrompt,
-			e.LoadedStrings.FileOpenError)
+			e.Strings().FileViewingHeader, e.Strings().FileEndOfFile,
+			e.Strings().FileMorePrompt, e.Strings().FilePausePrompt,
+			e.Strings().FileOpenError)
 	}
 
 	return currentUser, "", nil
@@ -150,9 +150,9 @@ func runTypeTextFile(c *cmdCtx, args string) (*user.User, string, error) {
 		_, termHeight = getTerminalSize(s)
 	}
 	displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight,
-		e.LoadedStrings.FileViewingHeader, e.LoadedStrings.FileEndOfFile,
-		e.LoadedStrings.FileMorePrompt, e.LoadedStrings.FilePausePrompt,
-		e.LoadedStrings.FileOpenError)
+		e.Strings().FileViewingHeader, e.Strings().FileEndOfFile,
+		e.Strings().FileMorePrompt, e.Strings().FilePausePrompt,
+		e.Strings().FileOpenError)
 
 	return currentUser, "", nil
 }
@@ -162,7 +162,7 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 	filePath, err := e.FileMgr.GetFilePath(record.ID)
 	if err != nil {
 		slog.Error("failed to get path for file", "id", record.ID, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileLocateError)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileLocateError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return
 	}
@@ -176,9 +176,9 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 			_, termHeight = getTerminalSize(s)
 		}
 		displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight,
-			e.LoadedStrings.FileViewingHeader, e.LoadedStrings.FileEndOfFile,
-			e.LoadedStrings.FileMorePrompt, e.LoadedStrings.FilePausePrompt,
-			e.LoadedStrings.FileOpenError)
+			e.Strings().FileViewingHeader, e.Strings().FileEndOfFile,
+			e.Strings().FileMorePrompt, e.Strings().FilePausePrompt,
+			e.Strings().FileOpenError)
 	}
 }
 

@@ -28,7 +28,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	currentOnly bool, termWidth int, termHeight int) (*user.User, string, error) {
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanLoginRequired)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -59,8 +59,8 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return nil, "", nil
 	}
 
-	hiColor := e.Theme.YesNoHighlightColor
-	loColor := e.Theme.YesNoRegularColor
+	hiColor := e.Theme().YesNoHighlightColor
+	loColor := e.Theme().YesNoRegularColor
 
 	// Per-message To/From/date/range filter (nil for a plain newscan). The
 	// reader and its message list both apply it, so navigation never lands on
@@ -69,7 +69,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// Display "Scanning Messages..."
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanHeader)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanHeader)), outputMode)
 
 	nonStop := false
 	quitNewScan := false
@@ -77,14 +77,14 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// If current area only, scan just that area
 	if scanCfg.WhichAreas == 3 {
 		if currentAreaID <= 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoAreaSelected)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAreaSelected)), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil
 		}
 
 		totalCount, _ := e.MessageMgr.GetMessageCountForArea(currentAreaID)
 		if totalCount == 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoMessages)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoMessages)), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", nil
 		}
@@ -94,9 +94,9 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			// Same outcome as the multi-area scan: a search that matched
 			// nothing says so, a plain newscan with nothing new completes.
 			if msgFilter != nil {
-				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
+				showScanNotice(terminal, outputMode, e.Strings().ScanNoMatches)
 			} else {
-				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanComplete)
+				showScanNotice(terminal, outputMode, e.Strings().ScanComplete)
 			}
 			return nil, "", nil
 		}
@@ -138,7 +138,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// If tagged areas mode, check if user has any tagged areas
 	if scanCfg.WhichAreas == 1 && len(currentUser.TaggedMessageAreaTags) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoTaggedAreas)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoTaggedAreas)), outputMode)
 		time.Sleep(2 * time.Second)
 		return nil, "", nil
 	}
@@ -238,7 +238,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(merged), outputMode)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		} else {
-			boardMsg := fmt.Sprintf(e.LoadedStrings.ScanAreaProgress,
+			boardMsg := fmt.Sprintf(e.Strings().ScanAreaProgress,
 				area.Tag, startMsg, totalCount)
 			boardMsg = strings.TrimRight(boardMsg, "\r\n")
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(boardMsg)), outputMode)
@@ -266,7 +266,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				continue
 			case 'J': // Jump to message #
 				prevStart := startMsg
-				handleJump(reader, terminal, outputMode, &startMsg, totalCount, e.LoadedStrings.MsgJumpPrompt, e.LoadedStrings.MsgInvalidMsgNum)
+				handleJump(reader, terminal, outputMode, &startMsg, totalCount, e.Strings().MsgJumpPrompt, e.Strings().MsgInvalidMsgNum)
 				// Match Pascal: if the jump succeeded, mark everything before
 				// the new start as read (NScan.LastRead[Cb] := Valu(Inpt)-1).
 				if startMsg != prevStart && startMsg > 1 {
@@ -316,9 +316,9 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	if msgFilter != nil && !scannedAny {
-		showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMatches)
+		showScanNotice(terminal, outputMode, e.Strings().ScanNoMatches)
 	} else {
-		showScanNotice(terminal, outputMode, e.LoadedStrings.ScanComplete)
+		showScanNotice(terminal, outputMode, e.Strings().ScanComplete)
 	}
 
 	return currentUser, "", nil
@@ -336,7 +336,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	outputMode := c.outputMode
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.UpdatePtrsLoginRequired)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -344,13 +344,13 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	scanIH := getSessionIH(s)
 
 	cancel := func() (*user.User, string, error) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.UpdatePtrsCancelled)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsCancelled)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	// Prompt for target date
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.UpdatePtrsDatePrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsDatePrompt)), outputMode)
 	dateInput, err := readScanLine(scanIH, terminal, outputMode, 10)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -377,14 +377,14 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	default:
 		t, ok := parseScanDate(dateInput)
 		if !ok {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanInvalidDate)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanInvalidDate)), outputMode)
 			return cancel()
 		}
 		scanDate = t.Unix()
 	}
 
 	// Prompt for scope: current conference or all
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.UpdatePtrsScopePrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsScopePrompt)), outputMode)
 	scopeKey, keyErr := scanIH.ReadKey()
 	if keyErr != nil {
 		if errors.Is(keyErr, io.EOF) {
@@ -448,9 +448,9 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	}
 
 	if saveErr {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.UpdatePtrsError)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsError)), outputMode)
 	} else {
-		msg := fmt.Sprintf(e.LoadedStrings.UpdatePtrsSuccess, updatedCount)
+		msg := fmt.Sprintf(e.Strings().UpdatePtrsSuccess, updatedCount)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	}
 	time.Sleep(1 * time.Second)

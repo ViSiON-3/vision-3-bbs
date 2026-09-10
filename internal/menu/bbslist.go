@@ -184,7 +184,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 		visibleRows = 3
 	}
 
-	hiColorSeq := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
+	hiColorSeq := colorCodeToAnsi(e.Theme().YesNoHighlightColor)
 
 	// --- Render helpers ---
 

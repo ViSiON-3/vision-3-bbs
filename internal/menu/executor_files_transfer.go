@@ -42,7 +42,7 @@ func (e *MenuExecutor) selectTransferProtocol(s ssh.Session, terminal *term.Term
 		connType = transfer.ConnTypeTelnet
 	}
 	var available []transfer.ProtocolConfig
-	for _, p := range e.Protocols {
+	for _, p := range e.Protocols() {
 		if p.ConnectionType == transfer.ConnTypeAny || p.ConnectionType == connType {
 			available = append(available, p)
 		}

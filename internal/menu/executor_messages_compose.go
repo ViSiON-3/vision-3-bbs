@@ -102,7 +102,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	// === PASCAL-STYLE MESSAGE POSTING FLOW ===
 
 	// 2. Prompt for Title (30 chars)
-	titlePrompt := e.LoadedStrings.MsgTitleStr
+	titlePrompt := e.Strings().MsgTitleStr
 	if titlePrompt == "" {
 		titlePrompt = "|07Title: |15"
 	}
@@ -131,7 +131,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 
 	// 3. Prompt for To (24 chars, default "All")
-	toPrompt := e.LoadedStrings.MsgToStr
+	toPrompt := e.Strings().MsgToStr
 	if toPrompt == "" {
 		toPrompt = "|07To: |15"
 	}
@@ -161,9 +161,9 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 			confAllowAnon = conf.AllowAnon
 		}
 	}
-	allowAnon := anonymousPostingAllowed(currentUser.AccessLevel, e.ServerCfg.AnonymousLevel, area.AllowAnon, confAllowAnon)
+	allowAnon := anonymousPostingAllowed(currentUser.AccessLevel, e.GetServerConfig().AnonymousLevel, area.AllowAnon, confAllowAnon)
 	if allowAnon {
-		anonPrompt := e.LoadedStrings.MsgAnonStr
+		anonPrompt := e.Strings().MsgAnonStr
 		if anonPrompt == "" {
 			anonPrompt = "|07Anonymous? @"
 		}
@@ -187,7 +187,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		fromName = currentUser.RealName
 	}
 	if isAnonymous {
-		fromName = strings.TrimSpace(e.LoadedStrings.AnonymousName)
+		fromName = strings.TrimSpace(e.Strings().AnonymousName)
 		if fromName == "" {
 			fromName = "Anonymous"
 		}

@@ -35,7 +35,7 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	sysOpACS := fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel)
+	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		msg := "\r\n|01Access denied.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -43,7 +43,7 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	retentionDays := e.ServerCfg.DeletedUserRetentionDays
+	retentionDays := e.GetServerConfig().DeletedUserRetentionDays
 	if retentionDays < 0 {
 		msg := "\r\n|14User purge is disabled (deletedUserRetentionDays = -1).|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)

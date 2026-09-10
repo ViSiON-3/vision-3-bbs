@@ -84,7 +84,7 @@ func runNewscanAutoJoin(c *cmdCtx) (*user.User, error) {
 
 	// Phase 2: one prompt per new network, persisted immediately after each
 	// answer so a disconnect mid-loop only loses the undecided remainder.
-	promptTpl := e.LoadedStrings.NewscanNewNetworkPrompt
+	promptTpl := e.Strings().NewscanNewNetworkPrompt
 	if promptTpl == "" {
 		promptTpl = "|15New network |14%s|15 is available - add to your newscan?"
 	}

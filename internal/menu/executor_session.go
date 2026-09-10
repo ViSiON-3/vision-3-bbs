@@ -213,7 +213,7 @@ func (e *MenuExecutor) showCursorIfHidden(terminal *term.Terminal, outputMode an
 // holdScreen displays the configured PauseString (centered) and waits for the
 // user to press Enter before continuing. Matches Pascal HoldScreen behaviour.
 func (e *MenuExecutor) holdScreen(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, termWidth, termHeight int) {
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}

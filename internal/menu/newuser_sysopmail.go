@@ -146,7 +146,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 		slog.Warn("failed to display NUEMAIL.ANS", "node", nodeNumber, "error", err)
 	}
 	if !displayed {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NewUserEmailPrompt)), outputMode)
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NewUserEmailPrompt)), outputMode)
 	}
 
 	// Auto-pause before proceeding into the editor.
@@ -156,7 +156,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 	// Default subject carries the handle so the SysOp can tell applications
 	// apart at a glance in their inbox. The %s guard tolerates a sysop who
 	// edited the subject string and removed the placeholder.
-	subjectFmt := e.LoadedStrings.NewUserEmailSubject
+	subjectFmt := e.Strings().NewUserEmailSubject
 	subject := subjectFmt
 	if strings.Contains(subjectFmt, "%s") {
 		subject = fmt.Sprintf(subjectFmt, newUser.Handle)
@@ -194,7 +194,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 
 		if !saved || strings.TrimSpace(body) == "" {
 			slog.Info("new user tried to skip the sysop message", "node", nodeNumber, "handle", newUser.Handle, "saved", saved)
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NewUserEmailRequired)), outputMode)
+			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NewUserEmailRequired)), outputMode)
 			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 			continue
 		}

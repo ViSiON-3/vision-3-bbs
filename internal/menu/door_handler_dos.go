@@ -168,7 +168,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 
 	// Determine dosemu binary path — use dosemu2.bin directly to bypass
 	// the bash wrapper script which mangles backslashes via eval.
-	dosemuPath := ctx.Executor.ServerCfg.DosemuPath
+	dosemuPath := ctx.Executor.GetServerConfig().DosemuPath
 	if dosemuPath == "" {
 		dosemuPath = "/usr/libexec/dosemu2/dosemu2.bin"
 	}

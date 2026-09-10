@@ -55,9 +55,9 @@ func runCfgViewConfig(c *cmdCtx, args string) (*user.User, string, error) {
 
 	boolStr := func(v bool) string {
 		if v {
-			return e.LoadedStrings.CfgToggleOn
+			return e.Strings().CfgToggleOn
 		}
-		return e.LoadedStrings.CfgToggleOff
+		return e.Strings().CfgToggleOff
 	}
 
 	width := currentUser.ScreenWidth
@@ -74,22 +74,22 @@ func runCfgViewConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	lines := []string{
-		fmt.Sprintf(e.LoadedStrings.CfgViewScreenWidth, width),
-		fmt.Sprintf(e.LoadedStrings.CfgViewScreenHeight, height),
-		fmt.Sprintf(e.LoadedStrings.CfgViewTermType, strings.ToUpper(outMode)),
-		fmt.Sprintf(e.LoadedStrings.CfgViewHotKeys, boolStr(currentUser.HotKeys)),
-		fmt.Sprintf(e.LoadedStrings.CfgViewMorePrompts, boolStr(currentUser.MorePrompts)),
-		fmt.Sprintf(e.LoadedStrings.CfgViewFileListMode, fileListModeDisplay(currentUser.FileListingMode)),
-		fmt.Sprintf(e.LoadedStrings.CfgViewMsgHeader, currentUser.MsgHdr),
-		fmt.Sprintf(e.LoadedStrings.CfgViewCustomPrompt, currentUser.CustomPrompt),
+		fmt.Sprintf(e.Strings().CfgViewScreenWidth, width),
+		fmt.Sprintf(e.Strings().CfgViewScreenHeight, height),
+		fmt.Sprintf(e.Strings().CfgViewTermType, strings.ToUpper(outMode)),
+		fmt.Sprintf(e.Strings().CfgViewHotKeys, boolStr(currentUser.HotKeys)),
+		fmt.Sprintf(e.Strings().CfgViewMorePrompts, boolStr(currentUser.MorePrompts)),
+		fmt.Sprintf(e.Strings().CfgViewFileListMode, fileListModeDisplay(currentUser.FileListingMode)),
+		fmt.Sprintf(e.Strings().CfgViewMsgHeader, currentUser.MsgHdr),
+		fmt.Sprintf(e.Strings().CfgViewCustomPrompt, currentUser.CustomPrompt),
 		"",
-		fmt.Sprintf(e.LoadedStrings.CfgViewPromptColor, currentUser.Colors[0], currentUser.Colors[0], currentUser.Colors[1], currentUser.Colors[1]),
-		fmt.Sprintf(e.LoadedStrings.CfgViewTextColor, currentUser.Colors[2], currentUser.Colors[2], currentUser.Colors[3], currentUser.Colors[3]),
-		fmt.Sprintf(e.LoadedStrings.CfgViewText2Color, currentUser.Colors[4], currentUser.Colors[4], currentUser.Colors[5], currentUser.Colors[5]),
-		fmt.Sprintf(e.LoadedStrings.CfgViewBarColor, currentUser.Colors[6], currentUser.Colors[6]),
+		fmt.Sprintf(e.Strings().CfgViewPromptColor, currentUser.Colors[0], currentUser.Colors[0], currentUser.Colors[1], currentUser.Colors[1]),
+		fmt.Sprintf(e.Strings().CfgViewTextColor, currentUser.Colors[2], currentUser.Colors[2], currentUser.Colors[3], currentUser.Colors[3]),
+		fmt.Sprintf(e.Strings().CfgViewText2Color, currentUser.Colors[4], currentUser.Colors[4], currentUser.Colors[5], currentUser.Colors[5]),
+		fmt.Sprintf(e.Strings().CfgViewBarColor, currentUser.Colors[6], currentUser.Colors[6]),
 		"",
-		fmt.Sprintf(e.LoadedStrings.CfgViewRealName, currentUser.RealName),
-		fmt.Sprintf(e.LoadedStrings.CfgViewNote, currentUser.PrivateNote),
+		fmt.Sprintf(e.Strings().CfgViewRealName, currentUser.RealName),
+		fmt.Sprintf(e.Strings().CfgViewNote, currentUser.PrivateNote),
 	}
 
 	// Append auto-signature info
@@ -116,7 +116,7 @@ func runCfgViewConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, buf.Bytes(), outputMode)
 
 	// Pause
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}

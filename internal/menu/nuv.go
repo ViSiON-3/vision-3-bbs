@@ -128,7 +128,7 @@ func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, 
 	wv(terminal, fmt.Sprintf("\r\n|15New User Voting - Candidate #%d\r\n|08%s\r\n", idx, strings.Repeat("\xc4", 50)), outputMode)
 
 	// V2: NUV_Voting_On = '|08U|07s|15er |08N|07a|15me|09: |15|NA'
-	nameStr := e.LoadedStrings.WhosBeingVotedOn
+	nameStr := e.Strings().WhosBeingVotedOn
 	if nameStr == "" {
 		nameStr = "|08U|07s|15er |08N|07a|15me|09: |15|NA"
 	}
@@ -137,7 +137,7 @@ func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, 
 
 	// V2: NUV_Yes_Votes includes threshold: '...|YV  |09(|13Required|01: |05|YT Votes|09)'
 	// Macros: |YV = current yes votes, |YT = yes threshold from config
-	yesStr := e.LoadedStrings.NumYesVotes
+	yesStr := e.Strings().NumYesVotes
 	if yesStr == "" {
 		yesStr = "|08Y|07e|15s |08V|07o|15tes|09: |15|YV"
 		if cfg.NUVYesVotes > 0 {
@@ -150,7 +150,7 @@ func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, 
 
 	// V2: NUV_No_Votes includes threshold: '...|NV  |09(|13Deletion|01: |05|NT Votes|09)'
 	// Macros: |NV = current no votes, |NT = no threshold from config
-	noStr := e.LoadedStrings.NumNoVotes
+	noStr := e.Strings().NumNoVotes
 	if noStr == "" {
 		noStr = "|08N|07o |08V|07o|15tes|09: |15|NV"
 		if cfg.NUVNoVotes > 0 {
@@ -164,7 +164,7 @@ func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, 
 	wv(terminal, fmt.Sprintf("|07Added      : |11%s\r\n", c.When.Format("01/02/2006")), outputMode)
 
 	// V2: NUV_Comment_Header = '|08C|07o|15mments |08S|07o |08F|07a|15r|09...'
-	commentHdr := e.LoadedStrings.NUVCommentHeader
+	commentHdr := e.Strings().NUVCommentHeader
 	if commentHdr == "" {
 		commentHdr = "\r\n|08C|07o|15mments |08S|07o |08F|07a|15r|09..."
 	}
@@ -251,7 +251,7 @@ func nuvPromptComment(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	currentUser *user.User, nd *NUVData, c *NUVCandidate,
 	outputMode ansi.OutputMode) {
 
-	commentPrompt := e.LoadedStrings.EnterNUVCommentPrompt
+	commentPrompt := e.Strings().EnterNUVCommentPrompt
 	if commentPrompt == "" {
 		// V2: '|08E|07n|15ter |08a C|07o|15mment |08o|07n |15|NA ...'
 		commentPrompt = "\r\n|08E|07n|15ter |08a C|07o|15mment |08o|07n |15|NA |09(|07Cr|09/|07Aborts|09)\r\n|09: "
@@ -319,7 +319,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	cfg := e.GetServerConfig()
 
 	// V2: NUV_Vote_Prompt = '|09New User Voting |01- |09(|10?|02/|10Help|09): '
-	votePrompt := e.LoadedStrings.NUVVotePrompt
+	votePrompt := e.Strings().NUVVotePrompt
 	if votePrompt == "" {
 		votePrompt = "|09New User Voting |01- |09(|10?|02/|10Help|09): "
 	}
@@ -425,7 +425,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 							wv(terminal, "\r\n|07Vote changed to |10YES\r\n", outputMode)
 						} else {
 							// V2: NUV_Yes_Cast = '|04Y|12e|14s |09Vote Cast!'
-							yesMsg := e.LoadedStrings.YesVoteCast
+							yesMsg := e.Strings().YesVoteCast
 							if yesMsg == "" {
 								yesMsg = "|04Y|12e|14s |09Vote Cast!"
 							}
@@ -436,7 +436,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 							wv(terminal, "\r\n|07Vote changed to |12NO\r\n", outputMode)
 						} else {
 							// V2: NUV_No_Cast = '|04N|12a|14h |09Vote Cast!'
-							noMsg := e.LoadedStrings.NoVoteCast
+							noMsg := e.Strings().NoVoteCast
 							if noMsg == "" {
 								noMsg = "|04N|12a|14h |09Vote Cast!"
 							}

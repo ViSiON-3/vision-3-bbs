@@ -35,7 +35,7 @@ func TestDropfileName(t *testing.T) {
 
 func newTestDoorCtx() *DoorCtx {
 	return &DoorCtx{
-		Executor:    &MenuExecutor{ServerCfg: config.ServerConfig{BoardName: "Test BBS"}},
+		Executor:    newExecutorWithServerConfig(config.ServerConfig{BoardName: "Test BBS"}),
 		User:        doorUserInfo{ID: 1, Handle: "Neo", RealName: "Thomas Anderson", AccessLevel: 50, ScreenWidth: 80, ScreenHeight: 25},
 		NodeNumStr:  "1",
 		UserIDStr:   "1",
