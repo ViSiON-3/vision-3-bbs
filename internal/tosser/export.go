@@ -322,7 +322,7 @@ func (t *Tosser) createOutboundNetmailPacket(link *linkConfig, msgs []pendingNet
 		}
 		kludges = append(kludges, "MSGID: "+msgIDStr)
 		kludges = append(kludges, "PID: "+jam.FormatPID())
-		kludges = append(kludges, pm.msg.Kludges...)
+		kludges = append(kludges, stripAreaKludges(pm.msg.Kludges)...)
 
 		parsed := &ftn.ParsedBody{
 			Area:    "", // No AREA kludge for netmail
@@ -447,8 +447,11 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 		// Add PID
 		parsed.Kludges = append(parsed.Kludges, "PID: "+jam.FormatPID())
 
-		// Existing kludges from the message
-		parsed.Kludges = append(parsed.Kludges, pm.msg.Kludges...)
+		// Existing kludges from the message. The AREA line is written from
+		// the area tag above, so any stored AREA kludge is dropped: older
+		// messages carry one in the JAM base and emitting it again would
+		// put the tag in the body twice.
+		parsed.Kludges = append(parsed.Kludges, stripAreaKludges(pm.msg.Kludges)...)
 
 		// SEEN-BY and PATH
 		if pm.msg.SeenBy != "" {
@@ -514,6 +517,20 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 
 	slog.Info("exported messages", "count", len(packedMsgs), "file", finalName, "link", link.Address)
 	return len(packedMsgs), nil
+}
+
+// stripAreaKludges drops AREA lines from stored kludges. The exporter writes
+// the AREA line itself from the area tag (and netmail has none at all), so a
+// stored copy would only duplicate it.
+func stripAreaKludges(kludges []string) []string {
+	out := make([]string, 0, len(kludges))
+	for _, k := range kludges {
+		if ftn.IsAreaLine(k) {
+			continue
+		}
+		out = append(out, k)
+	}
+	return out
 }
 
 // linkMsgAttr returns the FTN packet attribute flags for a link's delivery flavour.

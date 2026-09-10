@@ -26,13 +26,15 @@ Logic lives in `internal/jam/msgtype.go` and is called by `internal/message/mana
 
 When writing **echomail** with `WriteMessageExt`, Vision3 automatically adds:
 
-- `AREA:` kludge
 - `MSGID` (unique serial per base), generated when the message has none
 - `PID`/`TID` identifiers
 - Tearline (`--- ViSiON/3 vX.Y.Z/Platform`, assigned by the software)
 - Origin line (`* Origin: ... (address)`)
 
-`SEEN-BY` and `PATH` are the tosser's job and are not added here.
+`SEEN-BY` and `PATH` are the tosser's job and are not added here. Neither is
+the `AREA:` line: the echo area is implicit in the message base, and the tosser
+writes the FTS-0004 `AREA:` line from the area's echo tag when it packs the
+message for export.
 
 **Netmail** takes none of the above: `WriteMessageExt` writes an `MSGID`
 subfield only when the message already carries one, and adds no kludges,

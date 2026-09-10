@@ -339,3 +339,64 @@ func TestReadPacketRejectsOversizedInput(t *testing.T) {
 type zeroReader struct{}
 
 func (zeroReader) Read(p []byte) (int, error) { return len(p), nil }
+
+func TestParseAreaLine(t *testing.T) {
+	tests := []struct {
+		line    string
+		wantTag string
+		wantOK  bool
+	}{
+		{"AREA:FSX_TST", "FSX_TST", true},          // FTS-0004 form
+		{"AREA: FSX_TST", "FSX_TST", true},         // padded by some tossers
+		{"\x01AREA:FSX_TST", "FSX_TST", true},      // SOH-prefixed by some tossers
+		{" \x01 AREA:  FSX_TST ", "FSX_TST", true}, // padded around the SOH
+		{"area:fsx_tst", "fsx_tst", true},
+		{"AREAFIX", "", false},
+		{"MSGID: 21:4/158.1 6a6508de", "", false},
+		{"", "", false},
+		{"AREA:", "", false},    // no tag: keep the line, don't route on it
+		{"AREA:   ", "", false}, // same, padding only
+	}
+	for _, tc := range tests {
+		gotTag, gotOK := ParseAreaLine(tc.line)
+		if gotOK != tc.wantOK || gotTag != tc.wantTag {
+			t.Errorf("ParseAreaLine(%q) = (%q, %v), want (%q, %v)",
+				tc.line, gotTag, gotOK, tc.wantTag, tc.wantOK)
+		}
+	}
+}
+
+func TestIsAreaLine(t *testing.T) {
+	// IsAreaLine is the discard check, so it must also catch a tagless AREA
+	// line that ParseAreaLine deliberately rejects.
+	for _, line := range []string{"AREA:FSX_TST", "\x01AREA: FSX_TST", " \x01 area:fsx_tst", "AREA:", "AREA:  "} {
+		if !IsAreaLine(line) {
+			t.Errorf("IsAreaLine(%q) = false, want true", line)
+		}
+	}
+	for _, line := range []string{"", "AREAFIX", "MSGID: 21:4/158.1 6a6508de", "The AREA: is closed"} {
+		if IsAreaLine(line) {
+			t.Errorf("IsAreaLine(%q) = true, want false", line)
+		}
+	}
+}
+
+// TestParseBodyTolerantAreaLine verifies that an inbound message whose AREA
+// line carries a SOH prefix and padding is still routed to its echo area
+// instead of being mistaken for netmail.
+func TestParseBodyTolerantAreaLine(t *testing.T) {
+	body := "\x01AREA: FSX_TST\r\x01MSGID: 21:4/158.1 6a6508de\rHello\r"
+	parsed := ParsePackedMessageBody(body)
+
+	if parsed.Area != "FSX_TST" {
+		t.Errorf("Area = %q, want %q", parsed.Area, "FSX_TST")
+	}
+	for _, k := range parsed.Kludges {
+		if _, isArea := ParseAreaLine(k); isArea {
+			t.Errorf("AREA line kept as a kludge: %q", parsed.Kludges)
+		}
+	}
+	if parsed.Text != "Hello" {
+		t.Errorf("Text = %q, want %q", parsed.Text, "Hello")
+	}
+}

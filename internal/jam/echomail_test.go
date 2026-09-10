@@ -44,18 +44,19 @@ func TestWriteMessageExtEchomail(t *testing.T) {
 		t.Errorf("PID = %q, should start with ViSiON/3", got.PID)
 	}
 
-	// Verify kludges contain AREA and TID
+	// Verify kludges contain TID but not AREA — the echo area is implicit in
+	// the base, and the tosser writes the AREA line at export time.
 	var hasArea, hasTID bool
 	for _, k := range got.Kludges {
-		if k == "AREA:FSX_GEN" {
+		if isAreaKludge(k) {
 			hasArea = true
 		}
 		if strings.HasPrefix(k, "TID: ") {
 			hasTID = true
 		}
 	}
-	if !hasArea {
-		t.Error("missing AREA kludge")
+	if hasArea {
+		t.Errorf("AREA kludge should not be stored, kludges = %q", got.Kludges)
 	}
 	if !hasTID {
 		t.Error("missing TID kludge")
@@ -199,6 +200,19 @@ func TestDetermineMessageType(t *testing.T) {
 		got := DetermineMessageType(tt.areaType, tt.echoTag)
 		if got != tt.want {
 			t.Errorf("DetermineMessageType(%q, %q) = %d, want %d", tt.areaType, tt.echoTag, got, tt.want)
+		}
+	}
+}
+
+func TestIsAreaKludge(t *testing.T) {
+	for _, k := range []string{"AREA:FSX_GEN", "AREA: FSX_GEN", "\x01AREA:FSX_GEN", " \x01 area:fsx_gen", "AREA:"} {
+		if !isAreaKludge(k) {
+			t.Errorf("isAreaKludge(%q) = false, want true", k)
+		}
+	}
+	for _, k := range []string{"", "AREAFIX", "TID: ViSiON/3", "MSGID: 21:3/110 1234"} {
+		if isAreaKludge(k) {
+			t.Errorf("isAreaKludge(%q) = true, want false", k)
 		}
 	}
 }
