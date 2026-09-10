@@ -965,7 +965,7 @@ the TUI signals the BBS once every file in the save has been written.
 | `configs/conferences.json` | A caller whose conference was removed sees "None" and re-selects |
 | `configs/archivers.json` | Re-read on each archive operation |
 | IP blocklist/allowlist files | Watched separately, reloaded on save |
-| `configs/ftn.json` | Picked up by the binkd mailer on its next cycle |
+| `configs/ftn.json` | Origin lines apply on save; the mailer's runtime settings (port, log level, links) apply on its next cycle. Enabling or disabling the binkd mailer itself still requires a restart |
 
 Connection-security settings in `config.json` — `maxNodes`, `maxConnectionsPerIP`,
 `maxFailedLogins`, `lockoutMinutes`, the connection rate limiter, and the
@@ -1010,6 +1010,11 @@ difference is that nothing touches it automatically, so it is the explicit
 **Still requires a restart:**
 
 - Listening ports and hosts (`sshPort`, `sshHost`, `telnetPort`, `telnetHost`)
+- `boardName`'s startup copies: the WFC header, the V3Net identity sent in
+  subscribe requests, and the QWK **API** service's packet headers.
+  Everything else follows a rename immediately: message origin lines,
+  V3Net wire messages and blank-origin tearlines, and interactive QWK
+  packets (built fresh per operation)
 - Enabling or disabling a protocol (`sshEnabled`, `telnetEnabled`)
 - SSH host keys
 - The QWK API listener

@@ -72,7 +72,7 @@ func leafCfg(network, board string) config.V3NetLeafConfig {
 // running, and the area bindings follow.
 func TestReloadLeavesSwapsSubscriptions(t *testing.T) {
 	svc, mm := newReloadFixture(t, "ALPHA", "BETA")
-	svc.ConfigureLeaves([]config.V3NetLeafConfig{leafCfg("net-a", "ALPHA")}, mm, "TestBBS")
+	svc.ConfigureLeaves([]config.V3NetLeafConfig{leafCfg("net-a", "ALPHA")}, mm)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})
@@ -93,7 +93,7 @@ func TestReloadLeavesSwapsSubscriptions(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- svc.ReloadLeaves([]config.V3NetLeafConfig{leafCfg("net-b", "BETA")}, mm, nil, "TestBBS")
+		done <- svc.ReloadLeaves([]config.V3NetLeafConfig{leafCfg("net-b", "BETA")}, mm, nil)
 	}()
 	select {
 	case err := <-done:
@@ -111,8 +111,8 @@ func TestReloadLeavesSwapsSubscriptions(t *testing.T) {
 		t.Errorf("old binding survived reload: NetworkForArea(ALPHA) = %q", got)
 	}
 	betaArea, _ := mm.GetAreaByTag("BETA")
-	if b, ok := svc.AreaBindingFor(betaArea.ID); !ok || b.Network != "net-b" || b.Origin != "TestBBS" {
-		t.Errorf("AreaBindingFor(BETA) = %+v ok=%v, want net-b/TestBBS", b, ok)
+	if b, ok := svc.AreaBindingFor(betaArea.ID); !ok || b.Network != "net-b" || b.Origin != "" {
+		t.Errorf("AreaBindingFor(BETA) = %+v ok=%v, want net-b with empty origin (fallback applies at use time)", b, ok)
 	}
 
 	// SendMessage to the removed network is a silent no-op, matching the
@@ -128,9 +128,9 @@ func TestReloadLeavesSwapsSubscriptions(t *testing.T) {
 // swaps configuration without starting anything.
 func TestReloadLeavesBeforeStart(t *testing.T) {
 	svc, mm := newReloadFixture(t, "ALPHA", "BETA")
-	svc.ConfigureLeaves([]config.V3NetLeafConfig{leafCfg("net-a", "ALPHA")}, mm, "TestBBS")
+	svc.ConfigureLeaves([]config.V3NetLeafConfig{leafCfg("net-a", "ALPHA")}, mm)
 
-	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{leafCfg("net-b", "BETA")}, mm, nil, "TestBBS"); err != nil {
+	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{leafCfg("net-b", "BETA")}, mm, nil); err != nil {
 		t.Fatalf("ReloadLeaves before Start: %v", err)
 	}
 	if got := svc.LeafNetworks(); len(got) != 1 || got[0] != "net-b" {
@@ -151,7 +151,7 @@ func TestReloadLeavesRaceWithReaders(t *testing.T) {
 			if i%2 == 1 {
 				cfgs = []config.V3NetLeafConfig{leafCfg("net-b", "BETA")}
 			}
-			if err := svc.ReloadLeaves(cfgs, mm, nil, "TestBBS"); err != nil {
+			if err := svc.ReloadLeaves(cfgs, mm, nil); err != nil {
 				t.Errorf("ReloadLeaves: %v", err)
 				return
 			}

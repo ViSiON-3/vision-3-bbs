@@ -1735,18 +1735,7 @@ func main() {
 	if ftnErr != nil {
 		slog.Error("failed to load FTN config, echomail disabled", "error", ftnErr)
 	}
-	networkOrigins := make(map[string]string)
-	if ftnErr == nil {
-		for name, netCfg := range ftnConfig.Networks {
-			if strings.TrimSpace(netCfg.Origin) == "" {
-				continue
-			}
-			networkOrigins[strings.ToLower(strings.TrimSpace(name))] = netCfg.Origin
-		}
-	}
-	if len(networkOrigins) == 0 {
-		networkOrigins = nil
-	}
+	networkOrigins := ftnConfig.NetworkOrigins()
 
 	// Oneliners are loaded by the runnable; start with an empty list here.
 	oneliners := []string{}
@@ -1907,10 +1896,20 @@ func main() {
 			// ReloadLeaves can rebuild them and these callbacks pick up the
 			// new set on their next call.
 			nodeID := svc.NodeID()
-			svc.ConfigureLeaves(v3netConfig.Leaves, messageMgr, serverConfig.BoardName)
+			svc.ConfigureLeaves(v3netConfig.Leaves, messageMgr)
 
 			// Append tearline/origin to local JAM copy for V3Net areas so
 			// the user sees the origin on locally-created messages too.
+			// v3netOrigin resolves a binding's origin, applying the board-name
+			// fallback at use time (through the executor's atomic snapshot)
+			// so a renamed board reaches blank-origin areas immediately.
+			v3netOrigin := func(binding v3net.AreaBinding) string {
+				if binding.Origin != "" {
+					return binding.Origin
+				}
+				return menuExecutor.GetServerConfig().BoardName
+			}
+
 			messageMgr.BodyTransform = func(areaID int, body string) string {
 				binding, ok := svc.AreaBindingFor(areaID)
 				if !ok {
@@ -1922,7 +1921,7 @@ func main() {
 				if strings.Contains(body, "\n--- ") || strings.HasPrefix(body, "--- ") {
 					return body
 				}
-				return v3net.AppendV3NetOrigin(body, v3net.DefaultTearline(), binding.Origin, nodeID)
+				return v3net.AppendV3NetOrigin(body, v3net.DefaultTearline(), v3netOrigin(binding), nodeID)
 			}
 
 			// Hook message posts to forward to V3Net when posted to a networked area.
@@ -1935,7 +1934,12 @@ func main() {
 				if strings.HasPrefix(body, "\x01V3NETUUID: ") {
 					return
 				}
-				msg := v3net.BuildWireMessage(binding.Network, area.Tag, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, binding.Origin)
+				// Read through the executor's atomic snapshot, not the shared
+				// serverConfig var: this closure runs at post time, racing the
+				// config watcher's reload writes. It also means a renamed
+				// board flows into wire messages, matching the message
+				// manager's now-live fallback origin.
+				msg := v3net.BuildWireMessage(binding.Network, area.Tag, svc.NodeID(), menuExecutor.GetServerConfig().BoardName, from, to, subject, body, v3netOrigin(binding))
 				if err := svc.SendMessage(binding.Network, msg); err != nil {
 					slog.Error("V3Net: failed to send message", "network", binding.Network, "error", err)
 					return
@@ -1966,7 +1970,7 @@ func main() {
 				if lerr != nil {
 					return lerr
 				}
-				return svc.ReloadLeaves(fresh.Leaves, messageMgr, confMgr, serverConfig.BoardName)
+				return svc.ReloadLeaves(fresh.Leaves, messageMgr, confMgr)
 			}
 			slog.Info("V3Net service started",
 				"node_id", v3netService.NodeID(),

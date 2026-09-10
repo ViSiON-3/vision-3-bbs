@@ -259,3 +259,21 @@ func (c *FTNConfig) ResolvePaths(root string) {
 		c.DupeDBPath = resolve(c.DupeDBPath)
 	}
 }
+
+// NetworkOrigins collects each network's origin-line override, keyed by
+// lower-cased network name. Networks with no origin set are omitted; an
+// empty result returns nil. Shared by startup and the ftn.json reload so
+// both build the same map.
+func (c FTNConfig) NetworkOrigins() map[string]string {
+	origins := make(map[string]string)
+	for name, netCfg := range c.Networks {
+		if strings.TrimSpace(netCfg.Origin) == "" {
+			continue
+		}
+		origins[strings.ToLower(strings.TrimSpace(name))] = netCfg.Origin
+	}
+	if len(origins) == 0 {
+		return nil
+	}
+	return origins
+}

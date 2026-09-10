@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -367,5 +368,119 @@ func TestValidateMessageAreasAcceptsEmptyFile(t *testing.T) {
 	cw := &ConfigWatcher{rootConfigPath: dir}
 	if err := cw.validateMessageAreas(); err != nil {
 		t.Errorf("validateMessageAreas rejected an empty file: %v", err)
+	}
+}
+
+// TestReloadFTNOriginsThroughWatcher: an ftn.json origin edit reaches the
+// message manager's origin resolution without a restart — driven through the
+// real watcher construction and its polling path, so a regression that
+// unwires the ftn.json target fails here rather than passing on a direct
+// method call.
+func TestReloadFTNOriginsThroughWatcher(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := filepath.Join(tmp, "configs")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "message_areas.json"),
+		[]byte(`[{"id":1,"tag":"GEN","name":"General","network":"fidonet"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "ftn.json"),
+		[]byte(`{"networks":{"fidonet":{"origin":"Boot Origin"}}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	msgMgr, err := message.NewMessageManager(filepath.Join(tmp, "data"), configDir, "TestBBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var serverCfg config.ServerConfig
+	var serverCfgMu sync.RWMutex
+	e := &menu.MenuExecutor{MessageMgr: msgMgr}
+	cw, err := NewConfigWatcher(configDir, tmp, e, nil, &serverCfg, &serverCfgMu, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cw.Stop()
+
+	touchAt := func(path string, age time.Duration) {
+		t.Helper()
+		ts := time.Now().Add(age)
+		if err := os.Chtimes(path, ts, ts); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Edit ftn.json and let the real poll pick it up via its timestamp.
+	if err := os.WriteFile(filepath.Join(configDir, "ftn.json"),
+		[]byte(`{"networks":{"fidonet":{"origin":"Fresh Origin"}}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	touchAt(filepath.Join(configDir, "ftn.json"), time.Second)
+	cw.poll()
+
+	if got := msgMgr.OriginTextForNetwork("fidonet"); got != "Fresh Origin" {
+		t.Errorf("OriginTextForNetwork = %q after watcher poll, want Fresh Origin", got)
+	}
+
+	// And through the save sentinel, as v3config signals it.
+	if err := os.WriteFile(filepath.Join(configDir, "ftn.json"),
+		[]byte(`{"networks":{"fidonet":{"origin":"Sentinel Origin"}}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	touchAt(filepath.Join(configDir, "ftn.json"), 2*time.Second)
+	if err := config.TouchReloadSentinel(configDir); err != nil {
+		t.Fatal(err)
+	}
+	cw.poll()
+	if got := msgMgr.OriginTextForNetwork("fidonet"); got != "Sentinel Origin" {
+		t.Errorf("OriginTextForNetwork = %q after sentinel poll, want Sentinel Origin", got)
+	}
+}
+
+// TestServerConfigReloadUpdatesBoardNameFallback: a config.json boardName
+// edit reaches the message manager's fallback origin through the watcher's
+// reloadServerConfig wiring.
+func TestServerConfigReloadUpdatesBoardNameFallback(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := filepath.Join(tmp, "configs")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "message_areas.json"), []byte(`[]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	msgMgr, err := message.NewMessageManager(filepath.Join(tmp, "data"), configDir, "OldBoard", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var serverCfg config.ServerConfig
+	var serverCfgMu sync.RWMutex
+	e := &menu.MenuExecutor{MessageMgr: msgMgr}
+	cw := &ConfigWatcher{
+		rootConfigPath: configDir,
+		menuExecutor:   e,
+		serverConfig:   &serverCfg,
+		serverConfigMu: &serverCfgMu,
+	}
+
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"),
+		[]byte(`{"boardName":"New Board"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cw.reloadServerConfig()
+	if got := msgMgr.OriginTextForNetwork("any"); got != "New Board" {
+		t.Errorf("fallback origin = %q after config.json reload, want New Board", got)
+	}
+
+	// A malformed config.json must leave the fallback untouched.
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{broken`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cw.reloadServerConfig()
+	if got := msgMgr.OriginTextForNetwork("any"); got != "New Board" {
+		t.Errorf("fallback origin = %q after malformed reload, want New Board (unchanged)", got)
 	}
 }

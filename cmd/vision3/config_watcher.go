@@ -125,6 +125,7 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		{name: "protocols.json", path: filepath.Join(rootConfigPath, "protocols.json"), reload: cw.reloadProtocols},
 		{name: "events.json", path: filepath.Join(rootConfigPath, "events.json"), reload: cw.reloadEvents},
 		{name: "conferences.json", path: filepath.Join(rootConfigPath, "conferences.json"), reload: cw.reloadConferences},
+		{name: "ftn.json", path: filepath.Join(rootConfigPath, "ftn.json"), reload: cw.reloadFTNOrigins},
 	}
 	cw.deferredTargets = []deferredTarget{
 		{
@@ -600,6 +601,27 @@ func (cw *ConfigWatcher) reloadEvents() {
 	slog.Info("events.json reloaded", "count", len(newEvents.Events))
 }
 
+// reloadFTNOrigins re-reads ftn.json and applies the per-network origin
+// overrides to the message manager. That is the only piece of ftn.json the
+// BBS process itself consumes at runtime — the binkd mailer re-reads the
+// file on its own export/respawn cycle, so its settings need no push from
+// here.
+func (cw *ConfigWatcher) reloadFTNOrigins() {
+	slog.Info("reloading ftn.json network origins")
+
+	if cw.menuExecutor == nil || cw.menuExecutor.MessageMgr == nil {
+		slog.Warn("message manager not running, restart required to apply ftn.json origins")
+		return
+	}
+	ftnCfg, err := config.LoadFTNConfig(cw.rootConfigPath)
+	if err != nil {
+		slog.Error("failed to reload ftn.json", "error", err)
+		return
+	}
+	cw.menuExecutor.MessageMgr.SetNetworkOrigins(ftnCfg.NetworkOrigins())
+	slog.Info("ftn.json network origins reloaded", "count", len(ftnCfg.NetworkOrigins()))
+}
+
 // reloadServerConfig reloads the server configuration.
 func (cw *ConfigWatcher) reloadServerConfig() {
 	slog.Info("reloading config.json")
@@ -629,6 +651,11 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 		slog.Info("updated new user level", "level", newServerConfig.NewUserLevel)
 		cw.userMgr.SetAutoValidateNewUsers(newServerConfig.AutoValidateNewUsers)
 		slog.Info("updated auto-validate new users", "enabled", newServerConfig.AutoValidateNewUsers)
+	}
+
+	// Keep the message manager's fallback origin (the board name) current.
+	if cw.menuExecutor.MessageMgr != nil {
+		cw.menuExecutor.MessageMgr.SetBoardName(newServerConfig.BoardName)
 	}
 
 	// Push connection-security settings into the tracker. Without this the
