@@ -365,6 +365,13 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 		result.BytesAfter += info.Size()
 	}
 
+	// The pack itself is committed, so the counts describe the base on disk
+	// whatever happens next. They are set before the remap so the error path
+	// below does not hand the caller zeroes alongside a base that really was
+	// packed.
+	result.MessagesAfter = activeCount
+	result.DeletedRemoved = totalCount - activeCount
+
 	// Move lastread pointers onto the new numbering. This runs after the packed
 	// files are in place and reopened, so a failure here leaves a valid packed
 	// base with pointers still on the old numbering rather than losing the pack.
@@ -372,8 +379,6 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 		return result, fmt.Errorf("jam: packed, but lastread pointers were not remapped: %w", err)
 	}
 
-	result.MessagesAfter = activeCount
-	result.DeletedRemoved = totalCount - activeCount
 	return result, nil
 }
 
