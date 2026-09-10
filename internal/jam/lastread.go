@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -229,4 +230,64 @@ func (b *Base) GetUnreadCount(username string) (int, error) {
 		unread = 0
 	}
 	return unread, nil
+}
+
+// remapLastReadLocked rewrites every lastread pointer from the pre-pack
+// numbering to the post-pack numbering. survivors holds the old message numbers
+// that were kept, in ascending order.
+//
+// Packing renumbers surviving messages from 1, so a pointer left alone silently
+// changes meaning: after messages are removed, "I have read up to #3" starts
+// describing a message the user has never seen — or, once the base is smaller
+// than the pointer, every message in it. The login mail scan counts from
+// lastread+1, so a stranded pointer reports no new mail no matter what arrives,
+// and new private mail becomes invisible.
+//
+// A pointer at old message N becomes the number of survivors at or below N: the
+// user has still read everything up to that point, whatever it is now numbered.
+// Pointers past the end of the old base (already stale) collapse to the new
+// message count, and a base packed empty leaves every pointer at 0, which is
+// correct — there is nothing left to have read.
+//
+// The caller must hold b.mu and have the base open on the packed files.
+func (b *Base) remapLastReadLocked(survivors []int) error {
+	if !b.isOpen {
+		return ErrBaseNotOpen
+	}
+
+	info, err := b.jlrFile.Stat()
+	if err != nil {
+		return fmt.Errorf("jam: failed to stat .jlr: %w", err)
+	}
+	if info.Size()%LastReadSize != 0 {
+		return fmt.Errorf("jam: invalid .jlr size %d (not aligned to record size %d)", info.Size(), LastReadSize)
+	}
+	recordCount := info.Size() / LastReadSize
+
+	// remap counts the survivors at or below an old message number. survivors is
+	// ascending, so that is where old+1 would be inserted.
+	remap := func(old uint32) uint32 {
+		return uint32(sort.SearchInts(survivors, int(old)+1))
+	}
+
+	for i := int64(0); i < recordCount; i++ {
+		pos := i * LastReadSize
+		buf := make([]byte, LastReadSize)
+		if _, err := b.jlrFile.ReadAt(buf, pos); err != nil && err != io.EOF {
+			return fmt.Errorf("jam: read failed in .jlr: %w", err)
+		}
+		lastRead := binary.LittleEndian.Uint32(buf[8:12])
+		highRead := binary.LittleEndian.Uint32(buf[12:16])
+
+		newLastRead, newHighRead := remap(lastRead), remap(highRead)
+		if newLastRead == lastRead && newHighRead == highRead {
+			continue
+		}
+		binary.LittleEndian.PutUint32(buf[8:12], newLastRead)
+		binary.LittleEndian.PutUint32(buf[12:16], newHighRead)
+		if _, err := b.jlrFile.WriteAt(buf, pos); err != nil {
+			return fmt.Errorf("jam: write failed in .jlr: %w", err)
+		}
+	}
+	return nil
 }

@@ -9,7 +9,7 @@
 | Command    | Description                                                                  |
 | ---------- | ---------------------------------------------------------------------------- |
 | `stats`    | Display message counts, base sizes, and metadata for one or all areas        |
-| `pack`     | Defragment a base — physically removes deleted messages and compacts storage |
+| `pack`     | Defragment a base — physically removes deleted messages and compacts storage. Surviving messages are renumbered from 1, and each user's lastread pointer is moved with them, so a pack never marks unread mail as read |
 | `purge`    | Delete messages exceeding per-area `max_messages` or `max_age` limits        |
 | `fix`      | Verify base integrity; use `--repair` to automatically fix corrupt headers   |
 | `link`     | Build reply-thread chains (`ReplyTo` / `Reply1st` / `ReplyNext` JAM fields)  |

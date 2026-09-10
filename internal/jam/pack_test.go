@@ -183,9 +183,6 @@ func TestPackPreservesLastread(t *testing.T) {
 	b.WriteMessage(msg)
 	b.SetLastRead("testuser", 1, 1)
 
-	// Get .jlr contents before pack
-	jlrBefore, _ := os.ReadFile(basePath + ".jlr")
-
 	result, err := b.Pack()
 	if err != nil {
 		t.Fatalf("Pack: %v", err)
@@ -194,17 +191,10 @@ func TestPackPreservesLastread(t *testing.T) {
 		t.Errorf("MessagesAfter: got %d, want 1", result.MessagesAfter)
 	}
 
-	// Verify .jlr is unchanged
-	jlrAfter, _ := os.ReadFile(basePath + ".jlr")
-	if len(jlrBefore) != len(jlrAfter) {
-		t.Errorf(".jlr size changed: before=%d after=%d", len(jlrBefore), len(jlrAfter))
-	}
-	for i := range jlrBefore {
-		if jlrBefore[i] != jlrAfter[i] {
-			t.Error(".jlr contents changed after pack")
-			break
-		}
-	}
+	// Nothing was removed, so the numbering is untouched and the pointer keeps
+	// its value. What matters is that it still names the same message, which the
+	// check below asserts -- a pack that dropped messages would have to move the
+	// pointer to keep that true. See TestPackRemapsLastreadOntoNewNumbering.
 
 	// Verify lastread still works
 	lr, err := b.GetLastRead("testuser")
@@ -307,4 +297,136 @@ func TestPackRenameFailureMarksBaseClosed(t *testing.T) {
 	if b.IsOpen() {
 		t.Error("base claims open after failed rename recovery; want IsOpen() == false")
 	}
+}
+
+// TestPackRemapsLastreadOntoNewNumbering covers the pointer bug behind
+// "new private mail was never announced": packing renumbers surviving messages
+// from 1, so a pointer left on the old numbering stops describing what the user
+// has actually read. Once the base is smaller than the pointer, the login mail
+// scan (which counts from lastread+1) reports nothing no matter what arrives.
+func TestPackRemapsLastreadOntoNewNumbering(t *testing.T) {
+	write := func(t *testing.T, b *Base, subject string) {
+		t.Helper()
+		m := NewMessage()
+		m.From, m.To, m.Subject, m.Text = "someone", "sysop", subject, "body"
+		if _, err := b.WriteMessage(m); err != nil {
+			t.Fatalf("WriteMessage(%s): %v", subject, err)
+		}
+	}
+
+	t.Run("pointer follows its message when earlier ones are packed away", func(t *testing.T) {
+		b, err := Open(filepath.Join(t.TempDir(), "follow"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer b.Close()
+
+		for _, s := range []string{"one", "two", "three", "four"} {
+			write(t, b, s)
+		}
+		// Read up to #3, then #1 and #2 are removed: "three" becomes #1.
+		if err := b.SetLastRead("sysop", 3, 3); err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range []int{1, 2} {
+			if err := b.DeleteMessage(n); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := b.Pack(); err != nil {
+			t.Fatal(err)
+		}
+
+		lr, err := b.GetLastRead("sysop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lr.LastReadMsg != 1 || lr.HighReadMsg != 1 {
+			t.Fatalf("lastread = %d/%d, want 1/1 — the message read as #3 is now #1", lr.LastReadMsg, lr.HighReadMsg)
+		}
+		// "four" is the only message left unread, and must still read as unread.
+		count, err := b.GetMessageCount()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if unread := count - int(lr.LastReadMsg); unread != 1 {
+			t.Errorf("unread count = %d, want 1 (\"four\")", unread)
+		}
+	})
+
+	t.Run("mail arriving after an emptying pack is seen as new", func(t *testing.T) {
+		b, err := Open(filepath.Join(t.TempDir(), "empty"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer b.Close()
+
+		// The board's case: every old private mail read, then removed.
+		for _, s := range []string{"old one", "old two", "old three"} {
+			write(t, b, s)
+		}
+		if err := b.SetLastRead("sysop", 3, 3); err != nil {
+			t.Fatal(err)
+		}
+		for n := 1; n <= 3; n++ {
+			if err := b.DeleteMessage(n); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := b.Pack(); err != nil {
+			t.Fatal(err)
+		}
+
+		lr, err := b.GetLastRead("sysop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lr.LastReadMsg != 0 || lr.HighReadMsg != 0 {
+			t.Fatalf("lastread = %d/%d, want 0/0 — nothing survives to have been read", lr.LastReadMsg, lr.HighReadMsg)
+		}
+
+		// A new-user application arrives and becomes #1.
+		write(t, b, "New user application")
+		count, err := b.GetMessageCount()
+		if err != nil {
+			t.Fatal(err)
+		}
+		lr, err = b.GetLastRead("sysop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// This is the login mail scan's loop bound.
+		newMail := 0
+		for n := int(lr.LastReadMsg) + 1; n <= count; n++ {
+			newMail++
+		}
+		if newMail != 1 {
+			t.Errorf("login scan would report %d new messages, want 1 — the mail is invisible", newMail)
+		}
+	})
+
+	t.Run("a pointer already past the end collapses to the new count", func(t *testing.T) {
+		b, err := Open(filepath.Join(t.TempDir(), "stale"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer b.Close()
+
+		write(t, b, "only")
+		// A pointer stranded by an earlier pack, naming messages that never
+		// existed in this numbering.
+		if err := b.SetLastRead("sysop", 9, 9); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.Pack(); err != nil {
+			t.Fatal(err)
+		}
+		lr, err := b.GetLastRead("sysop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lr.LastReadMsg != 1 || lr.HighReadMsg != 1 {
+			t.Errorf("lastread = %d/%d, want 1/1 — clamped to what the base actually holds", lr.LastReadMsg, lr.HighReadMsg)
+		}
+	})
 }

@@ -80,8 +80,9 @@ func (b *Base) ResetLastRead(username string) error {
 }
 
 // Pack defragments the message base by rewriting all non-deleted messages
-// to new files, then atomically replacing the originals. The .jlr file
-// is preserved as-is.
+// to new files, then atomically replacing the originals. Lastread pointers in
+// the .jlr are remapped to the new numbering — see remapLastReadLocked — since
+// packing renumbers the messages they point at.
 func (b *Base) Pack() (PackResult, error) {
 	return b.packWithReplyIDCleanup(false)
 }
@@ -167,6 +168,9 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 
 	activeCount := 0
 	newMsgNum := uint32(0)
+	// The old message numbers that survive, ascending, so lastread pointers can
+	// be moved onto the new numbering once the packed files are in place.
+	survivors := make([]int, 0, totalCount)
 
 	for n := 1; n <= totalCount; n++ {
 		idx, err := b.readIndexRecordLocked(n)
@@ -267,6 +271,7 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 		}
 
 		activeCount++
+		survivors = append(survivors, n)
 	}
 
 	// Update final ActiveMsgs in the fixed header
@@ -358,6 +363,13 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 			return result, fmt.Errorf("jam: failed to stat file after pack: %w", err)
 		}
 		result.BytesAfter += info.Size()
+	}
+
+	// Move lastread pointers onto the new numbering. This runs after the packed
+	// files are in place and reopened, so a failure here leaves a valid packed
+	// base with pointers still on the old numbering rather than losing the pack.
+	if err := b.remapLastReadLocked(survivors); err != nil {
+		return result, fmt.Errorf("jam: packed, but lastread pointers were not remapped: %w", err)
 	}
 
 	result.MessagesAfter = activeCount
