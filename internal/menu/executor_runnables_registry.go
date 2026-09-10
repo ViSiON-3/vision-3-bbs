@@ -172,6 +172,10 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["SELECTMSGAREA"] = runSelectMessageAreaLightbar         // Register message area selection runnable (lightbar)
 	registry["CHANGEMSGCONF"] = runChangeMsgConferenceLightbar       // Change message conference (lightbar)
 	registry["CHANGEFILECONF"] = runChangeFileConferenceLightbar     // Change file conference (lightbar); joins for both menus
+	registry["NEXTFILEAREA"] = runNextFileArea                       // Next file area in the current conference
+	registry["PREVFILEAREA"] = runPrevFileArea                       // Previous file area in the current conference
+	registry["NEXTFILECONF"] = runNextFileConf                       // Next file conference (joins for both menus)
+	registry["PREVFILECONF"] = runPrevFileConf                       // Previous file conference (joins for both menus)
 	registry["NEXTMSGAREA"] = runNextMsgArea                         // Navigate to next message area
 	registry["PREVMSGAREA"] = runPrevMsgArea                         // Navigate to previous message area
 	registry["NEXTMSGCONF"] = runNextMsgConf                         // Navigate to next message conference

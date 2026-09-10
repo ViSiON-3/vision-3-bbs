@@ -505,20 +505,11 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	}
 
 	newConf := accessibleConfs[newIdx]
-	e.setUserMsgConference(currentUser, newConf.ID)
-
-	// Set first accessible area in the new conference
-	firstArea := findFirstAccessibleAreaInConference(e, s, terminal, currentUser, newConf.ID, sessionStartTime)
-	if firstArea != nil {
-		currentUser.CurrentMessageAreaID = firstArea.ID
-		currentUser.CurrentMessageAreaTag = firstArea.Tag
-	} else {
-		currentUser.CurrentMessageAreaID = 0
-		currentUser.CurrentMessageAreaTag = ""
-	}
-
-	if err := userManager.UpdateUser(currentUser); err != nil {
-		slog.Error("failed to save user after conference change", "node", nodeNumber, "error", err)
+	// Join for both messages and files (#304), reverting on a save failure.
+	if !e.commitConferenceJoin(s, terminal, userManager, currentUser, newConf.ID, sessionStartTime) {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Could not save the conference change.|07\r\n")), outputMode)
+		time.Sleep(1 * time.Second)
+		return currentUser, "", nil
 	}
 
 	msg := e.LoadedStrings.ConfCurrentConfFormat
