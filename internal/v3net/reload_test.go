@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ func newReloadFixture(t *testing.T, tags ...string) (*v3net.Service, *message.Me
 		if i > 0 {
 			body += ","
 		}
-		body += `{"id":` + itoa(i+1) + `,"tag":"` + tag + `","name":"` + tag + `"}`
+		body += `{"id":` + strconv.Itoa(i+1) + `,"tag":"` + tag + `","name":"` + tag + `"}`
 	}
 	body += "]"
 	if err := os.WriteFile(filepath.Join(configDir, "message_areas.json"), []byte(body), 0644); err != nil {
@@ -56,13 +57,6 @@ func newReloadFixture(t *testing.T, tags ...string) (*v3net.Service, *message.Me
 		t.Fatal(err)
 	}
 	return svc, mm
-}
-
-func itoa(n int) string {
-	if n < 10 {
-		return string(rune('0' + n))
-	}
-	return string(rune('0'+n/10)) + string(rune('0'+n%10))
 }
 
 func leafCfg(network, board string) config.V3NetLeafConfig {
@@ -163,7 +157,7 @@ func TestReloadLeavesRaceWithReaders(t *testing.T) {
 			}
 		}
 	}()
-	for {
+	for i := 0; ; i++ {
 		select {
 		case <-done:
 			return
@@ -175,6 +169,10 @@ func TestReloadLeavesRaceWithReaders(t *testing.T) {
 		_ = svc.NetworkForArea(1)
 		_, _ = svc.AreaBindingFor(2)
 		_ = svc.SendMessage("net-a", protocol.Message{})
-		svc.SendLogon("caller")
+		if i%64 == 0 {
+			// SendLogon spawns a goroutine per leaf per call; unthrottled it
+			// churns thousands of goroutines for no extra lock coverage.
+			svc.SendLogon("caller")
+		}
 	}
 }
