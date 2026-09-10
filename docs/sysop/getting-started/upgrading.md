@@ -306,9 +306,13 @@ worse off than before.
 Follow [Restarting](#restarting). The new `vision3` and the new `bin/binkd` both
 take effect only once you restart.
 
-## Worked example: upgrading past v0.9.0
+## Worked example: upgrading to v0.9.1
 
-The release after v0.9.0 changes one default you may be relying on.
+v0.9.1 is a much lighter upgrade than v0.9.0 — most of it is either automatic
+once you deploy the new binaries, or optional. The only things that need your
+hand are edits to **customized** config and menu files, since an upgrade never
+overwrites those. This section covers those; everything else just works after
+you drop in the new bundle.
 
 ### Anonymous posting is off by default
 
@@ -379,3 +383,30 @@ them from the built-in default automatically):
   private mail, the caller is now asked whether to read it immediately, dropping
   them into the reader (reply/skip per message). No config change needed beyond
   already having `NMAILSCAN` in your sequence.
+
+### New: file-menu commands (`FILEM.CFG`)
+
+The file/transfer menu gained commands that mirror the message menu. Installs
+using the shipped `FILEM.CFG` get them automatically; if you maintain a custom
+one, add the keys you want:
+
+- `[C]` → `RUN:CHANGEFILECONF` — change file conference. Changing conference in
+  either the file **or** message menu now sets it for both.
+- `]` / `[` → `RUN:NEXTFILEAREA` / `RUN:PREVFILEAREA` — step through file areas.
+- `}` / `{` → `RUN:NEXTFILECONF` / `RUN:PREVFILECONF` — step through conferences.
+- `[Y]` → `RUN:SETFILESCANDATE` — set the file newscan cutoff (a date, all, or
+  reset to "since last logon"). The message menu keeps this on `U`, but the file
+  menu uses `U` for Upload.
+- `[Z]` → `RUN:FILENEWSCANCONFIG` — set scan areas (previously unlabeled).
+
+If you use a custom `FILEM.ANS`, refresh it — the shipped art now lists these
+commands (and adds a rumor line). Menu art is read live, so no restart is needed
+for an art change.
+
+### No restart for `ftn.json` changes
+
+The integrated mailer now re-reads `ftn.json` on its own. A config-editor save
+of `export_interval_seconds` applies live; other binkd settings apply on binkd's
+next (re)launch — and, importantly, the supervisor no longer overwrites a newer
+`binkd.conf` with stale boot-time values. No action needed; it just stops
+silently reverting your changes.
