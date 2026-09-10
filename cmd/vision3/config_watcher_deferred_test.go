@@ -356,3 +356,16 @@ func TestDeferredInvalidEditClearsStalePending(t *testing.T) {
 		t.Fatalf("stale pending survived an invalid follow-up edit: %v", got)
 	}
 }
+
+// TestValidateMessageAreasAcceptsEmptyFile: an emptied message_areas.json is
+// a supported "no areas" state and must queue, not be rejected at validation.
+func TestValidateMessageAreasAcceptsEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "message_areas.json"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cw := &ConfigWatcher{rootConfigPath: dir}
+	if err := cw.validateMessageAreas(); err != nil {
+		t.Errorf("validateMessageAreas rejected an empty file: %v", err)
+	}
+}

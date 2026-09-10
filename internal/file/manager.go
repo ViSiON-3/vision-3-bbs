@@ -57,7 +57,7 @@ func NewFileManager(baseDataPath, baseConfigPath string) (*FileManager, error) {
 	}
 
 	slog.Info("loading file areas", "path", fm.configPath)
-	if err := fm.loadAreas(); err != nil {
+	if err := fm.loadAreas(createIfMissing); err != nil {
 		return nil, fmt.Errorf("failed to load file areas: %w", err)
 	}
 
@@ -85,16 +85,14 @@ func NewFileManager(baseDataPath, baseConfigPath string) (*FileManager, error) {
 // metadata.json. The config watcher enforces this by deferring the reload
 // until the session registry reports zero active sessions.
 func (fm *FileManager) Reload() error {
-	// A missing config is a reload ERROR, not the fresh-install case it is at
-	// construction. loadAreas would helpfully create an empty file_areas.json
-	// and report success with the old definitions still in memory — and the
-	// created file's fresh timestamp would then queue a follow-up reload that
-	// wipes every area. Refuse instead, keeping the running definitions and
-	// the sysop's ability to restore the file.
-	if _, err := os.Stat(fm.configPath); err != nil {
-		return fmt.Errorf("reloading file areas: %w", err)
-	}
-	if err := fm.loadAreas(); err != nil {
+	// errIfMissing: a missing config is a reload ERROR, not the
+	// fresh-install case it is at construction. Creating an empty
+	// file_areas.json here and reporting success would leave the old
+	// definitions in memory — and the created file's fresh timestamp would
+	// then queue a follow-up reload that wipes every area. The policy lives
+	// inside loadAreas' own read, so there is no check-then-read gap for a
+	// concurrent deletion to slip through.
+	if err := fm.loadAreas(errIfMissing); err != nil {
 		return fmt.Errorf("reloading file areas: %w", err)
 	}
 	if err := fm.loadAllFileRecords(); err != nil {
@@ -110,14 +108,24 @@ func (fm *FileManager) Reload() error {
 	return nil
 }
 
+// missingFilePolicy selects what loadAreas does when file_areas.json does
+// not exist: construction treats it as a fresh install and creates an empty
+// one; a reload treats it as an error and keeps the running definitions.
+type missingFilePolicy int
+
+const (
+	createIfMissing missingFilePolicy = iota
+	errIfMissing
+)
+
 // loadAreas loads the FileArea definitions from the configuration file.
-func (fm *FileManager) loadAreas() error {
+func (fm *FileManager) loadAreas(onMissing missingFilePolicy) error {
 	fm.muAreas.Lock()
 	defer fm.muAreas.Unlock()
 
 	data, err := os.ReadFile(fm.configPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) && onMissing == createIfMissing {
 			slog.Warn("file areas config not found, no file areas loaded", "path", fm.configPath)
 			// Create an empty file?
 			emptyJSON := []byte("[]")
