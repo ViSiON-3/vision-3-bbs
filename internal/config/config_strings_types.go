@@ -235,6 +235,12 @@ type StringsConfig struct {
 	// NewUserSysopPage is queued to every online co-sysop when a signup
 	// completes, and delivered through the same page queue as PageMessageFormat.
 	NewUserSysopPage string `json:"newUserSysopPage"`
+	// NewUserSysopNotice is the same news for a co-sysop who was offline at
+	// signup time, shown by the SYSOPNOTICES login step. It is a separate string
+	// because "just signed up" is only true of the live page: a queued notice is
+	// read whenever the sysop next calls, so it carries how long ago the signup
+	// happened (%s=handle, %s=age such as "2 hours", %d=node).
+	NewUserSysopNotice string `json:"newUserSysopNotice"`
 
 	// Newuser strings (V3-specific)
 	NewUsersClosedStr       string `json:"newUsersClosedStr"`

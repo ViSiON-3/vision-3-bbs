@@ -195,6 +195,12 @@ actually written — but a SysOp who habitually takes the fast-login jump never
 reaches the step, so a signup can sit unseen in `data/sysop_notices.json`
 indefinitely.
 
+The wording comes from `newUserSysopNotice`, which is separate from the
+`newUserSysopPage` used for the live page: a page is read as it arrives, so it
+says "just signed up", while a queued notice may be read days later and states
+the age instead — "signed up 9 hours ago from node 1". The age is computed when
+the notice is displayed, not when it is queued.
+
 Silent for ordinary users and when the queue is empty — it checks co-SysOp
 access itself, so no `sec_level` is required (though you may set one to remove
 it for a SysOp who does not want it). This is the asynchronous half of

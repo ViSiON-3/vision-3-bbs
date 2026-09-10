@@ -379,7 +379,11 @@ them from the built-in default automatically):
   ends the sequence and would skip everything below it. It is informational
   and fires regardless of `autoValidateNewUsers` — unlike `NEWUSERVAL`, which is
   silent when nothing is pending validation. Queued notices live in
-  `data/sysop_notices.json`.
+  `data/sysop_notices.json`. The wording is its own string,
+  `newUserSysopNotice` — the live page's "just signed up" is not true of a
+  notice read on the SysOp's next call, so the queued form states how long ago
+  the signup happened. No strings.json edit is needed; the key has a built-in
+  default.
 - **"Read it now?" after `NMAILSCAN`** — when the login mail scan reports new
   private mail, the caller is now asked whether to read it immediately, dropping
   them into the reader (reply/skip per message). No config change needed beyond

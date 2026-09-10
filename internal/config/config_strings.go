@@ -109,6 +109,12 @@ var StringFallbacks = map[string]string{
 	// it depends on has to as well.
 	"newUserSysopPage": "|12New user|07: |15%s|07 just signed up from node %d.",
 
+	// The queued counterpart, for the same reason: an older strings.json must
+	// not leave the SYSOPNOTICES step with nothing to render. "just signed up"
+	// belongs to the live page only -- a queued notice states the age instead,
+	// since it is read whenever the sysop next calls.
+	"newUserSysopNotice": "|12New user|07: |15%s|07 signed up |15%s ago|07 from node %d.",
+
 	// The rest of the batch download group. These are written straight to the
 	// terminal, so shipping them blank printed nothing where a message belongs
 	// -- an empty queue, or a failed save, looked like the command did nothing.

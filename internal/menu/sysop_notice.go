@@ -2,6 +2,7 @@ package menu
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -16,9 +17,20 @@ import (
 )
 
 // sysopNotice is one queued message for a sysop, waiting to be shown at their
-// next login. Text is fully rendered (pipe codes included) at enqueue time.
+// next login.
+//
+// Text is fully rendered (pipe codes included) at enqueue time and is what any
+// notice without structured fields displays verbatim — entries queued by an
+// older build, and any future producer that has nothing to re-render.
+//
+// A new-user notice also stores Handle and Node so the display side can render
+// it fresh against the clock: how long ago the signup happened is only knowable
+// when the sysop actually reads the notice, which may be days later. See
+// MenuExecutor.renderSysopNotice.
 type sysopNotice struct {
 	Text      string    `json:"text"`
+	Handle    string    `json:"handle,omitempty"`
+	Node      int       `json:"node,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -71,8 +83,9 @@ func saveSysopNotices(path string, m map[int][]sysopNotice) error {
 	return atomicfile.WriteFile(path, data, 0o644)
 }
 
-// enqueueSysopNotice appends a notice to one user's queue.
-func enqueueSysopNotice(path string, userID int, text string) error {
+// enqueueSysopNotice appends a notice to one user's queue, stamping CreatedAt
+// when the caller left it zero.
+func enqueueSysopNotice(path string, userID int, n sysopNotice) error {
 	sysopNoticesMu.Lock()
 	defer sysopNoticesMu.Unlock()
 
@@ -80,7 +93,10 @@ func enqueueSysopNotice(path string, userID int, text string) error {
 	if err != nil {
 		return err
 	}
-	m[userID] = append(m[userID], sysopNotice{Text: text, CreatedAt: time.Now()})
+	if n.CreatedAt.IsZero() {
+		n.CreatedAt = time.Now()
+	}
+	m[userID] = append(m[userID], n)
 	return saveSysopNotices(path, m)
 }
 
@@ -127,6 +143,57 @@ func drainSysopNotices(path string, userID int) ([]sysopNotice, error) {
 	return notices, nil
 }
 
+// humanizeAge renders how long ago something happened, as the age alone
+// ("2 hours") so a string can place it — "signed up %s ago" — rather than the
+// helper baking in the wording.
+//
+// Resolution coarsens with age on purpose: a sysop reading a three-day-old
+// signup cares that it was three days, not three days and four hours. A
+// negative age (a clock that moved backwards between enqueue and display)
+// reads as the smallest unit rather than as a nonsense future date.
+func humanizeAge(d time.Duration) string {
+	plural := func(n int, unit string) string {
+		if n == 1 {
+			return fmt.Sprintf("%d %s", n, unit)
+		}
+		return fmt.Sprintf("%d %ss", n, unit)
+	}
+	switch {
+	case d < time.Minute:
+		return "less than a minute"
+	case d < time.Hour:
+		return plural(int(d/time.Minute), "minute")
+	case d < 24*time.Hour:
+		return plural(int(d/time.Hour), "hour")
+	case d < 7*24*time.Hour:
+		return plural(int(d/(24*time.Hour)), "day")
+	default:
+		return plural(int(d/(7*24*time.Hour)), "week")
+	}
+}
+
+// renderSysopNotice produces the line shown for one queued notice.
+//
+// A new-user notice (one carrying a Handle) is rendered here rather than at
+// enqueue time so it can state how long ago the signup happened — the live page
+// says "just signed up", which stops being true the moment the notice is
+// queued for a sysop who is not online to read it.
+//
+// Everything else falls back to the text stored at enqueue time: notices queued
+// by a build that predates the structured fields, and a sysop who has blanked
+// newUserSysopNotice to opt out of the wording.
+func (e *MenuExecutor) renderSysopNotice(n sysopNotice, now time.Time) string {
+	if n.Handle == "" {
+		return n.Text
+	}
+	format := e.LoadedStrings.NewUserSysopNotice
+	if format == "" {
+		return n.Text
+	}
+	age := humanizeAge(now.Sub(n.CreatedAt))
+	return fmt.Sprintf(format, n.Handle, age, n.Node)
+}
+
 // runSysopNotices is the SYSOPNOTICES login-sequence handler: it shows any
 // queued notices for a co-sysop-or-above caller and clears them. It is quiet
 // (prints nothing, no pause) for ordinary users or when the queue is empty, so
@@ -164,8 +231,10 @@ func runSysopNotices(c *cmdCtx, args string) (*user.User, string, error) {
 	if werr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode); werr != nil {
 		return currentUser, "", nil // not delivered — leave queued
 	}
+	now := time.Now()
 	for _, n := range notices {
-		if werr := terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(n.Text)), outputMode); werr != nil {
+		text := e.renderSysopNotice(n, now)
+		if werr := terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(text)), outputMode); werr != nil {
 			slog.Warn("failed to write a sysop notice; leaving the queue for next login",
 				"node", nodeNumber, "handle", currentUser.Handle, "error", werr)
 			return currentUser, "", nil
