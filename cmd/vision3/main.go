@@ -1992,9 +1992,23 @@ func main() {
 	// cancel, messageMgr close, etc.) instead of leaving them unreachable.
 	slog.Info("Vision/3 BBS running")
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	sig := <-sigCh
-	slog.Info("shutdown signal received, stopping", "signal", sig.String())
+	// SIGHUP re-reads configuration rather than terminating, matching the
+	// convention of long-running daemons (and Synchronet's sbbs, where HUP
+	// recycles every server). It is never delivered on Windows.
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	for sig := range sigCh {
+		if sig == syscall.SIGHUP {
+			slog.Info("SIGHUP received, reloading configuration")
+			if configWatcher != nil {
+				configWatcher.ReloadAll()
+			} else {
+				slog.Warn("configuration reload unavailable, watcher failed to start")
+			}
+			continue
+		}
+		slog.Info("shutdown signal received, stopping", "signal", sig.String())
+		return
+	}
 }
 
 // v3netChatProvider creates a menu.ChatLeafProvider from the V3Net service.

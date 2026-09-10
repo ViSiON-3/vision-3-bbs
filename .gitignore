@@ -55,6 +55,7 @@ tmp/
 
 # Test-generated config artifacts in configeditor package
 internal/configeditor/*.json
+internal/configeditor/reload.now
 /configs/*.txt
 
 # FTN NA (nodelist area) files — site-specific, not tracked in git
@@ -62,6 +63,9 @@ internal/configeditor/*.json
 
 # SSH host keys (generated during setup, not tracked in git)
 /configs/ssh_host_*
+
+# Config reload semaphore (touched at runtime to signal a config reload)
+/configs/reload.now
 
 # Logs and debug files
 *.log

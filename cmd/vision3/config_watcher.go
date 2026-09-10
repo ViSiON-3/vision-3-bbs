@@ -5,156 +5,213 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/fsnotify/fsnotify"
 )
 
-// ConfigWatcher watches configuration files for changes and hot-reloads them.
+// defaultPollInterval is how often configuration files are checked for
+// modification. Matches Synchronet's DEFAULT_SEM_CHK_FREQ.
+const defaultPollInterval = 2 * time.Second
+
+// reloadTarget pairs a watched file with the action that re-reads it.
+type reloadTarget struct {
+	name   string // basename, for logging
+	path   string
+	reload func()
+}
+
+// ConfigWatcher polls configuration files for modification and hot-reloads
+// the ones that changed.
+//
+// It polls modification times rather than subscribing to filesystem events.
+// That is a deliberate choice, not a limitation:
+//
+//   - Polling is level-triggered. A tool that rewrites several config files in
+//     quick succession produces one burst of events but leaves every file with
+//     a new timestamp, so a single poll notices all of them. An event-driven
+//     watcher has to debounce, and a debounce that collapses a burst into one
+//     notification necessarily discards every filename but one (issue #320).
+//   - It is self-healing. Reading a file mid-write yields a parse error, the
+//     reload is skipped, and the old config stays in place; the writer's final
+//     timestamp differs from the one recorded for the failed attempt, so the
+//     next poll retries and succeeds. A missed event has no such recovery.
+//   - A sysop can trigger a reload with `touch`, and any tool can signal one
+//     without linking a file-watching library.
+//
+// This mirrors Synchronet's semfile mechanism (src/xpdev/semfile.c), including
+// treating the config files themselves as part of the signal rather than
+// maintaining a separate watch path for them.
 type ConfigWatcher struct {
-	mu             sync.RWMutex
-	watcher        *fsnotify.Watcher
-	watcherDone    chan bool
 	rootConfigPath string
 	menuSetPath    string
 	menuExecutor   *menu.MenuExecutor
 	userMgr        *user.UserMgr
 	serverConfig   *config.ServerConfig
 	serverConfigMu *sync.RWMutex // External mutex for server config
+
+	interval     time.Duration
+	targets      []reloadTarget
+	sentinelPath string
+
+	mu     sync.Mutex           // guards mtimes and stop
+	mtimes map[string]time.Time // last-seen modification time per polled path
+	stop   chan struct{}
+	done   chan struct{}
 }
 
-// NewConfigWatcher creates a new configuration file watcher.
+// NewConfigWatcher creates a configuration file watcher and starts polling.
 func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.MenuExecutor, userMgr *user.UserMgr, serverConfig *config.ServerConfig, serverConfigMu *sync.RWMutex) (*ConfigWatcher, error) {
-	watcher, err := fsnotify.NewWatcher()
+	// Polling a directory that does not exist would silently never fire, so
+	// fail loudly instead of starting a watcher that can never do anything.
+	info, err := os.Stat(rootConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file watcher: %w", err)
+		return nil, fmt.Errorf("cannot watch config directory %s: %w", rootConfigPath, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("config path %s is not a directory", rootConfigPath)
 	}
 
 	cw := &ConfigWatcher{
-		watcher:        watcher,
-		watcherDone:    make(chan bool),
 		rootConfigPath: rootConfigPath,
 		menuSetPath:    menuSetPath,
 		menuExecutor:   menuExecutor,
 		userMgr:        userMgr,
 		serverConfig:   serverConfig,
 		serverConfigMu: serverConfigMu,
+		interval:       defaultPollInterval,
+		sentinelPath:   config.ReloadSentinelPath(rootConfigPath),
+		mtimes:         make(map[string]time.Time),
+		stop:           make(chan struct{}),
+		done:           make(chan struct{}),
 	}
 
-	// Watch the configs directory
-	if err := watcher.Add(rootConfigPath); err != nil {
-		_ = watcher.Close() // cleanup on error path
-		return nil, fmt.Errorf("failed to watch %s: %w", rootConfigPath, err)
-	}
-	slog.Info("watching for config changes", "path", rootConfigPath)
-
-	// Watch the menu set path for theme.json
-	themePath := filepath.Join(menuSetPath, "theme.json")
-	if _, err := os.Stat(themePath); err == nil {
-		if err := watcher.Add(themePath); err != nil {
-			slog.Warn("failed to watch theme path", "path", themePath, "error", err)
-		} else {
-			slog.Info("watching for theme changes", "path", themePath)
-		}
+	cw.targets = []reloadTarget{
+		{name: "config.json", path: filepath.Join(rootConfigPath, "config.json"), reload: cw.reloadServerConfig},
+		{name: "doors.json", path: filepath.Join(rootConfigPath, "doors.json"), reload: cw.reloadDoors},
+		{name: "login.json", path: filepath.Join(rootConfigPath, "login.json"), reload: cw.reloadLoginSequence},
+		{name: "strings.json", path: filepath.Join(rootConfigPath, "strings.json"), reload: cw.reloadStrings},
+		{name: "theme.json", path: filepath.Join(menuSetPath, "theme.json"), reload: cw.reloadTheme},
 	}
 
-	// Start watching in a goroutine
-	go cw.watchLoop(watcher)
+	// Record current timestamps so the first poll does not reload everything
+	// that already loaded cleanly at startup.
+	cw.seed()
 
+	go cw.pollLoop()
+
+	slog.Info("watching for config changes",
+		"path", rootConfigPath, "sentinel", cw.sentinelPath, "interval", cw.interval)
 	return cw, nil
 }
 
-// Stop stops the configuration file watcher.
-func (cw *ConfigWatcher) Stop() {
+// seed records the current modification time of every polled file without
+// triggering a reload.
+func (cw *ConfigWatcher) seed() {
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
 
-	if cw.watcher == nil {
-		return
+	paths := make([]string, 0, len(cw.targets)+1)
+	paths = append(paths, cw.sentinelPath)
+	for _, t := range cw.targets {
+		paths = append(paths, t.path)
 	}
-
-	select {
-	case <-cw.watcherDone:
-		// already closed
-	default:
-		close(cw.watcherDone)
-	}
-	cw.watcherDone = nil
-
-	_ = cw.watcher.Close() // best-effort watcher shutdown
-	cw.watcher = nil
-	slog.Info("configuration file watcher stopped")
-}
-
-// watchLoop handles file system events for configuration files.
-func (cw *ConfigWatcher) watchLoop(w *fsnotify.Watcher) {
-	// Debounce timer to avoid reloading on rapid successive writes
-	var debounceTimer *time.Timer
-	debounceDuration := 500 * time.Millisecond
-
-	for {
-		select {
-		case event, ok := <-w.Events:
-			if !ok {
-				return
-			}
-
-			// Only care about Write and Create events
-			if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
-				// Cancel existing debounce timer
-				if debounceTimer != nil {
-					debounceTimer.Stop()
-				}
-				// Schedule reload after debounce period
-				debounceTimer = time.AfterFunc(debounceDuration, func() {
-					cw.handleConfigChange(event.Name)
-				})
-			}
-
-		case err, ok := <-w.Errors:
-			if !ok {
-				return
-			}
-			slog.Error("config file watcher error", "error", err)
-
-		case <-cw.watcherDone:
-			slog.Info("stopping config file watcher")
-			return
+	for _, p := range paths {
+		if info, err := os.Stat(p); err == nil {
+			cw.mtimes[p] = info.ModTime()
 		}
 	}
 }
 
-// handleConfigChange identifies which config file changed and reloads it.
-func (cw *ConfigWatcher) handleConfigChange(path string) {
-	filename := filepath.Base(path)
-	slog.Info("config file change detected", "file", filename)
-
-	switch strings.ToLower(filename) {
-	case "doors.json":
-		cw.reloadDoors()
-	case "login.json":
-		cw.reloadLoginSequence()
-	case "strings.json":
-		cw.reloadStrings()
-	case "theme.json":
-		cw.reloadTheme()
-	case "config.json":
-		cw.reloadServerConfig()
-	case "events.json":
-		// Events config reload would require restarting the scheduler
-		// For now, just log that a restart is needed
-		slog.Warn("events.json changed — restart required")
-	case "ftn.json":
-		// FTN config reload would require restarting the message manager
-		slog.Warn("ftn.json changed — restart required")
+// Stop halts polling. It is safe to call more than once.
+func (cw *ConfigWatcher) Stop() {
+	cw.mu.Lock()
+	select {
+	case <-cw.stop:
+		cw.mu.Unlock()
+		return // already stopped
 	default:
-		// Ignore other files
-		slog.Debug("ignoring config file change", "file", filename)
+		close(cw.stop)
+	}
+	cw.mu.Unlock()
+
+	<-cw.done
+	slog.Info("configuration file watcher stopped")
+}
+
+// pollLoop checks for modified configuration files until Stop is called.
+func (cw *ConfigWatcher) pollLoop() {
+	defer close(cw.done)
+
+	ticker := time.NewTicker(cw.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cw.stop:
+			slog.Info("stopping config file watcher")
+			return
+		case <-ticker.C:
+			cw.poll()
+		}
+	}
+}
+
+// poll reloads every configuration file whose timestamp changed since the last
+// check. A touched sentinel reloads everything regardless of timestamps.
+func (cw *ConfigWatcher) poll() {
+	if cw.changed(cw.sentinelPath) {
+		slog.Info("reload sentinel touched, reloading all configuration",
+			"path", cw.sentinelPath)
+		// Take the current timestamps first: the files being reloaded here are
+		// the same ones the sentinel is announcing, and without this each would
+		// reload a second time on the next poll.
+		for _, t := range cw.targets {
+			cw.changed(t.path)
+		}
+		cw.ReloadAll()
+		return
+	}
+
+	for _, t := range cw.targets {
+		if cw.changed(t.path) {
+			slog.Info("config file change detected", "file", t.name)
+			t.reload()
+		}
+	}
+}
+
+// changed reports whether path's modification time differs from the one last
+// recorded, updating the record. A file that does not exist is not a change;
+// its record is dropped so that re-creating it registers as one.
+//
+// Any difference counts, not just a newer timestamp, so that restoring a config
+// file from a backup — which can move the timestamp backwards — still reloads.
+func (cw *ConfigWatcher) changed(path string) bool {
+	info, err := os.Stat(path)
+
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
+
+	if err != nil {
+		delete(cw.mtimes, path)
+		return false
+	}
+
+	mt := info.ModTime()
+	prev, seen := cw.mtimes[path]
+	cw.mtimes[path] = mt
+	return !seen || !mt.Equal(prev)
+}
+
+// ReloadAll re-reads every watched configuration file. Used by the reload
+// sentinel and by SIGHUP.
+func (cw *ConfigWatcher) ReloadAll() {
+	for _, t := range cw.targets {
+		t.reload()
 	}
 }
 
