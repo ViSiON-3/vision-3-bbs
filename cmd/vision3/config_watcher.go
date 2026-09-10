@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -400,7 +401,16 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 	if err := logging.SetLevel(logCfg.Level); err != nil {
 		slog.Warn("config.json logging.level not applied", "level", logCfg.Level, "error", err)
 	} else if after := logging.Level(); after != before {
-		slog.Info("log level changed", "from", before.String(), "to", after.String())
+		// Log at the new threshold (or INFO, whichever is higher) so the
+		// message announcing the change survives the change it announces:
+		// at a fixed INFO it would be filtered out the moment the level
+		// rises past INFO, making a successful change look like a silent
+		// failure.
+		msgLevel := slog.LevelInfo
+		if after > msgLevel {
+			msgLevel = after
+		}
+		slog.Log(context.Background(), msgLevel, "log level changed", "from", before.String(), "to", after.String())
 	}
 
 	slog.Info("config.json reloaded")
