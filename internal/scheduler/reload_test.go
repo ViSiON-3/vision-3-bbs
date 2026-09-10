@@ -10,12 +10,15 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
-func testEvent(id, schedule string, startup bool) config.EventConfig {
+func testEvent(t *testing.T, id, schedule string, startup bool) config.EventConfig {
+	t.Helper()
 	return config.EventConfig{
-		ID:           id,
-		Name:         id,
-		Schedule:     schedule,
-		Command:      "true",
+		ID:       id,
+		Name:     id,
+		Schedule: schedule,
+		// Resolved via lookPath so platforms without the command (Windows)
+		// skip instead of failing when a test actually executes it.
+		Command:      lookPath(t, "true"),
 		Enabled:      true,
 		RunAtStartup: startup,
 	}
@@ -46,7 +49,7 @@ func startScheduler(t *testing.T, s *Scheduler) {
 
 func TestReloadSwapsScheduledEvents(t *testing.T) {
 	s := newTestScheduler(t, config.EventsConfig{
-		Events: []config.EventConfig{testEvent("old-a", "0 3 * * *", false), testEvent("old-b", "0 4 * * *", false)},
+		Events: []config.EventConfig{testEvent(t, "old-a", "0 3 * * *", false), testEvent(t, "old-b", "0 4 * * *", false)},
 	})
 	startScheduler(t, s)
 
@@ -60,7 +63,7 @@ func TestReloadSwapsScheduledEvents(t *testing.T) {
 	}
 
 	s.Reload(config.EventsConfig{
-		Events: []config.EventConfig{testEvent("new-a", "0 5 * * *", false)},
+		Events: []config.EventConfig{testEvent(t, "new-a", "0 5 * * *", false)},
 	})
 
 	if got := s.ScheduledCount(); got != 1 {
@@ -75,9 +78,9 @@ func TestReloadKeepsValidSchedulesOnPartialError(t *testing.T) {
 
 	s.Reload(config.EventsConfig{
 		Events: []config.EventConfig{
-			testEvent("good", "0 3 * * *", false),
-			testEvent("bad", "not a cron line", false),
-			testEvent("also-good", "30 6 * * *", false),
+			testEvent(t, "good", "0 3 * * *", false),
+			testEvent(t, "bad", "not a cron line", false),
+			testEvent(t, "also-good", "30 6 * * *", false),
 		},
 	})
 
@@ -94,8 +97,8 @@ func TestReloadDoesNotFireStartupEvents(t *testing.T) {
 	// A startup-only event (no schedule) and a scheduled one.
 	s.Reload(config.EventsConfig{
 		Events: []config.EventConfig{
-			testEvent("startup-only", "", true),
-			testEvent("cron", "0 3 * * *", false),
+			testEvent(t, "startup-only", "", true),
+			testEvent(t, "cron", "0 3 * * *", false),
 		},
 	})
 
@@ -160,6 +163,11 @@ func TestReloadRaceWithExecution(t *testing.T) {
 	var wg sync.WaitGroup
 	done := make(chan struct{})
 
+	// Events are built on the test goroutine: testEvent resolves its command
+	// via lookPath, whose skip-if-missing must not fire inside a goroutine.
+	reloadEv := testEvent(t, "e", "0 3 * * *", false)
+	runnerEv := testEvent(t, "runner", "", false)
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -167,7 +175,7 @@ func TestReloadRaceWithExecution(t *testing.T) {
 		for i := 0; i < reloads; i++ {
 			s.Reload(config.EventsConfig{
 				MaxConcurrentEvents: 1 + i%3,
-				Events:              []config.EventConfig{testEvent("e", "0 3 * * *", false)},
+				Events:              []config.EventConfig{reloadEv},
 			})
 		}
 	}()
@@ -176,8 +184,7 @@ func TestReloadRaceWithExecution(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ev := testEvent("runner", "", false)
-			ev.Command = "true"
+			ev := runnerEv
 			for {
 				select {
 				case <-done:
@@ -199,7 +206,7 @@ func TestReloadRaceWithExecution(t *testing.T) {
 func TestReloadDuringStartup(t *testing.T) {
 	events := make([]config.EventConfig, 50)
 	for i := range events {
-		events[i] = testEvent("boot-"+string(rune('a'+i%26))+string(rune('0'+i/26)), "0 3 * * *", false)
+		events[i] = testEvent(t, "boot-"+string(rune('a'+i%26))+string(rune('0'+i/26)), "0 3 * * *", false)
 	}
 	s := newTestScheduler(t, config.EventsConfig{Events: events})
 
@@ -208,7 +215,7 @@ func TestReloadDuringStartup(t *testing.T) {
 	// No synchronization on purpose: land somewhere inside (or before, or
 	// after) Start's scheduling loop.
 	s.Reload(config.EventsConfig{
-		Events: []config.EventConfig{testEvent("reloaded", "0 5 * * *", false)},
+		Events: []config.EventConfig{testEvent(t, "reloaded", "0 5 * * *", false)},
 	})
 
 	deadline := time.Now().Add(2 * time.Second)

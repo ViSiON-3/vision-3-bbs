@@ -171,8 +171,8 @@ func (s *Scheduler) Stop() {
 // ScheduledCount reports how many cron entries the scheduler currently
 // carries. Startup-only events are not cron entries and are not counted.
 func (s *Scheduler) ScheduledCount() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.cron == nil {
 		return 0
 	}
