@@ -57,7 +57,10 @@ type Service struct {
 }
 
 // AreaBinding ties a message area to the V3Net network it is subscribed on
-// and the origin line its outbound messages carry.
+// and the origin line its outbound messages carry. Origin is the leaf
+// config's value verbatim and may be EMPTY: the board-name fallback is
+// applied by the consumer at use time, not baked in here, so a renamed
+// board reaches blank-origin areas without a reload.
 type AreaBinding struct {
 	Network string
 	Origin  string
@@ -506,16 +509,13 @@ func (s *Service) ConfigPath() string {
 // ConfigureLeaves builds and registers a leaf client for every subscription
 // in leafCfgs: board tags are resolved against the message manager, a JAM
 // router is wired per network, and each resolved area is bound to its
-// network and origin. Unresolvable boards and networks with no resolvable
-// boards are skipped with a warning, matching historical startup behavior.
-// If the service is already running, new leaves start immediately.
-func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager, defaultOrigin string) {
+// network and configured origin (possibly empty — see AreaBinding).
+// Unresolvable boards and networks with no resolvable boards are skipped
+// with a warning, matching historical startup behavior. If the service is
+// already running, new leaves start immediately.
+func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager) {
 	for _, lcfg := range leafCfgs {
 		router := NewJAMRouter()
-		origin := lcfg.Origin
-		if origin == "" {
-			origin = defaultOrigin
-		}
 		var resolvedBoards []string
 		for _, tag := range lcfg.Boards {
 			area, ok := mgr.GetAreaByTag(tag)
@@ -525,7 +525,7 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 			}
 			router.Add(tag, NewJAMAdapter(mgr, area.ID))
 			resolvedBoards = append(resolvedBoards, tag)
-			s.RegisterArea(area.ID, lcfg.Network, origin)
+			s.RegisterArea(area.ID, lcfg.Network, lcfg.Origin)
 		}
 		if len(resolvedBoards) == 0 {
 			slog.Warn("V3Net leaf: no resolvable boards, skipping", "network", lcfg.Network)
@@ -552,7 +552,7 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 //
 // Hub settings, the enabled flag, and keystore/dedup paths are NOT touched;
 // those still require a restart.
-func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager, confMgr *conference.ConferenceManager, defaultOrigin string) error {
+func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager, confMgr *conference.ConferenceManager) error {
 	s.reloadMu.Lock()
 	defer s.reloadMu.Unlock()
 
@@ -575,7 +575,7 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	}
 	slog.Info("v3net: leaf subscriptions stopped for reload", "count", len(old))
 
-	s.ConfigureLeaves(leafCfgs, mgr, defaultOrigin)
+	s.ConfigureLeaves(leafCfgs, mgr)
 
 	s.mu.RLock()
 	count := len(s.leaves)
