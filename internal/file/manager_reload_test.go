@@ -99,3 +99,26 @@ func TestReloadRereadsRecordsFromDisk(t *testing.T) {
 		t.Errorf("externally added record not visible after reload: %v", err)
 	}
 }
+
+// TestReloadErrorsOnMissingFile pins the review fix on #331: a missing
+// file_areas.json is a reload error keeping the old definitions — not a
+// silent success that recreates an empty file whose fresh timestamp would
+// later wipe every area.
+func TestReloadErrorsOnMissingFile(t *testing.T) {
+	fm := setupTestFileManager(t, []FileArea{
+		{ID: 1, Tag: "KEEP", Name: "Keep", Path: "keep"},
+	})
+
+	if err := os.Remove(fm.configPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := fm.Reload(); err == nil {
+		t.Fatal("Reload succeeded with file_areas.json missing")
+	}
+	if _, ok := fm.GetAreaByTag("KEEP"); !ok {
+		t.Error("definitions lost after a refused reload")
+	}
+	if _, err := os.Stat(fm.configPath); !os.IsNotExist(err) {
+		t.Error("a refused reload recreated file_areas.json")
+	}
+}

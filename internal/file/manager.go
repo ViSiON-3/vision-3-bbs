@@ -85,6 +85,15 @@ func NewFileManager(baseDataPath, baseConfigPath string) (*FileManager, error) {
 // metadata.json. The config watcher enforces this by deferring the reload
 // until the session registry reports zero active sessions.
 func (fm *FileManager) Reload() error {
+	// A missing config is a reload ERROR, not the fresh-install case it is at
+	// construction. loadAreas would helpfully create an empty file_areas.json
+	// and report success with the old definitions still in memory — and the
+	// created file's fresh timestamp would then queue a follow-up reload that
+	// wipes every area. Refuse instead, keeping the running definitions and
+	// the sysop's ability to restore the file.
+	if _, err := os.Stat(fm.configPath); err != nil {
+		return fmt.Errorf("reloading file areas: %w", err)
+	}
 	if err := fm.loadAreas(); err != nil {
 		return fmt.Errorf("reloading file areas: %w", err)
 	}
