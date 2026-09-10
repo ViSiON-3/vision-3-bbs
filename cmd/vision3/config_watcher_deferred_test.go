@@ -290,3 +290,69 @@ func TestMessageAreasReloadEndToEnd(t *testing.T) {
 		t.Error("new message area not visible after the board went idle")
 	}
 }
+
+// TestDeferredApplyFailureRetries pins the review fix on #331: a transient
+// apply failure must stay queued and retry on a later poll, not be silently
+// de-queued until the file happens to change again.
+func TestDeferredApplyFailureRetries(t *testing.T) {
+	cw, dir, rec, _ := newDeferredTestWatcher(t)
+
+	failing := true
+	cw.deferredTargets[0].apply = func() error {
+		if failing {
+			return os.ErrPermission
+		}
+		rec.hit("structural.json")()
+		return nil
+	}
+
+	touch(t, filepath.Join(dir, "structural.json"), time.Second)
+	cw.poll() // idle board: applies immediately — and fails
+	if got := cw.PendingReloads(); len(got) != 1 {
+		t.Fatalf("failed apply was de-queued: PendingReloads() = %v", got)
+	}
+
+	cw.poll() // still failing: still pending
+	if got := cw.PendingReloads(); len(got) != 1 {
+		t.Fatalf("pending lost across a retry: %v", got)
+	}
+
+	failing = false
+	cw.poll()
+	if got := rec.count("structural.json"); got != 1 {
+		t.Errorf("applied %d times after the failure cleared, want 1", got)
+	}
+	if got := cw.PendingReloads(); got != nil {
+		t.Errorf("PendingReloads() = %v after success, want nil", got)
+	}
+}
+
+// TestDeferredInvalidEditClearsStalePending pins the second review fix: a
+// valid edit queues, then a second INVALID edit arrives before the board
+// goes idle — the stale pending mark must clear, or the idle window would
+// apply the invalid file.
+func TestDeferredInvalidEditClearsStalePending(t *testing.T) {
+	cw, dir, _, reg := newDeferredTestWatcher(t)
+	reg.Register(&session.BbsSession{ID: 1, NodeID: 1})
+
+	valid := true
+	cw.deferredTargets[0].validate = func() error {
+		if valid {
+			return nil
+		}
+		return os.ErrInvalid
+	}
+
+	touch(t, filepath.Join(dir, "structural.json"), time.Second)
+	cw.poll()
+	if got := cw.PendingReloads(); len(got) != 1 {
+		t.Fatalf("valid edit not queued: %v", got)
+	}
+
+	valid = false
+	touch(t, filepath.Join(dir, "structural.json"), 2*time.Second)
+	cw.poll()
+	if got := cw.PendingReloads(); got != nil {
+		t.Fatalf("stale pending survived an invalid follow-up edit: %v", got)
+	}
+}

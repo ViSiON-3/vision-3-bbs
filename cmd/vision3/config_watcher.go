@@ -282,6 +282,12 @@ func (cw *ConfigWatcher) activeSessions() int {
 // changes its timestamp, which queues it afresh.
 func (cw *ConfigWatcher) queueDeferred(t deferredTarget) {
 	if err := t.validate(); err != nil {
+		// Also clear any pending mark from an earlier, still-valid edit:
+		// the file's CURRENT content is what an apply would read, and it
+		// is invalid — applying the queue now would fail against it.
+		cw.mu.Lock()
+		delete(cw.pending, t.name)
+		cw.mu.Unlock()
 		slog.Error("changed config failed validation and will not be applied",
 			"file", t.name, "error", err)
 		return
@@ -307,6 +313,18 @@ func (cw *ConfigWatcher) applyPendingIfIdle() {
 		return
 	}
 	for _, t := range cw.deferredTargets {
+		// Re-check right before each apply: a caller may have connected while
+		// an earlier target in this pass was reloading. A session can still
+		// register in the instant between this check and the apply — that
+		// residual window is benign, not ignored: the managers' reloads take
+		// their write locks, so a just-admitted session's first structural
+		// operation serializes after the swap, and the mutators re-validate
+		// by ID under the write lock (see #330). The gate exists to keep
+		// reloads away from sessions mid-flight in longer operations, and a
+		// session admitted microseconds ago has none.
+		if cw.activeSessions() > 0 {
+			return
+		}
 		cw.mu.Lock()
 		isPending := cw.pending[t.name]
 		cw.mu.Unlock()
@@ -316,18 +334,21 @@ func (cw *ConfigWatcher) applyPendingIfIdle() {
 	}
 }
 
-// applyDeferred runs a deferred target's reload and clears its pending mark.
-// The mark is cleared even on failure: the apply re-reads the file, so a
-// failure means the file changed again and went bad, and the fix will arrive
-// as a fresh timestamp change that re-queues it.
+// applyDeferred runs a deferred target's reload, clearing its pending mark
+// only on success. A failed apply stays queued and retries on subsequent
+// polls: validation already gated what enters the queue, so an apply failure
+// is a transient problem (I/O, permissions) or a broken runtime dependency,
+// and either way silently de-queuing would strand the change until the file
+// happened to be touched again. The recurring error log while it retries is
+// deliberate visibility, not noise.
 func (cw *ConfigWatcher) applyDeferred(t deferredTarget) {
+	if err := t.apply(); err != nil {
+		slog.Error("failed to apply deferred config reload; will retry", "file", t.name, "error", err)
+		return
+	}
 	cw.mu.Lock()
 	delete(cw.pending, t.name)
 	cw.mu.Unlock()
-	if err := t.apply(); err != nil {
-		slog.Error("failed to apply deferred config reload", "file", t.name, "error", err)
-		return
-	}
 	slog.Info("deferred config reload applied", "file", t.name)
 }
 
