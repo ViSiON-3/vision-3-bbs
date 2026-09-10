@@ -280,3 +280,25 @@ func TestReplyKludgeParsing(t *testing.T) {
 		})
 	}
 }
+
+func TestStripAreaKludges(t *testing.T) {
+	in := []string{
+		"MSGID: 21:4/158.1 6a6508de",
+		"AREA:FSX_TST",
+		"AREA: FSX_TST",
+		"\x01AREA:FSX_TST",
+		"area:fsx_tst",
+		"TID: ViSiON/3",
+	}
+	want := []string{"MSGID: 21:4/158.1 6a6508de", "TID: ViSiON/3"}
+
+	got := stripAreaKludges(in)
+	if len(got) != len(want) {
+		t.Fatalf("stripAreaKludges = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("kludge %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

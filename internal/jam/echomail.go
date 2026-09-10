@@ -6,9 +6,20 @@ import (
 	"time"
 )
 
+// isAreaKludge reports whether a kludge line is an FTS-0004 AREA tag, with or
+// without the SOH prefix and padding some tossers add.
+func isAreaKludge(kludge string) bool {
+	kludge = strings.TrimPrefix(kludge, "\x01")
+	return len(kludge) >= len("AREA:") && strings.EqualFold(kludge[:len("AREA:")], "AREA:")
+}
+
 // WriteMessageExt writes a message with full echomail support. For echomail
-// messages it generates a MSGID, adds AREA/PID/TID kludges, tearline, and
-// origin line. DateProcessed is set to 0 so the tosser knows to export it.
+// messages it generates a MSGID, adds PID/TID kludges, tearline, and origin
+// line. DateProcessed is set to 0 so the tosser knows to export it.
+//
+// echoTag identifies the echo area but is not stored in the message: the area
+// is implicit in the base, and the tosser writes the FTS-0004 AREA line when
+// it packs the message for export.
 //
 // For local messages this behaves identically to WriteMessage.
 func (b *Base) WriteMessageExt(msg *Message, msgType MessageType, echoTag, originText string) (int, error) {
@@ -78,9 +89,6 @@ func (b *Base) WriteMessageExt(msg *Message, msgType MessageType, echoTag, origi
 				hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldMsgID, msg.MsgID))
 				hdr.MSGIDcrc = CRC32String(msg.MsgID)
 			}
-			if echoTag != "" {
-				hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldFTSKludge, "AREA:"+echoTag))
-			}
 			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldPID, FormatPID()))
 			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldFTSKludge, "TID: "+FormatTID()))
 
@@ -110,8 +118,14 @@ func (b *Base) WriteMessageExt(msg *Message, msgType MessageType, echoTag, origi
 			hdr.REPLYcrc = CRC32String(msg.ReplyID)
 		}
 
-		// Additional caller-provided kludges
+		// Additional caller-provided kludges. AREA is never stored: the echo
+		// area is implicit in the message base, and the tosser writes the
+		// AREA line from the area tag when it packs the message, so a stored
+		// copy would show up in the packed body twice.
 		for _, kludge := range msg.Kludges {
+			if isAreaKludge(kludge) {
+				continue
+			}
 			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldFTSKludge, kludge))
 		}
 

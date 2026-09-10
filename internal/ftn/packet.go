@@ -369,6 +369,18 @@ type ParsedBody struct {
 	Path    []string // PATH lines (without "\x01PATH: " prefix)
 }
 
+// ParseAreaLine recognizes the echomail AREA line and returns its tag.
+// FTS-0004 puts "AREA:TAG" at the very start of the body with no SOH and no
+// space after the colon, but some tossers prefix it with SOH and/or pad it,
+// so both are accepted here. The tag is returned without surrounding spaces.
+func ParseAreaLine(line string) (string, bool) {
+	line = strings.TrimPrefix(line, "\x01")
+	if len(line) < len("AREA:") || !strings.EqualFold(line[:len("AREA:")], "AREA:") {
+		return "", false
+	}
+	return strings.TrimSpace(line[len("AREA:"):]), true
+}
+
 // ParsePackedMessageBody separates an FTN message body into its components.
 // Kludge lines start with \x01 (SOH), SEEN-BY/PATH are at the end.
 func ParsePackedMessageBody(body string) *ParsedBody {
@@ -389,9 +401,11 @@ func ParsePackedMessageBody(body string) *ParsedBody {
 		}
 
 		// Check for AREA: tag (first line)
-		if strings.HasPrefix(line, "AREA:") && result.Area == "" && len(textLines) == 0 {
-			result.Area = strings.TrimPrefix(line, "AREA:")
-			continue
+		if result.Area == "" && len(textLines) == 0 {
+			if tag, ok := ParseAreaLine(line); ok {
+				result.Area = tag
+				continue
+			}
 		}
 
 		// Check for kludge lines (\x01 prefix)

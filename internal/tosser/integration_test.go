@@ -871,3 +871,76 @@ func makeStagedPkt(t *testing.T) []byte {
 	}
 	return buf.Bytes()
 }
+
+// TestExportedEchomailHasSingleAreaLine verifies that a locally written
+// echomail is packed with exactly one FTS-0004 AREA line — bare, at the start
+// of the body, with no SOH-prefixed duplicate among the kludges.
+func TestExportedEchomailHasSingleAreaLine(t *testing.T) {
+	env := setupTestEnv(t)
+
+	base, err := env.msgMgr.GetBase(1)
+	if err != nil {
+		t.Fatalf("GetBase: %v", err)
+	}
+
+	msg := jam.NewMessage()
+	msg.From = "Local User"
+	msg.To = "All"
+	msg.Subject = "Area tag test"
+	msg.Text = "Testing the new setup...\r"
+	msg.OrigAddr = "21:4/158.1"
+	// A legacy base (or a sloppy remote) may already carry an AREA kludge;
+	// it must not survive into the packed body.
+	msg.Kludges = []string{"AREA:FSX_TEST"}
+
+	area, _ := env.msgMgr.GetAreaByTag("FSX_TEST")
+	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
+	if _, err = base.WriteMessageExt(msg, msgType, area.EchoTag, "TestBBS"); err != nil {
+		t.Fatalf("WriteMessageExt: %v", err)
+	}
+	base.Close()
+
+	tosser, err := New("testnet", env.netCfg, env.globalCfg, env.dupeDB, env.msgMgr)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if result := tosser.ScanAndExport(); result.MessagesExported != 1 {
+		t.Fatalf("expected 1 exported, got %d (errors: %v)", result.MessagesExported, result.Errors)
+	}
+
+	entries, _ := os.ReadDir(env.outboundDir)
+	var pktPath string
+	for _, e := range entries {
+		if strings.ToLower(filepath.Ext(e.Name())) == ".pkt" {
+			pktPath = filepath.Join(env.outboundDir, e.Name())
+		}
+	}
+	if pktPath == "" {
+		t.Fatal("no .PKT written to outbound")
+	}
+
+	f, err := os.Open(pktPath)
+	if err != nil {
+		t.Fatalf("open pkt: %v", err)
+	}
+	defer f.Close()
+
+	_, pktMsgs, err := ftn.ReadPacket(f)
+	if err != nil {
+		t.Fatalf("ReadPacket: %v", err)
+	}
+	if len(pktMsgs) != 1 {
+		t.Fatalf("expected 1 message in packet, got %d", len(pktMsgs))
+	}
+
+	body := pktMsgs[0].Body
+	if n := strings.Count(strings.ToUpper(body), "AREA:"); n != 1 {
+		t.Errorf("body has %d AREA lines, want 1: %q", n, body)
+	}
+	if !strings.HasPrefix(body, "AREA:FSX_TEST\r") {
+		t.Errorf("body must start with a bare AREA line, got %q", body)
+	}
+	if strings.Contains(body, "\x01AREA") {
+		t.Errorf("body has an SOH-prefixed AREA kludge: %q", body)
+	}
+}

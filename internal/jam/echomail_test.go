@@ -44,18 +44,19 @@ func TestWriteMessageExtEchomail(t *testing.T) {
 		t.Errorf("PID = %q, should start with ViSiON/3", got.PID)
 	}
 
-	// Verify kludges contain AREA and TID
+	// Verify kludges contain TID but not AREA — the echo area is implicit in
+	// the base, and the tosser writes the AREA line at export time.
 	var hasArea, hasTID bool
 	for _, k := range got.Kludges {
-		if k == "AREA:FSX_GEN" {
+		if isAreaKludge(k) {
 			hasArea = true
 		}
 		if strings.HasPrefix(k, "TID: ") {
 			hasTID = true
 		}
 	}
-	if !hasArea {
-		t.Error("missing AREA kludge")
+	if hasArea {
+		t.Errorf("AREA kludge should not be stored, kludges = %q", got.Kludges)
 	}
 	if !hasTID {
 		t.Error("missing TID kludge")
