@@ -55,3 +55,21 @@ func TouchReloadSentinel(configPath string) error {
 	}
 	return nil
 }
+
+// ReloadForceSentinelName is the semaphore a sysop touches to apply DEFERRED
+// configuration changes immediately, without waiting for the board to go
+// idle, and to re-read everything else at the same time:
+//
+//	touch configs/reload.force
+//
+// Unlike ReloadSentinelName, no tool touches this automatically — structural
+// changes (file areas, and eventually message areas) normally wait for zero
+// active sessions because applying them mid-session can pull state out from
+// under a caller. The force sentinel is the explicit "I know, do it now".
+const ReloadForceSentinelName = "reload.force"
+
+// ReloadForceSentinelPath returns the full path to the force sentinel within
+// the given config directory.
+func ReloadForceSentinelPath(configPath string) string {
+	return filepath.Join(configPath, ReloadForceSentinelName)
+}

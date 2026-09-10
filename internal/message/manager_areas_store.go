@@ -18,12 +18,13 @@ func (mm *MessageManager) loadMessageAreas() error {
 	if err != nil {
 		return err
 	}
-	if len(data) == 0 {
-		return nil
-	}
-
 	var areasList []*MessageArea
-	if err := json.Unmarshal(data, &areasList); err != nil {
+	if len(data) == 0 {
+		// An empty file means no areas. Falling through with a nil list
+		// (rather than returning early) matters on reload: the maps below
+		// must be rebuilt empty, not left holding the previous contents.
+		slog.Info("message areas file is empty; none loaded", "path", mm.areasPath)
+	} else if err := json.Unmarshal(data, &areasList); err != nil {
 		return fmt.Errorf("failed to unmarshal areas from %s: %w", mm.areasPath, err)
 	}
 
@@ -33,6 +34,12 @@ func (mm *MessageManager) loadMessageAreas() error {
 	mm.areasByID = make(map[int]*MessageArea)
 	mm.areasByTag = make(map[string]*MessageArea)
 	mm.areasByEchoTag = make(map[string]*MessageArea)
+	// The cached indexes are keyed by area ID and validated against the base
+	// they were built from; they reset in the SAME critical section as the
+	// map swap, or a concurrent lookup could pair the new areas with an index
+	// built for a previous BasePath. At construction this is a no-op.
+	mm.threadIndex = make(map[int]*threadIndex)
+	mm.msgidIndex = make(map[int]*msgidIndex)
 
 	for _, area := range areasList {
 		if area == nil {
@@ -108,6 +115,34 @@ func (mm *MessageManager) loadMessageAreas() error {
 		slog.Info("auto-assigned message area positions (migration)", "count", len(sorted))
 	}
 
+	return nil
+}
+
+// Reload re-reads message_areas.json, replacing the in-memory definitions.
+// The cached thread/MSGID indexes drop in the same critical section as the
+// map swap (inside loadMessageAreas) — an area's BasePath may have changed,
+// and a stale index would answer for the wrong base. JAM bases are
+// opened on demand and never cached, so there are no handles to invalidate;
+// a message being posted concurrently holds its own area pointer and its own
+// open base, and at worst lands in an area removed a moment earlier (the JAM
+// files on disk are untouched by a reload). A message_areas.json that fails
+// to read or parse leaves the current definitions in place.
+//
+// Callers must ensure no sysop session is mid-edit in the area editor: its
+// whole-file SaveAreas would clobber (or be clobbered by) the sysop's edit.
+// The config watcher defers this reload to an idle window, which guarantees
+// that. V3Net area routing is bound at startup and is NOT rewired by a
+// reload; changing a V3Net-subscribed area still needs a restart.
+func (mm *MessageManager) Reload() error {
+	if err := mm.loadMessageAreas(); err != nil {
+		return fmt.Errorf("reloading message areas: %w", err)
+	}
+
+	mm.mu.RLock()
+	count := len(mm.areasByID)
+	mm.mu.RUnlock()
+
+	slog.Info("message areas reloaded", "count", count)
 	return nil
 }
 

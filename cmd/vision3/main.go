@@ -1795,20 +1795,6 @@ func main() {
 	// Initialize session registry for who's online tracking
 	sessionRegistry = session.NewSessionRegistry()
 
-	// Initialize and start the WFC admin server.
-	// adminMinLevel is a live getter so config hot-reloads take effect immediately.
-	adminMinLevel = func() int { return menuExecutor.GetServerConfig().CoSysOpLevel }
-	wfcEnabled = func() bool { return menuExecutor.GetServerConfig().WFCEnabled }
-	adminServer = admin.NewServer(admin.ServerConfig{
-		Reg:        sessionRegistry,
-		SystemName: serverConfig.BoardName,
-		StartedAt:  time.Now(),
-		Refresh:    time.Second,
-		MaxEvents:  200,
-		CallsToday: func() int { return -1 },
-	})
-	go adminServer.Run(context.Background())
-
 	// Load transfer protocol configuration
 	var loadedProtocols []transfer.ProtocolConfig
 	protocolsPath := filepath.Join(rootConfigPath, "protocols.json")
@@ -1832,6 +1818,28 @@ func main() {
 		defer configWatcher.Stop()
 		slog.Info("configuration hot reload enabled")
 	}
+
+	// Initialize and start the WFC admin server. Created after the menu
+	// executor and config watcher so its getters bind to objects that
+	// already exist — the closures are live so config hot-reloads take
+	// effect immediately, and the pending-reload queue reaches the console.
+	adminMinLevel = func() int { return menuExecutor.GetServerConfig().CoSysOpLevel }
+	wfcEnabled = func() bool { return menuExecutor.GetServerConfig().WFCEnabled }
+	adminServer = admin.NewServer(admin.ServerConfig{
+		Reg:        sessionRegistry,
+		SystemName: serverConfig.BoardName,
+		StartedAt:  time.Now(),
+		Refresh:    time.Second,
+		MaxEvents:  200,
+		CallsToday: func() int { return -1 },
+		PendingReloads: func() []string {
+			if configWatcher == nil {
+				return nil
+			}
+			return configWatcher.PendingReloads()
+		},
+	})
+	go adminServer.Run(context.Background())
 
 	if ftnErr == nil && len(ftnConfig.Networks) > 0 && !ftnConfig.Binkd.Enabled {
 		slog.Info("internal FTN tosser disabled, use v3mail for toss/scan or enable the binkd mailer")

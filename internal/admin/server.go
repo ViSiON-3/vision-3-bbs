@@ -18,6 +18,9 @@ type ServerConfig struct {
 	Refresh    time.Duration
 	MaxEvents  int
 	CallsToday func() int // returns -1 if unavailable; may be nil
+	// PendingReloads lists structural config reloads queued for the next
+	// idle window; may be nil.
+	PendingReloads func() []string
 }
 
 // Server polls SessionRegistry, keeps the latest snapshot, and fans out
@@ -93,7 +96,12 @@ func (s *Server) tickLocked(now time.Time) {
 	if s.cfg.CallsToday != nil {
 		calls = s.cfg.CallsToday()
 	}
+	var pending []string
+	if s.cfg.PendingReloads != nil {
+		pending = s.cfg.PendingReloads()
+	}
 	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, calls)
+	snap.PendingReloads = pending
 
 	s.mu.Lock()
 	events := DiffSnapshots(s.prev, snap)

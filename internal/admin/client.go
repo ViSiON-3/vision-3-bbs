@@ -49,6 +49,9 @@ type SystemSnapshot struct {
 	UptimeSecs int64       `json:"uptimeSecs"`
 	Nodes      []NodeState `json:"nodes"`
 	Counters   Counters    `json:"counters"`
+	// PendingReloads names structural config files whose reload is queued
+	// for the next idle window (empty when nothing is pending).
+	PendingReloads []string `json:"pendingReloads,omitempty"`
 }
 
 // EventType enumerates diff-synthesized event kinds.
