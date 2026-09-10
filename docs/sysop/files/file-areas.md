@@ -98,6 +98,32 @@ The `SELECTFILEAREA` function allows area selection:
 - Updates user's current file area
 - Accepts both ID numbers and tag names
 
+### Area & Conference Navigation
+
+The file menu mirrors the message menu's navigation commands:
+
+- `SELECTFILEAREA` (**A**) — pick a file area
+- `CHANGEFILECONF` (**C**) — pick a file conference (lightbar); changing conference
+  applies to **both** the file and message menus, so your active conference stays
+  in step across the two
+- `NEXTFILEAREA` / `PREVFILEAREA` (**]** / **[**) — step through areas in the
+  current conference
+- `NEXTFILECONF` / `PREVFILECONF` (**}** / **{**) — step through conferences
+  (also joins both menus)
+
+### File Newscan Date
+
+`FILE_NEWSCAN` (**N**) lists files uploaded since your previous logon. `SETFILESCANDATE`
+lets a user override that cutoff:
+
+- a date (`MM/DD/YY`) — show files uploaded on/after it
+- `A` — show all files regardless of date
+- `R` — reset to the default ("since your previous logon")
+
+The choice persists on the user record (`fileNewscanSince`) until changed. In the
+shipped `FILEM.CFG` it is on **Y** (the message menu keeps it on **U**, which the
+file menu uses for Upload); prompt text is the `fileScanDatePrompt` string.
+
 ### Listing Files
 
 The `LISTFILES` function shows files in current area:
