@@ -15,7 +15,18 @@ The login sequence provides:
 
 ## Configuration
 
-The login sequence is configured in `configs/login.json`. If the file is missing, a built-in default sequence is used (System News, Last Callers, Oneliners, User Stats).
+The login sequence is configured in `configs/login.json`. If the file is missing, a built-in default sequence is used (SysOp Notices, New Mail Scan, System News, Last Callers, Oneliners, User Stats, New User Validation).
+
+### Item Order Matters
+
+Items run top to bottom, and any item that returns a navigation action ends the
+sequence — everything below it is skipped. `FASTLOGIN` is the common case: when
+a caller picks a jump option, the rest of the sequence never runs.
+
+Put anything the caller must not miss **above** `FASTLOGIN`. The shipped
+template leads with `SYSOPNOTICES` and `NMAILSCAN` for exactly this reason:
+queued sysop notices are cleared once delivered, and unread mail is otherwise
+only discoverable by hand, so neither gets a second chance if it is skipped.
 
 ### Basic Structure
 
@@ -131,7 +142,12 @@ Displays `FASTLOGN.ANS` and loads options from `menus/v3/cfg/FASTLOGN.CFG`. The 
 {"command": "FASTLOGIN"}
 ```
 
-If the user selects a jump option (e.g., skip to MAIN), the remaining login items are skipped and the user goes directly to the chosen menu. Placing FASTLOGIN as the first item lets users skip the entire sequence upfront. Placing it at the end lets users jump to a submenu instead of MAIN after seeing everything.
+If the user selects a jump option (e.g., skip to MAIN), the remaining login items are skipped and the user goes directly to the chosen menu. Placing FASTLOGIN at the end lets users jump to a submenu instead of MAIN after seeing everything.
+
+Placing FASTLOGIN first lets users skip the entire sequence upfront — including
+any notice they would otherwise be shown. Keep `SYSOPNOTICES` and `NMAILSCAN`
+above it (as the shipped template does) so a fast-login jump cannot skip a
+queued sysop notice or an unread-mail alert.
 
 ### NEWUSERVAL
 
@@ -172,6 +188,18 @@ validation actually happens.
 ```json
 {"command": "SYSOPNOTICES"}
 ```
+
+Place it **above `FASTLOGIN`** (the shipped template puts it first). Skipping the
+step does not lose a notice — the queue is only cleared once the notice is
+actually written — but a SysOp who habitually takes the fast-login jump never
+reaches the step, so a signup can sit unseen in `data/sysop_notices.json`
+indefinitely.
+
+The wording comes from `newUserSysopNotice`, which is separate from the
+`newUserSysopPage` used for the live page: a page is read as it arrives, so it
+says "just signed up", while a queued notice may be read days later and states
+the age instead — "signed up 9 hours ago from node 1". The age is computed when
+the notice is displayed, not when it is queued.
 
 Silent for ordinary users and when the queue is empty — it checks co-SysOp
 access itself, so no `sec_level` is required (though you may set one to remove
@@ -239,15 +267,20 @@ In this example, `SYSOP_NEWS.ANS` is only shown to users with access level 200 o
 
 ```json
 [
+    {"command": "SYSOPNOTICES"},
+    {"command": "NMAILSCAN"},
     {"command": "PRINTNEWS"},
     {"command": "LASTCALLS"},
     {"command": "ONELINERS"},
-    {"command": "USERSTATS"}
+    {"command": "USERSTATS"},
+    {"command": "NEWUSERVAL"}
 ]
 ```
 
-`PRINTNEWS` is silent when the user has no unread news, so this behaves like the
-legacy three-item sequence on a system with no news items.
+`SYSOPNOTICES` and `NEWUSERVAL` are silent for non-SysOps, `NMAILSCAN` is silent
+without a PRIVMAIL area, and `PRINTNEWS` is silent when the user has no unread
+news — so on a quiet system this still behaves like the legacy three-item
+sequence.
 
 ### Full-Featured Login
 
@@ -327,7 +360,7 @@ The login sequence is loaded at BBS startup from `configs/login.json` and stored
 - **Missing PRIVMAIL area**: NMAILSCAN silently skips if the area is not configured
 - **User disconnect**: Detected via EOF and properly handled (session ends)
 - **Script errors**: RUNDOOR logs the error but continues with the next item
-- **Missing login.json**: The built-in default sequence (PRINTNEWS, LASTCALLS, ONELINERS, USERSTATS) is used
+- **Missing login.json**: The built-in default sequence (SYSOPNOTICES, NMAILSCAN, PRINTNEWS, LASTCALLS, ONELINERS, USERSTATS, NEWUSERVAL) is used
 
 ## Menu System Integration
 
@@ -345,6 +378,7 @@ All login sequence commands are also registered as menu runnables and can be use
 | WHOISONLINE    | `RUN:WHOISONLINE` (existing) |
 | PRINTNEWS      | `RUN:PRINTNEWS`              |
 | CHECKNUV       | `RUN:CHECKNUV`               |
+| SYSOPNOTICES   | `RUN:SYSOPNOTICES`           |
 | NEWUSERVAL     | `RUN:NEWUSERVAL`             |
 
 ## File Locations

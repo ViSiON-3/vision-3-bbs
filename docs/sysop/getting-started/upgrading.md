@@ -375,10 +375,15 @@ them from the built-in default automatically):
   used to be a live page only, so it was lost whenever no SysOp was online at
   signup time (which is most of the time). It is now also **queued and shown at
   the SysOp's next login**. Add a `{"command": "SYSOPNOTICES"}` item to your
-  login sequence (a good spot is right after `NEWUSERVAL`). It is informational
+  login sequence — put it **first**, above `FASTLOGIN`, since a fast-login jump
+  ends the sequence and would skip everything below it. It is informational
   and fires regardless of `autoValidateNewUsers` — unlike `NEWUSERVAL`, which is
   silent when nothing is pending validation. Queued notices live in
-  `data/sysop_notices.json`.
+  `data/sysop_notices.json`. The wording is its own string,
+  `newUserSysopNotice` — the live page's "just signed up" is not true of a
+  notice read on the SysOp's next call, so the queued form states how long ago
+  the signup happened. No strings.json edit is needed; the key has a built-in
+  default.
 - **"Read it now?" after `NMAILSCAN`** — when the login mail scan reports new
   private mail, the caller is now asked whether to read it immediately, dropping
   them into the reader (reply/skip per message). No config change needed beyond
