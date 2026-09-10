@@ -1735,18 +1735,7 @@ func main() {
 	if ftnErr != nil {
 		slog.Error("failed to load FTN config, echomail disabled", "error", ftnErr)
 	}
-	networkOrigins := make(map[string]string)
-	if ftnErr == nil {
-		for name, netCfg := range ftnConfig.Networks {
-			if strings.TrimSpace(netCfg.Origin) == "" {
-				continue
-			}
-			networkOrigins[strings.ToLower(strings.TrimSpace(name))] = netCfg.Origin
-		}
-	}
-	if len(networkOrigins) == 0 {
-		networkOrigins = nil
-	}
+	networkOrigins := ftnConfig.NetworkOrigins()
 
 	// Oneliners are loaded by the runnable; start with an empty list here.
 	oneliners := []string{}

@@ -369,3 +369,32 @@ func TestValidateMessageAreasAcceptsEmptyFile(t *testing.T) {
 		t.Errorf("validateMessageAreas rejected an empty file: %v", err)
 	}
 }
+
+// TestReloadFTNOriginsUpdatesMessageManager: an ftn.json origin edit reaches
+// the message manager's origin resolution without a restart.
+func TestReloadFTNOriginsUpdatesMessageManager(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := filepath.Join(tmp, "configs")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "message_areas.json"),
+		[]byte(`[{"id":1,"tag":"GEN","name":"General","network":"fidonet"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	msgMgr, err := message.NewMessageManager(filepath.Join(tmp, "data"), configDir, "TestBBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cw := &ConfigWatcher{rootConfigPath: configDir, menuExecutor: &menu.MenuExecutor{MessageMgr: msgMgr}}
+
+	if err := os.WriteFile(filepath.Join(configDir, "ftn.json"),
+		[]byte(`{"networks":{"fidonet":{"origin":"Fresh Origin"}}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cw.reloadFTNOrigins()
+
+	if got := msgMgr.OriginTextForNetwork("fidonet"); got != "Fresh Origin" {
+		t.Errorf("OriginTextForNetwork = %q after reload, want Fresh Origin", got)
+	}
+}

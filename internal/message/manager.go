@@ -129,16 +129,37 @@ func normalizeNetworkOrigins(input map[string]string) map[string]string {
 	return out
 }
 
-// originTextForNetwork returns the origin line text for an area on the given
+// OriginTextForNetwork returns the origin line text for an area on the given
 // network, falling back to the board name when the network sets none.
-func (mm *MessageManager) originTextForNetwork(network string) string {
+func (mm *MessageManager) OriginTextForNetwork(network string) string {
 	key := strings.ToLower(strings.TrimSpace(network))
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
 	if key != "" && mm.networkOrigins != nil {
 		if origin := mm.networkOrigins[key]; origin != "" {
 			return origin
 		}
 	}
 	return mm.boardName
+}
+
+// SetNetworkOrigins replaces the per-network origin overrides, applied when
+// ftn.json is reloaded. Messages already being posted keep the origin they
+// resolved; subsequent posts use the new set.
+func (mm *MessageManager) SetNetworkOrigins(origins map[string]string) {
+	normalized := normalizeNetworkOrigins(origins)
+	mm.mu.Lock()
+	mm.networkOrigins = normalized
+	mm.mu.Unlock()
+}
+
+// SetBoardName replaces the fallback origin text, applied when config.json's
+// boardName is reloaded. Other boardName consumers (the WFC header, V3Net
+// identity, QWK packet headers) still read theirs at startup.
+func (mm *MessageManager) SetBoardName(name string) {
+	mm.mu.Lock()
+	mm.boardName = name
+	mm.mu.Unlock()
 }
 
 // Close is a no-op now that bases are opened on-demand.
