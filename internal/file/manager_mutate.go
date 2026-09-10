@@ -12,34 +12,35 @@ import (
 // DeleteFileRecord removes a file record by ID. If deleteFromDisk is true,
 // the physical file is also removed from the filesystem.
 func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) error {
-	fm.muFiles.Lock()
-	defer fm.muFiles.Unlock()
-
+	// muAreas and muFiles are never held together (see the FileManager doc
+	// comment): find the record under a read lock, copy the area path under
+	// muAreas, then re-validate by ID under the write lock before mutating —
+	// the index from the first search can go stale in between.
+	fm.muFiles.RLock()
 	foundAreaID := -1
-	foundIndex := -1
-	var foundFilename string
-
 searchLoop:
 	for areaID, records := range fm.fileRecords {
 		for i := range records {
 			if records[i].ID == fileID {
 				foundAreaID = areaID
-				foundIndex = i
-				foundFilename = records[i].Filename
 				break searchLoop
 			}
 		}
 	}
+	fm.muFiles.RUnlock()
 
 	if foundAreaID == -1 {
 		return fmt.Errorf("file record with ID %s not found", fileID)
 	}
 
-	// If requested, delete from disk first — before touching metadata.
-	// This way a failure leaves metadata intact and the operation is retryable.
+	var areaDir string
 	if deleteFromDisk {
 		fm.muAreas.RLock()
 		area, areaExists := fm.fileAreas[foundAreaID]
+		var areaPath string
+		if areaExists {
+			areaPath = area.Path
+		}
 		fm.muAreas.RUnlock()
 		if !areaExists {
 			return fmt.Errorf("internal inconsistency: area %d not found", foundAreaID)
@@ -48,14 +49,41 @@ searchLoop:
 		if err != nil {
 			return fmt.Errorf("failed to get absolute base path: %w", err)
 		}
+		areaDir = filepath.Join(absBasePath, areaPath)
+	}
+
+	fm.muFiles.Lock()
+	defer fm.muFiles.Unlock()
+
+	// Re-search under the write lock: another writer may have moved or
+	// removed the record while no lock was held.
+	foundIndex := -1
+	for i := range fm.fileRecords[foundAreaID] {
+		if fm.fileRecords[foundAreaID][i].ID == fileID {
+			foundIndex = i
+			break
+		}
+	}
+	if foundIndex == -1 {
+		return fmt.Errorf("file record with ID %s not found", fileID)
+	}
+	// The on-disk name comes from the record as it exists NOW, under the
+	// write lock — not from a read-phase copy, which UpdateFileRecord may
+	// have renamed in the unlocked gap. A stale name here could delete a
+	// different file that has since taken it over.
+	freshFilename := fm.fileRecords[foundAreaID][foundIndex].Filename
+
+	// If requested, delete from disk first — before touching metadata.
+	// This way a failure leaves metadata intact and the operation is retryable.
+	if deleteFromDisk {
 		// Only gate the disk delete: a record with a corrupt filename must
 		// still be removable from metadata (deleteFromDisk=false), or the
 		// sysop has no way to clear it.
-		safeName, err := validateFilename(foundFilename)
+		safeName, err := validateFilename(freshFilename)
 		if err != nil {
 			return fmt.Errorf("refusing to delete from disk: %w", err)
 		}
-		fullPath := filepath.Join(absBasePath, area.Path, safeName)
+		fullPath := filepath.Join(areaDir, safeName)
 		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 			slog.Warn("failed to delete file from disk", "path", fullPath, "error", err)
 			return fmt.Errorf("failed to delete file from disk: %w", err)
@@ -72,39 +100,34 @@ searchLoop:
 	fm.muFiles.Lock()
 
 	if saveErr != nil {
-		slog.Error("failed to save file records after deleting", "file", foundFilename, "id", fileID, "error", saveErr)
+		slog.Error("failed to save file records after deleting", "file", freshFilename, "id", fileID, "error", saveErr)
 		return saveErr
 	}
 
-	slog.Info("deleted file record", "file", foundFilename, "id", fileID, "area", foundAreaID)
+	slog.Info("deleted file record", "file", freshFilename, "id", fileID, "area", foundAreaID)
 	return nil
 }
 
 // MoveFileRecord moves a file record to a different area, renaming the file on disk.
 func (fm *FileManager) MoveFileRecord(fileID uuid.UUID, targetAreaID int) error {
-	fm.muAreas.RLock()
-	targetArea, targetExists := fm.fileAreas[targetAreaID]
-	fm.muAreas.RUnlock()
-	if !targetExists {
-		return fmt.Errorf("target area ID %d not found", targetAreaID)
-	}
-
-	fm.muFiles.Lock()
-	defer fm.muFiles.Unlock()
-
+	// muAreas and muFiles are never held together (see the FileManager doc
+	// comment): locate the record under a read lock, copy both area paths
+	// under muAreas, then re-validate by ID under the write lock — the index
+	// from the first search can go stale in between. Disk operations stay
+	// under the write lock, as before, so concurrent moves of the same file
+	// serialize on it.
+	fm.muFiles.RLock()
 	srcAreaID := -1
-	srcIndex := -1
-
 searchLoop:
 	for areaID, records := range fm.fileRecords {
 		for i := range records {
 			if records[i].ID == fileID {
 				srcAreaID = areaID
-				srcIndex = i
 				break searchLoop
 			}
 		}
 	}
+	fm.muFiles.RUnlock()
 
 	if srcAreaID == -1 {
 		return fmt.Errorf("file record with ID %s not found", fileID)
@@ -113,11 +136,20 @@ searchLoop:
 		return fmt.Errorf("file is already in area %d", targetAreaID)
 	}
 
-	record := fm.fileRecords[srcAreaID][srcIndex]
-
 	fm.muAreas.RLock()
+	targetArea, targetExists := fm.fileAreas[targetAreaID]
 	srcArea, srcExists := fm.fileAreas[srcAreaID]
+	var srcAreaPath, targetAreaPath string
+	if targetExists {
+		targetAreaPath = targetArea.Path
+	}
+	if srcExists {
+		srcAreaPath = srcArea.Path
+	}
 	fm.muAreas.RUnlock()
+	if !targetExists {
+		return fmt.Errorf("target area ID %d not found", targetAreaID)
+	}
 	if !srcExists {
 		return fmt.Errorf("internal inconsistency: source area %d not found", srcAreaID)
 	}
@@ -126,12 +158,34 @@ searchLoop:
 	if err != nil {
 		return fmt.Errorf("failed to get absolute base path: %w", err)
 	}
+
+	fm.muFiles.Lock()
+	defer fm.muFiles.Unlock()
+
+	// Re-search under the write lock: another writer may have moved or
+	// removed the record while no lock was held.
+	srcIndex := -1
+	for i := range fm.fileRecords[srcAreaID] {
+		if fm.fileRecords[srcAreaID][i].ID == fileID {
+			srcIndex = i
+			break
+		}
+	}
+	if srcIndex == -1 {
+		return fmt.Errorf("file record with ID %s not found", fileID)
+	}
+	record := fm.fileRecords[srcAreaID][srcIndex]
+
+	// The on-disk name comes from the record as it exists NOW, under the
+	// write lock — not from a read-phase copy, which UpdateFileRecord may
+	// have renamed in the unlocked gap. A stale name here could rename a
+	// different file that has since taken it over.
 	safeFilename, err := validateFilename(record.Filename)
 	if err != nil {
 		return fmt.Errorf("refusing to move file record %s: %w", fileID, err)
 	}
-	srcPath := filepath.Join(absBasePath, srcArea.Path, safeFilename)
-	dstPath := filepath.Join(absBasePath, targetArea.Path, safeFilename)
+	srcPath := filepath.Join(absBasePath, srcAreaPath, safeFilename)
+	dstPath := filepath.Join(absBasePath, targetAreaPath, safeFilename)
 
 	// Guard against silently overwriting an existing file in the target area.
 	if _, err := os.Stat(dstPath); err == nil {

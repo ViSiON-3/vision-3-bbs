@@ -17,33 +17,37 @@ import (
 // It does NOT check that the file exists on disk -- callers that need that must
 // stat the returned path themselves.
 func (fm *FileManager) GetFilePath(fileID uuid.UUID) (string, error) {
-	fm.muFiles.RLock() // Need read lock to find the file record
-	defer fm.muFiles.RUnlock()
-	fm.muAreas.RLock() // Need read lock to get area path
-	defer fm.muAreas.RUnlock()
-
-	var foundArea *FileArea
-	var foundRecord *FileRecord
-
+	// muAreas and muFiles are never held together (see the FileManager doc
+	// comment): copy what is needed from each domain under its own lock.
+	fm.muFiles.RLock()
+	foundAreaID := -1
+	var foundFilename string
 searchLoop:
 	for areaID, records := range fm.fileRecords {
 		for i := range records {
 			if records[i].ID == fileID {
-				// Get corresponding area
-				area, areaExists := fm.fileAreas[areaID]
-				if !areaExists {
-					// Should not happen if data is consistent
-					return "", fmt.Errorf("internal inconsistency: area %d not found for file %s", areaID, fileID)
-				}
-				foundArea = area
-				foundRecord = &records[i] // Get pointer to the record
+				foundAreaID = areaID
+				foundFilename = records[i].Filename
 				break searchLoop
 			}
 		}
 	}
+	fm.muFiles.RUnlock()
 
-	if foundRecord == nil {
+	if foundAreaID == -1 {
 		return "", fmt.Errorf("file record with ID %s not found", fileID)
+	}
+
+	fm.muAreas.RLock()
+	area, areaExists := fm.fileAreas[foundAreaID]
+	var areaPath string
+	if areaExists {
+		areaPath = area.Path
+	}
+	fm.muAreas.RUnlock()
+	if !areaExists {
+		// Should not happen if data is consistent
+		return "", fmt.Errorf("internal inconsistency: area %d not found for file %s", foundAreaID, fileID)
 	}
 
 	// Construct path safely
@@ -54,12 +58,12 @@ searchLoop:
 	}
 	// Area path is relative to base path
 	// Filename should be just the base name
-	safeFilename, err := validateFilename(foundRecord.Filename)
+	safeFilename, err := validateFilename(foundFilename)
 	if err != nil {
 		return "", fmt.Errorf("file record %s: %w", fileID, err)
 	}
 
-	fullPath := filepath.Join(absBasePath, foundArea.Path, safeFilename)
+	fullPath := filepath.Join(absBasePath, areaPath, safeFilename)
 
 	// Final check: Ensure the resolved path is still within the intended base directory
 	if !strings.HasPrefix(fullPath, absBasePath) {

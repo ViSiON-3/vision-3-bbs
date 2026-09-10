@@ -14,26 +14,28 @@ import (
 // FileManager manages file areas and their associated file records.
 //
 // Locking: FileManager has two mutexes, muAreas (guards fileAreas/fileTags)
-// and muFiles (guards fileRecords). The intended acquisition order is
-// muAreas before muFiles. GetFilePath and DeleteFileRecord invert that
-// order: they take muFiles first and, while still holding it, take muAreas
-// (nested, not sequential — both are held at once). MoveFileRecord does
-// the same nested muFiles-then-muAreas acquisition internally (after an
-// initial, unrelated sequential muAreas check made before muFiles is ever
-// taken). loadAllFileRecords is the only function that nests them in the
-// intended muAreas-then-muFiles order — and it, too, runs only from
-// NewFileManager, so at runtime the nested order is in fact uniformly
-// muFiles-then-muAreas. Both halves of the inversion are therefore
-// confined to construction.
+// and muFiles (guards fileRecords). The invariant is that no goroutine ever
+// holds both at once — there is no acquisition order to get wrong, and a
+// runtime reload of file areas (an exclusive muAreas.Lock() after startup)
+// cannot deadlock against record operations. Historically these locks were
+// nested in both orders (an ABBA inversion, safe only because muAreas was
+// never write-locked after construction); that inversion is resolved, and
+// TestNoDeadlockUnderConcurrentAreaWriteLock guards against its return.
 //
-// This is an ABBA lock-ordering inversion. It cannot deadlock today only
-// because muAreas.Lock() (the exclusive write lock) is taken solely by
-// loadAreas, which runs once from NewFileManager before the FileManager
-// is shared, so muAreas is effectively read-only for the rest of the
-// process's life and concurrent RLock holders never block each other.
-// Introducing any runtime reload of file areas (an exclusive muAreas.Lock()
-// after startup) would make this a live deadlock risk. Do not add such a
-// reload without first resolving the ordering inversion.
+// Operations needing data from both domains copy what they need under one
+// lock, release it, then take the other. The price is that the combined view
+// is not atomic: a record found under muFiles may be gone by the time the
+// write lock is retaken, so mutators re-search by ID under the write lock
+// before touching anything, and treat "no longer there" as not-found. Area
+// paths read this way can in principle go stale against a future area
+// reload; such a reload is expected to run only with no sessions active
+// (see issue #323), which is also what keeps the rest of a reload's
+// consequences — removed areas' records, changed paths — tractable. The
+// same constraint covers in-flight mutators: DeleteFileRecord and
+// MoveFileRecord release muFiles between their in-memory update and
+// saveFileRecords, so a reload landing in that window would re-read
+// metadata.json — still holding the pre-mutation list — and revert the
+// update after the disk operation has already run.
 type FileManager struct {
 	basePath    string               // Base directory for all file areas (e.g., "data/files")
 	configPath  string               // Path to file_areas.json
