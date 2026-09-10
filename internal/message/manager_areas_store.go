@@ -34,6 +34,12 @@ func (mm *MessageManager) loadMessageAreas() error {
 	mm.areasByID = make(map[int]*MessageArea)
 	mm.areasByTag = make(map[string]*MessageArea)
 	mm.areasByEchoTag = make(map[string]*MessageArea)
+	// The cached indexes are keyed by area ID and validated against the base
+	// they were built from; they reset in the SAME critical section as the
+	// map swap, or a concurrent lookup could pair the new areas with an index
+	// built for a previous BasePath. At construction this is a no-op.
+	mm.threadIndex = make(map[int]*threadIndex)
+	mm.msgidIndex = make(map[int]*msgidIndex)
 
 	for _, area := range areasList {
 		if area == nil {
@@ -112,9 +118,10 @@ func (mm *MessageManager) loadMessageAreas() error {
 	return nil
 }
 
-// Reload re-reads message_areas.json, replacing the in-memory definitions
-// and dropping the cached thread/MSGID indexes — an area's BasePath may have
-// changed, and a stale index would answer for the wrong base. JAM bases are
+// Reload re-reads message_areas.json, replacing the in-memory definitions.
+// The cached thread/MSGID indexes drop in the same critical section as the
+// map swap (inside loadMessageAreas) — an area's BasePath may have changed,
+// and a stale index would answer for the wrong base. JAM bases are
 // opened on demand and never cached, so there are no handles to invalidate;
 // a message being posted concurrently holds its own area pointer and its own
 // open base, and at worst lands in an area removed a moment earlier (the JAM
@@ -132,11 +139,9 @@ func (mm *MessageManager) Reload() error {
 		return fmt.Errorf("reloading message areas: %w", err)
 	}
 
-	mm.mu.Lock()
-	mm.threadIndex = make(map[int]*threadIndex)
-	mm.msgidIndex = make(map[int]*msgidIndex)
+	mm.mu.RLock()
 	count := len(mm.areasByID)
-	mm.mu.Unlock()
+	mm.mu.RUnlock()
 
 	slog.Info("message areas reloaded", "count", count)
 	return nil

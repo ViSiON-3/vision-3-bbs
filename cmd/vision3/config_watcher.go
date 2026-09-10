@@ -401,6 +401,11 @@ func (cw *ConfigWatcher) validateMessageAreas() error {
 		return err
 	}
 	var areas []message.MessageArea
+	// An empty file is a supported state — loadMessageAreas defines it as
+	// "no areas" — and json.Unmarshal would reject it.
+	if len(data) == 0 {
+		return nil
+	}
 	if err := json.Unmarshal(data, &areas); err != nil {
 		return fmt.Errorf("parsing message_areas.json: %w", err)
 	}
