@@ -72,6 +72,35 @@ func NewFileManager(baseDataPath, baseConfigPath string) (*FileManager, error) {
 	return fm, nil
 }
 
+// Reload re-reads file_areas.json and every area's metadata, replacing the
+// in-memory definitions and records. Areas removed from the file lose their
+// records; added areas get theirs loaded; tag lookups follow the new file. A
+// file_areas.json that fails to read or parse leaves the current definitions
+// in place (loadAreas mutates nothing before a successful parse).
+//
+// Callers must ensure no sessions are active. Per the reload constraint in
+// the type comment: with callers online, area paths copied before the swap
+// can go stale, and a reload landing between an in-flight mutator's
+// in-memory update and its save would revert the update from stale
+// metadata.json. The config watcher enforces this by deferring the reload
+// until the session registry reports zero active sessions.
+func (fm *FileManager) Reload() error {
+	if err := fm.loadAreas(); err != nil {
+		return fmt.Errorf("reloading file areas: %w", err)
+	}
+	if err := fm.loadAllFileRecords(); err != nil {
+		// Area definitions swapped but some metadata failed to read; the
+		// affected areas simply list as empty until the next reload.
+		return fmt.Errorf("reloading file records: %w", err)
+	}
+
+	fm.muAreas.RLock()
+	count := len(fm.fileAreas)
+	fm.muAreas.RUnlock()
+	slog.Info("file areas reloaded", "count", count)
+	return nil
+}
+
 // loadAreas loads the FileArea definitions from the configuration file.
 func (fm *FileManager) loadAreas() error {
 	fm.muAreas.Lock()

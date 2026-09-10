@@ -64,8 +64,9 @@ internal/configeditor/reload.now
 # SSH host keys (generated during setup, not tracked in git)
 /configs/ssh_host_*
 
-# Config reload semaphore (touched at runtime to signal a config reload)
+# Config reload semaphores (touched at runtime to signal a config reload)
 /configs/reload.now
+/configs/reload.force
 
 # Logs and debug files
 *.log

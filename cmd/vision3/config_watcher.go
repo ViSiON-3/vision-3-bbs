@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
@@ -59,14 +61,29 @@ type ConfigWatcher struct {
 	connTracker    *ConnectionTracker
 	scheduler      *scheduler.Scheduler // set via SetScheduler after startup; nil until then
 
-	interval     time.Duration
-	targets      []reloadTarget
-	sentinelPath string
+	interval          time.Duration
+	targets           []reloadTarget
+	deferredTargets   []deferredTarget
+	sentinelPath      string
+	forceSentinelPath string
 
-	mu     sync.Mutex           // guards mtimes and stop
-	mtimes map[string]time.Time // last-seen modification time per polled path
-	stop   chan struct{}
-	done   chan struct{}
+	mu      sync.Mutex           // guards mtimes, pending, and stop
+	mtimes  map[string]time.Time // last-seen modification time per polled path
+	pending map[string]bool      // deferred targets queued for the next idle window
+	stop    chan struct{}
+	done    chan struct{}
+}
+
+// deferredTarget is a watched file whose reload is structural: applying it
+// with callers online can pull state out from under a session, so a detected
+// change is validated immediately (the sysop hears about a bad file at save
+// time, not hours later) but applied only once the session registry reports
+// zero active sessions — or when the force sentinel demands it.
+type deferredTarget struct {
+	name     string // basename, for logging and pending listings
+	path     string
+	validate func() error // parse-only check, run at signal time
+	apply    func() error // the actual reload, run at the idle window
 }
 
 // NewConfigWatcher creates a configuration file watcher and starts polling.
@@ -82,18 +99,20 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 	}
 
 	cw := &ConfigWatcher{
-		rootConfigPath: rootConfigPath,
-		menuSetPath:    menuSetPath,
-		menuExecutor:   menuExecutor,
-		userMgr:        userMgr,
-		serverConfig:   serverConfig,
-		serverConfigMu: serverConfigMu,
-		connTracker:    connTracker,
-		interval:       defaultPollInterval,
-		sentinelPath:   config.ReloadSentinelPath(rootConfigPath),
-		mtimes:         make(map[string]time.Time),
-		stop:           make(chan struct{}),
-		done:           make(chan struct{}),
+		rootConfigPath:    rootConfigPath,
+		menuSetPath:       menuSetPath,
+		menuExecutor:      menuExecutor,
+		userMgr:           userMgr,
+		serverConfig:      serverConfig,
+		serverConfigMu:    serverConfigMu,
+		connTracker:       connTracker,
+		interval:          defaultPollInterval,
+		sentinelPath:      config.ReloadSentinelPath(rootConfigPath),
+		forceSentinelPath: config.ReloadForceSentinelPath(rootConfigPath),
+		mtimes:            make(map[string]time.Time),
+		pending:           make(map[string]bool),
+		stop:              make(chan struct{}),
+		done:              make(chan struct{}),
 	}
 
 	cw.targets = []reloadTarget{
@@ -105,6 +124,14 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		{name: "protocols.json", path: filepath.Join(rootConfigPath, "protocols.json"), reload: cw.reloadProtocols},
 		{name: "events.json", path: filepath.Join(rootConfigPath, "events.json"), reload: cw.reloadEvents},
 		{name: "conferences.json", path: filepath.Join(rootConfigPath, "conferences.json"), reload: cw.reloadConferences},
+	}
+	cw.deferredTargets = []deferredTarget{
+		{
+			name:     "file_areas.json",
+			path:     filepath.Join(rootConfigPath, "file_areas.json"),
+			validate: cw.validateFileAreas,
+			apply:    cw.applyFileAreas,
+		},
 	}
 
 	// Record current timestamps so the first poll does not reload everything
@@ -124,9 +151,12 @@ func (cw *ConfigWatcher) seed() {
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
 
-	paths := make([]string, 0, len(cw.targets)+1)
-	paths = append(paths, cw.sentinelPath)
+	paths := make([]string, 0, len(cw.targets)+len(cw.deferredTargets)+2)
+	paths = append(paths, cw.sentinelPath, cw.forceSentinelPath)
 	for _, t := range cw.targets {
+		paths = append(paths, t.path)
+	}
+	for _, t := range cw.deferredTargets {
 		paths = append(paths, t.path)
 	}
 	for _, p := range paths {
@@ -173,6 +203,20 @@ func (cw *ConfigWatcher) pollLoop() {
 // poll reloads every configuration file whose timestamp changed since the last
 // check. A touched sentinel reloads everything regardless of timestamps.
 func (cw *ConfigWatcher) poll() {
+	if cw.changed(cw.forceSentinelPath) {
+		slog.Warn("force sentinel touched: applying all configuration now, including deferred structural changes",
+			"path", cw.forceSentinelPath, "active_sessions", cw.activeSessions())
+		for _, t := range cw.targets {
+			cw.changed(t.path)
+		}
+		cw.ReloadAll()
+		for _, t := range cw.deferredTargets {
+			cw.changed(t.path)
+			cw.applyDeferred(t)
+		}
+		return
+	}
+
 	if cw.changed(cw.sentinelPath) {
 		slog.Info("reload sentinel touched, reloading all configuration",
 			"path", cw.sentinelPath)
@@ -183,6 +227,15 @@ func (cw *ConfigWatcher) poll() {
 			cw.changed(t.path)
 		}
 		cw.ReloadAll()
+		// Deferred targets covered by the save are queued, not applied: the
+		// sentinel is touched automatically by v3config on every save, and
+		// automatic saves must not bypass the idle gate.
+		for _, t := range cw.deferredTargets {
+			if cw.changed(t.path) {
+				cw.queueDeferred(t)
+			}
+		}
+		cw.applyPendingIfIdle()
 		return
 	}
 
@@ -192,6 +245,118 @@ func (cw *ConfigWatcher) poll() {
 			t.reload()
 		}
 	}
+	for _, t := range cw.deferredTargets {
+		if cw.changed(t.path) {
+			cw.queueDeferred(t)
+		}
+	}
+	cw.applyPendingIfIdle()
+}
+
+// activeSessions reports how many callers are online, or 0 when no session
+// registry is wired (tests, tools) — in which case there is nobody to
+// protect and deferral degrades to immediate application.
+func (cw *ConfigWatcher) activeSessions() int {
+	if cw.menuExecutor == nil || cw.menuExecutor.SessionRegistry == nil {
+		return 0
+	}
+	return cw.menuExecutor.SessionRegistry.ActiveCount()
+}
+
+// queueDeferred validates a changed structural config now and, if it parses,
+// queues it for the next idle window. A file that fails validation is not
+// queued: the error is the sysop's immediate feedback, and fixing the file
+// changes its timestamp, which queues it afresh.
+func (cw *ConfigWatcher) queueDeferred(t deferredTarget) {
+	if err := t.validate(); err != nil {
+		slog.Error("changed config failed validation and will not be applied",
+			"file", t.name, "error", err)
+		return
+	}
+	cw.mu.Lock()
+	cw.pending[t.name] = true
+	cw.mu.Unlock()
+	if n := cw.activeSessions(); n > 0 {
+		slog.Info("structural config change queued; applies when no callers are online",
+			"file", t.name, "active_sessions", n,
+			"hint", "touch configs/"+config.ReloadForceSentinelName+" to apply now")
+	}
+}
+
+// applyPendingIfIdle applies every queued structural reload once the board
+// is idle. Called on each poll tick, so the reload lands within one poll
+// interval of the last caller logging off.
+func (cw *ConfigWatcher) applyPendingIfIdle() {
+	cw.mu.Lock()
+	anyPending := len(cw.pending) > 0
+	cw.mu.Unlock()
+	if !anyPending || cw.activeSessions() > 0 {
+		return
+	}
+	for _, t := range cw.deferredTargets {
+		cw.mu.Lock()
+		isPending := cw.pending[t.name]
+		cw.mu.Unlock()
+		if isPending {
+			cw.applyDeferred(t)
+		}
+	}
+}
+
+// applyDeferred runs a deferred target's reload and clears its pending mark.
+// The mark is cleared even on failure: the apply re-reads the file, so a
+// failure means the file changed again and went bad, and the fix will arrive
+// as a fresh timestamp change that re-queues it.
+func (cw *ConfigWatcher) applyDeferred(t deferredTarget) {
+	cw.mu.Lock()
+	delete(cw.pending, t.name)
+	cw.mu.Unlock()
+	if err := t.apply(); err != nil {
+		slog.Error("failed to apply deferred config reload", "file", t.name, "error", err)
+		return
+	}
+	slog.Info("deferred config reload applied", "file", t.name)
+}
+
+// PendingReloads lists the structural configs queued for the next idle
+// window, for surfacing on the WFC console.
+func (cw *ConfigWatcher) PendingReloads() []string {
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
+	if len(cw.pending) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(cw.pending))
+	for _, t := range cw.deferredTargets {
+		if cw.pending[t.name] {
+			names = append(names, t.name)
+		}
+	}
+	return names
+}
+
+// validateFileAreas is the signal-time check for file_areas.json: parse only,
+// touch nothing.
+func (cw *ConfigWatcher) validateFileAreas() error {
+	data, err := os.ReadFile(filepath.Join(cw.rootConfigPath, "file_areas.json"))
+	if err != nil {
+		return err
+	}
+	var areas []file.FileArea
+	if err := json.Unmarshal(data, &areas); err != nil {
+		return fmt.Errorf("parsing file_areas.json: %w", err)
+	}
+	return nil
+}
+
+// applyFileAreas reloads the file manager from disk. Runs only at an idle
+// window (or under the force sentinel), per the reload constraint documented
+// on FileManager.
+func (cw *ConfigWatcher) applyFileAreas() error {
+	if cw.menuExecutor == nil || cw.menuExecutor.FileMgr == nil {
+		return fmt.Errorf("file manager not running")
+	}
+	return cw.menuExecutor.FileMgr.Reload()
 }
 
 // changed reports whether path's modification time differs from the one last

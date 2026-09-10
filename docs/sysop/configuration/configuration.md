@@ -977,6 +977,29 @@ Reloading `events.json` replaces the cron schedule. Events already mid-run
 finish undisturbed, and `run_at_startup` events belong to process startup —
 saving the file does not re-fire them.
 
+**Applied when the board is idle:**
+
+Structural changes can pull state out from under a caller mid-session, so
+they queue instead of applying immediately, and land within a couple of
+seconds of the last caller logging off:
+
+- `configs/file_areas.json` — areas added, removed, or re-pathed; each
+  area's file records are re-read from its `metadata.json`
+
+A queued change is logged when it queues and again when it applies. The
+change is validated the moment you save — a file that doesn't parse is
+reported immediately and never queued, and the running config stays as it
+was. To apply queued changes right now, without waiting for the board to
+empty:
+
+```bash
+touch configs/reload.force
+```
+
+`reload.force` also re-reads everything else, like `reload.now` — the
+difference is that nothing touches it automatically, so it is the explicit
+"I know callers are online, do it anyway".
+
 **Still requires a restart:**
 
 - Listening ports and hosts (`sshPort`, `sshHost`, `telnetPort`, `telnetHost`)
@@ -984,7 +1007,7 @@ saving the file does not re-fire them.
 - SSH host keys
 - The QWK API listener
 - Logging directory and rolling settings (the log *level* is applied live)
-- `configs/message_areas.json`, `configs/file_areas.json`, `configs/v3net.json`
+- `configs/message_areas.json`, `configs/v3net.json`
 
 ### Triggering a reload by hand
 

@@ -11,14 +11,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// reloadAreasForTest performs the lock sequence a future file-area reload
-// will perform: re-read file_areas.json (exclusive muAreas.Lock inside
-// loadAreas), then re-read the per-area metadata (muFiles.Lock inside
-// loadAllFileRecords). No public Reload exists yet — the point of this file
-// is to prove the locks can support one.
+// reloadAreasForTest exercises the public Reload, which performs exactly the
+// lock sequence this file exists to prove safe: exclusive muAreas.Lock inside
+// loadAreas, then muFiles.Lock inside loadAllFileRecords.
 func reloadAreasForTest(fm *FileManager) {
-	_ = fm.loadAreas()
-	_ = fm.loadAllFileRecords()
+	_ = fm.Reload()
 }
 
 // lockTestManager builds a manager with two areas and a set of records whose
