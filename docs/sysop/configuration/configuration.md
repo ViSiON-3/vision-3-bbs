@@ -960,6 +960,8 @@ the TUI signals the BBS once every file in the save has been written.
 | `configs/strings.json` | |
 | `menus/<set>/theme.json` | |
 | Menu files (`.MNU`, `.CFG`) and ANSI art | Re-read every time a menu is displayed |
+| `configs/protocols.json` | |
+| `configs/events.json` | Reschedules cron events; see notes below |
 | `configs/archivers.json` | Re-read on each archive operation |
 | IP blocklist/allowlist files | Watched separately, reloaded on save |
 | `configs/ftn.json` | Picked up by the binkd mailer on its next cycle |
@@ -970,6 +972,10 @@ Connection-security settings in `config.json` — `maxNodes`, `maxConnectionsPer
 limit below current usage never disconnects anyone: new connections are refused
 until callers log off and usage falls back under the limit.
 
+Reloading `events.json` replaces the cron schedule. Events already mid-run
+finish undisturbed, and `run_at_startup` events belong to process startup —
+saving the file does not re-fire them.
+
 **Still requires a restart:**
 
 - Listening ports and hosts (`sshPort`, `sshHost`, `telnetPort`, `telnetHost`)
@@ -977,8 +983,8 @@ until callers log off and usage falls back under the limit.
 - SSH host keys
 - The QWK API listener
 - Logging directory and rolling settings (the log *level* also needs a restart today)
-- `configs/events.json`, `configs/message_areas.json`, `configs/file_areas.json`,
-  `configs/conferences.json`, `configs/protocols.json`, `configs/v3net.json`
+- `configs/message_areas.json`, `configs/file_areas.json`,
+  `configs/conferences.json`, `configs/v3net.json`
 
 ### Triggering a reload by hand
 

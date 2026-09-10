@@ -48,16 +48,31 @@ func NewScheduler(cfg config.EventsConfig, historyPath string) *Scheduler {
 
 // Start begins the scheduler with the given context
 func (s *Scheduler) Start(ctx context.Context) {
+	// Everything shared with Reload is written under the lock, and the loop
+	// below iterates a snapshot: the config watcher can call Reload as soon
+	// as it is up, which may be while startup scheduling is still in
+	// progress.
+	c := cron.New()
+	s.mu.Lock()
 	s.ctx, s.cancel = context.WithCancel(ctx)
+	// If a reload already installed a cron before Start got here, its config
+	// is newer than the boot config: leave it in place and skip boot-time
+	// cron scheduling below, rather than clobbering the reloaded instance —
+	// which would keep running, orphaned, alongside the stale one. Startup
+	// events still fire either way; they belong to process startup, which is
+	// happening regardless of config age.
+	bootCronCurrent := s.cron == nil
+	if bootCronCurrent {
+		s.cron = c
+	}
+	cfg := s.config
+	s.mu.Unlock()
 	defer s.cancel()
-
-	// Initialize cron scheduler with standard 5-field format (minute hour day month weekday)
-	s.cron = cron.New()
 
 	// Schedule all enabled events
 	enabledCount := 0
 	startupCount := 0
-	for _, event := range s.config.Events {
+	for _, event := range cfg.Events {
 		if !event.Enabled {
 			slog.Debug("event disabled; skipping", "id", event.ID, "name", event.Name)
 			continue
@@ -77,7 +92,10 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 		// Schedule cron events (startup-only events have no schedule)
 		if event.Schedule != "" {
-			if err := s.scheduleEvent(event); err != nil {
+			if !bootCronCurrent {
+				continue // a reload owns the cron; its schedules are newer
+			}
+			if err := s.scheduleEvent(c, event); err != nil {
 				slog.Error("failed to schedule event", "id", event.ID, "name", event.Name, "error", err)
 			} else {
 				enabledCount++
@@ -89,14 +107,32 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}
 
 	if enabledCount == 0 && startupCount == 0 {
+		// Nothing to run yet, but stay alive: a reload of events.json can
+		// schedule events later, and exiting here would leave any cron it
+		// starts unstopped at shutdown.
 		slog.Warn("no enabled events to schedule")
-		return
 	}
 
-	// Start the cron scheduler
-	s.cron.Start()
-	slog.Info("event scheduler running", "scheduled", enabledCount, "startup", startupCount,
-		"max_concurrent", s.config.MaxConcurrentEvents)
+	// Start the cron scheduler — unless a reload already replaced it while the
+	// loop above was scheduling, in which case starting c would resurrect the
+	// instance Reload just retired and its events would fire alongside the
+	// replacement's.
+	// The check and Start happen under the same lock Reload swaps under, so a
+	// reload either lands before (the check fails and c stays retired) or
+	// waits until c is running and then stops it cleanly.
+	s.mu.Lock()
+	current := s.cron == c
+	maxConcurrent := s.config.MaxConcurrentEvents
+	if current {
+		c.Start() // non-blocking: just launches the cron run loop
+	}
+	s.mu.Unlock()
+	if current {
+		slog.Info("event scheduler running", "scheduled", enabledCount, "startup", startupCount,
+			"max_concurrent", maxConcurrent)
+	} else {
+		slog.Info("event scheduler superseded by a reload during startup")
+	}
 
 	// Wait for context cancellation
 	<-s.ctx.Done()
@@ -108,9 +144,12 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 // Stop gracefully stops the scheduler
 func (s *Scheduler) Stop() {
-	if s.cron != nil {
+	s.mu.Lock()
+	c := s.cron
+	s.mu.Unlock()
+	if c != nil {
 		// Stop accepting new jobs
-		cronCtx := s.cron.Stop()
+		cronCtx := c.Stop()
 
 		// Wait for running jobs to complete
 		<-cronCtx.Done()
@@ -129,10 +168,79 @@ func (s *Scheduler) Stop() {
 	}
 }
 
-// scheduleEvent registers an event with the cron scheduler
-func (s *Scheduler) scheduleEvent(event config.EventConfig) error {
+// ScheduledCount reports how many cron entries the scheduler currently
+// carries. Startup-only events are not cron entries and are not counted.
+func (s *Scheduler) ScheduledCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cron == nil {
+		return 0
+	}
+	return len(s.cron.Entries())
+}
+
+// Reload replaces the scheduled events with those in cfg, applied without a
+// restart when events.json changes.
+//
+// Only cron-scheduled entries are affected. Run-at-startup events belong to
+// process startup and do not re-fire on a reload, and events already mid-run
+// are left to finish — the old cron is stopped in the background and its
+// running jobs drain on their own. History, the running-event set, and the
+// scheduler context all carry over.
+func (s *Scheduler) Reload(cfg config.EventsConfig) {
+	if cfg.MaxConcurrentEvents <= 0 {
+		cfg.MaxConcurrentEvents = 3
+	}
+
+	// Build and populate the replacement cron before swapping anything, so a
+	// config full of bad schedules still leaves every valid one running.
+	newCron := cron.New()
+	scheduled := 0
+	for _, event := range cfg.Events {
+		if !event.Enabled || event.Schedule == "" {
+			continue
+		}
+		e := event // capture for the closure
+		if _, err := newCron.AddFunc(e.Schedule, func() {
+			s.executeEventWithConcurrency(e)
+		}); err != nil {
+			slog.Error("failed to schedule event on reload", "id", e.ID, "name", e.Name, "error", err)
+			continue
+		}
+		scheduled++
+	}
+
+	s.mu.Lock()
+	oldCron := s.cron
+	if cfg.MaxConcurrentEvents != s.config.MaxConcurrentEvents {
+		// Resize by replacement. In-flight events release into the semaphore
+		// they acquired from (captured locally in executeEventWithConcurrency),
+		// so the old one drains harmlessly. Until they finish, total
+		// concurrency can briefly exceed the new limit.
+		s.concurrencySem = make(chan struct{}, cfg.MaxConcurrentEvents)
+	}
+	s.config = cfg
+	s.cron = newCron
+	s.mu.Unlock()
+
+	newCron.Start()
+
+	if oldCron != nil {
+		// Stop in the background: Stop's context waits for running jobs, and
+		// the caller is the config watcher's poll loop.
+		go func() { <-oldCron.Stop().Done() }()
+	}
+
+	slog.Info("event scheduler reloaded", "scheduled", scheduled,
+		"max_concurrent", cfg.MaxConcurrentEvents)
+}
+
+// scheduleEvent registers an event with the given cron instance. The instance
+// is passed explicitly rather than read from s.cron, which Reload may have
+// already replaced.
+func (s *Scheduler) scheduleEvent(c *cron.Cron, event config.EventConfig) error {
 	// Parse and add the cron schedule
-	_, err := s.cron.AddFunc(event.Schedule, func() {
+	_, err := c.AddFunc(event.Schedule, func() {
 		s.executeEventWithConcurrency(event)
 	})
 	return err
@@ -148,18 +256,31 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 		return
 	}
 
+	// Capture the semaphore while locked: Reload replaces it when
+	// maxConcurrentEvents changes, and a release must always pair with the
+	// semaphore its slot was acquired from — releasing into a fresh, empty
+	// replacement would block forever.
+	sem := s.concurrencySem
+	maxConcurrent := s.config.MaxConcurrentEvents
+	ctx := s.ctx
+	if ctx == nil {
+		// A reload can install and start a cron before Start assigns s.ctx; a
+		// job firing in that window must not hand executeEvent a nil context.
+		ctx = context.Background()
+	}
+
 	// Try to acquire concurrency semaphore while holding the lock
 	select {
-	case s.concurrencySem <- struct{}{}:
+	case sem <- struct{}{}:
 		// Acquired slot, mark as running before releasing lock
 		s.runningEvents[event.ID] = true
 		s.mu.Unlock()
-		defer func() { <-s.concurrencySem }()
+		defer func() { <-sem }()
 	default:
 		s.mu.Unlock()
 		// At concurrency limit, skip execution
 		slog.Warn("event skipped: max concurrent events reached",
-			"id", event.ID, "name", event.Name, "max_concurrent", s.config.MaxConcurrentEvents)
+			"id", event.ID, "name", event.Name, "max_concurrent", maxConcurrent)
 		return
 	}
 
@@ -170,7 +291,7 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 	}()
 
 	// Execute the event
-	result := s.executeEvent(s.ctx, event)
+	result := s.executeEvent(ctx, event)
 
 	// Update history
 	s.updateHistory(result)
