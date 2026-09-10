@@ -1902,47 +1902,17 @@ func main() {
 			// Auto-create message areas for V3Net subscriptions if missing.
 			v3net.SyncAreas(v3netConfig.Leaves, messageMgr, confMgr)
 
-			// Configure leaf clients for each subscribed network.
-			type v3netAreaInfo struct {
-				Network string
-				Origin  string
-			}
-			v3netAreaMap := make(map[int]v3netAreaInfo) // area ID → network info
+			// Configure leaf clients for each subscribed network. The area
+			// bindings live in the service (not a local map) so that
+			// ReloadLeaves can rebuild them and these callbacks pick up the
+			// new set on their next call.
 			nodeID := svc.NodeID()
-			for _, lcfg := range v3netConfig.Leaves {
-				router := v3net.NewJAMRouter()
-				origin := lcfg.Origin
-				if origin == "" {
-					origin = serverConfig.BoardName
-				}
-				var resolvedBoards []string
-				for _, tag := range lcfg.Boards {
-					area, ok := messageMgr.GetAreaByTag(tag)
-					if !ok {
-						slog.Warn("V3Net leaf: message area not found, skipping", "network", lcfg.Network, "area", tag)
-						continue
-					}
-					router.Add(tag, v3net.NewJAMAdapter(messageMgr, area.ID))
-					resolvedBoards = append(resolvedBoards, tag)
-					v3netAreaMap[area.ID] = v3netAreaInfo{Network: lcfg.Network, Origin: origin}
-					svc.RegisterArea(area.ID, lcfg.Network)
-				}
-				if len(resolvedBoards) == 0 {
-					slog.Warn("V3Net leaf: no resolvable boards, skipping", "network", lcfg.Network)
-					continue
-				}
-				leafCfg := lcfg
-				leafCfg.Boards = resolvedBoards
-				if err := v3netService.AddLeaf(leafCfg, router, nil); err != nil {
-					slog.Error("V3Net leaf error", "network", lcfg.Network, "error", err)
-					continue
-				}
-			}
+			svc.ConfigureLeaves(v3netConfig.Leaves, messageMgr, serverConfig.BoardName)
 
 			// Append tearline/origin to local JAM copy for V3Net areas so
 			// the user sees the origin on locally-created messages too.
 			messageMgr.BodyTransform = func(areaID int, body string) string {
-				info, ok := v3netAreaMap[areaID]
+				binding, ok := svc.AreaBindingFor(areaID)
 				if !ok {
 					return body
 				}
@@ -1952,22 +1922,22 @@ func main() {
 				if strings.Contains(body, "\n--- ") || strings.HasPrefix(body, "--- ") {
 					return body
 				}
-				return v3net.AppendV3NetOrigin(body, v3net.DefaultTearline(), info.Origin, nodeID)
+				return v3net.AppendV3NetOrigin(body, v3net.DefaultTearline(), binding.Origin, nodeID)
 			}
 
 			// Hook message posts to forward to V3Net when posted to a networked area.
 			// Skip messages imported from V3Net (contain the UUID kludge) to prevent feedback loops.
 			messageMgr.OnMessagePosted = func(area *message.MessageArea, msgNum int, from, to, subject, body string) {
-				info, ok := v3netAreaMap[area.ID]
+				binding, ok := svc.AreaBindingFor(area.ID)
 				if !ok {
 					return
 				}
 				if strings.HasPrefix(body, "\x01V3NETUUID: ") {
 					return
 				}
-				msg := v3net.BuildWireMessage(info.Network, area.Tag, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, info.Origin)
-				if err := svc.SendMessage(info.Network, msg); err != nil {
-					slog.Error("V3Net: failed to send message", "network", info.Network, "error", err)
+				msg := v3net.BuildWireMessage(binding.Network, area.Tag, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, binding.Origin)
+				if err := svc.SendMessage(binding.Network, msg); err != nil {
+					slog.Error("V3Net: failed to send message", "network", binding.Network, "error", err)
 					return
 				}
 				// Mark the local JAM copy as sent so the reader shows "V3NET SENT".
@@ -1988,6 +1958,16 @@ func main() {
 			go v3netService.Start(v3netCtx)
 			menuExecutor.V3NetStatus = v3netService
 			menuExecutor.ChatLeaves = v3netChatProvider(v3netService)
+			// Live subscription apply: re-read v3net.json and rebuild the
+			// leaf set. Used by the area browser after a subscribe or
+			// unsubscribe, and by the config watcher for hand edits.
+			menuExecutor.V3NetReload = func() error {
+				fresh, lerr := config.LoadV3NetConfig(rootConfigPath)
+				if lerr != nil {
+					return lerr
+				}
+				return svc.ReloadLeaves(fresh.Leaves, messageMgr, confMgr, serverConfig.BoardName)
+			}
 			slog.Info("V3Net service started",
 				"node_id", v3netService.NodeID(),
 				"hub", v3netService.HubActive(),

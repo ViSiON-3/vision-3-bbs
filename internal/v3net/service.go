@@ -10,7 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/dedup"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/hub"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
@@ -22,27 +24,57 @@ import (
 
 // Service manages V3Net hub and leaf lifecycle.
 //
-// leaves, leafByNetwork, and areaToNetwork are populated during initialization
-// (via AddLeaf/RegisterArea) before Start() is called, and are read-only after
-// that point. No mutex is needed for concurrent read access.
+// Leaf subscriptions and area bindings were historically populated before
+// Start() and read-only afterwards; ReloadLeaves changed that, so mu now
+// guards them. The hub, keystore, and dedup index remain fixed for the life
+// of the process — reconfiguring those still requires a restart.
 type Service struct {
 	cfg      config.V3NetConfig
 	ks       *keystore.Keystore
 	dedupIdx *dedup.Index
 	hub      *hub.Hub
-	leaves   []*leaf.Leaf
 
-	// leafByNetwork maps network name to its leaf for message sending.
-	// Populated at init time only; read-only after Start().
-	leafByNetwork map[string]*leaf.Leaf
+	// mu guards leaves, leafByNetwork, areaBindings, and runCtx.
+	mu     sync.RWMutex
+	leaves []*leafRun
 
-	// areaToNetwork maps message area ID to its V3Net network name.
-	// Populated at init time only; read-only after Start().
-	areaToNetwork map[int]string
+	// leafByNetwork maps network name to its running leaf for message sending.
+	leafByNetwork map[string]*leafRun
+
+	// areaBindings maps message area ID to its V3Net network and origin line.
+	areaBindings map[int]AreaBinding
+
+	// runCtx is the context Start was called with; nil until then. A leaf
+	// added while the service runs is started against a child of it.
+	runCtx context.Context
+
+	// reloadMu serializes ReloadLeaves calls; it is never held together with mu.
+	reloadMu sync.Mutex
 
 	// BBSName and BBSHost are sent in subscribe requests.
 	BBSName string
 	BBSHost string
+}
+
+// AreaBinding ties a message area to the V3Net network it is subscribed on
+// and the origin line its outbound messages carry.
+type AreaBinding struct {
+	Network string
+	Origin  string
+}
+
+// leafRun is a leaf plus its runtime handles. cancel and done are nil until
+// the leaf is started; stopping cancels the leaf's own context and waits for
+// its goroutine, so a stop never strands a mid-backoff subscribe or an open
+// SSE stream.
+type leafRun struct {
+	l      *leaf.Leaf
+	cancel context.CancelFunc
+	done   chan struct{}
+	// stop makes stopping idempotent and concurrency-safe: shutdown, Close,
+	// and a reload can all try to stop the same run, and sync.Once blocks
+	// the latecomers until the first stop has fully completed.
+	stop sync.Once
 }
 
 // hubAutoInit performs idempotent hub initialization steps:
@@ -160,8 +192,8 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 		cfg:           cfg,
 		ks:            ks,
 		dedupIdx:      ix,
-		leafByNetwork: make(map[string]*leaf.Leaf),
-		areaToNetwork: make(map[int]string),
+		leafByNetwork: make(map[string]*leafRun),
+		areaBindings:  make(map[int]AreaBinding),
 	}
 
 	// Initialize hub if enabled.
@@ -220,40 +252,88 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		BBSHost:      s.BBSHost,
 	})
 
-	s.leaves = append(s.leaves, l)
-	s.leafByNetwork[lcfg.Network] = l
+	run := &leafRun{l: l}
+	s.mu.Lock()
+	s.leaves = append(s.leaves, run)
+	s.leafByNetwork[lcfg.Network] = run
+	if s.runCtx != nil {
+		// The service is already running (a reload added this leaf); start it
+		// now rather than waiting for a Start that already happened.
+		s.startLeafLocked(run)
+	}
+	s.mu.Unlock()
 	return nil
 }
 
-// Start launches the hub (if enabled) and all leaf clients. Blocks until ctx is cancelled.
-func (s *Service) Start(ctx context.Context) {
-	var wg sync.WaitGroup
+// startLeafLocked launches a leaf against a child of the service context.
+// Caller must hold s.mu, and s.runCtx must be set.
+func (s *Service) startLeafLocked(run *leafRun) {
+	lctx, cancel := context.WithCancel(s.runCtx)
+	run.cancel = cancel
+	run.done = make(chan struct{})
+	go func() {
+		defer close(run.done)
+		run.l.Start(lctx)
+	}()
+}
 
+// stopLeaf cancels a running leaf, waits for its goroutine to exit, and
+// closes its idle connections. Safe on a leaf that was never started. Must
+// be called without holding s.mu — the wait can take as long as the leaf's
+// current HTTP request.
+func (s *Service) stopLeaf(run *leafRun) {
+	run.stop.Do(func() {
+		if run.cancel != nil {
+			run.cancel()
+			<-run.done
+		}
+		run.l.Close()
+	})
+}
+
+// Start launches the hub (if enabled) and all leaf clients, then blocks
+// until ctx is cancelled, at which point every running leaf is stopped and
+// waited for.
+func (s *Service) Start(ctx context.Context) {
+	hubDone := make(chan struct{})
 	if s.hub != nil {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer close(hubDone)
 			if err := s.hub.Start(ctx); err != nil {
 				slog.Error("v3net: hub error", "error", err)
 			}
 		}()
+	} else {
+		close(hubDone)
 	}
 
-	for _, l := range s.leaves {
-		wg.Add(1)
-		go func(lf *leaf.Leaf) {
-			defer wg.Done()
-			lf.Start(ctx)
-		}(l)
+	s.mu.Lock()
+	s.runCtx = ctx
+	for _, run := range s.leaves {
+		if run.done == nil {
+			s.startLeafLocked(run)
+		}
 	}
+	s.mu.Unlock()
 
-	wg.Wait()
+	<-ctx.Done()
+
+	s.mu.Lock()
+	running := append([]*leafRun(nil), s.leaves...)
+	s.mu.Unlock()
+	for _, run := range running {
+		s.stopLeaf(run)
+	}
+	<-hubDone
 }
 
 // Close releases resources held by the service.
 func (s *Service) Close() error {
-	for _, l := range s.leaves {
-		l.Close()
+	s.mu.Lock()
+	running := append([]*leafRun(nil), s.leaves...)
+	s.mu.Unlock()
+	for _, run := range running {
+		s.stopLeaf(run)
 	}
 	if s.hub != nil {
 		_ = s.hub.Close() // best-effort shutdown
@@ -271,11 +351,13 @@ func (s *Service) NodeID() string {
 // Also marks the message as seen in the dedup index so the local leaf
 // does not re-import it when polling.
 func (s *Service) SendMessage(network string, msg protocol.Message) error {
-	l, ok := s.leafByNetwork[network]
+	s.mu.RLock()
+	run, ok := s.leafByNetwork[network]
+	s.mu.RUnlock()
 	if !ok {
 		return nil
 	}
-	if err := l.SendMessage(msg); err != nil {
+	if err := run.l.SendMessage(msg); err != nil {
 		return err
 	}
 	// Mark as seen so our own leaf won't write it back to JAM.
@@ -288,24 +370,24 @@ func (s *Service) SendMessage(network string, msg protocol.Message) error {
 // SendLogon notifies all connected hubs of a user logon.
 // Runs asynchronously so it never blocks the caller's session.
 func (s *Service) SendLogon(handle string) {
-	for _, l := range s.leaves {
+	for _, lf := range s.Leaves() {
 		go func(lf *leaf.Leaf) {
 			if err := lf.SendLogon(handle); err != nil {
 				slog.Warn("v3net: SendLogon failed", "error", err)
 			}
-		}(l)
+		}(lf)
 	}
 }
 
 // SendLogoff notifies all connected hubs of a user logoff.
 // Runs asynchronously so it never blocks the caller's session.
 func (s *Service) SendLogoff(handle string) {
-	for _, l := range s.leaves {
+	for _, lf := range s.Leaves() {
 		go func(lf *leaf.Leaf) {
 			if err := lf.SendLogoff(handle); err != nil {
 				slog.Warn("v3net: SendLogoff failed", "error", err)
 			}
-		}(l)
+		}(lf)
 	}
 }
 
@@ -316,11 +398,15 @@ func (s *Service) HubActive() bool {
 
 // LeafCount returns the number of configured leaf subscriptions.
 func (s *Service) LeafCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return len(s.leaves)
 }
 
 // LeafNetworks returns the names of all subscribed networks.
 func (s *Service) LeafNetworks() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	var names []string
 	for name := range s.leafByNetwork {
 		names = append(names, name)
@@ -333,49 +419,75 @@ func (s *Service) Hub() *hub.Hub {
 	return s.hub
 }
 
-// Leaves returns all configured leaf clients (read-only after Start).
+// Leaves returns a snapshot of the current leaf clients. The slice is the
+// caller's to keep; a reload does not mutate it.
 func (s *Service) Leaves() []*leaf.Leaf {
-	return s.leaves
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*leaf.Leaf, 0, len(s.leaves))
+	for _, run := range s.leaves {
+		out = append(out, run.l)
+	}
+	return out
 }
 
-// RegisterArea associates a message area ID with a V3Net network name.
-// Called during startup so the message reader can identify V3Net areas.
-func (s *Service) RegisterArea(areaID int, network string) {
+// RegisterArea associates a message area ID with a V3Net network name and
+// the origin line its outbound messages carry.
+func (s *Service) RegisterArea(areaID int, network, origin string) {
 	slog.Info("v3net: registering area", "area_id", areaID, "network", network)
-	s.areaToNetwork[areaID] = network
+	s.mu.Lock()
+	s.areaBindings[areaID] = AreaBinding{Network: network, Origin: origin}
+	s.mu.Unlock()
 }
 
 // NetworkForArea returns the V3Net network name for a message area, or empty
 // string if the area is not a V3Net-networked area.
 func (s *Service) NetworkForArea(areaID int) string {
-	return s.areaToNetwork[areaID]
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.areaBindings[areaID].Network
+}
+
+// AreaBindingFor returns the full binding for a message area, and whether
+// the area is V3Net-networked at all.
+func (s *Service) AreaBindingFor(areaID int) (AreaBinding, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	b, ok := s.areaBindings[areaID]
+	return b, ok
 }
 
 // ProposeArea submits an area proposal to the hub for the given network.
 func (s *Service) ProposeArea(network string, req protocol.AreaProposalRequest) (*protocol.ProposalResponse, error) {
-	l, ok := s.leafByNetwork[network]
+	s.mu.RLock()
+	run, ok := s.leafByNetwork[network]
+	s.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("v3net: no leaf configured for network %q", network)
 	}
-	return l.ProposeArea(req)
+	return run.l.ProposeArea(req)
 }
 
 // FetchNALForNetwork fetches and verifies the NAL for the given network.
 func (s *Service) FetchNALForNetwork(ctx context.Context, network string) (*protocol.NAL, error) {
-	l, ok := s.leafByNetwork[network]
+	s.mu.RLock()
+	run, ok := s.leafByNetwork[network]
+	s.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("v3net: no leaf configured for network %q", network)
 	}
-	return l.FetchNAL(ctx)
+	return run.l.FetchNAL(ctx)
 }
 
 // HubURLForNetwork returns the hub URL for the given network, or empty string.
 func (s *Service) HubURLForNetwork(network string) string {
-	l, ok := s.leafByNetwork[network]
+	s.mu.RLock()
+	run, ok := s.leafByNetwork[network]
+	s.mu.RUnlock()
 	if !ok {
 		return ""
 	}
-	return l.HubURL()
+	return run.l.HubURL()
 }
 
 // RegistryURL returns the configured registry URL, or the default if not set.
@@ -389,4 +501,85 @@ func (s *Service) RegistryURL() string {
 // ConfigPath returns the path used to load the V3Net config (for saving).
 func (s *Service) ConfigPath() string {
 	return s.cfg.KeystorePath // parent dir derived at call site
+}
+
+// ConfigureLeaves builds and registers a leaf client for every subscription
+// in leafCfgs: board tags are resolved against the message manager, a JAM
+// router is wired per network, and each resolved area is bound to its
+// network and origin. Unresolvable boards and networks with no resolvable
+// boards are skipped with a warning, matching historical startup behavior.
+// If the service is already running, new leaves start immediately.
+func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager, defaultOrigin string) {
+	for _, lcfg := range leafCfgs {
+		router := NewJAMRouter()
+		origin := lcfg.Origin
+		if origin == "" {
+			origin = defaultOrigin
+		}
+		var resolvedBoards []string
+		for _, tag := range lcfg.Boards {
+			area, ok := mgr.GetAreaByTag(tag)
+			if !ok {
+				slog.Warn("V3Net leaf: message area not found, skipping", "network", lcfg.Network, "area", tag)
+				continue
+			}
+			router.Add(tag, NewJAMAdapter(mgr, area.ID))
+			resolvedBoards = append(resolvedBoards, tag)
+			s.RegisterArea(area.ID, lcfg.Network, origin)
+		}
+		if len(resolvedBoards) == 0 {
+			slog.Warn("V3Net leaf: no resolvable boards, skipping", "network", lcfg.Network)
+			continue
+		}
+		leafCfg := lcfg
+		leafCfg.Boards = resolvedBoards
+		if err := s.AddLeaf(leafCfg, router, nil); err != nil {
+			slog.Error("V3Net leaf error", "network", lcfg.Network, "error", err)
+		}
+	}
+}
+
+// ReloadLeaves replaces the running leaf subscriptions with those in
+// leafCfgs: message areas for new subscriptions are auto-created (as at
+// startup), every current leaf is stopped and waited for, the area bindings
+// are cleared, and the new set is configured and started.
+//
+// This is a full stop-and-rebuild rather than a per-network diff — a
+// subscription change is a rare, sysop-initiated event, and rebuilding is
+// the simplest shape that cannot leave a half-old, half-new set behind. The
+// visible costs: unchanged networks re-subscribe to their hub (idempotent),
+// and a caller mid-chat on a V3Net leaf has that chat's stream cancelled.
+//
+// Hub settings, the enabled flag, and keystore/dedup paths are NOT touched;
+// those still require a restart.
+func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager, confMgr *conference.ConferenceManager, defaultOrigin string) error {
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
+
+	if created := SyncAreas(leafCfgs, mgr, confMgr); created > 0 {
+		slog.Info("v3net: created message areas for new subscriptions", "count", created)
+	}
+
+	// Detach the current set under the lock, then stop it outside the lock —
+	// waiting for a leaf mid-request while holding mu would stall SendMessage
+	// and the status providers.
+	s.mu.Lock()
+	old := s.leaves
+	s.leaves = nil
+	s.leafByNetwork = make(map[string]*leafRun)
+	s.areaBindings = make(map[int]AreaBinding)
+	s.mu.Unlock()
+
+	for _, run := range old {
+		s.stopLeaf(run)
+	}
+	slog.Info("v3net: leaf subscriptions stopped for reload", "count", len(old))
+
+	s.ConfigureLeaves(leafCfgs, mgr, defaultOrigin)
+
+	s.mu.RLock()
+	count := len(s.leaves)
+	s.mu.RUnlock()
+	slog.Info("v3net: leaf subscriptions reloaded", "count", count)
+	return nil
 }

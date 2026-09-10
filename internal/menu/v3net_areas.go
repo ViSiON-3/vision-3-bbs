@@ -325,6 +325,13 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 					ent.subscribed = false
 					subSet[ent.network+":"+ent.area.Tag] = false
 					statusMsg = fmt.Sprintf("|10Unsubscribed from %s. Restart to apply.|07", ent.area.Tag)
+					if e.V3NetReload != nil {
+						if rerr := e.V3NetReload(); rerr != nil {
+							statusMsg = fmt.Sprintf("|10Unsubscribed from %s.|07 |04Live apply failed (%s); restart to apply.|07", ent.area.Tag, rerr)
+						} else {
+							statusMsg = fmt.Sprintf("|10Unsubscribed from %s. Now inactive.|07", ent.area.Tag)
+						}
+					}
 				}
 			} else {
 				// Subscribe: add leaf config + create message area.
@@ -345,6 +352,13 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 					ent.subscribed = true
 					subSet[ent.network+":"+ent.area.Tag] = true
 					statusMsg = fmt.Sprintf("|10Subscribed to %s. Restart to activate.|07", ent.area.Tag)
+					if e.V3NetReload != nil {
+						if rerr := e.V3NetReload(); rerr != nil {
+							statusMsg = fmt.Sprintf("|10Subscribed to %s.|07 |04Live apply failed (%s); restart to activate.|07", ent.area.Tag, rerr)
+						} else {
+							statusMsg = fmt.Sprintf("|10Subscribed to %s. Now active.|07", ent.area.Tag)
+						}
+					}
 				}
 			}
 			needFullRedraw = true

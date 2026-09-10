@@ -131,8 +131,9 @@ func (mm *MessageManager) loadMessageAreas() error {
 // Callers must ensure no sysop session is mid-edit in the area editor: its
 // whole-file SaveAreas would clobber (or be clobbered by) the sysop's edit.
 // The config watcher defers this reload to an idle window, which guarantees
-// that. V3Net area routing is bound at startup and is NOT rewired by a
-// reload; changing a V3Net-subscribed area still needs a restart.
+// that. V3Net area bindings are NOT rewired by this reload alone; a
+// v3net.json reload (or an area-browser subscription change) rebuilds them
+// against the current areas.
 func (mm *MessageManager) Reload() error {
 	if err := mm.loadMessageAreas(); err != nil {
 		return fmt.Errorf("reloading message areas: %w", err)
