@@ -1924,7 +1924,12 @@ func main() {
 				if strings.HasPrefix(body, "\x01V3NETUUID: ") {
 					return
 				}
-				msg := v3net.BuildWireMessage(binding.Network, area.Tag, svc.NodeID(), serverConfig.BoardName, from, to, subject, body, binding.Origin)
+				// Read through the executor's atomic snapshot, not the shared
+				// serverConfig var: this closure runs at post time, racing the
+				// config watcher's reload writes. It also means a renamed
+				// board flows into wire messages, matching the message
+				// manager's now-live fallback origin.
+				msg := v3net.BuildWireMessage(binding.Network, area.Tag, svc.NodeID(), menuExecutor.GetServerConfig().BoardName, from, to, subject, body, binding.Origin)
 				if err := svc.SendMessage(binding.Network, msg); err != nil {
 					slog.Error("V3Net: failed to send message", "network", binding.Network, "error", err)
 					return
@@ -1955,7 +1960,10 @@ func main() {
 				if lerr != nil {
 					return lerr
 				}
-				return svc.ReloadLeaves(fresh.Leaves, messageMgr, confMgr, serverConfig.BoardName)
+				// Atomic snapshot, not the shared var: this hook runs at
+				// reload time, and the current board name is the right
+				// default origin for freshly built leaf bindings.
+				return svc.ReloadLeaves(fresh.Leaves, messageMgr, confMgr, menuExecutor.GetServerConfig().BoardName)
 			}
 			slog.Info("V3Net service started",
 				"node_id", v3netService.NodeID(),
