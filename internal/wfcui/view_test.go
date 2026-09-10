@@ -67,6 +67,30 @@ func TestViewListContainsNodeHandle(t *testing.T) {
 }
 
 // TestViewListNilSnapshot renders without panic.
+// TestViewShowsPendingReloads: a queued structural reload must be visible on
+// the console, or a deferred save looks like a save that did nothing.
+func TestViewShowsPendingReloads(t *testing.T) {
+	m := makeModel(Options{NoColor: true, ASCII: true}, 120, 30)
+	m.mode = modeList
+	m.snapshot = &admin.SystemSnapshot{
+		SystemName:     "TestBBS",
+		Time:           time.Now(),
+		Nodes:          []admin.NodeState{{NodeID: 1, Handle: "Caller", Status: admin.StatusOnline}},
+		Counters:       admin.Counters{ActiveNodes: 1, CallsToday: 1},
+		PendingReloads: []string{"file_areas.json"},
+	}
+	got := m.View()
+	if !strings.Contains(got, "RELOAD PENDING") || !strings.Contains(got, "file_areas.json") {
+		t.Errorf("header missing pending-reload notice; got:\n%s", got)
+	}
+
+	// And absent when nothing is pending.
+	m.snapshot.PendingReloads = nil
+	if strings.Contains(m.View(), "RELOAD PENDING") {
+		t.Error("pending-reload notice shown with an empty queue")
+	}
+}
+
 func TestViewListNilSnapshot(t *testing.T) {
 	m := makeModel(Options{NoColor: true, ASCII: true}, 100, 30)
 	m.mode = modeList

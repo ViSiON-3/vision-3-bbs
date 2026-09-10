@@ -153,6 +153,12 @@ func (m Model) renderHeader(st colorSet) string {
 	now := time.Now().Format("15:04:05")
 	header := fmt.Sprintf(" %s  |  Nodes: %d  |  Calls Today: %s  |  Uptime: %s  |  %s",
 		sysName, activeNodes, callsTodayStr, uptime, now)
+	if m.snapshot != nil && len(m.snapshot.PendingReloads) > 0 {
+		// A structural config change is queued for the next idle window;
+		// the sysop should know saves are pending rather than silently held.
+		header += fmt.Sprintf("  |  RELOAD PENDING: %s",
+			sanitizeTerminal(strings.Join(m.snapshot.PendingReloads, ", ")))
+	}
 	return st.header.Render(header)
 }
 
