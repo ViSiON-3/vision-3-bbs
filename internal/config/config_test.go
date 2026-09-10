@@ -206,7 +206,10 @@ func TestLoadLoginSequence_MissingFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should return default sequence
-	want := []string{"PRINTNEWS", "LASTCALLS", "ONELINERS", "USERSTATS", "NEWUSERVAL", "SYSOPNOTICES"}
+	// SYSOPNOTICES and NMAILSCAN lead: they carry news the caller would
+	// otherwise never see, so nothing that can end the sequence early (a
+	// FASTLOGIN jump) may precede them. Same order as the shipped template.
+	want := []string{"SYSOPNOTICES", "NMAILSCAN", "PRINTNEWS", "LASTCALLS", "ONELINERS", "USERSTATS", "NEWUSERVAL"}
 	if len(result) != len(want) {
 		t.Fatalf("expected default %d-item sequence, got %d", len(want), len(result))
 	}

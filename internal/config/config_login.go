@@ -48,11 +48,26 @@ func LoadLoginSequence(configPath string) ([]LoginItem, error) {
 }
 
 // defaultLoginSequence returns the built-in default login sequence used when
-// login.json is missing: system news first (it clears the screen via
-// NEWSHDR.ANS and is silent when there is nothing new), then the legacy
-// last callers / oneliners / user stats trio.
+// login.json is missing: the two items that carry news the caller would
+// otherwise miss entirely — queued sysop notices and the new-mail scan — then
+// system news (it clears the screen via NEWSHDR.ANS and is silent when there is
+// nothing new), then the legacy last callers / oneliners / user stats trio.
+//
+// The order mirrors templates/configs/login.json, where the same two items lead
+// so that a FASTLOGIN jump (which ends the sequence) cannot skip them.
 func defaultLoginSequence() []LoginItem {
 	return []LoginItem{
+		// Delivers queued sysop notices (e.g. a new user who signed up while no
+		// sysop was online). Self-gates on sysop ACS and is silent otherwise.
+		//
+		// No ClearScreen: the runner clears before the handler decides whether
+		// it has anything to say, so setting it would blank a sysop's screen on
+		// every quiet login for a command that then prints nothing. The same
+		// reasoning applies to NEWUSERVAL below.
+		{Command: "SYSOPNOTICES"},
+		// Unread private mail is the one thing a caller most needs told about,
+		// so it leads too, ahead of anything that might end the sequence early.
+		{Command: "NMAILSCAN"},
 		{Command: "PRINTNEWS"},
 		{Command: "LASTCALLS"},
 		{Command: "ONELINERS"},
@@ -60,14 +75,7 @@ func defaultLoginSequence() []LoginItem {
 		// No SecLevel: this fallback runs when login.json is missing, so the
 		// configured sysOpLevel is not in reach here. NEWUSERVAL gates itself
 		// on sysop ACS, and shows nothing when no users are pending.
-		//
-		// No ClearScreen either: the runner clears before the handler decides
-		// whether it has anything to say, so setting it would blank a sysop's
-		// screen on every quiet login for a command that then prints nothing.
 		{Command: "NEWUSERVAL"},
-		// Delivers queued sysop notices (e.g. a new user who signed up while no
-		// sysop was online). Self-gates on sysop ACS and is silent otherwise.
-		{Command: "SYSOPNOTICES"},
 	}
 }
 
