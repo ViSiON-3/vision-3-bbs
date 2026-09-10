@@ -23,14 +23,34 @@ import (
 // already be resolved to absolute paths (FTNConfig.ResolvePaths).
 type Config struct {
 	BBSRoot string                  // absolute BBS root directory
-	FTN     config.FTNConfig        // FTN config including the Binkd section
+	FTN     config.FTNConfig        // FTN config including the Binkd section (boot snapshot)
 	Server  config.ServerConfig     // BBS identity for binkd.conf regeneration
 	MsgMgr  *message.MessageManager // for the export loop (may be nil in tests)
+
+	// ConfigDir is the directory holding ftn.json. When set, the running
+	// service re-reads it (into an immutable snapshot) so a config-editor save
+	// is picked up without a BBS restart. Empty disables hot-reload — the boot
+	// snapshot in FTN is then used for the life of the process.
+	ConfigDir string
 }
 
 // Service runs binkd under supervision plus the outbound export loop.
 type Service struct {
-	cfg        Config
+	cfg       Config
+	configDir string // directory holding ftn.json for hot-reload ("" = disabled)
+
+	// ftn holds the current FTN config as an immutable snapshot. Both loops
+	// read it via currentFTN() and reloadFTN() swaps in a freshly loaded,
+	// validated copy — so each read sees a coherent set of values and a
+	// config-editor save is applied without a restart. Never mutate the
+	// pointed-to value in place; always Store a new one.
+	ftn atomic.Pointer[config.FTNConfig]
+
+	// exportCfgMod is the ftn.json mod-time last seen by the export loop, so it
+	// only re-reads (and logs) the file when it actually changes. Touched only
+	// by the export goroutine.
+	exportCfgMod time.Time
+
 	binkdPath  string // resolved absolute path to the binkd binary
 	confPath   string // absolute path to binkd.conf
 	backoffMin time.Duration
@@ -130,8 +150,9 @@ func New(cfg Config) (*Service, error) {
 		exportDisabled = true
 	}
 
-	return &Service{
+	s := &Service{
 		cfg:            cfg,
+		configDir:      cfg.ConfigDir,
 		binkdPath:      binkdPath,
 		confPath:       confPath,
 		backoffMin:     5 * time.Second,
@@ -140,7 +161,69 @@ func New(cfg Config) (*Service, error) {
 		done:           make(chan struct{}),
 		exportDupeDB:   exportDupeDB,
 		exportDisabled: exportDisabled,
-	}, nil
+	}
+	bootFTN := cfg.FTN
+	s.ftn.Store(&bootFTN)
+	return s, nil
+}
+
+// currentFTN returns the current FTN configuration snapshot. It is safe to call
+// from either loop; each call returns a coherent set of values (the pointer is
+// swapped as a whole by reloadFTN).
+func (s *Service) currentFTN() config.FTNConfig {
+	if p := s.ftn.Load(); p != nil {
+		return *p
+	}
+	// No snapshot stored (a Service built directly, e.g. in tests): fall back to
+	// the boot config. New always stores a snapshot, so this is a safety net.
+	return s.cfg.FTN
+}
+
+// reloadFTN re-reads ftn.json from ConfigDir and, if it loads and validates,
+// swaps it in as the new snapshot. A missing ConfigDir, a read error, or an
+// invalid config leaves the current snapshot in place, so a half-written or
+// broken save never disrupts the running mailer. Paths are re-resolved against
+// BBSRoot to match how the boot snapshot was prepared.
+func (s *Service) reloadFTN() {
+	if s.configDir == "" {
+		return
+	}
+	fresh, err := config.LoadFTNConfig(s.configDir)
+	if err != nil {
+		slog.Warn("mailer FTN config reload failed; keeping previous snapshot", "error", err)
+		return
+	}
+	fresh.ResolvePaths(s.cfg.BBSRoot)
+	if err := config.ValidateFTNConfig(fresh); err != nil {
+		slog.Warn("mailer FTN config reload invalid; keeping previous snapshot", "error", err)
+		return
+	}
+	s.ftn.Store(&fresh)
+}
+
+// reloadedExportInterval reads only the export interval from ftn.json on disk,
+// without swapping the active snapshot. It is used by the export loop to retune
+// its ticker live: the interval is independent of binkd, so it is safe to change
+// mid-run (unlike the outbound path or port, which must move in step with a
+// binkd launch). Returns 0 when there is no config dir or the read fails, so the
+// caller keeps its current interval.
+func (s *Service) reloadedExportInterval() time.Duration {
+	if s.configDir == "" {
+		return 0
+	}
+	// Stat first and only re-read when ftn.json actually changed, so the
+	// per-tick check does not parse the file (or log LoadFTNConfig's Info lines)
+	// on every cycle when nothing has changed.
+	fi, err := os.Stat(filepath.Join(s.configDir, "ftn.json"))
+	if err != nil || !fi.ModTime().After(s.exportCfgMod) {
+		return 0
+	}
+	s.exportCfgMod = fi.ModTime()
+	fresh, err := config.LoadFTNConfig(s.configDir)
+	if err != nil || fresh.Binkd.ExportSecs <= 0 {
+		return 0
+	}
+	return time.Duration(fresh.Binkd.ExportSecs) * time.Second
 }
 
 // Start runs the binkd supervisor and the export loop until ctx is cancelled.

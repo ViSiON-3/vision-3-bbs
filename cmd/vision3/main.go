@@ -1882,10 +1882,11 @@ func main() {
 		mailerFTN := ftnConfig
 		mailerFTN.ResolvePaths(basePath)
 		mailerSvc, mErr := mailer.New(mailer.Config{
-			BBSRoot: basePath,
-			FTN:     mailerFTN,
-			Server:  serverConfig,
-			MsgMgr:  messageMgr,
+			BBSRoot:   basePath,
+			FTN:       mailerFTN,
+			Server:    serverConfig,
+			MsgMgr:    messageMgr,
+			ConfigDir: rootConfigPath, // enables hot-reload of ftn.json without a restart
 		})
 		if mErr != nil {
 			slog.Warn("binkd mailer disabled", "error", mErr)
