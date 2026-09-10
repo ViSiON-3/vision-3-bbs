@@ -22,7 +22,6 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	s := c.s
 	terminal := c.terminal
 	userManager := c.userManager
-	currentUser := c.currentUser
 	nodeNumber := c.nodeNumber
 	outputMode := c.outputMode
 	termWidth := c.termWidth
@@ -72,17 +71,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	// --- END Template Processing ---
 
 	// 2. Get last callers data from UserManager
-	lastCallers := userManager.GetLastCallers()
-	// Filter out invisible call records for non-CoSysOp viewers
-	if !e.isCoSysOpOrAbove(currentUser) {
-		filtered := make([]user.CallRecord, 0, len(lastCallers))
-		for _, rec := range lastCallers {
-			if !rec.Invisible {
-				filtered = append(filtered, rec)
-			}
-		}
-		lastCallers = filtered
-	}
+	lastCallers := visibleCallRecords(userManager.GetLastCallers())
 	users := userManager.GetAllUsers()
 	totalUsers := len(users)
 	userNotesByID := make(map[int]string, len(users))
@@ -197,4 +186,18 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	return nil, "", nil // Success
+}
+
+// visibleCallRecords drops call records made by users who declined the
+// "add this login to the last caller list?" prompt. The exclusion applies to
+// every viewer, including the SysOp: the caller asked not to be listed, so the
+// login must not appear on the screen no matter who is looking (issue #334).
+func visibleCallRecords(records []user.CallRecord) []user.CallRecord {
+	visible := make([]user.CallRecord, 0, len(records))
+	for _, rec := range records {
+		if !rec.Invisible {
+			visible = append(visible, rec)
+		}
+	}
+	return visible
 }
