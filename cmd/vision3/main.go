@@ -614,7 +614,12 @@ func (ct *ConnectionTracker) RecordFailedLoginAttempt(ip string) bool {
 // AppendToBlocklist appends an IP to the blocklist file and updates the in-memory list immediately.
 // If blocklistPath is not configured, this is a no-op.
 func (ct *ConnectionTracker) AppendToBlocklist(ip string) error {
-	if ct.blocklistPath == "" {
+	// Snapshot the path under the lock: SetIPListPaths can change it on a
+	// config reload, so it is no longer fixed after construction.
+	ct.mu.Lock()
+	blocklistPath := ct.blocklistPath
+	ct.mu.Unlock()
+	if blocklistPath == "" {
 		return nil
 	}
 
@@ -634,7 +639,7 @@ func (ct *ConnectionTracker) AppendToBlocklist(ip string) error {
 	}
 
 	// Append to file
-	f, err := os.OpenFile(ct.blocklistPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(blocklistPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open blocklist file: %w", err)
 	}
@@ -659,7 +664,7 @@ func (ct *ConnectionTracker) AppendToBlocklist(ip string) error {
 	ct.blocklist.ips[normalizedIP] = true
 	ct.mu.Unlock()
 
-	logging.Security("IP permanently added to blocklist", "ip", normalizedIP, "file", ct.blocklistPath)
+	logging.Security("IP permanently added to blocklist", "ip", normalizedIP, "file", blocklistPath)
 	return nil
 }
 
@@ -724,8 +729,16 @@ func (ct *ConnectionTracker) reloadIPLists() {
 
 // startWatching starts watching the IP list files for changes
 func (ct *ConnectionTracker) startWatching() error {
+	// Snapshot the paths under the lock: SetIPListPaths can change them on a
+	// config reload, and this function runs both at construction and on such
+	// a path change.
+	ct.mu.Lock()
+	blocklistPath := ct.blocklistPath
+	allowlistPath := ct.allowlistPath
+	ct.mu.Unlock()
+
 	// Don't start watcher if no files to watch
-	if ct.blocklistPath == "" && ct.allowlistPath == "" {
+	if blocklistPath == "" && allowlistPath == "" {
 		slog.Debug("no IP list files to watch, file watching disabled")
 		return nil
 	}
@@ -743,18 +756,18 @@ func (ct *ConnectionTracker) startWatching() error {
 
 	// Add files to watch
 	filesToWatch := []string{}
-	if ct.blocklistPath != "" {
-		if _, err := os.Stat(ct.blocklistPath); err == nil {
-			filesToWatch = append(filesToWatch, ct.blocklistPath)
+	if blocklistPath != "" {
+		if _, err := os.Stat(blocklistPath); err == nil {
+			filesToWatch = append(filesToWatch, blocklistPath)
 		} else {
-			slog.Warn("blocklist file does not exist, not watching", "file", ct.blocklistPath)
+			slog.Warn("blocklist file does not exist, not watching", "file", blocklistPath)
 		}
 	}
-	if ct.allowlistPath != "" {
-		if _, err := os.Stat(ct.allowlistPath); err == nil {
-			filesToWatch = append(filesToWatch, ct.allowlistPath)
+	if allowlistPath != "" {
+		if _, err := os.Stat(allowlistPath); err == nil {
+			filesToWatch = append(filesToWatch, allowlistPath)
 		} else {
-			slog.Warn("allowlist file does not exist, not watching", "file", ct.allowlistPath)
+			slog.Warn("allowlist file does not exist, not watching", "file", allowlistPath)
 		}
 	}
 
