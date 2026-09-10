@@ -30,7 +30,12 @@ import (
 // paths read this way can in principle go stale against a future area
 // reload; such a reload is expected to run only with no sessions active
 // (see issue #323), which is also what keeps the rest of a reload's
-// consequences — removed areas' records, changed paths — tractable.
+// consequences — removed areas' records, changed paths — tractable. The
+// same constraint covers in-flight mutators: DeleteFileRecord and
+// MoveFileRecord release muFiles between their in-memory update and
+// saveFileRecords, so a reload landing in that window would re-read
+// metadata.json — still holding the pre-mutation list — and revert the
+// update after the disk operation has already run.
 type FileManager struct {
 	basePath    string               // Base directory for all file areas (e.g., "data/files")
 	configPath  string               // Path to file_areas.json
