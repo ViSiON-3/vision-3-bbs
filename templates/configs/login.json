@@ -1,11 +1,14 @@
 [
     {
-        "command": "FASTLOGIN"
+        "command": "SYSOPNOTICES"
     },
     {
         "command": "NMAILSCAN",
         "clear_screen": true,
         "pause_after": true
+    },
+    {
+        "command": "FASTLOGIN"
     },
     {
         "command": "PRINTNEWS"
@@ -26,9 +29,6 @@
     {
         "command": "NEWUSERVAL",
         "sec_level": 255
-    },
-    {
-        "command": "SYSOPNOTICES"
     },
     {
         "command": "CHECKNUV"

@@ -135,3 +135,47 @@ func TestSetStringsSnapshotIsIsolated(t *testing.T) {
 		t.Errorf("PauseString = %q after the caller mutated its local, want %q", got, "first")
 	}
 }
+
+// TestCollectionSnapshotsAreIsolated enforces what used to be only a doc
+// comment (flagged in review of #327): callers of the map/slice setters and
+// accessors must not be able to reach the shared snapshot. The setter clones
+// its argument; the collection accessors clone their result.
+func TestCollectionSnapshotsAreIsolated(t *testing.T) {
+	e := &MenuExecutor{}
+
+	doors := map[string]config.DoorConfig{"A": {}}
+	e.SetDoorRegistry(doors)
+	doors["B"] = config.DoorConfig{} // caller mutates its own map after storing
+	if _, ok := e.GetDoorConfig("B"); ok {
+		t.Error("mutating the setter's argument reached the stored door registry")
+	}
+	reg := e.DoorRegistry()
+	reg["C"] = config.DoorConfig{} // caller mutates the returned map
+	if _, ok := e.GetDoorConfig("C"); ok {
+		t.Error("mutating an accessor's returned map reached the stored door registry")
+	}
+
+	seq := []config.LoginItem{{}}
+	e.SetLoginSequence(seq)
+	seq[0] = config.LoginItem{Command: "mutated"}
+	if got := e.GetLoginSequence(); len(got) != 1 || got[0].Command == "mutated" {
+		t.Error("mutating the setter's argument reached the stored login sequence")
+	}
+	out := e.GetLoginSequence()
+	out[0].Command = "mutated-out"
+	if got := e.GetLoginSequence(); got[0].Command == "mutated-out" {
+		t.Error("mutating an accessor's returned slice reached the stored login sequence")
+	}
+
+	protos := []transfer.ProtocolConfig{{Name: "Z"}}
+	e.SetProtocols(protos)
+	protos[0].Name = "mutated"
+	if got := e.Protocols(); len(got) != 1 || got[0].Name != "Z" {
+		t.Errorf("mutating the setter's argument reached the stored protocols: %+v", got)
+	}
+	pout := e.Protocols()
+	pout[0].Name = "mutated-out"
+	if got := e.Protocols(); got[0].Name != "Z" {
+		t.Error("mutating an accessor's returned slice reached the stored protocols")
+	}
+}

@@ -282,6 +282,7 @@
   "newUserPasswordTooShort": "\r\n|09Password must be at least 3 characters.|07\r\n",
   "newUserPendingReview": "|08A SysOp will review your account.|07\r\n",
   "newUserSysopPage": "|12New user|07: |15%s|07 just signed up from node %d.",
+  "newUserSysopNotice": "|12New user|07: |15%s|07 signed up |15%s ago|07 from node %d.",
   "newUserTooManyAttempts": "\r\n|05Too many invalid attempts.|07\r\n",
   "newUsersClosedStr": "\r\n|12This BBS is not accepting new users at this time.|07\r\n",
   "newUsersWaiting": "|08Y|07o|15u |08h|07a|15ve |04NOT |08v|07o|15ted |08o|07n |13|NE |08N|07e|15w |08U|07s|15ers.",
