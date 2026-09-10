@@ -31,7 +31,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	termHeight := c.termHeight
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanConfigLoginRequired)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanConfigLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -41,7 +41,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	// Get all accessible message areas
 	allAreas := e.MessageMgr.ListAreas()
 	if len(allAreas) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoAreasAvailable)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAreasAvailable)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -113,7 +113,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(accessibleAreas) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanNoAccessibleAreas)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAccessibleAreas)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
@@ -496,9 +496,9 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			if err := userManager.UpdateUser(currentUser); err != nil {
 				slog.Error("failed to save newscan config", "node", nodeNumber, "error", err)
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanConfigError)), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanConfigError)), outputMode)
 			} else {
-				msg := fmt.Sprintf(e.LoadedStrings.ScanConfigSaved, len(taggedTags))
+				msg := fmt.Sprintf(e.Strings().ScanConfigSaved, len(taggedTags))
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			}
 			time.Sleep(1 * time.Second)

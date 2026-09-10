@@ -30,7 +30,7 @@ func (e *MenuExecutor) notifySysopsOfNewUser(userManager *user.UserMgr, newUser 
 		return 0, 0
 	}
 
-	format := e.LoadedStrings.NewUserSysopPage
+	format := e.Strings().NewUserSysopPage
 	if format == "" {
 		// No configured text means no notice, rather than a blank line
 		// appearing at a sysop's prompt with no explanation.

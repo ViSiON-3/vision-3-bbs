@@ -24,9 +24,8 @@ func TestPromptYesNoLightbarCursorBackIsRuneWidth(t *testing.T) {
 	yesLabel := "はい" // 2 runes, 6 bytes
 	noLabel := "いいえ" // 3 runes, 9 bytes
 
-	e := &MenuExecutor{
-		LoadedStrings: config.StringsConfig{YesPromptText: yesLabel, NoPromptText: noLabel},
-	}
+	e := &MenuExecutor{}
+	e.SetStrings(config.StringsConfig{YesPromptText: yesLabel, NoPromptText: noLabel})
 	ts := newTestSession("\x1b[C\r") // toggle selection, then confirm
 	terminal := newTestTerminal(ts)
 

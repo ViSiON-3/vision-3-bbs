@@ -16,7 +16,8 @@ func newUserEditorTestEnv(t *testing.T) (*MenuExecutor, *user.UserMgr) {
 	if err != nil {
 		t.Fatalf("NewUserManager: %v", err)
 	}
-	e := &MenuExecutor{ServerCfg: config.ServerConfig{SysOpLevel: 255, RegularUserLevel: 10}}
+	e := &MenuExecutor{}
+	e.SetServerConfig(config.ServerConfig{SysOpLevel: 255, RegularUserLevel: 10})
 	return e, um
 }
 

@@ -107,7 +107,7 @@ func (e *MenuExecutor) resolveCurrentFileAreaTokens(currentUser *user.User) (str
 // templates behave consistently with prompts.  Longer tokens are replaced first
 // to avoid prefix collisions (e.g. |CFAN before |CFA, |CAN before |CA).
 func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.User, nodeNumber int) []byte {
-	now := config.NowIn(e.ServerCfg.Timezone)
+	now := config.NowIn(e.GetServerConfig().Timezone)
 	fileAreaTag, fileAreaName := e.resolveCurrentFileAreaTokens(currentUser)
 	msgAreaTag, msgAreaName := e.resolveCurrentAreaTokens(currentUser, "")
 
@@ -191,7 +191,7 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 	data, err := ansi.GetAnsiFileContent(filePath)
 	if err != nil {
 		slog.Error("failed to read ANSI file", "path", filePath, "error", err)
-		errMsg := fmt.Sprintf(e.LoadedStrings.ExecFileLoadError, filename)
+		errMsg := fmt.Sprintf(e.Strings().ExecFileLoadError, filename)
 		writeErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if writeErr != nil {
 			slog.Error("failed writing displayFile error message", "error", writeErr)
@@ -310,8 +310,8 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 	promptString := strings.Join(promptParts, "\r\n")
 
 	if promptString == "" {
-		if e.LoadedStrings.DefPrompt != "" { // Use loaded strings
-			promptString = e.LoadedStrings.DefPrompt
+		if e.Strings().DefPrompt != "" { // Use loaded strings
+			promptString = e.Strings().DefPrompt
 		} else {
 			slog.Warn("default prompt empty and menu prompt fields empty, no prompt will be displayed", "menu", currentMenuName)
 			return nil // Explicitly return nil if no prompt string can be determined
@@ -325,7 +325,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		newUsersStatus = "YES"
 	}
 
-	now := config.NowIn(e.ServerCfg.Timezone)
+	now := config.NowIn(e.GetServerConfig().Timezone)
 	currentAreaTag, currentAreaDisplayName := e.resolveCurrentAreaTokens(currentUser, currentAreaName)
 	currentFileAreaTag, currentFileAreaDisplayName := e.resolveCurrentFileAreaTokens(currentUser)
 

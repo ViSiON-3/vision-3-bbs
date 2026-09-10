@@ -16,7 +16,7 @@ import (
 
 // loginPausePrompt displays the configured pause prompt (centered) and waits for Enter.
 func (e *MenuExecutor) loginPausePrompt(s ssh.Session, terminal *term.Terminal, _ int, outputMode ansi.OutputMode, termWidth int, termHeight int) error {
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
@@ -188,7 +188,7 @@ func (e *MenuExecutor) confirmAbortLogin(s ssh.Session, terminal *term.Terminal,
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 	}
 
-	prompt := e.LoadedStrings.ExecAbortLoginPrompt
+	prompt := e.Strings().ExecAbortLoginPrompt
 	if prompt == "" {
 		prompt = "|07Abort Login? @"
 	}

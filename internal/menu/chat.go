@@ -38,7 +38,7 @@ type ChatLeafInfo struct {
 // ChatService and the room to join. The pickers run in normal terminal mode;
 // the caller sets up the full-screen chat UI afterwards.
 func chatSelectService(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, handle string, outputMode ansi.OutputMode) (chat.ChatService, string, string, error) {
-	dbPath := e.ServerCfg.DataDir + "/chat.db"
+	dbPath := e.GetServerConfig().DataDir + "/chat.db"
 
 	wt := func(text string) {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(text)), outputMode)
@@ -113,7 +113,7 @@ func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 	wg.Wait()
 	nets[len(leaves)] = netInfo{name: "Local", users: -1, avail: true, isLocal: true}
 
-	wt("\r\n" + e.LoadedStrings.ChatNetworkPickerHeader + "\r\n")
+	wt("\r\n" + e.Strings().ChatNetworkPickerHeader + "\r\n")
 	for i, net := range nets {
 		var status string
 		switch {
@@ -124,7 +124,7 @@ func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		default:
 			status = fmt.Sprintf("%d users online", net.users)
 		}
-		wt(fmt.Sprintf(e.LoadedStrings.ChatNetworkPickerEntry+"\r\n", i+1, net.name, status))
+		wt(fmt.Sprintf(e.Strings().ChatNetworkPickerEntry+"\r\n", i+1, net.name, status))
 	}
 	wt("\r\n")
 	wt("|07Select network |08[|071|08]|07: ")
@@ -163,13 +163,13 @@ func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, termin
 		return "lobby"
 	}
 
-	wt("\r\n" + e.LoadedStrings.ChatRoomListHeader + "\r\n")
+	wt("\r\n" + e.Strings().ChatRoomListHeader + "\r\n")
 	for _, r := range rooms {
 		topic := r.Topic
 		if topic == "" {
 			topic = "|08no topic|07"
 		}
-		wt(fmt.Sprintf(e.LoadedStrings.ChatRoomListEntry+"\r\n", r.Name, r.UserCount, topic))
+		wt(fmt.Sprintf(e.Strings().ChatRoomListEntry+"\r\n", r.Name, r.UserCount, topic))
 	}
 	wt("\r\n")
 	wt("|07Select room |08[|07lobby|08]|07: ")
@@ -303,7 +303,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		} else {
 			// Fallback: simple text header using the separator string.
-			sep := ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ChatSeparator))
+			sep := ansi.ReplacePipeCodes([]byte(e.Strings().ChatSeparator))
 			rawWriteLocked([]byte(ansi.MoveCursor(1, 1)))
 			rawWriteLocked(sep)
 			rawWriteLocked([]byte(ansi.MoveCursor(2, 1)))
@@ -326,7 +326,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// drawStatusBarLocked redraws the 2-row status bar. Caller must hold rawMu.
 	drawStatusBarLocked := func() {
-		sep := ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ChatSeparator))
+		sep := ansi.ReplacePipeCodes([]byte(e.Strings().ChatSeparator))
 		// Users line
 		rawWriteLocked([]byte(ansi.MoveCursor(height-2, 1)))
 		rawWriteLocked(sep)
@@ -385,7 +385,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	if err != nil {
 		slog.Info("chat join failed, falling back to local chat", "node", nodeNumber, "error", err)
 		svc.Close() //nolint:errcheck
-		dbPath := e.ServerCfg.DataDir + "/chat.db"
+		dbPath := e.GetServerConfig().DataDir + "/chat.db"
 		var localErr error
 		svc, localErr = chat.NewLocalChatService(handle, dbPath)
 		if localErr != nil {
@@ -408,9 +408,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	rawMu.Unlock()
 
 	// Show join notice and scrollback history.
-	writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Joined #"+currentRoom))
+	writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+currentRoom))
 	for _, msg := range history {
-		writeChatLine(formatChatMessage(msg, e.LoadedStrings.ChatSystemPrefix, e.LoadedStrings.ChatMessageFormat))
+		writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 	}
 
 	// Draw initial input prompt. chatReadLine will manage it from here on.
@@ -425,18 +425,18 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			switch ev.Type {
 			case chat.TypeMessage:
 				if ev.Message != nil {
-					writeChatLine(formatChatMessage(*ev.Message, e.LoadedStrings.ChatSystemPrefix, e.LoadedStrings.ChatMessageFormat))
+					writeChatLine(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 				}
 			case chat.TypePrivate:
 				if ev.Message != nil {
-					writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatPrivateMsgFormat, ev.Message.Handle, ev.Message.Text))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, ev.Message.Handle, ev.Message.Text))
 				}
 			case chat.TypeJoin:
 				if ev.Join != nil {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					writeChatLineLocked(fmt.Sprintf(e.LoadedStrings.ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
+					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
 					drawStatusBarLocked()
 					rawMu.Unlock()
 				}
@@ -445,7 +445,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					writeChatLineLocked(fmt.Sprintf(e.LoadedStrings.ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
+					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
 					drawStatusBarLocked()
 					rawMu.Unlock()
 				}
@@ -453,15 +453,15 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				if ev.Topic != nil {
 					rawMu.Lock()
 					currentTopic = ev.Topic.Topic
-					writeChatLineLocked(fmt.Sprintf(e.LoadedStrings.ChatTopicMsg, ev.Topic.Room, ev.Topic.Topic))
+					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatTopicMsg, ev.Topic.Room, ev.Topic.Topic))
 					drawHeaderLocked()
 					rawMu.Unlock()
 				}
 			case chat.TypeSystem:
 				if ev.Reconnect {
-					writeChatLine(e.LoadedStrings.ChatReconnected)
+					writeChatLine(e.Strings().ChatReconnected)
 				} else if ev.Text != "" {
-					writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, ev.Text))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, ev.Text))
 				}
 			}
 		}
@@ -503,7 +503,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				currentRoom = newRoom
 				_, joinHistory, joinErr := svc.Join(currentRoom)
 				if joinErr != nil {
-					writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
 				} else {
 					rawMu.Lock()
 					currentTopic = ""
@@ -511,9 +511,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
-					writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Joined #"+currentRoom))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+currentRoom))
 					for _, msg := range joinHistory {
-						writeChatLine(formatChatMessage(msg, e.LoadedStrings.ChatSystemPrefix, e.LoadedStrings.ChatMessageFormat))
+						writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 					}
 				}
 			}
@@ -529,7 +529,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			if e.ChatLeaves != nil {
 				leaves = e.ChatLeaves.ActiveChatLeaves()
 			}
-			dbPath := e.ServerCfg.DataDir + "/chat.db"
+			dbPath := e.GetServerConfig().DataDir + "/chat.db"
 
 			type netInfo struct {
 				name    string
@@ -569,7 +569,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			wg2.Wait()
 			nets[len(leaves)] = netInfo{name: "Local", users: -1, avail: true, isLocal: true}
 
-			writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Chat Networks:"))
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Chat Networks:"))
 			for i, net := range nets {
 				switch {
 				case !net.avail:
@@ -600,7 +600,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				sel := nets[n-1]
 				switch {
 				case !sel.avail:
-					writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Network unavailable, using local."))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Network unavailable, using local."))
 					newSvc, err = chat.NewLocalChatService(handle, dbPath)
 					newNetName = "Local"
 				case sel.isLocal:
@@ -620,7 +620,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// Room picker inline.
 			newRoom := "lobby"
 			if netRooms, roomErr := newSvc.Rooms(); roomErr == nil && len(netRooms) > 0 {
-				writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Available Rooms:"))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Available Rooms:"))
 				for i, r := range netRooms {
 					topic := r.Topic
 					if topic == "" {
@@ -643,7 +643,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// Join the new room.
 			_, newHistory, joinErr := newSvc.Join(newRoom)
 			if joinErr != nil {
-				writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
 				newSvc.Close() //nolint:errcheck
 				newSvc, err = chat.NewLocalChatService(handle, dbPath)
 				if err != nil {
@@ -673,9 +673,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			drawStatusBarLocked()
 			rawMu.Unlock()
 
-			writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Joined #"+currentRoom))
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+currentRoom))
 			for _, msg := range newHistory {
-				writeChatLine(formatChatMessage(msg, e.LoadedStrings.ChatSystemPrefix, e.LoadedStrings.ChatMessageFormat))
+				writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 			}
 
 			go func() {
@@ -684,18 +684,18 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					switch ev.Type {
 					case chat.TypeMessage:
 						if ev.Message != nil {
-							writeChatLine(formatChatMessage(*ev.Message, e.LoadedStrings.ChatSystemPrefix, e.LoadedStrings.ChatMessageFormat))
+							writeChatLine(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 						}
 					case chat.TypePrivate:
 						if ev.Message != nil {
-							writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatPrivateMsgFormat, ev.Message.Handle, ev.Message.Text))
+							writeChatLine(fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, ev.Message.Handle, ev.Message.Text))
 						}
 					case chat.TypeJoin:
 						if ev.Join != nil {
 							newUsers := svc.Users()
 							rawMu.Lock()
 							currentUsers = newUsers
-							writeChatLineLocked(fmt.Sprintf(e.LoadedStrings.ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
+							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
 							drawStatusBarLocked()
 							rawMu.Unlock()
 						}
@@ -704,7 +704,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 							newUsers := svc.Users()
 							rawMu.Lock()
 							currentUsers = newUsers
-							writeChatLineLocked(fmt.Sprintf(e.LoadedStrings.ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
+							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
 							drawStatusBarLocked()
 							rawMu.Unlock()
 						}
@@ -712,15 +712,15 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 						if ev.Topic != nil {
 							rawMu.Lock()
 							currentTopic = ev.Topic.Topic
-							writeChatLineLocked(fmt.Sprintf(e.LoadedStrings.ChatTopicMsg, ev.Topic.Room, ev.Topic.Topic))
+							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatTopicMsg, ev.Topic.Room, ev.Topic.Topic))
 							drawHeaderLocked()
 							rawMu.Unlock()
 						}
 					case chat.TypeSystem:
 						if ev.Reconnect {
-							writeChatLine(e.LoadedStrings.ChatReconnected)
+							writeChatLine(e.Strings().ChatReconnected)
 						} else if ev.Text != "" {
-							writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, ev.Text))
+							writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, ev.Text))
 						}
 					}
 				}
@@ -731,11 +731,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if upper == "/ROOMS" {
 			rooms, roomErr := svc.Rooms()
 			if roomErr != nil {
-				writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Could not list rooms: "+roomErr.Error()))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not list rooms: "+roomErr.Error()))
 			} else {
-				writeChatLine(e.LoadedStrings.ChatRoomListHeader)
+				writeChatLine(e.Strings().ChatRoomListHeader)
 				for _, r := range rooms {
-					writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatRoomListEntry, r.Name, r.UserCount, r.Topic))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatRoomListEntry, r.Name, r.UserCount, r.Topic))
 				}
 			}
 			continue
@@ -744,7 +744,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if strings.HasPrefix(upper, "/TOPIC ") {
 			topicText := strings.TrimSpace(trimmed[7:])
 			if topicErr := svc.SetTopic(currentRoom, topicText); topicErr != nil {
-				writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Could not set topic: "+topicErr.Error()))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not set topic: "+topicErr.Error()))
 			}
 			continue
 		}
@@ -762,7 +762,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					toNode = target[atIdx+1:]
 				}
 				if msgErr := svc.Private(toHandle, toNode, message); msgErr != nil {
-					writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Could not send private message: "+msgErr.Error()))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not send private message: "+msgErr.Error()))
 				}
 			}
 			continue
@@ -777,13 +777,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		if postErr := svc.Post(currentRoom, trimmed); postErr != nil {
-			writeChatLine(fmt.Sprintf(e.LoadedStrings.ChatSystemPrefix, "Could not post: "+postErr.Error()))
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not post: "+postErr.Error()))
 			continue
 		}
 
 		// Echo own message locally.
 		ownMsg := chat.ChatMessage{Handle: handle, Text: trimmed, Timestamp: time.Now()}
-		writeChatLine(formatChatMessage(ownMsg, e.LoadedStrings.ChatSystemPrefix, e.LoadedStrings.ChatMessageFormat))
+		writeChatLine(formatChatMessage(ownMsg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 	}
 
 	cleanup()

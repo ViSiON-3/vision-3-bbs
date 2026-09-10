@@ -51,14 +51,22 @@ func fieldToKey(t *testing.T) map[string]string {
 }
 
 // stringsFieldName returns the StringsConfig field an expression selects, if
-// the expression is of the form <anything>.LoadedStrings.<Field>.
+// the expression is of the form <anything>.Strings().<Field>.
+//
+// The configured strings used to be a plain field (<anything>.LoadedStrings),
+// and this matched a selector wrapping a selector. They are now behind an
+// accessor returning a snapshot pointer, so the inner node is a call.
 func stringsFieldName(expr ast.Expr) (string, bool) {
 	sel, ok := expr.(*ast.SelectorExpr)
 	if !ok {
 		return "", false
 	}
-	inner, ok := sel.X.(*ast.SelectorExpr)
-	if !ok || inner.Sel.Name != "LoadedStrings" {
+	call, ok := sel.X.(*ast.CallExpr)
+	if !ok {
+		return "", false
+	}
+	fn, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || fn.Sel.Name != "Strings" || len(call.Args) != 0 {
 		return "", false
 	}
 	return sel.Sel.Name, true
@@ -70,13 +78,13 @@ func stringsFieldName(expr ast.Expr) (string, bool) {
 // The direct form is not the only one. Several call sites copy the string into
 // a local first so they can substitute an inline default:
 //
-//	msg := e.LoadedStrings.ConfCurrentConfFormat
+//	msg := e.Strings().ConfCurrentConfFormat
 //	if msg == "" {
 //		msg = "\r\n|07(|15%s|07) [|14%s|07]\r\n"
 //	}
 //	formatted := fmt.Sprintf(msg, newConf.Name, newConf.Tag)
 //
-// Matching only fmt.Sprintf(x.LoadedStrings.Field, ...) misses those, and the
+// Matching only fmt.Sprintf(x.Strings().Field, ...) misses those, and the
 // keys they use then look unformatted and go unvalidated. Aliases are resolved
 // per function, so the same variable name in two functions cannot be confused.
 func scanCallSites(t *testing.T) []callSite {
@@ -458,7 +466,7 @@ func installValues(t *testing.T, shipped map[string]string) map[string]string {
 }
 
 // TestAliasedFormatSitesAreFound guards the alias-following in scanCallSites.
-// Matching only fmt.Sprintf(x.LoadedStrings.Field, ...) missed three keys that
+// Matching only fmt.Sprintf(x.Strings().Field, ...) missed three keys that
 // copy the string into a local first, so they looked unformatted and went
 // unvalidated. If the scanner regresses to the direct form these disappear from
 // the discovered set and TestFormattedKeysMatchCallSites starts passing for the
@@ -505,5 +513,28 @@ func TestAliasResolvesToNearestAssignment(t *testing.T) {
 			t.Errorf("%s: confNoAccessibleConfs is written directly, not formatted; "+
 				"the alias resolved to the wrong assignment", s.Pos)
 		}
+	}
+}
+
+// minExpectedCallSites is a floor under the number of call sites the scan is
+// expected to find. Every check in this file is driven by scanCallSites, so a
+// matcher that silently stops matching would leave them all passing over an
+// empty set. That is not hypothetical: the strings config moved from a plain
+// field to an accessor, which changed the AST shape stringsFieldName looks for.
+//
+// The scan found 132 sites when this was written, both before and after that
+// move — the matcher change was verified lossless by counting on both sides.
+// The exact count drifts as strings are added and removed, so the floor sits
+// below it. Raise the floor if it becomes slack, but do not lower it to make a
+// failure go away: a sharp drop means the matcher stopped matching, not that
+// the call sites disappeared.
+const minExpectedCallSites = 100
+
+func TestScanFindsCallSites(t *testing.T) {
+	sites := scanCallSites(t)
+	if len(sites) < minExpectedCallSites {
+		t.Fatalf("scanCallSites found %d call sites, expected at least %d; "+
+			"stringsFieldName has probably stopped matching the source's current shape",
+			len(sites), minExpectedCallSites)
 	}
 }

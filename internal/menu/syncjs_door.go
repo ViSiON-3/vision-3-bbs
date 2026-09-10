@@ -74,8 +74,8 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 		ScreenHeight:     ctx.User.ScreenHeight,
 		NodeNumber:       ctx.NodeNumber,
 		SessionStartTime: ctx.SessionStartTime,
-		BoardName:        ctx.Executor.ServerCfg.BoardName,
-		SysOpName:        ctx.Executor.ServerCfg.SysOpName,
+		BoardName:        ctx.Executor.GetServerConfig().BoardName,
+		SysOpName:        ctx.Executor.GetServerConfig().SysOpName,
 	}
 
 	// Derive from the SSH session context so scripts cancel on disconnect.

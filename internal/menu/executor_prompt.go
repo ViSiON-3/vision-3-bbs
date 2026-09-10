@@ -40,11 +40,11 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 		// On iOS, MuffinTerm ties the software keyboard to cursor visibility —
 		// hiding the cursor can dismiss the keyboard and block all input.
 
-		yesLabel := strings.TrimSpace(e.LoadedStrings.YesPromptText)
+		yesLabel := strings.TrimSpace(e.Strings().YesPromptText)
 		if yesLabel == "" {
 			yesLabel = "Yes"
 		}
-		noLabel := strings.TrimSpace(e.LoadedStrings.NoPromptText)
+		noLabel := strings.TrimSpace(e.Strings().NoPromptText)
 		if noLabel == "" {
 			noLabel = "No"
 		}
@@ -53,8 +53,8 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 		noOptionText := " " + noLabel + " "
 		yesNoSpacing := 2  // Spaces between prompt and first option
 		optionSpacing := 2 // Spaces between Yes and No
-		highlightColor := e.Theme.YesNoHighlightColor
-		regularColor := e.Theme.YesNoRegularColor
+		highlightColor := e.Theme().YesNoHighlightColor
+		regularColor := e.Theme().YesNoRegularColor
 
 		// Write the prompt text inline
 		promptDisplayBytes := ansi.ReplacePipeCodes([]byte(promptText))

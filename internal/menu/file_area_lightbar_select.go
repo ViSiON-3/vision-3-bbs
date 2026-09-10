@@ -157,7 +157,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 		visibleRows = 3
 	}
 
-	hiColorSeq := colorCodeToAnsi(e.Theme.YesNoHighlightColor)
+	hiColorSeq := colorCodeToAnsi(e.Theme().YesNoHighlightColor)
 	if len(hiBarOptions) > 0 {
 		hiColorSeq = colorCodeToAnsi(hiBarOptions[0].HighlightColor)
 	}

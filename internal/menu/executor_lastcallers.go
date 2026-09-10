@@ -49,7 +49,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load LASTCALL template files", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
-		msg := e.LoadedStrings.ExecLastcallTemplateErr
+		msg := e.Strings().ExecLastcallTemplateErr
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading LASTCALL templates")
@@ -92,7 +92,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		userNotesByID[userRecord.ID] = userRecord.PrivateNote
 	}
-	timeLoc := getLastCallerTimeLocation(strings.TrimSpace(e.ServerCfg.Timezone))
+	timeLoc := getLastCallerTimeLocation(strings.TrimSpace(e.GetServerConfig().Timezone))
 	if callerLimit > 0 && len(lastCallers) > callerLimit {
 		lastCallers = lastCallers[len(lastCallers)-callerLimit:]
 	}
@@ -180,7 +180,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// 5. Wait for Enter using configured PauseString
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
 	}

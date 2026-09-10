@@ -97,7 +97,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		hdrTemplatePath = filepath.Join(e.MenuSetPath, "templates", "message_headers", "MSGHDR.2.ans")
 		hdrTemplateBytes, hdrErr = ansi.GetAnsiFileContent(hdrTemplatePath)
 		if hdrErr != nil {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.MsgHdrLoadError)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgHdrLoadError)), outputMode)
 			time.Sleep(1 * time.Second)
 			return nil, "", fmt.Errorf("failed loading MSGHDR templates")
 		}
@@ -125,7 +125,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	reader := bufio.NewReader(sessionIH)
 
 	// Lightbar colors from theme
-	hiColor := e.Theme.YesNoHighlightColor
+	hiColor := e.Theme().YesNoHighlightColor
 	loColor := 9 // Bright blue unselected items
 	boundsColor := 1
 
@@ -324,9 +324,9 @@ readerLoop:
 				// Display footer: lightbar only
 				var suffixText string
 				if isNewScan {
-					suffixText = e.LoadedStrings.MsgNewScanSuffix
+					suffixText = e.Strings().MsgNewScanSuffix
 				} else {
-					suffixText = e.LoadedStrings.MsgReadingSuffix
+					suffixText = e.Strings().MsgReadingSuffix
 				}
 
 				// Draw horizontal line above footer (CP437 character 196)
@@ -409,9 +409,9 @@ readerLoop:
 			case editor.KeyArrowLeft, editor.KeyArrowRight, editor.KeyCtrlS, editor.KeyCtrlD: // Left/Right arrow - activate interactive lightbar
 				var suffixText string
 				if isNewScan {
-					suffixText = e.LoadedStrings.MsgNewScanSuffix
+					suffixText = e.Strings().MsgNewScanSuffix
 				} else {
-					suffixText = e.LoadedStrings.MsgReadingSuffix
+					suffixText = e.Strings().MsgReadingSuffix
 				}
 
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
@@ -450,9 +450,9 @@ readerLoop:
 						// Not a recognized command, show lightbar
 						var suffixText string
 						if isNewScan {
-							suffixText = e.LoadedStrings.MsgNewScanSuffix
+							suffixText = e.Strings().MsgNewScanSuffix
 						} else {
-							suffixText = e.LoadedStrings.MsgReadingSuffix
+							suffixText = e.Strings().MsgReadingSuffix
 						}
 
 						// Position cursor at last row for lightbar
@@ -476,9 +476,9 @@ readerLoop:
 					// Multi-byte sequence that wasn't handled as scrolling - show lightbar
 					var suffixText string
 					if isNewScan {
-						suffixText = e.LoadedStrings.MsgNewScanSuffix
+						suffixText = e.Strings().MsgNewScanSuffix
 					} else {
-						suffixText = e.LoadedStrings.MsgReadingSuffix
+						suffixText = e.Strings().MsgReadingSuffix
 					}
 
 					terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
@@ -510,14 +510,14 @@ readerLoop:
 						currentMsgNum = nxt
 						break scrollLoop
 					}
-					showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgEndOfMessages, termHeight)
+					showReaderNotice(terminal, outputMode, e.Strings().MsgEndOfMessages, termHeight)
 					break readerLoop
 				}
 				if currentMsgNum < totalMsgCount {
 					currentMsgNum++
 					break scrollLoop // Exit scroll loop to load next message
 				} else {
-					showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgEndOfMessages, termHeight)
+					showReaderNotice(terminal, outputMode, e.Strings().MsgEndOfMessages, termHeight)
 					break readerLoop
 				}
 
@@ -552,7 +552,7 @@ readerLoop:
 						break scrollLoop
 					}
 					// Already at the first visible message: stay put.
-					showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgFirstMessage, termHeight)
+					showReaderNotice(terminal, outputMode, e.Strings().MsgFirstMessage, termHeight)
 					needsRedraw = true
 					continue
 				}
@@ -560,7 +560,7 @@ readerLoop:
 					currentMsgNum--
 					break scrollLoop
 				} else {
-					showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgFirstMessage, termHeight)
+					showReaderNotice(terminal, outputMode, e.Strings().MsgFirstMessage, termHeight)
 					needsRedraw = true
 					continue
 				}
@@ -574,12 +574,12 @@ readerLoop:
 
 			case 'J': // Jump to message number
 				navDir = 1
-				handleJump(reader, terminal, outputMode, &currentMsgNum, totalMsgCount, e.LoadedStrings.MsgJumpPrompt, e.LoadedStrings.MsgInvalidMsgNum)
+				handleJump(reader, terminal, outputMode, &currentMsgNum, totalMsgCount, e.Strings().MsgJumpPrompt, e.Strings().MsgInvalidMsgNum)
 				// Exit scroll loop to load new message
 				break scrollLoop
 
 			case 'M': // Mail reply (deferred)
-				showReaderNotice(terminal, outputMode, e.LoadedStrings.MsgMailReplyDeferred, termHeight)
+				showReaderNotice(terminal, outputMode, e.Strings().MsgMailReplyDeferred, termHeight)
 				needsRedraw = true
 				continue
 

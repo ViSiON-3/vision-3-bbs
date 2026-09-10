@@ -198,7 +198,7 @@ func runScanTypeWithInput(t *testing.T, input string, numMsgs int) (*ScanConfig,
 	scanNoticePause = 0
 	t.Cleanup(func() { scanNoticePause = time.Second })
 
-	e := &MenuExecutor{LoadedStrings: loadTestStrings(t)}
+	e := newExecutorWithStrings(loadTestStrings(t))
 	ts := newTestSession(input)
 	terminal := newTestTerminal(ts)
 	ih := getSessionIH(ts)
@@ -363,7 +363,10 @@ func TestNewScanMultiAreaReportsNoMatches(t *testing.T) {
 	u.CurrentMessageAreaID = areaID
 	u.CurrentMessageAreaTag = "GENERAL"
 
-	e := &MenuExecutor{MessageMgr: mm, MenuSetPath: t.TempDir(), LoadedStrings: loadTestStrings(t)}
+	e := newExecutorWithStrings(loadTestStrings(t), func(e *MenuExecutor) {
+		e.MessageMgr = mm
+		e.MenuSetPath = t.TempDir()
+	})
 
 	// Scan menu: Date=All, From=zed (no such author), S then A = all areas
 	// in the conference, Enter to scan.
@@ -406,7 +409,10 @@ func TestNewScanCurrentAreaNothingNewCompletes(t *testing.T) {
 	u.CurrentMessageAreaID = areaID
 	u.CurrentMessageAreaTag = "GENERAL"
 
-	e := &MenuExecutor{MessageMgr: mm, MenuSetPath: t.TempDir(), LoadedStrings: loadTestStrings(t)}
+	e := newExecutorWithStrings(loadTestStrings(t), func(e *MenuExecutor) {
+		e.MessageMgr = mm
+		e.MenuSetPath = t.TempDir()
+	})
 
 	// Defaults (new messages, current area only), Enter to scan.
 	ts := newTestSession("\r")
@@ -465,8 +471,11 @@ func TestNewScanCurrentAreaAppliesFromSearchAndKeepsPointers(t *testing.T) {
 	u.CurrentMessageAreaID = areaID
 	u.CurrentMessageAreaTag = "GENERAL"
 
-	e := &MenuExecutor{MessageMgr: mm, MenuSetPath: menuSet, LoadedStrings: loadTestStrings(t)}
-	e.ServerCfg.CoSysOpLevel = 200
+	e := newExecutorWithStrings(loadTestStrings(t), func(e *MenuExecutor) {
+		e.MessageMgr = mm
+		e.MenuSetPath = menuSet
+	})
+	setServerField(e, func(c *config.ServerConfig) { c.CoSysOpLevel = 200 })
 
 	// Scan menu: Date=All, From=bob, Update Pointers off, Enter to scan.
 	// Reader: N (next) twice runs past the last match and ends the scan.

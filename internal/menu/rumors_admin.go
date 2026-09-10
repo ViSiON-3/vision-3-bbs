@@ -54,9 +54,9 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	// Anonymous option (V2: only if user level >= AnonymousLevel)
 	author := currentUser.Handle
 	realUser := currentUser.Handle
-	allowAnon := userLevel >= e.ServerCfg.AnonymousLevel
+	allowAnon := userLevel >= e.GetServerConfig().AnonymousLevel
 	if allowAnon {
-		anonPrompt := e.LoadedStrings.AddRumorAnonymous
+		anonPrompt := e.Strings().AddRumorAnonymous
 		if anonPrompt == "" {
 			anonPrompt = "|09Anonymous? @"
 		}
@@ -72,7 +72,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Min level to see (V2: Level_To_See_Rumor)
 	wv(terminal, "|08Minimum security level required to view this rumor |07(|151-255|07, |15Enter|07=1|07)\r\n", outputMode)
-	levelPrompt := e.LoadedStrings.EnterRumorLevel
+	levelPrompt := e.Strings().EnterRumorLevel
 	if levelPrompt == "" {
 		levelPrompt = "|09Level|08 : "
 	}
@@ -99,7 +99,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Rumor text
-	enterPrompt := e.LoadedStrings.EnterRumorPrompt
+	enterPrompt := e.Strings().EnterRumorPrompt
 	if enterPrompt == "" {
 		enterPrompt = "|09Enter Rumor |08(|15Enter|08/|15Abort|08)|07:\r\n"
 	}
@@ -149,7 +149,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	addedMsg := e.LoadedStrings.RumorAdded
+	addedMsg := e.Strings().RumorAdded
 	if addedMsg == "" {
 		addedMsg = "|10Rumor has been added!"
 	}

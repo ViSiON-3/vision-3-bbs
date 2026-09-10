@@ -84,12 +84,12 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 		// Prompt
 		var prompt string
 		if isNewUser {
-			prompt = e.LoadedStrings.NewInfoFormPrompt
+			prompt = e.Strings().NewInfoFormPrompt
 			if prompt == "" {
 				prompt = "|08N|07e|15wuser |08F|07o|15rms |09 |01(|09Q|01)uit or |09#|08: "
 			}
 		} else {
-			prompt = e.LoadedStrings.InfoformPrompt
+			prompt = e.Strings().InfoformPrompt
 			if prompt == "" {
 				prompt = "|08I|07n|15foForms|09 |01(|09V|01)iew (|09Q|01)uit or |09#|08: "
 			}
@@ -127,7 +127,7 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 
 		if upper == "V" && !isNewUser {
 			// View completed form
-			viewPrompt := e.LoadedStrings.ViewWhichForm
+			viewPrompt := e.Strings().ViewWhichForm
 			if viewPrompt == "" {
 				viewPrompt = "|09View which |08F|07o|15rm? (|07#|15) |09:"
 			}

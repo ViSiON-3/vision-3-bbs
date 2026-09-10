@@ -32,7 +32,7 @@ func displayOnelinerScreen(e *MenuExecutor, terminal *term.Terminal, outputMode 
 	botTemplateBytes, errBot := readTemplateFile(botTemplatePath)
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load one or more ONELINER template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
-		msg := e.LoadedStrings.ExecOnelinerTemplateErr
+		msg := e.Strings().ExecOnelinerTemplateErr
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return fmt.Errorf("failed loading ONELINER templates")
@@ -86,7 +86,7 @@ func displayOnelinerScreen(e *MenuExecutor, terminal *term.Terminal, outputMode 
 			return wErr
 		}
 	} else {
-		anonymousName := strings.TrimSpace(e.LoadedStrings.AnonymousName)
+		anonymousName := strings.TrimSpace(e.Strings().AnonymousName)
 		if anonymousName == "" {
 			anonymousName = "Anonymous"
 		}
@@ -131,10 +131,10 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
-	allowAnon := currentUser != nil && currentUser.AccessLevel >= e.ServerCfg.AnonymousLevel
+	allowAnon := currentUser != nil && currentUser.AccessLevel >= e.GetServerConfig().AnonymousLevel
 	isAnonymous := false
 	if allowAnon {
-		anonPrompt := e.LoadedStrings.OneLinerAnonymousPrompt
+		anonPrompt := e.Strings().OneLinerAnonymousPrompt
 		if anonPrompt == "" {
 			anonPrompt = "|09Post this one-liner as |08[|15A|08]nonymous|09? @"
 		}
@@ -155,7 +155,7 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 		}
 	}
 
-	enterPrompt := e.LoadedStrings.EnterOneLiner
+	enterPrompt := e.Strings().EnterOneLiner
 	if enterPrompt == "" {
 		slog.Error("required string 'EnterOneLiner' is missing or empty in strings configuration")
 		return nil, "", fmt.Errorf("missing EnterOneLiner string in configuration")
@@ -179,7 +179,7 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 	// termHeight, just compute the position.
 	inputRow := promptRow
 
-	legendText := strings.TrimSpace(e.LoadedStrings.OneLinerLegend)
+	legendText := strings.TrimSpace(e.Strings().OneLinerLegend)
 	legendRow := inputRow - 1
 	if legendRow < 1 {
 		legendRow = 1
@@ -229,7 +229,7 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 	}
 	newOneliner = truncateOnelinerPreservePipeCodes(newOneliner, oneLinerMaxLength)
 	if containsDisallowedOnelinerColorCode(newOneliner) {
-		msg := e.LoadedStrings.ExecOnelinerColorError
+		msg := e.Strings().ExecOnelinerColorError
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 		return nil, "", nil
@@ -264,16 +264,16 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 
 		if saveErr != nil {
 			slog.Error("failed to write updated oneliners JSON", "node", nodeNumber, "path", onelinerPath, "error", saveErr)
-			msg := e.LoadedStrings.ExecOnelinerWriteError
+			msg := e.Strings().ExecOnelinerWriteError
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		} else {
 			slog.Info("successfully saved updated oneliners", "node", nodeNumber, "path", onelinerPath)
-			msg := e.LoadedStrings.ExecOnelinerAdded
+			msg := e.Strings().ExecOnelinerAdded
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(500 * time.Millisecond)
 		}
 	} else {
-		msg := e.LoadedStrings.ExecOnelinerEmpty
+		msg := e.Strings().ExecOnelinerEmpty
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(500 * time.Millisecond)
 	}

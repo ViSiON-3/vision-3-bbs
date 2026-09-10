@@ -490,7 +490,7 @@ func v3netAreasShowMessage(e *MenuExecutor, terminal *term.Terminal, s ssh.Sessi
 	buf.Write(ansi.ReplacePipeCodes([]byte("  " + msg + "\r\n\r\n")))
 	terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}

@@ -215,7 +215,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		} else if cfg.ScanDate > 0 {
 			dateStr = fmt.Sprintf("Since %s", cfg.since().Format("01/02/06"))
 		}
-		line := fmt.Sprintf(e.LoadedStrings.ScanDateLine, dateStr)
+		line := fmt.Sprintf(e.Strings().ScanDateLine, dateStr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 
 		// To
@@ -223,7 +223,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		if cfg.SearchTo != "" {
 			toStr = fmt.Sprintf("Search For %s", cfg.SearchTo)
 		}
-		line = fmt.Sprintf(e.LoadedStrings.ScanToLine, toStr)
+		line = fmt.Sprintf(e.Strings().ScanToLine, toStr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 
 		// From
@@ -231,7 +231,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		if cfg.SearchFrom != "" {
 			fromStr = fmt.Sprintf("Search For %s", cfg.SearchFrom)
 		}
-		line = fmt.Sprintf(e.LoadedStrings.ScanFromLine, fromStr)
+		line = fmt.Sprintf(e.Strings().ScanFromLine, fromStr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 
 		// Range
@@ -239,7 +239,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		if cfg.RangeStart > 0 && cfg.RangeEnd > 0 {
 			rangeStr = fmt.Sprintf("%d-%d", cfg.RangeStart, cfg.RangeEnd)
 		}
-		line = fmt.Sprintf(e.LoadedStrings.ScanRangeLine, rangeStr)
+		line = fmt.Sprintf(e.Strings().ScanRangeLine, rangeStr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 
 		// Update Pointers
@@ -247,7 +247,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		if !cfg.UpdatePointers {
 			upStr = "No"
 		}
-		line = fmt.Sprintf(e.LoadedStrings.ScanUpdateLine, upStr)
+		line = fmt.Sprintf(e.Strings().ScanUpdateLine, upStr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 
 		// Which Areas
@@ -260,14 +260,14 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		case 3:
 			whichStr = "Current Area Only"
 		}
-		line = fmt.Sprintf(e.LoadedStrings.ScanWhichLine, whichStr)
+		line = fmt.Sprintf(e.Strings().ScanWhichLine, whichStr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 
-		line = e.LoadedStrings.ScanAbortLine
+		line = e.Strings().ScanAbortLine
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 
 		// Prompt - "Selection;" Dark Cyan (|03), "(Cr" Bright Cyan (|11), "/" Bright Magenta (|13), "Scan) :" Bright Cyan (|11)
-		prompt := e.LoadedStrings.ScanSelectionPrompt
+		prompt := e.Strings().ScanSelectionPrompt
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 	}
 
@@ -312,7 +312,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			return cfg, nil
 
 		case 'D': // Date
-			input, ok, err := promptLine(e.LoadedStrings.ScanDatePrompt, 10)
+			input, ok, err := promptLine(e.Strings().ScanDatePrompt, 10)
 			if err != nil {
 				return nil, err
 			}
@@ -327,14 +327,14 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			default:
 				t, parsed := parseScanDate(input)
 				if !parsed {
-					showScanNotice(terminal, outputMode, e.LoadedStrings.ScanInvalidDate)
+					showScanNotice(terminal, outputMode, e.Strings().ScanInvalidDate)
 					continue
 				}
 				cfg.ScanDate = t.Unix()
 			}
 
 		case 'T': // To
-			input, ok, err := promptLine(e.LoadedStrings.ScanToPrompt, 30)
+			input, ok, err := promptLine(e.Strings().ScanToPrompt, 30)
 			if err != nil {
 				return nil, err
 			}
@@ -343,7 +343,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			}
 
 		case 'F': // From
-			input, ok, err := promptLine(e.LoadedStrings.ScanFromPrompt, 30)
+			input, ok, err := promptLine(e.Strings().ScanFromPrompt, 30)
 			if err != nil {
 				return nil, err
 			}
@@ -359,10 +359,10 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			// menu never shows "All" while a stale bound is still in effect.
 			// The range is only ever stored as a validated pair.
 			if numMsgs <= 0 {
-				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanNoMessages)
+				showScanNotice(terminal, outputMode, e.Strings().ScanNoMessages)
 				continue
 			}
-			startInput, ok, err := promptLine(fmt.Sprintf(e.LoadedStrings.ScanRangeStartPrompt, numMsgs), 6)
+			startInput, ok, err := promptLine(fmt.Sprintf(e.Strings().ScanRangeStartPrompt, numMsgs), 6)
 			if err != nil {
 				return nil, err
 			}
@@ -376,11 +376,11 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			startNum, convErr := strconv.Atoi(startInput)
 			if convErr != nil || startNum < 1 || startNum > numMsgs {
 				cfg.RangeStart, cfg.RangeEnd = 0, 0
-				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanInvalidRange)
+				showScanNotice(terminal, outputMode, e.Strings().ScanInvalidRange)
 				continue
 			}
 
-			endInput, ok, err := promptLine(fmt.Sprintf(e.LoadedStrings.ScanRangeEndPrompt, startNum, numMsgs), 6)
+			endInput, ok, err := promptLine(fmt.Sprintf(e.Strings().ScanRangeEndPrompt, startNum, numMsgs), 6)
 			if err != nil {
 				return nil, err
 			}
@@ -394,7 +394,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			endNum, convErr := strconv.Atoi(endInput)
 			if convErr != nil || endNum < startNum || endNum > numMsgs {
 				cfg.RangeStart, cfg.RangeEnd = 0, 0
-				showScanNotice(terminal, outputMode, e.LoadedStrings.ScanInvalidRange)
+				showScanNotice(terminal, outputMode, e.Strings().ScanInvalidRange)
 				continue
 			}
 			cfg.RangeStart, cfg.RangeEnd = startNum, endNum
@@ -403,7 +403,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			cfg.UpdatePointers = !cfg.UpdatePointers
 
 		case 'S': // Scan which areas
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ScanWhichPrompt)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanWhichPrompt)), outputMode)
 			aKey, aErr := ih.ReadKey()
 			if aErr != nil {
 				return nil, aErr

@@ -61,7 +61,7 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Prompt for current password
-	msg := e.LoadedStrings.CfgCurrentPwPrompt
+	msg := e.Strings().CfgCurrentPwPrompt
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 
 	oldPw, err := readPasswordSecurely(s, terminal, outputMode)
@@ -74,7 +74,7 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Verify current password
 	if bcryptErr := bcrypt.CompareHashAndPassword([]byte(currentUser.PasswordHash), []byte(oldPw)); bcryptErr != nil {
-		msg := e.LoadedStrings.CfgIncorrectPw
+		msg := e.Strings().CfgIncorrectPw
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
@@ -107,7 +107,7 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	msg = e.LoadedStrings.CfgPasswordChanged
+	msg = e.Strings().CfgPasswordChanged
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(1 * time.Second)
 	return currentUser, "", nil
@@ -126,7 +126,7 @@ func runCfgCustomPrompt(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	help := e.LoadedStrings.CfgCustomPromptHelp
+	help := e.Strings().CfgCustomPromptHelp
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(help)), outputMode)
 
 	return runCfgStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,

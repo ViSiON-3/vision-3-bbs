@@ -139,7 +139,7 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 	}
 	lineCount := 0
 
-	morePrompt := e.LoadedStrings.FileMorePrompt
+	morePrompt := e.Strings().FileMorePrompt
 	if morePrompt == "" {
 		morePrompt = "\r\n|08--- |15More|08 --- |07[Enter]=Continue [Q]=Stop"
 	}

@@ -135,7 +135,7 @@ func rumorSanitize(s string) string {
 
 // rumorAnonName returns the configured anonymous display name.
 func rumorAnonName(e *MenuExecutor) string {
-	name := e.LoadedStrings.AnonymousName
+	name := e.Strings().AnonymousName
 	if strings.TrimSpace(name) == "" {
 		return "Anonymous"
 	}

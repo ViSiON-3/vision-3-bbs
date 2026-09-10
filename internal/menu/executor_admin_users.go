@@ -45,7 +45,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load USERLIST template files", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
-		msg := e.LoadedStrings.ExecUserlistTemplateErr
+		msg := e.Strings().ExecUserlistTemplateErr
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading USERLIST templates")
@@ -70,7 +70,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	var outputBuffer bytes.Buffer
 	outputBuffer.Write(processedTopTemplate) // Write processed top template
 	outputBuffer.WriteString("\r\n")
-	outputBuffer.WriteString(string(ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.ExecPendingValidation, pendingCount)))))
+	outputBuffer.WriteString(string(ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().ExecPendingValidation, pendingCount)))))
 
 	if len(users) == 0 {
 		// Optional: Handle empty state. The template might handle this.
@@ -137,7 +137,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// 5. Wait for Enter using configured PauseString (centered)
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
 	}
@@ -349,7 +349,7 @@ func runPendingValidationNotice(c *cmdCtx, args string) (*user.User, string, err
 		return nil, "", nil
 	}
 
-	sysOpACS := fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel)
+	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		return nil, "", nil
 	}
@@ -381,7 +381,7 @@ func runAdminToggleAllowNewUsers(c *cmdCtx, args string) (*user.User, string, er
 	if currentUser == nil {
 		return nil, "", nil
 	}
-	sysOpACS := fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel)
+	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Access denied.|07\r\n")), outputMode)
 		time.Sleep(1 * time.Second)

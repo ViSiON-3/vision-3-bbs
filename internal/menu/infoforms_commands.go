@@ -26,7 +26,7 @@ func runInfoFormView(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	viewPrompt := e.LoadedStrings.ViewWhichForm
+	viewPrompt := e.Strings().ViewWhichForm
 	if viewPrompt == "" {
 		viewPrompt = "|09View which |08F|07o|15rm? (|07#|15) |09:"
 	}

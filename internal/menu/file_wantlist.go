@@ -84,14 +84,14 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 	}
 
 	if len(entries) == 0 {
-		msg := e.LoadedStrings.WantListEmpty
+		msg := e.Strings().WantListEmpty
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+msg+"\r\n")), outputMode)
-		_ = writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
+		_ = writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
 		return currentUser, "", nil
 	}
 
 	// Display header
-	hdr := e.LoadedStrings.WantListHeader
+	hdr := e.Strings().WantListHeader
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+hdr+"\r\n")), outputMode)
 
 	// Display each entry
@@ -116,7 +116,7 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 		if err != nil {
 			return currentUser, "", err
 		}
-		msg := e.LoadedStrings.WantListCleared
+		msg := e.Strings().WantListCleared
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+msg+"\r\n")), outputMode)
 
 	case "D":
@@ -145,7 +145,7 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 
 func runWantListUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, currentUser *user.User, nodeNumber int, outputMode ansi.OutputMode) (*user.User, string, error) {
 	// Prompt for filename
-	prompt := e.LoadedStrings.WantListPrompt
+	prompt := e.Strings().WantListPrompt
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+prompt+": ")), outputMode)
 	filename, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -157,7 +157,7 @@ func runWantListUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, cu
 	}
 
 	// Prompt for reason
-	reasonPrompt := e.LoadedStrings.WantListReasonPrompt
+	reasonPrompt := e.Strings().WantListReasonPrompt
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(reasonPrompt+": ")), outputMode)
 	reason, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -185,7 +185,7 @@ func runWantListUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, cu
 		return currentUser, "", err
 	}
 
-	msg := e.LoadedStrings.WantListSubmitted
+	msg := e.Strings().WantListSubmitted
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+msg+"\r\n")), outputMode)
 
 	return currentUser, "", nil

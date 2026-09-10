@@ -56,8 +56,8 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	bbsID := resolveQWKID(e.ServerCfg)
-	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName, e.MessageMgr.DataPath())
+	bbsID := resolveQWKID(e.GetServerConfig())
+	svc := qwkservice.New(e.MessageMgr, bbsID, e.GetServerConfig().BoardName, e.GetServerConfig().SysOpName, e.MessageMgr.DataPath())
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15Building QWK packet...|07\r\n")), outputMode)
 
@@ -86,7 +86,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(statusMsg)), outputMode)
 
 	// Prompt user to send or quit
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+e.LoadedStrings.SendQWKPacketPrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+e.Strings().SendQWKPacketPrompt)), outputMode)
 	promptInput, promptErr := readLineFromSessionIH(s, terminal)
 	if promptErr != nil {
 		if errors.Is(promptErr, io.EOF) {
@@ -183,7 +183,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	bbsID := resolveQWKID(e.ServerCfg)
+	bbsID := resolveQWKID(e.GetServerConfig())
 
 	// Protocol selection
 	proto, ok, protoErr := e.selectTransferProtocol(s, terminal, outputMode)
@@ -233,7 +233,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	svc := qwkservice.New(e.MessageMgr, bbsID, e.ServerCfg.BoardName, e.ServerCfg.SysOpName, e.MessageMgr.DataPath())
+	svc := qwkservice.New(e.MessageMgr, bbsID, e.GetServerConfig().BoardName, e.GetServerConfig().SysOpName, e.MessageMgr.DataPath())
 
 	// The service owns parsing and posting; the menu supplies the ACS gate and
 	// per-area progress output as callbacks so terminal/UI concerns stay here.
@@ -244,7 +244,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 			return area.ACSWrite == "" || checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime)
 		},
 		Notify: func(area *message.MessageArea) {
-			postMsg := strings.ReplaceAll(e.LoadedStrings.PostingQWKMsg, "|BN", area.Name)
+			postMsg := strings.ReplaceAll(e.Strings().PostingQWKMsg, "|BN", area.Name)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+postMsg)), outputMode)
 		},
 	})
@@ -282,7 +282,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	statusMsg := strings.ReplaceAll(e.LoadedStrings.TotalQWKAdded, "|TO", fmt.Sprintf("%d", posted))
+	statusMsg := strings.ReplaceAll(e.Strings().TotalQWKAdded, "|TO", fmt.Sprintf("%d", posted))
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+statusMsg+"\r\n")), outputMode)
 	time.Sleep(2 * time.Second)
 

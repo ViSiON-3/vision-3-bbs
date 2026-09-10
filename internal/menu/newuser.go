@@ -38,7 +38,7 @@ func (e *MenuExecutor) confirmCannotBeEmpty(s ssh.Session, terminal *term.Termin
 		return false, err
 	}
 	if !retry {
-		msg := e.LoadedStrings.NewUserMaybeAnotherTime
+		msg := e.Strings().NewUserMaybeAnotherTime
 		if msg == "" {
 			msg = "\r\n|07Maybe another time?|07\r\n"
 		}
@@ -58,7 +58,7 @@ func (e *MenuExecutor) confirmExitNewUser(s ssh.Session, terminal *term.Terminal
 		return false, err
 	}
 	if exit {
-		msg := e.LoadedStrings.NewUserMaybeAnotherTime
+		msg := e.Strings().NewUserMaybeAnotherTime
 		if msg == "" {
 			msg = "\r\n|07Maybe another time?|07\r\n"
 		}
@@ -85,12 +85,12 @@ func (e *MenuExecutor) handleNewUserApplication(
 	serverCfg := e.GetServerConfig()
 	if !serverCfg.AllowNewUsers {
 		slog.Info("new user registration is disabled", "node", nodeNumber)
-		closedMsg := e.LoadedStrings.NewUsersClosedStr
+		closedMsg := e.Strings().NewUsersClosedStr
 		if closedMsg == "" {
 			closedMsg = "\r\n|12This BBS is not accepting new users at this time.|07\r\n"
 		}
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(closedMsg)), outputMode)
-		pausePrompt := e.LoadedStrings.PauseString
+		pausePrompt := e.Strings().PauseString
 		if pausePrompt == "" {
 			pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 		}
@@ -100,7 +100,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	}
 
 	// 1. "Apply for access?" prompt (before showing the ANS screen, matching Pascal flow)
-	applyPrompt := e.LoadedStrings.ApplyAsNewStr
+	applyPrompt := e.Strings().ApplyAsNewStr
 	if applyPrompt == "" {
 		applyPrompt = "|08A|07p|15ply |08F|07o|15r |08A|07c|15cess? @"
 	}
@@ -142,7 +142,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	// 4. Clear screen, show welcome and user number (matching Pascal: AnsiCls → Welcome → UserNum)
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
-	welcomeStr := e.LoadedStrings.WelcomeNewUser
+	welcomeStr := e.Strings().WelcomeNewUser
 	if welcomeStr == "" {
 		welcomeStr = "|04W|12e|14lcome |04T|12o |14|BN|08!"
 	}
@@ -151,7 +151,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	welcomeStr = strings.ReplaceAll(welcomeStr, "|BN", e.GetServerConfig().BoardName)
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(welcomeStr+"\r\n")), outputMode)
 
-	userNumStr := e.LoadedStrings.YourUserNum
+	userNumStr := e.Strings().YourUserNum
 	if userNumStr == "" {
 		userNumStr = "|15Your User # is |09|UN|CR"
 	}
@@ -199,7 +199,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	)
 	if addErr != nil {
 		slog.Error("failed to create new user", "node", nodeNumber, "handle", handle, "error", addErr)
-		errMsg := e.LoadedStrings.NewUserCreationError
+		errMsg := e.Strings().NewUserCreationError
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		time.Sleep(2 * time.Second)
 		return nil, nil
@@ -281,24 +281,24 @@ func (e *MenuExecutor) handleNewUserApplication(
 		// They just sent the required message and their account can get on, so
 		// they are about to be carried straight into a session — say so rather
 		// than "you can log on now", which implies a separate step.
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NewUserLoggingIn)), outputMode)
+		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NewUserLoggingIn)), outputMode)
 	} else {
-		validationMsg := e.LoadedStrings.NewUserAccountReady
+		validationMsg := e.Strings().NewUserAccountReady
 		if !canLogonAtLevel(cfg, newUser.AccessLevel) {
-			validationMsg = e.LoadedStrings.NewUserAccountCreated
+			validationMsg = e.Strings().NewUserAccountCreated
 		}
 		// Saying only "you can log on now" would imply nothing further happens.
 		// An account that is not yet reviewed still gets looked at, so say so —
 		// unless autoValidateNewUsers already marked it reviewed, in which case
 		// there is nothing pending.
 		if !newUser.Validated {
-			validationMsg += e.LoadedStrings.NewUserPendingReview
+			validationMsg += e.Strings().NewUserPendingReview
 		}
 		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(validationMsg)), outputMode)
 	}
 
 	// Pause before returning
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
@@ -348,23 +348,23 @@ func (e *MenuExecutor) promptForHandle(
 	outputMode ansi.OutputMode,
 	termWidth, termHeight int,
 ) (string, error) {
-	prompt := e.LoadedStrings.NewUserNameStr
+	prompt := e.Strings().NewUserNameStr
 	if prompt == "" {
 		prompt = "|CR|08E|07n|15ter |08Y|07o|15ur |08A|07l|15ias|09.|CR|08:"
 	}
 	prompt = strings.ReplaceAll(prompt, "|CR", "\r\n")
 
-	invalidMsg := e.LoadedStrings.InvalidUserName
+	invalidMsg := e.Strings().InvalidUserName
 	if invalidMsg == "" {
 		invalidMsg = "|05 |10Invalid Name .. Try again!"
 	}
 
-	nameUsedMsg := e.LoadedStrings.NameAlreadyUsed
+	nameUsedMsg := e.Strings().NameAlreadyUsed
 	if nameUsedMsg == "" {
 		nameUsedMsg = "|15 |13Name is already in use! |15"
 	}
 
-	checkingMsg := e.LoadedStrings.CheckingUserBase
+	checkingMsg := e.Strings().CheckingUserBase
 	if checkingMsg == "" {
 		checkingMsg = "|08 |05Fi|13nding |05A |05Pl|13ace |05Fo|13r |05Y|13ou!"
 	}
@@ -425,7 +425,7 @@ func (e *MenuExecutor) promptForHandle(
 	}
 
 	// Max attempts reached
-	errMsg := e.LoadedStrings.NewUserTooManyAttempts
+	errMsg := e.Strings().NewUserTooManyAttempts
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 	time.Sleep(1 * time.Second)
 	return "", nil
@@ -439,12 +439,12 @@ func (e *MenuExecutor) promptForPassword(
 	outputMode ansi.OutputMode,
 	termWidth, termHeight int,
 ) (string, error) {
-	createPrompt := e.LoadedStrings.CreateAPassword
+	createPrompt := e.Strings().CreateAPassword
 	if createPrompt == "" {
 		createPrompt = "|08C|07r|15eate A |08P|07a|15ssword |09: "
 	}
 
-	confirmPrompt := e.LoadedStrings.ReEnterPassword
+	confirmPrompt := e.Strings().ReEnterPassword
 	if confirmPrompt == "" {
 		confirmPrompt = "|08R|07e|15nter |08P|07a|15ssword |09: "
 	}
@@ -483,7 +483,7 @@ func (e *MenuExecutor) promptForPassword(
 		}
 
 		if len(password) < 3 {
-			msg := e.LoadedStrings.NewUserPasswordTooShort
+			msg := e.Strings().NewUserPasswordTooShort
 			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(500 * time.Millisecond)
 			continue
@@ -510,7 +510,7 @@ func (e *MenuExecutor) promptForPassword(
 		}
 
 		if password != confirm {
-			msg := e.LoadedStrings.NewUserPasswordMismatch
+			msg := e.Strings().NewUserPasswordMismatch
 			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(500 * time.Millisecond)
 			continue
@@ -520,7 +520,7 @@ func (e *MenuExecutor) promptForPassword(
 		return password, nil
 	}
 
-	errMsg := e.LoadedStrings.NewUserTooManyAttempts
+	errMsg := e.Strings().NewUserTooManyAttempts
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 	time.Sleep(1 * time.Second)
 	return "", nil
@@ -534,7 +534,7 @@ func (e *MenuExecutor) promptForRealName(
 	outputMode ansi.OutputMode,
 	termWidth, termHeight int,
 ) (string, error) {
-	prompt := e.LoadedStrings.EnterRealName
+	prompt := e.Strings().EnterRealName
 	if prompt == "" {
 		prompt = "|08E|07n|15ter |08Y|07o|15ur |09REAL |08N|07a|15me |09: "
 	}
@@ -574,7 +574,7 @@ func (e *MenuExecutor) promptForRealName(
 		}
 
 		if !validateRealName(name) {
-			msg := e.LoadedStrings.NewUserInvalidRealName
+			msg := e.Strings().NewUserInvalidRealName
 			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(500 * time.Millisecond)
 			continue
@@ -584,7 +584,7 @@ func (e *MenuExecutor) promptForRealName(
 		return name, nil
 	}
 
-	errMsg := e.LoadedStrings.NewUserTooManyAttempts
+	errMsg := e.Strings().NewUserTooManyAttempts
 	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 	time.Sleep(1 * time.Second)
 	return "", nil
@@ -598,7 +598,7 @@ func (e *MenuExecutor) promptForLocation(
 	outputMode ansi.OutputMode,
 	termWidth, termHeight int,
 ) (string, error) {
-	prompt := e.LoadedStrings.NewUserLocationPrompt
+	prompt := e.Strings().NewUserLocationPrompt
 	if prompt == "" {
 		prompt = "|08E|07n|15ter |08L|07o|15cation |09: "
 	}
@@ -636,7 +636,7 @@ func (e *MenuExecutor) promptForUserNote(
 	outputMode ansi.OutputMode,
 	termWidth, termHeight int,
 ) (string, error) {
-	prompt := e.LoadedStrings.EnterUserNote
+	prompt := e.Strings().EnterUserNote
 	if prompt == "" {
 		prompt = "|08D|07e|15sired |08U|07s|15er |08N|07o|15te |09: "
 	}

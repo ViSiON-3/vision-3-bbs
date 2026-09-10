@@ -38,7 +38,7 @@ func runListMessageAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Wait for Enter using configured PauseString
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
@@ -100,7 +100,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Prompt for area #/tag
-	prompt := e.LoadedStrings.ChangeBoardStr
+	prompt := e.Strings().ChangeBoardStr
 	if prompt == "" {
 		prompt = "|03Select Area |05[|13#|05/|13Tag|08, |13?|05=|13List|08, |13[|05=|13Prev |13]|05=|13Next|08, |13Q|05=|13Quit|05] : |11"
 	}

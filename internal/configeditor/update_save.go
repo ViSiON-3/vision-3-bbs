@@ -112,6 +112,16 @@ func (m *Model) saveAll() {
 	}
 
 	m.dirty = false
+
+	// Every file is written, so signal a running BBS to re-read its
+	// configuration. This is deliberately last: the early returns above mean a
+	// save that failed partway never signals, so the BBS is never told to pick
+	// up a half-written set of files. Best-effort — a BBS that misses the
+	// signal still notices the individual files' timestamps on its next poll.
+	if err := config.TouchReloadSentinel(m.configPath); err != nil {
+		slog.Warn("failed to signal config reload", "error", err)
+	}
+
 	if binkdSyncErr != nil {
 		m.message = fmt.Sprintf("Saved (warning: binkd.conf sync failed: %v)", binkdSyncErr)
 	} else {

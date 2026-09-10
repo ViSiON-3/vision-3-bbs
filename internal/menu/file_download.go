@@ -31,7 +31,7 @@ func runClearBatch(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(currentUser.TaggedFileIDs) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.BatchQueueEmpty)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().BatchQueueEmpty)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -43,12 +43,12 @@ func runClearBatch(c *cmdCtx, args string) (*user.User, string, error) {
 	if err := userManager.UpdateUser(currentUser); err != nil {
 		slog.Error("failed to update user after clearing batch queue", "node", nodeNumber, "error", err)
 		currentUser.TaggedFileIDs = oldTagged
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.SaveUserError)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SaveUserError)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.BatchClearedFormat, count))), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().BatchClearedFormat, count))), outputMode)
 	slog.Info("cleared files from batch queue", "node", nodeNumber, "handle", currentUser.Handle, "count", count)
 	time.Sleep(1 * time.Second)
 
@@ -72,7 +72,7 @@ func (e *MenuExecutor) downloadLoop(
 	// promptFilename shows the add-batch prompt and reads user input.
 	// Returns the trimmed filename or "" if the user pressed Enter (cancel).
 	promptFilename := func() (string, error) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.AddBatchPrompt)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().AddBatchPrompt)), outputMode)
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
 			return "", err
@@ -86,36 +86,36 @@ func (e *MenuExecutor) downloadLoop(
 	// returns false.
 	tryAddFile := func(filename string) bool {
 		if currentUser.CurrentFileAreaID <= 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileNoAreaSelected)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
 			time.Sleep(1 * time.Second)
 			return false
 		}
 		area, ok := e.FileMgr.GetAreaByID(currentUser.CurrentFileAreaID)
 		if !ok {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileAreaNotFound)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileAreaNotFound)), outputMode)
 			time.Sleep(1 * time.Second)
 			return false
 		}
 		if area.ACSDownload != "" && !checkACS(area.ACSDownload, currentUser, s, terminal, sessionStartTime) {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.YouCantDownloadHere)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().YouCantDownloadHere)), outputMode)
 			time.Sleep(1 * time.Second)
 			return false
 		}
 		rec, err := findFileInArea(e.FileMgr, currentUser.CurrentFileAreaID, filename)
 		if err != nil {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.FileNotFoundFormat, filename))), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().FileNotFoundFormat, filename))), outputMode)
 			time.Sleep(1 * time.Second)
 			return false
 		}
 		for _, id := range currentUser.TaggedFileIDs {
 			if id == rec.ID {
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileAlreadyMarked)), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileAlreadyMarked)), outputMode)
 				time.Sleep(1 * time.Second)
 				return false
 			}
 		}
 		if len(currentUser.TaggedFileIDs) >= 50 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FiftyFilesMaximum)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FiftyFilesMaximum)), outputMode)
 			time.Sleep(1 * time.Second)
 			return false
 		}
@@ -125,7 +125,7 @@ func (e *MenuExecutor) downloadLoop(
 			currentUser.TaggedFileIDs = currentUser.TaggedFileIDs[:len(currentUser.TaggedFileIDs)-1]
 			return false
 		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.AddedToBatchFormat, rec.Filename))), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().AddedToBatchFormat, rec.Filename))), outputMode)
 		slog.Info("tagged file", "node", nodeNumber, "handle", currentUser.Handle, "id", rec.ID, "file", rec.Filename)
 		return true
 	}
@@ -154,14 +154,14 @@ func (e *MenuExecutor) downloadLoop(
 	// Main loop.
 	for {
 		if len(currentUser.TaggedFileIDs) == 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NoFilesTagged)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NoFilesTagged)), outputMode)
 			time.Sleep(1 * time.Second)
 			return currentUser, nil
 		}
 
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.BatchCountFormat, len(currentUser.TaggedFileIDs)))), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().BatchCountFormat, len(currentUser.TaggedFileIDs)))), outputMode)
 
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.DownloadStr)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DownloadStr)), outputMode)
 
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
@@ -216,7 +216,7 @@ func (e *MenuExecutor) downloadLoop(
 		}
 
 		if len(paths) == 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FilesResolveError)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FilesResolveError)), outputMode)
 			currentUser.TaggedFileIDs = nil
 			if err := userManager.UpdateUser(currentUser); err != nil {
 				slog.Error("failed to persist cleared batch", "node", nodeNumber, "error", err)
@@ -250,7 +250,7 @@ func (e *MenuExecutor) downloadLoop(
 			slog.Error("failed to update user after download", "node", nodeNumber, "error", err)
 		}
 
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.LoadedStrings.DownloadFinishedFormat, successCount, failCount))), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().DownloadFinishedFormat, successCount, failCount))), outputMode)
 		slog.Info("download complete", "node", nodeNumber, "handle", currentUser.Handle, "success", successCount, "fail", failCount)
 		time.Sleep(2 * time.Second)
 
@@ -274,20 +274,20 @@ func runDownloadFile(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if currentUser.CurrentFileAreaID <= 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileNoAreaSelected)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	area, ok := e.FileMgr.GetAreaByID(currentUser.CurrentFileAreaID)
 	if !ok {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileAreaNotFound)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileAreaNotFound)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	if area.ACSDownload != "" && !checkACS(area.ACSDownload, currentUser, s, terminal, sessionStartTime) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.YouCantDownloadHere)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().YouCantDownloadHere)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -324,7 +324,7 @@ func runBatchDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(currentUser.TaggedFileIDs) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.NoFilesTagged)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NoFilesTagged)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}

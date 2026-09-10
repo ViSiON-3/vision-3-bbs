@@ -32,7 +32,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	// If already logged in, maybe show an error or just return?
 	if currentUser != nil {
 		slog.Warn("user tried to run AUTHENTICATE while already logged in", "node", nodeNumber, "handle", currentUser.Handle)
-		msg := e.LoadedStrings.ExecAlreadyLoggedIn
+		msg := e.Strings().ExecAlreadyLoggedIn
 		// Use WriteProcessedBytes
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		if wErr != nil {
@@ -49,7 +49,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Move to Username position, display prompt, and read input
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(userRow, userCol)), outputMode)
-	usernamePrompt := e.LoadedStrings.ExecUsernamePrompt
+	usernamePrompt := e.Strings().ExecUsernamePrompt
 	// Use WriteProcessedBytes for prompt
 	wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(usernamePrompt)), outputMode)
 	if wErr != nil {
@@ -101,7 +101,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Move to Password position, display prompt, and read input securely
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(passRow, passCol)), outputMode)
-	passwordPrompt := e.LoadedStrings.ExecPasswordPrompt
+	passwordPrompt := e.Strings().ExecPasswordPrompt
 	wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(passwordPrompt)), outputMode)
 	if wErr != nil {
 		slog.Error("failed writing password prompt", "node", nodeNumber, "error", wErr)
@@ -138,7 +138,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 				"node", nodeNumber, "ip", remoteIP, "locked_until", lockedUntil.Format("2006-01-02 15:04:05"), "attempts", attempts)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
 			minutesLeft := int(time.Until(lockedUntil).Minutes()) + 1
-			errMsg := fmt.Sprintf(e.LoadedStrings.ExecIPLockout, minutesLeft)
+			errMsg := fmt.Sprintf(e.Strings().ExecIPLockout, minutesLeft)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
 				slog.Error("failed writing IP lockout message", "error", wErr)
@@ -164,7 +164,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 
 		// Display error message to user
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode) // Move cursor for message
-		errMsg := e.LoadedStrings.ExecLoginIncorrect
+		errMsg := e.Strings().ExecLoginIncorrect
 		// Use WriteProcessedBytes
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if wErr != nil {
@@ -196,7 +196,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	if cfg.LogonLevel > 0 && authUser.AccessLevel < cfg.LogonLevel {
 		slog.Info("login denied - insufficient access level", "node", nodeNumber, "handle", username, "has", authUser.AccessLevel, "needs", cfg.LogonLevel)
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
-		errMsg := e.LoadedStrings.ExecAccessDenied
+		errMsg := e.Strings().ExecAccessDenied
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if wErr != nil {
 			slog.Error("failed writing access denied message", "error", wErr)

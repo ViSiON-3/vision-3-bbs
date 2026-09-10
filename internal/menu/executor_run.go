@@ -138,7 +138,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		menuMnuPath := filepath.Join(e.MenuSetPath, "mnu") // Use correct path structure for MNU
 		menuRec, err := LoadMenu(st.currentMenuName, menuMnuPath)
 		if err != nil {
-			errMsg := fmt.Sprintf(e.LoadedStrings.ExecMenuLoadError, st.currentMenuName, err)
+			errMsg := fmt.Sprintf(e.Strings().ExecMenuLoadError, st.currentMenuName, err)
 			processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
 			// Use new helper for error message
 			wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode)
@@ -184,7 +184,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		menuACS := menuRec.ACS
 		if !checkACS(menuACS, st.currentUser, s, terminal, sessionStartTime) { // Use ssh.Session 's'
 			slog.Info("user denied access to menu", "menu", st.currentMenuName, "acs", menuACS, "user", st.userHandle())
-			errMsg := e.LoadedStrings.ExecAccessDenied
+			errMsg := e.Strings().ExecAccessDenied
 			processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
 			// Use new helper for error message
 			wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode)

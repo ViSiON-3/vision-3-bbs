@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 // TestSysopNoticeQueueRoundTrip covers enqueue → drain: notices accumulate per
@@ -78,7 +80,7 @@ func TestHumanizeAge(t *testing.T) {
 // predates the structured fields, and a sysop who has blanked the string.
 func TestRenderSysopNotice(t *testing.T) {
 	e := &MenuExecutor{}
-	e.LoadedStrings.NewUserSysopNotice = "New user: %s signed up %s ago from node %d."
+	e.SetStrings(config.StringsConfig{NewUserSysopNotice: "New user: %s signed up %s ago from node %d."})
 	queued := time.Date(2026, 9, 10, 4, 55, 0, 0, time.UTC)
 	now := queued.Add(9 * time.Hour)
 

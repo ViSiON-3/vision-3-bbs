@@ -35,13 +35,13 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 	termWidth, termHeight := resolveTermDims(currentUser, c.termWidth, c.termHeight)
 
 	if currentUser == nil {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfLoginRequired)), outputMode)
+		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfLoginRequired)), outputMode)
 		time.Sleep(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if e.ConferenceMgr == nil {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfNoConferences)), outputMode)
+		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -71,7 +71,7 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 	}
 
 	if len(confs) == 0 {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ConfNoConferences)), outputMode)
+		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}

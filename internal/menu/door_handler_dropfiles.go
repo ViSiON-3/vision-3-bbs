@@ -99,7 +99,7 @@ func dropfileName(dropfileType, dropfileCase string) string {
 func generateDoorSys(ctx *DoorCtx, dir, filename string) error {
 	path := filepath.Join(dir, filename)
 	slog.Info("generating dropfile", "type", "DOOR.SYS", "filename", filename, "path", path)
-	bbsName := ctx.Executor.ServerCfg.BoardName
+	bbsName := ctx.Executor.GetServerConfig().BoardName
 	timeLeftSecs := ctx.TimeLeftMin * 60
 
 	var b strings.Builder
@@ -171,7 +171,7 @@ func generateDoorSys(ctx *DoorCtx, dir, filename string) error {
 func generateDoor32Sys(ctx *DoorCtx, dir, filename string) error {
 	path := filepath.Join(dir, filename)
 	slog.Info("generating dropfile", "type", "DOOR32.SYS", "filename", filename, "path", path)
-	bbsName := ctx.Executor.ServerCfg.BoardName
+	bbsName := ctx.Executor.GetServerConfig().BoardName
 	crlf := "\r\n"
 
 	var b strings.Builder
@@ -194,7 +194,7 @@ func generateDoor32Sys(ctx *DoorCtx, dir, filename string) error {
 func generateDorInfo(ctx *DoorCtx, dir, filename string) error {
 	path := filepath.Join(dir, filename)
 	slog.Info("generating dropfile", "type", "DORINFO1.DEF", "filename", filename, "path", path)
-	bbsName := ctx.Executor.ServerCfg.BoardName
+	bbsName := ctx.Executor.GetServerConfig().BoardName
 	crlf := "\r\n"
 
 	// Split real name into first/last
@@ -234,7 +234,7 @@ func generateDorInfo(ctx *DoorCtx, dir, filename string) error {
 func generateChainTxt(ctx *DoorCtx, dir, filename string) error {
 	path := filepath.Join(dir, filename)
 	slog.Info("generating dropfile", "type", "CHAIN.TXT", "filename", filename, "path", path)
-	bbsName := ctx.Executor.ServerCfg.BoardName
+	bbsName := ctx.Executor.GetServerConfig().BoardName
 	timeLeftSecs := ctx.TimeLeftMin * 60
 	crlf := "\r\n"
 

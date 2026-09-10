@@ -34,13 +34,13 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 
 	currentAreaID := currentUser.CurrentFileAreaID
 	if currentAreaID <= 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileNoAreaSelected)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	// Prompt for filename.
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileInfoPrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileInfoPrompt)), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -58,7 +58,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	// Look up the file in the current area.
 	rec, err := findFileInArea(e.FileMgr, currentAreaID, filename)
 	if err != nil {
-		msg := fmt.Sprintf(e.LoadedStrings.FileNotFoundFormat, filename)
+		msg := fmt.Sprintf(e.Strings().FileNotFoundFormat, filename)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		time.Sleep(1 * time.Second)
 		return currentUser, "", nil
@@ -71,7 +71,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Display header and file metadata.
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.FileInfoHeader)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileInfoHeader)), outputMode)
 
 	sizeStr := ""
 	if rec.Size < 1024 {
@@ -98,7 +98,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(info)), outputMode)
 
 	// Pause before returning.
-	_ = writeCenteredPausePrompt(s, terminal, e.LoadedStrings.PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
+	_ = writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
 
 	return currentUser, "", nil
 }

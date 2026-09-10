@@ -186,7 +186,7 @@ func (e *MenuExecutor) renderSysopNotice(n sysopNotice, now time.Time) string {
 	if n.Handle == "" {
 		return n.Text
 	}
-	format := e.LoadedStrings.NewUserSysopNotice
+	format := e.Strings().NewUserSysopNotice
 	if format == "" {
 		return n.Text
 	}

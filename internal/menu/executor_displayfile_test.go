@@ -17,11 +17,12 @@ func newDisplayExecutor(t *testing.T) *MenuExecutor {
 	if err := os.MkdirAll(filepath.Join(root, "ansi"), 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	return &MenuExecutor{
+	e := &MenuExecutor{
 		MenuSetPath:    root,
 		RootConfigPath: root,
-		LoadedStrings:  config.StringsConfig{ExecFileLoadError: "Cannot load %s"},
 	}
+	e.SetStrings(config.StringsConfig{ExecFileLoadError: "Cannot load %s"})
+	return e
 }
 
 func TestDisplayFile(t *testing.T) {

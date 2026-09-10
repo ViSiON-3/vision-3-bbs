@@ -55,7 +55,7 @@ func runNewUserValidation(c *cmdCtx, args string) (*user.User, string, error) {
 	// editor behind it refused them. The count is the sysop's business, so a
 	// misconfigured sec_level must not leak it. sec_level still works, and is
 	// still the way to remove the item for sysops who do not want it.
-	if !checkACS(fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel), currentUser, s, terminal, sessionStartTime) {
+	if !checkACS(fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel), currentUser, s, terminal, sessionStartTime) {
 		slog.Debug("NEWUSERVAL skipped: not a sysop", "node", nodeNumber, "handle", currentUser.Handle)
 		return nil, "", nil
 	}
@@ -138,7 +138,7 @@ func runUnvalidateUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	sysOpACS := fmt.Sprintf("S%d", e.ServerCfg.SysOpLevel)
+	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		msg := "\r\n|01Access denied.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)

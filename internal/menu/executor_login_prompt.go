@@ -27,7 +27,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 
 	if !userOk || !passOk {
 		slog.Error("LOGIN.ANS is missing required coordinate codes P or O")
-		if wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecLoginCriticalError)), outputMode); wErr != nil {
+		if wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecLoginCriticalError)), outputMode); wErr != nil {
 			slog.Error("failed writing critical login configuration message", "error", wErr)
 		}
 		time.Sleep(2 * time.Second)
@@ -130,7 +130,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 				"node", nodeNumber, "ip", remoteIP, "locked_until", lockedUntil.Format("2006-01-02 15:04:05"), "attempts", attempts)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
 			minutesLeft := int(time.Until(lockedUntil).Minutes()) + 1
-			errMsg := fmt.Sprintf(e.LoadedStrings.ExecIPLockout, minutesLeft)
+			errMsg := fmt.Sprintf(e.Strings().ExecIPLockout, minutesLeft)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
 				slog.Error("failed writing IP lockout message", "error", wErr)
@@ -155,7 +155,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		}
 
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode) // Move cursor for message
-		errMsg := e.LoadedStrings.ExecLoginIncorrect
+		errMsg := e.Strings().ExecLoginIncorrect
 		// Use WriteProcessedBytes with the passed outputMode
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if wErr != nil {
@@ -187,7 +187,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 	if cfg.LogonLevel > 0 && authUser.AccessLevel < cfg.LogonLevel {
 		slog.Info("login denied - insufficient access level", "node", nodeNumber, "handle", username, "has", authUser.AccessLevel, "needs", cfg.LogonLevel)
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
-		errMsg := e.LoadedStrings.ExecAccessDenied
+		errMsg := e.Strings().ExecAccessDenied
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		if wErr != nil {
 			slog.Error("failed writing access denied message", "error", wErr)

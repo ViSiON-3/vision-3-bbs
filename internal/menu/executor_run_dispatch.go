@@ -35,7 +35,7 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 		slog.Debug("menu requires password", "menu", st.currentMenuName)
 		passwordOk := false
 		for i := 0; i < 3; i++ { // Allow 3 attempts
-			prompt := fmt.Sprintf(e.LoadedStrings.ExecMenuPasswordPrompt, st.currentMenuName, i+1)
+			prompt := fmt.Sprintf(e.Strings().ExecMenuPasswordPrompt, st.currentMenuName, i+1)
 			processedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
 			wErr := terminalio.WriteProcessedBytes(terminal, processedPrompt, outputMode)
 			if wErr != nil {
@@ -59,14 +59,14 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 			if inputPassword == menuPassword {
 				passwordOk = true
 				// Use new helper for feedback message
-				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecPasswordAccepted)), outputMode)
+				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecPasswordAccepted)), outputMode)
 				if wErr != nil {
 					slog.Error("failed writing password accepted message", "error", wErr)
 				}
 				break
 			} else {
 				// Use new helper for feedback message
-				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecIncorrectPassword)), outputMode)
+				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecIncorrectPassword)), outputMode)
 				if wErr != nil {
 					slog.Error("failed writing incorrect password message", "error", wErr)
 				}
@@ -75,7 +75,7 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 		if !passwordOk {
 			slog.Warn("user failed password entry for menu", "menu", st.currentMenuName, "user", st.userHandle())
 			// Use new helper for feedback message
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.LoadedStrings.ExecTooManyAttempts)), outputMode)
+			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecTooManyAttempts)), outputMode)
 			if wErr != nil {
 				slog.Error("failed writing too many attempts message", "error", wErr)
 			}

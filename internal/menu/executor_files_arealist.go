@@ -199,7 +199,7 @@ func runListFileAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Wait for Enter using configured PauseString (centered)
-	pausePrompt := e.LoadedStrings.PauseString
+	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
 	}

@@ -946,12 +946,58 @@ The BBS will fail to start if the host key is missing.
 
 ## Applying Configuration Changes
 
-Most configuration changes take effect after a BBS restart. The TUI writes changes to disk when you save; restart `./vision3` to pick them up.
+A running BBS checks its configuration files for changes every two seconds and
+re-reads the ones that changed. Saving in `v3config` is normally all you need —
+the TUI signals the BBS once every file in the save has been written.
 
-Exceptions that take effect without a restart:
+**Applied without a restart:**
 
-- **IP blocklist/allowlist files** — watched by the BBS and reloaded automatically on save (no restart needed)
-- **strings.json** — loaded fresh on each display
+| File | Notes |
+|---|---|
+| `configs/config.json` | Except the startup-only fields listed below |
+| `configs/doors.json` | |
+| `configs/login.json` | |
+| `configs/strings.json` | |
+| `menus/<set>/theme.json` | |
+| Menu files (`.MNU`, `.CFG`) and ANSI art | Re-read every time a menu is displayed |
+| `configs/archivers.json` | Re-read on each archive operation |
+| IP blocklist/allowlist files | Watched separately, reloaded on save |
+| `configs/ftn.json` | Picked up by the binkd mailer on its next cycle |
+
+Connection-security settings in `config.json` — `maxNodes`, `maxConnectionsPerIP`,
+`maxFailedLogins`, `lockoutMinutes`, the connection rate limiter, and the
+`ipBlocklistPath` / `ipAllowlistPath` settings — are applied live. Lowering a
+limit below current usage never disconnects anyone: new connections are refused
+until callers log off and usage falls back under the limit.
+
+**Still requires a restart:**
+
+- Listening ports and hosts (`sshPort`, `sshHost`, `telnetPort`, `telnetHost`)
+- Enabling or disabling a protocol (`sshEnabled`, `telnetEnabled`)
+- SSH host keys
+- The QWK API listener
+- Logging directory and rolling settings (the log *level* also needs a restart today)
+- `configs/events.json`, `configs/message_areas.json`, `configs/file_areas.json`,
+  `configs/conferences.json`, `configs/protocols.json`, `configs/v3net.json`
+
+### Triggering a reload by hand
+
+You do not normally need to, but a reload can be forced two ways:
+
+```bash
+# Touch the reload semaphore — the BBS re-reads everything within a couple of seconds
+touch configs/reload.now
+
+# Or send SIGHUP to the running process
+kill -HUP $(pgrep vision3)
+```
+
+Both are useful after editing a config file by hand, or from a script. `SIGHUP`
+reloads rather than terminating; it is not available on Windows.
+
+### Restarting
+
+For the changes that need it:
 
 ```bash
 # Restart the BBS

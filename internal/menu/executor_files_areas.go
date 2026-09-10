@@ -34,7 +34,7 @@ func runSelectFileAreaDispatch(c *cmdCtx, args string) (*user.User, string, erro
 		mode = currentUser.FileListingMode
 	}
 	if mode == "" {
-		mode = e.ServerCfg.FileListingMode
+		mode = e.GetServerConfig().FileListingMode
 	}
 	if strings.EqualFold(mode, "classic") {
 		return runSelectFileArea(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args)
@@ -74,7 +74,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 
 	// Prompt for area tag
-	prompt := e.LoadedStrings.ChangeFileAreaStr
+	prompt := e.Strings().ChangeFileAreaStr
 	if prompt == "" {
 		prompt = "|07File Area Tag (?=List, Q=Quit): |15"
 	}

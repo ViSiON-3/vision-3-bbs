@@ -64,7 +64,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if totalMessages == 0 {
-		msg := e.LoadedStrings.ExecNoNewMail
+		msg := e.Strings().ExecNoNewMail
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		return currentUser, "", nil
 	}
@@ -92,7 +92,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if newMailCount > 0 {
-		mailMsg := fmt.Sprintf(e.LoadedStrings.ExecNewMailCount, newMailCount)
+		mailMsg := fmt.Sprintf(e.Strings().ExecNewMailCount, newMailCount)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(mailMsg)), outputMode)
 
 		// Offer to read it now rather than making the caller find the mail menu.
@@ -110,7 +110,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 			return runReadPrivateMail(c, "")
 		}
 	} else {
-		msg := e.LoadedStrings.ExecNoNewMail
+		msg := e.Strings().ExecNoNewMail
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	}
 
