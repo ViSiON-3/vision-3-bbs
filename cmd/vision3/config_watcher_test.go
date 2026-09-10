@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
@@ -329,5 +330,40 @@ func TestReloadEventsReschedules(t *testing.T) {
 	cw.reloadEvents()
 	if got := sched.ScheduledCount(); got != 0 {
 		t.Errorf("scheduled = %d after emptying events.json, want 0", got)
+	}
+}
+
+// TestReloadConferencesWithoutManager covers a BBS whose conference manager
+// never started (conferences.json failed at boot): the reload must log and
+// return, not panic.
+func TestReloadConferencesWithoutManager(t *testing.T) {
+	cw := &ConfigWatcher{rootConfigPath: t.TempDir(), menuExecutor: &menu.MenuExecutor{}}
+	cw.reloadConferences() // must not panic
+}
+
+// TestReloadConferencesUpdatesManager covers the conferences.json reload path
+// end to end: file on disk → ConferenceManager.Reload → new definitions live.
+func TestReloadConferencesUpdatesManager(t *testing.T) {
+	dir := t.TempDir()
+	write := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "conferences.json"), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(`[{"id":1,"tag":"GEN","name":"General"}]`)
+
+	confMgr, err := conference.NewConferenceManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &menu.MenuExecutor{ConferenceMgr: confMgr}
+	cw := &ConfigWatcher{rootConfigPath: dir, menuExecutor: e}
+
+	write(`[{"id":1,"tag":"GEN","name":"General"},{"id":2,"tag":"TECH","name":"Tech"}]`)
+	cw.reloadConferences()
+
+	if _, ok := confMgr.GetByTag("TECH"); !ok {
+		t.Error("conference TECH missing after reload")
 	}
 }

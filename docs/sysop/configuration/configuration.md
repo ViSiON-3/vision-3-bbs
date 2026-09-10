@@ -962,6 +962,7 @@ the TUI signals the BBS once every file in the save has been written.
 | Menu files (`.MNU`, `.CFG`) and ANSI art | Re-read every time a menu is displayed |
 | `configs/protocols.json` | |
 | `configs/events.json` | Reschedules cron events; see notes below |
+| `configs/conferences.json` | A caller whose conference was removed sees "None" and re-selects |
 | `configs/archivers.json` | Re-read on each archive operation |
 | IP blocklist/allowlist files | Watched separately, reloaded on save |
 | `configs/ftn.json` | Picked up by the binkd mailer on its next cycle |
@@ -983,8 +984,7 @@ saving the file does not re-fire them.
 - SSH host keys
 - The QWK API listener
 - Logging directory and rolling settings (the log *level* also needs a restart today)
-- `configs/message_areas.json`, `configs/file_areas.json`,
-  `configs/conferences.json`, `configs/v3net.json`
+- `configs/message_areas.json`, `configs/file_areas.json`, `configs/v3net.json`
 
 ### Triggering a reload by hand
 

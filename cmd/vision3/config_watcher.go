@@ -102,6 +102,7 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		{name: "theme.json", path: filepath.Join(menuSetPath, "theme.json"), reload: cw.reloadTheme},
 		{name: "protocols.json", path: filepath.Join(rootConfigPath, "protocols.json"), reload: cw.reloadProtocols},
 		{name: "events.json", path: filepath.Join(rootConfigPath, "events.json"), reload: cw.reloadEvents},
+		{name: "conferences.json", path: filepath.Join(rootConfigPath, "conferences.json"), reload: cw.reloadConferences},
 	}
 
 	// Record current timestamps so the first poll does not reload everything
@@ -296,6 +297,24 @@ func (cw *ConfigWatcher) reloadProtocols() {
 
 	cw.menuExecutor.SetProtocols(newProtocols)
 	slog.Info("protocols.json reloaded", "count", len(newProtocols))
+}
+
+// reloadConferences reloads the conference definitions.
+func (cw *ConfigWatcher) reloadConferences() {
+	slog.Info("reloading conferences.json")
+
+	confMgr := cw.menuExecutor.ConferenceMgr
+	if confMgr == nil {
+		// Conferences were disabled at boot (conferences.json failed to load),
+		// so there is no manager to reload into.
+		slog.Warn("conference manager not running, restart required to apply conferences.json")
+		return
+	}
+	if err := confMgr.Reload(); err != nil {
+		slog.Error("failed to reload conferences.json", "error", err)
+		return
+	}
+	slog.Info("conferences.json reloaded")
 }
 
 // SetScheduler hands the watcher the event scheduler once main has created
