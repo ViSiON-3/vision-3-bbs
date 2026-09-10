@@ -46,6 +46,11 @@ type Service struct {
 	// pointed-to value in place; always Store a new one.
 	ftn atomic.Pointer[config.FTNConfig]
 
+	// exportCfgMod is the ftn.json mod-time last seen by the export loop, so it
+	// only re-reads (and logs) the file when it actually changes. Touched only
+	// by the export goroutine.
+	exportCfgMod time.Time
+
 	binkdPath  string // resolved absolute path to the binkd binary
 	confPath   string // absolute path to binkd.conf
 	backoffMin time.Duration
@@ -206,11 +211,16 @@ func (s *Service) reloadedExportInterval() time.Duration {
 	if s.configDir == "" {
 		return 0
 	}
-	fresh, err := config.LoadFTNConfig(s.configDir)
-	if err != nil {
+	// Stat first and only re-read when ftn.json actually changed, so the
+	// per-tick check does not parse the file (or log LoadFTNConfig's Info lines)
+	// on every cycle when nothing has changed.
+	fi, err := os.Stat(filepath.Join(s.configDir, "ftn.json"))
+	if err != nil || !fi.ModTime().After(s.exportCfgMod) {
 		return 0
 	}
-	if fresh.Binkd.ExportSecs <= 0 {
+	s.exportCfgMod = fi.ModTime()
+	fresh, err := config.LoadFTNConfig(s.configDir)
+	if err != nil || fresh.Binkd.ExportSecs <= 0 {
 		return 0
 	}
 	return time.Duration(fresh.Binkd.ExportSecs) * time.Second

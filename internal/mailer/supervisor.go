@@ -90,8 +90,12 @@ func (s *Service) superviseLoop(ctx context.Context) {
 		// ones. A port or loglevel change takes effect on this (re)launch;
 		// while binkd is up, changes are applied the next time it respawns.
 		s.reloadFTN()
-		b := s.currentFTN().Binkd
-		if err := ftn.SyncBinkdSettings(s.confPath, b.Port, b.LogLevel, s.binkdOutboundDir()); err != nil {
+		// One snapshot for the whole sync, so the port/loglevel and the outbound
+		// dir cannot be drawn from two different reloads within one launch.
+		snap := s.currentFTN()
+		b := snap.Binkd
+		outDir := ftn.BinkdOutboundDir(s.cfg.BBSRoot, snap.BinkdOutboundPath)
+		if err := ftn.SyncBinkdSettings(s.confPath, b.Port, b.LogLevel, outDir); err != nil {
 			slog.Warn("binkd.conf settings sync failed", "error", err)
 		}
 		s.ensureRuntimeDirs()

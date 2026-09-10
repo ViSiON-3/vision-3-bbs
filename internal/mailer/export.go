@@ -20,12 +20,15 @@ func (s *Service) exportLoop(ctx context.Context) {
 		slog.Warn("binkd export loop disabled: message manager unavailable")
 		return
 	}
-	if s.currentFTN().Binkd.ExportSecs <= 0 {
+	// One snapshot for the startup checks and the initial interval, so a
+	// concurrent reload can't make the logged value differ from the ticker.
+	boot := s.currentFTN()
+	if boot.Binkd.ExportSecs <= 0 {
 		slog.Warn("binkd export loop disabled: export interval must be positive",
-			"export_secs", s.currentFTN().Binkd.ExportSecs)
+			"export_secs", boot.Binkd.ExportSecs)
 		return
 	}
-	interval := time.Duration(s.currentFTN().Binkd.ExportSecs) * time.Second
+	interval := time.Duration(boot.Binkd.ExportSecs) * time.Second
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
