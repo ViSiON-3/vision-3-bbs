@@ -3,6 +3,7 @@ package jam
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -429,4 +430,39 @@ func TestPackRemapsLastreadOntoNewNumbering(t *testing.T) {
 			t.Errorf("lastread = %d/%d, want 1/1 — clamped to what the base actually holds", lr.LastReadMsg, lr.HighReadMsg)
 		}
 	})
+}
+
+// TestPackRemapsHugeStalePointer covers a pointer holding a value above
+// math.MaxInt32. Remapping searches with the key as a uint32 for this reason:
+// converting one to int on a 32-bit build wraps negative, which would collapse
+// the pointer to zero and re-present the whole base as unread.
+func TestPackRemapsHugeStalePointer(t *testing.T) {
+	b, err := Open(filepath.Join(t.TempDir(), "huge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+
+	for i := 0; i < 2; i++ {
+		m := NewMessage()
+		m.From, m.To, m.Subject, m.Text = "someone", "sysop", "msg", "body"
+		if _, err := b.WriteMessage(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := b.SetLastRead("sysop", math.MaxUint32, math.MaxUint32); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Pack(); err != nil {
+		t.Fatal(err)
+	}
+
+	lr, err := b.GetLastRead("sysop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lr.LastReadMsg != 2 || lr.HighReadMsg != 2 {
+		t.Errorf("lastread = %d/%d, want 2/2 — clamped to the message count, not wrapped to 0",
+			lr.LastReadMsg, lr.HighReadMsg)
+	}
 }

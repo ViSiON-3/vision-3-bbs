@@ -265,16 +265,29 @@ func (b *Base) remapLastReadLocked(survivors []int) error {
 	recordCount := info.Size() / LastReadSize
 
 	// remap counts the survivors at or below an old message number. survivors is
-	// ascending, so that is where old+1 would be inserted.
+	// ascending, so that is the first position holding a larger number.
+	//
+	// The search key stays a uint32: a stale pointer can hold any value the file
+	// happens to contain, and converting one above math.MaxInt32 to int would
+	// wrap negative on a 32-bit build and collapse the pointer to zero.
 	remap := func(old uint32) uint32 {
-		return uint32(sort.SearchInts(survivors, int(old)+1))
+		return uint32(sort.Search(len(survivors), func(i int) bool {
+			return uint32(survivors[i]) > old
+		}))
 	}
 
+	buf := make([]byte, LastReadSize)
 	for i := int64(0); i < recordCount; i++ {
 		pos := i * LastReadSize
-		buf := make([]byte, LastReadSize)
-		if _, err := b.jlrFile.ReadAt(buf, pos); err != nil && err != io.EOF {
+		n, err := b.jlrFile.ReadAt(buf, pos)
+		if err != nil && err != io.EOF {
 			return fmt.Errorf("jam: read failed in .jlr: %w", err)
+		}
+		// A short read would leave stale bytes in the reused buffer, and the
+		// record is written back below — remapping partial data would corrupt a
+		// pointer rather than merely misplace it.
+		if n != int(LastReadSize) {
+			return fmt.Errorf("jam: short read in .jlr: got %d bytes", n)
 		}
 		lastRead := binary.LittleEndian.Uint32(buf[8:12])
 		highRead := binary.LittleEndian.Uint32(buf[12:16])
