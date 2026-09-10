@@ -9,7 +9,9 @@ import (
 // isAreaKludge reports whether a kludge line is an FTS-0004 AREA tag, with or
 // without the SOH prefix and padding some tossers add.
 func isAreaKludge(kludge string) bool {
+	kludge = strings.TrimLeft(kludge, " \t")
 	kludge = strings.TrimPrefix(kludge, "\x01")
+	kludge = strings.TrimLeft(kludge, " \t")
 	return len(kludge) >= len("AREA:") && strings.EqualFold(kludge[:len("AREA:")], "AREA:")
 }
 

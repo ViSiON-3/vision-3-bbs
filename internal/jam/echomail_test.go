@@ -203,3 +203,16 @@ func TestDetermineMessageType(t *testing.T) {
 		}
 	}
 }
+
+func TestIsAreaKludge(t *testing.T) {
+	for _, k := range []string{"AREA:FSX_GEN", "AREA: FSX_GEN", "\x01AREA:FSX_GEN", " \x01 area:fsx_gen", "AREA:"} {
+		if !isAreaKludge(k) {
+			t.Errorf("isAreaKludge(%q) = false, want true", k)
+		}
+	}
+	for _, k := range []string{"", "AREAFIX", "TID: ViSiON/3", "MSGID: 21:3/110 1234"} {
+		if isAreaKludge(k) {
+			t.Errorf("isAreaKludge(%q) = true, want false", k)
+		}
+	}
+}

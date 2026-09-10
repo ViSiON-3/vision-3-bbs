@@ -934,8 +934,14 @@ func TestExportedEchomailHasSingleAreaLine(t *testing.T) {
 	}
 
 	body := pktMsgs[0].Body
-	if n := strings.Count(strings.ToUpper(body), "AREA:"); n != 1 {
-		t.Errorf("body has %d AREA lines, want 1: %q", n, body)
+	var areaLines int
+	for _, line := range strings.Split(body, "\r") {
+		if ftn.IsAreaLine(line) {
+			areaLines++
+		}
+	}
+	if areaLines != 1 {
+		t.Errorf("body has %d AREA lines, want 1: %q", areaLines, body)
 	}
 	if !strings.HasPrefix(body, "AREA:FSX_TEST\r") {
 		t.Errorf("body must start with a bare AREA line, got %q", body)

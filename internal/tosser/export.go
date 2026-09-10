@@ -525,7 +525,7 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 func stripAreaKludges(kludges []string) []string {
 	out := make([]string, 0, len(kludges))
 	for _, k := range kludges {
-		if _, isArea := ftn.ParseAreaLine(k); isArea {
+		if ftn.IsAreaLine(k) {
 			continue
 		}
 		out = append(out, k)

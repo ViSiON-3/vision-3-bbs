@@ -369,16 +369,39 @@ type ParsedBody struct {
 	Path    []string // PATH lines (without "\x01PATH: " prefix)
 }
 
-// ParseAreaLine recognizes the echomail AREA line and returns its tag.
-// FTS-0004 puts "AREA:TAG" at the very start of the body with no SOH and no
-// space after the colon, but some tossers prefix it with SOH and/or pad it,
-// so both are accepted here. The tag is returned without surrounding spaces.
-func ParseAreaLine(line string) (string, bool) {
+// trimAreaPrefix strips the padding and optional SOH some tossers put in front
+// of the AREA line, reporting whether what remains is an AREA line and, if so,
+// the tag that follows the colon (which may be empty).
+func trimAreaPrefix(line string) (string, bool) {
+	line = strings.TrimLeft(line, " \t")
 	line = strings.TrimPrefix(line, "\x01")
+	line = strings.TrimLeft(line, " \t")
 	if len(line) < len("AREA:") || !strings.EqualFold(line[:len("AREA:")], "AREA:") {
 		return "", false
 	}
 	return strings.TrimSpace(line[len("AREA:"):]), true
+}
+
+// IsAreaLine reports whether a line is an echomail AREA line, including a
+// malformed one carrying no tag. Use it when discarding AREA lines; use
+// ParseAreaLine when the tag itself is needed.
+func IsAreaLine(line string) bool {
+	_, ok := trimAreaPrefix(line)
+	return ok
+}
+
+// ParseAreaLine recognizes the echomail AREA line and returns its tag.
+// FTS-0004 puts "AREA:TAG" at the very start of the body with no SOH and no
+// space after the colon, but some tossers prefix it with SOH and/or pad it, so
+// both are accepted here. The tag is returned without surrounding spaces; a
+// line with no tag at all is not treated as an AREA line, so it stays in the
+// body rather than being silently dropped.
+func ParseAreaLine(line string) (string, bool) {
+	tag, ok := trimAreaPrefix(line)
+	if !ok || tag == "" {
+		return "", false
+	}
+	return tag, true
 }
 
 // ParsePackedMessageBody separates an FTN message body into its components.
