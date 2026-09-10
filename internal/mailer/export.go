@@ -20,12 +20,12 @@ func (s *Service) exportLoop(ctx context.Context) {
 		slog.Warn("binkd export loop disabled: message manager unavailable")
 		return
 	}
-	if s.cfg.FTN.Binkd.ExportSecs <= 0 {
+	if s.currentFTN().Binkd.ExportSecs <= 0 {
 		slog.Warn("binkd export loop disabled: export interval must be positive",
-			"export_secs", s.cfg.FTN.Binkd.ExportSecs)
+			"export_secs", s.currentFTN().Binkd.ExportSecs)
 		return
 	}
-	interval := time.Duration(s.cfg.FTN.Binkd.ExportSecs) * time.Second
+	interval := time.Duration(s.currentFTN().Binkd.ExportSecs) * time.Second
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -38,7 +38,21 @@ func (s *Service) exportLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// exportOnce uses the active snapshot, which the supervisor swaps in
+			// only when it (re)launches binkd — so the tosser always packs into
+			// the directory binkd is actually watching (the #266 invariant).
+			// Outbound-path, port, and network changes therefore take effect on
+			// the next binkd launch, not mid-run.
 			s.exportOnce()
+			// The export interval is the exception: it is independent of binkd,
+			// so a config-editor change to it is safe to apply live. Read it
+			// straight from disk (without touching the active snapshot) and
+			// retune the ticker.
+			if newInterval := s.reloadedExportInterval(); newInterval > 0 && newInterval != interval {
+				interval = newInterval
+				ticker.Reset(interval)
+				slog.Info("binkd export interval changed", "interval", interval)
+			}
 		}
 	}
 }
@@ -51,11 +65,12 @@ func (s *Service) exportLoop(ctx context.Context) {
 // processes that own data/ftn/dupes.json. s.exportDupeDB is a throwaway
 // instance backed by os.DevNull that is never read from or written to.
 func (s *Service) exportOnce() {
-	for name, netCfg := range s.cfg.FTN.Networks {
+	ftnCfg := s.currentFTN()
+	for name, netCfg := range ftnCfg.Networks {
 		if !netCfg.InternalTosserEnabled {
 			continue
 		}
-		t, err := tosser.New(name, netCfg, s.cfg.FTN, s.exportDupeDB, s.cfg.MsgMgr)
+		t, err := tosser.New(name, netCfg, ftnCfg, s.exportDupeDB, s.cfg.MsgMgr)
 		if err != nil {
 			slog.Error("binkd export: tosser init failed", "network", name, "error", err)
 			continue

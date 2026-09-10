@@ -54,7 +54,7 @@ func (t *stderrTail) String() string {
 // binkdOutboundDir is the BSO outbound directory binkd is configured with —
 // the same one the tosser packs bundles into, so the two cannot drift apart.
 func (s *Service) binkdOutboundDir() string {
-	return ftn.BinkdOutboundDir(s.cfg.BBSRoot, s.cfg.FTN.BinkdOutboundPath)
+	return ftn.BinkdOutboundDir(s.cfg.BBSRoot, s.currentFTN().BinkdOutboundPath)
 }
 
 // ensureRuntimeDirs creates the directories binkd needs at startup (log dir
@@ -83,11 +83,14 @@ func (s *Service) superviseLoop(ctx context.Context) {
 			return
 		}
 
-		// Sync dynamic settings into binkd.conf before each launch (best-effort).
-		// b is the boot-time config snapshot: a config-editor port change made
-		// mid-session is only re-applied here after the BBS restarts (the TUI
-		// save path also syncs binkd.conf directly, for immediate effect).
-		b := s.cfg.FTN.Binkd
+		// Pick up any config-editor save before each launch, then sync the
+		// current settings into binkd.conf. Reloading here (rather than reusing
+		// the boot snapshot) means the supervisor writes the sysop's latest
+		// values instead of silently overwriting a newer binkd.conf with stale
+		// ones. A port or loglevel change takes effect on this (re)launch;
+		// while binkd is up, changes are applied the next time it respawns.
+		s.reloadFTN()
+		b := s.currentFTN().Binkd
 		if err := ftn.SyncBinkdSettings(s.confPath, b.Port, b.LogLevel, s.binkdOutboundDir()); err != nil {
 			slog.Warn("binkd.conf settings sync failed", "error", err)
 		}
@@ -120,7 +123,7 @@ func (s *Service) superviseLoop(ctx context.Context) {
 // positional config path, which binkd expects last.
 func (s *Service) binkdArgs() []string {
 	args := make([]string, 0, 2)
-	if s.cfg.FTN.Binkd.DisableCramMD5 {
+	if s.currentFTN().Binkd.DisableCramMD5 {
 		// -m stops binkd both offering CRAM-MD5 to callers and answering a
 		// remote's offer, so both directions fall back to a plaintext
 		// password. Only useful against a peer whose CRAM-MD5 rejects an
@@ -152,7 +155,7 @@ func (s *Service) runOnce(ctx context.Context) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	slog.Info("binkd mailer started", "pid", cmd.Process.Pid, "port", s.cfg.FTN.Binkd.Port)
+	slog.Info("binkd mailer started", "pid", cmd.Process.Pid, "port", s.currentFTN().Binkd.Port)
 
 	waitErr := make(chan error, 1)
 	go func() { waitErr <- cmd.Wait() }()
