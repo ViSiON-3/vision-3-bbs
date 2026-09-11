@@ -68,3 +68,133 @@ jobs:
         run: go test ./...
       - name: go test -race
         run: go test -race ./...
+
+  # The Docker image went unbuildable for ~6 months: go.mod moved to go 1.25.0
+  # (a78bfce) while the Dockerfile stayed on golang:1.24-alpine, and the official
+  # golang images pin GOTOOLCHAIN=local, so `go mod download` failed outright
+  # instead of fetching a newer toolchain. Nothing in CI built the image, so two
+  # releases shipped with a broken container. This job builds it and boots it.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Cheapest possible guard on the drift above, and the one that fails with a
+      # message naming the fix rather than a toolchain error 6 layers deep.
+      - name: Dockerfile base image matches go.mod
+        run: |
+          gomod=$(awk '/^go /{print $2; exit}' go.mod | cut -d. -f1,2)
+          image=$(sed -n 's/^FROM golang:\([0-9]*\.[0-9]*\).*/\1/p' Dockerfile | head -1)
+          if [ -z "$gomod" ] || [ -z "$image" ]; then
+            echo "could not parse versions (go.mod='$gomod' Dockerfile='$image')"
+            exit 1
+          fi
+          if [ "$gomod" != "$image" ]; then
+            echo "Dockerfile uses golang:$image but go.mod requires go $gomod."
+            echo "The official golang images set GOTOOLCHAIN=local, so the build"
+            echo "will fail at 'go mod download'. Update the FROM line in Dockerfile."
+            exit 1
+          fi
+          echo "go.mod and Dockerfile agree on Go $gomod"
+
+      - name: Build image
+        run: docker compose build
+
+      # Compose mounts ./menus over /vision3/menus, so the boot test below would
+      # still pass with the COPY menus/ layer dropped -- it would be reading the
+      # checkout. Check the image itself, where a plain `docker run` looks.
+      - name: Image ships the built-in menu set
+        run: docker run --rm --entrypoint test vision3:latest -d /vision3/menus/v3
+
+      # A fresh clone has no configs/ or data/, so Compose creates them as root
+      # while the BBS runs as uid 100 -- the exact state a new sysop starts from.
+      - name: First run from a clean state
+        run: docker compose up -d
+
+      - name: Wait for the BBS to come up
+        run: |
+          for _ in $(seq 1 90); do
+            if docker compose logs --no-color 2>&1 | grep -q "Vision/3 BBS running"; then
+              echo "BBS reported ready"
+              exit 0
+            fi
+            state=$(docker inspect -f '{{.State.Status}}' vision3-bbs 2>/dev/null || echo gone)
+            if [ "$state" = "restarting" ] || [ "$state" = "exited" ]; then
+              echo "container is $state -- first run failed"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "timed out waiting for the BBS to start"
+          exit 1
+
+      # Each of these fired on a real fresh install before the entrypoint learned
+      # to fix volume ownership and drop privileges.
+      - name: First run needed no manual intervention
+        run: |
+          logs=$(docker compose logs --no-color 2>&1)
+          fail=0
+          for pattern in "Permission denied" "\[FAIL\]" "setup.sh"; do
+            if echo "$logs" | grep -q "$pattern"; then
+              echo "::error::first-run log contains '$pattern'"
+              fail=1
+            fi
+          done
+          for pattern in "SSH server ready" "telnet server ready" "created default sysop account"; do
+            if ! echo "$logs" | grep -q "$pattern"; then
+              echo "::error::first-run log is missing '$pattern'"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Serves SSH and telnet
+        run: |
+          for port in 2222 2323; do
+            timeout 10 bash -c "until printf '' > /dev/tcp/127.0.0.1/$port 2>/dev/null; do sleep 1; done" \
+              || { echo "::error::nothing listening on $port"; exit 1; }
+            echo "port $port accepting connections"
+          done
+
+      # The entrypoint starts as root to chown the mounts, then su-execs to
+      # vision3. If that drop ever regresses, the BBS runs as root and silently
+      # scatters root-owned files through the operator's bind mounts.
+      - name: BBS dropped privileges to vision3
+        run: |
+          owner=$(docker compose exec -T -u vision3 vision3 sh -c "ps -o user,args | awk '/ViSiON3/ && !/awk/ {print \$1; exit}'")
+          echo "ViSiON3 runs as: $owner"
+          [ "$owner" = "vision3" ] || { echo "::error::expected vision3, got '$owner'"; exit 1; }
+
+      # build.sh builds eight binaries; the Dockerfile built seven and quietly
+      # omitted wfc, which has its own documented console.
+      - name: Image ships every binary build.sh builds
+        run: |
+          expected=$(sed -n 's/.*go build -o \([A-Za-z0-9_]*\) .*/\1/p' build.sh | sort -u)
+          fail=0
+          for bin in $expected; do
+            # build.sh writes lowercase 'vision3'; the image names it ViSiON3.
+            [ "$bin" = "vision3" ] && bin=ViSiON3
+            if ! docker compose exec -T -u vision3 vision3 test -x "/vision3/$bin"; then
+              echo "::error::/vision3/$bin missing from the image"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      # Taking ownership of the bind-mounted checkout would leave the host user
+      # unable to `git pull` or edit their own menu set.
+      - name: Bind-mounted menus/ kept its host ownership
+        run: |
+          owner=$(stat -c %u menus)
+          echo "menus/ owned by uid $owner (runner is $(id -u))"
+          [ "$owner" = "$(id -u)" ] || { echo "::error::the container chowned the host's menus/"; exit 1; }
+
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

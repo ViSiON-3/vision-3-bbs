@@ -8,6 +8,10 @@ import (
 	"runtime"
 )
 
+// menusCheckName labels the menu-set check so the failure report can tell an
+// empty menus/ bind mount apart from an unwritable volume.
+const menusCheckName = "menus/v3/"
+
 // preflightResult holds the outcome of a single preflight check.
 type preflightResult struct {
 	name     string
@@ -50,7 +54,7 @@ func runPreflight(basePath string) bool {
 	check("data/logs/", true, filepath.Join(dataPath, "logs"), true)
 	check("data/msgbases/", true, filepath.Join(dataPath, "msgbases"), true)
 	check("data/files/", true, filepath.Join(dataPath, "files"), true)
-	check("menus/v3/", true, filepath.Join(basePath, "menus", "v3"), true)
+	check(menusCheckName, true, filepath.Join(basePath, "menus", "v3"), true)
 
 	// --- Required config (critical) ---
 	check("configs/config.json", true, filepath.Join(configPath, "config.json"), false)
@@ -90,12 +94,22 @@ func runPreflight(basePath string) bool {
 	// --- Evaluate results ---
 	criticalFails := 0
 	warnFails := 0
+	// Tracked separately: an empty menus/ mount and an unwritable volume are
+	// both critical, but they need opposite advice, and chowning cannot fix the
+	// former.
+	menusMissing := false
+	otherCriticalFails := 0
 	for _, r := range results {
 		if r.ok {
 			continue
 		}
 		if r.critical {
 			criticalFails++
+			if r.name == menusCheckName {
+				menusMissing = true
+			} else {
+				otherCriticalFails++
+			}
 		} else {
 			warnFails++
 		}
@@ -128,13 +142,39 @@ func runPreflight(basePath string) bool {
 		fmt.Fprintf(os.Stderr, "  %d critical issue(s), %d warning(s).\n", criticalFails, warnFails)
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "  It looks like the initial setup has not been completed.")
-		fmt.Fprintln(os.Stderr, "  Please run the setup script for your platform:")
-		fmt.Fprintln(os.Stderr, "")
-		if runtime.GOOS == "windows" {
-			fmt.Fprintln(os.Stderr, "    .\\setup.bat        (Command Prompt)")
-			fmt.Fprintln(os.Stderr, "    .\\setup.ps1        (PowerShell)")
+		if os.Getenv("VISION3_CONTAINER") != "" {
+			// setup.sh is not shipped in the container image -- the entrypoint
+			// does its job instead. Pointing a Docker operator at it sends them
+			// looking for a file that does not exist.
+			if menusMissing {
+				fmt.Fprintln(os.Stderr, "  The image ships the default menu set, so an empty menus/v3 almost")
+				fmt.Fprintln(os.Stderr, "  always means an empty host directory is mounted over it. Either drop")
+				fmt.Fprintln(os.Stderr, "  the menus mount from docker-compose.yml, or populate it:")
+				fmt.Fprintln(os.Stderr, "")
+				fmt.Fprintln(os.Stderr, "    docker create --name v3tmp vision3:latest")
+				fmt.Fprintln(os.Stderr, "    docker cp v3tmp:/vision3/menus/v3 ./menus/")
+				fmt.Fprintln(os.Stderr, "    docker rm v3tmp")
+			}
+			if otherCriticalFails > 0 {
+				if menusMissing {
+					fmt.Fprintln(os.Stderr, "")
+				}
+				fmt.Fprintln(os.Stderr, "  The entrypoint could not prepare these paths, which almost always")
+				fmt.Fprintln(os.Stderr, "  means the mounted volumes are not writable by the container user.")
+				fmt.Fprintln(os.Stderr, "")
+				fmt.Fprintln(os.Stderr, "    docker compose down")
+				fmt.Fprintln(os.Stderr, "    sudo chown -R 100:101 ./configs ./data")
+				fmt.Fprintln(os.Stderr, "    docker compose up -d")
+			}
 		} else {
-			fmt.Fprintln(os.Stderr, "    ./setup.sh")
+			fmt.Fprintln(os.Stderr, "  Please run the setup script for your platform:")
+			fmt.Fprintln(os.Stderr, "")
+			if runtime.GOOS == "windows" {
+				fmt.Fprintln(os.Stderr, "    .\\setup.bat        (Command Prompt)")
+				fmt.Fprintln(os.Stderr, "    .\\setup.ps1        (PowerShell)")
+			} else {
+				fmt.Fprintln(os.Stderr, "    ./setup.sh")
+			}
 		}
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "  For detailed instructions see: https://vision3bbs.com/sysop/")

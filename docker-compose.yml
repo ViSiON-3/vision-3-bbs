@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   vision3:
     build:
@@ -15,6 +13,8 @@ services:
       # Persistent data - these directories will be created on host
       - ./configs:/vision3/configs
       - ./data:/vision3/data
+      # Menus ship inside the image; this mount keeps a customised
+      # set on the host and lets `git pull` update them in place.
       - ./menus:/vision3/menus
     environment:
       # Optional: Override default settings

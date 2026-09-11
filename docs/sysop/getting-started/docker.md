@@ -24,12 +24,14 @@ This guide covers deploying ViSiON/3 using Docker and Docker Compose.
 
    This will:
    - Build the Docker image
-   - Compile all Go binaries (ViSiON3, v3mail, helper, strings)
-   - Bundle sexyz (Synchronet ZModem 8k) from `bin/sexyz`
-   - Create necessary directories (`configs/`, `data/`, `menus/`, `temp/`)
+   - Compile all Go binaries (ViSiON3, v3mail, helper, strings, ue, config, menuedit, wfc)
+   - Create necessary directories (`configs/`, `data/`, `temp/`)
    - Generate SSH host keys automatically
    - Initialize config files from templates
    - Start the BBS on ports 2222 (SSH) and 2323 (telnet)
+
+   > **sexyz and binkd are not bundled.** The image ships `sexyz.ini` but not the
+   > binaries themselves — see [Adding sexyz and binkd](#adding-sexyz-and-binkd).
 
 3. **Check logs:**
 
@@ -57,7 +59,7 @@ If you prefer not to use Docker Compose:
 2. **Create host directories:**
 
    ```bash
-   mkdir -p configs data menus
+   mkdir -p configs data
    ```
 
 3. **Run the container:**
@@ -69,9 +71,13 @@ If you prefer not to use Docker Compose:
      -p 2323:2323 \
      -v "$(pwd)/configs:/vision3/configs" \
      -v "$(pwd)/data:/vision3/data" \
-     -v "$(pwd)/menus:/vision3/menus" \
      vision3:latest
    ```
+
+   The default menu set ships inside the image, so no `menus/` mount is needed.
+   Add `-v "$(pwd)/menus:/vision3/menus"` only if you keep a customised set on
+   the host — mounting an *empty* directory there hides the built-in menus and
+   the pre-flight check will refuse to start.
 
 ## Important Notes
 
@@ -79,11 +85,61 @@ If you prefer not to use Docker Compose:
 
 ViSiON/3 uses a pure-Go SSH implementation (`gliderlabs/ssh`) — no CGO or native libraries required. The Dockerfile:
 
-- Builds all Go binaries: `vision3`, `v3mail`, `config`, `strings`, `ue`, `menuedit`, `helper`
-- Copies `bin/sexyz` for ZModem 8k file transfers (works on both SSH and telnet)
-- Copies the static `binkd` binary for FTN mailer support
+- Builds all Go binaries: `ViSiON3`, `v3mail`, `config`, `strings`, `ue`, `menuedit`, `helper`, `wfc`
+- Ships the default menu set at `/vision3/menus`
+- Ships `sexyz.ini`, which the entrypoint copies to `bin/`
 
-> **Note:** The sexyz binary at `bin/sexyz` must match the container's architecture (typically linux/amd64). See [File Transfer Protocols](files/file-transfer.md) for build instructions.
+The builder stage is pinned to the Go version in `go.mod`. The official `golang`
+images set `GOTOOLCHAIN=local`, so if `go.mod` is bumped past the base image the
+build fails at `go mod download` rather than fetching a newer toolchain — keep
+the two in step.
+
+### Adding sexyz and binkd
+
+The `sexyz` (ZModem 8k file transfers) and `binkd` (FTN mailer) binaries are
+**not** in the image: they are third-party builds that must match the
+container's architecture (linux/amd64 for the Alpine base). Supply them with a
+mount:
+
+```yaml
+volumes:
+  - ./bin:/vision3/bin
+```
+
+or add them in a derived image:
+
+```dockerfile
+FROM vision3:latest
+COPY bin/sexyz bin/binkd /vision3/bin/
+```
+
+`.dockerignore` excludes `bin/` but re-includes those two paths specifically, so
+the `COPY` resolves with the repository root as the build context.
+
+See [File Transfer Protocols](files/file-transfer.md) for build instructions.
+
+### Container user and file ownership
+
+The BBS runs as the unprivileged `vision3` user (uid 100, gid 101). The
+entrypoint starts as root only long enough to `chown` the mounted volumes, then
+drops privileges — so Docker-created bind mounts, which arrive owned by root,
+work without any manual preparation.
+
+Because of that privilege drop, `docker exec` lands you as **root**, not
+`vision3`. Always pass `-u vision3` when running the TUI tools, or they will
+leave root-owned files in `configs/` that the BBS cannot rewrite.
+
+`menus/` is deliberately left alone. Compose bind-mounts your checkout there, and
+taking ownership of it would leave you unable to `git pull` or edit your own menu
+set on the host. The BBS only reads menus, so a normal checkout works as-is.
+
+The trade-off is that `menuedit` cannot save into a bind-mounted `menus/`, which
+the container user may read but not write. Pick whichever suits your setup:
+
+- edit menus on the host (`./menuedit` from the checkout), or
+- drop the `menus/` mount and use the set baked into the image, or
+- make the mount writable by the container user: `sudo chown -R 100:101 ./menus`
+  — after which the host user needs `sudo` to edit those files.
 
 ### Persistent Data
 
@@ -111,10 +167,16 @@ The following directories are mounted as volumes and persist across container re
 
 On first run, the entrypoint script will:
 
-1. Create necessary directories
-2. Generate SSH host keys (RSA and ED25519)
-3. Copy template configs to `configs/` if missing
-4. Create default user (felonius/password)
+1. Fix ownership of the mounted volumes, then drop to the `vision3` user
+2. Create necessary directories
+3. Generate SSH host keys (RSA and ED25519)
+4. Copy template configs and IP list files to `configs/` if missing
+5. Seed `data/oneliners.json` and the call-history counters
+6. Initialize the JAM message bases
+
+The default sysop account (`felonius` / `password`, access level 255) is created
+by the BBS itself on first start, not by the entrypoint — watch for the
+`created default sysop account` warning in the logs.
 
 ### Configuration
 
@@ -122,17 +184,24 @@ After first run, use the TUI tools to configure your BBS. Run them via `docker e
 
 ```bash
 # Main config editor (BBS name, ports, access levels, networking, etc.)
-docker exec -it vision3-bbs ./config
+docker exec -u vision3 -it vision3-bbs ./config
 
 # String editor (display text and prompts)
-docker exec -it vision3-bbs ./strings
+docker exec -u vision3 -it vision3-bbs ./strings
 
 # User editor
-docker exec -it vision3-bbs ./ue
+docker exec -u vision3 -it vision3-bbs ./ue
 
 # Menu editor
-docker exec -it vision3-bbs ./menuedit
+docker exec -u vision3 -it vision3-bbs ./menuedit
+
+# WFC sysop console
+docker exec -u vision3 -it vision3-bbs ./wfc
 ```
+
+> Omitting `-u vision3` runs the tool as root and writes root-owned files into
+> the mounted volumes, which the BBS itself (running as `vision3`) then cannot
+> modify.
 
 The container's working directory is `/vision3`, which is where `configs/`, `data/`, and `menus/` are mounted — so the TUI tools find your files automatically without extra flags.
 

@@ -662,7 +662,7 @@ grep "authenticated successfully" data/logs/vision3.log
    git pull
    go build ./cmd/vision3
    # or
-   docker-compose up -d --build
+   docker compose up -d --build
    ```
 
 4. **Monitor Logs**

@@ -331,7 +331,7 @@ Protocol configurations are defined in `configs/protocols.json`. ViSiON/3 uses *
 
 sexyz is included as a pre-built binary at `bin/sexyz`. If you need to build it for a different platform, see [File Transfer Protocols](files/file-transfer.md) for instructions.
 
-**Docker:** The sexyz binary is copied into the Docker image automatically if present at `bin/sexyz`.
+**Docker:** The sexyz binary is *not* bundled in the image — mount `./bin:/vision3/bin` or bake it into a derived image. See [Adding sexyz and binkd](getting-started/docker.md#adding-sexyz-and-binkd).
 
 **Currently Implemented:**
 
