@@ -6,13 +6,23 @@ import "github.com/ViSiON-3/vision-3-bbs/internal/config"
 type networkConfig = config.FTNNetworkConfig
 type linkConfig = config.FTNLinkConfig
 
-// pathConfig holds the global FTN settings from FTNConfig (shared across all networks).
+// pathConfig holds the FTN settings from FTNConfig that the tosser needs. Most
+// are global (shared across all networks); BinkdOutboundPath is resolved per
+// network, see below.
 type pathConfig struct {
 	InboundPath       string
 	SecureInboundPath string
 	OutboundPath      string
+
+	// BinkdOutboundPath is this network's BSO outbound, already resolved from
+	// its own binkd_outbound_path or the global one (see New). Per-network
+	// rather than global because BSO flow files are named from the
+	// destination net/node with no zone component: two networks sharing one
+	// directory and a net/node pair would collide on a single filename, and
+	// one network's mail would be handed to the other's hub.
 	BinkdOutboundPath string
-	TempPath          string
-	BadAreaTag        string
-	DupeAreaTag       string
+
+	TempPath    string
+	BadAreaTag  string
+	DupeAreaTag string
 }

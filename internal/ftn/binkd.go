@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 // binkd.conf generation: the config types and the entry point that creates or
@@ -35,9 +38,15 @@ type BinkdConfig struct {
 	// Node is the new hub node to add.
 	Node BinkdNode
 
-	// OutboundPath is binkd's BSO outbound directory, written into the
-	// "domain" lines. Empty falls back to <BBSRoot>/data/ftn/out.
+	// OutboundPath is binkd's default BSO outbound directory, written into
+	// the "domain" line of every network without its own. Empty falls back
+	// to <BBSRoot>/data/ftn/out.
 	OutboundPath string
+
+	// NetworkOutbound holds per-network outbound overrides, keyed by
+	// lower-cased network name. A network listed here gets its own directory
+	// on its "domain" line instead of OutboundPath.
+	NetworkOutbound map[string]string
 }
 
 // outboundPath returns the BSO outbound directory for the domain lines,
@@ -49,6 +58,22 @@ type BinkdConfig struct {
 // an empty queue, and echomail sits unsent with no error on either side.
 func (c BinkdConfig) outboundPath() string {
 	return BinkdOutboundDir(c.BBSRoot, c.OutboundPath)
+}
+
+// outbound resolves the default and every per-network outbound directory for
+// the domain lines.
+func (c BinkdConfig) outbound() BinkdOutbound {
+	o := BinkdOutbound{
+		Default:  c.outboundPath(),
+		ByDomain: make(map[string]string, len(c.NetworkOutbound)),
+	}
+	for name, p := range c.NetworkOutbound {
+		if p == "" {
+			continue
+		}
+		o.ByDomain[strings.ToLower(name)] = BinkdOutboundDir(c.BBSRoot, p)
+	}
+	return o
 }
 
 // BinkdOutboundDir resolves ftn.json's binkd_outbound_path to the absolute
@@ -64,6 +89,64 @@ func BinkdOutboundDir(bbsRoot, configured string) string {
 		return configured
 	}
 	return filepath.Join(bbsRoot, configured)
+}
+
+// BinkdOutbound holds the absolute BSO outbound directory for each binkd
+// domain, so one binkd.conf can give two networks separate queues. ByDomain is
+// keyed by lower-cased network name and carries only the networks that
+// override the global path; every other domain resolves to Default.
+type BinkdOutbound struct {
+	Default  string
+	ByDomain map[string]string
+}
+
+// For returns the outbound directory a binkd domain's queue lives in.
+func (o BinkdOutbound) For(domain string) string {
+	if p, ok := o.ByDomain[strings.ToLower(domain)]; ok && p != "" {
+		return p
+	}
+	return o.Default
+}
+
+// Dirs returns every distinct outbound directory, sorted, for callers that
+// have to create them: binkd will not create a missing outbound itself, and
+// the tosser writing a bundle into a directory that does not exist fails.
+func (o BinkdOutbound) Dirs() []string {
+	seen := make(map[string]bool, len(o.ByDomain)+1)
+	dirs := make([]string, 0, len(o.ByDomain)+1)
+	add := func(p string) {
+		if p == "" || seen[p] {
+			return
+		}
+		seen[p] = true
+		dirs = append(dirs, p)
+	}
+	add(o.Default)
+	domains := make([]string, 0, len(o.ByDomain))
+	for d := range o.ByDomain {
+		domains = append(domains, d)
+	}
+	sort.Strings(domains)
+	for _, d := range domains {
+		add(o.ByDomain[d])
+	}
+	return dirs
+}
+
+// BinkdOutboundFor builds the per-domain outbound map for a loaded FTN config,
+// resolving every path against the BBS root.
+func BinkdOutboundFor(bbsRoot string, ftnCfg config.FTNConfig) BinkdOutbound {
+	o := BinkdOutbound{
+		Default:  BinkdOutboundDir(bbsRoot, ftnCfg.BinkdOutboundPath),
+		ByDomain: make(map[string]string, len(ftnCfg.Networks)),
+	}
+	for name, netCfg := range ftnCfg.Networks {
+		if netCfg.BinkdOutboundPath == "" {
+			continue
+		}
+		o.ByDomain[strings.ToLower(name)] = BinkdOutboundDir(bbsRoot, netCfg.BinkdOutboundPath)
+	}
+	return o
 }
 
 // identityOrDefaults fills fallback values for blank BBS identity fields.
@@ -114,7 +197,7 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 		return writeFileAtomic(confPath, updated, 0600)
 	}
 
-	outPath := cfg.outboundPath()
+	outbound := cfg.outbound()
 	logPath := filepath.Join(cfg.BBSRoot, "data", "logs", "binkd.log")
 	secureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "secure_in")
 	insecureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "in")
@@ -126,10 +209,10 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 
 	if len(existing) == 0 {
 		// Generate fresh binkd.conf.
-		writeFreshBinkdConf(&out, cfg, outPath, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location)
+		writeFreshBinkdConf(&out, cfg, outbound, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location)
 	} else {
 		// Rewrite existing file: strip placeholders, inject real values.
-		rewriteBinkdConf(&out, string(existing), cfg, outPath, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location)
+		rewriteBinkdConf(&out, string(existing), cfg, outbound, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location)
 	}
 
 	// Append the new node block.

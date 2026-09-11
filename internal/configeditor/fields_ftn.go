@@ -130,6 +130,11 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			Get: func() string { return netPtr.Origin },
 			Set: func(val string) error { netPtr.Origin = val; save(); return nil },
 		},
+		{
+			Label: "Binkd Outbound", Help: "This network's own BSO outbound dir (empty = the global one; set it when carrying more than one network)", Type: ftString, Col: 3, Row: 5, Width: 45,
+			Get: func() string { return netPtr.BinkdOutboundPath },
+			Set: func(val string) error { netPtr.BinkdOutboundPath = strings.TrimSpace(val); save(); return nil },
+		},
 	}
 }
 
@@ -306,9 +311,20 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			Set: func(val string) error { linkPtr.Name = val; save(); return nil },
 		},
 		{
-			Label: "Hostname", Help: "Hub BinkP hostname; synced to the binkd.conf node line on save", Type: ftString, Col: 3, Row: 7, Width: 40,
+			Label: "Hostname", Help: "Hub BinkP hostname; synced to the binkd.conf node line on save. Empty = receive-only: binkd cannot call this link", Type: ftString, Col: 3, Row: 7, Width: 40,
 			Get: func() string { return linkPtr.Hostname },
 			Set: func(val string) error { linkPtr.Hostname = strings.TrimSpace(val); save(); return nil },
+			// Left empty this link is receive-only, which is legitimate but
+			// easy to do by accident: no binkd node line and no poll event are
+			// created, so the network only ever receives mail when the uplink
+			// calls in. Said plainly here rather than rejected, because the
+			// alternative is discovering it months later from the binkd log.
+			AfterSet: func(cur *Model, val string) {
+				if strings.TrimSpace(val) == "" {
+					cur.message = "No hostname: this link is receive-only — binkd cannot poll it, " +
+						"so no node line or poll event will be created"
+				}
+			},
 		},
 		{
 			Label: "Port", Help: "Hub BinkP port (default 24554)", Type: ftInteger, Col: 3, Row: 8, Width: 6, Min: 0, Max: 65535,

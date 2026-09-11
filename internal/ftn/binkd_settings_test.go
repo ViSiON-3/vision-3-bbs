@@ -25,7 +25,7 @@ func writeConf(t *testing.T, content string) string {
 
 func TestSyncBinkdSettingsUpdatesLines(t *testing.T) {
 	path := writeConf(t, settingsConf)
-	if err := SyncBinkdSettings(path, 24555, 6, ""); err != nil {
+	if err := SyncBinkdSettings(path, 24555, 6, BinkdOutbound{}); err != nil {
 		t.Fatalf("SyncBinkdSettings: %v", err)
 	}
 	got, _ := os.ReadFile(path)
@@ -44,7 +44,7 @@ func TestSyncBinkdSettingsUpdatesLines(t *testing.T) {
 func TestSyncBinkdSettingsNoChangeLeavesFile(t *testing.T) {
 	path := writeConf(t, settingsConf)
 	before, _ := os.Stat(path)
-	if err := SyncBinkdSettings(path, 24554, 4, ""); err != nil {
+	if err := SyncBinkdSettings(path, 24554, 4, BinkdOutbound{}); err != nil {
 		t.Fatalf("SyncBinkdSettings: %v", err)
 	}
 	after, _ := os.Stat(path)
@@ -55,14 +55,14 @@ func TestSyncBinkdSettingsNoChangeLeavesFile(t *testing.T) {
 
 func TestSyncBinkdSettingsMissingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "binkd.conf")
-	if err := SyncBinkdSettings(path, 24554, 4, ""); err != nil {
+	if err := SyncBinkdSettings(path, 24554, 4, BinkdOutbound{}); err != nil {
 		t.Fatalf("missing file must be a no-op, got: %v", err)
 	}
 }
 
 func TestSyncBinkdSettingsNonPositiveIgnored(t *testing.T) {
 	path := writeConf(t, settingsConf)
-	if err := SyncBinkdSettings(path, 0, 0, ""); err != nil {
+	if err := SyncBinkdSettings(path, 0, 0, BinkdOutbound{}); err != nil {
 		t.Fatalf("SyncBinkdSettings: %v", err)
 	}
 	got, _ := os.ReadFile(path)
@@ -76,7 +76,7 @@ func TestSyncBinkdSettingsNonPositiveIgnored(t *testing.T) {
 // binkd reported an empty queue and echomail never left the board.
 func TestSyncBinkdSettingsRepointsDomainOutbound(t *testing.T) {
 	path := writeConf(t, settingsConf+"domain fsxnet /opt/v3/data/ftn/binkd_outbound 21\ndomain fidonet /opt/v3/data/ftn/binkd_outbound 3\n")
-	if err := SyncBinkdSettings(path, 24554, 4, "/opt/v3/data/ftn/out"); err != nil {
+	if err := SyncBinkdSettings(path, 24554, 4, BinkdOutbound{Default: "/opt/v3/data/ftn/out"}); err != nil {
 		t.Fatalf("SyncBinkdSettings: %v", err)
 	}
 	got := readConf(t, path)
@@ -96,7 +96,7 @@ func TestSyncBinkdSettingsRepointsDomainOutbound(t *testing.T) {
 func TestSyncBinkdSettingsLeavesMatchingDomainAlone(t *testing.T) {
 	conf := settingsConf + "domain fsxnet /opt/v3/data/ftn/out 21\n"
 	path := writeConf(t, conf)
-	if err := SyncBinkdSettings(path, 24554, 4, "/opt/v3/data/ftn/out"); err != nil {
+	if err := SyncBinkdSettings(path, 24554, 4, BinkdOutbound{Default: "/opt/v3/data/ftn/out"}); err != nil {
 		t.Fatalf("SyncBinkdSettings: %v", err)
 	}
 	if got := readConf(t, path); got != conf {
@@ -104,12 +104,12 @@ func TestSyncBinkdSettingsLeavesMatchingDomainAlone(t *testing.T) {
 	}
 }
 
-// An empty outboundPath means "not configured"; blanking the sysop's domain
+// An empty resolved path means "not configured"; blanking the sysop's domain
 // lines would leave binkd with no outbound at all.
 func TestSyncBinkdSettingsEmptyOutboundLeavesDomains(t *testing.T) {
 	conf := settingsConf + "domain fsxnet /somewhere/else 21\n"
 	path := writeConf(t, conf)
-	if err := SyncBinkdSettings(path, 24554, 4, ""); err != nil {
+	if err := SyncBinkdSettings(path, 24554, 4, BinkdOutbound{}); err != nil {
 		t.Fatalf("SyncBinkdSettings: %v", err)
 	}
 	if got := readConf(t, path); got != conf {

@@ -1,6 +1,8 @@
 package ftn
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -274,5 +276,76 @@ func TestSyncBinkdConfKeepsHostWhenLinkHasNone(t *testing.T) {
 	want := "node 21:4/999@fsxnet hub.example.org:24554 newpw"
 	if !strings.Contains(got, want+"\n") {
 		t.Errorf("got:\n%s\nwant line: %s", got, want)
+	}
+}
+
+// Not inventing a node line without a hostname is correct, but doing it
+// silently is how a network ends up appearing configured while binkd has no
+// way to call it — the mail then arrives only when the uplink calls in, or as
+// a side effect of another network's poll over a shared uplink. The skip must
+// be warned about.
+func TestSyncBinkdConfWarnsOnLinkWithoutHostname(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	path := writeConf(t, "iport 24554\n")
+	links := map[string]BinkdLinkSync{
+		"1337:3/123@tqwnet": {SessionPwd: "s3cret"},
+	}
+	if err := SyncBinkdConf(path, BinkdIdentity{}, links); err != nil {
+		t.Fatalf("SyncBinkdConf: %v", err)
+	}
+
+	out := logged.String()
+	if !strings.Contains(out, "no hostname") {
+		t.Errorf("a hostname-less link must warn, got: %q", out)
+	}
+	if !strings.Contains(out, "1337:3/123@tqwnet") {
+		t.Errorf("warning must name the link, got: %q", out)
+	}
+}
+
+// A link that does get a node line must not warn, or the log cries wolf on
+// every save of a healthy config.
+func TestSyncBinkdConfNoWarningWhenHostnamePresent(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	path := writeConf(t, "iport 24554\n")
+	links := map[string]BinkdLinkSync{
+		"1337:3/123@tqwnet": {SessionPwd: "s3cret", HostPort: "get-ghosted.com:24555"},
+	}
+	if err := SyncBinkdConf(path, BinkdIdentity{}, links); err != nil {
+		t.Fatalf("SyncBinkdConf: %v", err)
+	}
+	if strings.Contains(logged.String(), "no hostname") {
+		t.Errorf("a pollable link must not warn, got: %q", logged.String())
+	}
+	if !strings.Contains(readConf(t, path), "node 1337:3/123@tqwnet get-ghosted.com:24555 s3cret") {
+		t.Errorf("node line not appended:\n%s", readConf(t, path))
+	}
+}
+
+// An existing node line already covers the link, so a missing hostname in
+// ftn.json is not a problem worth warning about — the host on the line stands.
+func TestSyncBinkdConfNoWarningWhenNodeLineExists(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	path := writeConf(t, "iport 24554\nnode 1337:3/123@tqwnet get-ghosted.com:24555 s3cret\n")
+	links := map[string]BinkdLinkSync{
+		"1337:3/123@tqwnet": {SessionPwd: "s3cret"},
+	}
+	if err := SyncBinkdConf(path, BinkdIdentity{}, links); err != nil {
+		t.Fatalf("SyncBinkdConf: %v", err)
+	}
+	if strings.Contains(logged.String(), "no hostname") {
+		t.Errorf("an existing node line must not warn, got: %q", logged.String())
 	}
 }

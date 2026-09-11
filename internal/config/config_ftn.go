@@ -77,6 +77,18 @@ type FTNNetworkConfig struct {
 	OwnAddress            string          `json:"own_address"`             // e.g., "21:4/158.1"
 	Origin                string          `json:"origin,omitempty"`        // Origin line text for echomail (empty = board name)
 	Links                 []FTNLinkConfig `json:"links"`
+
+	// BinkdOutboundPath overrides the global binkd_outbound_path for this
+	// network, becoming both its "domain" line in binkd.conf and the
+	// directory its bundles and flow files are packed into. Empty shares the
+	// global one.
+	//
+	// Worth setting whenever two networks are carried. BSO flow files are
+	// named from the destination net/node alone with no zone component, so
+	// two links in different networks that share a net/node pair resolve to
+	// one filename and one network's mail is handed to the other's hub.
+	// Separate outbounds are also how binkd itself tells two domains apart.
+	BinkdOutboundPath string `json:"binkd_outbound_path,omitempty"`
 }
 
 // BinkdServerConfig controls the integrated binkd mailer daemon.
@@ -258,6 +270,33 @@ func (c *FTNConfig) ResolvePaths(root string) {
 	if c.DupeDBPath != "" {
 		c.DupeDBPath = resolve(c.DupeDBPath)
 	}
+	// Per-network outbound overrides resolve the same way. Networks is a map
+	// of values, so each entry has to be written back.
+	for name, netCfg := range c.Networks {
+		if netCfg.BinkdOutboundPath == "" {
+			continue
+		}
+		netCfg.BinkdOutboundPath = resolve(netCfg.BinkdOutboundPath)
+		c.Networks[name] = netCfg
+	}
+}
+
+// BinkdOutboundFor returns the BSO outbound directory this network's bundles
+// belong in: its own override when set, otherwise the global one. Both are
+// returned as configured (relative or absolute) — resolve with
+// ftn.BinkdOutboundDir, or call after ResolvePaths.
+func (c FTNConfig) BinkdOutboundFor(network string) string {
+	if netCfg, ok := c.Networks[network]; ok && netCfg.BinkdOutboundPath != "" {
+		return netCfg.BinkdOutboundPath
+	}
+	// The map is keyed as the sysop wrote it; binkd.conf domain names are
+	// lower-cased, so fall back to a case-insensitive match.
+	for name, netCfg := range c.Networks {
+		if strings.EqualFold(name, network) && netCfg.BinkdOutboundPath != "" {
+			return netCfg.BinkdOutboundPath
+		}
+	}
+	return c.BinkdOutboundPath
 }
 
 // NetworkOrigins collects each network's origin-line override, keyed by

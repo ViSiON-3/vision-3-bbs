@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
@@ -122,8 +123,22 @@ func refreshPollEvents(events *config.EventsConfig, networks map[string]config.F
 				e.Args = []string{"-p", "-P", hubFull, "{BBS_ROOT}/data/ftn/binkd.conf"}
 			}
 		}
-		if !found && nc.Links[0].HostPort() != "" {
+		switch {
+		case found:
+			// Already has a poll event; retargeted above.
+		case nc.Links[0].HostPort() != "":
 			events.Events = append(events.Events, newPollEvent(netKey, hub))
+		default:
+			// No hostname means nothing to dial, so no poll event. Warned
+			// because the network then looks configured but only ever receives
+			// mail when the uplink calls in — or, where it shares an uplink
+			// with another network, as a side effect of that network's poll,
+			// which is indistinguishable from working until the other link
+			// changes.
+			slog.Warn("ftn network has no hub hostname, so no poll event was created — "+
+				"inbound mail depends entirely on the uplink calling in; "+
+				"set the link's Hostname under Echomail Links to poll it",
+				"network", netKey, "hub", hub)
 		}
 	}
 }

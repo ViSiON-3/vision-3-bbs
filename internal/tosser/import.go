@@ -102,7 +102,7 @@ func New(networkName string, cfg networkConfig, globalCfg config.FTNConfig, dupe
 			InboundPath:       globalCfg.InboundPath,
 			SecureInboundPath: globalCfg.SecureInboundPath,
 			OutboundPath:      globalCfg.OutboundPath,
-			BinkdOutboundPath: globalCfg.BinkdOutboundPath,
+			BinkdOutboundPath: globalCfg.BinkdOutboundFor(networkName),
 			TempPath:          globalCfg.TempPath,
 			BadAreaTag:        globalCfg.BadAreaTag,
 			DupeAreaTag:       globalCfg.DupeAreaTag,

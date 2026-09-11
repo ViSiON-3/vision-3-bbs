@@ -51,22 +51,24 @@ func (t *stderrTail) String() string {
 	return strings.TrimSpace(string(t.buf))
 }
 
-// binkdOutboundDir is the BSO outbound directory binkd is configured with —
-// the same one the tosser packs bundles into, so the two cannot drift apart.
-func (s *Service) binkdOutboundDir() string {
-	return ftn.BinkdOutboundDir(s.cfg.BBSRoot, s.currentFTN().BinkdOutboundPath)
-}
-
 // ensureRuntimeDirs creates the directories binkd needs at startup (log dir
 // and inbound/outbound queues). binkd exits immediately if its log file's
 // directory is missing, and nothing else in the launch path creates these.
-func (s *Service) ensureRuntimeDirs() {
-	for _, d := range []string{
+//
+// The outbound is passed in rather than re-read so it comes from the same
+// config snapshot as the settings sync that precedes it: a reload landing
+// between the two would otherwise create one set of queues and point
+// binkd.conf at another.
+func (s *Service) ensureRuntimeDirs(outbound ftn.BinkdOutbound) {
+	dirs := []string{
 		filepath.Join(s.cfg.BBSRoot, "data", "logs"),
 		filepath.Join(s.cfg.BBSRoot, "data", "ftn", "in"),
 		filepath.Join(s.cfg.BBSRoot, "data", "ftn", "secure_in"),
-		s.binkdOutboundDir(),
-	} {
+	}
+	// Every network's outbound, so a per-network queue exists before binkd
+	// and the tosser reach for it.
+	dirs = append(dirs, outbound.Dirs()...)
+	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			slog.Warn("creating binkd runtime dir failed", "dir", d, "error", err)
 		}
@@ -94,11 +96,11 @@ func (s *Service) superviseLoop(ctx context.Context) {
 		// dir cannot be drawn from two different reloads within one launch.
 		snap := s.currentFTN()
 		b := snap.Binkd
-		outDir := ftn.BinkdOutboundDir(s.cfg.BBSRoot, snap.BinkdOutboundPath)
-		if err := ftn.SyncBinkdSettings(s.confPath, b.Port, b.LogLevel, outDir); err != nil {
+		outbound := ftn.BinkdOutboundFor(s.cfg.BBSRoot, snap)
+		if err := ftn.SyncBinkdSettings(s.confPath, b.Port, b.LogLevel, outbound); err != nil {
 			slog.Warn("binkd.conf settings sync failed", "error", err)
 		}
-		s.ensureRuntimeDirs()
+		s.ensureRuntimeDirs(outbound)
 
 		started := time.Now()
 		err := s.runOnce(ctx)

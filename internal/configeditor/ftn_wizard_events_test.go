@@ -1,6 +1,9 @@
 package configeditor
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -196,5 +199,63 @@ func TestWireFTNEventsMissingOptionalEventsNotCreated(t *testing.T) {
 	}
 	if !ev.Enabled {
 		t.Error("scheduler must be enabled")
+	}
+}
+
+// A network whose link carries no hostname gets no poll event — there is
+// nothing to dial. It must also be warned about rather than skipped in
+// silence: such a network looks configured but only receives mail when the
+// uplink calls in, or (sharing an uplink with another network) as a side
+// effect of that network's poll, which is indistinguishable from working
+// until the other link changes.
+func TestRefreshPollEventsSkipsLinkWithoutHostname(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	ev := templateEvents()
+	nets := map[string]config.FTNNetworkConfig{
+		"tqwnet": {Links: []config.FTNLinkConfig{{Address: "1337:3/123"}}},
+	}
+	refreshPollEvents(&ev, nets)
+
+	if findEvent(ev, "echomail_poll_tqwnet") != nil {
+		t.Error("a link with no hostname has nothing to dial, so no poll event should be created")
+	}
+	out := logged.String()
+	if !strings.Contains(out, "no hub hostname") {
+		t.Errorf("skipping a hostname-less network must warn, got: %q", out)
+	}
+	if !strings.Contains(out, "tqwnet") {
+		t.Errorf("warning must name the network, got: %q", out)
+	}
+}
+
+// The counterpart: a hostname makes the network pollable, so the event is
+// created and nothing is warned about.
+func TestRefreshPollEventsCreatesForLinkWithHostname(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	ev := templateEvents()
+	nets := map[string]config.FTNNetworkConfig{
+		"tqwnet": {Links: []config.FTNLinkConfig{
+			{Address: "1337:3/123", Hostname: "get-ghosted.com", Port: 24555},
+		}},
+	}
+	refreshPollEvents(&ev, nets)
+
+	poll := findEvent(ev, "echomail_poll_tqwnet")
+	if poll == nil {
+		t.Fatal("a link with a hostname must get a poll event")
+	}
+	if !containsArg(poll.Args, "1337:3/123@tqwnet") {
+		t.Errorf("poll must target the hub: %v", poll.Args)
+	}
+	if strings.Contains(logged.String(), "no hub hostname") {
+		t.Errorf("a pollable network must not warn, got: %q", logged.String())
 	}
 }

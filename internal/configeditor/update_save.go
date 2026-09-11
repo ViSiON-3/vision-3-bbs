@@ -91,7 +91,7 @@ func (m *Model) saveAll() {
 		}
 		if binkdSyncErr == nil {
 			binkdSyncErr = ftn.SyncBinkdSettings(binkdPath, m.configs.FTN.Binkd.Port, m.configs.FTN.Binkd.LogLevel,
-				ftn.BinkdOutboundDir(bbsRoot, m.configs.FTN.BinkdOutboundPath))
+				ftn.BinkdOutboundFor(bbsRoot, m.configs.FTN))
 		}
 	}
 	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {

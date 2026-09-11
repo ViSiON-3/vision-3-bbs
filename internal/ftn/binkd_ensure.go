@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
@@ -22,6 +23,9 @@ func buildBinkdRegen(ftnCfg config.FTNConfig, server config.ServerConfig, bbsRoo
 		Location:     server.BBSLocation,
 		Domains:      make(map[string]int),
 		OutboundPath: ftnCfg.BinkdOutboundPath,
+		// Per-network outbound overrides, so a regenerated conf keeps each
+		// network's own queue rather than collapsing them onto the global one.
+		NetworkOutbound: NetworkOutbounds(ftnCfg),
 	}
 	var nodes []BinkdNode
 
@@ -82,8 +86,25 @@ func EnsureBinkdConf(bbsRoot string, ftnCfg config.FTNConfig, server config.Serv
 	}
 	// The regenerated conf carries template defaults for port/loglevel;
 	// bring them in line with the configured values.
-	if err := SyncBinkdSettings(confPath, ftnCfg.Binkd.Port, ftnCfg.Binkd.LogLevel, cfg.outboundPath()); err != nil {
+	if err := SyncBinkdSettings(confPath, ftnCfg.Binkd.Port, ftnCfg.Binkd.LogLevel, cfg.outbound()); err != nil {
 		return true, err
 	}
 	return true, nil
+}
+
+// NetworkOutbounds collects the per-network binkd_outbound_path overrides from
+// an FTN config, keyed by lower-cased network name. Networks that share the
+// global outbound are omitted, so a nil result means "no split configured".
+func NetworkOutbounds(ftnCfg config.FTNConfig) map[string]string {
+	out := make(map[string]string, len(ftnCfg.Networks))
+	for name, netCfg := range ftnCfg.Networks {
+		if netCfg.BinkdOutboundPath == "" {
+			continue
+		}
+		out[strings.ToLower(name)] = netCfg.BinkdOutboundPath
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
