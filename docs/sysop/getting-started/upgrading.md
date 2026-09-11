@@ -420,7 +420,7 @@ silently reverting your changes.
 
 v0.9.2 is almost entirely automatic: deploy the new bundle, restart, and the
 fixes and the new live config reload are active. The one thing that needs your
-hand is a **customized `login.json`** — and even that is only an ordering edit.
+hand is a **customized `login.json`** — and even that is only a small edit.
 
 ### Custom `login.json`: put SYSOPNOTICES and NMAILSCAN first
 
@@ -436,21 +436,33 @@ Two things changed around the login sequence:
   skipped for callers who take the shortcut — which is how sysop notices and
   the new-mail scan were being missed.
 
-An upgrade never touches your `login.json`, so if you maintain a custom one,
-reorder it so `SYSOPNOTICES` and `NMAILSCAN` are the first two items, above
-`FASTLOGIN`. (Earlier docs suggested adding `SYSOPNOTICES` after `NEWUSERVAL`,
-which lands below `FASTLOGIN` — move it up.)
+An upgrade never touches your `login.json`, so if you maintain a custom one:
+
+1. **Add whichever of the two is missing.** Older custom files may have neither
+   (`NMAILSCAN` is new to the built-in default too). An item is just
+   `{ "command": "SYSOPNOTICES" }` — copy the first two entries from the
+   shipped `templates/configs/login.json` if in doubt.
+2. **Make them the first two items**, `SYSOPNOTICES` then `NMAILSCAN`, above
+   `FASTLOGIN`. (Earlier docs suggested adding `SYSOPNOTICES` after
+   `NEWUSERVAL`, which lands below `FASTLOGIN` — move it up.)
 
 ### Config edits now apply to the running BBS
 
 Saving from `./config` (or editing a config file by hand) no longer needs a
 restart for most files — see
-[Configuration](../configuration/configuration.md) for the full live-vs-restart
+[Configuration](configuration/configuration.md) for the full live-vs-restart
 table and how the `configs/reload.now` / `configs/reload.force` semaphore files
 and `SIGHUP` work. Structural files (`file_areas.json`, `message_areas.json`,
 `v3net.json` hand edits) are validated on save and applied the moment the board
-is empty, so live callers are never yanked around. Nothing to migrate — this is
-just a behavior change to know about.
+is empty, so live callers are never yanked around — unless you explicitly
+`touch configs/reload.force`, which applies queued structural changes with
+callers online. Nothing to migrate — this is just a behavior change to know
+about.
+
+> **Note:** the earlier worked examples on this page predate live reload —
+> where they say to restart after a config edit (e.g. `message_areas.json` in
+> the v0.9.1 section), that advice is superseded on v0.9.2 by the table linked
+> above.
 
 ### Stranded "already read" mail heals on the next pack
 
@@ -473,6 +485,7 @@ since callers who lean on Enter at connect get dropped too.
 
 Invisible logins are now hidden from **every** viewer (before, CoSysOp+ still
 saw them), and they no longer crowd real callers off the screen — the list
-always shows up to 20 visible callers. Real callers evicted from the old,
-shallower history are gone for good; the screen refills as calls arrive. No
-action needed.
+shows up to 20 visible callers by default (a `RUN:LASTCALLERS <n>` argument in
+your menu CFG still overrides the row count). Real callers evicted from the
+old, shallower history are gone for good; the screen refills as calls arrive.
+No action needed.
