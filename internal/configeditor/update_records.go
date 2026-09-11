@@ -79,6 +79,19 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.recordCursor = m.recordCount() - 1
 			}
 			m.clampRecordScroll()
+			// An echomail network is created under a placeholder name
+			// (zz_newnet_N) that is useless until renamed, and that name is the
+			// binkd domain every address, area and node line then hangs off.
+			// Returning to the list leaves the placeholder sitting there
+			// looking like a configured network, so open the new record with
+			// the cursor on the field that has to be filled in.
+			if m.recordType == "ftn" && m.recordCursor >= 0 {
+				m.recordEditIdx = m.recordCursor
+				m.recordFields = m.buildRecordFields()
+				m.editField = 0
+				m.fieldScroll = 0
+				m.mode = modeRecordEdit
+			}
 			return m, nil
 		case "g", "G":
 			if m.recordType == "ftn" {

@@ -69,7 +69,12 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			// AfterSet runs on the current model (not the stale captured pointer), so index
 			// updates here are correctly applied before buildRecordFields is called.
 			AfterSet: func(cur *Model, val string) {
-				val = strings.TrimSpace(val)
+				// Normalised the way Set stores the key. Searching the raw
+				// input meant a name typed with any capital ("TQWnet") missed,
+				// leaving recordEditIdx on the row the network occupied before
+				// the re-sort — which is a different network afterwards, or
+				// past the end of the list, rendering an empty edit screen.
+				val = strings.ToLower(strings.TrimSpace(val))
 				newKeys := cur.ftnNetworkKeys()
 				idx := sort.SearchStrings(newKeys, val)
 				if idx < len(newKeys) && newKeys[idx] == val {
