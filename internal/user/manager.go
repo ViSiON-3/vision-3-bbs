@@ -22,12 +22,16 @@ var (
 )
 
 const (
-	userFile         = "users.json"
-	callHistoryFile  = "callhistory.json"    // Filename for call history
-	callNumberFile   = "callnumber.json"     // Filename for the next call number
-	adminLogFile     = "admin_activity.json" // Filename for admin activity log
-	callHistoryLimit = 20                    // Max number of call records to keep
-	adminLogLimit    = 1000                  // Max number of admin log entries to keep
+	userFile        = "users.json"
+	callHistoryFile = "callhistory.json"    // Filename for call history
+	callNumberFile  = "callnumber.json"     // Filename for the next call number
+	adminLogFile    = "admin_activity.json" // Filename for admin activity log
+	// callHistoryLimit is the stored depth, not the displayed row count. Logins
+	// hidden by the invisible prompt still occupy a slot here, so the ring is
+	// kept deep enough that they cannot starve the last callers screen of real
+	// callers; the screen itself caps at lastCallersDisplayLimit visible rows.
+	callHistoryLimit = 200  // Max number of call records to keep
+	adminLogLimit    = 1000 // Max number of admin log entries to keep
 )
 
 // StripUTF8BOM returns data with UTF-8 BOM (EF BB BF) removed if present.
