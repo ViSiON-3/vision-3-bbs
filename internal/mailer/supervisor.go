@@ -2,6 +2,9 @@ package mailer
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,11 +15,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
 // termGrace is how long binkd gets after SIGTERM before being killed.
 const termGrace = 5 * time.Second
+
+// defaultConfWatch is how often binkd.conf is re-synced from ftn.json and
+// compared against what the running binkd was started with. Short enough that
+// a config-editor save takes effect while the sysop is still at the console,
+// long enough to be nothing on an idle system: the check is a file read and a
+// hash. Held on the Service so tests can shorten it.
+const defaultConfWatch = 15 * time.Second
 
 // stderrTailCap bounds how much of binkd's stderr is retained for error
 // reporting; only the most recent bytes are kept.
@@ -95,17 +106,22 @@ func (s *Service) superviseLoop(ctx context.Context) {
 		// One snapshot for the whole sync, so the port/loglevel and the outbound
 		// dir cannot be drawn from two different reloads within one launch.
 		snap := s.currentFTN()
-		b := snap.Binkd
-		outbound := ftn.BinkdOutboundFor(s.cfg.BBSRoot, snap)
-		if err := ftn.SyncBinkdSettings(s.confPath, b.Port, b.LogLevel, outbound); err != nil {
-			slog.Warn("binkd.conf settings sync failed", "error", err)
-		}
+		outbound := s.syncConf(snap)
 		s.ensureRuntimeDirs(outbound)
+		// Baseline for the watcher: binkd is about to read this file, so any
+		// later difference is a change binkd has not seen.
+		s.confSeen.Store(hashFile(s.confPath))
 
 		started := time.Now()
 		err := s.runOnce(ctx)
 		if ctx.Err() != nil {
 			return // shutdown requested; exit regardless of process error
+		}
+
+		if errors.Is(err, errRecycle) {
+			// Deliberate stop for a config change: relaunch at once, and leave
+			// the backoff alone so a recycle cannot mask a crash loop.
+			continue
 		}
 
 		if time.Since(started) >= s.healthyRun {
@@ -174,17 +190,123 @@ func (s *Service) runOnce(ctx context.Context) error {
 			}
 		}
 		return err
+	case <-s.recycle:
+		// binkd.conf changed under a running binkd, which only reads it at
+		// startup. Stop it the same way shutdown does and report no error, so
+		// superviseLoop relaunches immediately on the new config instead of
+		// backing off as it would for a crash.
+		slog.Info("binkd.conf changed, recycling binkd", "pid", cmd.Process.Pid)
+		s.terminate(cmd, waitErr)
+		return errRecycle
 	case <-ctx.Done():
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			_ = cmd.Process.Kill() // SIGTERM unsupported (e.g. windows) or gone
-		}
-		select {
-		case <-waitErr:
-		case <-time.After(termGrace):
-			_ = cmd.Process.Kill()
-			<-waitErr
-		}
+		s.terminate(cmd, waitErr)
 		slog.Info("binkd mailer stopped")
 		return nil
 	}
+}
+
+// terminate stops binkd with SIGTERM, escalating to SIGKILL after termGrace,
+// and waits for it to be reaped.
+func (s *Service) terminate(cmd *exec.Cmd, waitErr <-chan error) {
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		_ = cmd.Process.Kill() // SIGTERM unsupported (e.g. windows) or gone
+	}
+	select {
+	case <-waitErr:
+	case <-time.After(termGrace):
+		_ = cmd.Process.Kill()
+		<-waitErr
+	}
+}
+
+// errRecycle marks a stop that superviseLoop asked for itself, so the relaunch
+// is immediate and is not counted against the crash backoff.
+var errRecycle = errors.New("binkd recycled for a config change")
+
+// syncConf writes the current configuration into binkd.conf and returns the
+// outbound directories it resolved. Shared by the launch path and the watcher
+// so both produce identical files; every sync is idempotent and rewrites
+// nothing when the file already matches.
+func (s *Service) syncConf(snap config.FTNConfig) ftn.BinkdOutbound {
+	outbound := ftn.BinkdOutboundFor(s.cfg.BBSRoot, snap)
+	b := snap.Binkd
+
+	identity := ftn.BinkdIdentity{
+		BoardName: s.cfg.Server.BoardName,
+		SysopName: s.cfg.Server.SysOpName,
+		Location:  s.cfg.Server.BBSLocation,
+	}
+	links := make(map[string]ftn.BinkdLinkSync)
+	for netKey, nc := range snap.Networks {
+		for _, lnk := range nc.Links {
+			links[fmt.Sprintf("%s@%s", lnk.Address, netKey)] = ftn.BinkdLinkSync{
+				SessionPwd: lnk.SessionPassword,
+				HostPort:   lnk.HostPort(),
+			}
+		}
+	}
+	if err := ftn.SyncBinkdConf(s.confPath, identity, links); err != nil {
+		slog.Warn("binkd.conf link sync failed", "error", err)
+	}
+	if err := ftn.SyncBinkdNetworks(s.confPath, s.cfg.BBSRoot, snap); err != nil {
+		slog.Warn("binkd.conf network sync failed", "error", err)
+	}
+	if err := ftn.SyncBinkdSettings(s.confPath, b.Port, b.LogLevel, outbound); err != nil {
+		slog.Warn("binkd.conf settings sync failed", "error", err)
+	}
+	return outbound
+}
+
+// watchConfLoop recycles binkd when binkd.conf changes underneath it.
+//
+// binkd reads its configuration once, at startup. Nothing else asks it to
+// re-read: the supervisor syncs the file only just before a launch, and the
+// only other signal is the SIGTERM of a BBS shutdown. A new node, a changed
+// hub hostname or password, a new network, a different listen port — all of it
+// sat inert until binkd happened to exit, which on a healthy system could be
+// weeks. Worse, the sysop sees the saved config and the correct binkd.conf and
+// has no way to tell that the running process disagrees with both.
+//
+// So the file is re-synced from ftn.json on a timer and compared with what the
+// running binkd was given. A difference means binkd is stale, and it is
+// recycled: a sub-second gap in which the listener is down, against mail that
+// otherwise does not flow at all.
+func (s *Service) watchConfLoop(ctx context.Context) {
+	ticker := time.NewTicker(s.confWatch)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		s.reloadFTN()
+		s.syncConf(s.currentFTN())
+
+		current := hashFile(s.confPath)
+		if current == "" {
+			continue // unreadable: leave the running binkd alone
+		}
+		seen, _ := s.confSeen.Load().(string)
+		if seen == "" || seen == current {
+			continue
+		}
+		s.confSeen.Store(current)
+		select {
+		case s.recycle <- struct{}{}:
+		default: // a recycle is already pending
+		}
+	}
+}
+
+// hashFile returns a content hash of path, or "" if it cannot be read.
+func hashFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }

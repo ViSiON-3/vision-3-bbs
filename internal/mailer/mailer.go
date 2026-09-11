@@ -51,6 +51,18 @@ type Service struct {
 	// by the export goroutine.
 	exportCfgMod time.Time
 
+	// recycle asks the supervisor to stop the running binkd so it relaunches
+	// on a changed binkd.conf. Buffered: the watcher must never block, and a
+	// second request while one is pending is redundant.
+	recycle chan struct{}
+
+	// confSeen is the binkd.conf content hash the running binkd was started
+	// with, so the watcher can tell a stale process from an up-to-date one.
+	confSeen atomic.Value // string
+
+	// confWatch is how often that comparison runs.
+	confWatch time.Duration
+
 	binkdPath  string // resolved absolute path to the binkd binary
 	confPath   string // absolute path to binkd.conf
 	backoffMin time.Duration
@@ -159,6 +171,8 @@ func New(cfg Config) (*Service, error) {
 		backoffMax:     5 * time.Minute,
 		healthyRun:     time.Minute,
 		done:           make(chan struct{}),
+		recycle:        make(chan struct{}, 1),
+		confWatch:      defaultConfWatch,
 		exportDupeDB:   exportDupeDB,
 		exportDisabled: exportDisabled,
 	}
@@ -234,7 +248,7 @@ func (s *Service) Start(ctx context.Context) {
 	}
 	defer close(s.done)
 
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() {
 		defer s.wg.Done()
 		s.superviseLoop(ctx)
@@ -242,6 +256,10 @@ func (s *Service) Start(ctx context.Context) {
 	go func() {
 		defer s.wg.Done()
 		s.exportLoop(ctx)
+	}()
+	go func() {
+		defer s.wg.Done()
+		s.watchConfLoop(ctx)
 	}()
 	s.wg.Wait()
 }

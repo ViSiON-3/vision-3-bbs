@@ -23,7 +23,14 @@ func newSupervisedService(t *testing.T, crash bool) (*Service, string) {
 	pidFile := filepath.Join(root, "binkd.pid")
 	script := "#!/bin/sh\necho $$ >> " + pidFile + "\n"
 	if !crash {
-		script += "sleep 60\n"
+		// Exit on SIGTERM the way real binkd does ("got signal #15 ...
+		// quitting"), so a stop costs a moment rather than the full termGrace
+		// spent escalating to SIGKILL. sleep is backgrounded because a shell
+		// runs no trap while a foreground child is running.
+		// The backgrounded sleep must be reaped too: it inherits stderr, and
+		// a surviving holder of that pipe makes cmd.Wait block for WaitDelay
+		// even after the shell itself has exited.
+		script += "trap 'kill $p 2>/dev/null; exit 0' TERM\nsleep 60 & p=$!\nwait\n"
 	}
 	if err := os.WriteFile(filepath.Join(root, "bin", "binkd"), []byte(script), 0755); err != nil {
 		t.Fatal(err)
@@ -38,6 +45,7 @@ func newSupervisedService(t *testing.T, crash bool) (*Service, string) {
 	}
 	svc.backoffMin = 20 * time.Millisecond
 	svc.backoffMax = 100 * time.Millisecond
+	svc.confWatch = 20 * time.Millisecond // the real 15s would outrun every test
 	return svc, pidFile
 }
 
@@ -165,4 +173,83 @@ func TestSupervisorRestartsAfterCrash(t *testing.T) {
 	waitForLines(t, pidFile, 3)
 	cancel()
 	<-done
+}
+
+// binkd reads its configuration once, at startup, and nothing asked it to
+// re-read: the supervisor synced binkd.conf only just before a launch, and the
+// only other signal was a shutdown SIGTERM. A new node, a changed hub hostname
+// or a different listen port therefore sat inert until binkd happened to exit —
+// on a healthy system, potentially for weeks — while the sysop looked at a
+// correct config file and a running process that disagreed with it.
+func TestBinkdRecycledWhenConfChanges(t *testing.T) {
+	svc, pidFile := newSupervisedService(t, false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go svc.Start(ctx)
+
+	first := waitForLines(t, pidFile, 1)
+
+	// Change binkd.conf the way a config-editor save would.
+	conf, err := os.ReadFile(svc.confPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(svc.confPath, append(conf, "\nnode 21:4/158@fsxnet hub.example.org:24554 secret\n"...), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// The watcher should notice and relaunch binkd on the new file.
+	second := waitForLines(t, pidFile, 2)
+	if len(second) <= len(first) {
+		t.Fatalf("binkd was not recycled after binkd.conf changed:\n%s", second)
+	}
+
+	cancel()
+	_ = svc.Close()
+}
+
+// A recycle is deliberate, so it must not be reported or paced as a crash:
+// the relaunch is immediate and the crash backoff is left untouched, or a
+// config change could mask a genuine crash loop.
+func TestRecycleDoesNotDisturbCrashBackoff(t *testing.T) {
+	svc, _ := newSupervisedService(t, false)
+	svc.backoffMin = 50 * time.Millisecond
+	before := svc.backoffMin
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go svc.Start(ctx)
+	time.Sleep(100 * time.Millisecond)
+
+	if svc.backoffMin != before {
+		t.Errorf("backoffMin changed to %v, want %v", svc.backoffMin, before)
+	}
+	cancel()
+	_ = svc.Close()
+}
+
+// An unchanged binkd.conf must not recycle binkd, or the watcher restarts the
+// mailer every tick and no session ever completes.
+func TestUnchangedConfDoesNotRecycle(t *testing.T) {
+	svc, pidFile := newSupervisedService(t, false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go svc.Start(ctx)
+	waitForLines(t, pidFile, 1)
+
+	// Longer than several watch ticks would be if the interval were short;
+	// with a stable file the count must stay at one.
+	time.Sleep(300 * time.Millisecond)
+
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(data), "\n"); n != 1 {
+		t.Errorf("binkd started %d times with an unchanged conf, want 1:\n%s", n, data)
+	}
+	cancel()
+	_ = svc.Close()
 }
