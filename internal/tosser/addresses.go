@@ -40,15 +40,16 @@ func (t *Tosser) resolveOrigAddr(pktHdr *ftn.PacketHeader, msg *ftn.PackedMessag
 		Net:  int(msg.OrigNet),
 		Node: int(msg.OrigNode),
 	}
-	// On netmail gated between zones the packet header carries the gate's
-	// zone, not the author's; INTL carries the author's.
-	if a := intlAddr(parsed.Kludges, intlOrig); a != nil && a.Net == addr.Net && a.Node == addr.Node {
-		addr.Zone = a.Zone
-	}
 	if parsed.Area != "" {
 		if author, ok := echoAuthor(parsed, msgID); ok {
 			return author.String()
 		}
+	} else if a := intlAddr(parsed.Kludges, intlOrig); a != nil && a.Net == addr.Net && a.Node == addr.Node {
+		// On netmail gated between zones the packet header carries the
+		// gate's zone, not the author's; INTL carries the author's. INTL is
+		// netmail-only (FTS-4001), so on echomail it is a stray a transit
+		// system failed to strip and says nothing about the author.
+		addr.Zone = a.Zone
 	}
 	if origAddr, ok := origPoint(addr, pktHdr, parsed, msgID); ok {
 		addr = origAddr

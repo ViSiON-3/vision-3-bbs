@@ -272,6 +272,12 @@ func TestResolveOrigAddrEchomailTrustsAuthor(t *testing.T) {
 			want:   "21:4/158",
 		},
 		{
+			name:   "stray intl is still ignored on the header fallback",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Kludges: []string{"INTL 21:4/158 1:4/158"}},
+			want:   "21:4/158",
+		},
+		{
 			name:   "author matching the header stays the same",
 			msg:    &ftn.PackedMessage{OrigNet: 3, OrigNode: 255},
 			parsed: &ftn.ParsedBody{Area: area, Text: " * Origin: DEAD SOCKET (21:3/255)\r"},
