@@ -190,6 +190,107 @@ func TestResolveOrigAddrRecoversPoint(t *testing.T) {
 	}
 }
 
+func TestResolveOrigAddrEchomailTrustsAuthor(t *testing.T) {
+	// A hub relaying another net's echomail: a Mystic hub stamps the
+	// receiving link (us, 21:4/158) into the packed message header's origin,
+	// so only the MSGID and origin line know who actually wrote it.
+	hubPkt := &ftn.PacketHeader{OrigZone: 21, OrigNet: 4, OrigNode: 100}
+	stamped := &ftn.PackedMessage{OrigNet: 4, OrigNode: 158}
+	const area = "FSX_TST"
+
+	tests := []struct {
+		name   string
+		msg    *ftn.PackedMessage
+		parsed *ftn.ParsedBody
+		msgID  string
+		want   string
+	}{
+		{
+			name:   "msgid names the author",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Text: "Hello\r * Origin: DEAD SOCKET (21:3/255)\r"},
+			msgID:  "21:3/255 1a2b3c4d",
+			want:   "21:3/255",
+		},
+		{
+			name:   "origin line names the author when the msgid is at-style",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Text: "Hello\r * Origin: DEAD SOCKET (21:3/255)\r"},
+			msgID:  "1a2b3c4d@deadsocket 1a2b3c4d",
+			want:   "21:3/255",
+		},
+		{
+			name:   "origin line names the author when there is no msgid",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Text: "Hello\r * Origin: DEAD SOCKET (21:3/255)\r"},
+			want:   "21:3/255",
+		},
+		{
+			name:   "msgid names a point author",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area},
+			msgID:  "21:3/255.1 1a2b3c4d",
+			want:   "21:3/255.1",
+		},
+		{
+			name:   "origin line names a point author",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Text: " * Origin: Point (21:3/255.1)\r"},
+			want:   "21:3/255.1",
+		},
+		{
+			name:   "three dimensional msgid wins over an origin point",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Text: " * Origin: Point (21:3/255.9)\r"},
+			msgID:  "21:3/255 1a2b3c4d",
+			want:   "21:3/255",
+		},
+		{
+			name:   "msgid from another zone keeps its zone",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area},
+			msgID:  "1:229/426 1a2b3c4d",
+			want:   "1:229/426",
+		},
+		{
+			name:   "header is the fallback when nothing names the author",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Text: "Hello\r"},
+			want:   "21:4/158",
+		},
+		{
+			name:   "header is the fallback when the origin line has no zone",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Text: " * Origin: Old BBS (3/255)\r"},
+			msgID:  "1a2b3c4d@deadsocket 1a2b3c4d",
+			want:   "21:4/158",
+		},
+		{
+			name:   "stray fmpt is still ignored on the header fallback",
+			msg:    stamped,
+			parsed: &ftn.ParsedBody{Area: area, Kludges: []string{"FMPT 3"}},
+			want:   "21:4/158",
+		},
+		{
+			name:   "author matching the header stays the same",
+			msg:    &ftn.PackedMessage{OrigNet: 3, OrigNode: 255},
+			parsed: &ftn.ParsedBody{Area: area, Text: " * Origin: DEAD SOCKET (21:3/255)\r"},
+			msgID:  "21:3/255 1a2b3c4d",
+			want:   "21:3/255",
+		},
+	}
+
+	tos := pointTosser(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tos.resolveOrigAddr(hubPkt, tt.msg, tt.parsed, tt.msgID)
+			if got != tt.want {
+				t.Errorf("resolveOrigAddr = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveOrigAddrTakesZoneFromINTL(t *testing.T) {
 	// Netmail gated between zones: the packet header carries the gate's zone,
 	// INTL carries the author's.

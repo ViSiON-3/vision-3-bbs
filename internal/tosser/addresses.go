@@ -11,11 +11,19 @@ import (
 // resolveOrigAddr returns the author's FTN address for an inbound packed
 // message.
 //
-// The packed message header (FTS-0001) carries only net and node, so a point
-// author's ".N" has to be recovered from one of the places that does carry it:
-// the MSGID kludge, the origin line, an FMPT kludge, or the packet header.
-// Without this a point node arrives as a plain 3D address and the reader shows
-// (and replies quote) the boss node instead.
+// Echomail reaches us relayed, and the systems along the way rewrite the
+// packed message header's origin to suit themselves — a Mystic hub stamps the
+// receiving link into it, so every message it forwards appears to come from
+// us. The MSGID kludge and the origin line are written by the author and
+// travel untouched, so echomail takes its address from those and falls back
+// to the header only when neither names one.
+//
+// Netmail is point-to-point, so its packed header is trusted for net and node.
+// That header carries no point, so a point author's ".N" has to be recovered
+// from one of the places that does carry it: the MSGID kludge, the origin
+// line, an FMPT kludge, or the packet header. Without this a point node
+// arrives as a plain 3D address and the reader shows (and replies quote) the
+// boss node instead.
 func (t *Tosser) resolveOrigAddr(pktHdr *ftn.PacketHeader, msg *ftn.PackedMessage, parsed *ftn.ParsedBody, msgID string) string {
 	zone := pktHdr.OrigZone
 	if zone == 0 {
@@ -37,10 +45,38 @@ func (t *Tosser) resolveOrigAddr(pktHdr *ftn.PacketHeader, msg *ftn.PackedMessag
 	if a := intlAddr(parsed.Kludges, intlOrig); a != nil && a.Net == addr.Net && a.Node == addr.Node {
 		addr.Zone = a.Zone
 	}
+	if parsed.Area != "" {
+		if author, ok := echoAuthor(parsed, msgID); ok {
+			return author.String()
+		}
+	}
 	if origAddr, ok := origPoint(addr, pktHdr, parsed, msgID); ok {
 		addr = origAddr
 	}
 	return addr.String()
+}
+
+// echoAuthor returns the address an echomail message's author wrote into it,
+// or false when the message carries none we can parse.
+//
+// MSGID (FTS-0009) is "<address> <serial>" and names the author, making it the
+// most reliable source. The address half can be an @-style ID rather than an
+// FTN address, which simply fails to parse and falls through to the origin
+// line (FTS-0004), which carries the author's 4D address. An origin line
+// written without a zone fails to parse too, and the caller falls back to the
+// packed header.
+func echoAuthor(parsed *ftn.ParsedBody, msgID string) (jam.FidoAddress, bool) {
+	if fields := strings.Fields(msgID); len(fields) > 0 {
+		if a, err := jam.ParseAddress(fields[0]); err == nil {
+			return *a, true
+		}
+	}
+	if origin := jam.ExtractOriginAddress(parsed.Text); origin != "" {
+		if a, err := jam.ParseAddress(origin); err == nil {
+			return *a, true
+		}
+	}
+	return jam.FidoAddress{}, false
 }
 
 // resolveDestAddr returns the addressee's FTN address for an inbound packed
@@ -137,13 +173,15 @@ func kludgePoint(kludges []string, prefix string) (int, bool) {
 	return 0, false
 }
 
-// origPoint finds the author's complete address in an inbound message, or
-// returns false when no authoritative address is available.
+// origPoint finds the author's complete address in an inbound message whose
+// packed header is trusted for net and node, or returns false when no
+// authoritative address is available.
 //
 // Every candidate is checked against the packed header's net/node before it is
-// trusted: echomail reaches us relayed, so the packet was written by a link
-// rather than the author, and a point link's own packet header must not stamp
-// its point number onto everyone else's mail.
+// trusted, so a link's own packet header cannot stamp its point number onto
+// mail it merely relays. Echomail normally never reaches this: its author is
+// taken from the MSGID or origin line first (see echoAuthor), and only a
+// message naming neither ends up here with the header as its sole source.
 func origPoint(base jam.FidoAddress, pktHdr *ftn.PacketHeader, parsed *ftn.ParsedBody, msgID string) (jam.FidoAddress, bool) {
 	matches := func(a *jam.FidoAddress) bool {
 		return a.Net == base.Net && a.Node == base.Node
