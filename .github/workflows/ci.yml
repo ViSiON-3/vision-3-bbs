@@ -102,6 +102,12 @@ jobs:
       - name: Build image
         run: docker compose build
 
+      # Compose mounts ./menus over /vision3/menus, so the boot test below would
+      # still pass with the COPY menus/ layer dropped -- it would be reading the
+      # checkout. Check the image itself, where a plain `docker run` looks.
+      - name: Image ships the built-in menu set
+        run: docker run --rm --entrypoint test vision3:latest -d /vision3/menus/v3
+
       # A fresh clone has no configs/ or data/, so Compose creates them as root
       # while the BBS runs as uid 100 -- the exact state a new sysop starts from.
       - name: First run from a clean state
@@ -176,6 +182,14 @@ jobs:
             fi
           done
           exit $fail
+
+      # Taking ownership of the bind-mounted checkout would leave the host user
+      # unable to `git pull` or edit their own menu set.
+      - name: Bind-mounted menus/ kept its host ownership
+        run: |
+          owner=$(stat -c %u menus)
+          echo "menus/ owned by uid $owner (runner is $(id -u))"
+          [ "$owner" = "$(id -u)" ] || { echo "::error::the container chowned the host's menus/"; exit 1; }
 
       - name: Container logs
         if: failure()

@@ -161,6 +161,9 @@ FROM vision3:latest
 COPY bin/sexyz /vision3/bin/sexyz
 ```
 
+`.dockerignore` excludes `bin/` but re-includes `bin/sexyz` and `bin/binkd`, so
+this resolves with the repository root as the build context.
+
 The entrypoint copies `sexyz.ini` into `bin/` on every start, so only the binary
 itself needs supplying. See [Docker Deployment](getting-started/docker.md#adding-sexyz-and-binkd).
 

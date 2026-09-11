@@ -113,6 +113,9 @@ FROM vision3:latest
 COPY bin/sexyz bin/binkd /vision3/bin/
 ```
 
+`.dockerignore` excludes `bin/` but re-includes those two paths specifically, so
+the `COPY` resolves with the repository root as the build context.
+
 See [File Transfer Protocols](files/file-transfer.md) for build instructions.
 
 ### Container user and file ownership
@@ -125,6 +128,18 @@ work without any manual preparation.
 Because of that privilege drop, `docker exec` lands you as **root**, not
 `vision3`. Always pass `-u vision3` when running the TUI tools, or they will
 leave root-owned files in `configs/` that the BBS cannot rewrite.
+
+`menus/` is deliberately left alone. Compose bind-mounts your checkout there, and
+taking ownership of it would leave you unable to `git pull` or edit your own menu
+set on the host. The BBS only reads menus, so a normal checkout works as-is.
+
+The trade-off is that `menuedit` cannot save into a bind-mounted `menus/`, which
+the container user may read but not write. Pick whichever suits your setup:
+
+- edit menus on the host (`./menuedit` from the checkout), or
+- drop the `menus/` mount and use the set baked into the image, or
+- make the mount writable by the container user: `sudo chown -R 100:101 ./menus`
+  — after which the host user needs `sudo` to edit those files.
 
 ### Persistent Data
 

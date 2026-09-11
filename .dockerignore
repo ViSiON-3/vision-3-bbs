@@ -4,6 +4,11 @@
 
 # Build artifacts
 bin/
+# ...but keep the optional third-party transfer/mailer binaries reachable, so a
+# derived image can COPY them with the repository root as its build context.
+# Everything else under bin/ stays excluded.
+!bin/sexyz
+!bin/binkd
 *.exe
 *.dll
 *.so

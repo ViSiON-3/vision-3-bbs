@@ -13,10 +13,25 @@
 # ---------------------------------------------------------------------------
 if [ "$(id -u)" = "0" ]; then
     mkdir -p /vision3/configs /vision3/data /vision3/menus /vision3/temp /vision3/bin
-    chown -R vision3:vision3 \
-        /vision3/configs /vision3/data /vision3/temp /vision3/bin 2>/dev/null
-    # A curated menu set may be mounted read-only; never fail the boot over it.
-    chown -R vision3:vision3 /vision3/menus 2>/dev/null || true
+    # Walk the tree only when the mount root is not already ours. Docker creates
+    # these owned by root on a fresh install, which is the case worth repairing;
+    # on every restart afterwards a recursive pass would traverse the whole of
+    # data/ -- every file area, every message base -- to change nothing.
+    owner_uid=$(id -u vision3)
+    for d in /vision3/configs /vision3/data /vision3/temp /vision3/bin; do
+        if [ "$(stat -c %u "$d" 2>/dev/null)" != "$owner_uid" ]; then
+            chown -R vision3:vision3 "$d" 2>/dev/null
+        fi
+    done
+    # menus/ is deliberately NOT chowned. docker-compose.yml bind-mounts the
+    # repository checkout there, and taking ownership of it leaves the host user
+    # unable to `git pull` or edit their own menu set -- the container silently
+    # breaking the working tree it was started from. The BBS only reads menus,
+    # and a normal checkout is already world-readable.
+    #
+    # The trade-off: menuedit cannot save into a bind-mounted menus/ unless the
+    # host makes it writable by uid 100. Editing on the host, or dropping the
+    # mount to use the set baked into the image, both avoid that.
     exec su-exec vision3 "$0" "$@"
 fi
 
@@ -104,9 +119,13 @@ if [ ! -f "/vision3/bin/sexyz.ini" ] && [ -f "/vision3/templates/configs/sexyz.i
     cp /vision3/templates/configs/sexyz.ini /vision3/bin/sexyz.ini
 fi
 
-# Initialise the JAM message bases, as setup.sh does. Harmless once they exist.
+# Initialise the JAM message bases, as setup.sh does. Harmless once they exist,
+# and non-fatal if it fails -- the message manager opens bases on demand -- but
+# say so rather than swallowing it, or the first symptom is an empty message area.
 if [ -x /vision3/v3mail ]; then
-    /vision3/v3mail stats --all --config /vision3/configs --data /vision3/data >/dev/null 2>&1 || true
+    if ! /vision3/v3mail stats --all --config /vision3/configs --data /vision3/data >/dev/null; then
+        echo "WARNING: could not initialise JAM message bases; message areas may be unavailable" >&2
+    fi
 fi
 
 exec "$@"
