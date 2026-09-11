@@ -939,6 +939,9 @@ func TestLoadServerConfigChallengeGateDefaults(t *testing.T) {
 	if !cfg.ChallengeGateLiveCountdown {
 		t.Errorf("ChallengeGateLiveCountdown default = false, want true")
 	}
+	if cfg.ChallengeGateStrayLimit != 8 {
+		t.Errorf("ChallengeGateStrayLimit = %d, want 8", cfg.ChallengeGateStrayLimit)
+	}
 	if cfg.ConnRateLimitHits != 20 || cfg.ConnRateLimitWindowSeconds != 10 || cfg.ConnRateLimitBanMinutes != 90 {
 		t.Errorf("rate-limit defaults = %d/%d/%d, want 20/10/90",
 			cfg.ConnRateLimitHits, cfg.ConnRateLimitWindowSeconds, cfg.ConnRateLimitBanMinutes)
@@ -946,13 +949,16 @@ func TestLoadServerConfigChallengeGateDefaults(t *testing.T) {
 }
 
 func TestSanitizeChallengeGate(t *testing.T) {
-	cfg := ServerConfig{ChallengeGateTimeoutSeconds: 0, ChallengeGateRequiredPresses: 0, ChallengeGateFile: "", ChallengeGateKey: ""}
+	cfg := ServerConfig{ChallengeGateTimeoutSeconds: 0, ChallengeGateRequiredPresses: 0, ChallengeGateStrayLimit: 0, ChallengeGateFile: "", ChallengeGateKey: ""}
 	cfg.SanitizeChallengeGate()
 	if cfg.ChallengeGateTimeoutSeconds != 20 {
 		t.Errorf("timeout not defaulted: %d", cfg.ChallengeGateTimeoutSeconds)
 	}
 	if cfg.ChallengeGateRequiredPresses != 2 {
 		t.Errorf("presses not defaulted: %d", cfg.ChallengeGateRequiredPresses)
+	}
+	if cfg.ChallengeGateStrayLimit != 8 {
+		t.Errorf("stray limit not defaulted: %d", cfg.ChallengeGateStrayLimit)
 	}
 	if cfg.ChallengeGateFile != "BOTCHECK.ASC" {
 		t.Errorf("file not defaulted: %q", cfg.ChallengeGateFile)

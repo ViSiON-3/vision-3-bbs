@@ -92,7 +92,21 @@ it.
 | Challenge Key | `challengeGateKey` | `ESC` | The key the caller must press. Use the literal string `ESC` for the Escape key, or a single character (e.g. `*`). |
 | Timeout Secs | `challengeGateTimeoutSeconds` | `20` | Seconds the caller has to complete the challenge before the connection is dropped. |
 | Req Presses | `challengeGateRequiredPresses` | `2` | Number of times the key must be pressed to pass. |
+| Stray Keys | `challengeGateStrayLimit` | `8` | Number of wrong (non-challenge) keys that drops the caller immediately instead of waiting out the timeout. Set to `1` to hang up on the first wrong key. See the note below before going that low. |
 | Live Countdown | `challengeGateLiveCountdown` | `true` | Animates the countdown once per second in the art file. Turn this **off** for web-based telnet clients that garble absolute cursor repositioning — with it off, the starting number is drawn once and stays static instead of ticking down. |
+
+**Stray keys and the timeout:** the gate drops the caller as soon as it has
+seen `challengeGateStrayLimit` keys that are not the challenge key, so a
+scanner that fires a payload at the prompt is rejected without tying up the
+node for the full timeout. Two things to weigh before lowering it to `1`:
+
+- Many callers press **Enter** the moment they connect, before they have
+  read the prompt. With the limit at `1` that Enter is the stray key and they
+  are hung up on. A value of `2` or `3` still cuts off most scripted junk
+  while forgiving a single reflexive keystroke.
+- A bot that connects and sends **nothing** never trips the stray-key rule.
+  That hold is bounded only by `challengeGateTimeoutSeconds`, so if idle
+  connections are what's occupying your nodes, lower the timeout instead.
 
 **The `##` countdown placeholder:** in the gate art file, a run of `#`
 characters marks where the countdown is drawn. The number of `#` characters

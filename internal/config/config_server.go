@@ -64,6 +64,7 @@ type ServerConfig struct {
 	ChallengeGateKey             string `json:"challengeGateKey"`             // "ESC" or a single character
 	ChallengeGateTimeoutSeconds  int    `json:"challengeGateTimeoutSeconds"`  // seconds to complete the challenge
 	ChallengeGateRequiredPresses int    `json:"challengeGateRequiredPresses"` // presses of the key to pass
+	ChallengeGateStrayLimit      int    `json:"challengeGateStrayLimit"`      // non-matching keys that reject (1 = first stray key drops)
 	ChallengeGateLiveCountdown   bool   `json:"challengeGateLiveCountdown"`   // live per-second countdown vs static
 
 	// Connection-rate limiter — temp-ban IPs that reconnect too rapidly.
@@ -195,6 +196,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		ChallengeGateKey:             "ESC",
 		ChallengeGateTimeoutSeconds:  20,
 		ChallengeGateRequiredPresses: 2,
+		ChallengeGateStrayLimit:      8,
 		ChallengeGateLiveCountdown:   true,
 		EnableConnRateLimit:          false,
 		ConnRateLimitHits:            20,
@@ -278,6 +280,9 @@ func (c *ServerConfig) SanitizeChallengeGate() {
 	}
 	if c.ChallengeGateRequiredPresses < 1 {
 		c.ChallengeGateRequiredPresses = 2
+	}
+	if c.ChallengeGateStrayLimit < 1 {
+		c.ChallengeGateStrayLimit = 8
 	}
 	if c.ConnRateLimitHits < 0 {
 		c.ConnRateLimitHits = 0
