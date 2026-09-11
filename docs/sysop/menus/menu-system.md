@@ -839,14 +839,19 @@ Command usage examples:
 ```json
 {
   "KEYS": "LC",
-  "CMD": "RUN:LASTCALLERS 10",
+  "CMD": "RUN:LASTCALLERS 20",
   "ACS": "*",
   "HIDDEN": false
 }
 ```
 
-- `RUN:LASTCALLERS` - Uses default limit of 10 entries
+- `RUN:LASTCALLERS` - Uses default limit of 20 entries
 - `RUN:LASTCALLERS 25` - Shows last 25 entries
+
+The limit counts entries the viewer actually sees: logins hidden by the
+invisible logon prompt are filtered out before it is applied, so they never
+consume a row. Stored history is deeper than the display limit
+(`callHistoryLimit`), so hidden logins cannot push real callers off the screen.
 
 Template files:
 

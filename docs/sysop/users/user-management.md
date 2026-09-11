@@ -620,12 +620,12 @@ Invisible Logon? Y/n
 
 If they choose **Yes**, the session is flagged invisible for its duration. Invisible sessions are:
 
-- **Hidden from Last Callers** — non-CoSysOp users do not see the call in `RUN:LASTCALLERS`. The call is still logged to `callhistory.json` with `"invisible": true`.
+- **Hidden from Last Callers** — the call does not appear in `RUN:LASTCALLERS` for *any* viewer, including the SysOp: the prompt asks whether to list the login, so declining hides it from everyone. The call is still logged to `callhistory.json` with `"invisible": true`, and the global call counter still advances.
 - **Hidden from Who's Online** — invisible sessions are excluded from `RUN:WHOONLINE` listings and the `NODECT` token count for non-CoSysOp viewers.
 - **Hidden from Page** — invisible nodes do not appear in the page node list and are treated as offline for non-CoSysOp users attempting to page them.
 - **Silent in Chat** — join and leave announcements are suppressed in `RUN:CHAT` for invisible users (they can still chat normally).
 
-**CoSysOp/SysOp users can always see invisible sessions** across all of the above views.
+**CoSysOp/SysOp users can always see invisible sessions** in Who's Online, Page, and Chat. Last Callers is the exception: a declined login is hidden from every viewer.
 
 ### Configuration
 

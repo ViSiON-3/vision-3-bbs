@@ -29,8 +29,10 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running LASTCALLERS", "node", nodeNumber)
 
-	// Parse optional caller count argument (e.g., RUN:LASTCALLERS 10)
-	callerLimit := 10
+	// Parse optional caller count argument (e.g., RUN:LASTCALLERS 25).
+	// The default fills the screen; an explicit argument overrides it in either
+	// direction, so a larger request is honoured rather than capped.
+	callerLimit := defaultLastCallerRows
 	if strings.TrimSpace(args) != "" {
 		if parsedLimit, parseErr := strconv.Atoi(strings.TrimSpace(args)); parseErr == nil && parsedLimit > 0 {
 			callerLimit = parsedLimit
@@ -82,9 +84,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 		userNotesByID[userRecord.ID] = userRecord.PrivateNote
 	}
 	timeLoc := getLastCallerTimeLocation(strings.TrimSpace(e.GetServerConfig().Timezone))
-	if callerLimit > 0 && len(lastCallers) > callerLimit {
-		lastCallers = lastCallers[len(lastCallers)-callerLimit:]
-	}
+	lastCallers = mostRecentCallRecords(lastCallers, callerLimit)
 
 	processedTopTemplate = renderLastCallerGlobalATTokens(processedTopTemplate, totalUsers)
 	processedBotTemplate = renderLastCallerGlobalATTokens(processedBotTemplate, totalUsers)
@@ -188,21 +188,15 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	return nil, "", nil // Success
 }
 
-// lastCallersDisplayLimit caps how many rows the last callers screen renders.
-// The cap is applied to the visible records only, so a board whose stored
-// history is mostly hidden SysOp logins still fills the screen with real
-// callers instead of showing a handful of rows.
-const lastCallersDisplayLimit = 20
+// defaultLastCallerRows is how many callers the screen shows when the menu
+// command passes no count. Hidden logins are filtered out before this limit is
+// applied, so it is a count of real callers rather than of stored records.
+const defaultLastCallerRows = 20
 
 // visibleCallRecords drops call records made by users who declined the
-// "add this login to the last caller list?" prompt, then keeps the most recent
-// lastCallersDisplayLimit of what remains. The exclusion applies to every
-// viewer, including the SysOp: the caller asked not to be listed, so the login
-// must not appear on the screen no matter who is looking (issue #334).
-//
-// Hidden records are removed before the cap so they cannot consume display
-// slots. Chronological order is preserved (oldest kept record first), which is
-// the order LASTCALL.MID expects.
+// "add this login to the last caller list?" prompt. The exclusion applies to
+// every viewer, including the SysOp: the caller asked not to be listed, so the
+// login must not appear on the screen no matter who is looking (issue #334).
 func visibleCallRecords(records []user.CallRecord) []user.CallRecord {
 	visible := make([]user.CallRecord, 0, len(records))
 	for _, rec := range records {
@@ -210,8 +204,16 @@ func visibleCallRecords(records []user.CallRecord) []user.CallRecord {
 			visible = append(visible, rec)
 		}
 	}
-	if len(visible) > lastCallersDisplayLimit {
-		visible = visible[len(visible)-lastCallersDisplayLimit:]
-	}
 	return visible
+}
+
+// mostRecentCallRecords keeps the newest limit records, preserving the
+// oldest-first order LASTCALL.MID renders. A limit of zero or less keeps
+// everything. Callers must filter hidden records first so that the limit
+// counts rows the viewer will actually see.
+func mostRecentCallRecords(records []user.CallRecord, limit int) []user.CallRecord {
+	if limit <= 0 || len(records) <= limit {
+		return records
+	}
+	return records[len(records)-limit:]
 }
