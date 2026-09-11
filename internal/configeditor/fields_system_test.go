@@ -149,8 +149,8 @@ func TestMenuItemBuildersNonEmpty(t *testing.T) {
 func TestSysFieldsBotDefenseRoundTrip(t *testing.T) {
 	cfg := &config.ServerConfig{}
 	fields := sysFieldsBotDefense(cfg)
-	if len(fields) != 10 {
-		t.Fatalf("got %d fields, want 10", len(fields))
+	if len(fields) != 11 {
+		t.Fatalf("got %d fields, want 11", len(fields))
 	}
 	byLabel := map[string]fieldDef{}
 	for _, f := range fields {
@@ -164,6 +164,9 @@ func TestSysFieldsBotDefenseRoundTrip(t *testing.T) {
 	}
 	if err := byLabel["Timeout Secs"].Set("30"); err != nil || cfg.ChallengeGateTimeoutSeconds != 30 {
 		t.Errorf("Timeout Set failed: %d", cfg.ChallengeGateTimeoutSeconds)
+	}
+	if err := byLabel["Stray Keys"].Set("1"); err != nil || cfg.ChallengeGateStrayLimit != 1 {
+		t.Errorf("Stray Keys Set failed: %d", cfg.ChallengeGateStrayLimit)
 	}
 	if got := byLabel["Enable Gate"].Get(); got != "Y" {
 		t.Errorf("Enable Gate Get = %q, want Y", got)

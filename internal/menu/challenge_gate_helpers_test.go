@@ -230,6 +230,23 @@ func TestRunChallengeLoopFloodFails(t *testing.T) {
 	}
 }
 
+// A stray limit of 1 drops the caller on the very first wrong key, even
+// though the matching keys that follow would otherwise have passed.
+func TestRunChallengeLoopStrayLimitOneDropsOnFirstStray(t *testing.T) {
+	in := &scriptedInput{events: []struct {
+		key int
+		err error
+	}{key('a'), key(editor.KeyEsc), key(editor.KeyEsc)}}
+	now := func() time.Time { return time.Unix(0, 0) }
+	passed, err := runChallengeLoop(in, now, time.Unix(100, 0), editor.KeyEsc, 2, 1, time.Second, func() {})
+	if err != nil || passed {
+		t.Fatalf("passed=%v err=%v; want false/nil (first stray key)", passed, err)
+	}
+	if in.i != 1 {
+		t.Errorf("loop read %d keys before rejecting, want 1", in.i)
+	}
+}
+
 func TestRunChallengeLoopTimeout(t *testing.T) {
 	in := &scriptedInput{} // always idle-timeout
 	ticks := 0

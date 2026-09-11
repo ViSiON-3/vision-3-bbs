@@ -55,17 +55,29 @@ func sysFieldsBotDefense(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Live Countdown", Help: "Animate the ## countdown (off = static)", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
+			Label: "Stray Keys", Help: "Wrong keys before the caller is dropped (1 = first)", Type: ftInteger, Col: 3, Row: 6, Width: 3, Min: 1, Max: 99,
+			Get: func() string { return strconv.Itoa(cfg.ChallengeGateStrayLimit) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.ChallengeGateStrayLimit = n
+				return nil
+			},
+		},
+		{
+			Label: "Live Countdown", Help: "Animate the ## countdown (off = static)", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.ChallengeGateLiveCountdown) },
 			Set: func(val string) error { cfg.ChallengeGateLiveCountdown = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Rate Limit", Help: "Temp-ban IPs that reconnect too fast", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
+			Label: "Rate Limit", Help: "Temp-ban IPs that reconnect too fast", Type: ftYesNo, Col: 3, Row: 8, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.EnableConnRateLimit) },
 			Set: func(val string) error { cfg.EnableConnRateLimit = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Rate Hits", Help: "Attempts within the window that trigger a ban", Type: ftInteger, Col: 3, Row: 8, Width: 4, Min: 0, Max: 9999,
+			Label: "Rate Hits", Help: "Attempts within the window that trigger a ban", Type: ftInteger, Col: 3, Row: 9, Width: 4, Min: 0, Max: 9999,
 			Get: func() string { return strconv.Itoa(cfg.ConnRateLimitHits) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -77,7 +89,7 @@ func sysFieldsBotDefense(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Rate Window", Help: "Sliding window in seconds", Type: ftInteger, Col: 3, Row: 9, Width: 4, Min: 1, Max: 9999,
+			Label: "Rate Window", Help: "Sliding window in seconds", Type: ftInteger, Col: 3, Row: 10, Width: 4, Min: 1, Max: 9999,
 			Get: func() string { return strconv.Itoa(cfg.ConnRateLimitWindowSeconds) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -89,7 +101,7 @@ func sysFieldsBotDefense(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Ban Minutes", Help: "Temp-ban duration in minutes", Type: ftInteger, Col: 3, Row: 10, Width: 5, Min: 1, Max: 99999,
+			Label: "Ban Minutes", Help: "Temp-ban duration in minutes", Type: ftInteger, Col: 3, Row: 11, Width: 5, Min: 1, Max: 99999,
 			Get: func() string { return strconv.Itoa(cfg.ConnRateLimitBanMinutes) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)

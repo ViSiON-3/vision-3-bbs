@@ -14,11 +14,6 @@ import (
 	"golang.org/x/term"
 )
 
-// challengeStrayLimit is the number of non-matching keys that trips the
-// fail-fast scripted-payload rejection: the loop rejects on the Nth stray key
-// (8 or more), mirroring botgate's stray-key flood rule.
-const challengeStrayLimit = 8
-
 // fallbackGatePrompt is used when the configured art file cannot be read. It
 // keeps the "{KEY}"/"{PRESSES}"/"{TIMES}" tokens and the "##" countdown field
 // intact, so substituteGateTokens and the live countdown work the same as for
@@ -62,6 +57,13 @@ func (e *MenuExecutor) RunChallengeGate(
 	if timeout < 1 {
 		timeout = 1
 	}
+	// Non-matching keys that trip the fail-fast rejection: the loop drops the
+	// caller on the Nth stray key. The default of 8 mirrors botgate's
+	// stray-key flood rule; 1 drops on the first wrong key.
+	strayLimit := cfg.ChallengeGateStrayLimit
+	if strayLimit < 1 {
+		strayLimit = 8
+	}
 
 	prompt := gatePromptOrFallback(e, cfg.ChallengeGateFile, nodeNumber)
 	prompt = substituteGateTokens(prompt, cfg.ChallengeGateKey, required)
@@ -76,7 +78,7 @@ func (e *MenuExecutor) RunChallengeGate(
 	}
 	writeGateArt(terminal, draw, outputMode)
 
-	slog.Info("challenge gate presented", "node", nodeNumber, "key", cfg.ChallengeGateKey, "required", required, "timeout_s", timeout)
+	slog.Info("challenge gate presented", "node", nodeNumber, "key", cfg.ChallengeGateKey, "required", required, "stray_limit", strayLimit, "timeout_s", timeout)
 
 	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
 	remaining := timeout
@@ -92,7 +94,7 @@ func (e *MenuExecutor) RunChallengeGate(
 		terminalio.WriteProcessedBytes(terminal, []byte(upd), outputMode)
 	}
 
-	passed, err := runChallengeLoop(getSessionIH(s), time.Now, deadline, matchKey, required, challengeStrayLimit, time.Second, onTick)
+	passed, err := runChallengeLoop(getSessionIH(s), time.Now, deadline, matchKey, required, strayLimit, time.Second, onTick)
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
