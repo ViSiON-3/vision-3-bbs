@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
@@ -131,56 +132,72 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			Set: func(val string) error { netPtr.Origin = val; save(); return nil },
 		},
 		{
-			Label: "Binkd Outbound", Help: "This network's own BSO outbound dir (empty = the global one; set it when carrying more than one network)", Type: ftString, Col: 3, Row: 5, Width: 45,
+			Label: "Binkd Outbound", Help: "This network's own BSO outbound dir, no dots (empty = the global one; set it when carrying more than one network)", Type: ftString, Col: 3, Row: 5, Width: 45,
 			Get: func() string { return netPtr.BinkdOutboundPath },
-			Set: func(val string) error { netPtr.BinkdOutboundPath = strings.TrimSpace(val); save(); return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := config.ValidateBinkdOutboundPath(val); err != nil {
+					return err
+				}
+				netPtr.BinkdOutboundPath = val
+				save()
+				return nil
+			},
 		},
 	}
 }
 
 // fieldsFTNGlobal returns fields for editing the global FTN path and storage settings.
 func (m *Model) fieldsFTNGlobal() []fieldDef {
-	ftn := &m.configs.FTN
+	// Named fc so the ftn package stays reachable for validation below.
+	fc := &m.configs.FTN
 	return []fieldDef{
 		{
 			Label: "Dupe DB Path", Help: "Path to duplicate-message database file", Type: ftString, Col: 3, Row: 1, Width: 45,
-			Get: func() string { return ftn.DupeDBPath },
-			Set: func(val string) error { ftn.DupeDBPath = val; return nil },
+			Get: func() string { return fc.DupeDBPath },
+			Set: func(val string) error { fc.DupeDBPath = val; return nil },
 		},
 		{
 			Label: "Inbound Path", Help: "Directory where binkd deposits received bundles", Type: ftString, Col: 3, Row: 2, Width: 45,
-			Get: func() string { return ftn.InboundPath },
-			Set: func(val string) error { ftn.InboundPath = val; return nil },
+			Get: func() string { return fc.InboundPath },
+			Set: func(val string) error { fc.InboundPath = val; return nil },
 		},
 		{
 			Label: "Secure Inbound", Help: "Directory for authenticated inbound sessions", Type: ftString, Col: 3, Row: 3, Width: 45,
-			Get: func() string { return ftn.SecureInboundPath },
-			Set: func(val string) error { ftn.SecureInboundPath = val; return nil },
+			Get: func() string { return fc.SecureInboundPath },
+			Set: func(val string) error { fc.SecureInboundPath = val; return nil },
 		},
 		{
 			Label: "Outbound Path", Help: "Staging directory for outbound .PKT files", Type: ftString, Col: 3, Row: 4, Width: 45,
-			Get: func() string { return ftn.OutboundPath },
-			Set: func(val string) error { ftn.OutboundPath = val; return nil },
+			Get: func() string { return fc.OutboundPath },
+			Set: func(val string) error { fc.OutboundPath = val; return nil },
 		},
 		{
-			Label: "Binkd Outbound", Help: "Binkd outbound directory for ZIP bundles", Type: ftString, Col: 3, Row: 5, Width: 45,
-			Get: func() string { return ftn.BinkdOutboundPath },
-			Set: func(val string) error { ftn.BinkdOutboundPath = val; return nil },
+			Label: "Binkd Outbound", Help: "Binkd outbound directory for ZIP bundles (no dots in the directory name)", Type: ftString, Col: 3, Row: 5, Width: 45,
+			Get: func() string { return fc.BinkdOutboundPath },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := config.ValidateBinkdOutboundPath(val); err != nil {
+					return err
+				}
+				fc.BinkdOutboundPath = val
+				return nil
+			},
 		},
 		{
 			Label: "Temp Path", Help: "Temporary directory for bundle processing", Type: ftString, Col: 3, Row: 6, Width: 45,
-			Get: func() string { return ftn.TempPath },
-			Set: func(val string) error { ftn.TempPath = val; return nil },
+			Get: func() string { return fc.TempPath },
+			Set: func(val string) error { fc.TempPath = val; return nil },
 		},
 		{
 			Label: "Bad Area Tag", Help: "Area tag for unrecognized echomail", Type: ftString, Col: 3, Row: 7, Width: 20,
-			Get: func() string { return ftn.BadAreaTag },
-			Set: func(val string) error { ftn.BadAreaTag = val; return nil },
+			Get: func() string { return fc.BadAreaTag },
+			Set: func(val string) error { fc.BadAreaTag = val; return nil },
 		},
 		{
 			Label: "Dupe Area Tag", Help: "Area tag for duplicate messages", Type: ftString, Col: 3, Row: 8, Width: 20,
-			Get: func() string { return ftn.DupeAreaTag },
-			Set: func(val string) error { ftn.DupeAreaTag = val; return nil },
+			Get: func() string { return fc.DupeAreaTag },
+			Set: func(val string) error { fc.DupeAreaTag = val; return nil },
 		},
 	}
 }

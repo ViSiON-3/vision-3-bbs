@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -67,5 +68,86 @@ func TestNetworkOutboundOmittedByDefault(t *testing.T) {
 	}
 	if got := cfg.BinkdOutboundFor("fsxnet"); got != "data/ftn/out" {
 		t.Errorf("BinkdOutboundFor = %q, want the global path", got)
+	}
+}
+
+// binkd refuses to start when the base outbound name carries an extension
+// ("there should be no extension for the base outbound name"), because it
+// derives zone outbounds by appending the zone as lowercase hex. Writing such
+// a path into binkd.conf does not fail the save — it crash-loops the mailer
+// afterwards with all mail stopped — so it has to be rejected up front.
+func TestValidateBinkdOutboundPath(t *testing.T) {
+	for _, tc := range []struct {
+		path    string
+		wantErr bool
+	}{
+		{"", false},                   // unset: falls back to the default
+		{"data/ftn/out", false},       // the shipped default
+		{"data/ftn/out_fsx", false},   // underscore is fine
+		{"data/ftn/out-fsx", false},   // so is a hyphen
+		{"/abs/path/outbound", false}, // absolute, no extension
+		{"data/ftn/out.fsx", true},    // the one that crash-looped binkd
+		{"data/ftn/out.tqw", true},    // likewise
+		{"data/ftn/out.016", true},    // collides with binkd's zone suffix
+		{"out.", true},                // trailing dot is still an extension
+		{"data/ftn.d/out", false},     // a dot in a parent dir is binkd's business, not ours
+	} {
+		err := ValidateBinkdOutboundPath(tc.path)
+		if tc.wantErr && err == nil {
+			t.Errorf("ValidateBinkdOutboundPath(%q) = nil, want an error", tc.path)
+		}
+		if !tc.wantErr && err != nil {
+			t.Errorf("ValidateBinkdOutboundPath(%q) = %v, want nil", tc.path, err)
+		}
+	}
+}
+
+// The error should hand the sysop a usable replacement rather than just
+// saying no.
+func TestValidateBinkdOutboundPathSuggestsFix(t *testing.T) {
+	err := ValidateBinkdOutboundPath("data/ftn/out.tqw")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "out_tqw") {
+		t.Errorf("error should suggest the underscored form, got: %v", err)
+	}
+}
+
+// ValidateFTNConfig runs at startup, so a hand-edited ftn.json is caught
+// before the supervisor writes it into binkd.conf.
+func TestValidateFTNConfigRejectsDottedOutbound(t *testing.T) {
+	base := FTNConfig{
+		InboundPath:       "data/ftn/in",
+		OutboundPath:      "data/ftn/outbound",
+		BinkdOutboundPath: "data/ftn/out",
+		TempPath:          "data/ftn/temp",
+	}
+
+	ok := base
+	ok.Networks = map[string]FTNNetworkConfig{
+		"fsxnet": {InternalTosserEnabled: true, BinkdOutboundPath: "data/ftn/out_fsx"},
+	}
+	if err := ValidateFTNConfig(ok); err != nil {
+		t.Errorf("valid config rejected: %v", err)
+	}
+
+	bad := base
+	bad.Networks = map[string]FTNNetworkConfig{
+		"tqwnet": {InternalTosserEnabled: true, BinkdOutboundPath: "data/ftn/out.tqw"},
+	}
+	err := ValidateFTNConfig(bad)
+	if err == nil {
+		t.Fatal("a dotted per-network outbound must be rejected")
+	}
+	if !strings.Contains(err.Error(), "tqwnet") {
+		t.Errorf("error should name the network, got: %v", err)
+	}
+
+	badGlobal := base
+	badGlobal.BinkdOutboundPath = "data/ftn/out.shared"
+	badGlobal.Networks = map[string]FTNNetworkConfig{"fsxnet": {InternalTosserEnabled: true}}
+	if err := ValidateFTNConfig(badGlobal); err == nil {
+		t.Error("a dotted global outbound must be rejected too")
 	}
 }

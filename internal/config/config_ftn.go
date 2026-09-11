@@ -250,6 +250,37 @@ func ValidateFTNConfig(cfg FTNConfig) error {
 			return fmt.Errorf("ftn.json: %q is required when internal_tosser_enabled is true", r.field)
 		}
 	}
+	if err := ValidateBinkdOutboundPath(cfg.BinkdOutboundPath); err != nil {
+		return fmt.Errorf("ftn.json: binkd_outbound_path: %w", err)
+	}
+	for name, netCfg := range cfg.Networks {
+		if err := ValidateBinkdOutboundPath(netCfg.BinkdOutboundPath); err != nil {
+			return fmt.Errorf("ftn.json: network %q: binkd_outbound_path: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// ValidateBinkdOutboundPath rejects a BSO outbound whose final path component
+// carries an extension. binkd refuses to start on one — "there should be no
+// extension for the base outbound name" — because it reserves that suffix for
+// zone outbounds, deriving them by appending the zone as lowercase hex
+// (out.016 for zone 22). A dotted base would collide with that scheme.
+//
+// Validated rather than silently corrected because the value is written
+// straight into binkd.conf: an unusable path there does not fail the save, it
+// crash-loops binkd afterwards with all mail stopped, and the cause shows up
+// only in the mailer's stderr.
+func ValidateBinkdOutboundPath(configured string) error {
+	if strings.TrimSpace(configured) == "" {
+		return nil // unset falls back to the default, which is always valid
+	}
+	base := filepath.Base(filepath.Clean(configured))
+	if strings.Contains(base, ".") {
+		return fmt.Errorf("directory name %q must not contain a dot — binkd rejects an extension "+
+			"on the base outbound name (it reserves .<zone> for zone outbounds); use %q instead",
+			base, strings.ReplaceAll(base, ".", "_"))
+	}
 	return nil
 }
 
