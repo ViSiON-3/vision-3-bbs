@@ -143,15 +143,26 @@ ViSiON/3's telnet layer (`TelnetConn`) handles IAC stripping/escaping transparen
 
 ## Docker Deployment
 
-For Docker deployments, the sexyz binary must be included in the image. Place it at `bin/sexyz` before building:
+The stock image does **not** contain sexyz — `.dockerignore` excludes `bin/`, and
+the binary is a third-party build that has to match the container architecture
+(linux/amd64 for the Alpine base). Supply it one of two ways.
 
-```dockerfile
-# Copy sexyz binary
-COPY bin/sexyz ./bin/sexyz
-RUN chmod +x ./bin/sexyz
+Mount it at runtime:
+
+```yaml
+volumes:
+  - ./bin:/vision3/bin
 ```
 
-Ensure the binary matches the Docker container's architecture (typically linux/amd64 for Alpine-based images).
+Or bake it into a derived image:
+
+```dockerfile
+FROM vision3:latest
+COPY bin/sexyz /vision3/bin/sexyz
+```
+
+The entrypoint copies `sexyz.ini` into `bin/` on every start, so only the binary
+itself needs supplying. See [Docker Deployment](getting-started/docker.md#adding-sexyz-and-binkd).
 
 ## Troubleshooting
 

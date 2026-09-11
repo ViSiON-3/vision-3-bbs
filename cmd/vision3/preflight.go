@@ -128,13 +128,25 @@ func runPreflight(basePath string) bool {
 		fmt.Fprintf(os.Stderr, "  %d critical issue(s), %d warning(s).\n", criticalFails, warnFails)
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "  It looks like the initial setup has not been completed.")
-		fmt.Fprintln(os.Stderr, "  Please run the setup script for your platform:")
-		fmt.Fprintln(os.Stderr, "")
-		if runtime.GOOS == "windows" {
-			fmt.Fprintln(os.Stderr, "    .\\setup.bat        (Command Prompt)")
-			fmt.Fprintln(os.Stderr, "    .\\setup.ps1        (PowerShell)")
+		if os.Getenv("VISION3_CONTAINER") != "" {
+			// setup.sh is not shipped in the container image -- the entrypoint
+			// does its job instead. Pointing a Docker operator at it sends them
+			// looking for a file that does not exist.
+			fmt.Fprintln(os.Stderr, "  The entrypoint could not prepare these paths, which almost always")
+			fmt.Fprintln(os.Stderr, "  means the mounted volumes are not writable by the container user.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "    docker compose down")
+			fmt.Fprintln(os.Stderr, "    sudo chown -R 100:101 ./configs ./data")
+			fmt.Fprintln(os.Stderr, "    docker compose up -d")
 		} else {
-			fmt.Fprintln(os.Stderr, "    ./setup.sh")
+			fmt.Fprintln(os.Stderr, "  Please run the setup script for your platform:")
+			fmt.Fprintln(os.Stderr, "")
+			if runtime.GOOS == "windows" {
+				fmt.Fprintln(os.Stderr, "    .\\setup.bat        (Command Prompt)")
+				fmt.Fprintln(os.Stderr, "    .\\setup.ps1        (PowerShell)")
+			} else {
+				fmt.Fprintln(os.Stderr, "    ./setup.sh")
+			}
 		}
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "  For detailed instructions see: https://vision3bbs.com/sysop/")
