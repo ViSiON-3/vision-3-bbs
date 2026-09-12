@@ -540,7 +540,8 @@ How it behaves:
   gives its slot back before the child asks for one, so a limit of 1 still
   chains.
 - A `run_after` naming an event that does not exist is warned about at
-  startup and never fires. An event naming itself is ignored.
+  startup and never fires. An enabled event naming itself counts as a cycle
+  and disables chaining like any other loop; a disabled one is ignored.
 - A BBS shutdown cancels a chained event still waiting out its delay.
 
 ## Error Handling
