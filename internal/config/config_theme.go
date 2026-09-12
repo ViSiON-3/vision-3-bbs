@@ -21,7 +21,7 @@ type ThemeConfig struct {
 // set path. A copy in the set's overlay (menus.d/<set>/theme.json) takes
 // precedence over the shipped one.
 func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
-	filePath := menuset.FromPath(menuSetPath).Resolve("theme.json")
+	filePath, resolveErr := menuset.FromPath(menuSetPath).Resolve("theme.json")
 	slog.Info("loading theme configuration", "path", filePath)
 
 	// Default theme settings
@@ -30,6 +30,9 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 		YesNoRegularColor:   15,  // Bright White on Black
 	}
 
+	if resolveErr != nil {
+		return defaultTheme, resolveErr
+	}
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {

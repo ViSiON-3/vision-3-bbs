@@ -1,6 +1,7 @@
 package scripting
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,6 +108,10 @@ func resolveAnsiPath(eng *Engine, filename string) string {
 			base := menus.Path(layer, sub)
 			path = filepath.Join(base, cleaned)
 			if _, err := os.Stat(path); err != nil {
+				if !os.IsNotExist(err) {
+					slog.Warn("resolving script art", "path", path, "error", err)
+					return ""
+				}
 				continue
 			}
 			if real := pathUnderBase(base, path); real != "" {

@@ -17,8 +17,14 @@ func (e *MenuExecutor) Menus() menuset.Set {
 
 // menuFile resolves a file inside the menu set, overlay first. elem is the
 // path relative to the set root: menuFile("ansi", "MAIN.ANS").
+// Resolution errors are logged; the failing path is retained for the reader
+// to report its open error rather than reading a different layer.
 func (e *MenuExecutor) menuFile(elem ...string) string {
-	return e.Menus().Resolve(elem...)
+	path, err := e.Menus().Resolve(elem...)
+	if err != nil {
+		slog.Error("resolving menu file", "path", path, "error", err)
+	}
+	return path
 }
 
 // templateFile resolves a template by its bare name, accepting the .ANS/.ans
@@ -26,7 +32,11 @@ func (e *MenuExecutor) menuFile(elem ...string) string {
 // Each spelling is tried in the overlay before the shipped set. readTemplateFile
 // probes the same suffixes itself, so passing its result on is safe either way.
 func (e *MenuExecutor) templateFile(name string) string {
-	return e.Menus().ResolveFirst("templates", name, name+".ANS", name+".ans")
+	path, err := e.Menus().ResolveFirst("templates", name, name+".ANS", name+".ans")
+	if err != nil {
+		slog.Error("resolving menu template", "path", path, "error", err)
+	}
+	return path
 }
 
 // lightbarLayerWarned remembers which menus have already had their layer
@@ -54,7 +64,11 @@ func (e *MenuExecutor) warnLightbarLayerMismatch(menuName string) {
 	}
 	var base, overlay []string
 	for _, p := range parts {
-		_, layer, ok := m.Locate(p.sub, p.name)
+		_, layer, ok, err := m.Locate(p.sub, p.name)
+		if err != nil {
+			slog.Warn("checking lightbar layers", "error", err)
+			return
+		}
 		if !ok {
 			continue
 		}

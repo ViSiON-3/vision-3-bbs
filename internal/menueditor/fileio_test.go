@@ -187,13 +187,13 @@ func TestSaveAndLoadCommands(t *testing.T) {
 func TestCreateDeleteExists(t *testing.T) {
 	base := newMenuBase(t)
 
-	if MenuExists(menuset.Bare(base), "NEW") {
+	if menuExistsOK(t, menuset.Bare(base), "NEW") {
 		t.Fatal("NEW should not exist yet")
 	}
 	if err := CreateMenu(menuset.Bare(base), "new"); err != nil {
 		t.Fatalf("CreateMenu: %v", err)
 	}
-	if !MenuExists(menuset.Bare(base), "new") {
+	if !menuExistsOK(t, menuset.Bare(base), "new") {
 		t.Error("MenuExists should be true after CreateMenu (case-insensitive)")
 	}
 
@@ -213,7 +213,7 @@ func TestCreateDeleteExists(t *testing.T) {
 	if err := DeleteMenu(menuset.Bare(base), "NEW"); err != nil {
 		t.Fatalf("DeleteMenu: %v", err)
 	}
-	if MenuExists(menuset.Bare(base), "NEW") {
+	if menuExistsOK(t, menuset.Bare(base), "NEW") {
 		t.Error("NEW should be gone after DeleteMenu")
 	}
 	if _, err := os.Stat(filepath.Join(base, "cfg", "NEW.CFG")); !os.IsNotExist(err) {
@@ -231,7 +231,16 @@ func TestCreateDeleteExists(t *testing.T) {
 	if err := DeleteMenu(menuset.Bare(base), "../X"); err == nil {
 		t.Error("DeleteMenu with traversal name should error")
 	}
-	if MenuExists(menuset.Bare(base), "../X") {
+	if exists, err := MenuExists(menuset.Bare(base), "../X"); err == nil || exists {
 		t.Error("MenuExists with invalid name should be false")
 	}
+}
+
+func menuExistsOK(t *testing.T, set menuset.Set, name string) bool {
+	t.Helper()
+	exists, err := MenuExists(set, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return exists
 }

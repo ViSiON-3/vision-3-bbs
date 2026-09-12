@@ -247,7 +247,13 @@ func (m Model) updateAddMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		if MenuExists(m.set, name) {
+		exists, err := MenuExists(m.set, name)
+		if err != nil {
+			m.message = fmt.Sprintf("Checking menu: %v", err)
+			m.mode = modeMenuList
+			return m, nil
+		}
+		if exists {
 			m.message = fmt.Sprintf("Menu %s already exists!", name)
 			m.mode = modeMenuList
 			return m, nil

@@ -1,6 +1,7 @@
 package menuset
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -54,16 +55,22 @@ func TestOverlayFor(t *testing.T) {
 
 func TestResolveFallsBackToBase(t *testing.T) {
 	s := fixture(t)
-	got := s.Resolve("ansi", "MAIN.ANS")
+	got, err := s.Resolve("ansi", "MAIN.ANS")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != filepath.Join(s.Base, "ansi", "MAIN.ANS") {
 		t.Errorf("Resolve = %q", got)
 	}
 	// Missing everywhere: still the base path, so errors name the right place.
-	got = s.Resolve("ansi", "NOPE.ANS")
+	got, err = s.Resolve("ansi", "NOPE.ANS")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != filepath.Join(s.Base, "ansi", "NOPE.ANS") {
 		t.Errorf("Resolve(missing) = %q", got)
 	}
-	if s.Exists("ansi", "NOPE.ANS") {
+	if exists, err := s.Exists("ansi", "NOPE.ANS"); err != nil || exists {
 		t.Error("Exists(missing) = true")
 	}
 }
@@ -73,24 +80,24 @@ func TestResolvePrefersOverlay(t *testing.T) {
 	over := filepath.Join(s.Overlay, "ansi", "MAIN.ANS")
 	write(t, over, "mine")
 
-	path, layer, ok := s.Locate("ansi", "MAIN.ANS")
-	if !ok || layer != LayerOverlay || path != over {
+	path, layer, ok, err := s.Locate("ansi", "MAIN.ANS")
+	if err != nil || !ok || layer != LayerOverlay || path != over {
 		t.Errorf("Locate = %q %v %v", path, layer, ok)
 	}
 	// A sibling that is not overridden still comes from the base.
-	if _, layer, _ := s.Locate("ansi", "LOGIN.ANS"); layer != LayerBase {
+	if _, layer, _, err := s.Locate("ansi", "LOGIN.ANS"); err != nil || layer != LayerBase {
 		t.Errorf("LOGIN.ANS layer = %v", layer)
 	}
 	// A new file that only the overlay has resolves too.
 	write(t, filepath.Join(s.Overlay, "ansi", "EXTRA.ANS"), "x")
-	if !s.Exists("ansi", "EXTRA.ANS") {
+	if exists, err := s.Exists("ansi", "EXTRA.ANS"); err != nil || !exists {
 		t.Error("overlay-only file not found")
 	}
 	// A directory in the overlay is not a file match.
 	if err := os.MkdirAll(filepath.Join(s.Overlay, "ansi", "LOGIN.ANS"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, layer, _ := s.Locate("ansi", "LOGIN.ANS"); layer != LayerBase {
+	if _, layer, _, err := s.Locate("ansi", "LOGIN.ANS"); err != nil || layer != LayerBase {
 		t.Errorf("directory in overlay shadowed a base file")
 	}
 }
@@ -102,7 +109,7 @@ func TestBareHasNoOverlay(t *testing.T) {
 	if bare.HasOverlay() {
 		t.Error("Bare set reports an overlay")
 	}
-	if _, layer, _ := bare.Locate("ansi", "MAIN.ANS"); layer != LayerBase {
+	if _, layer, _, err := bare.Locate("ansi", "MAIN.ANS"); err != nil || layer != LayerBase {
 		t.Error("Bare set read the overlay")
 	}
 	if got := bare.WritePath("mnu", "X.MNU"); got != filepath.Join(s.Base, "mnu", "X.MNU") {
@@ -121,19 +128,28 @@ func TestResolveFirst(t *testing.T) {
 	s := fixture(t)
 	// Shipped set has FILEAREA.TOP.ANS only; the bare name is tried first and
 	// the .ANS candidate matches.
-	got := s.ResolveFirst("templates", "FILEAREA.TOP", "FILEAREA.TOP.ANS")
+	got, err := s.ResolveFirst("templates", "FILEAREA.TOP", "FILEAREA.TOP.ANS")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != filepath.Join(s.Base, "templates", "FILEAREA.TOP.ANS") {
 		t.Errorf("ResolveFirst = %q", got)
 	}
 	// An overlay copy under the *other* candidate name still wins — the
 	// candidate order is by name, the layer order within each name.
 	write(t, filepath.Join(s.Overlay, "templates", "FILEAREA.TOP"), "mine")
-	got = s.ResolveFirst("templates", "FILEAREA.TOP", "FILEAREA.TOP.ANS")
+	got, err = s.ResolveFirst("templates", "FILEAREA.TOP", "FILEAREA.TOP.ANS")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != filepath.Join(s.Overlay, "templates", "FILEAREA.TOP") {
 		t.Errorf("ResolveFirst with overlay = %q", got)
 	}
 	// Nothing matches: shipped path of the first name.
-	got = s.ResolveFirst("templates", "NOPE.TOP", "NOPE.TOP.ANS")
+	got, err = s.ResolveFirst("templates", "NOPE.TOP", "NOPE.TOP.ANS")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != filepath.Join(s.Base, "templates", "NOPE.TOP") {
 		t.Errorf("ResolveFirst(missing) = %q", got)
 	}
@@ -246,5 +262,60 @@ func TestReadDirDoesNotHideBrokenBase(t *testing.T) {
 	write(t, filepath.Join(s.Overlay, "bar", "MAIN.BAR"), "overlay")
 	if entries, err := s.ReadDir("bar"); err == nil || entries != nil {
 		t.Fatalf("broken base hidden: entries=%v err=%v", entries, err)
+	}
+}
+
+// A symlink loop produces a non-missing stat error without depending on Unix
+// permissions or whether the test runs as root.
+func TestResolutionPropagatesStatErrors(t *testing.T) {
+	for _, layer := range []Layer{LayerOverlay, LayerBase} {
+		t.Run(layer.String(), func(t *testing.T) {
+			s := fixture(t)
+			if layer == LayerBase {
+				s = Bare(s.Base)
+			}
+			path := s.Path(layer, "ansi", "BROKEN.ANS")
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("BROKEN.ANS", path); err != nil {
+				t.Skipf("symlink unavailable: %v", err)
+			}
+			_, statErr := os.Stat(path)
+			if statErr == nil || os.IsNotExist(statErr) {
+				t.Fatalf("expected non-missing stat error, got %v", statErr)
+			}
+			if layer == LayerOverlay {
+				write(t, s.Path(LayerBase, "ansi", "BROKEN.ANS"), "must not be read")
+			}
+			checkErr := func(err error) {
+				t.Helper()
+				var want, got *os.PathError
+				if !errors.As(statErr, &want) || !errors.As(err, &got) || got.Path != path || !errors.Is(err, want.Err) {
+					t.Errorf("error = %v, want original stat error %v", err, statErr)
+				}
+			}
+			got, gotLayer, ok, err := s.Locate("ansi", "BROKEN.ANS")
+			checkErr(err)
+			if got != path || gotLayer != layer || ok {
+				t.Errorf("Locate = %q %v %v", got, gotLayer, ok)
+			}
+			got, err = s.Resolve("ansi", "BROKEN.ANS")
+			checkErr(err)
+			if got != path {
+				t.Errorf("Resolve selected %s instead of failing path", got)
+			}
+			// A readable alternative must not mask the first candidate's error.
+			got, err = s.ResolveFirst("ansi", "BROKEN.ANS", "MAIN.ANS")
+			checkErr(err)
+			if got != path {
+				t.Errorf("ResolveFirst selected %s instead of failing path", got)
+			}
+			exists, err := s.Exists("ansi", "BROKEN.ANS")
+			checkErr(err)
+			if exists {
+				t.Error("Exists returned true on stat error")
+			}
+		})
 	}
 }

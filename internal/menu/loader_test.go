@@ -100,10 +100,10 @@ func TestHasBarFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "bar", "MAIN.BAR"), []byte("x"), 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if !HasBarFile("MAIN", menuset.Bare(dir)) {
+	if !hasBarFileOK(t, "MAIN", menuset.Bare(dir)) {
 		t.Error("MAIN.BAR should be detected")
 	}
-	if HasBarFile("OTHER", menuset.Bare(dir)) {
+	if hasBarFileOK(t, "OTHER", menuset.Bare(dir)) {
 		t.Error("OTHER.BAR should not be detected")
 	}
 }
@@ -149,7 +149,7 @@ func TestLoaderReadsOverlayFirst(t *testing.T) {
 	if err != nil || len(cmds) != 2 {
 		t.Errorf("MAIN.CFG: %d commands err=%v (want 2 from overlay)", len(cmds), err)
 	}
-	if !HasBarFile("MAIN", menus) || !HasBarFile("EXTRA", menus) || HasBarFile("NOPE", menus) {
+	if !hasBarFileOK(t, "MAIN", menus) || !hasBarFileOK(t, "EXTRA", menus) || hasBarFileOK(t, "NOPE", menus) {
 		t.Error("HasBarFile did not merge layers")
 	}
 
@@ -157,5 +157,41 @@ func TestLoaderReadsOverlayFirst(t *testing.T) {
 	e := &MenuExecutor{MenuSetPath: base}
 	if got := e.menuFile("mnu", "MAIN.MNU"); got != filepath.Join(overlay, "mnu", "MAIN.MNU") {
 		t.Errorf("executor menuFile = %q", got)
+	}
+}
+
+func hasBarFileOK(t *testing.T, name string, menus menuset.Set) bool {
+	t.Helper()
+	exists, err := HasBarFile(name, menus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return exists
+}
+
+func TestLoadMenuReportsBrokenOverlay(t *testing.T) {
+	root := t.TempDir()
+	menus := menuset.FromPath(filepath.Join(root, "menus", "v3"))
+	for _, sub := range []string{"mnu", "cfg"} {
+		if err := os.MkdirAll(menus.Path(menuset.LayerBase, sub), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(menus.Path(menuset.LayerOverlay, sub), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, file := range []struct{ sub, name, content string }{{"mnu", "MAIN.MNU", "{}"}, {"cfg", "MAIN.CFG", "[]"}} {
+		if err := os.WriteFile(menus.Path(menuset.LayerBase, file.sub, file.name), []byte(file.content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(file.name, menus.Path(menuset.LayerOverlay, file.sub, file.name)); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+	}
+	if _, err := LoadMenu("MAIN", menus); err == nil {
+		t.Error("LoadMenu silently loaded shipped menu")
+	}
+	if _, err := LoadCommands("MAIN", menus); err == nil {
+		t.Error("LoadCommands silently loaded shipped commands")
 	}
 }

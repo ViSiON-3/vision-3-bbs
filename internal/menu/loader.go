@@ -12,7 +12,10 @@ import (
 // LoadMenu reads a .MNU file (assumed JSON) for the given menu name from the
 // menu set's mnu/ directory, overlay first.
 func LoadMenu(menuName string, menus menuset.Set) (*MenuRecord, error) {
-	filePath := menus.Resolve("mnu", menuName+".MNU")
+	filePath, err := menus.Resolve("mnu", menuName+".MNU")
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -36,7 +39,10 @@ func LoadMenu(menuName string, menus menuset.Set) (*MenuRecord, error) {
 // LoadCommands reads a .CFG file (assumed JSON) for the given menu name from
 // the menu set's cfg/ directory, overlay first.
 func LoadCommands(menuName string, menus menuset.Set) ([]CommandRecord, error) {
-	filePath := menus.Resolve("cfg", menuName+".CFG")
+	filePath, err := menus.Resolve("cfg", menuName+".CFG")
+	if err != nil {
+		return nil, err
+	}
 	slog.Debug("attempting to load command file", "file", filePath, "menu", menuName)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -71,6 +77,6 @@ func LoadCommands(menuName string, menus menuset.Set) ([]CommandRecord, error) {
 
 // HasBarFile returns true if a .BAR lightbar definition file exists for the
 // given menu name inside the menu set's bar/ directory, in either layer.
-func HasBarFile(menuName string, menus menuset.Set) bool {
+func HasBarFile(menuName string, menus menuset.Set) (bool, error) {
 	return menus.Exists("bar", menuName+".BAR")
 }

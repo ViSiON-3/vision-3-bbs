@@ -129,7 +129,7 @@ func TestAddMenuDialog(t *testing.T) {
 	if m.mode != modeMenuEdit {
 		t.Fatalf("mode = %v, want menuEdit after create", m.mode)
 	}
-	if !MenuExists(m.set, "GAMMA") {
+	if !menuExistsOK(t, m.set, "GAMMA") {
 		t.Error("GAMMA should exist on disk")
 	}
 	if m.menus[m.menuEditIdx].Name != "GAMMA" {
@@ -172,7 +172,7 @@ func TestDeleteMenuConfirm(t *testing.T) {
 	if len(m.menus) != 1 || m.menus[0].Name != "BETA" {
 		t.Fatalf("after delete: menus = %+v, want just BETA", m.menus)
 	}
-	if MenuExists(m.set, "ALPHA") {
+	if menuExistsOK(t, m.set, "ALPHA") {
 		t.Error("ALPHA should be deleted from disk")
 	}
 }

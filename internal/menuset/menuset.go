@@ -96,46 +96,51 @@ func (s Set) Path(layer Layer, elem ...string) string {
 	return filepath.Join(append([]string{root}, elem...)...)
 }
 
-// Resolve returns the path to read for a file: the overlay copy if one exists,
-// otherwise the shipped path — whether or not that exists, so an error from
-// the subsequent open names the place the file was expected.
-func (s Set) Resolve(elem ...string) string {
-	path, _, _ := s.Locate(elem...)
-	return path
+// Resolve returns the overlay file if present, otherwise the shipped path.
+// Missing files return the shipped path without an error so readers can handle
+// absence as before. Other stat errors return the failing path and error;
+// an inaccessible overlay must never silently select the shipped file.
+func (s Set) Resolve(elem ...string) (string, error) {
+	path, _, _, err := s.Locate(elem...)
+	return path, err
 }
 
-// Locate is Resolve with the layer the file was found in. ok is false when
-// the file exists in neither layer, in which case path is the shipped path.
-func (s Set) Locate(elem ...string) (path string, layer Layer, ok bool) {
+// Locate reports the path and layer of a file, or ok=false if neither layer
+// contains it. A non-missing stat error stops lookup at the failing layer.
+func (s Set) Locate(elem ...string) (path string, layer Layer, ok bool, err error) {
 	if s.Overlay != "" {
 		p := s.Path(LayerOverlay, elem...)
-		if isFile(p) {
-			return p, LayerOverlay, true
+		exists, err := statFile(p)
+		if err != nil || exists {
+			return p, LayerOverlay, exists, err
 		}
 	}
 	p := s.Path(LayerBase, elem...)
-	return p, LayerBase, isFile(p)
+	exists, err := statFile(p)
+	return p, LayerBase, exists, err
 }
 
-// ResolveFirst tries several file names in order within one subdirectory
-// and returns the first that exists in either layer, overlay first. When none
-// exists it returns the shipped path of the first name.
-func (s Set) ResolveFirst(sub string, names ...string) string {
+// ResolveFirst tries names in order, overlay before base within each name.
+// A non-missing error stops lookup before trying another spelling. If no name
+// exists, it returns the shipped path of the first name without an error.
+func (s Set) ResolveFirst(sub string, names ...string) (string, error) {
 	for _, n := range names {
-		if p, _, ok := s.Locate(sub, n); ok {
-			return p
+		p, _, ok, err := s.Locate(sub, n)
+		if err != nil || ok {
+			return p, err
 		}
 	}
 	if len(names) == 0 {
-		return s.Path(LayerBase, sub)
+		return s.Path(LayerBase, sub), nil
 	}
-	return s.Path(LayerBase, sub, names[0])
+	return s.Path(LayerBase, sub, names[0]), nil
 }
 
-// Exists reports whether the file exists in either layer.
-func (s Set) Exists(elem ...string) bool {
-	_, _, ok := s.Locate(elem...)
-	return ok
+// Exists reports whether a file exists in either layer. Errors other than
+// absence are returned, not interpreted as a missing file.
+func (s Set) Exists(elem ...string) (bool, error) {
+	_, _, ok, err := s.Locate(elem...)
+	return ok, err
 }
 
 // WritePath returns where an editor should save a file: the overlay when one
@@ -278,7 +283,11 @@ func (s Set) Summarize() (sum Summary, ok bool, err error) {
 			}
 			return nil
 		}
-		if isFile(filepath.Join(s.Base, rel)) {
+		exists, err := statFile(filepath.Join(s.Base, rel))
+		if err != nil {
+			return err
+		}
+		if exists {
 			sum.Overrides++
 		} else {
 			sum.Additions++
@@ -292,9 +301,15 @@ func (s Set) Summarize() (sum Summary, ok bool, err error) {
 	return sum, true, nil
 }
 
-func isFile(p string) bool {
+func statFile(p string) (bool, error) {
 	info, err := os.Stat(p)
-	return err == nil && !info.IsDir()
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !info.IsDir(), nil
 }
 
 func isDir(p string) bool {

@@ -100,7 +100,10 @@ func LoadMenus(set menuset.Set) ([]menuEntry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("loading %s: %w", name, err)
 		}
-		_, cfgLayer, _ := set.Locate("cfg", stem+".CFG")
+		_, cfgLayer, _, err := set.Locate("cfg", stem+".CFG")
+		if err != nil {
+			return nil, err
+		}
 		menus = append(menus, menuEntry{
 			Name:       stem,
 			Data:       data,
@@ -135,7 +138,10 @@ func LoadCommands(set menuset.Set, name string) ([]CmdData, error) {
 	if err != nil {
 		return nil, err
 	}
-	path := set.Resolve("cfg", n+".CFG")
+	path, err := set.Resolve("cfg", n+".CFG")
+	if err != nil {
+		return nil, err
+	}
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return []CmdData{}, nil
@@ -286,10 +292,10 @@ func CreateMenu(set menuset.Set, name string) error {
 
 // MenuExists reports whether a .MNU file with the given name exists in
 // either layer.
-func MenuExists(set menuset.Set, name string) bool {
+func MenuExists(set menuset.Set, name string) (bool, error) {
 	n, err := normalizeMenuName(name)
 	if err != nil {
-		return false
+		return false, err
 	}
 	return set.Exists("mnu", n+".MNU")
 }

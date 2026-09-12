@@ -338,7 +338,11 @@ func (e *MenuExecutor) showPrelogon(s ssh.Session, terminal *term.Terminal, node
 	// and leave PRELOGON.1 to the shipped set.
 	var candidates []string
 	for i := 1; i <= 20; i++ {
-		path, _, ok := menus.Locate("ansi", fmt.Sprintf("PRELOGON.%d", i))
+		path, _, ok, err := menus.Locate("ansi", fmt.Sprintf("PRELOGON.%d", i))
+		if err != nil {
+			slog.Warn("resolving prelogon file", "error", err)
+			return
+		}
 		if !ok {
 			break // Stop at first gap
 		}
@@ -347,7 +351,12 @@ func (e *MenuExecutor) showPrelogon(s ssh.Session, terminal *term.Terminal, node
 
 	// Fall back to single PRELOGON.ANS
 	if len(candidates) == 0 {
-		if path, _, ok := menus.Locate("ansi", "PRELOGON.ANS"); ok {
+		path, _, ok, err := menus.Locate("ansi", "PRELOGON.ANS")
+		if err != nil {
+			slog.Warn("resolving prelogon file", "error", err)
+			return
+		}
+		if ok {
 			candidates = append(candidates, path)
 		}
 	}

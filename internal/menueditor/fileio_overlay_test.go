@@ -75,7 +75,7 @@ func TestOverlaySavesLandInOverlay(t *testing.T) {
 	if err := CreateMenu(set, "NEW"); err != nil {
 		t.Fatal(err)
 	}
-	if !MenuExists(set, "NEW") || MenuExists(menuset.Bare(set.Base), "NEW") {
+	if !menuExistsOK(t, set, "NEW") || menuExistsOK(t, menuset.Bare(set.Base), "NEW") {
 		t.Error("NEW should exist in the overlay only")
 	}
 }
@@ -89,7 +89,7 @@ func TestOverlayDeleteCannotRemoveShipped(t *testing.T) {
 	if !errors.As(err, &shipped) || shipped.Reverted {
 		t.Fatalf("DeleteMenu(shipped) = %v, want ShippedMenuError{Reverted:false}", err)
 	}
-	if !MenuExists(set, "MAIN") {
+	if !menuExistsOK(t, set, "MAIN") {
 		t.Error("shipped MAIN was removed")
 	}
 
@@ -116,7 +116,7 @@ func TestOverlayDeleteCannotRemoveShipped(t *testing.T) {
 	if err := DeleteMenu(set, "NEW"); err != nil {
 		t.Errorf("DeleteMenu(overlay-only) = %v", err)
 	}
-	if MenuExists(set, "NEW") {
+	if menuExistsOK(t, set, "NEW") {
 		t.Error("NEW still exists")
 	}
 }
@@ -191,5 +191,22 @@ func TestDeleteMenuRollsBackPair(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOverlayReadReportsInaccessibleCommands(t *testing.T) {
+	set := newOverlaySet(t)
+	path := set.WritePath("cfg", "MAIN.CFG")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("MAIN.CFG", path); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := LoadCommands(set, "MAIN"); err == nil {
+		t.Error("LoadCommands silently loaded shipped commands")
+	}
+	if _, err := LoadMenus(set); err == nil {
+		t.Error("LoadMenus silently marked broken overlay commands as base")
 	}
 }

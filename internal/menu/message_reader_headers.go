@@ -159,7 +159,11 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		// Verify template file exists
-		if !e.Menus().Exists("templates", "message_headers", fmt.Sprintf("MSGHDR.%d.ans", templateNum)) {
+		exists, err := e.Menus().Exists("templates", "message_headers", fmt.Sprintf("MSGHDR.%d.ans", templateNum))
+		if err != nil {
+			return nil, "", err
+		}
+		if !exists {
 			slog.Warn("template file not found", "file", fmt.Sprintf("MSGHDR.%d.ans", templateNum))
 			continue
 		}
