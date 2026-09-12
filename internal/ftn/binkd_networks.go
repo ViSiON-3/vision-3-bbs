@@ -118,8 +118,14 @@ func declaredDirectives(content string) map[string]bool {
 	have := make(map[string]bool)
 	for _, line := range confLines(content) {
 		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) >= 2 && (fields[0] == "domain" || fields[0] == "address") {
-			have[fields[0]+" "+strings.ToLower(fields[1])] = true
+		if len(fields) < 2 {
+			continue
+		}
+		// binkd reads its keywords case-insensitively too, so a hand-written
+		// "DOMAIN" line is as much a declaration as "domain".
+		keyword := strings.ToLower(fields[0])
+		if keyword == "domain" || keyword == "address" {
+			have[keyword+" "+strings.ToLower(fields[1])] = true
 		}
 	}
 	return have

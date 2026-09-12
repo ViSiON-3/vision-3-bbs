@@ -151,8 +151,9 @@ func TestSyncBinkdNetworksMissingFileIsNoOp(t *testing.T) {
 // "domain TQWnet" already declares tqwnet. Comparing case-sensitively treated
 // it as missing and appended a second declaration on every sync.
 func TestSyncBinkdNetworksMatchesDomainCaseInsensitively(t *testing.T) {
+	// Mixed case in the keywords as well as the domain: binkd accepts both.
 	path := writeConf(t, settingsConf+
-		"domain TQWnet /bbs/data/ftn/out_tqw 1337\naddress 1337:3/123.1@TQWnet\n")
+		"DOMAIN TQWnet /bbs/data/ftn/out_tqw 1337\nAddress 1337:3/123.1@TQWnet\n")
 
 	cfg := config.FTNConfig{
 		BinkdOutboundPath: "data/ftn/out",
