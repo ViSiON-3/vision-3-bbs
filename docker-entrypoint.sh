@@ -18,7 +18,7 @@ if [ "$(id -u)" = "0" ]; then
     # on every restart afterwards a recursive pass would traverse the whole of
     # data/ -- every file area, every message base -- to change nothing.
     owner_uid=$(id -u vision3)
-    for d in /vision3/configs /vision3/data /vision3/menus.d /vision3/temp /vision3/bin; do
+    for d in /vision3/configs /vision3/data /vision3/temp /vision3/bin; do
         if [ "$(stat -c %u "$d" 2>/dev/null)" != "$owner_uid" ]; then
             chown -R vision3:vision3 "$d" 2>/dev/null
         fi
@@ -29,9 +29,8 @@ if [ "$(id -u)" = "0" ]; then
     # breaking the working tree it was started from. The BBS only reads menus,
     # and a normal checkout is already world-readable.
     #
-    # menus.d/ IS chowned: it is the overlay menuedit saves into, so the
-    # container must be able to write it, and git never tracks its contents
-    # (only the README), so ownership there costs the host nothing.
+    # menus.d/ also keeps its host ownership. Run menuedit with the host
+    # uid:gid so both host and container edits remain writable by the host.
     exec su-exec vision3 "$0" "$@"
 fi
 

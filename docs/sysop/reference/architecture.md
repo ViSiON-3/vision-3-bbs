@@ -199,8 +199,8 @@ vision3/
 │       └── registry/   # Network registry client
 ├── menus/v3/           # Shipped menu set (tracked)
 │   ├── ansi/           # ANSI art files
-│   ├── cfg/            # Menu display configurations
-│   ├── mnu/            # Menu command definitions
+│   ├── cfg/            # Menu command definitions
+│   ├── mnu/            # Menu configurations
 │   └── templates/      # Display templates
 └── menus.d/v3/         # Sysop overrides, same layout, searched first (git-ignored)
 ```

@@ -415,6 +415,7 @@ func TestWatcherWatchesOverlayTheme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConfigWatcher: %v", err)
 	}
+	defer cw.Stop()
 	want := map[string]bool{
 		filepath.Join(menuSet, "theme.json"):               false,
 		filepath.Join(root, "menus.d", "v3", "theme.json"): true,

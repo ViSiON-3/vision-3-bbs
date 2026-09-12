@@ -39,8 +39,8 @@ func TestOverlayFor(t *testing.T) {
 		"menus/v3":              filepath.Join("menus.d", "v3"),
 		"menus/v3/":             filepath.Join("menus.d", "v3"),
 		"./menus/v3":            filepath.Join("menus.d", "v3"),
-		"/opt/vision3/menus/v3": "/opt/vision3/menus.d/v3",
-		"/vision3/menus/v3":     "/vision3/menus.d/v3",
+		"/opt/vision3/menus/v3": filepath.FromSlash("/opt/vision3/menus.d/v3"),
+		"/vision3/menus/v3":     filepath.FromSlash("/vision3/menus.d/v3"),
 		"custom/sets/mine":      filepath.Join("custom", "sets.d", "mine"),
 		"v3":                    "",
 		"/v3":                   "",
@@ -235,5 +235,16 @@ func TestSummarize(t *testing.T) {
 	want := Summary{Overrides: 2, Additions: 3, UnknownDirs: []string{"screens"}}
 	if !reflect.DeepEqual(sum, want) {
 		t.Errorf("Summary = %+v, want %+v", sum, want)
+	}
+}
+
+func TestReadDirDoesNotHideBrokenBase(t *testing.T) {
+	s := fixture(t)
+	// A file in place of the base directory produces a real error on every OS,
+	// including when tests run as root (unlike permission-based fixtures).
+	write(t, filepath.Join(s.Base, "bar"), "not a directory")
+	write(t, filepath.Join(s.Overlay, "bar", "MAIN.BAR"), "overlay")
+	if entries, err := s.ReadDir("bar"); err == nil || entries != nil {
+		t.Fatalf("broken base hidden: entries=%v err=%v", entries, err)
 	}
 }

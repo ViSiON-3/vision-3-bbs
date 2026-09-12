@@ -78,7 +78,7 @@ If you prefer not to use Docker Compose:
    To customise menus, mount an overlay directory instead of the whole set:
    `-v "$(pwd)/menus.d:/vision3/menus.d"`. Files in it are read before the
    built-in ones, file by file, and `menuedit` inside the container saves there
-   (see [Customising menus without losing your changes](../menus/menu-system.md#customising-menus-without-losing-your-changes)).
+   (see [Customising menus without losing your changes](menus/menu-system.md#customising-menus-without-losing-your-changes)).
    Add `-v "$(pwd)/menus:/vision3/menus"` only if you keep a complete set of
    your own on the host — mounting an *empty* directory there hides the
    built-in menus and the pre-flight check will refuse to start.
@@ -130,26 +130,30 @@ drops privileges — so Docker-created bind mounts, which arrive owned by root,
 work without any manual preparation.
 
 Because of that privilege drop, `docker exec` lands you as **root**, not
-`vision3`. Always pass `-u vision3` when running the TUI tools, or they will
+`vision3`. Pass `-u vision3` when running the configuration TUI tools, or they will
 leave root-owned files in `configs/` that the BBS cannot rewrite.
 
 `menus/` is deliberately left alone. Compose bind-mounts your checkout there, and
 taking ownership of it would leave you unable to `git pull` or edit your own menu
 set on the host. The BBS only reads menus, so a normal checkout works as-is.
 
-`menus.d/` — the overlay your customisations go in — **is** chowned like
-`configs/` and `data/`, because `menuedit` in the container writes there. Git
-tracks nothing in it but a README, so the ownership change costs the host
-nothing. That is what makes editing menus from inside the container work:
+`menus.d/` also keeps its host ownership, including its tracked README. Run
+`menuedit` with your host UID and GID so files created inside the container
+remain editable on the host. Create the directory on the host before mounting
+it when using `docker run` outside a checkout:
 
 ```bash
-docker compose exec -u vision3 vision3 ./menuedit   # saves into /vision3/menus.d
+mkdir -p menus.d
+docker compose exec -u "$(id -u):$(id -g)" vision3 ./menuedit
 ```
+
+If an earlier container changed the overlay's ownership, restore it once with
+`sudo chown -R "$(id -u):$(id -g)" ./menus.d`.
 
 Edits made on the host land in the same directory (`./menus.d`) and are picked
 up on the next menu load. You never need to make `menus/` writable. If you
 customised `menus/` before the overlay existed, move those files across once —
-see [Moving existing customisations into menus.d](../menus/menu-system.md#moving-existing-customisations-into-menusd).
+see [Moving existing customisations into menus.d](menus/menu-system.md#moving-existing-customisations-into-menusd).
 
 ### Persistent Data
 

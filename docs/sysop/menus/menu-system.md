@@ -179,13 +179,13 @@ full-screen editor's own screens, `theme.json`, art displayed by scripts, and
 
 Docker users mount `./menus.d` alongside `./menus` — `docker-compose.yml`
 already does — and can leave the shipped set read-only; see
-[Docker](../getting-started/docker.md#container-user-and-file-ownership).
+[Docker](getting-started/docker.md#container-user-and-file-ownership).
 
 ### Moving existing customisations into `menus.d/`
 
 If you customised menus before the overlay existed, your edits are inside
 `menus/`. Moving them takes a few minutes and only has to be done once. How
-you find the changed files depends on [which install you have](../getting-started/upgrading.md#which-install-do-you-have).
+you find the changed files depends on [which install you have](getting-started/upgrading.md#which-install-do-you-have).
 
 **Repo in place** — `menus/` is the git working tree, so git knows what you
 changed:
@@ -239,7 +239,8 @@ leave anything you do not recognise to the shipped set.
 **Docker** — `menus/` is your checkout bind-mounted, so follow the repo-in-place
 steps on the host. If you had made `menus/` writable by the container
 (`chown -R 100:101`), you can take it back now: `sudo chown -R "$(id -u):$(id -g)" ./menus`.
-`menuedit` writes to `menus.d/`, which the entrypoint owns.
+`menus.d/` keeps its host ownership too. Run container `menuedit` with your host
+UID and GID as described in [Docker](getting-started/docker.md#container-user-and-file-ownership).
 
 **Check the result.** Start the BBS and look for the overlay line in the log:
 

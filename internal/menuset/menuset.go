@@ -187,7 +187,7 @@ func (s Set) ReadDir(elem ...string) ([]Entry, error) {
 		}
 	}
 
-	if baseErr != nil && overlayMissing {
+	if baseErr != nil && (!errors.Is(baseErr, fs.ErrNotExist) || overlayMissing) {
 		return nil, baseErr
 	}
 

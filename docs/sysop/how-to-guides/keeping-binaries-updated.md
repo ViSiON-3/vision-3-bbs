@@ -103,7 +103,7 @@ If you have customised a file, keep your version in `menus.d/` rather than in
 `menus/`: the BBS reads `menus.d/v3/ansi/SOMEMENU.ANS` in preference to the
 shipped copy, so you can overwrite `menus/` freely — or symlink it to the repo
 so it tracks every pull — and never lose an edit. See
-[Customising menus without losing your changes](../menus/menu-system.md#customising-menus-without-losing-your-changes).
+[Customising menus without losing your changes](menus/menu-system.md#customising-menus-without-losing-your-changes).
 
 This does not apply if you run Vision/3 directly out of the git checkout, or if
 you bind-mount the repo's `menus/` as `docker-compose.yml` does — there `git pull`

@@ -11,7 +11,7 @@ what makes upgrading safe, and also what makes two steps necessary:
   overwrite menu edits you made in the repo. An instance or bundle install
   never updates it, so artwork fixes do not reach you at all. Keeping your
   edits in `menus.d/` instead of `menus/` sidesteps both problems — see
-  [Customising menus without losing your changes](../menus/menu-system.md#customising-menus-without-losing-your-changes).
+  [Customising menus without losing your changes](menus/menu-system.md#customising-menus-without-losing-your-changes).
 - The binaries in `bin/` (`binkd`, `sexyz`) are prebuilt — a source build
   (`git pull` + `build.sh`) never touches them, so they stay at the version you
   first installed. Most releases don't change them; when one does, the release
@@ -86,7 +86,7 @@ git checkout -- menus/v3/ansi/MAIN.ANS
 
 After that, `git pull` cannot conflict on menus again. The full procedure,
 including edits committed on a branch, is in
-[Moving existing customisations into menus.d](../menus/menu-system.md#moving-existing-customisations-into-menusd).
+[Moving existing customisations into menus.d](menus/menu-system.md#moving-existing-customisations-into-menusd).
 
 Re-running `./setup.sh` is safe: it copies a config template only when the
 target does not already exist. It fills in genuinely new files and leaves
@@ -141,7 +141,7 @@ rm -rf menus && ln -s ~/git/vision3/menus menus
 `menus.d/` is searched before `menus/`, file by file, so the shipped set can
 change underneath you without touching a file you have overridden. Step by
 step, including how to tell your edits from fixes you have not copied yet:
-[Moving existing customisations into menus.d](../menus/menu-system.md#moving-existing-customisations-into-menusd).
+[Moving existing customisations into menus.d](menus/menu-system.md#moving-existing-customisations-into-menusd).
 
 The same is true of `configs/`: templates are copied only when the file is
 absent, so see [Settings added since your version](#settings-added-since-your-version).

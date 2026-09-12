@@ -2,6 +2,7 @@ package menueditor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -184,16 +185,9 @@ func DeleteMenu(set menuset.Set, name string) error {
 	mnuPath := set.WritePath("mnu", n+".MNU")
 	cfgPath := set.WritePath("cfg", n+".CFG")
 
-	removed := false
-	for _, p := range []string{mnuPath, cfgPath} {
-		err := os.Remove(p)
-		switch {
-		case err == nil:
-			removed = true
-		case os.IsNotExist(err):
-		default:
-			return fmt.Errorf("removing %s: %w", p, err)
-		}
+	removed, err := removeMenuFiles([]string{mnuPath, cfgPath}, os.Rename, os.Remove)
+	if err != nil {
+		return err
 	}
 	if set.HasOverlay() {
 		if shipped := set.Path(menuset.LayerBase, "mnu", n+".MNU"); fileExists(shipped) {
@@ -201,6 +195,69 @@ func DeleteMenu(set menuset.Set, name string) error {
 		}
 	}
 	return nil
+}
+
+// removeMenuFiles stages the pair beside the originals before deleting either
+// backup. Keep contents until cleanup succeeds so even a second cleanup failure
+// can restore the complete pair. Rollback errors are reported with the cause.
+func removeMenuFiles(paths []string, rename func(string, string) error, remove func(string) error) (bool, error) {
+	type stagedFile struct {
+		path, backup string
+		data         []byte
+		mode         os.FileMode
+		deleted      bool
+	}
+	var staged []stagedFile
+	rollback := func(cause error) (bool, error) {
+		for i := len(staged) - 1; i >= 0; i-- {
+			f := staged[i]
+			var err error
+			if f.deleted {
+				err = atomicfile.WriteFile(f.path, f.data, f.mode)
+			} else {
+				err = rename(f.backup, f.path)
+			}
+			if err != nil {
+				cause = errors.Join(cause, fmt.Errorf("restoring %s: %w", f.path, err))
+			}
+		}
+		return false, cause
+	}
+	for _, path := range paths {
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return rollback(fmt.Errorf("removing %s: %w", path, err))
+		}
+		if !info.Mode().IsRegular() {
+			return rollback(fmt.Errorf("removing %s: not a regular file", path))
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return rollback(fmt.Errorf("removing %s: %w", path, err))
+		}
+		tmp, err := os.CreateTemp(filepath.Dir(path), ".menu-delete-*")
+		if err != nil {
+			return rollback(fmt.Errorf("removing %s: %w", path, err))
+		}
+		backup := tmp.Name()
+		if err := tmp.Close(); err != nil {
+			return rollback(errors.Join(err, os.Remove(backup)))
+		}
+		if err := rename(path, backup); err != nil {
+			return rollback(errors.Join(fmt.Errorf("removing %s: %w", path, err), os.Remove(backup)))
+		}
+		staged = append(staged, stagedFile{path: path, backup: backup, data: data, mode: info.Mode().Perm()})
+	}
+	for i := range staged {
+		if err := remove(staged[i].backup); err != nil {
+			return rollback(fmt.Errorf("removing %s: %w", staged[i].path, err))
+		}
+		staged[i].deleted = true
+	}
+	return len(staged) > 0, nil
 }
 
 // CreateMenu writes a new empty .MNU and empty .CFG for the given name.

@@ -144,3 +144,52 @@ func TestOverlayModelRevertsOnDeleteOfOverriddenMenu(t *testing.T) {
 		t.Errorf("menus after revert = %+v", m.menus)
 	}
 }
+
+func TestDeleteMenuRollsBackPair(t *testing.T) {
+	for _, failure := range []string{"stage", "cleanup"} {
+		t.Run(failure, func(t *testing.T) {
+			set := newOverlaySet(t)
+			if err := CreateMenu(set, "MAIN"); err != nil {
+				t.Fatal(err)
+			}
+			paths := []string{set.WritePath("mnu", "MAIN.MNU"), set.WritePath("cfg", "MAIN.CFG")}
+			before := make([][]byte, len(paths))
+			for i, path := range paths {
+				var err error
+				before[i], err = os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			injected := errors.New("second file failure")
+			rename := func(old, new string) error {
+				if failure == "stage" && old == paths[1] {
+					return injected
+				}
+				return os.Rename(old, new)
+			}
+			removes := 0
+			remove := func(path string) error {
+				removes++
+				if failure == "cleanup" && removes == 2 {
+					return injected
+				}
+				return os.Remove(path)
+			}
+			removed, err := removeMenuFiles(paths, rename, remove)
+			if removed || !errors.Is(err, injected) {
+				t.Fatalf("removed=%v err=%v", removed, err)
+			}
+			for i, path := range paths {
+				got, err := os.ReadFile(path)
+				if err != nil || string(got) != string(before[i]) {
+					t.Errorf("%s not restored: %q, %v", path, got, err)
+				}
+				entries, err := os.ReadDir(filepath.Dir(path))
+				if err != nil || len(entries) != 1 {
+					t.Errorf("backup left behind: %v, %v", entries, err)
+				}
+			}
+		})
+	}
+}
