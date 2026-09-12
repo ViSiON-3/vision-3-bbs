@@ -75,17 +75,21 @@ func run() int {
 	// Discarding for the whole run also threw away every warning the editor
 	// produces (an FTN link saved with no hostname, a network declared in
 	// binkd.conf, a rejected outbound path) and left a config save with no
-	// record anywhere that it had happened. A logging failure keeps the discard,
-	// since nothing can go to stderr without corrupting the display.
+	// record anywhere that it had happened. A logging failure keeps the
+	// discard, and is shown in the editor's status line: it cannot go to
+	// stderr, which the alternate screen is about to clear, and silently
+	// losing every lifecycle record is the thing this log exists to stop.
+	startupMsg := ""
 	if closeLog, err := initEditorLog(serverCfg, bbsRoot); err == nil {
 		defer func() { _ = closeLog() }() // best-effort flush at exit
 		slog.Info("config editor started", "configs", path, "bbs_root", bbsRoot)
+	} else {
+		startupMsg = fmt.Sprintf("Warning: editor log unavailable, nothing will be logged this session: %v", err)
 	}
 
 	// Regenerate a missing binkd.conf from configuration before the editor
 	// starts (best-effort): the FTN Setup Wizard refuses to re-run for an
 	// existing network, so this is the recovery path after a manual delete.
-	startupMsg := ""
 	if ftnCfg, ftnErr := config.LoadFTNConfig(path); ftnErr == nil && serverCfgErr == nil {
 		if created, err := ftn.EnsureBinkdConf(bbsRoot, ftnCfg, serverCfg); err != nil {
 			startupMsg = fmt.Sprintf("Warning: binkd.conf regeneration failed: %v", err)
