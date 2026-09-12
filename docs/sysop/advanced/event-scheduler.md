@@ -518,7 +518,7 @@ schedule. Set `run_after` to the ID of the event it follows, and optionally
 }
 ```
 
-In the events editor these are the **Run After** and **Delay** fields.
+In the events editor these are the **Run After** and **Delay After** fields.
 
 How it behaves:
 
