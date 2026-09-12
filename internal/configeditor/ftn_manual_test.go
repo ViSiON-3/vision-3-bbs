@@ -159,6 +159,33 @@ func TestNetworkRenameLowercaseKeepsEditingSameNetwork(t *testing.T) {
 	}
 }
 
+// The placeholder is not reliably the last sorted key: an existing network
+// that sorts after "zz_newnet_" (or a tenth placeholder, which sorts before
+// the ninth) put the cursor on the wrong row, so the edit screen opened — and
+// the rename that followed hit — an existing network.
+func TestInsertNetworkOpensTheInsertedNetworkNotTheLastRow(t *testing.T) {
+	m := newFTNModel(map[string]config.FTNNetworkConfig{
+		"fsxnet": {OwnAddress: "21:4/158.1"},
+		"zzznet": {OwnAddress: "99:1/1.1"},
+	})
+	m.recordType = "ftn"
+	m.mode = modeRecordList
+
+	res, _ := m.updateRecordList(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	got := res.(Model)
+
+	keys := got.ftnNetworkKeys()
+	if got.recordEditIdx < 0 || got.recordEditIdx >= len(keys) {
+		t.Fatalf("recordEditIdx %d out of range for %v", got.recordEditIdx, keys)
+	}
+	if keys[got.recordEditIdx] != "zz_newnet_1" {
+		t.Errorf("opened %q, want zz_newnet_1 (keys %v)", keys[got.recordEditIdx], keys)
+	}
+	if got.recordCursor != got.recordEditIdx {
+		t.Errorf("recordCursor %d does not match recordEditIdx %d", got.recordCursor, got.recordEditIdx)
+	}
+}
+
 // Inserting a network drops the sysop straight into its edit screen: the
 // placeholder name it is created under is the binkd domain every address and
 // area hangs off, so leaving it on the list makes an unusable record look

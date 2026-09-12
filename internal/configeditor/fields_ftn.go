@@ -64,6 +64,12 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 						m.configs.MsgAreas[i].Network = val
 					}
 				}
+				// And the network's poll event, whose ID and -P target both
+				// carry the key. Left alone, the old event kept polling
+				// <hub>@<oldkey>, which binkd rejects as an unknown domain,
+				// and refreshPollEvents created a second event under the
+				// new key beside it.
+				renamePollEvent(&m.configs.Events, key, val)
 				return nil
 			},
 			// AfterSet runs on the current model (not the stale captured pointer), so index
