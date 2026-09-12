@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
-// LoadMenu reads a .MNU file (assumed JSON) for the given menu name.
-func LoadMenu(menuName string, configPath string) (*MenuRecord, error) {
-	filePath := filepath.Join(configPath, menuName+".MNU")
+// LoadMenu reads a .MNU file (assumed JSON) for the given menu name from the
+// menu set's mnu/ directory, overlay first.
+func LoadMenu(menuName string, menus menuset.Set) (*MenuRecord, error) {
+	filePath, err := menus.Resolve("mnu", menuName+".MNU")
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -31,10 +36,14 @@ func LoadMenu(menuName string, configPath string) (*MenuRecord, error) {
 	return &menuRec, nil
 }
 
-// LoadCommands reads a .CFG file (assumed JSON) for the given menu name.
-func LoadCommands(menuName string, configPath string) ([]CommandRecord, error) {
-	filePath := filepath.Join(configPath, menuName+".CFG")
-	slog.Debug("attempting to load command file", "file", filePath, "menu", menuName, "path", configPath)
+// LoadCommands reads a .CFG file (assumed JSON) for the given menu name from
+// the menu set's cfg/ directory, overlay first.
+func LoadCommands(menuName string, menus menuset.Set) ([]CommandRecord, error) {
+	filePath, err := menus.Resolve("cfg", menuName+".CFG")
+	if err != nil {
+		return nil, err
+	}
+	slog.Debug("attempting to load command file", "file", filePath, "menu", menuName)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -67,9 +76,7 @@ func LoadCommands(menuName string, configPath string) ([]CommandRecord, error) {
 }
 
 // HasBarFile returns true if a .BAR lightbar definition file exists for the
-// given menu name inside the menu set's bar/ directory.
-func HasBarFile(menuName string, menuSetPath string) bool {
-	barPath := filepath.Join(menuSetPath, "bar", menuName+".BAR")
-	_, err := os.Stat(barPath)
-	return err == nil
+// given menu name inside the menu set's bar/ directory, in either layer.
+func HasBarFile(menuName string, menus menuset.Set) (bool, error) {
+	return menus.Exists("bar", menuName+".BAR")
 }

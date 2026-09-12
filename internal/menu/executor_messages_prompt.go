@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -49,10 +48,9 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 	topTemplateFilename := "MSGAREA.TOP"
 	midTemplateFilename := "MSGAREA.MID"
 	botTemplateFilename := "MSGAREA.BOT" // We'll use BOT template differently here
-	templateDir := filepath.Join(e.MenuSetPath, "templates")
-	topTemplatePath := filepath.Join(templateDir, topTemplateFilename)
-	midTemplatePath := filepath.Join(templateDir, midTemplateFilename)
-	botTemplatePath := filepath.Join(templateDir, botTemplateFilename) // Load BOT template
+	topTemplatePath := e.templateFile(topTemplateFilename)
+	midTemplatePath := e.templateFile(midTemplateFilename)
+	botTemplatePath := e.templateFile(botTemplateFilename) // Load BOT template
 
 	topTemplateBytes, errTop := readTemplateFile(topTemplatePath)
 	midTemplateBytes, errMid := readTemplateFile(midTemplatePath)

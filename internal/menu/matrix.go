@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -45,8 +44,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 	}
 
 	// Load commands from PDMATRIX.CFG to map hotkeys to actions
-	cfgPath := filepath.Join(e.MenuSetPath, "cfg")
-	commands, err := LoadCommands(menuName, cfgPath)
+	commands, err := LoadCommands(menuName, e.Menus())
 	if err != nil {
 		slog.Warn("failed to load CFG file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
 		return "LOGIN", nil, nil
@@ -60,7 +58,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 
 	// Load the ANSI background (convention: PDMATRIX.ANS)
 	// Use GetAnsiFileContent to automatically strip SAUCE metadata
-	ansPath := filepath.Join(e.MenuSetPath, "ansi", menuName+".ANS")
+	ansPath := e.menuFile("ansi", menuName+".ANS")
 	ansBackground, err := ansi.GetAnsiFileContent(ansPath)
 	if err != nil {
 		slog.Warn("failed to load ANS file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
@@ -333,23 +331,32 @@ func (e *MenuExecutor) handleCheckAccess(
 // Matches Pascal: Printfile(PRELOGON.x) + HoldScreen where x is random 1..NumPrelogon.
 // Looks for numbered files (PRELOGON.1, PRELOGON.2, ...) first, falls back to PRELOGON.ANS.
 func (e *MenuExecutor) showPrelogon(s ssh.Session, terminal *term.Terminal, nodeNumber int, outputMode ansi.OutputMode, termWidth, termHeight int) {
-	ansiDir := filepath.Join(e.MenuSetPath, "ansi")
+	menus := e.Menus()
 
 	// Look for numbered PRELOGON files (Pascal pattern: PRELOGON.1, PRELOGON.2, ...)
+	// Each number resolves on its own, so an overlay can replace PRELOGON.2
+	// and leave PRELOGON.1 to the shipped set.
 	var candidates []string
 	for i := 1; i <= 20; i++ {
-		path := filepath.Join(ansiDir, fmt.Sprintf("PRELOGON.%d", i))
-		if _, err := os.Stat(path); err == nil {
-			candidates = append(candidates, path)
-		} else {
+		path, _, ok, err := menus.Locate("ansi", fmt.Sprintf("PRELOGON.%d", i))
+		if err != nil {
+			slog.Warn("resolving prelogon file", "error", err)
+			return
+		}
+		if !ok {
 			break // Stop at first gap
 		}
+		candidates = append(candidates, path)
 	}
 
 	// Fall back to single PRELOGON.ANS
 	if len(candidates) == 0 {
-		path := filepath.Join(ansiDir, "PRELOGON.ANS")
-		if _, err := os.Stat(path); err == nil {
+		path, _, ok, err := menus.Locate("ansi", "PRELOGON.ANS")
+		if err != nil {
+			slog.Warn("resolving prelogon file", "error", err)
+			return
+		}
+		if ok {
 			candidates = append(candidates, path)
 		}
 	}

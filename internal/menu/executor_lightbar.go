@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -16,19 +15,23 @@ import (
 
 // loadLightbarOptions loads and parses lightbar options from configuration files
 func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, error) {
+	// Every lightbar — matrix, fast login, ordinary menus — comes through
+	// here, so this is where a menu split across overlay and shipped layers
+	// gets reported.
+	e.warnLightbarLayerMismatch(menuName)
+
 	// Determine paths using MenuSetPath
 	cfgFilename := menuName + ".CFG"
 	barFilename := menuName + ".BAR"
-	cfgPath := filepath.Join(e.MenuSetPath, "cfg", cfgFilename)
-	barPath := filepath.Join(e.MenuSetPath, "bar", barFilename)
+	cfgPath := e.menuFile("cfg", cfgFilename)
+	barPath := e.menuFile("bar", barFilename)
 
 	slog.Debug("loading CFG", "path", cfgPath)
 	slog.Debug("loading BAR", "path", barPath)
 
 	// Load commands from CFG file using the proper JSON loader
 	commandsByHotkey := make(map[string]string)
-	configPath := filepath.Join(e.MenuSetPath, "cfg")
-	commands, err := LoadCommands(menuName, configPath)
+	commands, err := LoadCommands(menuName, e.Menus())
 	if err != nil {
 		slog.Warn("failed to load CFG file", "path", cfgPath, "error", err)
 	} else {
@@ -105,7 +108,7 @@ func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, er
 // loadBarFile loads and parses a standalone BAR file (no matching CFG required).
 // Returns nil, nil if the file does not exist.
 func loadBarFile(barName string, e *MenuExecutor) ([]LightbarOption, error) {
-	barPath := filepath.Join(e.MenuSetPath, "bar", barName+".BAR")
+	barPath := e.menuFile("bar", barName+".BAR")
 
 	barFile, err := os.Open(barPath)
 	if err != nil {

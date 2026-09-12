@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
 // makeHeaderSet writes MSGHDR.<n>.ans for each n and returns the menu set root.
@@ -30,17 +32,17 @@ func TestHeaderStyleAvailableAcceptsEveryShippedTemplate(t *testing.T) {
 	root := makeHeaderSet(t, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 
 	for n := 1; n <= 15; n++ {
-		if !headerStyleAvailable(root, n) {
+		if !headerStyleAvailable(menuset.Bare(root), n) {
 			t.Errorf("style %d has a template but was rejected", n)
 		}
 	}
-	if headerStyleAvailable(root, 16) {
+	if headerStyleAvailable(menuset.Bare(root), 16) {
 		t.Error("style 16 has no template and should be rejected")
 	}
-	if headerStyleAvailable(root, 0) {
+	if headerStyleAvailable(menuset.Bare(root), 0) {
 		t.Error("0 means unset and must not count as available")
 	}
-	if headerStyleAvailable(root, -1) {
+	if headerStyleAvailable(menuset.Bare(root), -1) {
 		t.Error("negative styles must be rejected")
 	}
 }
@@ -50,12 +52,12 @@ func TestHeaderStyleAvailableHandlesGaps(t *testing.T) {
 	root := makeHeaderSet(t, 1, 2, 5)
 
 	for _, n := range []int{1, 2, 5} {
-		if !headerStyleAvailable(root, n) {
+		if !headerStyleAvailable(menuset.Bare(root), n) {
 			t.Errorf("style %d exists but was rejected", n)
 		}
 	}
 	for _, n := range []int{3, 4, 6} {
-		if headerStyleAvailable(root, n) {
+		if headerStyleAvailable(menuset.Bare(root), n) {
 			t.Errorf("style %d has no template but was accepted", n)
 		}
 	}
@@ -65,7 +67,7 @@ func TestHeaderStyleAvailableHandlesGaps(t *testing.T) {
 func TestHeaderStyleAvailableIsNotCappedAtFifteen(t *testing.T) {
 	root := makeHeaderSet(t, 1, 20, 42)
 	for _, n := range []int{20, 42} {
-		if !headerStyleAvailable(root, n) {
+		if !headerStyleAvailable(menuset.Bare(root), n) {
 			t.Errorf("style %d exists but was rejected; the bound is still fixed", n)
 		}
 	}
@@ -74,7 +76,7 @@ func TestHeaderStyleAvailableIsNotCappedAtFifteen(t *testing.T) {
 // If discovery fails there is no basis to reject a stored preference, and
 // forcing the selector open on every read would be worse than accepting it.
 func TestHeaderStyleAvailableAcceptsWhenDiscoveryFails(t *testing.T) {
-	if !headerStyleAvailable(filepath.Join(t.TempDir(), "nonexistent"), 7) {
+	if !headerStyleAvailable(menuset.Bare(filepath.Join(t.TempDir(), "nonexistent")), 7) {
 		t.Error("with no templates discoverable, a positive style should be accepted")
 	}
 }

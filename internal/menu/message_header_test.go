@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
 func TestExtractHeaderNumber(t *testing.T) {
@@ -37,7 +39,7 @@ func TestExtractHeaderNumber(t *testing.T) {
 func TestDiscoverMessageHeaders(t *testing.T) {
 	// Create temporary test directory structure
 	tmpDir := t.TempDir()
-	msgHdrDir := filepath.Join(tmpDir, "message_headers")
+	msgHdrDir := filepath.Join(tmpDir, "templates", "message_headers")
 	if err := os.MkdirAll(msgHdrDir, 0755); err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
@@ -59,7 +61,7 @@ func TestDiscoverMessageHeaders(t *testing.T) {
 	}
 
 	// Run discovery
-	templates, err := discoverMessageHeaders(tmpDir)
+	templates, err := discoverMessageHeaders(menuset.Bare(tmpDir))
 	if err != nil {
 		t.Fatalf("discoverMessageHeaders() error = %v", err)
 	}
@@ -95,12 +97,12 @@ func TestDiscoverMessageHeaders(t *testing.T) {
 func TestDiscoverMessageHeadersEmpty(t *testing.T) {
 	// Create temporary test directory with no templates
 	tmpDir := t.TempDir()
-	msgHdrDir := filepath.Join(tmpDir, "message_headers")
+	msgHdrDir := filepath.Join(tmpDir, "templates", "message_headers")
 	if err := os.MkdirAll(msgHdrDir, 0755); err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
 
-	templates, err := discoverMessageHeaders(tmpDir)
+	templates, err := discoverMessageHeaders(menuset.Bare(tmpDir))
 	if err != nil {
 		t.Fatalf("discoverMessageHeaders() error = %v", err)
 	}

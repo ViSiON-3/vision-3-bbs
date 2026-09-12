@@ -1,0 +1,355 @@
+// Package menuset resolves files in a menu set through an optional overlay.
+//
+// A menu set is a directory tree such as menus/v3 holding ansi/, bar/, cfg/,
+// mnu/, templates/ and theme.json. The shipped set is tracked in git, so a
+// sysop who edits it in place fights every git pull. The overlay is a second
+// tree with the same layout — menus.d/v3 for menus/v3 — that is searched
+// first, file by file. A file present in the overlay shadows the shipped one;
+// everything else falls through to the shipped set. The overlay is not
+// tracked, so upgrades never touch it and it never has to be re-copied.
+//
+// Resolution is per file, not per directory. Overriding MAIN.ANS does not
+// require copying the rest of ansi/. There are no whiteouts: a file cannot be
+// removed from the shipped set by way of the overlay.
+package menuset
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+// OverlaySuffix is appended to the menu root directory name to find the
+// overlay root: menus/v3 pairs with menus.d/v3.
+const OverlaySuffix = ".d"
+
+// Layer identifies the tree a file was resolved from.
+type Layer int
+
+const (
+	// LayerBase is the shipped menu set.
+	LayerBase Layer = iota
+	// LayerOverlay is the sysop's override tree.
+	LayerOverlay
+)
+
+func (l Layer) String() string {
+	if l == LayerOverlay {
+		return "overlay"
+	}
+	return "base"
+}
+
+// Set is a menu set with an optional overlay.
+type Set struct {
+	// Base is the shipped menu set directory, e.g. menus/v3.
+	Base string
+	// Overlay is the override directory, e.g. menus.d/v3. Empty disables
+	// the overlay entirely.
+	Overlay string
+}
+
+// FromPath returns the Set for a shipped menu set directory, pairing it with
+// the overlay derived from its location: <parent>.d/<name>. The pairing is
+// defined here and nowhere else so that every reader of a menu set — the
+// server, the editors, the scripting engine — agrees on where the overlay
+// lives, for relative and absolute paths alike.
+func FromPath(base string) Set {
+	return Set{Base: base, Overlay: OverlayFor(base)}
+}
+
+// Bare returns a Set that reads and writes the shipped tree only.
+func Bare(base string) Set {
+	return Set{Base: base}
+}
+
+// OverlayFor returns the overlay directory paired with a shipped menu set
+// directory: menus/v3 → menus.d/v3, /opt/bbs/menus/v3 → /opt/bbs/menus.d/v3.
+func OverlayFor(base string) string {
+	base = filepath.Clean(base)
+	parent, name := filepath.Split(base)
+	parent = filepath.Clean(parent)
+	if parent == "." || parent == string(filepath.Separator) || parent == "" {
+		// A set with no parent (e.g. "v3") has nowhere to hang a sibling.
+		return ""
+	}
+	return filepath.Join(parent+OverlaySuffix, name)
+}
+
+// HasOverlay reports whether an overlay directory is configured.
+func (s Set) HasOverlay() bool {
+	return s.Overlay != ""
+}
+
+// Path returns the path of a file in the given layer without checking that
+// it exists. elem is the path relative to the set root, e.g. "ansi",
+// "MAIN.ANS".
+func (s Set) Path(layer Layer, elem ...string) string {
+	root := s.Base
+	if layer == LayerOverlay {
+		root = s.Overlay
+	}
+	return filepath.Join(append([]string{root}, elem...)...)
+}
+
+// Resolve returns the overlay file if present, otherwise the shipped path.
+// Missing files return the shipped path without an error so readers can handle
+// absence as before. Other stat errors return the failing path and error;
+// an inaccessible overlay must never silently select the shipped file.
+func (s Set) Resolve(elem ...string) (string, error) {
+	path, _, _, err := s.Locate(elem...)
+	return path, err
+}
+
+// Locate reports the path and layer of a file, or ok=false if neither layer
+// contains it. A non-missing stat error stops lookup at the failing layer.
+func (s Set) Locate(elem ...string) (path string, layer Layer, ok bool, err error) {
+	if s.Overlay != "" {
+		p := s.Path(LayerOverlay, elem...)
+		exists, err := statFile(p)
+		if err != nil || exists {
+			return p, LayerOverlay, exists, err
+		}
+	}
+	p := s.Path(LayerBase, elem...)
+	exists, err := statFile(p)
+	return p, LayerBase, exists, err
+}
+
+// ResolveFirst tries names in order, overlay before base within each name.
+// A non-missing error stops lookup before trying another spelling. If no name
+// exists, it returns the shipped path of the first name without an error.
+func (s Set) ResolveFirst(sub string, names ...string) (string, error) {
+	for _, n := range names {
+		p, _, ok, err := s.Locate(sub, n)
+		if err != nil || ok {
+			return p, err
+		}
+	}
+	if len(names) == 0 {
+		return s.Path(LayerBase, sub), nil
+	}
+	return s.Path(LayerBase, sub, names[0]), nil
+}
+
+// Exists reports whether a file exists in either layer. Errors other than
+// absence are returned, not interpreted as a missing file.
+func (s Set) Exists(elem ...string) (bool, error) {
+	_, _, ok, err := s.Locate(elem...)
+	return ok, err
+}
+
+// WritePath returns where an editor should save a file: the overlay when one
+// is configured, otherwise the shipped tree. It does not create directories.
+func (s Set) WritePath(elem ...string) string {
+	if s.Overlay != "" {
+		return s.Path(LayerOverlay, elem...)
+	}
+	return s.Path(LayerBase, elem...)
+}
+
+// Entry is one file in a merged directory listing.
+type Entry struct {
+	Name  string // base name
+	Path  string // full path in the layer it resolved to
+	Layer Layer
+}
+
+// ReadDir lists the regular files of a subdirectory across both layers,
+// merged by name with the overlay winning, sorted by name. Directories are
+// omitted. The error is that of the shipped directory when neither layer has
+// the subdirectory; a subdirectory present in only one layer is not an error.
+func (s Set) ReadDir(elem ...string) ([]Entry, error) {
+	merged := map[string]Entry{}
+
+	baseDir := s.Path(LayerBase, elem...)
+	baseEntries, baseErr := readDir(baseDir)
+	for _, de := range baseEntries {
+		if de.IsDir() {
+			continue
+		}
+		merged[de.Name()] = Entry{Name: de.Name(), Path: filepath.Join(baseDir, de.Name()), Layer: LayerBase}
+	}
+
+	overlayMissing := true
+	if s.Overlay != "" {
+		overlayDir := s.Path(LayerOverlay, elem...)
+		overlayEntries, err := readDir(overlayDir)
+		if err == nil {
+			overlayMissing = false
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		// Use the overlay filesystem's own case rules. A differently cased
+		// spelling shadows a base name only if that spelling resolves there.
+		// Preserve distinct names on case-sensitive filesystems.
+		overlayNames := make(map[string]bool, len(overlayEntries))
+		baseNames := make(map[string][]string, len(merged))
+		for name := range merged {
+			key := strings.ToUpper(name)
+			baseNames[key] = append(baseNames[key], name)
+		}
+		for _, de := range overlayEntries {
+			overlayNames[de.Name()] = true
+		}
+		for _, de := range overlayEntries {
+			if de.IsDir() {
+				continue
+			}
+			for _, baseName := range baseNames[strings.ToUpper(de.Name())] {
+				if overlayNames[baseName] {
+					continue
+				}
+				if _, err := os.Lstat(filepath.Join(overlayDir, baseName)); err == nil {
+					delete(merged, baseName)
+				} else if !errors.Is(err, fs.ErrNotExist) {
+					return nil, err
+				}
+			}
+			merged[de.Name()] = Entry{Name: de.Name(), Path: filepath.Join(overlayDir, de.Name()), Layer: LayerOverlay}
+		}
+	}
+
+	if baseErr != nil && (!errors.Is(baseErr, fs.ErrNotExist) || overlayMissing) {
+		return nil, baseErr
+	}
+
+	out := make([]Entry, 0, len(merged))
+	for _, e := range merged {
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// readDir distinguishes a missing layer from an invalid directory on Windows,
+// where reading a regular file can report ErrNotExist.
+func readDir(path string) ([]fs.DirEntry, error) {
+	entries, err := os.ReadDir(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		info, statErr := os.Stat(path)
+		if statErr == nil && !info.IsDir() {
+			return nil, fmt.Errorf("reading %s: not a directory", path)
+		}
+		if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
+			return nil, statErr
+		}
+	}
+	return entries, err
+}
+
+// Glob matches a shell pattern against the files of a subdirectory across
+// both layers, merged by name with the overlay winning. Results are sorted by
+// name. The pattern applies to the base name only.
+func (s Set) Glob(sub, pattern string) ([]Entry, error) {
+	if _, err := filepath.Match(pattern, ""); err != nil {
+		return nil, fmt.Errorf("bad pattern %q: %w", pattern, err)
+	}
+	entries, err := s.ReadDir(sub)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []Entry
+	for _, e := range entries {
+		if ok, _ := filepath.Match(pattern, e.Name); ok {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
+// Summary describes what an overlay currently contributes. It exists for the
+// startup log so a sysop can see at a glance that their overrides are being
+// read, and catch a mistyped subdirectory.
+type Summary struct {
+	// Overrides counts overlay files that shadow a shipped file.
+	Overrides int
+	// Additions counts overlay files with no shipped counterpart.
+	Additions int
+	// UnknownDirs lists top-level overlay subdirectories that the shipped set
+	// does not have, e.g. "ANSI" typed for "ansi" on a case-sensitive filesystem.
+	UnknownDirs []string
+}
+
+// Summarize walks the overlay and classifies each file against the shipped
+// set. It returns ok=false with a zero Summary when the overlay does not exist.
+func (s Set) Summarize() (sum Summary, ok bool, err error) {
+	if s.Overlay == "" {
+		return Summary{}, false, nil
+	}
+	info, statErr := os.Stat(s.Overlay)
+	if statErr != nil {
+		if errors.Is(statErr, fs.ErrNotExist) {
+			return Summary{}, false, nil
+		}
+		return Summary{}, false, statErr
+	}
+	if !info.IsDir() {
+		return Summary{}, false, fmt.Errorf("%s is not a directory", s.Overlay)
+	}
+
+	walkErr := filepath.WalkDir(s.Overlay, func(path string, d fs.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		rel, relErr := filepath.Rel(s.Overlay, path)
+		if relErr != nil || rel == "." {
+			return nil
+		}
+		if d.IsDir() {
+			// Only the first path component is checked: deeper layout is the
+			// shipped set's business.
+			if !strings.Contains(rel, string(filepath.Separator)) {
+				if !isDir(filepath.Join(s.Base, rel)) {
+					sum.UnknownDirs = append(sum.UnknownDirs, rel)
+				}
+			}
+			return nil
+		}
+		exists, err := statFile(filepath.Join(s.Base, rel))
+		if err != nil {
+			return err
+		}
+		if exists {
+			sum.Overrides++
+		} else {
+			sum.Additions++
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return Summary{}, true, walkErr
+	}
+	sort.Strings(sum.UnknownDirs)
+	return sum, true, nil
+}
+
+func statFile(p string) (bool, error) {
+	info, err := os.Stat(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		// A dangling link is an explicit entry whose target cannot be read,
+		// not an absent override. Keep the target error instead of falling back.
+		if _, linkErr := os.Lstat(p); linkErr == nil {
+			return false, err
+		} else if !errors.Is(linkErr, fs.ErrNotExist) {
+			return false, linkErr
+		}
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !info.IsDir(), nil
+}
+
+func isDir(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
+}

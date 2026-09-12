@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -64,19 +63,19 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	defaultBot := []byte("|08" + scanLine + "|07\r\n")
 	defaultArea := []byte("\r\n|11@AREA@ |07(@COUNT@ new)\r\n")
 
-	topBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.TOP"))
+	topBytes, err := readTemplateFile(e.templateFile("FILESCAN.TOP"))
 	if err != nil {
 		topBytes = defaultTop
 	}
-	midBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.MID"))
+	midBytes, err := readTemplateFile(e.templateFile("FILESCAN.MID"))
 	if err != nil {
 		midBytes = defaultMid
 	}
-	botBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.BOT"))
+	botBytes, err := readTemplateFile(e.templateFile("FILESCAN.BOT"))
 	if err != nil {
 		botBytes = defaultBot
 	}
-	areaHdrBytes, err := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "FILESCAN.AREA"))
+	areaHdrBytes, err := readTemplateFile(e.templateFile("FILESCAN.AREA"))
 	if err != nil {
 		areaHdrBytes = defaultArea
 	}
@@ -426,7 +425,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	ansPath := filepath.Join(e.MenuSetPath, "ansi", "FILESCAN.ANS")
+	ansPath := e.menuFile("ansi", "FILESCAN.ANS")
 	headerContent, ansErr := ansi.GetAnsiFileContent(ansPath)
 	if ansErr == nil {
 		if outputMode == ansi.OutputModeCP437 {

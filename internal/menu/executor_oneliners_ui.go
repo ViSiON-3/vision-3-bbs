@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,9 +22,9 @@ func displayOnelinerScreen(e *MenuExecutor, terminal *term.Terminal, outputMode 
 	numLiners := len(records)
 
 	// 1. Load template files (same flow as LASTCALLERS)
-	topTemplatePath := filepath.Join(e.MenuSetPath, "templates", "ONELINER.TOP")
-	midTemplatePath := filepath.Join(e.MenuSetPath, "templates", "ONELINER.MID")
-	botTemplatePath := filepath.Join(e.MenuSetPath, "templates", "ONELINER.BOT")
+	topTemplatePath := e.templateFile("ONELINER.TOP")
+	midTemplatePath := e.templateFile("ONELINER.MID")
+	botTemplatePath := e.templateFile("ONELINER.BOT")
 
 	topTemplateBytes, errTop := readTemplateFile(topTemplatePath)
 	midTemplateBytes, errMid := readTemplateFile(midTemplatePath)

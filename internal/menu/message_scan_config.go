@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -332,7 +331,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
 	// Try to display ANSI header
-	ansPath := filepath.Join(e.MenuSetPath, "ansi", "NEWSCAN.ANS")
+	ansPath := e.menuFile("ansi", "NEWSCAN.ANS")
 	headerContent, ansErr := ansi.GetAnsiFileContent(ansPath)
 	if ansErr == nil {
 		// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives

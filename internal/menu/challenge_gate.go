@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -26,7 +25,7 @@ const fallbackGatePrompt = "\x1b[0m\r\n Press {KEY} {PRESSES} {TIMES} if you're 
 // (and any "##" countdown field) unsubstituted; the caller is responsible for
 // running substituteGateTokens.
 func gatePromptOrFallback(e *MenuExecutor, fileName string, nodeNumber int) []byte {
-	path := filepath.Join(e.MenuSetPath, "ansi", fileName)
+	path := e.menuFile("ansi", fileName)
 	content, err := ansi.GetAnsiFileContent(path)
 	if err != nil {
 		slog.Warn("challenge gate art missing, using fallback", "node", nodeNumber, "file", path, "error", err)

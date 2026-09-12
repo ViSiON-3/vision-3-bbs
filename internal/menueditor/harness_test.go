@@ -3,6 +3,8 @@ package menueditor
 import (
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -11,11 +13,11 @@ func newTestEditor(t *testing.T) Model {
 	t.Helper()
 	base := newMenuBase(t)
 	for _, name := range []string{"ALPHA", "BETA"} {
-		if err := CreateMenu(base, name); err != nil {
+		if err := CreateMenu(menuset.Bare(base), name); err != nil {
 			t.Fatalf("CreateMenu(%s): %v", name, err)
 		}
 	}
-	m, err := New(base)
+	m, err := New(menuset.Bare(base))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

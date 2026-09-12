@@ -1,0 +1,32 @@
+# menus.d — your menu overrides
+
+Anything you put in here is read **before** the shipped menu set in `menus/`,
+file by file. Override files are git-ignored, so `git pull` never touches your
+customisations and you never have to re-copy them after an upgrade. Only this
+README is tracked.
+
+Mirror the layout of the set you are overriding. To replace the main menu art
+of the `v3` set, for example:
+
+```
+menus.d/v3/ansi/MAIN.ANS      ← used if present
+menus/v3/ansi/MAIN.ANS        ← otherwise
+```
+
+Only the files you add here are affected. Overriding one `.ANS` does not mean
+copying the rest of `ansi/`; every other file still comes from `menus/`.
+
+- `menuedit` saves into this directory by default (files it wrote are marked
+  with `*` in its menu list). Run it with `--no-overlay` to edit `menus/`
+  directly.
+- `theme.json` can be overridden here too, and hot-reloads like the shipped one.
+- A lightbar menu's `.ANS`, `.BAR` and `.CFG` are drawn against each other.
+  If you override one, check the others still line up; the BBS logs a warning
+  when a lightbar menu's files come from different layers.
+- A file cannot be *removed* from the shipped set by way of this directory.
+- Already edited files inside `menus/`? Move them here once: `git status --short menus/`
+  lists them on a checkout, `diff -rq menus/v3 <repo>/menus/v3` on an
+  instance. Move each to the same path under `menus.d/`, then restore the
+  shipped copy. Full steps in the guide linked below.
+
+See the sysop guide: [Customising menus without losing your changes](../docs/sysop/menus/menu-system.md#customising-menus-without-losing-your-changes).

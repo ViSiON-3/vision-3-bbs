@@ -2,13 +2,16 @@ package menueditor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
 // validMenuName matches a safe 1-8 character uppercase alphanumeric + underscore name.
@@ -54,43 +57,59 @@ type CmdData struct {
 type menuEntry struct {
 	Name string // basename without extension, e.g. "MAIN"
 	Data MenuData
+	// MnuOverlay and CfgOverlay report whether each file currently resolves
+	// from the menu set's overlay (menus.d) rather than the shipped tree.
+	MnuOverlay bool
+	CfgOverlay bool
 }
 
-// mnuDir returns the path to the .MNU files directory.
-func mnuDir(menuBase string) string {
-	return filepath.Join(menuBase, "mnu")
+// ShippedMenuError is returned by DeleteMenu when the menu remains in the
+// shipped tree, which the overlay cannot remove. Reverted reports whether an
+// overlay copy was removed in the process, i.e. the menu is back to shipped.
+type ShippedMenuError struct {
+	Name     string
+	Shipped  string // path of the shipped .MNU that remains
+	Reverted bool
 }
 
-// cfgDir returns the path to the .CFG files directory.
-func cfgDir(menuBase string) string {
-	return filepath.Join(menuBase, "cfg")
+func (e *ShippedMenuError) Error() string {
+	if e.Reverted {
+		return fmt.Sprintf("%s reverted to the shipped copy; %s cannot be removed through the overlay", e.Name, e.Shipped)
+	}
+	return fmt.Sprintf("%s is part of the shipped menu set (%s) and cannot be removed through the overlay; run menuedit --no-overlay to edit the shipped set", e.Name, e.Shipped)
 }
 
-// LoadMenus reads all .MNU files from {menuBase}/mnu/ and returns them
-// sorted alphabetically by name.
-func LoadMenus(menuBase string) ([]menuEntry, error) {
-	dir := mnuDir(menuBase)
-	entries, err := os.ReadDir(dir)
+// LoadMenus reads all .MNU files from the set's mnu/ directory — the overlay
+// merged over the shipped tree — and returns them sorted alphabetically by
+// name.
+func LoadMenus(set menuset.Set) ([]menuEntry, error) {
+	entries, err := set.ReadDir("mnu")
 	if err != nil {
-		return nil, fmt.Errorf("reading menu dir %s: %w", dir, err)
+		return nil, fmt.Errorf("reading menu dir %s: %w", set.Path(menuset.LayerBase, "mnu"), err)
 	}
 
 	var menus []menuEntry
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
+		name := e.Name
 		if !strings.HasSuffix(strings.ToUpper(name), ".MNU") {
 			continue
 		}
 		stem := strings.ToUpper(strings.TrimSuffix(name, filepath.Ext(name)))
 
-		data, err := loadMenuFile(filepath.Join(dir, name))
+		data, err := loadMenuFile(e.Path)
 		if err != nil {
 			return nil, fmt.Errorf("loading %s: %w", name, err)
 		}
-		menus = append(menus, menuEntry{Name: stem, Data: data})
+		_, cfgLayer, _, err := set.Locate("cfg", stem+".CFG")
+		if err != nil {
+			return nil, err
+		}
+		menus = append(menus, menuEntry{
+			Name:       stem,
+			Data:       data,
+			MnuOverlay: e.Layer == menuset.LayerOverlay,
+			CfgOverlay: cfgLayer == menuset.LayerOverlay,
+		})
 	}
 
 	sort.Slice(menus, func(i, j int) bool {
@@ -112,14 +131,17 @@ func loadMenuFile(path string) (MenuData, error) {
 	return d, nil
 }
 
-// LoadCommands reads the .CFG file for the given menu name from {menuBase}/cfg/.
-// Returns an empty slice if no .CFG exists.
-func LoadCommands(menuBase, name string) ([]CmdData, error) {
+// LoadCommands reads the .CFG file for the given menu name from the set's
+// cfg/ directory, overlay first. Returns an empty slice if no .CFG exists.
+func LoadCommands(set menuset.Set, name string) ([]CmdData, error) {
 	n, err := normalizeMenuName(name)
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(cfgDir(menuBase), n+".CFG")
+	path, err := set.Resolve("cfg", n+".CFG")
+	if err != nil {
+		return nil, err
+	}
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return []CmdData{}, nil
@@ -137,47 +159,116 @@ func LoadCommands(menuBase, name string) ([]CmdData, error) {
 	return cmds, nil
 }
 
-// SaveMenu writes a MenuData record atomically to {menuBase}/mnu/{name}.MNU.
-func SaveMenu(menuBase, name string, data MenuData) error {
+// SaveMenu writes a MenuData record atomically to mnu/{name}.MNU in the
+// set's write layer: the overlay when it has one, else the shipped tree.
+func SaveMenu(set menuset.Set, name string, data MenuData) error {
 	n, err := normalizeMenuName(name)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(mnuDir(menuBase), n+".MNU")
-	return atomicWriteJSON(path, data)
+	return atomicWriteJSON(set.WritePath("mnu", n+".MNU"), data)
 }
 
-// SaveCommands writes a command slice atomically to {menuBase}/cfg/{name}.CFG.
-func SaveCommands(menuBase, name string, cmds []CmdData) error {
+// SaveCommands writes a command slice atomically to cfg/{name}.CFG in the
+// set's write layer.
+func SaveCommands(set menuset.Set, name string, cmds []CmdData) error {
 	n, err := normalizeMenuName(name)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(cfgDir(menuBase), n+".CFG")
-	return atomicWriteJSON(path, cmds)
+	return atomicWriteJSON(set.WritePath("cfg", n+".CFG"), cmds)
 }
 
-// DeleteMenu removes the .MNU and .CFG files for the given menu name.
-func DeleteMenu(menuBase, name string) error {
+// DeleteMenu removes the .MNU and .CFG files for the given menu name from the
+// set's write layer. With an overlay, only overlay copies are removed: a menu
+// that also exists in the shipped tree is left there and a *ShippedMenuError
+// reports it, since there is no way to hide a shipped file from the overlay.
+func DeleteMenu(set menuset.Set, name string) error {
 	n, err := normalizeMenuName(name)
 	if err != nil {
 		return err
 	}
-	mnuPath := filepath.Join(mnuDir(menuBase), n+".MNU")
-	cfgPath := filepath.Join(cfgDir(menuBase), n+".CFG")
+	mnuPath := set.WritePath("mnu", n+".MNU")
+	cfgPath := set.WritePath("cfg", n+".CFG")
 
-	if err := os.Remove(mnuPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("removing %s: %w", mnuPath, err)
+	removed, err := removeMenuFiles([]string{mnuPath, cfgPath}, os.Rename, os.Remove)
+	if err != nil {
+		return err
 	}
-	if err := os.Remove(cfgPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("removing %s: %w", cfgPath, err)
+	if set.HasOverlay() {
+		if shipped := set.Path(menuset.LayerBase, "mnu", n+".MNU"); fileExists(shipped) {
+			return &ShippedMenuError{Name: n, Shipped: shipped, Reverted: removed}
+		}
 	}
 	return nil
 }
 
+// removeMenuFiles stages the pair beside the originals before deleting either
+// backup. Keep contents until cleanup succeeds so even a second cleanup failure
+// can restore the complete pair. Rollback errors are reported with the cause.
+func removeMenuFiles(paths []string, rename func(string, string) error, remove func(string) error) (bool, error) {
+	type stagedFile struct {
+		path, backup string
+		data         []byte
+		mode         os.FileMode
+		deleted      bool
+	}
+	var staged []stagedFile
+	rollback := func(cause error) (bool, error) {
+		for i := len(staged) - 1; i >= 0; i-- {
+			f := staged[i]
+			var err error
+			if f.deleted {
+				err = atomicfile.WriteFile(f.path, f.data, f.mode)
+			} else {
+				err = rename(f.backup, f.path)
+			}
+			if err != nil {
+				cause = errors.Join(cause, fmt.Errorf("restoring %s: %w", f.path, err))
+			}
+		}
+		return false, cause
+	}
+	for _, path := range paths {
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return rollback(fmt.Errorf("removing %s: %w", path, err))
+		}
+		if !info.Mode().IsRegular() {
+			return rollback(fmt.Errorf("removing %s: not a regular file", path))
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return rollback(fmt.Errorf("removing %s: %w", path, err))
+		}
+		tmp, err := os.CreateTemp(filepath.Dir(path), ".menu-delete-*")
+		if err != nil {
+			return rollback(fmt.Errorf("removing %s: %w", path, err))
+		}
+		backup := tmp.Name()
+		if err := tmp.Close(); err != nil {
+			return rollback(errors.Join(err, os.Remove(backup)))
+		}
+		if err := rename(path, backup); err != nil {
+			return rollback(errors.Join(fmt.Errorf("removing %s: %w", path, err), os.Remove(backup)))
+		}
+		staged = append(staged, stagedFile{path: path, backup: backup, data: data, mode: info.Mode().Perm()})
+	}
+	for i := range staged {
+		if err := remove(staged[i].backup); err != nil {
+			return rollback(fmt.Errorf("removing %s: %w", staged[i].path, err))
+		}
+		staged[i].deleted = true
+	}
+	return len(staged) > 0, nil
+}
+
 // CreateMenu writes a new empty .MNU and empty .CFG for the given name.
 // If writing the .CFG fails, the .MNU is removed so no half-created state is left on disk.
-func CreateMenu(menuBase, name string) error {
+func CreateMenu(set menuset.Set, name string) error {
 	n, err := normalizeMenuName(name)
 	if err != nil {
 		return err
@@ -188,36 +279,44 @@ func CreateMenu(menuBase, name string) error {
 		UsePrompt: true,
 		Fallback:  name,
 	}
-	if err := SaveMenu(menuBase, name, d); err != nil {
+	if err := SaveMenu(set, name, d); err != nil {
 		return err
 	}
-	if err := SaveCommands(menuBase, name, []CmdData{}); err != nil {
+	if err := SaveCommands(set, name, []CmdData{}); err != nil {
 		// Best-effort rollback: remove the .MNU we just wrote.
-		os.Remove(filepath.Join(mnuDir(menuBase), name+".MNU")) //nolint:errcheck
+		os.Remove(set.WritePath("mnu", name+".MNU")) //nolint:errcheck
 		return err
 	}
 	return nil
 }
 
-// MenuExists reports whether a .MNU file with the given name exists.
-func MenuExists(menuBase, name string) bool {
+// MenuExists reports whether a .MNU file with the given name exists in
+// either layer.
+func MenuExists(set menuset.Set, name string) (bool, error) {
 	n, err := normalizeMenuName(name)
 	if err != nil {
-		return false
+		return false, err
 	}
-	path := filepath.Join(mnuDir(menuBase), n+".MNU")
-	_, err = os.Stat(path)
-	return err == nil
+	return set.Exists("mnu", n+".MNU")
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // atomicWriteJSON marshals v to pretty-printed JSON and writes it to path
-// via a temp file + rename for atomicity.
+// via a temp file + rename for atomicity, creating the directory first: an
+// overlay's mnu/ and cfg/ do not exist until the first save.
 func atomicWriteJSON(path string, v any) error {
 	data, err := json.MarshalIndent(v, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
 	data = append(data, '\n')
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+	}
 	if err := atomicfile.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}

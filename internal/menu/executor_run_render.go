@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strconv"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -26,7 +25,7 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 	// Determine ANSI filename using standard convention
 	ansFilename := st.currentMenuName + ".ANS"
 	// Use MenuSetPath for ANSI file
-	fullAnsPath := filepath.Join(e.MenuSetPath, "ansi", ansFilename)
+	fullAnsPath := e.menuFile("ansi", ansFilename)
 
 	// Process the associated ANSI file to get display bytes and coordinates
 	rawAnsiContent, readErr := ansi.GetAnsiFileContent(fullAnsPath)

@@ -174,6 +174,9 @@ if [[ -d "$REPO_DIR/menus" ]] && [[ ! -d "$TARGET/menus" ]]; then
     elif [[ -d "$TARGET/menus" ]]; then
     info "Menus directory already exists, skipping."
 fi
+# The overlay is where menu customisations belong; menus/ can then track the
+# repo (see docs/sysop/getting-started/upgrading.md).
+mkdir -p "$TARGET/menus.d"
 
 # ── Copy scripts ─────────────────────────────────────────────────
 if [[ -d "$REPO_DIR/scripts/examples" ]] && [[ ! -d "$TARGET/scripts/examples" ]]; then

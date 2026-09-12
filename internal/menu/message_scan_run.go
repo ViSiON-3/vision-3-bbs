@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -128,7 +127,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	// Load scan area header template (ANSI art) if available
-	scanHeaderTemplate, headerErr := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "system_header", "HEADER"))
+	scanHeaderTemplate, headerErr := e.readScanHeaderTemplate()
 	if headerErr != nil && !os.IsNotExist(headerErr) {
 		slog.Warn("failed to load scan header template", "node", nodeNumber, "error", headerErr)
 	}
@@ -544,4 +543,13 @@ func scanBaseStart(e *MenuExecutor, cfg *ScanConfig, areaID int, username string
 		}
 	}
 	return totalCount + 1 // No messages on or after the target date; skip area
+}
+
+// readScanHeaderTemplate resolves suffixes in both layers before reading.
+func (e *MenuExecutor) readScanHeaderTemplate() ([]byte, error) {
+	path, err := e.Menus().ResolveFirst("templates/system_header", "HEADER", "HEADER.ANS", "HEADER.ans")
+	if err != nil {
+		return nil, err
+	}
+	return readTemplateFile(path)
 }

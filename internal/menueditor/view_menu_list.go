@@ -112,7 +112,8 @@ func (m Model) renderMenuRow(idx int, boxW int) string {
 		displayTitle = entry.Name
 	}
 	name := padRight(displayTitle, nameColW)
-	files := fmt.Sprintf("%s.MNU / %s.CFG", entry.Name, entry.Name)
+	// An asterisk marks a file that comes from the overlay (menus.d).
+	files := fmt.Sprintf("%s.MNU%s / %s.CFG%s", entry.Name, overlayMark(entry.MnuOverlay), entry.Name, overlayMark(entry.CfgOverlay))
 	files = padRight(files, boxW-nameColW-4) // 4 = 3 prefix + 1 separator
 	content := "   " + name + " " + files
 	if len(content) < boxW {
@@ -126,4 +127,11 @@ func (m Model) renderMenuRow(idx int, boxW int) string {
 		return listHighlightStyle.Render(content)
 	}
 	return listItemStyle.Render(content)
+}
+
+func overlayMark(fromOverlay bool) string {
+	if fromOverlay {
+		return "*"
+	}
+	return ""
 }

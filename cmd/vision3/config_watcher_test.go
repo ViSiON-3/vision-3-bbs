@@ -367,3 +367,95 @@ func TestReloadConferencesUpdatesManager(t *testing.T) {
 		t.Error("conference TECH missing after reload")
 	}
 }
+
+// TestPollReloadsOnRemovalWhenAsked covers the overlay theme.json: a file that
+// is absent at startup, appears, and is removed again must reload on both
+// transitions, because its absence means "use the shipped copy". Ordinary
+// targets keep ignoring removal (TestPollHandlesMissingAndRecreatedFile).
+func TestPollReloadsOnRemovalWhenAsked(t *testing.T) {
+	cw, dir, rec := newTestWatcher(t)
+	path := filepath.Join(dir, "theme.json")
+	cw.targets = append(cw.targets, reloadTarget{name: "theme.json", path: path, reload: rec.hit("theme.json"), reloadOnRemove: true})
+	cw.seed()
+
+	cw.poll() // still absent: nothing to do
+	if got := rec.count("theme.json"); got != 0 {
+		t.Fatalf("absent file reloaded %d times, want 0", got)
+	}
+
+	touch(t, path, time.Second)
+	cw.poll()
+	if got := rec.count("theme.json"); got != 1 {
+		t.Errorf("created file reloaded %d times, want 1", got)
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	cw.poll()
+	if got := rec.count("theme.json"); got != 2 {
+		t.Errorf("removed file reloaded %d times, want 2", got)
+	}
+	cw.poll() // still absent: no repeat
+	if got := rec.count("theme.json"); got != 2 {
+		t.Errorf("still-absent file reloaded %d times, want 2", got)
+	}
+}
+
+// TestWatcherWatchesOverlayTheme checks the constructor registers theme.json
+// in both the shipped set and its overlay.
+func TestWatcherWatchesOverlayTheme(t *testing.T) {
+	root := t.TempDir()
+	menuSet := filepath.Join(root, "menus", "v3")
+	configs := filepath.Join(root, "configs")
+	if err := os.MkdirAll(configs, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cw, err := NewConfigWatcher(configs, menuSet, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewConfigWatcher: %v", err)
+	}
+	defer cw.Stop()
+	want := map[string]bool{
+		filepath.Join(menuSet, "theme.json"):               false,
+		filepath.Join(root, "menus.d", "v3", "theme.json"): true,
+	}
+	for _, tg := range cw.targets {
+		if reloadOnRemove, ok := want[tg.path]; ok {
+			if tg.reloadOnRemove != reloadOnRemove {
+				t.Errorf("%s reloadOnRemove = %v, want %v", tg.path, tg.reloadOnRemove, reloadOnRemove)
+			}
+			delete(want, tg.path)
+		}
+	}
+	for p := range want {
+		t.Errorf("theme target not registered: %s", p)
+	}
+}
+
+func TestWatcherStatErrorDoesNotCountAsRemoval(t *testing.T) {
+	cw, dir, _ := newTestWatcher(t, "theme.json")
+	path := filepath.Join(dir, "theme.json")
+	before := cw.mtimes[path]
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("theme.json", path); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := os.Stat(path); err == nil || os.IsNotExist(err) {
+		t.Fatalf("expected non-missing stat error: %v", err)
+	}
+	if cw.changed(path, true) {
+		t.Error("stat failure triggered removal reload")
+	}
+	if got := cw.mtimes[path]; !got.Equal(before) {
+		t.Errorf("stat failure discarded mtime: %v, want %v", got, before)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if !cw.changed(path, true) {
+		t.Error("actual removal not reported after stat failure")
+	}
+}

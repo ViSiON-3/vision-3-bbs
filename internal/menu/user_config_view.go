@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -29,8 +28,8 @@ func runCfgViewConfig(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	topPath := filepath.Join(e.MenuSetPath, "templates", "USRCFGV.TOP")
-	botPath := filepath.Join(e.MenuSetPath, "templates", "USRCFGV.BOT")
+	topPath := e.templateFile("USRCFGV.TOP")
+	botPath := e.templateFile("USRCFGV.BOT")
 
 	topBytes, err := os.ReadFile(topPath)
 	if err != nil && !os.IsNotExist(err) {

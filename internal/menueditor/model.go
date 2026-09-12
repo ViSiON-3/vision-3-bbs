@@ -5,6 +5,8 @@ package menueditor
 import (
 	"fmt"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -35,7 +37,7 @@ const (
 
 // Model is the BubbleTea model for the menu editor TUI.
 type Model struct {
-	menuBase string // path to menu set directory (parent of mnu/ and cfg/)
+	set menuset.Set // menu set: shipped tree plus the overlay saves go to
 
 	// Menu list state
 	menus      []menuEntry
@@ -86,9 +88,10 @@ type Model struct {
 	message string // flash message (cleared on next key)
 }
 
-// New creates a new menu editor model.
-func New(menuBase string) (Model, error) {
-	menus, err := LoadMenus(menuBase)
+// New creates a new menu editor model over a menu set. When the set has an
+// overlay, menus are read through it and every save lands in it.
+func New(set menuset.Set) (Model, error) {
+	menus, err := LoadMenus(set)
 	if err != nil {
 		return Model{}, fmt.Errorf("loading menus: %w", err)
 	}
@@ -103,8 +106,16 @@ func New(menuBase string) (Model, error) {
 	// is dragged.
 	art := pickBackdropArt()
 
+	// Tell the sysop where saves will land before the first one happens; the
+	// flash clears on the next key.
+	notice := ""
+	if set.HasOverlay() {
+		notice = fmt.Sprintf("Saving to overlay %s (* = overlay file)", set.Overlay)
+	}
+
 	return Model{
-		menuBase:             menuBase,
+		message:              notice,
+		set:                  set,
 		menus:                menus,
 		menuFields:           menuFields(),
 		cmdFields:            cmdFields(),

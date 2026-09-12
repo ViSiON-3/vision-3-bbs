@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -185,7 +184,7 @@ func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.
 // with its status line showing.
 func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, outputMode ansi.OutputMode, termHeight int, clearFirst ...bool) error {
 	// Construct full path using MenuSetPath
-	filePath := filepath.Join(e.MenuSetPath, "ansi", filename)
+	filePath := e.menuFile("ansi", filename)
 
 	// Read ANSI content via helper (strips SAUCE metadata)
 	data, err := ansi.GetAnsiFileContent(filePath)
@@ -507,7 +506,7 @@ func (e *MenuExecutor) processFileIncludes(prompt string, depth int) string {
 		// match is "%%name.ext%%"; strip the delimiters instead of re-matching.
 		fileName := strings.TrimSuffix(strings.TrimPrefix(match, "%%"), "%%")
 		// Look for included file in MenuSetPath/ansi
-		filePath := filepath.Join(e.MenuSetPath, "ansi", fileName)
+		filePath := e.menuFile("ansi", fileName)
 
 		slog.Debug("including file in prompt", "path", filePath, "depth", depth)
 		data, err := os.ReadFile(filePath)

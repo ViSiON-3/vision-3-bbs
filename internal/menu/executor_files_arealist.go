@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,10 +28,9 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 	topTemplateFilename := "FILEAREA.TOP"
 	midTemplateFilename := "FILEAREA.MID"
 	botTemplateFilename := "FILEAREA.BOT"
-	templateDir := filepath.Join(e.MenuSetPath, "templates")
-	topTemplatePath := filepath.Join(templateDir, topTemplateFilename)
-	midTemplatePath := filepath.Join(templateDir, midTemplateFilename)
-	botTemplatePath := filepath.Join(templateDir, botTemplateFilename)
+	topTemplatePath := e.templateFile(topTemplateFilename)
+	midTemplatePath := e.templateFile(midTemplateFilename)
+	botTemplatePath := e.templateFile(botTemplateFilename)
 
 	// 2. Load Template Files
 	topTemplateBytes, errTop := readTemplateFile(topTemplatePath)
@@ -54,7 +52,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 	processedBotTemplate := ansi.ReplacePipeCodes(botTemplateBytes)
 
 	// Conference header template (optional)
-	confHdrBytes, errConf := readTemplateFile(filepath.Join(templateDir, "FILECONF.HDR"))
+	confHdrBytes, errConf := readTemplateFile(e.templateFile("FILECONF.HDR"))
 	confHdrTemplate := ""
 	if errConf == nil {
 		confHdrTemplate = string(ansi.ReplacePipeCodes(confHdrBytes))

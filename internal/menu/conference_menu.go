@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -240,11 +239,10 @@ func navigateMsgArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 
 // displayConferenceList renders the conference list using templates.
 func displayConferenceList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, currentUser *user.User, outputMode ansi.OutputMode, nodeNumber int, sessionStartTime time.Time) ([]*conference.Conference, error) {
-	templateDir := filepath.Join(e.MenuSetPath, "templates")
 
-	topBytes, errTop := readTemplateFile(filepath.Join(templateDir, "MSGCONF.TOP"))
-	midBytes, errMid := readTemplateFile(filepath.Join(templateDir, "MSGCONF.MID"))
-	botBytes, errBot := readTemplateFile(filepath.Join(templateDir, "MSGCONF.BOT"))
+	topBytes, errTop := readTemplateFile(e.templateFile("MSGCONF.TOP"))
+	midBytes, errMid := readTemplateFile(e.templateFile("MSGCONF.MID"))
+	botBytes, errBot := readTemplateFile(e.templateFile("MSGCONF.BOT"))
 
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load MSGCONF templates", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
@@ -298,10 +296,9 @@ func displayConferenceList(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, currentUser *user.User, outputMode ansi.OutputMode, nodeNumber int, sessionStartTime time.Time, filterConfID int) ([]*message.MessageArea, error) {
 	slog.Debug("displaying message area list (filtered)", "node", nodeNumber, "confID", filterConfID)
 
-	templateDir := filepath.Join(e.MenuSetPath, "templates")
-	topTemplateBytes, errTop := readTemplateFile(filepath.Join(templateDir, "MSGAREA.TOP"))
-	midTemplateBytes, errMid := readTemplateFile(filepath.Join(templateDir, "MSGAREA.MID"))
-	botTemplateBytes, errBot := readTemplateFile(filepath.Join(templateDir, "MSGAREA.BOT"))
+	topTemplateBytes, errTop := readTemplateFile(e.templateFile("MSGAREA.TOP"))
+	midTemplateBytes, errMid := readTemplateFile(e.templateFile("MSGAREA.MID"))
+	botTemplateBytes, errBot := readTemplateFile(e.templateFile("MSGAREA.BOT"))
 
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load MSGAREA template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
@@ -310,7 +307,7 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 		return nil, fmt.Errorf("failed loading MSGAREA templates")
 	}
 
-	confHdrBytes, errConf := readTemplateFile(filepath.Join(templateDir, "MSGCONF.HDR"))
+	confHdrBytes, errConf := readTemplateFile(e.templateFile("MSGCONF.HDR"))
 	confHdrTemplate := ""
 	if errConf == nil {
 		confHdrTemplate = string(ansi.ReplacePipeCodes(confHdrBytes))

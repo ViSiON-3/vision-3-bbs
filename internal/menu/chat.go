@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -280,7 +279,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// @MRCROOM@ and @MRCTOPIC@ placeholders with the current room and topic.
 	// Falls back to a simple text header if the art file is not found.
 	drawHeaderLocked := func() {
-		artPath := filepath.Join(e.MenuSetPath, "ansi", "CHATHEADER.ANS")
+		artPath := e.menuFile("ansi", "CHATHEADER.ANS")
 		artData, artErr := ansi.GetAnsiFileContent(artPath)
 		if artErr == nil {
 			// Convert CP437 high bytes to UTF-8 so box-drawing chars render

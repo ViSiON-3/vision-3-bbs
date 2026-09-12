@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -318,7 +317,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 
 // displayNewUserScreen loads and displays NEWUSER.ANS.
 func (e *MenuExecutor) displayNewUserScreen(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) error {
-	fullAnsPath := filepath.Join(e.MenuSetPath, "ansi", "NEWUSER.ANS")
+	fullAnsPath := e.menuFile("ansi", "NEWUSER.ANS")
 	rawContent, err := ansi.GetAnsiFileContent(fullAnsPath)
 	if err != nil {
 		if os.IsNotExist(err) {

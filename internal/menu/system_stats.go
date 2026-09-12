@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -31,8 +30,8 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	topPath := filepath.Join(e.MenuSetPath, "templates", "SYSSTATS.TOP")
-	botPath := filepath.Join(e.MenuSetPath, "templates", "SYSSTATS.BOT")
+	topPath := e.templateFile("SYSSTATS.TOP")
+	botPath := e.templateFile("SYSSTATS.BOT")
 
 	topBytes, err := readTemplateFile(topPath)
 	if err != nil && !os.IsNotExist(err) {

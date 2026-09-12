@@ -219,7 +219,7 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 	// menu set stays self-consistent instead of being hard-coded to 78.
 	headerWidth := newsFallbackHeaderWidth
 
-	ansiPath := filepath.Join(e.MenuSetPath, "ansi", "NEWSHDR.ANS")
+	ansiPath := e.menuFile("ansi", "NEWSHDR.ANS")
 	if raw, err := os.ReadFile(ansiPath); err == nil {
 		headerWidth = headerTemplateWidth(string(raw))
 		maxStr := strconv.Itoa(item.MaxLevel)

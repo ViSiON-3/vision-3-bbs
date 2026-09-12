@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -224,7 +223,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 // require-email step. Like NEWUSER.ANS it lives in the active menu set's ansi
 // directory and is optional.
 func (e *MenuExecutor) newUserEmailArtPath() string {
-	return filepath.Join(e.MenuSetPath, "ansi", "NUEMAIL.ANS")
+	return e.menuFile("ansi", "NUEMAIL.ANS")
 }
 
 // displayNewUserEmailScreen loads and displays NUEMAIL.ANS. It returns

@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -86,7 +87,10 @@ func (s *Screen) calculateGeometry() {
 // LoadHeaderTemplate loads and processes the FSEDITOR.ANS template.
 // fromName is the sender display name: handle, real name, or anonymous string.
 func (s *Screen) LoadHeaderTemplate(menuSetPath, subject, recipient, fromName string, isAnon bool) error {
-	templatePath := filepath.Join(menuSetPath, "ansi", "FSEDITOR.ANS")
+	templatePath, err := menuset.FromPath(menuSetPath).Resolve("ansi", "FSEDITOR.ANS")
+	if err != nil {
+		return err
+	}
 	content, err := ansi.GetAnsiFileContent(templatePath)
 	if err != nil {
 		// If template doesn't exist, create a minimal header
@@ -129,7 +133,10 @@ func (s *Screen) LoadHeaderTemplate(menuSetPath, subject, recipient, fromName st
 // Screen geometry (statusLineY) is adjusted to prevent the editing area from
 // overwriting footer rows.
 func (s *Screen) LoadFooterTemplate(menuSetPath string) error {
-	templatePath := filepath.Join(menuSetPath, "ansi", "FSEDITORF.ANS")
+	templatePath, err := menuset.FromPath(menuSetPath).Resolve("ansi", "FSEDITORF.ANS")
+	if err != nil {
+		return err
+	}
 	content, err := ansi.GetAnsiFileContent(templatePath)
 	if err != nil {
 		return nil // footer is optional

@@ -1718,6 +1718,8 @@ func main() {
 		logging.Fatal("failed to load strings configuration", "error", err)
 	}
 
+	logMenuOverlay(menuSetPath)
+
 	// Load theme configuration from the menu set path
 	loadedTheme, err = config.LoadThemeConfig(menuSetPath)
 	if err != nil {

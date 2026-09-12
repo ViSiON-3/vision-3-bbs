@@ -1,8 +1,10 @@
 package editor
 
 import (
-	"path/filepath"
+	"log/slog"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
@@ -283,8 +285,14 @@ func (ch *CommandHandler) processForBuffer(text string) string {
 // Displays the help screen
 func (ch *CommandHandler) HandleHelp(inputHandler *InputHandler) {
 	// Try to load EDITHELP.ANS file
-	helpPath := filepath.Join(ch.menuSetPath, "ansi", "EDITHELP.ANS")
-	helpContent, err := ansi.GetAnsiFileContent(helpPath)
+	helpPath, err := menuset.FromPath(ch.menuSetPath).Resolve("ansi", "EDITHELP.ANS")
+	var helpContent []byte
+	if err == nil {
+		helpContent, err = ansi.GetAnsiFileContent(helpPath)
+	}
+	if err != nil {
+		slog.Warn("failed to load editor help", "error", err)
+	}
 
 	ch.screen.ClearScreen()
 

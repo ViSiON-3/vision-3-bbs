@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -24,9 +23,9 @@ import (
 // since callers re-process them per page with processFileListPlaceholders.
 // mid is returned fully processed since it needs no further per-page work.
 func (e *MenuExecutor) loadFileListTemplates(currentUser *user.User, nodeNumber int, terminal *term.Terminal, outputMode ansi.OutputMode) (top []byte, mid string, bot []byte, err error) {
-	topTemplatePath := filepath.Join(e.MenuSetPath, "templates", "FILELIST.TOP")
-	midTemplatePath := filepath.Join(e.MenuSetPath, "templates", "FILELIST.MID")
-	botTemplatePath := filepath.Join(e.MenuSetPath, "templates", "FILELIST.BOT")
+	topTemplatePath := e.templateFile("FILELIST.TOP")
+	midTemplatePath := e.templateFile("FILELIST.MID")
+	botTemplatePath := e.templateFile("FILELIST.BOT")
 
 	topTemplateBytes, errTop := readTemplateFile(topTemplatePath)
 	midTemplateBytes, errMid := readTemplateFile(midTemplatePath)

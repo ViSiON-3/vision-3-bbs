@@ -63,8 +63,8 @@ func (e *MenuExecutor) registerUploadedFiles(
 			proc := ziplab.NewProcessor(zlCfg, zlBaseDir)
 
 			// Load ZIPLAB.ANS and ZIPLAB.NFO for visual display
-			ansiPath := filepath.Join(e.MenuSetPath, "ansi", "ZIPLAB.ANS")
-			nfoPath := filepath.Join(e.MenuSetPath, "ansi", "ZIPLAB.NFO")
+			ansiPath := e.menuFile("ansi", "ZIPLAB.ANS")
+			nfoPath := e.menuFile("ansi", "ZIPLAB.NFO")
 
 			ansiContent, _ := ansi.GetAnsiFileContent(ansiPath)
 			nfo, _ := ziplab.ParseNFO(nfoPath)

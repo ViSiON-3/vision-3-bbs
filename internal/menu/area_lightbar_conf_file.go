@@ -2,7 +2,6 @@ package menu
 
 import (
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -144,8 +143,7 @@ func runChangeFileConferenceLightbar(c *cmdCtx, args string) (*user.User, string
 		return currentUser, "", nil
 	}
 
-	templateDir := filepath.Join(e.MenuSetPath, "templates")
-	topBytes, midBytes := loadFileConfTemplates(templateDir)
+	topBytes, midBytes := loadFileConfTemplates(e)
 	if topBytes == nil || midBytes == nil {
 		// Conferences may well exist — the templates are what's missing — so
 		// report a template error rather than "no conferences".
@@ -231,14 +229,14 @@ func runChangeFileConferenceLightbar(c *cmdCtx, args string) (*user.User, string
 
 // loadFileConfTemplates returns the top/mid templates for the file conference
 // picker, preferring FILECONF.* and falling back to the shipped MSGCONF.*.
-func loadFileConfTemplates(templateDir string) (top, mid []byte) {
-	top, errTop := readTemplateFile(filepath.Join(templateDir, "FILECONF.TOP"))
-	mid, errMid := readTemplateFile(filepath.Join(templateDir, "FILECONF.MID"))
+func loadFileConfTemplates(e *MenuExecutor) (top, mid []byte) {
+	top, errTop := readTemplateFile(e.templateFile("FILECONF.TOP"))
+	mid, errMid := readTemplateFile(e.templateFile("FILECONF.MID"))
 	if errTop == nil && errMid == nil {
 		return top, mid
 	}
-	top, errTop = readTemplateFile(filepath.Join(templateDir, "MSGCONF.TOP"))
-	mid, errMid = readTemplateFile(filepath.Join(templateDir, "MSGCONF.MID"))
+	top, errTop = readTemplateFile(e.templateFile("MSGCONF.TOP"))
+	mid, errMid = readTemplateFile(e.templateFile("MSGCONF.MID"))
 	if errTop != nil || errMid != nil {
 		return nil, nil
 	}

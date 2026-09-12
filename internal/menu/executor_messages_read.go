@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -53,9 +52,9 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	// template this menu set does not have. A fixed upper bound would reject
 	// styles the selector offers — MSGHDR.BAR ships fifteen and describes
 	// itself as supporting an unlimited number.
-	if !headerStyleAvailable(e.MenuSetPath, currentUser.MsgHdr) {
+	if !headerStyleAvailable(e.Menus(), currentUser.MsgHdr) {
 		// Check if MSGHDR.ANS exists for selection screen
-		selPath := filepath.Join(e.MenuSetPath, "templates", "message_headers", "MSGHDR.ANS")
+		selPath := e.menuFile("templates", "message_headers", "MSGHDR.ANS")
 		if _, statErr := os.Stat(selPath); statErr == nil {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Please select a message header style.|07\r\n")), outputMode)
 			time.Sleep(500 * time.Millisecond)

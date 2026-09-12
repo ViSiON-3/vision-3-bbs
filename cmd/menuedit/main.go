@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	./menuedit [--menus path/to/menus/set]
+//	./menuedit [--menus path/to/menus/set] [--no-overlay]
 //
 // If no --menus flag is provided, it looks for menus/v3 relative to the
 // current working directory.
@@ -16,6 +16,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/menueditor"
@@ -23,6 +25,7 @@ import (
 
 func main() {
 	menusPath := flag.String("menus", "", "Path to menu set directory (default: menus/v3)")
+	noOverlay := flag.Bool("no-overlay", false, "Read and write the shipped menu set directly instead of its menus.d overlay")
 	flag.Parse()
 
 	// Resolve menus path
@@ -69,8 +72,16 @@ func main() {
 		}
 	}
 
+	// Menus are read through the overlay (menus.d/<set>) and saved into it,
+	// so edits survive a git pull of the shipped set. --no-overlay edits the
+	// shipped tree in place, as before the overlay existed.
+	set := menuset.FromPath(path)
+	if *noOverlay {
+		set = menuset.Bare(path)
+	}
+
 	// Create the editor model
-	model, err := menueditor.New(path)
+	model, err := menueditor.New(set)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing editor: %v\n", err) //nolint:errcheck
 		os.Exit(1)

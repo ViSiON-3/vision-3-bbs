@@ -195,7 +195,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
 		// Display ANSI header (Vision/2 style - 4 rows tall)
-		ansPath := "menus/v3/ansi/NSCANHDR.ANS"
+		ansPath := e.menuFile("ansi", "NSCANHDR.ANS")
 		headerContent, ansErr := ansi.GetAnsiFileContent(ansPath)
 		if ansErr == nil {
 			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives

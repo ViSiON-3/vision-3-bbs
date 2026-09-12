@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
 // newMenuBase creates a menu base directory with mnu/ and cfg/ subdirs.
@@ -61,11 +63,11 @@ func TestSaveAndLoadMenuRoundTrip(t *testing.T) {
 		ACS:      "s10",
 		MesConf:  2,
 	}
-	if err := SaveMenu(base, "main", want); err != nil {
+	if err := SaveMenu(menuset.Bare(base), "main", want); err != nil {
 		t.Fatalf("SaveMenu: %v", err)
 	}
 
-	menus, err := LoadMenus(base)
+	menus, err := LoadMenus(menuset.Bare(base))
 	if err != nil {
 		t.Fatalf("LoadMenus: %v", err)
 	}
@@ -93,10 +95,10 @@ func TestSaveAndLoadMenuRoundTrip(t *testing.T) {
 
 func TestLoadMenus_SkipsNonMenuFiles(t *testing.T) {
 	base := newMenuBase(t)
-	if err := SaveMenu(base, "B", MenuData{Title: "B"}); err != nil {
+	if err := SaveMenu(menuset.Bare(base), "B", MenuData{Title: "B"}); err != nil {
 		t.Fatalf("SaveMenu: %v", err)
 	}
-	if err := SaveMenu(base, "A", MenuData{Title: "A"}); err != nil {
+	if err := SaveMenu(menuset.Bare(base), "A", MenuData{Title: "A"}); err != nil {
 		t.Fatalf("SaveMenu: %v", err)
 	}
 	// Non-.MNU file and a subdirectory must be skipped.
@@ -107,7 +109,7 @@ func TestLoadMenus_SkipsNonMenuFiles(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	menus, err := LoadMenus(base)
+	menus, err := LoadMenus(menuset.Bare(base))
 	if err != nil {
 		t.Fatalf("LoadMenus: %v", err)
 	}
@@ -121,7 +123,7 @@ func TestLoadMenus_SkipsNonMenuFiles(t *testing.T) {
 }
 
 func TestLoadMenus_MissingDir(t *testing.T) {
-	if _, err := LoadMenus(filepath.Join(t.TempDir(), "nope")); err == nil {
+	if _, err := LoadMenus(menuset.Bare(filepath.Join(t.TempDir(), "nope"))); err == nil {
 		t.Fatal("missing mnu dir should error")
 	}
 }
@@ -130,7 +132,7 @@ func TestSaveAndLoadCommands(t *testing.T) {
 	base := newMenuBase(t)
 
 	// Missing .CFG returns an empty slice, not an error.
-	cmds, err := LoadCommands(base, "MAIN")
+	cmds, err := LoadCommands(menuset.Bare(base), "MAIN")
 	if err != nil {
 		t.Fatalf("LoadCommands missing: %v", err)
 	}
@@ -142,10 +144,10 @@ func TestSaveAndLoadCommands(t *testing.T) {
 		{Keys: "M", Command: "GOTO:MSGMENU", ACS: "s10"},
 		{Keys: "G", Command: "LOGOFF", Hidden: true},
 	}
-	if err := SaveCommands(base, "main", want); err != nil {
+	if err := SaveCommands(menuset.Bare(base), "main", want); err != nil {
 		t.Fatalf("SaveCommands: %v", err)
 	}
-	got, err := LoadCommands(base, "MAIN")
+	got, err := LoadCommands(menuset.Bare(base), "MAIN")
 	if err != nil {
 		t.Fatalf("LoadCommands: %v", err)
 	}
@@ -162,7 +164,7 @@ func TestSaveAndLoadCommands(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(base, "cfg", "EMPTY.CFG"), nil, 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	cmds, err = LoadCommands(base, "EMPTY")
+	cmds, err = LoadCommands(menuset.Bare(base), "EMPTY")
 	if err != nil {
 		t.Fatalf("LoadCommands empty: %v", err)
 	}
@@ -171,13 +173,13 @@ func TestSaveAndLoadCommands(t *testing.T) {
 	}
 
 	// Invalid names are rejected.
-	if _, err := LoadCommands(base, "../etc"); err == nil {
+	if _, err := LoadCommands(menuset.Bare(base), "../etc"); err == nil {
 		t.Error("LoadCommands with traversal name should error")
 	}
-	if err := SaveCommands(base, "bad name", nil); err == nil {
+	if err := SaveCommands(menuset.Bare(base), "bad name", nil); err == nil {
 		t.Error("SaveCommands with invalid name should error")
 	}
-	if err := SaveMenu(base, "toolongname", MenuData{}); err == nil {
+	if err := SaveMenu(menuset.Bare(base), "toolongname", MenuData{}); err == nil {
 		t.Error("SaveMenu with invalid name should error")
 	}
 }
@@ -185,18 +187,18 @@ func TestSaveAndLoadCommands(t *testing.T) {
 func TestCreateDeleteExists(t *testing.T) {
 	base := newMenuBase(t)
 
-	if MenuExists(base, "NEW") {
+	if menuExistsOK(t, menuset.Bare(base), "NEW") {
 		t.Fatal("NEW should not exist yet")
 	}
-	if err := CreateMenu(base, "new"); err != nil {
+	if err := CreateMenu(menuset.Bare(base), "new"); err != nil {
 		t.Fatalf("CreateMenu: %v", err)
 	}
-	if !MenuExists(base, "new") {
+	if !menuExistsOK(t, menuset.Bare(base), "new") {
 		t.Error("MenuExists should be true after CreateMenu (case-insensitive)")
 	}
 
 	// CreateMenu seeds UsePrompt=true and Fallback=self.
-	menus, err := LoadMenus(base)
+	menus, err := LoadMenus(menuset.Bare(base))
 	if err != nil {
 		t.Fatalf("LoadMenus: %v", err)
 	}
@@ -208,10 +210,10 @@ func TestCreateDeleteExists(t *testing.T) {
 		t.Errorf("expected NEW.CFG to exist: %v", err)
 	}
 
-	if err := DeleteMenu(base, "NEW"); err != nil {
+	if err := DeleteMenu(menuset.Bare(base), "NEW"); err != nil {
 		t.Fatalf("DeleteMenu: %v", err)
 	}
-	if MenuExists(base, "NEW") {
+	if menuExistsOK(t, menuset.Bare(base), "NEW") {
 		t.Error("NEW should be gone after DeleteMenu")
 	}
 	if _, err := os.Stat(filepath.Join(base, "cfg", "NEW.CFG")); !os.IsNotExist(err) {
@@ -219,17 +221,26 @@ func TestCreateDeleteExists(t *testing.T) {
 	}
 
 	// Deleting a nonexistent menu is not an error.
-	if err := DeleteMenu(base, "GHOST"); err != nil {
+	if err := DeleteMenu(menuset.Bare(base), "GHOST"); err != nil {
 		t.Errorf("DeleteMenu(nonexistent) = %v, want nil", err)
 	}
 	// Invalid names.
-	if err := CreateMenu(base, "../X"); err == nil {
+	if err := CreateMenu(menuset.Bare(base), "../X"); err == nil {
 		t.Error("CreateMenu with traversal name should error")
 	}
-	if err := DeleteMenu(base, "../X"); err == nil {
+	if err := DeleteMenu(menuset.Bare(base), "../X"); err == nil {
 		t.Error("DeleteMenu with traversal name should error")
 	}
-	if MenuExists(base, "../X") {
+	if exists, err := MenuExists(menuset.Bare(base), "../X"); err == nil || exists {
 		t.Error("MenuExists with invalid name should be false")
 	}
+}
+
+func menuExistsOK(t *testing.T, set menuset.Set, name string) bool {
+	t.Helper()
+	exists, err := MenuExists(set, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return exists
 }

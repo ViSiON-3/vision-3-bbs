@@ -197,11 +197,12 @@ vision3/
 │       ├── nal/        # Network Area List signing/verification
 │       ├── protocol/   # Wire format, message types, events
 │       └── registry/   # Network registry client
-└── menus/v3/           # Menu resources
-    ├── ansi/           # ANSI art files
-    ├── cfg/            # Menu display configurations
-    ├── mnu/            # Menu command definitions
-    └── templates/      # Display templates
+├── menus/v3/           # Shipped menu set (tracked)
+│   ├── ansi/           # ANSI art files
+│   ├── cfg/            # Menu command definitions
+│   ├── mnu/            # Menu configurations
+│   └── templates/      # Display templates
+└── menus.d/v3/         # Sysop overrides, same layout, searched first (git-ignored)
 ```
 
 ## Module Boundaries
@@ -214,6 +215,7 @@ vision3/
 * `internal/conference`: Conference grouping for message and file areas
 * `internal/config`: Configuration file loading and parsing
 * `internal/menu`: Menu loading, display, command execution
+* `internal/menuset`: Menu set path resolution — the `menus.d/` overlay over the shipped set
 * `internal/jam`: JAM binary message base (read/write/index/lastread)
 * `internal/ftn`: FTN Type-2+ packet parsing and creation
 * `internal/message`: Message area management, JAM-backed storage
@@ -223,7 +225,7 @@ vision3/
 * `internal/file`: File area management and metadata
 * `internal/v3net`: V3Net message networking (hub, leaf, protocol, keystore, dedup, NAL, registry)
 * `internal/session`: Session state tracking (currently minimal)
-* `menus/v3`: Static menu resources (ANSI art, menu definitions)
+* `menus/v3`: Static menu resources (ANSI art, menu definitions); `menus.d/v3` holds per-file overrides
 * `data`: Persisted application data (users, JAM bases, FTN packets, logs)
 
 ## Key Design Decisions

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -88,13 +87,12 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// load below already falls back.
 
 	// Load the MSGHDR template file
-	hdrTemplatePath := filepath.Join(e.MenuSetPath, "templates", "message_headers",
-		fmt.Sprintf("MSGHDR.%d.ans", hdrStyle))
+	hdrTemplatePath := e.menuFile("templates", "message_headers", fmt.Sprintf("MSGHDR.%d.ans", hdrStyle))
 	hdrTemplateBytes, hdrErr := ansi.GetAnsiFileContent(hdrTemplatePath)
 	if hdrErr != nil {
 		slog.Error("failed to load message header", "node", nodeNumber, "file", fmt.Sprintf("MSGHDR.%d.ans", hdrStyle), "error", hdrErr)
 		// Fallback to style 2 (simple text format)
-		hdrTemplatePath = filepath.Join(e.MenuSetPath, "templates", "message_headers", "MSGHDR.2.ans")
+		hdrTemplatePath = e.menuFile("templates", "message_headers", "MSGHDR.2.ans")
 		hdrTemplateBytes, hdrErr = ansi.GetAnsiFileContent(hdrTemplatePath)
 		if hdrErr != nil {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgHdrLoadError)), outputMode)

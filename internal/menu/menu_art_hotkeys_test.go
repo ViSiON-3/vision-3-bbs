@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
@@ -61,7 +63,7 @@ func TestMenuArtHotkeysAreBound(t *testing.T) {
 			continue // art with no command set of its own
 		}
 
-		commands, err := LoadCommands(name, cfgDir)
+		commands, err := LoadCommands(name, menuset.Bare(menuSet))
 		if err != nil {
 			t.Errorf("%s.CFG: %v", name, err)
 			continue

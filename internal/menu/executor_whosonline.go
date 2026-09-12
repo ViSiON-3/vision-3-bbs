@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -114,9 +113,9 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running WHOISONLINE", "node", nodeNumber)
 
-	topPath := filepath.Join(e.MenuSetPath, "templates", "WHOONLN.TOP")
-	midPath := filepath.Join(e.MenuSetPath, "templates", "WHOONLN.MID")
-	botPath := filepath.Join(e.MenuSetPath, "templates", "WHOONLN.BOT")
+	topPath := e.templateFile("WHOONLN.TOP")
+	midPath := e.templateFile("WHOONLN.MID")
+	botPath := e.templateFile("WHOONLN.BOT")
 
 	topBytes, errTop := readTemplateFile(topPath)
 	midBytes, errMid := readTemplateFile(midPath)
