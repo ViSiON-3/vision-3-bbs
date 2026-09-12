@@ -15,6 +15,11 @@ import (
 
 // loadLightbarOptions loads and parses lightbar options from configuration files
 func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, error) {
+	// Every lightbar — matrix, fast login, ordinary menus — comes through
+	// here, so this is where a menu split across overlay and shipped layers
+	// gets reported.
+	e.warnLightbarLayerMismatch(menuName)
+
 	// Determine paths using MenuSetPath
 	cfgFilename := menuName + ".CFG"
 	barFilename := menuName + ".BAR"

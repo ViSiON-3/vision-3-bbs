@@ -23,5 +23,9 @@ copying the rest of `ansi/`; every other file still comes from `menus/`.
   If you override one, check the others still line up; the BBS logs a warning
   when a lightbar menu's files come from different layers.
 - A file cannot be *removed* from the shipped set by way of this directory.
+- Already edited files inside `menus/`? Move them here once: `git status --short menus/`
+  lists them on a checkout, `diff -rq menus/v3 <repo>/menus/v3` on an
+  instance. Move each to the same path under `menus.d/`, then restore the
+  shipped copy. Full steps in the guide linked below.
 
 See the sysop guide: `docs/sysop/menus/menu-system.md#customising-menus-without-losing-your-changes`.

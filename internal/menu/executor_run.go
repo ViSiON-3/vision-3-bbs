@@ -214,9 +214,6 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// --- Check for Lightbar Menu (.BAR) ---
 		// Check if a .BAR file exists for this menu in the MENU SET directory
 		st.isLightbarMenu = HasBarFile(st.currentMenuName, e.Menus())
-		if st.isLightbarMenu {
-			e.warnLightbarLayerMismatch(st.currentMenuName)
-		}
 
 		// Variable declarations for command handling
 		// var st.userInput string // REMOVE this redeclaration

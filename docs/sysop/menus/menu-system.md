@@ -181,6 +181,77 @@ Docker users mount `./menus.d` alongside `./menus` — `docker-compose.yml`
 already does — and can leave the shipped set read-only; see
 [Docker](../getting-started/docker.md#container-user-and-file-ownership).
 
+### Moving existing customisations into `menus.d/`
+
+If you customised menus before the overlay existed, your edits are inside
+`menus/`. Moving them takes a few minutes and only has to be done once. How
+you find the changed files depends on [which install you have](../getting-started/upgrading.md#which-install-do-you-have).
+
+**Repo in place** — `menus/` is the git working tree, so git knows what you
+changed:
+
+```bash
+git status --short menus/       # M = a shipped file you edited, ?? = a file you added
+```
+
+Move each listed file to the same path under `menus.d/`, then let git put the
+shipped copy back:
+
+```bash
+mkdir -p menus.d/v3/ansi
+mv menus/v3/ansi/MAIN.ANS menus.d/v3/ansi/
+git checkout -- menus/v3/ansi/MAIN.ANS
+```
+
+Files you added (`??`) just move; there is nothing to restore. If you had
+committed your edits to a branch, use `git diff --name-only main -- menus/` to
+list them, move them the same way, and switch back to `main`.
+
+**Instance or bundle** — `menus/` is a copy that `dev-setup.sh` made or a
+bundle extracted, so compare it with the shipped set you got it from:
+
+```bash
+# instance: against the repo it was built from
+diff -rq menus/v3 ~/git/vision3/menus/v3
+# bundle: against a fresh extraction of the bundle you installed
+diff -rq menus/v3 /tmp/vision3-bundle/menus/v3
+```
+
+`Files ... differ` is a shipped file you edited, `Only in menus/v3/...` is one
+you added. Move each to the same path under `menus.d/v3/`. Then, on an
+instance, replace the copy with a symlink so the shipped set tracks the repo
+from now on:
+
+```bash
+rm -rf menus && ln -s ~/git/vision3/menus menus
+```
+
+The overlay stays in the instance directory (`/opt/vision3/menus.d/`), next to
+the symlink, not inside the repo.
+
+Be aware that a file can differ because a *release* changed it and you never
+copied the fix across, not because you edited it. Moving such a file into
+`menus.d/` would freeze it at the old version. If you are not sure whether a
+difference is yours, look at it (`diff menus/v3/ansi/X.ANS ~/git/vision3/menus/v3/ansi/X.ANS`)
+or check the repo's history for the file (`git log --oneline -- menus/v3/ansi/X.ANS`);
+leave anything you do not recognise to the shipped set.
+
+**Docker** — `menus/` is your checkout bind-mounted, so follow the repo-in-place
+steps on the host. If you had made `menus/` writable by the container
+(`chown -R 100:101`), you can take it back now: `sudo chown -R "$(id -u):$(id -g)" ./menus`.
+`menuedit` writes to `menus.d/`, which the entrypoint owns.
+
+**Check the result.** Start the BBS and look for the overlay line in the log:
+
+```
+menu overlay active path=.../menus.d/v3 overrides=3 additions=1
+```
+
+`overrides` should equal the number of shipped files you moved, `additions`
+the number of files you added. A `has no counterpart in the shipped set`
+warning means a subdirectory name is wrong. `git status menus/` (repo) or the
+`diff -rq` above (instance) should now report nothing.
+
 ## Menu Configuration Files (.MNU)
 
 Menu configuration files are JSON files that define menu behavior and prompts.

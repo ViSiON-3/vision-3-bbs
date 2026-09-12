@@ -147,7 +147,9 @@ docker compose exec -u vision3 vision3 ./menuedit   # saves into /vision3/menus.
 ```
 
 Edits made on the host land in the same directory (`./menus.d`) and are picked
-up on the next menu load. You never need to make `menus/` writable.
+up on the next menu load. You never need to make `menus/` writable. If you
+customised `menus/` before the overlay existed, move those files across once —
+see [Moving existing customisations into menus.d](../menus/menu-system.md#moving-existing-customisations-into-menusd).
 
 ### Persistent Data
 

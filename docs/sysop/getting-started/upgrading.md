@@ -84,7 +84,9 @@ mv menus/v3/ansi/MAIN.ANS menus.d/v3/ansi/
 git checkout -- menus/v3/ansi/MAIN.ANS
 ```
 
-After that, `git pull` cannot conflict on menus again.
+After that, `git pull` cannot conflict on menus again. The full procedure,
+including edits committed on a branch, is in
+[Moving existing customisations into menus.d](../menus/menu-system.md#moving-existing-customisations-into-menusd).
 
 Re-running `./setup.sh` is safe: it copies a config template only when the
 target does not already exist. It fills in genuinely new files and leaves
@@ -131,14 +133,15 @@ the symlinked set cannot overwrite them:
 
 ```bash
 cd /opt/vision3
-# first move anything you changed out of the way, e.g.
-#   mkdir -p menus.d/v3/ansi && mv menus/v3/ansi/MAIN.ANS menus.d/v3/ansi/
+diff -rq menus/v3 ~/git/vision3/menus/v3      # find what you changed or added
+# move each of those files to the same path under menus.d/v3/, then:
 rm -rf menus && ln -s ~/git/vision3/menus menus
 ```
 
 `menus.d/` is searched before `menus/`, file by file, so the shipped set can
-change underneath you without touching a file you have overridden — see
-[Customising menus without losing your changes](../menus/menu-system.md#customising-menus-without-losing-your-changes).
+change underneath you without touching a file you have overridden. Step by
+step, including how to tell your edits from fixes you have not copied yet:
+[Moving existing customisations into menus.d](../menus/menu-system.md#moving-existing-customisations-into-menusd).
 
 The same is true of `configs/`: templates are copied only when the file is
 absent, so see [Settings added since your version](#settings-added-since-your-version).
