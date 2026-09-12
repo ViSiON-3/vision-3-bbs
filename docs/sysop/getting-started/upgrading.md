@@ -489,3 +489,96 @@ shows up to 20 visible callers by default (a `RUN:LASTCALLERS <n>` argument in
 your menu CFG still overrides the row count). Real callers evicted from the
 old, shallower history are gone for good; the screen refills as calls arrive.
 No action needed.
+
+## Worked example: upgrading to v0.9.3
+
+v0.9.3 is automatic for a board carrying **one** FTN network: deploy the new
+bundle and restart. A board carrying **two or more** networks has one thing to
+do by hand, and everyone should know about three behaviour changes.
+
+### Two or more FTN networks: give each its own binkd outbound
+
+Until now every network's mail went into the single global
+`binkd_outbound_path`, and the mailer put it back there even if you had split
+the directories by hand. Sharing one BSO outbound between networks is unsafe:
+bundle and flow filenames are built from the destination net/node with no zone
+component, so two hubs in different networks that share a net/node pair
+collide on one filename, and one network's mail is handed to the other's hub.
+
+Each network can now have its own outbound. In `./config` → **Echomail
+Networks**, open each network beyond the first and set **Binkd Outbound** to a
+directory of its own — `data/ftn/out_tqw`, say. No dots in the directory name:
+binkd reserves `.<zone>` suffixes on the base outbound for zone directories and
+refuses to start on a dotted one, so the editor rejects it up front. Leave the
+field empty on a network to keep using the global directory.
+
+On save the mailer creates the directory, repoints that network's `domain`
+line in `binkd.conf`, and restarts binkd on the new configuration. Do this
+when the outbound is empty — right after a successful poll — or move that
+hub's bundle and flow files across by hand, since binkd only looks in the
+domain's current directory.
+
+### `binkd.conf` is kept in step, and binkd restarts itself
+
+Two things used to need a hand-edit and a restart:
+
+- A network added outside the FTN Setup Wizard (by hand in the editor, or with
+  `helper ftnsetup`) got a `node` line in `binkd.conf` and nothing else, so
+  binkd refused its sessions with `unknown domain`. The `domain` and
+  `address` lines are now added for any network missing them, on save and
+  before each mailer launch.
+- binkd reads `binkd.conf` once, at startup, and nothing asked it to re-read.
+  A new node, a changed hostname or password, or a different listen port sat
+  inert until binkd happened to exit. The integrated mailer now re-checks the
+  file every 15 seconds and recycles binkd when it has changed — a sub-second
+  gap in the listener — whether the change came from the editor or from a
+  hand edit.
+
+`ftn.json` is the source of truth for `node` lines and for each `domain`
+line's outbound path; every other line in `binkd.conf` is left exactly as you
+wrote it.
+
+### Poll events follow your networks
+
+The per-network `echomail_poll_<network>` event used to be created only by the
+wizard. It is now created on save for any network whose hub link has a
+**Hostname**, renamed along with its network, and **disabled** (never deleted,
+so a tuned schedule survives) when the network is removed or its hub loses its
+hostname. A link with no hostname is receive-only — binkd has nothing to dial —
+and the editor's log says so; set the hostname under **Echomail Links** to
+poll it.
+
+### Event chaining now works
+
+`run_after` and `delay_after_seconds` have been in `events.json` and the
+events editor since the scheduler shipped, but nothing read them. They do what
+they say now: the chained event runs when the named event finishes (whatever
+its exit status), after the delay. If you set **Run After** on an event in the
+past and shrugged when nothing happened, that event will start chaining after
+this upgrade — check `events.json` for stray values. A cycle (A after B after
+A) disables chaining for every event and logs an error naming the loop. See
+[Event Chaining](../advanced/event-scheduler.md#event-chaining-run_after).
+
+### Real names are validated everywhere
+
+Sign-up has always required a real name of at least four characters with a
+space in it. The sysop user editors, the scripting API's
+`user.set('realName', ...)`, and the caller's own **Real Name** prompt in the
+config menu now apply the same rule instead of saving anything, including
+blank. Existing users are untouched; a blank real name is caught the next time
+someone edits that user. (An area flagged real-name-only still falls back to
+the handle for a user with no real name — that is the behaviour the validation
+exists to stop happening silently.)
+
+### Where the config editor's warnings went
+
+`./config` now writes a rolling `data/logs/config.log` instead of discarding
+its log. Warnings raised by a save — a link with no hostname, a rejected
+outbound path, a network declared in `binkd.conf` — land there. If the log
+cannot be opened, the editor says so in its status line at startup.
+
+### 32-bit Windows and Docker
+
+Nothing to do. The 386 build no longer panics on every telnet connect, and the
+Docker image builds and starts again (see
+[Docker](docker.md)) — both were broken in v0.9.0 through v0.9.2.

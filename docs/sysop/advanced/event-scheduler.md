@@ -57,15 +57,15 @@ Event scheduling is configured in `configs/events.json`.
 
 - **id** (string, required): Unique identifier for the event
 - **name** (string, required): Human-readable name for logging
-- **schedule** (string, required): Cron schedule expression (see below)
+- **schedule** (string): Cron schedule expression (see below). Required unless the event is `run_at_startup` or has a `run_after`
 - **command** (string, required): Path to the executable
 - **args** (array): Command-line arguments
 - **working_directory** (string): Directory to run the command in
 - **timeout_seconds** (integer): Maximum execution time (0 = no timeout)
 - **enabled** (boolean): Enable/disable this specific event
 - **environment_vars** (object): Environment variables to set
-- **run_after** (string): Event ID that must complete before this event runs (future feature)
-- **delay_after_seconds** (integer): Delay after run_after event completes (future feature)
+- **run_after** (string): Event ID this event follows; it runs when that event finishes (see [Event Chaining](#event-chaining-run_after))
+- **delay_after_seconds** (integer): Seconds to wait after the `run_after` event finishes before starting
 
 ## Cron Schedule Syntax
 
@@ -193,6 +193,10 @@ Networks did not control hub polling and has been removed; legacy
 > concurrently exporting the same bases (double-export). Scheduler events
 > remain useful for forced polls (`binkd -p`) of specific hubs. See
 > [ftn-echomail.md](messages/ftn-echomail.md#enabling-the-integrated-mailer-recommended).
+
+To poll several hubs one after another — over a single line, say, or to toss
+once after the last poll — chain the events with `run_after`; see
+[Event Chaining](#event-chaining-run_after).
 
 **Simple poll all nodes every 30 minutes:**
 
@@ -494,6 +498,51 @@ Time  Event A  Event B  Event C  Result
 0:03  Done     Running  Start    C runs (A freed slot)
 ```
 
+## Event Chaining (`run_after`)
+
+An event can follow another event instead of, or as well as, having a
+schedule. Set `run_after` to the ID of the event it follows, and optionally
+`delay_after_seconds` to wait before it starts:
+
+```json
+{
+  "id": "echomail_poll_tqwnet",
+  "name": "Poll tqwNet (after fsxNet)",
+  "run_after": "echomail_poll_fsxnet",
+  "delay_after_seconds": 30,
+  "command": "{BBS_ROOT}/bin/binkd",
+  "args": ["-p", "-P", "1337:3/123@tqwnet", "{BBS_ROOT}/data/ftn/binkd.conf"],
+  "working_directory": "{BBS_ROOT}",
+  "timeout_seconds": 300,
+  "enabled": true
+}
+```
+
+In the events editor these are the **Run After** and **Delay** fields.
+
+How it behaves:
+
+- **The chained event runs when its parent finishes, whatever the parent's
+  exit status.** "Run after" is about order, not success: a poll that failed
+  is exactly when the next network still wants its turn. An event that must
+  not run after a failure should be a different event.
+- **A chained event needs no schedule.** One with only `run_after` is fine; one
+  with both fires on its schedule *and* after its parent.
+- **Several events may follow one parent**, and chains may be several events
+  long (up to 16 deep, which is more than any real chain).
+- **A disabled event is never chained**, the same as it is never scheduled,
+  and it is ignored when the chain graph is checked.
+- **A cycle disables chaining for every event.** A after B after A would
+  re-trigger forever, so the scheduler refuses the whole graph at startup or
+  reload, logs an error naming the loop, and runs schedules only until the
+  loop is broken in the events editor.
+- **Chained events count toward `max_concurrent_events`**, but the parent
+  gives its slot back before the child asks for one, so a limit of 1 still
+  chains.
+- A `run_after` naming an event that does not exist is warned about at
+  startup and never fires. An event naming itself is ignored.
+- A BBS shutdown cancels a chained event still waiting out its delay.
+
 ## Error Handling
 
 ### Non-Fatal Errors (logged, scheduler continues)
@@ -632,8 +681,6 @@ The BBS will start normally but the scheduler will not run.
 
 Planned features for future releases:
 
-- **Event dependencies**: `run_after` and `delay_after_seconds` support
-- **Event chains**: Automatic sequential execution
 - **Manual triggers**: API/command to trigger events on-demand
 - **Event output capture**: Store full output for review
 - **Notification hooks**: Alert on event failures
