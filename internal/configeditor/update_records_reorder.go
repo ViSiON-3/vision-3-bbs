@@ -21,7 +21,7 @@ func (m Model) updateRecordReorder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	lo := m.reorderMinIdx
 	hi := m.reorderMaxIdx
 
-	target := m.recordCursor
+	var target int
 	switch msg.Type {
 	case tea.KeyUp:
 		target = m.recordCursor - 1

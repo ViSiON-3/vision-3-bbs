@@ -52,8 +52,7 @@ var (
 	fallbackStyle = tuiart.Color(dosBlack, dosDarkGray)
 
 	// State marker column, between the label and the value.
-	markerStyle          = tuiart.Color(dosBlack, dosLightCyan)
-	markerHighlightStyle = tuiart.Color(dosMagenta, dosLightCyan)
+	markerStyle = tuiart.Color(dosBlack, dosLightCyan)
 
 	// Description caption, drawn over the backdrop below the panel
 	descriptionStyle = tuiart.Color(dosBlack, dosLightMagenta)

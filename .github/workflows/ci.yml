@@ -28,15 +28,11 @@ jobs:
           fi
       - name: go vet
         run: go vet ./...
-      # A ~131-issue legacy baseline exists (2026-07-15: 50 errcheck, 45
-      # staticcheck, 36 unused); block only new issues until it's burned
-      # down. only-new-issues requires a PR patch, so this step is
-      # PR-only by design — a full run on main would fail on the baseline.
+      # The legacy baseline (~131 issues on 2026-07-15) is gone as of #349, so
+      # this is a full run that gates pushes to main as well as PRs. Keep it
+      # that way: only-new-issues needs a PR patch and would silently skip main.
       - name: golangci-lint
-        if: github.event_name == 'pull_request'
         uses: golangci/golangci-lint-action@v8
-        with:
-          only-new-issues: true
 
       # The 386 builds run on 32-bit Windows, and there a 64-bit atomic on a
       # struct field that is not 8-byte aligned panics at first use with
