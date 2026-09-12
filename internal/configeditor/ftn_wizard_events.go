@@ -111,6 +111,18 @@ const pollEventPrefix = "echomail_poll_"
 func refreshPollEvents(events *config.EventsConfig, networks map[string]config.FTNNetworkConfig) {
 	for netKey, nc := range networks {
 		if len(nc.Links) == 0 {
+			// Nothing to poll. An existing event would target a hub that has
+			// been removed, so it is switched off the same way a lost
+			// hostname switches it off below.
+			for i := range events.Events {
+				e := &events.Events[i]
+				if e.ID == pollEventPrefix+netKey && e.Enabled {
+					e.Enabled = false
+					slog.Warn("ftn network has no links left, so its poll event was disabled — "+
+						"add the hub under Echomail Links to poll it again",
+						"network", netKey, "event", e.ID)
+				}
+			}
 			continue
 		}
 		hub := nc.Links[0].Address
@@ -187,7 +199,30 @@ func refreshPollEvents(events *config.EventsConfig, networks map[string]config.F
 // renamePollEvent moves a network's poll event from oldKey to newKey: the ID
 // and the -P target both embed the key. The rest of the event is untouched;
 // refreshPollEvents on save then retargets the hub address as usual.
+//
+// An event already sitting under newKey — the disabled leftover of a network
+// by that name that was removed — is dropped first, or the rename would
+// produce two events with one ID. The renamed network's event is the live one.
 func renamePollEvent(events *config.EventsConfig, oldKey, newKey string) {
+	hasOld := false
+	for _, e := range events.Events {
+		if e.ID == pollEventPrefix+oldKey {
+			hasOld = true
+			break
+		}
+	}
+	if hasOld {
+		kept := events.Events[:0]
+		for _, e := range events.Events {
+			if e.ID == pollEventPrefix+newKey {
+				slog.Info("dropping leftover poll event that the renamed network's event replaces",
+					"event", e.ID, "renamed_from", oldKey)
+				continue
+			}
+			kept = append(kept, e)
+		}
+		events.Events = kept
+	}
 	for i := range events.Events {
 		e := &events.Events[i]
 		if e.ID != pollEventPrefix+oldKey {
