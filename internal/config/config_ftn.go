@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
@@ -77,6 +78,18 @@ type FTNNetworkConfig struct {
 	OwnAddress            string          `json:"own_address"`             // e.g., "21:4/158.1"
 	Origin                string          `json:"origin,omitempty"`        // Origin line text for echomail (empty = board name)
 	Links                 []FTNLinkConfig `json:"links"`
+
+	// BinkdOutboundPath overrides the global binkd_outbound_path for this
+	// network, becoming both its "domain" line in binkd.conf and the
+	// directory its bundles and flow files are packed into. Empty shares the
+	// global one.
+	//
+	// Worth setting whenever two networks are carried. BSO flow files are
+	// named from the destination net/node alone with no zone component, so
+	// two links in different networks that share a net/node pair resolve to
+	// one filename and one network's mail is handed to the other's hub.
+	// Separate outbounds are also how binkd itself tells two domains apart.
+	BinkdOutboundPath string `json:"binkd_outbound_path,omitempty"`
 }
 
 // BinkdServerConfig controls the integrated binkd mailer daemon.
@@ -210,9 +223,16 @@ func pointBossMissing(net FTNNetworkConfig) bool {
 }
 
 // ValidateFTNConfig checks that all required global path fields are set for any
-// network that has internal_tosser_enabled=true. Call this before starting the
-// tosser, not during editing, so the config editor can open an incomplete config.
+// network that has internal_tosser_enabled=true, and that every binkd outbound
+// name is one binkd will accept. Call this before starting the tosser, not
+// during editing, so the config editor can open an incomplete config.
 func ValidateFTNConfig(cfg FTNConfig) error {
+	// The outbound names are checked whether or not any tosser is enabled:
+	// binkd consumes them regardless, and it is binkd that refuses to start on
+	// a dotted one (see ValidateBinkdOutboundPaths).
+	if err := ValidateBinkdOutboundPaths(cfg); err != nil {
+		return err
+	}
 	tosserEnabled := false
 	for _, net := range cfg.Networks {
 		if net.InternalTosserEnabled {
@@ -241,6 +261,52 @@ func ValidateFTNConfig(cfg FTNConfig) error {
 	return nil
 }
 
+// ValidateBinkdOutboundPaths checks the global and every per-network
+// binkd_outbound_path with ValidateBinkdOutboundPath. It is separate from
+// ValidateFTNConfig because a failure here is fatal to binkd specifically: the
+// mailer must refuse to launch binkd on one, where a missing tosser path only
+// disables the export loop.
+func ValidateBinkdOutboundPaths(cfg FTNConfig) error {
+	if err := ValidateBinkdOutboundPath(cfg.BinkdOutboundPath); err != nil {
+		return fmt.Errorf("ftn.json: binkd_outbound_path: %w", err)
+	}
+	// Sorted so the same bad config always reports the same network first.
+	names := make([]string, 0, len(cfg.Networks))
+	for name := range cfg.Networks {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if err := ValidateBinkdOutboundPath(cfg.Networks[name].BinkdOutboundPath); err != nil {
+			return fmt.Errorf("ftn.json: network %q: binkd_outbound_path: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// ValidateBinkdOutboundPath rejects a BSO outbound whose final path component
+// carries an extension. binkd refuses to start on one — "there should be no
+// extension for the base outbound name" — because it reserves that suffix for
+// zone outbounds, deriving them by appending the zone as lowercase hex
+// (out.016 for zone 22). A dotted base would collide with that scheme.
+//
+// Validated rather than silently corrected because the value is written
+// straight into binkd.conf: an unusable path there does not fail the save, it
+// crash-loops binkd afterwards with all mail stopped, and the cause shows up
+// only in the mailer's stderr.
+func ValidateBinkdOutboundPath(configured string) error {
+	if strings.TrimSpace(configured) == "" {
+		return nil // unset falls back to the default, which is always valid
+	}
+	base := filepath.Base(filepath.Clean(configured))
+	if strings.Contains(base, ".") {
+		return fmt.Errorf("directory name %q must not contain a dot — binkd rejects an extension "+
+			"on the base outbound name (it reserves .<zone> for zone outbounds); use %q instead",
+			base, strings.ReplaceAll(base, ".", "_"))
+	}
+	return nil
+}
+
 // ResolvePaths makes the FTN path fields absolute by joining relative paths
 // against root (the BBS root directory). Empty and absolute paths are unchanged.
 func (c *FTNConfig) ResolvePaths(root string) {
@@ -258,6 +324,33 @@ func (c *FTNConfig) ResolvePaths(root string) {
 	if c.DupeDBPath != "" {
 		c.DupeDBPath = resolve(c.DupeDBPath)
 	}
+	// Per-network outbound overrides resolve the same way. Networks is a map
+	// of values, so each entry has to be written back.
+	for name, netCfg := range c.Networks {
+		if netCfg.BinkdOutboundPath == "" {
+			continue
+		}
+		netCfg.BinkdOutboundPath = resolve(netCfg.BinkdOutboundPath)
+		c.Networks[name] = netCfg
+	}
+}
+
+// BinkdOutboundFor returns the BSO outbound directory this network's bundles
+// belong in: its own override when set, otherwise the global one. Both are
+// returned as configured (relative or absolute) — resolve with
+// ftn.BinkdOutboundDir, or call after ResolvePaths.
+func (c FTNConfig) BinkdOutboundFor(network string) string {
+	if netCfg, ok := c.Networks[network]; ok && netCfg.BinkdOutboundPath != "" {
+		return netCfg.BinkdOutboundPath
+	}
+	// The map is keyed as the sysop wrote it; binkd.conf domain names are
+	// lower-cased, so fall back to a case-insensitive match.
+	for name, netCfg := range c.Networks {
+		if strings.EqualFold(name, network) && netCfg.BinkdOutboundPath != "" {
+			return netCfg.BinkdOutboundPath
+		}
+	}
+	return c.BinkdOutboundPath
 }
 
 // NetworkOrigins collects each network's origin-line override, keyed by

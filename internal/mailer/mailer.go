@@ -51,6 +51,36 @@ type Service struct {
 	// by the export goroutine.
 	exportCfgMod time.Time
 
+	// recycle asks the supervisor to stop the running binkd so it relaunches
+	// on a changed binkd.conf. Buffered: the watcher must never block, and a
+	// second request while one is pending is redundant.
+	recycle chan struct{}
+
+	// confSeen is the binkd.conf content hash the running binkd was started
+	// with, so the watcher can tell a stale process from an up-to-date one.
+	confSeen atomic.Value // string
+
+	// confWatch is how often that comparison runs.
+	confWatch time.Duration
+
+	// watchCfgMod is the ftn.json mod-time last seen by the conf watcher, so
+	// it only re-reads (and logs) when the file actually changed. Touched only
+	// by the watcher goroutine.
+	watchCfgMod time.Time
+
+	// lastSynced is the binkd.conf content hash after the watcher's last
+	// sync, so it syncs (and repeats any warnings) only when ftn.json or the
+	// file itself has changed since. Touched only by the watcher goroutine.
+	lastSynced string
+
+	// syncMu serialises syncConf between the launch path and the watcher; see
+	// syncConf.
+	syncMu sync.Mutex
+
+	// syncHook, when set, is called on every syncConf. Tests use it to count
+	// syncs; it is nil in production.
+	syncHook func()
+
 	binkdPath  string // resolved absolute path to the binkd binary
 	confPath   string // absolute path to binkd.conf
 	backoffMin time.Duration
@@ -93,6 +123,15 @@ func New(cfg Config) (*Service, error) {
 	}
 
 	confPath := filepath.Join(cfg.BBSRoot, "data", "ftn", "binkd.conf")
+
+	// An outbound name binkd itself rejects is fatal: it would be written
+	// straight into binkd.conf and crash-loop the mailer with all mail stopped,
+	// so refusing to start is the promised startup rejection. Checked before
+	// the regeneration below, which would otherwise write the bad name into a
+	// fresh binkd.conf on the way to the error.
+	if err := config.ValidateBinkdOutboundPaths(cfg.FTN); err != nil {
+		return nil, err
+	}
 
 	// A deleted binkd.conf is regenerated from configuration (best-effort):
 	// the FTN Setup Wizard refuses to re-run for an existing network, so
@@ -159,6 +198,8 @@ func New(cfg Config) (*Service, error) {
 		backoffMax:     5 * time.Minute,
 		healthyRun:     time.Minute,
 		done:           make(chan struct{}),
+		recycle:        make(chan struct{}, 1),
+		confWatch:      defaultConfWatch,
 		exportDupeDB:   exportDupeDB,
 		exportDisabled: exportDisabled,
 	}
@@ -234,7 +275,7 @@ func (s *Service) Start(ctx context.Context) {
 	}
 	defer close(s.done)
 
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() {
 		defer s.wg.Done()
 		s.superviseLoop(ctx)
@@ -242,6 +283,10 @@ func (s *Service) Start(ctx context.Context) {
 	go func() {
 		defer s.wg.Done()
 		s.exportLoop(ctx)
+	}()
+	go func() {
+		defer s.wg.Done()
+		s.watchConfLoop(ctx)
 	}()
 	s.wg.Wait()
 }

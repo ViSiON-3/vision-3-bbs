@@ -1,6 +1,9 @@
 package configeditor
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -196,5 +199,201 @@ func TestWireFTNEventsMissingOptionalEventsNotCreated(t *testing.T) {
 	}
 	if !ev.Enabled {
 		t.Error("scheduler must be enabled")
+	}
+}
+
+// A network whose link carries no hostname gets no poll event — there is
+// nothing to dial. It must also be warned about rather than skipped in
+// silence: such a network looks configured but only receives mail when the
+// uplink calls in, or (sharing an uplink with another network) as a side
+// effect of that network's poll, which is indistinguishable from working
+// until the other link changes.
+func TestRefreshPollEventsSkipsLinkWithoutHostname(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	ev := templateEvents()
+	nets := map[string]config.FTNNetworkConfig{
+		"tqwnet": {Links: []config.FTNLinkConfig{{Address: "1337:3/123"}}},
+	}
+	refreshPollEvents(&ev, nets)
+
+	if findEvent(ev, "echomail_poll_tqwnet") != nil {
+		t.Error("a link with no hostname has nothing to dial, so no poll event should be created")
+	}
+	out := logged.String()
+	if !strings.Contains(out, "no hub hostname") {
+		t.Errorf("skipping a hostname-less network must warn, got: %q", out)
+	}
+	if !strings.Contains(out, "tqwnet") {
+		t.Errorf("warning must name the network, got: %q", out)
+	}
+}
+
+// The counterpart: a hostname makes the network pollable, so the event is
+// created and nothing is warned about.
+func TestRefreshPollEventsCreatesForLinkWithHostname(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	ev := templateEvents()
+	nets := map[string]config.FTNNetworkConfig{
+		"tqwnet": {Links: []config.FTNLinkConfig{
+			{Address: "1337:3/123", Hostname: "get-ghosted.com", Port: 24555},
+		}},
+	}
+	refreshPollEvents(&ev, nets)
+
+	poll := findEvent(ev, "echomail_poll_tqwnet")
+	if poll == nil {
+		t.Fatal("a link with a hostname must get a poll event")
+	}
+	if !containsArg(poll.Args, "1337:3/123@tqwnet") {
+		t.Errorf("poll must target the hub: %v", poll.Args)
+	}
+	if strings.Contains(logged.String(), "no hub hostname") {
+		t.Errorf("a pollable network must not warn, got: %q", logged.String())
+	}
+}
+
+// A network deleted in the editor left its poll event enabled: binkd failed
+// the poll every 15 minutes with "unknown domain", and the events list showed
+// a live poll for a network that no longer existed.
+func TestRefreshPollEventsDisablesEventForRemovedNetwork(t *testing.T) {
+	ev := templateEvents()
+	wireFTNEvents(&ev, "fsxnet", "21:4/100")
+	wireFTNEvents(&ev, "tqwnet", "1337:3/123")
+
+	nets := map[string]config.FTNNetworkConfig{
+		"fsxnet": {Links: []config.FTNLinkConfig{{Address: "21:4/100", Hostname: "hub.example.org"}}},
+	}
+	refreshPollEvents(&ev, nets)
+
+	stale := findEvent(ev, "echomail_poll_tqwnet")
+	if stale == nil {
+		t.Fatal("the stale event must be disabled, not deleted, so a tuned schedule survives")
+	}
+	if stale.Enabled {
+		t.Error("poll event for a removed network must be disabled")
+	}
+	if live := findEvent(ev, "echomail_poll_fsxnet"); live == nil || !live.Enabled {
+		t.Error("the remaining network's poll must be left enabled")
+	}
+}
+
+// A hub that loses its hostname can no longer be dialled; its poll event is
+// switched off rather than left failing, and nothing switches it back on
+// behind the sysop's back — a hostname restored later re-enables nothing.
+func TestRefreshPollEventsDisablesEventWhenHostnameIsRemoved(t *testing.T) {
+	ev := templateEvents()
+	wireFTNEvents(&ev, "tqwnet", "1337:3/123")
+
+	nets := map[string]config.FTNNetworkConfig{
+		"tqwnet": {Links: []config.FTNLinkConfig{{Address: "1337:3/123"}}}, // no hostname
+	}
+	refreshPollEvents(&ev, nets)
+
+	poll := findEvent(ev, "echomail_poll_tqwnet")
+	if poll == nil {
+		t.Fatal("event must be kept")
+	}
+	if poll.Enabled {
+		t.Error("poll event must be disabled once its hub has no hostname")
+	}
+
+	nets["tqwnet"] = config.FTNNetworkConfig{Links: []config.FTNLinkConfig{
+		{Address: "1337:3/123", Hostname: "get-ghosted.com"},
+	}}
+	refreshPollEvents(&ev, nets)
+	if findEvent(ev, "echomail_poll_tqwnet").Enabled {
+		t.Error("refresh must not re-enable an event; that is the sysop's call")
+	}
+}
+
+// Renaming a network in the editor carries its poll event along: the ID and
+// the -P target both embed the key, and leaving them was one event polling a
+// domain binkd no longer knew plus a fresh duplicate under the new key.
+func TestRenamePollEventFollowsNetworkKey(t *testing.T) {
+	ev := templateEvents()
+	wireFTNEvents(&ev, "fsxnet", "21:4/100")
+	poll := findEvent(ev, "echomail_poll_fsxnet")
+	poll.Schedule = "*/5 * * * *" // sysop-tuned; must survive
+
+	renamePollEvent(&ev, "fsxnet", "fsx")
+
+	if findEvent(ev, "echomail_poll_fsxnet") != nil {
+		t.Error("event must not remain under the old key")
+	}
+	moved := findEvent(ev, "echomail_poll_fsx")
+	if moved == nil {
+		t.Fatal("event missing under the new key")
+	}
+	if !containsArg(moved.Args, "21:4/100@fsx") {
+		t.Errorf("-P target must follow the key: %v", moved.Args)
+	}
+	if moved.Schedule != "*/5 * * * *" {
+		t.Errorf("schedule not preserved: %q", moved.Schedule)
+	}
+
+	// And a save afterwards sees one event for the renamed network.
+	nets := map[string]config.FTNNetworkConfig{
+		"fsx": {Links: []config.FTNLinkConfig{{Address: "21:4/100", Hostname: "hub.example.org"}}},
+	}
+	refreshPollEvents(&ev, nets)
+	count := 0
+	for _, e := range ev.Events {
+		if strings.HasPrefix(e.ID, "echomail_poll_") && e.Enabled {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("want exactly one enabled poll event after rename+save, got %d", count)
+	}
+}
+
+// Deleting a network's last link leaves nothing to poll; the event must be
+// switched off like a lost hostname, not left targeting the removed hub.
+func TestRefreshPollEventsDisablesEventWhenLastLinkIsRemoved(t *testing.T) {
+	ev := templateEvents()
+	wireFTNEvents(&ev, "tqwnet", "1337:3/123")
+
+	refreshPollEvents(&ev, map[string]config.FTNNetworkConfig{"tqwnet": {}})
+
+	poll := findEvent(ev, "echomail_poll_tqwnet")
+	if poll == nil {
+		t.Fatal("event must be kept, disabled")
+	}
+	if poll.Enabled {
+		t.Error("poll event must be disabled once the network has no links")
+	}
+}
+
+// A network removed earlier leaves a disabled event under its key. Renaming
+// another network to that key must not produce two events with one ID.
+func TestRenamePollEventReplacesLeftoverAtDestination(t *testing.T) {
+	ev := templateEvents()
+	wireFTNEvents(&ev, "fsxnet", "21:4/100")
+	wireFTNEvents(&ev, "oldnet", "1:2/3")
+	refreshPollEvents(&ev, map[string]config.FTNNetworkConfig{
+		"fsxnet": {Links: []config.FTNLinkConfig{{Address: "21:4/100", Hostname: "hub.example.org"}}},
+	}) // oldnet removed: its event is now a disabled leftover
+
+	renamePollEvent(&ev, "fsxnet", "oldnet")
+
+	count := 0
+	for _, e := range ev.Events {
+		if e.ID == "echomail_poll_oldnet" {
+			count++
+			if !containsArg(e.Args, "21:4/100@oldnet") {
+				t.Errorf("surviving event must be the renamed one, got args %v", e.Args)
+			}
+		}
+	}
+	if count != 1 {
+		t.Errorf("want exactly one echomail_poll_oldnet after rename, got %d", count)
 	}
 }

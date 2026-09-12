@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
@@ -63,12 +64,23 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 						m.configs.MsgAreas[i].Network = val
 					}
 				}
+				// And the network's poll event, whose ID and -P target both
+				// carry the key. Left alone, the old event kept polling
+				// <hub>@<oldkey>, which binkd rejects as an unknown domain,
+				// and refreshPollEvents created a second event under the
+				// new key beside it.
+				renamePollEvent(&m.configs.Events, key, val)
 				return nil
 			},
 			// AfterSet runs on the current model (not the stale captured pointer), so index
 			// updates here are correctly applied before buildRecordFields is called.
 			AfterSet: func(cur *Model, val string) {
-				val = strings.TrimSpace(val)
+				// Normalised the way Set stores the key. Searching the raw
+				// input meant a name typed with any capital ("TQWnet") missed,
+				// leaving recordEditIdx on the row the network occupied before
+				// the re-sort — which is a different network afterwards, or
+				// past the end of the list, rendering an empty edit screen.
+				val = strings.ToLower(strings.TrimSpace(val))
 				newKeys := cur.ftnNetworkKeys()
 				idx := sort.SearchStrings(newKeys, val)
 				if idx < len(newKeys) && newKeys[idx] == val {
@@ -130,52 +142,73 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			Get: func() string { return netPtr.Origin },
 			Set: func(val string) error { netPtr.Origin = val; save(); return nil },
 		},
+		{
+			Label: "Binkd Outbound", Help: "This network's own BSO outbound dir, no dots (empty = the global one; set it when carrying more than one network)", Type: ftString, Col: 3, Row: 5, Width: 45,
+			Get: func() string { return netPtr.BinkdOutboundPath },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := config.ValidateBinkdOutboundPath(val); err != nil {
+					return err
+				}
+				netPtr.BinkdOutboundPath = val
+				save()
+				return nil
+			},
+		},
 	}
 }
 
 // fieldsFTNGlobal returns fields for editing the global FTN path and storage settings.
 func (m *Model) fieldsFTNGlobal() []fieldDef {
-	ftn := &m.configs.FTN
+	// Named fc so the ftn package stays reachable for validation below.
+	fc := &m.configs.FTN
 	return []fieldDef{
 		{
 			Label: "Dupe DB Path", Help: "Path to duplicate-message database file", Type: ftString, Col: 3, Row: 1, Width: 45,
-			Get: func() string { return ftn.DupeDBPath },
-			Set: func(val string) error { ftn.DupeDBPath = val; return nil },
+			Get: func() string { return fc.DupeDBPath },
+			Set: func(val string) error { fc.DupeDBPath = val; return nil },
 		},
 		{
 			Label: "Inbound Path", Help: "Directory where binkd deposits received bundles", Type: ftString, Col: 3, Row: 2, Width: 45,
-			Get: func() string { return ftn.InboundPath },
-			Set: func(val string) error { ftn.InboundPath = val; return nil },
+			Get: func() string { return fc.InboundPath },
+			Set: func(val string) error { fc.InboundPath = val; return nil },
 		},
 		{
 			Label: "Secure Inbound", Help: "Directory for authenticated inbound sessions", Type: ftString, Col: 3, Row: 3, Width: 45,
-			Get: func() string { return ftn.SecureInboundPath },
-			Set: func(val string) error { ftn.SecureInboundPath = val; return nil },
+			Get: func() string { return fc.SecureInboundPath },
+			Set: func(val string) error { fc.SecureInboundPath = val; return nil },
 		},
 		{
 			Label: "Outbound Path", Help: "Staging directory for outbound .PKT files", Type: ftString, Col: 3, Row: 4, Width: 45,
-			Get: func() string { return ftn.OutboundPath },
-			Set: func(val string) error { ftn.OutboundPath = val; return nil },
+			Get: func() string { return fc.OutboundPath },
+			Set: func(val string) error { fc.OutboundPath = val; return nil },
 		},
 		{
-			Label: "Binkd Outbound", Help: "Binkd outbound directory for ZIP bundles", Type: ftString, Col: 3, Row: 5, Width: 45,
-			Get: func() string { return ftn.BinkdOutboundPath },
-			Set: func(val string) error { ftn.BinkdOutboundPath = val; return nil },
+			Label: "Binkd Outbound", Help: "Binkd outbound directory for ZIP bundles (no dots in the directory name)", Type: ftString, Col: 3, Row: 5, Width: 45,
+			Get: func() string { return fc.BinkdOutboundPath },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := config.ValidateBinkdOutboundPath(val); err != nil {
+					return err
+				}
+				fc.BinkdOutboundPath = val
+				return nil
+			},
 		},
 		{
 			Label: "Temp Path", Help: "Temporary directory for bundle processing", Type: ftString, Col: 3, Row: 6, Width: 45,
-			Get: func() string { return ftn.TempPath },
-			Set: func(val string) error { ftn.TempPath = val; return nil },
+			Get: func() string { return fc.TempPath },
+			Set: func(val string) error { fc.TempPath = val; return nil },
 		},
 		{
 			Label: "Bad Area Tag", Help: "Area tag for unrecognized echomail", Type: ftString, Col: 3, Row: 7, Width: 20,
-			Get: func() string { return ftn.BadAreaTag },
-			Set: func(val string) error { ftn.BadAreaTag = val; return nil },
+			Get: func() string { return fc.BadAreaTag },
+			Set: func(val string) error { fc.BadAreaTag = val; return nil },
 		},
 		{
 			Label: "Dupe Area Tag", Help: "Area tag for duplicate messages", Type: ftString, Col: 3, Row: 8, Width: 20,
-			Get: func() string { return ftn.DupeAreaTag },
-			Set: func(val string) error { ftn.DupeAreaTag = val; return nil },
+			Get: func() string { return fc.DupeAreaTag },
+			Set: func(val string) error { fc.DupeAreaTag = val; return nil },
 		},
 	}
 }
@@ -306,9 +339,20 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			Set: func(val string) error { linkPtr.Name = val; save(); return nil },
 		},
 		{
-			Label: "Hostname", Help: "Hub BinkP hostname; synced to the binkd.conf node line on save", Type: ftString, Col: 3, Row: 7, Width: 40,
+			Label: "Hostname", Help: "Hub BinkP hostname; synced to the binkd.conf node line on save. Empty = receive-only: binkd cannot call this link", Type: ftString, Col: 3, Row: 7, Width: 40,
 			Get: func() string { return linkPtr.Hostname },
 			Set: func(val string) error { linkPtr.Hostname = strings.TrimSpace(val); save(); return nil },
+			// Left empty this link is receive-only, which is legitimate but
+			// easy to do by accident: no binkd node line and no poll event are
+			// created, so the network only ever receives mail when the uplink
+			// calls in. Said plainly here rather than rejected, because the
+			// alternative is discovering it months later from the binkd log.
+			AfterSet: func(cur *Model, val string) {
+				if strings.TrimSpace(val) == "" {
+					cur.message = "No hostname: this link is receive-only — binkd cannot poll it, " +
+						"so no node line or poll event will be created"
+				}
+			},
 		},
 		{
 			Label: "Port", Help: "Hub BinkP port (default 24554)", Type: ftInteger, Col: 3, Row: 8, Width: 6, Min: 0, Max: 65535,

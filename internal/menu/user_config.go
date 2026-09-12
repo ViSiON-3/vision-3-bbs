@@ -73,6 +73,22 @@ func runCfgStringInput(
 	getter func(*user.User) string,
 	setter func(*user.User, string),
 ) (*user.User, string, error) {
+	return runCfgValidatedStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
+		fieldName, maxLen, getter, setter, nil)
+}
+
+// runCfgValidatedStringInput is runCfgStringInput with a validator applied to
+// the (trimmed, length-capped) input before it is stored. A rejection is shown
+// to the user and nothing is saved.
+func runCfgValidatedStringInput(
+	e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
+	userManager *user.UserMgr, currentUser *user.User,
+	nodeNumber int, outputMode ansi.OutputMode,
+	fieldName string, maxLen int,
+	getter func(*user.User) string,
+	setter func(*user.User, string),
+	validate func(string) error,
+) (*user.User, string, error) {
 	if currentUser == nil {
 		return nil, "", nil
 	}
@@ -101,6 +117,15 @@ func runCfgStringInput(
 	// would be a latent hazard even though it's unreachable today.
 	if utf8.RuneCountInString(input) > maxLen {
 		input = string([]rune(input)[:maxLen])
+	}
+
+	if validate != nil {
+		if err := validate(input); err != nil {
+			msg := fmt.Sprintf("\r\n|01%s|07\r\n", err.Error())
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			time.Sleep(1500 * time.Millisecond)
+			return currentUser, "", nil
+		}
 	}
 
 	setter(currentUser, input)

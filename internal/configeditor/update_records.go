@@ -66,19 +66,55 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.recordType == "v3nethub" {
 				return m.enterHubWizard()
 			}
+			// For ftn, the network keys before the insert: the new one is
+			// whichever key appears afterwards that was not there before.
+			var ftnKeysBefore map[string]bool
+			if m.recordType == "ftn" {
+				ftnKeysBefore = make(map[string]bool, len(m.configs.FTN.Networks))
+				for k := range m.configs.FTN.Networks {
+					ftnKeysBefore[k] = true
+				}
+			}
 			m.insertRecord()
 			m.dirty = true
-			// For ftnlink the new link is appended to the first (sorted) network,
-			// not necessarily at the end of the flat list; point at it directly.
-			if m.recordType == "ftnlink" {
+			switch m.recordType {
+			case "ftnlink":
+				// The new link is appended to the first (sorted) network, not
+				// necessarily at the end of the flat list; point at it directly.
 				nets := m.ftnNetworkKeys()
 				if len(nets) > 0 {
 					m.recordCursor = len(m.configs.FTN.Networks[nets[0]].Links) - 1
 				}
-			} else {
+			case "ftn":
+				// The placeholder (zz_newnet_N) is not reliably the last sorted
+				// key: zz_newnet_10 sorts before zz_newnet_9, and a real network
+				// named zzznet sorts after all of them. Pointing at the last row
+				// then opened an existing network, and the Network Name edit
+				// that followed renamed that one instead.
+				m.recordCursor = m.recordCount() - 1
+				for i, k := range m.ftnNetworkKeys() {
+					if !ftnKeysBefore[k] {
+						m.recordCursor = i
+						break
+					}
+				}
+			default:
 				m.recordCursor = m.recordCount() - 1
 			}
 			m.clampRecordScroll()
+			// An echomail network is created under a placeholder name
+			// (zz_newnet_N) that is useless until renamed, and that name is the
+			// binkd domain every address, area and node line then hangs off.
+			// Returning to the list leaves the placeholder sitting there
+			// looking like a configured network, so open the new record with
+			// the cursor on the field that has to be filled in.
+			if m.recordType == "ftn" && m.recordCursor >= 0 {
+				m.recordEditIdx = m.recordCursor
+				m.recordFields = m.buildRecordFields()
+				m.editField = 0
+				m.fieldScroll = 0
+				m.mode = modeRecordEdit
+			}
 			return m, nil
 		case "g", "G":
 			if m.recordType == "ftn" {

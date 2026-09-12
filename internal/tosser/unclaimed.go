@@ -11,6 +11,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
 // Reporting on inbound mail that no configured network would take.
@@ -40,13 +41,21 @@ const UnclaimedDirName = "unclaimed"
 // UnclaimedReport describes inbound mail left behind after every enabled
 // network has had its turn.
 type UnclaimedReport struct {
-	Files       []string       // paths still in the inbound directories
-	Origins     map[string]int // origin address -> packets declined, across all networks
-	Oldest      time.Time      // modification time of the oldest file
-	Quarantined []string       // files moved aside this run
+	Files   []string       // paths still in the inbound directories
+	Origins map[string]int // origin address -> packets declined, across all networks
+	Oldest  time.Time      // modification time of the oldest file
+
+	// Held is inbound mail belonging to a network whose tosser is switched
+	// off. It is waiting for that network to be enabled rather than claimed
+	// by nobody, so it is never quarantined and is reported in its own
+	// words. See heldOrigins.
+	Held []string
+
+	Quarantined []string // files moved aside this run
 }
 
-// Empty reports whether anything was left unclaimed.
+// Empty reports whether anything was left unclaimed. Mail held for a disabled
+// network does not count: it is waiting by the sysop's own instruction.
 func (r UnclaimedReport) Empty() bool { return len(r.Files) == 0 }
 
 // OriginList renders the declined origin addresses in a stable order, most
@@ -85,6 +94,11 @@ func (r UnclaimedReport) OriginList() string {
 func FindUnclaimed(ftnCfg config.FTNConfig, skippedByFile map[string]map[string]int) UnclaimedReport {
 	report := UnclaimedReport{Origins: map[string]int{}}
 
+	// Mail for a network the sysop has switched off is held, not unclaimed:
+	// quarantining it would age out exactly the mail someone is deliberately
+	// waiting to toss once the areas are set up.
+	held, anyDisabled, allDisabled := heldOrigins(ftnCfg)
+
 	seen := make(map[string]bool)
 	for _, dir := range []string{ftnCfg.SecureInboundPath, ftnCfg.InboundPath} {
 		if dir == "" || seen[dir] {
@@ -105,6 +119,10 @@ func FindUnclaimed(ftnCfg config.FTNConfig, skippedByFile map[string]map[string]
 				continue
 			}
 			path := filepath.Join(dir, entry.Name())
+			if isHeldForDisabledNetwork(skippedByFile[path], held, anyDisabled, allDisabled) {
+				report.Held = append(report.Held, path)
+				continue
+			}
 			report.Files = append(report.Files, path)
 			// Only the origins of files still present are reported. A file a
 			// later network claimed has been removed by it, so the addresses
@@ -125,7 +143,65 @@ func FindUnclaimed(ftnCfg config.FTNConfig, skippedByFile map[string]map[string]
 		}
 	}
 	sort.Strings(report.Files)
+	sort.Strings(report.Held)
 	return report
+}
+
+// heldOrigins returns the "zone:net/node" addresses whose mail belongs to a
+// network with internal_tosser_enabled off, whether any network is disabled
+// at all, and whether every configured network is.
+//
+// Addresses are rendered the way tossPacket reports a declined origin — zone,
+// net and node, no point — so the two can be compared directly without
+// re-reading the packets.
+func heldOrigins(ftnCfg config.FTNConfig) (held map[string]bool, anyDisabled, allDisabled bool) {
+	held = map[string]bool{}
+	allDisabled = len(ftnCfg.Networks) > 0
+	for name, netCfg := range ftnCfg.Networks {
+		if netCfg.InternalTosserEnabled {
+			allDisabled = false
+			continue
+		}
+		anyDisabled = true
+		for _, link := range netCfg.Links {
+			addr, err := jam.ParseAddress(link.Address)
+			if err != nil {
+				slog.Warn("invalid link address on a disabled network; its mail cannot be recognised as held",
+					"network", name, "link", link.Address, "error", err)
+				continue
+			}
+			held[fmt.Sprintf("%d:%d/%d", addr.Zone, addr.Net, addr.Node)] = true
+		}
+	}
+	return held, anyDisabled, allDisabled
+}
+
+// isHeldForDisabledNetwork reports whether an inbound file is waiting for a
+// switched-off network rather than claimed by nobody.
+//
+// origins is what the enabled networks declined the file under. A file whose
+// origin matches a disabled network's link is plainly that network's. A file
+// with no recorded origins is unattributable, and is held only when every
+// network is disabled: that is the one case where nothing parsed it, and mail
+// should not be aged out on a guess. With any network enabled, an origin-less
+// file is one the enabled tossers saw and could not attribute — unreadable, or
+// a packet a mixed bundle re-queued — and holding it would let a stale, broken
+// file sit forever behind an unrelated network being switched off. With every
+// network enabled this is false throughout and the #276 behaviour is
+// unchanged.
+func isHeldForDisabledNetwork(origins map[string]int, held map[string]bool, anyDisabled, allDisabled bool) bool {
+	if !anyDisabled {
+		return false
+	}
+	if len(origins) == 0 {
+		return allDisabled
+	}
+	for origin := range origins {
+		if held[origin] {
+			return true
+		}
+	}
+	return false
 }
 
 // QuarantineStale moves unclaimed files older than quarantineAfter into the
@@ -167,6 +243,13 @@ func (r *UnclaimedReport) QuarantineStale(tempPath string) {
 // address the mail came from — the piece needed to spot that a link address
 // does not match the uplink actually sending.
 func (r UnclaimedReport) Log() {
+	// Held mail is expected, so it is reported at Info and says why it is
+	// waiting — a Warn here would train the sysop to ignore the Warn below.
+	if len(r.Held) > 0 {
+		slog.Info("inbound mail waiting for a network whose tosser is switched off — "+
+			"it is held, not quarantined; enable the network to toss it",
+			"files", len(r.Held))
+	}
 	if r.Empty() && len(r.Quarantined) == 0 {
 		return
 	}

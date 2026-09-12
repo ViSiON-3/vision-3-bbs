@@ -19,8 +19,30 @@ type Scheduler struct {
 	mu             sync.RWMutex
 	concurrencySem chan struct{}
 	startupWg      sync.WaitGroup
+	// chainWg tracks in-flight chained events (including those still in their
+	// delay) so Stop drains them rather than leaving them to fire into a
+	// cancelled context.
+	chainWg sync.WaitGroup
+	// retiredWg tracks crons Reload has replaced but whose running jobs have
+	// not finished. Stop waits on it before draining chains and saving
+	// history, or a job from a retired cron could finish after both and
+	// start a chain into a scheduler that has already shut down.
+	retiredWg sync.WaitGroup
+	// chainingOK is false when run_after contains a cycle; chaining is then
+	// off for every event, so behaviour matches the error that was logged.
+	chainingOK bool
+	// stopping is set under mu when Stop begins. Reload refuses to install a
+	// cron after that: the config watcher is stopped after the scheduler, so
+	// a reload can land mid-shutdown, and a cron retired then would register
+	// with retiredWg after Stop had already waited on it.
+	stopping bool
+	// ctx is what events run under. It starts as a scheduler-owned context
+	// from NewScheduler, so a cron a Reload installs before Start has a
+	// cancellable one rather than context.Background(); Start replaces it
+	// with one derived from the caller's, and Stop cancels both.
 	ctx            context.Context
 	cancel         context.CancelFunc
+	preStartCancel context.CancelFunc
 }
 
 // NewScheduler creates a new event scheduler
@@ -37,12 +59,17 @@ func NewScheduler(cfg config.EventsConfig, historyPath string) *Scheduler {
 		history = make(map[string]*EventHistory)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		config:         cfg,
 		history:        history,
 		historyPath:    historyPath,
 		runningEvents:  make(map[string]bool),
 		concurrencySem: make(chan struct{}, cfg.MaxConcurrentEvents),
+		chainingOK:     validateChains(cfg.Events),
+		ctx:            ctx,
+		cancel:         cancel,
+		preStartCancel: cancel,
 	}
 }
 
@@ -54,6 +81,8 @@ func (s *Scheduler) Start(ctx context.Context) {
 	// progress.
 	c := cron.New()
 	s.mu.Lock()
+	// Anything already running under the pre-start context keeps it; that
+	// context is cancelled by Stop along with this one.
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	// If a reload already installed a cron before Start got here, its config
 	// is newer than the boot config: leave it in place and skip boot-time
@@ -72,6 +101,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	// Schedule all enabled events
 	enabledCount := 0
 	startupCount := 0
+	chainedCount := 0
 	for _, event := range cfg.Events {
 		if !event.Enabled {
 			slog.Debug("event disabled; skipping", "id", event.ID, "name", event.Name)
@@ -101,12 +131,15 @@ func (s *Scheduler) Start(ctx context.Context) {
 				enabledCount++
 				slog.Info("event scheduled", "id", event.ID, "name", event.Name, "schedule", event.Schedule)
 			}
+		} else if event.RunAfter != "" {
+			chainedCount++
+			slog.Info("event chained", "id", event.ID, "name", event.Name, "after", chainDescription(event))
 		} else if !event.RunAtStartup {
-			slog.Warn("event has no schedule and run_at_startup is false; skipping", "id", event.ID, "name", event.Name)
+			slog.Warn("event has no schedule, no run_after and run_at_startup is false; skipping", "id", event.ID, "name", event.Name)
 		}
 	}
 
-	if enabledCount == 0 && startupCount == 0 {
+	if enabledCount == 0 && startupCount == 0 && chainedCount == 0 {
 		// Nothing to run yet, but stay alive: a reload of events.json can
 		// schedule events later, and exiting here would leave any cron it
 		// starts unstopped at shutdown.
@@ -129,7 +162,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	s.mu.Unlock()
 	if current {
 		slog.Info("event scheduler running", "scheduled", enabledCount, "startup", startupCount,
-			"max_concurrent", maxConcurrent)
+			"chained", chainedCount, "max_concurrent", maxConcurrent)
 	} else {
 		slog.Info("event scheduler superseded by a reload during startup")
 	}
@@ -145,8 +178,16 @@ func (s *Scheduler) Start(ctx context.Context) {
 // Stop gracefully stops the scheduler
 func (s *Scheduler) Stop() {
 	s.mu.Lock()
+	s.stopping = true
 	c := s.cron
+	preStartCancel := s.preStartCancel
 	s.mu.Unlock()
+	// Cancel the pre-start context too, so a chain a reload-installed cron
+	// started before Start — still waiting out a delay_after_seconds — is
+	// released rather than holding chainWg.Wait below for the full delay.
+	if preStartCancel != nil {
+		preStartCancel()
+	}
 	if c != nil {
 		// Stop accepting new jobs
 		cronCtx := c.Stop()
@@ -159,6 +200,15 @@ func (s *Scheduler) Stop() {
 	// Wait for startup events to complete
 	s.startupWg.Wait()
 	slog.Info("all startup events completed")
+
+	// And for any cron a reload retired whose jobs are still running: they
+	// are not part of the current cron's stop context above.
+	s.retiredWg.Wait()
+
+	// And for chained events, including any still waiting out a
+	// delay_after_seconds — their context is cancelled by now, so this drains
+	// rather than waits for work.
+	s.chainWg.Wait()
 
 	// Save history
 	if err := SaveHistory(s.historyPath, s.history); err != nil {
@@ -211,7 +261,19 @@ func (s *Scheduler) Reload(cfg config.EventsConfig) {
 	}
 
 	s.mu.Lock()
+	if s.stopping {
+		s.mu.Unlock()
+		slog.Info("event scheduler reload ignored: scheduler is stopping")
+		return
+	}
 	oldCron := s.cron
+	if oldCron != nil {
+		// Registered under the lock, so Stop — which sets stopping under the
+		// same lock before waiting on retiredWg — either refuses this reload
+		// or waits for the cron it retires.
+		s.retiredWg.Add(1)
+	}
+	s.chainingOK = validateChains(cfg.Events)
 	if cfg.MaxConcurrentEvents != s.config.MaxConcurrentEvents {
 		// Resize by replacement. In-flight events release into the semaphore
 		// they acquired from (captured locally in executeEventWithConcurrency),
@@ -227,8 +289,12 @@ func (s *Scheduler) Reload(cfg config.EventsConfig) {
 
 	if oldCron != nil {
 		// Stop in the background: Stop's context waits for running jobs, and
-		// the caller is the config watcher's poll loop.
-		go func() { <-oldCron.Stop().Done() }()
+		// the caller is the config watcher's poll loop. Tracked (Add above,
+		// under the lock) so shutdown waits for those jobs too.
+		go func() {
+			defer s.retiredWg.Done()
+			<-oldCron.Stop().Done()
+		}()
 	}
 
 	slog.Info("event scheduler reloaded", "scheduled", scheduled,
@@ -246,14 +312,45 @@ func (s *Scheduler) scheduleEvent(c *cron.Cron, event config.EventConfig) error 
 	return err
 }
 
-// executeEventWithConcurrency executes an event with concurrency control
+// executeEventWithConcurrency executes an event with concurrency control.
 func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
+	s.executeChain(event, 0)
+}
+
+// executeChain is executeEventWithConcurrency plus the chain depth reached so
+// far, so a cascade of run_after triggers can be bounded. Chained launches use
+// the scheduler's own context, resolved in runWithSlot, so a shutdown cancels
+// a chain still waiting out its delay.
+//
+// The chaining step runs only after runWithSlot has returned, which is when
+// the parent's concurrency slot and running-event mark are released. Chaining
+// from inside it left the parent holding its slot while the child asked for
+// one: with max_concurrent_events at 1 every child was refused with "max
+// concurrent events reached", and at the default of 3 a fan-out or a longer
+// chain dropped children whenever the race went the wrong way.
+func (s *Scheduler) executeChain(event config.EventConfig, depth int) {
+	ctx, ran := s.runWithSlot(event)
+	if !ran {
+		return
+	}
+	// After updateHistory so a chained event that reads the history sees the
+	// parent's completed run, and regardless of the parent's outcome — "run
+	// after" is about order, not success.
+	s.runChainedEvents(ctx, event.ID, depth)
+}
+
+// runWithSlot executes event under the concurrency limit and the
+// one-instance-per-event rule, recording its history. It reports whether the
+// event ran at all, and returns the context it ran under for anything that
+// follows it. The slot and the running mark are released by the time it
+// returns.
+func (s *Scheduler) runWithSlot(event config.EventConfig) (context.Context, bool) {
 	// Atomically check if event is already running and try to acquire semaphore
 	s.mu.Lock()
 	if s.runningEvents[event.ID] {
 		s.mu.Unlock()
 		slog.Warn("event skipped: already running", "id", event.ID, "name", event.Name)
-		return
+		return nil, false
 	}
 
 	// Capture the semaphore while locked: Reload replaces it when
@@ -262,12 +359,7 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 	// replacement would block forever.
 	sem := s.concurrencySem
 	maxConcurrent := s.config.MaxConcurrentEvents
-	ctx := s.ctx
-	if ctx == nil {
-		// A reload can install and start a cron before Start assigns s.ctx; a
-		// job firing in that window must not hand executeEvent a nil context.
-		ctx = context.Background()
-	}
+	ctx := s.ctx // never nil: NewScheduler sets a pre-start context
 
 	// Try to acquire concurrency semaphore while holding the lock
 	select {
@@ -281,7 +373,7 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 		// At concurrency limit, skip execution
 		slog.Warn("event skipped: max concurrent events reached",
 			"id", event.ID, "name", event.Name, "max_concurrent", maxConcurrent)
-		return
+		return nil, false
 	}
 
 	defer func() {
@@ -295,4 +387,5 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 
 	// Update history
 	s.updateHistory(result)
+	return ctx, true
 }

@@ -161,13 +161,14 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 	binkdPath := filepath.Join(absRoot, "data", "ftn", "binkd.conf")
 
 	binkdCfg := ftn.BinkdConfig{
-		BBSRoot:      absRoot,
-		BoardName:    m.configs.Server.BoardName,
-		SysopName:    m.configs.Server.SysOpName,
-		Location:     m.configs.Server.BBSLocation,
-		Domains:      map[string]int{netKey: w.zone},
-		Addresses:    []string{fmt.Sprintf("%s@%s", w.ownAddress, netKey)},
-		OutboundPath: m.configs.FTN.BinkdOutboundPath,
+		BBSRoot:         absRoot,
+		BoardName:       m.configs.Server.BoardName,
+		SysopName:       m.configs.Server.SysOpName,
+		Location:        m.configs.Server.BBSLocation,
+		Domains:         map[string]int{netKey: w.zone},
+		Addresses:       []string{fmt.Sprintf("%s@%s", w.ownAddress, netKey)},
+		OutboundPath:    m.configs.FTN.BinkdOutboundPath,
+		NetworkOutbound: ftn.NetworkOutbounds(m.configs.FTN),
 		Node: ftn.BinkdNode{
 			Address:     fmt.Sprintf("%s@%s", w.hubAddress, netKey),
 			Hostname:    fmt.Sprintf("%s:%d", w.hubHostname, w.hubPort),

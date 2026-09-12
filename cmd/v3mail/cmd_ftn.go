@@ -94,6 +94,12 @@ func cmdToss(args []string) {
 	if !*quiet {
 		fmt.Printf("Toss complete: %d packets, %d messages imported, %d dupes skipped\n",
 			totalPackets, totalImported, totalDupes)
+		if n := len(unclaimed.Held); n > 0 {
+			// Stated plainly rather than as a warning: this mail waits because
+			// the sysop switched the network off, and it tosses normally once
+			// the network is switched back on.
+			fmt.Printf("%d inbound file(s) held for a network whose tosser is off — enable it to toss them\n", n)
+		}
 		if n := len(unclaimed.Files) + len(unclaimed.Quarantined); n > 0 {
 			// Without this the run looks identical to one that had no mail
 			// waiting, which is how a backlog goes unnoticed for weeks.

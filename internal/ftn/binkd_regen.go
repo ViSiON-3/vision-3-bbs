@@ -13,7 +13,7 @@ import (
 // could not be recreated. The caller supplies real values; iport/loglevel are
 // template defaults here and are corrected by SyncBinkdSettings afterwards.
 func RegenerateBinkdConf(confPath string, cfg BinkdConfig, nodes []BinkdNode) error {
-	outPath := cfg.outboundPath()
+	outbound := cfg.outbound()
 	logPath := filepath.Join(cfg.BBSRoot, "data", "logs", "binkd.log")
 	secureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "secure_in")
 	insecureIn := filepath.Join(cfg.BBSRoot, "data", "ftn", "in")
@@ -22,7 +22,7 @@ func RegenerateBinkdConf(confPath string, cfg BinkdConfig, nodes []BinkdNode) er
 	boardName, sysop, location := identityOrDefaults(cfg)
 
 	var out strings.Builder
-	writeFreshBinkdConf(&out, cfg, outPath, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location)
+	writeFreshBinkdConf(&out, cfg, outbound, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location)
 	for _, n := range nodes {
 		pwd := n.SessionPwd
 		if pwd == "" {

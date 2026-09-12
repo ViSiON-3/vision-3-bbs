@@ -89,9 +89,15 @@ func (m *Model) saveAll() {
 		if binkdSyncErr == nil {
 			binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
 		}
+		// A network added here or by "helper ftnsetup" has no domain or
+		// address line of its own — only the wizard wrote those — so binkd
+		// refused its sessions with "unknown domain". Declare what is missing.
+		if binkdSyncErr == nil {
+			binkdSyncErr = ftn.SyncBinkdNetworks(binkdPath, bbsRoot, m.configs.FTN)
+		}
 		if binkdSyncErr == nil {
 			binkdSyncErr = ftn.SyncBinkdSettings(binkdPath, m.configs.FTN.Binkd.Port, m.configs.FTN.Binkd.LogLevel,
-				ftn.BinkdOutboundDir(bbsRoot, m.configs.FTN.BinkdOutboundPath))
+				ftn.BinkdOutboundFor(bbsRoot, m.configs.FTN))
 		}
 	}
 	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {

@@ -64,11 +64,20 @@ func (t *Tosser) PackOutbound() PackResult {
 			continue
 		}
 
-		// Match the packet's destination to a configured link by net:node.
+		// Match the packet's destination to a configured link by zone:net/node.
+		// The staging directory is shared by every network's tosser, and each
+		// one only looks for its own links, so the zone is what stops a
+		// packet for 3/123 in one network being bundled into another
+		// network's BSO for a link that also happens to be 3/123. A zone of 0
+		// means a type-2 header with no zone field; those match on net/node
+		// alone, as before.
 		matched := false
 		for _, link := range t.config.Links {
 			destAddr, err := jam.ParseAddress(link.Address)
 			if err != nil {
+				continue
+			}
+			if hdr.DestZone != 0 && uint16(destAddr.Zone) != hdr.DestZone {
 				continue
 			}
 			if uint16(destAddr.Net) == hdr.DestNet && uint16(destAddr.Node) == hdr.DestNode {

@@ -22,10 +22,15 @@ func runCfgRealName(c *cmdCtx, args string) (*user.User, string, error) {
 	nodeNumber := c.nodeNumber
 	outputMode := c.outputMode
 
-	return runCfgStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
+	// Validated like every other writer of the field (signup, the sysop
+	// editors, the scripting API): a real name that fails the rule here would
+	// otherwise be saved unchecked, and a blank or handle-like one silently
+	// turns off real_name_only for this user in every area that sets it.
+	return runCfgValidatedStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
 		"Real Name", 40,
 		func(u *user.User) string { return u.RealName },
 		func(u *user.User, v string) { u.RealName = v },
+		user.ValidateRealName,
 	)
 }
 

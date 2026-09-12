@@ -1,7 +1,11 @@
 package scripting
 
 import (
+	"log/slog"
+	"strings"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/dop251/goja"
 )
 
@@ -67,7 +71,16 @@ func registerUser(v3 *goja.Object, eng *Engine) {
 		field := call.Arguments[0].String()
 		switch field {
 		case "realName":
-			u.RealName = call.Arguments[1].String()
+			// Rejected rather than silently stored: a script blanking a real
+			// name would turn off real_name_only for that user everywhere.
+			v := call.Arguments[1].String()
+			if err := user.ValidateRealName(v); err != nil {
+				// The value itself is not logged: a script can pass anything here,
+				// and a rejected name is still someone's personal data.
+				slog.Warn("script set('realName') rejected", "error", err)
+				return goja.Undefined()
+			}
+			u.RealName = strings.TrimSpace(v)
 		case "location":
 			u.GroupLocation = call.Arguments[1].String()
 		case "screenWidth":

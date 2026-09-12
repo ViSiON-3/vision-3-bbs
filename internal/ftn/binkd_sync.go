@@ -2,6 +2,7 @@ package ftn
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
@@ -130,11 +131,28 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 	// Append node lines for configured links that have a hostname but no
 	// line yet (new link, or the link's address was changed in the TUI).
 	// Sorted so repeated syncs produce identical files.
-	var missing []string
+	var missing, unpollable []string
 	for addr, link := range links {
-		if !seenNodes[addr] && link.HostPort != "" {
-			missing = append(missing, addr)
+		if seenNodes[addr] {
+			continue
 		}
+		if link.HostPort != "" {
+			missing = append(missing, addr)
+			continue
+		}
+		unpollable = append(unpollable, addr)
+	}
+	// A link with no hostname and no existing node line gives binkd no way to
+	// call it. Warned rather than failed, because a receive-only link (the hub
+	// always calls in) is legitimate — but silence is how a network ends up
+	// appearing to work while only ever receiving mail as a side effect of
+	// another network's session with a shared uplink.
+	sort.Strings(unpollable)
+	for _, addr := range unpollable {
+		slog.Warn("ftn link has no hostname, so no binkd node line was written and binkd cannot call it — "+
+			"mail will arrive only when the uplink calls in, and no poll event is created; "+
+			"set the link's Hostname under Echomail Links to poll it",
+			"link", addr)
 	}
 	sort.Strings(missing)
 	for _, addr := range missing {

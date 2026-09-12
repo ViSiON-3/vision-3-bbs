@@ -709,12 +709,11 @@ func validateHandle(handle string) bool {
 	return !allDigits
 }
 
-// validateRealName checks that a real name is >3 chars and contains a space.
+// validateRealName checks a real name for the new-user flow. The rule itself
+// lives in internal/user so the sysop editors and the scripting API enforce the
+// same one; this keeps the bool shape the prompt loop wants.
 func validateRealName(name string) bool {
-	if len(name) < 4 {
-		return false
-	}
-	return strings.Contains(name, " ")
+	return user.ValidateRealName(name) == nil
 }
 
 // runNewUser is the RUN:NEWUSER handler for menu system integration.

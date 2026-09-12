@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
@@ -248,5 +249,155 @@ func TestQuarantineStaleMovesOnlyOldFiles(t *testing.T) {
 	}
 	if len(report.Files) != 1 || filepath.Base(report.Files[0]) != "fresh.pkt" {
 		t.Errorf("report should still list the file left behind, got %v", report.Files)
+	}
+}
+
+// disabledNetCfg returns a global config carrying one enabled and one disabled
+// network, the shape a sysop has while setting a new network up.
+func disabledNetCfg(env *testEnv) config.FTNConfig {
+	cfg := env.globalCfg
+	cfg.Networks = map[string]config.FTNNetworkConfig{
+		"fsxnet": {
+			InternalTosserEnabled: true,
+			Links:                 []config.FTNLinkConfig{{Address: "21:4/158"}},
+		},
+		"tqwnet": {
+			InternalTosserEnabled: false,
+			Links:                 []config.FTNLinkConfig{{Address: "1337:3/123"}},
+		},
+	}
+	return cfg
+}
+
+// Mail for a network the sysop switched off is waiting on them, not
+// unclaimed. Ageing it out at 24h would quarantine exactly the mail someone
+// deliberately paused while setting up areas — a weekend is longer than the
+// cutoff.
+func TestDisabledNetworkMailIsHeldNotQuarantined(t *testing.T) {
+	env := setupTestEnv(t)
+	stale := writeGoodPacket(t, env.inboundDir, "tqw.pkt", 1337, 3, 123)
+	old := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	report := FindUnclaimed(disabledNetCfg(env), map[string]map[string]int{
+		stale: {"1337:3/123": 7},
+	})
+	report.QuarantineStale(env.tempDir)
+
+	if len(report.Held) != 1 || filepath.Base(report.Held[0]) != "tqw.pkt" {
+		t.Fatalf("want the packet reported as held, got Held=%v Files=%v", report.Held, report.Files)
+	}
+	if len(report.Quarantined) != 0 {
+		t.Errorf("held mail must never be quarantined, got %v", report.Quarantined)
+	}
+	if _, err := os.Stat(stale); err != nil {
+		t.Errorf("held mail must stay in the inbound directory: %v", err)
+	}
+	if !report.Empty() {
+		t.Error("held mail must not count as unclaimed")
+	}
+}
+
+// The #276 protection has to survive: mail from an address no network claims
+// is still quarantined even while some other network is disabled.
+func TestUnclaimedMailStillQuarantinedAlongsideDisabledNetwork(t *testing.T) {
+	env := setupTestEnv(t)
+	stale := writeGoodPacket(t, env.inboundDir, "nobody.pkt", 99, 1, 1)
+	old := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	report := FindUnclaimed(disabledNetCfg(env), map[string]map[string]int{
+		stale: {"99:1/1": 3},
+	})
+	report.QuarantineStale(env.tempDir)
+
+	if len(report.Held) != 0 {
+		t.Errorf("mail from an unknown address is not held, got %v", report.Held)
+	}
+	if len(report.Quarantined) != 1 {
+		t.Fatalf("want the stale unclaimed packet quarantined, got %v", report.Quarantined)
+	}
+	if !strings.Contains(report.OriginList(), "99:1/1") {
+		t.Errorf("origin should still be named, got %q", report.OriginList())
+	}
+}
+
+// With every network enabled nothing is held and the original ageing applies
+// unchanged.
+func TestAllNetworksEnabledHoldsNothing(t *testing.T) {
+	env := setupTestEnv(t)
+	stale := writeGoodPacket(t, env.inboundDir, "stale.pkt", 1337, 3, 123)
+	old := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := env.globalCfg
+	cfg.Networks = map[string]config.FTNNetworkConfig{
+		"fsxnet": {InternalTosserEnabled: true, Links: []config.FTNLinkConfig{{Address: "21:4/158"}}},
+	}
+
+	report := FindUnclaimed(cfg, map[string]map[string]int{stale: {"1337:3/123": 1}})
+	report.QuarantineStale(env.tempDir)
+
+	if len(report.Held) != 0 {
+		t.Errorf("nothing should be held with every network enabled, got %v", report.Held)
+	}
+	if len(report.Quarantined) != 1 {
+		t.Errorf("stale unclaimed mail should still be quarantined, got %v", report.Quarantined)
+	}
+}
+
+// Nothing parsed the file — which is what happens when every network is
+// disabled — so it cannot be attributed. Mail is not aged out on a guess.
+func TestUnattributableMailIsHeldWhenEveryNetworkIsDisabled(t *testing.T) {
+	env := setupTestEnv(t)
+	stale := writeGoodPacket(t, env.inboundDir, "mystery.pkt", 1337, 3, 123)
+	old := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := disabledNetCfg(env)
+	for name, nc := range cfg.Networks {
+		nc.InternalTosserEnabled = false
+		cfg.Networks[name] = nc
+	}
+	report := FindUnclaimed(cfg, nil) // no origins recorded
+	report.QuarantineStale(env.tempDir)
+
+	if len(report.Held) != 1 {
+		t.Fatalf("unattributable mail should be held, got Held=%v Files=%v", report.Held, report.Files)
+	}
+	if len(report.Quarantined) != 0 {
+		t.Errorf("unattributable mail must not be quarantined, got %v", report.Quarantined)
+	}
+}
+
+// With an enabled network in the mix, a file with no recorded origin is one
+// the enabled tosser saw and could not attribute — unreadable, say. Holding it
+// because some unrelated network is switched off would let it bypass the
+// 24-hour quarantine indefinitely.
+func TestUnattributableMailIsNotHeldWhileANetworkIsEnabled(t *testing.T) {
+	env := setupTestEnv(t)
+	stale := writeGoodPacket(t, env.inboundDir, "mystery.pkt", 1337, 3, 123)
+	old := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	report := FindUnclaimed(disabledNetCfg(env), nil) // fsxnet enabled, tqwnet off; no origins
+	report.QuarantineStale(env.tempDir)
+
+	if len(report.Held) != 0 {
+		t.Errorf("origin-less mail must not be held on an unrelated disabled network, got %v", report.Held)
+	}
+	if len(report.Quarantined) != 1 {
+		t.Errorf("stale origin-less mail should be quarantined, got Files=%v Quarantined=%v",
+			report.Files, report.Quarantined)
 	}
 }

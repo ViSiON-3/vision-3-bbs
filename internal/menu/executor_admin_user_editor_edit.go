@@ -204,7 +204,13 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 		target.Handle = normalizedHandle
 	}
 	if val, ok := pendingChanges["realname"]; ok {
-		target.RealName = val.(string)
+		// Validated like the handle above: a blank real name silently turns off
+		// real_name_only for this user in every area that sets it.
+		normalizedRealName := strings.TrimSpace(val.(string))
+		if err := user.ValidateRealName(normalizedRealName); err != nil {
+			return "|01" + err.Error() + "|07", false
+		}
+		target.RealName = normalizedRealName
 	}
 	if val, ok := pendingChanges["grouploc"]; ok {
 		target.GroupLocation = val.(string)
