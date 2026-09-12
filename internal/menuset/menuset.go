@@ -163,6 +163,14 @@ func (s Set) ReadDir(elem ...string) ([]Entry, error) {
 
 	baseDir := s.Path(LayerBase, elem...)
 	baseEntries, baseErr := os.ReadDir(baseDir)
+	// Windows can report ErrNotExist when ReadDir targets a regular file.
+	// Confirm that the path is absent before treating that error as a missing
+	// layer, otherwise a malformed shipped tree is silently hidden.
+	if errors.Is(baseErr, fs.ErrNotExist) {
+		if info, err := os.Stat(baseDir); err == nil && !info.IsDir() {
+			return nil, fmt.Errorf("reading %s: not a directory", baseDir)
+		}
+	}
 	for _, de := range baseEntries {
 		if de.IsDir() {
 			continue

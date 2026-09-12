@@ -240,8 +240,8 @@ func TestSummarize(t *testing.T) {
 
 func TestReadDirDoesNotHideBrokenBase(t *testing.T) {
 	s := fixture(t)
-	// A file in place of the base directory produces a real error on every OS,
-	// including when tests run as root (unlike permission-based fixtures).
+	// A file in place of the base directory must not be treated as missing,
+	// even on Windows, where ReadDir can report ErrNotExist in this case.
 	write(t, filepath.Join(s.Base, "bar"), "not a directory")
 	write(t, filepath.Join(s.Overlay, "bar", "MAIN.BAR"), "overlay")
 	if entries, err := s.ReadDir("bar"); err == nil || entries != nil {
