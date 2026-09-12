@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	./menuedit [--menus path/to/menus/set]
+//	./menuedit [--menus path/to/menus/set] [--no-overlay]
 //
 // If no --menus flag is provided, it looks for menus/v3 relative to the
 // current working directory.

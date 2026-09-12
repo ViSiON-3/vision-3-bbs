@@ -2,6 +2,7 @@ package menuset
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -254,14 +255,92 @@ func TestSummarize(t *testing.T) {
 	}
 }
 
-func TestReadDirDoesNotHideBrokenBase(t *testing.T) {
+func TestReadDirDoesNotHideBrokenLayer(t *testing.T) {
+	for _, layer := range []Layer{LayerBase, LayerOverlay} {
+		t.Run(layer.String(), func(t *testing.T) {
+			s := fixture(t)
+			other := LayerBase
+			if layer == LayerBase {
+				other = LayerOverlay
+			}
+			write(t, s.Path(layer, "bar"), "not a directory")
+			write(t, s.Path(other, "bar", "MAIN.BAR"), "readable")
+			if entries, err := s.ReadDir("bar"); err == nil || errors.Is(err, fs.ErrNotExist) || entries != nil {
+				t.Fatalf("broken layer hidden: entries=%v err=%v", entries, err)
+			}
+			if entries, err := s.Glob("bar", "*"); err == nil || entries != nil {
+				t.Fatalf("Glob hid broken layer: entries=%v err=%v", entries, err)
+			}
+		})
+	}
+}
+
+func TestReadDirCaseVariantOverlay(t *testing.T) {
 	s := fixture(t)
-	// A file in place of the base directory must not be treated as missing,
-	// even on Windows, where ReadDir can report ErrNotExist in this case.
-	write(t, filepath.Join(s.Base, "bar"), "not a directory")
-	write(t, filepath.Join(s.Overlay, "bar", "MAIN.BAR"), "overlay")
-	if entries, err := s.ReadDir("bar"); err == nil || entries != nil {
-		t.Fatalf("broken base hidden: entries=%v err=%v", entries, err)
+	write(t, s.Path(LayerBase, "mnu", "MAIN.MNU"), "shipped")
+	write(t, s.Path(LayerOverlay, "mnu", "main.mnu"), "overlay")
+	// Detect semantics of the actual filesystem, including case-insensitive
+	// macOS volumes, rather than assuming them from the operating system.
+	_, aliasErr := os.Lstat(s.Path(LayerOverlay, "mnu", "MAIN.MNU"))
+	insensitive := aliasErr == nil
+	if aliasErr != nil && !os.IsNotExist(aliasErr) {
+		t.Fatal(aliasErr)
+	}
+	entries, err := s.ReadDir("mnu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 2
+	if insensitive {
+		want = 1
+	}
+	if len(entries) != want {
+		t.Fatalf("entries=%v want %d (case insensitive=%v)", entries, want, insensitive)
+	}
+	if insensitive && (entries[0].Layer != LayerOverlay || entries[0].Name != "main.mnu") {
+		t.Errorf("case variant did not shadow shipped menu: %v", entries)
+	}
+	glob, err := s.Glob("mnu", "*")
+	if err != nil || !reflect.DeepEqual(glob, entries) {
+		t.Errorf("Glob=%v err=%v, want %v", glob, err, entries)
+	}
+	// An exact overlay spelling on a case-sensitive volume must not hide
+	// another distinct file just because their names differ only in case.
+	if !insensitive {
+		write(t, s.Path(LayerOverlay, "mnu", "MAIN.MNU"), "another override")
+		entries, err = s.ReadDir("mnu")
+		if err != nil || len(entries) != 2 {
+			t.Fatalf("distinct names lost: %v, %v", entries, err)
+		}
+		for _, entry := range entries {
+			if entry.Layer != LayerOverlay {
+				t.Errorf("entry=%v", entry)
+			}
+		}
+	}
+}
+
+func TestDanglingOverlayDoesNotFallBack(t *testing.T) {
+	s := fixture(t)
+	path := s.Path(LayerOverlay, "ansi", "MAIN.ANS")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("missing-target", path); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	got, layer, ok, err := s.Locate("ansi", "MAIN.ANS")
+	if err == nil || got != path || layer != LayerOverlay || ok {
+		t.Fatalf("Locate=%q %v %v %v", got, layer, ok, err)
+	}
+	if got, err := s.Resolve("ansi", "MAIN.ANS"); err == nil || got != path {
+		t.Errorf("Resolve=%q %v", got, err)
+	}
+	if got, err := s.ResolveFirst("ansi", "MAIN.ANS", "LOGIN.ANS"); err == nil || got != path {
+		t.Errorf("ResolveFirst=%q %v", got, err)
+	}
+	if exists, err := s.Exists("ansi", "MAIN.ANS"); err == nil || exists {
+		t.Errorf("Exists=%v %v", exists, err)
 	}
 }
 

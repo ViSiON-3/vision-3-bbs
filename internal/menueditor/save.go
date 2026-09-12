@@ -19,6 +19,7 @@ func (m *Model) saveCurrentMenu() {
 		m.message = fmt.Sprintf("Save error: %v", err)
 		return
 	}
+	m.menus[idx].MnuOverlay = m.set.HasOverlay()
 	delete(m.dirtyMenus, entry.Name)
 }
 
@@ -38,6 +39,7 @@ func (m *Model) saveCurrentCommands() error {
 		m.message = fmt.Sprintf("Save error: %v", err)
 		return err
 	}
+	m.menus[m.cmdsMenuIdx].CfgOverlay = m.set.HasOverlay()
 	m.dirtyCmds = false
 	return nil
 }
@@ -46,13 +48,14 @@ func (m *Model) saveCurrentCommands() error {
 // Returns true only if every save succeeded; failed entries remain dirty.
 func (m *Model) saveAll() bool {
 	ok := true
-	for _, entry := range m.menus {
+	for idx, entry := range m.menus {
 		if m.dirtyMenus[entry.Name] {
 			if err := SaveMenu(m.set, entry.Name, entry.Data); err != nil {
 				m.message = fmt.Sprintf("Save error: %v", err)
 				ok = false
 				continue
 			}
+			m.menus[idx].MnuOverlay = m.set.HasOverlay()
 			delete(m.dirtyMenus, entry.Name)
 		}
 	}

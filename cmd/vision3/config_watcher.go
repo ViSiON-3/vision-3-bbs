@@ -464,6 +464,7 @@ func (cw *ConfigWatcher) applyV3Net() error {
 // recorded, updating the record. A file that does not exist is not a change
 // unless reloadOnRemove is set and it was present on the previous poll; either
 // way its record is dropped so that re-creating it registers as one.
+// Other stat errors are logged without changing the saved timestamp.
 //
 // Any difference counts, not just a newer timestamp, so that restoring a config
 // file from a backup — which can move the timestamp backwards — still reloads.
@@ -474,6 +475,10 @@ func (cw *ConfigWatcher) changed(path string, reloadOnRemove bool) bool {
 	defer cw.mu.Unlock()
 
 	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Warn("could not stat watched configuration", "path", path, "error", err)
+			return false
+		}
 		_, seen := cw.mtimes[path]
 		delete(cw.mtimes, path)
 		return seen && reloadOnRemove

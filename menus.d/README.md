@@ -1,8 +1,9 @@
 # menus.d — your menu overrides
 
 Anything you put in here is read **before** the shipped menu set in `menus/`,
-file by file. Nothing in this directory is tracked by git, so `git pull` never
-touches it and you never have to re-copy your customisations after an upgrade.
+file by file. Override files are git-ignored, so `git pull` never touches your
+customisations and you never have to re-copy them after an upgrade. Only this
+README is tracked.
 
 Mirror the layout of the set you are overriding. To replace the main menu art
 of the `v3` set, for example:
@@ -28,4 +29,4 @@ copying the rest of `ansi/`; every other file still comes from `menus/`.
   instance. Move each to the same path under `menus.d/`, then restore the
   shipped copy. Full steps in the guide linked below.
 
-See the sysop guide: `docs/sysop/menus/menu-system.md#customising-menus-without-losing-your-changes`.
+See the sysop guide: [Customising menus without losing your changes](../docs/sysop/menus/menu-system.md#customising-menus-without-losing-your-changes).

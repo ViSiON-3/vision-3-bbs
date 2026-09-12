@@ -1358,7 +1358,7 @@ Each script gets its own JSON file in `scripts/data/<script-name>.json`.
 
 ### v3.ansi — ANSI Art Display
 
-Resolves files from: script directory → `menus/v3/ansi/` → `menus/v3/templates/`.
+Resolves files from: script directory → `menus.d/v3/ansi/` → `menus/v3/ansi/` → `menus.d/v3/templates/` → `menus/v3/templates/`. Overlay files shadow shipped artwork.
 
 | Method                 | Parameters | Returns   | Description                                 |
 | ---------------------- | ---------- | --------- | ------------------------------------------- |

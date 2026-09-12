@@ -574,7 +574,7 @@ for (var i = 0; i < files.length; i++) {
 
 ### v3.ansi
 
-Display ANSI art files (.ANS) from scripts. Files are resolved by searching the script's working directory first, then `menus/v3/ansi/`, then `menus/v3/templates/`.
+Display ANSI art files (.ANS) from scripts. Files are resolved by searching the script's working directory first, then `menus.d/v3/ansi/`, `menus/v3/ansi/`, `menus.d/v3/templates/`, and `menus/v3/templates/` in that order. Overlay files shadow shipped artwork.
 
 | Function | Description |
 |----------|-------------|

@@ -209,8 +209,8 @@ docker exec -u vision3 -it vision3-bbs ./strings
 # User editor
 docker exec -u vision3 -it vision3-bbs ./ue
 
-# Menu editor
-docker exec -u vision3 -it vision3-bbs ./menuedit
+# Menu editor (use the host UID/GID for the bind-mounted overlay)
+docker exec -it -u "$(id -u):$(id -g)" vision3-bbs ./menuedit
 
 # WFC sysop console
 docker exec -u vision3 -it vision3-bbs ./wfc

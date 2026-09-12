@@ -432,3 +432,30 @@ func TestWatcherWatchesOverlayTheme(t *testing.T) {
 		t.Errorf("theme target not registered: %s", p)
 	}
 }
+
+func TestWatcherStatErrorDoesNotCountAsRemoval(t *testing.T) {
+	cw, dir, _ := newTestWatcher(t, "theme.json")
+	path := filepath.Join(dir, "theme.json")
+	before := cw.mtimes[path]
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("theme.json", path); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := os.Stat(path); err == nil || os.IsNotExist(err) {
+		t.Fatalf("expected non-missing stat error: %v", err)
+	}
+	if cw.changed(path, true) {
+		t.Error("stat failure triggered removal reload")
+	}
+	if got := cw.mtimes[path]; !got.Equal(before) {
+		t.Errorf("stat failure discarded mtime: %v, want %v", got, before)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if !cw.changed(path, true) {
+		t.Error("actual removal not reported after stat failure")
+	}
+}

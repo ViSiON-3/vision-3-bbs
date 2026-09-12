@@ -80,7 +80,9 @@ func readTemplateFile(path string) ([]byte, error) {
 		if err == nil {
 			return stripSauceMetadata(data), nil
 		}
-		if !os.IsNotExist(err) {
+		_, linkErr := os.Lstat(candidate)
+		if !os.IsNotExist(err) || !os.IsNotExist(linkErr) {
+			// A dangling link is an explicit template, not a missing candidate.
 			// Real I/O error (permissions, etc.) — stop trying.
 			return nil, err
 		}

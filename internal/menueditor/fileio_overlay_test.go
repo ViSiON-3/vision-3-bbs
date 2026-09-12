@@ -210,3 +210,49 @@ func TestOverlayReadReportsInaccessibleCommands(t *testing.T) {
 		t.Error("LoadMenus silently marked broken overlay commands as base")
 	}
 }
+
+func TestSaveUpdatesOverlayMarkers(t *testing.T) {
+	for _, mode := range []string{"overlay", "bare", "failed"} {
+		for _, action := range []string{"menu", "commands", "all"} {
+			t.Run(mode+"/"+action, func(t *testing.T) {
+				set := newOverlaySet(t)
+				if mode == "bare" {
+					set = menuset.Bare(set.Base)
+				}
+				m, err := New(set)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if mode == "failed" {
+					if err := os.MkdirAll(filepath.Dir(set.Overlay), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(set.Overlay, []byte("not a directory"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				m.menuEditIdx, m.cmdsMenuIdx = 0, 0
+				name := m.menus[0].Name
+				m.menus[0].Data.Title = "saved title"
+				m.dirtyMenus[name] = true
+				m.dirtyCmds = true
+				switch action {
+				case "menu":
+					m.saveCurrentMenu()
+				case "commands":
+					_ = m.saveCurrentCommands()
+				case "all":
+					_ = m.saveAll()
+				}
+				wantMnu := mode == "overlay" && action != "commands"
+				wantCfg := mode == "overlay" && action != "menu"
+				if m.menus[0].MnuOverlay != wantMnu || m.menus[0].CfgOverlay != wantCfg {
+					t.Errorf("markers=(%v,%v) want (%v,%v)", m.menus[0].MnuOverlay, m.menus[0].CfgOverlay, wantMnu, wantCfg)
+				}
+				if mode == "failed" && (m.message == "" || !m.dirtyMenus[name] || !m.dirtyCmds) {
+					t.Errorf("failed save lost dirty state or error: %+v", m.message)
+				}
+			})
+		}
+	}
+}

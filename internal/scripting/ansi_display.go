@@ -108,7 +108,8 @@ func resolveAnsiPath(eng *Engine, filename string) string {
 			base := menus.Path(layer, sub)
 			path = filepath.Join(base, cleaned)
 			if _, err := os.Stat(path); err != nil {
-				if !os.IsNotExist(err) {
+				_, linkErr := os.Lstat(path)
+				if !os.IsNotExist(err) || !os.IsNotExist(linkErr) {
 					slog.Warn("resolving script art", "path", path, "error", err)
 					return ""
 				}

@@ -27,7 +27,7 @@ import (
 // overlay root: menus/v3 pairs with menus.d/v3.
 const OverlaySuffix = ".d"
 
-// Layer names which tree a file was resolved from.
+// Layer identifies the tree a file was resolved from.
 type Layer int
 
 const (
@@ -167,15 +167,7 @@ func (s Set) ReadDir(elem ...string) ([]Entry, error) {
 	merged := map[string]Entry{}
 
 	baseDir := s.Path(LayerBase, elem...)
-	baseEntries, baseErr := os.ReadDir(baseDir)
-	// Windows can report ErrNotExist when ReadDir targets a regular file.
-	// Confirm that the path is absent before treating that error as a missing
-	// layer, otherwise a malformed shipped tree is silently hidden.
-	if errors.Is(baseErr, fs.ErrNotExist) {
-		if info, err := os.Stat(baseDir); err == nil && !info.IsDir() {
-			return nil, fmt.Errorf("reading %s: not a directory", baseDir)
-		}
-	}
+	baseEntries, baseErr := readDir(baseDir)
 	for _, de := range baseEntries {
 		if de.IsDir() {
 			continue
@@ -186,15 +178,37 @@ func (s Set) ReadDir(elem ...string) ([]Entry, error) {
 	overlayMissing := true
 	if s.Overlay != "" {
 		overlayDir := s.Path(LayerOverlay, elem...)
-		overlayEntries, err := os.ReadDir(overlayDir)
+		overlayEntries, err := readDir(overlayDir)
 		if err == nil {
 			overlayMissing = false
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
+		// Use the overlay filesystem's own case rules. A differently cased
+		// spelling shadows a base name only if that spelling resolves there.
+		// Preserve distinct names on case-sensitive filesystems.
+		overlayNames := make(map[string]bool, len(overlayEntries))
+		baseNames := make(map[string][]string, len(merged))
+		for name := range merged {
+			key := strings.ToUpper(name)
+			baseNames[key] = append(baseNames[key], name)
+		}
+		for _, de := range overlayEntries {
+			overlayNames[de.Name()] = true
+		}
 		for _, de := range overlayEntries {
 			if de.IsDir() {
 				continue
+			}
+			for _, baseName := range baseNames[strings.ToUpper(de.Name())] {
+				if overlayNames[baseName] {
+					continue
+				}
+				if _, err := os.Lstat(filepath.Join(overlayDir, baseName)); err == nil {
+					delete(merged, baseName)
+				} else if !errors.Is(err, fs.ErrNotExist) {
+					return nil, err
+				}
 			}
 			merged[de.Name()] = Entry{Name: de.Name(), Path: filepath.Join(overlayDir, de.Name()), Layer: LayerOverlay}
 		}
@@ -210,6 +224,22 @@ func (s Set) ReadDir(elem ...string) ([]Entry, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+// readDir distinguishes a missing layer from an invalid directory on Windows,
+// where reading a regular file can report ErrNotExist.
+func readDir(path string) ([]fs.DirEntry, error) {
+	entries, err := os.ReadDir(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		info, statErr := os.Stat(path)
+		if statErr == nil && !info.IsDir() {
+			return nil, fmt.Errorf("reading %s: not a directory", path)
+		}
+		if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
+			return nil, statErr
+		}
+	}
+	return entries, err
 }
 
 // Glob matches a shell pattern against the files of a subdirectory across
@@ -304,6 +334,13 @@ func (s Set) Summarize() (sum Summary, ok bool, err error) {
 func statFile(p string) (bool, error) {
 	info, err := os.Stat(p)
 	if errors.Is(err, fs.ErrNotExist) {
+		// A dangling link is an explicit entry whose target cannot be read,
+		// not an absent override. Keep the target error instead of falling back.
+		if _, linkErr := os.Lstat(p); linkErr == nil {
+			return false, err
+		} else if !errors.Is(linkErr, fs.ErrNotExist) {
+			return false, linkErr
+		}
 		return false, nil
 	}
 	if err != nil {
