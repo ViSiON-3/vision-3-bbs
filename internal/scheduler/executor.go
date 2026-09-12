@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +14,19 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
+
+// outputWaitDelay is how long after an event's process has exited that
+// executeEvent keeps waiting for its stdout and stderr to close.
+//
+// Output is captured through pipes, and a pipe stays open for as long as any
+// process holds its write end. An event that leaves a background child
+// behind — a script that starts a daemon, or "sleep 30 &" — exits promptly
+// itself, but cmd.Run then blocked until that child also exited, and the same
+// held after a timeout kill, which reaches only the process we started. The
+// event's slot and running-event mark were held for the whole of it. After
+// this delay the pipes are closed and the run completes on the process's own
+// exit status.
+const outputWaitDelay = 5 * time.Second
 
 // executeEvent runs a scheduled event and returns the result
 func (s *Scheduler) executeEvent(ctx context.Context, event config.EventConfig) EventResult {
@@ -90,12 +104,22 @@ func (s *Scheduler) executeEvent(ctx context.Context, event config.EventConfig) 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	cmd.WaitDelay = outputWaitDelay
 
 	// Execute the command
 	err := cmd.Run()
 	result.EndTime = time.Now()
 	result.Output = stdout.String()
 	result.ErrorOutput = stderr.String()
+
+	// ErrWaitDelay means the process itself exited cleanly and only its
+	// orphaned output pipes had to be closed: the event succeeded, and what
+	// the orphan wrote afterwards is not part of its output.
+	if errors.Is(err, exec.ErrWaitDelay) {
+		slog.Warn("event left a child process holding its output open; output after the event's own exit was discarded",
+			"id", event.ID, "name", event.Name, "wait_delay", outputWaitDelay)
+		err = nil
+	}
 
 	// Determine result status
 	if err != nil {

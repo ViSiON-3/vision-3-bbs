@@ -210,3 +210,34 @@ func TestPlaceholderSubstitutionInCommand(t *testing.T) {
 		t.Errorf("Expected output to contain 'placeholder_test_ok', got: %s", result2.Output)
 	}
 }
+
+// An event that leaves a background child behind exits promptly itself, but
+// the child inherits the output pipes. cmd.Run used to block until that child
+// exited too, holding the event's concurrency slot and running-event mark for
+// however long the orphan lived, and a timeout kill did not help because it
+// reaches only the process we started.
+func TestExecuteEvent_OrphanedChildDoesNotBlockCompletion(t *testing.T) {
+	s := &Scheduler{}
+
+	event := config.EventConfig{
+		ID:      "test_orphan",
+		Name:    "Test Orphaned Child",
+		Command: lookPath(t, "sh"),
+		// The shell exits at once; the sleep keeps stdout open for 30s.
+		Args: []string{"-c", "sleep 30 & echo started"},
+	}
+
+	start := time.Now()
+	result := s.executeEvent(context.Background(), event)
+	duration := time.Since(start)
+
+	if !result.Success {
+		t.Errorf("the shell exited 0, so the event should succeed: exit=%d err=%v", result.ExitCode, result.Error)
+	}
+	if !strings.Contains(result.Output, "started") {
+		t.Errorf("output written before exit must be kept, got %q", result.Output)
+	}
+	if duration > outputWaitDelay+5*time.Second {
+		t.Errorf("event took %v; the orphaned child must not hold it past the wait delay", duration)
+	}
+}
