@@ -33,8 +33,17 @@ func TestBinkdOutboundFor(t *testing.T) {
 // working directory instead, putting one network's queue somewhere neither
 // binkd nor the tosser looks.
 func TestResolvePathsResolvesNetworkOutbound(t *testing.T) {
-	root := filepath.FromSlash("/bbs")
-	abs := filepath.Join(root, "elsewhere", "out.ago")
+	// t.TempDir, not a "/bbs" literal: on Windows a rooted path is only
+	// absolute with a drive letter, so filepath.IsAbs("\\bbs\\...") is false
+	// there and the "absolute override" case silently became a relative one
+	// that got joined against root twice.
+	root := t.TempDir()
+	abs := filepath.Join(t.TempDir(), "out.ago")
+	// The premise of the absolute-override case, asserted rather than assumed:
+	// a "/bbs" literal satisfies this on Linux and fails it on Windows.
+	if !filepath.IsAbs(abs) {
+		t.Fatalf("test needs a genuinely absolute path, got %q", abs)
+	}
 	cfg := FTNConfig{
 		BinkdOutboundPath: "data/ftn/out",
 		Networks: map[string]FTNNetworkConfig{

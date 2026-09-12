@@ -1,6 +1,7 @@
 package ftn
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -45,7 +46,7 @@ func TestSyncBinkdNetworksDeclaresMissingNetwork(t *testing.T) {
 
 	got := readConf(t, path)
 	for _, want := range []string{
-		"domain fidonet /bbs/data/ftn/out_fido 3",
+		"domain fidonet " + filepath.Join("/bbs", "data/ftn/out_fido") + " 3",
 		"address 3:633/2744.11@fidonet",
 	} {
 		if !strings.Contains(got, want) {
@@ -75,8 +76,9 @@ func TestSyncBinkdNetworksUsesOwnAddressZone(t *testing.T) {
 	if err := SyncBinkdNetworks(path, "/bbs", cfg); err != nil {
 		t.Fatalf("SyncBinkdNetworks: %v", err)
 	}
-	if got := readConf(t, path); !strings.Contains(got, "domain tqwnet /bbs/data/ftn/out 1337") {
-		t.Errorf("want zone 1337 from own_address, got:\n%s", got)
+	want := "domain tqwnet " + filepath.Join("/bbs", "data/ftn/out") + " 1337"
+	if got := readConf(t, path); !strings.Contains(got, want) {
+		t.Errorf("want %q, got:\n%s", want, got)
 	}
 }
 
