@@ -31,8 +31,18 @@ type Scheduler struct {
 	// chainingOK is false when run_after contains a cycle; chaining is then
 	// off for every event, so behaviour matches the error that was logged.
 	chainingOK bool
-	ctx        context.Context
-	cancel     context.CancelFunc
+	// stopping is set under mu when Stop begins. Reload refuses to install a
+	// cron after that: the config watcher is stopped after the scheduler, so
+	// a reload can land mid-shutdown, and a cron retired then would register
+	// with retiredWg after Stop had already waited on it.
+	stopping bool
+	// ctx is what events run under. It starts as a scheduler-owned context
+	// from NewScheduler, so a cron a Reload installs before Start has a
+	// cancellable one rather than context.Background(); Start replaces it
+	// with one derived from the caller's, and Stop cancels both.
+	ctx            context.Context
+	cancel         context.CancelFunc
+	preStartCancel context.CancelFunc
 }
 
 // NewScheduler creates a new event scheduler
@@ -49,6 +59,7 @@ func NewScheduler(cfg config.EventsConfig, historyPath string) *Scheduler {
 		history = make(map[string]*EventHistory)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		config:         cfg,
 		history:        history,
@@ -56,6 +67,9 @@ func NewScheduler(cfg config.EventsConfig, historyPath string) *Scheduler {
 		runningEvents:  make(map[string]bool),
 		concurrencySem: make(chan struct{}, cfg.MaxConcurrentEvents),
 		chainingOK:     validateChains(cfg.Events),
+		ctx:            ctx,
+		cancel:         cancel,
+		preStartCancel: cancel,
 	}
 }
 
@@ -67,6 +81,8 @@ func (s *Scheduler) Start(ctx context.Context) {
 	// progress.
 	c := cron.New()
 	s.mu.Lock()
+	// Anything already running under the pre-start context keeps it; that
+	// context is cancelled by Stop along with this one.
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	// If a reload already installed a cron before Start got here, its config
 	// is newer than the boot config: leave it in place and skip boot-time
@@ -162,8 +178,16 @@ func (s *Scheduler) Start(ctx context.Context) {
 // Stop gracefully stops the scheduler
 func (s *Scheduler) Stop() {
 	s.mu.Lock()
+	s.stopping = true
 	c := s.cron
+	preStartCancel := s.preStartCancel
 	s.mu.Unlock()
+	// Cancel the pre-start context too, so a chain a reload-installed cron
+	// started before Start — still waiting out a delay_after_seconds — is
+	// released rather than holding chainWg.Wait below for the full delay.
+	if preStartCancel != nil {
+		preStartCancel()
+	}
 	if c != nil {
 		// Stop accepting new jobs
 		cronCtx := c.Stop()
@@ -237,7 +261,18 @@ func (s *Scheduler) Reload(cfg config.EventsConfig) {
 	}
 
 	s.mu.Lock()
+	if s.stopping {
+		s.mu.Unlock()
+		slog.Info("event scheduler reload ignored: scheduler is stopping")
+		return
+	}
 	oldCron := s.cron
+	if oldCron != nil {
+		// Registered under the lock, so Stop — which sets stopping under the
+		// same lock before waiting on retiredWg — either refuses this reload
+		// or waits for the cron it retires.
+		s.retiredWg.Add(1)
+	}
 	s.chainingOK = validateChains(cfg.Events)
 	if cfg.MaxConcurrentEvents != s.config.MaxConcurrentEvents {
 		// Resize by replacement. In-flight events release into the semaphore
@@ -254,9 +289,8 @@ func (s *Scheduler) Reload(cfg config.EventsConfig) {
 
 	if oldCron != nil {
 		// Stop in the background: Stop's context waits for running jobs, and
-		// the caller is the config watcher's poll loop. Tracked so shutdown
-		// waits for those jobs too.
-		s.retiredWg.Add(1)
+		// the caller is the config watcher's poll loop. Tracked (Add above,
+		// under the lock) so shutdown waits for those jobs too.
 		go func() {
 			defer s.retiredWg.Done()
 			<-oldCron.Stop().Done()
@@ -325,12 +359,7 @@ func (s *Scheduler) runWithSlot(event config.EventConfig) (context.Context, bool
 	// replacement would block forever.
 	sem := s.concurrencySem
 	maxConcurrent := s.config.MaxConcurrentEvents
-	ctx := s.ctx
-	if ctx == nil {
-		// A reload can install and start a cron before Start assigns s.ctx; a
-		// job firing in that window must not hand executeEvent a nil context.
-		ctx = context.Background()
-	}
+	ctx := s.ctx // never nil: NewScheduler sets a pre-start context
 
 	// Try to acquire concurrency semaphore while holding the lock
 	select {

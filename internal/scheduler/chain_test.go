@@ -372,3 +372,36 @@ func TestStopWaitsForRetiredCronJobs(t *testing.T) {
 		t.Errorf("retired cron's job missing from saved history %v: Stop did not wait for it", history)
 	}
 }
+
+// A cron installed by Reload before Start ran its jobs under
+// context.Background(), so a chain it started could not be cancelled: Stop
+// then blocked on chainWg for the child's whole delay_after_seconds. The
+// pre-start context is now the scheduler's own, and Stop cancels it.
+func TestStopCancelsChainStartedBeforeStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chain tests run shell commands; skipped on windows")
+	}
+	out := filepath.Join(t.TempDir(), "order.txt")
+	parent := chainEvent(t, "parent", "", "@every 1s", 0, out)
+	child := chainEvent(t, "child", "parent", "", 30, out) // long delay
+	s := NewScheduler(config.EventsConfig{MaxConcurrentEvents: 2},
+		filepath.Join(t.TempDir(), "history.json"))
+
+	// Reload before Start installs and starts a cron on the pre-start context.
+	s.Reload(config.EventsConfig{MaxConcurrentEvents: 2, Events: []config.EventConfig{parent, child}})
+	waitForContent(t, out, 1) // parent has run; child is waiting out its delay
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.Start(ctx)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop blocked on a chain started before Start; its delay was not cancelled")
+	}
+}
