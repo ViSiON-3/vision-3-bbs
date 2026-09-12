@@ -38,6 +38,30 @@ jobs:
         with:
           only-new-issues: true
 
+      # The 386 builds run on 32-bit Windows, and there a 64-bit atomic on a
+      # struct field that is not 8-byte aligned panics at first use with
+      # "unaligned 64-bit atomic operation". 0.9.0 and 0.9.1 shipped with one
+      # in the editor's input handler, so every telnet connect on Windows 10
+      # 32-bit died at the matrix screen. No 64-bit build, vet, or test can see
+      # it: the field is aligned on amd64/arm64. staticcheck's SA1027 finds it,
+      # but only while analysing a 32-bit target, which the step above never
+      # does. Both OSes, since windows-tagged files are only analysed under
+      # GOOS=windows. Runs on main too: it has no baseline to hide behind.
+      - name: golangci-lint linux/386 (64-bit atomic alignment)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          args: --config .golangci-32bit.yml
+        env:
+          GOOS: linux
+          GOARCH: "386"
+      - name: golangci-lint windows/386 (64-bit atomic alignment)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          args: --config .golangci-32bit.yml
+        env:
+          GOOS: windows
+          GOARCH: "386"
+
   # Windows is a released platform (README: "Windows x86_64 Released") and now
   # gates like Linux does. It went untested for a long time, and turning it on
   # found four product bugs at once: FTN mail could not start there at all
