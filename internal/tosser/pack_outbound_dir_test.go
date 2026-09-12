@@ -1,12 +1,14 @@
 package tosser
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
 // A network with its own binkd_outbound_path must pack into that directory.
@@ -106,7 +108,62 @@ func TestPackOutboundUsesPerNetworkDir(t *testing.T) {
 
 	// The global outbound must be untouched: a stray bundle there is exactly
 	// the cross-network mix-up the split prevents.
-	if global, err := os.ReadDir(env.binkdDir); err == nil && len(global) > 0 {
+	global, err := os.ReadDir(env.binkdDir)
+	if err != nil {
+		t.Fatalf("reading the global outbound: %v", err)
+	}
+	if len(global) > 0 {
 		t.Errorf("global outbound %s must stay empty, got %v", env.binkdDir, global)
+	}
+}
+
+// stagePacketTo writes a minimal echomail packet addressed to zone:net/node
+// into the shared staging directory, the way the exporter leaves one.
+func stagePacketTo(t *testing.T, env *testEnv, name string, zone, net, node uint16) {
+	t.Helper()
+	hdr := ftn.NewPacketHeader(21, 4, 158, 1, zone, net, node, 0, "")
+	body := &ftn.ParsedBody{Area: "FSX_TEST", Text: "hello\r", Kludges: []string{"MSGID: 21:4/158.1 22222222"}}
+	packed := &ftn.PackedMessage{
+		MsgType: 2, OrigNode: 158, DestNode: node, OrigNet: 4, DestNet: net,
+		DateTime: "01 Mar 26  12:00:00", To: "All", From: "Someone",
+		Subject: "hi", Body: ftn.FormatPackedMessageBody(body),
+	}
+	var buf bytes.Buffer
+	if err := ftn.WritePacket(&buf, hdr, []*ftn.PackedMessage{packed}); err != nil {
+		t.Fatalf("WritePacket: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(env.outboundDir, name), buf.Bytes(), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The staging directory is shared by every network's tosser, and packets were
+// matched to links by net/node alone. Two networks whose hubs share a net/node
+// pair in different zones — 21:4/158 and 1337:4/158 — therefore let whichever
+// tosser ran first claim the other network's packet, remove it, and bundle it
+// into its own BSO for the wrong hub. The zone in the packet header is what
+// tells them apart.
+func TestPackOutboundLeavesOtherZonesPacketsAlone(t *testing.T) {
+	env := setupTestEnv(t)
+
+	netCfg := env.netCfg
+	netCfg.Links = []linkConfig{{Address: "21:4/158", Name: "fsx hub", Flavour: "Crash"}}
+	tosser, err := New("fsxnet", netCfg, env.globalCfg, env.dupeDB, env.msgMgr)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	stagePacketTo(t, env, "ours.pkt", 21, 4, 158)
+	stagePacketTo(t, env, "theirs.pkt", 1337, 4, 158)
+
+	res := tosser.PackOutbound()
+	if res.BundlesCreated != 1 {
+		t.Fatalf("BundlesCreated = %d, want 1 (only the zone-21 packet): %v", res.BundlesCreated, res.Errors)
+	}
+	if _, err := os.Stat(filepath.Join(env.outboundDir, "theirs.pkt")); err != nil {
+		t.Errorf("the other zone's packet must stay staged for its own network's tosser: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(env.outboundDir, "ours.pkt")); !os.IsNotExist(err) {
+		t.Errorf("our packet should have been bundled and removed, stat err = %v", err)
 	}
 }

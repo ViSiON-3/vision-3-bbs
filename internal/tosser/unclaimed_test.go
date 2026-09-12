@@ -354,7 +354,7 @@ func TestAllNetworksEnabledHoldsNothing(t *testing.T) {
 
 // Nothing parsed the file — which is what happens when every network is
 // disabled — so it cannot be attributed. Mail is not aged out on a guess.
-func TestUnattributableMailIsHeldWhenANetworkIsDisabled(t *testing.T) {
+func TestUnattributableMailIsHeldWhenEveryNetworkIsDisabled(t *testing.T) {
 	env := setupTestEnv(t)
 	stale := writeGoodPacket(t, env.inboundDir, "mystery.pkt", 1337, 3, 123)
 	old := time.Now().Add(-72 * time.Hour)
@@ -362,7 +362,12 @@ func TestUnattributableMailIsHeldWhenANetworkIsDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	report := FindUnclaimed(disabledNetCfg(env), nil) // no origins recorded
+	cfg := disabledNetCfg(env)
+	for name, nc := range cfg.Networks {
+		nc.InternalTosserEnabled = false
+		cfg.Networks[name] = nc
+	}
+	report := FindUnclaimed(cfg, nil) // no origins recorded
 	report.QuarantineStale(env.tempDir)
 
 	if len(report.Held) != 1 {
@@ -370,5 +375,29 @@ func TestUnattributableMailIsHeldWhenANetworkIsDisabled(t *testing.T) {
 	}
 	if len(report.Quarantined) != 0 {
 		t.Errorf("unattributable mail must not be quarantined, got %v", report.Quarantined)
+	}
+}
+
+// With an enabled network in the mix, a file with no recorded origin is one
+// the enabled tosser saw and could not attribute — unreadable, say. Holding it
+// because some unrelated network is switched off would let it bypass the
+// 24-hour quarantine indefinitely.
+func TestUnattributableMailIsNotHeldWhileANetworkIsEnabled(t *testing.T) {
+	env := setupTestEnv(t)
+	stale := writeGoodPacket(t, env.inboundDir, "mystery.pkt", 1337, 3, 123)
+	old := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	report := FindUnclaimed(disabledNetCfg(env), nil) // fsxnet enabled, tqwnet off; no origins
+	report.QuarantineStale(env.tempDir)
+
+	if len(report.Held) != 0 {
+		t.Errorf("origin-less mail must not be held on an unrelated disabled network, got %v", report.Held)
+	}
+	if len(report.Quarantined) != 1 {
+		t.Errorf("stale origin-less mail should be quarantined, got Files=%v Quarantined=%v",
+			report.Files, report.Quarantined)
 	}
 }

@@ -20,6 +20,10 @@ type pathConfig struct {
 	// destination net/node with no zone component: two networks sharing one
 	// directory and a net/node pair would collide on a single filename, and
 	// one network's mail would be handed to the other's hub.
+	//
+	// OutboundPath (the staging queue) stays shared: staged packets carry
+	// their destination zone in the header, and PackOutbound matches on
+	// zone:net/node, so each network's tosser takes only its own.
 	BinkdOutboundPath string
 
 	TempPath    string
