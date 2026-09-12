@@ -541,7 +541,8 @@ How it behaves:
   chains.
 - A `run_after` naming an event that does not exist is warned about at
   startup and never fires. An enabled event naming itself counts as a cycle
-  and disables chaining like any other loop; a disabled one is ignored.
+  and disables chaining like any other loop. A disabled event still gets
+  these warnings, but never takes part in chaining or in the cycle check.
 - A BBS shutdown cancels a chained event still waiting out its delay.
 
 ## Error Handling
