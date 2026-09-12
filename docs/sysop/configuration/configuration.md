@@ -657,7 +657,7 @@ See [Message Areas Guide](messages/message-areas.md) for detailed configuration.
 
 > *Use the [Configuration Editor](#configuration-editor-tui) (key 3 → Echomail Networks / Echomail Links) to manage FTN settings interactively. The JSON structure below is for reference.*
 
-Located in the `configs/` directory. Configures the internal FTN tosser (v3mail) for echomail. Global fields include directory paths (`inbound_path`, `outbound_path`, `binkd_outbound_path`, `temp_path`) and routing tags (`bad_area_tag`, `dupe_area_tag`). Per-network fields include `own_address`, `internal_tosser_enabled`, and `origin`. Per-link fields include `address`, `packet_password`, `areafix_password`, `name`, and `flavour`.
+Located in the `configs/` directory. Configures the internal FTN tosser (v3mail) for echomail. Global fields include directory paths (`inbound_path`, `outbound_path`, `binkd_outbound_path`, `temp_path`) and routing tags (`bad_area_tag`, `dupe_area_tag`). Per-network fields include `own_address`, `internal_tosser_enabled`, `origin`, and an optional `binkd_outbound_path` (a BSO outbound of the network's own, needed when carrying more than one network). Per-link fields include `address`, `packet_password`, `areafix_password`, `name`, and `flavour`.
 
 Hub polling is configured under **Events** in `configs/events.json`; edit the
 `echomail_poll_<network>` event's cron schedule. The former per-network

@@ -108,6 +108,7 @@ Per-network fields (`networks.<key>`):
 | `own_address`               | This node's FTN address (zone:net/node.point)                   |
 | `internal_tosser_enabled`   | Set `true` to enable `v3mail` for this network                  |
 | `origin`                    | Origin line text (empty = board name)                           |
+| `binkd_outbound_path`       | Optional: this network's own BSO outbound (`ftn-pack` output); empty = the global one. Use one per network when carrying several. |
 
 Hub polling is scheduled through **Events**, using the per-network
 `echomail_poll_<network>` event created by the FTN wizard. See

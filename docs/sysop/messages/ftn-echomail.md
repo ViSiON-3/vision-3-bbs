@@ -629,7 +629,7 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
 | `inbound_path`        | Unsecured inbound directory (binkd deposits bundles here)    |
 | `secure_inbound_path` | Secure inbound for password-authenticated mailer sessions    |
 | `outbound_path`       | Staging dir for outbound `.pkt` files (`v3mail scan` output) |
-| `binkd_outbound_path` | Outbound bundles dir (binkd picks up ZIP archives from here) |
+| `binkd_outbound_path` | Outbound bundles dir (binkd picks up ZIP archives from here); a network can override it with its own, see below |
 | `temp_path`           | Temp dir for bundle extraction during toss                   |
 | `bad_area_tag`        | Area tag for messages with unknown echo tags (e.g. `"BAD"`)  |
 | `dupe_area_tag`       | Area tag for duplicate MSGIDs (e.g. `"DUPE"`)                |
@@ -641,6 +641,7 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
 | `internal_tosser_enabled` | Set `true` to enable `v3mail` for this network      |
 | `own_address`             | Your FTN address (e.g., `21:4/158.1`)               |
 | `origin`                  | Origin line text (empty = board name)               |
+| `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one. Set it on every network beyond the first — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
 
 Hub polling is controlled by the per-network `echomail_poll_<network>` event
 under **Events**. The wizard creates it with a 15-minute cron schedule; edit
@@ -758,7 +759,8 @@ Groups message areas for display in the BBS menu:
 To add another FTN network (e.g., AgoraNet alongside fsxNet):
 
 1. Get the network's `.na` file from your hub
-2. Run `helper ftnsetup` again with the new network details:
+2. Run `helper ftnsetup` again with the new network details (or add the
+   network by hand in `./config` → **Echomail Networks**):
 
 ```bash
 ./helper ftnsetup \
@@ -769,15 +771,30 @@ To add another FTN network (e.g., AgoraNet alongside fsxNet):
   --network agoranet
 ```
 
-3. Add the new domain, address, and node to `binkd.conf`:
+3. In `./config` → **Echomail Networks**, open the new network and set
+   **Binkd Outbound** to a directory of its own, e.g. `data/ftn/out_agora`
+   (no dots in the name — binkd reserves `.<zone>` suffixes on the base
+   outbound and refuses a dotted one). Every network needs its own BSO
+   outbound: bundle and flow filenames carry only the destination net/node,
+   so two networks sharing one directory can hand mail to the wrong hub when
+   two hubs share a net/node pair.
+4. Under **Echomail Links**, make sure the new hub link has a **Hostname**.
+   Without one binkd has nothing to dial, the network only ever receives mail
+   when the hub calls in, and no poll event is created.
+
+That is all with the integrated mailer. On save it adds the `domain`,
+`address` and `node` lines to `binkd.conf`, creates the outbound directory,
+creates an `echomail_poll_agoranet` event, and restarts binkd on the new
+configuration within 15 seconds.
+
+If you run an external binkd instead, add the lines to its config yourself and
+restart it:
 
 ```conf
-domain agoranet /home/bbs/vision3/data/ftn/out 46
+domain agoranet /home/bbs/vision3/data/ftn/out_agora 46
 address 46:1/100.1@agoranet
 node 46:1/100@agoranet hub-hostname:24554 HUBPASS -
 ```
-
-4. Restart binkd
 
 ## Troubleshooting
 
