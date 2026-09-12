@@ -321,9 +321,13 @@ func TestStopWaitsForRetiredCronJobs(t *testing.T) {
 		t.Skip("chain tests run shell commands; skipped on windows")
 	}
 	historyPath := filepath.Join(t.TempDir(), "history.json")
+	// Run sleep directly rather than via "sh -c": a shell that forks the
+	// sleep is what gets killed on cancellation, and the orphaned sleep then
+	// holds the output pipes open until it exits on its own, which on Linux
+	// stalled this test past its deadline.
 	slow := config.EventConfig{
-		ID: "slow", Name: "slow", Schedule: "@every 1s", Command: "/bin/sh",
-		Args: []string{"-c", "sleep 30"}, Enabled: true, TimeoutSeconds: 60,
+		ID: "slow", Name: "slow", Schedule: "@every 1s", Command: "/bin/sleep",
+		Args: []string{"30"}, Enabled: true, TimeoutSeconds: 60,
 	}
 	s := NewScheduler(config.EventsConfig{MaxConcurrentEvents: 2, Events: []config.EventConfig{slow}},
 		historyPath)
