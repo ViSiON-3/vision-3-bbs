@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
@@ -222,9 +223,16 @@ func pointBossMissing(net FTNNetworkConfig) bool {
 }
 
 // ValidateFTNConfig checks that all required global path fields are set for any
-// network that has internal_tosser_enabled=true. Call this before starting the
-// tosser, not during editing, so the config editor can open an incomplete config.
+// network that has internal_tosser_enabled=true, and that every binkd outbound
+// name is one binkd will accept. Call this before starting the tosser, not
+// during editing, so the config editor can open an incomplete config.
 func ValidateFTNConfig(cfg FTNConfig) error {
+	// The outbound names are checked whether or not any tosser is enabled:
+	// binkd consumes them regardless, and it is binkd that refuses to start on
+	// a dotted one (see ValidateBinkdOutboundPaths).
+	if err := ValidateBinkdOutboundPaths(cfg); err != nil {
+		return err
+	}
 	tosserEnabled := false
 	for _, net := range cfg.Networks {
 		if net.InternalTosserEnabled {
@@ -250,11 +258,26 @@ func ValidateFTNConfig(cfg FTNConfig) error {
 			return fmt.Errorf("ftn.json: %q is required when internal_tosser_enabled is true", r.field)
 		}
 	}
+	return nil
+}
+
+// ValidateBinkdOutboundPaths checks the global and every per-network
+// binkd_outbound_path with ValidateBinkdOutboundPath. It is separate from
+// ValidateFTNConfig because a failure here is fatal to binkd specifically: the
+// mailer must refuse to launch binkd on one, where a missing tosser path only
+// disables the export loop.
+func ValidateBinkdOutboundPaths(cfg FTNConfig) error {
 	if err := ValidateBinkdOutboundPath(cfg.BinkdOutboundPath); err != nil {
 		return fmt.Errorf("ftn.json: binkd_outbound_path: %w", err)
 	}
-	for name, netCfg := range cfg.Networks {
-		if err := ValidateBinkdOutboundPath(netCfg.BinkdOutboundPath); err != nil {
+	// Sorted so the same bad config always reports the same network first.
+	names := make([]string, 0, len(cfg.Networks))
+	for name := range cfg.Networks {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if err := ValidateBinkdOutboundPath(cfg.Networks[name].BinkdOutboundPath); err != nil {
 			return fmt.Errorf("ftn.json: network %q: binkd_outbound_path: %w", name, err)
 		}
 	}

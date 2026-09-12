@@ -157,6 +157,13 @@ func New(cfg Config) (*Service, error) {
 		return nil, fmt.Errorf("creating export dupe db: %w", err)
 	}
 
+	// An outbound name binkd itself rejects is fatal: it would be written
+	// straight into binkd.conf and crash-loop the mailer with all mail stopped,
+	// so refusing to start is the promised startup rejection.
+	if err := config.ValidateBinkdOutboundPaths(cfg.FTN); err != nil {
+		return nil, err
+	}
+
 	// Validate FTN global paths for any tosser-enabled network up front.
 	// binkd can still serve inbound with an invalid config, so this must not
 	// fail New; instead the export loop is disabled with a single warning

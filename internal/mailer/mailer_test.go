@@ -221,6 +221,20 @@ func TestCloseBeforeStart(t *testing.T) {
 	}
 }
 
+// An outbound name binkd itself refuses is different from a missing tosser
+// path: it goes straight into binkd.conf and crash-loops binkd, so New must
+// refuse it outright rather than start binkd with the export loop disabled.
+func TestNewRejectsBinkdInvalidOutbound(t *testing.T) {
+	root := newTestRoot(t)
+	cfg := testFTNConfig()
+	cfg.Networks = map[string]config.FTNNetworkConfig{
+		"tqwnet": {OwnAddress: "1337:3/123", BinkdOutboundPath: "data/ftn/out.tqw"}, // tosser disabled
+	}
+	if _, err := New(Config{BBSRoot: root, FTN: cfg}); err == nil {
+		t.Fatal("New must refuse a dotted binkd outbound instead of launching binkd on it")
+	}
+}
+
 func TestNewValidatesFTNPathsForExport(t *testing.T) {
 	// A tosser-enabled network with blank global paths (inbound/outbound/
 	// binkd_outbound/temp) must not fail New (binkd can still serve inbound),

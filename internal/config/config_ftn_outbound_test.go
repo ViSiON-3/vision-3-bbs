@@ -160,3 +160,29 @@ func TestValidateFTNConfigRejectsDottedOutbound(t *testing.T) {
 		t.Error("a dotted global outbound must be rejected too")
 	}
 }
+
+// binkd consumes the outbound paths whether or not any internal tosser is
+// enabled, so a dotted name must be rejected even in a config where the
+// tosser-path checks are skipped — otherwise it reaches binkd.conf and
+// crash-loops binkd on a board that only uses it for inbound.
+func TestValidateFTNConfigRejectsDottedOutboundWithTossersDisabled(t *testing.T) {
+	cfg := FTNConfig{
+		BinkdOutboundPath: "data/ftn/out",
+		Networks: map[string]FTNNetworkConfig{
+			"tqwnet": {InternalTosserEnabled: false, BinkdOutboundPath: "data/ftn/out.tqw"},
+		},
+	}
+	err := ValidateFTNConfig(cfg)
+	if err == nil {
+		t.Fatal("a dotted per-network outbound must be rejected with tossers disabled")
+	}
+	if !strings.Contains(err.Error(), "tqwnet") {
+		t.Errorf("error should name the network, got: %v", err)
+	}
+
+	// The tosser-only path requirements still do not apply while disabled.
+	cfg.Networks["tqwnet"] = FTNNetworkConfig{InternalTosserEnabled: false, BinkdOutboundPath: "data/ftn/out_tqw"}
+	if err := ValidateFTNConfig(cfg); err != nil {
+		t.Errorf("clean outbound with tossers disabled rejected: %v", err)
+	}
+}
