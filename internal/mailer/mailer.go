@@ -68,6 +68,19 @@ type Service struct {
 	// by the watcher goroutine.
 	watchCfgMod time.Time
 
+	// lastSynced is the binkd.conf content hash after the watcher's last
+	// sync, so it syncs (and repeats any warnings) only when ftn.json or the
+	// file itself has changed since. Touched only by the watcher goroutine.
+	lastSynced string
+
+	// syncMu serialises syncConf between the launch path and the watcher; see
+	// syncConf.
+	syncMu sync.Mutex
+
+	// syncHook, when set, is called on every syncConf. Tests use it to count
+	// syncs; it is nil in production.
+	syncHook func()
+
 	binkdPath  string // resolved absolute path to the binkd binary
 	confPath   string // absolute path to binkd.conf
 	backoffMin time.Duration

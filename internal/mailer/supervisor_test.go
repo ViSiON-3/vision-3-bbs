@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -213,17 +214,73 @@ func TestBinkdRecycledWhenConfChanges(t *testing.T) {
 // the relaunch is immediate and the crash backoff is left untouched, or a
 // config change could mask a genuine crash loop.
 func TestRecycleDoesNotDisturbCrashBackoff(t *testing.T) {
-	svc, _ := newSupervisedService(t, false)
-	svc.backoffMin = 50 * time.Millisecond
-	before := svc.backoffMin
+	svc, pidFile := newSupervisedService(t, false)
+	// Long enough that a relaunch paced by the crash backoff would be
+	// unmistakable against the immediate relaunch a recycle must get.
+	svc.backoffMin = 2 * time.Second
+	svc.backoffMax = 2 * time.Second
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go svc.Start(ctx)
-	time.Sleep(100 * time.Millisecond)
+	waitForLines(t, pidFile, 1)
 
-	if svc.backoffMin != before {
-		t.Errorf("backoffMin changed to %v, want %v", svc.backoffMin, before)
+	conf, err := os.ReadFile(svc.confPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := time.Now()
+	if err := os.WriteFile(svc.confPath, append(conf, "\nnode 21:4/158@fsxnet hub.example.org:24554 secret\n"...), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	waitForLines(t, pidFile, 2)
+	if took := time.Since(changed); took >= svc.backoffMin {
+		t.Errorf("relaunch after a recycle took %v, at least the crash backoff of %v: the recycle was paced as a crash",
+			took, svc.backoffMin)
+	}
+	cancel()
+	_ = svc.Close()
+}
+
+// One receive-only link (no hostname) on an unchanged configuration produced
+// the same warning on every watcher tick — 5,760 a day at the real interval —
+// burying anything new. The watcher must sync, and so warn, only when
+// ftn.json or binkd.conf has actually changed.
+func TestWatcherDoesNotResyncAnUnchangedConf(t *testing.T) {
+	svc, pidFile := newSupervisedService(t, false)
+
+	var syncs atomic.Int32
+	svc.syncHook = func() { syncs.Add(1) }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go svc.Start(ctx)
+	waitForLines(t, pidFile, 1)
+
+	// Let the watcher settle (its first tick syncs once to establish its
+	// baseline), then count over many ticks with nothing changing.
+	time.Sleep(100 * time.Millisecond)
+	base := syncs.Load()
+	time.Sleep(300 * time.Millisecond)
+	if n := syncs.Load() - base; n != 0 {
+		t.Errorf("watcher synced %d times with nothing changed, want 0", n)
+	}
+
+	// A hand edit to binkd.conf is still noticed and re-synced.
+	conf, err := os.ReadFile(svc.confPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(svc.confPath, append(conf, "\n# hand edit\n"...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for syncs.Load() == base && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if syncs.Load() == base {
+		t.Error("a changed binkd.conf must still trigger a sync")
 	}
 	cancel()
 	_ = svc.Close()

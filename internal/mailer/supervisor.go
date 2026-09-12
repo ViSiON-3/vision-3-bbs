@@ -227,7 +227,21 @@ var errRecycle = errors.New("binkd recycled for a config change")
 // outbound directories it resolved. Shared by the launch path and the watcher
 // so both produce identical files; every sync is idempotent and rewrites
 // nothing when the file already matches.
+//
+// The three syncs are each a read-modify-replace of the whole file, and the
+// launch path and the watcher run concurrently: without the lock an older
+// snapshot in one could overwrite a newer link or domain line the other had
+// just written, or the watcher could hash a file the launch path was about to
+// replace and see a spurious change. The config editor is a separate process
+// and cannot share this lock; its writes are atomic renames, and the watcher's
+// next tick re-syncs whatever it left.
 func (s *Service) syncConf(snap config.FTNConfig) ftn.BinkdOutbound {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+	if s.syncHook != nil {
+		s.syncHook()
+	}
+
 	outbound := ftn.BinkdOutboundFor(s.cfg.BBSRoot, snap)
 	b := snap.Binkd
 
@@ -286,17 +300,28 @@ func (s *Service) watchConfLoop(ctx context.Context) {
 		// the file and LoadFTNConfig logs an Info line per tosser-enabled
 		// network, so doing it every tick buried the log in ~19 lines a minute
 		// that said nothing had happened.
-		if s.ftnChanged() {
+		ftnChanged := s.ftnChanged()
+		if ftnChanged {
 			s.reloadFTN()
 		}
-		// The syncs themselves are cheap and silent unless they write, so they
-		// run every tick and keep repairing drift — including a binkd.conf
-		// edited by hand.
-		s.syncConf(s.currentFTN())
-
+		// Likewise the syncs run only when there is something to sync from —
+		// a changed ftn.json, or a binkd.conf that differs from the one the
+		// last sync produced (edited by hand, or the launch path rewrote it).
+		// They are silent when nothing needs writing, but not when something
+		// cannot be: a link with no hostname, or a network with an unusable
+		// own_address, is warned about on every sync, and one such link on an
+		// unchanged config was 5,760 identical warnings a day.
 		current := hashFile(s.confPath)
 		if current == "" {
 			continue // unreadable: leave the running binkd alone
+		}
+		if ftnChanged || current != s.lastSynced {
+			s.syncConf(s.currentFTN())
+			current = hashFile(s.confPath)
+			if current == "" {
+				continue
+			}
+			s.lastSynced = current
 		}
 		seen, _ := s.confSeen.Load().(string)
 		if seen == "" || seen == current {
@@ -313,6 +338,9 @@ func (s *Service) watchConfLoop(ctx context.Context) {
 // ftnChanged reports whether ftn.json has been modified since the watcher last
 // saw it, so the per-tick check neither re-parses the file nor logs when
 // nothing has changed. Touched only by the watcher goroutine.
+//
+// The first call always reports a change, so the watcher's first tick syncs
+// once and establishes lastSynced.
 func (s *Service) ftnChanged() bool {
 	if s.configDir == "" {
 		return false
