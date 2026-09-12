@@ -1,0 +1,18 @@
+# Used by the CI lint job with GOOS/GOARCH set to a 32-bit target. Only
+# staticcheck's SA1027 (64-bit atomic on a field that is not 8-byte aligned)
+# is enabled: it fires only while analysing a 32-bit target, so the main
+# .golangci.yml run never sees it. Everything else is covered there.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - staticcheck
+  settings:
+    staticcheck:
+      checks:
+        - SA1027
+  exclusions:
+    generated: lax
+    paths:
+      - third_party
