@@ -2,7 +2,9 @@ package scheduler
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -208,5 +210,46 @@ func TestPlaceholderSubstitutionInCommand(t *testing.T) {
 	}
 	if !strings.Contains(result2.Output, "placeholder_test_ok") {
 		t.Errorf("Expected output to contain 'placeholder_test_ok', got: %s", result2.Output)
+	}
+}
+
+// An event that leaves a background child behind exits promptly itself, but
+// the child inherits the output pipes. cmd.Run used to block until that child
+// exited too, holding the event's concurrency slot and running-event mark for
+// however long the orphan lived, and a timeout kill did not help because it
+// reaches only the process we started.
+func TestExecuteEvent_OrphanedChildDoesNotBlockCompletion(t *testing.T) {
+	s := &Scheduler{}
+
+	sleep := lookPath(t, "sleep") // resolved, so a missing sleep skips rather than passing vacuously
+	event := config.EventConfig{
+		ID:      "test_orphan",
+		Name:    "Test Orphaned Child",
+		Command: lookPath(t, "sh"),
+		// The shell exits at once; the sleep keeps stdout open for 30s. Its
+		// PID is printed so the test can kill it rather than leak it.
+		Args: []string{"-c", sleep + " 30 & echo started $!"},
+	}
+
+	start := time.Now()
+	result := s.executeEvent(context.Background(), event)
+	duration := time.Since(start)
+
+	if !result.Success {
+		t.Errorf("the shell exited 0, so the event should succeed: exit=%d err=%v", result.ExitCode, result.Error)
+	}
+	fields := strings.Fields(result.Output)
+	if len(fields) != 2 || fields[0] != "started" {
+		t.Fatalf("output written before exit must be kept, got %q", result.Output)
+	}
+	pid, err := strconv.Atoi(fields[1])
+	if err != nil {
+		t.Fatalf("shell did not print the sleep's pid: %q", result.Output)
+	}
+	if p, err := os.FindProcess(pid); err == nil {
+		_ = p.Kill() // do not leak the orphan past the test
+	}
+	if duration > outputWaitDelay+5*time.Second {
+		t.Errorf("event took %v; the orphaned child must not hold it past the wait delay", duration)
 	}
 }
