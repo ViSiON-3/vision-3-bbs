@@ -282,7 +282,16 @@ func (s *Service) watchConfLoop(ctx context.Context) {
 		case <-ticker.C:
 		}
 
-		s.reloadFTN()
+		// Only re-read ftn.json when it has actually changed. reloadFTN parses
+		// the file and LoadFTNConfig logs an Info line per tosser-enabled
+		// network, so doing it every tick buried the log in ~19 lines a minute
+		// that said nothing had happened.
+		if s.ftnChanged() {
+			s.reloadFTN()
+		}
+		// The syncs themselves are cheap and silent unless they write, so they
+		// run every tick and keep repairing drift — including a binkd.conf
+		// edited by hand.
 		s.syncConf(s.currentFTN())
 
 		current := hashFile(s.confPath)
@@ -299,6 +308,21 @@ func (s *Service) watchConfLoop(ctx context.Context) {
 		default: // a recycle is already pending
 		}
 	}
+}
+
+// ftnChanged reports whether ftn.json has been modified since the watcher last
+// saw it, so the per-tick check neither re-parses the file nor logs when
+// nothing has changed. Touched only by the watcher goroutine.
+func (s *Service) ftnChanged() bool {
+	if s.configDir == "" {
+		return false
+	}
+	fi, err := os.Stat(filepath.Join(s.configDir, "ftn.json"))
+	if err != nil || !fi.ModTime().After(s.watchCfgMod) {
+		return false
+	}
+	s.watchCfgMod = fi.ModTime()
+	return true
 }
 
 // hashFile returns a content hash of path, or "" if it cannot be read.

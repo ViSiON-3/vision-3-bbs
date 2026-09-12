@@ -63,6 +63,11 @@ type Service struct {
 	// confWatch is how often that comparison runs.
 	confWatch time.Duration
 
+	// watchCfgMod is the ftn.json mod-time last seen by the conf watcher, so
+	// it only re-reads (and logs) when the file actually changed. Touched only
+	// by the watcher goroutine.
+	watchCfgMod time.Time
+
 	binkdPath  string // resolved absolute path to the binkd binary
 	confPath   string // absolute path to binkd.conf
 	backoffMin time.Duration

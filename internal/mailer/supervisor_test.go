@@ -253,3 +253,48 @@ func TestUnchangedConfDoesNotRecycle(t *testing.T) {
 	cancel()
 	_ = svc.Close()
 }
+
+// The watcher runs every few seconds. Re-reading ftn.json on each tick meant
+// LoadFTNConfig logged an Info line per tosser-enabled network every time,
+// burying the log in ~19 lines a minute that said nothing had happened — the
+// same trap reloadedExportInterval already guards against with its own
+// mod-time check.
+func TestFTNChangedOnlyReportsRealChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ftn.json")
+	if err := os.WriteFile(path, []byte(`{"networks":{}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Service{configDir: dir}
+
+	if !s.ftnChanged() {
+		t.Fatal("first check must report a change so the watcher picks up the current file")
+	}
+	if s.ftnChanged() {
+		t.Error("an unchanged ftn.json must not report a change")
+	}
+	if s.ftnChanged() {
+		t.Error("still unchanged on a third tick")
+	}
+
+	// A save bumps the mod-time; the watcher must notice exactly once.
+	later := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if !s.ftnChanged() {
+		t.Error("a modified ftn.json must report a change")
+	}
+	if s.ftnChanged() {
+		t.Error("the same change must not be reported twice")
+	}
+}
+
+// No config dir means hot-reload is disabled; the watcher must not stat or
+// reload anything.
+func TestFTNChangedWithoutConfigDir(t *testing.T) {
+	s := &Service{}
+	if s.ftnChanged() {
+		t.Error("with no config dir there is nothing to reload")
+	}
+}
