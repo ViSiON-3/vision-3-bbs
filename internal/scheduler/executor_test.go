@@ -2,7 +2,9 @@ package scheduler
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -219,12 +221,14 @@ func TestPlaceholderSubstitutionInCommand(t *testing.T) {
 func TestExecuteEvent_OrphanedChildDoesNotBlockCompletion(t *testing.T) {
 	s := &Scheduler{}
 
+	sleep := lookPath(t, "sleep") // resolved, so a missing sleep skips rather than passing vacuously
 	event := config.EventConfig{
 		ID:      "test_orphan",
 		Name:    "Test Orphaned Child",
 		Command: lookPath(t, "sh"),
-		// The shell exits at once; the sleep keeps stdout open for 30s.
-		Args: []string{"-c", "sleep 30 & echo started"},
+		// The shell exits at once; the sleep keeps stdout open for 30s. Its
+		// PID is printed so the test can kill it rather than leak it.
+		Args: []string{"-c", sleep + " 30 & echo started $!"},
 	}
 
 	start := time.Now()
@@ -234,8 +238,16 @@ func TestExecuteEvent_OrphanedChildDoesNotBlockCompletion(t *testing.T) {
 	if !result.Success {
 		t.Errorf("the shell exited 0, so the event should succeed: exit=%d err=%v", result.ExitCode, result.Error)
 	}
-	if !strings.Contains(result.Output, "started") {
-		t.Errorf("output written before exit must be kept, got %q", result.Output)
+	fields := strings.Fields(result.Output)
+	if len(fields) != 2 || fields[0] != "started" {
+		t.Fatalf("output written before exit must be kept, got %q", result.Output)
+	}
+	pid, err := strconv.Atoi(fields[1])
+	if err != nil {
+		t.Fatalf("shell did not print the sleep's pid: %q", result.Output)
+	}
+	if p, err := os.FindProcess(pid); err == nil {
+		_ = p.Kill() // do not leak the orphan past the test
 	}
 	if duration > outputWaitDelay+5*time.Second {
 		t.Errorf("event took %v; the orphaned child must not hold it past the wait delay", duration)
