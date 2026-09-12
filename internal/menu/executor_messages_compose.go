@@ -183,8 +183,18 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	// 5. Determine the sender display name for the editor header (@F@ field).
 	// Priority: anonymous string > real name (if area requires it) > handle.
 	fromName := currentUser.Handle
-	if area.RealNameOnly && strings.TrimSpace(currentUser.RealName) != "" {
-		fromName = currentUser.RealName
+	if area.RealNameOnly {
+		if currentUser.HasRealName() {
+			fromName = currentUser.RealName
+		} else {
+			// The area asks for a real name and this account has none, so the
+			// post goes out under the handle. Signup requires one and every
+			// writer now validates it, so this should be unreachable — but it
+			// is the one path that quietly defeats the flag, and a network that
+			// requires real names (FidoNet) would have no way to notice.
+			slog.Warn("area requires real names but this user has none; posting under the handle instead",
+				"area", area.Tag, "handle", currentUser.Handle)
+		}
 	}
 	if isAnonymous {
 		fromName = strings.TrimSpace(e.Strings().AnonymousName)

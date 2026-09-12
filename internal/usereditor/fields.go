@@ -51,7 +51,15 @@ func editFields() []fieldDef {
 		{
 			Label: "Real Name", Type: ftString, Col: 3, Row: 5, Width: 22,
 			Get: func(u *user.User) string { return u.RealName },
-			Set: func(u *user.User, val string) error { u.RealName = val; return nil },
+			Set: func(u *user.User, val string) error {
+				// Same rule signup applies: a blanked real name silently turns
+				// off real_name_only for that user in every area.
+				if err := user.ValidateRealName(val); err != nil {
+					return err
+				}
+				u.RealName = strings.TrimSpace(val)
+				return nil
+			},
 		},
 		{
 			Label: "Access Level", Type: ftInteger, Col: 3, Row: 6, Width: 5, Min: 0, Max: 255,
