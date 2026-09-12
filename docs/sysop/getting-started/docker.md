@@ -75,9 +75,13 @@ If you prefer not to use Docker Compose:
    ```
 
    The default menu set ships inside the image, so no `menus/` mount is needed.
-   Add `-v "$(pwd)/menus:/vision3/menus"` only if you keep a customised set on
-   the host — mounting an *empty* directory there hides the built-in menus and
-   the pre-flight check will refuse to start.
+   To customise menus, mount an overlay directory instead of the whole set:
+   `-v "$(pwd)/menus.d:/vision3/menus.d"`. Files in it are read before the
+   built-in ones, file by file, and `menuedit` inside the container saves there
+   (see [Customising menus without losing your changes](../menus/menu-system.md#customising-menus-without-losing-your-changes)).
+   Add `-v "$(pwd)/menus:/vision3/menus"` only if you keep a complete set of
+   your own on the host — mounting an *empty* directory there hides the
+   built-in menus and the pre-flight check will refuse to start.
 
 ## Important Notes
 
@@ -133,13 +137,17 @@ leave root-owned files in `configs/` that the BBS cannot rewrite.
 taking ownership of it would leave you unable to `git pull` or edit your own menu
 set on the host. The BBS only reads menus, so a normal checkout works as-is.
 
-The trade-off is that `menuedit` cannot save into a bind-mounted `menus/`, which
-the container user may read but not write. Pick whichever suits your setup:
+`menus.d/` — the overlay your customisations go in — **is** chowned like
+`configs/` and `data/`, because `menuedit` in the container writes there. Git
+tracks nothing in it but a README, so the ownership change costs the host
+nothing. That is what makes editing menus from inside the container work:
 
-- edit menus on the host (`./menuedit` from the checkout), or
-- drop the `menus/` mount and use the set baked into the image, or
-- make the mount writable by the container user: `sudo chown -R 100:101 ./menus`
-  — after which the host user needs `sudo` to edit those files.
+```bash
+docker compose exec -u vision3 vision3 ./menuedit   # saves into /vision3/menus.d
+```
+
+Edits made on the host land in the same directory (`./menus.d`) and are picked
+up on the next menu load. You never need to make `menus/` writable.
 
 ### Persistent Data
 
@@ -160,8 +168,11 @@ The following directories are mounted as volumes and persist across container re
   - `ftn/` - FidoNet/echomail data
   - `logs/` - Application logs (vision3.log, v3mail.log, binkd.log)
 
-- **`menus/`** - Menu files (ANSI screens, configs)
-  - Mount your custom menu set here
+- **`menus/`** - The shipped menu set (ANSI screens, configs)
+  - Mount your checkout here so `git pull` updates it, or leave it to the image
+
+- **`menus.d/`** - Your menu overrides
+  - Read before `menus/`, file by file; `menuedit` saves here
 
 ### First Run Initialization
 
@@ -296,7 +307,13 @@ services:
 
 ### Custom Menu Set
 
-Mount a custom menu directory:
+To override individual files, put them in `./menus.d` (mounted by default):
+
+```
+menus.d/v3/ansi/MAIN.ANS   # replaces the shipped MAIN.ANS; everything else is unchanged
+```
+
+To replace the whole set, mount a complete menu directory over the shipped one:
 
 ```yaml
 volumes:

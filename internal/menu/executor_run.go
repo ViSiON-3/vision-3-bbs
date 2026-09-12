@@ -3,7 +3,6 @@ package menu
 import (
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -135,8 +134,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 		// --- REGULAR MENU PROCESSING (Common for ALL menus, including LOGIN after interaction) ---
 		// 1. Load Menu Definition (.MNU)
-		menuMnuPath := filepath.Join(e.MenuSetPath, "mnu") // Use correct path structure for MNU
-		menuRec, err := LoadMenu(st.currentMenuName, menuMnuPath)
+		menuRec, err := LoadMenu(st.currentMenuName, e.Menus())
 		if err != nil {
 			errMsg := fmt.Sprintf(e.Strings().ExecMenuLoadError, st.currentMenuName, err)
 			processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
@@ -150,8 +148,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		}
 
 		// 2. Load Commands (.CFG) for the *current* menu (which might be LOGIN)
-		menuCfgPath := filepath.Join(e.MenuSetPath, "cfg") // Use correct path structure for CFG
-		commands, err := LoadCommands(st.currentMenuName, menuCfgPath)
+		commands, err := LoadCommands(st.currentMenuName, e.Menus())
 		if err != nil {
 			slog.Warn("failed to load commands for menu", "menu", st.currentMenuName, "error", err)
 			commands = []CommandRecord{} // Use empty slice
@@ -216,7 +213,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 		// --- Check for Lightbar Menu (.BAR) ---
 		// Check if a .BAR file exists for this menu in the MENU SET directory
-		st.isLightbarMenu = HasBarFile(st.currentMenuName, e.MenuSetPath)
+		st.isLightbarMenu = HasBarFile(st.currentMenuName, e.Menus())
+		if st.isLightbarMenu {
+			e.warnLightbarLayerMismatch(st.currentMenuName)
+		}
 
 		// Variable declarations for command handling
 		// var st.userInput string // REMOVE this redeclaration

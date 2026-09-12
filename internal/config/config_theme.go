@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
 // ThemeConfig holds theme-related settings, loaded per menu set.
@@ -16,9 +17,11 @@ type ThemeConfig struct {
 	// Add other theme elements here as needed (e.g., default menu colors)
 }
 
-// LoadThemeConfig loads theme settings from theme.json within a specific menu set path.
+// LoadThemeConfig loads theme settings from theme.json within a specific menu
+// set path. A copy in the set's overlay (menus.d/<set>/theme.json) takes
+// precedence over the shipped one.
 func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
-	filePath := filepath.Join(menuSetPath, "theme.json")
+	filePath := menuset.FromPath(menuSetPath).Resolve("theme.json")
 	slog.Info("loading theme configuration", "path", filePath)
 
 	// Default theme settings

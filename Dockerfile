@@ -69,11 +69,12 @@ COPY menus/ ./menus/
 # Create the mount points before declaring them so a named volume inherits
 # vision3 ownership. Bind mounts still arrive owned by the host uid, which the
 # entrypoint corrects at runtime.
-RUN mkdir -p /vision3/configs /vision3/data /vision3/temp /vision3/bin \
+RUN mkdir -p /vision3/configs /vision3/data /vision3/menus.d /vision3/temp /vision3/bin \
     && chown -R vision3:vision3 /vision3
 
 VOLUME /vision3/configs
 VOLUME /vision3/menus
+VOLUME /vision3/menus.d
 VOLUME /vision3/data
 
 EXPOSE 2222 2323

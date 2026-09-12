@@ -2,7 +2,6 @@ package menu
 
 import (
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -37,9 +36,8 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 		return nil, "", nil
 	}
 
-	templateDir := filepath.Join(e.MenuSetPath, "templates")
-	topBytes, errTop := readTemplateFile(filepath.Join(templateDir, "MSGAREA.TOP"))
-	midBytes, errMid := readTemplateFile(filepath.Join(templateDir, "MSGAREA.MID"))
+	topBytes, errTop := readTemplateFile(e.templateFile("MSGAREA.TOP"))
+	midBytes, errMid := readTemplateFile(e.templateFile("MSGAREA.MID"))
 
 	if errTop != nil || errMid != nil {
 		slog.Warn("MSGAREA templates unavailable, using text mode", "node", nodeNumber, "topError", errTop, "midError", errMid)

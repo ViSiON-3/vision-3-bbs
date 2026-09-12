@@ -99,8 +99,11 @@ changed as a set; taking one file and not the others can leave you worse off
 than before. (For most menus the three must agree outright; menus that read
 their own keys in Go, like the Sponsor Menu, keep only a subset in their `.CFG`
 — see [the menu system guide](menus/menu-system.md#keeping-the-bar-file-and-the-art-in-step).)
-If you have customised a file, diff it against the repo's version rather than
-overwriting it.
+If you have customised a file, keep your version in `menus.d/` rather than in
+`menus/`: the BBS reads `menus.d/v3/ansi/SOMEMENU.ANS` in preference to the
+shipped copy, so you can overwrite `menus/` freely — or symlink it to the repo
+so it tracks every pull — and never lose an edit. See
+[Customising menus without losing your changes](../menus/menu-system.md#customising-menus-without-losing-your-changes).
 
 This does not apply if you run Vision/3 directly out of the git checkout, or if
 you bind-mount the repo's `menus/` as `docker-compose.yml` does — there `git pull`

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -49,11 +49,11 @@ func extractHeaderNumber(filename string) (int, error) {
 //
 // Membership rather than a maximum, so a menu set with a gap in its numbering
 // is handled too.
-func headerStyleAvailable(menuSetPath string, style int) bool {
+func headerStyleAvailable(menus menuset.Set, style int) bool {
 	if style < 1 {
 		return false
 	}
-	templates, err := discoverMessageHeaders(filepath.Join(menuSetPath, "templates"))
+	templates, err := discoverMessageHeaders(menus)
 	if err != nil || len(templates) == 0 {
 		// Discovery failed: fall back to accepting any positive style rather
 		// than forcing the selector open on every read.
@@ -67,18 +67,19 @@ func headerStyleAvailable(menuSetPath string, style int) bool {
 	return false
 }
 
-// discoverMessageHeaders finds all MSGHDR.*.ans template files in the templates/message_headers directory.
+// discoverMessageHeaders finds all MSGHDR.*.ans template files in the
+// templates/message_headers directory of either layer, an overlay copy
+// shadowing the shipped one of the same name.
 // Returns templates sorted by number (1, 2, ..., 14, 15, etc.).
-func discoverMessageHeaders(templatesPath string) ([]MessageHeaderTemplate, error) {
-	pattern := filepath.Join(templatesPath, "message_headers", "MSGHDR.*.ans")
-	files, err := filepath.Glob(pattern)
+func discoverMessageHeaders(menus menuset.Set) ([]MessageHeaderTemplate, error) {
+	files, err := menus.Glob(filepath.Join("templates", "message_headers"), "MSGHDR.*.ans")
 	if err != nil {
 		return nil, fmt.Errorf("failed to glob header templates: %w", err)
 	}
 
 	var templates []MessageHeaderTemplate
 	for _, file := range files {
-		base := filepath.Base(file)
+		base := file.Name
 
 		// Skip MSGHDR.ANS (selection screen, not a template)
 		if base == "MSGHDR.ANS" {
@@ -148,7 +149,6 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Verify template files exist and extract template numbers
-	templatesPath := filepath.Join(e.MenuSetPath, "templates", "message_headers")
 	var validOptions []LightbarOption
 	for _, opt := range options {
 		// Parse template number from return value (not hotkey, since 10+ use letters)
@@ -159,8 +159,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		// Verify template file exists
-		templateFile := filepath.Join(templatesPath, fmt.Sprintf("MSGHDR.%d.ans", templateNum))
-		if _, statErr := os.Stat(templateFile); statErr != nil {
+		if !e.Menus().Exists("templates", "message_headers", fmt.Sprintf("MSGHDR.%d.ans", templateNum)) {
 			slog.Warn("template file not found", "file", fmt.Sprintf("MSGHDR.%d.ans", templateNum))
 			continue
 		}
@@ -180,7 +179,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Info("loaded message header options from BAR file", "node", nodeNumber, "count", len(options))
 
 	// Display the header selection ANSI screen
-	selectionPath := filepath.Join(e.MenuSetPath, "templates", "message_headers", "MSGHDR.ANS")
+	selectionPath := e.menuFile("templates", "message_headers", "MSGHDR.ANS")
 	selectionBytes, err := ansi.GetAnsiFileContent(selectionPath)
 	if err != nil {
 		slog.Error("failed to load MSGHDR.ANS", "node", nodeNumber, "error", err)
@@ -322,7 +321,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		if key == editor.KeyEnter {
 			opt := options[selectedIndex]
 			templateNum, _ := strconv.Atoi(opt.ReturnValue)
-			hdrPath := filepath.Join(e.MenuSetPath, "templates", "message_headers", fmt.Sprintf("MSGHDR.%d.ans", templateNum))
+			hdrPath := e.menuFile("templates", "message_headers", fmt.Sprintf("MSGHDR.%d.ans", templateNum))
 
 			// Preview with sample data
 			hdrBytes, readErr := ansi.GetAnsiFileContent(hdrPath)

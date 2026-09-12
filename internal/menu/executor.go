@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -291,7 +290,7 @@ func (e *MenuExecutor) isCoSysOpOrAbove(u *user.User) bool {
 // LOGOFF/DISCONNECT whenever ErrIdleTimeout is received from any input loop.
 func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int, termHeight int) {
 	// Try to display TIMEOUT.ANS first.
-	ansPath := filepath.Join(e.MenuSetPath, "ansi", "TIMEOUT.ANS")
+	ansPath := e.menuFile("ansi", "TIMEOUT.ANS")
 	if rawContent, err := ansi.GetAnsiFileContent(ansPath); err == nil {
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		if outputMode == ansi.OutputModeCP437 {

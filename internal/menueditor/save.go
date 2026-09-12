@@ -15,7 +15,7 @@ func (m *Model) saveCurrentMenu() {
 	if !m.dirtyMenus[entry.Name] {
 		return
 	}
-	if err := SaveMenu(m.menuBase, entry.Name, entry.Data); err != nil {
+	if err := SaveMenu(m.set, entry.Name, entry.Data); err != nil {
 		m.message = fmt.Sprintf("Save error: %v", err)
 		return
 	}
@@ -34,7 +34,7 @@ func (m *Model) saveCurrentCommands() error {
 		return nil
 	}
 	name := m.menus[m.cmdsMenuIdx].Name
-	if err := SaveCommands(m.menuBase, name, m.cmds); err != nil {
+	if err := SaveCommands(m.set, name, m.cmds); err != nil {
 		m.message = fmt.Sprintf("Save error: %v", err)
 		return err
 	}
@@ -48,7 +48,7 @@ func (m *Model) saveAll() bool {
 	ok := true
 	for _, entry := range m.menus {
 		if m.dirtyMenus[entry.Name] {
-			if err := SaveMenu(m.menuBase, entry.Name, entry.Data); err != nil {
+			if err := SaveMenu(m.set, entry.Name, entry.Data); err != nil {
 				m.message = fmt.Sprintf("Save error: %v", err)
 				ok = false
 				continue
@@ -69,7 +69,7 @@ func (m Model) openCommandList(menuIdx int) (Model, tea.Cmd) {
 		return m, nil
 	}
 	name := m.menus[menuIdx].Name
-	cmds, err := LoadCommands(m.menuBase, name)
+	cmds, err := LoadCommands(m.set, name)
 	if err != nil {
 		m.message = fmt.Sprintf("Load commands error: %v", err)
 		return m, nil

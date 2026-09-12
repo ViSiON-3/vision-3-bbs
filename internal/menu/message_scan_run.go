@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -128,7 +127,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	// Load scan area header template (ANSI art) if available
-	scanHeaderTemplate, headerErr := readTemplateFile(filepath.Join(e.MenuSetPath, "templates", "system_header", "HEADER"))
+	scanHeaderTemplate, headerErr := readTemplateFile(e.menuFile("templates", "system_header", "HEADER"))
 	if headerErr != nil && !os.IsNotExist(headerErr) {
 		slog.Warn("failed to load scan header template", "node", nodeNumber, "error", headerErr)
 	}

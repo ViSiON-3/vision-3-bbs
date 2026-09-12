@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -40,9 +39,9 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// 1. Load Template Files from MenuSetPath/templates
-	topTemplatePath := filepath.Join(e.MenuSetPath, "templates", "LASTCALL.TOP")
-	midTemplatePath := filepath.Join(e.MenuSetPath, "templates", "LASTCALL.MID")
-	botTemplatePath := filepath.Join(e.MenuSetPath, "templates", "LASTCALL.BOT")
+	topTemplatePath := e.templateFile("LASTCALL.TOP")
+	midTemplatePath := e.templateFile("LASTCALL.MID")
+	botTemplatePath := e.templateFile("LASTCALL.BOT")
 
 	topTemplateBytes, errTop := readTemplateFile(topTemplatePath)
 	midTemplateBytes, errMid := readTemplateFile(midTemplatePath)

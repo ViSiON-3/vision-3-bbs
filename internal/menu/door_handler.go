@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -134,9 +133,9 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Load templates
-	topPath := filepath.Join(e.MenuSetPath, "templates", "DOORLIST.TOP")
-	midPath := filepath.Join(e.MenuSetPath, "templates", "DOORLIST.MID")
-	botPath := filepath.Join(e.MenuSetPath, "templates", "DOORLIST.BOT")
+	topPath := e.templateFile("DOORLIST.TOP")
+	midPath := e.templateFile("DOORLIST.MID")
+	botPath := e.templateFile("DOORLIST.BOT")
 
 	topBytes, errTop := readTemplateFile(topPath)
 	midBytes, errMid := readTemplateFile(midPath)

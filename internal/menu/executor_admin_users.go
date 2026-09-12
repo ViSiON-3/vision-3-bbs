@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,9 +34,9 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running LISTUSERS", "node", nodeNumber)
 
 	// 1. Load Templates (Corrected filenames)
-	topTemplatePath := filepath.Join(e.MenuSetPath, "templates", "USERLIST.TOP")
-	midTemplatePath := filepath.Join(e.MenuSetPath, "templates", "USERLIST.MID")
-	botTemplatePath := filepath.Join(e.MenuSetPath, "templates", "USERLIST.BOT")
+	topTemplatePath := e.templateFile("USERLIST.TOP")
+	midTemplatePath := e.templateFile("USERLIST.MID")
+	botTemplatePath := e.templateFile("USERLIST.BOT")
 
 	topTemplateBytes, errTop := readTemplateFile(topTemplatePath)
 	midTemplateBytes, errMid := readTemplateFile(midTemplatePath)

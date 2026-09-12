@@ -1,6 +1,7 @@
 package menueditor
 
 import (
+	"errors"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,9 +42,20 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		name := m.menus[idx].Name
-		if err := DeleteMenu(m.menuBase, name); err != nil {
-			m.message = fmt.Sprintf("Delete error: %v", err)
+		if err := DeleteMenu(m.set, name); err != nil {
+			var shipped *ShippedMenuError
+			if errors.As(err, &shipped) && shipped.Reverted {
+				// The overlay copy is gone and the shipped one shows again.
+				delete(m.dirtyMenus, name)
+				if menus, loadErr := LoadMenus(m.set); loadErr == nil {
+					m.menus = menus
+				}
+				m.message = fmt.Sprintf("Reverted %s to the shipped copy (shipped menus cannot be deleted through the overlay)", name)
+			} else {
+				m.message = fmt.Sprintf("Delete error: %v", err)
+			}
 			m.mode = modeMenuList
+			m.clampMenuScroll()
 			return m, nil
 		}
 		delete(m.dirtyMenus, name)

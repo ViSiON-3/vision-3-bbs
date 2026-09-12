@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
@@ -69,6 +71,9 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 //  2. menus/v3/ansi/
 //  3. menus/v3/templates/
 //
+// The menu set's overlay (menus.d/v3) is searched before the shipped tree
+// for the last two, as everywhere else in the BBS.
+//
 // Returns empty string if not found in any location.
 // Symlinks are resolved to prevent traversal outside the intended directories.
 func resolveAnsiPath(eng *Engine, filename string) string {
@@ -91,22 +96,22 @@ func resolveAnsiPath(eng *Engine, filename string) string {
 	if bbsRoot == "" {
 		return ""
 	}
+	menus := menuset.FromPath(filepath.Join(bbsRoot, "menus", "v3"))
 
-	// Try menus/v3/ansi/.
-	ansiBase := filepath.Join(bbsRoot, "menus", "v3", "ansi")
-	path = filepath.Join(ansiBase, cleaned)
-	if _, err := os.Stat(path); err == nil {
-		if real := pathUnderBase(ansiBase, path); real != "" {
-			return real
-		}
-	}
-
-	// Try menus/v3/templates/.
-	tmplBase := filepath.Join(bbsRoot, "menus", "v3", "templates")
-	path = filepath.Join(tmplBase, cleaned)
-	if _, err := os.Stat(path); err == nil {
-		if real := pathUnderBase(tmplBase, path); real != "" {
-			return real
+	// Try ansi/ then templates/, overlay before shipped set for each.
+	for _, sub := range []string{"ansi", "templates"} {
+		for _, layer := range []menuset.Layer{menuset.LayerOverlay, menuset.LayerBase} {
+			if layer == menuset.LayerOverlay && !menus.HasOverlay() {
+				continue
+			}
+			base := menus.Path(layer, sub)
+			path = filepath.Join(base, cleaned)
+			if _, err := os.Stat(path); err != nil {
+				continue
+			}
+			if real := pathUnderBase(base, path); real != "" {
+				return real
+			}
 		}
 	}
 

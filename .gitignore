@@ -36,6 +36,12 @@ go.work.sum
 /data/*
 !/data/.gitkeep
 
+# Menu overlay: sysop overrides of menus/, read first, file by file. Never
+# tracked, so `git pull` cannot touch it. The README is kept so the directory
+# exists in every checkout (and Docker's bind mount does not create it as root).
+/menus.d/*
+!/menus.d/README.md
+
 # Compiled executable
 /vision3
 /cmd/vision3/vision3

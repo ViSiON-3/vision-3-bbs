@@ -12,13 +12,13 @@
 # chown; carry on and let the writes succeed or fail on their own merits.
 # ---------------------------------------------------------------------------
 if [ "$(id -u)" = "0" ]; then
-    mkdir -p /vision3/configs /vision3/data /vision3/menus /vision3/temp /vision3/bin
+    mkdir -p /vision3/configs /vision3/data /vision3/menus /vision3/menus.d /vision3/temp /vision3/bin
     # Walk the tree only when the mount root is not already ours. Docker creates
     # these owned by root on a fresh install, which is the case worth repairing;
     # on every restart afterwards a recursive pass would traverse the whole of
     # data/ -- every file area, every message base -- to change nothing.
     owner_uid=$(id -u vision3)
-    for d in /vision3/configs /vision3/data /vision3/temp /vision3/bin; do
+    for d in /vision3/configs /vision3/data /vision3/menus.d /vision3/temp /vision3/bin; do
         if [ "$(stat -c %u "$d" 2>/dev/null)" != "$owner_uid" ]; then
             chown -R vision3:vision3 "$d" 2>/dev/null
         fi
@@ -29,9 +29,9 @@ if [ "$(id -u)" = "0" ]; then
     # breaking the working tree it was started from. The BBS only reads menus,
     # and a normal checkout is already world-readable.
     #
-    # The trade-off: menuedit cannot save into a bind-mounted menus/ unless the
-    # host makes it writable by uid 100. Editing on the host, or dropping the
-    # mount to use the set baked into the image, both avoid that.
+    # menus.d/ IS chowned: it is the overlay menuedit saves into, so the
+    # container must be able to write it, and git never tracks its contents
+    # (only the README), so ownership there costs the host nothing.
     exec su-exec vision3 "$0" "$@"
 fi
 

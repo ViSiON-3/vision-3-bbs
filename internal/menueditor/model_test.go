@@ -81,7 +81,7 @@ func TestMenuEditFieldFlow(t *testing.T) {
 	if m.dirtyMenus["ALPHA"] {
 		t.Error("ALPHA should be clean after save-on-escape")
 	}
-	menus, err := LoadMenus(m.menuBase)
+	menus, err := LoadMenus(m.set)
 	if err != nil {
 		t.Fatalf("LoadMenus: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestAddMenuDialog(t *testing.T) {
 	if m.mode != modeMenuEdit {
 		t.Fatalf("mode = %v, want menuEdit after create", m.mode)
 	}
-	if !MenuExists(m.menuBase, "GAMMA") {
+	if !MenuExists(m.set, "GAMMA") {
 		t.Error("GAMMA should exist on disk")
 	}
 	if m.menus[m.menuEditIdx].Name != "GAMMA" {
@@ -172,7 +172,7 @@ func TestDeleteMenuConfirm(t *testing.T) {
 	if len(m.menus) != 1 || m.menus[0].Name != "BETA" {
 		t.Fatalf("after delete: menus = %+v, want just BETA", m.menus)
 	}
-	if MenuExists(m.menuBase, "ALPHA") {
+	if MenuExists(m.set, "ALPHA") {
 		t.Error("ALPHA should be deleted from disk")
 	}
 }
@@ -222,7 +222,7 @@ func TestCommandListAndEditFlow(t *testing.T) {
 	if m.mode != modeMenuEdit {
 		t.Fatalf("mode = %v, want menuEdit", m.mode)
 	}
-	cmds, err := LoadCommands(m.menuBase, "ALPHA")
+	cmds, err := LoadCommands(m.set, "ALPHA")
 	if err != nil {
 		t.Fatalf("LoadCommands: %v", err)
 	}

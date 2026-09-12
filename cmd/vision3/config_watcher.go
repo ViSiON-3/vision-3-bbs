@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
@@ -29,6 +31,12 @@ type reloadTarget struct {
 	name   string // basename, for logging
 	path   string
 	reload func()
+	// reloadOnRemove makes the target's removal count as a change. Set for
+	// files whose absence has a meaning of its own — an overlay theme.json
+	// going away means "back to the shipped one" — and left unset for
+	// required configs, where a vanished file is a broken install, not a
+	// request to reload nothing.
+	reloadOnRemove bool
 }
 
 // ConfigWatcher polls configuration files for modification and hot-reloads
@@ -122,11 +130,21 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		{name: "login.json", path: filepath.Join(rootConfigPath, "login.json"), reload: cw.reloadLoginSequence},
 		{name: "strings.json", path: filepath.Join(rootConfigPath, "strings.json"), reload: cw.reloadStrings},
 		{name: "theme.json", path: filepath.Join(menuSetPath, "theme.json"), reload: cw.reloadTheme},
+	}
+	// theme.json can also live in the menu set's overlay, which shadows the
+	// shipped copy. Both are watched so that creating, editing or removing the
+	// overlay copy takes effect without a restart; reloadTheme resolves which
+	// one applies.
+	if overlay := menuset.OverlayFor(menuSetPath); overlay != "" {
+		cw.targets = append(cw.targets,
+			reloadTarget{name: "theme.json (overlay)", path: filepath.Join(overlay, "theme.json"), reload: cw.reloadTheme, reloadOnRemove: true})
+	}
+	cw.targets = append(cw.targets, []reloadTarget{
 		{name: "protocols.json", path: filepath.Join(rootConfigPath, "protocols.json"), reload: cw.reloadProtocols},
 		{name: "events.json", path: filepath.Join(rootConfigPath, "events.json"), reload: cw.reloadEvents},
 		{name: "conferences.json", path: filepath.Join(rootConfigPath, "conferences.json"), reload: cw.reloadConferences},
 		{name: "ftn.json", path: filepath.Join(rootConfigPath, "ftn.json"), reload: cw.reloadFTNOrigins},
-	}
+	}...)
 	cw.deferredTargets = []deferredTarget{
 		{
 			name:     "file_areas.json",
@@ -217,35 +235,35 @@ func (cw *ConfigWatcher) pollLoop() {
 // poll reloads every configuration file whose timestamp changed since the last
 // check. A touched sentinel reloads everything regardless of timestamps.
 func (cw *ConfigWatcher) poll() {
-	if cw.changed(cw.forceSentinelPath) {
+	if cw.changed(cw.forceSentinelPath, false) {
 		slog.Warn("force sentinel touched: applying all configuration now, including deferred structural changes",
 			"path", cw.forceSentinelPath, "active_sessions", cw.activeSessions())
 		for _, t := range cw.targets {
-			cw.changed(t.path)
+			cw.changed(t.path, t.reloadOnRemove)
 		}
 		cw.ReloadAll()
 		for _, t := range cw.deferredTargets {
-			cw.changed(t.path)
+			cw.changed(t.path, false)
 			cw.applyDeferred(t)
 		}
 		return
 	}
 
-	if cw.changed(cw.sentinelPath) {
+	if cw.changed(cw.sentinelPath, false) {
 		slog.Info("reload sentinel touched, reloading all configuration",
 			"path", cw.sentinelPath)
 		// Take the current timestamps first: the files being reloaded here are
 		// the same ones the sentinel is announcing, and without this each would
 		// reload a second time on the next poll.
 		for _, t := range cw.targets {
-			cw.changed(t.path)
+			cw.changed(t.path, t.reloadOnRemove)
 		}
 		cw.ReloadAll()
 		// Deferred targets covered by the save are queued, not applied: the
 		// sentinel is touched automatically by v3config on every save, and
 		// automatic saves must not bypass the idle gate.
 		for _, t := range cw.deferredTargets {
-			if cw.changed(t.path) {
+			if cw.changed(t.path, false) {
 				cw.queueDeferred(t)
 			}
 		}
@@ -254,13 +272,13 @@ func (cw *ConfigWatcher) poll() {
 	}
 
 	for _, t := range cw.targets {
-		if cw.changed(t.path) {
+		if cw.changed(t.path, t.reloadOnRemove) {
 			slog.Info("config file change detected", "file", t.name)
 			t.reload()
 		}
 	}
 	for _, t := range cw.deferredTargets {
-		if cw.changed(t.path) {
+		if cw.changed(t.path, false) {
 			cw.queueDeferred(t)
 		}
 	}
@@ -443,20 +461,22 @@ func (cw *ConfigWatcher) applyV3Net() error {
 }
 
 // changed reports whether path's modification time differs from the one last
-// recorded, updating the record. A file that does not exist is not a change;
-// its record is dropped so that re-creating it registers as one.
+// recorded, updating the record. A file that does not exist is not a change
+// unless reloadOnRemove is set and it was present on the previous poll; either
+// way its record is dropped so that re-creating it registers as one.
 //
 // Any difference counts, not just a newer timestamp, so that restoring a config
 // file from a backup — which can move the timestamp backwards — still reloads.
-func (cw *ConfigWatcher) changed(path string) bool {
+func (cw *ConfigWatcher) changed(path string, reloadOnRemove bool) bool {
 	info, err := os.Stat(path)
 
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
 
 	if err != nil {
+		_, seen := cw.mtimes[path]
 		delete(cw.mtimes, path)
-		return false
+		return seen && reloadOnRemove
 	}
 
 	mt := info.ModTime()

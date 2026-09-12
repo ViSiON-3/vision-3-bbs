@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -80,8 +79,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Info("user entering sponsor menu for area",
 		"node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag)
 
-	menuMnuPath := filepath.Join(e.MenuSetPath, "mnu")
-	menuRec, loadErr := LoadMenu("SPONSORM", menuMnuPath)
+	menuRec, loadErr := LoadMenu("SPONSORM", e.Menus())
 	if loadErr != nil {
 		slog.Warn("failed to load SPONSORM.MNU, using fallback prompt", "node", nodeNumber, "error", loadErr)
 		menuRec = nil

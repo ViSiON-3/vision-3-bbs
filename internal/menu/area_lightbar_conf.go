@@ -2,7 +2,6 @@ package menu
 
 import (
 	"log/slog"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -46,9 +45,8 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 		return currentUser, "", nil
 	}
 
-	templateDir := filepath.Join(e.MenuSetPath, "templates")
-	topBytes, errTop := readTemplateFile(filepath.Join(templateDir, "MSGCONF.TOP"))
-	midBytes, errMid := readTemplateFile(filepath.Join(templateDir, "MSGCONF.MID"))
+	topBytes, errTop := readTemplateFile(e.templateFile("MSGCONF.TOP"))
+	midBytes, errMid := readTemplateFile(e.templateFile("MSGCONF.MID"))
 
 	if errTop != nil || errMid != nil {
 		slog.Warn("MSGCONF templates unavailable, using text mode", "node", nodeNumber, "topError", errTop, "midError", errMid)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -100,7 +99,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 
 	ansFilename := "YOURSTAT.ANS"
 	// Use MenuSetPath for ANSI file
-	fullAnsPath := filepath.Join(e.MenuSetPath, "ansi", ansFilename)
+	fullAnsPath := e.menuFile("ansi", ansFilename)
 	rawAnsiContent, readErr := ansi.GetAnsiFileContent(fullAnsPath)
 	if readErr != nil {
 		slog.Error("failed to read file for showstats", "node", nodeNumber, "path", fullAnsPath, "error", readErr)

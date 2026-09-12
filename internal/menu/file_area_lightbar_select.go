@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,9 +53,8 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 		return nil, "", nil
 	}
 
-	templateDir := filepath.Join(e.MenuSetPath, "templates")
-	topBytes, errTop := readTemplateFile(filepath.Join(templateDir, "FILEAREA.TOP"))
-	midBytes, errMid := readTemplateFile(filepath.Join(templateDir, "FILEAREA.MID"))
+	topBytes, errTop := readTemplateFile(e.templateFile("FILEAREA.TOP"))
+	midBytes, errMid := readTemplateFile(e.templateFile("FILEAREA.MID"))
 
 	if errTop != nil || errMid != nil {
 		slog.Warn("FILEAREA templates unavailable, using text mode", "node", nodeNumber, "errTop", errTop, "errMid", errMid)

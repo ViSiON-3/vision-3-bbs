@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -30,8 +29,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Load FASTLOGN menu definition (.MNU) for CLR/CLS + prompt behavior
 	var fastlognMenu *MenuRecord
-	menuMnuPath := filepath.Join(e.MenuSetPath, "mnu")
-	loadedMenu, menuErr := LoadMenu("FASTLOGN", menuMnuPath)
+	loadedMenu, menuErr := LoadMenu("FASTLOGN", e.Menus())
 	if menuErr != nil {
 		slog.Warn("failed to load FASTLOGN.MNU", "node", nodeNumber, "error", menuErr)
 	} else {
@@ -60,8 +58,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Load FASTLOGN commands
-	cfgPath := filepath.Join(e.MenuSetPath, "cfg")
-	commands, err := LoadCommands("FASTLOGN", cfgPath)
+	commands, err := LoadCommands("FASTLOGN", e.Menus())
 	if err != nil {
 		slog.Warn("failed to load FASTLOGN.CFG", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
@@ -70,7 +67,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 	renderFastLoginScreen()
 
 	// Check for lightbar BAR file.
-	barPath := filepath.Join(e.MenuSetPath, "bar", "FASTLOGN.BAR")
+	barPath := e.menuFile("bar", "FASTLOGN.BAR")
 	lightbarOptions, barLoadErr := loadLightbarOptions("FASTLOGN", e)
 	isLightbar := barLoadErr == nil && len(lightbarOptions) > 0
 	if barLoadErr != nil {

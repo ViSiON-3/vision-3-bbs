@@ -9,13 +9,19 @@ The ViSiON/3 menu system is the core of the BBS user interface. This guide expla
 ```bash
 ./menuedit                            # uses menus/v3 by default
 ./menuedit --menus /path/to/menus/v3  # explicit path
+./menuedit --no-overlay               # edit the shipped set in place
 ```
 
 The `--menus` path must contain `mnu/` and `cfg/` subdirectories. The BBS does not need to be stopped to run `menuedit`, but changes take effect on next menu load.
 
+`menuedit` reads menus through the [overlay directory](#customising-menus-without-losing-your-changes)
+and **saves into it** — `menus.d/v3/` for the default set — so your edits are
+never in the way of a `git pull`. A flash message on startup names the
+directory. Pass `--no-overlay` to read and write `menus/v3/` directly instead.
+
 ### Menu List
 
-The opening screen lists all menus in `menus/v3/mnu/`. Columns show the menu title and its filename pair (`.MNU` / `.CFG`).
+The opening screen lists all menus in `menus/v3/mnu/`, with any overrides from `menus.d/v3/mnu/` merged in. Columns show the menu title and its filename pair (`.MNU` / `.CFG`); a `*` after a filename means that file comes from the overlay.
 
 | Key | Action |
 |-----|--------|
@@ -96,7 +102,7 @@ Edits the 6 fields of a single command:
 
 **Creating a menu:** Press F5 from Menu List or Menu Edit. Enter a name (A-Z, 0-9, underscore, max 8 characters). The editor creates empty `.MNU` and `.CFG` files and opens Menu Edit for the new menu.
 
-**Deleting a menu:** F2 from Menu List or Menu Edit. This removes **both** `.MNU` and `.CFG` files permanently — there is no undo.
+**Deleting a menu:** F2 from Menu List or Menu Edit. This removes **both** `.MNU` and `.CFG` files permanently — there is no undo. With the overlay in use, only overlay copies are removed: deleting a menu you had overridden reverts it to the shipped version, and a menu that exists only in `menus/` cannot be deleted this way (use `--no-overlay`).
 
 **Saving:** Changes are written when you press Esc from an edit screen, navigate with PgUp/PgDn, or press F10 to jump to the Command List.
 
@@ -120,6 +126,60 @@ All menu files are located in `menus/v3/`:
 - `menus/v3/cfg/` - Command definition files
 - `menus/v3/ansi/` - ANSI art files
 - `menus/v3/bar/` - Lightbar menu files (optional)
+
+Any of them can be overridden from `menus.d/v3/` without editing `menus/v3/`
+itself — see the next section.
+
+## Customising menus without losing your changes
+
+`menus/v3/` is part of the repository, so every upgrade wants to update it, and
+every file you have edited there is a merge conflict waiting to happen. Put your
+changes in **`menus.d/`** instead. It mirrors the layout of `menus/` and is
+searched first, one file at a time:
+
+```
+menus.d/v3/ansi/MAIN.ANS     ← used if present
+menus/v3/ansi/MAIN.ANS       ← otherwise
+```
+
+Resolution is per file, not per directory. Overriding `MAIN.ANS` does not mean
+copying the rest of `ansi/`; every file you have not overridden still comes from
+the shipped set, so bug fixes to those files reach you on the next pull.
+
+`menus.d/` is git-ignored (only its README is tracked), so `git pull` never
+touches it, and there is nothing to re-copy after an upgrade.
+
+Everything that reads the menu set goes through the overlay: menu screens and
+prompts, `.MNU`/`.CFG`/`.BAR` definitions, templates (including the message
+header styles under `templates/message_headers/`), `PRELOGON` screens, the
+full-screen editor's own screens, `theme.json`, art displayed by scripts, and
+`menuedit`.
+
+**What to know:**
+
+- **Start with a copy.** To change a shipped file, copy it into the same place
+  under `menus.d/` and edit the copy: `cp menus/v3/ansi/MAIN.ANS menus.d/v3/ansi/`.
+  New files (a `PRELOGON.3`, a menu of your own) can be created there directly.
+- **Check the startup log.** The BBS logs `menu overlay active` with how many
+  files it overrides, and warns about any subdirectory in `menus.d/v3/` that
+  the shipped set does not have — the usual cause of "my change isn't showing"
+  is a misspelled directory name.
+- **Lightbar menus travel as a set.** A lightbar's `.ANS`, `.BAR` and `.CFG`
+  are drawn against each other (see [Keeping the BAR file and the art in step](#keeping-the-bar-file-and-the-art-in-step)).
+  If you override one and a release changes the others, they can drift apart.
+  The BBS logs a warning the first time a lightbar menu's files resolve from
+  different layers; when you see it, compare your copy with the shipped one.
+- **`theme.json` hot-reloads** from either place. Adding, editing or removing
+  `menus.d/v3/theme.json` takes effect without a restart.
+- **You cannot delete through the overlay.** A shipped file cannot be hidden by
+  the overlay; if you need a menu gone, remove it from `menus/` (and expect the
+  next pull to bring it back) or point its commands elsewhere.
+- **Reverting** a customisation is deleting the file from `menus.d/`; the
+  shipped one shows again on the next menu load.
+
+Docker users mount `./menus.d` alongside `./menus` — `docker-compose.yml`
+already does — and can leave the shipped set read-only; see
+[Docker](../getting-started/docker.md#container-user-and-file-ownership).
 
 ## Menu Configuration Files (.MNU)
 

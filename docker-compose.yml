@@ -13,9 +13,12 @@ services:
       # Persistent data - these directories will be created on host
       - ./configs:/vision3/configs
       - ./data:/vision3/data
-      # Menus ship inside the image; this mount keeps a customised
-      # set on the host and lets `git pull` update them in place.
+      # Menus ship inside the image; this mount keeps the shipped set on
+      # the host and lets `git pull` update it in place.
       - ./menus:/vision3/menus
+      # Your menu overrides. Read before menus/, file by file; menuedit
+      # saves here. Writable by the container, never touched by git.
+      - ./menus.d:/vision3/menus.d
     environment:
       # Optional: Override default settings
       - TZ=America/Los_Angeles

@@ -9,7 +9,9 @@ what makes upgrading safe, and also what makes two steps necessary:
 - Your menu set is a different story, and which story depends on how you
   installed. A repo-in-place upgrade **will** update `menus/`, and can
   overwrite menu edits you made in the repo. An instance or bundle install
-  never updates it, so artwork fixes do not reach you at all.
+  never updates it, so artwork fixes do not reach you at all. Keeping your
+  edits in `menus.d/` instead of `menus/` sidesteps both problems — see
+  [Customising menus without losing your changes](../menus/menu-system.md#customising-menus-without-losing-your-changes).
 - The binaries in `bin/` (`binkd`, `sexyz`) are prebuilt — a source build
   (`git pull` + `build.sh`) never touches them, so they stay at the version you
   first installed. Most releases don't change them; when one does, the release
@@ -69,8 +71,20 @@ git pull
 
 **`menus/` is tracked**, so a pull does update the shipped menu set — and will
 conflict, or overwrite, if you have edited a menu, `.ANS` or `.CFG` file in
-place. Commit your menu edits to a branch, or keep copies outside the repo,
-before pulling.
+place. Keep your edits in **`menus.d/`** instead: it is searched before `menus/`
+file by file, it is git-ignored, and `menuedit` saves there by default. If you
+already have edits inside `menus/`, move them across once:
+
+```bash
+# see which shipped files you have changed
+git status --short menus/
+# move each one into the overlay, then let git restore the shipped copy
+mkdir -p menus.d/v3/ansi
+mv menus/v3/ansi/MAIN.ANS menus.d/v3/ansi/
+git checkout -- menus/v3/ansi/MAIN.ANS
+```
+
+After that, `git pull` cannot conflict on menus again.
 
 Re-running `./setup.sh` is safe: it copies a config template only when the
 target does not already exist. It fills in genuinely new files and leaves
@@ -111,12 +125,20 @@ fixes never arrive on their own. Either copy the changed files by hand:
 cp ~/git/vision3/menus/v3/ansi/SOMEFILE.ANS /opt/vision3/menus/v3/ansi/
 ```
 
-…or, if you have not customised the menu set, replace the directory with a
-symlink once and it will track the repo from then on:
+…or replace the directory with a symlink once and it will track the repo from
+then on, with your own customisations kept in the instance's `menus.d/` where
+the symlinked set cannot overwrite them:
 
 ```bash
-cd /opt/vision3 && rm -rf menus && ln -s ~/git/vision3/menus menus
+cd /opt/vision3
+# first move anything you changed out of the way, e.g.
+#   mkdir -p menus.d/v3/ansi && mv menus/v3/ansi/MAIN.ANS menus.d/v3/ansi/
+rm -rf menus && ln -s ~/git/vision3/menus menus
 ```
+
+`menus.d/` is searched before `menus/`, file by file, so the shipped set can
+change underneath you without touching a file you have overridden — see
+[Customising menus without losing your changes](../menus/menu-system.md#customising-menus-without-losing-your-changes).
 
 The same is true of `configs/`: templates are copied only when the file is
 absent, so see [Settings added since your version](#settings-added-since-your-version).

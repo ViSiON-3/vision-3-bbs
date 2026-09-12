@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -244,10 +243,9 @@ func (st *runLoopState) resolvePostAuthAction() (action string, ok bool, err err
 	sessionStartTime := st.sessionStartTime
 
 	// Load LOGIN.CFG to find the default action
-	loginCfgPath := filepath.Join(e.MenuSetPath, "cfg") // Use correct path structure
-	loginCommands, loadCmdErr := LoadCommands("LOGIN", loginCfgPath)
+	loginCommands, loadCmdErr := LoadCommands("LOGIN", e.Menus())
 	if loadCmdErr != nil {
-		slog.Error("failed to load LOGIN.CFG after successful authentication", "path", filepath.Join(loginCfgPath, "LOGIN.CFG"), "error", loadCmdErr)
+		slog.Error("failed to load LOGIN.CFG after successful authentication", "path", e.menuFile("cfg", "LOGIN.CFG"), "error", loadCmdErr)
 		// Return an error? Or try to default to MAIN?
 		return "", false, fmt.Errorf("failed loading LOGIN.CFG post-auth") // Logoff user on critical error
 	}
