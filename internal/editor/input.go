@@ -74,14 +74,19 @@ type InputHandler struct {
 	unreadBuf []byte        // bytes pushed back for re-reading
 
 	// idleNs is the session-level idle timeout in nanoseconds (0 = disabled).
-	// Stored as int64 for lock-free atomic access. Any call to readByte()
-	// that blocks longer than this fires ErrIdleTimeout. Set via
-	// SetSessionIdleTimeout; read on every key-wait.
-	idleNs int64 // atomic
+	// Any call to readByte() that blocks longer than this fires
+	// ErrIdleTimeout. Set via SetSessionIdleTimeout; read on every key-wait.
+	//
+	// atomic.Int64 (not a bare int64 with atomic.LoadInt64/StoreInt64) is
+	// deliberate: the typed wrapper is guaranteed 8-byte aligned wherever it
+	// is placed, whereas a bare int64 after the pointer-sized fields above
+	// lands at a 4-byte offset on 32-bit targets (386, arm) and the first
+	// atomic access panics with "unaligned 64-bit atomic operation".
+	idleNs atomic.Int64
 
 	// escTimeoutNs overrides the inter-byte ESC disambiguation window
 	// (default 500 ms). 0 means use the default. Set via SetEscTimeout.
-	escTimeoutNs int64 // atomic
+	escTimeoutNs atomic.Int64
 
 	// Optional read interrupt integration for sessions that support it.
 	readInterrupt    chan struct{}
@@ -92,24 +97,24 @@ type InputHandler struct {
 // SetSessionIdleTimeout sets the session-level idle timeout applied to every
 // ReadKey call. Pass 0 to disable. Thread-safe.
 func (ih *InputHandler) SetSessionIdleTimeout(d time.Duration) {
-	atomic.StoreInt64(&ih.idleNs, d.Nanoseconds())
+	ih.idleNs.Store(d.Nanoseconds())
 }
 
 // SetEscTimeout overrides the ESC disambiguation window used in ReadKey.
 // Pass 0 to restore the default (500 ms). Thread-safe.
 func (ih *InputHandler) SetEscTimeout(d time.Duration) {
-	atomic.StoreInt64(&ih.escTimeoutNs, d.Nanoseconds())
+	ih.escTimeoutNs.Store(d.Nanoseconds())
 }
 
 func (ih *InputHandler) escTimeout() time.Duration {
-	if ns := atomic.LoadInt64(&ih.escTimeoutNs); ns > 0 {
+	if ns := ih.escTimeoutNs.Load(); ns > 0 {
 		return time.Duration(ns)
 	}
 	return 500 * time.Millisecond
 }
 
 func (ih *InputHandler) sessionIdleTimeout() time.Duration {
-	ns := atomic.LoadInt64(&ih.idleNs)
+	ns := ih.idleNs.Load()
 	if ns <= 0 {
 		return 0
 	}
