@@ -79,12 +79,20 @@ func run() int {
 	// discard, and is shown in the editor's status line: it cannot go to
 	// stderr, which the alternate screen is about to clear, and silently
 	// losing every lifecycle record is the thing this log exists to stop.
+	// There is one status line, so messages accumulate rather than replace:
+	// the log warning must not be lost behind a binkd.conf notice.
 	startupMsg := ""
+	addStartupMsg := func(msg string) {
+		if startupMsg != "" {
+			startupMsg += " | "
+		}
+		startupMsg += msg
+	}
 	if closeLog, err := initEditorLog(serverCfg, bbsRoot); err == nil {
 		defer func() { _ = closeLog() }() // best-effort flush at exit
 		slog.Info("config editor started", "configs", path, "bbs_root", bbsRoot)
 	} else {
-		startupMsg = fmt.Sprintf("Warning: editor log unavailable, nothing will be logged this session: %v", err)
+		addStartupMsg(fmt.Sprintf("Warning: editor log unavailable, nothing will be logged this session: %v", err))
 	}
 
 	// Regenerate a missing binkd.conf from configuration before the editor
@@ -92,9 +100,9 @@ func run() int {
 	// existing network, so this is the recovery path after a manual delete.
 	if ftnCfg, ftnErr := config.LoadFTNConfig(path); ftnErr == nil && serverCfgErr == nil {
 		if created, err := ftn.EnsureBinkdConf(bbsRoot, ftnCfg, serverCfg); err != nil {
-			startupMsg = fmt.Sprintf("Warning: binkd.conf regeneration failed: %v", err)
+			addStartupMsg(fmt.Sprintf("Warning: binkd.conf regeneration failed: %v", err))
 		} else if created {
-			startupMsg = "binkd.conf was missing - regenerated from configuration"
+			addStartupMsg("binkd.conf was missing - regenerated from configuration")
 		}
 	}
 
