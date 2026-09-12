@@ -144,7 +144,7 @@ it when using `docker run` outside a checkout:
 
 ```bash
 mkdir -p menus.d
-docker compose exec -u "$(id -u):$(id -g)" vision3 ./menuedit
+docker exec -it -u "$(id -u):$(id -g)" vision3-bbs ./menuedit
 ```
 
 If an earlier container changed the overlay's ownership, restore it once with
