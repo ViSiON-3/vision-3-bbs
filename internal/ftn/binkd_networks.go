@@ -82,12 +82,12 @@ func SyncBinkdNetworks(confPath, bbsRoot string, ftnCfg config.FTNConfig) error 
 			wrote = true
 		}
 		akaLine := fmt.Sprintf("%s@%s", netCfg.OwnAddress, domain)
-		if !have["address "+akaLine] && !ourAddressDeclared(have, domain) {
+		if !have["address "+strings.ToLower(akaLine)] && !ourAddressDeclared(have, domain) {
 			if !wrote {
 				fmt.Fprintf(&out, "\n#\n# %s (added to match ftn.json)\n#\n", name)
 			}
 			fmt.Fprintf(&out, "address %s\n", akaLine)
-			have["address "+akaLine] = true
+			have["address "+strings.ToLower(akaLine)] = true
 			wrote = true
 		}
 		if wrote {
@@ -109,12 +109,17 @@ func SyncBinkdNetworks(confPath, bbsRoot string, ftnCfg config.FTNConfig) error 
 // directives present in content. Unlike keptDirectives it does not filter
 // placeholders: this is used to decide whether to append, and a placeholder
 // line still occupies the directive as far as binkd's parser is concerned.
+//
+// Values are lowercased, as are the keys SyncBinkdNetworks looks up: binkd
+// matches domain names case-insensitively, so an existing "domain TQWnet" or
+// "address 1337:3/123@TQWnet" already declares tqwnet, and treating it as
+// missing would append a second, conflicting declaration on every sync.
 func declaredDirectives(content string) map[string]bool {
 	have := make(map[string]bool)
 	for _, line := range confLines(content) {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) >= 2 && (fields[0] == "domain" || fields[0] == "address") {
-			have[fields[0]+" "+fields[1]] = true
+			have[fields[0]+" "+strings.ToLower(fields[1])] = true
 		}
 	}
 	return have

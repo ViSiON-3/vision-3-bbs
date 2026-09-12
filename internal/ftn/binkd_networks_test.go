@@ -146,3 +146,29 @@ func TestSyncBinkdNetworksMissingFileIsNoOp(t *testing.T) {
 		t.Errorf("missing file must be a no-op, got: %v", err)
 	}
 }
+
+// binkd matches domain names case-insensitively, so a sysop's hand-written
+// "domain TQWnet" already declares tqwnet. Comparing case-sensitively treated
+// it as missing and appended a second declaration on every sync.
+func TestSyncBinkdNetworksMatchesDomainCaseInsensitively(t *testing.T) {
+	path := writeConf(t, settingsConf+
+		"domain TQWnet /bbs/data/ftn/out_tqw 1337\naddress 1337:3/123.1@TQWnet\n")
+
+	cfg := config.FTNConfig{
+		BinkdOutboundPath: "data/ftn/out",
+		Networks: map[string]config.FTNNetworkConfig{
+			"tqwnet": netCfg("1337:3/123.1", "1337:3/123"),
+		},
+	}
+	if err := SyncBinkdNetworks(path, "/bbs", cfg); err != nil {
+		t.Fatalf("SyncBinkdNetworks: %v", err)
+	}
+
+	got := readConf(t, path)
+	if n := strings.Count(strings.ToLower(got), "domain tqwnet"); n != 1 {
+		t.Errorf("tqwnet domain declared %d times, want 1:\n%s", n, got)
+	}
+	if n := strings.Count(strings.ToLower(got), "@tqwnet"); n != 1 {
+		t.Errorf("tqwnet address declared %d times, want 1:\n%s", n, got)
+	}
+}
