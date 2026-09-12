@@ -19,8 +19,15 @@ type Scheduler struct {
 	mu             sync.RWMutex
 	concurrencySem chan struct{}
 	startupWg      sync.WaitGroup
-	ctx            context.Context
-	cancel         context.CancelFunc
+	// chainWg tracks in-flight chained events (including those still in their
+	// delay) so Stop drains them rather than leaving them to fire into a
+	// cancelled context.
+	chainWg sync.WaitGroup
+	// chainingOK is false when run_after contains a cycle; chaining is then
+	// off for every event, so behaviour matches the error that was logged.
+	chainingOK bool
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 // NewScheduler creates a new event scheduler
@@ -43,6 +50,7 @@ func NewScheduler(cfg config.EventsConfig, historyPath string) *Scheduler {
 		historyPath:    historyPath,
 		runningEvents:  make(map[string]bool),
 		concurrencySem: make(chan struct{}, cfg.MaxConcurrentEvents),
+		chainingOK:     validateChains(cfg.Events),
 	}
 }
 
@@ -72,6 +80,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	// Schedule all enabled events
 	enabledCount := 0
 	startupCount := 0
+	chainedCount := 0
 	for _, event := range cfg.Events {
 		if !event.Enabled {
 			slog.Debug("event disabled; skipping", "id", event.ID, "name", event.Name)
@@ -101,12 +110,15 @@ func (s *Scheduler) Start(ctx context.Context) {
 				enabledCount++
 				slog.Info("event scheduled", "id", event.ID, "name", event.Name, "schedule", event.Schedule)
 			}
+		} else if event.RunAfter != "" {
+			chainedCount++
+			slog.Info("event chained", "id", event.ID, "name", event.Name, "after", chainDescription(event))
 		} else if !event.RunAtStartup {
-			slog.Warn("event has no schedule and run_at_startup is false; skipping", "id", event.ID, "name", event.Name)
+			slog.Warn("event has no schedule, no run_after and run_at_startup is false; skipping", "id", event.ID, "name", event.Name)
 		}
 	}
 
-	if enabledCount == 0 && startupCount == 0 {
+	if enabledCount == 0 && startupCount == 0 && chainedCount == 0 {
 		// Nothing to run yet, but stay alive: a reload of events.json can
 		// schedule events later, and exiting here would leave any cron it
 		// starts unstopped at shutdown.
@@ -129,7 +141,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	s.mu.Unlock()
 	if current {
 		slog.Info("event scheduler running", "scheduled", enabledCount, "startup", startupCount,
-			"max_concurrent", maxConcurrent)
+			"chained", chainedCount, "max_concurrent", maxConcurrent)
 	} else {
 		slog.Info("event scheduler superseded by a reload during startup")
 	}
@@ -159,6 +171,11 @@ func (s *Scheduler) Stop() {
 	// Wait for startup events to complete
 	s.startupWg.Wait()
 	slog.Info("all startup events completed")
+
+	// And for chained events, including any still waiting out a
+	// delay_after_seconds — their context is cancelled by now, so this drains
+	// rather than waits for work.
+	s.chainWg.Wait()
 
 	// Save history
 	if err := SaveHistory(s.historyPath, s.history); err != nil {
@@ -212,6 +229,7 @@ func (s *Scheduler) Reload(cfg config.EventsConfig) {
 
 	s.mu.Lock()
 	oldCron := s.cron
+	s.chainingOK = validateChains(cfg.Events)
 	if cfg.MaxConcurrentEvents != s.config.MaxConcurrentEvents {
 		// Resize by replacement. In-flight events release into the semaphore
 		// they acquired from (captured locally in executeEventWithConcurrency),
@@ -246,8 +264,16 @@ func (s *Scheduler) scheduleEvent(c *cron.Cron, event config.EventConfig) error 
 	return err
 }
 
-// executeEventWithConcurrency executes an event with concurrency control
+// executeEventWithConcurrency executes an event with concurrency control.
 func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
+	s.executeChain(event, 0)
+}
+
+// executeChain is executeEventWithConcurrency plus the chain depth reached so
+// far, so a cascade of run_after triggers can be bounded. Chained launches use
+// the scheduler's own context, resolved below, so a shutdown cancels a chain
+// still waiting out its delay.
+func (s *Scheduler) executeChain(event config.EventConfig, depth int) {
 	// Atomically check if event is already running and try to acquire semaphore
 	s.mu.Lock()
 	if s.runningEvents[event.ID] {
@@ -295,4 +321,9 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 
 	// Update history
 	s.updateHistory(result)
+
+	// Then anything chained to it. After updateHistory so a chained event that
+	// reads the history sees the parent's completed run, and regardless of the
+	// parent's outcome — "run after" is about order, not success.
+	s.runChainedEvents(ctx, event.ID, depth)
 }
