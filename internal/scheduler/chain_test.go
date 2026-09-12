@@ -190,7 +190,17 @@ func TestChainCycleDetected(t *testing.T) {
 		}, false},
 		{"dangling reference", []config.EventConfig{{ID: "a", RunAfter: "nope"}}, false},
 		{"no chaining", []config.EventConfig{{ID: "a"}, {ID: "b"}}, false},
+		// A disabled event is never chained, so a loop through one cannot
+		// re-trigger and must not switch chaining off for everything else.
+		{"loop broken by a disabled event", []config.EventConfig{
+			{ID: "a", RunAfter: "b"}, {ID: "b", RunAfter: "a", Enabled: false, Name: "disabled"},
+		}, false},
 	} {
+		for i := range tc.events {
+			if tc.events[i].Name != "disabled" {
+				tc.events[i].Enabled = true
+			}
+		}
 		cycle := chainCycle(tc.events)
 		if tc.cyclic && cycle == "" {
 			t.Errorf("%s: expected a cycle to be reported", tc.name)
@@ -267,5 +277,94 @@ func TestReloadRevalidatesChains(t *testing.T) {
 	}})
 	if !s.chainingOK {
 		t.Error("a reload fixing the cycle must re-enable chaining")
+	}
+}
+
+// The parent must give its concurrency slot back before its children ask for
+// one. With max_concurrent_events at 1 — a common setting for a board that
+// polls several networks over one line — a chain otherwise stopped dead after
+// the parent, every child refused with "max concurrent events reached".
+func TestChainRunsWithSingleConcurrencySlot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chain tests run shell commands; skipped on windows")
+	}
+	out := filepath.Join(t.TempDir(), "order.txt")
+	events := []config.EventConfig{
+		chainEvent(t, "first", "", "", 0, out),
+		chainEvent(t, "second", "first", "", 0, out),
+		chainEvent(t, "third", "second", "", 0, out),
+	}
+	events[0].RunAtStartup = true
+
+	s := NewScheduler(
+		config.EventsConfig{MaxConcurrentEvents: 1, Events: events},
+		filepath.Join(t.TempDir(), "history.json"),
+	)
+	startChain(t, s)
+
+	got := waitForContent(t, out, 3)
+	want := []string{"first", "second", "third"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("chain ran %v, want %v", got, want)
+		}
+	}
+}
+
+// A job still running on a cron that Reload retired is not covered by the
+// current cron's stop context. Stop has to wait for it anyway, or the job can
+// finish after the chain drain and history save: its run is then missing from
+// the saved history, and anything chained to it would start into a scheduler
+// that has already shut down.
+func TestStopWaitsForRetiredCronJobs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chain tests run shell commands; skipped on windows")
+	}
+	historyPath := filepath.Join(t.TempDir(), "history.json")
+	slow := config.EventConfig{
+		ID: "slow", Name: "slow", Schedule: "@every 1s", Command: "/bin/sh",
+		Args: []string{"-c", "sleep 30"}, Enabled: true, TimeoutSeconds: 60,
+	}
+	s := NewScheduler(config.EventsConfig{MaxConcurrentEvents: 2, Events: []config.EventConfig{slow}},
+		historyPath)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.Start(ctx)
+	}()
+
+	// Wait for the job to be mid-run, then retire its cron with an empty reload.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s.mu.RLock()
+		running := s.runningEvents["slow"]
+		s.mu.RUnlock()
+		if running {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("slow event never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	s.Reload(config.EventsConfig{MaxConcurrentEvents: 2})
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("scheduler did not stop")
+	}
+	// The job is killed by the cancellation, and its (failed) run must have
+	// been recorded before Stop saved the history — which it is only if Stop
+	// waited for the retired cron's job to return.
+	history, err := LoadHistory(historyPath)
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if _, ok := history["slow"]; !ok {
+		t.Errorf("retired cron's job missing from saved history %v: Stop did not wait for it", history)
 	}
 }

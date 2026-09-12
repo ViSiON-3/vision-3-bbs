@@ -34,10 +34,18 @@ const maxChainDepth = 16
 // Rejecting a cycle is not optional: A after B after A would re-trigger
 // forever, each hop spawning a goroutine, until the concurrency limit turned it
 // into a flood of "event skipped" warnings.
+//
+// Only enabled events take part, matching chainedAfter: a disabled event is
+// never chained, so a loop that runs through one cannot re-trigger, and
+// counting it would switch chaining off for every valid chain on the board
+// because of an event the sysop has already turned off.
 func chainCycle(events []config.EventConfig) string {
 	parent := make(map[string]string, len(events))
 	known := make(map[string]bool, len(events))
 	for _, e := range events {
+		if !e.Enabled {
+			continue
+		}
 		known[e.ID] = true
 		if e.RunAfter != "" {
 			parent[e.ID] = e.RunAfter
@@ -46,6 +54,9 @@ func chainCycle(events []config.EventConfig) string {
 
 	// Walk each event's ancestry; a revisit within one walk is a cycle.
 	for _, e := range events {
+		if !e.Enabled {
+			continue
+		}
 		seen := map[string]bool{e.ID: true}
 		path := []string{e.ID}
 		for id := e.ID; ; {
@@ -130,7 +141,9 @@ func (s *Scheduler) runChainedEvents(ctx context.Context, parentID string, depth
 	enabled := s.chainingOK
 	s.mu.RUnlock()
 
-	if !enabled {
+	if !enabled || ctx.Err() != nil {
+		// A parent finishing after shutdown began (a job from a cron Reload
+		// retired, say) must not add to chainWg once Stop has drained it.
 		return
 	}
 	next := chainedAfter(events, parentID)

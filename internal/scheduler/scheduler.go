@@ -23,6 +23,11 @@ type Scheduler struct {
 	// delay) so Stop drains them rather than leaving them to fire into a
 	// cancelled context.
 	chainWg sync.WaitGroup
+	// retiredWg tracks crons Reload has replaced but whose running jobs have
+	// not finished. Stop waits on it before draining chains and saving
+	// history, or a job from a retired cron could finish after both and
+	// start a chain into a scheduler that has already shut down.
+	retiredWg sync.WaitGroup
 	// chainingOK is false when run_after contains a cycle; chaining is then
 	// off for every event, so behaviour matches the error that was logged.
 	chainingOK bool
@@ -172,6 +177,10 @@ func (s *Scheduler) Stop() {
 	s.startupWg.Wait()
 	slog.Info("all startup events completed")
 
+	// And for any cron a reload retired whose jobs are still running: they
+	// are not part of the current cron's stop context above.
+	s.retiredWg.Wait()
+
 	// And for chained events, including any still waiting out a
 	// delay_after_seconds — their context is cancelled by now, so this drains
 	// rather than waits for work.
@@ -245,8 +254,13 @@ func (s *Scheduler) Reload(cfg config.EventsConfig) {
 
 	if oldCron != nil {
 		// Stop in the background: Stop's context waits for running jobs, and
-		// the caller is the config watcher's poll loop.
-		go func() { <-oldCron.Stop().Done() }()
+		// the caller is the config watcher's poll loop. Tracked so shutdown
+		// waits for those jobs too.
+		s.retiredWg.Add(1)
+		go func() {
+			defer s.retiredWg.Done()
+			<-oldCron.Stop().Done()
+		}()
 	}
 
 	slog.Info("event scheduler reloaded", "scheduled", scheduled,
@@ -271,15 +285,38 @@ func (s *Scheduler) executeEventWithConcurrency(event config.EventConfig) {
 
 // executeChain is executeEventWithConcurrency plus the chain depth reached so
 // far, so a cascade of run_after triggers can be bounded. Chained launches use
-// the scheduler's own context, resolved below, so a shutdown cancels a chain
-// still waiting out its delay.
+// the scheduler's own context, resolved in runWithSlot, so a shutdown cancels
+// a chain still waiting out its delay.
+//
+// The chaining step runs only after runWithSlot has returned, which is when
+// the parent's concurrency slot and running-event mark are released. Chaining
+// from inside it left the parent holding its slot while the child asked for
+// one: with max_concurrent_events at 1 every child was refused with "max
+// concurrent events reached", and at the default of 3 a fan-out or a longer
+// chain dropped children whenever the race went the wrong way.
 func (s *Scheduler) executeChain(event config.EventConfig, depth int) {
+	ctx, ran := s.runWithSlot(event)
+	if !ran {
+		return
+	}
+	// After updateHistory so a chained event that reads the history sees the
+	// parent's completed run, and regardless of the parent's outcome — "run
+	// after" is about order, not success.
+	s.runChainedEvents(ctx, event.ID, depth)
+}
+
+// runWithSlot executes event under the concurrency limit and the
+// one-instance-per-event rule, recording its history. It reports whether the
+// event ran at all, and returns the context it ran under for anything that
+// follows it. The slot and the running mark are released by the time it
+// returns.
+func (s *Scheduler) runWithSlot(event config.EventConfig) (context.Context, bool) {
 	// Atomically check if event is already running and try to acquire semaphore
 	s.mu.Lock()
 	if s.runningEvents[event.ID] {
 		s.mu.Unlock()
 		slog.Warn("event skipped: already running", "id", event.ID, "name", event.Name)
-		return
+		return nil, false
 	}
 
 	// Capture the semaphore while locked: Reload replaces it when
@@ -307,7 +344,7 @@ func (s *Scheduler) executeChain(event config.EventConfig, depth int) {
 		// At concurrency limit, skip execution
 		slog.Warn("event skipped: max concurrent events reached",
 			"id", event.ID, "name", event.Name, "max_concurrent", maxConcurrent)
-		return
+		return nil, false
 	}
 
 	defer func() {
@@ -321,9 +358,5 @@ func (s *Scheduler) executeChain(event config.EventConfig, depth int) {
 
 	// Update history
 	s.updateHistory(result)
-
-	// Then anything chained to it. After updateHistory so a chained event that
-	// reads the history sees the parent's completed run, and regardless of the
-	// parent's outcome — "run after" is about order, not success.
-	s.runChainedEvents(ctx, event.ID, depth)
+	return ctx, true
 }
