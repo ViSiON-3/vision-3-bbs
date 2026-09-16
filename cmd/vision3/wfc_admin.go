@@ -161,6 +161,20 @@ func wfcAdminSubsystem(sess ssh.Session) {
 	// revocation (key removed, level lowered, WFC disabled) kicks the client.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// A console that vanishes without closing (sleeping laptop, dropped
+	// NAT mapping) would otherwise hold this goroutine, its subscriber, and
+	// its snapshot writer until the kernel gives up on the TCP connection.
+	// Keepalives bound that to roughly 25 seconds.
+	if conn, ok := sess.Context().Value(ssh.ContextKeyConn).(*gossh.ServerConn); ok && conn != nil {
+		stopKA := admin.KeepAlive(conn, admin.DefaultKeepAliveInterval, admin.DefaultKeepAliveTimeout, func(err error) {
+			slog.Info("wfc-admin: console stopped responding, closing session",
+				"user", handle, "addr", sess.RemoteAddr(), "reason", err)
+			_ = sess.Close() // unblocks ServeRPC's read loop
+			_ = conn.Close() // and tears down the dead transport
+		})
+		defer stopKA()
+	}
 	stillAuthorized := func(h string) bool { return authorizeAdminKey(h, keyBytes) }
 	go watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
 		slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr())

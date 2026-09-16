@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -99,7 +100,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, audit fun
 			audit(string(f.Command.Command))
 		}
 		res, err := srv.Execute(*f.Command)
-		out := &Frame{Kind: KindResult}
+		out := &Frame{Kind: KindResult, ID: f.ID}
 		if err != nil {
 			out.Kind = KindError
 			out.Err = err.Error()
@@ -125,6 +126,9 @@ type StreamClient struct {
 	events    chan Event
 	closeFn   func() error
 	once      sync.Once
+	done      chan struct{} // closed when readLoop exits; the link is dead after this
+	doneErr   error         // why readLoop exited; guarded by mu
+	nextID    atomic.Uint64 // last command ID issued
 }
 
 // NewStreamClient starts the read loop over rwc.
@@ -135,9 +139,32 @@ func NewStreamClient(rwc io.ReadWriteCloser) *StreamClient {
 		results:   make(chan *Frame, 4),
 		events:    make(chan Event, 256),
 		closeFn:   rwc.Close,
+		done:      make(chan struct{}),
 	}
 	go c.readLoop()
 	return c
+}
+
+// Done is closed once the read loop has exited, i.e. the connection can no
+// longer deliver snapshots or events. Implements Liveness.
+func (c *StreamClient) Done() <-chan struct{} { return c.done }
+
+// Err reports why the connection died (nil while it is still alive).
+// Implements Liveness.
+func (c *StreamClient) Err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.doneErr
+}
+
+// closed reports whether the read loop has exited.
+func (c *StreamClient) closed() bool {
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *StreamClient) readLoop() {
@@ -147,10 +174,14 @@ func (c *StreamClient) readLoop() {
 	// rather than blocking forever after the connection drops.
 	defer c.snapOnce.Do(func() { close(c.snapReady) })
 	defer close(c.results)
+	defer close(c.done)
 
 	for {
 		f, err := ReadFrame(c.rwc)
 		if err != nil {
+			c.mu.Lock()
+			c.doneErr = fmt.Errorf("admin: connection closed: %w", err)
+			c.mu.Unlock()
 			close(c.events)
 			return
 		}
@@ -180,7 +211,8 @@ func (c *StreamClient) readLoop() {
 
 // Snapshot waits for the initial snapshot from the server and returns it.
 // Subsequent calls return the most recently received snapshot immediately.
-// Returns an error if the connection closes before a snapshot is received.
+// Once the connection has died it returns the death reason instead of the
+// stale cached snapshot, so a caller polling Snapshot notices the loss.
 func (c *StreamClient) Snapshot(ctx context.Context) (*SystemSnapshot, error) {
 	select {
 	case <-c.snapReady:
@@ -189,6 +221,12 @@ func (c *StreamClient) Snapshot(ctx context.Context) (*SystemSnapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed() {
+		if c.doneErr != nil {
+			return nil, c.doneErr
+		}
+		return nil, fmt.Errorf("admin: connection closed")
+	}
 	if c.snap == nil {
 		return nil, fmt.Errorf("admin: connection closed before snapshot received")
 	}
@@ -202,24 +240,36 @@ func (c *StreamClient) Subscribe(ctx context.Context) (<-chan Event, error) {
 
 // Execute sends a command and waits for the result frame from the server.
 // Only one Execute is allowed in flight at a time; concurrent callers queue.
+//
+// Each command carries a fresh ID. If a caller gives up (ctx expires) the
+// server still finishes the command and sends its reply later; the next
+// Execute recognises that reply by its stale ID and drops it, so a timed-out
+// kick can never be reported as the outcome of the command after it. Replies
+// without an ID come from an older daemon and are taken at face value.
 func (c *StreamClient) Execute(ctx context.Context, cmd AdminCommand) (*Result, error) {
 	c.execMu.Lock()
 	defer c.execMu.Unlock()
 
-	if err := WriteFrame(c.rwc, &Frame{Kind: KindCommand, Command: &cmd}); err != nil {
+	id := c.nextID.Add(1)
+	if err := WriteFrame(c.rwc, &Frame{Kind: KindCommand, ID: id, Command: &cmd}); err != nil {
 		return nil, err
 	}
-	select {
-	case f, ok := <-c.results:
-		if !ok {
-			return nil, fmt.Errorf("admin: connection closed")
+	for {
+		select {
+		case f, ok := <-c.results:
+			if !ok {
+				return nil, fmt.Errorf("admin: connection closed")
+			}
+			if f.ID != 0 && f.ID != id {
+				continue // late reply to a command whose caller already gave up
+			}
+			if f.Kind == KindError {
+				return nil, errFromString(f.Err)
+			}
+			return f.Result, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-		if f.Kind == KindError {
-			return nil, errFromString(f.Err)
-		}
-		return f.Result, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
 	}
 }
 

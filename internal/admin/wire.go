@@ -9,7 +9,13 @@ import (
 
 // Frame is one message on the admin RPC channel.
 type Frame struct {
-	Kind     string          `json:"kind"`
+	Kind string `json:"kind"`
+	// ID correlates a command with its result: the client numbers each
+	// command and the server echoes the number on the reply. A client that
+	// gave up waiting on a command can then discard its late reply instead
+	// of mistaking it for the answer to the next command. Zero means the
+	// peer predates request IDs.
+	ID       uint64          `json:"id,omitempty"`
 	Snapshot *SystemSnapshot `json:"snapshot,omitempty"`
 	Event    *Event          `json:"event,omitempty"`
 	Command  *AdminCommand   `json:"command,omitempty"`

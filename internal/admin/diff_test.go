@@ -103,3 +103,24 @@ func TestDiffNodeIDTurnover(t *testing.T) {
 		t.Errorf("expected no menu/activity change events for turnover node, got menu=%d activity=%d", menuChanges, activityChanges)
 	}
 }
+
+func TestDiffEmitsLoginWhenHandleAppearsAndCarriesAddr(t *testing.T) {
+	now := time.Now()
+	prev := &SystemSnapshot{Time: now, Nodes: []NodeState{{NodeID: 1, RemoteAddr: "10.0.0.5:4000", ConnectedAt: now, CurrentMenu: "LOGIN"}}}
+	cur := &SystemSnapshot{Time: now.Add(time.Second), Nodes: []NodeState{{NodeID: 1, Handle: "Zed", RemoteAddr: "10.0.0.5:4000", ConnectedAt: now, CurrentMenu: "MAIN"}}}
+	events := DiffSnapshots(prev, cur)
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want login + menu: %+v", len(events), events)
+	}
+	if events[0].Type != EventCallerLoggedIn || events[0].Handle != "Zed" || events[0].Addr != "10.0.0.5:4000" {
+		t.Fatalf("login event = %+v", events[0])
+	}
+	if events[1].Type != EventMenuChanged || events[1].Addr != "10.0.0.5:4000" {
+		t.Fatalf("menu event = %+v", events[1])
+	}
+	// The disconnect of an anonymous connection still names it by address.
+	gone := DiffSnapshots(cur, &SystemSnapshot{Time: now.Add(2 * time.Second)})
+	if len(gone) != 1 || gone[0].Type != EventCallerDisconnected || gone[0].Addr != "10.0.0.5:4000" {
+		t.Fatalf("disconnect event = %+v", gone)
+	}
+}

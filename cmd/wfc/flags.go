@@ -31,7 +31,7 @@ type cliFlags struct {
 func registerFlags(fs *flag.FlagSet) *cliFlags {
 	f := &cliFlags{}
 	fs.StringVar(&f.connect, "connect", "", "SSH target: ssh://user@host:port (required)")
-	fs.BoolVar(&f.readonly, "readonly", false, "Disable admin commands (view only)")
+	fs.BoolVar(&f.readonly, "readonly", false, "Disable admin commands such as kick (view only)")
 	fs.BoolVar(&f.ascii, "ascii", false, "Use ASCII-only characters (no box-drawing)")
 	fs.BoolVar(&f.noColor, "no-color", false, "Disable color output")
 	fs.IntVar(&f.refresh, "refresh", 1000, "Snapshot poll interval in milliseconds")
