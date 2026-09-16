@@ -328,6 +328,7 @@ func TestViewKickConfirmBar(t *testing.T) {
 	m := makeModel(Options{}, 100, 30)
 	m.snapshot = mockupSnapshot(m.now())
 	m.selected = 1
+	m.kickTarget = m.snapshot.Nodes[1]
 	m.mode = modeConfirmKick
 	last := rows(m.View())[29]
 	if !strings.Contains(last, "Disconnect The Wolverine on node 2? [Y] yes [N] no") {

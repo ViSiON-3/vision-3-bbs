@@ -118,8 +118,8 @@ type Model struct {
 	// prompt acts on this, not on whatever the cursor index points at by
 	// the time Y is pressed, since a snapshot can reorder the list meanwhile.
 	kickTarget admin.NodeState
-	width    int
-	height   int
+	width      int
+	height     int
 	// scrollBack is how many log lines the lower box is held back from
 	// the newest entry (PgUp/PgDn); zero follows the tail.
 	scrollBack int
