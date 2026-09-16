@@ -129,6 +129,13 @@ func DialSSHContext(ctx context.Context, cfg SSHDialConfig) (*SSHChannelClient, 
 	sshConn, chans, reqs, err := gossh.NewClientConn(tcp, cfg.Addr, clientCfg)
 	close(handshakeDone)
 	<-watcherDone
+	if err == nil && dialCtx.Err() != nil {
+		// The caller cancelled during the handshake and the watcher may
+		// have picked that case and closed tcp; report the cancellation
+		// rather than letting session setup fail on a dead transport.
+		_ = sshConn.Close()
+		return nil, fmt.Errorf("admin: ssh dial %s: %w", cfg.Addr, ctx.Err())
+	}
 	if err != nil {
 		_ = tcp.Close() // cleanup on error path
 		if ctxErr := ctx.Err(); ctxErr != nil {

@@ -326,13 +326,12 @@ func (m *Model) pushLocalEvent(text string) {
 // appendServerEvent adds an event from the daemon unless the feed already
 // holds an identical one. Subscribe replays the server's ring buffer on every
 // new link, so after a reconnect the recent history arrives again; without
-// this, each reconnect would duplicate the log.
+// this, each reconnect would duplicate the log. The whole bounded feed is
+// scanned: console-originated lines carry the local clock, so timestamp order
+// is not slice order and an early exit could miss the match.
 func (m *Model) appendServerEvent(ev admin.Event) {
 	for i := len(m.events) - 1; i >= 0; i-- {
 		e := m.events[i]
-		if e.Time.Before(ev.Time) {
-			break // events arrive in time order; nothing older can match
-		}
 		if e.Time.Equal(ev.Time) && e.Type == ev.Type && e.NodeID == ev.NodeID &&
 			e.Handle == ev.Handle && e.Addr == ev.Addr && e.Message == ev.Message {
 			return
@@ -604,6 +603,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			who = fmt.Sprintf("node %d", msg.nodeID)
 		} else {
 			who = fmt.Sprintf("%s (node %d)", who, msg.nodeID)
+		}
+		if errors.Is(msg.err, context.DeadlineExceeded) {
+			// The daemon may still complete the kick; the reply, if it
+			// comes, is discarded by the transport as stale.
+			m.setStatus("Kick of "+who+" timed out; outcome unknown", true)
+			m.pushLocalEvent("Kick of " + who + " timed out; outcome unknown")
+			return m, nil
 		}
 		if msg.err != nil {
 			m.setStatus("Kick failed: "+errText(msg.err), true)

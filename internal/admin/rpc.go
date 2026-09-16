@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -99,7 +100,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, audit fun
 			audit(string(f.Command.Command))
 		}
 		res, err := srv.Execute(*f.Command)
-		out := &Frame{Kind: KindResult}
+		out := &Frame{Kind: KindResult, ID: f.ID}
 		if err != nil {
 			out.Kind = KindError
 			out.Err = err.Error()
@@ -127,6 +128,7 @@ type StreamClient struct {
 	once      sync.Once
 	done      chan struct{} // closed when readLoop exits; the link is dead after this
 	doneErr   error         // why readLoop exited; guarded by mu
+	nextID    atomic.Uint64 // last command ID issued
 }
 
 // NewStreamClient starts the read loop over rwc.
@@ -238,24 +240,36 @@ func (c *StreamClient) Subscribe(ctx context.Context) (<-chan Event, error) {
 
 // Execute sends a command and waits for the result frame from the server.
 // Only one Execute is allowed in flight at a time; concurrent callers queue.
+//
+// Each command carries a fresh ID. If a caller gives up (ctx expires) the
+// server still finishes the command and sends its reply later; the next
+// Execute recognises that reply by its stale ID and drops it, so a timed-out
+// kick can never be reported as the outcome of the command after it. Replies
+// without an ID come from an older daemon and are taken at face value.
 func (c *StreamClient) Execute(ctx context.Context, cmd AdminCommand) (*Result, error) {
 	c.execMu.Lock()
 	defer c.execMu.Unlock()
 
-	if err := WriteFrame(c.rwc, &Frame{Kind: KindCommand, Command: &cmd}); err != nil {
+	id := c.nextID.Add(1)
+	if err := WriteFrame(c.rwc, &Frame{Kind: KindCommand, ID: id, Command: &cmd}); err != nil {
 		return nil, err
 	}
-	select {
-	case f, ok := <-c.results:
-		if !ok {
-			return nil, fmt.Errorf("admin: connection closed")
+	for {
+		select {
+		case f, ok := <-c.results:
+			if !ok {
+				return nil, fmt.Errorf("admin: connection closed")
+			}
+			if f.ID != 0 && f.ID != id {
+				continue // late reply to a command whose caller already gave up
+			}
+			if f.Kind == KindError {
+				return nil, errFromString(f.Err)
+			}
+			return f.Result, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-		if f.Kind == KindError {
-			return nil, errFromString(f.Err)
-		}
-		return f.Result, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
 	}
 }
 

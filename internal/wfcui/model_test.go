@@ -659,3 +659,31 @@ func TestKickCommandCarriesConnectTime(t *testing.T) {
 		t.Fatalf("kick command = %+v, want ConnectedAt %v", fc.execs, started)
 	}
 }
+
+func TestReplayDedupSurvivesClockSkew(t *testing.T) {
+	fc := newFakeClient()
+	m, ck := newTestModel(fc, Options{})
+	// The daemon's clock runs ahead of the console's.
+	server := admin.Event{Time: ck.t.Add(time.Hour), Type: admin.EventMenuChanged, NodeID: 1, Handle: "Zed", Message: "MAIN"}
+	m, _ = update(t, m, eventMsg{connID: m.connID, ch: fc.events, ev: server, ok: true})
+	m, _ = update(t, m, connLostMsg{connID: m.connID, err: errors.New("gone")}) // local event, earlier timestamp
+	m, _ = update(t, m, dialResultMsg{connID: m.connID, client: newFakeClient()})
+	m, _ = update(t, m, eventMsg{connID: m.connID, ch: fc.events, ev: server, ok: true}) // replay
+	n := 0
+	for _, ev := range m.events {
+		if ev.Type == admin.EventMenuChanged {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("replayed event duplicated under clock skew: %+v", m.events)
+	}
+}
+
+func TestKickTimeoutReportedAsUnknown(t *testing.T) {
+	m, _ := newTestModel(newFakeClient(), Options{})
+	m, _ = update(t, m, kickResultMsg{connID: m.connID, nodeID: 2, handle: "Zed", err: context.DeadlineExceeded})
+	if !m.statusErr || !strings.Contains(m.status, "timed out; outcome unknown") {
+		t.Fatalf("status = %q", m.status)
+	}
+}

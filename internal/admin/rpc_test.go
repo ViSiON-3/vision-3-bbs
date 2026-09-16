@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -85,5 +86,37 @@ func TestStreamClientReportsDeadLink(t *testing.T) {
 	}
 	if _, err := c.Execute(ctx, AdminCommand{Command: CommandRefresh}); err == nil {
 		t.Fatal("Execute must fail on a dead link")
+	}
+}
+
+// TestExecuteDiscardsLateReplyOfTimedOutCommand: a command whose caller gave
+// up still completes on the server; its reply must not be handed to the next
+// command as if it were that command's result.
+func TestExecuteDiscardsLateReplyOfTimedOutCommand(t *testing.T) {
+	release := make(chan struct{})
+	srv := NewServer(ServerConfig{
+		Reg: &fakeRegistry{}, Refresh: time.Hour, MaxEvents: 8,
+		Kick: func(int, time.Time) error { <-release; return nil },
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cliConn, srvConn := net.Pipe()
+	go func() { _ = ServeRPC(ctx, srvConn, srv, nil) }()
+	c := NewStreamClient(cliConn)
+	defer c.Close()
+	if _, err := c.Snapshot(ctx); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+
+	short, cancelShort := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancelShort()
+	if _, err := c.Execute(short, AdminCommand{Command: CommandKick, NodeID: 1}); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("blocked kick should time out, got %v", err)
+	}
+	close(release) // the kick now completes and its reply arrives late
+
+	res, err := c.Execute(ctx, AdminCommand{Command: CommandRefresh})
+	if err != nil || res == nil || !res.OK || res.Message != "" {
+		t.Fatalf("refresh got the kick's late reply or failed: res=%+v err=%v", res, err)
 	}
 }
