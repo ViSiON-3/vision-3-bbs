@@ -37,21 +37,55 @@ type NodeState struct {
 }
 
 // Counters holds header counters populated only from existing data sources.
+// Every counter other than ActiveNodes uses -1 to mean "unavailable".
 type Counters struct {
 	ActiveNodes int `json:"activeNodes"`
-	CallsToday  int `json:"callsToday"` // -1 if unavailable
+	TotalUsers  int `json:"totalUsers"`  // registered (not deleted) accounts; -1 if unavailable
+	CallsToday  int `json:"callsToday"`  // logins since local midnight; -1 if unavailable
+	NewUsers    int `json:"newUsers"`    // accounts awaiting validation; -1 if unavailable
+	MailWaiting int `json:"mailWaiting"` // unread private mail for the SysOp; -1 if unavailable
 }
+
+// SnapshotSchema is the schema version a current daemon stamps on every
+// snapshot. A console compares it to decide which fields the daemon actually
+// reports: an older daemon leaves Schema at zero, and the console then shows
+// "-" for the newer counters instead of a misleading zero.
+const SnapshotSchema = 2
 
 // SystemSnapshot is a point-in-time view of the whole system.
 type SystemSnapshot struct {
-	Time       time.Time   `json:"time"`
-	SystemName string      `json:"systemName"`
-	UptimeSecs int64       `json:"uptimeSecs"`
-	Nodes      []NodeState `json:"nodes"`
-	Counters   Counters    `json:"counters"`
+	Schema     int       `json:"schema,omitempty"`
+	Time       time.Time `json:"time"`
+	SystemName string    `json:"systemName"`
+	UptimeSecs int64     `json:"uptimeSecs"`
+	// MaxNodes is the configured node limit, so the console can draw a slot
+	// for every node the board answers. Zero when the daemon does not report it.
+	MaxNodes int         `json:"maxNodes,omitempty"`
+	Nodes    []NodeState `json:"nodes"`
+	Counters Counters    `json:"counters"`
 	// PendingReloads names structural config files whose reload is queued
 	// for the next idle window (empty when nothing is pending).
 	PendingReloads []string `json:"pendingReloads,omitempty"`
+	// ScheduledEvents is the event scheduler's configured events with their
+	// run history, for the console's Events tab. Nil when the daemon has no
+	// scheduler.
+	ScheduledEvents []ScheduledEvent `json:"scheduledEvents,omitempty"`
+}
+
+// ScheduledEvent is one event-scheduler entry as shown on the console.
+type ScheduledEvent struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Schedule       string    `json:"schedule,omitempty"` // cron spec; empty for startup-only
+	Enabled        bool      `json:"enabled"`
+	RunAtStartup   bool      `json:"runAtStartup,omitempty"`
+	Running        bool      `json:"running"`
+	NextRun        time.Time `json:"nextRun,omitzero"`
+	LastRun        time.Time `json:"lastRun,omitzero"`
+	LastStatus     string    `json:"lastStatus,omitempty"` // success | failure | timeout
+	LastDurationMs int64     `json:"lastDurationMs,omitempty"`
+	RunCount       int       `json:"runCount"`
+	FailureCount   int       `json:"failureCount"`
 }
 
 // EventType enumerates diff-synthesized event kinds.
@@ -60,8 +94,14 @@ type EventType string
 const (
 	EventCallerConnected    EventType = "caller.connected"
 	EventCallerDisconnected EventType = "caller.disconnected"
-	EventMenuChanged        EventType = "menu.changed"
-	EventActivityChanged    EventType = "activity.changed"
+	// EventCallerLoggedIn fires when a connection acquires a user: the point
+	// at which an anonymous connection becomes a caller.
+	EventCallerLoggedIn  EventType = "caller.login"
+	EventMenuChanged     EventType = "menu.changed"
+	EventActivityChanged EventType = "activity.changed"
+	// EventNodeKicked is emitted by the server when an admin command
+	// disconnects a caller, so every console sees who was dropped and why.
+	EventNodeKicked EventType = "node.kicked"
 )
 
 // Event is a single entry in the live event feed.
@@ -70,14 +110,18 @@ type Event struct {
 	Type    EventType `json:"type"`
 	NodeID  int       `json:"nodeId"`
 	Handle  string    `json:"handle"`
+	Addr    string    `json:"addr,omitempty"` // remote address; names an anonymous connection
 	Message string    `json:"message"`
 }
 
-// CommandType enumerates admin commands. v1 implements only CommandRefresh.
+// CommandType enumerates admin commands.
 type CommandType string
 
 const (
+	// CommandRefresh asks the server to rebuild its snapshot now.
 	CommandRefresh CommandType = "system.refresh"
+	// CommandKick disconnects the caller on AdminCommand.NodeID.
+	CommandKick CommandType = "node.kick"
 )
 
 // AdminCommand is a request to the server to perform an action.
@@ -99,4 +143,13 @@ type AdminClient interface {
 	Subscribe(ctx context.Context) (<-chan Event, error)
 	Execute(ctx context.Context, cmd AdminCommand) (*Result, error)
 	Close() error
+}
+
+// Liveness is optionally implemented by clients whose transport can die
+// underneath them. Done is closed once the connection is unusable; Err then
+// reports why. The TUI uses it to notice a dropped link immediately instead
+// of waiting for the next request to fail.
+type Liveness interface {
+	Done() <-chan struct{}
+	Err() error
 }

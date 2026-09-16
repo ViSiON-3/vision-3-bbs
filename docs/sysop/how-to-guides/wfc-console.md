@@ -1,13 +1,15 @@
 # WFC Sysop Console (`wfc`)
 
-`wfc` is a **Waiting-For-Caller** console: a live, read-only view of who's
-online, what each node is doing, and a feed of recent system events. You run it
-on your own machine (laptop, desktop, another server) and it connects to a
-running ViSiON/3 daemon over the BBS's **existing SSH server** — so it works
-the same whether the BBS is on localhost or hosted in the cloud.
+`wfc` is a **Waiting-For-Caller** console: a live view of who's online, what
+each node is doing, the event scheduler's status, and logs of caller and bot
+activity, with a **kick** command to drop a caller. You run it on your
+own machine (laptop, desktop, another server) and it connects to a running
+ViSiON/3 daemon over the BBS's **existing SSH server** — so it works the same
+whether the BBS is on localhost or hosted in the cloud.
 
-This version is **monitor-only**: it does not disconnect nodes, send messages,
-or start sysop chat. Those are planned for a later release.
+If the link to the BBS drops, the console **reconnects on its own** and keeps
+going; you never have to restart it. Sysop chat and paging a caller are not in
+this release.
 
 ## Requirements to access WFC
 
@@ -160,94 +162,154 @@ wfc --connect ssh://Felonius@your-bbs-host:2222 --identity ~/.ssh/id_ed25519
 | `--no-color` | Disable color |
 | `--refresh <ms>` | Snapshot poll interval in milliseconds (default 1000) |
 | `--max-events <n>` | Events kept in the feed (default 200) |
-| `--readonly` | View-only (always true in this version) |
+| `--readonly` | View-only: hides and disables the kick command |
 | `--version` / `--help` | Print version / usage |
 
 ## Console functions
 
-The console is a single full-screen view with four parts: a status header, the
-node table, an optional event log, and a command bar. It refreshes on its own
-(once a second by default; tune with `--refresh`).
+The console is a single full-screen view: a title bar, a row of counters, an
+**Online Now** box listing live callers, a **tabbed lower box** showing the
+callers' log, the bot log, or scheduled events, and a command bar. The caller box is
+only as tall as it needs to be and the lower box takes the rest. It
+needs at least an 80×25 terminal and uses any extra size it is given. It
+refreshes on its own (once a second by default; tune with `--refresh`).
 
-### Status header
+### Title bar and counters
 
-One line across the top with live system stats:
+The title bar shows the BBS name (from `config.json`; `ViSiON/3 WFC` until the
+first snapshot arrives) and, at the right, the console version — or the link
+state when something is wrong (see [Reconnecting](#reconnecting) below). A
+queued structural config reload is flagged here as `RELOAD PENDING`.
 
-| Field | Meaning |
-|-------|---------|
-| System name | The BBS name from `config.json` (falls back to `ViSiON/3 WFC` before the first snapshot arrives) |
-| `Nodes` | Number of currently active nodes (connections) |
-| `Calls Today` | Calls answered since midnight; shows `—` if the counter is unavailable |
-| `Uptime` | How long the daemon has been running, as `Xd Xh Xm` |
-| Clock | Current local time on *your* machine (`HH:MM:SS`) |
+The counter row underneath:
 
-### Node table
+| Counter | Meaning |
+|---------|---------|
+| `Total Users` | Registered accounts (soft-deleted ones excluded) |
+| `New Users` | Accounts waiting for sysop validation (not validated, not banned, not deleted) |
+| `Mail Waiting` | Unread private mail addressed to the SysOp account (user #1) |
+| `Calls Today` | Logins since local midnight: calls in the history plus callers still online |
+| `Uptime` | How long the daemon has been running, as `HH:MM:SS` (with a day count past 24h) |
 
-One row per active connection, including callers still at the login prompt:
+The row is centred; on an 80-column terminal the labels shorten to `Users`,
+`New`, `Mail`, `Calls` and `Uptime` so all five fit. A `-` means the daemon could not supply that figure (no PRIVMAIL area, no
+user #1). An **older daemon** that predates a counter also shows `-` there,
+and its Events tab says so, until the BBS is updated. The counters that scan
+data are refreshed every few seconds rather than every tick.
+
+### Online Now
+
+The upper box lists **live callers only** — one row per logged-in user:
 
 | Column | Meaning |
 |--------|---------|
-| `Handle` | The caller's handle, or `(login)` if not yet logged in |
-| `Status` | Coarse node status — see below |
-| `Activity` | What the caller is doing right now (e.g. reading messages), if the current screen reports it |
-| `Menu` | The menu the caller is currently in |
-| `Address` | The caller's remote IP address and port |
+| `Handle` | The caller's handle |
+| `Activity` | What the caller is doing, or `Menu: NAME` when the screen reports nothing more specific |
+| `On` | Time online (`4m`, `1h10m`, `2d3h`) |
+| `Address` | Remote IP address (the port is left out; the details view has it) |
+| `N#` | Node number |
 
-Status values:
+With nobody on, the box shows a single `...waiting...` row.
 
-- **`login`** — connected but not yet authenticated
-- **`online`** — logged in
-- **`menu`** — logged in and sitting in a menu (no other activity reported)
-- **`chat`** / **`idle`** — reserved for later releases
+### Lower box: Callers, Bots, Events
 
-Use `↑`/`↓` to select a row and `Enter` to open the details view.
+`TAB` (and `Shift+TAB`) cycles the lower box through three views; the active
+tab is highlighted.
 
-### Node details
+**Callers** — the activity log for real callers, newest at the bottom, each
+line stamped `HH:MM:SS` with the handle involved:
 
-`Enter` on a node shows everything the daemon knows about that session: node
-number, status, handle, user ID, access level, remote address, current menu,
-current activity, connect time, last-activity time, and **time left** in the
-caller's session (minutes remaining against their time limit, `(unknown)` if
-the account has no limit). `Esc` returns to the node table.
+| Line | Fired when |
+|------|-----------|
+| `Logged on` | A connection finishes logging in and becomes a caller |
+| `Menu: NAME` | A caller moves to a different menu |
+| *activity text* | A caller's reported activity changes |
+| `Disconnected` | A caller drops or logs off |
+| `Kicked by sysop` | A console disconnected that caller |
+| `Connection lost: …` / `Reconnected` | The console's own link to the BBS dropped or came back |
 
-### Event log
+**Bots** — the same kind of log for **anonymous connections**: port scanners,
+probes, and callers who have not logged in yet, named by IP address with
+`Connected` / `Disconnected` lines and the node they used. The count in the
+tab label is how many such connections are open right now; on a public board
+they usually come and go within a second or two, which is why the count is
+normally 0 while the log keeps filling. Keeping this traffic out of the
+Callers log is what makes that log readable.
 
-Press `L` to split the screen and show a live feed of recent system events,
-newest at the bottom, each stamped `HH:MM:SS` with the handle involved:
+**Events** — the event scheduler's entries from `events.json`:The caller box is exactly as tall as the callers online, so with two callers
+the lower box gets almost the whole screen; when a list is longer than the
+space available it scrolls to keep the selected row visible, and the lower box
+always keeps at least three rows.
 
-| Event | Fired when |
-|-------|-----------|
-| `caller.connected` | A new connection appears |
-| `caller.disconnected` | A node drops or logs off |
-| `menu.changed` | A caller moves to a different menu |
-| `activity.changed` | A caller's reported activity changes |
+**Where the cursor is.** On the Callers and Bots tabs, `↑`/`↓`, `Enter` and
+`K` act on the callers in Online Now. Open the Events tab and the cursor moves
+to that list instead (the caller rows lose their highlight); switch away from
+Events to return it to the callers.
 
-The feed keeps the most recent events in memory (200 by default; adjust with
-`--max-events`). Press `L` again to hide the log and give the node table the
-full screen.
+### Details
 
-### Refresh and reconnect
+`Enter` on a caller or bot shows everything the daemon knows about that
+session: node, status, handle, user ID, access level, remote address, current
+menu, activity, connect time, time online, last-activity time, and **time
+left** in the caller's session (`(unknown)` if the account has no limit).
+`Enter` on a scheduled event shows its ID, schedule, next and last run, last
+result and duration, and run/failure counts. `Esc` (or `Enter`) closes the
+overlay; `↑`/`↓` move to the next row without closing it.
 
-The console polls the daemon for a fresh snapshot once a second (configurable
-with `--refresh`) and receives events as they happen; `R` forces an immediate
-refresh. If the SSH connection drops, a **Disconnected** banner replaces the
-screen — press `R` to reconnect (the console re-subscribes to the event feed
-automatically) or `Q` to quit.
+### Kicking a caller
+
+`K` on a selected caller asks for confirmation in the command bar
+(`[Y] yes [N] no`), then disconnects that node. The caller sees a short
+"disconnected by the SysOp" notice, their session ends through the normal
+hang-up path (so the disconnect is logged and the node is freed), and every
+connected console gets a `Kicked by sysop` line in its Callers log. Kicks are
+audited in the BBS log with the admin's handle. `--readonly` hides the command
+entirely.
+
+### Scrolling the logs
+
+Both logs follow their newest entry. `PgUp` scrolls back a screenful at a
+time and `PgDn` returns toward the tail; while scrolled back, the header row
+shows how many newer lines lie below (`12 newer - PgDn`). On the Events tab
+`PgUp`/`PgDn` move the cursor a page at a time. Each log keeps the most recent
+events in memory (200 by default; adjust with `--max-events`), and switching
+tabs jumps back to the tail.
+
+### Reconnecting
+
+The console watches its link to the BBS three ways: the event stream, the
+once-a-second snapshot feed, and SSH keepalives (every 15 seconds, answered
+within 10). A dropped connection — the BBS restarting, a laptop waking from
+sleep, a NAT mapping expiring — is noticed within about 25 seconds at worst
+and usually at once.
+
+When the link drops the screen stays up: the title bar switches to
+`OFFLINE - retry in Ns`, the Online Now caption turns red, the last known rows are
+dimmed, and the Callers log records `Connection lost:` with the reason. The
+console then redials on its own, backing off from 1 second up to 30 seconds
+between attempts, and logs `Reconnected` when the BBS is back. Press `R` to
+retry immediately instead of waiting, or `Q` to quit. If the snapshot feed
+stalls for 30 seconds while the connection still looks alive, the console
+treats that as a dead link and reconnects too.
+
+While connected, `R` asks the daemon for an immediate refresh.
+
+The very first connection is different: if it fails (wrong key, unknown host,
+access denied) `wfc` prints the error and exits, so a misconfiguration is
+reported plainly instead of turning into a retry loop.
 
 ## Navigating the console
 
 | Key | Action |
 |-----|--------|
-| `↑` / `↓` | Select a node |
-| `Enter` | Show node details |
-| `Esc` | Back to the node list |
-| `R` | Refresh now (also reconnect when disconnected) |
-| `L` | Show/hide the event log panel |
+| `↑` / `↓` / `Home` / `End` | Select a row |
+| `TAB` / `Shift+TAB` | Switch the lower box between Callers, Bots and Events |
+| `Enter` | Show details for the selected row |
+| `Esc` | Close the details overlay |
+| `K` | Kick the selected caller (asks `Y`/`N` first) |
+| `PgUp` / `PgDn` | Scroll the log back / forward (page the cursor on Events) |
+| `R` | Refresh now (not shown on the bar); retry the connection now when offline |
 | `Q` / `Ctrl+C` | Quit |
-
-The screen refreshes about once a second on its own. If the connection drops,
-the console shows a **Disconnected** banner; press `R` to reconnect or `Q` to
-quit — it will not crash.
 
 ## Troubleshooting
 
@@ -306,9 +368,13 @@ login because it didn't match a qualifying account.
 - **Sanitized display.** Caller-supplied text (handles) is stripped of
   terminal control characters before rendering, and control characters are
   rejected in new handles at registration.
-- **Audited.** Every admin session open/close (and every command) is written to
-  the BBS log via structured logging. Unknown public-key offers are logged at
-  debug level with the key fingerprint.
+- **Audited.** Every admin session open/close and every command — including
+  each kick, with the admin's handle and address — is written to the BBS log
+  via structured logging. Unknown public-key offers are logged at debug level
+  with the key fingerprint.
+- **Kick is the only mutation.** Any account that can open the console can
+  disconnect any node; there is no separate permission level. Run remote
+  consoles with `--readonly` if a co-sysop should only watch.
 - **Host-key verified.** The client checks the daemon's SSH host key against
   `known_hosts` unless you pass `--insecure`.
 

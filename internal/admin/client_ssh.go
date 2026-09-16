@@ -1,9 +1,11 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 	"time"
 
@@ -26,6 +28,13 @@ type SSHDialConfig struct {
 	// Insecure disables host key verification. Only for development/testing;
 	// never use in production.
 	Insecure bool
+	// Timeout bounds the TCP connect and SSH handshake. Zero means 10s.
+	Timeout time.Duration
+	// KeepAliveInterval and KeepAliveTimeout tune dead-peer detection. Zero
+	// selects DefaultKeepAliveInterval / DefaultKeepAliveTimeout; a negative
+	// interval disables keepalives (tests only).
+	KeepAliveInterval time.Duration
+	KeepAliveTimeout  time.Duration
 }
 
 // SSHChannelClient is an AdminClient backed by an SSH wfc-admin subsystem
@@ -33,22 +42,45 @@ type SSHDialConfig struct {
 // underlying ssh.Client connection so both can be closed together.
 type SSHChannelClient struct {
 	*StreamClient
-	conn *gossh.Client
+	conn      *gossh.Client
+	stopKA    func()
+	closeOnce sync.Once
+	closeErr  error
 }
 
-// Close closes the admin stream and the underlying SSH connection.
+// Close closes the admin stream and the underlying SSH connection. It is
+// safe to call more than once.
 func (c *SSHChannelClient) Close() error {
-	streamErr := c.StreamClient.Close()
-	connErr := c.conn.Close()
-	return errors.Join(streamErr, connErr)
+	c.closeOnce.Do(func() {
+		if c.stopKA != nil {
+			c.stopKA()
+		}
+		streamErr := c.StreamClient.Close()
+		connErr := c.conn.Close()
+		c.closeErr = errors.Join(streamErr, connErr)
+	})
+	return c.closeErr
 }
 
 // DialSSH connects to the SSH server at cfg.Addr, opens the wfc-admin
-// subsystem channel, and returns an AdminClient ready to use.
+// subsystem channel, and returns an AdminClient ready to use. It is
+// DialSSHContext with a background context.
+func DialSSH(cfg SSHDialConfig) (*SSHChannelClient, error) {
+	return DialSSHContext(context.Background(), cfg)
+}
+
+// DialSSHContext is DialSSH with a context that can abandon the connect and
+// handshake early (the console uses it so a quit during a reconnect attempt
+// does not wait out the dial timeout).
 //
 // Host key verification uses knownhosts.New(cfg.KnownHostsPath) unless
 // cfg.Insecure is true, in which case ssh.InsecureIgnoreHostKey() is used.
-func DialSSH(cfg SSHDialConfig) (*SSHChannelClient, error) {
+//
+// The returned client sends SSH keepalives so a peer that vanishes without a
+// FIN (sleep, network change, crash) is detected within roughly
+// KeepAliveInterval+KeepAliveTimeout; the connection is then closed, which
+// surfaces through Liveness.Done and as errors from Snapshot/Execute.
+func DialSSHContext(ctx context.Context, cfg SSHDialConfig) (*SSHChannelClient, error) {
 	var hostKeyCallback gossh.HostKeyCallback
 	if cfg.Insecure {
 		hostKeyCallback = gossh.InsecureIgnoreHostKey() //nolint:gosec // intentionally insecure in dev
@@ -60,19 +92,45 @@ func DialSSH(cfg SSHDialConfig) (*SSHChannelClient, error) {
 		hostKeyCallback = cb
 	}
 
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
 	clientCfg := &gossh.ClientConfig{
 		User: cfg.User,
 		Auth: []gossh.AuthMethod{
 			gossh.PublicKeys(cfg.Signer),
 		},
 		HostKeyCallback: hostKeyCallback,
-		Timeout:         10 * time.Second,
+		Timeout:         timeout,
 	}
 
-	conn, err := gossh.Dial("tcp", cfg.Addr, clientCfg)
+	dialCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	tcp, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", cfg.Addr)
 	if err != nil {
 		return nil, fmt.Errorf("admin: ssh dial %s: %w", cfg.Addr, err)
 	}
+	// The handshake honours ClientConfig.Timeout via a deadline on tcp, but
+	// not ctx; closing the socket on cancellation is what aborts it early.
+	handshakeDone := make(chan struct{})
+	go func() {
+		select {
+		case <-dialCtx.Done():
+			_ = tcp.Close() // aborts a handshake that is still in progress
+		case <-handshakeDone:
+		}
+	}()
+	sshConn, chans, reqs, err := gossh.NewClientConn(tcp, cfg.Addr, clientCfg)
+	close(handshakeDone)
+	if err != nil {
+		_ = tcp.Close() // cleanup on error path
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("admin: ssh dial %s: %w", cfg.Addr, ctxErr)
+		}
+		return nil, fmt.Errorf("admin: ssh dial %s: %w", cfg.Addr, err)
+	}
+	conn := gossh.NewClient(sshConn, chans, reqs)
 
 	sess, err := conn.NewSession()
 	if err != nil {
@@ -90,10 +148,18 @@ func DialSSH(cfg SSHDialConfig) (*SSHChannelClient, error) {
 	rwc := &sshSessionRWC{sess: sess}
 	streamClient := NewStreamClient(rwc)
 
-	return &SSHChannelClient{
+	client := &SSHChannelClient{
 		StreamClient: streamClient,
 		conn:         conn,
-	}, nil
+	}
+	if cfg.KeepAliveInterval >= 0 {
+		client.stopKA = KeepAlive(conn, cfg.KeepAliveInterval, cfg.KeepAliveTimeout, func(error) {
+			// Closing the SSH connection makes the session reader return, so
+			// the StreamClient read loop exits and Done() fires.
+			_ = conn.Close()
+		})
+	}
+	return client, nil
 }
 
 // sshSessionRWC wraps an *gossh.Session, combining its stdin writer and

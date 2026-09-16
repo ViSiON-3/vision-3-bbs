@@ -22,7 +22,7 @@ func TestBuildSnapshotMapsFields(t *testing.T) {
 		{NodeID: 2, User: nil, CurrentMenu: "", StartTime: now}, // pre-auth
 	}}
 
-	snap := BuildSnapshot(reg, "Test BBS", start, now, 14)
+	snap := BuildSnapshot(reg, "Test BBS", start, now, Counters{CallsToday: 14, NewUsers: -1, MailWaiting: -1})
 
 	if snap.SystemName != "Test BBS" || snap.UptimeSecs != 600 {
 		t.Fatalf("header wrong: %+v", snap)

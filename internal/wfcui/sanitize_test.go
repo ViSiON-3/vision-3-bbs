@@ -51,14 +51,17 @@ func TestNodeTableStripsControlBytes(t *testing.T) {
 func TestEventFeedStripsControlBytes(t *testing.T) {
 	m := makeModel(Options{NoColor: true, ASCII: true}, 100, 30)
 	m.mode = modeList
-	m.showLogs = true
 	m.snapshot = &admin.SystemSnapshot{SystemName: "TestBBS", Time: time.Now()}
 	m.events = []admin.Event{
-		{Time: time.Now(), Type: admin.EventCallerConnected, NodeID: 2,
-			Handle: hostileHandle, Message: "caller\x1b[31m connected"},
+		{Time: time.Now(), Type: admin.EventMenuChanged, NodeID: 2,
+			Handle: hostileHandle, Message: "MAIN\x1b[31m"},
+		{Time: time.Now(), Type: admin.EventCallerConnected, NodeID: 3,
+			Addr: "10.0.0.1:9\x1b[2J", Message: "connected"},
 	}
 	got := m.View()
-	assertNoControlBytes(t, "event feed", got)
+	assertNoControlBytes(t, "callers log", got)
+	m.tab = groupBots
+	assertNoControlBytes(t, "bot log", m.View())
 }
 
 // TestDetailsViewStripsControlBytes verifies a hostile handle cannot inject

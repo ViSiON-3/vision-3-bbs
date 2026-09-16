@@ -125,6 +125,8 @@ type StreamClient struct {
 	events    chan Event
 	closeFn   func() error
 	once      sync.Once
+	done      chan struct{} // closed when readLoop exits; the link is dead after this
+	doneErr   error         // why readLoop exited; guarded by mu
 }
 
 // NewStreamClient starts the read loop over rwc.
@@ -135,9 +137,32 @@ func NewStreamClient(rwc io.ReadWriteCloser) *StreamClient {
 		results:   make(chan *Frame, 4),
 		events:    make(chan Event, 256),
 		closeFn:   rwc.Close,
+		done:      make(chan struct{}),
 	}
 	go c.readLoop()
 	return c
+}
+
+// Done is closed once the read loop has exited, i.e. the connection can no
+// longer deliver snapshots or events. Implements Liveness.
+func (c *StreamClient) Done() <-chan struct{} { return c.done }
+
+// Err reports why the connection died (nil while it is still alive).
+// Implements Liveness.
+func (c *StreamClient) Err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.doneErr
+}
+
+// closed reports whether the read loop has exited.
+func (c *StreamClient) closed() bool {
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *StreamClient) readLoop() {
@@ -147,10 +172,14 @@ func (c *StreamClient) readLoop() {
 	// rather than blocking forever after the connection drops.
 	defer c.snapOnce.Do(func() { close(c.snapReady) })
 	defer close(c.results)
+	defer close(c.done)
 
 	for {
 		f, err := ReadFrame(c.rwc)
 		if err != nil {
+			c.mu.Lock()
+			c.doneErr = fmt.Errorf("admin: connection closed: %w", err)
+			c.mu.Unlock()
 			close(c.events)
 			return
 		}
@@ -180,7 +209,8 @@ func (c *StreamClient) readLoop() {
 
 // Snapshot waits for the initial snapshot from the server and returns it.
 // Subsequent calls return the most recently received snapshot immediately.
-// Returns an error if the connection closes before a snapshot is received.
+// Once the connection has died it returns the death reason instead of the
+// stale cached snapshot, so a caller polling Snapshot notices the loss.
 func (c *StreamClient) Snapshot(ctx context.Context) (*SystemSnapshot, error) {
 	select {
 	case <-c.snapReady:
@@ -189,6 +219,12 @@ func (c *StreamClient) Snapshot(ctx context.Context) (*SystemSnapshot, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed() {
+		if c.doneErr != nil {
+			return nil, c.doneErr
+		}
+		return nil, fmt.Errorf("admin: connection closed")
+	}
 	if c.snap == nil {
 		return nil, fmt.Errorf("admin: connection closed before snapshot received")
 	}

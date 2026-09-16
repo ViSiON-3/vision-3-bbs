@@ -47,3 +47,43 @@ func TestRPCStreamClientServer(t *testing.T) {
 		t.Fatal("expected an event over the RPC stream")
 	}
 }
+
+// TestStreamClientReportsDeadLink: once the peer goes away, Done fires,
+// Snapshot stops handing out the stale cached snapshot, and Execute fails
+// fast instead of blocking.
+func TestStreamClientReportsDeadLink(t *testing.T) {
+	srv := NewServer(ServerConfig{Reg: &fakeRegistry{}, SystemName: "T", Refresh: time.Hour, MaxEvents: 8})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cliConn, srvConn := net.Pipe()
+	go func() { _ = ServeRPC(ctx, srvConn, srv, nil) }()
+
+	c := NewStreamClient(cliConn)
+	defer c.Close()
+	if _, err := c.Snapshot(ctx); err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	select {
+	case <-c.Done():
+		t.Fatal("Done fired while the link was healthy")
+	default:
+	}
+
+	_ = srvConn.Close() // the daemon side vanishes
+
+	select {
+	case <-c.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("Done did not fire after the peer closed")
+	}
+	if c.Err() == nil {
+		t.Fatal("Err must explain the loss")
+	}
+	if _, err := c.Snapshot(ctx); err == nil {
+		t.Fatal("Snapshot must fail on a dead link rather than return the cached copy")
+	}
+	if _, err := c.Execute(ctx, AdminCommand{Command: CommandRefresh}); err == nil {
+		t.Fatal("Execute must fail on a dead link")
+	}
+}

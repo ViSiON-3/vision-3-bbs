@@ -8,6 +8,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -79,18 +80,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := admin.DialSSH(admin.SSHDialConfig{
+	dialCfg := admin.SSHDialConfig{
 		Addr:           sshAddr,
 		User:           sshUser,
 		Signer:         signer,
 		KnownHostsPath: knownHostsPath,
 		Insecure:       f.insecure,
-	})
+	}
+	// dial is what the console calls to reconnect after the link drops.
+	// The concrete type is only converted to the interface on success so a
+	// failure never yields a non-nil interface wrapping a nil pointer.
+	dial := func(ctx context.Context) (admin.AdminClient, error) {
+		c, err := admin.DialSSHContext(ctx, dialCfg)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
+	}
+
+	// The first connection is made before the TUI starts so a bad key, an
+	// unknown host, or a rejected login is reported plainly on stderr with
+	// a non-zero exit, rather than as an endless retry loop on screen.
+	client, err := dial(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "wfc: connect: %v\n", err)
 		os.Exit(1)
 	}
-	defer func() { _ = client.Close() }() // best-effort teardown
+	defer func() { _ = client.Close() }() // best-effort teardown; the model closes replacements itself
 
 	model := wfcui.New(client, wfcui.Options{
 		ASCII:     f.ascii,
@@ -98,6 +114,8 @@ func main() {
 		ReadOnly:  f.readonly,
 		MaxEvents: f.maxEvents,
 		Refresh:   time.Duration(f.refresh) * time.Millisecond,
+		Version:   version,
+		Dial:      dial,
 	})
 
 	p := tea.NewProgram(model, tea.WithAltScreen())

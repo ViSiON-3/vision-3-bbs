@@ -1141,6 +1141,9 @@ func sessionHandler(s ssh.Session) {
 		LastActivity: sessionStartTime,
 		CurrentMenu:  "LOGIN",
 		RemoteAddr:   s.RemoteAddr(),
+		// The channel lets the WFC console drop this caller (kick): closing
+		// it makes the session's next read return EOF and unwind normally.
+		Channel: s,
 	}
 	sessionRegistry.Register(bbsSession)
 
@@ -1816,19 +1819,41 @@ func main() {
 	// effect immediately, and the pending-reload queue reaches the console.
 	adminMinLevel = func() int { return menuExecutor.GetServerConfig().CoSysOpLevel }
 	wfcEnabled = func() bool { return menuExecutor.GetServerConfig().WFCEnabled }
+	// The event scheduler is created further down; the console reads it
+	// through this pointer so the getter is safe before it exists and is
+	// not a data race with the admin server's tick goroutine.
+	var schedulerRef atomic.Pointer[scheduler.Scheduler]
 	adminServer = admin.NewServer(admin.ServerConfig{
 		Reg:        sessionRegistry,
 		SystemName: serverConfig.BoardName,
 		StartedAt:  time.Now(),
 		Refresh:    time.Second,
 		MaxEvents:  200,
-		CallsToday: func() int { return -1 },
+		// Counters that scan state are cached so the once-a-second tick
+		// does not turn into a once-a-second message-base scan.
+		CallsToday: admin.CachedInt(5*time.Second, func() int {
+			return countCallsToday(userMgr.GetLastCallers(), sessionRegistry.ListActive(), time.Now())
+		}),
+		TotalUsers: admin.CachedInt(15*time.Second, func() int {
+			return countTotalUsers(userMgr.GetAllUsers())
+		}),
+		NewUsers: admin.CachedInt(15*time.Second, func() int {
+			return countNewUsers(userMgr.GetAllUsers())
+		}),
+		MailWaiting: admin.CachedInt(30*time.Second, func() int {
+			return countSysopMailWaiting(messageMgr, userMgr)
+		}),
+		MaxNodes: func() int { return menuExecutor.GetServerConfig().MaxNodes },
 		PendingReloads: func() []string {
 			if configWatcher == nil {
 				return nil
 			}
 			return configWatcher.PendingReloads()
 		},
+		ScheduledEvents: func() []admin.ScheduledEvent {
+			return schedulerEvents(schedulerRef.Load(), time.Now())
+		},
+		Kick: func(nodeID int) error { return kickNode(sessionRegistry, nodeID) },
 	})
 	go adminServer.Run(context.Background())
 
@@ -1854,6 +1879,7 @@ func main() {
 		}
 		historyPath := filepath.Join(dataPath, "logs", "event_history.json")
 		eventScheduler = scheduler.NewScheduler(eventsConfig, historyPath)
+		schedulerRef.Store(eventScheduler) // expose to the WFC console's Events tab
 		schedulerCtx, schedulerCancel = context.WithCancel(context.Background())
 		defer func() {
 			if schedulerCancel != nil {

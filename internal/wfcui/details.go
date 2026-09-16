@@ -2,63 +2,88 @@ package wfcui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// detailsView renders the full details for the currently selected node.
-func (m Model) detailsView() string {
-	st := newStyles(m.opts)
+type detailRow struct{ label, value string }
 
-	// Guard: no snapshot or selected index out of range.
-	if m.snapshot == nil || m.selected < 0 || m.selected >= len(m.snapshot.Nodes) {
-		lines := []string{
-			"",
-			st.dimmed.Render("No node selected."),
-			"",
-			st.cmdBar.Render("[Esc] back   [q] quit"),
+// drawDetails paints the details overlay for the selected row: a caller or
+// bot on the node tabs, a scheduled event on the events tab.
+func (m Model) drawDetails(s *screen, g geometry) {
+	var title string
+	var rows []detailRow
+	now := m.now()
+	if ev, ok := m.selectedEvent(); ok {
+		title = "Event " + eventName(ev)
+		status, _ := eventStatusText(ev)
+		rows = []detailRow{
+			{"ID", ev.ID},
+			{"Name", labelOrFallback(ev.Name, "(none)")},
+			{"Schedule", scheduleText(ev)},
+			{"Enabled", yesNo(ev.Enabled)},
+			{"Status", status},
+			{"Next Run", formatTimestamp(ev.NextRun)},
+			{"Last Run", formatTimestamp(ev.LastRun)},
+			{"Last Result", labelOrFallback(ev.LastStatus, "(never run)")},
+			{"Duration", formatMillis(ev.LastDurationMs)},
+			{"Runs", strconv.Itoa(ev.RunCount)},
+			{"Failures", strconv.Itoa(ev.FailureCount)},
 		}
-		return strings.Join(lines, "\n")
+	} else if n, ok := m.selectedNode(); ok {
+		title = fmt.Sprintf("Node %d", n.NodeID)
+		rows = []detailRow{
+			{"Handle", labelOrFallback(n.Handle, "(not logged in)")},
+			{"Status", string(n.Status)},
+			{"User ID", strconv.Itoa(n.UserID)},
+			{"Access Level", strconv.Itoa(n.AccessLevel)},
+			{"Address", labelOrFallback(n.RemoteAddr, "(unknown)")},
+			{"Menu", labelOrFallback(n.CurrentMenu, "(none)")},
+			{"Activity", labelOrFallback(n.Activity, "(none)")},
+			{"Connected", formatTimestamp(n.ConnectedAt)},
+			{"Online For", formatOnline(now.Sub(n.ConnectedAt))},
+			{"Last Activity", formatTimestamp(n.LastActivity)},
+			{"Time Left", formatTimeLeft(n.TimeLeftMins)},
+		}
+		if n.Invisible {
+			rows = append(rows, detailRow{"Invisible", "yes"})
+		}
+	} else {
+		return
 	}
 
-	n := m.snapshot.Nodes[m.selected]
-
-	// Build the detail rows as label/value pairs.
-	rows := []struct{ label, value string }{
-		{"Node", fmt.Sprintf("%d", n.NodeID)},
-		{"Status", string(n.Status)},
-		{"Handle", labelOrFallback(n.Handle, "(not logged in)")},
-		{"User ID", fmt.Sprintf("%d", n.UserID)},
-		{"Access Level", fmt.Sprintf("%d", n.AccessLevel)},
-		{"Remote Addr", labelOrFallback(n.RemoteAddr, "(unknown)")},
-		{"Current Menu", labelOrFallback(n.CurrentMenu, "(none)")},
-		{"Activity", labelOrFallback(n.Activity, "(none)")},
-		{"Connected At", formatTimestamp(n.ConnectedAt)},
-		{"Last Activity", formatTimestamp(n.LastActivity)},
-		{"Time Left", formatTimeLeft(n.TimeLeftMins)},
+	const labelW = 14
+	boxW := min(60, g.boxW)
+	boxH := len(rows) + 4
+	x := (g.w - boxW) / 2
+	y := (g.h - boxH) / 2
+	if y < 1 {
+		y = 1
 	}
-
-	const labelWidth = 14
-	var sb strings.Builder
-
-	sb.WriteString("\n")
-	title := fmt.Sprintf(" Node %d Details ", n.NodeID)
-	sb.WriteString(st.header.Render(title))
-	sb.WriteString("\n\n")
-
-	for _, row := range rows {
-		label := fmt.Sprintf("%-*s", labelWidth, row.label+":")
-		sb.WriteString(" ")
-		sb.WriteString(st.dimmed.Render(label))
-		sb.WriteString(" ")
-		sb.WriteString(sanitizeTerminal(row.value))
-		sb.WriteString("\n")
+	s.fill(x, y, boxW, boxH, ' ', cLightGray, cBlack)
+	s.box(x, y, boxW, boxH, boxColors{dim: cLightMagenta, bright: cLightMagenta})
+	s.tab(x+1, y+1, boxW-2, sanitizeTerminal(title), cMagenta, cWhite, cMagenta)
+	for i, r := range rows {
+		ry := y + 3 + i
+		s.textRight(x+2, ry, labelW, r.label+":", cDarkGray, cBlack)
+		s.text(x+2+labelW+1, ry, sanitizeTerminal(r.value), cWhite, cBlack, x+boxW-2)
 	}
+}
 
-	sb.WriteString("\n")
-	sb.WriteString(st.cmdBar.Render("[Esc] back   [q] quit"))
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
 
-	return sb.String()
+// formatMillis renders a duration in milliseconds, or "-" when unknown.
+func formatMillis(ms int64) string {
+	if ms <= 0 {
+		return "-"
+	}
+	return (time.Duration(ms) * time.Millisecond).Round(time.Millisecond).String()
 }
 
 // labelOrFallback returns val if non-empty, else fallback.
@@ -69,13 +94,13 @@ func labelOrFallback(val, fallback string) string {
 	return val
 }
 
-// formatTimestamp renders a time.Time as HH:MM:SS on YYYY-MM-DD, or "(none)"
+// formatTimestamp renders a time.Time as YYYY-MM-DD HH:MM:SS, or "(none)"
 // if the time is zero.
 func formatTimestamp(t time.Time) string {
 	if t.IsZero() {
 		return "(none)"
 	}
-	return t.Format("2006-01-02 15:04:05")
+	return t.Local().Format("2006-01-02 15:04:05")
 }
 
 // formatTimeLeft converts the TimeLeftMins value to a human-readable string.

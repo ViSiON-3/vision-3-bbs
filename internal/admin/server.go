@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -17,14 +18,27 @@ type ServerConfig struct {
 	StartedAt  time.Time
 	Refresh    time.Duration
 	MaxEvents  int
-	CallsToday func() int // returns -1 if unavailable; may be nil
+	// Header counter getters. Each returns -1 if unavailable; any may be nil.
+	// They run on every tick, so anything expensive should be wrapped in
+	// CachedInt.
+	TotalUsers  func() int
+	CallsToday  func() int
+	NewUsers    func() int
+	MailWaiting func() int
+	// MaxNodes reports the configured node limit; may be nil.
+	MaxNodes func() int
 	// PendingReloads lists structural config reloads queued for the next
 	// idle window; may be nil.
 	PendingReloads func() []string
+	// ScheduledEvents reports the event scheduler's entries; may be nil.
+	ScheduledEvents func() []ScheduledEvent
+	// Kick disconnects the caller on nodeID. Nil means the server rejects
+	// CommandKick as unsupported.
+	Kick func(nodeID int) error
 }
 
 // Server polls SessionRegistry, keeps the latest snapshot, and fans out
-// diff-synthesized events to subscribers. Read-only; v1 implements no mutations.
+// diff-synthesized events to subscribers.
 type Server struct {
 	cfg      ServerConfig
 	mu       sync.RWMutex
@@ -90,18 +104,35 @@ func (s *Server) refreshIfDue() {
 	s.tickLocked(now)
 }
 
+// counterOr calls get if non-nil, else returns -1 (unavailable).
+func counterOr(get func() int) int {
+	if get == nil {
+		return -1
+	}
+	return get()
+}
+
 // tickLocked is the body of tick. Callers must hold tickMu.
 func (s *Server) tickLocked(now time.Time) {
-	calls := -1
-	if s.cfg.CallsToday != nil {
-		calls = s.cfg.CallsToday()
+	counters := Counters{
+		TotalUsers:  counterOr(s.cfg.TotalUsers),
+		CallsToday:  counterOr(s.cfg.CallsToday),
+		NewUsers:    counterOr(s.cfg.NewUsers),
+		MailWaiting: counterOr(s.cfg.MailWaiting),
 	}
 	var pending []string
 	if s.cfg.PendingReloads != nil {
 		pending = s.cfg.PendingReloads()
 	}
-	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, calls)
+	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, counters)
+	snap.Schema = SnapshotSchema
 	snap.PendingReloads = pending
+	if s.cfg.MaxNodes != nil {
+		snap.MaxNodes = s.cfg.MaxNodes()
+	}
+	if s.cfg.ScheduledEvents != nil {
+		snap.ScheduledEvents = s.cfg.ScheduledEvents()
+	}
 
 	s.mu.Lock()
 	events := DiffSnapshots(s.prev, snap)
@@ -112,14 +143,21 @@ func (s *Server) tickLocked(now time.Time) {
 	if now.After(s.lastTick) {
 		s.lastTick = now
 	}
+	s.publishLocked(events)
+	s.mu.Unlock()
+}
+
+// publishLocked appends events to the ring buffer and fans them out to every
+// subscriber. Callers must hold s.mu. Fan-out happens under the lock so sends
+// cannot race a concurrent close; sends are non-blocking, so holding the lock
+// here is bounded and safe.
+func (s *Server) publishLocked(events []Event) {
 	for _, e := range events {
 		s.ring = append(s.ring, e)
 		if len(s.ring) > s.cfg.MaxEvents {
 			s.ring = s.ring[len(s.ring)-s.cfg.MaxEvents:]
 		}
 	}
-	// Fan-out while holding the lock so sends cannot race a concurrent close.
-	// Sends are non-blocking, so holding the lock here is bounded and safe.
 	for _, e := range events {
 		for c := range s.subs {
 			select {
@@ -128,6 +166,13 @@ func (s *Server) tickLocked(now time.Time) {
 			}
 		}
 	}
+}
+
+// emit publishes a single server-originated event (one that is not derived
+// from a snapshot diff).
+func (s *Server) emit(e Event) {
+	s.mu.Lock()
+	s.publishLocked([]Event{e})
 	s.mu.Unlock()
 }
 
@@ -136,6 +181,22 @@ func (s *Server) Snapshot() *SystemSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.prev
+}
+
+// nodeIdentity returns the handle and address on nodeID in the latest
+// snapshot, or empty strings.
+func (s *Server) nodeIdentity(nodeID int) (handle, addr string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.prev == nil {
+		return "", ""
+	}
+	for _, n := range s.prev.Nodes {
+		if n.NodeID == nodeID {
+			return n.Handle, n.RemoteAddr
+		}
+	}
+	return "", ""
 }
 
 // Subscribe returns a channel that first replays the current ring buffer and
@@ -162,7 +223,11 @@ func (s *Server) Subscribe(ctx context.Context) <-chan Event {
 	return ch
 }
 
-// Execute runs an admin command. v1 supports only CommandRefresh.
+// ErrKickUnsupported is returned for CommandKick when the server has no
+// Kick hook wired.
+var ErrKickUnsupported = errors.New("admin: kick not supported by this server")
+
+// Execute runs an admin command.
 func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 	switch cmd.Command {
 	case CommandRefresh:
@@ -170,7 +235,23 @@ func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 		// snapshot rebuilds faster than the configured polling interval.
 		s.refreshIfDue()
 		return &Result{OK: true}, nil
+	case CommandKick:
+		if s.cfg.Kick == nil {
+			return nil, ErrKickUnsupported
+		}
+		if cmd.NodeID <= 0 {
+			return nil, fmt.Errorf("admin: kick: node id required")
+		}
+		handle, addr := s.nodeIdentity(cmd.NodeID)
+		if err := s.cfg.Kick(cmd.NodeID); err != nil {
+			return nil, fmt.Errorf("admin: kick node %d: %w", cmd.NodeID, err)
+		}
+		s.emit(Event{Time: timeNow(), Type: EventNodeKicked, NodeID: cmd.NodeID, Handle: handle, Addr: addr, Message: "kicked by sysop"})
+		// Poll right away so the node's disappearance reaches consoles now
+		// rather than on the next scheduled tick.
+		s.refreshIfDue()
+		return &Result{OK: true, Message: fmt.Sprintf("node %d disconnected", cmd.NodeID)}, nil
 	default:
-		return nil, fmt.Errorf("admin: command not supported in read-only v1: %s", cmd.Command)
+		return nil, fmt.Errorf("admin: unsupported command: %s", cmd.Command)
 	}
 }

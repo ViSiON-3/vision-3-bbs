@@ -13,8 +13,10 @@ type RegistrySource interface {
 }
 
 // BuildSnapshot copies live session state into a serialization-safe snapshot.
-// It reads each session under its RLock. callsToday may be -1 if unavailable.
-func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Time, callsToday int) *SystemSnapshot {
+// It reads each session under its RLock. counters supplies the header values
+// the registry cannot derive (-1 where unavailable); ActiveNodes is always
+// overwritten with the live count.
+func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Time, counters Counters) *SystemSnapshot {
 	sessions := reg.ListActive()
 	nodes := make([]NodeState, 0, len(sessions))
 	for _, s := range sessions {
@@ -53,11 +55,12 @@ func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Ti
 		s.Mutex.RUnlock()
 		nodes = append(nodes, ns)
 	}
+	counters.ActiveNodes = len(nodes)
 	return &SystemSnapshot{
 		Time:       now,
 		SystemName: systemName,
 		UptimeSecs: int64(now.Sub(startedAt).Seconds()),
 		Nodes:      nodes,
-		Counters:   Counters{ActiveNodes: len(nodes), CallsToday: callsToday},
+		Counters:   counters,
 	}
 }
