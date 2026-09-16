@@ -53,6 +53,7 @@ type dialResultMsg struct {
 
 // kickResultMsg carries the outcome of a node.kick command.
 type kickResultMsg struct {
+	connID int
 	nodeID int
 	handle string
 	addr   string // names a bot, which has no handle

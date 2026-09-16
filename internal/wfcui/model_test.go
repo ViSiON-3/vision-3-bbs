@@ -600,3 +600,62 @@ func TestPageKeysScrollLogsAndPageEvents(t *testing.T) {
 		t.Fatalf("PgUp on events: selected = %d, want 0", m.selected)
 	}
 }
+
+func TestReconnectReplayDoesNotDuplicateEvents(t *testing.T) {
+	fc := newFakeClient()
+	m, ck := newTestModel(fc, Options{})
+	history := []admin.Event{
+		{Time: ck.t.Add(-3 * time.Second), Type: admin.EventCallerLoggedIn, NodeID: 1, Handle: "Zed", Message: "logged in"},
+		{Time: ck.t.Add(-2 * time.Second), Type: admin.EventMenuChanged, NodeID: 1, Handle: "Zed", Message: "MAIN"},
+		{Time: ck.t.Add(-2 * time.Second), Type: admin.EventActivityChanged, NodeID: 1, Handle: "Zed", Message: "Reading"},
+	}
+	feed := func(evs []admin.Event) {
+		for _, ev := range evs {
+			m, _ = update(t, m, eventMsg{connID: m.connID, ch: fc.events, ev: ev, ok: true})
+		}
+	}
+	feed(history)
+	// Link drops and comes back; the daemon replays its ring buffer.
+	m, _ = update(t, m, connLostMsg{connID: m.connID, err: errors.New("gone")})
+	m, _ = update(t, m, dialResultMsg{connID: m.connID, client: newFakeClient()})
+	feed(history)
+	newer := admin.Event{Time: ck.t.Add(time.Second), Type: admin.EventMenuChanged, NodeID: 1, Handle: "Zed", Message: "DOORS"}
+	feed([]admin.Event{newer})
+
+	var menus, logins int
+	for _, ev := range m.events {
+		switch ev.Type {
+		case admin.EventMenuChanged:
+			menus++
+		case admin.EventCallerLoggedIn:
+			logins++
+		}
+	}
+	if logins != 1 || menus != 2 {
+		t.Fatalf("replayed history duplicated: logins=%d menus=%d events=%+v", logins, menus, m.events)
+	}
+	if !strings.Contains(lastEvent(m), "DOORS") {
+		t.Fatalf("new event after replay must still be appended: %q", lastEvent(m))
+	}
+}
+
+func TestStaleKickResultIgnored(t *testing.T) {
+	m, _ := newTestModel(newFakeClient(), Options{})
+	m, _ = update(t, m, kickResultMsg{connID: m.connID - 1, nodeID: 2, handle: "Old", res: &admin.Result{OK: true}})
+	if m.status != "" || len(m.events) != 0 {
+		t.Fatalf("stale kick result must not touch the model: status=%q events=%d", m.status, len(m.events))
+	}
+}
+
+func TestKickCommandCarriesConnectTime(t *testing.T) {
+	fc := newFakeClient()
+	m, _ := newTestModel(fc, Options{})
+	started := time.Date(2026, 9, 16, 11, 0, 0, 0, time.UTC)
+	m.snapshot = &admin.SystemSnapshot{Time: time.Now(), Nodes: []admin.NodeState{{NodeID: 4, Handle: "Zed", ConnectedAt: started}}}
+	m, _ = update(t, m, keyRune('k'))
+	m, cmd := update(t, m, keyRune('y'))
+	run(t, m, cmd)
+	if len(fc.execs) != 1 || !fc.execs[0].ConnectedAt.Equal(started) {
+		t.Fatalf("kick command = %+v, want ConnectedAt %v", fc.execs, started)
+	}
+}

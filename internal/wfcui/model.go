@@ -246,15 +246,17 @@ func (m Model) watchDone() tea.Cmd {
 
 // kick issues node.kick for n.
 func (m Model) kick(n admin.NodeState) tea.Cmd {
-	c := m.client
+	c, id := m.client, m.connID
 	if c == nil {
 		return nil
 	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
-		res, err := c.Execute(ctx, admin.AdminCommand{Command: admin.CommandKick, NodeID: n.NodeID})
-		return kickResultMsg{nodeID: n.NodeID, handle: n.Handle, addr: n.RemoteAddr, res: res, err: err}
+		// ConnectedAt pins the command to this session so a reused node
+		// number cannot drop whoever connected next.
+		res, err := c.Execute(ctx, admin.AdminCommand{Command: admin.CommandKick, NodeID: n.NodeID, ConnectedAt: n.ConnectedAt})
+		return kickResultMsg{connID: id, nodeID: n.NodeID, handle: n.Handle, addr: n.RemoteAddr, res: res, err: err}
 	}
 }
 
@@ -319,6 +321,24 @@ func (m *Model) startDial() tea.Cmd {
 // pushLocalEvent appends a console-originated line to the event feed.
 func (m *Model) pushLocalEvent(text string) {
 	m.appendEvent(admin.Event{Time: m.now(), Type: eventConsole, Handle: "WFC", Message: text})
+}
+
+// appendServerEvent adds an event from the daemon unless the feed already
+// holds an identical one. Subscribe replays the server's ring buffer on every
+// new link, so after a reconnect the recent history arrives again; without
+// this, each reconnect would duplicate the log.
+func (m *Model) appendServerEvent(ev admin.Event) {
+	for i := len(m.events) - 1; i >= 0; i-- {
+		e := m.events[i]
+		if e.Time.Before(ev.Time) {
+			break // events arrive in time order; nothing older can match
+		}
+		if e.Time.Equal(ev.Time) && e.Type == ev.Type && e.NodeID == ev.NodeID &&
+			e.Handle == ev.Handle && e.Addr == ev.Addr && e.Message == ev.Message {
+			return
+		}
+	}
+	m.appendEvent(ev)
 }
 
 func (m *Model) appendEvent(ev admin.Event) {
@@ -532,7 +552,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.ok {
 			return m, m.loseConnection(errEventStreamClosed)
 		}
-		m.appendEvent(msg.ev)
+		m.appendServerEvent(msg.ev)
 		return m, waitForEvent(msg.connID, msg.ch)
 
 	case connLostMsg:
@@ -572,6 +592,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.linkCmds()...)
 
 	case kickResultMsg:
+		if msg.connID != m.connID {
+			return m, nil // issued on a link that has since been replaced
+		}
 		// Name the target by handle, else by address (a bot), else by node.
 		who := sanitizeTerminal(msg.handle)
 		if who == "" {

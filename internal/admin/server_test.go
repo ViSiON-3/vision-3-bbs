@@ -105,19 +105,25 @@ func TestSubscribeCancelRace(t *testing.T) {
 }
 
 func TestServerExecuteKick(t *testing.T) {
-	reg := &fakeRegistry{sessions: []*session.BbsSession{{NodeID: 3, User: &user.User{Handle: "Scanner"}}}}
+	reg := &fakeRegistry{sessions: []*session.BbsSession{{NodeID: 3, User: &user.User{Handle: "Scanner"}, StartTime: time.Unix(1_700_000_000, 0)}}}
 	var kicked []int
-	srv := NewServer(ServerConfig{Reg: reg, MaxEvents: 4, Kick: func(nodeID int) error {
+	var kickedAt []time.Time
+	srv := NewServer(ServerConfig{Reg: reg, MaxEvents: 4, Kick: func(nodeID int, at time.Time) error {
 		if nodeID == 9 {
 			return errNoSuchNode
 		}
 		kicked = append(kicked, nodeID)
+		kickedAt = append(kickedAt, at)
 		return nil
 	}})
 	srv.tick(time.Now())
 	ch := srv.Subscribe(context.Background())
 
-	res, err := srv.Execute(AdminCommand{Command: CommandKick, NodeID: 3})
+	started := reg.sessions[0].StartTime
+	res, err := srv.Execute(AdminCommand{Command: CommandKick, NodeID: 3, ConnectedAt: started})
+	if err == nil && (len(kickedAt) != 1 || !kickedAt[0].Equal(started)) {
+		t.Fatalf("kick must pass the session's connect time through: %v", kickedAt)
+	}
 	if err != nil || !res.OK || len(kicked) != 1 || kicked[0] != 3 {
 		t.Fatalf("kick: res=%+v err=%v kicked=%v", res, err, kicked)
 	}

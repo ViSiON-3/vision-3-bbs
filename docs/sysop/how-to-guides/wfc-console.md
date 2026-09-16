@@ -236,7 +236,16 @@ they usually come and go within a second or two, which is why the count is
 normally 0 while the log keeps filling. Keeping this traffic out of the
 Callers log is what makes that log readable.
 
-**Events** — the event scheduler's entries from `events.json`:The caller box is exactly as tall as the callers online, so with two callers
+**Events** — the event scheduler's entries from `events.json`:
+
+| Column | Meaning |
+|--------|---------|
+| `Event` | The event's name (or ID) |
+| `Schedule` | Its cron spec, `at startup` for run-at-startup events, or both |
+| `Next Run` / `Last Run` | Times shown as `15:04` today, `Tue 15:04` this week, `Jan 02 15:04` otherwise |
+| `Status` | `running`, `ok 1.2s`, `failed`, `timed out`, `never run`, or `disabled` |
+
+The caller box is exactly as tall as the callers online, so with two callers
 the lower box gets almost the whole screen; when a list is longer than the
 space available it scrolls to keep the selected row visible, and the lower box
 always keeps at least three rows.
@@ -259,7 +268,10 @@ overlay; `↑`/`↓` move to the next row without closing it.
 ### Kicking a caller
 
 `K` on a selected caller asks for confirmation in the command bar
-(`[Y] yes [N] no`), then disconnects that node. The caller sees a short
+(`[Y] yes [N] no`), then disconnects that node. The command names the
+caller's session, not just the node number, so if that caller has already
+left and someone else has taken the slot, the kick is refused with a note to
+select again. The caller sees a short
 "disconnected by the SysOp" notice, their session ends through the normal
 hang-up path (so the disconnect is logged and the node is freed), and every
 connected console gets a `Kicked by sysop` line in its Callers log. Kicks are

@@ -91,7 +91,11 @@ func countSysopMailWaiting(mm *message.MessageManager, um *user.UserMgr) int {
 	}
 	lastRead, err := mm.GetLastRead(area.ID, sysop.Handle)
 	if err != nil {
-		lastRead = 0
+		// A missing lastread record is already (0, nil); an error is an I/O
+		// failure, and counting from zero would report every message as
+		// waiting.
+		slog.Debug("wfc: mail waiting: lastread", "error", err)
+		return -1
 	}
 	base, err := mm.GetBase(area.ID)
 	if err != nil {
@@ -144,12 +148,20 @@ func schedulerEvents(s *scheduler.Scheduler, now time.Time) []admin.ScheduledEve
 	return out
 }
 
+// kickNoticeTimeout bounds the courtesy notice written before a kick. A
+// caller whose connection has stalled may never drain its flow-control
+// window, and the admin command must not hang behind that write.
+const kickNoticeTimeout = 2 * time.Second
+
 // kickNode disconnects the caller on nodeID by closing their SSH channel.
-// The session loop sees EOF on its next read and unwinds exactly as it does
-// for a caller who hangs up, so the disconnect is logged and the node is
-// freed through the normal path. A short notice is written first so the
-// caller knows this was deliberate.
-func kickNode(reg *session.SessionRegistry, nodeID int) error {
+// connectedAt names the session the sysop selected: node numbers are reused,
+// so if a different session now holds the slot the kick is refused instead of
+// dropping the wrong caller (a zero connectedAt skips the check). The session
+// loop sees EOF on its next read and unwinds exactly as it does for a caller
+// who hangs up, so the disconnect is logged and the node is freed through the
+// normal path. A short notice is written first so the caller knows this was
+// deliberate.
+func kickNode(reg *session.SessionRegistry, nodeID int, connectedAt time.Time) error {
 	if reg == nil {
 		return fmt.Errorf("session registry unavailable")
 	}
@@ -159,10 +171,25 @@ func kickNode(reg *session.SessionRegistry, nodeID int) error {
 	}
 	s.Mutex.RLock()
 	ch := s.Channel
+	started := s.StartTime
 	s.Mutex.RUnlock()
+	if !connectedAt.IsZero() && !started.Equal(connectedAt) {
+		return fmt.Errorf("node %d now has a different caller; select again", nodeID)
+	}
 	if ch == nil {
 		return fmt.Errorf("node %d has no channel to close", nodeID)
 	}
-	_, _ = ch.Write([]byte("\r\n\r\nYou have been disconnected by the SysOp.\r\n")) // best-effort notice
+	// From here on only ch (the selected session's own channel) is touched,
+	// so a slot reuse after the check above cannot redirect the close.
+	written := make(chan struct{})
+	go func() {
+		defer close(written)
+		_, _ = ch.Write([]byte("\r\n\r\nYou have been disconnected by the SysOp.\r\n")) // best-effort notice
+	}()
+	select {
+	case <-written:
+	case <-time.After(kickNoticeTimeout):
+		// Close unblocks the stalled writer; do not wait for it.
+	}
 	return ch.Close()
 }

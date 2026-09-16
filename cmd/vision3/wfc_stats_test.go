@@ -1,7 +1,9 @@
 package main
 
 import (
+	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,23 +64,63 @@ func (f *fakeChannel) Close() error                { f.closed = true; return nil
 func TestKickNode(t *testing.T) {
 	reg := session.NewSessionRegistry()
 	ch := &fakeChannel{}
-	reg.Register(&session.BbsSession{NodeID: 2, Channel: ch})
-	reg.Register(&session.BbsSession{NodeID: 3}) // no channel wired
+	started := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	reg.Register(&session.BbsSession{NodeID: 2, Channel: ch, StartTime: started})
+	reg.Register(&session.BbsSession{NodeID: 3, StartTime: started}) // no channel wired
 
-	if err := kickNode(reg, 2); err != nil {
+	// A stale connect time means the slot has been reused: refuse.
+	if err := kickNode(reg, 2, started.Add(-time.Hour)); err == nil || ch.closed {
+		t.Fatalf("kick with a different connect time must be refused: err=%v closed=%v", err, ch.closed)
+	}
+	if err := kickNode(reg, 2, started); err != nil {
 		t.Fatalf("kick node 2: %v", err)
 	}
 	if !ch.closed || !strings.Contains(ch.wrote.String(), "disconnected by the SysOp") {
 		t.Fatalf("channel closed=%v wrote=%q", ch.closed, ch.wrote.String())
 	}
-	if err := kickNode(reg, 3); err == nil {
+	if err := kickNode(reg, 3, time.Time{}); err == nil {
 		t.Fatal("node without a channel must report an error")
 	}
-	if err := kickNode(reg, 9); err == nil {
+	if err := kickNode(reg, 9, time.Time{}); err == nil {
 		t.Fatal("unknown node must report an error")
 	}
-	if err := kickNode(nil, 2); err == nil {
+	if err := kickNode(nil, 2, time.Time{}); err == nil {
 		t.Fatal("nil registry must report an error")
+	}
+}
+
+// stalledChannel never completes a write, like a caller whose flow-control
+// window is exhausted.
+type stalledChannel struct {
+	gossh.Channel
+	closed  chan struct{}
+	closeMu sync.Once
+}
+
+func (c *stalledChannel) Write(p []byte) (int, error) {
+	<-c.closed // released by Close, as x/crypto/ssh does for a closed channel
+	return 0, io.EOF
+}
+func (c *stalledChannel) Close() error { c.closeMu.Do(func() { close(c.closed) }); return nil }
+
+func TestKickNodeDoesNotHangOnStalledNotice(t *testing.T) {
+	reg := session.NewSessionRegistry()
+	ch := &stalledChannel{closed: make(chan struct{})}
+	reg.Register(&session.BbsSession{NodeID: 1, Channel: ch})
+	done := make(chan error, 1)
+	go func() { done <- kickNode(reg, 1, time.Time{}) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("kick: %v", err)
+		}
+	case <-time.After(kickNoticeTimeout + 3*time.Second):
+		t.Fatal("kick blocked behind a stalled notice write")
+	}
+	select {
+	case <-ch.closed:
+	default:
+		t.Fatal("channel must be closed even though the notice never drained")
 	}
 }
 

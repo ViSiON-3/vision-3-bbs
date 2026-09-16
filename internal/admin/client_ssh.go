@@ -113,8 +113,13 @@ func DialSSHContext(ctx context.Context, cfg SSHDialConfig) (*SSHChannelClient, 
 	}
 	// The handshake honours ClientConfig.Timeout via a deadline on tcp, but
 	// not ctx; closing the socket on cancellation is what aborts it early.
+	// The watcher is joined before this function returns: the deferred
+	// cancel would otherwise race a watcher that has not woken yet, which
+	// could pick the cancellation case and close a live connection.
 	handshakeDone := make(chan struct{})
+	watcherDone := make(chan struct{})
 	go func() {
+		defer close(watcherDone)
 		select {
 		case <-dialCtx.Done():
 			_ = tcp.Close() // aborts a handshake that is still in progress
@@ -123,6 +128,7 @@ func DialSSHContext(ctx context.Context, cfg SSHDialConfig) (*SSHChannelClient, 
 	}()
 	sshConn, chans, reqs, err := gossh.NewClientConn(tcp, cfg.Addr, clientCfg)
 	close(handshakeDone)
+	<-watcherDone
 	if err != nil {
 		_ = tcp.Close() // cleanup on error path
 		if ctxErr := ctx.Err(); ctxErr != nil {

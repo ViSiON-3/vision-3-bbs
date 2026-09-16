@@ -126,9 +126,14 @@ const (
 
 // AdminCommand is a request to the server to perform an action.
 type AdminCommand struct {
-	Command CommandType    `json:"command"`
-	NodeID  int            `json:"nodeId,omitempty"`
-	Payload map[string]any `json:"payload,omitempty"`
+	Command CommandType `json:"command"`
+	NodeID  int         `json:"nodeId,omitempty"`
+	// ConnectedAt identifies the session a node-scoped command targets. Node
+	// numbers are reused, so a kick names the caller it was issued against
+	// by their connect time; if a different caller now holds the slot the
+	// command is refused rather than dropping the wrong person.
+	ConnectedAt time.Time      `json:"connectedAt,omitzero"`
+	Payload     map[string]any `json:"payload,omitempty"`
 }
 
 // Result is the outcome of an AdminCommand.

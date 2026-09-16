@@ -1853,7 +1853,9 @@ func main() {
 		ScheduledEvents: func() []admin.ScheduledEvent {
 			return schedulerEvents(schedulerRef.Load(), time.Now())
 		},
-		Kick: func(nodeID int) error { return kickNode(sessionRegistry, nodeID) },
+		Kick: func(nodeID int, connectedAt time.Time) error {
+			return kickNode(sessionRegistry, nodeID, connectedAt)
+		},
 	})
 	go adminServer.Run(context.Background())
 

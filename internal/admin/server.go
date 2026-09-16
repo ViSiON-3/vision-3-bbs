@@ -32,9 +32,10 @@ type ServerConfig struct {
 	PendingReloads func() []string
 	// ScheduledEvents reports the event scheduler's entries; may be nil.
 	ScheduledEvents func() []ScheduledEvent
-	// Kick disconnects the caller on nodeID. Nil means the server rejects
-	// CommandKick as unsupported.
-	Kick func(nodeID int) error
+	// Kick disconnects the caller on nodeID whose session started at
+	// connectedAt (a zero time skips that check). Nil means the server
+	// rejects CommandKick as unsupported.
+	Kick func(nodeID int, connectedAt time.Time) error
 }
 
 // Server polls SessionRegistry, keeps the latest snapshot, and fans out
@@ -183,16 +184,17 @@ func (s *Server) Snapshot() *SystemSnapshot {
 	return s.prev
 }
 
-// nodeIdentity returns the handle and address on nodeID in the latest
-// snapshot, or empty strings.
-func (s *Server) nodeIdentity(nodeID int) (handle, addr string) {
+// nodeIdentity returns the handle and address of the session on nodeID in
+// the latest snapshot, or empty strings when no session with that connect
+// time is there (a zero connectedAt matches whatever holds the slot).
+func (s *Server) nodeIdentity(nodeID int, connectedAt time.Time) (handle, addr string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.prev == nil {
 		return "", ""
 	}
 	for _, n := range s.prev.Nodes {
-		if n.NodeID == nodeID {
+		if n.NodeID == nodeID && (connectedAt.IsZero() || n.ConnectedAt.Equal(connectedAt)) {
 			return n.Handle, n.RemoteAddr
 		}
 	}
@@ -242,8 +244,8 @@ func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 		if cmd.NodeID <= 0 {
 			return nil, fmt.Errorf("admin: kick: node id required")
 		}
-		handle, addr := s.nodeIdentity(cmd.NodeID)
-		if err := s.cfg.Kick(cmd.NodeID); err != nil {
+		handle, addr := s.nodeIdentity(cmd.NodeID, cmd.ConnectedAt)
+		if err := s.cfg.Kick(cmd.NodeID, cmd.ConnectedAt); err != nil {
 			return nil, fmt.Errorf("admin: kick node %d: %w", cmd.NodeID, err)
 		}
 		s.emit(Event{Time: timeNow(), Type: EventNodeKicked, NodeID: cmd.NodeID, Handle: handle, Addr: addr, Message: "kicked by sysop"})
