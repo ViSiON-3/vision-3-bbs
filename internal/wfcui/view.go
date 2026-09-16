@@ -722,7 +722,7 @@ func (m Model) drawCmdBar(s *screen, g geometry) {
 	y := g.cmdY
 	if m.mode == modeConfirmKick {
 		s.fill(0, y, g.w, 1, ' ', cWhite, cRed)
-		n, _ := m.selectedNode()
+		n := m.kickTarget
 		who := sanitizeTerminal(n.Handle)
 		if who == "" {
 			who = sanitizeTerminal(n.RemoteAddr)

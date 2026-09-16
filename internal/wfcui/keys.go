@@ -92,26 +92,30 @@ func (m Model) beginKick() (tea.Model, tea.Cmd) {
 		m.setStatus("Not connected", true)
 		return m, nil
 	}
-	if _, ok := m.selectedNode(); !ok {
+	n, ok := m.selectedNode()
+	if !ok {
 		m.setStatus("No caller selected", true)
 		return m, nil
 	}
+	m.kickTarget = n
 	m.prevMode = m.mode
 	m.mode = modeConfirmKick
 	return m, nil
 }
 
-// handleKeyConfirmKick: Y sends the kick, anything else cancels.
+// handleKeyConfirmKick: Y sends the kick for the caller captured when the
+// prompt opened, anything else cancels. If that caller has since left, the
+// prompt is cancelled rather than aimed at whoever now holds the row.
 func (m Model) handleKeyConfirmKick(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.mode = m.prevMode
 	if msg.Type == tea.KeyRunes {
 		switch string(msg.Runes) {
 		case "y", "Y":
-			n, ok := m.selectedNode()
-			if !ok {
+			if !m.stillOnline(m.kickTarget) {
+				m.setStatus("Kick cancelled: that caller is no longer online", true)
 				return m, nil
 			}
-			return m, m.kick(n)
+			return m, m.kick(m.kickTarget)
 		}
 	}
 	return m, nil

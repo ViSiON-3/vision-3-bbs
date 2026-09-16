@@ -114,6 +114,10 @@ type Model struct {
 	selected int   // row within the focused list (callers, or the lower tab)
 	mode     viewMode
 	prevMode viewMode // mode to return to after a confirm prompt
+	// kickTarget is the caller captured when the kick prompt opened. The
+	// prompt acts on this, not on whatever the cursor index points at by
+	// the time Y is pressed, since a snapshot can reorder the list meanwhile.
+	kickTarget admin.NodeState
 	width    int
 	height   int
 	// scrollBack is how many log lines the lower box is held back from
@@ -476,6 +480,25 @@ func (m Model) selectedNode() (admin.NodeState, bool) {
 		return admin.NodeState{}, false
 	}
 	return nodes[m.selected], true
+}
+
+// sameSession reports whether a and b are the same session: same node and
+// same connect time (node numbers are reused, connect times are not).
+func sameSession(a, b admin.NodeState) bool {
+	return a.NodeID == b.NodeID && a.ConnectedAt.Equal(b.ConnectedAt)
+}
+
+// stillOnline reports whether target is in the latest snapshot.
+func (m Model) stillOnline(target admin.NodeState) bool {
+	if m.snapshot == nil {
+		return false
+	}
+	for _, n := range m.snapshot.Nodes {
+		if sameSession(n, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // selectedEvent returns the scheduled event under the cursor on the events tab.

@@ -687,3 +687,32 @@ func TestKickTimeoutReportedAsUnknown(t *testing.T) {
 		t.Fatalf("status = %q", m.status)
 	}
 }
+
+func TestKickPromptTargetsCapturedCaller(t *testing.T) {
+	fc := newFakeClient()
+	m, ck := newTestModel(fc, Options{})
+	a := admin.NodeState{NodeID: 1, Handle: "Alice", ConnectedAt: ck.t.Add(-time.Hour)}
+	b := admin.NodeState{NodeID: 2, Handle: "Bob", ConnectedAt: ck.t.Add(-time.Minute)}
+	m.snapshot = &admin.SystemSnapshot{Time: ck.t, Nodes: []admin.NodeState{a, b}}
+	m.selected = 0 // Alice
+	m, _ = update(t, m, keyRune('k'))
+	if m.kickTarget.Handle != "Alice" {
+		t.Fatalf("captured target = %+v", m.kickTarget)
+	}
+	// Alice's row is gone but index 0 now points at Bob: Y must not kick Bob.
+	m, _ = update(t, m, snapshotMsg{connID: m.connID, snap: &admin.SystemSnapshot{Time: ck.t.Add(time.Second), Nodes: []admin.NodeState{b}}})
+	m, cmd := update(t, m, keyRune('y'))
+	if cmd != nil || len(fc.execs) != 0 || !strings.Contains(m.status, "no longer online") {
+		t.Fatalf("kick must be cancelled when the target left: cmd=%v execs=%d status=%q", cmd != nil, len(fc.execs), m.status)
+	}
+	// A reorder that keeps the target online kicks the captured session.
+	m.snapshot = &admin.SystemSnapshot{Time: ck.t, Nodes: []admin.NodeState{a, b}}
+	m.selected = 0
+	m, _ = update(t, m, keyRune('k'))
+	m, _ = update(t, m, snapshotMsg{connID: m.connID, snap: &admin.SystemSnapshot{Time: ck.t.Add(2 * time.Second), Nodes: []admin.NodeState{b, a}}})
+	m, cmd = update(t, m, keyRune('y'))
+	run(t, m, cmd)
+	if len(fc.execs) != 1 || fc.execs[0].NodeID != 1 || !fc.execs[0].ConnectedAt.Equal(a.ConnectedAt) {
+		t.Fatalf("kick must target the captured session: %+v", fc.execs)
+	}
+}
