@@ -220,12 +220,27 @@ func (m Model) drawTitle(s *screen, g geometry) {
 		s.text(boxX, titleY, note, cYellow, cBlue, g.w/2-runeCount(name)/2-1)
 	}
 
-	right, fg := m.linkStatus()
+	// The state segment must not run into the centred name; it gets the
+	// room to the right of it and picks the longest wording that fits.
+	nameEnd := (g.w+runeCount(name))/2 + 2
+	right, fg := m.linkStatus(g.w - marginW - nameEnd)
 	s.textRight(0, titleY, g.w-marginW, right, fg, cBlue)
 }
 
-// linkStatus is the title-bar text and colour for the connection state.
-func (m Model) linkStatus() (string, uint8) {
+// fitFirst returns the first candidate no wider than room (the last one
+// regardless, if none fits).
+func fitFirst(room int, candidates ...string) string {
+	for _, c := range candidates {
+		if runeCount(c) <= room {
+			return c
+		}
+	}
+	return candidates[len(candidates)-1]
+}
+
+// linkStatus is the title-bar text and colour for the connection state,
+// worded to fit within room cells.
+func (m Model) linkStatus(room int) (string, uint8) {
 	now := m.now()
 	switch m.conn {
 	case connConnecting:
@@ -251,6 +266,22 @@ func (m Model) linkStatus() (string, uint8) {
 	}
 	if v[0] >= '0' && v[0] <= '9' {
 		v = "v" + v
+	}
+	if m.drops > 0 {
+		// A flapping link (a sleeping laptop, a lossy hop) shows up here as
+		// a count rather than as a log line per event.
+		noun := "drops"
+		if m.drops == 1 {
+			noun = "drop"
+		}
+		tally := fmt.Sprintf("%d %s", m.drops, noun)
+		last := m.lastDropAt.Format("15:04")
+		return fitFirst(room,
+			fmt.Sprintf("WFC %s - %s, last %s", v, tally, last),
+			fmt.Sprintf("WFC %s - %s", v, tally),
+			tally+", last "+last,
+			tally,
+		), cLightBlue
 	}
 	return "WFC " + v, cLightBlue
 }

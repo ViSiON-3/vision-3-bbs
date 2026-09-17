@@ -76,9 +76,14 @@ const (
 	statusTTL = 4 * time.Second
 )
 
-// eventConsole marks events the console generates locally (connection
-// changes, kick results) so they can be told apart from server events.
-const eventConsole admin.EventType = "console"
+// eventConsole marks events the console generates locally about callers
+// (kick results) so they can be told apart from server events. eventLink
+// marks the console's own link changes; those are kept for the drop counter
+// in the title bar but stay out of the logs, which are about the board.
+const (
+	eventConsole admin.EventType = "console"
+	eventLink    admin.EventType = "console.link"
+)
 
 var (
 	errEventStreamClosed = errors.New("event stream closed")
@@ -134,6 +139,11 @@ type Model struct {
 	// last arrived; lastSnapServer is that server timestamp.
 	lastSnapAt     time.Time
 	lastSnapServer time.Time
+	// drops counts links lost since the console started; lastDropAt is when
+	// the most recent one happened. Shown in the title bar so a flapping
+	// link is visible at a glance without a log line per event.
+	drops      int
+	lastDropAt time.Time
 
 	status      string
 	statusErr   bool
@@ -303,7 +313,10 @@ func (m *Model) loseConnection(err error) tea.Cmd {
 	if m.mode == modeConfirmKick {
 		m.mode = m.prevMode
 	}
-	m.pushLocalEvent("Connection lost: " + errText(err))
+	m.drops++
+	m.lastDropAt = m.now()
+	m.pushLinkEvent("Connection lost: " + errText(err))
+	m.setStatus("Connection lost: "+errText(err), true)
 	return closeClient(old)
 }
 
@@ -322,9 +335,16 @@ func (m *Model) startDial() tea.Cmd {
 	}
 }
 
-// pushLocalEvent appends a console-originated line to the event feed.
+// pushLocalEvent appends a console-originated line about a caller (a kick
+// result) to the feed; it shows in the Callers log.
 func (m *Model) pushLocalEvent(text string) {
 	m.appendEvent(admin.Event{Time: m.now(), Type: eventConsole, Handle: "WFC", Message: text})
+}
+
+// pushLinkEvent records a change in the console's own link. It is kept in
+// the feed for history but not shown in either log.
+func (m *Model) pushLinkEvent(text string) {
+	m.appendEvent(admin.Event{Time: m.now(), Type: eventLink, Handle: "WFC", Message: text})
 }
 
 // appendServerEvent adds an event from the daemon unless the feed already
@@ -444,6 +464,9 @@ func (m Model) botEvents() []admin.Event    { return m.eventsWhere(true) }
 func (m Model) eventsWhere(bot bool) []admin.Event {
 	var out []admin.Event
 	for _, ev := range m.events {
+		if ev.Type == eventLink {
+			continue // the console's own link is not board activity
+		}
 		if isBotEvent(ev) == bot {
 			out = append(out, ev)
 		}
@@ -606,9 +629,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastErr = nil
 		m.lastSnapAt = m.now()
 		if m.everLinked {
-			m.pushLocalEvent("Reconnected")
+			m.pushLinkEvent("Reconnected")
+			m.setStatus("Reconnected", false)
 		} else {
-			m.pushLocalEvent("Connected")
+			m.pushLinkEvent("Connected")
 		}
 		m.everLinked = true
 		return m, tea.Batch(m.linkCmds()...)

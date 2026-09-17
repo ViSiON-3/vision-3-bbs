@@ -226,7 +226,9 @@ line stamped `HH:MM:SS` with the handle involved:
 | *activity text* | A caller's reported activity changes |
 | `Disconnected` | A caller drops or logs off |
 | `Kicked by sysop` | A console disconnected that caller |
-| `Connection lost: …` / `Reconnected` | The console's own link to the BBS dropped or came back |
+
+The console's own link changes are deliberately **not** logged here (see
+[Reconnecting](#reconnecting)); the log is about the board, not the console.
 
 **Bots** — the same kind of log for **anonymous connections**: port scanners,
 probes, and callers who have not logged in yet, named by IP address with
@@ -296,11 +298,16 @@ sleep, a NAT mapping expiring — is noticed within about 25 seconds at worst
 and usually at once.
 
 When the link drops the screen stays up: the title bar switches to
-`OFFLINE - retry in Ns`, the Online Now caption turns red, the last known rows are
-dimmed, and the Callers log records `Connection lost:` with the reason. The
+`OFFLINE - retry in Ns`, the Online Now caption turns red, the last known rows
+are dimmed, and the command bar shows the reason for a few seconds. The
 console then redials on its own, backing off from 1 second up to 30 seconds
-between attempts, and logs `Reconnected` when the BBS is back. Press `R` to
-retry immediately instead of waiting, or `Q` to quit. If the snapshot feed
+between attempts, and shows `Reconnected` in the command bar when the BBS is
+back. Press `R` to retry immediately instead of waiting, or `Q` to quit.
+
+Link changes are not written to the logs. Instead the title bar keeps a
+running tally after the first drop, e.g. `WFC v1.0 - 12 drops, last 07:01`,
+so a flapping link is visible at a glance. A laptop that sleeps overnight
+typically shows one drop per wake cycle; that is the machine, not the BBS. If the snapshot feed
 stalls for 30 seconds while the connection still looks alive, the console
 treats that as a dead link and reconnects too.
 

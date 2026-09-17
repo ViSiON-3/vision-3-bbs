@@ -201,8 +201,14 @@ func TestSnapshotErrorLosesConnectionAndSchedulesRetry(t *testing.T) {
 	if m.attempt != 1 || !m.nextRetryAt.Equal(ck.t.Add(time.Second)) {
 		t.Fatalf("attempt=%d next=%v; want 1 and +1s", m.attempt, m.nextRetryAt)
 	}
-	if !strings.HasPrefix(lastEvent(m), "Connection lost: EOF") {
-		t.Fatalf("event log = %q", lastEvent(m))
+	if !strings.HasPrefix(lastEvent(m), "Connection lost: EOF") || m.events[len(m.events)-1].Type != eventLink {
+		t.Fatalf("link event = %+v", m.events)
+	}
+	if !m.statusErr || !strings.HasPrefix(m.status, "Connection lost: EOF") || m.drops != 1 {
+		t.Fatalf("status=%q drops=%d", m.status, m.drops)
+	}
+	if len(m.callerEvents()) != 0 || len(m.botEvents()) != 0 {
+		t.Fatal("link events must stay out of both logs")
 	}
 	if m.client != nil {
 		t.Fatal("dead client must be dropped")
@@ -251,8 +257,8 @@ func TestTickDialsWhenRetryDue(t *testing.T) {
 	if m.conn != connConnected || m.client != replacement || m.attempt != 0 {
 		t.Fatalf("after dial: conn=%v client=%v attempt=%d", m.conn, m.client, m.attempt)
 	}
-	if lastEvent(m) != "Reconnected" {
-		t.Fatalf("event = %q, want Reconnected", lastEvent(m))
+	if lastEvent(m) != "Reconnected" || m.status != "Reconnected" {
+		t.Fatalf("event = %q status = %q, want Reconnected", lastEvent(m), m.status)
 	}
 	// The new link is serviced: its snapshot arrives via the link commands.
 	m = run(t, m, cmd)
