@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -412,6 +413,39 @@ func TestQuoteModeParksCursorOnLightbar(t *testing.T) {
 			row, col := tt.Cursor()
 			if row != tc.wantRow || col != 1 {
 				t.Errorf("cursor at (%d,%d), want (%d,1) — the cursor is not parked on the lightbar", row, col, tc.wantRow)
+			}
+		})
+	}
+}
+
+// With more source lines than the pane holds, the bar scrolls the pane, and
+// the parked cursor has to follow the bar's row on screen rather than its
+// index in the source.
+func TestQuoteModeParksCursorAfterScrolling(t *testing.T) {
+	long := make([]string, 30)
+	for i := range long {
+		long[i] = fmt.Sprintf("line %02d", i+1)
+	}
+	tests := []struct {
+		name    string
+		keys    string
+		wantRow int
+	}{
+		{"end scrolls to the last pane row", "\x10\x1b", 23},                // CTRL-P
+		{"page down keeps the bar on the last pane row", "\x03\x1b", 23},    // CTRL-C = page down
+		{"end then up sits one row above the bottom", "\x10\x05\x1b", 22},   // CTRL-E = up
+		{"end then home returns to the first pane row", "\x10\x17\x1b", 16}, // CTRL-W
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tt, ch, ih, cleanup := newQuoteHarness(t, tc.keys, long)
+			defer cleanup()
+
+			ch.HandleQuote(ih, 1, 1)
+
+			row, col := tt.Cursor()
+			if row != tc.wantRow || col != 1 {
+				t.Errorf("cursor at (%d,%d), want (%d,1) — the cursor did not follow the scrolled lightbar", row, col, tc.wantRow)
 			}
 		})
 	}
