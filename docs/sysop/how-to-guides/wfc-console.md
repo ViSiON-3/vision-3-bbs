@@ -304,8 +304,9 @@ console then redials on its own, backing off from 1 second up to 30 seconds
 between attempts, and shows `Reconnected` in the command bar when the BBS is
 back. Press `R` to retry immediately instead of waiting, or `Q` to quit.
 
-Link changes are not written to the logs. Instead the title bar keeps a
-running tally after the first drop, e.g. `WFC v1.0 - 12 drops, last 07:01`,
+Link changes are not written to the logs and take no room in the event
+history. Instead the title bar keeps a running tally after the first drop,
+e.g. `WFC v1.0 - 12 drops, last 07:01` (shortened beside a long board name),
 so a flapping link is visible at a glance. A laptop that sleeps overnight
 typically shows one drop per wake cycle; that is the machine, not the BBS. If the snapshot feed
 stalls for 30 seconds while the connection still looks alive, the console

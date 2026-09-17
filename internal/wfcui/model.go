@@ -77,13 +77,12 @@ const (
 )
 
 // eventConsole marks events the console generates locally about callers
-// (kick results) so they can be told apart from server events. eventLink
-// marks the console's own link changes; those are kept for the drop counter
-// in the title bar but stay out of the logs, which are about the board.
-const (
-	eventConsole admin.EventType = "console"
-	eventLink    admin.EventType = "console.link"
-)
+// (kick results) so they can be told apart from server events. The
+// console's own link changes are not events at all: they are counted for
+// the title bar (drops, lastDropAt) and shown briefly in the command bar,
+// so they neither clutter the logs nor push board activity out of the
+// bounded feed.
+const eventConsole admin.EventType = "console"
 
 var (
 	errEventStreamClosed = errors.New("event stream closed")
@@ -315,7 +314,6 @@ func (m *Model) loseConnection(err error) tea.Cmd {
 	}
 	m.drops++
 	m.lastDropAt = m.now()
-	m.pushLinkEvent("Connection lost: " + errText(err))
 	m.setStatus("Connection lost: "+errText(err), true)
 	return closeClient(old)
 }
@@ -339,12 +337,6 @@ func (m *Model) startDial() tea.Cmd {
 // result) to the feed; it shows in the Callers log.
 func (m *Model) pushLocalEvent(text string) {
 	m.appendEvent(admin.Event{Time: m.now(), Type: eventConsole, Handle: "WFC", Message: text})
-}
-
-// pushLinkEvent records a change in the console's own link. It is kept in
-// the feed for history but not shown in either log.
-func (m *Model) pushLinkEvent(text string) {
-	m.appendEvent(admin.Event{Time: m.now(), Type: eventLink, Handle: "WFC", Message: text})
 }
 
 // appendServerEvent adds an event from the daemon unless the feed already
@@ -464,9 +456,6 @@ func (m Model) botEvents() []admin.Event    { return m.eventsWhere(true) }
 func (m Model) eventsWhere(bot bool) []admin.Event {
 	var out []admin.Event
 	for _, ev := range m.events {
-		if ev.Type == eventLink {
-			continue // the console's own link is not board activity
-		}
 		if isBotEvent(ev) == bot {
 			out = append(out, ev)
 		}
@@ -629,10 +618,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastErr = nil
 		m.lastSnapAt = m.now()
 		if m.everLinked {
-			m.pushLinkEvent("Reconnected")
 			m.setStatus("Reconnected", false)
-		} else {
-			m.pushLinkEvent("Connected")
 		}
 		m.everLinked = true
 		return m, tea.Batch(m.linkCmds()...)

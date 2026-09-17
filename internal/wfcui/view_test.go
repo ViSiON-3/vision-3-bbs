@@ -370,7 +370,6 @@ func TestViewEventsNewestLastAndLabelled(t *testing.T) {
 		{Time: base.Add(time.Second), Type: admin.EventMenuChanged, Handle: "Zed", Message: "MAIN"},
 		{Time: base.Add(2 * time.Second), Type: admin.EventNodeKicked, Handle: "Zed", Message: "kicked by sysop"},
 		{Time: base.Add(3 * time.Second), Type: eventConsole, Handle: "WFC", Message: "Kicked Zed (node 1)"},
-		{Time: base.Add(4 * time.Second), Type: eventLink, Handle: "WFC", Message: "Reconnected"},
 	}
 	v := m.View()
 	for _, want := range []string{"Zed           Logged on", "Zed           Menu: MAIN", "Zed           Kicked by sysop", "WFC           Kicked Zed (node 1)"} {
@@ -381,12 +380,31 @@ func TestViewEventsNewestLastAndLabelled(t *testing.T) {
 	if strings.Index(v, "Logged on") > strings.Index(v, "Kicked Zed") {
 		t.Error("events must be oldest first")
 	}
-	if strings.Contains(v, "Reconnected") {
-		t.Error("link events must not appear in the Callers log")
+}
+
+func TestTitleStateNeverOverwritesLongBoardName(t *testing.T) {
+	m := makeModel(Options{Version: "1.0.0", Dial: func(context.Context) (admin.AdminClient, error) { return nil, nil }}, 80, 25)
+	m.snapshot = mockupSnapshot(m.now())
+	m.snapshot.SystemName = strings.Repeat("Broken Bit Syndicate ", 3) + "BBS" // 66 columns
+	m.nextRetryAt = m.now().Add(4 * time.Second)
+	m.drops = 3
+	states := []struct {
+		name string
+		set  func()
+	}{
+		{"connecting", func() { m.conn = connConnecting }},
+		{"offline", func() { m.conn = connLost }},
+		{"offline-no-dial", func() { m.conn = connLost; m.opts.Dial = nil }},
+		{"stale", func() { m.conn = connConnected; m.lastSnapAt = m.now().Add(-9 * time.Second) }},
+		{"drops", func() { m.conn = connConnected; m.lastSnapAt = m.now() }},
+		{"plain", func() { m.drops = 0 }},
 	}
-	m.tab = groupBots
-	if strings.Contains(m.View(), "Reconnected") {
-		t.Error("link events must not appear in the Bots log")
+	for _, st := range states {
+		st.set()
+		r0 := rows(m.View())[0]
+		if !strings.Contains(r0, m.snapshot.SystemName) || runeCount(r0) != 80 {
+			t.Errorf("%s: board name damaged: %q", st.name, r0)
+		}
 	}
 }
 

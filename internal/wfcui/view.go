@@ -227,37 +227,44 @@ func (m Model) drawTitle(s *screen, g geometry) {
 	s.textRight(0, titleY, g.w-marginW, right, fg, cBlue)
 }
 
-// fitFirst returns the first candidate no wider than room (the last one
-// regardless, if none fits).
+// fitFirst returns the first candidate no wider than room, or "" when none
+// fits: the title-bar state is omitted rather than drawn over the board name.
 func fitFirst(room int, candidates ...string) string {
 	for _, c := range candidates {
 		if runeCount(c) <= room {
 			return c
 		}
 	}
-	return candidates[len(candidates)-1]
+	return ""
 }
 
-// linkStatus is the title-bar text and colour for the connection state,
-// worded to fit within room cells.
+// linkStatus is the title-bar text and colour for the connection state.
+// Every state offers progressively shorter wordings so it fits within room
+// cells beside the centred board name, or disappears if even the shortest
+// would not.
 func (m Model) linkStatus(room int) (string, uint8) {
 	now := m.now()
 	switch m.conn {
 	case connConnecting:
-		return "connecting...", cYellow
+		return fitFirst(room, "connecting...", "conn..."), cYellow
 	case connLost:
 		if m.opts.Dial == nil {
-			return "OFFLINE", cLightRed
+			return fitFirst(room, "OFFLINE", "OFF"), cLightRed
 		}
 		wait := m.nextRetryAt.Sub(now).Round(time.Second)
 		if wait < 0 {
 			wait = 0
 		}
-		return fmt.Sprintf("OFFLINE - retry in %ds", int(wait/time.Second)), cLightRed
+		secs := int(wait / time.Second)
+		return fitFirst(room,
+			fmt.Sprintf("OFFLINE - retry in %ds", secs),
+			fmt.Sprintf("OFFLINE %ds", secs),
+			"OFFLINE", "OFF",
+		), cLightRed
 	}
 	if !m.lastSnapAt.IsZero() {
 		if age := now.Sub(m.lastSnapAt); age > staleAfter {
-			return fmt.Sprintf("stale %ds", int(age/time.Second)), cYellow
+			return fitFirst(room, fmt.Sprintf("stale %ds", int(age/time.Second)), "stale"), cYellow
 		}
 	}
 	v := m.opts.Version
@@ -283,7 +290,7 @@ func (m Model) linkStatus(room int) (string, uint8) {
 			tally,
 		), cLightBlue
 	}
-	return "WFC " + v, cLightBlue
+	return fitFirst(room, "WFC "+v, v), cLightBlue
 }
 
 // drawStats paints the counter pills, centred: " Label: value " on blue with
