@@ -3,6 +3,7 @@ package editor
 import (
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,4 +81,55 @@ func TestRunLeavesSharedInputHandlerOpen(t *testing.T) {
 		// Still open — menu reader keeps working after the editor exits.
 	}
 	shared.CloseAndWait()
+}
+
+// TestRunQuotePickerIgnoresSyncTERMCtrlQTrailer replays what SyncTERM on macOS
+// sends for CTRL-Q: 0x11 immediately followed by 0x10. The 0x10 used to reach
+// the quote picker as End, so it opened with the lightbar on the last source
+// line (#318). SPACE then quotes whichever line the bar is on, which makes the
+// bar's position observable in the saved message.
+func TestRunQuotePickerIgnoresSyncTERMCtrlQTrailer(t *testing.T) {
+	lines := []string{"first line", "middle line", "last line"}
+	for _, tc := range []struct {
+		name, open string
+	}{
+		{"plain CTRL-Q", "\x11"},
+		{"SyncTERM CTRL-Q with 0x10 trailer", "\x11\x10"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// open picker, SPACE quotes the selected line, ESC closes, CTRL-Z saves.
+			sess := testterm.NewSession(nil, tc.open+" \x1b\x1a")
+			ed := NewFSEditor(sess, io.Discard, ansi.OutputModeUTF8, 80, 24,
+				"", "", "", "", "", "", nil)
+			ed.input.SetEscTimeout(10 * time.Millisecond)
+			ed.SetQuoteData(&QuoteData{From: "Bucko", Title: "t", Lines: lines})
+			content, saved, err := ed.Run()
+			if err != nil || !saved {
+				t.Fatalf("Run: saved=%v err=%v", saved, err)
+			}
+			if !strings.Contains(content, "first line") || strings.Contains(content, "last line") {
+				t.Fatalf("picker did not open on the first line; saved message:\n%s", content)
+			}
+		})
+	}
+}
+
+// A deliberate End after the picker is open must still work: only a 0x10 that
+// rides in with the CTRL-Q keypress is dropped.
+func TestDiscardPendingByteOnlyDropsTheMatchingByte(t *testing.T) {
+	sess := testterm.NewSession(nil, "\x10x")
+	ih := NewInputHandler(sess)
+	defer ih.CloseAndWait()
+	if !ih.DiscardPendingByte(KeyCtrlP, 200*time.Millisecond) {
+		t.Fatal("pending 0x10 was not dropped")
+	}
+	if ih.DiscardPendingByte(KeyCtrlP, 200*time.Millisecond) {
+		t.Fatal("a non-matching byte must not be dropped")
+	}
+	if key, err := ih.ReadKey(); err != nil || key != 'x' {
+		t.Fatalf("the non-matching byte must stay readable: key=%q err=%v", key, err)
+	}
+	if ih.DiscardPendingByte(KeyCtrlP, 20*time.Millisecond) {
+		t.Fatal("nothing pending must report false")
+	}
 }

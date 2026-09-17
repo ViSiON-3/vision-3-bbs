@@ -255,6 +255,27 @@ func (ih *InputHandler) readByteWithTimeout(timeout time.Duration) (byte, error)
 	}
 }
 
+// ctrlQTrailerWindow is how long the editor waits, after CTRL-Q, for the
+// stray 0x10 some clients send with it. The two bytes leave the client in one
+// write, so the second is normally already queued; the window only has to
+// cover them being split across reads.
+const ctrlQTrailerWindow = 40 * time.Millisecond
+
+// DiscardPendingByte drops the next input byte if it equals b and is already
+// queued or arrives within wait. Any other byte is left for the next read. It
+// reports whether a byte was dropped.
+func (ih *InputHandler) DiscardPendingByte(b byte, wait time.Duration) bool {
+	next, err := ih.readByteWithTimeout(wait)
+	if err != nil {
+		return false
+	}
+	if next == b {
+		return true
+	}
+	ih.unreadByte(next)
+	return false
+}
+
 // errTimeout is the sentinel returned when readByteWithTimeout expires.
 var errTimeout = &inputTimeoutError{}
 

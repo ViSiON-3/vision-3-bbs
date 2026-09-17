@@ -27,6 +27,13 @@ func (e *FSEditor) handleKey(key int) {
 	case KeyCtrlZ: // Save
 		e.handleCommand(CommandSave)
 	case KeyCtrlQ: // Quote
+		// SyncTERM (seen on macOS over SSH) sends CTRL-Q as two bytes in one
+		// burst: 0x11 followed by 0x10, which is also the PC scancode of the
+		// Q key. 0x10 is CTRL-P, which the quote picker reads as End, so the
+		// lightbar jumped to the last source line the moment the picker
+		// opened (#318). Nobody can press End that fast after CTRL-Q, so a
+		// 0x10 arriving with the keypress is dropped as part of it.
+		e.input.DiscardPendingByte(KeyCtrlP, ctrlQTrailerWindow)
 		e.handleCommand(CommandQuote)
 
 	// Navigation
