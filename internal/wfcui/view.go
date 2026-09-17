@@ -220,29 +220,51 @@ func (m Model) drawTitle(s *screen, g geometry) {
 		s.text(boxX, titleY, note, cYellow, cBlue, g.w/2-runeCount(name)/2-1)
 	}
 
-	right, fg := m.linkStatus()
+	// The state segment must not run into the centred name; it gets the
+	// room to the right of it and picks the longest wording that fits.
+	nameEnd := (g.w+runeCount(name))/2 + 2
+	right, fg := m.linkStatus(g.w - marginW - nameEnd)
 	s.textRight(0, titleY, g.w-marginW, right, fg, cBlue)
 }
 
+// fitFirst returns the first candidate no wider than room, or "" when none
+// fits: the title-bar state is omitted rather than drawn over the board name.
+func fitFirst(room int, candidates ...string) string {
+	for _, c := range candidates {
+		if runeCount(c) <= room {
+			return c
+		}
+	}
+	return ""
+}
+
 // linkStatus is the title-bar text and colour for the connection state.
-func (m Model) linkStatus() (string, uint8) {
+// Every state offers progressively shorter wordings so it fits within room
+// cells beside the centred board name, or disappears if even the shortest
+// would not.
+func (m Model) linkStatus(room int) (string, uint8) {
 	now := m.now()
 	switch m.conn {
 	case connConnecting:
-		return "connecting...", cYellow
+		return fitFirst(room, "connecting...", "conn..."), cYellow
 	case connLost:
 		if m.opts.Dial == nil {
-			return "OFFLINE", cLightRed
+			return fitFirst(room, "OFFLINE", "OFF"), cLightRed
 		}
 		wait := m.nextRetryAt.Sub(now).Round(time.Second)
 		if wait < 0 {
 			wait = 0
 		}
-		return fmt.Sprintf("OFFLINE - retry in %ds", int(wait/time.Second)), cLightRed
+		secs := int(wait / time.Second)
+		return fitFirst(room,
+			fmt.Sprintf("OFFLINE - retry in %ds", secs),
+			fmt.Sprintf("OFFLINE %ds", secs),
+			"OFFLINE", "OFF",
+		), cLightRed
 	}
 	if !m.lastSnapAt.IsZero() {
 		if age := now.Sub(m.lastSnapAt); age > staleAfter {
-			return fmt.Sprintf("stale %ds", int(age/time.Second)), cYellow
+			return fitFirst(room, fmt.Sprintf("stale %ds", int(age/time.Second)), "stale"), cYellow
 		}
 	}
 	v := m.opts.Version
@@ -252,7 +274,23 @@ func (m Model) linkStatus() (string, uint8) {
 	if v[0] >= '0' && v[0] <= '9' {
 		v = "v" + v
 	}
-	return "WFC " + v, cLightBlue
+	if m.drops > 0 {
+		// A flapping link (a sleeping laptop, a lossy hop) shows up here as
+		// a count rather than as a log line per event.
+		noun := "drops"
+		if m.drops == 1 {
+			noun = "drop"
+		}
+		tally := fmt.Sprintf("%d %s", m.drops, noun)
+		last := m.lastDropAt.Format("15:04")
+		return fitFirst(room,
+			fmt.Sprintf("WFC %s - %s, last %s", v, tally, last),
+			fmt.Sprintf("WFC %s - %s", v, tally),
+			tally+", last "+last,
+			tally,
+		), cLightBlue
+	}
+	return fitFirst(room, "WFC "+v, v), cLightBlue
 }
 
 // drawStats paints the counter pills, centred: " Label: value " on blue with

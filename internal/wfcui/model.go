@@ -76,8 +76,12 @@ const (
 	statusTTL = 4 * time.Second
 )
 
-// eventConsole marks events the console generates locally (connection
-// changes, kick results) so they can be told apart from server events.
+// eventConsole marks events the console generates locally about callers
+// (kick results) so they can be told apart from server events. The
+// console's own link changes are not events at all: they are counted for
+// the title bar (drops, lastDropAt) and shown briefly in the command bar,
+// so they neither clutter the logs nor push board activity out of the
+// bounded feed.
 const eventConsole admin.EventType = "console"
 
 var (
@@ -134,6 +138,11 @@ type Model struct {
 	// last arrived; lastSnapServer is that server timestamp.
 	lastSnapAt     time.Time
 	lastSnapServer time.Time
+	// drops counts links lost since the console started; lastDropAt is when
+	// the most recent one happened. Shown in the title bar so a flapping
+	// link is visible at a glance without a log line per event.
+	drops      int
+	lastDropAt time.Time
 
 	status      string
 	statusErr   bool
@@ -303,7 +312,9 @@ func (m *Model) loseConnection(err error) tea.Cmd {
 	if m.mode == modeConfirmKick {
 		m.mode = m.prevMode
 	}
-	m.pushLocalEvent("Connection lost: " + errText(err))
+	m.drops++
+	m.lastDropAt = m.now()
+	m.setStatus("Connection lost: "+errText(err), true)
 	return closeClient(old)
 }
 
@@ -322,7 +333,8 @@ func (m *Model) startDial() tea.Cmd {
 	}
 }
 
-// pushLocalEvent appends a console-originated line to the event feed.
+// pushLocalEvent appends a console-originated line about a caller (a kick
+// result) to the feed; it shows in the Callers log.
 func (m *Model) pushLocalEvent(text string) {
 	m.appendEvent(admin.Event{Time: m.now(), Type: eventConsole, Handle: "WFC", Message: text})
 }
@@ -606,9 +618,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastErr = nil
 		m.lastSnapAt = m.now()
 		if m.everLinked {
-			m.pushLocalEvent("Reconnected")
-		} else {
-			m.pushLocalEvent("Connected")
+			m.setStatus("Reconnected", false)
 		}
 		m.everLinked = true
 		return m, tea.Batch(m.linkCmds()...)

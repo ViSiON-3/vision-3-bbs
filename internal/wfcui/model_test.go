@@ -201,8 +201,11 @@ func TestSnapshotErrorLosesConnectionAndSchedulesRetry(t *testing.T) {
 	if m.attempt != 1 || !m.nextRetryAt.Equal(ck.t.Add(time.Second)) {
 		t.Fatalf("attempt=%d next=%v; want 1 and +1s", m.attempt, m.nextRetryAt)
 	}
-	if !strings.HasPrefix(lastEvent(m), "Connection lost: EOF") {
-		t.Fatalf("event log = %q", lastEvent(m))
+	if !m.statusErr || !strings.HasPrefix(m.status, "Connection lost: EOF") || m.drops != 1 {
+		t.Fatalf("status=%q drops=%d", m.status, m.drops)
+	}
+	if len(m.events) != 0 {
+		t.Fatalf("a link loss must not take a slot in the bounded feed: %+v", m.events)
 	}
 	if m.client != nil {
 		t.Fatal("dead client must be dropped")
@@ -251,8 +254,8 @@ func TestTickDialsWhenRetryDue(t *testing.T) {
 	if m.conn != connConnected || m.client != replacement || m.attempt != 0 {
 		t.Fatalf("after dial: conn=%v client=%v attempt=%d", m.conn, m.client, m.attempt)
 	}
-	if lastEvent(m) != "Reconnected" {
-		t.Fatalf("event = %q, want Reconnected", lastEvent(m))
+	if m.status != "Reconnected" || len(m.events) != 0 {
+		t.Fatalf("status = %q events = %d, want Reconnected status and no log entry", m.status, len(m.events))
 	}
 	// The new link is serviced: its snapshot arrives via the link commands.
 	m = run(t, m, cmd)
@@ -666,7 +669,8 @@ func TestReplayDedupSurvivesClockSkew(t *testing.T) {
 	// The daemon's clock runs ahead of the console's.
 	server := admin.Event{Time: ck.t.Add(time.Hour), Type: admin.EventMenuChanged, NodeID: 1, Handle: "Zed", Message: "MAIN"}
 	m, _ = update(t, m, eventMsg{connID: m.connID, ch: fc.events, ev: server, ok: true})
-	m, _ = update(t, m, connLostMsg{connID: m.connID, err: errors.New("gone")}) // local event, earlier timestamp
+	m.pushLocalEvent("Kicked Bob (node 2)") // local clock: an earlier timestamp lands after the server event
+	m, _ = update(t, m, connLostMsg{connID: m.connID, err: errors.New("gone")})
 	m, _ = update(t, m, dialResultMsg{connID: m.connID, client: newFakeClient()})
 	m, _ = update(t, m, eventMsg{connID: m.connID, ch: fc.events, ev: server, ok: true}) // replay
 	n := 0
@@ -714,5 +718,20 @@ func TestKickPromptTargetsCapturedCaller(t *testing.T) {
 	run(t, m, cmd)
 	if len(fc.execs) != 1 || fc.execs[0].NodeID != 1 || !fc.execs[0].ConnectedAt.Equal(a.ConnectedAt) {
 		t.Fatalf("kick must target the captured session: %+v", fc.execs)
+	}
+}
+
+func TestLinkChangesDoNotEvictBoardEvents(t *testing.T) {
+	fc := newFakeClient()
+	m, ck := newTestModel(fc, Options{MaxEvents: 3})
+	for i := 0; i < 3; i++ {
+		m, _ = update(t, m, eventMsg{connID: m.connID, ch: fc.events, ev: admin.Event{Time: ck.t.Add(time.Duration(i) * time.Second), Type: admin.EventMenuChanged, NodeID: 1, Handle: "Zed", Message: fmt.Sprintf("M%d", i)}, ok: true})
+	}
+	for i := 0; i < 10; i++ {
+		m, _ = update(t, m, connLostMsg{connID: m.connID, err: errors.New("nap")})
+		m, _ = update(t, m, dialResultMsg{connID: m.connID, client: newFakeClient()})
+	}
+	if len(m.callerEvents()) != 3 || m.drops != 10 {
+		t.Fatalf("board events lost to link churn: %d kept, drops=%d", len(m.callerEvents()), m.drops)
 	}
 }

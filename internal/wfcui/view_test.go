@@ -369,16 +369,70 @@ func TestViewEventsNewestLastAndLabelled(t *testing.T) {
 		{Time: base, Type: admin.EventCallerLoggedIn, NodeID: 2, Handle: "Zed", Message: "logged in"},
 		{Time: base.Add(time.Second), Type: admin.EventMenuChanged, Handle: "Zed", Message: "MAIN"},
 		{Time: base.Add(2 * time.Second), Type: admin.EventNodeKicked, Handle: "Zed", Message: "kicked by sysop"},
-		{Time: base.Add(3 * time.Second), Type: eventConsole, Handle: "WFC", Message: "Reconnected"},
+		{Time: base.Add(3 * time.Second), Type: eventConsole, Handle: "WFC", Message: "Kicked Zed (node 1)"},
 	}
 	v := m.View()
-	for _, want := range []string{"Zed           Logged on", "Zed           Menu: MAIN", "Zed           Kicked by sysop", "WFC           Reconnected"} {
+	for _, want := range []string{"Zed           Logged on", "Zed           Menu: MAIN", "Zed           Kicked by sysop", "WFC           Kicked Zed (node 1)"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("event feed missing %q:\n%s", want, v)
 		}
 	}
-	if strings.Index(v, "Logged on") > strings.Index(v, "Reconnected") {
+	if strings.Index(v, "Logged on") > strings.Index(v, "Kicked Zed") {
 		t.Error("events must be oldest first")
+	}
+}
+
+func TestTitleStateNeverOverwritesLongBoardName(t *testing.T) {
+	m := makeModel(Options{Version: "1.0.0", Dial: func(context.Context) (admin.AdminClient, error) { return nil, nil }}, 80, 25)
+	m.snapshot = mockupSnapshot(m.now())
+	m.snapshot.SystemName = strings.Repeat("Broken Bit Syndicate ", 3) + "BBS" // 66 columns
+	m.nextRetryAt = m.now().Add(4 * time.Second)
+	m.drops = 3
+	states := []struct {
+		name string
+		set  func()
+	}{
+		{"connecting", func() { m.conn = connConnecting }},
+		{"offline", func() { m.conn = connLost }},
+		{"offline-no-dial", func() { m.conn = connLost; m.opts.Dial = nil }},
+		{"stale", func() { m.conn = connConnected; m.lastSnapAt = m.now().Add(-9 * time.Second) }},
+		{"drops", func() { m.conn = connConnected; m.lastSnapAt = m.now() }},
+		{"plain", func() { m.drops = 0 }},
+	}
+	for _, st := range states {
+		st.set()
+		r0 := rows(m.View())[0]
+		if !strings.Contains(r0, m.snapshot.SystemName) || runeCount(r0) != 80 {
+			t.Errorf("%s: board name damaged: %q", st.name, r0)
+		}
+	}
+}
+
+func TestTitleShowsDropCount(t *testing.T) {
+	m := makeModel(Options{Version: "1.0.0"}, 80, 25)
+	m.snapshot = mockupSnapshot(m.now())
+	if !strings.Contains(rows(m.View())[0], "WFC v1.0.0 ") {
+		t.Errorf("title: %q", rows(m.View())[0])
+	}
+	m.drops = 1
+	m.lastDropAt = time.Date(2026, 9, 17, 7, 1, 0, 0, time.Local)
+	// At 80 columns the full wording would touch the name, so it shortens.
+	r0 := rows(m.View())[0]
+	if !strings.Contains(r0, "Broken Bit Syndicate") || !strings.HasSuffix(r0, "WFC v1.0.0 - 1 drop ") || strings.Contains(r0, "last") {
+		t.Errorf("title with drops at 80 cols: %q", r0)
+	}
+	m.drops = 12
+	m.width, m.height = 110, 34
+	r0 = rows(m.View())[0]
+	if !strings.HasSuffix(r0, "WFC v1.0.0 - 12 drops, last 07:01 ") || !strings.Contains(r0, "Broken Bit Syndicate") {
+		t.Errorf("title with drops at 110 cols: %q", r0)
+	}
+	// A very long board name leaves only the bare tally.
+	m.width, m.height = 80, 25
+	m.snapshot.SystemName = "The Very Long Name Of A Bulletin Board System"
+	r0 = rows(m.View())[0]
+	if !strings.Contains(r0, m.snapshot.SystemName) || !strings.HasSuffix(r0, "12 drops ") || strings.Contains(r0, "WFC") || runeCount(r0) != 80 {
+		t.Errorf("title clipping: %q", r0)
 	}
 }
 
