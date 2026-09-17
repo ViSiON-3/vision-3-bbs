@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -382,5 +383,70 @@ func TestQuotePrefixHonoursConfiguredTemplate(t *testing.T) {
 	ch.SetQuoteStrings("", "", "^N said: ")
 	if got := ch.quotePrefix(); got != "Bucko said: " {
 		t.Errorf("^N quotePrefix() = %q, want %q", got, "Bucko said: ")
+	}
+}
+
+// The cursor is hidden while the picker is open, but a client that ignores
+// the hide request shows it wherever the last paint ended — the bottom row of
+// the source pane, which reads as a selector on the wrong line. It must sit on
+// the lightbar row instead, and follow the bar as it moves.
+func TestQuoteModeParksCursorOnLightbar(t *testing.T) {
+	// Source pane starts at row 16 (see TestQuoteModeDrawsSplitPanes).
+	tests := []struct {
+		name    string
+		keys    string
+		wantRow int
+	}{
+		{"on open", "\x1b", 16},
+		{"after moving down", "\x18\x1b", 17},                // CTRL-X = down
+		{"after quoting a line", " \x1b", 17},                // SPACE steps the bar down
+		{"after end key", "\x10\x1b", 18},                    // CTRL-P = last line
+		{"after moving back to the top", "\x10\x17\x1b", 16}, // CTRL-W = first line
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tt, ch, ih, cleanup := newQuoteHarness(t, tc.keys, quoteBody)
+			defer cleanup()
+
+			ch.HandleQuote(ih, 1, 1)
+
+			row, col := tt.Cursor()
+			if row != tc.wantRow || col != 1 {
+				t.Errorf("cursor at (%d,%d), want (%d,1) — the cursor is not parked on the lightbar", row, col, tc.wantRow)
+			}
+		})
+	}
+}
+
+// With more source lines than the pane holds, the bar scrolls the pane, and
+// the parked cursor has to follow the bar's row on screen rather than its
+// index in the source.
+func TestQuoteModeParksCursorAfterScrolling(t *testing.T) {
+	long := make([]string, 30)
+	for i := range long {
+		long[i] = fmt.Sprintf("line %02d", i+1)
+	}
+	tests := []struct {
+		name    string
+		keys    string
+		wantRow int
+	}{
+		{"end scrolls to the last pane row", "\x10\x1b", 23},                // CTRL-P
+		{"page down keeps the bar on the last pane row", "\x03\x1b", 23},    // CTRL-C = page down
+		{"end then up sits one row above the bottom", "\x10\x05\x1b", 22},   // CTRL-E = up
+		{"end then home returns to the first pane row", "\x10\x17\x1b", 16}, // CTRL-W
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tt, ch, ih, cleanup := newQuoteHarness(t, tc.keys, long)
+			defer cleanup()
+
+			ch.HandleQuote(ih, 1, 1)
+
+			row, col := tt.Cursor()
+			if row != tc.wantRow || col != 1 {
+				t.Errorf("cursor at (%d,%d), want (%d,1) — the cursor did not follow the scrolled lightbar", row, col, tc.wantRow)
+			}
+		})
 	}
 }
