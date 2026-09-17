@@ -85,48 +85,68 @@ func (ch *CommandHandler) runQuoteMode(inputHandler *InputHandler, src []string,
 	defer ch.screen.WriteDirect("\x1b[?25h")
 
 	qs.drawAll()
+	qs.parkCursor()
 
 	for {
 		key, err := inputHandler.ReadKeyTranslated()
 		if err != nil {
 			break
 		}
-
-		if qs.composeFocus {
-			if qs.handleComposeKey(key) {
-				break
-			}
-			continue
+		if qs.handleKey(key) {
+			break
 		}
-
-		// ReadKeyTranslated folds the arrow and paging keys into the WordStar
-		// control codes, so only the control codes are dispatched here.
-		switch key {
-		case KeyCtrlE:
-			qs.moveTo(qs.sel - 1)
-		case KeyCtrlX:
-			qs.moveTo(qs.sel + 1)
-		case KeyCtrlR:
-			qs.moveTo(qs.sel - qs.quoteRows)
-		case KeyCtrlC:
-			qs.moveTo(qs.sel + qs.quoteRows)
-		case KeyCtrlW:
-			qs.moveTo(0)
-		case KeyCtrlP:
-			qs.moveTo(len(qs.src) - 1)
-		case ' ', KeyEnter:
-			qs.quoteSelected()
-		case KeyBackspace, KeyCtrlY:
-			qs.undoLast()
-		case KeyTab:
-			qs.composeFocus = true
-			qs.drawDivider()
-		case KeyEsc, KeyCtrlQ:
-			return qs.finish()
-		}
+		qs.parkCursor()
 	}
 
 	return qs.finish()
+}
+
+// handleKey dispatches one keypress to whichever pane holds focus.
+// Returns true when the session should end.
+func (qs *quoteSession) handleKey(key int) bool {
+	if qs.composeFocus {
+		return qs.handleComposeKey(key)
+	}
+
+	// ReadKeyTranslated folds the arrow and paging keys into the WordStar
+	// control codes, so only the control codes are dispatched here.
+	switch key {
+	case KeyCtrlE:
+		qs.moveTo(qs.sel - 1)
+	case KeyCtrlX:
+		qs.moveTo(qs.sel + 1)
+	case KeyCtrlR:
+		qs.moveTo(qs.sel - qs.quoteRows)
+	case KeyCtrlC:
+		qs.moveTo(qs.sel + qs.quoteRows)
+	case KeyCtrlW:
+		qs.moveTo(0)
+	case KeyCtrlP:
+		qs.moveTo(len(qs.src) - 1)
+	case ' ', KeyEnter:
+		qs.quoteSelected()
+	case KeyBackspace, KeyCtrlY:
+		qs.undoLast()
+	case KeyTab:
+		qs.composeFocus = true
+		qs.drawDivider()
+	case KeyEsc, KeyCtrlQ:
+		return true
+	}
+	return false
+}
+
+// parkCursor moves the hardware cursor onto the lightbar row. Every repaint
+// leaves the cursor wherever its last write ended, usually the bottom row of
+// the source pane. The cursor is hidden for the whole session, but a client
+// that ignores DECTCEM shows a blinking block there, on the wrong line, so it
+// is parked on the selection instead.
+func (qs *quoteSession) parkCursor() {
+	row := qs.quoteY + qs.sel - qs.top
+	if row < qs.quoteY || row >= qs.quoteY+qs.quoteRows {
+		row = qs.quoteY
+	}
+	qs.ch.screen.GoXY(1, row)
 }
 
 // handleComposeKey scrolls the compose pane while it holds focus.

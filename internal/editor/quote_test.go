@@ -384,3 +384,35 @@ func TestQuotePrefixHonoursConfiguredTemplate(t *testing.T) {
 		t.Errorf("^N quotePrefix() = %q, want %q", got, "Bucko said: ")
 	}
 }
+
+// The cursor is hidden while the picker is open, but a client that ignores
+// the hide request shows it wherever the last paint ended — the bottom row of
+// the source pane, which reads as a selector on the wrong line. It must sit on
+// the lightbar row instead, and follow the bar as it moves.
+func TestQuoteModeParksCursorOnLightbar(t *testing.T) {
+	// Source pane starts at row 16 (see TestQuoteModeDrawsSplitPanes).
+	tests := []struct {
+		name    string
+		keys    string
+		wantRow int
+	}{
+		{"on open", "\x1b", 16},
+		{"after moving down", "\x18\x1b", 17},                // CTRL-X = down
+		{"after quoting a line", " \x1b", 17},                // SPACE steps the bar down
+		{"after end key", "\x10\x1b", 18},                    // CTRL-P = last line
+		{"after moving back to the top", "\x10\x17\x1b", 16}, // CTRL-W = first line
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tt, ch, ih, cleanup := newQuoteHarness(t, tc.keys, quoteBody)
+			defer cleanup()
+
+			ch.HandleQuote(ih, 1, 1)
+
+			row, col := tt.Cursor()
+			if row != tc.wantRow || col != 1 {
+				t.Errorf("cursor at (%d,%d), want (%d,1) — the cursor is not parked on the lightbar", row, col, tc.wantRow)
+			}
+		})
+	}
+}
