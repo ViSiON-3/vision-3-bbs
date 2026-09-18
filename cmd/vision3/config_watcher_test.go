@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
@@ -65,16 +66,15 @@ func newTestWatcher(t *testing.T, names ...string) (*ConfigWatcher, string, *rec
 // touch rewrites a file with a modification time distinct from its current one.
 // Timestamps are set explicitly rather than relying on wall-clock movement, so
 // the test does not depend on filesystem timestamp granularity.
-// touch rewrites path with a modification time age from now, as a single
-// change from the watcher's point of view.
+// touch rewrites path with a modification time age from now, staged in a
+// sibling file and renamed into place so the watcher sees exactly one change.
 //
 // Writing in place and then setting the time changes the modification time
-// twice, and the poll loop compares modification times. A poll landing between
-// the two saw one change, reloaded, then saw the other and reloaded again -
-// which is how TestLivePollLoopPicksUpABurst came to observe two reloads per
-// file on a loaded runner (#370). Staging the content in a sibling file and
-// renaming it into place keeps the whole thing to one atomic change, so no
-// poll can catch an intermediate state.
+// twice, and changed() compares modification times on every poll with no
+// debouncing. A poll landing between the two saw one change, reloaded, then
+// saw the other and reloaded again - the two-reloads-per-file failure in #370.
+// A rename carries the staged time across with the content in one step, so no
+// poll can observe an intermediate state.
 func touch(t *testing.T, path string, age time.Duration) {
 	t.Helper()
 
@@ -99,9 +99,12 @@ func touch(t *testing.T, path string, age time.Duration) {
 	if err := os.Chtimes(tmpName, ts, ts); err != nil {
 		t.Fatalf("chtimes %s: %v", tmpName, err)
 	}
-	// Rename carries the staged modification time across with the content.
-	if err := os.Rename(tmpName, path); err != nil {
-		t.Fatalf("rename %s -> %s: %v", tmpName, path, err)
+	// atomicfile.Replace rather than os.Rename: Windows refuses to replace a
+	// file another handle has open, and the poll loop is reading these paths
+	// concurrently. Replace retries that case, which os.Rename would surface
+	// as a Windows-only flake in place of the one this fixes.
+	if err := atomicfile.Replace(tmpName, path); err != nil {
+		t.Fatalf("replace %s -> %s: %v", tmpName, path, err)
 	}
 }
 
