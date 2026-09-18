@@ -5,6 +5,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/mattn/go-runewidth"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
@@ -223,5 +225,25 @@ func TestMessageBodyKeepsTrailingResetAfterABreak(t *testing.T) {
 	// It is zero-width, so it must not cost an extra row.
 	if len(lines) != 1 {
 		t.Errorf("expected the reset to ride on the last line, got %d lines: %q", len(lines), lines)
+	}
+}
+
+// Display width, not rune count: a CJK rune occupies two terminal columns, so
+// a line can fit comfortably by rune count and still overrun the margin.
+func TestMessageBodyMeasuresWideRunesAsTwoColumns(t *testing.T) {
+	const width = 20
+	line := "你好世界 你好世界 你好世界"
+
+	if n := utf8.RuneCountInString(line); n > width {
+		t.Fatalf("fixture is %d runes; it must fit by rune count for this test to bite", n)
+	}
+	if runewidth.StringWidth(line) <= width {
+		t.Fatalf("fixture must exceed %d display columns", width)
+	}
+
+	for i, ln := range wrapAnsiString(line, width) {
+		if got := runewidth.StringWidth(reWrapEsc.ReplaceAllString(ln, "")); got > width {
+			t.Errorf("line %d is %d display columns, over the %d budget: %q", i, got, width, ln)
+		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
 
@@ -117,14 +118,14 @@ func wrapAnsiString(text string, width int) []string {
 }
 
 // columnWidth is the on-screen width of escape-free text. Message bodies are
-// raw bytes: CP437 art is one column per byte, while a UTF-8 body is one
-// column per rune. The two encodings cannot be told apart byte by byte -
+// raw bytes: CP437 art is one column per byte, while a UTF-8 body is measured
+// by display width, so a CJK rune counts two and a combining mark none. The two encodings cannot be told apart byte by byte -
 // plenty of adjacent CP437 pairs form a valid UTF-8 sequence - so the caller
 // decides once per line and passes the answer down, matching how
 // terminalio's writer resolves the same ambiguity for a span.
 func columnWidth(plain string, asUTF8 bool) int {
 	if asUTF8 {
-		return utf8.RuneCountInString(plain)
+		return runewidth.StringWidth(plain)
 	}
 	return len(plain)
 }
@@ -202,14 +203,13 @@ func splitWrapSegments(line string, asUTF8 bool) []wrapSeg {
 			codes.WriteString(pending.String())
 			pending.Reset()
 		}
-		n := 1
+		n, w := 1, 1
 		if asUTF8 {
-			if _, size := utf8.DecodeRuneInString(line[i:]); size > 1 {
-				n = size
-			}
+			r, size := utf8.DecodeRuneInString(line[i:])
+			n, w = size, runewidth.RuneWidth(r)
 		}
 		text.WriteString(line[i : i+n])
-		width++
+		width += w
 		i += n
 	}
 	closeSeg()
