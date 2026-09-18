@@ -103,6 +103,17 @@ func showNewsItem(c *cmdCtx, item *NewsItem, idx int) (quit bool, err error) {
 		drawStatus()
 	}
 
+	// restore puts the terminal back in a sane state for whatever the caller
+	// writes next. drawStatus leaves the cursor parked on the last row with a
+	// colour still in force, and the pause prompt that may follow only moves
+	// horizontally - it would be written over the status line in that colour.
+	// Not called when input fails: the connection is gone and there is nothing
+	// to tidy.
+	restore := func() {
+		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(c.termHeight, 1)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, []byte("\x1b[0m\x1b[K"), outputMode)
+	}
+
 	pageSize := availRows - 1
 	if pageSize < 1 {
 		pageSize = 1
@@ -123,8 +134,10 @@ func showNewsItem(c *cmdCtx, item *NewsItem, idx int) (quit bool, err error) {
 		prev := offset
 		switch key {
 		case editor.KeyEsc, 'q', 'Q':
+			restore()
 			return true, nil
 		case editor.KeyEnter, ' ':
+			restore()
 			return false, nil
 
 		case editor.KeyArrowUp, editor.KeyCtrlE:
@@ -142,6 +155,7 @@ func showNewsItem(c *cmdCtx, item *NewsItem, idx int) (quit bool, err error) {
 		default:
 			// Any other key moves on, which keeps the old "press a key"
 			// reflex working for readers who are not scrolling.
+			restore()
 			return false, nil
 		}
 
