@@ -47,7 +47,15 @@ func showNewsItem(c *cmdCtx, item *NewsItem, idx int) (quit bool, err error) {
 	// A line's colour can be set by a line above it, so a window that starts
 	// part-way down has to restore the state it inherits - the same fold the
 	// message reader does (#362).
-	entryState := buildBodyEntryStates(body)
+	//
+	// Seeded from the header rather than from grey: trimTrailingBlankRows
+	// deliberately keeps the colour the header ends on so the body inherits
+	// it, and starting the fold at the default would throw that away for any
+	// header that does not end grey.
+	headerState := ansi.NewSGRState()
+	headerState.Write(bodyDefaultColour)
+	headerState.Write(string(hdr))
+	entryState := buildBodyEntryStatesFrom(body, headerState.Escape())
 
 	offset := 0
 	maxOffset := len(body) - availRows

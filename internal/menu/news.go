@@ -264,7 +264,7 @@ func trimTrailingBlankRows(b []byte) []byte {
 		if strings.TrimSpace(stripEscapes(last)) != "" {
 			break
 		}
-		carried = escapesOnly(last) + carried
+		carried = graphicEscapesOnly(last) + carried
 		rows = rows[:len(rows)-1]
 	}
 	rows[len(rows)-1] += carried
@@ -272,19 +272,42 @@ func trimTrailingBlankRows(b []byte) []byte {
 	return []byte(strings.Join(rows, "\r\n"))
 }
 
-// escapesOnly returns just the escape sequences in s, discarding everything
-// that would occupy a column.
-func escapesOnly(s string) string {
+// graphicEscapesOnly returns just the colour sequences in s.
+//
+// Only SGR is carried off a dropped row. Everything else an escape can do -
+// moving the cursor, erasing - depends on where in the header it ran, so
+// hoisting a stray ESC[5;1H or ESC[K onto the row above would change what the
+// header draws rather than merely what colour it leaves behind.
+func graphicEscapesOnly(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); {
-		if n := escapeLen(s, i); n > 0 {
-			b.WriteString(s[i : i+n])
-			i += n
+		n := escapeLen(s, i)
+		if n == 0 {
+			i++
 			continue
 		}
-		i++
+		if isSGR(s[i : i+n]) {
+			b.WriteString(s[i : i+n])
+		}
+		i += n
 	}
 	return b.String()
+}
+
+// isSGR reports whether seq is a Select Graphic Rendition sequence: CSI, plain
+// parameter bytes, and a final "m". A private form such as ESC[?7m is not one.
+func isSGR(seq string) bool {
+	if len(seq) < 3 || seq[0] != 0x1b || seq[1] != '[' || seq[len(seq)-1] != 'm' {
+		return false
+	}
+	for i := 2; i < len(seq)-1; i++ {
+		c := seq[i]
+		if c >= '0' && c <= '9' || c == ';' || c == ':' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // renderNewsBody wraps an item's body to the width of the header frame.
@@ -422,6 +445,7 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	shown := 0
+	var viewErr error
 	for i, item := range nd.Items {
 		if userLevel < item.Level {
 			continue
@@ -445,7 +469,7 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		}
 
-		stop, viewErr := showNewsItem(c, &nd.Items[i], i+1)
+		stop, err := showNewsItem(c, &nd.Items[i], i+1)
 		shown++
 
 		// Seen either way: the item was put on screen, and making a reader who
@@ -453,9 +477,15 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 		if !item.Always && item.ID > 0 {
 			seen[item.ID] = true
 		}
-		if viewErr != nil || stop {
-			// ESC skips the rest of the backlog. Save what has been seen so
-			// far before leaving.
+		if err != nil {
+			// Hold the error rather than returning here: the seen-set still
+			// needs saving. A disconnect must reach the login sequence, which
+			// turns io.EOF into LOGOFF.
+			viewErr = err
+			break
+		}
+		if stop {
+			// ESC skips the rest of the backlog.
 			break
 		}
 	}
@@ -473,7 +503,7 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 	if shown > 0 {
 		slog.Debug("displayed news items", "node", nodeNumber, "count", shown, "handle", currentUser.Handle)
 	}
-	return currentUser, "", nil
+	return currentUser, "", viewErr
 }
 
 // runListNews presents all visible news items in a list and lets users read them.

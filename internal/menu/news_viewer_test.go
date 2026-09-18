@@ -55,18 +55,24 @@ func TestNewsHeaderKeepsContentRows(t *testing.T) {
 	}
 }
 
-// escapesOnly keeps the zero-width parts and discards everything that occupies
-// a column, which is what lets a dropped row hand its colour upwards.
-func TestNewsEscapesOnly(t *testing.T) {
+// graphicEscapesOnly keeps the colour and discards everything else, which is
+// what lets a dropped row hand its colour upwards without also moving the
+// cursor or erasing part of the row above.
+func TestNewsGraphicEscapesOnly(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
 		{"\x1b[0;37m", "\x1b[0;37m"},
 		{"   \x1b[1;30m  ", "\x1b[1;30m"},
 		{"text\x1b[31mmore", "\x1b[31m"},
 		{"nothing", ""},
 		{"", ""},
+		// Only colour is carried: cursor and erase depend on where they ran.
+		{"\x1b[5;1H\x1b[0;37m", "\x1b[0;37m"},
+		{"\x1b[K", ""},
+		{"\x1b[?7h", ""},
+		{"\x1b[38;5;208m", "\x1b[38;5;208m"},
 	} {
-		if got := escapesOnly(tc.in); got != tc.want {
-			t.Errorf("escapesOnly(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := graphicEscapesOnly(tc.in); got != tc.want {
+			t.Errorf("graphicEscapesOnly(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }
@@ -97,5 +103,36 @@ func TestNewsBodyLinesCarryEntryState(t *testing.T) {
 func TestNewsEmptyBodyRendersNoLines(t *testing.T) {
 	if got := renderNewsBody(&NewsItem{}, shippedHeaderWidth, 80, ansi.OutputModeUTF8); len(got) != 0 {
 		t.Errorf("empty body produced %d line(s): %q", len(got), got)
+	}
+}
+
+// trimTrailingBlankRows keeps the colour the header ends on so the body
+// inherits it, so the colour fold has to start from that state rather than
+// from grey. Otherwise a header ending in anything but grey coloured the body
+// one way when written in sequence and another when paged.
+func TestNewsBodyFoldStartsFromTheHeaderColour(t *testing.T) {
+	// A header whose final row sets bright cyan and nothing else.
+	hdr := trimTrailingBlankRows(ansi.ReplacePipeCodes([]byte("|15Title\r\n|11\r\n")))
+
+	state := ansi.NewSGRState()
+	state.Write(bodyDefaultColour)
+	state.Write(string(hdr))
+	seeded := state.Escape()
+
+	if seeded == bodyDefaultColour {
+		t.Fatalf("fixture header must leave a colour other than the default, got %q", seeded)
+	}
+
+	body := []string{"plain line", "another plain line"}
+	states := buildBodyEntryStatesFrom(body, seeded)
+	for i, got := range states {
+		if got != seeded {
+			t.Errorf("body line %d starts in %q, want the header's %q", i, got, seeded)
+		}
+	}
+
+	// And the unseeded form still starts from grey, for the message reader.
+	if got := buildBodyEntryStates(body)[0]; got != bodyDefaultColour {
+		t.Errorf("unseeded fold starts in %q, want the default %q", got, bodyDefaultColour)
 	}
 }
