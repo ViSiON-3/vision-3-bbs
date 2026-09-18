@@ -234,9 +234,20 @@ type SGRState struct {
 	blink bool
 	fg    int // -1 = default, 30-37 = normal, 90-97 = bright
 	bg    int // -1 = default, 40-47 = normal, 100-107 = bright
+	// Extended colour, held whole because it cannot be expressed as a single
+	// parameter: "38;5;N" / "48;5;N" for 256-colour, "38;2;R;G;B" / "48;2;R;G;B"
+	// for direct colour. Set in place of fg/bg, never alongside.
+	fgExt string
+	bgExt string
 }
 
 // applyParams processes a semicolon-separated SGR parameter string (e.g. "1;36").
+//
+// Extended colour is consumed as a whole group rather than parameter by
+// parameter. "48;5;12" is one 256-colour background, not background-48 plus
+// blink-5 plus 12 - and |B12 expands to exactly that (see pipeCodeMap), so
+// flattening it turned a blue background into a blinking one and dropped the
+// colour.
 func (s *SGRState) applyParams(paramStr string) {
 	if paramStr == "" {
 		// ESC[m with no params is equivalent to ESC[0m (reset)
@@ -244,7 +255,25 @@ func (s *SGRState) applyParams(paramStr string) {
 		return
 	}
 	parts := splitSGR(paramStr)
-	for _, p := range parts {
+	for i := 0; i < len(parts); i++ {
+		p := parts[i]
+
+		// Extended colour: 38/48 followed by 5;N or 2;R;G;B.
+		if p == 38 || p == 48 {
+			ext, consumed, isGroup := extendedColour(parts, i)
+			if isGroup && ext != "" {
+				if p == 38 {
+					s.fg, s.fgExt = -1, ext
+				} else {
+					s.bg, s.bgExt = -1, ext
+				}
+			}
+			// A truncated group still swallows its remaining parameters, so a
+			// stray 5 or 2 inside it cannot be read as blink or faint.
+			i += consumed
+			continue
+		}
+
 		switch {
 		case p == 0: // reset
 			*s = SGRState{fg: -1, bg: -1}
@@ -260,19 +289,50 @@ func (s *SGRState) applyParams(paramStr string) {
 		case p == 25: // blink off
 			s.blink = false
 		case p >= 30 && p <= 37:
-			s.fg = p
+			s.fg, s.fgExt = p, ""
 		case p == 39: // default fg
-			s.fg = -1
+			s.fg, s.fgExt = -1, ""
 		case p >= 40 && p <= 47:
-			s.bg = p
+			s.bg, s.bgExt = p, ""
 		case p == 49: // default bg
-			s.bg = -1
+			s.bg, s.bgExt = -1, ""
 		case p >= 90 && p <= 97: // bright fg
-			s.fg = p
+			s.fg, s.fgExt = p, ""
 		case p >= 100 && p <= 107: // bright bg
-			s.bg = p
+			s.bg, s.bgExt = p, ""
 		}
 	}
+}
+
+// extendedColour reads the parameter group starting at parts[i], which is 38
+// or 48. It returns the group rendered back as SGR parameters, how many extra
+// parameters to skip, and whether this was an extended-colour introducer at
+// all.
+//
+// A truncated group reports itself as a group with no colour and skips what is
+// left, so its trailing parameters cannot be mistaken for other attributes. A
+// 38 or 48 followed by anything other than 5 or 2 is not an introducer, and
+// only that one parameter is dropped.
+func extendedColour(parts []int, i int) (ext string, skip int, isGroup bool) {
+	rest := len(parts) - i - 1
+	if rest < 1 {
+		return "", 0, false
+	}
+	out := strconv.Itoa(parts[i])
+	switch parts[i+1] {
+	case 5: // 256-colour: 38;5;N
+		if rest < 2 {
+			return "", rest, true
+		}
+		return out + ";5;" + strconv.Itoa(parts[i+2]), 2, true
+	case 2: // direct colour: 38;2;R;G;B
+		if rest < 4 {
+			return "", rest, true
+		}
+		return out + ";2;" + strconv.Itoa(parts[i+2]) + ";" +
+			strconv.Itoa(parts[i+3]) + ";" + strconv.Itoa(parts[i+4]), 4, true
+	}
+	return "", 0, false
 }
 
 // Escape returns the ANSI escape sequence that restores this SGR state.
@@ -289,11 +349,19 @@ func (s *SGRState) Escape() string {
 	if s.blink {
 		parts = append(parts, ';', '5')
 	}
-	if s.fg >= 0 {
+	switch {
+	case s.fgExt != "":
+		parts = append(parts, ';')
+		parts = append(parts, s.fgExt...)
+	case s.fg >= 0:
 		parts = append(parts, ';')
 		parts = strconv.AppendInt(parts, int64(s.fg), 10)
 	}
-	if s.bg >= 0 {
+	switch {
+	case s.bgExt != "":
+		parts = append(parts, ';')
+		parts = append(parts, s.bgExt...)
+	case s.bg >= 0:
 		parts = append(parts, ';')
 		parts = strconv.AppendInt(parts, int64(s.bg), 10)
 	}

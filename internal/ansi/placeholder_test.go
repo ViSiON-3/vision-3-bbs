@@ -754,3 +754,33 @@ func TestSplitSGR(t *testing.T) {
 		})
 	}
 }
+
+// Extended colour is one group, not a run of independent parameters. |B12
+// expands to "\x1b[104m\x1b[48;5;12m", so flattening it recorded the 5 as
+// blink and dropped the background entirely.
+func TestSGRStateExtendedColour(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"pipe |B12 bright blue bg", "\x1b[104m\x1b[48;5;12m", "\x1b[0;48;5;12m"},
+		{"256-colour fg", "\x1b[38;5;208m", "\x1b[0;38;5;208m"},
+		{"direct colour fg", "\x1b[38;2;255;0;0m", "\x1b[0;38;2;255;0;0m"},
+		{"both extended", "\x1b[38;5;9m\x1b[48;5;4m", "\x1b[0;38;5;9;48;5;4m"},
+		{"extended then basic fg wins", "\x1b[38;5;9m\x1b[32m", "\x1b[0;32m"},
+		{"basic then extended fg wins", "\x1b[32m\x1b[38;5;9m", "\x1b[0;38;5;9m"},
+		{"default fg clears extended", "\x1b[38;5;9m\x1b[39m", "\x1b[0m"},
+		{"reset clears extended", "\x1b[48;5;12m\x1b[0m", "\x1b[0m"},
+		{"blink still parsed on its own", "\x1b[5m", "\x1b[0;5m"},
+		{"truncated group is ignored", "\x1b[48;5m", "\x1b[0m"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewSGRState()
+			s.Write(tc.input)
+			if got := s.Escape(); got != tc.want {
+				t.Errorf("Write(%q) -> %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
