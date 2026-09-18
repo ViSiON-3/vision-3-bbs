@@ -97,18 +97,36 @@ func wrapAnsiString(text string, width int) []string {
 			continue
 		}
 
+		// Message bodies arrive as raw bytes that may be CP437 or UTF-8, so a
+		// column is not always a byte. asUTF8 settles it once for the whole
+		// line, the same way terminalio decides a span's encoding.
+		asUTF8 := utf8.ValidString(plainLine)
+
 		// A line that already fits is left exactly as the author typed it.
 		// Re-flowing it would collapse the runs of spaces that column-aligned
 		// signatures, tables and ASCII boxes are built out of.
-		if len(plainLine) <= width {
+		if columnWidth(plainLine, asUTF8) <= width {
 			wrappedLines = append(wrappedLines, line)
 			continue
 		}
 
-		wrappedLines = append(wrappedLines, wrapVisualLine(line, width)...)
+		wrappedLines = append(wrappedLines, wrapVisualLine(line, width, asUTF8)...)
 	}
 
 	return wrappedLines
+}
+
+// columnWidth is the on-screen width of escape-free text. Message bodies are
+// raw bytes: CP437 art is one column per byte, while a UTF-8 body is one
+// column per rune. The two encodings cannot be told apart byte by byte -
+// plenty of adjacent CP437 pairs form a valid UTF-8 sequence - so the caller
+// decides once per line and passes the answer down, matching how
+// terminalio's writer resolves the same ambiguity for a span.
+func columnWidth(plain string, asUTF8 bool) int {
+	if asUTF8 {
+		return utf8.RuneCountInString(plain)
+	}
+	return len(plain)
 }
 
 // wrapSeg is one run of a line: either whitespace or non-whitespace, never a
@@ -145,7 +163,7 @@ func ansiSeqEnd(s string, i int) int {
 // splitWrapSegments breaks a line into alternating whitespace and word runs.
 // Escape sequences carry no width, so they ride along with the run they sit in
 // (or with the run that follows, when they open the line).
-func splitWrapSegments(line string) []wrapSeg {
+func splitWrapSegments(line string, asUTF8 bool) []wrapSeg {
 	var segs []wrapSeg
 	var text, codes, pending strings.Builder
 	width := 0
@@ -184,9 +202,15 @@ func splitWrapSegments(line string) []wrapSeg {
 			codes.WriteString(pending.String())
 			pending.Reset()
 		}
-		text.WriteByte(line[i])
+		n := 1
+		if asUTF8 {
+			if _, size := utf8.DecodeRuneInString(line[i:]); size > 1 {
+				n = size
+			}
+		}
+		text.WriteString(line[i : i+n])
 		width++
-		i++
+		i += n
 	}
 	closeSeg()
 
@@ -206,7 +230,7 @@ func splitWrapSegments(line string) []wrapSeg {
 // indent and interior spacing are kept; only the whitespace a break lands on
 // is consumed, the way a terminal would. A word wider than the whole line is
 // emitted oversized rather than cut mid-word.
-func wrapVisualLine(line string, width int) []string {
+func wrapVisualLine(line string, width int, asUTF8 bool) []string {
 	var (
 		out      []string
 		cur      strings.Builder
@@ -221,7 +245,7 @@ func wrapVisualLine(line string, width int) []string {
 		broken = true
 	}
 
-	for _, seg := range splitWrapSegments(line) {
+	for _, seg := range splitWrapSegments(line, asUTF8) {
 		if seg.space {
 			switch {
 			case curWidth == 0 && broken:
@@ -243,7 +267,15 @@ func wrapVisualLine(line string, width int) []string {
 		curWidth += seg.width
 	}
 
-	if curWidth > 0 {
+	switch {
+	case curWidth > 0:
+		out = append(out, cur.String())
+	case cur.Len() > 0 && len(out) > 0:
+		// Nothing visible left, only escapes - a trailing reset, typically.
+		// Keep them on the last line rather than spending a row on them, so
+		// the colour they close cannot bleed into the rest of the body.
+		out[len(out)-1] += cur.String()
+	case cur.Len() > 0:
 		out = append(out, cur.String())
 	}
 	return out

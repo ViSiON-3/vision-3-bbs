@@ -3,6 +3,7 @@ package menu
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
@@ -164,5 +165,63 @@ func TestMessageBodyPreservesFullWidthFrame(t *testing.T) {
 		if got[i] != rows[i] {
 			t.Errorf("row %d altered:\n got  %q\n want %q", i, got[i], rows[i])
 		}
+	}
+}
+
+// Message bodies are raw bytes and may be UTF-8 rather than CP437, where a
+// column is a rune, not a byte. Measuring width in bytes made a UTF-8 line
+// look wider than it is, so an aligned UTF-8 signature was reflowed even
+// though it fits. (Counting runes unconditionally would be just as wrong: a
+// CP437 art line is one column per byte, and many CP437 pairs happen to form
+// a valid UTF-8 sequence, so the encoding is decided per line.)
+func TestMessageBodyMeasuresUTF8BodiesInColumns(t *testing.T) {
+	const width = 30
+	line := "│ café    naïve    résumé │"
+
+	if cols := utf8.RuneCountInString(line); cols > width {
+		t.Fatalf("fixture is %d columns, must fit in %d", cols, width)
+	}
+	if len(line) <= width {
+		t.Fatalf("fixture is %d bytes; it must exceed %d for this test to bite", len(line), width)
+	}
+
+	lines := wrapAnsiString(line, width)
+	if len(lines) != 1 || lines[0] != line {
+		t.Errorf("UTF-8 line was reflowed:\n got  %q\n want %q", lines, line)
+	}
+}
+
+// CP437 art must still be measured in bytes: the clrghouz frame rows are 79
+// columns of single-byte CP437, and counting them as runes would let an
+// over-wide row through unwrapped.
+func TestMessageBodyMeasuresCP437BodiesInBytes(t *testing.T) {
+	const width = 20
+	// Single-byte CP437 art with break opportunities, and not valid UTF-8.
+	// 6 groups of 5 columns = 30 columns, over the budget.
+	line := strings.TrimRight(strings.Repeat("\xc4\xdc\xc4\xdc ", 6), " ")
+	if utf8.ValidString(line) {
+		t.Fatalf("fixture must be invalid UTF-8 to exercise the CP437 path")
+	}
+
+	for _, ln := range wrapAnsiString(line, width) {
+		if got := len(reWrapEsc.ReplaceAllString(ln, "")); got > width {
+			t.Errorf("CP437 row measured as runes and left %d cols wide, over %d: %q", got, width, ln)
+		}
+	}
+}
+
+// A break that swallows the whitespace an ANSI reset sits in must not discard
+// the reset, or the colour it closes bleeds into the rest of the body.
+func TestMessageBodyKeepsTrailingResetAfterABreak(t *testing.T) {
+	const width = 30
+	line := strings.Repeat("a", width) + " \x1b[0m"
+
+	lines := wrapAnsiString(line, width)
+	if joined := strings.Join(lines, ""); !strings.Contains(joined, "\x1b[0m") {
+		t.Errorf("trailing reset was dropped: %q", lines)
+	}
+	// It is zero-width, so it must not cost an extra row.
+	if len(lines) != 1 {
+		t.Errorf("expected the reset to ride on the last line, got %d lines: %q", len(lines), lines)
 	}
 }
