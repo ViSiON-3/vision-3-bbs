@@ -68,7 +68,17 @@ func TestEscapeLenSurvivesAHardBreak(t *testing.T) {
 	if joined != line {
 		t.Errorf("hard break altered the line:\n got  %q\n want %q", joined, line)
 	}
-	if !strings.Contains(joined, seq) {
+	// The escape must survive inside a single chunk. Checking the joined
+	// string cannot show this: joined already equals line, so it contains seq
+	// even when the break cut the sequence in half.
+	intact := false
+	for _, c := range chunks {
+		if strings.Contains(c, seq) {
+			intact = true
+			break
+		}
+	}
+	if !intact {
 		t.Errorf("escape was split across a chunk boundary: %q", chunks)
 	}
 	for i, c := range chunks {
