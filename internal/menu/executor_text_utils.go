@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
 
@@ -68,7 +69,7 @@ func containsAnsiArt(text string) bool {
 	return ansiArtIndicators.MatchString(text)
 }
 
-func wrapAnsiString(text string, width int) []string {
+func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 	if width <= 0 {
 		return strings.Split(text, "\n") // No wrapping if width is invalid
 	}
@@ -97,55 +98,204 @@ func wrapAnsiString(text string, width int) []string {
 			continue
 		}
 
-		currentLine := ""
-		currentWidth := 0
-		words := strings.Fields(line) // Split line into words
+		// Message bodies arrive as raw bytes that may be CP437 or UTF-8, so a
+		// column is not always a byte. asUTF8 settles it once for the whole
+		// line, the same way terminalio decides a span's encoding.
+		asUTF8 := utf8.ValidString(plainLine)
 
-		for _, word := range words {
-			// Calculate visible width of the word (stripping ANSI)
-			plainWord := reAnsi.ReplaceAllString(word, "")
-			wordWidth := len(plainWord)
+		// A line that already fits is left exactly as the author typed it.
+		// Re-flowing it would collapse the runs of spaces that column-aligned
+		// signatures, tables and ASCII boxes are built out of.
+		if columnWidth(plainLine, asUTF8, mode) <= width {
+			wrappedLines = append(wrappedLines, line)
+			continue
+		}
 
-			if currentWidth == 0 {
-				// First word on the line
-				if wordWidth > width {
-					// Word is longer than the line width, just append it (will overflow)
-					wrappedLines = append(wrappedLines, word)
-					currentLine = ""
-					currentWidth = 0
-				} else {
-					currentLine = word
-					currentWidth = wordWidth
-				}
-			} else {
-				// Subsequent words
-				if currentWidth+1+wordWidth <= width {
-					// Word fits on the current line
-					currentLine += " " + word
-					currentWidth += 1 + wordWidth
-				} else {
-					// Word doesn't fit, wrap to next line
-					wrappedLines = append(wrappedLines, currentLine)
-					if wordWidth > width {
-						// Word itself is too long, put it on its own line
-						wrappedLines = append(wrappedLines, word)
-						currentLine = ""
-						currentWidth = 0
-					} else {
-						// Start new line with the current word
-						currentLine = word
-						currentWidth = wordWidth
-					}
-				}
-			}
-		}
-		// Add the last line being built
-		if currentWidth > 0 {
-			wrappedLines = append(wrappedLines, currentLine)
-		}
+		wrappedLines = append(wrappedLines, wrapVisualLine(line, width, asUTF8, mode)...)
 	}
 
 	return wrappedLines
+}
+
+// columnWidth is the on-screen width of escape-free text. Measure it the way
+// the writer will actually render it, or wrapping decides against a width the
+// terminal never sees.
+//
+// Message bodies are raw bytes that may be CP437 or UTF-8, and the two cannot
+// be told apart byte by byte - plenty of adjacent CP437 pairs form a valid
+// UTF-8 sequence - so asUTF8 is decided once per line, exactly as terminalio
+// resolves the same ambiguity per span.
+//
+// A span that is not valid UTF-8 is CP437 and reaches the terminal untouched:
+// one column per byte in either mode. A valid UTF-8 span depends on where it
+// is going. UTF-8 mode passes it through, so display width applies and a CJK
+// rune is two columns while a combining mark is none. CP437 mode folds each
+// rune to a single CP437 byte, or to '?' where it does not map, so every rune
+// is exactly one column whatever its display width.
+func columnWidth(plain string, asUTF8 bool, mode ansi.OutputMode) int {
+	if !asUTF8 {
+		return len(plain)
+	}
+	if mode == ansi.OutputModeCP437 {
+		return utf8.RuneCountInString(plain)
+	}
+	return runewidth.StringWidth(plain)
+}
+
+// wrapSeg is one run of a line: either whitespace or non-whitespace, never a
+// mix. text is the run as it appeared, escapes included; codes is just those
+// escapes, so a whitespace run that a line break swallows can still hand its
+// colour on to the next line.
+type wrapSeg struct {
+	text  string
+	codes string
+	width int
+	space bool
+}
+
+// ansiSeqEnd returns the index just past the escape sequence starting at i.
+func ansiSeqEnd(s string, i int) int {
+	j := i + 1
+	if j < len(s) && s[j] == '[' {
+		j++
+		for j < len(s) {
+			c := s[j]
+			j++
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				break
+			}
+		}
+		return j
+	}
+	if j < len(s) {
+		j++
+	}
+	return j
+}
+
+// splitWrapSegments breaks a line into alternating whitespace and word runs.
+// Escape sequences carry no width, so they ride along with the run they sit in
+// (or with the run that follows, when they open the line).
+func splitWrapSegments(line string, asUTF8 bool, mode ansi.OutputMode) []wrapSeg {
+	var segs []wrapSeg
+	var text, codes, pending strings.Builder
+	width := 0
+	space := false
+	open := false
+
+	closeSeg := func() {
+		if !open {
+			return
+		}
+		segs = append(segs, wrapSeg{text: text.String(), codes: codes.String(), width: width, space: space})
+		text.Reset()
+		codes.Reset()
+		width = 0
+		open = false
+	}
+
+	for i := 0; i < len(line); {
+		if line[i] == 0x1b {
+			end := ansiSeqEnd(line, i)
+			if open {
+				text.WriteString(line[i:end])
+				codes.WriteString(line[i:end])
+			} else {
+				pending.WriteString(line[i:end])
+			}
+			i = end
+			continue
+		}
+		isSpace := line[i] == ' ' || line[i] == '\t'
+		if !open || isSpace != space {
+			closeSeg()
+			space = isSpace
+			open = true
+			text.WriteString(pending.String())
+			codes.WriteString(pending.String())
+			pending.Reset()
+		}
+		n, w := 1, 1
+		if asUTF8 {
+			r, size := utf8.DecodeRuneInString(line[i:])
+			n = size
+			// One CP437 byte per rune on the way out, so one column; only a
+			// UTF-8 terminal sees the rune's real display width.
+			if mode != ansi.OutputModeCP437 {
+				w = runewidth.RuneWidth(r)
+			}
+		}
+		text.WriteString(line[i : i+n])
+		width += w
+		i += n
+	}
+	closeSeg()
+
+	if pending.Len() > 0 {
+		// A trailing reset, normally. Keep it on the tail of the line.
+		if n := len(segs); n > 0 {
+			segs[n-1].text += pending.String()
+			segs[n-1].codes += pending.String()
+		} else {
+			segs = append(segs, wrapSeg{text: pending.String(), codes: pending.String()})
+		}
+	}
+	return segs
+}
+
+// wrapVisualLine greedily wraps one over-long line at whitespace. Leading
+// indent and interior spacing are kept; only the whitespace a break lands on
+// is consumed, the way a terminal would. A word wider than the whole line is
+// emitted oversized rather than cut mid-word.
+func wrapVisualLine(line string, width int, asUTF8 bool, mode ansi.OutputMode) []string {
+	var (
+		out      []string
+		cur      strings.Builder
+		curWidth int
+		broken   bool
+	)
+
+	flush := func() {
+		out = append(out, cur.String())
+		cur.Reset()
+		curWidth = 0
+		broken = true
+	}
+
+	for _, seg := range splitWrapSegments(line, asUTF8, mode) {
+		if seg.space {
+			switch {
+			case curWidth == 0 && broken:
+				// This run is the break itself; keep only its colour.
+				cur.WriteString(seg.codes)
+			case curWidth+seg.width <= width:
+				cur.WriteString(seg.text)
+				curWidth += seg.width
+			default:
+				flush()
+				cur.WriteString(seg.codes)
+			}
+			continue
+		}
+		if curWidth > 0 && curWidth+seg.width > width {
+			flush()
+		}
+		cur.WriteString(seg.text)
+		curWidth += seg.width
+	}
+
+	switch {
+	case curWidth > 0:
+		out = append(out, cur.String())
+	case cur.Len() > 0 && len(out) > 0:
+		// Nothing visible left, only escapes - a trailing reset, typically.
+		// Keep them on the last line rather than spending a row on them, so
+		// the colour they close cannot bleed into the rest of the body.
+		out[len(out)-1] += cur.String()
+	case cur.Len() > 0:
+		out = append(out, cur.String())
+	}
+	return out
 }
 
 // writeProcessedStringWithManualEncoding takes bytes that have already had pipe codes

@@ -16,7 +16,7 @@ func visibleCols(s string) int { return len(reWrapEsc.ReplaceAllString(s, "")) }
 // wrapNewsBodyForTest mirrors what displayNewsItem does to a body.
 func wrapNewsBodyForTest(body string, termWidth int) []string {
 	converted := ansi.ReplacePipeCodes([]byte(normalizeNewsBody(body)))
-	return wrapAnsiString(string(converted), newsBodyWidth(shippedHeaderWidth, termWidth))
+	return wrapAnsiString(string(converted), newsBodyWidth(shippedHeaderWidth, termWidth), ansi.OutputModeUTF8)
 }
 
 // shippedHeaderWidth is the rule width of the NEWSHDR.ANS that ships in
@@ -100,7 +100,7 @@ func TestNewsBodyWrapsOnWordBoundaries(t *testing.T) {
 		"in the general vicinity of the woodpile."
 
 	width := newsBodyWidth(shippedHeaderWidth, 80)
-	lines := wrapAnsiString(normalizeNewsBody(body), width)
+	lines := wrapAnsiString(normalizeNewsBody(body), width, ansi.OutputModeUTF8)
 
 	if len(lines) < 2 {
 		t.Fatalf("expected the paragraph to wrap onto several lines, got %d", len(lines))
@@ -130,7 +130,7 @@ func TestNewsBodyWrapsOnWordBoundaries(t *testing.T) {
 // Explicit newlines the sysop typed are paragraph breaks and must survive.
 func TestNewsBodyPreservesAuthoredLineBreaks(t *testing.T) {
 	body := "First paragraph.\n\nSecond paragraph."
-	lines := wrapAnsiString(normalizeNewsBody(body), newsBodyWidth(shippedHeaderWidth, 80))
+	lines := wrapAnsiString(normalizeNewsBody(body), newsBodyWidth(shippedHeaderWidth, 80), ansi.OutputModeUTF8)
 
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 lines (para, blank, para), got %d: %q", len(lines), lines)
@@ -144,7 +144,7 @@ func TestNewsBodyPreservesAuthoredLineBreaks(t *testing.T) {
 // art relies on absolute positioning.
 func TestNewsBodyLeavesAnsiArtAlone(t *testing.T) {
 	art := "\x1b[5;10Hsome art\n\x1b[6;10Hmore art"
-	lines := wrapAnsiString(normalizeNewsBody(art), newsBodyWidth(shippedHeaderWidth, 80))
+	lines := wrapAnsiString(normalizeNewsBody(art), newsBodyWidth(shippedHeaderWidth, 80), ansi.OutputModeUTF8)
 	if len(lines) != 2 {
 		t.Fatalf("art should split on newlines only, got %d lines: %q", len(lines), lines)
 	}
@@ -308,7 +308,7 @@ func TestNewsBodyArtIsExemptFromHardBreaking(t *testing.T) {
 		t.Fatal("fixture is not detected as ANSI art; the exemption would not apply")
 	}
 
-	lines := wrapAnsiString(art, newsBodyWidth(shippedHeaderWidth, 80))
+	lines := wrapAnsiString(art, newsBodyWidth(shippedHeaderWidth, 80), ansi.OutputModeUTF8)
 	if len(lines) != 2 {
 		t.Fatalf("art should stay 2 rows, got %d", len(lines))
 	}
