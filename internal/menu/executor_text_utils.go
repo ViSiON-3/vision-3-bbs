@@ -69,6 +69,19 @@ func containsAnsiArt(text string) bool {
 	return ansiArtIndicators.MatchString(text)
 }
 
+// reWrapAnsi matches the escape sequences ReplacePipeCodes emits. Package
+// level because wrapping recompiled it on every call.
+var reWrapAnsi = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// visibleColumns is the on-screen width of s for mode, escapes excluded. It is
+// the measure wrapping uses, so anything that re-checks a wrapped line against
+// the same budget must use it too or the two will disagree about the same
+// line.
+func visibleColumns(s string, mode ansi.OutputMode) int {
+	plain := reWrapAnsi.ReplaceAllString(s, "")
+	return columnWidth(plain, utf8.ValidString(plain), mode)
+}
+
 func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 	if width <= 0 {
 		return strings.Split(text, "\n") // No wrapping if width is invalid
@@ -85,10 +98,8 @@ func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 	// Split input into lines first based on existing newlines
 	inputLines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
-	reAnsi := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`) // Basic regex for ANSI codes
-
 	for _, line := range inputLines {
-		plainLine := reAnsi.ReplaceAllString(line, "")
+		plainLine := reWrapAnsi.ReplaceAllString(line, "")
 		if strings.TrimSpace(plainLine) == "" {
 			wrappedLines = append(wrappedLines, "")
 			continue

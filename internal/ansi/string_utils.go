@@ -7,6 +7,15 @@ import (
 
 // VisibleLength returns the display width of a string, ignoring ANSI escape sequences.
 // This counts only the characters that would be visible on screen.
+//
+// One rune counts as one column. That is right for CP437 and the Latin-1 range
+// this BBS sees, and wrong for double-width glyphs such as CJK, which render
+// two columns. Callers that lay text out - padding, centring, indenting - live
+// with that; being a column short there is cosmetic.
+//
+// Line wrapping does not: measuring short there puts a line past the terminal
+// margin. menu.columnWidth is the measure for that, and it accounts for both
+// display width and the output encoding. See #363 for why the two differ.
 func VisibleLength(s string) int {
 	visCount := 0
 	i := 0
