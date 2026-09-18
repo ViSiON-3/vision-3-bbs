@@ -20,6 +20,13 @@ type ANSIRenderer struct {
 	CursorX      int
 	CursorY      int
 	CurrentStyle string
+	// Cursor position stashed by ESC[s and brought back by ESC[u. ANSI.SYS
+	// semantics: position only, not the graphic attributes (that is DECSC,
+	// ESC 7, which the art in these messages does not use). savedValid keeps a
+	// restore before any save from jumping the cursor to the origin.
+	savedX     int
+	savedY     int
+	savedValid bool
 }
 
 // NewANSIRenderer creates a new renderer with given dimensions
@@ -297,10 +304,19 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			r.CurrentStyle = seq
 			return false
 
-		case 's': // Save cursor position (not implemented in this simple version)
-			return false
-		case 'u': // Restore cursor position (not implemented in this simple version)
-			return false
+		case 's': // Save cursor position
+			r.savedX, r.savedY = r.CursorX, r.CursorY
+			r.savedValid = true
+			return false // stashes the cursor, does not move it
+
+		case 'u': // Restore cursor position
+			// A restore with nothing saved is a no-op rather than a jump to
+			// the origin, which is what a terminal does and what the art
+			// expects.
+			if r.savedValid {
+				r.CursorX, r.CursorY = r.savedX, r.savedY
+			}
+			return true
 		}
 	}
 	return false
