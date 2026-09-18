@@ -105,3 +105,50 @@ func TestANSIRendererStillHandlesCompleteSequences(t *testing.T) {
 		t.Errorf("colour not applied: %q", lines[4])
 	}
 }
+
+// Escape handling must never swallow a line break or draw an ESC as a cell,
+// and a sequence the grammar rejects must be discarded rather than applied.
+func TestANSIRendererEscapeEdgeCases(t *testing.T) {
+	t.Run("ESC before a newline keeps the line break", func(t *testing.T) {
+		lines := RenderANSIArtToLines("AB\x1b\nCD", 79, 5)
+		if len(lines) != 2 {
+			t.Fatalf("newline was swallowed: %q", lines)
+		}
+		if a, b := plainRow(lines, 0), plainRow(lines, 1); a != "AB" || b != "CD" {
+			t.Errorf("rows = %q, %q; want \"AB\", \"CD\"", a, b)
+		}
+	})
+
+	t.Run("bare trailing ESC is not drawn", func(t *testing.T) {
+		lines := RenderANSIArtToLines("AB\x1b", 79, 5)
+		if got := plainRow(lines, 0); got != "AB" {
+			t.Errorf("row = %q, want \"AB\" (ESC leaked into the buffer)", got)
+		}
+	})
+
+	t.Run("colon-form extended colour is applied", func(t *testing.T) {
+		lines := RenderANSIArtToLines("\x1b[38:5:208mX", 79, 5)
+		if got := styleAt(lines, 0); got != "\x1b[0;38;5;208m" {
+			t.Errorf("style = %q, want the 256-colour foreground", got)
+		}
+	})
+
+	t.Run("parameters after an intermediate are rejected", func(t *testing.T) {
+		// ESC[ 32m puts an intermediate before its parameters, so it is not a
+		// colour change; the preceding red must survive.
+		lines := RenderANSIArtToLines("\x1b[31m\x1b[ 32mX", 79, 5)
+		if got := styleAt(lines, 0); got != "\x1b[0;31m" {
+			t.Errorf("style = %q, want the earlier red to stand", got)
+		}
+		if got := plainRow(lines, 0); got != "X" {
+			t.Errorf("row = %q, want \"X\" (malformed sequence drawn as text)", got)
+		}
+	})
+
+	t.Run("charset designation is consumed whole", func(t *testing.T) {
+		lines := RenderANSIArtToLines("\x1b(BAB", 79, 5)
+		if got := plainRow(lines, 0); got != "AB" {
+			t.Errorf("row = %q, want \"AB\"", got)
+		}
+	})
+}

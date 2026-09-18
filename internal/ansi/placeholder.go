@@ -369,7 +369,9 @@ func (s *SGRState) Escape() string {
 	return "\x1b[" + string(parts) + "m"
 }
 
-// splitSGR splits a semicolon-separated parameter string into ints.
+// splitSGR splits an SGR parameter string into ints. Colons separate as well
+// as semicolons: ITU-T T.416 writes extended colour as "38:5:208", which names
+// the same colour as "38;5;208" and reaches extendedColour the same way.
 func splitSGR(s string) []int {
 	var result []int
 	val := 0
@@ -378,7 +380,7 @@ func splitSGR(s string) []int {
 		if s[i] >= '0' && s[i] <= '9' {
 			val = val*10 + int(s[i]-'0')
 			hasDigit = true
-		} else if s[i] == ';' {
+		} else if s[i] == ';' || s[i] == ':' {
 			if hasDigit {
 				result = append(result, val)
 			} else {
@@ -542,13 +544,27 @@ func (s *SGRState) Write(text string) {
 			j++
 		}
 		paramStart := j
-		for j < len(text) && (text[j] >= '0' && text[j] <= '9' || text[j] == ';' || text[j] == ' ') {
-			j++
+		intermediate, malformed := false, false
+		for j < len(text) {
+			c := text[j]
+			if c >= 0x30 && c <= 0x3f { // parameter byte, ':' included
+				if intermediate {
+					malformed = true // parameters must precede intermediates
+				}
+				j++
+				continue
+			}
+			if c >= 0x20 && c <= 0x2f { // intermediate byte
+				intermediate = true
+				j++
+				continue
+			}
+			break
 		}
 		if j >= len(text) {
 			return // unterminated; nothing more can change the state
 		}
-		if text[j] == 'm' && paramStart == i+2 {
+		if text[j] == 'm' && !malformed && paramStart == i+2 {
 			s.applyParams(text[paramStart:j])
 		}
 		i = j + 1

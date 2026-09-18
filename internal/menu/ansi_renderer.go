@@ -131,42 +131,64 @@ func (r *ANSIRenderer) Render(text string) {
 
 // parseEscapeSequence extracts an ANSI escape sequence and returns it with its length
 func (r *ANSIRenderer) parseEscapeSequence(text string) (string, int) {
-	if len(text) < 2 || text[0] != '\x1b' {
+	if len(text) == 0 || text[0] != 0x1b {
 		return "", 0
 	}
-
-	// ESC followed by [
-	if text[1] == '[' {
-		// CSI: ESC [ parameter bytes 0x30-0x3F, intermediate bytes 0x20-0x2F,
-		// final byte 0x40-0x7E.
-		i := 2
-		for i < len(text) {
-			ch := text[i]
-			if ch >= 0x30 && ch <= 0x3f { // 0-9 : ; < = > ?
-				i++
-				continue
-			}
-			if ch >= 0x20 && ch <= 0x2f { // intermediate bytes
-				i++
-				continue
-			}
-			if ch >= 0x40 && ch <= 0x7e { // final byte
-				return text[:i+1], i + 1
-			}
-			break // a byte that cannot appear in a CSI, e.g. a newline
-		}
-		// The sequence was cut short - this echo carries art that upstream
-		// truncated at 79 bytes mid-escape. Swallow what is there rather than
-		// returning only "ESC[" and leaving "1;30" to be drawn as text.
-		return text[:i], i
+	if len(text) == 1 {
+		// Bare ESC at the end of the input. Consume it; an ESC drawn as a cell
+		// is never what was meant.
+		return "", 1
 	}
 
-	// Other escape sequences (ESC 7, ESC 8, etc.)
-	if len(text) >= 2 {
+	if text[1] == '[' {
+		// CSI: ESC [ parameter bytes 0x30-0x3F, then intermediate bytes
+		// 0x20-0x2F, then a final byte 0x40-0x7E. Returning ("", n) consumes n
+		// bytes and dispatches nothing, which is how anything malformed or
+		// cut short is discarded rather than drawn.
+		i := 2
+		intermediate := false
+		malformed := false
+		for i < len(text) {
+			ch := text[i]
+			switch {
+			case ch >= 0x30 && ch <= 0x3f: // parameter byte
+				// Parameters must precede intermediates; ESC[ 31m is not a
+				// colour change, whatever its digits say.
+				if intermediate {
+					malformed = true
+				}
+				i++
+			case ch >= 0x20 && ch <= 0x2f: // intermediate byte
+				intermediate = true
+				i++
+			case ch >= 0x40 && ch <= 0x7e: // final byte
+				if malformed {
+					return "", i + 1
+				}
+				return text[:i+1], i + 1
+			default:
+				// A byte that cannot appear in a CSI, such as the newline left
+				// behind when this echo truncates art at 79 bytes. Stop before
+				// it so it is still processed as itself.
+				return "", i
+			}
+		}
+		return "", i // ran off the end mid-sequence
+	}
+
+	switch text[1] {
+	case '(', ')', '*', '+': // charset designation, e.g. ESC ( B
+		if len(text) >= 3 {
+			return text[:3], 3
+		}
+		return "", 2
+	case '7', '8', '=', '>', 'c', 'D', 'E', 'H', 'M': // known two-byte forms
 		return text[:2], 2
 	}
 
-	return "", 0
+	// Unknown escape: consume only the ESC, so a control character following
+	// it - a line break, most importantly - is still handled normally.
+	return "", 1
 }
 
 // handleEscapeSequence processes an ANSI escape sequence
