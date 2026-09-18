@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // ANSICell represents a single character cell with its attributes
@@ -20,6 +22,12 @@ type ANSIRenderer struct {
 	CursorX      int
 	CursorY      int
 	CurrentStyle string
+	// Accumulated graphic state. ANSI art overwhelmingly sets one attribute at
+	// a time - "\x1b[46m" to change only the background, say - and expects the
+	// rest to persist. Keeping just the last sequence dropped everything it did
+	// not mention, so a foreground set earlier reverted to the terminal default
+	// the moment a background was chosen.
+	sgr ansi.SGRState
 	// Cursor position stashed by ESC[s and brought back by ESC[u. ANSI.SYS
 	// semantics: position only, not the graphic attributes (that is DECSC,
 	// ESC 7, which the art in these messages does not use). savedValid keeps a
@@ -54,6 +62,7 @@ func NewANSIRenderer(width, height int) *ANSIRenderer {
 		CursorX:      0,
 		CursorY:      0,
 		CurrentStyle: "\x1b[0m",
+		sgr:          ansi.NewSGRState(),
 	}
 }
 
@@ -122,39 +131,68 @@ func (r *ANSIRenderer) Render(text string) {
 
 // parseEscapeSequence extracts an ANSI escape sequence and returns it with its length
 func (r *ANSIRenderer) parseEscapeSequence(text string) (string, int) {
-	if len(text) < 2 || text[0] != '\x1b' {
+	if len(text) == 0 || text[0] != 0x1b {
 		return "", 0
 	}
-
-	// ESC followed by [
-	if text[1] == '[' {
-		// CSI sequence: ESC [ params letter
-		i := 2
-		for i < len(text) {
-			ch := text[i]
-			// Parameters: digits, semicolons, and private parameter bytes (?, >, =, etc.)
-			if (ch >= '0' && ch <= '9') || ch == ';' || ch == '?' || ch == '>' || ch == '=' || ch == '<' {
-				i++
-				continue
-			}
-			// Final character (letter)
-			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
-				return text[:i+1], i + 1
-			}
-			// Other characters allowed in CSI
-			if ch >= '@' && ch <= '~' {
-				return text[:i+1], i + 1
-			}
-			break
-		}
+	if len(text) == 1 {
+		// Bare ESC at the end of the input. Consume it; an ESC drawn as a cell
+		// is never what was meant.
+		return "", 1
 	}
 
-	// Other escape sequences (ESC 7, ESC 8, etc.)
-	if len(text) >= 2 {
+	if text[1] == '[' {
+		// CSI: ESC [ parameter bytes 0x30-0x3F, then intermediate bytes
+		// 0x20-0x2F, then a final byte 0x40-0x7E. Returning ("", n) consumes n
+		// bytes and dispatches nothing, which is how anything malformed or
+		// cut short is discarded rather than drawn.
+		i := 2
+		intermediate := false
+		malformed := false
+		for i < len(text) {
+			ch := text[i]
+			switch {
+			case ch >= 0x30 && ch <= 0x3f: // parameter byte
+				// Parameters must precede intermediates; ESC[ 31m is not a
+				// colour change, whatever its digits say.
+				if intermediate {
+					malformed = true
+				}
+				i++
+			case ch >= 0x20 && ch <= 0x2f: // intermediate byte
+				intermediate = true
+				i++
+			case ch >= 0x40 && ch <= 0x7e: // final byte
+				// An intermediate byte selects a different control function
+				// from the bare form, and none of the functions this renderer
+				// implements take one. Consume and dispatch nothing rather
+				// than acting on a sequence that was not what it looked like.
+				if malformed || intermediate {
+					return "", i + 1
+				}
+				return text[:i+1], i + 1
+			default:
+				// A byte that cannot appear in a CSI, such as the newline left
+				// behind when this echo truncates art at 79 bytes. Stop before
+				// it so it is still processed as itself.
+				return "", i
+			}
+		}
+		return "", i // ran off the end mid-sequence
+	}
+
+	switch text[1] {
+	case '(', ')', '*', '+': // charset designation, e.g. ESC ( B
+		if len(text) >= 3 {
+			return text[:3], 3
+		}
+		return "", 2
+	case '7', '8', '=', '>', 'c', 'D', 'E', 'H', 'M': // known two-byte forms
 		return text[:2], 2
 	}
 
-	return "", 0
+	// Unknown escape: consume only the ESC, so a control character following
+	// it - a line break, most importantly - is still handled normally.
+	return "", 1
 }
 
 // handleEscapeSequence processes an ANSI escape sequence
@@ -300,8 +338,10 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			return true
 
 		case 'm': // SGR - Select Graphic Rendition (colors, styles)
-			// Update current style - does NOT affect cursor position
-			r.CurrentStyle = seq
+			// Fold into the running state; the emitted style is the whole
+			// state, not just this sequence. Does not affect cursor position.
+			r.sgr.Write(seq)
+			r.CurrentStyle = r.sgr.Escape()
 			return false
 
 		case 's': // Save cursor position

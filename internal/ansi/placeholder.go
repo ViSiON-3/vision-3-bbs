@@ -3,6 +3,7 @@ package ansi
 import (
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // editorPlaceholderRegex matches @CODE@ placeholders with optional alignment modifiers.
@@ -254,7 +255,79 @@ func (s *SGRState) applyParams(paramStr string) {
 		*s = SGRState{fg: -1, bg: -1}
 		return
 	}
-	parts := splitSGR(paramStr)
+	// A parameter may carry colon-separated subparameters (ITU-T T.416), where
+	// the colons bind tighter than the semicolons. Flattening both at once
+	// loses that: "38:2::255:128:64" would read its empty colourspace field as
+	// a red of 0 and drop the blue. Colon groups are therefore taken whole,
+	// in order, with the plain parameters around them applied as they come.
+	var flat []int
+	for _, field := range strings.Split(paramStr, ";") {
+		if strings.ContainsRune(field, ':') {
+			s.applyFlatParams(flat)
+			flat = nil
+			s.applyColonGroup(field)
+			continue
+		}
+		flat = append(flat, atoiParam(field))
+	}
+	s.applyFlatParams(flat)
+}
+
+// atoiParam reads one SGR parameter; an omitted value means zero.
+func atoiParam(field string) int {
+	n := 0
+	for i := 0; i < len(field); i++ {
+		if field[i] >= '0' && field[i] <= '9' {
+			n = n*10 + int(field[i]-'0')
+		}
+	}
+	return n
+}
+
+// applyColonGroup applies one colon-separated parameter, which is only ever an
+// extended colour: "38:5:N" for 256-colour, and for direct colour either
+// "38:2:R:G:B" or the fully-specified "38:2:<colourspace>:R:G:B" whose
+// colourspace field this terminal has no use for. Anything else is ignored
+// rather than guessed at.
+func (s *SGRState) applyColonGroup(field string) {
+	parts := strings.Split(field, ":")
+	nums := make([]int, len(parts))
+	for i, p := range parts {
+		nums[i] = atoiParam(p)
+	}
+	if len(nums) < 3 || (nums[0] != 38 && nums[0] != 48) {
+		return
+	}
+
+	lead := strconv.Itoa(nums[0])
+	var ext string
+	switch nums[1] {
+	case 5:
+		ext = lead + ";5;" + strconv.Itoa(nums[2])
+	case 2:
+		var r, g, b int
+		switch len(nums) {
+		case 5: // 38:2:R:G:B
+			r, g, b = nums[2], nums[3], nums[4]
+		case 6: // 38:2:<colourspace>:R:G:B
+			r, g, b = nums[3], nums[4], nums[5]
+		default:
+			return
+		}
+		ext = lead + ";2;" + strconv.Itoa(r) + ";" + strconv.Itoa(g) + ";" + strconv.Itoa(b)
+	default:
+		return
+	}
+
+	if nums[0] == 38 {
+		s.fg, s.fgExt = -1, ext
+	} else {
+		s.bg, s.bgExt = -1, ext
+	}
+}
+
+// applyFlatParams applies a run of plain (colon-free) SGR parameters.
+func (s *SGRState) applyFlatParams(parts []int) {
 	for i := 0; i < len(parts); i++ {
 		p := parts[i]
 
@@ -367,33 +440,6 @@ func (s *SGRState) Escape() string {
 	}
 	// Only "0" with no other attributes → fully default, still emit for safety.
 	return "\x1b[" + string(parts) + "m"
-}
-
-// splitSGR splits a semicolon-separated parameter string into ints.
-func splitSGR(s string) []int {
-	var result []int
-	val := 0
-	hasDigit := false
-	for i := 0; i < len(s); i++ {
-		if s[i] >= '0' && s[i] <= '9' {
-			val = val*10 + int(s[i]-'0')
-			hasDigit = true
-		} else if s[i] == ';' {
-			if hasDigit {
-				result = append(result, val)
-			} else {
-				result = append(result, 0) // missing param = 0
-			}
-			val = 0
-			hasDigit = false
-		}
-	}
-	if hasDigit {
-		result = append(result, val)
-	} else {
-		result = append(result, 0)
-	}
-	return result
 }
 
 // FindEditorColorAtPos returns the ANSI SGR escape sequence active at the specified
@@ -542,13 +588,29 @@ func (s *SGRState) Write(text string) {
 			j++
 		}
 		paramStart := j
-		for j < len(text) && (text[j] >= '0' && text[j] <= '9' || text[j] == ';' || text[j] == ' ') {
-			j++
+		intermediate, malformed := false, false
+		for j < len(text) {
+			c := text[j]
+			if c >= 0x30 && c <= 0x3f { // parameter byte, ':' included
+				if intermediate {
+					malformed = true // parameters must precede intermediates
+				}
+				j++
+				continue
+			}
+			if c >= 0x20 && c <= 0x2f { // intermediate byte
+				intermediate = true
+				j++
+				continue
+			}
+			break
 		}
 		if j >= len(text) {
 			return // unterminated; nothing more can change the state
 		}
-		if text[j] == 'm' && paramStart == i+2 {
+		// An intermediate byte makes this a different control function, not
+		// SGR, whatever its parameters say.
+		if text[j] == 'm' && !malformed && !intermediate && paramStart == i+2 {
 			s.applyParams(text[paramStart:j])
 		}
 		i = j + 1
