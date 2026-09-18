@@ -69,7 +69,7 @@ func containsAnsiArt(text string) bool {
 	return ansiArtIndicators.MatchString(text)
 }
 
-func wrapAnsiString(text string, width int) []string {
+func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 	if width <= 0 {
 		return strings.Split(text, "\n") // No wrapping if width is invalid
 	}
@@ -106,28 +106,40 @@ func wrapAnsiString(text string, width int) []string {
 		// A line that already fits is left exactly as the author typed it.
 		// Re-flowing it would collapse the runs of spaces that column-aligned
 		// signatures, tables and ASCII boxes are built out of.
-		if columnWidth(plainLine, asUTF8) <= width {
+		if columnWidth(plainLine, asUTF8, mode) <= width {
 			wrappedLines = append(wrappedLines, line)
 			continue
 		}
 
-		wrappedLines = append(wrappedLines, wrapVisualLine(line, width, asUTF8)...)
+		wrappedLines = append(wrappedLines, wrapVisualLine(line, width, asUTF8, mode)...)
 	}
 
 	return wrappedLines
 }
 
-// columnWidth is the on-screen width of escape-free text. Message bodies are
-// raw bytes: CP437 art is one column per byte, while a UTF-8 body is measured
-// by display width, so a CJK rune counts two and a combining mark none. The two encodings cannot be told apart byte by byte -
-// plenty of adjacent CP437 pairs form a valid UTF-8 sequence - so the caller
-// decides once per line and passes the answer down, matching how
-// terminalio's writer resolves the same ambiguity for a span.
-func columnWidth(plain string, asUTF8 bool) int {
-	if asUTF8 {
-		return runewidth.StringWidth(plain)
+// columnWidth is the on-screen width of escape-free text. Measure it the way
+// the writer will actually render it, or wrapping decides against a width the
+// terminal never sees.
+//
+// Message bodies are raw bytes that may be CP437 or UTF-8, and the two cannot
+// be told apart byte by byte - plenty of adjacent CP437 pairs form a valid
+// UTF-8 sequence - so asUTF8 is decided once per line, exactly as terminalio
+// resolves the same ambiguity per span.
+//
+// A span that is not valid UTF-8 is CP437 and reaches the terminal untouched:
+// one column per byte in either mode. A valid UTF-8 span depends on where it
+// is going. UTF-8 mode passes it through, so display width applies and a CJK
+// rune is two columns while a combining mark is none. CP437 mode folds each
+// rune to a single CP437 byte, or to '?' where it does not map, so every rune
+// is exactly one column whatever its display width.
+func columnWidth(plain string, asUTF8 bool, mode ansi.OutputMode) int {
+	if !asUTF8 {
+		return len(plain)
 	}
-	return len(plain)
+	if mode == ansi.OutputModeCP437 {
+		return utf8.RuneCountInString(plain)
+	}
+	return runewidth.StringWidth(plain)
 }
 
 // wrapSeg is one run of a line: either whitespace or non-whitespace, never a
@@ -164,7 +176,7 @@ func ansiSeqEnd(s string, i int) int {
 // splitWrapSegments breaks a line into alternating whitespace and word runs.
 // Escape sequences carry no width, so they ride along with the run they sit in
 // (or with the run that follows, when they open the line).
-func splitWrapSegments(line string, asUTF8 bool) []wrapSeg {
+func splitWrapSegments(line string, asUTF8 bool, mode ansi.OutputMode) []wrapSeg {
 	var segs []wrapSeg
 	var text, codes, pending strings.Builder
 	width := 0
@@ -206,7 +218,12 @@ func splitWrapSegments(line string, asUTF8 bool) []wrapSeg {
 		n, w := 1, 1
 		if asUTF8 {
 			r, size := utf8.DecodeRuneInString(line[i:])
-			n, w = size, runewidth.RuneWidth(r)
+			n = size
+			// One CP437 byte per rune on the way out, so one column; only a
+			// UTF-8 terminal sees the rune's real display width.
+			if mode != ansi.OutputModeCP437 {
+				w = runewidth.RuneWidth(r)
+			}
 		}
 		text.WriteString(line[i : i+n])
 		width += w
@@ -230,7 +247,7 @@ func splitWrapSegments(line string, asUTF8 bool) []wrapSeg {
 // indent and interior spacing are kept; only the whitespace a break lands on
 // is consumed, the way a terminal would. A word wider than the whole line is
 // emitted oversized rather than cut mid-word.
-func wrapVisualLine(line string, width int, asUTF8 bool) []string {
+func wrapVisualLine(line string, width int, asUTF8 bool, mode ansi.OutputMode) []string {
 	var (
 		out      []string
 		cur      strings.Builder
@@ -245,7 +262,7 @@ func wrapVisualLine(line string, width int, asUTF8 bool) []string {
 		broken = true
 	}
 
-	for _, seg := range splitWrapSegments(line, asUTF8) {
+	for _, seg := range splitWrapSegments(line, asUTF8, mode) {
 		if seg.space {
 			switch {
 			case curWidth == 0 && broken:

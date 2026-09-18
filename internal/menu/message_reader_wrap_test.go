@@ -26,7 +26,7 @@ const codefenixSignature = "Good to be back!\r" +
 // paints it: format, expand pipe codes, wrap to the terminal width.
 func readBodyForTest(body string, termWidth int) []string {
 	formatted := formatMessageBody(body, "", false)
-	return wrapAnsiString(string(ansi.ReplacePipeCodes([]byte(formatted))), termWidth)
+	return wrapAnsiString(string(ansi.ReplacePipeCodes([]byte(formatted))), termWidth, ansi.OutputModeUTF8)
 }
 
 // A signature block that already fits the terminal must reach the screen
@@ -187,7 +187,7 @@ func TestMessageBodyMeasuresUTF8BodiesInColumns(t *testing.T) {
 		t.Fatalf("fixture is %d bytes; it must exceed %d for this test to bite", len(line), width)
 	}
 
-	lines := wrapAnsiString(line, width)
+	lines := wrapAnsiString(line, width, ansi.OutputModeUTF8)
 	if len(lines) != 1 || lines[0] != line {
 		t.Errorf("UTF-8 line was reflowed:\n got  %q\n want %q", lines, line)
 	}
@@ -205,7 +205,7 @@ func TestMessageBodyMeasuresCP437BodiesInBytes(t *testing.T) {
 		t.Fatalf("fixture must be invalid UTF-8 to exercise the CP437 path")
 	}
 
-	for _, ln := range wrapAnsiString(line, width) {
+	for _, ln := range wrapAnsiString(line, width, ansi.OutputModeUTF8) {
 		if got := len(reWrapEsc.ReplaceAllString(ln, "")); got > width {
 			t.Errorf("CP437 row measured as runes and left %d cols wide, over %d: %q", got, width, ln)
 		}
@@ -218,7 +218,7 @@ func TestMessageBodyKeepsTrailingResetAfterABreak(t *testing.T) {
 	const width = 30
 	line := strings.Repeat("a", width) + " \x1b[0m"
 
-	lines := wrapAnsiString(line, width)
+	lines := wrapAnsiString(line, width, ansi.OutputModeUTF8)
 	if joined := strings.Join(lines, ""); !strings.Contains(joined, "\x1b[0m") {
 		t.Errorf("trailing reset was dropped: %q", lines)
 	}
@@ -241,9 +241,36 @@ func TestMessageBodyMeasuresWideRunesAsTwoColumns(t *testing.T) {
 		t.Fatalf("fixture must exceed %d display columns", width)
 	}
 
-	for i, ln := range wrapAnsiString(line, width) {
+	for i, ln := range wrapAnsiString(line, width, ansi.OutputModeUTF8) {
 		if got := runewidth.StringWidth(reWrapEsc.ReplaceAllString(ln, "")); got > width {
 			t.Errorf("line %d is %d display columns, over the %d budget: %q", i, got, width, ln)
 		}
+	}
+}
+
+// Width must be measured the way the writer will render it, not the way the
+// bytes happen to decode. 0xDC 0xB3 is a CP437 pair (▄│) that is also a valid
+// UTF-8 encoding of U+0733, a zero-width combining mark, so display width says
+// it costs nothing - but WriteStringCP437 folds each rune to one CP437 byte,
+// or to '?' where it does not map, and emits a column the margin has no room
+// for. See #280 for the same ambiguity biting the writer.
+func TestMessageBodyMeasuresForTheOutputTerminal(t *testing.T) {
+	const width = 80
+	line := strings.Repeat("a", width-1) + " \xdc\xb3"
+
+	if !utf8.ValidString(line) {
+		t.Fatalf("fixture must be valid UTF-8 for this ambiguity to bite")
+	}
+	if got := columnWidth(line, true, ansi.OutputModeUTF8); got != width {
+		t.Fatalf("UTF-8 mode: %d columns, want %d", got, width)
+	}
+	if got := columnWidth(line, true, ansi.OutputModeCP437); got != width+1 {
+		t.Errorf("CP437 mode: %d columns, want %d", got, width+1)
+	}
+	if got := wrapAnsiString(line, width, ansi.OutputModeCP437); len(got) != 2 {
+		t.Errorf("CP437 mode: should have wrapped, got %d lines: %q", len(got), got)
+	}
+	if got := wrapAnsiString(line, width, ansi.OutputModeUTF8); len(got) != 1 {
+		t.Errorf("UTF-8 mode: fits, should not wrap, got %d lines: %q", len(got), got)
 	}
 }

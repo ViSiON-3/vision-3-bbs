@@ -255,7 +255,7 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 		// an item still gets it positioned correctly.
 		width := newsBodyWidth(headerWidth, termWidth)
 		body := string(ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body))))
-		lines := wrapAnsiString(body, width)
+		lines := wrapAnsiString(body, width, outputMode)
 		// wrapAnsiString breaks on spaces, so a token with no break opportunity
 		// (a long URL, a path) comes back oversized; break those explicitly
 		// rather than leaving the client terminal to chop them mid-token.

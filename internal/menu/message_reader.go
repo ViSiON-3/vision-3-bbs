@@ -255,7 +255,7 @@ readerLoop:
 			}
 		} else {
 			// Regular text message - use normal wrapping
-			wrappedBodyLines = wrapAnsiString(processedBodyStr, termWidth)
+			wrappedBodyLines = wrapAnsiString(processedBodyStr, termWidth, outputMode)
 		}
 
 		// Calculate available body height
