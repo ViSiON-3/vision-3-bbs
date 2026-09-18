@@ -97,55 +97,156 @@ func wrapAnsiString(text string, width int) []string {
 			continue
 		}
 
-		currentLine := ""
-		currentWidth := 0
-		words := strings.Fields(line) // Split line into words
-
-		for _, word := range words {
-			// Calculate visible width of the word (stripping ANSI)
-			plainWord := reAnsi.ReplaceAllString(word, "")
-			wordWidth := len(plainWord)
-
-			if currentWidth == 0 {
-				// First word on the line
-				if wordWidth > width {
-					// Word is longer than the line width, just append it (will overflow)
-					wrappedLines = append(wrappedLines, word)
-					currentLine = ""
-					currentWidth = 0
-				} else {
-					currentLine = word
-					currentWidth = wordWidth
-				}
-			} else {
-				// Subsequent words
-				if currentWidth+1+wordWidth <= width {
-					// Word fits on the current line
-					currentLine += " " + word
-					currentWidth += 1 + wordWidth
-				} else {
-					// Word doesn't fit, wrap to next line
-					wrappedLines = append(wrappedLines, currentLine)
-					if wordWidth > width {
-						// Word itself is too long, put it on its own line
-						wrappedLines = append(wrappedLines, word)
-						currentLine = ""
-						currentWidth = 0
-					} else {
-						// Start new line with the current word
-						currentLine = word
-						currentWidth = wordWidth
-					}
-				}
-			}
+		// A line that already fits is left exactly as the author typed it.
+		// Re-flowing it would collapse the runs of spaces that column-aligned
+		// signatures, tables and ASCII boxes are built out of.
+		if len(plainLine) <= width {
+			wrappedLines = append(wrappedLines, line)
+			continue
 		}
-		// Add the last line being built
-		if currentWidth > 0 {
-			wrappedLines = append(wrappedLines, currentLine)
-		}
+
+		wrappedLines = append(wrappedLines, wrapVisualLine(line, width)...)
 	}
 
 	return wrappedLines
+}
+
+// wrapSeg is one run of a line: either whitespace or non-whitespace, never a
+// mix. text is the run as it appeared, escapes included; codes is just those
+// escapes, so a whitespace run that a line break swallows can still hand its
+// colour on to the next line.
+type wrapSeg struct {
+	text  string
+	codes string
+	width int
+	space bool
+}
+
+// ansiSeqEnd returns the index just past the escape sequence starting at i.
+func ansiSeqEnd(s string, i int) int {
+	j := i + 1
+	if j < len(s) && s[j] == '[' {
+		j++
+		for j < len(s) {
+			c := s[j]
+			j++
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				break
+			}
+		}
+		return j
+	}
+	if j < len(s) {
+		j++
+	}
+	return j
+}
+
+// splitWrapSegments breaks a line into alternating whitespace and word runs.
+// Escape sequences carry no width, so they ride along with the run they sit in
+// (or with the run that follows, when they open the line).
+func splitWrapSegments(line string) []wrapSeg {
+	var segs []wrapSeg
+	var text, codes, pending strings.Builder
+	width := 0
+	space := false
+	open := false
+
+	closeSeg := func() {
+		if !open {
+			return
+		}
+		segs = append(segs, wrapSeg{text: text.String(), codes: codes.String(), width: width, space: space})
+		text.Reset()
+		codes.Reset()
+		width = 0
+		open = false
+	}
+
+	for i := 0; i < len(line); {
+		if line[i] == 0x1b {
+			end := ansiSeqEnd(line, i)
+			if open {
+				text.WriteString(line[i:end])
+				codes.WriteString(line[i:end])
+			} else {
+				pending.WriteString(line[i:end])
+			}
+			i = end
+			continue
+		}
+		isSpace := line[i] == ' ' || line[i] == '\t'
+		if !open || isSpace != space {
+			closeSeg()
+			space = isSpace
+			open = true
+			text.WriteString(pending.String())
+			codes.WriteString(pending.String())
+			pending.Reset()
+		}
+		text.WriteByte(line[i])
+		width++
+		i++
+	}
+	closeSeg()
+
+	if pending.Len() > 0 {
+		// A trailing reset, normally. Keep it on the tail of the line.
+		if n := len(segs); n > 0 {
+			segs[n-1].text += pending.String()
+			segs[n-1].codes += pending.String()
+		} else {
+			segs = append(segs, wrapSeg{text: pending.String(), codes: pending.String()})
+		}
+	}
+	return segs
+}
+
+// wrapVisualLine greedily wraps one over-long line at whitespace. Leading
+// indent and interior spacing are kept; only the whitespace a break lands on
+// is consumed, the way a terminal would. A word wider than the whole line is
+// emitted oversized rather than cut mid-word.
+func wrapVisualLine(line string, width int) []string {
+	var (
+		out      []string
+		cur      strings.Builder
+		curWidth int
+		broken   bool
+	)
+
+	flush := func() {
+		out = append(out, cur.String())
+		cur.Reset()
+		curWidth = 0
+		broken = true
+	}
+
+	for _, seg := range splitWrapSegments(line) {
+		if seg.space {
+			switch {
+			case curWidth == 0 && broken:
+				// This run is the break itself; keep only its colour.
+				cur.WriteString(seg.codes)
+			case curWidth+seg.width <= width:
+				cur.WriteString(seg.text)
+				curWidth += seg.width
+			default:
+				flush()
+				cur.WriteString(seg.codes)
+			}
+			continue
+		}
+		if curWidth > 0 && curWidth+seg.width > width {
+			flush()
+		}
+		cur.WriteString(seg.text)
+		curWidth += seg.width
+	}
+
+	if curWidth > 0 {
+		out = append(out, cur.String())
+	}
+	return out
 }
 
 // writeProcessedStringWithManualEncoding takes bytes that have already had pipe codes
