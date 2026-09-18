@@ -162,7 +162,11 @@ func (r *ANSIRenderer) parseEscapeSequence(text string) (string, int) {
 				intermediate = true
 				i++
 			case ch >= 0x40 && ch <= 0x7e: // final byte
-				if malformed {
+				// An intermediate byte selects a different control function
+				// from the bare form, and none of the functions this renderer
+				// implements take one. Consume and dispatch nothing rather
+				// than acting on a sequence that was not what it looked like.
+				if malformed || intermediate {
 					return "", i + 1
 				}
 				return text[:i+1], i + 1

@@ -723,33 +723,32 @@ func TestSGRStateEscape(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// splitSGR
+// SGR parameter splitting
 // ---------------------------------------------------------------------------
 
-func TestSplitSGR(t *testing.T) {
+// An omitted parameter means zero, which for SGR means a reset. These cases
+// used to sit on splitSGR; they are asserted through the state now that
+// applyParams splits its own fields.
+func TestSGRStateParameterSplitting(t *testing.T) {
 	tests := []struct {
 		name string
-		s    string
-		want []int
+		in   string
+		want string
 	}{
-		{"single", "31", []int{31}},
-		{"multiple", "1;31;42", []int{1, 31, 42}},
-		{"leading semicolon", ";31", []int{0, 31}},
-		{"trailing semicolon", "31;", []int{31, 0}},
-		{"empty between semicolons", "1;;31", []int{1, 0, 31}},
-		{"just zero", "0", []int{0}},
+		{"single", "\x1b[31m", "\x1b[0;31m"},
+		{"multiple", "\x1b[1;31;42m", "\x1b[0;1;31;42m"},
+		{"leading semicolon resets first", "\x1b[;31m", "\x1b[0;31m"},
+		{"trailing semicolon resets last", "\x1b[31;m", "\x1b[0m"},
+		{"empty between semicolons resets", "\x1b[1;;31m", "\x1b[0;31m"},
+		{"just zero", "\x1b[0m", "\x1b[0m"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := splitSGR(tt.s)
-			if len(got) != len(tt.want) {
-				t.Fatalf("splitSGR(%q) = %v (len %d), want %v (len %d)", tt.s, got, len(got), tt.want, len(tt.want))
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("splitSGR(%q)[%d] = %d, want %d", tt.s, i, got[i], tt.want[i])
-				}
+			s := NewSGRState()
+			s.Write(tt.in)
+			if got := s.Escape(); got != tt.want {
+				t.Errorf("Write(%q) -> %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}
@@ -782,5 +781,53 @@ func TestSGRStateExtendedColour(t *testing.T) {
 				t.Errorf("Write(%q) -> %q, want %q", tc.input, got, tc.want)
 			}
 		})
+	}
+}
+
+// Colons bind tighter than semicolons (ITU-T T.416), so a colon group must be
+// read whole. Flattening both separators together made the empty colourspace
+// field in "38:2::255:128:64" look like a red of 0 and dropped the blue.
+func TestSGRStateColonSubparameters(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"256-colour", "\x1b[38:5:208m", "\x1b[0;38;5;208m"},
+		{"direct colour", "\x1b[38:2:255:128:64m", "\x1b[0;38;2;255;128;64m"},
+		{"direct colour with colourspace field", "\x1b[38:2::255:128:64m", "\x1b[0;38;2;255;128;64m"},
+		{"background direct colour", "\x1b[48:2::1:2:3m", "\x1b[0;48;2;1;2;3m"},
+		{"colon and semicolon forms agree", "\x1b[38;2;255;128;64m", "\x1b[0;38;2;255;128;64m"},
+		{"truncated colon group is ignored", "\x1b[38:m", "\x1b[0m"},
+		{"unknown colon selector is ignored", "\x1b[38:9:1m", "\x1b[0m"},
+		{"colon group beside plain parameters", "\x1b[1;38:5:9;47m", "\x1b[0;1;38;5;9;47m"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewSGRState()
+			s.Write(tc.in)
+			if got := s.Escape(); got != tc.want {
+				t.Errorf("Write(%q) -> %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// An intermediate byte selects a different control function from the bare
+// form, so ESC[31 m is not "set foreground red" and must leave the state alone.
+func TestSGRStateRejectsIntermediateBytes(t *testing.T) {
+	s := NewSGRState()
+	s.Write("\x1b[31m")
+	before := s.Escape()
+
+	s.Write("\x1b[32 m") // parameters, then an intermediate, then the final byte
+	if got := s.Escape(); got != before {
+		t.Errorf("a sequence with an intermediate byte changed the state: %q -> %q", before, got)
+	}
+
+	// And one with no prior state must not invent any.
+	fresh := NewSGRState()
+	fresh.Write("\x1b[31 m")
+	if got := fresh.Escape(); got != "\x1b[0m" {
+		t.Errorf("Write(%q) -> %q, want the default", "\x1b[31 m", got)
 	}
 }
