@@ -81,3 +81,29 @@ func TestANSIRendererHonoursWrapMode(t *testing.T) {
 		t.Fatalf("wrapping was re-enabled but output took %d row(s): %q", len(on), on)
 	}
 }
+
+// A mode sequence may carry several parameters at once, so DECAWM has to be
+// looked for throughout rather than only in the first position.
+func TestANSIRendererFindsWrapModeAmongOtherModes(t *testing.T) {
+	const w = 10
+	overflow := strings.Repeat("a", w) + "bc"
+
+	for _, tc := range []struct {
+		name      string
+		seq       string
+		wantWraps bool
+	}{
+		{"wrap off alone", "\x1b[?7l", false},
+		{"wrap off after another mode", "\x1b[?25;7l", false},
+		{"wrap off before another mode", "\x1b[?7;25l", false},
+		{"wrap on among other modes", "\x1b[?7l\x1b[?25;7;1h", true},
+		{"unrelated mode leaves wrapping alone", "\x1b[?25l", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := RenderANSIArtToLines(tc.seq+overflow, w, 5)
+			if wrapped := len(lines) > 1; wrapped != tc.wantWraps {
+				t.Errorf("%q: wrapped=%v, want %v (rows %q)", tc.seq, wrapped, tc.wantWraps, lines)
+			}
+		})
+	}
+}

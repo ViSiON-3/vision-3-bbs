@@ -374,12 +374,18 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			return false
 
 		case 'h', 'l': // Mode set / reset
-			// Only DECAWM matters here: art that turns wrapping off expects a
-			// full-width row to stay on its row.
-			if strings.Contains(seq, "?") && len(params) > 0 && params[0] == 7 {
-				r.autoWrap = cmd == 'h'
-				if !r.autoWrap {
-					r.pendingWrap = false
+			// One sequence may carry several modes - ESC[?7;25h sets both
+			// auto-wrap and cursor visibility - so look through all of them
+			// rather than only the first. Only DECAWM (7) matters here.
+			if strings.Contains(seq, "?") {
+				for _, p := range params {
+					if p != 7 {
+						continue
+					}
+					r.autoWrap = cmd == 'h'
+					if !r.autoWrap {
+						r.pendingWrap = false
+					}
 				}
 			}
 			return false

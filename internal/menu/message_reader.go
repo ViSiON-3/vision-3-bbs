@@ -244,9 +244,13 @@ readerLoop:
 		hasAnsiArt := detectAnsiArtInMessage(processedBodyStr)
 
 		if hasAnsiArt {
-			// Render ANSI art into virtual buffer with NO AUTO-WRAPPING
-			// Cursor positioning is relative to buffer (0,0), not terminal screen
-			// Text that exceeds buffer width is clipped, not wrapped
+			// Render ANSI art into a virtual buffer, cursor positioning
+			// relative to the buffer (0,0) rather than the terminal screen.
+			// Text reaching the right margin wraps onto the next row the way a
+			// terminal does, deferred so that a row filled exactly to the
+			// margin does not gain a blank row after it. Art can turn wrapping
+			// off with ESC[?7l, and much of this echo's art turns it on with
+			// ESC[?7h.
 			wrappedBodyLines = RenderANSIArtToLines(processedBodyStr, termWidth, 500)
 
 			// Convert CP437 bytes to UTF-8 for modern terminals
