@@ -213,64 +213,118 @@ func WarnIfNewsUnwired(rootConfigPath string, loginSequence []config.LoginItem) 
 //
 //	^NM = item number   ^TI = title    ^FR = from/author
 //	^DT = date          ^TM = time     ^LV = min level   ^MX = max level
-func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, idx int, outputMode ansi.OutputMode, termWidth int) {
-	// Width of the header frame the body should line up under. Measured from
-	// the header actually rendered, so a customized NEWSHDR.ANS or a different
-	// menu set stays self-consistent instead of being hard-coded to 78.
-	headerWidth := newsFallbackHeaderWidth
-
+//
+// renderNewsHeader returns the item's header with pipe codes already expanded,
+// and the width of the frame the body should line up under. The width is
+// measured from the header actually rendered, so a customized NEWSHDR.ANS or a
+// different menu set stays self-consistent instead of being hard-coded to 78.
+//
+// The returned bytes carry no trailing line break: callers decide what follows
+// the header, which is what lets the body start on the very next row.
+func renderNewsHeader(e *MenuExecutor, item *NewsItem, idx int, outputMode ansi.OutputMode) ([]byte, int) {
 	ansiPath := e.menuFile("ansi", "NEWSHDR.ANS")
-	if raw, err := os.ReadFile(ansiPath); err == nil {
-		headerWidth = headerTemplateWidth(string(raw), outputMode)
-		maxStr := strconv.Itoa(item.MaxLevel)
-		if item.MaxLevel <= 0 {
-			maxStr = "All"
-		}
-		hdr := string(raw)
-		hdr = strings.ReplaceAll(hdr, "^NM", strconv.Itoa(idx))
-		hdr = strings.ReplaceAll(hdr, "^TI", item.Title)
-		hdr = strings.ReplaceAll(hdr, "^FR", item.From)
-		hdr = strings.ReplaceAll(hdr, "^DT", item.When.Format("01/02/2006"))
-		hdr = strings.ReplaceAll(hdr, "^TM", item.When.Format("3:04 pm"))
-		hdr = strings.ReplaceAll(hdr, "^LV", strconv.Itoa(item.Level))
-		hdr = strings.ReplaceAll(hdr, "^MX", maxStr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(hdr)), outputMode)
-	} else {
-		// Fallback plain header if NEWSHDR.ANS is missing
-		wv(terminal, fmt.Sprintf("\r\n|15News #%d: |11%s\r\n|07From: |11%s |07  Date: |11%s\r\n|08%s\r\n",
+	raw, err := os.ReadFile(ansiPath)
+	if err != nil {
+		// Fallback plain header if NEWSHDR.ANS is missing.
+		fallback := fmt.Sprintf("\r\n|15News #%d: |11%s\r\n|07From: |11%s |07  Date: |11%s\r\n|08%s\r\n",
 			idx, item.Title, item.From, item.When.Format("01/02/2006"),
-			strings.Repeat("\xc4", newsFallbackHeaderWidth)), outputMode)
+			strings.Repeat("\xc4", newsFallbackHeaderWidth))
+		return trimTrailingBlankRows(ansi.ReplacePipeCodes([]byte(fallback))), newsFallbackHeaderWidth
 	}
-	if item.Body != "" {
-		// Word-wrap to the terminal, the same way the message reader renders a
-		// message body. Without this the terminal hard-wraps at its own margin
-		// and breaks words mid-word.
-		//
-		// Pipe codes are converted to ANSI *before* wrapping, matching the
-		// reader. wrapAnsiString measures width with ANSI escapes stripped but
-		// knows nothing about pipe codes, so wrapping first would count "|04"
-		// as three visible columns and break lines far too early.
-		//
-		// wrapAnsiString leaves ANSI art alone, so a sysop who pastes art into
-		// an item still gets it positioned correctly.
-		width := newsBodyWidth(headerWidth, termWidth)
-		body := string(ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body))))
-		lines := wrapAnsiString(body, width, outputMode)
-		// wrapAnsiString breaks on spaces, so a token with no break opportunity
-		// (a long URL, a path) comes back oversized; break those explicitly
-		// rather than leaving the client terminal to chop them mid-token.
-		//
-		// Not for ANSI art: wrapAnsiString leaves art rows alone because they
-		// are positioned absolutely, and hard-breaking a full-width row would
-		// push everything below it down a line and wreck the picture.
-		if !containsAnsiArt(body) {
-			lines = breakOversizedLines(lines, width, outputMode)
+
+	maxStr := strconv.Itoa(item.MaxLevel)
+	if item.MaxLevel <= 0 {
+		maxStr = "All"
+	}
+	hdr := string(raw)
+	hdr = strings.ReplaceAll(hdr, "^NM", strconv.Itoa(idx))
+	hdr = strings.ReplaceAll(hdr, "^TI", item.Title)
+	hdr = strings.ReplaceAll(hdr, "^FR", item.From)
+	hdr = strings.ReplaceAll(hdr, "^DT", item.When.Format("01/02/2006"))
+	hdr = strings.ReplaceAll(hdr, "^TM", item.When.Format("3:04 pm"))
+	hdr = strings.ReplaceAll(hdr, "^LV", strconv.Itoa(item.Level))
+	hdr = strings.ReplaceAll(hdr, "^MX", maxStr)
+	return trimTrailingBlankRows(ansi.ReplacePipeCodes([]byte(hdr))), headerTemplateWidth(string(raw), outputMode)
+}
+
+// trimTrailingBlankRows drops rows at the end of b that draw nothing, keeping
+// any colour they set.
+//
+// NEWSHDR.ANS ends with its rule, a line break, a colour code and one more
+// line break, so the header arrived a row taller than it looks and the body
+// started with a blank line under it (#372). Dropping the empty row while
+// carrying its escapes onto the row above keeps the colour the header chose
+// for the body that follows.
+func trimTrailingBlankRows(b []byte) []byte {
+	rows := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
+
+	carried := ""
+	for len(rows) > 1 {
+		last := rows[len(rows)-1]
+		if strings.TrimSpace(stripEscapes(last)) != "" {
+			break
 		}
-		for _, line := range lines {
-			// Already pipe-converted, so write straight through rather than
-			// running it past ReplacePipeCodes a second time.
-			terminalio.WriteProcessedBytes(terminal, []byte(line+"\r\n"), outputMode)
+		carried = escapesOnly(last) + carried
+		rows = rows[:len(rows)-1]
+	}
+	rows[len(rows)-1] += carried
+
+	return []byte(strings.Join(rows, "\r\n"))
+}
+
+// escapesOnly returns just the escape sequences in s, discarding everything
+// that would occupy a column.
+func escapesOnly(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if n := escapeLen(s, i); n > 0 {
+			b.WriteString(s[i : i+n])
+			i += n
+			continue
 		}
+		i++
+	}
+	return b.String()
+}
+
+// renderNewsBody wraps an item's body to the width of the header frame.
+func renderNewsBody(item *NewsItem, headerWidth, termWidth int, outputMode ansi.OutputMode) []string {
+	if item.Body == "" {
+		return nil
+	}
+	// Pipe codes are converted to ANSI *before* wrapping, matching the
+	// reader. wrapAnsiString measures width with ANSI escapes stripped but
+	// knows nothing about pipe codes, so wrapping first would count "|04"
+	// as three visible columns and break lines far too early.
+	//
+	// wrapAnsiString leaves ANSI art alone, so a sysop who pastes art into
+	// an item still gets it positioned correctly.
+	width := newsBodyWidth(headerWidth, termWidth)
+	body := string(ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body))))
+	lines := wrapAnsiString(body, width, outputMode)
+	// wrapAnsiString breaks on spaces, so a token with no break opportunity
+	// (a long URL, a path) comes back oversized; break those explicitly
+	// rather than leaving the client terminal to chop them mid-token.
+	//
+	// Not for ANSI art: wrapAnsiString leaves art rows alone because they
+	// are positioned absolutely, and hard-breaking a full-width row would
+	// push everything below it down a line and wreck the picture.
+	if !containsAnsiArt(body) {
+		lines = breakOversizedLines(lines, width, outputMode)
+	}
+	return lines
+}
+
+// displayNewsItem writes an item to the terminal in sequence, without paging.
+// Used by the sysop editor's preview; readers go through showNewsItem.
+func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, idx int, outputMode ansi.OutputMode, termWidth int) {
+	hdr, headerWidth := renderNewsHeader(e, item, idx, outputMode)
+	terminalio.WriteProcessedBytes(terminal, hdr, outputMode)
+	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+	for _, line := range renderNewsBody(item, headerWidth, termWidth, outputMode) {
+		// Already pipe-converted, so write straight through rather than
+		// running it past ReplacePipeCodes a second time.
+		terminalio.WriteProcessedBytes(terminal, []byte(line+"\r\n"), outputMode)
 	}
 }
 
@@ -337,13 +391,8 @@ func headerTemplateWidth(tmpl string, mode ansi.OutputMode) int {
 // an item is not lost when a login is aborted before it is displayed.
 func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
-	s := c.s
-	terminal := c.terminal
 	currentUser := c.currentUser
 	nodeNumber := c.nodeNumber
-	outputMode := c.outputMode
-	termWidth := c.termWidth
-	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -396,12 +445,18 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		}
 
-		displayNewsItem(e, terminal, &nd.Items[i], i+1, outputMode, termWidth)
-		e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+		stop, viewErr := showNewsItem(c, &nd.Items[i], i+1)
 		shown++
 
+		// Seen either way: the item was put on screen, and making a reader who
+		// quits out see it again next login is worse than the alternative.
 		if !item.Always && item.ID > 0 {
 			seen[item.ID] = true
+		}
+		if viewErr != nil || stop {
+			// ESC skips the rest of the backlog. Save what has been seen so
+			// far before leaving.
+			break
 		}
 	}
 
@@ -430,8 +485,6 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 	currentUser := c.currentUser
 	nodeNumber := c.nodeNumber
 	outputMode := c.outputMode
-	termWidth := c.termWidth
-	termHeight := c.termHeight
 
 	if currentUser == nil {
 		return currentUser, "", nil
@@ -514,11 +567,13 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 		idx := visible[n-1]
-		displayNewsItem(e, terminal, &nd.Items[idx], n, outputMode, termWidth)
+		if _, viewErr := showNewsItem(c, &nd.Items[idx], n); viewErr != nil {
+			saveSeen()
+			return currentUser, "", viewErr
+		}
 		if item := nd.Items[idx]; !item.Always && item.ID > 0 {
 			seen[item.ID] = true
 		}
-		e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 		showList()
 	}
 }
