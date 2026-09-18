@@ -28,6 +28,14 @@ type ANSIRenderer struct {
 	// not mention, so a foreground set earlier reverted to the terminal default
 	// the moment a background was chosen.
 	sgr ansi.SGRState
+	// Auto-wrap (DECAWM), on by default as on a real terminal and toggled by
+	// ESC[?7h and ESC[?7l. Art of this era is written for an 80-column screen
+	// and leans on the wrap to start each new row.
+	autoWrap bool
+	// Deferred wrap. Filling the last column does not move the cursor; it arms
+	// the wrap, and the *next* printable character starts the new row. Wrapping
+	// eagerly instead would insert a blank row after every full-width line.
+	pendingWrap bool
 	// Cursor position stashed by ESC[s and brought back by ESC[u. ANSI.SYS
 	// semantics: position only, not the graphic attributes (that is DECSC,
 	// ESC 7, which the art in these messages does not use). savedValid keeps a
@@ -63,6 +71,7 @@ func NewANSIRenderer(width, height int) *ANSIRenderer {
 		CursorY:      0,
 		CurrentStyle: "\x1b[0m",
 		sgr:          ansi.NewSGRState(),
+		autoWrap:     true,
 	}
 }
 
@@ -94,6 +103,7 @@ func (r *ANSIRenderer) Render(text string) {
 		switch ch {
 		case '\r':
 			r.CursorX = 0
+			r.pendingWrap = false
 		case '\n':
 			// Handle both \r\n and standalone \n
 			// If \n is NOT preceded by \r, reset column to 0
@@ -104,12 +114,23 @@ func (r *ANSIRenderer) Render(text string) {
 			if r.CursorY >= r.Height {
 				r.CursorY = r.Height - 1
 			}
+			r.pendingWrap = false
 		case '\t':
+			r.pendingWrap = false
 			r.CursorX = ((r.CursorX / 8) + 1) * 8
 			if r.CursorX >= r.Width {
 				r.CursorX = r.Width - 1
 			}
 		default:
+			// A wrap armed by the previous character takes effect now.
+			if r.pendingWrap {
+				r.pendingWrap = false
+				r.CursorX = 0
+				r.CursorY++
+				if r.CursorY >= r.Height {
+					r.CursorY = r.Height - 1
+				}
+			}
 			// Write character to buffer (only if within bounds)
 			if r.CursorY >= 0 && r.CursorY < r.Height && r.CursorX >= 0 && r.CursorX < r.Width {
 				r.Buffer[r.CursorY][r.CursorX] = ANSICell{
@@ -117,11 +138,14 @@ func (r *ANSIRenderer) Render(text string) {
 					Style: r.CurrentStyle,
 				}
 			}
-			r.CursorX++
-			// Don't auto-wrap! ANSI art uses explicit positioning.
-			// If text exceeds buffer width, just clip it (stay at edge).
-			if r.CursorX >= r.Width {
-				r.CursorX = r.Width - 1 // Stay at right edge (last valid column)
+			if r.CursorX >= r.Width-1 {
+				// Last column. With wrapping on, arm it rather than moving now;
+				// with it off, stay put and let further writes overwrite here,
+				// which is what a terminal does.
+				r.CursorX = r.Width - 1
+				r.pendingWrap = r.autoWrap
+			} else {
+				r.CursorX++
 			}
 		}
 		lastChar = ch // Track last character for \n handling
@@ -209,6 +233,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 
 		switch cmd {
 		case 'A': // Cursor up
+			r.pendingWrap = false
 			count := 1
 			if len(params) > 0 && params[0] > 0 {
 				count = params[0]
@@ -220,6 +245,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			return true
 
 		case 'B': // Cursor down
+			r.pendingWrap = false
 			count := 1
 			if len(params) > 0 && params[0] > 0 {
 				count = params[0]
@@ -231,6 +257,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			return true
 
 		case 'C': // Cursor forward (right)
+			r.pendingWrap = false
 			count := 1
 			if len(params) > 0 && params[0] > 0 {
 				count = params[0]
@@ -242,6 +269,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			return true
 
 		case 'D': // Cursor back (left)
+			r.pendingWrap = false
 			count := 1
 			if len(params) > 0 && params[0] > 0 {
 				count = params[0]
@@ -253,6 +281,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			return true
 
 		case 'H', 'f': // Cursor position
+			r.pendingWrap = false
 			row, col := 1, 1
 			if len(params) > 0 && params[0] > 0 {
 				row = params[0]
@@ -344,6 +373,17 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			r.CurrentStyle = r.sgr.Escape()
 			return false
 
+		case 'h', 'l': // Mode set / reset
+			// Only DECAWM matters here: art that turns wrapping off expects a
+			// full-width row to stay on its row.
+			if strings.Contains(seq, "?") && len(params) > 0 && params[0] == 7 {
+				r.autoWrap = cmd == 'h'
+				if !r.autoWrap {
+					r.pendingWrap = false
+				}
+			}
+			return false
+
 		case 's': // Save cursor position
 			r.savedX, r.savedY = r.CursorX, r.CursorY
 			r.savedValid = true
@@ -355,6 +395,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			// expects.
 			if r.savedValid {
 				r.CursorX, r.CursorY = r.savedX, r.savedY
+				r.pendingWrap = false
 			}
 			return true
 		}
