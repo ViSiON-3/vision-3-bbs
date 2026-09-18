@@ -115,9 +115,16 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 	// Runes are treated as one terminal column each. That holds for CP437 and
 	// for the Latin-1 range this BBS actually sees; it is NOT true of
 	// double-width glyphs such as CJK, which would render two columns wide and
-	// skew the box and cursor maths. Wide-character support is deliberately out
-	// of scope repo-wide (it would need go-runewidth threaded through
+	// skew the box and cursor maths. Wide-character support remains out of
+	// scope for layout (it would need go-runewidth threaded through
 	// ansi.VisibleLength), so a CJK value here draws a box that is too narrow.
+	//
+	// Line wrapping is the deliberate exception: see menu.columnWidth. Padding
+	// and centring that come out a column short are cosmetic, but a wrapper
+	// that measures short emits a line past the terminal margin, which is a
+	// real defect (#361). So the wrapper measures display width and everything
+	// here does not, and #363 records the split rather than pretending the two
+	// have the same requirements.
 	input := make([]byte, 0, maxLen)
 	if defaultValue != "" {
 		input = append(input, []byte(ansi.TruncateRunes(defaultValue, maxLen, ""))...)

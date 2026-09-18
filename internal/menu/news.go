@@ -221,7 +221,7 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 
 	ansiPath := e.menuFile("ansi", "NEWSHDR.ANS")
 	if raw, err := os.ReadFile(ansiPath); err == nil {
-		headerWidth = headerTemplateWidth(string(raw))
+		headerWidth = headerTemplateWidth(string(raw), outputMode)
 		maxStr := strconv.Itoa(item.MaxLevel)
 		if item.MaxLevel <= 0 {
 			maxStr = "All"
@@ -264,7 +264,7 @@ func displayNewsItem(e *MenuExecutor, terminal *term.Terminal, item *NewsItem, i
 		// are positioned absolutely, and hard-breaking a full-width row would
 		// push everything below it down a line and wreck the picture.
 		if !containsAnsiArt(body) {
-			lines = breakOversizedLines(lines, width)
+			lines = breakOversizedLines(lines, width, outputMode)
 		}
 		for _, line := range lines {
 			// Already pipe-converted, so write straight through rather than
@@ -320,11 +320,11 @@ func newsBodyWidth(headerWidth, termWidth int) int {
 // Measured on the template before substitution: that is the width the header
 // was designed to, and it keeps the body budget stable from item to item
 // instead of drifting with the length of a title or author name.
-func headerTemplateWidth(tmpl string) int {
+func headerTemplateWidth(tmpl string, mode ansi.OutputMode) int {
 	converted := string(ansi.ReplacePipeCodes([]byte(strings.ReplaceAll(tmpl, "\r\n", "\n"))))
 	widest := 0
 	for _, line := range strings.Split(converted, "\n") {
-		if w := visibleWidth(line); w > widest {
+		if w := visibleColumns(line, mode); w > widest {
 			widest = w
 		}
 	}

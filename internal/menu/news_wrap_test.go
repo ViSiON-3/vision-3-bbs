@@ -73,11 +73,11 @@ func TestHeaderTemplateWidthMeasuresTheRules(t *testing.T) {
 		"|15 News #^NM|15: |11^TI\r\n" +
 		"|08" + strings.Repeat("\xc4", 78) + "\r\n"
 
-	if got := headerTemplateWidth(tmpl); got != 78 {
+	if got := headerTemplateWidth(tmpl, ansi.OutputModeUTF8); got != 78 {
 		t.Errorf("headerTemplateWidth = %d, want 78 (the rule width)", got)
 	}
 
-	if got := headerTemplateWidth(""); got != 0 {
+	if got := headerTemplateWidth("", ansi.OutputModeUTF8); got != 0 {
 		t.Errorf("empty template width = %d, want 0", got)
 	}
 }
@@ -224,7 +224,7 @@ func TestNewsBodyBreaksOversizedTokens(t *testing.T) {
 	body := "Grab it from " + url + " today."
 	width := newsBodyWidth(shippedHeaderWidth, 80)
 
-	lines := breakOversizedLines(wrapNewsBodyForTest(body, 80), width)
+	lines := breakOversizedLines(wrapNewsBodyForTest(body, 80), width, ansi.OutputModeUTF8)
 
 	for i, ln := range lines {
 		if got := visibleCols(ln); got > width {
@@ -241,7 +241,7 @@ func TestNewsBodyBreaksOversizedTokens(t *testing.T) {
 
 func TestBreakOversizedLinesKeepsShortLinesUntouched(t *testing.T) {
 	in := []string{"short", "also short", ""}
-	got := breakOversizedLines(in, 79)
+	got := breakOversizedLines(in, 79, ansi.OutputModeUTF8)
 	if len(got) != len(in) {
 		t.Fatalf("short lines were altered: %q", got)
 	}
@@ -266,7 +266,7 @@ func TestBreakOversizedLinesIsAnsiAware(t *testing.T) {
 		t.Fatalf("fixture is %d visible cols, expected 100", visibleCols(line))
 	}
 
-	got := breakOversizedLines([]string{line}, 40)
+	got := breakOversizedLines([]string{line}, 40, ansi.OutputModeUTF8)
 
 	for i, ln := range got {
 		if w := visibleCols(ln); w > 40 {
@@ -291,7 +291,7 @@ func TestBreakOversizedLinesIsAnsiAware(t *testing.T) {
 func TestBreakOversizedLinesInvalidWidthIsANoOp(t *testing.T) {
 	in := []string{strings.Repeat("x", 200)}
 	for _, w := range []int{0, -1} {
-		got := breakOversizedLines(in, w)
+		got := breakOversizedLines(in, w, ansi.OutputModeUTF8)
 		if len(got) != 1 || got[0] != in[0] {
 			t.Errorf("width %d should be a no-op, got %q", w, got)
 		}
@@ -313,7 +313,7 @@ func TestNewsBodyArtIsExemptFromHardBreaking(t *testing.T) {
 		t.Fatalf("art should stay 2 rows, got %d", len(lines))
 	}
 	// Demonstrates why the gate exists: breaking would double the row count.
-	if broken := breakOversizedLines(lines, newsBodyWidth(shippedHeaderWidth, 80)); len(broken) == len(lines) {
+	if broken := breakOversizedLines(lines, newsBodyWidth(shippedHeaderWidth, 80), ansi.OutputModeUTF8); len(broken) == len(lines) {
 		t.Skip("break pass no longer splits these rows; gate may be redundant")
 	}
 }
