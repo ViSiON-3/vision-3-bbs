@@ -69,16 +69,72 @@ func containsAnsiArt(text string) bool {
 	return ansiArtIndicators.MatchString(text)
 }
 
-// reWrapAnsi matches the escape sequences ReplacePipeCodes emits. Package
-// level because wrapping recompiled it on every call.
-var reWrapAnsi = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+// escapeLen returns the byte length of the escape sequence at s[i], or 0 if
+// one does not start there. It is the single recognizer for the whole wrapping
+// path: measuring, segmenting and hard-breaking all consult it, so none of
+// them can disagree about where an escape ends.
+//
+// CSI is parsed to the ECMA-48 grammar rather than "digits and semicolons then
+// a letter". That earlier shape missed the private forms (ESC[?25l), the
+// colon-separated parameters of ITU-T T.416 (ESC[38:5:12m) and any sequence
+// with an intermediate byte, so their bytes were counted as visible columns
+// and a hard break could cut one in half.
+func escapeLen(s string, i int) int {
+	if i >= len(s) || s[i] != 0x1b {
+		return 0
+	}
+	j := i + 1
+	if j >= len(s) {
+		return 1 // lone ESC at the end of the string
+	}
+	if s[j] != '[' {
+		// Two-character escapes such as ESC(B, and anything else we do not
+		// recognise, which is consumed a byte at a time.
+		if s[j] == '(' || s[j] == ')' {
+			if j+1 < len(s) {
+				return j + 2 - i
+			}
+		}
+		return 2
+	}
+	j++
+	for j < len(s) && s[j] >= 0x30 && s[j] <= 0x3f { // parameter bytes 0-9 : ; < = > ?
+		j++
+	}
+	for j < len(s) && s[j] >= 0x20 && s[j] <= 0x2f { // intermediate bytes
+		j++
+	}
+	if j < len(s) && s[j] >= 0x40 && s[j] <= 0x7e { // final byte
+		return j + 1 - i
+	}
+	return j - i // unterminated; consume what we saw
+}
+
+// stripEscapes removes every escape sequence from s, leaving what occupies
+// columns on screen.
+func stripEscapes(s string) string {
+	if !strings.Contains(s, "\x1b") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if n := escapeLen(s, i); n > 0 {
+			i += n
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}
 
 // visibleColumns is the on-screen width of s for mode, escapes excluded. It is
 // the measure wrapping uses, so anything that re-checks a wrapped line against
 // the same budget must use it too or the two will disagree about the same
 // line.
 func visibleColumns(s string, mode ansi.OutputMode) int {
-	plain := reWrapAnsi.ReplaceAllString(s, "")
+	plain := stripEscapes(s)
 	return columnWidth(plain, utf8.ValidString(plain), mode)
 }
 
@@ -99,7 +155,7 @@ func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 	inputLines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
 	for _, line := range inputLines {
-		plainLine := reWrapAnsi.ReplaceAllString(line, "")
+		plainLine := stripEscapes(line)
 		if strings.TrimSpace(plainLine) == "" {
 			wrappedLines = append(wrappedLines, "")
 			continue
@@ -164,26 +220,6 @@ type wrapSeg struct {
 	space bool
 }
 
-// ansiSeqEnd returns the index just past the escape sequence starting at i.
-func ansiSeqEnd(s string, i int) int {
-	j := i + 1
-	if j < len(s) && s[j] == '[' {
-		j++
-		for j < len(s) {
-			c := s[j]
-			j++
-			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
-				break
-			}
-		}
-		return j
-	}
-	if j < len(s) {
-		j++
-	}
-	return j
-}
-
 // splitWrapSegments breaks a line into alternating whitespace and word runs.
 // Escape sequences carry no width, so they ride along with the run they sit in
 // (or with the run that follows, when they open the line).
@@ -207,7 +243,7 @@ func splitWrapSegments(line string, asUTF8 bool, mode ansi.OutputMode) []wrapSeg
 
 	for i := 0; i < len(line); {
 		if line[i] == 0x1b {
-			end := ansiSeqEnd(line, i)
+			end := i + escapeLen(line, i)
 			if open {
 				text.WriteString(line[i:end])
 				codes.WriteString(line[i:end])

@@ -1,11 +1,13 @@
 package menu
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -88,6 +90,50 @@ func TestNewsHardBreakKeepsEscapesOutOfTheCount(t *testing.T) {
 	for i, chunk := range breakOversizedLines([]string{line}, width, ansi.OutputModeUTF8) {
 		if w := visibleColumns(chunk, ansi.OutputModeUTF8); w > width {
 			t.Errorf("chunk %d is %d visible columns, over %d: %q", i, w, width, chunk)
+		}
+	}
+}
+
+// Ground truth for the CP437 case: what the writer emits is what the terminal
+// shows, so a chunk's measured columns must equal the number of CP437 bytes
+// WriteStringCP437 produces for it.
+//
+// A valid UTF-8 span bound for a CP437 terminal is folded one rune to one byte
+// (or to '?'), so "é" is two bytes of input and exactly one column of output.
+// Measuring it byte-wise instead would count two, disagreeing with
+// columnWidth and re-opening the very split this change closes.
+func TestNewsHardBreakCP437FoldsRunesToOneColumn(t *testing.T) {
+	const width = 8
+	line := strings.Repeat("é", 20) // 20 runes, 40 bytes, 20 CP437 columns
+
+	if !utf8.ValidString(line) {
+		t.Fatalf("fixture must be valid UTF-8 to exercise the fold")
+	}
+	if got := visibleColumns(line, ansi.OutputModeCP437); got != 20 {
+		t.Fatalf("measured %d columns, want 20 (one per rune)", got)
+	}
+
+	chunks := breakOversizedLines([]string{line}, width, ansi.OutputModeCP437)
+	if len(chunks) < 2 {
+		t.Fatalf("expected the line to break, got %d chunk(s)", len(chunks))
+	}
+	if joined := strings.Join(chunks, ""); joined != line {
+		t.Errorf("breaking altered the text:\n got  %q\n want %q", joined, line)
+	}
+
+	for i, chunk := range chunks {
+		measured := visibleColumns(chunk, ansi.OutputModeCP437)
+		if measured > width {
+			t.Errorf("chunk %d measures %d columns, over %d", i, measured, width)
+		}
+		// What the writer actually puts on the wire.
+		var buf bytes.Buffer
+		if err := terminalio.WriteStringCP437(&buf, []byte(chunk), ansi.OutputModeCP437); err != nil {
+			t.Fatalf("WriteStringCP437: %v", err)
+		}
+		if rendered := buf.Len(); rendered != measured {
+			t.Errorf("chunk %d: measured %d columns but the writer emitted %d bytes (%q)",
+				i, measured, rendered, buf.Bytes())
 		}
 	}
 }

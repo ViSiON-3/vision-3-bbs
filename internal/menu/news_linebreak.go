@@ -55,11 +55,11 @@ func hardBreak(s string, width int, mode ansi.OutputMode) []string {
 		b       strings.Builder
 		visible int
 	)
-	plain := reWrapAnsi.ReplaceAllString(s, "")
+	plain := stripEscapes(s)
 	asUTF8 := utf8.ValidString(plain)
 
 	for i := 0; i < len(s); {
-		if n := ansiEscapeLenBytes(s[i:]); n > 0 {
+		if n := escapeLen(s, i); n > 0 {
 			// Zero-width: emit with the current chunk, do not count or split.
 			b.WriteString(s[i : i+n])
 			i += n
@@ -89,23 +89,4 @@ func hardBreak(s string, width int, mode ansi.OutputMode) []string {
 		chunks = append(chunks, b.String())
 	}
 	return chunks
-}
-
-// ansiEscapeLenBytes returns the byte length of the CSI escape sequence at the
-// start of s, or 0 if s does not begin with one.
-func ansiEscapeLenBytes(s string) int {
-	if len(s) < 2 || s[0] != 0x1b || s[1] != '[' {
-		return 0
-	}
-	for i := 2; i < len(s); i++ {
-		c := s[i]
-		if (c >= '0' && c <= '9') || c == ';' || c == '?' {
-			continue
-		}
-		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
-			return i + 1 // include the final byte
-		}
-		return 0 // malformed; treat as literal text
-	}
-	return 0 // unterminated
 }
