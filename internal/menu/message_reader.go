@@ -271,23 +271,33 @@ readerLoop:
 		// Initialize scroll state for this message
 		scrollOffset := 0
 		totalBodyLines := len(wrappedBodyLines)
+
+		// The colour a body line is drawn in can be set by a line above it, so
+		// painting a window that starts part-way down the body has to restore
+		// the state that window inherits. bodyEntryState[i] is the escape that
+		// puts the terminal into the state line i begins in, which is what the
+		// line would have inherited had the body been drawn from the top.
+		bodyEntryState := buildBodyEntryStates(wrappedBodyLines)
 		needsRedraw := true
 		needsBodyRedraw := false
 
 		drawBody := func() {
-			// Reset to grey before drawing body to prevent inherited colors (e.g. cyan
-			// from the |11 reading suffix) from bleeding into plain body text lines.
-			terminalio.WriteProcessedBytes(terminal, []byte("\x1b[0;37m"), outputMode)
 			// Display visible portion of message body using explicit cursor positioning
 			for i := 0; i < bodyAvailHeight; i++ {
 				lineNum := bodyStartRow + i
 				// Position cursor at specific line
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(lineNum, 1)), outputMode)
-				// Clear line
-				terminalio.WriteProcessedBytes(terminal, []byte("\x1b[K"), outputMode)
+				// Reset before clearing: erase-in-line paints with the current
+				// background, so without this a line that set one would smear
+				// it across the rest of the row.
+				terminalio.WriteProcessedBytes(terminal, []byte("\x1b[0m\x1b[K"), outputMode)
 				// Display line if available
 				lineIdx := scrollOffset + i
 				if lineIdx < totalBodyLines {
+					// Restore the colour this line inherits. For the body's own
+					// first line that is grey, which keeps the cyan of the |11
+					// reading suffix out of plain body text.
+					terminalio.WriteProcessedBytes(terminal, []byte(bodyEntryState[lineIdx]), outputMode)
 					terminalio.WriteProcessedBytes(terminal, []byte(wrappedBodyLines[lineIdx]), outputMode)
 				}
 			}

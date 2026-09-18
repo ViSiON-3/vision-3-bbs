@@ -115,7 +115,7 @@ func FindEditorPlaceholderPos(template []byte, code byte) (row, col int, colorEs
 	n := len(template)
 
 	// SGR attribute accumulator — tracks the "current color" state as we scan.
-	sgr := sgrState{fg: -1, bg: -1}
+	sgr := NewSGRState()
 
 	for i < n {
 		// Detect our placeholder: starts with @<code> followed by @, :, #, or |
@@ -123,7 +123,7 @@ func FindEditorPlaceholderPos(template []byte, code byte) (row, col int, colorEs
 			if i+2 < n {
 				next := template[i+2]
 				if next == '@' || next == ':' || next == '#' || next == '|' {
-					return row, col, sgr.escape()
+					return row, col, sgr.Escape()
 				}
 			}
 		}
@@ -225,10 +225,10 @@ func FindEditorPlaceholderPos(template []byte, code byte) (row, col int, colorEs
 	return 0, 0, "" // not found
 }
 
-// sgrState tracks the accumulated SGR (Select Graphic Rendition) attributes
+// SGRState tracks the accumulated SGR (Select Graphic Rendition) attributes
 // as we scan through ANSI content. This lets us reconstruct the active
 // foreground, background, bold, blink state at any point.
-type sgrState struct {
+type SGRState struct {
 	bold  bool
 	faint bool
 	blink bool
@@ -237,17 +237,17 @@ type sgrState struct {
 }
 
 // applyParams processes a semicolon-separated SGR parameter string (e.g. "1;36").
-func (s *sgrState) applyParams(paramStr string) {
+func (s *SGRState) applyParams(paramStr string) {
 	if paramStr == "" {
 		// ESC[m with no params is equivalent to ESC[0m (reset)
-		*s = sgrState{fg: -1, bg: -1}
+		*s = SGRState{fg: -1, bg: -1}
 		return
 	}
 	parts := splitSGR(paramStr)
 	for _, p := range parts {
 		switch {
 		case p == 0: // reset
-			*s = sgrState{fg: -1, bg: -1}
+			*s = SGRState{fg: -1, bg: -1}
 		case p == 1:
 			s.bold = true
 		case p == 2:
@@ -275,9 +275,9 @@ func (s *sgrState) applyParams(paramStr string) {
 	}
 }
 
-// escape returns the ANSI escape sequence that restores this SGR state.
+// Escape returns the ANSI escape sequence that restores this SGR state.
 // Returns "" if the state is completely default.
-func (s *sgrState) escape() string {
+func (s *SGRState) Escape() string {
 	var parts []byte
 	parts = append(parts, '0') // always start with reset for a clean slate
 	if s.bold {
@@ -344,7 +344,7 @@ func FindEditorColorAtPos(template []byte, targetRow, targetCol int) string {
 	i := 0
 	n := len(template)
 
-	sgr := sgrState{fg: -1, bg: -1}
+	sgr := NewSGRState()
 
 	for i < n {
 		// Process ANSI/VT escape sequences first — they update SGR/cursor without
@@ -418,7 +418,7 @@ func FindEditorColorAtPos(template []byte, targetRow, targetCol int) string {
 		// Check target AFTER processing any ANSI sequences at this position,
 		// BEFORE advancing the column for the visible character.
 		if row == targetRow && col == targetCol {
-			return sgr.escape()
+			return sgr.Escape()
 		}
 		if row > targetRow {
 			return "" // passed the target row
@@ -453,4 +453,36 @@ func parseSingleParam(b []byte, def int) int {
 		return v
 	}
 	return def
+}
+
+// NewSGRState returns a tracker in the terminal's default state.
+func NewSGRState() SGRState {
+	return SGRState{fg: -1, bg: -1}
+}
+
+// Write folds every SGR sequence in text into the state, leaving it as the
+// terminal would be after that text had been written. Non-SGR escapes and
+// ordinary characters are ignored, since neither changes the colour.
+func (s *SGRState) Write(text string) {
+	for i := 0; i < len(text); {
+		if text[i] != 0x1b || i+1 >= len(text) || text[i+1] != '[' {
+			i++
+			continue
+		}
+		j := i + 2
+		for j < len(text) && (text[j] == '?' || text[j] == '=' || text[j] == '>' || text[j] == '<') {
+			j++
+		}
+		paramStart := j
+		for j < len(text) && (text[j] >= '0' && text[j] <= '9' || text[j] == ';' || text[j] == ' ') {
+			j++
+		}
+		if j >= len(text) {
+			return // unterminated; nothing more can change the state
+		}
+		if text[j] == 'm' && paramStart == i+2 {
+			s.applyParams(text[paramStart:j])
+		}
+		i = j + 1
+	}
 }

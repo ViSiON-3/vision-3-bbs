@@ -280,49 +280,49 @@ func TestFindEditorPlaceholderPos_SGRTracking(t *testing.T) {
 			name:      "bold + red fg",
 			tmpl:      "\x1b[1;31m@T@",
 			code:      'T',
-			wantColor: (&sgrState{bold: true, fg: 31, bg: -1}).escape(),
+			wantColor: (&SGRState{bold: true, fg: 31, bg: -1}).Escape(),
 		},
 		{
 			name:      "reset clears state",
 			tmpl:      "\x1b[1;31m\x1b[0m@T@",
 			code:      'T',
-			wantColor: (&sgrState{fg: -1, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: -1, bg: -1}).Escape(),
 		},
 		{
 			name:      "faint attribute",
 			tmpl:      "\x1b[2m@T@",
 			code:      'T',
-			wantColor: (&sgrState{faint: true, fg: -1, bg: -1}).escape(),
+			wantColor: (&SGRState{faint: true, fg: -1, bg: -1}).Escape(),
 		},
 		{
 			name:      "blink attribute",
 			tmpl:      "\x1b[5m@T@",
 			code:      'T',
-			wantColor: (&sgrState{blink: true, fg: -1, bg: -1}).escape(),
+			wantColor: (&SGRState{blink: true, fg: -1, bg: -1}).Escape(),
 		},
 		{
 			name:      "background color",
 			tmpl:      "\x1b[42m@T@",
 			code:      'T',
-			wantColor: (&sgrState{fg: -1, bg: 42}).escape(),
+			wantColor: (&SGRState{fg: -1, bg: 42}).Escape(),
 		},
 		{
 			name:      "bright fg",
 			tmpl:      "\x1b[91m@T@",
 			code:      'T',
-			wantColor: (&sgrState{fg: 91, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 91, bg: -1}).Escape(),
 		},
 		{
 			name:      "bright bg",
 			tmpl:      "\x1b[104m@T@",
 			code:      'T',
-			wantColor: (&sgrState{fg: -1, bg: 104}).escape(),
+			wantColor: (&SGRState{fg: -1, bg: 104}).Escape(),
 		},
 		{
 			name:      "empty params resets (ESC[m)",
 			tmpl:      "\x1b[1;31m\x1b[m@T@",
 			code:      'T',
-			wantColor: (&sgrState{fg: -1, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: -1, bg: -1}).Escape(),
 		},
 	}
 
@@ -353,21 +353,21 @@ func TestFindEditorColorAtPos_Basic(t *testing.T) {
 			tmpl:      "Hello",
 			row:       1,
 			col:       1,
-			wantColor: (&sgrState{fg: -1, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: -1, bg: -1}).Escape(),
 		},
 		{
 			name:      "red fg at position",
 			tmpl:      "\x1b[31mHello",
 			row:       1,
 			col:       1,
-			wantColor: (&sgrState{fg: 31, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 31, bg: -1}).Escape(),
 		},
 		{
 			name:      "color at second row",
 			tmpl:      "Line1\n\x1b[32mLine2",
 			row:       2,
 			col:       1,
-			wantColor: (&sgrState{fg: 32, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 32, bg: -1}).Escape(),
 		},
 		{
 			name:      "position not reached",
@@ -388,14 +388,14 @@ func TestFindEditorColorAtPos_Basic(t *testing.T) {
 			tmpl:      "\x1b[33m\tX",
 			row:       1,
 			col:       9,
-			wantColor: (&sgrState{fg: 33, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 33, bg: -1}).Escape(),
 		},
 		{
 			name:      "carriage return resets col",
 			tmpl:      "Hello\r\x1b[34mX",
 			row:       1,
 			col:       1,
-			wantColor: (&sgrState{fg: -1, bg: -1}).escape(), // returns color at first encounter of col=1 ('H'), before \r
+			wantColor: (&SGRState{fg: -1, bg: -1}).Escape(), // returns color at first encounter of col=1 ('H'), before \r
 		},
 	}
 
@@ -423,63 +423,63 @@ func TestFindEditorColorAtPos_CursorMovements(t *testing.T) {
 			tmpl:      "\x1b[31m\x1b[3;5HX",
 			row:       3,
 			col:       5,
-			wantColor: (&sgrState{fg: 31, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 31, bg: -1}).Escape(),
 		},
 		{
 			name:      "cursor position f",
 			tmpl:      "\x1b[32m\x1b[2;3fX",
 			row:       2,
 			col:       3,
-			wantColor: (&sgrState{fg: 32, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 32, bg: -1}).Escape(),
 		},
 		{
 			name:      "cursor up",
 			tmpl:      "\x1b[33m\x1b[5;1H\x1b[2AX",
 			row:       3,
 			col:       1,
-			wantColor: (&sgrState{fg: 33, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 33, bg: -1}).Escape(),
 		},
 		{
 			name:      "cursor down",
 			tmpl:      "\x1b[34m\x1b[1;1H\x1b[2BX",
 			row:       3,
 			col:       1,
-			wantColor: (&sgrState{fg: 34, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 34, bg: -1}).Escape(),
 		},
 		{
 			name:      "cursor forward",
 			tmpl:      "\x1b[35m\x1b[1;1H\x1b[4CX",
 			row:       1,
 			col:       5,
-			wantColor: (&sgrState{fg: 35, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 35, bg: -1}).Escape(),
 		},
 		{
 			name:      "cursor back",
 			tmpl:      "\x1b[36m\x1b[1;10H\x1b[3DX",
 			row:       1,
 			col:       7,
-			wantColor: (&sgrState{fg: 36, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 36, bg: -1}).Escape(),
 		},
 		{
 			name:      "cursor back clamped",
 			tmpl:      "\x1b[37m\x1b[1;2H\x1b[10DX",
 			row:       1,
 			col:       1,
-			wantColor: (&sgrState{fg: 37, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 37, bg: -1}).Escape(),
 		},
 		{
 			name:      "cursor up clamped",
 			tmpl:      "\x1b[31m\x1b[1;1H\x1b[10AX",
 			row:       1,
 			col:       1,
-			wantColor: (&sgrState{fg: 31, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 31, bg: -1}).Escape(),
 		},
 		{
 			name:      "cursor row only (no semicolon)",
 			tmpl:      "\x1b[32m\x1b[5HX",
 			row:       5,
 			col:       1,
-			wantColor: (&sgrState{fg: 32, bg: -1}).escape(),
+			wantColor: (&SGRState{fg: 32, bg: -1}).Escape(),
 		},
 	}
 
@@ -496,7 +496,7 @@ func TestFindEditorColorAtPos_CursorMovements(t *testing.T) {
 func TestFindEditorColorAtPos_DECPrivateMode(t *testing.T) {
 	// ESC[?25l should be consumed without error
 	tmpl := []byte("\x1b[?25l\x1b[31mHi")
-	want := (&sgrState{fg: 31, bg: -1}).escape()
+	want := (&SGRState{fg: 31, bg: -1}).Escape()
 	got := FindEditorColorAtPos(tmpl, 1, 1)
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -506,7 +506,7 @@ func TestFindEditorColorAtPos_DECPrivateMode(t *testing.T) {
 func TestFindEditorColorAtPos_NonCSIEscape(t *testing.T) {
 	// ESC without [ should skip 2 bytes
 	tmpl := []byte("\x1bM\x1b[31mHi")
-	want := (&sgrState{fg: 31, bg: -1}).escape()
+	want := (&SGRState{fg: 31, bg: -1}).Escape()
 	got := FindEditorColorAtPos(tmpl, 1, 1)
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -528,16 +528,16 @@ func TestFindEditorColorAtPos_SGRAttributes(t *testing.T) {
 		tmpl      string
 		wantColor string
 	}{
-		{"bold", "\x1b[1mX", (&sgrState{bold: true, fg: -1, bg: -1}).escape()},
-		{"faint", "\x1b[2mX", (&sgrState{faint: true, fg: -1, bg: -1}).escape()},
-		{"blink", "\x1b[5mX", (&sgrState{blink: true, fg: -1, bg: -1}).escape()},
-		{"reset bold (22)", "\x1b[1m\x1b[22mX", (&sgrState{fg: -1, bg: -1}).escape()},
-		{"reset blink (25)", "\x1b[5m\x1b[25mX", (&sgrState{fg: -1, bg: -1}).escape()},
-		{"default fg (39)", "\x1b[31m\x1b[39mX", (&sgrState{fg: -1, bg: -1}).escape()},
-		{"default bg (49)", "\x1b[41m\x1b[49mX", (&sgrState{fg: -1, bg: -1}).escape()},
-		{"bright fg", "\x1b[91mX", (&sgrState{fg: 91, bg: -1}).escape()},
-		{"bright bg", "\x1b[104mX", (&sgrState{fg: -1, bg: 104}).escape()},
-		{"empty params reset", "\x1b[1;31m\x1b[mX", (&sgrState{fg: -1, bg: -1}).escape()},
+		{"bold", "\x1b[1mX", (&SGRState{bold: true, fg: -1, bg: -1}).Escape()},
+		{"faint", "\x1b[2mX", (&SGRState{faint: true, fg: -1, bg: -1}).Escape()},
+		{"blink", "\x1b[5mX", (&SGRState{blink: true, fg: -1, bg: -1}).Escape()},
+		{"reset bold (22)", "\x1b[1m\x1b[22mX", (&SGRState{fg: -1, bg: -1}).Escape()},
+		{"reset blink (25)", "\x1b[5m\x1b[25mX", (&SGRState{fg: -1, bg: -1}).Escape()},
+		{"default fg (39)", "\x1b[31m\x1b[39mX", (&SGRState{fg: -1, bg: -1}).Escape()},
+		{"default bg (49)", "\x1b[41m\x1b[49mX", (&SGRState{fg: -1, bg: -1}).Escape()},
+		{"bright fg", "\x1b[91mX", (&SGRState{fg: 91, bg: -1}).Escape()},
+		{"bright bg", "\x1b[104mX", (&SGRState{fg: -1, bg: 104}).Escape()},
+		{"empty params reset", "\x1b[1;31m\x1b[mX", (&SGRState{fg: -1, bg: -1}).Escape()},
 	}
 
 	for _, tt := range tests {
@@ -586,99 +586,99 @@ func TestParseSingleParam(t *testing.T) {
 func TestApplyParams(t *testing.T) {
 	tests := []struct {
 		name     string
-		initial  sgrState
+		initial  SGRState
 		paramStr string
-		want     sgrState
+		want     SGRState
 	}{
 		{
 			name:     "empty resets",
-			initial:  sgrState{bold: true, fg: 31, bg: 42},
+			initial:  SGRState{bold: true, fg: 31, bg: 42},
 			paramStr: "",
-			want:     sgrState{fg: -1, bg: -1},
+			want:     SGRState{fg: -1, bg: -1},
 		},
 		{
 			name:     "reset with 0",
-			initial:  sgrState{bold: true, fg: 31},
+			initial:  SGRState{bold: true, fg: 31},
 			paramStr: "0",
-			want:     sgrState{fg: -1, bg: -1},
+			want:     SGRState{fg: -1, bg: -1},
 		},
 		{
 			name:     "bold",
-			initial:  sgrState{fg: -1, bg: -1},
+			initial:  SGRState{fg: -1, bg: -1},
 			paramStr: "1",
-			want:     sgrState{bold: true, fg: -1, bg: -1},
+			want:     SGRState{bold: true, fg: -1, bg: -1},
 		},
 		{
 			name:     "faint",
-			initial:  sgrState{fg: -1, bg: -1},
+			initial:  SGRState{fg: -1, bg: -1},
 			paramStr: "2",
-			want:     sgrState{faint: true, fg: -1, bg: -1},
+			want:     SGRState{faint: true, fg: -1, bg: -1},
 		},
 		{
 			name:     "blink",
-			initial:  sgrState{fg: -1, bg: -1},
+			initial:  SGRState{fg: -1, bg: -1},
 			paramStr: "5",
-			want:     sgrState{blink: true, fg: -1, bg: -1},
+			want:     SGRState{blink: true, fg: -1, bg: -1},
 		},
 		{
 			name:     "normal intensity resets bold and faint",
-			initial:  sgrState{bold: true, faint: true, fg: -1, bg: -1},
+			initial:  SGRState{bold: true, faint: true, fg: -1, bg: -1},
 			paramStr: "22",
-			want:     sgrState{fg: -1, bg: -1},
+			want:     SGRState{fg: -1, bg: -1},
 		},
 		{
 			name:     "blink off",
-			initial:  sgrState{blink: true, fg: -1, bg: -1},
+			initial:  SGRState{blink: true, fg: -1, bg: -1},
 			paramStr: "25",
-			want:     sgrState{fg: -1, bg: -1},
+			want:     SGRState{fg: -1, bg: -1},
 		},
 		{
 			name:     "foreground color",
-			initial:  sgrState{fg: -1, bg: -1},
+			initial:  SGRState{fg: -1, bg: -1},
 			paramStr: "31",
-			want:     sgrState{fg: 31, bg: -1},
+			want:     SGRState{fg: 31, bg: -1},
 		},
 		{
 			name:     "default fg",
-			initial:  sgrState{fg: 31, bg: -1},
+			initial:  SGRState{fg: 31, bg: -1},
 			paramStr: "39",
-			want:     sgrState{fg: -1, bg: -1},
+			want:     SGRState{fg: -1, bg: -1},
 		},
 		{
 			name:     "background color",
-			initial:  sgrState{fg: -1, bg: -1},
+			initial:  SGRState{fg: -1, bg: -1},
 			paramStr: "42",
-			want:     sgrState{fg: -1, bg: 42},
+			want:     SGRState{fg: -1, bg: 42},
 		},
 		{
 			name:     "default bg",
-			initial:  sgrState{fg: -1, bg: 42},
+			initial:  SGRState{fg: -1, bg: 42},
 			paramStr: "49",
-			want:     sgrState{fg: -1, bg: -1},
+			want:     SGRState{fg: -1, bg: -1},
 		},
 		{
 			name:     "bright fg",
-			initial:  sgrState{fg: -1, bg: -1},
+			initial:  SGRState{fg: -1, bg: -1},
 			paramStr: "91",
-			want:     sgrState{fg: 91, bg: -1},
+			want:     SGRState{fg: 91, bg: -1},
 		},
 		{
 			name:     "bright bg",
-			initial:  sgrState{fg: -1, bg: -1},
+			initial:  SGRState{fg: -1, bg: -1},
 			paramStr: "104",
-			want:     sgrState{fg: -1, bg: 104},
+			want:     SGRState{fg: -1, bg: 104},
 		},
 		{
 			name:     "multiple params",
-			initial:  sgrState{fg: -1, bg: -1},
+			initial:  SGRState{fg: -1, bg: -1},
 			paramStr: "1;31;42",
-			want:     sgrState{bold: true, fg: 31, bg: 42},
+			want:     SGRState{bold: true, fg: 31, bg: 42},
 		},
 		{
 			name:     "semicolon with missing param treated as 0 (reset)",
-			initial:  sgrState{bold: true, fg: 31, bg: -1},
+			initial:  SGRState{bold: true, fg: 31, bg: -1},
 			paramStr: ";31",
-			want:     sgrState{fg: 31, bg: -1}, // leading ; = param 0 = reset, then 31
+			want:     SGRState{fg: 31, bg: -1}, // leading ; = param 0 = reset, then 31
 		},
 	}
 
@@ -694,27 +694,27 @@ func TestApplyParams(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// sgrState.escape
+// SGRState.escape
 // ---------------------------------------------------------------------------
 
 func TestSGRStateEscape(t *testing.T) {
 	tests := []struct {
 		name string
-		s    sgrState
+		s    SGRState
 		want string
 	}{
-		{"default", sgrState{fg: -1, bg: -1}, "\x1b[0m"},
-		{"bold only", sgrState{bold: true, fg: -1, bg: -1}, "\x1b[0;1m"},
-		{"faint only", sgrState{faint: true, fg: -1, bg: -1}, "\x1b[0;2m"},
-		{"blink only", sgrState{blink: true, fg: -1, bg: -1}, "\x1b[0;5m"},
-		{"fg only", sgrState{fg: 31, bg: -1}, "\x1b[0;31m"},
-		{"bg only", sgrState{fg: -1, bg: 42}, "\x1b[0;42m"},
-		{"all set", sgrState{bold: true, faint: true, blink: true, fg: 33, bg: 44}, "\x1b[0;1;2;5;33;44m"},
+		{"default", SGRState{fg: -1, bg: -1}, "\x1b[0m"},
+		{"bold only", SGRState{bold: true, fg: -1, bg: -1}, "\x1b[0;1m"},
+		{"faint only", SGRState{faint: true, fg: -1, bg: -1}, "\x1b[0;2m"},
+		{"blink only", SGRState{blink: true, fg: -1, bg: -1}, "\x1b[0;5m"},
+		{"fg only", SGRState{fg: 31, bg: -1}, "\x1b[0;31m"},
+		{"bg only", SGRState{fg: -1, bg: 42}, "\x1b[0;42m"},
+		{"all set", SGRState{bold: true, faint: true, blink: true, fg: 33, bg: 44}, "\x1b[0;1;2;5;33;44m"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.s.escape()
+			got := tt.s.Escape()
 			if got != tt.want {
 				t.Errorf("escape() = %q, want %q", got, tt.want)
 			}
