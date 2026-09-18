@@ -17,9 +17,18 @@ const bodyDefaultColour = "\x1b[0;37m"
 // Folding the state forward over the whole body lets any scroll position be
 // drawn exactly as a scroll from the top would have drawn it (#362).
 func buildBodyEntryStates(lines []string) []string {
+	return buildBodyEntryStatesFrom(lines, bodyDefaultColour)
+}
+
+// buildBodyEntryStatesFrom is buildBodyEntryStates starting from a given state
+// rather than the default. News seeds it with whatever colour its header left
+// in force, so a customized header that ends in something other than grey
+// colours the body the same way whether it is paged or written out in
+// sequence.
+func buildBodyEntryStatesFrom(lines []string, initial string) []string {
 	states := make([]string, len(lines))
 	sgr := ansi.NewSGRState()
-	sgr.Write(bodyDefaultColour)
+	sgr.Write(initial)
 	for i, line := range lines {
 		states[i] = sgr.Escape()
 		sgr.Write(line)
