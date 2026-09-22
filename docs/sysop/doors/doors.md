@@ -207,7 +207,7 @@ Set `is_dos: true` to run a 16-bit DOS door game via dosemu2.
 
 ### Global DOS Settings
 
-The dosemu2 binary path is configured globally in `config.json` (System Configuration > DOS Emulation in the config editor), not per-door:
+The dosemu2 binary path is configured globally in `config.json` (System Setup > DOS Emulation in the config editor), not per-door:
 
 | Field | Type | Description |
 | --- | --- | --- |

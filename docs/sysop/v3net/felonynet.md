@@ -33,7 +33,7 @@ not affect your existing FTN configuration.
 Open the config editor and navigate to the system settings:
 
 ```
-./config  →  1 — System Configuration  →  2. Server Setup
+./config  →  1 — System Setup  →  2. Server Setup
 ```
 
 Set **V3Net** to `Y` and press **S** to save. The keystore path, dedup DB path,
@@ -191,7 +191,7 @@ FelonyNet uses auto-approve, so you start receiving messages immediately.
 ## Troubleshooting
 
 **"V3Net networking disabled"** — V3Net is not enabled. Go back to Step 1 and
-set **V3Net** to `Y` in System Configuration → Server Setup.
+set **V3Net** to `Y` in System Setup → Server Setup.
 
 **"message area not found, skipping"** — A subscribed area doesn't match any
 local message base. Open the area browser (edit the subscription → Areas) and

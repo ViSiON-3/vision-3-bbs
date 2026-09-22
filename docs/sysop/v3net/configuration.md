@@ -7,17 +7,17 @@
 
 V3Net settings live in two places in the TUI config editor (`./config`):
 
-- **System Configuration → Server Setup** — master enable/disable, file paths, and hub server settings
+- **System Setup → Server Setup** — master enable/disable, file paths, and hub server settings
 - **ViSiON/3 Networking (V3Net)** — subscriptions (leaf setup), hosted networks (hub setup), and node identity
 
 > For a step-by-step guide to joining FelonyNet, see [Joining FelonyNet](v3net/felonynet.md).
 
 ---
 
-## System Configuration — Server Setup
+## System Setup — Server Setup
 
 ```
-./config  →  1 — System Configuration  →  2. Server Setup
+./config  →  1 — System Setup  →  2. Server Setup
 ```
 
 ```
@@ -136,7 +136,7 @@ Press **Enter** on **Areas** to browse and subscribe. Press **S** to save.
 
 To host your own V3Net network:
 
-1. Enable the hub server in **System Configuration → Server Setup** (set **V3Net Hub** to `Y`, fill in **Hub Port** and **Hub Data Dir**)
+1. Enable the hub server in **System Setup → Server Setup** (set **V3Net Hub** to `Y`, fill in **Hub Port** and **Hub Data Dir**)
 2. Define at least one network via **V3Net Networking → 3. Networks**
 
 ```

@@ -73,9 +73,9 @@ Run the interactive config editor and set at minimum your BBS name, sysop name, 
 .\config.exe      # Windows
 ```
 
-Navigate to **System Configuration** (key 1), then:
-- **BBS Registration** (sub-screen 0) — board name, sysop name, location, timezone
-- **Server Setup** (sub-screen 1) — SSH/Telnet ports and enabled flags
+Navigate to **System Setup** (key 1), then:
+- **BBS Registration** (item 1) — board name, sysop name, location, timezone
+- **Server Setup** (item 2) — SSH/Telnet ports and enabled flags
 
 Press **Q** to quit and save when done.
 
@@ -167,7 +167,7 @@ Available output modes:
 
 ### Port Already in Use
 
-Change the SSH port in `./config` → System Configuration → Server Setup (sub-screen 1), then restart the server.
+Change the SSH port in `./config` → System Setup → Server Setup (item 2), then restart the server.
 
 ### Permission Denied
 

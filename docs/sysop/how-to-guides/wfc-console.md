@@ -22,7 +22,7 @@ A user account can open the WFC console only when **all** of these are true:
 2. **A registered SSH public key** on the account. WFC authenticates with your
    SSH key (no password), and the key must be listed on a qualifying account.
 3. **WFC access enabled** — the `wfcEnabled` config flag (default **true**).
-   Toggle it in the config TUI under **System Configuration → Access Levels**
+   Toggle it in the config TUI under **Access & Security → Access Levels**
    as **WFC Access**. This is hot-reloaded: the change takes effect on the
    *next* connection attempt, no restart needed.
 
