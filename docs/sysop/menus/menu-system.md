@@ -371,6 +371,8 @@ Execute a built-in function:
 "CMD": "RUN:SHOWSTATS"
 ```
 
+Text after the first space is passed to the command as data, for example `RUN:LASTCALLERS 20`. See the [Menu Commands Reference](reference/menu-commands.md) for every command and what it accepts.
+
 #### Door Command
 
 Launch external program:
@@ -877,58 +879,7 @@ something.
 
 ## Built-in Functions
 
-Functions available via `RUN:` command:
-
-### Authentication & User Management
-
-- `AUTHENTICATE` - Prompt for login
-- `FULL_LOGIN_SEQUENCE` - Complete login process
-- `NEWUSER` - New user registration form
-- `SHOWSTATS` - Display user statistics
-- `LISTUSERS` - List all users
-- `LASTCALLERS` - Show recent callers
-
-### Messaging System
-
-- `LISTMSGAR` - List message areas
-- `COMPOSEMSG` - Write new message
-- `READMSGS` - Read messages
-- `NEWSCAN` - Scan for new messages
-- `SELECTMSGAREA` - Choose message area (lightbar)
-- `CHANGEMSGCONF` - Choose message conference (lightbar)
-- `NEXTMSGAREA` - Navigate to next message area in conference
-- `PREVMSGAREA` - Navigate to previous message area in conference
-- `NEXTMSGCONF` - Navigate to next message conference
-- `PREVMSGCONF` - Navigate to previous message conference
-
-### File System
-
-- `LISTFILES` - List files in current area
-- `LISTFILEAR` - List file areas
-- `SELECTFILEAREA` - Choose file area (lightbar or classic, based on `fileListingMode`)
-
-### Private Mail
-
-- `SENDPRIVMAIL` - Send private mail to another user
-- `READPRIVMAIL` - Read private mail addressed to current user
-- `LISTPRIVMAIL` - List private mail messages
-
-### News
-
-- `PRINTNEWS` - Display news items the user has not seen yet (login sequence use)
-- `LISTNEWS` - Browse all visible news items; user selects to read
-- `EDITNEWS` - SysOp news management: add, delete, edit, list, view (SysOp only)
-
-### Other Functions
-
-- `ONELINER` - One-liner system
-- `SHOWVERSION` - Display BBS version
-- `TOGGLEALLOWNEWUSERS` - Toggle new user registration open/closed (SysOp only)
-- `VOTE` - Voting booths
-- `VOTEMANDATORY` - Force vote on mandatory topics not yet voted on (login sequence use)
-- `LISTNUV` - View NUV candidate queue with vote tallies (read-only)
-- `SCANNUV` - Vote on pending NUV candidates
-- `CHECKNUV` - Login hook: notify eligible users of unvoted NUV candidates (login sequence use)
+Every command available to `RUN:` is listed, with the data it accepts and the access it checks, in the [Menu Commands Reference](reference/menu-commands.md).
 
 ## Template Files (.TOP / .MID / .BOT)
 

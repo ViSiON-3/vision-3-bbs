@@ -42,7 +42,7 @@
 * [Pre-Login ANSI](menus/menu-system.md#pre-login-ansi-files-prelogon)
 * [Pipe Color Codes](menus/menu-system.md#pipe-color-codes)
 * [Placeholders](menus/menu-system.md#special-placeholder-codes)
-* [Built-in Functions](menus/menu-system.md#built-in-functions)
+* [Menu Commands Reference](reference/menu-commands.md)
 * [Templates](menus/menu-system.md#template-files-top--mid--bot)
 
 * **USERS**
