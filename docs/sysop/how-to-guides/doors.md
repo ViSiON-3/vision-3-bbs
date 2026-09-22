@@ -15,7 +15,7 @@ ViSiON/3 runs four kinds of door. Work out which one you have first, then follow
 | A Synchronet JavaScript game (the `xtrn/` folder from Synchronet, such as the LORD and LORD II ports) | Synchronet JS door | [Set up a Synchronet JS door](how-to-guides/door-synchronet-js.md) |
 | A script you wrote, or one of the examples that ship with the BBS | VPL script | [Set up a VPL script door](how-to-guides/door-vpl.md) |
 
-Not sure? A `.EXE` that will not run on your Linux box is a DOS door. A folder of `.js` files that came from Synchronet is a Synchronet JS door. A `.js` file written for ViSiON/3, or copied from `scripts/examples/`, is a VPL script. A program that runs from your shell is native.
+Not sure? A 16-bit `.EXE` from the DOS era, usually shipped with a `.DOC` that talks about FOSSIL drivers and COM ports, is a DOS door. A Windows `.EXE` is a native door and needs a Windows BBS; it will not run under dosemu2. A folder of `.js` files that came from Synchronet is a Synchronet JS door. A `.js` file written for ViSiON/3, or copied from `scripts/examples/`, is a VPL script. Anything that runs from your shell is native.
 
 Every ViSiON/3 install already has seven VPL script doors wired into the doors menu, so if you want to see a door run before setting one up, connect and press **H** on the doors menu for the "Hello World" example.
 
