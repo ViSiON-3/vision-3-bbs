@@ -51,7 +51,7 @@ Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.j
 
 ## 3. Add it to a menu
 
-Run `./menuedit`, open `DOORSM`, press **F5**, and set **Keys** to `L`, **Command** to `DOOR:LORDJS`, **ACS** to `*`. Press **Esc** to save, and add the key to `menus/v3/ansi/DOORSM.ANS` so callers can see it.
+Run `./menuedit`, open `DOORSM`, press **F5**, and set **Keys** to `L`, **Command** to `DOOR:LORDJS`, **ACS** to `*`. Press **Esc** to save; the editor writes to the `menus.d/v3/` overlay. To show the key, copy `menus/v3/ansi/DOORSM.ANS` to `menus.d/v3/ansi/DOORSM.ANS` and add it there with an ANSI editor.
 
 ## 4. Try it
 

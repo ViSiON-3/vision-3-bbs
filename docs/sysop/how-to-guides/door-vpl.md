@@ -50,15 +50,15 @@ Run `./menuedit`, open `DOORSM`, press **F5** to add a command, and set:
 
 | Field | Value |
 | --- | --- |
-| Keys | `G` |
+| Keys | `W` |
 | Command | `DOOR:GREETING` |
 | ACS | `*` |
 
-Press **Esc** to save. The key works straight away; to show it on the doors screen, add a `[G] Greeting` line to `menus/v3/ansi/DOORSM.ANS` with an ANSI editor.
+**W** is free on the stock doors menu; **G** is not, it logs the caller off. Press **Esc** to save; the editor writes the change to the `menus.d/v3/` overlay. The key works straight away. To show it on the doors screen, copy `menus/v3/ansi/DOORSM.ANS` to `menus.d/v3/ansi/DOORSM.ANS` and add a `[W] Greeting` line with an ANSI editor.
 
 ## 4. Try it
 
-Connect to the BBS, open the doors menu and press **G**. No restart is needed, and the script is read fresh each time it runs, so you can edit `greeting.js` and press **G** again to see the change.
+Connect to the BBS, open the doors menu and press **W**. No restart is needed, and the script is read fresh each time it runs, so you can edit `greeting.js` and press **W** again to see the change.
 
 ## Passing arguments
 

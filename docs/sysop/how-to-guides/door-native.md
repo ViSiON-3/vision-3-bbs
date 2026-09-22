@@ -14,7 +14,7 @@ doors/mydoor/
 └── ...             its data files
 ```
 
-Make the program executable (`chmod +x doors/mydoor/mydoor`) and run it once by hand from that directory to be sure it starts and that any first-run setup is done.
+On Linux or macOS make the program executable (`chmod +x doors/mydoor/mydoor`). On Windows use the `.exe` as shipped. Then run it once by hand from that directory to be sure it starts and that any first-run setup is done.
 
 ## 2. Find out what the door expects
 
@@ -34,13 +34,13 @@ Run `./config`, press **6** for Door Programs, then **I** to insert a record and
 | Name | `My Door` |
 | Type | Native |
 | Working Dir | `doors/mydoor` |
-| Commands | `./mydoor -n {NODE}, -d {DROPFILE}` |
+| Commands | `./mydoor -n, {NODE}, -d, {DROPFILE}` |
 | Dropfile Type | `DOOR.SYS` |
 | Dropfile Location | `node` |
 | Raw Terminal | `Y` |
 | Single Instance | `Y` if the door keeps shared save files |
 
-**Commands** is the program followed by its arguments, separated by commas. Each comma-separated entry becomes one argument. The placeholders are replaced when the door starts: `{NODE}` with the node number and `{DROPFILE}` with the full path of the dropfile the BBS just wrote. A door that wants the directory instead takes `{NODEDIR}`. The full list is in [Door Command Line](doors/doors.md#door-command-line).
+**Commands** is the program, a space, then its arguments separated by commas. Each comma-separated entry becomes exactly one argument, so a switch and its value are two entries (`-n, {NODE}`) unless the door wants them joined (`-n{NODE}`). The placeholders are replaced when the door starts: `{NODE}` with the node number and `{DROPFILE}` with the full path of the dropfile the BBS just wrote. A door that wants the directory instead takes `{NODEDIR}`. The full list is in [Door Command Line](doors/doors.md#door-command-line).
 
 **Dropfile Location** `node` writes the dropfile to a private temporary directory for the calling node, so two nodes running the door at once do not overwrite each other's file. Use `startup` only for a door that insists on finding the dropfile in its own directory.
 
@@ -51,7 +51,7 @@ Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.j
   "code": "MYDOOR",
   "name": "My Door",
   "working_directory": "doors/mydoor",
-  "commands": ["./mydoor", "-n {NODE}", "-d {DROPFILE}"],
+  "commands": ["./mydoor", "-n", "{NODE}", "-d", "{DROPFILE}"],
   "dropfile_type": "DOOR.SYS",
   "dropfile_location": "node",
   "requires_raw_terminal": true,
@@ -65,17 +65,17 @@ Run `./menuedit`, open `DOORSM`, press **F5**, and set **Keys** to `M`, **Comman
 
 ## 5. Try it
 
-Connect, open the doors menu and press **M**. If the door starts but does not know who you are, it did not find the dropfile: check the switch names against the door's documentation and whether it wants the file or its directory. If it starts but draws garbage, turn **Raw Terminal** on. `data/logs/vision3.log` records the exact command line and dropfile path used for every launch.
+Connect, open the doors menu and press **M**. If the door starts but does not know who you are, it did not find the dropfile: check the switch names against the door's documentation and whether it wants the file or its directory. If it starts but draws garbage, turn **Raw Terminal** on. `data/logs/vision3.log` records each launch, the dropfile it wrote and any error starting the program.
 
 ## Variations
 
-**Shell scripts and pipelines.** A `.sh` script, or a command line with pipes or redirects, needs **Use Shell** set to Yes. The command then runs through `/bin/sh -c`.
+**Shell scripts.** A `.sh` script, or a program that must be started through the shell, needs **Use Shell** set to Yes. The BBS then runs it through `/bin/sh` (`cmd` on Windows) with the arguments passed through unchanged. The field does not interpret pipes, redirects or globs; put those inside a wrapper script and launch the script.
 
-**Environment variables instead of switches.** Some doors read their settings from the environment. Every native door already gets `BBS_NODE`, `BBS_USERHANDLE`, `BBS_USERID`, `BBS_TIMELEFT`, `LINES` and `COLUMNS`. Add more in **Env Vars** as `KEY=VALUE, KEY2=VALUE2`; placeholders work there too.
+**Environment variables instead of switches.** Some doors read their settings from the environment. Every native door gets `BBS_NODE`, `BBS_USERHANDLE`, `BBS_USERID` and `BBS_TIMELEFT`; on Linux and macOS it also gets `LINES` and `COLUMNS`. Add more in **Env Vars** as `KEY=VALUE, KEY2=VALUE2`; placeholders work there too.
 
-**Doors that expect a socket.** A few doors written for Synchronet or Mystic want a socket handle rather than a terminal. Set **I/O Mode** to `SOCKET`; the BBS passes the socket as file descriptor 3 and sets `DOOR_SOCKET_FD=3`.
+**Doors that expect a socket.** A few doors written for Synchronet or Mystic want a socket handle rather than a terminal. On Linux and macOS, set **I/O Mode** to `SOCKET`; the BBS passes the socket as file descriptor 3 and sets `DOOR_SOCKET_FD=3`. Socket mode is not available on Windows.
 
-**Cleanup after exit.** Set **Cleanup Command** to a script that runs after the door exits, for example to process a score file. It takes the same placeholders.
+**Cleanup after exit.** Set **Cleanup Command** to a program and its arguments, separated like **Commands**, to run after the door exits, for example to process a score file. Placeholders are replaced in the arguments; the program path is used as written.
 
 ## See also
 

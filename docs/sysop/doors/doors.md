@@ -61,17 +61,17 @@ The **Commands** field (`commands` in JSON) is the command line the BBS runs whe
 
 | Door type | How to enter Commands in the config editor | Stored in JSON as |
 | --- | --- | --- |
-| Native | Executable followed by comma-separated arguments: `/opt/doors/tw2002/tw2002 -n {NODE}, -d {DROPFILE}` | `["/opt/doors/tw2002/tw2002", "-n {NODE}", "-d {DROPFILE}"]` |
+| Native | Executable followed by comma-separated arguments: `/opt/doors/tw2002/tw2002 -n, {NODE}, -d, {DROPFILE}` | `["/opt/doors/tw2002/tw2002", "-n", "{NODE}", "-d", "{DROPFILE}"]` |
 | DOS | Comma-separated DOS batch lines: `START.BAT {NODE}, EXIT` | `["START.BAT {NODE}", "EXIT"]` |
 | Synchronet JS / VPL | Not used. Set **Script** and **Script Args** instead | `script`, `args` |
 
-For native doors the first token is the executable and every following comma-separated entry becomes one argument, so a flag and its value can live in one entry (`-n {NODE}`) or two (`-n, {NODE}`), whichever the door expects. Set **Use Shell** to `Yes` if the command line needs pipes, redirects, globbing, or is a `.sh` / `.bat` script.
+For native doors the first token is the executable and every following comma-separated entry becomes exactly one argument, so a flag and its value are two entries (`-n, {NODE}`) unless the door wants them joined (`-n{NODE}`). Set **Use Shell** to `Yes` for a `.sh` / `.bat` script or a program that must start through the shell; the field does not interpret pipes, redirects or globs.
 
 For DOS doors each entry becomes a line in the generated `EXTERNAL.BAT`, run after the FOSSIL driver loads, the screen clears, and the BBS changes into **Working Dir**.
 
 #### Placeholders
 
-These placeholders are substituted at runtime wherever they appear in **Commands**, **Cleanup Command** arguments, and **Env Vars** (`commands`, `cleanup_args`, `environment_variables`). They are not substituted in **Script Args** for JS or VPL doors.
+These placeholders are substituted at runtime wherever they appear in **Commands**, the arguments of **Cleanup Command**, and **Env Vars** (`commands`, `cleanup_args`, `environment_variables`). The cleanup program path itself is not substituted. They are not substituted in **Script Args** for JS or VPL doors.
 
 | Placeholder | Value | Available for |
 | --- | --- | --- |
@@ -234,7 +234,7 @@ The `cleanup_command` and `cleanup_args` fields specify an optional command to r
 - Processing score files or game results
 - Resetting door state between sessions
 
-The cleanup command supports the same placeholders as door arguments. Cleanup failures are logged but do not affect the user's session.
+Placeholders are replaced in `cleanup_args`; `cleanup_command` itself is used as written. Cleanup failures are logged but do not affect the user's session.
 
 Example:
 
@@ -247,7 +247,7 @@ Example:
 
 ## Use Shell
 
-Set `use_shell: true` to wrap the door command in a shell (`/bin/sh -c` on Linux, `cmd /c` on Windows). This enables shell features like pipes, redirects, and globbing in the command line. Required for launching shell scripts (`.sh`, `.bat`, `.cmd` files) directly.
+Set `use_shell: true` to start the door through a shell (`/bin/sh` on Linux and macOS, `cmd` on Windows). The command and its arguments are passed through unchanged, so pipes, redirects and globs in the command line are not interpreted; put those in a wrapper script. Required for launching shell scripts (`.sh`, `.bat`, `.cmd` files) directly.
 
 ## Menu Integration
 

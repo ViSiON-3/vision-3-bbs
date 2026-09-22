@@ -226,7 +226,7 @@ LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `d
    }
    ```
 
-2. **Add menu entries** to `menus/v3/cfg/DOORSM.CFG`, with `./menuedit` or by hand:
+2. **Add menu entries** with `./menuedit`, which saves them into the `menus.d/v3/cfg/DOORSM.CFG` overlay, or by hand by adding these objects inside the existing top-level array of that file (the entry before them must end with a comma):
    ```json
    { "KEYS": "L", "CMD": "DOOR:LORDJS", "ACS": "*", "HIDDEN": false },
    { "KEYS": "2", "CMD": "DOOR:LORD2JS", "ACS": "*", "HIDDEN": false }

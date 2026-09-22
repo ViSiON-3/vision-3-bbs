@@ -15,7 +15,7 @@ ViSiON/3 runs four kinds of door. Work out which one you have first, then follow
 | A Synchronet JavaScript game (the `xtrn/` folder from Synchronet, such as the LORD and LORD II ports) | Synchronet JS door | [Set up a Synchronet JS door](how-to-guides/door-synchronet-js.md) |
 | A script you wrote, or one of the examples that ship with the BBS | VPL script | [Set up a VPL script door](how-to-guides/door-vpl.md) |
 
-Not sure? A `.EXE` that will not run on your Linux box is a DOS door. A folder of `.js` files that came from Synchronet is a Synchronet JS door. Anything else is native.
+Not sure? A `.EXE` that will not run on your Linux box is a DOS door. A folder of `.js` files that came from Synchronet is a Synchronet JS door. A `.js` file written for ViSiON/3, or copied from `scripts/examples/`, is a VPL script. A program that runs from your shell is native.
 
 Every ViSiON/3 install already has seven VPL script doors wired into the doors menu, so if you want to see a door run before setting one up, connect and press **H** on the doors menu for the "Hello World" example.
 
@@ -27,7 +27,7 @@ Three things are the same for every door type.
 
 **How a door is defined.** Each door is one record in the config editor. Run `./config`, press **6** for Door Programs, and press **I** to insert a record. Every record has a **Code**, which is the name you use in menus, a **Name** that callers see, and a **Type**. The walkthroughs list the other fields each type needs.
 
-**How a caller reaches it.** A menu command `DOOR:CODE` launches the door. Run `./menuedit`, open the `DOORSM` menu, press **F5** to add a command, set **Keys** to the letter callers will press and **Command** to `DOOR:CODE`. The stock doors screen is ANSI art, so a new key works immediately but is not drawn on screen until you add it to `menus/v3/ansi/DOORSM.ANS` with an ANSI editor. See [Menus & ACS](menus/menu-system.md) for the menu editor and art files.
+**How a caller reaches it.** A menu command `DOOR:CODE` launches the door. Run `./menuedit`, open the `DOORSM` menu, press **F5** to add a command, set **Keys** to a letter no other command on that menu uses and **Command** to `DOOR:CODE`. The editor saves into `menus.d/v3/`, an overlay that upgrades leave alone. The stock doors screen is ANSI art, so a new key works immediately but is not drawn until you copy `menus/v3/ansi/DOORSM.ANS` to `menus.d/v3/ansi/DOORSM.ANS` and add the key there with an ANSI editor. See [Menus & ACS](menus/menu-system.md) for the menu editor and the overlay.
 
 ## Troubleshooting
 

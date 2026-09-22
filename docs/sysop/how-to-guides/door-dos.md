@@ -44,16 +44,9 @@ At the `C:\>` prompt, change into the game's directory and run its configuration
 CD \DOORS\LORD
 ```
 
-In the game's configuration, set the dropfile directory to the per-node path the BBS uses, `C:\NODES\TEMP1` for node 1, and the dropfile type to `DOOR.SYS`. Save, then type `EXITEMU` to leave dosemu2.
+In the game's configuration, set the dropfile type to `DOOR.SYS` and, for each node you will run, the dropfile directory to the per-node path the BBS uses: `C:\NODES\TEMP1` for node 1, `C:\NODES\TEMP2` for node 2, and so on. Save, then type `EXITEMU` to leave dosemu2.
 
-Create `C:\DOORS\LORD\START.BAT` (from Linux, as `doors/drive_c/DOORS/LORD/START.BAT`) so that the node number the BBS passes reaches the game:
-
-```bat
-@ECHO OFF
-LORD /N%1 /P%2
-```
-
-`%1` is the node number and `%2` the DOS path of that node's dropfile directory, both passed by the BBS in the next step. Check LORD's `LORD.DOC` for the switch names your version uses; some builds want the dropfile path set in `LORDCFG` only.
+LORD ships its own `START.BAT`, which takes the node number as its first argument and already carries the switches the game needs. Leave it in place; the BBS passes the node number to it in the next step. If your copy has no `START.BAT`, `LORD.DOC` shows the launch line to put in one.
 
 ## 4. Define the door
 
@@ -65,13 +58,13 @@ Run `./config`, press **6** for Door Programs, then **I** to insert a record and
 | Name | `Legend of the Red Dragon` |
 | Type | DOS |
 | Working Dir | `C:\DOORS\LORD` |
-| Commands | `START.BAT {NODE} {DOSNODEDIR}` |
+| Commands | `START.BAT {NODE}` |
 | Dropfile Type | `DOOR.SYS` |
 | Drive C Path | `doors/drive_c` |
 | FOSSIL Driver | `C:\UTILS\X00.EXE eliminate` |
 | Single Instance | `Y` |
 
-For a DOS door, **Commands** is a comma-separated list of batch lines, and **Working Dir** is a DOS path the BBS changes into before running them. `{NODE}` becomes the node number and `{DOSNODEDIR}` the DOS path of the node's dropfile directory, such as `C:\NODES\TEMP1`. The BBS writes all four dropfile formats there before every launch, so LORD finds `DOOR.SYS` whichever way it looks.
+For a DOS door, **Commands** is a comma-separated list of batch lines, and **Working Dir** is a DOS path the BBS changes into before running them. `{NODE}` becomes the node number. A door that takes its dropfile directory on the command line can be given `{DOSNODEDIR}`, which becomes that node's directory such as `C:\NODES\TEMP1`; LORD reads it from its own configuration instead. The BBS writes all four dropfile formats into the node directory before every launch, so the game finds `DOOR.SYS` whichever way it looks.
 
 The **FOSSIL Driver** line is run first. `eliminate` tells X00 to unload any earlier copy before loading, which keeps repeated launches clean.
 
@@ -83,7 +76,7 @@ Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.j
   "name": "Legend of the Red Dragon",
   "is_dos": true,
   "working_directory": "C:\\DOORS\\LORD",
-  "commands": ["START.BAT {NODE} {DOSNODEDIR}"],
+  "commands": ["START.BAT {NODE}"],
   "dropfile_type": "DOOR.SYS",
   "drive_c_path": "doors/drive_c",
   "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
@@ -93,11 +86,11 @@ Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.j
 
 ## 5. Add it to a menu
 
-Run `./menuedit`, open `DOORSM`, press **F5**, and set **Keys** to `L`, **Command** to `DOOR:LORD`, **ACS** to `*`. Press **Esc** to save, and add the key to `menus/v3/ansi/DOORSM.ANS` so callers can see it.
+Run `./menuedit`, open `DOORSM`, press **F5**, and set **Keys** to `L`, **Command** to `DOOR:LORD`, **ACS** to `*`. Press **Esc** to save; the editor writes to the `menus.d/v3/` overlay. To show the key, copy `menus/v3/ansi/DOORSM.ANS` to `menus.d/v3/ansi/DOORSM.ANS` and add it there with an ANSI editor.
 
 ## 6. Try it
 
-Connect over SSH, open the doors menu and press **L**. You should see a brief pause, then LORD's title screen with no DOS boot text before it. Create a character, quit, and call again to be sure the character was saved.
+Connect over SSH, open the doors menu and press **L**. If you also set up the JavaScript port of LORD, give one of them a different key. You should see a brief pause, then LORD's title screen with no DOS boot text before it. Create a character, quit, and call again to be sure the character was saved.
 
 ## If it does not work
 
@@ -107,7 +100,7 @@ Connect over SSH, open the doors menu and press **L**. You should see a brief pa
 
 **"Bad command or file name".** A DOS path is wrong. Remember the C: drive is `doors/drive_c/` and paths inside it are DOS paths with backslashes.
 
-**The game asks who you are.** It did not find `DOOR.SYS`. Check the dropfile directory configured in the game against `C:\NODES\TEMPn`, and that the batch file passes `{DOSNODEDIR}` if the game takes it on the command line.
+**The game asks who you are.** It did not find `DOOR.SYS`. Check that the dropfile directory configured in the game for that node is `C:\NODES\TEMPn`, with `n` the node number.
 
 **Box-drawing characters are wrong.** `~/.dosemu/.dosemurc` must set both character sets to `cp437`. The template does; a hand-edited file may not.
 
