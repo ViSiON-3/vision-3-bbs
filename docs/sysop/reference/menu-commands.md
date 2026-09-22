@@ -131,8 +131,8 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `BATCHDOWNLOAD` | none | Transfers the tagged batch queue. | Area download ACS |
 | `CLEAR_BATCH` | none | Empties the tagged batch queue. | |
 | `UPLOADFILE` | none | ZMODEM upload into the current area, then duplicate check and description prompts. | Area upload ACS |
-| `FILE_NEWSCAN` | `CURRENT` to scan only the current area. Anything else scans every listable area. | Lists files uploaded since the newscan cutoff, grouped by area, from the `FILESCAN` templates. | Area list ACS |
-| `FILENEWSCANCONFIG` | none | Tag and untag file areas for the file newscan. | |
+| `FILE_NEWSCAN` | `CURRENT` to scan only the current area. Anything else scans every listable area. | Lists files uploaded since the newscan cutoff, grouped by area, from the `FILESCAN` templates. The cutoff is set by `SETFILESCANDATE`, or the previous logon. Tagged areas from `FILENEWSCANCONFIG` are not consulted. | Area list ACS |
+| `FILENEWSCANCONFIG` | none | Tag and untag file areas. The tags are saved to the user record, but `FILE_NEWSCAN` does not read them yet and always scans every listable area. | |
 | `SETFILESCANDATE` | none | Sets the file newscan cutoff. Accepts a date as MM/DD/YY, `A` for all files, or `R` to reset to the previous logon. | |
 | `WANTLIST` | none | For CoSysOp+, manages the file want list. For everyone else, asks for a filename and reason and adds a request. Stock menus restrict it to sysops. | Branches on CoSysOp+ |
 | `EDITFILERECORD` | none | Upload review queue. Asks whether to review all areas or the current one, then edits, moves, or deletes each unreviewed file. | CoSysOp+, silent otherwise |
