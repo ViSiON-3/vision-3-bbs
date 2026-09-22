@@ -69,6 +69,10 @@ func runWantList(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
+	if currentUser == nil {
+		return nil, "", nil
+	}
+
 	if e.isCoSysOpOrAbove(currentUser) {
 		return runWantListSysop(e, s, terminal, userManager, currentUser, nodeNumber, outputMode, termWidth, termHeight)
 	}

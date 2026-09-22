@@ -38,9 +38,8 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | Term | Meaning |
 | --- | --- |
 | Logged in | Refuses or does nothing when no user is logged in. Almost every command needs this, so it is only listed when a command is unusual. |
-| SysOp | The command checks ACS `S<sysOpLevel>` from `config.json` |
+| SysOp | The command checks access level at or above `sysOpLevel` from `config.json` (default 255) |
 | CoSysOp+ | The command checks access level at or above `coSysOpLevel` from `config.json` (default 250) |
-| Level 255 | The command hard-codes access level 255, regardless of `config.json` |
 
 ## Session and login
 
@@ -131,8 +130,8 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `BATCHDOWNLOAD` | none | Transfers the tagged batch queue. | Area download ACS |
 | `CLEAR_BATCH` | none | Empties the tagged batch queue. | |
 | `UPLOADFILE` | none | ZMODEM upload into the current area, then duplicate check and description prompts. | Area upload ACS |
-| `FILE_NEWSCAN` | `CURRENT` to scan only the current area. Anything else scans every listable area. | Lists files uploaded since the newscan cutoff, grouped by area, from the `FILESCAN` templates. The cutoff is set by `SETFILESCANDATE`, or the previous logon. Tagged areas from `FILENEWSCANCONFIG` are not consulted. | Area list ACS |
-| `FILENEWSCANCONFIG` | none | Tag and untag file areas. The tags are saved to the user record, but `FILE_NEWSCAN` does not read them yet and always scans every listable area. | |
+| `FILE_NEWSCAN` | `CURRENT` to scan only the current area. Anything else scans the areas tagged in `FILENEWSCANCONFIG`, or every listable area when nothing is tagged. | Lists files uploaded since the newscan cutoff, grouped by area, from the `FILESCAN` templates. The cutoff is set by `SETFILESCANDATE`, or the previous logon. | Area list ACS |
+| `FILENEWSCANCONFIG` | none | Tag and untag file areas for the file newscan. | |
 | `SETFILESCANDATE` | none | Sets the file newscan cutoff. Accepts a date as MM/DD/YY, `A` for all files, or `R` to reset to the previous logon. | |
 | `WANTLIST` | none | For CoSysOp+, manages the file want list. For everyone else, asks for a filename and reason and adds a request. Stock menus restrict it to sysops. | Branches on CoSysOp+ |
 | `EDITFILERECORD` | none | Upload review queue. Asks whether to review all areas or the current one, then edits, moves, or deletes each unreviewed file. | CoSysOp+, silent otherwise |
@@ -200,9 +199,9 @@ All of these apply to the logged-in user and are bound in the stock `USERCFG` me
 
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
-| `RUMORSLIST` | none | Table of visible rumors, then a pause. Level 255 sees the real author behind anonymous rumors. | Per-rumor minimum level |
+| `RUMORSLIST` | none | Table of visible rumors, then a pause. SysOps see the real author behind anonymous rumors. | Per-rumor minimum level |
 | `RUMORSADD` | none | Prompts for rumor text, and for anonymity if the caller's level allows it. Hard cap of 999 rumors. | Level 2 or above; anonymity needs `anonymousLevel` |
-| `RUMORSDELETE` | none | Asks for a rumor number and deletes it. | Own rumors, or any at level 255 |
+| `RUMORSDELETE` | none | Asks for a rumor number and deletes it. | Own rumors, or any for SysOp |
 | `RUMORSSEARCH` | none | Prompts for text and matches it against rumor text and author. | Per-rumor minimum level |
 | `RUMORSNEWSCAN` | none | Rumors posted since the caller's last login. | Per-rumor minimum level |
 | `RANDOMRUMOR` | none | Prints one random visible rumor with no pause. Usable as a login step. | |
@@ -214,8 +213,8 @@ All of these apply to the logged-in user and are bound in the stock `USERCFG` me
 | `INFOFORMS` | none | Lists forms 1 to 5 with required and completed status. Quitting is blocked while a required form is incomplete. | Per-form minimum level |
 | `INFOFORMVIEW` | none | Asks for a form number and shows the caller's own answers. | |
 | `INFOFORMREQUIRED` | none | Forces unvalidated users to complete required forms, and disconnects them if they refuse. Shipped as a login step. Does nothing for validated users. | |
-| `INFOFORMHUNT` | none | Asks for a form number and prints every user's answers. | Level 255 |
-| `INFOFORMNUKE` | none | Asks for a handle, confirms, and deletes all of that user's form answers. | Level 255 |
+| `INFOFORMHUNT` | none | Asks for a form number and prints every user's answers. | SysOp |
+| `INFOFORMNUKE` | none | Asks for a handle, confirms, and deletes all of that user's form answers. | SysOp |
 
 ## V3Net
 

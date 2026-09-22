@@ -1008,7 +1008,7 @@ func runBBSListVerify(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if !e.isCoSysOpOrAbove(currentUser) {
-		wv(terminal, "\r\n|04SysOp access required.\r\n", outputMode)
+		wv(terminal, "\r\n|04CoSysOp access required.\r\n", outputMode)
 		return currentUser, "", nil
 	}
 

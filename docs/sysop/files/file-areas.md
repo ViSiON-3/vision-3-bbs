@@ -113,8 +113,9 @@ The file menu mirrors the message menu's navigation commands:
 
 ### File Newscan Date
 
-`FILE_NEWSCAN` (**N**) lists files uploaded since your previous logon. `SETFILESCANDATE`
-lets a user override that cutoff:
+`FILE_NEWSCAN` (**N**) lists files uploaded since your previous logon, in the areas
+tagged under `FILENEWSCANCONFIG` (**Z**) or in every listable area when nothing is
+tagged. `SETFILESCANDATE` lets a user override that cutoff:
 
 - a date (`MM/DD/YY`) — show files uploaded on/after it
 - `A` — show all files regardless of date

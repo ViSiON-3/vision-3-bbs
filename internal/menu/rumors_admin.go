@@ -178,7 +178,7 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running RUMORSDELETE", "node", nodeNumber, "handle", currentUser.Handle)
 
-	isSysop := currentUser.AccessLevel >= 255
+	isSysop := e.isSysOpOrAbove(currentUser)
 	userLevel := currentUser.AccessLevel
 	anonName := rumorAnonName(e)
 

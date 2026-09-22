@@ -33,7 +33,7 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 	// Clear screen before listing
 	wv(terminal, "\x1b[2J\x1b[H", outputMode)
 
-	isSysop := currentUser.AccessLevel >= 255
+	isSysop := e.isSysOpOrAbove(currentUser)
 	userLevel := currentUser.AccessLevel
 	anonName := rumorAnonName(e)
 
@@ -81,7 +81,7 @@ func runRumorsSearch(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running RUMORSSEARCH", "node", nodeNumber, "handle", currentUser.Handle)
 
-	isSysop := currentUser.AccessLevel >= 255
+	isSysop := e.isSysOpOrAbove(currentUser)
 	userLevel := currentUser.AccessLevel
 	anonName := rumorAnonName(e)
 
@@ -155,7 +155,7 @@ func runRumorsNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	// Clear screen before newscan
 	wv(terminal, "\x1b[2J\x1b[H", outputMode)
 
-	isSysop := currentUser.AccessLevel >= 255
+	isSysop := e.isSysOpOrAbove(currentUser)
 	userLevel := currentUser.AccessLevel
 	anonName := rumorAnonName(e)
 

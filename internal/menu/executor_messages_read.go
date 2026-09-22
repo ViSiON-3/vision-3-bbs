@@ -149,6 +149,11 @@ func runNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
+	if currentUser == nil {
+		slog.Warn("NEWSCAN called without logged in user", "node", nodeNumber)
+		return nil, "", nil
+	}
+
 	slog.Debug("running NEWSCAN", "node", nodeNumber, "handle", currentUser.Handle)
 
 	// Refresh user from the in-process manager so we pick up any newscan

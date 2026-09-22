@@ -285,6 +285,13 @@ func (e *MenuExecutor) isCoSysOpOrAbove(u *user.User) bool {
 	return u != nil && u.AccessLevel >= e.GetServerConfig().CoSysOpLevel
 }
 
+// isSysOpOrAbove returns true if the user has SysOp access level. Handlers use
+// this instead of comparing against a literal 255 so a board that sets
+// sysOpLevel lower in config.json gets the same answer everywhere.
+func (e *MenuExecutor) isSysOpOrAbove(u *user.User) bool {
+	return u != nil && u.AccessLevel >= e.GetServerConfig().SysOpLevel
+}
+
 // handleIdleTimeout displays TIMEOUT.ANS (if available) or falls back to the
 // idle timeout string, then logs the disconnection. Call this before returning
 // LOGOFF/DISCONNECT whenever ErrIdleTimeout is received from any input loop.
