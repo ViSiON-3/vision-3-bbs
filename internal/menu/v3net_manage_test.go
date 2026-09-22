@@ -188,6 +188,29 @@ func TestCoordinatorPanelShowsHubError(t *testing.T) {
 	}
 }
 
+func TestV3NetAgoAcceptsHubAndRFC3339Timestamps(t *testing.T) {
+	now := time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
+	cases := map[string]string{
+		"2026-09-22 09:30:00":  "2h ago", // SQLite datetime('now'), as the hub stores it
+		"2026-09-20T12:00:00Z": "2d ago", // RFC 3339
+		"2026-09-22 11:59:40":  "just now",
+		"garbage":              "garbage",
+	}
+	for in, want := range cases {
+		if got := v3netAgo(in, now); got != want {
+			t.Errorf("v3netAgo(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestV3NetRolesToleratesNilNAL(t *testing.T) {
+	fake := &fakeV3NetStatus{network: "testnet"} // nal left nil
+	coord, managed, errs := v3netRoles(context.Background(), fake)
+	if len(coord) != 0 || len(managed) != 0 || len(errs) != 1 || !strings.Contains(errs[0], "no NAL") {
+		t.Fatalf("got coord=%v managed=%v errs=%v", coord, managed, errs)
+	}
+}
+
 func TestParseListCommand(t *testing.T) {
 	cases := []struct {
 		in     string

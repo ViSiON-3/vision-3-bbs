@@ -101,6 +101,15 @@ func runV3NetAccessRequests(c *cmdCtx, args string) (*user.User, string, error) 
 			continue
 		}
 		row := rows[n-1]
+		// Prompt for the reason before starting the request timeout, so a
+		// slow typist does not hand the hub call an expired context.
+		reason := ""
+		if action == 'D' {
+			reason, next, err = v3netPromptLine(s, terminal, outputMode, "|07  Reason (optional): ")
+			if err != nil {
+				return nil, next, err
+			}
+		}
 		ctx, cancel = context.WithTimeout(context.Background(), v3netManageTimeout)
 		switch action {
 		case 'A':
@@ -109,11 +118,6 @@ func runV3NetAccessRequests(c *cmdCtx, args string) (*user.User, string, error) 
 				status = fmt.Sprintf("|10Approved %s for %s.|07", row.req.BBSName, row.tag)
 			}
 		case 'D':
-			reason, next, perr := v3netPromptLine(s, terminal, outputMode, "|07  Reason (optional): ")
-			if perr != nil {
-				cancel()
-				return nil, next, perr
-			}
 			err = svc.DenyAccess(ctx, row.network, row.tag, []string{row.req.NodeID}, reason)
 			if err == nil {
 				status = fmt.Sprintf("|14Denied %s for %s and added it to the deny list.|07", row.req.BBSName, row.tag)

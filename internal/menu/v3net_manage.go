@@ -33,10 +33,15 @@ func v3netRule(width int) string {
 	return "|08" + strings.Repeat("─", width-1) + "|07\r\n"
 }
 
-// v3netAgo renders an RFC 3339 timestamp as a short relative age. Anything
-// unparseable is shown as-is, truncated, so a hub bug never hides a row.
+// v3netAgo renders a hub timestamp as a short relative age. The hub stores
+// proposed_at and requested_at with SQLite's datetime('now'), which comes
+// back as "YYYY-MM-DD HH:MM:SS" in UTC; RFC 3339 is accepted too. Anything
+// else is shown as-is, truncated, so a hub bug never hides a row.
 func v3netAgo(stamp string, now time.Time) string {
 	t, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		t, err = time.ParseInLocation("2006-01-02 15:04:05", stamp, time.UTC)
+	}
 	if err != nil {
 		return truncateStr(stamp, 10)
 	}
@@ -110,6 +115,10 @@ func v3netRoles(ctx context.Context, svc V3NetStatusProvider) (coordinated []str
 		n, err := svc.FetchNALForNetwork(ctx, net)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %s", net, err))
+			continue
+		}
+		if n == nil {
+			errs = append(errs, fmt.Sprintf("%s: no NAL returned", net))
 			continue
 		}
 		if n.CoordNodeID != "" && n.CoordNodeID == me {

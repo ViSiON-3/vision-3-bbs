@@ -149,6 +149,7 @@ func runV3NetProposalQueue(c *cmdCtx, networks []string) (string, string, error)
 		}
 		buf.WriteString("\r\n")
 		buf.Write(ansi.ReplacePipeCodes([]byte(v3netRule(termWidth))))
+		shown := status
 		if status != "" {
 			buf.Write(ansi.ReplacePipeCodes([]byte("  " + status + "\r\n")))
 			status = ""
@@ -156,7 +157,12 @@ func runV3NetProposalQueue(c *cmdCtx, networks []string) (string, string, error)
 		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 
 		if len(rows) == 0 {
-			return "", "", nil
+			// The panel redraws on return, so hand it the last decision's
+			// status (or the empty-queue notice) to show there.
+			if shown == "" {
+				shown = "|08No pending proposals.|07"
+			}
+			return shown, "", nil
 		}
 
 		line, next, err := v3netPromptLine(s, terminal, outputMode,
@@ -173,6 +179,15 @@ func runV3NetProposalQueue(c *cmdCtx, networks []string) (string, string, error)
 			continue
 		}
 		row := rows[n-1]
+		// Prompt for the reason before starting the request timeout, so a
+		// slow typist does not hand the hub call an expired context.
+		reason := ""
+		if action == 'R' {
+			reason, next, err = v3netPromptLine(s, terminal, outputMode, "|07  Reason (optional): ")
+			if err != nil {
+				return "", next, err
+			}
+		}
 		ctx, cancel = context.WithTimeout(context.Background(), v3netManageTimeout)
 		switch action {
 		case 'A':
@@ -181,11 +196,6 @@ func runV3NetProposalQueue(c *cmdCtx, networks []string) (string, string, error)
 				status = fmt.Sprintf("|10Approved %s. The hub has added it to the NAL.|07", row.proposal.Tag)
 			}
 		case 'R':
-			reason, next, perr := v3netPromptLine(s, terminal, outputMode, "|07  Reason (optional): ")
-			if perr != nil {
-				cancel()
-				return "", next, perr
-			}
 			err = svc.RejectProposal(ctx, row.network, row.proposal.ID, protocol.ProposalRejectRequest{Reason: reason})
 			if err == nil {
 				status = fmt.Sprintf("|14Rejected %s.|07", row.proposal.Tag)

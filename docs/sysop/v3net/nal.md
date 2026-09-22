@@ -115,7 +115,7 @@ When sysops propose new areas, you review them from the Pending Proposals screen
 
 ### Managers and Coordinator Transfer
 
-The hub accepts a manager assignment only as part of approving a proposal, and coordinator transfer needs the new coordinator's public key and an acceptance step. Neither is offered from the BBS menu yet. The hub exposes both on its HTTP API for operators who need them now; see the developer notes below.
+The hub always makes the proposing node the manager of an approved area and has no endpoint for changing it afterwards. Coordinator transfer exists on the hub's HTTP API but needs the new coordinator's public key and an acceptance step, and is not offered from the BBS menu yet.
 
 ## For Developers
 
