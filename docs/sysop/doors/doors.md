@@ -2,20 +2,11 @@
 
 Doors are external programs launched from the BBS. ViSiON/3 generates a dropfile, hands off the user's terminal to the door process, and resumes the BBS session when the door exits.
 
+This page is the reference for every door setting. **Setting up your first door?** Start with [Setting Up Doors](how-to-guides/doors.md), which walks through a DOS door, a native door, a Synchronet JS door and a VPL script step by step.
+
 ## Configuration
 
-Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Door Programs) to add, edit, and remove door definitions interactively. This is the recommended approach.
-
-### Quick Setup (TUI-First)
-
-If you are setting up doors on a fresh system, start in the config editor first:
-
-1. Run `./config`
-2. Open **Door Programs** (section `6`)
-3. Add a new door record
-4. Set **Code** (internal command name) and **Name** (display name)
-5. Set **Type** and fill only the required fields for that type
-6. Save, then add a menu command like `DOOR:YOURCODE`
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Door Programs) to add, edit, and remove door definitions interactively. The JSON below is what the editor writes to `configs/doors.json`.
 
 ### Required Fields by Door Type
 
@@ -25,14 +16,6 @@ If you are setting up doors on a fresh system, start in the config editor first:
 | DOS door (dosemu2) | `Code`, `Name`, `Type=dos`, `Commands`, `Dropfile Type` (usually `DOOR.SYS`), `Drive C Path`, optional `FOSSIL Driver` |
 | Synchronet JS door | `Code`, `Name`, `Type=synchronet_js`, `Script`, `Working Dir`, `Exec Dir`, `Library Paths` |
 | VPL script door | `Code`, `Name`, `Type=v3_script`, `Script`, `Working Dir` |
-
-### Common First-Time Tips
-
-- Start with one simple door and test it before adding more.
-- Use `LISTDOORS` in a menu to confirm your door appears for users.
-- If the door launches but cannot find files, verify `Working Dir` first.
-- If the door starts but does not know who is playing, check `Dropfile Type` and the `{DROPFILE}` / `{NODEDIR}` placeholders on the command line (see [Door Command Line](#door-command-line)).
-- For legacy DOS games, set **Single Instance** to `Yes` if they share data files.
 
 ### Supported Dropfile Types
 
@@ -131,7 +114,7 @@ The menu commands that launch doors take no flags of their own. `DOOR:CODE` runs
 
 Door programs are stored in `configs/doors.json` as an array.
 
-> **Note:** The template `doors.json` ships with example configurations for a DOS door (LORD) and Synchronet JS doors (LORDJS and LORD2JS). The Synchronet JS runtime and the LORD/LORD II game files are included in the release bundle under `doors/sbbs/` — no extra download required. DOS door games must be obtained separately from their original distributors or BBS archives. See [Synchronet JS Doors](doors/synchronet-js-doors.md) for details.
+> **Note:** The template `doors.json` ships with seven VPL script doors from `scripts/examples/`. The Synchronet JS runtime and the LORD and LORD II JavaScript games are included in the release bundle under `doors/sbbs/` but are not defined in the template; see [Set up a Synchronet JS door](how-to-guides/door-synchronet-js.md). DOS door games must be obtained separately from BBS archives; the LORD entry below is an example.
 
 ```json
 [

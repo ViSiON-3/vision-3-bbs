@@ -226,10 +226,10 @@ LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `d
    }
    ```
 
-2. **Add menu entries** in your `.CFG` file:
-   ```
-   L,DOOR:LORDJS,*
-   2,DOOR:LORD2JS,*
+2. **Add menu entries** to `menus/v3/cfg/DOORSM.CFG`, with `./menuedit` or by hand:
+   ```json
+   { "KEYS": "L", "CMD": "DOOR:LORDJS", "ACS": "*", "HIDDEN": false },
+   { "KEYS": "2", "CMD": "DOOR:LORD2JS", "ACS": "*", "HIDDEN": false }
    ```
 
 3. **Connect and play** — select the door from your menu.
