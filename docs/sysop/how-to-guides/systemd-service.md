@@ -232,7 +232,7 @@ still running as an unprivileged user, add this to the `[Service]` section:
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 ```
 
-Then set the ports in `./config` → System Configuration → Server Setup and
+Then set the ports in `./config` → System Setup → Server Setup and
 restart the service.
 
 ---

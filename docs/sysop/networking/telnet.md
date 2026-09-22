@@ -222,7 +222,7 @@ A key difference between the two protocols:
 
 ## Configuration
 
-Telnet settings are managed in `./config` → **System Configuration → Server Setup** (sub-screen 1):
+Telnet settings are managed in `./config` → **System Setup → Server Setup** (item 2):
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -232,7 +232,7 @@ Telnet settings are managed in `./config` → **System Configuration → Server 
 
 These write to `configs/config.json` under `telnetEnabled`, `telnetHost`, and `telnetPort`. Telnet is disabled by default — enable it only if you have clients that need it, since telnet transmits all data in cleartext.
 
-> **Note:** The `Current Limitations` section below reflects a snapshot in time. IP filtering is now fully implemented and configured via System Configuration → IP Blocklist/Allowlist.
+> **Note:** The `Current Limitations` section below reflects a snapshot in time. IP filtering is now fully implemented and configured via Access & Security → IP Blocklist/Allowlist.
 
 ### Command-Line Testing
 

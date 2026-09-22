@@ -16,7 +16,7 @@ Key features:
 
 ## Configuration
 
-SSH settings are managed in `./config` → **System Configuration → Server Setup** (sub-screen 1):
+SSH settings are managed in `./config` → **System Setup → Server Setup** (item 2):
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -71,13 +71,13 @@ registering a key, and connecting.
 
 ### Connection Refused
 
-- Check that SSH Enabled is **Y** in `./config` → System Configuration → Server Setup
+- Check that SSH Enabled is **Y** in `./config` → System Setup → Server Setup
 - Verify the port is not in use: `netstat -ln | grep 2222`
 - Check that `configs/ssh_host_rsa_key` exists and is readable
 
 ### SyncTERM or Retro Client Fails to Connect
 
-- Enable Legacy SSH in `./config` → System Configuration → Server Setup, then restart the BBS
+- Enable Legacy SSH in `./config` → System Setup → Server Setup, then restart the BBS
 
 ### Authentication Fails
 

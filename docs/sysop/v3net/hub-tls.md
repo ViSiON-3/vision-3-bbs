@@ -183,7 +183,7 @@ Set the config fields to point at the generated files.
 Once you have your certificate files, enter the paths in the TUI config editor:
 
 ```
-./config  →  1 — System Configuration  →  Server Setup
+./config  →  1 — System Setup  →  Server Setup
 ```
 
 Scroll to the V3Net hub fields and set **Hub TLS Cert** and **Hub TLS Key**:

@@ -345,8 +345,8 @@ For production deployments:
 - Limit exposed ports (only expose 2222)
 - Consider running with a non-root user inside the container
 - Set up firewall rules on the host
-- Configure connection limits via `docker exec -it vision3-bbs ./config` → System Configuration → Connection Limits (Max Nodes, Max Per IP, failed login lockout)
-- Configure IP filtering via System Configuration → IP Blocklist/Allowlist (paths to plain-text files with one IP or CIDR per line)
+- Configure connection limits via `docker exec -it vision3-bbs ./config` → Access & Security → Connection Limits (Max Nodes, Max Per IP, failed login lockout)
+- Configure IP filtering via Access & Security → IP Blocklist/Allowlist (paths to plain-text files with one IP or CIDR per line)
 
 ## Support
 

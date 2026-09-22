@@ -18,38 +18,48 @@ ViSiON/3 includes an interactive TUI configuration editor modeled after ViSiON/2
 
 ### Main Menu
 
-The editor opens to a main menu. Keys **1**, **2**, **3**, and **4** open sub-menus; the rest go directly to record lists.
+The editor opens to a main menu. Keys **1** through **5** open sub-menus; the rest go directly to record lists.
 
 | Key | Section | What it covers |
 |-----|---------|----------------|
-| 1 | System Configuration | Opens 9 sub-screens: BBS identity, server setup, connection limits, access levels, default settings, IP lists, NUV, DOS emulation, logging |
-| 2 | Areas and Conferences | Sub-menu: Message Areas, File Areas, Conferences |
-| 3 | Echomail Networking | Sub-menu: Echomail Networks, Echomail Links, FTN Setup Wizard |
-| 4 | ViSiON/3 Networking (V3Net) | Sub-menu: Node Identity, Subscriptions, Hosted Networks |
-| 5 | Door Programs | External door program record list |
-| 6 | Transfer Protocols | File transfer protocol record list |
-| 7 | Archivers | Archive format record list |
-| 8 | Event Scheduler | Automated event record list |
-| 9 | Login Sequence | Login step record list |
+| 1 | System Setup | Sub-menu: BBS Registration, Server Setup, Default Settings, DOS Emulation, Logging, QWK Mobile API |
+| 2 | Access & Security | Sub-menu: Access Levels, Connection Limits, Bot Defense, IP Blocklist/Allowlist, New User Voting (NUV) |
+| 3 | Areas and Conferences | Sub-menu: Message Areas, File Areas, Conferences |
+| 4 | Echomail Networking | Sub-menu: Echomail Networks, Echomail Links, FTN Setup Wizard |
+| 5 | ViSiON/3 Networking (V3Net) | Sub-menu: Node Identity, Subscriptions, Hosted Networks |
+| 6 | Door Programs | External door program record list |
+| 7 | Transfer Protocols | File transfer protocol record list |
+| 8 | Archivers | Archive format record list |
+| 9 | Event Scheduler | Automated event record list |
+| 0 | Login Sequence | Login step record list |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
-### System Configuration Sub-screens
+### System Setup Sub-screens
 
-Choosing **System Configuration** (key 1) opens an inner menu with nine numbered sub-screens, all writing to `configs/config.json`. Use Up/Down and Enter (or the sub-screen number) to navigate; Esc returns to the main menu.
+Choosing **System Setup** (key 1) opens an inner menu of six numbered screens, all writing to `configs/config.json`. Use Up/Down and Enter to open a screen; Esc returns to the main menu.
 
-| Sub-screen | Name | Fields |
-|------------|------|--------|
-| 0 | BBS Registration | Board Name, SysOp Name, BBS Location, Timezone |
-| 1 | Server Setup | SSH enabled/host/port/legacy-algorithms, Telnet enabled/host/port, V3Net enabled + hub settings |
+| Item | Name | Fields |
+|------|------|--------|
+| 1 | BBS Registration | Board Name, SysOp Name, BBS Location, Timezone, QWK ID |
+| 2 | Server Setup | SSH enabled/host/port/legacy-algorithms, Telnet enabled/host/port, V3Net enabled + keystore/dedup/registry paths, V3Net hub settings, Binkd mailer settings |
+| 3 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days |
+| 4 | DOS Emulation | DOSemu Path |
+| 5 | Logging | Log Directory, Min Level, Rolling Type, Cache Writes, Max Files, Max Size KB |
+| 6 | QWK Mobile API | Enabled, Host, Port, Cert File, Key File, Token TTL Hours |
+
+**Server Setup (item 2)** also writes to `configs/v3net.json` for the V3Net fields (keystore path, dedup DB path, registry URL, hub enabled/host/port/data dir/auto-approve).
+
+### Access & Security Sub-screens
+
+Choosing **Access & Security** (key 2) opens an inner menu of five numbered screens, also writing to `configs/config.json`.
+
+| Item | Name | Fields |
+|------|------|--------|
+| 1 | Access Levels | SysOp Level, CoSysOp Level, WFC Access, Invisible Level, New User Level, Auto Validate, Notify SysOp, Regular Level, Logon Level, Anonymous Level |
 | 2 | Connection Limits | Max Nodes, Max Per IP, Failed Logins (0=off), Lockout Minutes, Idle Timeout, Transfer Timeout |
-| 3 | Access Levels | SysOp Level, CoSysOp Level, Invisible Level, New User Level, Regular Level, Logon Level, Anonymous Level |
-| 4 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days |
-| 5 | IP Blocklist/Allowlist | Blocklist Path, Allowlist Path |
-| 6 | New User Voting (NUV) | Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
-| 7 | DOS Emulation | DOSemu Path |
-| 8 | Logging | Log Directory, Min Level, Rolling Type, Cache Writes, Max Files, Max Size KB |
-
-**Server Setup (sub-screen 1)** also writes to `configs/v3net.json` for the V3Net fields (keystore path, dedup DB path, registry URL, hub enabled/host/port/data dir/auto-approve).
+| 3 | Bot Defense | Challenge gate (enable, art file, key, timeout, required presses, stray keys, live countdown) and connection-rate limiter (enable, hits, window, ban minutes). See [Security](configuration/security.md#bot-defense) |
+| 4 | IP Blocklist/Allowlist | Blocklist Path, Allowlist Path |
+| 5 | New User Voting (NUV) | Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
 
 ### Areas and Conferences Sub-menu
 
@@ -193,7 +203,7 @@ The strings support pipe color codes:
 
 ## doors.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 5 — Door Programs) to manage door settings interactively. The JSON structure below is for reference.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (section 6 — Door Programs) to manage door settings interactively. The JSON structure below is for reference.*
 
 Configures external door programs that can be launched from the BBS. The file contains an array of door configurations. See the [Door Programs Guide](doors/doors.md) for full documentation including DOS door setup, FOSSIL drivers, and dosemu2 configuration.
 
@@ -382,21 +392,23 @@ Defines file areas available on the BBS. The file contains an array of file area
 
 ## config.json
 
-General BBS configuration. All settings in this file are managed through the **System Configuration** section of `./config` — you should not need to hand-edit it.
+General BBS configuration. All settings in this file are managed through the **System Setup** and **Access & Security** sections of `./config` — you should not need to hand-edit it.
 
 ### TUI Paths
 
 | Setting group | TUI path |
 |---------------|----------|
-| Board name, sysop name, location, timezone | System Configuration → BBS Registration (sub-screen 0) |
-| SSH / Telnet ports and enabled flags | System Configuration → Server Setup (sub-screen 1) |
-| Max nodes, per-IP limits, timeouts | System Configuration → Connection Limits (sub-screen 2) |
-| Access levels (sysop, new user, logon, etc.) | System Configuration → Access Levels (sub-screen 3) |
-| New user registration, file list mode, retention | System Configuration → Default Settings (sub-screen 4) |
-| Blocklist / allowlist file paths | System Configuration → IP Blocklist/Allowlist (sub-screen 5) |
-| NUV voting thresholds and behavior | System Configuration → New User Voting (sub-screen 6) |
-| DOSemu binary path | System Configuration → DOS Emulation (sub-screen 7) |
-| Log directory, level, rotation | System Configuration → Logging (sub-screen 8) |
+| Board name, sysop name, location, timezone, QWK ID | System Setup → BBS Registration (item 1) |
+| SSH / Telnet ports and enabled flags, V3Net, Binkd | System Setup → Server Setup (item 2) |
+| New user registration, file list mode, retention | System Setup → Default Settings (item 3) |
+| DOSemu binary path | System Setup → DOS Emulation (item 4) |
+| Log directory, level, rotation | System Setup → Logging (item 5) |
+| QWK mobile API listener and TLS files | System Setup → QWK Mobile API (item 6) |
+| Access levels (sysop, new user, logon, etc.) | Access & Security → Access Levels (item 1) |
+| Max nodes, per-IP limits, timeouts | Access & Security → Connection Limits (item 2) |
+| Bot challenge gate and connection-rate limiter | Access & Security → Bot Defense (item 3) |
+| Blocklist / allowlist file paths | Access & Security → IP Blocklist/Allowlist (item 4) |
+| NUV voting thresholds and behavior | Access & Security → New User Voting (NUV) (item 5) |
 
 ### Field Reference
 
@@ -557,13 +569,13 @@ Leave paths empty (`""`) to disable the feature.
 
 ## Logging
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (System Configuration → Logging) to manage logging settings interactively. The JSON structure below is for reference.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (System Setup → Logging) to manage logging settings interactively. The JSON structure below is for reference.*
 
 ViSiON/3 writes structured JSON logs (one object per line) to a configurable directory. All settings live under the `"logging"` key in `configs/config.json` and are shared by every binary (`vision3`, `v3mail`). If the key is absent, defaults are applied automatically so existing installs continue to work unchanged.
 
-### TUI: System Configuration → Logging
+### TUI: System Setup → Logging
 
-Open the configuration editor (`./config`), choose **System Configuration**, then navigate to **Logging** (sub-screen 8).
+Open the configuration editor (`./config`), choose **System Setup**, then navigate to **Logging** (item 5).
 
 | Field | Description | Default |
 |-------|-------------|---------|

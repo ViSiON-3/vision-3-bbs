@@ -18,7 +18,7 @@ The tosser is built into Vision/3 via the `v3mail` command, conceptually similar
 | `v3mail scan` | Scans JAM bases for new outbound echomail and creates `.pkt` files |
 | `v3mail ftn-pack` | Packs outbound `.pkt` files into ZIP bundles for mailer pickup |
 
-Configured via `configs/ftn.json`. The [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Echomail Networks, section 8 — Echomail Links) manages network and link settings interactively.
+Configured via `configs/ftn.json`. The [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 4 — Echomail Networking → Echomail Networks and Echomail Links) manages network and link settings interactively.
 
 > **Current limitation — single uplink per network:** Vision/3 currently supports one uplink (hub) per FTN network. All outbound echomail for a network is sent to every configured link, so defining more than one link will result in duplicate packets being delivered to each. Multi-link routing (hub/downlink operation) is planned for a future release.
 
@@ -34,7 +34,7 @@ Configured via `data/ftn/binkd.conf`, which the [FTN Setup Wizard](#quick-setup-
 
 Once the FTN Setup Wizard has created `data/ftn/binkd.conf` (or you've created it manually — [Step 4](#step-4-configure-your-mailer-binkd-example)), enable the built-in mailer:
 
-- **Configuration Editor:** `./config` → **System Configuration** → **Server Setup** → set **"Binkd Mailer"** to `Y`
+- **Configuration Editor:** `./config` → **System Setup** → **Server Setup** → set **"Binkd Mailer"** to `Y`
 - **Or directly in `configs/ftn.json`:** set `"binkd": {"enabled": true}`
 
 Restart the BBS afterward. On startup, Vision/3 launches `bin/binkd` as a supervised child process: it restarts binkd automatically if it crashes (exponential backoff, 5s up to 5min), and stops it cleanly (SIGTERM, then a 5s grace period) on BBS shutdown.
@@ -336,7 +336,7 @@ With `--tag-prefix fd_`, areas get prefixed tags (e.g. `FD_LINUX`) and base path
 
 The `helper areafix` command sends an AreaFix netmail to your hub. AreaFix lets you subscribe/unsubscribe to echo areas, list areas, and rescan without contacting your hub operator.
 
-**Prerequisites:** Set `areafix_password` on the hub link in `configs/ftn.json` (Configuration Editor, section 8 — Echomail Links). Your hub assigns this password.
+**Prerequisites:** Set `areafix_password` on the hub link in `configs/ftn.json` (Configuration Editor, section 4 — Echomail Networking → Echomail Links). Your hub assigns this password.
 
 **Run `helper areafix`:**
 
@@ -614,7 +614,7 @@ See [event-scheduler.md](advanced/event-scheduler.md) for the full recommended F
 
 ## Configuration Files Reference
 
-> *The [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Echomail Networks, section 8 — Echomail Links) manages FTN network and link settings interactively. Mailer-specific configuration (binkd.conf) and directory setup are still handled manually as described below.*
+> *The [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 4 — Echomail Networking → Echomail Networks and Echomail Links) manages FTN network and link settings interactively. Mailer-specific configuration (binkd.conf) and directory setup are still handled manually as described below.*
 
 ### ftn.json
 

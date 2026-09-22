@@ -23,11 +23,11 @@ ViSiON/3 includes built-in connection management to prevent resource exhaustion 
 
 ### Configuring Connection Limits
 
-Open the config editor and navigate to **System Configuration → Connection Limits** (sub-screen 2):
+Open the config editor and navigate to **Access & Security → Connection Limits** (item 2):
 
 ```bash
 ./config
-# → 1 System Configuration → 2 Connection Limits
+# → 2 Access & Security → 2 Connection Limits
 ```
 
 | Field | Default | Description |
@@ -39,7 +39,7 @@ Open the config editor and navigate to **System Configuration → Connection Lim
 | Idle Timeout | 5 | Minutes before an idle session is disconnected. |
 | Xfer Timeout | 10 | Minutes before a stalled file transfer is aborted. |
 
-To set IP blocklist and allowlist file paths, use **System Configuration → IP Blocklist/Allowlist** (sub-screen 5).
+To set IP blocklist and allowlist file paths, use **Access & Security → IP Blocklist/Allowlist** (item 4).
 
 ### Max Nodes
 
@@ -64,7 +64,7 @@ config TUI's dedicated **Bot Defense** sub-screen:
 
 ```bash
 ./config
-# → 1 System Configuration → 11 Bot Defense
+# → 2 Access & Security → 3 Bot Defense
 ```
 
 ### Challenge Gate
@@ -188,7 +188,7 @@ Block specific IPs or IP ranges from connecting.
    2001:db8::/32
    ```
 
-2. Set the path in `./config` → **System Configuration → IP Blocklist/Allowlist** (sub-screen 5), Blocklist Path field.
+2. Set the path in `./config` → **Access & Security → IP Blocklist/Allowlist** (item 4), Blocklist Path field.
 
 **When to use:**
 
@@ -223,7 +223,7 @@ Allow specific IPs to bypass all connection limits.
    2001:db8:admin::/48
    ```
 
-2. Set the path in `./config` → **System Configuration → IP Blocklist/Allowlist** (sub-screen 5), Allowlist Path field.
+2. Set the path in `./config` → **Access & Security → IP Blocklist/Allowlist** (item 4), Allowlist Path field.
 
 **When to use:**
 
@@ -333,8 +333,8 @@ Connection requests are evaluated in this order:
 
 #### Example 1: Public BBS with Admin Protection
 
-In `./config` → System Configuration → Connection Limits: Max Nodes = 20, Max Per IP = 3.
-In System Configuration → IP Blocklist/Allowlist: set both file paths.
+In `./config` → Access & Security → Connection Limits: Max Nodes = 20, Max Per IP = 3.
+In Access & Security → IP Blocklist/Allowlist: set both file paths.
 
 `configs/allowlist.txt`:
 
@@ -366,8 +366,8 @@ In System Configuration → IP Blocklist/Allowlist: set both file paths.
 
 #### Example 2: Private BBS (Members Only)
 
-In `./config` → System Configuration → Connection Limits: Max Nodes = 10, Max Per IP = 2.
-In System Configuration → IP Blocklist/Allowlist: set allowlist path, leave blocklist empty.
+In `./config` → Access & Security → Connection Limits: Max Nodes = 10, Max Per IP = 2.
+In Access & Security → IP Blocklist/Allowlist: set allowlist path, leave blocklist empty.
 
 `configs/allowlist.txt`:
 
@@ -480,7 +480,7 @@ CIDR mask must be 0-32 for IPv4, 0-128 for IPv6.
 
 ### Security Levels
 
-ViSiON/3 uses numeric security levels for access control. Configure them in `./config` → **System Configuration → Access Levels** (sub-screen 3):
+ViSiON/3 uses numeric security levels for access control. Configure them in `./config` → **Access & Security → Access Levels** (item 1):
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -494,7 +494,7 @@ ViSiON/3 uses numeric security levels for access control. Configure them in `./c
 
 ### Authentication Lockout
 
-Protect against brute-force attacks with automatic **IP-based** lockout after failed login attempts. Configure in `./config` → **System Configuration → Connection Limits** (sub-screen 2):
+Protect against brute-force attacks with automatic **IP-based** lockout after failed login attempts. Configure in `./config` → **Access & Security → Connection Limits** (item 2):
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -603,7 +603,7 @@ The system protects against SSH brute force attempts through:
 
 #### Configuration Example
 
-For a secure public BBS that allows new users, set these in `./config` → System Configuration → Connection Limits:
+For a secure public BBS that allows new users, set these in `./config` → Access & Security → Connection Limits:
 
 - Failed Logins: **5**, Lockout Mins: **30**
 - Max Per IP: **3**, Max Nodes: **20**
@@ -720,7 +720,7 @@ grep "authenticated successfully" data/logs/vision3.log
    ```
 
 2. **BBS: Use a Non-Standard Port**
-   Change the SSH port in `./config` → **System Configuration → Server Setup** (sub-screen 1), SSH Port field. Default is `2222`.
+   Change the SSH port in `./config` → **System Setup → Server Setup** (item 2), SSH Port field. Default is `2222`.
 
 3. **Limit SSH to Specific IPs**
    Use allowlist for trusted admin IPs.
@@ -787,7 +787,7 @@ iptables -A INPUT -p tcp --dport 2222 -m state --state NEW \
 ## Security Checklist
 
 - [ ] Change default password
-- [ ] Configure maxNodes and maxConnectionsPerIP (System Configuration → Connection Limits)
+- [ ] Configure maxNodes and maxConnectionsPerIP (Access & Security → Connection Limits)
 - [ ] Set up IP blocklist (if needed)
 - [ ] Set up IP allowlist for admins
 - [ ] Use IP allowlist to restrict host admin SSH access (if running system sshd)
