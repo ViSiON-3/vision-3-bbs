@@ -18,7 +18,7 @@ ViSiON/3 includes an interactive TUI configuration editor modeled after ViSiON/2
 
 ### Main Menu
 
-The editor opens to a main menu. Keys **1** through **5** open sub-menus; the rest go directly to record lists.
+The editor opens to a main menu. Keys **1** through **5** open sub-menus, keys **6** through **9** and **0** open record lists, and **Q** quits.
 
 | Key | Section | What it covers |
 |-----|---------|----------------|
@@ -34,9 +34,9 @@ The editor opens to a main menu. Keys **1** through **5** open sub-menus; the re
 | 0 | Login Sequence | Login step record list |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
-### System Setup Sub-screens
+### System Setup Sub-menu
 
-Choosing **System Setup** (key 1) opens an inner menu of six numbered screens, all writing to `configs/config.json`. Use Up/Down and Enter to open a screen; Esc returns to the main menu.
+Choosing **System Setup** (key 1) opens an inner menu of six numbered items, all writing to `configs/config.json`. Use Up/Down and Enter to open an item; Esc returns to the main menu.
 
 | Item | Name | Fields |
 |------|------|--------|
@@ -49,9 +49,9 @@ Choosing **System Setup** (key 1) opens an inner menu of six numbered screens, a
 
 **Server Setup (item 2)** also writes to `configs/v3net.json` for the V3Net fields (keystore path, dedup DB path, registry URL, hub enabled/host/port/data dir/auto-approve).
 
-### Access & Security Sub-screens
+### Access & Security Sub-menu
 
-Choosing **Access & Security** (key 2) opens an inner menu of five numbered screens, also writing to `configs/config.json`.
+Choosing **Access & Security** (key 2) opens an inner menu of five numbered items, also writing to `configs/config.json`.
 
 | Item | Name | Fields |
 |------|------|--------|
