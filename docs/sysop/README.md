@@ -29,7 +29,7 @@ New to ViSiON/3? Start here:
 | [Users](users/user-management.md) | Accounts, access levels, login flow |
 | [Messages](messages/message-areas.md) | Message bases, FTN echomail, V3Mail |
 | [Files](files/file-areas.md) | File areas, transfers, bulk import |
-| [Doors](doors/doors.md) | External programs, dropfile generation |
+| [Doors](how-to-guides/doors.md) | Setting up DOS, native, Synchronet JS and VPL doors; [reference](doors/doors.md) |
 | [Networking](networking/ssh.md) | SSH and Telnet servers |
 | [V3Net](v3net/configuration.md) | Native inter-BBS networking, FelonyNet, key recovery |
 | [Advanced](advanced/event-scheduler.md) | Scheduler, string editor, encoding |

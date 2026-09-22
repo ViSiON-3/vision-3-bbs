@@ -76,6 +76,7 @@
 * [SAUCE Metadata](files/sauce-metadata.md)
 
 * **DOORS**
+* [Setting Up Doors (How-To)](how-to-guides/doors.md)
 * [Door Programs](doors/doors.md)
 * [Synchronet JS Doors](doors/synchronet-js-doors.md)
 
@@ -97,6 +98,11 @@
 
 * **HOW-TO GUIDES**
 * [How-To Guides](how-to-guides/README.md)
+* [Setting Up Doors](how-to-guides/doors.md)
+* [DOS Door](how-to-guides/door-dos.md)
+* [Native Door](how-to-guides/door-native.md)
+* [Synchronet JS Door](how-to-guides/door-synchronet-js.md)
+* [VPL Script Door](how-to-guides/door-vpl.md)
 * [Keeping Binaries Updated](how-to-guides/keeping-binaries-updated.md)
 * [WFC Sysop Console](how-to-guides/wfc-console.md)
 * [Running as a systemd Service](how-to-guides/systemd-service.md)

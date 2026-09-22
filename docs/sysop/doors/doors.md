@@ -2,20 +2,11 @@
 
 Doors are external programs launched from the BBS. ViSiON/3 generates a dropfile, hands off the user's terminal to the door process, and resumes the BBS session when the door exits.
 
+This page is the reference for every door setting. **Setting up your first door?** Start with [Setting Up Doors](how-to-guides/doors.md), which walks through a DOS door, a native door, a Synchronet JS door and a VPL script step by step.
+
 ## Configuration
 
-Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Door Programs) to add, edit, and remove door definitions interactively. This is the recommended approach.
-
-### Quick Setup (TUI-First)
-
-If you are setting up doors on a fresh system, start in the config editor first:
-
-1. Run `./config`
-2. Open **Door Programs** (section `6`)
-3. Add a new door record
-4. Set **Code** (internal command name) and **Name** (display name)
-5. Set **Type** and fill only the required fields for that type
-6. Save, then add a menu command like `DOOR:YOURCODE`
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Door Programs) to add, edit, and remove door definitions interactively. The JSON below is what the editor writes to `configs/doors.json`.
 
 ### Required Fields by Door Type
 
@@ -25,14 +16,6 @@ If you are setting up doors on a fresh system, start in the config editor first:
 | DOS door (dosemu2) | `Code`, `Name`, `Type=dos`, `Commands`, `Dropfile Type` (usually `DOOR.SYS`), `Drive C Path`, optional `FOSSIL Driver` |
 | Synchronet JS door | `Code`, `Name`, `Type=synchronet_js`, `Script`, `Working Dir`, `Exec Dir`, `Library Paths` |
 | VPL script door | `Code`, `Name`, `Type=v3_script`, `Script`, `Working Dir` |
-
-### Common First-Time Tips
-
-- Start with one simple door and test it before adding more.
-- Use `LISTDOORS` in a menu to confirm your door appears for users.
-- If the door launches but cannot find files, verify `Working Dir` first.
-- If the door starts but does not know who is playing, check `Dropfile Type` and the `{DROPFILE}` / `{NODEDIR}` placeholders on the command line (see [Door Command Line](#door-command-line)).
-- For legacy DOS games, set **Single Instance** to `Yes` if they share data files.
 
 ### Supported Dropfile Types
 
@@ -78,17 +61,17 @@ The **Commands** field (`commands` in JSON) is the command line the BBS runs whe
 
 | Door type | How to enter Commands in the config editor | Stored in JSON as |
 | --- | --- | --- |
-| Native | Executable followed by comma-separated arguments: `/opt/doors/tw2002/tw2002 -n {NODE}, -d {DROPFILE}` | `["/opt/doors/tw2002/tw2002", "-n {NODE}", "-d {DROPFILE}"]` |
+| Native | Executable followed by comma-separated arguments: `/opt/doors/tw2002/tw2002 -n, {NODE}, -d, {DROPFILE}` | `["/opt/doors/tw2002/tw2002", "-n", "{NODE}", "-d", "{DROPFILE}"]` |
 | DOS | Comma-separated DOS batch lines: `START.BAT {NODE}, EXIT` | `["START.BAT {NODE}", "EXIT"]` |
 | Synchronet JS / VPL | Not used. Set **Script** and **Script Args** instead | `script`, `args` |
 
-For native doors the first token is the executable and every following comma-separated entry becomes one argument, so a flag and its value can live in one entry (`-n {NODE}`) or two (`-n, {NODE}`), whichever the door expects. Set **Use Shell** to `Yes` if the command line needs pipes, redirects, globbing, or is a `.sh` / `.bat` script.
+For native doors the first token is the executable and every following comma-separated entry becomes exactly one argument, so a flag and its value are two entries (`-n, {NODE}`) unless the door wants them joined (`-n{NODE}`). Set **Use Shell** to `Yes` for a `.sh` / `.bat` script or a program that must start through the shell; the field does not interpret pipes, redirects or globs.
 
 For DOS doors each entry becomes a line in the generated `EXTERNAL.BAT`, run after the FOSSIL driver loads, the screen clears, and the BBS changes into **Working Dir**.
 
 #### Placeholders
 
-These placeholders are substituted at runtime wherever they appear in **Commands**, **Cleanup Command** arguments, and **Env Vars** (`commands`, `cleanup_args`, `environment_variables`). They are not substituted in **Script Args** for JS or VPL doors.
+These placeholders are substituted at runtime wherever they appear in **Commands**, the arguments of **Cleanup Command**, and **Env Vars** (`commands`, `cleanup_args`, `environment_variables`). The cleanup program path itself is not substituted. They are not substituted in **Script Args** for JS or VPL doors.
 
 | Placeholder | Value | Available for |
 | --- | --- | --- |
@@ -131,7 +114,7 @@ The menu commands that launch doors take no flags of their own. `DOOR:CODE` runs
 
 Door programs are stored in `configs/doors.json` as an array.
 
-> **Note:** The template `doors.json` ships with example configurations for a DOS door (LORD) and Synchronet JS doors (LORDJS and LORD2JS). The Synchronet JS runtime and the LORD/LORD II game files are included in the release bundle under `doors/sbbs/` — no extra download required. DOS door games must be obtained separately from their original distributors or BBS archives. See [Synchronet JS Doors](doors/synchronet-js-doors.md) for details.
+> **Note:** The template `doors.json` ships with seven VPL script doors from `scripts/examples/`. The Synchronet JS runtime and the LORD and LORD II JavaScript games are included in the release bundle under `doors/sbbs/` but are not defined in the template; see [Set up a Synchronet JS door](how-to-guides/door-synchronet-js.md). DOS door games must be obtained separately from BBS archives; the LORD entry below is an example.
 
 ```json
 [
@@ -251,7 +234,7 @@ The `cleanup_command` and `cleanup_args` fields specify an optional command to r
 - Processing score files or game results
 - Resetting door state between sessions
 
-The cleanup command supports the same placeholders as door arguments. Cleanup failures are logged but do not affect the user's session.
+Placeholders are replaced in `cleanup_args`; `cleanup_command` itself is used as written. Cleanup failures are logged but do not affect the user's session.
 
 Example:
 
@@ -264,7 +247,7 @@ Example:
 
 ## Use Shell
 
-Set `use_shell: true` to wrap the door command in a shell (`/bin/sh -c` on Linux, `cmd /c` on Windows). This enables shell features like pipes, redirects, and globbing in the command line. Required for launching shell scripts (`.sh`, `.bat`, `.cmd` files) directly.
+Set `use_shell: true` to start the door through a shell (`/bin/sh` on Linux and macOS, `cmd` on Windows). The command and its arguments are passed through unchanged, so pipes, redirects and globs in the command line are not interpreted; put those in a wrapper script. Required for launching shell scripts (`.sh`, `.bat`, `.cmd` files) directly.
 
 ## Menu Integration
 
