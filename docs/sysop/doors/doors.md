@@ -4,14 +4,14 @@ Doors are external programs launched from the BBS. ViSiON/3 generates a dropfile
 
 ## Configuration
 
-Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 5 — Door Programs) to add, edit, and remove door definitions interactively. This is the recommended approach.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Door Programs) to add, edit, and remove door definitions interactively. This is the recommended approach.
 
 ### Quick Setup (TUI-First)
 
 If you are setting up doors on a fresh system, start in the config editor first:
 
 1. Run `./config`
-2. Open **Door Programs** (section `5`)
+2. Open **Door Programs** (section `6`)
 3. Add a new door record
 4. Set **Code** (internal command name) and **Name** (display name)
 5. Set **Type** and fill only the required fields for that type
@@ -21,7 +21,7 @@ If you are setting up doors on a fresh system, start in the config editor first:
 
 | Type | Minimum fields to set |
 | --- | --- |
-| Native external door | `Code`, `Name`, `Type=native`, `Commands` |
+| Native external door | `Code`, `Name`, `Type=native`, `Commands`, `Dropfile Type` if the door reads one (see [Supported Dropfile Types](#supported-dropfile-types)) |
 | DOS door (dosemu2) | `Code`, `Name`, `Type=dos`, `Commands`, `Dropfile Type` (usually `DOOR.SYS`), `Drive C Path`, optional `FOSSIL Driver` |
 | Synchronet JS door | `Code`, `Name`, `Type=synchronet_js`, `Script`, `Working Dir`, `Exec Dir`, `Library Paths` |
 | VPL script door | `Code`, `Name`, `Type=v3_script`, `Script`, `Working Dir` |
@@ -31,7 +31,101 @@ If you are setting up doors on a fresh system, start in the config editor first:
 - Start with one simple door and test it before adding more.
 - Use `LISTDOORS` in a menu to confirm your door appears for users.
 - If the door launches but cannot find files, verify `Working Dir` first.
+- If the door starts but does not know who is playing, check `Dropfile Type` and the `{DROPFILE}` / `{NODEDIR}` placeholders on the command line (see [Door Command Line](#door-command-line)).
 - For legacy DOS games, set **Single Instance** to `Yes` if they share data files.
+
+### Supported Dropfile Types
+
+A dropfile is a small text file the BBS writes just before the door starts. It tells the door who is connected, how much time they have, and which node they are on. Pick the format your door's documentation asks for in the **Dropfile Type** field (`dropfile_type` in JSON).
+
+| Dropfile Type | Origin | Lines | Filename written | Typically used by |
+| --- | --- | --- | --- | --- |
+| `DOOR.SYS` | PCBoard / GAP | 52 | `DOOR.SYS` | Most DOS door games (LORD, TradeWars, Usurper), many modern doors |
+| `DOOR32.SYS` | Mystic / Synchronet | 11 | `DOOR32.SYS` | 32-bit and modern doors, Synchronet-style doors |
+| `DORINFO1.DEF` | RBBS-PC / QuickBBS | 13 | `DORINFO1.DEF` | Older RBBS, QuickBBS, and RemoteAccess doors |
+| `CHAIN.TXT` | WWIV | 30 | `CHAIN.TXT` | WWIV chain programs |
+| `(none)` | — | — | nothing | Doors that only need environment variables or command-line placeholders |
+
+All four formats carry the same core session data:
+
+| Value | Source |
+| --- | --- |
+| Node number | Current node |
+| Baud rate | Always `38400` (`115200` in `DORINFO1.DEF`, `9600` in `CHAIN.TXT`) |
+| Real name and handle | User record |
+| Security level | User access level |
+| Time remaining | Session time left, in minutes or seconds depending on the format |
+| User record number | User ID |
+| BBS name | `boardName` from `config.json` |
+| Screen size | User's saved screen height (and width in `CHAIN.TXT`), default 25 rows / 80 columns |
+| Graphics | Always ANSI |
+
+Fields the BBS does not track are filled with safe placeholders: phone numbers are `00-0000-0000`, the password is `SECRET`, dates are `01-01-1971`, and the sysop name in `DORINFO1.DEF` and `CHAIN.TXT` is `Sysop`. Doors that key their save data on the user record number, real name, or handle work as expected.
+
+**How each door type handles dropfiles:**
+
+- **Native doors** (Linux, macOS, Windows) write only the selected format. With `(none)` no file is written and `{DROPFILE}` expands to an empty string. The file is deleted when the door exits.
+- **DOS doors** always write all four formats to the per-node directory (`C:\NODES\TEMPn\`). `Dropfile Type` only decides which file the `{DROPFILE}` and `{DOSDROPFILE}` placeholders point at; it defaults to `DOOR.SYS`. `Dropfile Location` and `Dropfile Case` are ignored for DOS doors.
+- **Synchronet JS and VPL script doors** do not use dropfiles. The script runtime gets the session data directly. See [Synchronet JS Doors](doors/synchronet-js-doors.md).
+
+**Filename case.** Native doors on case-sensitive filesystems sometimes look for `door32.sys` rather than `DOOR32.SYS`. Set **Dropfile Case** (`dropfile_case`) to `lower` for those doors. The default, `upper`, writes the conventional uppercase name.
+
+**Where the file goes.** See [Dropfile Location](#dropfile-location) below. The short version: `startup` (the default) writes into the door's working directory, `node` writes into a fresh per-node temporary directory so several nodes can run the same door at once.
+
+### Door Command Line
+
+The **Commands** field (`commands` in JSON) is the command line the BBS runs when a user opens the door. It is entered differently depending on the door type:
+
+| Door type | How to enter Commands in the config editor | Stored in JSON as |
+| --- | --- | --- |
+| Native | Executable followed by comma-separated arguments: `/opt/doors/tw2002/tw2002 -n {NODE}, -d {DROPFILE}` | `["/opt/doors/tw2002/tw2002", "-n {NODE}", "-d {DROPFILE}"]` |
+| DOS | Comma-separated DOS batch lines: `START.BAT {NODE}, EXIT` | `["START.BAT {NODE}", "EXIT"]` |
+| Synchronet JS / VPL | Not used. Set **Script** and **Script Args** instead | `script`, `args` |
+
+For native doors the first token is the executable and every following comma-separated entry becomes one argument, so a flag and its value can live in one entry (`-n {NODE}`) or two (`-n, {NODE}`), whichever the door expects. Set **Use Shell** to `Yes` if the command line needs pipes, redirects, globbing, or is a `.sh` / `.bat` script.
+
+For DOS doors each entry becomes a line in the generated `EXTERNAL.BAT`, run after the FOSSIL driver loads, the screen clears, and the BBS changes into **Working Dir**.
+
+#### Placeholders
+
+These placeholders are substituted at runtime wherever they appear in **Commands**, **Cleanup Command** arguments, and **Env Vars** (`commands`, `cleanup_args`, `environment_variables`). They are not substituted in **Script Args** for JS or VPL doors.
+
+| Placeholder | Value | Available for |
+| --- | --- | --- |
+| `{NODE}` | Node number | All |
+| `{PORT}` | Port number (same as node number) | All |
+| `{TIMELEFT}` | Minutes remaining in the session | All |
+| `{BAUD}` | Baud rate (simulated, always `38400`) | All |
+| `{USERHANDLE}` | User's handle | All |
+| `{USERID}` | User record number | All |
+| `{REALNAME}` | User's real name | All |
+| `{LEVEL}` | User's access level | All |
+| `{STARTUPDIR}` | Resolved working directory (`.` when **Working Dir** is blank) | All |
+| `{DROPFILE}` | Host path to the generated dropfile (empty when **Dropfile Type** is `(none)`) | Native, DOS |
+| `{NODEDIR}` | Host directory containing the dropfile | Native, DOS |
+| `{DOSDROPFILE}` | DOS path to the dropfile, e.g. `C:\NODES\TEMP1\DOOR.SYS` | DOS only |
+| `{DOSNODEDIR}` | DOS path to the node directory, e.g. `C:\NODES\TEMP1` | DOS only |
+
+Placeholders are plain text replacement, so add any separator the door needs yourself. A door that wants a trailing slash on a directory takes `{NODEDIR}/`.
+
+Examples:
+
+```json
+"commands": ["/opt/doors/lord/lord", "-n{NODE}", "-p{NODEDIR}"]
+```
+
+```json
+"commands": ["START.BAT {NODE} {DOSNODEDIR}"]
+```
+
+```json
+"cleanup_command": "/opt/bbs/scripts/lord-cleanup.sh",
+"cleanup_args": ["{NODEDIR}", "{NODE}"]
+```
+
+#### Menu commands
+
+The menu commands that launch doors take no flags of their own. `DOOR:CODE` runs the door with that code, and `LISTDOORS`, `OPENDOOR`, and `DOORINFO` ignore anything after the command name. Anything the door needs on its command line goes in **Commands**. See [Menu Integration](#menu-integration).
 
 ### JSON Reference
 
@@ -79,13 +173,15 @@ These fields apply to both native and DOS doors:
 | `name` | string | Display name shown to users (free-form, case preserved) |
 | `commands` | []string | Native: `[0]`=executable, `[1:]`=args. DOS: each entry is a batch command line |
 | `working_directory` | string | Native: Linux directory to run the command in. DOS: DOS path to `cd` into before running commands (e.g., `C:\DOORS\LORD`) |
-| `dropfile_type` | string | Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or blank for none |
-| `dropfile_location` | string | Where to write dropfile: `startup` (working dir, default) or `node` (per-node temp dir) |
+| `type` | string | `synchronet_js`, `v3_script`, or blank for a native/DOS door (see `is_dos`) |
+| `dropfile_type` | string | Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or blank for none. See [Supported Dropfile Types](#supported-dropfile-types) |
+| `dropfile_location` | string | Where to write dropfile: `startup` (working dir, default) or `node` (per-node temp dir). Native doors only |
+| `dropfile_case` | string | Dropfile filename case: `upper` (default, `DOOR32.SYS`) or `lower` (`door32.sys`). Native doors only |
 | `min_access_level` | int | Minimum user access level required (0 = no restriction) |
 | `single_instance` | bool | Only allow one node to run this door at a time |
 | `cleanup_command` | string | Command to run after the door exits (optional) |
 | `cleanup_args` | []string | Arguments for cleanup command (supports placeholders) |
-| `environment_variables` | map | Additional environment variables to set (supports placeholders). Format: `{"KEY": "VALUE"}` |
+| `environment_variables` | map | Additional environment variables to set (supports placeholders). Format: `{"KEY": "VALUE"}`. Native doors only |
 
 ### Native Door Fields
 
@@ -119,23 +215,7 @@ The dosemu2 binary path is configured globally in `config.json` (System Configur
 
 ## Placeholders
 
-The following placeholders can be used in `commands`, `cleanup_args`, and `environment_variables`. They are substituted at runtime:
-
-| Placeholder | Value |
-| --- | --- |
-| `{NODE}` | Node number |
-| `{PORT}` | Port number (same as node number) |
-| `{TIMELEFT}` | Minutes remaining in session |
-| `{BAUD}` | Baud rate (simulated, always 38400) |
-| `{USERHANDLE}` | User's handle |
-| `{USERID}` | User ID number |
-| `{REALNAME}` | User's real name |
-| `{LEVEL}` | User's access level |
-| `{DROPFILE}` | Full Linux path to the generated dropfile |
-| `{NODEDIR}` | Linux directory containing the dropfile |
-| `{STARTUPDIR}` | Resolved startup/working directory |
-| `{DOSDROPFILE}` | DOS path to the dropfile (e.g., `C:\NODES\TEMP1\DOOR.SYS`) |
-| `{DOSNODEDIR}` | DOS path to the node directory (e.g., `C:\NODES\TEMP1`) |
+See [Door Command Line](#door-command-line) for the full placeholder table and examples.
 
 ## I/O Modes
 
@@ -149,9 +229,9 @@ Creates a Unix socketpair and passes one end to the door process as file descrip
 
 ## Dropfile Location
 
-By default (`dropfile_location: "startup"` or blank), the dropfile is written to the door's `working_directory`. Set `dropfile_location: "node"` to write it to a per-node temporary directory (`/tmp/vision3_nodeN/`) instead. This is useful for multi-instance doors where multiple nodes may run simultaneously and need isolated dropfiles.
+By default (`dropfile_location: "startup"` or blank), the dropfile is written to the door's `working_directory`. Set `dropfile_location: "node"` to write it to a fresh per-node temporary directory (named like `vision3_node1_XXXXXX` under the system temp directory) instead. The directory is removed when the door exits. This is useful for multi-instance doors where multiple nodes may run simultaneously and need isolated dropfiles.
 
-For DOS doors, dropfiles are written to the per-node temp directory inside `drive_c` (at `C:\NODES\TEMPn\`). Configure the door game itself to read the dropfile from the node directory using the `{DOSNODEDIR}` placeholder, or set `dropfile_location: "startup"` to write it to the working directory instead.
+For DOS doors, `dropfile_location` is ignored: all four dropfile formats are always written to the per-node directory inside `drive_c` (at `C:\NODES\TEMPn\`). Point the door game at that directory using the `{DOSNODEDIR}` or `{DOSDROPFILE}` placeholder on its command line.
 
 ## Access Control
 
@@ -323,7 +403,7 @@ The following environment variables are automatically set for all door processes
 | `DOOR_SOCKET_FD` | Socket FD (SOCKET mode only) |
 | `DOSEMU_QUIET` | `1` (DOS doors only, suppresses dosemu startup messages) |
 
-Additional variables can be configured per-door via the `environment_variables` field. These are set in the OS environment before the door process (or DOS emulator) is launched. Placeholders are substituted at runtime.
+Additional variables can be configured per-door via the `environment_variables` field (**Env Vars** in the config editor, entered as `KEY=VALUE, KEY2=VALUE2`). These are set in the OS environment before a native door process is launched. Placeholders are substituted at runtime. DOS doors receive only `DOSEMU_QUIET`; pass session data to a DOS door through the dropfile or the batch command line instead.
 
 Example:
 
