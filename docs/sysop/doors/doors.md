@@ -6,6 +6,33 @@ Doors are external programs launched from the BBS. ViSiON/3 generates a dropfile
 
 Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 5 — Door Programs) to add, edit, and remove door definitions interactively. This is the recommended approach.
 
+### Quick Setup (TUI-First)
+
+If you are setting up doors on a fresh system, start in the config editor first:
+
+1. Run `./config`
+2. Open **Door Programs** (section `5`)
+3. Add a new door record
+4. Set **Code** (internal command name) and **Name** (display name)
+5. Set **Type** and fill only the required fields for that type
+6. Save, then add a menu command like `DOOR:YOURCODE`
+
+### Required Fields by Door Type
+
+| Type | Minimum fields to set |
+| --- | --- |
+| Native external door | `Code`, `Name`, `Type=native`, `Commands` |
+| DOS door (dosemu2) | `Code`, `Name`, `Type=dos`, `Commands`, `Dropfile Type` (usually `DOOR.SYS`), `Drive C Path`, optional `FOSSIL Driver` |
+| Synchronet JS door | `Code`, `Name`, `Type=synchronet_js`, `Script`, `Working Dir`, `Exec Dir`, `Library Paths` |
+| VPL script door | `Code`, `Name`, `Type=v3_script`, `Script`, `Working Dir` |
+
+### Common First-Time Tips
+
+- Start with one simple door and test it before adding more.
+- Use `LISTDOORS` in a menu to confirm your door appears for users.
+- If the door launches but cannot find files, verify `Working Dir` first.
+- For legacy DOS games, set `single_instance: true` if they share data files.
+
 ### JSON Reference
 
 Door programs are stored in `configs/doors.json` as an array.
