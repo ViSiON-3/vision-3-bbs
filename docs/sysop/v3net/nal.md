@@ -79,16 +79,19 @@ If you manage an area (the coordinator assigned you as manager), you'll see the 
 ```
 [ V3Net: Area Access Requests ]
 
-  NETWORK     AREA TAG          BBS NAME                  REQUESTED
-  felonynet   fel.phreaking     The Underground BBS       2d ago
-  felonynet   fel.phreaking     Sector 7 BBS              5h ago
+  #  NETWORK     AREA TAG          BBS NAME              NODE ID   REQUESTED
+  1  felonynet   fel.phreaking     The Underground BBS   A1B2C3D4  2d ago
+  2  felonynet   fel.phreaking     Sector 7 BBS          E5F6A7B8  5h ago
 
-  [A]pprove  [D]eny  [B]lacklist  [Q]uit
+  [A]pprove #  [D]eny #  [Q]uit
 ```
 
-- **Approve** — Grants the requesting node access to the area
-- **Deny** — Rejects the request (you can provide a reason)
-- **Blacklist** — Denies and permanently adds the node to the area's deny list
+Type the action letter and the row number, for example `A 1` or `D2`.
+
+- **Approve** — Grants the requesting node access to the area and activates its subscription
+- **Deny** — Rejects the request, optionally with a reason, and adds the node to the area's deny list so it cannot re-request
+
+The list covers every subscribed network and is refreshed after each action.
 
 ## For Network Coordinators
 
@@ -98,28 +101,21 @@ Coordinators see the **Coordinator Panel** in the V3Net menu:
 [ V3Net: Coordinator Panel — felonynet ]
 
   [P]ending area proposals  (2)
-  [M]anage area managers
-  [T]ransfer coordinator role
   [Q]uit
 ```
 
+The panel appears only when the NAL of a subscribed network names your node as its coordinator.
+
 ### Reviewing Proposals
 
-When sysops propose new areas, you review them from the Pending Proposals screen. You can:
+When sysops propose new areas, you review them from the Pending Proposals screen. Type the action letter and the row number, for example `A 1` or `R2`.
 
-- **Approve** — Adds the area to the NAL and publishes it to all nodes
-- **Reject** — Declines the proposal (optionally with a reason)
-- **Edit before approving** — Change the access mode, assign a different area manager, or adjust policy settings before adding the area
+- **Approve** — Adds the area to the NAL as it was proposed and publishes it to all nodes
+- **Reject** — Declines the proposal, optionally with a reason, and notifies the proposing node
 
-### Transferring Coordinator Role
+### Managers and Coordinator Transfer
 
-If you need to hand off coordination to another sysop, use the **Transfer coordinator role** option. This is a three-step process:
-
-1. You initiate the transfer by specifying the new coordinator's node ID
-2. The new coordinator accepts the transfer from their sysop menu
-3. The NAL is re-signed with the new coordinator's key
-
-All of this happens within the BBS — no external tools, no manual key exchange.
+The hub accepts a manager assignment only as part of approving a proposal, and coordinator transfer needs the new coordinator's public key and an acceptance step. Neither is offered from the BBS menu yet. The hub exposes both on its HTTP API for operators who need them now; see the developer notes below.
 
 ## For Developers
 

@@ -23,6 +23,16 @@ type V3NetStatusProvider interface {
 	HubURLForNetwork(network string) string
 	ProposeArea(network string, req protocol.AreaProposalRequest) (*protocol.ProposalResponse, error)
 	RegistryURL() string
+
+	// Coordinator and area-manager operations. The hub authorizes each call
+	// from the signed node ID, so a caller that lacks the role gets an error
+	// carrying the hub's message.
+	ListProposals(ctx context.Context, network string) ([]protocol.AreaProposal, error)
+	ApproveProposal(ctx context.Context, network, proposalID string, req protocol.ProposalApproveRequest) error
+	RejectProposal(ctx context.Context, network, proposalID string, req protocol.ProposalRejectRequest) error
+	ListAccessRequests(ctx context.Context, network, tag string) ([]protocol.AccessRequest, error)
+	ApproveAccess(ctx context.Context, network, tag string, nodeIDs []string) error
+	DenyAccess(ctx context.Context, network, tag string, nodeIDs []string, reason string) error
 }
 
 func runV3NetStatus(c *cmdCtx, args string) (*user.User, string, error) {

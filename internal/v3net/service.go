@@ -471,6 +471,74 @@ func (s *Service) ProposeArea(network string, req protocol.AreaProposalRequest) 
 	return run.l.ProposeArea(req)
 }
 
+// leafFor returns the leaf client for a network, or an error naming the
+// network when no subscription is configured for it.
+func (s *Service) leafFor(network string) (*leaf.Leaf, error) {
+	s.mu.RLock()
+	run, ok := s.leafByNetwork[network]
+	s.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("v3net: no leaf configured for network %q", network)
+	}
+	return run.l, nil
+}
+
+// ListProposals returns the pending area proposals on a network's hub.
+// The hub answers only the network coordinator.
+func (s *Service) ListProposals(ctx context.Context, network string) ([]protocol.AreaProposal, error) {
+	l, err := s.leafFor(network)
+	if err != nil {
+		return nil, err
+	}
+	return l.ListProposals(ctx)
+}
+
+// ApproveProposal approves a pending proposal on a network's hub.
+func (s *Service) ApproveProposal(ctx context.Context, network, proposalID string, req protocol.ProposalApproveRequest) error {
+	l, err := s.leafFor(network)
+	if err != nil {
+		return err
+	}
+	return l.ApproveProposal(ctx, proposalID, req)
+}
+
+// RejectProposal rejects a pending proposal on a network's hub.
+func (s *Service) RejectProposal(ctx context.Context, network, proposalID string, req protocol.ProposalRejectRequest) error {
+	l, err := s.leafFor(network)
+	if err != nil {
+		return err
+	}
+	return l.RejectProposal(ctx, proposalID, req)
+}
+
+// ListAccessRequests returns the pending subscription requests for an area.
+// The hub answers only that area's manager.
+func (s *Service) ListAccessRequests(ctx context.Context, network, tag string) ([]protocol.AccessRequest, error) {
+	l, err := s.leafFor(network)
+	if err != nil {
+		return nil, err
+	}
+	return l.ListAccessRequests(ctx, tag)
+}
+
+// ApproveAccess grants the listed nodes access to an area.
+func (s *Service) ApproveAccess(ctx context.Context, network, tag string, nodeIDs []string) error {
+	l, err := s.leafFor(network)
+	if err != nil {
+		return err
+	}
+	return l.ApproveAccess(ctx, tag, nodeIDs)
+}
+
+// DenyAccess refuses the listed nodes and adds them to the area's deny list.
+func (s *Service) DenyAccess(ctx context.Context, network, tag string, nodeIDs []string, reason string) error {
+	l, err := s.leafFor(network)
+	if err != nil {
+		return err
+	}
+	return l.DenyAccess(ctx, tag, nodeIDs, reason)
+}
+
 // FetchNALForNetwork fetches and verifies the NAL for the given network.
 func (s *Service) FetchNALForNetwork(ctx context.Context, network string) (*protocol.NAL, error) {
 	s.mu.RLock()

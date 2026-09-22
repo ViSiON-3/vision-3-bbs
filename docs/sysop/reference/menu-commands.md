@@ -226,8 +226,8 @@ Stock menus bind all of these in `V3NETM` with ACS `S255`. None of them check a 
 | `V3NETAREAS` | Network name, optional. Blank covers every subscribed network. | Fetches each network's area list and shows a lightbar for subscribing and unsubscribing. | Silent when V3Net is off |
 | `V3NETPROPOSE` | Network name, optional. Blank uses the first subscribed network. | Form to propose a new network area. | Silent when V3Net is off |
 | `V3NETREGISTRY` | none | Fetches the network registry and lists networks, marking subscribed ones. | |
-| `V3NETACCESSREQUESTS` | none | Placeholder. Draws the access request screen and always reports none pending. | Silent when V3Net is off |
-| `V3NETCOORDINATOR` | none | Placeholder. Draws the coordinator menu. Its keys are not wired yet. | Silent when V3Net is off |
+| `V3NETACCESSREQUESTS` | none | Pending subscription requests for every area this node manages, across all subscribed networks. `A` approves, `D` denies and adds the node to the area's deny list. | Area manager, checked by the hub |
+| `V3NETCOORDINATOR` | none | Coordinator panel for networks whose NAL names this node as coordinator. `P` opens the pending proposal queue, where `A` approves a proposal as submitted and `R` rejects it with an optional reason. | Network coordinator, checked by the hub |
 
 ## SysOp and administration
 
