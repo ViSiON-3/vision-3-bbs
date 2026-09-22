@@ -61,6 +61,8 @@ The file is a JSON array of login items. Items are executed in order from top to
 
 ## Built-in Commands
 
+The full list of step names, and the `RUN:` commands they map to, is also in the [Menu Commands Reference](reference/menu-commands.md#login-sequence-steps).
+
 ### LASTCALLS
 
 Displays the last callers list using templates from `menus/v3/templates/` (`LASTCALL.TOP`, `LASTCALL.MID`, `LASTCALL.BOT`).
