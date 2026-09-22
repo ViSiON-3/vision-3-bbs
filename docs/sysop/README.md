@@ -21,8 +21,6 @@ New to ViSiON/3? Start here:
 
 ## Documentation Sections
 
-SysOp documentation is available at [Online Wiki](https://vision3bbs.com/sysop/).
-
 | Section | What's Covered |
 |---------|----------------|
 | [Getting Started](getting-started/README.md) | Installation, Docker, initial setup |
