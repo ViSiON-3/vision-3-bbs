@@ -43,4 +43,4 @@ ViSiON/3 is a ground-up rewrite of ViSiON/2 in Go — SSH instead of dialup, eve
 
 - **GitHub**: [ViSiON-3/vision-3-bbs](https://github.com/ViSiON-3/vision-3-bbs)
 - **Discord**: [Join the server](https://discord.gg/VkjRN2Ms)
-- **Main Site**: [vision3bbs.com](https://vision3bbs.com)
+- **Main Site**: [vision-3.github.io/vision-3-bbs](https://vision-3.github.io/vision-3-bbs/)
