@@ -54,7 +54,12 @@ Run `./menuedit`, open `DOORSM`, press **F5** to add a command, and set:
 | Command | `DOOR:GREETING` |
 | ACS | `*` |
 
-**W** is free on the stock doors menu; **G** is not, it logs the caller off. Press **Esc** to save; the editor writes the change to the `menus.d/v3/` overlay. The key works straight away. To show it on the doors screen, copy `menus/v3/ansi/DOORSM.ANS` to `menus.d/v3/ansi/DOORSM.ANS` and add a `[W] Greeting` line with an ANSI editor.
+**W** is free on the stock doors menu; **G** is not, it logs the caller off. Press **Esc** to save; the editor writes the change to the `menus.d/v3/` overlay. The key works straight away. To show it on the doors screen, copy the shipped art into the overlay and add a `[W] Greeting` line with an ANSI editor:
+
+```bash
+mkdir -p menus.d/v3/ansi
+cp menus/v3/ansi/DOORSM.ANS menus.d/v3/ansi/
+```
 
 ## 4. Try it
 

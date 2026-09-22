@@ -86,7 +86,12 @@ Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.j
 
 ## 5. Add it to a menu
 
-Run `./menuedit`, open `DOORSM`, press **F5**, and set **Keys** to `L`, **Command** to `DOOR:LORD`, **ACS** to `*`. Press **Esc** to save; the editor writes to the `menus.d/v3/` overlay. To show the key, copy `menus/v3/ansi/DOORSM.ANS` to `menus.d/v3/ansi/DOORSM.ANS` and add it there with an ANSI editor.
+Run `./menuedit`, open `DOORSM`, press **F5**, and set **Keys** to `L`, **Command** to `DOOR:LORD`, **ACS** to `*`. Press **Esc** to save; the editor writes to the `menus.d/v3/` overlay. To show the key, copy the shipped art into the overlay and add the key there with an ANSI editor:
+
+```bash
+mkdir -p menus.d/v3/ansi
+cp menus/v3/ansi/DOORSM.ANS menus.d/v3/ansi/
+```
 
 ## 6. Try it
 
