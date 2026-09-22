@@ -103,6 +103,10 @@ func runNUVScan(c *cmdCtx, args string) (*user.User, string, error) {
 	termWidth := c.termWidth
 	termHeight := c.termHeight
 
+	if currentUser == nil {
+		return nil, "", nil
+	}
+
 	cfg := e.GetServerConfig()
 	if !cfg.UseNUV {
 		wv(terminal, "\r\n|07New User Voting is disabled.\r\n", outputMode)
@@ -150,6 +154,10 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 	outputMode := c.outputMode
 	termWidth := c.termWidth
 	termHeight := c.termHeight
+
+	if currentUser == nil {
+		return nil, "", nil
+	}
 
 	nuvMu.Lock()
 	nd, err := loadNUVData(e.RootConfigPath)

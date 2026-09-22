@@ -47,8 +47,17 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 			areas = []file.FileArea{*area}
 		}
 	} else {
-		// Scan all accessible areas
+		// Scan the areas tagged in FILENEWSCANCONFIG. A user who has never
+		// tagged anything gets every listable area, so the scan keeps working
+		// out of the box.
+		taggedMap := make(map[string]bool, len(currentUser.TaggedFileAreaTags))
+		for _, tag := range currentUser.TaggedFileAreaTags {
+			taggedMap[strings.ToUpper(tag)] = true
+		}
 		for _, area := range e.FileMgr.ListAreas() {
+			if len(taggedMap) > 0 && !taggedMap[strings.ToUpper(area.Tag)] {
+				continue
+			}
 			if checkACS(area.ACSList, currentUser, s, terminal, sessionStartTime) {
 				areas = append(areas, area)
 			}

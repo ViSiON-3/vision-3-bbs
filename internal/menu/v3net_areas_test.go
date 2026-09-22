@@ -31,6 +31,22 @@ func (f *fakeV3NetStatus) FetchNALForNetwork(ctx context.Context, network string
 func (f *fakeV3NetStatus) ProposeArea(network string, req protocol.AreaProposalRequest) (*protocol.ProposalResponse, error) {
 	return nil, nil
 }
+func (f *fakeV3NetStatus) ListProposals(context.Context, string) ([]protocol.AreaProposal, error) {
+	return nil, nil
+}
+func (f *fakeV3NetStatus) ApproveProposal(context.Context, string, string, protocol.ProposalApproveRequest) error {
+	return nil
+}
+func (f *fakeV3NetStatus) RejectProposal(context.Context, string, string, protocol.ProposalRejectRequest) error {
+	return nil
+}
+func (f *fakeV3NetStatus) ListAccessRequests(context.Context, string, string) ([]protocol.AccessRequest, error) {
+	return nil, nil
+}
+func (f *fakeV3NetStatus) ApproveAccess(context.Context, string, string, []string) error { return nil }
+func (f *fakeV3NetStatus) DenyAccess(context.Context, string, string, []string, string) error {
+	return nil
+}
 
 // runV3NetAreas builds each row as " %s %-24s %-28s %-8s %s" (status, tag,
 // name, access, network) then clamps the whole line to termWidth-1 with

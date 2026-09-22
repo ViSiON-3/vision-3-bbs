@@ -62,7 +62,7 @@ func runInfoFormHunt(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	isSysop := currentUser.AccessLevel >= 255
+	isSysop := e.isSysOpOrAbove(currentUser)
 	if !isSysop {
 		wv(terminal, "\r\n|04Access denied.\r\n", outputMode)
 		return currentUser, "", nil
@@ -209,7 +209,7 @@ func runInfoFormNuke(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	isSysop := currentUser.AccessLevel >= 255
+	isSysop := e.isSysOpOrAbove(currentUser)
 	if !isSysop {
 		wv(terminal, "\r\n|04Access denied.\r\n", outputMode)
 		return currentUser, "", nil

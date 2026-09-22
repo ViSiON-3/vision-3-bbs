@@ -86,8 +86,8 @@ V3Net provides several menu screens accessible to sysops and users:
 | `V3NETAREAS` | Browse and manage area subscriptions from the NAL |
 | `V3NETPROPOSE` | Submit a new area proposal to the network coordinator |
 | `V3NETREGISTRY` | Browse the public network registry to discover available networks |
-| `V3NETCOORD` | Coordinator panel for approving/rejecting proposals (coordinator only) |
-| `V3NETACCESS` | View and manage area access requests (coordinator only) |
+| `V3NETCOORDINATOR` | Coordinator panel for approving or rejecting area proposals (network coordinator only) |
+| `V3NETACCESSREQUESTS` | Approve or deny subscription requests for the areas this node manages (area manager only) |
 
 These commands are configured in your menu `.CFG` files. The default V3Net menu is provided in `menus/v3/cfg/V3NETM.CFG`.
 
