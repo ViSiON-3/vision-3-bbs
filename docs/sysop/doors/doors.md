@@ -31,7 +31,7 @@ If you are setting up doors on a fresh system, start in the config editor first:
 - Start with one simple door and test it before adding more.
 - Use `LISTDOORS` in a menu to confirm your door appears for users.
 - If the door launches but cannot find files, verify `Working Dir` first.
-- For legacy DOS games, set `single_instance: true` if they share data files.
+- For legacy DOS games, set **Single Instance** to `Yes` if they share data files.
 
 ### JSON Reference
 
