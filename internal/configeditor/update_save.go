@@ -15,45 +15,50 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 )
 
-// saveAll writes all modified configs to disk.
-func (m *Model) saveAll() {
+// saveAll writes all modified configs to disk, reporting whether every file
+// was written.
+//
+// Callers that quit or navigate away must check the result. A failed save
+// leaves the session's changes only in memory, so leaving the screen would
+// discard them and take the reason off the display at the same time.
+func (m *Model) saveAll() bool {
 	if !m.dirty {
-		return
+		return true
 	}
 
 	if err := saveServerConfig(m.configPath, m.configs.Server); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	if err := saveConferences(m.configPath, m.configs.Conferences); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	if err := saveMsgAreas(m.configPath, m.configs.MsgAreas); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	if err := saveFileAreas(m.configPath, m.configs.FileAreas); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	if err := saveDoors(m.configPath, m.configs.Doors); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	// FTN before events: the FTN wizard enables a hub-poll event for the
 	// network it saves, so if the sequence fails midway the poll must not be
 	// persisted for a network that never made it to ftn.json.
 	if err := saveFTNConfig(m.configPath, m.configs.FTN); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	// Follow hub changes: existing per-network poll events track the
 	// network's first link address.
 	refreshPollEvents(&m.configs.Events, m.configs.FTN.Networks)
 	if err := saveEventsConfig(m.configPath, m.configs.Events); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	// Sync BBS identity and link passwords to binkd.conf (best-effort).
 	var binkdSyncErr error
@@ -102,19 +107,19 @@ func (m *Model) saveAll() {
 	}
 	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	if err := saveProtocols(m.configPath, m.configs.Protocols); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	if err := saveArchivers(m.configPath, m.configs.Archivers); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 	if err := saveLoginSeq(m.configPath, m.configs.LoginSeq); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return
+		return false
 	}
 
 	m.dirty = false
@@ -133,6 +138,7 @@ func (m *Model) saveAll() {
 	} else {
 		m.message = "All configurations saved successfully"
 	}
+	return true
 }
 
 // --- Record count and helpers ---

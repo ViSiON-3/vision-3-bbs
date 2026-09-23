@@ -720,7 +720,13 @@ func (m Model) executeConfirm() (Model, tea.Cmd) {
 	case modeQuitConfirm:
 		return m, tea.Quit
 	case modeExitConfirm, modeSaveConfirm:
-		m.saveAll()
+		if !m.saveAll() {
+			// Nothing reached disk. Quitting would throw away every change in
+			// this session and take the reason off the screen with it, so stay
+			// in the editor with the error showing.
+			m.mode = modeTopMenu
+			return m, nil
+		}
 		return m, tea.Quit
 	case modeDeleteConfirm:
 		m.deleteRecord()
@@ -756,7 +762,10 @@ func (m Model) updateNavSaveConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.confirmYes = !m.confirmYes
 	case tea.KeyEnter:
 		if m.confirmYes {
-			m.saveAll()
+			if !m.saveAll() {
+				m.mode = m.navSaveSourceMode
+				return m, nil
+			}
 			m.mode = m.navSaveDestMode
 			return m, nil
 		}
@@ -770,7 +779,10 @@ func (m Model) updateNavSaveConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		switch msg.String() {
 		case "y", "Y":
-			m.saveAll()
+			if !m.saveAll() {
+				m.mode = m.navSaveSourceMode
+				return m, nil
+			}
 			m.mode = m.navSaveDestMode
 			return m, nil
 		case "n", "N":

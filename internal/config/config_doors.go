@@ -79,6 +79,36 @@ func ParseDisconnectKey(setting string) (key byte, enabled bool, err error) {
 	return 0, false, fmt.Errorf("disconnect key must be \"none\" or a control key such as \"^]\", got %q", setting)
 }
 
+// ValidateRLogin checks the settings an rlogin door cannot run without.
+//
+// It is deliberately limited to rlogin doors and to settings whose absence is
+// unambiguously a mistake. LoadDoors does not call it: a door configuration
+// error is fatal at startup, and refusing to boot the whole BBS over one
+// mistyped door would be a worse outcome than the door failing when somebody
+// opens it. The config editor calls it instead, where a sysop can see the
+// message and fix the record in front of them.
+//
+// Doors of other types are accepted unchanged, so this can never reject a
+// configuration that already worked.
+func (d DoorConfig) ValidateRLogin() error {
+	if d.Type != "rlogin" {
+		return nil
+	}
+	if strings.TrimSpace(d.Host) == "" {
+		return fmt.Errorf("door %q: an RLogin door needs a host", d.Code)
+	}
+	if d.Port < 0 || d.Port > 65535 {
+		return fmt.Errorf("door %q: port must be 0-65535, got %d", d.Code, d.Port)
+	}
+	if d.ConnectTimeout < 0 {
+		return fmt.Errorf("door %q: connect timeout cannot be negative, got %d", d.Code, d.ConnectTimeout)
+	}
+	if _, _, err := ParseDisconnectKey(d.DisconnectKey); err != nil {
+		return fmt.Errorf("door %q: %w", d.Code, err)
+	}
+	return nil
+}
+
 // doorCodeRE validates a door code after uppercasing: the code keys the door
 // registry and appears in DOOR:CODE menu commands, so it must be a short slug
 // with no spaces or punctuation.

@@ -189,8 +189,7 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 
 	// 7. Save everything.
 	m.dirty = true
-	m.saveAll()
-	if strings.HasPrefix(m.message, "SAVE ERROR") {
+	if !m.saveAll() {
 		m.message += binkdWarning
 		return m, nil
 	}

@@ -157,8 +157,7 @@ func (m Model) exitAreaBrowser() (tea.Model, tea.Cmd) {
 			m.configs.V3Net.Leaves[idx].Boards = boards
 			m.createBrowserMessageAreas()
 			m.dirty = true
-			m.saveAll()
-			if strings.HasPrefix(m.message, "SAVE ERROR") {
+			if !m.saveAll() {
 				return m, nil
 			}
 			m.recordFields = m.buildRecordFields()

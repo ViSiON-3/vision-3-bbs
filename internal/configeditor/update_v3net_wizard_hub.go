@@ -222,8 +222,7 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 	m.addSelfLeaf(m.wizard.netName, port)
 
 	m.dirty = true
-	m.saveAll()
-	if strings.HasPrefix(m.message, "SAVE ERROR") {
+	if !m.saveAll() {
 		return m, nil
 	}
 	m.message = "Hub saved. Start BBS to initialize."
