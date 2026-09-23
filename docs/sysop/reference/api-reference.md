@@ -601,7 +601,7 @@ type DoorConfig struct {
     CleanupArgs         []string
     EnvironmentVars     map[string]string
     // Script door fields
-    Type                string              // "synchronet_js" or "v3_script"
+    Type                string              // "synchronet_js", "v3_script" or "rlogin"
     Script              string
     LibraryPaths        []string
     ExecDir             string
@@ -1025,14 +1025,15 @@ The `RUN:` registry is built in `internal/menu/executor_runnables_registry.go`. 
 
 ### Door Types
 
-The system supports four door execution types:
+The system supports five door execution types:
 
-| Type          | Config Field            | Description                                |
-| ------------- | ----------------------- | ------------------------------------------ |
-| Native        | (default)               | Direct executable programs on any platform |
-| DOS           | `IsDOS: true`           | Legacy DOS doors via dosemu2 emulator      |
-| Synchronet JS | `Type: "synchronet_js"` | Synchronet-compatible JavaScript scripts   |
-| Vision/3 VPL  | `Type: "v3_script"`     | Native Vision/3 JavaScript scripts         |
+| Type          | Config Field            | Description                                 |
+| ------------- | ----------------------- | ------------------------------------------- |
+| Native        | (default)               | Direct executable programs on any platform  |
+| DOS           | `IsDOS: true`           | Legacy DOS doors via dosemu2 emulator       |
+| Synchronet JS | `Type: "synchronet_js"` | Synchronet-compatible JavaScript scripts    |
+| Vision/3 VPL  | `Type: "v3_script"`     | Native Vision/3 JavaScript scripts          |
+| RLogin        | `Type: "rlogin"`        | Outbound connection to a remote door server |
 
 **Dropfile formats:** `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or none.
 

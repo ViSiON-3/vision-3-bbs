@@ -6,7 +6,7 @@ This guide gets a door from "I have the files" to "a caller can pick it from a m
 
 ## Which kind of door do you have?
 
-ViSiON/3 runs four kinds of door. Work out which one you have first, then follow that walkthrough.
+ViSiON/3 runs five kinds of door. Work out which one you have first, then follow that walkthrough.
 
 | You have | Door type | Walkthrough |
 | --- | --- | --- |
@@ -14,14 +14,17 @@ ViSiON/3 runs four kinds of door. Work out which one you have first, then follow
 | A program built for the machine the BBS runs on (a Linux or macOS binary, or a Windows program on a Windows BBS) | Native door | [Set up a native door](how-to-guides/door-native.md) |
 | A Synchronet JavaScript game (the `xtrn/` folder from Synchronet, such as the LORD and LORD II ports) | Synchronet JS door | [Set up a Synchronet JS door](how-to-guides/door-synchronet-js.md) |
 | A script you wrote, or one of the examples that ship with the BBS | VPL script | [Set up a VPL script door](how-to-guides/door-vpl.md) |
+| No files at all — the doors live on another machine you connect to | Door server link | [Set up a door server connection](how-to-guides/door-rlogin.md) |
 
-Not sure? A 16-bit `.EXE` from the DOS era, usually shipped with a `.DOC` that talks about FOSSIL drivers and COM ports, is a DOS door. A Windows `.EXE` is a native door and needs a Windows BBS; it will not run under dosemu2. A folder of `.js` files that came from Synchronet is a Synchronet JS door. A `.js` file written for ViSiON/3, or copied from `scripts/examples/`, is a VPL script. Anything that runs from your shell is native.
+Not sure? A 16-bit `.EXE` from the DOS era, usually shipped with a `.DOC` that talks about FOSSIL drivers and COM ports, is a DOS door. A Windows `.EXE` is a native door and needs a Windows BBS; it will not run under dosemu2. A folder of `.js` files that came from Synchronet is a Synchronet JS door. A `.js` file written for ViSiON/3, or copied from `scripts/examples/`, is a VPL script. Anything that runs from your shell is native. If you have no door files at all, only an address someone gave you, that is a door server.
 
 Every ViSiON/3 install already has seven VPL script doors wired into the doors menu, so if you want to see a door run before setting one up, connect and press **H** on the doors menu for the "Hello World" example.
 
 ## Before you start
 
 Three things are the same for every door type.
+
+These three apply to doors that run on this machine. A door server connection has no local files, no dropfile and no working directory — only an address — so it skips straight to defining the record.
 
 **Where the files go.** Keep doors under the `doors/` directory in the BBS root. DOS doors go on the virtual C: drive at `doors/drive_c/`. Synchronet JS games go under `doors/sbbs/xtrn/`. Native doors and VPL scripts can go anywhere, but `doors/<name>/` and `scripts/` keep them together and inside your backups.
 
@@ -56,5 +59,6 @@ See [Menus & ACS](menus/menu-system.md) for the menu editor and the overlay.
 
 - [Door Programs](doors/doors.md) for every field, placeholder and dropfile format
 - [Synchronet JS Doors](doors/synchronet-js-doors.md) for the JavaScript runtime, its API surface and module resolution
+- [Door Servers](doors/door-servers.md) for connecting out to a shared door server over RLogin
 - [VPL Scripting](scripting/vpl-scripting.md) for the script API
 - [Menu Commands Reference](reference/menu-commands.md) for `DOOR:`, `LISTDOORS`, `OPENDOOR` and `DOORINFO`

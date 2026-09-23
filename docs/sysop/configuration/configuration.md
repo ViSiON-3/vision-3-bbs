@@ -257,6 +257,18 @@ Configures external door programs that can be launched from the BBS. The file co
 - `use_shell` - Wrap command in `/bin/sh -c`
 - `environment_variables` - Additional environment variables
 
+### RLogin Door Fields
+
+Set `type` to `rlogin` for an outbound connection to a door server. See [Door Servers](doors/door-servers.md).
+
+- `host` - Door server hostname or IP address (required)
+- `port` - Door server TCP port (0 or omitted = 513, the RLogin default)
+- `client_username` - First RLogin handshake field (blank = the user's handle)
+- `server_username` - Second RLogin handshake field, e.g. `[TAG]{USERHANDLE}` (blank = the user's handle)
+- `terminal_type` - Third RLogin handshake field; door servers read the door code here, e.g. `xtrn=LORD` (blank = `ANSI/38400`)
+- `connect_timeout` - Seconds to wait for the door server (0 or omitted = 10)
+- `disconnect_key` - Key that hangs up the session, in `^X` notation (blank = `^]`, `none` = disabled)
+
 ### DOS Door Fields
 
 - `is_dos` - Set to `true` for DOS doors launched via dosemu2
@@ -278,6 +290,8 @@ Configures external door programs that can be launched from the BBS. The file co
 - `{DROPFILE}` - Host OS path to the generated dropfile (full path incl. filename)
 - `{NODEDIR}` - Host OS path to the dropfile's directory, **no trailing slash**. Some door libraries (e.g. godoors) concatenate the filename directly and need a trailing slash — pass `{NODEDIR}/` in that case.
 - `{DOSDROPFILE}` / `{DOSNODEDIR}` - DOS paths (e.g., `C:\NODES\TEMP1\DOOR.SYS`)
+
+Placeholders are substituted in `commands`, `cleanup_args` and `environment_variables`, and for RLogin doors in `client_username`, `server_username` and `terminal_type`. The dropfile and DOS placeholders do not apply to RLogin doors, which run no local process.
 
 ## archivers.json
 
