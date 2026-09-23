@@ -1,0 +1,58 @@
+name: Purge Cloudflare cache
+
+# vision3bbs.com is GitHub Pages behind a Cloudflare proxy. Pages sends
+# `cache-control: max-age=600`, so without this the edge and every visitor's
+# browser can serve the previous build for up to ten minutes after a deploy.
+#
+# The trigger is the *Pages build*, not the push: pushing to main only queues
+# a build, and purging before it finishes just re-caches the old content.
+on:
+  workflow_run:
+    workflows: ["pages-build-deployment"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    # A failed or cancelled Pages build leaves the old content live — purging
+    # then would be pointless churn. workflow_dispatch has no upstream run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Purge
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ] || [ -z "$CF_ZONE_ID" ]; then
+            echo "CLOUDFLARE_API_TOKEN secret or CLOUDFLARE_ZONE_ID variable not set; skipping."
+            exit 0
+          fi
+
+          # The sysop guide is docsify: index.html is a shell that fetches the
+          # .md files at runtime. Purging by URL would mean enumerating every
+          # markdown file and getting it wrong on the next docs commit, so
+          # purge the whole zone. The site is ~90 files off a free origin.
+          response=$(curl -sS -w '\n%{http_code}' -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}')
+
+          status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          echo "$body"
+
+          # Cloudflare answers 200 with "success": false for things like an
+          # expired token, so the HTTP status alone does not mean it purged.
+          if [ "$status" != "200" ] || ! echo "$body" | grep -q '"success":true'; then
+            echo "Purge failed (HTTP $status)"
+            exit 1
+          fi
+          echo "Purged."

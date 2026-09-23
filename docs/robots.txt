@@ -1,0 +1,6 @@
+# The sysop guide is a docsify single-page app. The .md files under /sysop/
+# are its data, loaded by JavaScript — crawling them directly yields raw
+# markdown with no navigation, competing with the rendered pages.
+User-agent: *
+Disallow: /sysop/*.md$
+Allow: /
