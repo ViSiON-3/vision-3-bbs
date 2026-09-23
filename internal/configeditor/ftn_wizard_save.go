@@ -17,15 +17,6 @@ import (
 func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 	w := m.ftnWizard
 
-	// Check the door configuration before anything is written. This wizard
-	// rewrites binkd.conf on its way to saveAll, and saveAll refuses a door
-	// that cannot run -- so without this, an unrelated broken door would leave
-	// binkd.conf carrying a network that never reached ftn.json.
-	if err := validateDoors(m.configs.Doors); err != nil {
-		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
-		return m, nil
-	}
-
 	// Derive network key (lowercase).
 	netKey := strings.ToLower(w.networkName)
 	editing := w.editing()
