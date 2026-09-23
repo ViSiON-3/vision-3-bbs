@@ -8,8 +8,9 @@ This walkthrough connects to a door server at `doors.example.com`. Replace the h
 
 Ask whoever runs the door server, or read its documentation, for four things:
 
-- **Host and port.** Port 513 is the RLogin default. It is privileged on Unix, so a server running as a normal user is often on a different port.
-- **What goes in the two name fields.** RLogin sends a client name and a server name. Servers disagree about which carries the caller's handle, whether it wants a system tag such as `[V3]`, and whether one of them is really a password.
+- **Host and port.** Assume it is *not* 513 — that port is privileged on Unix, so a server run by an ordinary user is almost always elsewhere. 3513 and 9999 are both common.
+- **The password.** Synchronet door servers and DoorParty both want one, and RLogin has nowhere to put a password, so both read it from the *client-user-name* field. It is normally one shared secret for your whole system, not a per-user password.
+- **What goes in the name fields.** With a password in the client field, the caller's handle goes in the server field, sometimes prefixed with a system tag such as `[V3]`. Servers disagree, so check.
 - **How a door is chosen.** Most servers read the door code from the terminal-type field, either as `xtrn=LORD` (Synchronet-style) or bare as `LORD`.
 - **Whether you need to register.** Public door servers issue credentials; your own does not.
 
@@ -35,13 +36,15 @@ Run `./config`, press **6** for Door Programs, then **I** to insert a record and
 | Name | `Door Server` |
 | Type | RLogin |
 | Host | `doors.example.com` |
-| Port | `0` for 513, or the port the server uses |
-| Client User | blank, or what the server asks for |
-| Server User | blank, or e.g. `[V3]{USERHANDLE}` |
+| Port | the port the server uses — `0` means 513, which it probably is not |
+| Client User | **the password**, if the server wants one |
+| Server User | `{USERHANDLE}`, or `[V3]{USERHANDLE}` if the server wants a tag |
 | Terminal Type | blank for the server's menu, or `xtrn=LORD` for one game |
 | Single Instance | `N` — the server handles its own concurrency |
 
-Blank name fields send the caller's handle, which is what a private door server usually wants. The placeholders from [Door Programs](doors/doors.md#placeholders) work in all three fields, so `[V3]{USERHANDLE}` sends the handle with your system tag in front.
+**Client User is the password field.** RLogin has nowhere else to put one, so Synchronet door servers and DoorParty both read it from there. Leave it blank only for a server that asks for no authentication; blank sends the caller's handle, which such a server would reject as a bad password.
+
+The placeholders from [Door Programs](doors/doors.md#placeholders) work in all three fields, so `[V3]{USERHANDLE}` sends the handle with your system tag in front.
 
 Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.json`:
 
@@ -50,7 +53,10 @@ Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.j
   "code": "DOORSRV",
   "name": "Door Server",
   "type": "rlogin",
-  "host": "doors.example.com"
+  "host": "doors.example.com",
+  "port": 3513,
+  "client_username": "the-shared-password",
+  "server_username": "{USERHANDLE}"
 }
 ```
 
@@ -71,13 +77,17 @@ If it does not work, `data/logs/vision3.log` records the address of every attemp
 
 **"Unable to connect"** — wrong host or port, or a firewall. Step 2 catches this.
 
-**It connects but the server does not know the caller** — the name fields are not what that server expects. Swap **Client User** and **Server User**, or add the system tag it asks for.
+**It connects, then drops or asks you to log in** — the password is missing or wrong. It belongs in **Client User**. If you left that blank, the caller's handle went across as the password.
+
+**It connects but the server does not know the caller** — the name fields are not the shape that server expects. Add or remove the system tag, or try the two swapped.
 
 **It lands on a menu instead of the game** — put the door code in **Terminal Type**, with or without the `xtrn=` prefix depending on the server.
 
 ## Variations
 
 **One menu key per game.** Add a record per door, all with the same host, differing only in **Terminal Type** and **Code**. Callers then go straight into a game rather than through the server's menu.
+
+**DoorParty.** Run [DoorParty Connector](https://github.com/echicken/dpc2) alongside the BBS and point this door at it — `127.0.0.1`, port `9999` by default — with **Client User** set to the password from the connector's own config. The connector adds your system tag and carries the session to DoorParty over its SSH tunnel. Full example in [Door Servers](doors/door-servers.md#doorparty-via-the-connector).
 
 **A door that needs Ctrl-] itself.** Change **Disconnect Key** to another control key in `^X` notation, or to `none` to pass every key through. With `none` a caller has no way out of a wedged session except dropping carrier, so only do it if the door genuinely needs the key.
 

@@ -262,9 +262,9 @@ Configures external door programs that can be launched from the BBS. The file co
 Set `type` to `rlogin` for an outbound connection to a door server. See [Door Servers](doors/door-servers.md).
 
 - `host` - Door server hostname or IP address (required)
-- `port` - Door server TCP port (0 or omitted = 513, the RLogin default)
-- `client_username` - First RLogin handshake field (blank = the user's handle)
-- `server_username` - Second RLogin handshake field, e.g. `[TAG]{USERHANDLE}` (blank = the user's handle)
+- `port` - Door server TCP port (0 or omitted = 513). Most door servers are not on 513, which is privileged on Unix; 3513 and 9999 are common
+- `client_username` - First RLogin handshake field. **Carries the password** on servers that authenticate, including Synchronet door servers and DoorParty (blank = the user's handle)
+- `server_username` - Second RLogin handshake field, the caller's identity, e.g. `[TAG]{USERHANDLE}` (blank = the user's handle)
 - `terminal_type` - Third RLogin handshake field; door servers read the door code here, e.g. `xtrn=LORD` (blank = `ANSI/38400`)
 - `connect_timeout` - Seconds to wait for the door server (0 or omitted = 10)
 - `disconnect_key` - Key that hangs up the session, in `^X` notation (blank = `^]`, `none` = disabled)
