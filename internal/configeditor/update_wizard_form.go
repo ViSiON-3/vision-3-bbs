@@ -295,8 +295,7 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 		}
 		m.createBrowserMsgAreaIfNeeded(a.Tag, a.LocalBoard, m.wizard.networkName)
 	}
-	m.saveAll()
-	if strings.HasPrefix(m.message, "SAVE ERROR") {
+	if !m.saveAll() {
 		return m, nil
 	}
 	m.message = "Leaf saved. Restart BBS to activate."
