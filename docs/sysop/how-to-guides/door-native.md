@@ -76,7 +76,7 @@ Connect, open the doors menu and press **M**. If the door starts but does not kn
 
 **Shell scripts.** A `.sh` script, or a program that must be started through the shell, needs **Use Shell** set to Yes. The BBS then runs it through `/bin/sh` (`cmd` on Windows) with the arguments passed through unchanged. The field does not interpret pipes, redirects or globs; put those inside a wrapper script and launch the script.
 
-**Environment variables instead of switches.** Some doors read their settings from the environment. Every native door gets `BBS_NODE`, `BBS_USERHANDLE`, `BBS_USERID` and `BBS_TIMELEFT`; on Linux and macOS it also gets `LINES` and `COLUMNS`. Add more in **Env Vars** as `KEY=VALUE, KEY2=VALUE2`; placeholders work there too.
+**Environment variables instead of switches.** Some doors read their settings from the environment. Every native door gets `BBS_NODE`, `BBS_USERHANDLE`, `BBS_USERID`, `BBS_TIMELEFT` and `BBS_USERIP`; on Linux and macOS it also gets `LINES` and `COLUMNS`. Add more in **Env Vars** as `KEY=VALUE, KEY2=VALUE2`; placeholders work there too.
 
 **Doors that expect a socket.** A few doors written for Synchronet or Mystic want a socket handle rather than a terminal. On Linux and macOS, set **I/O Mode** to `SOCKET`; the BBS passes the socket as file descriptor 3 and sets `DOOR_SOCKET_FD=3`. Socket mode is not available on Windows.
 
