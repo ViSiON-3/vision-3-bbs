@@ -81,9 +81,20 @@ func TestDialSendsHandshake(t *testing.T) {
 			return
 		}
 		defer c.Close()
-		buf := make([]byte, 128)
-		n, _ := c.Read(buf)
-		got <- append([]byte(nil), buf[:n]...)
+		// Read until all four NUL separators arrive: TCP may split the
+		// client's single write, and a truncated read would fail the
+		// assertion even though the client behaved correctly.
+		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		var b []byte
+		buf := make([]byte, 32)
+		for bytes.Count(b, []byte{0}) < 4 {
+			n, err := c.Read(buf)
+			b = append(b, buf[:n]...)
+			if err != nil {
+				break
+			}
+		}
+		got <- b
 	}()
 
 	conn, err := Dial(context.Background(), ln.Addr().String(),

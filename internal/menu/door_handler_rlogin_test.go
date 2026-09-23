@@ -89,9 +89,13 @@ func TestSubstituteDoorPlaceholders(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
 		{"[V3]{USERHANDLE}", "[V3]Neo"},
 		{"xtrn=LORD", "xtrn=LORD"},
-		{"  {USERHANDLE}  ", "Neo"},
 		{"node{NODE}", "node3"},
 		{"", ""},
+		// Whitespace a sysop configured is part of the value: the handshake
+		// fields are sent as written, so only an all-blank field is "unset".
+		{"  {USERHANDLE}  ", "  Neo  "},
+		{"   ", ""},
+		{"{MISSING}", "{MISSING}"},
 	} {
 		if got := substituteDoorPlaceholders(tc.in, subs); got != tc.want {
 			t.Errorf("substituteDoorPlaceholders(%q) = %q, want %q", tc.in, got, tc.want)
@@ -157,13 +161,12 @@ func newDoorServer(t *testing.T) *doorServer {
 		if err != nil {
 			return
 		}
-		buf := make([]byte, 256)
-		n, err := c.Read(buf)
+		hs, err := readHandshake(c)
 		if err != nil {
 			_ = c.Close()
 			return
 		}
-		ds.handshake <- string(buf[:n])
+		ds.handshake <- hs
 		ds.conns <- c
 	}()
 	t.Cleanup(func() { _ = ln.Close() })
@@ -326,6 +329,74 @@ func TestExecuteRLoginDoorRefusesWhenTimeExhausted(t *testing.T) {
 	}
 }
 
+// Time spent dialling has to come out of the caller's limit. Before this was
+// one absolute deadline, a slow connect handed back a fresh full allowance:
+// 30 seconds left plus a 10-second dial gave 40 seconds of door time.
+func TestExecuteRLoginDoorCountsDialTimeAgainstTheLimit(t *testing.T) {
+	ds := newDoorServer(t)
+	host, port := ds.hostPort(t)
+	sess := newRelaySession()
+
+	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
+	// One minute of allowance, all but 300ms of it already spent.
+	ctx.User.TimeLimit = 1
+	ctx.SessionStartTime = time.Now().Add(-time.Minute + 300*time.Millisecond)
+
+	started := time.Now()
+	done := make(chan error, 1)
+	go func() { done <- executeRLoginDoor(ctx) }()
+
+	<-ds.handshake
+	conn := <-ds.conns
+	defer conn.Close()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("executeRLoginDoor: %v", err)
+		}
+		// The session must end at the original deadline, not 300ms after the
+		// connection happened to be established.
+		if elapsed := time.Since(started); elapsed > 3*time.Second {
+			t.Errorf("session ran for %v; the deadline was reset by the dial", elapsed)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("session outlived the caller's time limit")
+	}
+}
+
+// A connect timeout longer than the caller's remaining time must not let the
+// dial alone overrun the limit.
+func TestExecuteRLoginDoorCapsConnectTimeoutToTimeLeft(t *testing.T) {
+	// A port with nothing listening: the dial fails rather than connecting.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+	host, portStr, _ := net.SplitHostPort(addr)
+	var port int
+	if _, err := fmt.Sscan(portStr, &port); err != nil {
+		t.Fatalf("parse port: %v", err)
+	}
+
+	sess := newRelaySession()
+	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
+		Type: "rlogin", Host: host, Port: port, ConnectTimeout: 120,
+	})
+	ctx.User.TimeLimit = 1
+	ctx.SessionStartTime = time.Now().Add(-time.Minute + time.Second)
+
+	started := time.Now()
+	if err := executeRLoginDoor(ctx); err != nil {
+		t.Errorf("executeRLoginDoor: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Errorf("dial ran for %v, past the caller's remaining second", elapsed)
+	}
+}
+
 func TestExecuteRLoginDoorRequiresHost(t *testing.T) {
 	sess := newRelaySession()
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin"})
@@ -372,8 +443,11 @@ func TestExecuteRLoginDoorReportsConnectFailure(t *testing.T) {
 		Type: "rlogin", Host: host, Port: port, ConnectTimeout: 1,
 	})
 
-	if err := executeRLoginDoor(ctx); err == nil {
-		t.Fatal("expected a connection error")
+	// The caller is told once, by the configured message. Returning an error
+	// too would make every caller of executeDoor print a second, generic
+	// failure on top of it.
+	if err := executeRLoginDoor(ctx); err != nil {
+		t.Errorf("executeRLoginDoor returned %v; the caller was already notified", err)
 	}
 	if out := sess.rendered(); !strings.Contains(out, "FAILED:DOORSRV") {
 		t.Errorf("failure notice missing from %q", out)
@@ -423,6 +497,26 @@ func TestRLoginDoorDispatches(t *testing.T) {
 	conn := <-ds.conns
 	_ = conn.Close()
 	<-done
+}
+
+// readHandshake reads until the four NUL separators of a complete rlogin
+// handshake have arrived. TCP may split the client's single write, so a lone
+// Read can return a truncated handshake and fail the assertion for a reason
+// that has nothing to do with the client being wrong.
+func readHandshake(c net.Conn) (string, error) {
+	_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	defer func() { _ = c.SetReadDeadline(time.Time{}) }()
+
+	var got []byte
+	buf := make([]byte, 64)
+	for bytes.Count(got, []byte{0}) < 4 {
+		n, err := c.Read(buf)
+		got = append(got, buf[:n]...)
+		if err != nil {
+			return string(got), err
+		}
+	}
+	return string(got), nil
 }
 
 // waitFor polls cond until it holds or the test times out. The relay is

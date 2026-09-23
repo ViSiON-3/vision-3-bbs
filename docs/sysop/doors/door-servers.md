@@ -7,7 +7,7 @@ This is configured as a door like any other, so it appears in the door list, obe
 ## When to use this
 
 - You run more than one BBS and want them to share one set of doors.
-- You want to offer doors from a public door server.
+- You want to reach a door server that speaks plain RLogin. Public services such as DoorParty, BBSLink and Exodus are *not* supported yet — each needs its own connection handshake. See [Limitations](#limitations).
 - You want to run doors on a different machine from the BBS.
 
 If the doors run on the same machine as ViSiON/3, you do not need this — use a native, DOS, or script door instead.
@@ -97,6 +97,7 @@ Users with no time limit set (`0`) stay connected for as long as the door server
 - Only point doors at servers you trust. The fields are sent as configured, so a server can be told whatever it asks for — including a password.
 - Prefer a door server on your own network, or reachable over a VPN or tunnel, over one across the public internet.
 - `configs/doors.json` holds these values in plain text. Keep its permissions tight if a door server requires a password.
+- The handshake fields are kept out of the default log for the same reason. They appear only at debug level.
 
 ## Troubleshooting
 
@@ -108,7 +109,7 @@ Users with no time limit set (`0`) stay connected for as long as the door server
 
 **Garbled output** — the door server is sending a character set the terminal is not expecting. RLogin has no binary-mode negotiation, so file transfers through a door server are unreliable; this affects doors that try to send files.
 
-The BBS log records the address, the server-user name, and the terminal type for every remote door connection, which is usually enough to see which field is wrong.
+The BBS log records the address of every remote door connection. The handshake fields themselves are logged at debug level only, since they can carry a shared password on servers that authenticate that way; raise the log level to see them when diagnosing which field a server is unhappy with.
 
 ## Limitations
 

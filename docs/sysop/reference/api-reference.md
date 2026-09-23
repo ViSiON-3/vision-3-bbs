@@ -612,6 +612,14 @@ type DoorConfig struct {
     DOSEmulator         string
     FossilDriver        string
     DosemuConfig        string
+    // RLogin door fields
+    Host                string
+    Port                int
+    ClientUsername      string
+    ServerUsername      string
+    TerminalType        string
+    ConnectTimeout      int
+    DisconnectKey       string
 }
 
 type LoginItem struct {

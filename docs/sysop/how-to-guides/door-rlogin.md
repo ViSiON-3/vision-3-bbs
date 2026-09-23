@@ -67,7 +67,7 @@ cp menus/v3/ansi/DOORSM.ANS menus.d/v3/ansi/
 
 Connect, open the doors menu and press **S**. You should see a "Connecting" line and then the door server. **Ctrl-]** hangs up and returns you to the BBS.
 
-If it does not work, `data/logs/vision3.log` records the address, the server-user name and the terminal type for every attempt, which usually shows which field is wrong:
+If it does not work, `data/logs/vision3.log` records the address of every attempt. The handshake fields are logged at debug level only, because they can carry a password; raise the log level when you need to see them.
 
 **"Unable to connect"** — wrong host or port, or a firewall. Step 2 catches this.
 

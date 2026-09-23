@@ -544,9 +544,6 @@ func stringCatalog() []StringEntry {
 		// Door access control (V3)
 		{Label: "Door: Access Denied", Key: "doorAccessDenied", Description: "Shown when a user lacks access to a door (%s=door name)"},
 		{Label: "Door: In Use", Key: "doorBusyFormat", Description: "Shown when a door is already in use (%s=door name)"},
-		{Label: "Door: Connecting", Key: "doorRemoteConnecting", Description: "Shown while dialling a remote door server (%s=door name)"},
-		{Label: "Door: Connect Failed", Key: "doorRemoteConnectFailed", Description: "Shown when a remote door server cannot be reached (%s=door name)"},
-		{Label: "Door: Disconnected", Key: "doorRemoteDisconnected", Description: "Shown after a remote door session ends (%s=door name)"},
 
 		// Matrix login outcome (V3)
 		{Label: "Matrix: Cannot Log On", Key: "matrixAccountCannotLogon", Description: "Account exists but access is too low (%s=alias, %d=level, %d=minimum)"},
@@ -578,5 +575,8 @@ func stringCatalog() []StringEntry {
 		{Label: "New User: Email Required", Key: "newUserEmailRequired", Description: "Shown when a caller tries to skip the required message, before returning them to the editor"},
 		{Label: "New User: Logging In", Key: "newUserLoggingIn", Description: "Shown after a new user who can log on finishes signup, as they are carried into a session"},
 		{Label: "File: Scan Date Prompt", Key: "fileScanDatePrompt", Description: "Prompts for the file newscan cutoff (SETFILESCANDATE): a date, A=all, R=reset"},
+		{Label: "Door: Connecting", Key: "doorRemoteConnecting", Description: "Shown while dialling a remote door server (%s=door name)"},
+		{Label: "Door: Connect Failed", Key: "doorRemoteConnectFailed", Description: "Shown when a remote door server cannot be reached (%s=door name)"},
+		{Label: "Door: Disconnected", Key: "doorRemoteDisconnected", Description: "Shown after a remote door session ends (%s=door name)"},
 	}
 }

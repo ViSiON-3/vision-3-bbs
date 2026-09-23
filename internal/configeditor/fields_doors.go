@@ -568,7 +568,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Get: func() string { return dPtr.DosemuConfig },
 			Set: func(val string) error { dPtr.DosemuConfig = val; save(); return nil },
 		})
-	} else if !dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) {
+	} else if !dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) && !isRLogin(dPtr) {
 		// Native-specific fields
 		row++
 		fields = append(fields, fieldDef{

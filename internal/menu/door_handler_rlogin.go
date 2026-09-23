@@ -61,10 +61,14 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 	// only to drop it immediately wastes a slot and litters the far end's log.
 	// TimeLimit <= 0 means unlimited, matching how the rest of the BBS reads
 	// the field.
-	var remaining time.Duration
+	// A single absolute deadline covers dialling and the session alike, so a
+	// slow connect spends the caller's time rather than being added on top of
+	// it. A zero deadline means no limit, matching how the rest of the BBS
+	// reads TimeLimit <= 0.
+	var deadline time.Time
 	if ctx.User.TimeLimit > 0 {
-		remaining = time.Duration(ctx.User.TimeLimit)*time.Minute - time.Since(ctx.SessionStartTime)
-		if remaining <= 0 {
+		deadline = ctx.SessionStartTime.Add(time.Duration(ctx.User.TimeLimit) * time.Minute)
+		if !time.Now().Before(deadline) {
 			slog.Info("not entering rlogin door, no time left",
 				"node", ctx.NodeNumber, "door", ctx.DoorName)
 			return nil
@@ -72,22 +76,42 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 	}
 
 	timeout := time.Duration(doorConfig.ConnectTimeout) * time.Second
+	if timeout <= 0 {
+		timeout = rlogin.DefaultTimeout
+	}
+	// Never wait longer for the door server than the caller has left.
+	if !deadline.IsZero() {
+		if left := time.Until(deadline); left < timeout {
+			timeout = left
+		}
+	}
 
+	// The handshake fields can carry a shared password on servers that
+	// authenticate that way, so they are not written to the default log. They
+	// are the first thing to check when a door server rejects a caller, so
+	// they stay available at debug level.
 	slog.Info("connecting to rlogin door server",
-		"node", ctx.NodeNumber, "door", ctx.DoorName, "addr", addr,
+		"node", ctx.NodeNumber, "door", ctx.DoorName, "addr", addr)
+	slog.Debug("rlogin handshake fields",
+		"node", ctx.NodeNumber, "door", ctx.DoorName,
 		"serverUser", handshake.ServerUser, "termType", handshake.TermType)
 
 	writeDoorMessage(ctx, fmt.Sprintf(ctx.Executor.Strings().DoorRemoteConnecting, ctx.DoorName))
 
 	conn, err := rlogin.Dial(context.Background(), addr, handshake, timeout)
 	if err != nil {
+		// The caller has already been told, in the sysop's own wording, that
+		// the door server is unreachable. Returning the error as well would
+		// have every caller of executeDoor print "Error running door ..." on
+		// top of it, so a door server being down would read as two different
+		// failures. The detail is in the log, which is where a sysop looks.
 		slog.Warn("rlogin door connection failed",
 			"node", ctx.NodeNumber, "door", ctx.DoorName, "addr", addr, "error", err)
 		writeDoorMessage(ctx, fmt.Sprintf(ctx.Executor.Strings().DoorRemoteConnectFailed, ctx.DoorName))
-		return err
+		return nil
 	}
 
-	relayRLoginSession(ctx, conn, disconnectKey, disconnectEnabled, remaining)
+	relayRLoginSession(ctx, conn, disconnectKey, disconnectEnabled, deadline)
 
 	writeDoorMessage(ctx, fmt.Sprintf(ctx.Executor.Strings().DoorRemoteDisconnected, ctx.DoorName))
 	runDoorCleanup(ctx)
@@ -98,9 +122,9 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 // one end goes away, the user's time runs out, or the user presses the
 // disconnect key. It closes conn before returning.
 //
-// A remaining of zero means the caller has no time limit, so the session lasts
-// as long as the door server keeps it.
-func relayRLoginSession(ctx *DoorCtx, conn net.Conn, disconnectKey byte, disconnectEnabled bool, remaining time.Duration) {
+// A zero deadline means the caller has no time limit, so the session lasts as
+// long as the door server keeps it.
+func relayRLoginSession(ctx *DoorCtx, conn net.Conn, disconnectKey byte, disconnectEnabled bool, deadline time.Time) {
 	// Closing the socket is what unblocks both copies, so every exit path --
 	// remote hangup, expired time, local hang-up key -- funnels through it.
 	var once sync.Once
@@ -111,8 +135,8 @@ func relayRLoginSession(ctx *DoorCtx, conn net.Conn, disconnectKey byte, disconn
 	}
 	defer closeConn()
 
-	if remaining > 0 {
-		timer := time.AfterFunc(remaining, func() {
+	if !deadline.IsZero() {
+		timer := time.AfterFunc(time.Until(deadline), func() {
 			slog.Info("time limit reached during rlogin door, disconnecting",
 				"node", ctx.NodeNumber, "door", ctx.DoorName)
 			closeConn()
@@ -211,11 +235,20 @@ func copyToRemote(dst io.Writer, src io.Reader, disconnectKey byte, disconnectEn
 
 // substituteDoorPlaceholders expands the {NODE}, {USERHANDLE} and friends that
 // the rest of the door config supports.
+//
+// The result is returned as written apart from one case: a field that expands
+// to nothing but whitespace is reported as empty so the caller can apply its
+// default. Trimming every field would instead corrupt a value a door server
+// asked for, and the handshake fields are documented as being sent as
+// configured.
 func substituteDoorPlaceholders(value string, subs map[string]string) string {
 	for key, val := range subs {
 		value = strings.ReplaceAll(value, key, val)
 	}
-	return strings.TrimSpace(value)
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return value
 }
 
 // writeDoorMessage sends a pipe-coded status line to the caller. Failures are
