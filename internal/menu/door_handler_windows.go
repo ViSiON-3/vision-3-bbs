@@ -151,10 +151,13 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 		}
 	}
 
-	// Add standard BBS env vars
+	// Add standard BBS env vars unless the sysop already set them. Windows
+	// treats variable names case-insensitively and Go keeps the last duplicate,
+	// so compare names upper-cased or a configured "bbs_userip" would lose to
+	// the default appended below.
 	envMap := make(map[string]bool)
 	for _, envPair := range cmd.Env {
-		envMap[strings.SplitN(envPair, "=", 2)[0]] = true
+		envMap[strings.ToUpper(strings.SplitN(envPair, "=", 2)[0])] = true
 	}
 	if _, exists := envMap["BBS_USERHANDLE"]; !exists {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_USERHANDLE=%s", ctx.User.Handle))
