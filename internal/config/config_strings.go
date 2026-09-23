@@ -201,6 +201,14 @@ var StringFallbacks = map[string]string{
 	// Door access control
 	"doorAccessDenied": "\r\n|14Access denied to door: |11%s|07\r\n",
 	"doorBusyFormat":   "\r\n|14Door is currently in use: |11%s|07\r\n",
+
+	// Remote (rlogin) door notices. Without defaults an upgraded
+	// strings.json would connect and disconnect in total silence, leaving
+	// the caller staring at a blank screen with no idea a door server is
+	// being dialled.
+	"doorRemoteConnecting":    "\r\n|15Connecting to |11%s|15, please wait...|07\r\n",
+	"doorRemoteConnectFailed": "\r\n|12Unable to connect to |11%s|12. Please try again later.|07\r\n",
+	"doorRemoteDisconnected":  "\r\n|08Disconnected from |07%s|08.|07\r\n",
 }
 
 // applyStringDefaults fills in StringFallbacks values for any string field that

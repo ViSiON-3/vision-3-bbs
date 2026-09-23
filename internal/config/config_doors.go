@@ -26,7 +26,7 @@ type DoorConfig struct {
 	CleanupArgs         []string          `json:"cleanup_args,omitempty"`          // Arguments for cleanup command (supports placeholders)
 	EnvironmentVars     map[string]string `json:"environment_variables,omitempty"` // Additional environment variables (optional)
 	// Script door fields
-	Type         string   `json:"type,omitempty"`          // "synchronet_js", "v3_script", or empty (legacy native/DOS)
+	Type         string   `json:"type,omitempty"`          // "synchronet_js", "v3_script", "rlogin", or empty (legacy native/DOS)
 	Script       string   `json:"script,omitempty"`        // Main JS file to execute (relative to working_directory)
 	LibraryPaths []string `json:"library_paths,omitempty"` // Search paths for load()/require()
 	Args         []string `json:"args,omitempty"`          // Script arguments (available as argv in JS)
@@ -38,6 +38,45 @@ type DoorConfig struct {
 	FossilDriver string `json:"fossil_driver,omitempty"` // DOS FOSSIL driver command (e.g. "C:\\UTILS\\X00.EXE eliminate")
 	// dosemu2-specific fields (Linux x86 only)
 	DosemuConfig string `json:"dosemu_config,omitempty"` // Path to custom .dosemurc (optional)
+	// Remote door fields (type "rlogin"): an outbound connection to a door server
+	Host           string `json:"host,omitempty"`            // Door server hostname or IP
+	Port           int    `json:"port,omitempty"`            // Door server TCP port (0 = 513)
+	ClientUsername string `json:"client_username,omitempty"` // RLogin client-user-name field (placeholders supported)
+	ServerUsername string `json:"server_username,omitempty"` // RLogin server-user-name field (placeholders supported)
+	TerminalType   string `json:"terminal_type,omitempty"`   // RLogin terminal-type field, e.g. "xtrn=LORD" (placeholders supported)
+	ConnectTimeout int    `json:"connect_timeout,omitempty"` // Seconds to wait for the connection (0 = 10)
+	DisconnectKey  string `json:"disconnect_key,omitempty"`  // Local hang-up key, e.g. "^]" (empty = "^]", "none" = disabled)
+}
+
+// DefaultDisconnectKey is the control character that hangs up a remote door
+// session from the caller's end. Ctrl-] is what Synchronet's gateway uses, so
+// it is what users of other BBS software will already reach for.
+const DefaultDisconnectKey = 0x1D // Ctrl-]
+
+// ParseDisconnectKey resolves a door's disconnect_key setting to the control
+// byte the session should watch for.
+//
+// An empty setting means the default rather than "disabled": a user whose door
+// server stops responding must always have a way out, so opting out of that is
+// something a sysop has to write down ("none") rather than something they get
+// by leaving a field blank.
+func ParseDisconnectKey(setting string) (key byte, enabled bool, err error) {
+	setting = strings.TrimSpace(setting)
+	switch {
+	case setting == "":
+		return DefaultDisconnectKey, true, nil
+	case strings.EqualFold(setting, "none"):
+		return 0, false, nil
+	}
+	// "^X" notation: the control character is the letter with bits 6 and 7
+	// cleared, which is also how ^@ through ^_ map onto 0x00-0x1F.
+	if len(setting) == 2 && setting[0] == '^' {
+		c := strings.ToUpper(setting[1:])[0]
+		if c >= '@' && c <= '_' {
+			return c & 0x1F, true, nil
+		}
+	}
+	return 0, false, fmt.Errorf("disconnect key must be \"none\" or a control key such as \"^]\", got %q", setting)
 }
 
 // doorCodeRE validates a door code after uppercasing: the code keys the door

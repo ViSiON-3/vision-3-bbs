@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/rlogin"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -214,6 +215,9 @@ func executeDoor(ctx *DoorCtx) error {
 	if ctx.Config.Type == "v3_script" {
 		return executeV3ScriptDoor(ctx)
 	}
+	if ctx.Config.Type == "rlogin" {
+		return executeRLoginDoor(ctx)
+	}
 
 	if ctx.Config.IsDOS {
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
@@ -224,6 +228,13 @@ func executeDoor(ctx *DoorCtx) error {
 
 // cleanupTimeout is the maximum time allowed for a cleanup command to run.
 const cleanupTimeout = 30 * time.Second
+
+// runDoorCleanup runs the post-door cleanup command. It exists so the
+// cross-platform executors can reach the cleanup step without caring which
+// platform's implementation they are compiled against.
+func runDoorCleanup(ctx *DoorCtx) {
+	executeCleanupWindows(ctx)
+}
 
 // executeCleanupWindows runs the optional post-door cleanup command on Windows with a timeout.
 func executeCleanupWindows(ctx *DoorCtx) {
@@ -555,6 +566,8 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			doorType = "VPL Script"
 		case doorConfig.Type == "synchronet_js":
 			doorType = "Synchronet JS"
+		case doorConfig.Type == "rlogin":
+			doorType = "RLogin (remote)"
 		case doorConfig.IsDOS:
 			doorType = "DOS (not supported on Windows)"
 		}
@@ -562,6 +575,9 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		info := fmt.Sprintf("|15Door: |07%s\r\n|15Type: |07%s\r\n", upperInput, doorType)
 		if len(doorConfig.Commands) > 0 {
 			info += fmt.Sprintf("|15Commands: |07%s\r\n", strings.Join(doorConfig.Commands, ", "))
+		}
+		if doorConfig.Type == "rlogin" {
+			info += fmt.Sprintf("|15Server: |07%s\r\n", rlogin.JoinHostPort(doorConfig.Host, doorConfig.Port))
 		}
 		if doorConfig.WorkingDirectory != "" {
 			info += fmt.Sprintf("|15Directory: |07%s\r\n", doorConfig.WorkingDirectory)

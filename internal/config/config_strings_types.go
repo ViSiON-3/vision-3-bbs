@@ -443,16 +443,19 @@ type StringsConfig struct {
 	WantListCleared      string `json:"wantListCleared"`
 
 	// Door handler strings (V3-specific)
-	DoorDropfileError     string `json:"doorDropfileError"`
-	DoorErrorFormat       string `json:"doorErrorFormat"`
-	DoorLoginRequired     string `json:"doorLoginRequired"`
-	DoorPrompt            string `json:"doorPrompt"`
-	DoorNotFoundFormat    string `json:"doorNotFoundFormat"`
-	DoorNoneConfigured    string `json:"doorNoneConfigured"`
-	DoorTemplateError     string `json:"doorTemplateError"`
-	DoorInfoLoginRequired string `json:"doorInfoLoginRequired"`
-	DoorAccessDenied      string `json:"doorAccessDenied"`
-	DoorBusyFormat        string `json:"doorBusyFormat"`
+	DoorDropfileError       string `json:"doorDropfileError"`
+	DoorErrorFormat         string `json:"doorErrorFormat"`
+	DoorLoginRequired       string `json:"doorLoginRequired"`
+	DoorPrompt              string `json:"doorPrompt"`
+	DoorNotFoundFormat      string `json:"doorNotFoundFormat"`
+	DoorNoneConfigured      string `json:"doorNoneConfigured"`
+	DoorTemplateError       string `json:"doorTemplateError"`
+	DoorInfoLoginRequired   string `json:"doorInfoLoginRequired"`
+	DoorAccessDenied        string `json:"doorAccessDenied"`
+	DoorBusyFormat          string `json:"doorBusyFormat"`
+	DoorRemoteConnecting    string `json:"doorRemoteConnecting"`
+	DoorRemoteConnectFailed string `json:"doorRemoteConnectFailed"`
+	DoorRemoteDisconnected  string `json:"doorRemoteDisconnected"`
 
 	// Matrix strings (V3-specific)
 	MatrixDisconnecting       string `json:"matrixDisconnecting"`

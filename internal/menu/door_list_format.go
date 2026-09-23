@@ -17,6 +17,8 @@ func formatDoorListLine(template string, displayIdx int, code string, d config.D
 		doorType = "VPL"
 	case d.Type == "synchronet_js":
 		doorType = "Synchronet JS"
+	case d.Type == "rlogin":
+		doorType = "RLogin"
 	case d.IsDOS:
 		doorType = "DOS"
 	}
