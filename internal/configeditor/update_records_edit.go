@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -38,9 +39,30 @@ func doorExitWarning(d config.DoorConfig, ok bool) string {
 		return ""
 	}
 	if err := d.ValidateRLogin(); err != nil {
-		return fmt.Sprintf("WARNING: %v. Saved as-is; the door will fail when a caller opens it.", err)
+		// Leaving a record does not write anything -- the change sits in
+		// memory until the sysop saves -- so the wording must not suggest it
+		// has already reached disk.
+		return fmt.Sprintf("WARNING: %v. It can still be saved, but the door will fail when a caller opens it.", err)
 	}
 	return ""
+}
+
+// warnIfLeavingUnrunnableDoor posts the warning for the door record being left,
+// if it is one and it will not run. Every way out of a record calls it: Escape
+// returns to the list, and PageUp/PageDown move to another record, so keying it
+// to one of them would let a sysop page straight past the problem.
+//
+// A record that is fine clears any warning left by a previous one, so the
+// message never outlives the record it describes.
+func (m *Model) warnIfLeavingUnrunnableDoor() {
+	if m.recordType != "door" {
+		return
+	}
+	if warning := doorExitWarning(m.currentDoor()); warning != "" {
+		m.message = warning
+	} else if strings.HasPrefix(m.message, "WARNING: door ") {
+		m.message = ""
+	}
 }
 
 func (m Model) updateRecordEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -99,15 +121,14 @@ func (m Model) updateRecordEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.recordType == "v3nethub" || m.recordType == "v3netleaf" {
 			return m.promptNavSave(modeRecordList)
 		}
-		if m.recordType == "door" {
-			m.message = doorExitWarning(m.currentDoor())
-		}
+		m.warnIfLeavingUnrunnableDoor()
 		m.mode = modeRecordList
 		return m, nil
 
 	case tea.KeyPgDown:
 		total := m.recordCount()
 		if m.recordEditIdx >= 0 && total > 0 && m.recordEditIdx < total-1 {
+			m.warnIfLeavingUnrunnableDoor()
 			m.recordEditIdx++
 			m.recordFields = m.buildRecordFields()
 			m.editField = 0
@@ -117,6 +138,7 @@ func (m Model) updateRecordEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPgUp:
 		if m.recordEditIdx > 0 {
+			m.warnIfLeavingUnrunnableDoor()
 			m.recordEditIdx--
 			m.recordFields = m.buildRecordFields()
 			m.editField = 0

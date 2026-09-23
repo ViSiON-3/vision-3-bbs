@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
@@ -183,5 +185,57 @@ func TestSaveAllReportsFailureOnAnUnwritableConfigPath(t *testing.T) {
 	}
 	if !m.dirty {
 		t.Error("model was marked clean despite nothing being written")
+	}
+}
+
+// Escape is not the only way out of a record: PageUp and PageDown move to
+// another one. Keying the warning to Escape alone would let a sysop page
+// straight past a broken door and never be told.
+func TestEveryRecordExitWarnsAboutAnUnrunnableDoor(t *testing.T) {
+	doors := map[string]config.DoorConfig{
+		"AAABROKEN": {Code: "AAABROKEN", Type: "rlogin"},                        // no host
+		"BBBOK":     {Code: "BBBOK", Type: "rlogin", Host: "doors.example.com"}, // fine
+	}
+	for name, key := range map[string]tea.KeyMsg{
+		"escape":   {Type: tea.KeyEscape},
+		"pagedown": {Type: tea.KeyPgDown},
+	} {
+		m := Model{
+			recordType:    "door",
+			recordEditIdx: 0, // AAABROKEN sorts first
+			configs:       &allConfigs{Doors: doors},
+		}
+		m.recordFields = m.buildRecordFields()
+		out, _ := m.updateRecordEdit(key)
+		got := out.(Model).message
+		if !strings.Contains(got, "AAABROKEN") {
+			t.Errorf("%s: message = %q, want a warning naming the door being left", name, got)
+		}
+	}
+
+	// Leaving the workable door must not warn, and must clear a warning left
+	// over from the broken one.
+	m := Model{
+		recordType:    "door",
+		recordEditIdx: 1, // BBBOK
+		configs:       &allConfigs{Doors: doors},
+		message:       `WARNING: door "AAABROKEN": an RLogin door needs a host.`,
+	}
+	m.recordFields = m.buildRecordFields()
+	out, _ := m.updateRecordEdit(tea.KeyMsg{Type: tea.KeyPgUp})
+	if got := out.(Model).message; got != "" {
+		t.Errorf("message = %q, want the stale warning cleared when leaving a workable door", got)
+	}
+}
+
+// The warning describes an unsaved record, so it must not claim the change is
+// already on disk.
+func TestDoorExitWarningDoesNotClaimTheRecordWasSaved(t *testing.T) {
+	got := doorExitWarning(config.DoorConfig{Code: "DOORSRV", Type: "rlogin"}, true)
+	if strings.Contains(got, "Saved as-is") {
+		t.Errorf("warning = %q, but leaving a record writes nothing", got)
+	}
+	if !strings.Contains(got, "can still be saved") {
+		t.Errorf("warning = %q, want it to say the record can still be saved", got)
 	}
 }
