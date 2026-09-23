@@ -56,34 +56,14 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 		handshake.TermType = "ANSI/" + ctx.BaudStr
 	}
 
-	// A door must not outlive the caller's time limit, and a caller with none
-	// left should never reach the door server at all: opening a connection
-	// only to drop it immediately wastes a slot and litters the far end's log.
-	// TimeLimit <= 0 means unlimited, matching how the rest of the BBS reads
-	// the field.
-	// A single absolute deadline covers dialling and the session alike, so a
-	// slow connect spends the caller's time rather than being added on top of
-	// it. A zero deadline means no limit, matching how the rest of the BBS
-	// reads TimeLimit <= 0.
-	var deadline time.Time
-	if ctx.User.TimeLimit > 0 {
-		deadline = ctx.SessionStartTime.Add(time.Duration(ctx.User.TimeLimit) * time.Minute)
-		if !time.Now().Before(deadline) {
-			slog.Info("not entering rlogin door, no time left",
-				"node", ctx.NodeNumber, "door", ctx.DoorName)
-			return nil
-		}
-	}
-
-	timeout := time.Duration(doorConfig.ConnectTimeout) * time.Second
-	if timeout <= 0 {
-		timeout = rlogin.DefaultTimeout
-	}
-	// Never wait longer for the door server than the caller has left.
-	if !deadline.IsZero() {
-		if left := time.Until(deadline); left < timeout {
-			timeout = left
-		}
+	deadline, timeout, expired := doorDeadline(
+		ctx.User.TimeLimit, ctx.SessionStartTime, doorConfig.ConnectTimeout, time.Now())
+	if expired {
+		// Opening a connection only to drop it immediately wastes a slot and
+		// litters the door server's log.
+		slog.Info("not entering rlogin door, no time left",
+			"node", ctx.NodeNumber, "door", ctx.DoorName)
+		return nil
 	}
 
 	// The handshake fields can carry a shared password on servers that
@@ -116,6 +96,41 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 	writeDoorMessage(ctx, fmt.Sprintf(ctx.Executor.Strings().DoorRemoteDisconnected, ctx.DoorName))
 	runDoorCleanup(ctx)
 	return nil
+}
+
+// doorDeadline works out when a remote door session must end and how long the
+// connection attempt may take.
+//
+// One absolute deadline covers dialling and the session alike: computing a
+// duration before the dial and starting the clock after it would hand the
+// caller a fresh full allowance, so a slow connect would extend their time
+// rather than spend it.
+//
+// A zero deadline means no limit, matching how the rest of the BBS reads
+// TimeLimit <= 0. expired reports a caller who has no time left at all, who
+// should not reach the door server in the first place.
+func doorDeadline(timeLimitMin int, sessionStart time.Time, connectTimeoutSecs int, now time.Time) (deadline time.Time, timeout time.Duration, expired bool) {
+	timeout = time.Duration(connectTimeoutSecs) * time.Second
+	if timeout <= 0 {
+		timeout = rlogin.DefaultTimeout
+	}
+	if timeLimitMin <= 0 {
+		return time.Time{}, timeout, false
+	}
+
+	deadline = sessionStart.Add(time.Duration(timeLimitMin) * time.Minute)
+	left := deadline.Sub(now)
+	if left <= 0 {
+		return deadline, 0, true
+	}
+	// Never wait longer for the door server than the caller has left. The
+	// remaining time must stay positive here: rlogin.Dial reads a nonpositive
+	// timeout as "unset" and substitutes its default, which would let the dial
+	// run on past the deadline it was meant to respect.
+	if left < timeout {
+		timeout = left
+	}
+	return deadline, timeout, false
 }
 
 // relayRLoginSession pipes bytes between the caller and the door server until

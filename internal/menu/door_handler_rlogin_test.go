@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/rlogin"
 )
 
 func TestParseDisconnectKeyViaDoorConfig(t *testing.T) {
@@ -281,7 +282,7 @@ func TestExecuteRLoginDoorDisconnectKeyEndsSession(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- executeRLoginDoor(ctx) }()
 
-	<-ds.handshake
+	awaitHandshake(t, ds, done)
 	conn := <-ds.conns
 	defer conn.Close()
 
@@ -329,71 +330,113 @@ func TestExecuteRLoginDoorRefusesWhenTimeExhausted(t *testing.T) {
 	}
 }
 
-// Time spent dialling has to come out of the caller's limit. Before this was
-// one absolute deadline, a slow connect handed back a fresh full allowance:
-// 30 seconds left plus a 10-second dial gave 40 seconds of door time.
-func TestExecuteRLoginDoorCountsDialTimeAgainstTheLimit(t *testing.T) {
+// The deadline maths is where the caller's time is actually spent or given
+// away, and a loopback dial is too fast to observe it end to end, so it is
+// tested directly.
+func TestDoorDeadline(t *testing.T) {
+	now := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	start := now.Add(-10 * time.Minute)
+
+	t.Run("no limit means no deadline", func(t *testing.T) {
+		deadline, timeout, expired := doorDeadline(0, start, 0, now)
+		if !deadline.IsZero() || expired {
+			t.Errorf("got deadline=%v expired=%v, want no limit", deadline, expired)
+		}
+		if timeout != rlogin.DefaultTimeout {
+			t.Errorf("timeout = %v, want the default %v", timeout, rlogin.DefaultTimeout)
+		}
+	})
+
+	t.Run("deadline is absolute, not relative to the dial", func(t *testing.T) {
+		deadline, _, expired := doorDeadline(30, start, 0, now)
+		if expired {
+			t.Fatal("expired with 20 minutes left")
+		}
+		// 30 minutes from the session start, not from now.
+		if want := start.Add(30 * time.Minute); !deadline.Equal(want) {
+			t.Errorf("deadline = %v, want %v", deadline, want)
+		}
+	})
+
+	t.Run("exhausted limit is refused", func(t *testing.T) {
+		if _, _, expired := doorDeadline(10, start, 0, now); !expired {
+			t.Error("a caller whose limit ran out exactly now should be refused")
+		}
+		if _, _, expired := doorDeadline(5, start, 0, now); !expired {
+			t.Error("a caller past their limit should be refused")
+		}
+	})
+
+	t.Run("connect timeout is capped to the time left", func(t *testing.T) {
+		// 30s left, but the door is configured to wait two minutes.
+		_, timeout, expired := doorDeadline(10, now.Add(-9*time.Minute-30*time.Second), 120, now)
+		if expired {
+			t.Fatal("expired with 30s left")
+		}
+		if timeout != 30*time.Second {
+			t.Errorf("timeout = %v, want it capped to the 30s remaining", timeout)
+		}
+	})
+
+	t.Run("configured timeout is kept when it fits", func(t *testing.T) {
+		_, timeout, _ := doorDeadline(30, start, 5, now)
+		if timeout != 5*time.Second {
+			t.Errorf("timeout = %v, want the configured 5s", timeout)
+		}
+	})
+
+	// rlogin.Dial reads a nonpositive timeout as "unset" and substitutes its
+	// own default, so a caller out of time must never reach it with one.
+	t.Run("never yields a nonpositive timeout", func(t *testing.T) {
+		for _, tc := range []struct {
+			name  string
+			limit int
+			start time.Time
+		}{
+			{"exactly out of time", 10, start},
+			{"well past the limit", 1, start},
+			{"a hair left", 10, start.Add(time.Nanosecond)},
+		} {
+			_, timeout, expired := doorDeadline(tc.limit, tc.start, 60, now)
+			if expired {
+				continue // refused before dialling, which is the point
+			}
+			if timeout <= 0 {
+				t.Errorf("%s: timeout = %v; Dial would replace it with its default and outlive the deadline",
+					tc.name, timeout)
+			}
+		}
+	})
+}
+
+// The relay must stop at the deadline even while the door server is still
+// happily connected.
+func TestRelayRLoginSessionStopsAtDeadline(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
 	sess := newRelaySession()
-
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
-	// One minute of allowance, all but 300ms of it already spent.
-	ctx.User.TimeLimit = 1
-	ctx.SessionStartTime = time.Now().Add(-time.Minute + 300*time.Millisecond)
 
-	started := time.Now()
-	done := make(chan error, 1)
-	go func() { done <- executeRLoginDoor(ctx) }()
-
-	<-ds.handshake
-	conn := <-ds.conns
+	conn, err := net.Dial("tcp", net.JoinHostPort(host, fmt.Sprint(port)))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
 	defer conn.Close()
 
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Errorf("executeRLoginDoor: %v", err)
-		}
-		// The session must end at the original deadline, not 300ms after the
-		// connection happened to be established.
-		if elapsed := time.Since(started); elapsed > 3*time.Second {
-			t.Errorf("session ran for %v; the deadline was reset by the dial", elapsed)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("session outlived the caller's time limit")
-	}
-}
-
-// A connect timeout longer than the caller's remaining time must not let the
-// dial alone overrun the limit.
-func TestExecuteRLoginDoorCapsConnectTimeoutToTimeLeft(t *testing.T) {
-	// A port with nothing listening: the dial fails rather than connecting.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	addr := ln.Addr().String()
-	ln.Close()
-	host, portStr, _ := net.SplitHostPort(addr)
-	var port int
-	if _, err := fmt.Sscan(portStr, &port); err != nil {
-		t.Fatalf("parse port: %v", err)
-	}
-
-	sess := newRelaySession()
-	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
-		Type: "rlogin", Host: host, Port: port, ConnectTimeout: 120,
-	})
-	ctx.User.TimeLimit = 1
-	ctx.SessionStartTime = time.Now().Add(-time.Minute + time.Second)
-
+	done := make(chan struct{})
 	started := time.Now()
-	if err := executeRLoginDoor(ctx); err != nil {
-		t.Errorf("executeRLoginDoor: %v", err)
-	}
-	if elapsed := time.Since(started); elapsed > 10*time.Second {
-		t.Errorf("dial ran for %v, past the caller's remaining second", elapsed)
+	go func() {
+		defer close(done)
+		relayRLoginSession(ctx, conn, 0x1D, true, time.Now().Add(300*time.Millisecond))
+	}()
+
+	select {
+	case <-done:
+		if elapsed := time.Since(started); elapsed > 5*time.Second {
+			t.Errorf("relay ran %v past a 300ms deadline", elapsed)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("relay outlived its deadline")
 	}
 }
 
@@ -497,6 +540,21 @@ func TestRLoginDoorDispatches(t *testing.T) {
 	conn := <-ds.conns
 	_ = conn.Close()
 	<-done
+}
+
+// awaitHandshake waits for the stand-in server to receive a handshake, failing
+// rather than blocking if the executor returned without dialling.
+func awaitHandshake(t *testing.T, ds *doorServer, done <-chan error) string {
+	t.Helper()
+	select {
+	case hs := <-ds.handshake:
+		return hs
+	case err := <-done:
+		t.Fatalf("executeRLoginDoor returned before dialling: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("door server never received a handshake")
+	}
+	return ""
 }
 
 // readHandshake reads until the four NUL separators of a complete rlogin
