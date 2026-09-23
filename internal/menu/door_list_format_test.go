@@ -45,6 +45,7 @@ func TestFormatDoorListLineTypes(t *testing.T) {
 	}{
 		{config.DoorConfig{Type: "v3_script"}, "VPL"},
 		{config.DoorConfig{Type: "synchronet_js"}, "Synchronet JS"},
+		{config.DoorConfig{Type: "rlogin"}, "RLogin"},
 		{config.DoorConfig{IsDOS: true}, "DOS"},
 		{config.DoorConfig{}, "Native"},
 	}

@@ -4,6 +4,8 @@ Doors are external programs launched from the BBS. ViSiON/3 generates a dropfile
 
 This page is the reference for every door setting. **Setting up your first door?** Start with [Setting Up Doors](how-to-guides/doors.md), which walks through a DOS door, a native door, a Synchronet JS door and a VPL script step by step.
 
+Doors that live on another machine are set up differently: see [Door Servers](doors/door-servers.md) for connecting out to a shared door server over RLogin.
+
 ## Configuration
 
 Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Door Programs) to add, edit, and remove door definitions interactively. The JSON below is what the editor writes to `configs/doors.json`.
@@ -16,6 +18,7 @@ Use the [Configuration Editor](configuration/configuration.md#configuration-edit
 | DOS door (dosemu2) | `Code`, `Name`, `Type=dos`, `Commands`, `Dropfile Type` (usually `DOOR.SYS`), `Drive C Path`, optional `FOSSIL Driver` |
 | Synchronet JS door | `Code`, `Name`, `Type=synchronet_js`, `Script`, `Working Dir`, `Exec Dir`, `Library Paths` |
 | VPL script door | `Code`, `Name`, `Type=v3_script`, `Script`, `Working Dir` |
+| RLogin door server | `Code`, `Name`, `Type=rlogin`, `Host`, usually `Terminal Type` (see [Door Servers](doors/door-servers.md)) |
 
 ### Supported Dropfile Types
 
@@ -50,6 +53,7 @@ Fields the BBS does not track are filled with safe placeholders: phone numbers a
 - **Native doors** (Linux, macOS, Windows) write only the selected format. With `(none)` no file is written and `{DROPFILE}` expands to an empty string. The file is deleted when the door exits.
 - **DOS doors** always write all four formats to the per-node directory (`C:\NODES\TEMPn\`). `Dropfile Type` only decides which file the `{DROPFILE}` and `{DOSDROPFILE}` placeholders point at; it defaults to `DOOR.SYS`. `Dropfile Location` and `Dropfile Case` are ignored for DOS doors.
 - **Synchronet JS and VPL script doors** do not use dropfiles. The script runtime gets the session data directly. See [Synchronet JS Doors](doors/synchronet-js-doors.md).
+- **RLogin doors** do not use dropfiles. There is no local process to read one; the user is identified to the door server through the RLogin handshake instead. See [Door Servers](doors/door-servers.md).
 
 **Filename case.** Native doors on case-sensitive filesystems sometimes look for `door32.sys` rather than `DOOR32.SYS`. Set **Dropfile Case** (`dropfile_case`) to `lower` for those doors. The default, `upper`, writes the conventional uppercase name.
 
@@ -64,6 +68,7 @@ The **Commands** field (`commands` in JSON) is the command line the BBS runs whe
 | Native | Executable followed by comma-separated arguments: `/opt/doors/tw2002/tw2002 -n, {NODE}, -d, {DROPFILE}` | `["/opt/doors/tw2002/tw2002", "-n", "{NODE}", "-d", "{DROPFILE}"]` |
 | DOS | Comma-separated DOS batch lines: `START.BAT {NODE}, EXIT` | `["START.BAT {NODE}", "EXIT"]` |
 | Synchronet JS / VPL | Not used. Set **Script** and **Script Args** instead | `script`, `args` |
+| RLogin | Not used. Set **Host** and the handshake fields instead | `host`, `terminal_type` |
 
 For native doors the first token is the executable and every following comma-separated entry becomes exactly one argument, so a flag and its value are two entries (`-n, {NODE}`) unless the door wants them joined (`-n{NODE}`). Set **Use Shell** to `Yes` for a `.sh` / `.bat` script or a program that must start through the shell; the field does not interpret pipes, redirects or globs.
 
@@ -89,6 +94,8 @@ These placeholders are substituted at runtime wherever they appear in **Commands
 | `{NODEDIR}` | Host directory containing the dropfile | Native, DOS |
 | `{DOSDROPFILE}` | DOS path to the dropfile, e.g. `C:\NODES\TEMP1\DOOR.SYS` | DOS only |
 | `{DOSNODEDIR}` | DOS path to the node directory, e.g. `C:\NODES\TEMP1` | DOS only |
+
+For RLogin doors the placeholders above marked *All* are also substituted in **Client User**, **Server User**, and **Terminal Type**. Dropfile and DOS placeholders do not apply, since no local process runs.
 
 Placeholders are plain text replacement, so add any separator the door needs yourself. A door that wants a trailing slash on a directory takes `{NODEDIR}/`.
 

@@ -133,6 +133,8 @@ func doorTypeLabel(d *config.DoorConfig) string {
 		return "SyncJS"
 	case "v3_script":
 		return "VPL"
+	case "rlogin":
+		return "RLogin"
 	}
 	if d.IsDOS {
 		return "DOS"
@@ -148,6 +150,11 @@ func isSyncJS(d *doorEditProxy) bool {
 // isV3Script returns true if the door is a Vision/3 VPL script.
 func isV3Script(d *doorEditProxy) bool {
 	return d.Type == "v3_script"
+}
+
+// isRLogin returns true if the door is an outbound RLogin door-server link.
+func isRLogin(d *doorEditProxy) bool {
+	return d.Type == "rlogin"
 }
 
 // fieldsDoor returns fields for editing a door program.
@@ -219,13 +226,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 	// Door type selector — determines which type-specific fields are shown
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Type", Help: "Door type: Native, DOS (dosemu2), Synchronet JS, or VPL script", Type: ftLookup, Col: 3, Row: row, Width: 20,
+		Label: "Type", Help: "Door type: Native, DOS (dosemu2), Synchronet JS, VPL script, or RLogin", Type: ftLookup, Col: 3, Row: row, Width: 20,
 		Get: func() string {
 			switch dPtr.Type {
 			case "synchronet_js":
 				return "synchronet_js"
 			case "v3_script":
 				return "v3_script"
+			case "rlogin":
+				return "rlogin"
 			}
 			if dPtr.IsDOS {
 				return "dos"
@@ -239,6 +248,9 @@ func (m *Model) fieldsDoor() []fieldDef {
 				dPtr.IsDOS = false
 			case "v3_script":
 				dPtr.Type = "v3_script"
+				dPtr.IsDOS = false
+			case "rlogin":
+				dPtr.Type = "rlogin"
 				dPtr.IsDOS = false
 			case "dos":
 				dPtr.Type = ""
@@ -256,6 +268,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 				{Value: "dos", Display: "DOS - DOS door via dosemu2"},
 				{Value: "synchronet_js", Display: "Synchronet JS - JavaScript door game"},
 				{Value: "v3_script", Display: "VPL Script - Vision/3 JavaScript script"},
+				{Value: "rlogin", Display: "RLogin - Outbound link to a door server"},
 			}
 		},
 	})
@@ -306,6 +319,75 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Label: "Script Args", Help: "Arguments passed to script (available as v3.args), comma-separated", Type: ftString, Col: 3, Row: row, Width: 45,
 			Get: func() string { return sliceToCSV(dPtr.Args) },
 			Set: func(val string) error { dPtr.Args = csvToSlice(val); save(); return nil },
+		})
+	} else if isRLogin(dPtr) {
+		// Outbound RLogin door-server fields. There is no local program, so
+		// nothing here concerns commands, dropfiles or the environment.
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Host", Help: "Door server hostname or IP address", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.Host },
+			Set: func(val string) error { dPtr.Host = strings.TrimSpace(val); save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Port", Help: "Door server TCP port (0 = 513, the RLogin default)", Type: ftInteger, Col: 3, Row: row, Width: 6, Min: 0, Max: 65535,
+			Get: func() string { return strconv.Itoa(dPtr.Port) },
+			Set: func(val string) error {
+				v, err := strconv.Atoi(strings.TrimSpace(val))
+				if err != nil || v < 0 || v > 65535 {
+					return fmt.Errorf("port must be 0-65535")
+				}
+				dPtr.Port = v
+				save()
+				return nil
+			},
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Client User", Help: "RLogin client-user-name; some servers expect a password here (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.ClientUsername },
+			Set: func(val string) error { dPtr.ClientUsername = val; save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Server User", Help: "RLogin server-user-name, e.g. [TAG]{USERHANDLE} (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.ServerUsername },
+			Set: func(val string) error { dPtr.ServerUsername = val; save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Terminal Type", Help: "RLogin terminal-type; door servers read the door code here, e.g. xtrn=LORD (blank = ANSI/38400)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Get: func() string { return dPtr.TerminalType },
+			Set: func(val string) error { dPtr.TerminalType = val; save(); return nil },
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Connect Timeout", Help: "Seconds to wait for the door server (0 = 10)", Type: ftInteger, Col: 3, Row: row, Width: 5, Min: 0, Max: 300,
+			Get: func() string { return strconv.Itoa(dPtr.ConnectTimeout) },
+			Set: func(val string) error {
+				v, err := strconv.Atoi(strings.TrimSpace(val))
+				if err != nil || v < 0 || v > 300 {
+					return fmt.Errorf("timeout must be 0-300 seconds")
+				}
+				dPtr.ConnectTimeout = v
+				save()
+				return nil
+			},
+		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Disconnect Key", Help: "Key that hangs up the remote session, e.g. ^] (blank = ^], 'none' = disabled)", Type: ftString, Col: 3, Row: row, Width: 10,
+			Get: func() string { return dPtr.DisconnectKey },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if _, _, err := config.ParseDisconnectKey(val); err != nil {
+					return err
+				}
+				dPtr.DisconnectKey = val
+				save()
+				return nil
+			},
 		})
 	} else {
 		// Native and DOS doors have commands and dropfiles
@@ -434,20 +516,24 @@ func (m *Model) fieldsDoor() []fieldDef {
 			},
 		})
 
-		row++
-		fields = append(fields, fieldDef{
-			Label: "Env Vars", Help: "Environment variables: KEY=VALUE, KEY2=VALUE2", Type: ftString, Col: 3, Row: row, Width: 45,
-			Get: func() string { return envMapToCSV(dPtr.EnvironmentVars) },
-			Set: func(val string) error {
-				m, err := csvToEnvMap(val)
-				if err != nil {
-					return err
-				}
-				dPtr.EnvironmentVars = m
-				save()
-				return nil
-			},
-		})
+		// Environment variables need a local process to apply to, so they are
+		// not offered for a door that is only a socket to somewhere else.
+		if !isRLogin(dPtr) {
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Env Vars", Help: "Environment variables: KEY=VALUE, KEY2=VALUE2", Type: ftString, Col: 3, Row: row, Width: 45,
+				Get: func() string { return envMapToCSV(dPtr.EnvironmentVars) },
+				Set: func(val string) error {
+					m, err := csvToEnvMap(val)
+					if err != nil {
+						return err
+					}
+					dPtr.EnvironmentVars = m
+					save()
+					return nil
+				},
+			})
+		}
 	}
 
 	if dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) {
@@ -482,7 +568,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Get: func() string { return dPtr.DosemuConfig },
 			Set: func(val string) error { dPtr.DosemuConfig = val; save(); return nil },
 		})
-	} else if !dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) {
+	} else if !dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) && !isRLogin(dPtr) {
 		// Native-specific fields
 		row++
 		fields = append(fields, fieldDef{

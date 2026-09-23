@@ -575,5 +575,8 @@ func stringCatalog() []StringEntry {
 		{Label: "New User: Email Required", Key: "newUserEmailRequired", Description: "Shown when a caller tries to skip the required message, before returning them to the editor"},
 		{Label: "New User: Logging In", Key: "newUserLoggingIn", Description: "Shown after a new user who can log on finishes signup, as they are carried into a session"},
 		{Label: "File: Scan Date Prompt", Key: "fileScanDatePrompt", Description: "Prompts for the file newscan cutoff (SETFILESCANDATE): a date, A=all, R=reset"},
+		{Label: "Door: Connecting", Key: "doorRemoteConnecting", Description: "Shown while dialling a remote door server (%s=door name)"},
+		{Label: "Door: Connect Failed", Key: "doorRemoteConnectFailed", Description: "Shown when a remote door server cannot be reached (%s=door name)"},
+		{Label: "Door: Disconnected", Key: "doorRemoteDisconnected", Description: "Shown after a remote door session ends (%s=door name)"},
 	}
 }
