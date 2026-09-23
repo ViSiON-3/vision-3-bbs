@@ -374,7 +374,7 @@ The `$_external_char_set` and `$_internal_char_set` must be `"cp437"` for DOS do
 
 ## Environment Variables
 
-The following environment variables are automatically set for all door processes:
+The following environment variables are automatically set for native and Windows door processes. DOS doors receive only `DOSEMU_QUIET`:
 
 | Variable | Value |
 | --- | --- |
