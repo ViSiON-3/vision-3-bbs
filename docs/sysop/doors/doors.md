@@ -83,6 +83,7 @@ These placeholders are substituted at runtime wherever they appear in **Commands
 | `{USERID}` | User record number | All |
 | `{REALNAME}` | User's real name | All |
 | `{LEVEL}` | User's access level | All |
+| `{USERIP}` | Caller's IP address (IPv4 or IPv6 without brackets; empty when the session has no remote address) | All |
 | `{STARTUPDIR}` | Resolved working directory (`.` when **Working Dir** is blank) | All |
 | `{DROPFILE}` | Host path to the generated dropfile (empty when **Dropfile Type** is `(none)`) | Native, DOS |
 | `{NODEDIR}` | Host directory containing the dropfile | Native, DOS |
@@ -381,6 +382,7 @@ The following environment variables are automatically set for all door processes
 | `BBS_USERID` | User ID number |
 | `BBS_NODE` | Node number |
 | `BBS_TIMELEFT` | Minutes remaining |
+| `BBS_USERIP` | Caller's IP address |
 | `LINES` | Terminal height |
 | `COLUMNS` | Terminal width |
 | `DOOR_SOCKET_FD` | Socket FD (SOCKET mode only) |

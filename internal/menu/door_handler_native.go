@@ -164,6 +164,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	if _, exists := envMap["BBS_TIMELEFT"]; !exists {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_TIMELEFT=%s", ctx.TimeLeftStr))
 	}
+	if _, exists := envMap["BBS_USERIP"]; !exists {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_USERIP=%s", ctx.Subs["{USERIP}"]))
+	}
 
 	// Set LINES and COLUMNS from user's saved preferences (for terminal size detection).
 	// Remove any existing LINES/COLUMNS entries first to ensure our values take precedence.

@@ -275,6 +275,7 @@ Configures external door programs that can be launched from the BBS. The file co
 - `{USERID}` - User ID number
 - `{REALNAME}` - User's real name
 - `{LEVEL}` - Access level
+- `{USERIP}` - Caller's IP address
 - `{DROPFILE}` - Host OS path to the generated dropfile (full path incl. filename)
 - `{NODEDIR}` - Host OS path to the dropfile's directory, **no trailing slash**. Some door libraries (e.g. godoors) concatenate the filename directly and need a trailing slash — pass `{NODEDIR}/` in that case.
 - `{DOSDROPFILE}` / `{DOSNODEDIR}` - DOS paths (e.g., `C:\NODES\TEMP1\DOOR.SYS`)

@@ -15,6 +15,16 @@ import (
 	"golang.org/x/term"
 )
 
+// doorUserIP returns the caller's IP address for the {USERIP} placeholder and
+// the BBS_USERIP environment variable. It is empty when the session has no
+// remote address (local console, tests), so a door launch never fails on it.
+func doorUserIP(s ssh.Session) string {
+	if s == nil || s.RemoteAddr() == nil {
+		return ""
+	}
+	return remoteIPFromSession(s)
+}
+
 // buildDoorCtx creates a DoorCtx from the standard RunnableFunc parameters.
 func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userID int, handle, realName string, accessLevel, timeLimit, timesCalled int,
@@ -33,6 +43,7 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	timeLeftStr := strconv.Itoa(remainingMinutes)
 	baudStr := "38400"
 	userIDStr := strconv.Itoa(userID)
+	userIP := doorUserIP(s)
 
 	startupDir := doorConfig.WorkingDirectory
 	if startupDir == "" {
@@ -48,6 +59,7 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		"{USERID}":     userIDStr,
 		"{REALNAME}":   realName,
 		"{LEVEL}":      strconv.Itoa(accessLevel),
+		"{USERIP}":     userIP,
 		"{STARTUPDIR}": startupDir,
 		"{DROPFILE}":   "", // populated after dropfile generation
 		"{NODEDIR}":    "", // populated after dropfile generation

@@ -168,6 +168,9 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	if _, exists := envMap["BBS_TIMELEFT"]; !exists {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_TIMELEFT=%s", ctx.TimeLeftStr))
 	}
+	if _, exists := envMap["BBS_USERIP"]; !exists {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_USERIP=%s", ctx.Subs["{USERIP}"]))
+	}
 
 	if strings.EqualFold(doorConfig.IOMode, "SOCKET") {
 		return fmt.Errorf("socket I/O mode is not implemented on Windows yet")
