@@ -18,7 +18,7 @@ In the [Configuration Editor](configuration/configuration.md#configuration-edito
 
 | Field | JSON key | Meaning |
 | --- | --- | --- |
-| Host | `host` | Door server hostname or IP address. Required. |
+| Host | `host` | Door server hostname or IP address. Required — the config editor refuses to save an RLogin door without one. |
 | Port | `port` | TCP port. Blank or `0` uses 513. Most door servers are **not** on 513 — see [Ports](#ports). |
 | Client User | `client_username` | First handshake field. **This is where a password goes** on servers that want one — see [Passwords](#passwords). Blank sends the user's handle. |
 | Server User | `server_username` | Second handshake field, normally the caller's identity. Blank sends the user's handle. |

@@ -15,9 +15,35 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 )
 
+// validateDoors reports the first door whose settings would not work, in a
+// stable order so the same broken record is named every time rather than
+// whichever the map happened to yield first.
+func validateDoors(doors map[string]config.DoorConfig) error {
+	codes := make([]string, 0, len(doors))
+	for code := range doors {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	for _, code := range codes {
+		if err := doors[code].ValidateRLogin(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // saveAll writes all modified configs to disk.
 func (m *Model) saveAll() {
 	if !m.dirty {
+		return
+	}
+
+	// Validate before writing anything. The savers run in sequence and each
+	// one commits as it goes, so a record rejected partway through would leave
+	// some files updated and the rest stale. Checking first means a refused
+	// save changes nothing on disk.
+	if err := validateDoors(m.configs.Doors); err != nil {
+		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return
 	}
 

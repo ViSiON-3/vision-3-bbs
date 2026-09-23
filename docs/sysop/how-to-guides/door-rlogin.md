@@ -46,7 +46,9 @@ Run `./config`, press **6** for Door Programs, then **I** to insert a record and
 
 The placeholders from [Door Programs](doors/doors.md#placeholders) work in all three fields, so `[V3]{USERHANDLE}` sends the handle with your system tag in front.
 
-Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.json`:
+Press **Esc**, then **Q** and **Y** to save. If Host is blank, or the port or disconnect key is out of range, the editor refuses the save and says which door is at fault rather than writing a record that cannot run.
+
+The same record in `configs/doors.json`:
 
 ```json
 {
