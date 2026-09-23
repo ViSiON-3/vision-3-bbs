@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Absolute, so the page still styles when served for a miss at any depth. -->
     <link rel="stylesheet" href="/style.css">
     <style>
         .nc-wrap {
@@ -25,36 +26,55 @@
             background: var(--bg-card);
             padding: 2rem;
         }
-        .nc-box pre {
+        .nc-term {
             color: var(--blue-bright);
             font-family: var(--font-mono);
             font-size: 0.9rem;
-            line-height: 1.3;
-            margin: 0 0 1.5rem;
+            line-height: 1.35;
+            margin: 0 0 1.25rem;
+            /* Reserve the finished sequence's height up front, or the 404 text
+               below shunts down a line at a time while the dialer types. */
+            min-height: 7.5em;
+            white-space: pre-wrap;
             overflow-x: auto;
         }
+        .nc-cursor {
+            display: inline-block;
+            animation: nc-blink 1s step-end infinite;
+        }
+        @keyframes nc-blink { 50% { opacity: 0; } }
+        .nc-sound {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 0.25rem 0.6rem;
+            cursor: pointer;
+            margin-bottom: 1.25rem;
+        }
+        .nc-sound:hover { color: var(--cyan-accent); border-color: var(--cyan-accent); }
         .nc-box h1 {
             color: var(--text-heading);
             font-family: var(--font-mono);
             font-size: 1.25rem;
             margin: 0 0 1rem;
         }
-        .nc-box p {
-            color: var(--text-secondary);
-            margin: 0 0 1.5rem;
-        }
-        .nc-links a {
-            color: var(--cyan-accent);
-            margin-right: 1.5rem;
+        .nc-box p { color: var(--text-secondary); margin: 0 0 1.5rem; }
+        .nc-links a { color: var(--cyan-accent); margin-right: 1.5rem; }
+        @media (prefers-reduced-motion: reduce) {
+            .nc-cursor { animation: none; }
         }
     </style>
 </head>
 <body>
     <div class="nc-wrap">
         <div class="nc-box">
-<pre>ATDT 1-314-555-0100
-CONNECT 2400
-NO CARRIER</pre>
+            <div class="nc-term" id="nc-term" aria-hidden="true"><span class="nc-cursor" id="nc-cursor">&#9608;</span></div>
+            <button class="nc-sound" id="nc-sound" type="button">[ replay with sound ]</button>
+            <!-- The error itself lives in the markup rather than being painted by
+                 the script: it has to survive JS being off, and a screen reader
+                 would otherwise be handed the dialer transcript instead. -->
             <h1>404 &mdash; that page isn't here.</h1>
             <p>The address you asked for doesn't exist on this board. It may have
                moved, or it may never have been here at all.</p>
@@ -65,5 +85,151 @@ NO CARRIER</pre>
             </div>
         </div>
     </div>
+
+<script>
+(function () {
+    'use strict';
+
+    var term = document.getElementById('nc-term');
+    var cursor = document.getElementById('nc-cursor');
+    var soundBtn = document.getElementById('nc-sound');
+
+    var NUMBER = '13145673833';
+    var FINAL = 'ATDT ' + NUMBER + '\nRING\nRING\nCONNECT 14400/HST\nNO CARRIER';
+
+    // DTMF pairs, so dialling sounds like dialling rather than like beeping.
+    var DTMF = {
+        '1': [697, 1209], '2': [697, 1336], '3': [697, 1477],
+        '4': [770, 1209], '5': [770, 1336], '6': [770, 1477],
+        '7': [852, 1209], '8': [852, 1336], '9': [852, 1477],
+        '0': [941, 1336]
+    };
+
+    var timers = [];
+    var ctx = null;
+    var modem = null;
+    var running = false;
+
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+
+    function reset() {
+        timers.forEach(clearTimeout);
+        timers = [];
+        if (modem) { try { modem.pause(); modem.currentTime = 0; } catch (e) {} }
+        term.textContent = '';
+        term.appendChild(cursor);
+    }
+
+    function write(s) { cursor.insertAdjacentText('beforebegin', s); }
+
+    // Oscillator pair gated by a gain envelope. Without the ramps the abrupt
+    // start and stop click audibly.
+    function tone(freqs, dur) {
+        if (!ctx) return;
+        var t0 = ctx.currentTime;
+        var gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, t0);
+        gain.gain.linearRampToValueAtTime(0.18, t0 + 0.01);
+        gain.gain.setValueAtTime(0.18, t0 + dur - 0.02);
+        gain.gain.linearRampToValueAtTime(0, t0 + dur);
+        gain.connect(ctx.destination);
+        freqs.forEach(function (f) {
+            var osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.value = f;
+            osc.connect(gain);
+            osc.start(t0);
+            osc.stop(t0 + dur);
+        });
+    }
+
+    function ring() { tone([440, 480], 1.2); }
+
+    function showFinal() {
+        term.textContent = FINAL + '\n';
+        term.appendChild(cursor);
+    }
+
+    // withSound is only ever true from a click. Browsers block audio without a
+    // gesture, so the automatic pass on load is deliberately silent rather than
+    // firing play() calls that get rejected and logged as errors.
+    function run(withSound) {
+        if (running) return;
+        running = true;
+        reset();
+
+        if (withSound) {
+            try {
+                ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (ctx.state === 'suspended') { ctx.resume(); }
+                modem = new Audio('/audio/modem-handshake.mp3');
+                modem.volume = 0.8;
+            } catch (e) {
+                ctx = null;
+                modem = null;
+            }
+        } else {
+            ctx = null;
+            modem = null;
+        }
+
+        write('ATDT ');
+
+        var i = 0;
+        function digit() {
+            if (i < NUMBER.length) {
+                var d = NUMBER[i];
+                write(d);
+                if (DTMF[d]) { tone(DTMF[d], 0.09); }
+                i++;
+                later(digit, 110);
+                return;
+            }
+            write('\n');
+
+            later(function () {
+                ring();
+                write('RING\n');
+
+                later(function () {
+                    ring();
+                    write('RING\n');
+
+                    later(function () {
+                        if (modem) {
+                            modem.play().catch(function () { /* blocked; the visual still runs */ });
+                        }
+                        // Connect once the handshake has had time to sound like
+                        // one. Trimmed hard versus the homepage splash: a 404 is
+                        // an error page, not an intro, so the whole run is ~9s.
+                        later(function () {
+                            write('CONNECT 14400/HST\n');
+                            later(function () {
+                                if (modem) { try { modem.pause(); } catch (e) {} }
+                                write('NO CARRIER');
+                                running = false;
+                            }, 1100);
+                        }, 3600);
+                    }, 900);
+                }, 1300);
+            }, 700);
+        }
+        later(digit, 400);
+    }
+
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) {
+        showFinal();
+        soundBtn.hidden = true;
+    } else {
+        run(false);
+    }
+
+    soundBtn.addEventListener('click', function () {
+        running = false;
+        run(true);
+    });
+})();
+</script>
 </body>
 </html>
