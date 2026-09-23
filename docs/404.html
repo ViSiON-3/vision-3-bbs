@@ -96,6 +96,7 @@
 
     var NUMBER = '13145673833';
     var FINAL = 'ATDT ' + NUMBER + '\nRING\nRING\nCONNECT 14400/HST\nNO CARRIER';
+    var HANDSHAKE = '/audio/modem-handshake.mp3';
 
     // DTMF pairs, so dialling sounds like dialling rather than like beeping.
     var DTMF = {
@@ -106,16 +107,74 @@
     };
 
     var timers = [];
-    var ctx = null;
-    var modem = null;
     var running = false;
 
+    // Exactly one AudioContext for the life of the page. They are expensive --
+    // each one can mean a high-priority thread and a system audio stream -- and
+    // browsers cap how many a document may hold (Chromium: 6). Making a fresh
+    // one per replay would throw on the seventh and drop tones from then on.
+    var ctx = null;
+    // Everything routes through a per-run gain node, so reset() can disconnect
+    // it and silence whatever is mid-flight instead of letting a ring bleed
+    // across a restart.
+    var master = null;
+    var buffer = null;   // decoded handshake, fetched once
+    var source = null;   // the handshake currently playing, if any
+
     function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+
+    function ensureCtx() {
+        if (!ctx) {
+            try {
+                ctx = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+                ctx = null;
+            }
+        }
+        if (ctx && ctx.state === 'suspended') { ctx.resume(); }
+        return ctx;
+    }
+
+    function newMaster() {
+        if (!ctx) { return null; }
+        if (master) { try { master.disconnect(); } catch (e) {} }
+        master = ctx.createGain();
+        master.gain.value = 1;
+        master.connect(ctx.destination);
+        return master;
+    }
+
+    function stopHandshake() {
+        if (source) {
+            try { source.stop(); } catch (e) {}
+            source = null;
+        }
+    }
+
+    // Decoded into the AudioContext rather than played from an <audio> element.
+    // The handshake starts about 4.4s into the run, and a play() that far from
+    // the click is not "caused by" the gesture -- WebKit may refuse it. An
+    // AudioContext unlocked by the click stays unlocked, so scheduling into it
+    // later is reliable.
+    function loadBuffer() {
+        if (!ctx || buffer) { return Promise.resolve(buffer); }
+        return fetch(HANDSHAKE)
+            .then(function (r) { return r.arrayBuffer(); })
+            .then(function (bytes) {
+                return new Promise(function (resolve, reject) {
+                    // Callback form: Safari lacked the promise-returning one.
+                    ctx.decodeAudioData(bytes, resolve, reject);
+                });
+            })
+            .then(function (buf) { buffer = buf; return buf; })
+            .catch(function () { return null; });
+    }
 
     function reset() {
         timers.forEach(clearTimeout);
         timers = [];
-        if (modem) { try { modem.pause(); modem.currentTime = 0; } catch (e) {} }
+        stopHandshake();
+        if (master) { try { master.disconnect(); } catch (e) {} master = null; }
         term.textContent = '';
         term.appendChild(cursor);
     }
@@ -125,14 +184,14 @@
     // Oscillator pair gated by a gain envelope. Without the ramps the abrupt
     // start and stop click audibly.
     function tone(freqs, dur) {
-        if (!ctx) return;
+        if (!ctx || !master) { return; }
         var t0 = ctx.currentTime;
         var gain = ctx.createGain();
         gain.gain.setValueAtTime(0, t0);
         gain.gain.linearRampToValueAtTime(0.18, t0 + 0.01);
         gain.gain.setValueAtTime(0.18, t0 + dur - 0.02);
         gain.gain.linearRampToValueAtTime(0, t0 + dur);
-        gain.connect(ctx.destination);
+        gain.connect(master);
         freqs.forEach(function (f) {
             var osc = ctx.createOscillator();
             osc.type = 'sine';
@@ -145,6 +204,15 @@
 
     function ring() { tone([440, 480], 1.2); }
 
+    function playHandshake() {
+        if (!ctx || !master || !buffer) { return; }
+        stopHandshake();
+        source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(master);
+        source.start();
+    }
+
     function showFinal() {
         term.textContent = FINAL + '\n';
         term.appendChild(cursor);
@@ -152,25 +220,18 @@
 
     // withSound is only ever true from a click. Browsers block audio without a
     // gesture, so the automatic pass on load is deliberately silent rather than
-    // firing play() calls that get rejected and logged as errors.
+    // firing calls that get refused and logged as errors.
     function run(withSound) {
-        if (running) return;
+        if (running) { return; }
         running = true;
         reset();
 
         if (withSound) {
-            try {
-                ctx = new (window.AudioContext || window.webkitAudioContext)();
-                if (ctx.state === 'suspended') { ctx.resume(); }
-                modem = new Audio('/audio/modem-handshake.mp3');
-                modem.volume = 0.8;
-            } catch (e) {
-                ctx = null;
-                modem = null;
-            }
-        } else {
-            ctx = null;
-            modem = null;
+            ensureCtx();
+            newMaster();
+            // Kick the decode off at click time so the buffer is ready well
+            // before the handshake is due ~4.4s in.
+            loadBuffer();
         }
 
         write('ATDT ');
@@ -196,16 +257,14 @@
                     write('RING\n');
 
                     later(function () {
-                        if (modem) {
-                            modem.play().catch(function () { /* blocked; the visual still runs */ });
-                        }
+                        playHandshake();
                         // Connect once the handshake has had time to sound like
                         // one. Trimmed hard versus the homepage splash: a 404 is
                         // an error page, not an intro, so the whole run is ~9s.
                         later(function () {
                             write('CONNECT 14400/HST\n');
                             later(function () {
-                                if (modem) { try { modem.pause(); } catch (e) {} }
+                                stopHandshake();
                                 write('NO CARRIER');
                                 running = false;
                             }, 1100);
