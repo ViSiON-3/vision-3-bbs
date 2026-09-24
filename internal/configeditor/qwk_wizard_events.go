@@ -34,9 +34,11 @@ func newQWKPollEvent(netKey, hubID, schedule string) config.EventConfig {
 	}
 }
 
-// wireQWKEvents upserts the network's poll event after the wizard saves,
-// keeping a sysop-tuned schedule and extras on an existing event, and
-// turns the scheduler on. schedule applies only when the event is new.
+// wireQWKEvents upserts the network's poll event after the wizard saves and
+// turns the scheduler on. A non-blank schedule is applied to an existing
+// event too, since the wizard pre-fills the field from that event and what
+// comes back is the sysop's current choice; blank keeps whatever is there.
+// Extra arguments a sysop added survive either way.
 func wireQWKEvents(events *config.EventsConfig, netKey, hubID, schedule string) {
 	id := qwkPollEventPrefix + netKey
 	for i := range events.Events {
@@ -47,6 +49,9 @@ func wireQWKEvents(events *config.EventsConfig, netKey, hubID, schedule string) 
 		e.Name = fmt.Sprintf("Poll QWK Hub (%s)", hubID)
 		e.Command = "{BBS_ROOT}/v3mail"
 		e.Args = retargetQWKArgs(e.Args, netKey)
+		if s := strings.TrimSpace(schedule); s != "" {
+			e.Schedule = s
+		}
 		e.Enabled = true
 		events.Enabled = true
 		if events.MaxConcurrentEvents <= 0 {

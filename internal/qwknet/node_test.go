@@ -1,9 +1,11 @@
 package qwknet
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
@@ -287,9 +290,7 @@ func TestPoll_EndToEnd(t *testing.T) {
 	if len(res.Errors) != 0 || !res.Uploaded || !res.Downloaded || res.Scan.Exported != 1 || res.Toss.Imported != 1 {
 		t.Fatalf("poll: %+v", res)
 	}
-	srv.mu.Lock()
-	rep := srv.uploads["VERT.REP"]
-	srv.mu.Unlock()
+	rep := srv.upload("VERT.REP")
 	p, err := qwk.ReadREPPacket(bytes.NewReader(rep), int64(len(rep)), "VERT")
 	if err != nil || len(p.Messages) != 1 || p.Messages[0].Subject != "outbound" {
 		t.Fatalf("uploaded REP: %+v err=%v", p, err)
@@ -301,9 +302,8 @@ func TestPoll_EndToEnd(t *testing.T) {
 		t.Errorf("hub message not tossed into area 2 (count %d)", c)
 	}
 
-	// Second poll: hub has nothing (file consumed in the fake by design of
-	// the map? no: it is static), so remove it to simulate 550.
-	delete(srv.files, "VERT.QWK")
+	// Second poll: the hub has nothing, which it answers with 550.
+	srv.remove("VERT.QWK")
 	res = n.Poll(context.Background())
 	if len(res.Errors) != 0 || res.Uploaded || res.Downloaded || res.Toss.Imported != 0 {
 		t.Fatalf("quiet poll: %+v", res)
@@ -344,7 +344,7 @@ func TestFetchConferences(t *testing.T) {
 	if len(n.inboundPackets()) != 1 {
 		t.Error("downloaded packet not kept in inbound")
 	}
-	delete(srv.files, "VERT.QWK")
+	srv.remove("VERT.QWK")
 	if again, err := n.FetchConferences(context.Background()); err != nil || len(again) != 2 {
 		t.Fatalf("offline conference read: %+v err=%v", again, err)
 	}
@@ -356,4 +356,143 @@ func atoi(s string) int {
 		n = n*10 + int(c-'0')
 	}
 	return n
+}
+
+func TestInboundPackets_ExactNamesAndOrder(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	for _, name := range []string{"VERT-1700000002.QWK", "VERTX.QWK", "vert.qwk", "VERT-1700000001.QWK", "VERT-abc.QWK", "OTHER.QWK"} {
+		if err := os.WriteFile(filepath.Join(e.paths.InboundPath, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := n.inboundPackets()
+	want := []string{"vert.qwk", "VERT-1700000001.QWK", "VERT-1700000002.QWK"}
+	if len(got) != len(want) {
+		t.Fatalf("inboundPackets = %v", got)
+	}
+	for i := range want {
+		if filepath.Base(got[i]) != want[i] {
+			t.Errorf("order[%d] = %s want %s", i, filepath.Base(got[i]), want[i])
+		}
+	}
+}
+
+func TestToss_RejectsPacketWithoutHubID(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	// MESSAGES.DAT only, no CONTROL.DAT: must not be imported blind.
+	pw := qwk.NewPacketWriter("VERT", "V", "S")
+	var full bytes.Buffer
+	if err := pw.WritePacket(&full); err != nil {
+		t.Fatal(err)
+	}
+	stripped := rezipWithout(t, full.Bytes(), "CONTROL.DAT")
+	path := filepath.Join(e.paths.InboundPath, "VERT.QWK")
+	if err := os.WriteFile(path, stripped, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := n.Toss()
+	if len(res.Errors) != 1 || res.Imported != 0 {
+		t.Fatalf("toss: %+v", res)
+	}
+	if _, err := os.Stat(path + ".bad"); err != nil {
+		t.Error("packet without hub ID not set aside")
+	}
+}
+
+func TestToss_BadAreaCatchesUnmappedConferences(t *testing.T) {
+	e := newEnv(t)
+	e.paths.BadAreaTag = "LOCAL"
+	n := e.node(t)
+	pkt := hubPacket(t, qwk.PacketMessage{Conference: 2099, Number: 1, From: "X", To: "All", Subject: "stray", DateTime: time.Now(), Body: "x"})
+	if err := os.WriteFile(filepath.Join(e.paths.InboundPath, "VERT.QWK"), pkt, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := n.Toss()
+	if len(res.Errors) != 0 || res.Unmapped != 1 || res.Imported != 1 {
+		t.Fatalf("toss: %+v", res)
+	}
+	if c, _ := e.msgMgr.GetMessageCountForArea(3); c != 1 {
+		t.Errorf("bad area holds %d messages, want 1", c)
+	}
+}
+
+func TestScan_AdvancesPointerPastImportedMail(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	pkt := hubPacket(t,
+		qwk.PacketMessage{Conference: 2001, Number: 1, From: "A", To: "All", Subject: "one", DateTime: time.Now(), Body: "1"},
+		qwk.PacketMessage{Conference: 2001, Number: 2, From: "B", To: "All", Subject: "two", DateTime: time.Now(), Body: "2"},
+	)
+	if err := os.WriteFile(filepath.Join(e.paths.InboundPath, "VERT.QWK"), pkt, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if res := n.Toss(); res.Imported != 2 {
+		t.Fatalf("toss: %+v", res)
+	}
+	n.Scan()
+	base, err := e.msgMgr.GetBase(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hwm := highWater(base)
+	_ = base.Close()
+	if hwm != 2 {
+		t.Errorf("export pointer = %d, want 2 (imported mail skipped without rescanning)", hwm)
+	}
+}
+
+func TestScan_SkipsMessagesWithQWKViaEvenIfUnmarked(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	// Simulate an import whose DateProcessed mark failed: the message has the
+	// QWKVIA kludge but DateProcessed is zero.
+	base, err := e.msgMgr.GetBase(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jm := jam.NewMessage()
+	jm.From, jm.To, jm.Subject, jm.Text = "Hub User", "All", "from hub", "body"
+	jm.Kludges = []string{"QWKVIA: VERT"}
+	if _, err := base.WriteMessageExt(jm, jam.MsgTypeEchomailMsg, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	_ = base.Close()
+	res := n.Scan()
+	if res.Exported != 0 || res.REPPath != "" {
+		t.Fatalf("hub mail re-exported: %+v", res)
+	}
+}
+
+// rezipWithout copies a zip archive, leaving out one entry.
+func rezipWithout(t *testing.T, archive []byte, drop string) []byte {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	zw := zip.NewWriter(&out)
+	for _, f := range zr.File {
+		if strings.EqualFold(f.Name, drop) {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := zw.Create(f.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.Copy(w, rc); err != nil {
+			t.Fatal(err)
+		}
+		_ = rc.Close()
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
 }

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/robfig/cron/v3"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
@@ -132,8 +134,10 @@ func (m *Model) fieldsQWKWizard() []fieldDef {
 				if val == "" {
 					val = defaultQWKPollSchedule
 				}
-				if !strings.HasPrefix(val, "@") && len(strings.Fields(val)) != 5 {
-					return fmt.Errorf("five cron fields (min hour day month weekday) or a name like @hourly")
+				// The same parser the scheduler uses, so "@foo" or a six
+				// field spec is refused here instead of silently never running.
+				if _, err := cron.ParseStandard(val); err != nil {
+					return fmt.Errorf("five cron fields (min hour day month weekday) or @hourly/@daily: %v", err)
 				}
 				w.schedule = val
 				return nil
@@ -180,8 +184,10 @@ func (m *Model) validateQWKWizard() error {
 			return fmt.Errorf("%s: %v", f.Label, err)
 		}
 	}
-	if m.qwkWizard.loginName == "" && m.systemQWKID() == "" {
-		return fmt.Errorf("login Name: this system has no QWK ID; set one under System Setup or enter a login name")
+	// The node's identity on the network is the system QWK ID whatever the
+	// FTP login is called; the poller refuses to run without one.
+	if m.systemQWKID() == "" {
+		return fmt.Errorf("your QWK-ID: this system has no QWK ID; set one under System Setup > Registration first")
 	}
 	return nil
 }

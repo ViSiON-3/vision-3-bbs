@@ -131,7 +131,9 @@ edits the global paths, ESC returns. The edit screen has these fields:
 | HEADERS.DAT | Y (the default) sends full-length names, Message-IDs and time zones; N sends only the body kludges, for a hub that chokes on the file. |
 | Timeout (secs) | Per-transfer FTP timeout. 0 means 300. |
 
-Global (**G**): Inbound Path, Outbound Path, Temp Path, Dupe DB Path.
+Global (**G**): Inbound Path, Outbound Path, Temp Path, Dupe DB Path, Bad Area
+Tag (a local area that catches mail for conferences you have not mirrored;
+blank drops it with a log line).
 
 ## Manual Configuration
 
@@ -143,6 +145,7 @@ Global (**G**): Inbound Path, Outbound Path, Temp Path, Dupe DB Path.
   "outboundPath": "data/qwknet/out",
   "tempPath": "data/qwknet/temp",
   "dupeDbPath": "data/qwknet/dupes.json",
+  "badAreaTag": "",
   "networks": {
     "dovenet": {
       "enabled": true,
@@ -167,6 +170,7 @@ Global (**G**): Inbound Path, Outbound Path, Temp Path, Dupe DB Path.
 | `outboundPath` | Packed `.REP` waiting to be uploaded. |
 | `tempPath` | Scratch space while packets are built and downloaded. |
 | `dupeDbPath` | JSON file of imported Message-IDs, kept 90 days. |
+| `badAreaTag` | Tag of a local area that receives messages for conferences no area mirrors. Blank drops them with a log line, as Synchronet does; a hub sends every conference your account subscribes to, so unmapped ones are normal. |
 | `networks.<key>.enabled` | Include this network in unqualified `qwk-poll` / `qwk-scan` runs. |
 | `hubId` | The hub's QWK ID. Names the packets: `<hubId>.REP` up, `<hubId>.QWK` down. |
 | `ownId` | Your QWK ID on this network. Blank uses the system QWK ID. |

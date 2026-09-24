@@ -92,9 +92,15 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (Toss
 	if err != nil {
 		return res, err
 	}
-	if p.BBSID != "" && !strings.EqualFold(p.BBSID, n.hubID) {
+	// CONTROL.DAT names the sender. A packet without one cannot be trusted
+	// to be the hub's, so it is set aside rather than imported blind.
+	if p.BBSID == "" {
+		return res, fmt.Errorf("packet has no CONTROL.DAT BBS ID; expected hub %s", n.hubID)
+	}
+	if !strings.EqualFold(p.BBSID, n.hubID) {
 		return res, fmt.Errorf("packet is from %s, not hub %s", p.BBSID, n.hubID)
 	}
+	badArea := n.badArea()
 	if p.ParseError != nil {
 		slog.Warn("packet ended early; importing what was readable", "path", path, "error", p.ParseError)
 	}
@@ -116,8 +122,12 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (Toss
 		area, ok := areas[m.Conference]
 		if !ok {
 			res.Unmapped++
-			slog.Warn("qwknet message for a conference no area mirrors", "network", n.Key, "conference", m.Conference, "subject", m.Subject)
-			continue
+			if badArea == nil {
+				slog.Warn("qwknet message for a conference no area mirrors, dropped", "network", n.Key, "conference", m.Conference, "subject", m.Subject)
+				continue
+			}
+			slog.Warn("qwknet message for a conference no area mirrors, routed to bad area", "network", n.Key, "conference", m.Conference, "subject", m.Subject, "area", badArea.Tag)
+			area = badArea
 		}
 		key := dupeKey(m)
 		if n.dupes != nil && n.dupes.IsDupe(key) {
@@ -198,7 +208,11 @@ func (n *Node) importMessage(area *message.MessageArea, m qwk.NetMessage) (retEr
 	if err != nil {
 		return err
 	}
-	if hdr, herr := base.ReadMessageHeader(num); herr == nil {
+	// The QWKVIA kludge is the second guard against re-export should this
+	// mark fail: Scan skips any message carrying it.
+	if hdr, herr := base.ReadMessageHeader(num); herr != nil {
+		slog.Warn("failed to read imported message header to mark it processed", "area", area.Tag, "msg", num, "error", herr)
+	} else {
 		hdr.DateProcessed = uint32(time.Now().Unix())
 		if uerr := base.UpdateMessageHeader(num, hdr); uerr != nil {
 			slog.Warn("failed to mark imported message processed", "area", area.Tag, "msg", num, "error", uerr)

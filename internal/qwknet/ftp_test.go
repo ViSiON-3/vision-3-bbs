@@ -40,6 +40,24 @@ func newFakeFTP(t *testing.T, user, pass string, files map[string][]byte) *fakeF
 
 func (s *fakeFTP) addr() string { return s.ln.Addr().String() }
 
+func (s *fakeFTP) setNoEPSV(v bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.noEPSV = v
+}
+
+func (s *fakeFTP) remove(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.files, name)
+}
+
+func (s *fakeFTP) upload(name string) []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.uploads[name]
+}
+
 func (s *fakeFTP) serve() {
 	for {
 		conn, err := s.ln.Accept()
@@ -81,7 +99,10 @@ func (s *fakeFTP) session(conn net.Conn) {
 		case "TYPE":
 			w("200 ok")
 		case "EPSV":
-			if s.noEPSV {
+			s.mu.Lock()
+			noEPSV := s.noEPSV
+			s.mu.Unlock()
+			if noEPSV {
 				w("500 no EPSV")
 				continue
 			}
@@ -110,7 +131,9 @@ func (s *fakeFTP) session(conn net.Conn) {
 				w("503 bad sequence")
 				continue
 			}
+			s.mu.Lock()
 			body, ok := s.files[arg]
+			s.mu.Unlock()
 			if !ok {
 				_ = data.Close()
 				code := 550
@@ -149,10 +172,7 @@ func TestFTPClient_UploadDownload(t *testing.T) {
 	if err := c.store(ctx, "VERT.REP", strings.NewReader("rep-bytes")); err != nil {
 		t.Fatal(err)
 	}
-	srv.mu.Lock()
-	got := string(srv.uploads["VERT.REP"])
-	srv.mu.Unlock()
-	if got != "rep-bytes" {
+	if got := string(srv.upload("VERT.REP")); got != "rep-bytes" {
 		t.Errorf("upload = %q", got)
 	}
 	var buf bytes.Buffer
@@ -167,7 +187,7 @@ func TestFTPClient_UploadDownload(t *testing.T) {
 
 func TestFTPClient_PASVFallbackAndBadLogin(t *testing.T) {
 	srv := newFakeFTP(t, "NODE", "pw", map[string][]byte{"X": []byte("x")})
-	srv.noEPSV = true
+	srv.setNoEPSV(true)
 	ctx := context.Background()
 	c, err := ftpDial(ctx, srv.addr(), 5*time.Second)
 	if err != nil {
@@ -201,5 +221,26 @@ func TestParsePASVAndEPSV(t *testing.T) {
 	}
 	if p, ok := parseEPSV("Entering Extended Passive Mode (|||2121|)"); !ok || p != 2121 {
 		t.Errorf("parseEPSV = %d %v", p, ok)
+	}
+}
+
+func TestFTPClient_RejectsControlCharacters(t *testing.T) {
+	srv := newFakeFTP(t, "NODE", "pw", nil)
+	c, err := ftpDial(context.Background(), srv.addr(), 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.quit()
+	if err := c.login("NODE\r\nDELE x", "pw"); err == nil {
+		t.Error("CRLF in user name accepted")
+	}
+	if err := c.login("NODE", "pw\nQUIT"); err == nil {
+		t.Error("LF in password accepted")
+	}
+	if err := c.login("NODE", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.retrieve(context.Background(), "A\r\nB", io.Discard); err == nil {
+		t.Error("CRLF in file name accepted")
 	}
 }

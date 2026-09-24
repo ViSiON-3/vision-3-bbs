@@ -72,7 +72,7 @@ func TestQWKWizard_SaveCreatesNetworkAreasAndEvent(t *testing.T) {
 	if a.AreaType != "qwknet" || a.Network != "dovenet" || a.QWKConference != 2001 || a.Tag != "DOVENET_GENERAL" || a.EchoTag != "General" {
 		t.Errorf("area 0 = %+v", a)
 	}
-	if a.BasePath != filepath.Join("msgbases", "qwk.dovenet_general") || a.ConferenceID == 0 {
+	if a.BasePath != filepath.Join("msgbases", "qwk.dovenet_2001_general") || a.ConferenceID == 0 {
 		t.Errorf("area 0 paths = %+v", a)
 	}
 	ev := findEvent(m.configs.Events, "qwknet_poll_dovenet")
@@ -167,13 +167,18 @@ func TestQWKEvents_WireRefreshRename(t *testing.T) {
 	if e == nil || !e.Enabled || e.Schedule != defaultQWKPollSchedule || !ev.Enabled {
 		t.Fatalf("wire: %+v enabled=%v", e, ev.Enabled)
 	}
-	// A tuned schedule survives a re-wire; the hub name refreshes.
+	// A tuned schedule survives a blank re-wire; the hub name refreshes.
 	e.Schedule = "0 * * * *"
 	e.Args = append(e.Args, "-v")
 	wireQWKEvents(&ev, "dovenet", "VERT2", "")
 	e = findEvent(ev, "qwknet_poll_dovenet")
 	if e.Schedule != "0 * * * *" || !strings.Contains(e.Name, "VERT2") || e.Args[len(e.Args)-1] != "-v" {
 		t.Errorf("re-wire lost tuning: %+v", e)
+	}
+	// An explicit schedule (the wizard's edited field) replaces it.
+	wireQWKEvents(&ev, "dovenet", "VERT2", "*/10 * * * *")
+	if e = findEvent(ev, "qwknet_poll_dovenet"); e.Schedule != "*/10 * * * *" {
+		t.Errorf("edited schedule not applied: %+v", e)
 	}
 
 	// Refresh: a disabled network disables its event; a removed one too; an

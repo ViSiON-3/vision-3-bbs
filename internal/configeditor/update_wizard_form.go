@@ -334,9 +334,11 @@ func (m Model) wizardHasData() bool {
 
 // updateWizardExitConfirm handles the wizard save/discard dialog.
 func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Determine if this is the FTN wizard, the QWK wizard or V3Net wizard.
-	isFTN := m.ftnWizard != nil && m.ftnWizard.hasData()
-	isQWK := !isFTN && m.qwkWizard != nil && m.qwkWizard.hasData()
+	// The wizard that opened the dialog decides what Y/N act on. Falling
+	// back to hasData() would let stale data from a discarded FTN wizard
+	// capture a QWK wizard's dialog (or the reverse).
+	isFTN := m.wizardExitSource == modeFTNWizardForm
+	isQWK := m.wizardExitSource == modeQWKWizardForm
 
 	formMode := modeWizardForm
 	discardMode := editorMode(modeRecordList)

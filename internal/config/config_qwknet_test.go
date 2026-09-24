@@ -21,6 +21,10 @@ func TestQWKNetConfig_RoundTrip(t *testing.T) {
 	in := QWKNetConfig{Networks: map[string]QWKNetworkConfig{
 		"dovenet": {Enabled: true, Name: "DOVE-Net", HubID: "VERT", Host: "vert.synchro.net", Password: "secret"},
 	}}
+	// A pre-existing world-readable file (a copied template) must end up 0600.
+	if err := os.WriteFile(filepath.Join(dir, "qwknet.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := SaveQWKNetConfig(dir, in); err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +53,9 @@ func TestQWKNetworkConfig_NodeIDAndLogin(t *testing.T) {
 	n.OwnID = "mynode"
 	if got := n.NodeID("VISION3B"); got != "MYNODE" {
 		t.Errorf("NodeID own = %q", got)
+	}
+	if got := (QWKNetworkConfig{Host: "2001:db8::1", Port: 2121}).HostPort(); got != "[2001:db8::1]:2121" {
+		t.Errorf("HostPort IPv6 = %q", got)
 	}
 	if got := n.LoginUser("MYNODE"); got != "MYNODE" {
 		t.Errorf("LoginUser fallback = %q", got)

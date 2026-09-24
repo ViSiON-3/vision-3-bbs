@@ -211,6 +211,11 @@ func (m *Model) fieldsQWKNetGlobal() []fieldDef {
 			Get: func() string { return qc.DupeDBPath },
 			Set: func(val string) error { qc.DupeDBPath = strings.TrimSpace(val); return nil },
 		},
+		{
+			Label: "Bad Area Tag", Help: "Message area tag that receives mail for conferences no area mirrors (blank = drop and log)", Type: ftString, Col: 3, Row: 5, Width: 20,
+			Get: func() string { return qc.BadAreaTag },
+			Set: func(val string) error { qc.BadAreaTag = strings.TrimSpace(val); return nil },
+		},
 	}
 }
 

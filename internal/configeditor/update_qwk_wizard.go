@@ -116,6 +116,7 @@ func (m Model) updateQWKWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEscape:
 		if m.qwkWizard.hasData() {
 			m.confirmYes = true
+			m.wizardExitSource = modeQWKWizardForm
 			m.mode = modeWizardExitConfirm
 			return m, nil
 		}

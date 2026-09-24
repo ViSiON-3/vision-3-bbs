@@ -65,12 +65,13 @@ func splitBodyKludges(body string) (bodyKludges, string) {
 			target, prefix = &k.via, kludgeVia
 		case strings.HasPrefix(upper, kludgeMsgID):
 			target, prefix = &k.msgID, kludgeMsgID
+		// @REPLYTO: shares the @REPLY prefix, so it has to be tested first.
+		case strings.HasPrefix(upper, kludgeReplyTo):
+			target, prefix = &k.replyTo, kludgeReplyTo
 		case strings.HasPrefix(upper, kludgeReply):
 			target, prefix = &k.replyID, kludgeReply
 		case strings.HasPrefix(upper, kludgeTZ):
 			target, prefix = &k.tz, kludgeTZ
-		case strings.HasPrefix(upper, kludgeReplyTo):
-			target, prefix = &k.replyTo, kludgeReplyTo
 		case strings.HasPrefix(upper, "TO:"):
 			target, prefix = &k.to, "TO:"
 		case strings.HasPrefix(upper, "FROM:"):

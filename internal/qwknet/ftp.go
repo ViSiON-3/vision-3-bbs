@@ -49,8 +49,30 @@ func ftpDial(ctx context.Context, hostPort string, timeout time.Duration) (*ftpC
 	return c, nil
 }
 
+// errBadArgument is returned for a credential or file name that could not
+// be sent as one FTP command line.
+var errBadArgument = errors.New("value contains control characters")
+
+// checkArgument rejects values that would inject a second command: FTP is
+// line-oriented, so a CR or LF (or any other control byte) in a user name,
+// password or file name ends the command early.
+func checkArgument(v string) error {
+	for _, r := range v {
+		if r < 0x20 || r == 0x7f {
+			return errBadArgument
+		}
+	}
+	return nil
+}
+
 // login runs USER/PASS and switches to binary mode.
 func (c *ftpClient) login(user, pass string) error {
+	if err := checkArgument(user); err != nil {
+		return fmt.Errorf("user name: %w", err)
+	}
+	if err := checkArgument(pass); err != nil {
+		return fmt.Errorf("password: %w", err)
+	}
 	code, msg, err := c.cmd("USER %s", user)
 	if err != nil {
 		return err
@@ -190,6 +212,9 @@ func parseEPSV(msg string) (int, bool) {
 
 // store uploads r as name.
 func (c *ftpClient) store(ctx context.Context, name string, r io.Reader) error {
+	if err := checkArgument(name); err != nil {
+		return fmt.Errorf("file name %q: %w", name, err)
+	}
 	data, err := c.passive(ctx)
 	if err != nil {
 		return fmt.Errorf("opening data connection: %w", err)
@@ -225,6 +250,9 @@ func (c *ftpClient) store(ctx context.Context, name string, r io.Reader) error {
 // retrieve downloads name into w and returns the byte count. A 550 (or 450)
 // reply to RETR is reported as errNoSuchFile.
 func (c *ftpClient) retrieve(ctx context.Context, name string, w io.Writer) (int64, error) {
+	if err := checkArgument(name); err != nil {
+		return 0, fmt.Errorf("file name %q: %w", name, err)
+	}
 	data, err := c.passive(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("opening data connection: %w", err)

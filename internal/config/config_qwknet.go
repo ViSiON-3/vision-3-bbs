@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 )
 
 // QWKNetConfig is the root of configs/qwknet.json: the shared working
@@ -28,6 +32,10 @@ type QWKNetConfig struct {
 	TempPath string `json:"tempPath"`
 	// DupeDBPath is the JSON file of Message-IDs already imported.
 	DupeDBPath string `json:"dupeDbPath"`
+	// BadAreaTag names a local message area that receives messages for
+	// conferences no area mirrors. Blank drops them with a log line, which
+	// is what a hub sending more conferences than the node carries expects.
+	BadAreaTag string `json:"badAreaTag,omitempty"`
 	// Networks is keyed by the network key (e.g. "dovenet"), which is also
 	// what message areas name in their Network field.
 	Networks map[string]QWKNetworkConfig `json:"networks"`
@@ -67,7 +75,7 @@ func (n QWKNetworkConfig) HostPort() string {
 	if port <= 0 {
 		port = 21
 	}
-	return fmt.Sprintf("%s:%d", strings.TrimSpace(n.Host), port)
+	return net.JoinHostPort(strings.TrimSpace(n.Host), strconv.Itoa(port))
 }
 
 // LoginUser returns the FTP user name: the configured one, else the node's
@@ -168,8 +176,14 @@ func SaveQWKNetConfig(configPath string, cfg QWKNetConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal QWK network config: %w", err)
 	}
-	if err := os.WriteFile(filePath, data, 0600); err != nil {
+	// The file holds the hub password. atomicfile replaces the target with
+	// a fresh file, so the mode applies even when qwknet.json already
+	// existed with broader permissions (a template copied by setup, say).
+	if err := atomicfile.WriteFile(filePath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write QWK network config to %s: %w", filePath, err)
+	}
+	if err := os.Chmod(filePath, 0o600); err != nil {
+		return fmt.Errorf("failed to secure QWK network config %s: %w", filePath, err)
 	}
 	return nil
 }
@@ -194,6 +208,11 @@ func ValidateQWKNetwork(key string, n QWKNetworkConfig, systemID string) error {
 	}
 	if n.Password == "" {
 		return fmt.Errorf("network %q: hub password is required", key)
+	}
+	for name, v := range map[string]string{"login name": n.Username, "password": n.Password, "host": n.Host} {
+		if strings.ContainsAny(v, "\r\n\x00") {
+			return fmt.Errorf("network %q: %s contains a line break", key, name)
+		}
 	}
 	return nil
 }

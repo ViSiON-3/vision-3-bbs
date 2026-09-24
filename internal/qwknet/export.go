@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -73,18 +74,38 @@ func (n *Node) Scan() ScanResult {
 			res.Errors = append(res.Errors, fmt.Sprintf("area %s: count: %v", area.Tag, err))
 			continue
 		}
-		start := highWater(base) + 1
-		for num := start; num <= count; num++ {
+		hwm := highWater(base)
+		// advance moves the pointer past a message that needs no export,
+		// but only while the run from the pointer is unbroken: a pending
+		// message further back must stay in front of it.
+		advance := func(num int) {
+			if num != hwm+1 {
+				return
+			}
+			if err := base.SetLastRead(ScannerUser, uint32(num), uint32(num)); err != nil {
+				slog.Warn("failed to advance export pointer", "network", n.Key, "area", area.Tag, "error", err)
+				return
+			}
+			hwm = num
+		}
+		for num := hwm + 1; num <= count; num++ {
 			hdr, err := base.ReadMessageHeader(num)
 			if err != nil {
 				continue
 			}
 			if hdr.DateProcessed != 0 || hdr.Attribute&jam.MsgDeleted != 0 {
+				advance(num)
 				continue
 			}
 			msg, err := base.ReadMessage(num)
 			if err != nil {
 				res.Errors = append(res.Errors, fmt.Sprintf("area %s msg %d: %v", area.Tag, num, err))
+				continue
+			}
+			if hasQWKVia(msg) {
+				// Imported from the hub but never marked processed (the
+				// mark failed); it must not go back out.
+				advance(num)
 				continue
 			}
 			outgoing = append(outgoing, n.netMessageFor(base, area, conf, num, msg))
@@ -121,6 +142,17 @@ func (n *Node) Scan() ScanResult {
 	}
 	slog.Info("qwknet REP packed", "network", n.Key, "hub", n.hubID, "new", res.Exported, "pending", res.Pending, "path", repPath)
 	return res
+}
+
+// hasQWKVia reports whether a stored message carries the QWKVIA kludge the
+// tosser stamps on everything that arrived from a hub.
+func hasQWKVia(m *jam.Message) bool {
+	for _, k := range m.Kludges {
+		if strings.HasPrefix(strings.TrimPrefix(k, "\x01"), "QWKVIA:") {
+			return true
+		}
+	}
+	return false
 }
 
 // highWater reads the area's export pointer; 0 when none is recorded yet.
@@ -220,7 +252,9 @@ func (n *Node) writeREP(repPath string, msgs []qwk.NetMessage) error {
 	if err := os.WriteFile(tmp, buf.Bytes(), 0o644); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, repPath); err != nil {
+	// Replace rather than Rename: a REP waiting for upload is overwritten
+	// with the appended one, and on Windows Rename refuses to replace.
+	if err := atomicfile.Replace(tmp, repPath); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}

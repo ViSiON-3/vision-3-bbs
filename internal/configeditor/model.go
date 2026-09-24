@@ -270,6 +270,11 @@ type Model struct {
 	ftnWizardPickerCursor int
 	ftnWizardPickerScroll int
 
+	// wizardExitSource is the wizard form that opened the "Unsaved Wizard"
+	// dialog, so Y/N act on that wizard and not on stale data left in
+	// another one.
+	wizardExitSource editorMode
+
 	// QWK network wizard state
 	qwkWizard          *qwkWizardState // pointer so field closures survive value-receiver copies
 	qwkWizardFields    []fieldDef

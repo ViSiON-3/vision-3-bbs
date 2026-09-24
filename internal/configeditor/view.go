@@ -48,11 +48,14 @@ func (m Model) View() string {
 	case modeNavSaveConfirm:
 		return m.viewNavSaveConfirm()
 	case modeWizardExitConfirm:
-		bg := m.viewWizardForm()
-		if m.ftnWizard != nil && m.ftnWizard.hasData() {
+		var bg string
+		switch m.wizardExitSource {
+		case modeFTNWizardForm:
 			bg = m.viewFTNWizardForm()
-		} else if m.qwkWizard != nil && m.qwkWizard.hasData() {
+		case modeQWKWizardForm:
 			bg = m.viewQWKWizardForm()
+		default:
+			bg = m.viewWizardForm()
 		}
 		return m.overlayConfirmDialog(bg, "-- Unsaved Wizard --",
 			"Save before leaving?")

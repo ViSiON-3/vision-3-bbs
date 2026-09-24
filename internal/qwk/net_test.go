@@ -8,9 +8,9 @@ import (
 )
 
 func TestSplitBodyKludges(t *testing.T) {
-	body := "@VIA: VERT/OTHER\n@msgid: <1.2@other>\n@REPLY: <9.9@vert>\n@TZ: 41e0\nTo: Somebody With A Long Name\nHello there\n@VIA: not a kludge now\n"
+	body := "@VIA: VERT/OTHER\n@msgid: <1.2@other>\n@REPLYTO: Some One@VERT\n@REPLY: <9.9@vert>\n@TZ: 41e0\nTo: Somebody With A Long Name\nHello there\n@VIA: not a kludge now\n"
 	k, rest := splitBodyKludges(body)
-	if k.via != "VERT/OTHER" || k.msgID != "<1.2@other>" || k.replyID != "<9.9@vert>" || k.tz != "41e0" || k.to != "Somebody With A Long Name" {
+	if k.via != "VERT/OTHER" || k.msgID != "<1.2@other>" || k.replyID != "<9.9@vert>" || k.replyTo != "Some One@VERT" || k.tz != "41e0" || k.to != "Somebody With A Long Name" {
 		t.Fatalf("kludges = %+v", k)
 	}
 	if rest != "Hello there\n@VIA: not a kludge now\n" {

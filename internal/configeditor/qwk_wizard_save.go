@@ -120,8 +120,10 @@ func (m *Model) createQWKMsgAreaIfNeeded(netKey string, conf qwk.ConferenceInfo,
 		AutoJoin:      autoJoin,
 		ACSRead:       "s10",
 		ACSWrite:      "s20",
-		BasePath:      filepath.Join("msgbases", "qwk."+strings.ToLower(netKey)+"_"+strings.ToLower(slug)),
-		ConferenceID:  confID,
+		// The number keeps the path unique: two conferences can slug alike
+		// ("Programming (Baja)" / "(Basic)" both cut to the same 24 chars).
+		BasePath:     filepath.Join("msgbases", fmt.Sprintf("qwk.%s_%d_%s", strings.ToLower(netKey), conf.Number, strings.ToLower(slug))),
+		ConferenceID: confID,
 	})
 	return true
 }

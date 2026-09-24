@@ -258,6 +258,7 @@ func (m Model) updateFTNWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEscape:
 		if m.ftnWizard.hasData() {
 			m.confirmYes = true
+			m.wizardExitSource = modeFTNWizardForm
 			m.mode = modeWizardExitConfirm
 			return m, nil
 		}

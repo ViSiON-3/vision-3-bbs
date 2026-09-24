@@ -110,25 +110,65 @@ func (n *Node) areasByConference() map[int]*message.MessageArea {
 	return out
 }
 
-// inboundPackets lists the hub's packets waiting in the inbound directory,
-// oldest first by name. A download is stored as <HUBID>.QWK, or with a
-// timestamp suffix when one is already waiting.
+// badArea returns the area configured to receive messages for conferences
+// no area mirrors, or nil when none is set or it does not exist.
+func (n *Node) badArea() *message.MessageArea {
+	tag := strings.TrimSpace(n.paths.BadAreaTag)
+	if tag == "" || n.msgMgr == nil {
+		return nil
+	}
+	area, ok := n.msgMgr.GetAreaByTag(tag)
+	if !ok {
+		slog.Warn("qwknet bad area is not a configured message area", "tag", tag)
+		return nil
+	}
+	return area
+}
+
+// inboundPackets lists this hub's packets waiting in the inbound directory:
+// <HUBID>.QWK first, then the timestamp-suffixed names newInboundName
+// produces, oldest first. Every network shares the directory, so only the
+// exact names count; a prefix match would let hub VERT claim VERTX's packet.
 func (n *Node) inboundPackets() []string {
 	entries, err := os.ReadDir(n.paths.InboundPath)
 	if err != nil {
 		return nil
 	}
-	var out []string
-	prefix := strings.ToUpper(n.hubID)
+	hub := strings.ToUpper(n.hubID)
+	var plain, dated []string
 	for _, e := range entries {
-		name := strings.ToUpper(e.Name())
-		if e.IsDir() || !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".QWK") {
+		if e.IsDir() {
 			continue
 		}
-		out = append(out, filepath.Join(n.paths.InboundPath, e.Name()))
+		path := filepath.Join(n.paths.InboundPath, e.Name())
+		name := strings.ToUpper(e.Name())
+		switch {
+		case name == hub+".QWK":
+			plain = append(plain, path)
+		case isDatedPacketName(name, hub):
+			dated = append(dated, path)
+		}
 	}
-	sort.Strings(out)
-	return out
+	sort.Strings(dated)
+	return append(plain, dated...)
+}
+
+// isDatedPacketName reports whether name (upper-cased) is HUB-<digits>.QWK.
+func isDatedPacketName(name, hub string) bool {
+	rest, ok := strings.CutPrefix(name, hub+"-")
+	if !ok {
+		return false
+	}
+	digits, ok := strings.CutSuffix(rest, ".QWK")
+	if !ok || digits == "" {
+		return false
+	}
+	for _, c := range digits {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // newInboundName picks a free file name for a downloaded packet.
