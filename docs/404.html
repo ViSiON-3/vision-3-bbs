@@ -5,315 +5,93 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
     <title>NO CARRIER — ViSiON/3 BBS</title>
-    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- Absolute, so the page still styles when served for a miss at any depth. -->
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/favicon.ico">
     <link rel="stylesheet" href="/style.css">
     <style>
-        .nc-wrap {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem 1rem;
-        }
-        .nc-box {
-            max-width: 46rem;
-            width: 100%;
-            border: 1px solid var(--border-color);
-            background: var(--bg-card);
-            padding: 2rem;
-        }
-        .nc-term {
-            color: var(--blue-bright);
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-            line-height: 1.35;
-            margin: 0 0 1.25rem;
-            /* Reserve the finished sequence's height up front, or the 404 text
-               below shunts down a line at a time while the dialer types. */
-            min-height: 7.5em;
-            white-space: pre-wrap;
-            overflow-x: auto;
-        }
-        .nc-cursor {
-            display: inline-block;
-            animation: nc-blink 1s step-end infinite;
-        }
-        @keyframes nc-blink { 50% { opacity: 0; } }
-        .nc-sound {
-            background: none;
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            padding: 0.25rem 0.6rem;
-            cursor: pointer;
-            margin-bottom: 1.25rem;
-        }
-        .nc-sound:hover { color: var(--cyan-accent); border-color: var(--cyan-accent); }
-        .nc-box h1 {
-            color: var(--text-heading);
-            font-family: var(--font-mono);
-            font-size: 1.25rem;
-            margin: 0 0 1rem;
-        }
-        .nc-box p { color: var(--text-secondary); margin: 0 0 1.5rem; }
-        .nc-links a { color: var(--cyan-accent); margin-right: 1.5rem; }
-        @media (prefers-reduced-motion: reduce) {
-            .nc-cursor { animation: none; }
+        .bbs-nav { overflow-x: auto; }
+        .bbs-nav .container { min-width: max-content; }
+        .ansi-art-wrap { max-width: 100%; overflow-x: auto; margin: 0 auto 2rem; }
+        .ansi-art { width: max-content; margin: 0 auto; color: var(--text-secondary); font-family: var(--font-mono); font-size: clamp(0.4rem, 2vw, 0.82rem); line-height: 1.1; white-space: pre; }
+        @media (max-width: 600px) {
+            .container { padding-right: 1rem; padding-left: 1rem; }
+            .msg-right { display: block; float: none; }
         }
     </style>
 </head>
 <body>
-    <div class="nc-wrap">
-        <div class="nc-box">
-            <div class="nc-term" id="nc-term" aria-hidden="true"><span class="nc-cursor" id="nc-cursor">&#9608;</span></div>
-            <button class="nc-sound" id="nc-sound" type="button">[ replay with sound ]</button>
-            <!-- The error itself lives in the markup rather than being painted by
-                 the script: it has to survive JS being off, and a screen reader
-                 would otherwise be handed the dialer transcript instead. -->
-            <h1>404 &mdash; that page isn't here.</h1>
-            <p>The address you asked for doesn't exist on this board. It may have
-               moved, or it may never have been here at all.</p>
-            <div class="nc-links">
-                <a href="/">[H] Home</a>
-                <a href="/sysop/">[D] Sysop Docs</a>
-                <a href="https://github.com/ViSiON-3/vision-3-bbs">[G] GitHub</a>
+<div class="crt-frame">
+
+    <nav class="bbs-nav">
+        <div class="container">
+            <span class="nav-item"><span class="nav-bracket">[</span><span class="nav-key">F</span><span class="nav-bracket">]</span> <a href="/#features"><span class="fade-1">F</span><span class="fade-2">e</span><span class="fade-3">atur</span><span class="fade-2">e</span><span class="fade-1">s</span></a></span>
+            <span class="nav-item"><span class="nav-bracket">[</span><span class="nav-key">G</span><span class="nav-bracket">]</span> <a href="/#get-started"><span class="fade-1">G</span><span class="fade-2">e</span><span class="fade-3">t Start</span><span class="fade-2">e</span><span class="fade-1">d</span></a></span>
+            <span class="nav-item"><span class="nav-bracket">[</span><span class="nav-key">J</span><span class="nav-bracket">]</span> <a href="/#get-involved"><span class="fade-1">G</span><span class="fade-2">e</span><span class="fade-3">t Involv</span><span class="fade-2">e</span><span class="fade-1">d</span></a></span>
+            <span class="nav-item"><span class="nav-bracket">[</span><span class="nav-key">H</span><span class="nav-bracket">]</span> <a href="/#history"><span class="fade-1">H</span><span class="fade-2">i</span><span class="fade-3">sto</span><span class="fade-2">r</span><span class="fade-1">y</span></a></span>
+            <span class="nav-item"><span class="nav-bracket">[</span><span class="nav-key">D</span><span class="nav-bracket">]</span> <a href="/sysop/"><span class="fade-1">S</span><span class="fade-2">y</span><span class="fade-3">sop Doc</span><span class="fade-2">s</span></a></span>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container">
+            <img src="/ViSiON3.png" alt="ViSiON/3 BBS" class="hero-logo">
+            <h1 class="tagline">NO CARRIER</h1>
+            <p class="subtitle">Error 404. The node you called is not answering.</p>
+        </div>
+    </header>
+
+    <main>
+        <section>
+            <div class="container">
+                <div class="ansi-art-wrap" aria-hidden="true">
+<pre class="ansi-art"><span class="cfade-3">╔══════════════════════════════════════════════════════════════════╗</span>
+<span class="cfade-2">║  U.S. ROBOTICS             COURIER HST Dual Standard             ║</span>
+<span class="cfade-4">║                                                                  ║</span>
+<span class="cfade-3">║  ┌────────────────────────────────────────────────────────────┐  ║</span>
+<span class="fade-2">║  │  STATUS        AA   </span><span class="fade-3">CD</span><span class="fade-2">   OH   RD   SD   TR   MR   RS   CS  │  ║</span>
+<span class="cfade-3">║  │</span>                <span class="cfade-2">▓▓</span>   <span class="fade-3">░░</span>   <span class="cfade-2">▓▓</span>   <span class="cfade-3">▒▒   ▒▒</span>   <span class="cfade-2">▓▓   ▓▓</span>   <span class="cfade-3">▒▒   ▒▒</span>  <span class="cfade-3">│  ║</span>
+<span class="fade-2">║  │                ON   </span><span class="fade-3">--</span><span class="fade-2">   ON  DATA DATA  DTR  DSR  RTS  CTS │  ║</span>
+<span class="cfade-3">║  └────────────────────────────────────────────────────────────┘  ║</span>
+<span class="cfade-4">║                                                                  ║</span>
+<span class="fade-1">║  404 / REMOTE SYSTEM DID NOT ANSWER                              ║</span>
+<span class="cfade-3">║  ░▒▓██████████████████████████████████████████████████████▓▒░    ║</span>
+<span class="cfade-3">╚══════════════════════════════════════════════════════════════════╝</span></pre>
+                </div>
+
+                <div class="msg-post">
+                    <div class="msg-header">
+                        <span class="msg-line"><span class="msg-bracket">[</span><span class="msg-label">Title</span><span class="msg-bracket">]</span>: <span class="msg-value">Lost Carrier</span> <span class="msg-right"><span class="msg-number">404</span> <span class="msg-number-of">of</span> <span class="msg-number">404</span></span></span>
+                        <span class="msg-line"><span class="msg-bracket">[</span><span class="msg-label">Author</span><span class="msg-bracket">]</span>: <span class="msg-value">felonius</span> <span class="msg-right"><span class="msg-bracket">[</span><span class="msg-label">When</span><span class="msg-bracket">]</span>: <span class="msg-value">09/23/26</span></span></span>
+                        <span class="msg-line"><span class="msg-bracket">[</span><span class="msg-label">To</span><span class="msg-bracket">]</span>: <span class="msg-value">Caller</span> <span class="msg-right"><span class="msg-bracket">[</span><span class="msg-label">Area</span><span class="msg-bracket">]</span>: <span class="msg-value">Lost &amp; Found</span></span></span>
+                    </div>
+                    <div class="msg-body">
+                        <p>The remote system did not answer at this address.</p>
+                        <p>Either the page moved, the link is stale, or somebody forgot to update the file list. It happens. Drop back to the main menu and try another door.</p>
+                        <p>Your connect time has not been deducted.</p>
+                    </div>
+                </div>
+
+                <div class="cta-buttons">
+                    <a href="/" class="btn btn-primary">Return to Main Menu</a>
+                    <a href="/sysop/" class="btn btn-secondary">Sysop Docs</a>
+                    <a href="https://github.com/ViSiON-3/vision-3-bbs" class="btn btn-secondary">View on GitHub</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <p><span class="fade-1">V</span><span class="fade-2">i</span><span class="fade-3">SiON/3 &mdash; Built with love by people smart enough to know better and old enough to care any</span><span class="fade-3">w</span><span class="fade-2">a</span><span class="fade-1">y</span></p>
+            <div class="footer-links">
+                <a href="https://github.com/ViSiON-3/vision-3-bbs">GitHub</a>
+                <a href="https://discord.gg/VkjRN2Ms">Discord</a>
+                <a href="mailto:spaceman@vision3bbs.com">Contact</a>
             </div>
         </div>
-    </div>
-
-<script>
-(function () {
-    'use strict';
-
-    var term = document.getElementById('nc-term');
-    var cursor = document.getElementById('nc-cursor');
-    var soundBtn = document.getElementById('nc-sound');
-
-    var NUMBER = '13145673833';
-    var FINAL = 'ATDT ' + NUMBER + '\nRING\nRING\nCONNECT 14400/HST\nNO CARRIER';
-    var HANDSHAKE = '/audio/modem-handshake.mp3';
-
-    // DTMF pairs, so dialling sounds like dialling rather than like beeping.
-    var DTMF = {
-        '1': [697, 1209], '2': [697, 1336], '3': [697, 1477],
-        '4': [770, 1209], '5': [770, 1336], '6': [770, 1477],
-        '7': [852, 1209], '8': [852, 1336], '9': [852, 1477],
-        '0': [941, 1336]
-    };
-
-    var timers = [];
-    var running = false;
-    // Identifies the current run, so a buffer that resolves late cannot play
-    // into a run that has since been restarted.
-    var runId = 0;
-    // True between the handshake beat and NO CARRIER: the only window in which
-    // starting the recording still makes sense.
-    var handshakeOpen = false;
-
-    // Exactly one AudioContext for the life of the page. They are expensive --
-    // each one can mean a high-priority thread and a system audio stream -- and
-    // browsers cap how many a document may hold (Chromium: 6). Making a fresh
-    // one per replay would throw on the seventh and drop tones from then on.
-    var ctx = null;
-    // Everything routes through a per-run gain node, so reset() can disconnect
-    // it and silence whatever is mid-flight instead of letting a ring bleed
-    // across a restart.
-    var master = null;
-    var buffer = null;   // decoded handshake, fetched once
-    var source = null;   // the handshake currently playing, if any
-
-    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
-
-    function ensureCtx() {
-        if (!ctx) {
-            try {
-                ctx = new (window.AudioContext || window.webkitAudioContext)();
-            } catch (e) {
-                ctx = null;
-            }
-        }
-        if (ctx && ctx.state === 'suspended') { ctx.resume(); }
-        return ctx;
-    }
-
-    function newMaster() {
-        if (!ctx) { return null; }
-        if (master) { try { master.disconnect(); } catch (e) {} }
-        master = ctx.createGain();
-        master.gain.value = 1;
-        master.connect(ctx.destination);
-        return master;
-    }
-
-    function stopHandshake() {
-        if (source) {
-            try { source.stop(); } catch (e) {}
-            source = null;
-        }
-    }
-
-    // Decoded into the AudioContext rather than played from an <audio> element.
-    // The handshake starts about 4.4s into the run, and a play() that far from
-    // the click is not "caused by" the gesture -- WebKit may refuse it. An
-    // AudioContext unlocked by the click stays unlocked, so scheduling into it
-    // later is reliable.
-    function loadBuffer() {
-        if (!ctx || buffer) { return Promise.resolve(buffer); }
-        return fetch(HANDSHAKE)
-            .then(function (r) { return r.arrayBuffer(); })
-            .then(function (bytes) {
-                return new Promise(function (resolve, reject) {
-                    // Callback form: Safari lacked the promise-returning one.
-                    ctx.decodeAudioData(bytes, resolve, reject);
-                });
-            })
-            .then(function (buf) { buffer = buf; return buf; })
-            .catch(function () { return null; });
-    }
-
-    function reset() {
-        timers.forEach(clearTimeout);
-        timers = [];
-        stopHandshake();
-        handshakeOpen = false;
-        if (master) { try { master.disconnect(); } catch (e) {} master = null; }
-        term.textContent = '';
-        term.appendChild(cursor);
-    }
-
-    function write(s) { cursor.insertAdjacentText('beforebegin', s); }
-
-    // Oscillator pair gated by a gain envelope. Without the ramps the abrupt
-    // start and stop click audibly.
-    function tone(freqs, dur) {
-        if (!ctx || !master) { return; }
-        var t0 = ctx.currentTime;
-        var gain = ctx.createGain();
-        gain.gain.setValueAtTime(0, t0);
-        gain.gain.linearRampToValueAtTime(0.18, t0 + 0.01);
-        gain.gain.setValueAtTime(0.18, t0 + dur - 0.02);
-        gain.gain.linearRampToValueAtTime(0, t0 + dur);
-        gain.connect(master);
-        freqs.forEach(function (f) {
-            var osc = ctx.createOscillator();
-            osc.type = 'sine';
-            osc.frequency.value = f;
-            osc.connect(gain);
-            osc.start(t0);
-            osc.stop(t0 + dur);
-        });
-    }
-
-    function ring() { tone([440, 480], 1.2); }
-
-    function playHandshake() {
-        if (!ctx || !master || !buffer) { return; }
-        stopHandshake();
-        source = ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(master);
-        source.start();
-    }
-
-    // The decode is kicked off at click time, but on a slow connection it can
-    // still be outstanding when the handshake is due. Rather than skip the
-    // recording for that run, wait for it and start late. The visual timing
-    // never waits on audio. A buffer that lands after NO CARRIER, or after a
-    // restart, is dropped instead of playing over whatever is on screen now.
-    function playHandshakeWhenReady(id) {
-        if (!ctx || !master) { return; }
-        if (buffer) { playHandshake(); return; }
-        loadBuffer().then(function (buf) {
-            if (!buf || id !== runId || !handshakeOpen) { return; }
-            playHandshake();
-        });
-    }
-
-    function showFinal() {
-        term.textContent = FINAL + '\n';
-        term.appendChild(cursor);
-    }
-
-    // withSound is only ever true from a click. Browsers block audio without a
-    // gesture, so the automatic pass on load is deliberately silent rather than
-    // firing calls that get refused and logged as errors.
-    function run(withSound) {
-        if (running) { return; }
-        running = true;
-        reset();
-        runId++;
-        var myRun = runId;
-
-        if (withSound) {
-            ensureCtx();
-            newMaster();
-            // Kick the decode off at click time so the buffer is ready well
-            // before the handshake is due ~4.4s in.
-            loadBuffer();
-        }
-
-        write('ATDT ');
-
-        var i = 0;
-        function digit() {
-            if (i < NUMBER.length) {
-                var d = NUMBER[i];
-                write(d);
-                if (DTMF[d]) { tone(DTMF[d], 0.09); }
-                i++;
-                later(digit, 110);
-                return;
-            }
-            write('\n');
-
-            later(function () {
-                ring();
-                write('RING\n');
-
-                later(function () {
-                    ring();
-                    write('RING\n');
-
-                    later(function () {
-                        handshakeOpen = true;
-                        playHandshakeWhenReady(myRun);
-                        // Connect once the handshake has had time to sound like
-                        // one. Trimmed hard versus the homepage splash: a 404 is
-                        // an error page, not an intro, so the whole run is ~9s.
-                        later(function () {
-                            write('CONNECT 14400/HST\n');
-                            later(function () {
-                                handshakeOpen = false;
-                                stopHandshake();
-                                write('NO CARRIER');
-                                running = false;
-                            }, 1100);
-                        }, 3600);
-                    }, 900);
-                }, 1300);
-            }, 700);
-        }
-        later(digit, 400);
-    }
-
-    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced) {
-        showFinal();
-        soundBtn.hidden = true;
-    } else {
-        run(false);
-    }
-
-    soundBtn.addEventListener('click', function () {
-        running = false;
-        run(true);
-    });
-})();
-</script>
+    </footer>
+</div>
 </body>
 </html>
