@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -32,7 +33,8 @@ func TestQWKNetConfig_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Mode().Perm()&0o077 != 0 {
+	// Windows has no Unix permission bits; os.Stat reports 0666 there.
+	if runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 {
 		t.Errorf("qwknet.json holds a password and must not be group/world readable, got %v", st.Mode().Perm())
 	}
 	out, err := LoadQWKNetConfig(dir)
