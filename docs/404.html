@@ -108,6 +108,12 @@
 
     var timers = [];
     var running = false;
+    // Identifies the current run, so a buffer that resolves late cannot play
+    // into a run that has since been restarted.
+    var runId = 0;
+    // True between the handshake beat and NO CARRIER: the only window in which
+    // starting the recording still makes sense.
+    var handshakeOpen = false;
 
     // Exactly one AudioContext for the life of the page. They are expensive --
     // each one can mean a high-priority thread and a system audio stream -- and
@@ -174,6 +180,7 @@
         timers.forEach(clearTimeout);
         timers = [];
         stopHandshake();
+        handshakeOpen = false;
         if (master) { try { master.disconnect(); } catch (e) {} master = null; }
         term.textContent = '';
         term.appendChild(cursor);
@@ -213,6 +220,20 @@
         source.start();
     }
 
+    // The decode is kicked off at click time, but on a slow connection it can
+    // still be outstanding when the handshake is due. Rather than skip the
+    // recording for that run, wait for it and start late. The visual timing
+    // never waits on audio. A buffer that lands after NO CARRIER, or after a
+    // restart, is dropped instead of playing over whatever is on screen now.
+    function playHandshakeWhenReady(id) {
+        if (!ctx || !master) { return; }
+        if (buffer) { playHandshake(); return; }
+        loadBuffer().then(function (buf) {
+            if (!buf || id !== runId || !handshakeOpen) { return; }
+            playHandshake();
+        });
+    }
+
     function showFinal() {
         term.textContent = FINAL + '\n';
         term.appendChild(cursor);
@@ -225,6 +246,8 @@
         if (running) { return; }
         running = true;
         reset();
+        runId++;
+        var myRun = runId;
 
         if (withSound) {
             ensureCtx();
@@ -257,13 +280,15 @@
                     write('RING\n');
 
                     later(function () {
-                        playHandshake();
+                        handshakeOpen = true;
+                        playHandshakeWhenReady(myRun);
                         // Connect once the handshake has had time to sound like
                         // one. Trimmed hard versus the homepage splash: a 404 is
                         // an error page, not an intro, so the whole run is ~9s.
                         later(function () {
                             write('CONNECT 14400/HST\n');
                             later(function () {
+                                handshakeOpen = false;
                                 stopHandshake();
                                 write('NO CARRIER');
                                 running = false;
