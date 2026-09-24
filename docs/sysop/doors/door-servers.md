@@ -14,7 +14,7 @@ If the doors run on the same machine as ViSiON/3, you do not need this — use a
 
 ## Quick start
 
-In the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Door Programs), add a door and set **Type** to `RLogin`. Fill in **Host**, and usually **Terminal Type**:
+In the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Door Programs), add a door and set **Type** to `RLogin`. Fill in **Host**, and usually **Terminal Type**:
 
 | Field | JSON key | Meaning |
 | --- | --- | --- |

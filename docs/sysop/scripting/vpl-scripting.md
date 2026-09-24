@@ -87,7 +87,7 @@ Add an entry to `configs/doors.json`:
 }
 ```
 
-Or use the **Configuration Editor** (`./config`, section 6 — Door Programs) and select "VPL Script" as the door type.
+Or use the **Configuration Editor** (`./config`, section 7 — Door Programs) and select "VPL Script" as the door type.
 
 #### Door Config Fields
 

@@ -28,7 +28,7 @@ These three apply to doors that run on this machine. A door server connection ha
 
 **Where the files go.** Keep doors under the `doors/` directory in the BBS root. DOS doors go on the virtual C: drive at `doors/drive_c/`. Synchronet JS games go under `doors/sbbs/xtrn/`. Native doors and VPL scripts can go anywhere, but `doors/<name>/` and `scripts/` keep them together and inside your backups.
 
-**How a door is defined.** Each door is one record in the config editor. Run `./config`, press **6** for Door Programs, and press **I** to insert a record. Every record has a **Code**, which is the name you use in menus, a **Name** that callers see, and a **Type**. The walkthroughs list the other fields each type needs.
+**How a door is defined.** Each door is one record in the config editor. Run `./config`, press **7** for Door Programs, and press **I** to insert a record. Every record has a **Code**, which is the name you use in menus, a **Name** that callers see, and a **Type**. The walkthroughs list the other fields each type needs.
 
 **How a caller reaches it.** A menu command `DOOR:CODE` launches the door. Run `./menuedit`, open the `DOORSM` menu, press **F5** to add a command, set **Keys** to a letter no other command on that menu uses and **Command** to `DOOR:CODE`. The editor saves into `menus.d/v3/`, an overlay that upgrades leave alone. The stock doors screen is ANSI art, so a new key works immediately but is not drawn until you copy the shipped art into the overlay and add the key there with an ANSI editor:
 

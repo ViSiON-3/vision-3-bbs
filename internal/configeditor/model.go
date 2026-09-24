@@ -334,12 +334,13 @@ func New(configPath string) (Model, error) {
 		{"2", "Access & Security"},
 		{"3", "Areas and Conferences"},
 		{"4", "Echomail Networking"},
-		{"5", "ViSiON/3 Networking (V3Net)"},
-		{"6", "Door Programs"},
-		{"7", "Transfer Protocols"},
-		{"8", "Archivers"},
-		{"9", "Event Scheduler"},
-		{"0", "Login Sequence"},
+		{"5", "QWK Networking"},
+		{"6", "ViSiON/3 Networking (V3Net)"},
+		{"7", "Door Programs"},
+		{"8", "Transfer Protocols"},
+		{"9", "Archivers"},
+		{"0", "Event Scheduler"},
+		{"A", "Login Sequence"},
 		{"Q", "Quit Program"},
 	}
 
@@ -601,6 +602,14 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 			{Label: "Echomail Networks", RecordType: "ftn"},
 			{Label: "Echomail Links", RecordType: "ftnlink"},
 			{Label: "FTN Setup Wizard", Mode: modeFTNWizardForm},
+		}
+		m.catMenuCursor = 0
+		m.mode = modeCategoryMenu
+		return m, nil
+
+	case 4: // QWK Networking: its own network type, not FidoNet echomail.
+		m.catMenuTitle = "QWK Networking"
+		m.catMenuItems = []categoryMenuItem{
 			{Label: "QWK Networks", RecordType: "qwknet"},
 			{Label: "QWK Network Wizard", Mode: modeQWKWizardForm},
 		}
@@ -608,7 +617,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeCategoryMenu
 		return m, nil
 
-	case 4: // V3Net Networking
+	case 5: // V3Net Networking
 		m.catMenuTitle = "ViSiON/3 Networking (V3Net)"
 		m.catMenuItems = []categoryMenuItem{
 			{Label: "Node Identity", Mode: modeV3NetIdentity},
@@ -619,7 +628,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeCategoryMenu
 		return m, nil
 
-	case 5: // Door Programs (direct)
+	case 6: // Door Programs (direct)
 		m.recordType = "door"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -627,7 +636,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 6: // Transfer Protocols (direct)
+	case 7: // Transfer Protocols (direct)
 		m.recordType = "protocol"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -635,7 +644,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 7: // Archivers (direct)
+	case 8: // Archivers (direct)
 		m.recordType = "archiver"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -643,7 +652,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 8: // Event Scheduler (direct)
+	case 9: // Event Scheduler (direct)
 		m.recordType = "event"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -651,7 +660,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 9: // Login Sequence (direct)
+	case 10: // Login Sequence (direct)
 		m.recordType = "login"
 		m.recordCursor = 0
 		m.recordScroll = 0
@@ -659,7 +668,7 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeRecordList
 		return m, nil
 
-	case 10: // Quit
+	case 11: // Quit
 		return m.tryExit()
 	}
 	return m, nil

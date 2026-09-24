@@ -8,7 +8,7 @@ Doors that live on another machine are set up differently: see [Door Servers](do
 
 ## Configuration
 
-Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 6 — Door Programs) to add, edit, and remove door definitions interactively. The JSON below is what the editor writes to `configs/doors.json`.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Door Programs) to add, edit, and remove door definitions interactively. The JSON below is what the editor writes to `configs/doors.json`.
 
 ### Required Fields by Door Type
 

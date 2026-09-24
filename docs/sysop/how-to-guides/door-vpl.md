@@ -20,7 +20,7 @@ Pipe codes such as `|11` set colours, the same as in menu strings. The full API 
 
 ## 2. Define the door
 
-Run `./config`, press **6** for Door Programs, then **I** to insert a record and fill in:
+Run `./config`, press **7** for Door Programs, then **I** to insert a record and fill in:
 
 | Field | Value |
 | --- | --- |

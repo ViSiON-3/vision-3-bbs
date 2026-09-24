@@ -28,7 +28,7 @@ A connection that opens and sits there is what you want — RLogin says nothing 
 
 ## 3. Define the door
 
-Run `./config`, press **6** for Door Programs, then **I** to insert a record and fill in:
+Run `./config`, press **7** for Door Programs, then **I** to insert a record and fill in:
 
 | Field | Value |
 | --- | --- |

@@ -50,7 +50,7 @@ change them.
 From the main config menu, open the V3Net networking section:
 
 ```
-./config  →  4 — ViSiON/3 Networking (V3Net)
+./config  →  6 — ViSiON/3 Networking (V3Net)
 ```
 
 ```
@@ -139,7 +139,7 @@ no backup, you must re-register with all hubs from scratch.
 **Do this before your first restart:**
 
 ```
-./config  →  4 — ViSiON/3 Networking (V3Net)  →  1. Node Identity
+./config  →  6 — ViSiON/3 Networking (V3Net)  →  1. Node Identity
 ```
 
 ```

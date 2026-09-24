@@ -15,7 +15,7 @@ The event scheduler provides:
 
 ## Configuration
 
-Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 9 — Event Scheduler) to add, edit, and remove scheduled events interactively. This is the recommended approach.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 0 — Event Scheduler) to add, edit, and remove scheduled events interactively. This is the recommended approach.
 
 ### JSON Reference
 

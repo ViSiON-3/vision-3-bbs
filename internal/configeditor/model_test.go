@@ -71,9 +71,9 @@ func TestTopMenuNavigationAndSelect(t *testing.T) {
 		t.Fatalf("mode = %v, want sysConfigMenu", m.mode)
 	}
 
-	// Hotkey selection: "7" jumps straight to the protocols record list.
+	// Hotkey selection: "8" jumps straight to the protocols record list.
 	m.mode = modeTopMenu
-	m = hit(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("7")})
+	m = hit(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("8")})
 	if m.mode != modeRecordList || m.recordType != "protocol" {
 		t.Errorf("mode/type = %v/%q, want recordList/protocol", m.mode, m.recordType)
 	}
@@ -224,10 +224,40 @@ func TestTopMenuAccessSecurityEntry(t *testing.T) {
 		t.Errorf("first security item = %q, want %q", m.sysMenuItems[0].Label, "Access Levels")
 	}
 
-	// Login Sequence is the 10th functional item, keyed "0".
-	login := m.topItems[9]
-	if login.Label != "Login Sequence" || login.Key != "0" {
-		t.Errorf("topItems[9] = %+v, want {Key:0 Label:Login Sequence}", login)
+	// Login Sequence is the 11th functional item, keyed "A" now that the
+	// three network types each have their own entry.
+	login := m.topItems[10]
+	if login.Label != "Login Sequence" || login.Key != "A" {
+		t.Errorf("topItems[10] = %+v, want {Key:A Label:Login Sequence}", login)
+	}
+	// QWK networking sits beside the other network types, not under echomail.
+	if m.topItems[4].Label != "QWK Networking" || m.topItems[3].Label != "Echomail Networking" || m.topItems[5].Label != "ViSiON/3 Networking (V3Net)" {
+		t.Errorf("network entries = %q / %q / %q", m.topItems[3].Label, m.topItems[4].Label, m.topItems[5].Label)
+	}
+	m.topCursor = 4
+	updated, _ = m.selectTopMenuItem()
+	if updated.mode != modeCategoryMenu || updated.catMenuTitle != "QWK Networking" {
+		t.Fatalf("QWK Networking entry: mode=%v title=%q", updated.mode, updated.catMenuTitle)
+	}
+	want := []categoryMenuItem{
+		{Label: "QWK Networks", RecordType: "qwknet"},
+		{Label: "QWK Network Wizard", Mode: modeQWKWizardForm},
+	}
+	if len(updated.catMenuItems) != len(want) {
+		t.Fatalf("QWK category items = %+v, want %+v", updated.catMenuItems, want)
+	}
+	for i, w := range want {
+		if got := updated.catMenuItems[i]; got != w {
+			t.Errorf("QWK category item %d = %+v, want %+v", i, got, w)
+		}
+	}
+	// The Echomail category no longer carries the QWK entries.
+	m.topCursor = 3
+	echo, _ := m.selectTopMenuItem()
+	for _, it := range echo.catMenuItems {
+		if strings.Contains(it.Label, "QWK") {
+			t.Errorf("Echomail Networking still lists %q", it.Label)
+		}
 	}
 }
 

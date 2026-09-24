@@ -17,7 +17,7 @@ If `doors/sbbs/` is missing you installed from source rather than a release arch
 
 ## 2. Define the door
 
-Run `./config`, press **6** for Door Programs, then **I** to insert a record and fill in:
+Run `./config`, press **7** for Door Programs, then **I** to insert a record and fill in:
 
 | Field | Value |
 | --- | --- |
