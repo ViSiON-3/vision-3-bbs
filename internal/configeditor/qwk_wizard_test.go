@@ -177,8 +177,8 @@ func TestQWKNetGlobalBadAreaMustExist(t *testing.T) {
 	if err := bad.Set("nope"); err == nil {
 		t.Error("unknown area accepted")
 	}
-	if err := bad.Set("local"); err != nil || m.configs.QWKNet.BadAreaTag != "local" {
-		t.Errorf("existing area rejected: %v", err)
+	if err := bad.Set("local"); err != nil || m.configs.QWKNet.BadAreaTag != "LOCAL" {
+		t.Errorf("existing area rejected or spelling not canonicalized: %v %q", err, m.configs.QWKNet.BadAreaTag)
 	}
 	if err := bad.Set(""); err != nil || m.configs.QWKNet.BadAreaTag != "" {
 		t.Errorf("blank rejected: %v", err)
