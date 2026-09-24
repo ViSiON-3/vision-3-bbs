@@ -36,18 +36,9 @@ func ReadPacket(r io.ReaderAt, size int64) (*Packet, error) {
 		}
 		return nil
 	}
-	read := func(f *zip.File) ([]byte, error) {
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = rc.Close() }() // read-only zip entry
-		return io.ReadAll(rc)
-	}
-
 	p := &Packet{}
 	if f := find("CONTROL.DAT"); f != nil {
-		data, err := read(f)
+		data, err := readZipEntryLimited(f, maxControlDataSize)
 		if err != nil {
 			return nil, fmt.Errorf("read CONTROL.DAT: %w", err)
 		}
@@ -56,7 +47,9 @@ func ReadPacket(r io.ReaderAt, size int64) (*Packet, error) {
 
 	headers := map[int]ExtHeader{}
 	if f := find("HEADERS.DAT"); f != nil {
-		if data, err := read(f); err == nil {
+		// HEADERS.DAT only refines fields the header blocks already carry,
+		// so one that cannot be read (or is over the limit) is skipped.
+		if data, err := readZipEntryLimited(f, maxMessageDataSize); err == nil {
 			headers = parseHeadersDAT(data)
 		}
 	}
@@ -65,7 +58,7 @@ func ReadPacket(r io.ReaderAt, size int64) (*Packet, error) {
 	if f == nil {
 		return p, nil // an empty packet from a hub with nothing new
 	}
-	data, err := read(f)
+	data, err := readZipEntryLimited(f, maxMessageDataSize)
 	if err != nil {
 		return nil, fmt.Errorf("read MESSAGES.DAT: %w", err)
 	}

@@ -17,12 +17,7 @@ func ReadArchiveHeaders(r io.ReaderAt, size int64) (map[int]ExtHeader, error) {
 		if !strings.EqualFold(f.Name, "HEADERS.DAT") {
 			continue
 		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		data, err := io.ReadAll(rc)
-		_ = rc.Close() // read-only zip entry
+		data, err := readZipEntryLimited(f, maxMessageDataSize)
 		if err != nil {
 			return nil, err
 		}

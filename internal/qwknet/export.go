@@ -235,6 +235,11 @@ func (n *Node) pendingREPMessages(repPath string) ([]qwk.NetMessage, error) {
 	if err != nil {
 		return nil, err
 	}
+	// An empty REP is one already uploaded that could not be removed
+	// (retireUploadedREP empties it as a last resort): nothing is waiting.
+	if st.Size() == 0 {
+		return nil, nil
+	}
 	p, err := qwk.ReadREPPacket(f, st.Size(), n.hubID)
 	if err != nil {
 		return nil, err

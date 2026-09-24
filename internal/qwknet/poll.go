@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
 )
 
@@ -30,13 +31,7 @@ func (n *Node) Poll(ctx context.Context) PollResult {
 	var res PollResult
 
 	if len(n.inboundPackets()) > 0 {
-		pre := n.Toss()
-		res.Toss.Packets += pre.Packets
-		res.Toss.Imported += pre.Imported
-		res.Toss.Duplicates += pre.Duplicates
-		res.Toss.Unmapped += pre.Unmapped
-		res.Toss.Skipped += pre.Skipped
-		res.Toss.Errors = append(res.Toss.Errors, pre.Errors...)
+		res.Toss.add(n.Toss())
 	}
 
 	res.Scan = n.Scan()
@@ -46,13 +41,7 @@ func (n *Node) Poll(ctx context.Context) PollResult {
 	}
 
 	if res.Downloaded || len(n.inboundPackets()) > 0 {
-		post := n.Toss()
-		res.Toss.Packets += post.Packets
-		res.Toss.Imported += post.Imported
-		res.Toss.Duplicates += post.Duplicates
-		res.Toss.Unmapped += post.Unmapped
-		res.Toss.Skipped += post.Skipped
-		res.Toss.Errors = append(res.Toss.Errors, post.Errors...)
+		res.Toss.add(n.Toss())
 	}
 	return res
 }
@@ -81,8 +70,8 @@ func (n *Node) exchange(ctx context.Context, res *PollResult) error {
 			slog.Warn("qwknet REP upload failed; kept for the next poll", "network", n.Key, "hub", n.hubID, "error", uerr)
 		} else {
 			res.Uploaded = true
-			if err := os.Remove(repPath); err != nil {
-				res.Errors = append(res.Errors, fmt.Sprintf("remove uploaded REP: %v", err))
+			if err := retireUploadedREP(repPath); err != nil {
+				res.Errors = append(res.Errors, fmt.Sprintf("uploaded REP left in outbound and will be sent again: %v", err))
 			}
 			slog.Info("qwknet REP uploaded", "network", n.Key, "hub", n.hubID, "bytes", st.Size())
 		}
@@ -100,6 +89,29 @@ func (n *Node) exchange(ctx context.Context, res *PollResult) error {
 		slog.Info("qwknet hub had no packet for us", "network", n.Key, "hub", n.hubID)
 	}
 	return nil
+}
+
+// retireUploadedREP gets a delivered REP out of the way of the next Scan,
+// which would otherwise read its messages back as still pending and upload
+// them a second time. Removal is tried first; failing that the file is
+// renamed aside, and failing that emptied, since Scan and exchange both
+// treat an empty REP as nothing waiting. Only when all three fail does the
+// REP stay live, and the error says so.
+func retireUploadedREP(repPath string) error {
+	rmErr := os.Remove(repPath)
+	if rmErr == nil || os.IsNotExist(rmErr) {
+		return nil
+	}
+	sent := repPath + ".sent"
+	if err := atomicfile.Replace(repPath, sent); err == nil {
+		slog.Warn("could not remove uploaded REP; renamed it aside", "path", repPath, "moved_to", sent, "error", rmErr)
+		return nil
+	}
+	if err := os.Truncate(repPath, 0); err == nil {
+		slog.Warn("could not remove or rename uploaded REP; emptied it", "path", repPath, "error", rmErr)
+		return nil
+	}
+	return rmErr
 }
 
 // connect dials and logs in to the hub.

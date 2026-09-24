@@ -166,6 +166,13 @@ func (mm *MessageManager) SetQWKID(id string) {
 	mm.mu.Unlock()
 }
 
+// QWKID returns the QWK ID set by SetQWKID, lower-cased; "" when none.
+func (mm *MessageManager) QWKID() string {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	return mm.qwkID
+}
+
 // qwkMessageID makes the Message-ID for a new post in a qwknet area:
 // <time-hex.areatag@qwkid>. Nanosecond time keeps it unique on one system;
 // the QWK ID keeps it unique across the network.

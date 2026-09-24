@@ -34,12 +34,17 @@ func newQWKPollEvent(netKey, hubID, schedule string) config.EventConfig {
 	}
 }
 
-// wireQWKEvents upserts the network's poll event after the wizard saves and
-// turns the scheduler on. A non-blank schedule is applied to an existing
-// event too, since the wizard pre-fills the field from that event and what
-// comes back is the sysop's current choice; blank keeps whatever is there.
-// Extra arguments a sysop added survive either way.
-func wireQWKEvents(events *config.EventsConfig, netKey, hubID, schedule string) {
+// wireQWKEvents upserts the network's poll event after the wizard saves. A
+// non-blank schedule is applied to an existing event too, since the wizard
+// pre-fills the field from that event and what comes back is the sysop's
+// current choice; blank keeps whatever is there. Extra arguments a sysop
+// added survive either way.
+//
+// Only adding a network switches polling on (the event and the scheduler).
+// Editing one, to add conferences say, leaves an existing event's Enabled
+// alone: a sysop may have paused it, and nothing here should undo that. An
+// event that is missing is created enabled only when the network is.
+func wireQWKEvents(events *config.EventsConfig, netKey, hubID, schedule string, adding, netEnabled bool) {
 	id := qwkPollEventPrefix + netKey
 	for i := range events.Events {
 		if events.Events[i].ID != id {
@@ -52,14 +57,22 @@ func wireQWKEvents(events *config.EventsConfig, netKey, hubID, schedule string) 
 		if s := strings.TrimSpace(schedule); s != "" {
 			e.Schedule = s
 		}
-		e.Enabled = true
-		events.Enabled = true
-		if events.MaxConcurrentEvents <= 0 {
-			events.MaxConcurrentEvents = 3
+		if adding {
+			e.Enabled = true
+			turnOnScheduler(events)
 		}
 		return
 	}
-	events.Events = append(events.Events, newQWKPollEvent(netKey, hubID, schedule))
+	ev := newQWKPollEvent(netKey, hubID, schedule)
+	ev.Enabled = netEnabled
+	events.Events = append(events.Events, ev)
+	if netEnabled {
+		turnOnScheduler(events)
+	}
+}
+
+// turnOnScheduler enables the event scheduler so a new poll event runs.
+func turnOnScheduler(events *config.EventsConfig) {
 	events.Enabled = true
 	if events.MaxConcurrentEvents <= 0 {
 		events.MaxConcurrentEvents = 3

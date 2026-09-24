@@ -25,6 +25,16 @@ type TossResult struct {
 	Errors     []string
 }
 
+// add folds another pass's counts and errors into r.
+func (r *TossResult) add(o TossResult) {
+	r.Packets += o.Packets
+	r.Imported += o.Imported
+	r.Duplicates += o.Duplicates
+	r.Unmapped += o.Unmapped
+	r.Skipped += o.Skipped
+	r.Errors = append(r.Errors, o.Errors...)
+}
+
 // Toss imports every waiting packet from the hub. A packet whose messages
 // all land is deleted; one the reader cannot parse, or that came from a
 // different hub, is set aside as <name>.bad; one with a message that could
@@ -36,11 +46,7 @@ func (n *Node) Toss() TossResult {
 	for _, path := range n.inboundPackets() {
 		res.Packets++
 		pr, err := n.tossPacket(path, areas)
-		res.Imported += pr.Imported
-		res.Duplicates += pr.Duplicates
-		res.Unmapped += pr.Unmapped
-		res.Skipped += pr.Skipped
-		res.Errors = append(res.Errors, pr.Errors...)
+		res.add(pr)
 		if err != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("%s: %v", path, err))
 			setAside(path)
@@ -77,8 +83,7 @@ func setAside(path string) {
 
 // tossPacket imports one packet. The returned error means the packet as a
 // whole was unusable; per-message failures go in the result's Errors.
-func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (TossResult, error) {
-	var res TossResult
+func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (res TossResult, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return res, err
@@ -110,6 +115,15 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (Toss
 		res.Errors = append(res.Errors, fmt.Sprintf("packet ended early: %v", p.ParseError))
 	}
 
+	// Route every message first, so each area's reply parents can be looked
+	// up before any of its messages are written: the manager's Message-ID
+	// index is rebuilt whenever an area's count changes, and it opens its own
+	// handle on the base, which must not nest inside the one held for writes.
+	type routed struct {
+		m    qwk.NetMessage
+		area *message.MessageArea
+	}
+	var plan []routed
 	for _, m := range p.Messages {
 		switch {
 		case m.Status == 'V':
@@ -134,14 +148,59 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (Toss
 			slog.Warn("qwknet message for a conference no area mirrors, routed to bad area", "network", n.Key, "conference", m.Conference, "subject", m.Subject, "area", badArea.Tag)
 			area = badArea
 		}
+		plan = append(plan, routed{m: m, area: area})
+	}
+
+	// parents[areaID][Message-ID] is the local number of a reply's parent:
+	// resolved from the base now, then extended with each message this
+	// packet imports so a reply to a message earlier in the packet threads.
+	parents := make(map[int]map[string]int)
+	for _, r := range plan {
+		byID := parents[r.area.ID]
+		if byID == nil {
+			byID = make(map[string]int)
+			parents[r.area.ID] = byID
+		}
+		if id := r.m.ReplyID; id != "" {
+			if _, seen := byID[id]; !seen {
+				byID[id] = n.msgMgr.FindMessageByMSGID(r.area.ID, id)
+			}
+		}
+	}
+
+	// One open base per area for the whole packet.
+	bases := make(map[int]*jam.Base)
+	defer func() {
+		for id, b := range bases {
+			if err := b.Close(); err != nil {
+				res.Errors = append(res.Errors, fmt.Sprintf("closing base for area %d: %v", id, err))
+			}
+		}
+	}()
+
+	for _, r := range plan {
+		m, area := r.m, r.area
 		key := dupeKey(m)
 		if n.dupes != nil && n.dupes.IsDupe(key) {
 			res.Duplicates++
 			continue
 		}
-		if err := n.importMessage(area, m); err != nil {
+		base := bases[area.ID]
+		if base == nil {
+			b, err := n.msgMgr.GetBase(area.ID)
+			if err != nil {
+				res.Errors = append(res.Errors, fmt.Sprintf("conference %d -> %s: %v", m.Conference, area.Tag, err))
+				continue
+			}
+			base, bases[area.ID] = b, b
+		}
+		num, err := n.importMessage(base, area, m, parents[area.ID][m.ReplyID])
+		if err != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("conference %d -> %s: %v", m.Conference, area.Tag, err))
 			continue
+		}
+		if m.MessageID != "" {
+			parents[area.ID][m.MessageID] = num
 		}
 		if n.dupes != nil {
 			n.dupes.Add(key)
@@ -162,26 +221,11 @@ func dupeKey(m qwk.NetMessage) string {
 	return "fp:" + hex.EncodeToString(h.Sum(nil))
 }
 
-// importMessage writes one hub message into its local area, marking it
-// processed so the export scan never sends it back to the hub.
-func (n *Node) importMessage(area *message.MessageArea, m qwk.NetMessage) (retErr error) {
-	// Resolve the parent before opening the base: the manager opens its own
-	// handle for the index and a nested open on the same base is avoided.
-	replyTo := 0
-	if m.ReplyID != "" {
-		replyTo = n.msgMgr.FindMessageByMSGID(area.ID, m.ReplyID)
-	}
-
-	base, err := n.msgMgr.GetBase(area.ID)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if cerr := base.Close(); cerr != nil && retErr == nil {
-			retErr = fmt.Errorf("closing base: %w", cerr)
-		}
-	}()
-
+// importMessage writes one hub message into its local area through base,
+// marking it processed so the export scan never sends it back to the hub.
+// replyTo is the parent's local number, 0 when unknown. It returns the new
+// message's number.
+func (n *Node) importMessage(base *jam.Base, area *message.MessageArea, m qwk.NetMessage, replyTo int) (int, error) {
 	jm := jam.NewMessage()
 	jm.From = toCP437(m.From, m.UTF8)
 	jm.To = toCP437(m.To, m.UTF8)
@@ -211,7 +255,7 @@ func (n *Node) importMessage(area *message.MessageArea, m qwk.NetMessage) (retEr
 
 	num, err := base.WriteMessageExt(jm, jam.MsgTypeEchomailMsg, "", "")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// The QWKVIA kludge is the second guard against re-export should this
 	// mark fail: Scan skips any message carrying it.
@@ -224,7 +268,7 @@ func (n *Node) importMessage(area *message.MessageArea, m qwk.NetMessage) (retEr
 		}
 	}
 	slog.Info("qwknet tossed message", "network", n.Key, "area", area.Tag, "from", m.From, "subject", m.Subject, "msgid", m.MessageID)
-	return nil
+	return num, nil
 }
 
 // toCP437 converts a UTF-8 packet string to the CP437 the message bases

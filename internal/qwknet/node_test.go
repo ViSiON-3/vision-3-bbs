@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -236,6 +237,47 @@ func TestToss_ImportsRoutesDedupsAndNeverReexports(t *testing.T) {
 	}
 }
 
+// Replies thread to their parent whether it arrived in an earlier packet or
+// earlier in the same one.
+func TestToss_ThreadsRepliesAcrossAndWithinPackets(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	when := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	toss := func(msgs ...qwk.PacketMessage) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(e.paths.InboundPath, "VERT.QWK"), hubPacket(t, msgs...), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if res := n.Toss(); len(res.Errors) != 0 {
+			t.Fatalf("toss: %+v", res)
+		}
+	}
+	msg := func(num int, body string) qwk.PacketMessage {
+		return qwk.PacketMessage{Conference: 2001, Number: num, From: "A", To: "All", Subject: "Thread", DateTime: when, Body: body}
+	}
+	// The packet writer's HEADERS.DAT names each message <number.conf@vert>.
+	toss(msg(1, "root"))
+	toss(
+		msg(2, "@REPLY: <1.2001@vert>\nreply to an earlier packet"),
+		msg(3, "@REPLY: <2.2001@vert>\nreply within this packet"),
+	)
+
+	base, err := e.msgMgr.GetBase(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = base.Close() }()
+	for num, want := range map[int]uint32{2: 1, 3: 2} {
+		hdr, err := base.ReadMessageHeader(num)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hdr.ReplyTo != want {
+			t.Errorf("message %d ReplyTo = %d, want %d", num, hdr.ReplyTo, want)
+		}
+	}
+}
+
 func TestToss_DropsLoopedAndForeignPackets(t *testing.T) {
 	e := newEnv(t)
 	n := e.node(t)
@@ -353,6 +395,46 @@ func TestPoll_RefusedUploadStillDownloads(t *testing.T) {
 	}
 	if parts, _ := filepath.Glob(filepath.Join(e.paths.InboundPath, "*.part")); len(parts) != 0 {
 		t.Errorf("partial download left behind: %v", parts)
+	}
+}
+
+// An uploaded REP that cannot be deleted must not be read back as pending
+// and uploaded again. A read-only outbound directory blocks both removal and
+// the rename aside, leaving the emptying fallback.
+func TestPoll_UndeletableUploadedREPIsNotResent(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs unix directory permissions enforced")
+	}
+	e := newEnv(t)
+	srv := newFakeFTP(t, "VISION3", "pw", map[string][]byte{})
+	host, port, _ := strings.Cut(srv.addr(), ":")
+	e.cfg.Host = host
+	e.cfg.Port = atoi(port)
+	n := e.node(t)
+
+	if _, err := e.msgMgr.AddMessage(1, "Robbie", "All", "once only", "send me once", ""); err != nil {
+		t.Fatal(err)
+	}
+	if res := n.Scan(); res.Exported != 1 {
+		t.Fatalf("scan: %+v", res)
+	}
+	if err := os.Chmod(e.paths.OutboundPath, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(e.paths.OutboundPath, 0o755) })
+
+	res := n.Poll(context.Background())
+	if !res.Uploaded || len(res.Errors) != 0 {
+		t.Fatalf("poll: %+v", res)
+	}
+	if st, err := os.Stat(n.repPath()); err != nil || st.Size() != 0 {
+		t.Fatalf("uploaded REP should be emptied in place: %v %v", st, err)
+	}
+	if again := n.Scan(); again.Pending != 0 || len(again.Errors) != 0 {
+		t.Errorf("delivered messages read back as pending: %+v", again)
+	}
+	if res := n.Poll(context.Background()); res.Uploaded {
+		t.Error("emptied REP was uploaded again")
 	}
 }
 

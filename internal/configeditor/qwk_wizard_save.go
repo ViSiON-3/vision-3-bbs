@@ -33,7 +33,11 @@ func (m Model) confirmQWKWizard() (Model, tea.Cmd) {
 	m.configs.QWKNet.ApplyDefaults()
 
 	nc := m.configs.QWKNet.Networks[key] // zero value when adding
-	nc.Enabled = true
+	// Joining a network turns it on. Editing one keeps the sysop's choice:
+	// adding a conference to a disabled network must not start polling it.
+	if !editing {
+		nc.Enabled = true
+	}
 	nc.Name = w.networkName
 	nc.HubID = w.hubID
 	nc.Host = w.host
@@ -62,7 +66,7 @@ func (m Model) confirmQWKWizard() (Model, tea.Cmd) {
 		}
 	}
 
-	wireQWKEvents(&m.configs.Events, key, w.hubID, w.schedule)
+	wireQWKEvents(&m.configs.Events, key, w.hubID, w.schedule, !editing, nc.Enabled)
 
 	m.dirty = true
 	if !m.saveAll() {
@@ -70,6 +74,8 @@ func (m Model) confirmQWKWizard() (Model, tea.Cmd) {
 	}
 
 	switch {
+	case editing && !nc.Enabled:
+		m.message = fmt.Sprintf("QWK network %q updated — %d conference area(s) added. The network is disabled; enable it under QWK Networks to poll.", key, created)
 	case editing:
 		m.message = fmt.Sprintf("QWK network %q updated — %d conference area(s) added. The next scheduled poll picks it up.", key, created)
 	case created == 0:

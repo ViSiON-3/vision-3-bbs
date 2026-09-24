@@ -124,6 +124,41 @@ func TestQWKWizard_EditAddsOnlyNewConferences(t *testing.T) {
 	}
 }
 
+// Adding a conference to a network the sysop switched off, or whose poll
+// event they paused, must not turn either back on.
+func TestQWKWizard_EditKeepsDisabledNetworkAndPausedEvent(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		netEnabled bool
+	}{{"disabled network", false}, {"paused event only", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := qwkTestModel(t)
+			m.configs.QWKNet.Networks = map[string]config.QWKNetworkConfig{
+				"dovenet": {Enabled: tc.netEnabled, Name: "DOVE-Net", HubID: "VERT", Host: "vert.synchro.net", Password: "pw"},
+			}
+			paused := newQWKPollEvent("dovenet", "VERT", "")
+			paused.Enabled = false
+			m.configs.Events.Events = append(m.configs.Events.Events, paused)
+
+			m, _ = m.enterQWKWizard("dovenet")
+			w := m.qwkWizard
+			m, _ = m.enterQWKConfBrowser()
+			m.qwkConfBrowserSel[1] = true
+			w.selected = m.qwkConfBrowserSel
+			m, _ = m.submitQWKWizardForm()
+			if strings.HasPrefix(m.message, "SAVE ERROR") {
+				t.Fatal(m.message)
+			}
+			if got := m.configs.QWKNet.Networks["dovenet"].Enabled; got != tc.netEnabled {
+				t.Errorf("network Enabled = %v, want %v", got, tc.netEnabled)
+			}
+			if e := findEvent(m.configs.Events, "qwknet_poll_dovenet"); e == nil || e.Enabled {
+				t.Errorf("paused poll event was re-enabled: %+v", e)
+			}
+		})
+	}
+}
+
 func TestQWKWizard_RejectsDuplicateKeyAndMissingPassword(t *testing.T) {
 	m := qwkTestModel(t)
 	m.configs.QWKNet.Networks = map[string]config.QWKNetworkConfig{"dovenet": {HubID: "VERT", Host: "h", Password: "p"}}
@@ -187,7 +222,7 @@ func TestQWKNetGlobalBadAreaMustExist(t *testing.T) {
 
 func TestQWKEvents_WireRefreshRename(t *testing.T) {
 	ev := templateEvents()
-	wireQWKEvents(&ev, "dovenet", "VERT", "")
+	wireQWKEvents(&ev, "dovenet", "VERT", "", true, true)
 	e := findEvent(ev, "qwknet_poll_dovenet")
 	if e == nil || !e.Enabled || e.Schedule != defaultQWKPollSchedule || !ev.Enabled {
 		t.Fatalf("wire: %+v enabled=%v", e, ev.Enabled)
@@ -195,13 +230,13 @@ func TestQWKEvents_WireRefreshRename(t *testing.T) {
 	// A tuned schedule survives a blank re-wire; the hub name refreshes.
 	e.Schedule = "0 * * * *"
 	e.Args = append(e.Args, "-v")
-	wireQWKEvents(&ev, "dovenet", "VERT2", "")
+	wireQWKEvents(&ev, "dovenet", "VERT2", "", false, true)
 	e = findEvent(ev, "qwknet_poll_dovenet")
 	if e.Schedule != "0 * * * *" || !strings.Contains(e.Name, "VERT2") || e.Args[len(e.Args)-1] != "-v" {
 		t.Errorf("re-wire lost tuning: %+v", e)
 	}
 	// An explicit schedule (the wizard's edited field) replaces it.
-	wireQWKEvents(&ev, "dovenet", "VERT2", "*/10 * * * *")
+	wireQWKEvents(&ev, "dovenet", "VERT2", "*/10 * * * *", false, true)
 	if e = findEvent(ev, "qwknet_poll_dovenet"); e.Schedule != "*/10 * * * *" {
 		t.Errorf("edited schedule not applied: %+v", e)
 	}
@@ -238,7 +273,7 @@ func TestQWKNetworkRecordFieldsRenameCarriesAreasAndEvent(t *testing.T) {
 	m := qwkTestModel(t)
 	m.configs.QWKNet.Networks = map[string]config.QWKNetworkConfig{"old": {HubID: "VERT", Host: "h", Password: "p"}}
 	m.configs.MsgAreas = []message.MessageArea{{ID: 1, Tag: "OLD_GEN", AreaType: "qwknet", Network: "old", QWKConference: 2001}}
-	wireQWKEvents(&m.configs.Events, "old", "VERT", "")
+	wireQWKEvents(&m.configs.Events, "old", "VERT", "", true, true)
 	m.recordType = "qwknet"
 	m.recordEditIdx = 0
 	fields := m.buildRecordFields()

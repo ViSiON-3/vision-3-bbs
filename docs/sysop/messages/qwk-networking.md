@@ -282,6 +282,7 @@ outbound directory and the next scan appends new posts to it.
 | `data/qwknet/out/<HUBID>.REP.bad` | A REP that could not be read back when new posts were to be appended | Sysop reviews |
 | `data/qwknet/in/<HUBID>.QWK.*.part` | A download in progress; one left behind after a failed move into place is a complete packet | Automatic; if the log names one, rename it to `<HUBID>.QWK` to toss it |
 | `data/qwknet/out/<HUBID>.REP.tmp` | A REP being rewritten | Automatic |
+| `data/qwknet/out/<HUBID>.REP.sent` | An uploaded REP that could not be deleted, moved aside so it is not sent twice | Sysop deletes; check the outbound directory's permissions |
 | `data/qwknet/dupes.json` | Imported Message-IDs, pruned after 90 days | Automatic |
 | `<area>.jlr` (user `qwknet`) | Per-area export high-water mark inside each JAM base | Automatic |
 
