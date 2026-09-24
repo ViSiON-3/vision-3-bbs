@@ -115,6 +115,15 @@ func TestQWKWizard_EntryOffersPickerWhenConfigured(t *testing.T) {
 	if v := m.viewQWKWizardPicker(); !strings.Contains(v, "dovenet") || !strings.Contains(v, "Add a new network") {
 		t.Errorf("picker view missing entries")
 	}
+	// The detail panel shows the login the poller will use: a per-network
+	// ownId wins over the system QWK ID.
+	nc := m.configs.QWKNet.Networks["dovenet"]
+	nc.OwnID = "mynode"
+	m.configs.QWKNet.Networks["dovenet"] = nc
+	m.qwkWizardPickerCursor = 1
+	if v := m.viewQWKWizardPicker(); !strings.Contains(v, "Login: MYNODE") {
+		t.Errorf("picker login should honor ownId, view was:\n%s", v)
+	}
 	// Enter on the network opens it for editing; N opens a blank form.
 	r, _ := m.updateQWKWizardPicker(tea.KeyMsg{Type: tea.KeyDown})
 	r, _ = r.(Model).updateQWKWizardPicker(tea.KeyMsg{Type: tea.KeyEnter})

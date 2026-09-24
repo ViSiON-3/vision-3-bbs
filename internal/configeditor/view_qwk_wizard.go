@@ -50,7 +50,7 @@ func (m Model) viewQWKWizardPicker() string {
 		if net.Enabled {
 			enabled = "on"
 		}
-		lb.row(editInfoValueStyle.Render(padRight(fmt.Sprintf("  Polling: %s   Login: %s", enabled, net.LoginUser(m.systemQWKID())), boxW)))
+		lb.row(editInfoValueStyle.Render(padRight(fmt.Sprintf("  Polling: %s   Login: %s", enabled, net.LoginUser(net.NodeID(m.systemQWKID()))), boxW)))
 		lb.row(editInfoValueStyle.Render(padRight("  Enter re-opens the wizard to change the hub or add conferences.", boxW)))
 	}
 
