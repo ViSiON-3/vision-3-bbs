@@ -28,7 +28,9 @@ type QWKNetConfig struct {
 	InboundPath string `json:"inboundPath"`
 	// OutboundPath holds packed REP files waiting to be uploaded.
 	OutboundPath string `json:"outboundPath"`
-	// TempPath is scratch space for building and unpacking packets.
+	// TempPath is a scratch directory. Packets are not staged here: each is
+	// built or downloaded beside its destination so the final rename never
+	// crosses a filesystem.
 	TempPath string `json:"tempPath"`
 	// DupeDBPath is the JSON file of Message-IDs already imported.
 	DupeDBPath string `json:"dupeDbPath"`

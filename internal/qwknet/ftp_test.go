@@ -24,6 +24,7 @@ type fakeFTP struct {
 	uploads  map[string][]byte
 	noEPSV   bool
 	retrCode int // non-zero overrides the RETR reply for missing files
+	storCode int // non-zero refuses every STOR with this code
 }
 
 func newFakeFTP(t *testing.T, user, pass string, files map[string][]byte) *fakeFTP {
@@ -44,6 +45,12 @@ func (s *fakeFTP) setNoEPSV(v bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.noEPSV = v
+}
+
+func (s *fakeFTP) setStorCode(code int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.storCode = code
 }
 
 func (s *fakeFTP) remove(name string) {
@@ -115,6 +122,15 @@ func (s *fakeFTP) session(conn net.Conn) {
 		case "STOR":
 			if !loggedIn || data == nil {
 				w("503 bad sequence")
+				continue
+			}
+			s.mu.Lock()
+			storCode := s.storCode
+			s.mu.Unlock()
+			if storCode != 0 {
+				_ = data.Close()
+				data = nil
+				w("%d upload refused", storCode)
 				continue
 			}
 			w("150 go ahead")

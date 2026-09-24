@@ -74,13 +74,18 @@ func (n *Node) exchange(ctx context.Context, res *PollResult) error {
 		uerr := c.store(ctx, n.hubID+".REP", f)
 		_ = f.Close() // read-only
 		if uerr != nil {
-			return fmt.Errorf("upload REP: %w", uerr)
+			// The REP stays in outbound for the next poll. The download still
+			// runs: a hub refusing uploads must not also cut off incoming
+			// mail. If the connection itself is gone, it fails at once.
+			res.Errors = append(res.Errors, fmt.Sprintf("upload REP: %v", uerr))
+			slog.Warn("qwknet REP upload failed; kept for the next poll", "network", n.Key, "hub", n.hubID, "error", uerr)
+		} else {
+			res.Uploaded = true
+			if err := os.Remove(repPath); err != nil {
+				res.Errors = append(res.Errors, fmt.Sprintf("remove uploaded REP: %v", err))
+			}
+			slog.Info("qwknet REP uploaded", "network", n.Key, "hub", n.hubID, "bytes", st.Size())
 		}
-		res.Uploaded = true
-		if err := os.Remove(repPath); err != nil {
-			res.Errors = append(res.Errors, fmt.Sprintf("remove uploaded REP: %v", err))
-		}
-		slog.Info("qwknet REP uploaded", "network", n.Key, "hub", n.hubID, "bytes", st.Size())
 	}
 
 	size, path, err := n.download(ctx, c)
@@ -114,15 +119,21 @@ func (n *Node) connect(ctx context.Context) (*ftpClient, error) {
 	return c, nil
 }
 
-// download fetches <HUBID>.QWK into the inbound directory via a temp file.
-// It returns "" for the path when the hub had nothing (550, or an empty
-// file, which some hubs send instead).
+// download fetches <HUBID>.QWK into the inbound directory. It returns ""
+// for the path when the hub had nothing (550, or an empty file, which some
+// hubs send instead).
+//
+// The partial file is written in the inbound directory itself, so the final
+// rename never crosses a filesystem, and under a unique name inboundPackets
+// ignores. Once RETR completes the hub counts the packet as delivered and
+// will not send it again, so from then on a failure keeps the file rather
+// than deleting the only copy.
 func (n *Node) download(ctx context.Context, c *ftpClient) (int64, string, error) {
-	tmp := filepath.Join(n.paths.TempPath, n.hubID+".QWK.part")
-	f, err := os.Create(tmp)
+	f, err := os.CreateTemp(n.paths.InboundPath, n.hubID+".QWK.*.part")
 	if err != nil {
 		return 0, "", fmt.Errorf("create temp download: %w", err)
 	}
+	tmp := f.Name()
 	size, rerr := c.retrieve(ctx, n.hubID+".QWK", f)
 	cerr := f.Close()
 	if rerr != nil {
@@ -133,8 +144,7 @@ func (n *Node) download(ctx context.Context, c *ftpClient) (int64, string, error
 		return 0, "", fmt.Errorf("download QWK: %w", rerr)
 	}
 	if cerr != nil {
-		_ = os.Remove(tmp)
-		return 0, "", fmt.Errorf("finish download: %w", cerr)
+		return 0, "", fmt.Errorf("finish download (packet kept at %s): %w", tmp, cerr)
 	}
 	if size == 0 {
 		_ = os.Remove(tmp)
@@ -142,8 +152,8 @@ func (n *Node) download(ctx context.Context, c *ftpClient) (int64, string, error
 	}
 	dest := n.newInboundName()
 	if err := os.Rename(tmp, dest); err != nil {
-		_ = os.Remove(tmp)
-		return 0, "", fmt.Errorf("move download into inbound: %w", err)
+		return 0, "", fmt.Errorf("move download into inbound (packet kept at %s; rename it to %s to toss it): %w",
+			tmp, filepath.Base(dest), err)
 	}
 	return size, dest, nil
 }

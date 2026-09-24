@@ -3,6 +3,7 @@ package tosser
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -300,5 +301,58 @@ func TestStripAreaKludges(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("kludge %d = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+// TestDupeDBSaveMergesConcurrentWriters covers two processes holding the same
+// file: each saves only what it added, and neither save may drop the other's.
+func TestDupeDBSaveMergesConcurrentWriters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dupes.json")
+	a, err := NewDupeDB(path, 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := NewDupeDB(path, 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Add("<a@one>")
+	b.Add("<b@two>")
+	if err := a.Save(); err != nil {
+		t.Fatalf("save a: %v", err)
+	}
+	if err := b.Save(); err != nil {
+		t.Fatalf("save b: %v", err)
+	}
+	c, err := NewDupeDB(path, 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.IsDupe("<a@one>") || !c.IsDupe("<b@two>") {
+		t.Errorf("after both saves the file holds %d entries, want both IDs", c.Count())
+	}
+}
+
+// TestDupeDBPurgeIsNotUndoneByMerge checks the merge skips expired entries
+// still sitting in the file.
+func TestDupeDBPurgeIsNotUndoneByMerge(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dupes.json")
+	old := time.Now().Add(-48 * time.Hour).Unix()
+	if err := os.WriteFile(path, []byte(`{"entries":{"<old@x>":`+strconv.FormatInt(old, 10)+`}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db, err := NewDupeDB(path, 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Purge(); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	reloaded, err := NewDupeDB(path, 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.IsDupe("<old@x>") {
+		t.Error("expired entry came back after Purge")
 	}
 }

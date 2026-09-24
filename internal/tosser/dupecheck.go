@@ -2,11 +2,14 @@ package tosser
 
 import (
 	"encoding/json"
-	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 )
 
 // DupeDB tracks seen MSGIDs to prevent duplicate message tossing.
@@ -100,13 +103,65 @@ func (db *DupeDB) Save() error {
 	return db.saveLocked()
 }
 
+// saveLocked writes the database, first folding in whatever another process
+// saved since this one loaded it. Several processes can hold the same file
+// (one v3mail run per QWK network, polled on the same schedule), and a plain
+// rewrite from memory would drop every entry the others added. The merge runs
+// under a cross-process lock so no save lands between the read and the write.
 func (db *DupeDB) saveLocked() error {
+	// The lock sidecar sits beside the file, so the directory must exist.
+	if err := os.MkdirAll(filepath.Dir(db.path), 0o755); err != nil {
+		return err
+	}
+	lock, lockErr := filelock.Acquire(db.path, filelock.DefaultTimeout)
+	if lockErr != nil {
+		slog.Warn("saving dupe DB without the cross-process lock; a concurrent save could be lost",
+			"path", db.path, "error", lockErr)
+	}
+	defer lock.Release() // nil-safe: no-op when the acquire above failed
+
+	db.mergeFromDiskLocked()
+
 	f := dupeFile{Entries: db.entries}
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
 	}
 	return atomicWriteFile(db.path, data, 0644)
+}
+
+// mergeFromDiskLocked adds the on-disk entries this process does not have,
+// skipping any older than maxAge so a Purge here is not undone by the merge.
+// Where both sides know an ID, the earlier first-seen time is kept.
+func (db *DupeDB) mergeFromDiskLocked() {
+	data, err := os.ReadFile(db.path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Warn("could not re-read dupe DB before saving; entries saved by other processes may be lost",
+				"path", db.path, "error", err)
+		}
+		return
+	}
+	if len(data) == 0 {
+		return
+	}
+	var f dupeFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		slog.Warn("corrupt dupe DB on disk, overwriting it", "path", db.path, "error", err)
+		return
+	}
+	var cutoff int64
+	if db.maxAge > 0 {
+		cutoff = time.Now().Add(-db.maxAge).Unix()
+	}
+	for id, ts := range f.Entries {
+		if ts < cutoff {
+			continue
+		}
+		if cur, ok := db.entries[id]; !ok || ts < cur {
+			db.entries[id] = ts
+		}
+	}
 }
 
 // atomicWriteFile writes data to a temp file then renames it to path,

@@ -168,7 +168,7 @@ blank drops it with a log line).
 |-------|-------------|
 | `inboundPath` | Downloaded `.QWK` packets waiting to be tossed. Relative paths are under the BBS root. |
 | `outboundPath` | Packed `.REP` waiting to be uploaded. |
-| `tempPath` | Scratch space while packets are built and downloaded. |
+| `tempPath` | Scratch directory, created at startup. Packets are not staged here: each is built or downloaded beside its destination (a `.part` file in `inboundPath`, a `.REP.tmp` in `outboundPath`) so the final move never crosses filesystems. |
 | `dupeDbPath` | JSON file of imported Message-IDs, kept 90 days. |
 | `badAreaTag` | Tag of a local area that receives messages for conferences no area mirrors. Blank drops them with a log line, as Synchronet does; a hub sends every conference your account subscribes to, so unmapped ones are normal. |
 | `networks.<key>.enabled` | Include this network in unqualified `qwk-poll` / `qwk-scan` runs. |
@@ -280,7 +280,8 @@ outbound directory and the next scan appends new posts to it.
 | `data/qwknet/in/*.bad` | Packets set aside after a failure | Sysop reviews, then deletes or renames back to `.QWK` to retry |
 | `data/qwknet/out/<HUBID>.REP` | Packed messages waiting for upload | Automatic |
 | `data/qwknet/out/<HUBID>.REP.bad` | A REP that could not be read back when new posts were to be appended | Sysop reviews |
-| `data/qwknet/temp/` | Packets under construction or download | Automatic |
+| `data/qwknet/in/<HUBID>.QWK.*.part` | A download in progress; one left behind after a failed move into place is a complete packet | Automatic; if the log names one, rename it to `<HUBID>.QWK` to toss it |
+| `data/qwknet/out/<HUBID>.REP.tmp` | A REP being rewritten | Automatic |
 | `data/qwknet/dupes.json` | Imported Message-IDs, pruned after 90 days | Automatic |
 | `<area>.jlr` (user `qwknet`) | Per-area export high-water mark inside each JAM base | Automatic |
 

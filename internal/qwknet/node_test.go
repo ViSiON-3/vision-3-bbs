@@ -328,6 +328,34 @@ func TestPoll_HubDownStillPacksREP(t *testing.T) {
 	}
 }
 
+func TestPoll_RefusedUploadStillDownloads(t *testing.T) {
+	e := newEnv(t)
+	pkt := hubPacket(t, qwk.PacketMessage{Conference: 2006, Number: 9, From: "Hub User", To: "All", Subject: "From hub", DateTime: time.Now(), Body: "hub says hi"})
+	srv := newFakeFTP(t, "VISION3", "pw", map[string][]byte{"VERT.QWK": pkt})
+	srv.setStorCode(553)
+	host, port, _ := strings.Cut(srv.addr(), ":")
+	e.cfg.Host = host
+	e.cfg.Port = atoi(port)
+	n := e.node(t)
+
+	if _, err := e.msgMgr.AddMessage(1, "Robbie", "All", "outbound", "to the hub", ""); err != nil {
+		t.Fatal(err)
+	}
+	res := n.Poll(context.Background())
+	if res.Uploaded || len(res.Errors) != 1 || !strings.Contains(res.Errors[0], "upload REP") {
+		t.Fatalf("want exactly the upload error: %+v", res)
+	}
+	if !res.Downloaded || res.Toss.Imported != 1 {
+		t.Fatalf("refused upload stopped the download: %+v", res)
+	}
+	if _, err := os.Stat(n.repPath()); err != nil {
+		t.Error("REP should wait in outbound for the next poll")
+	}
+	if parts, _ := filepath.Glob(filepath.Join(e.paths.InboundPath, "*.part")); len(parts) != 0 {
+		t.Errorf("partial download left behind: %v", parts)
+	}
+}
+
 func TestFetchConferences(t *testing.T) {
 	e := newEnv(t)
 	pkt := hubPacket(t)
@@ -361,7 +389,7 @@ func atoi(s string) int {
 func TestInboundPackets_ExactNamesAndOrder(t *testing.T) {
 	e := newEnv(t)
 	n := e.node(t)
-	for _, name := range []string{"VERT-1700000002.QWK", "VERTX.QWK", "vert.qwk", "VERT-1700000001.QWK", "VERT-abc.QWK", "OTHER.QWK"} {
+	for _, name := range []string{"VERT-1700000002.QWK", "VERTX.QWK", "vert.qwk", "VERT-1700000001.QWK", "VERT-abc.QWK", "OTHER.QWK", "VERT.QWK.123456.part"} {
 		if err := os.WriteFile(filepath.Join(e.paths.InboundPath, name), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}

@@ -202,7 +202,7 @@ func (m *Model) fieldsQWKNetGlobal() []fieldDef {
 			Set: func(val string) error { qc.OutboundPath = strings.TrimSpace(val); return nil },
 		},
 		{
-			Label: "Temp Path", Help: "Scratch directory for building and unpacking packets", Type: ftString, Col: 3, Row: 3, Width: 45,
+			Label: "Temp Path", Help: "Scratch directory (packets are staged beside their destination, not here)", Type: ftString, Col: 3, Row: 3, Width: 45,
 			Get: func() string { return qc.TempPath },
 			Set: func(val string) error { qc.TempPath = strings.TrimSpace(val); return nil },
 		},

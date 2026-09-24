@@ -26,7 +26,15 @@ type ftpClient struct {
 	host    string // control-connection host, for PASV replies that say 0.0.0.0
 	timeout time.Duration
 	dialer  net.Dialer
+	// broken is set once the control connection fails to send or answer.
+	// Later commands then fail at once instead of each waiting out the
+	// timeout, so a caller can try the next step without knowing the state.
+	broken bool
 }
+
+// errConnBroken is returned by commands issued after the control connection
+// has already failed.
+var errConnBroken = errors.New("control connection lost")
 
 // ftpDial connects and consumes the greeting.
 func ftpDial(ctx context.Context, hostPort string, timeout time.Duration) (*ftpClient, error) {
@@ -104,8 +112,12 @@ func (c *ftpClient) quit() {
 // cmd sends one command and returns the reply.
 func (c *ftpClient) cmd(format string, args ...any) (int, string, error) {
 	line := fmt.Sprintf(format, args...)
+	if c.broken {
+		return 0, "", fmt.Errorf("sending %s: %w", firstWord(line), errConnBroken)
+	}
 	_ = c.conn.SetDeadline(time.Now().Add(c.timeout))
 	if _, err := io.WriteString(c.conn, line+"\r\n"); err != nil {
+		c.broken = true
 		return 0, "", fmt.Errorf("sending %s: %w", firstWord(line), err)
 	}
 	code, msg, err := c.readReply()
@@ -115,8 +127,17 @@ func (c *ftpClient) cmd(format string, args ...any) (int, string, error) {
 	return code, msg, nil
 }
 
-// readReply reads a single- or multi-line reply ("123-" ... "123 ").
+// readReply reads a single- or multi-line reply ("123-" ... "123 "). Any
+// failure leaves the reply stream out of step, so it marks the client broken.
 func (c *ftpClient) readReply() (int, string, error) {
+	code, text, err := c.readReplyRaw()
+	if err != nil {
+		c.broken = true
+	}
+	return code, text, err
+}
+
+func (c *ftpClient) readReplyRaw() (int, string, error) {
 	_ = c.conn.SetDeadline(time.Now().Add(c.timeout))
 	line, err := c.r.ReadString('\n')
 	if err != nil {

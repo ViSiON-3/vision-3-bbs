@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -248,15 +247,17 @@ func (n *Node) pendingREPMessages(repPath string) ([]qwk.NetMessage, error) {
 	return msgs, nil
 }
 
-// writeREP builds the packet in the temp directory and moves it into place
-// so a crash mid-write never leaves a truncated REP for the uploader.
+// writeREP builds the packet beside the REP and moves it into place so a
+// crash mid-write never leaves a truncated REP for the uploader. The temp
+// file lives in the outbound directory, not TempPath, so the rename never
+// crosses a filesystem when the two are configured on different volumes.
 func (n *Node) writeREP(repPath string, msgs []qwk.NetMessage) error {
 	var buf bytes.Buffer
 	opts := qwk.NetREPOptions{Tagline: n.cfg.Tagline, NoHeaders: n.cfg.NoHeaders, NodeID: n.nodeID}
 	if err := qwk.WriteNetREP(&buf, n.hubID, msgs, opts); err != nil {
 		return err
 	}
-	tmp := filepath.Join(n.paths.TempPath, n.hubID+".REP.tmp")
+	tmp := repPath + ".tmp"
 	if err := os.WriteFile(tmp, buf.Bytes(), 0o644); err != nil {
 		return err
 	}
