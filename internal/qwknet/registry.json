@@ -6,8 +6,8 @@
     "hub_id": "VERT",
     "host": "vert.synchro.net",
     "port": 21,
-    "info_url": "https://wiki.synchro.net/howto:dove-net",
-    "join_notes": "Telnet to vert.synchro.net, log on as New with your QWK ID as the user name, answer Yes to 'Is this account to be used for QWK Networking (DOVE-Net)?', and use that password here.",
+    "info_url": "https://wiki.synchro.net/network:dove-net",
+    "join_notes": "Telnet to vert.synchro.net, log on as New with your QWK ID as the user name, answer Yes to 'Is this account to be used for QWK Networking (DOVE-Net)?', and use that password here. Setup guide: https://wiki.synchro.net/howto:dove-net",
     "conferences": [
       {"Number": 2001, "Name": "General"},
       {"Number": 2002, "Name": "Advertisements"},
@@ -22,7 +22,7 @@
       {"Number": 2011, "Name": "Synchronet Programming (Baja)"},
       {"Number": 2012, "Name": "Synchronet Programming (JavaScript)"},
       {"Number": 2013, "Name": "Synchronet Data"},
-      {"Number": 2014, "Name": "Synchronet Programming (C/C++)"},
+      {"Number": 2014, "Name": "Synchronet Programming (C/C++ and Git)"},
       {"Number": 2015, "Name": "HAM Radio Operators"},
       {"Number": 2016, "Name": "Internet Discussion"},
       {"Number": 2017, "Name": "Pro-Audio Discussion"},
@@ -30,6 +30,9 @@
       {"Number": 2019, "Name": "Sports Discussion"},
       {"Number": 2020, "Name": "Religious Discussion"},
       {"Number": 2021, "Name": "Hobby Corner"},
+      {"Number": 2022, "Name": "Tech Talk"},
+      {"Number": 2023, "Name": "AI Discussion"},
+      {"Number": 2024, "Name": "AI Playground"},
       {"Number": 2030, "Name": "Synchronet Announcements"}
     ]
   }

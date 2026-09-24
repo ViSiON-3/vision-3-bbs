@@ -48,7 +48,7 @@ message carries the extensions Synchronet defined:
 | Carrier | Fields |
 |---------|--------|
 | `HEADERS.DAT` | Full-length `Sender`, `To`, `Subject`; `Message-ID`; `Reply-ID`; `WhenWritten` with time zone; `SenderNetAddr` (the originating QWK ID); `Utf8`; `Conference` |
-| Body kludges | `@MSGID:`, `@REPLY:`, `@TZ:` at the top of the body, for hubs that ignore `HEADERS.DAT`; `@VIA:` on relayed mail, listing the systems it has passed through |
+| Body kludges | `@MSGID:`, `@REPLY:`, `@TZ:` at the top of the body, for hubs that ignore `HEADERS.DAT`; `@VIA:` on relayed mail, listing the systems it has passed through; `@REPLYTO:` naming where replies should go, kept on imported messages as a `QWKREPLYTO` kludge |
 | Tearline | Outbound messages get a `---` tearline and a ` ■ ViSiON/3 ■ <tagline>` line, unless the message already has one |
 
 On import, `HEADERS.DAT` wins over the body kludges, which win over the short
@@ -90,7 +90,7 @@ The form asks for:
 | Tagline | Added under the tearline of every message you send (e.g. `My BBS - bbs.example.org`). |
 | Poll Schedule | Cron schedule for the poll event. Default `*/30 * * * *` (every 30 minutes). |
 | Newscan Default | Y adds the new areas to users' newscan by default. |
-| Conferences | Press Enter. For a known network the preset list appears at once; otherwise the wizard logs in to the hub, downloads its packet and reads the conference list from `CONTROL.DAT`. Space toggles a conference, A selects all, N clears, Enter confirms. |
+| Conferences | Press Enter. For a known network the preset list appears at once; otherwise the wizard logs in to the hub, downloads its packet and reads the conference list from `CONTROL.DAT`. Space toggles a conference, A selects all, N clears, Enter confirms. **F** refreshes a preset list from the hub (once the password is filled in), which picks up conferences added since this release; ticks carry over by conference number. The downloaded packet stays in the inbound directory for the first poll to toss. |
 
 Press **S** or **PgDn** to save. The wizard then:
 
@@ -214,7 +214,7 @@ An area joins a network by its type, network key and conference number:
 
 To find the numbers, use the wizard's conference browser or
 `v3mail qwk-conferences --network <key>`. DOVE-Net publishes its list at
-<http://www.synchro.net/docs/dove-net.txt>.
+<https://wiki.synchro.net/network:dove-net>.
 
 Posts in a `qwknet` area are stored as echomail: they get a Message-ID of the
 form `<time.areatag@yourqwkid>` when written, so replies coming back from the

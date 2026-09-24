@@ -307,9 +307,9 @@ type qwkConfsMsg struct {
 	err   error
 }
 
-// enterQWKConfBrowser opens the conference picker. A known network's list
-// is used as-is; otherwise the hub is asked, which needs the connection
-// details filled in first.
+// enterQWKConfBrowser opens the conference picker. A known network's
+// preset list appears at once (F in the picker refreshes it from the hub);
+// otherwise the hub is asked, which needs the connection details first.
 func (m Model) enterQWKConfBrowser() (Model, tea.Cmd) {
 	w := m.qwkWizard
 	if w.confsFetched {
@@ -317,8 +317,19 @@ func (m Model) enterQWKConfBrowser() (Model, tea.Cmd) {
 	}
 	if w.known != nil && len(w.known.Conferences) > 0 {
 		m.setQWKConferences(w.known.Conferences)
+		w.confsFromHub = false
 		return m.openQWKConfBrowser(), nil
 	}
+	return m.fetchQWKConferences()
+}
+
+// fetchQWKConferences asks the hub for its conference list: it logs in,
+// downloads the node's packet (left in inbound for the first toss, since
+// the hub will not send those messages again) and reads CONTROL.DAT. The
+// hub's list is authoritative: it carries the numbers this account gets,
+// including conferences newer than the preset list.
+func (m Model) fetchQWKConferences() (Model, tea.Cmd) {
+	w := m.qwkWizard
 	if w.hubID == "" || w.host == "" || w.password == "" {
 		m.message = "Fill in Hub QWK-ID, Hub Host and Password first — the list comes from the hub"
 		return m, nil
@@ -392,10 +403,16 @@ func (m Model) handleQWKConfsMsg(msg qwkConfsMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		w.confsErr = msg.err.Error()
 		m.qwkConfBrowserErr = w.confsErr
+		if len(w.available) > 0 {
+			// A refresh of the preset list failed: keep showing the preset.
+			return m.openQWKConfBrowser(), nil
+		}
 		m.mode = modeQWKConfBrowser
 		return m, nil
 	}
+	m.qwkConfBrowserErr = ""
 	m.setQWKConferences(msg.confs)
+	w.confsFromHub = true
 	return m.openQWKConfBrowser(), nil
 }
 
@@ -418,8 +435,7 @@ func (m Model) updateQWKConfBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case msg.Type == tea.KeyEscape:
 			m.mode = modeQWKWizardForm
 		case strings.EqualFold(msg.String(), "r"):
-			w.confsFetched = false
-			return m.enterQWKConfBrowser()
+			return m.fetchQWKConferences()
 		}
 		return m, nil
 	}
@@ -450,6 +466,11 @@ func (m Model) updateQWKConfBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			for i := range m.qwkConfBrowserSel {
 				m.qwkConfBrowserSel[i] = false
 			}
+		case "F":
+			// Refresh from the hub, keeping the ticks made so far: they
+			// carry over by conference number.
+			w.selected = m.qwkConfBrowserSel
+			return m.fetchQWKConferences()
 		}
 	}
 	return m, nil

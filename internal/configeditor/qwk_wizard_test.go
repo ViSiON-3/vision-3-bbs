@@ -1,14 +1,18 @@
 package configeditor
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwknet"
 )
 
 // qwkTestModel is a model whose saveAll writes into a temp configs dir.
@@ -287,4 +291,60 @@ func TestQWKNetworkRecordFieldsRenameCarriesAreasAndEvent(t *testing.T) {
 		t.Fatalf("rename incomplete: %+v areas=%+v", m.configs.QWKNet.Networks, m.configs.MsgAreas)
 	}
 	_ = qwk.ConferenceInfo{} // keep the import honest for the helper below
+}
+
+// F in the conference picker replaces a preset list with the hub's, keeping
+// ticks by conference number; a failed refresh keeps the preset on screen.
+func TestQWKWizard_RefreshPresetConferencesFromHub(t *testing.T) {
+	m := qwkTestModel(t)
+	m, _ = m.enterQWKWizard("")
+	nets, err := qwknet.LoadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.populateQWKWizardFromRegistry(nets[0])
+	m, _ = m.enterQWKConfBrowser()
+	w := m.qwkWizard
+	if m.mode != modeQWKConfBrowser || w.confsFromHub || len(w.available) != len(nets[0].Conferences) {
+		t.Fatalf("preset list not shown: mode=%v fromHub=%v n=%d", m.mode, w.confsFromHub, len(w.available))
+	}
+	m.qwkConfBrowserSel[0] = true // 2001
+	pressF := func(m Model) (Model, tea.Cmd) {
+		t.Helper()
+		next, cmd := m.updateQWKConfBrowser(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+		return next.(Model), cmd
+	}
+
+	// No password yet: the refresh explains itself and fetches nothing.
+	m, cmd := pressF(m)
+	if cmd != nil || m.mode != modeQWKConfBrowser || !strings.Contains(m.message, "Password") {
+		t.Fatalf("refresh without password: mode=%v msg=%q", m.mode, m.message)
+	}
+
+	w.password = "pw"
+	m, cmd = pressF(m)
+	if cmd == nil || m.mode != modeQWKConfFetching {
+		t.Fatalf("refresh did not start a fetch: mode=%v", m.mode)
+	}
+	next, _ := m.handleQWKConfsMsg(qwkConfsMsg{gen: w.fetchGen, confs: []qwk.ConferenceInfo{
+		{Number: 2001, Name: "General"}, {Number: 2099, Name: "Brand New"},
+	}})
+	m = next.(Model)
+	if m.mode != modeQWKConfBrowser || !w.confsFromHub || len(w.available) != 2 {
+		t.Fatalf("hub list not installed: mode=%v fromHub=%v avail=%+v", m.mode, w.confsFromHub, w.available)
+	}
+	if !m.qwkConfBrowserSel[0] || m.qwkConfBrowserSel[1] {
+		t.Errorf("ticks did not carry over by number: %v", m.qwkConfBrowserSel)
+	}
+
+	// A failed refresh keeps the list and reports the error.
+	m, _ = pressF(m)
+	next, _ = m.handleQWKConfsMsg(qwkConfsMsg{gen: w.fetchGen, err: errors.New("530 login refused")})
+	m = next.(Model)
+	if m.mode != modeQWKConfBrowser || len(w.available) != 2 || !strings.Contains(m.qwkConfBrowserErr, "530") {
+		t.Fatalf("failed refresh: mode=%v avail=%d err=%q", m.mode, len(w.available), m.qwkConfBrowserErr)
+	}
+	if !strings.Contains(m.View(), "Hub refresh failed") {
+		t.Error("picker does not show the refresh error")
+	}
 }

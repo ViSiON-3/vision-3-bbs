@@ -249,6 +249,12 @@ func (n *Node) importMessage(base *jam.Base, area *message.MessageArea, m qwk.Ne
 		route += "/" + m.Via
 	}
 	jm.Kludges = append(jm.Kludges, "QWKVIA: "+route)
+	// @REPLYTO names where replies should go when that is not the sender.
+	// It is kept under its own name rather than FTN's REPLYTO, whose
+	// "<address> <name>" form this is not.
+	if m.ReplyTo != "" {
+		jm.Kludges = append(jm.Kludges, "QWKREPLYTO: "+toCP437(m.ReplyTo, m.UTF8))
+	}
 	if m.Private {
 		jm.Header = &jam.MessageHeader{Attribute: jam.MsgPrivate}
 	}

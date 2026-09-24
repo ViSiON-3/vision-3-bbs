@@ -26,6 +26,7 @@ type NetMessage struct {
 
 	MessageID     string // RFC822-style Message-ID (HEADERS.DAT or @MSGID)
 	ReplyID       string // Reply-ID / In-Reply-To (HEADERS.DAT or @REPLY)
+	ReplyTo       string // @REPLYTO: where replies should go, when not the sender
 	Via           string // @VIA route as received; empty for the sender's own posts
 	SenderNetAddr string // HEADERS.DAT SenderNetAddr (QWK ID of the origin)
 	UTF8          bool   // HEADERS.DAT Utf8: the body is UTF-8, not CP437
@@ -242,6 +243,7 @@ func buildNetMessage(bf blockFields, header, body []byte, ext ExtHeader) NetMess
 		Via:           kl.via,
 		MessageID:     kl.msgID,
 		ReplyID:       kl.replyID,
+		ReplyTo:       kl.replyTo,
 	}
 	if kl.to != "" {
 		m.To = kl.to
@@ -299,6 +301,9 @@ func encodeKludgeLines(m NetMessage) string {
 	}
 	if m.ReplyID != "" {
 		b.WriteString(kludgeReply + " " + m.ReplyID + "\n")
+	}
+	if m.ReplyTo != "" {
+		b.WriteString(kludgeReplyTo + " " + m.ReplyTo + "\n")
 	}
 	if !m.DateTime.IsZero() {
 		_, off := m.DateTime.Zone()

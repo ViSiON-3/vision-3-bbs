@@ -29,6 +29,7 @@ type qwkWizardState struct {
 	available     []qwk.ConferenceInfo
 	selected      []bool // parallel to available
 	confsFetched  bool
+	confsFromHub  bool // available came from the hub, not the preset list
 	confsErr      string
 	existingConfs map[int]bool // already mirrored by an area (editing)
 	fetchGen      uint64       // guards against a late result after ESC/retry

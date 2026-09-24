@@ -118,9 +118,21 @@ func (m Model) viewQWKConfBrowser() string {
 			selected++
 		}
 	}
-	lb.line(lb.pad(editInfoValueStyle.Render(centerText(fmt.Sprintf("%d of %d conferences selected", selected, total), boxW+2))))
-	lb.bgRows(1)
-	return lb.finish("Space - Toggle  |  A - All  |  N - None  |  Enter - Confirm  |  ESC - Back")
+	source := "preset list"
+	if w.confsFromHub || w.known == nil {
+		source = "from the hub"
+	}
+	lb.line(lb.pad(editInfoValueStyle.Render(centerText(fmt.Sprintf("%d of %d conferences selected (%s)", selected, total, source), boxW+2))))
+	if m.qwkConfBrowserErr != "" {
+		msg := "Hub refresh failed: " + m.qwkConfBrowserErr
+		if len([]rune(msg)) > boxW {
+			msg = string([]rune(msg)[:boxW-3]) + "..."
+		}
+		lb.messageRow(msg)
+	} else {
+		lb.bgRows(1)
+	}
+	return lb.finish("Space - Toggle  |  A - All  |  N - None  |  F - Refresh from Hub  |  Enter - Confirm  |  ESC - Back")
 }
 
 // wrapToWidth breaks text into lines no wider than w on word boundaries.

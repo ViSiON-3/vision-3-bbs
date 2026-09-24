@@ -278,6 +278,41 @@ func TestToss_ThreadsRepliesAcrossAndWithinPackets(t *testing.T) {
 	}
 }
 
+// @REPLYTO is kept on the imported message and stripped from its text.
+func TestToss_KeepsReplyTo(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	pkt := hubPacket(t, qwk.PacketMessage{Conference: 2001, Number: 1, From: "List Bot", To: "All", Subject: "Digest",
+		DateTime: time.Now(), Body: "@REPLYTO: Moderator\nToday's digest"})
+	if err := os.WriteFile(filepath.Join(e.paths.InboundPath, "VERT.QWK"), pkt, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if res := n.Toss(); len(res.Errors) != 0 || res.Imported != 1 {
+		t.Fatalf("toss: %+v", res)
+	}
+	base, err := e.msgMgr.GetBase(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = base.Close() }()
+	msg, err := base.ReadMessage(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, k := range msg.Kludges {
+		if strings.TrimPrefix(k, "\x01") == "QWKREPLYTO: Moderator" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("kludges = %q, want QWKREPLYTO: Moderator", msg.Kludges)
+	}
+	if strings.Contains(msg.Text, "@REPLYTO") {
+		t.Errorf("kludge left in the text: %q", msg.Text)
+	}
+}
+
 func TestToss_DropsLoopedAndForeignPackets(t *testing.T) {
 	e := newEnv(t)
 	n := e.node(t)

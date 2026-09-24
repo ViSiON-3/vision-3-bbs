@@ -131,7 +131,7 @@ func headersFromREP(t *testing.T, archive []byte) map[int]ExtHeader {
 
 func TestWriteNetREP_NoHeadersStillCarriesKludges(t *testing.T) {
 	var buf bytes.Buffer
-	msg := NetMessage{Conference: 5, From: "A", To: "B", Subject: "S", DateTime: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Body: "x", MessageID: "<1@a>"}
+	msg := NetMessage{Conference: 5, From: "A", To: "B", Subject: "S", DateTime: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Body: "x", MessageID: "<1@a>", ReplyTo: "Moderator"}
 	if err := WriteNetREP(&buf, "HUB", []NetMessage{msg}, NetREPOptions{NoHeaders: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestWriteNetREP_NoHeadersStillCarriesKludges(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, msgs, _ := ParseMSGPayload(p.Payload, nil)
-	if len(msgs) != 1 || msgs[0].MessageID != "<1@a>" || msgs[0].Body != "x" {
+	if len(msgs) != 1 || msgs[0].MessageID != "<1@a>" || msgs[0].ReplyTo != "Moderator" || msgs[0].Body != "x" {
 		t.Fatalf("msgs = %+v", msgs)
 	}
 }
