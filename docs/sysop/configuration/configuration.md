@@ -89,7 +89,7 @@ Choosing **Access & Security** (key 2) opens an inner menu of five numbered item
 | Item | What it edits |
 |------|---------------|
 | QWK Networks | Configured QWK network hubs (hub QWK ID, FTP host, login, password, tagline); **G** edits the shared paths and the bad-area tag; **W** re-runs the wizard on the highlighted network to add conferences |
-| QWK Network Wizard | Guided flow: pick a known network (DOVE-Net) or enter a custom hub, choose the hub conferences to carry, then writes `qwknet.json`, `message_areas.json`, `conferences.json` and the `qwknet_poll_<key>` event. See [QWK Networking](messages/qwk-networking.md) |
+| QWK Network Wizard | Guided flow (offers add-or-edit when a network already exists): pick a known network (DOVE-Net) or enter a custom hub, choose the hub conferences to carry, then writes `qwknet.json`, `message_areas.json`, `conferences.json` and the `qwknet_poll_<key>` event. See [QWK Networking](messages/qwk-networking.md) |
 
 ### ViSiON/3 Networking (V3Net) Sub-menu
 

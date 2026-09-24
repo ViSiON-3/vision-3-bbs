@@ -75,6 +75,9 @@ has been through your system before and is dropped.
 ## Joining a Network with the Wizard
 
 Run `./config`, choose **5 - QWK Networking**, then **QWK Network Wizard**.
+With a network already configured the wizard first asks whether to add another
+or edit an existing one; pick the network to change its hub details or add
+conferences, or **N** for a new one.
 
 The form asks for:
 

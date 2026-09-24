@@ -97,6 +97,45 @@ func TestQWKWizard_SaveCreatesNetworkAreasAndEvent(t *testing.T) {
 	}
 }
 
+func TestQWKWizard_EntryOffersPickerWhenConfigured(t *testing.T) {
+	m := qwkTestModel(t)
+	m, _ = m.enterQWKWizardEntry()
+	if m.mode != modeQWKWizardForm || m.qwkWizard == nil || m.qwkWizard.editing() {
+		t.Fatalf("fresh system should open the blank form, got mode %v", m.mode)
+	}
+
+	m = qwkTestModel(t)
+	m.configs.QWKNet.Networks = map[string]config.QWKNetworkConfig{
+		"dovenet": {Enabled: true, HubID: "VERT", Host: "vert.synchro.net", Password: "pw"},
+	}
+	m, _ = m.enterQWKWizardEntry()
+	if m.mode != modeQWKWizardPicker || len(m.qwkWizardPickerKeys) != 1 {
+		t.Fatalf("configured system should offer the picker, got mode %v keys %v", m.mode, m.qwkWizardPickerKeys)
+	}
+	if v := m.viewQWKWizardPicker(); !strings.Contains(v, "dovenet") || !strings.Contains(v, "Add a new network") {
+		t.Errorf("picker view missing entries")
+	}
+	// The detail panel shows the login the poller will use: a per-network
+	// ownId wins over the system QWK ID.
+	nc := m.configs.QWKNet.Networks["dovenet"]
+	nc.OwnID = "mynode"
+	m.configs.QWKNet.Networks["dovenet"] = nc
+	m.qwkWizardPickerCursor = 1
+	if v := m.viewQWKWizardPicker(); !strings.Contains(v, "Login: MYNODE") {
+		t.Errorf("picker login should honor ownId, view was:\n%s", v)
+	}
+	// Enter on the network opens it for editing; N opens a blank form.
+	r, _ := m.updateQWKWizardPicker(tea.KeyMsg{Type: tea.KeyDown})
+	r, _ = r.(Model).updateQWKWizardPicker(tea.KeyMsg{Type: tea.KeyEnter})
+	if e := r.(Model); e.mode != modeQWKWizardForm || !e.qwkWizard.editing() || e.qwkWizard.editingKey != "dovenet" {
+		t.Errorf("Enter on network: mode=%v editing=%v", e.mode, e.qwkWizard != nil && e.qwkWizard.editing())
+	}
+	r, _ = m.updateQWKWizardPicker(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	if a := r.(Model); a.mode != modeQWKWizardForm || a.qwkWizard.editing() {
+		t.Errorf("N should open the blank form, got mode %v", a.mode)
+	}
+}
+
 func TestQWKWizard_EditAddsOnlyNewConferences(t *testing.T) {
 	m := qwkTestModel(t)
 	m.configs.QWKNet.Networks = map[string]config.QWKNetworkConfig{

@@ -11,6 +11,54 @@ func (m Model) viewQWKWizardForm() string {
 	return m.viewFieldWizardForm(m.qwkWizardFields, title, modeQWKWizardForm, modeQWKWizardField)
 }
 
+// viewQWKWizardPicker renders the wizard's opening choice: add a network or
+// edit one already configured.
+func (m Model) viewQWKWizardPicker() string {
+	boxW := 70
+	total := len(m.qwkWizardPickerKeys) + 1
+	lb := m.newListBox(boxW, qwkListVisible+13)
+
+	lb.topBorder()
+	lb.title("QWK Network Wizard")
+	lb.colHeader(fmt.Sprintf("  %-14s  %-8s  %-28s  %s", "Network", "Hub", "Host", "Areas"))
+	lb.separator()
+
+	lb.list(qwkListVisible, m.qwkWizardPickerScroll, m.qwkWizardPickerCursor, total, func(i int) string {
+		if i == 0 {
+			return "+ Add a new network..."
+		}
+		key := m.qwkWizardPickerKeys[i-1]
+		net := m.configs.QWKNet.Networks[key]
+		return fmt.Sprintf("  %-14s  %-8s  %-28s  %d", padRight(key, 14), padRight(net.HubID, 8),
+			padRight(truncateToDisplayWidth(net.HostPort(), 28), 28), len(m.qwkConferenceNumbersFor(key)))
+	})
+
+	lb.separator()
+	if m.qwkWizardPickerCursor == 0 {
+		lb.row(editInfoValueStyle.Render(padRight("  Join a QWK network this system is not a node of yet.", boxW)))
+		lb.emptyRows(3)
+	} else {
+		key := m.qwkWizardPickerKeys[m.qwkWizardPickerCursor-1]
+		net := m.configs.QWKNet.Networks[key]
+		name := net.Name
+		if name == "" {
+			name = key
+		}
+		lb.row(editInfoValueStyle.Render(padRight(fmt.Sprintf("  %s — hub %s at %s", name, net.HubID, net.HostPort()), boxW)))
+		lb.row(editInfoValueStyle.Render(padRight(fmt.Sprintf("  Conferences carried: %d", len(m.qwkConferenceNumbersFor(key))), boxW)))
+		enabled := "off"
+		if net.Enabled {
+			enabled = "on"
+		}
+		lb.row(editInfoValueStyle.Render(padRight(fmt.Sprintf("  Polling: %s   Login: %s", enabled, net.LoginUser(net.NodeID(m.systemQWKID()))), boxW)))
+		lb.row(editInfoValueStyle.Render(padRight("  Enter re-opens the wizard to change the hub or add conferences.", boxW)))
+	}
+
+	lb.bottomBorder()
+	lb.bgRows(lb.bottomPad + 1)
+	return lb.finish("Enter - Select  |  N - Add New  |  ESC - Back")
+}
+
 // viewQWKNetworkBrowser renders the known-network list with an info panel.
 func (m Model) viewQWKNetworkBrowser() string {
 	boxW := 70
