@@ -18,7 +18,7 @@ ViSiON/3 includes an interactive TUI configuration editor modeled after ViSiON/2
 
 ### Main Menu
 
-The editor opens to a main menu. Keys **1** through **5** open sub-menus, keys **6** through **9** and **0** open record lists, and **Q** quits.
+The editor opens to a main menu. Keys **1** through **6** open sub-menus, keys **7** through **9**, **0** and **A** open record lists, and **Q** quits.
 
 | Key | Section | What it covers |
 |-----|---------|----------------|
@@ -26,12 +26,13 @@ The editor opens to a main menu. Keys **1** through **5** open sub-menus, keys *
 | 2 | Access & Security | Sub-menu: Access Levels, Connection Limits, Bot Defense, IP Blocklist/Allowlist, New User Voting (NUV) |
 | 3 | Areas and Conferences | Sub-menu: Message Areas, File Areas, Conferences |
 | 4 | Echomail Networking | Sub-menu: Echomail Networks, Echomail Links, FTN Setup Wizard |
-| 5 | ViSiON/3 Networking (V3Net) | Sub-menu: Node Identity, Subscriptions, Hosted Networks |
-| 6 | Door Programs | External door program record list |
-| 7 | Transfer Protocols | File transfer protocol record list |
-| 8 | Archivers | Archive format record list |
-| 9 | Event Scheduler | Automated event record list |
-| 0 | Login Sequence | Login step record list |
+| 5 | QWK Networking | Sub-menu: QWK Networks, QWK Network Wizard |
+| 6 | ViSiON/3 Networking (V3Net) | Sub-menu: Node Identity, Subscriptions, Hosted Networks |
+| 7 | Door Programs | External door program record list |
+| 8 | Transfer Protocols | File transfer protocol record list |
+| 9 | Archivers | Archive format record list |
+| 0 | Event Scheduler | Automated event record list |
+| A | Login Sequence | Login step record list |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
 ### System Setup Sub-menu
@@ -82,6 +83,13 @@ Choosing **Access & Security** (key 2) opens an inner menu of five numbered item
 **Node Lookup.** After entering your FTN address, select the *Node Lookup* row and press Enter. The wizard downloads the network's nodelist, finds your node, and fills in your uplink hub's address, hostname, and BinkP port automatically. If your node isn't listed yet (new nodes appear in the next weekly nodelist), the hub is inferred from your net's Host/Hub entries. Networks without a published nodelist URL skip this feature; hub details can always be entered manually.
 
 **Echo Areas.** Selecting the *Echo Areas* row downloads the network's echolist so you can tick the echoes you want. Echo areas are optional: not every network publishes its `.NA` file on the web (some hand it out through the network itself, via AreaFix), and web-hosted lists do go offline. If the download fails, press ESC — everything you entered is still on the form — and save. You get the network, its hub link, the netmail area and an updated `binkd.conf`; echoes can be added later under *Message Areas*, or by re-entering the wizard and choosing the network to edit.
+
+### QWK Networking Sub-menu
+
+| Item | What it edits |
+|------|---------------|
+| QWK Networks | Configured QWK network hubs (hub QWK ID, FTP host, login, password, tagline); **G** edits the shared paths and the bad-area tag; **W** re-runs the wizard on the highlighted network to add conferences |
+| QWK Network Wizard | Guided flow: pick a known network (DOVE-Net) or enter a custom hub, choose the hub conferences to carry, then writes `qwknet.json`, `message_areas.json`, `conferences.json` and the `qwknet_poll_<key>` event. See [QWK Networking](messages/qwk-networking.md) |
 
 ### ViSiON/3 Networking (V3Net) Sub-menu
 
@@ -203,7 +211,7 @@ The strings support pipe color codes:
 
 ## doors.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 6 — Door Programs) to manage door settings interactively. The JSON structure below is for reference.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (section 7 — Door Programs) to manage door settings interactively. The JSON structure below is for reference.*
 
 Configures external door programs that can be launched from the BBS. The file contains an array of door configurations. See the [Door Programs Guide](doors/doors.md) for full documentation including DOS door setup, FOSSIL drivers, and dosemu2 configuration.
 
@@ -296,7 +304,7 @@ Placeholders are substituted in `commands`, `cleanup_args` and `environment_vari
 
 ## archivers.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (key 7 — Archivers) to manage archiver settings interactively. The JSON structure below is for reference.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (section 9 — Archivers) to manage archiver settings interactively. The JSON structure below is for reference.*
 
 Defines archive formats and the external tools used to pack, unpack, test, and list them. This centralized configuration ensures all subsystems (ZipLab upload pipeline, file area management, archive viewing) use the same archiver definitions, and that different platforms can specify their preferred tool versions.
 

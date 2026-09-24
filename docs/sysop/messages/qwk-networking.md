@@ -74,7 +74,7 @@ has been through your system before and is dropped.
 
 ## Joining a Network with the Wizard
 
-Run `./config`, choose **4 - Echomail Networking**, then **QWK Network Wizard**.
+Run `./config`, choose **5 - QWK Networking**, then **QWK Network Wizard**.
 
 The form asks for:
 
@@ -114,7 +114,7 @@ browsing.
 
 ### Managing networks after setup
 
-**4 - Echomail Networking → QWK Networks** lists the configured networks.
+**5 - QWK Networking → QWK Networks** lists the configured networks.
 Enter edits one, **I** opens the wizard for a new one, **W** re-runs the
 wizard on the highlighted network (to add conferences), **D** deletes, **G**
 edits the global paths, ESC returns. The edit screen has these fields:
