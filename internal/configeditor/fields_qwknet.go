@@ -214,9 +214,29 @@ func (m *Model) fieldsQWKNetGlobal() []fieldDef {
 		{
 			Label: "Bad Area Tag", Help: "Message area tag that receives mail for conferences no area mirrors (blank = drop and log)", Type: ftString, Col: 3, Row: 5, Width: 20,
 			Get: func() string { return qc.BadAreaTag },
-			Set: func(val string) error { qc.BadAreaTag = strings.TrimSpace(val); return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if val != "" && !m.msgAreaTagExists(val) {
+					return fmt.Errorf("message area %q does not exist", val)
+				}
+				qc.BadAreaTag = val
+				return nil
+			},
 		},
 	}
+}
+
+// msgAreaTagExists reports whether a configured message area has the tag.
+func (m Model) msgAreaTagExists(tag string) bool {
+	if m.configs == nil {
+		return false
+	}
+	for _, a := range m.configs.MsgAreas {
+		if strings.EqualFold(a.Tag, tag) {
+			return true
+		}
+	}
+	return false
 }
 
 // fileExists reports whether path names an existing file.

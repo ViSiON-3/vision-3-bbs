@@ -72,10 +72,12 @@ func TestValidateQWKNetwork(t *testing.T) {
 		t.Fatalf("valid config rejected: %v", err)
 	}
 	cases := map[string]QWKNetworkConfig{
-		"no hub":      {Host: "h", Password: "p"},
-		"no host":     {HubID: "VERT", Password: "p"},
-		"no password": {HubID: "VERT", Host: "h"},
-		"bad port":    {HubID: "VERT", Host: "h", Password: "p", Port: 70000},
+		"no hub":       {Host: "h", Password: "p"},
+		"no host":      {HubID: "VERT", Password: "p"},
+		"no password":  {HubID: "VERT", Host: "h"},
+		"bad port":     {HubID: "VERT", Host: "h", Password: "p", Port: 70000},
+		"tab in pass":  {HubID: "VERT", Host: "h", Password: "p\tq"},
+		"crlf in user": {HubID: "VERT", Host: "h", Password: "p", Username: "u\r\nDELE"},
 	}
 	for name, c := range cases {
 		if err := ValidateQWKNetwork("x", c, "VISION3"); err == nil {

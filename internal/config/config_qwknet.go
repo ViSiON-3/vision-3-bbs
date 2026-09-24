@@ -209,9 +209,11 @@ func ValidateQWKNetwork(key string, n QWKNetworkConfig, systemID string) error {
 	if n.Password == "" {
 		return fmt.Errorf("network %q: hub password is required", key)
 	}
+	// The FTP client refuses the same characters; catching them here means
+	// the sysop hears about it while editing, not at the next poll.
 	for name, v := range map[string]string{"login name": n.Username, "password": n.Password, "host": n.Host} {
-		if strings.ContainsAny(v, "\r\n\x00") {
-			return fmt.Errorf("network %q: %s contains a line break", key, name)
+		if strings.ContainsFunc(v, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+			return fmt.Errorf("network %q: %s contains a control character", key, name)
 		}
 	}
 	return nil

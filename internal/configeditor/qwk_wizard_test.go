@@ -160,6 +160,31 @@ func TestQWKAreaSlugAndTag(t *testing.T) {
 	}
 }
 
+func TestQWKNetGlobalBadAreaMustExist(t *testing.T) {
+	m := qwkTestModel(t)
+	m.configs.MsgAreas = []message.MessageArea{{ID: 1, Tag: "LOCAL"}}
+	m.recordType = "qwknet"
+	m.recordEditIdx = -1
+	var bad fieldDef
+	for _, f := range m.buildRecordFields() {
+		if f.Label == "Bad Area Tag" {
+			bad = f
+		}
+	}
+	if bad.Set == nil {
+		t.Fatal("Bad Area Tag field missing")
+	}
+	if err := bad.Set("nope"); err == nil {
+		t.Error("unknown area accepted")
+	}
+	if err := bad.Set("local"); err != nil || m.configs.QWKNet.BadAreaTag != "local" {
+		t.Errorf("existing area rejected: %v", err)
+	}
+	if err := bad.Set(""); err != nil || m.configs.QWKNet.BadAreaTag != "" {
+		t.Errorf("blank rejected: %v", err)
+	}
+}
+
 func TestQWKEvents_WireRefreshRename(t *testing.T) {
 	ev := templateEvents()
 	wireQWKEvents(&ev, "dovenet", "VERT", "")
