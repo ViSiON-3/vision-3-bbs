@@ -8,6 +8,15 @@ import (
 
 // viewFTNWizardForm renders the FTN setup wizard form.
 func (m Model) viewFTNWizardForm() string {
+	return m.viewFieldWizardForm(m.ftnWizardFields, "FTN Setup Wizard", modeFTNWizardForm, modeFTNWizardField)
+}
+
+// viewFieldWizardForm renders a wizard form built from field definitions:
+// a titled box of label/value rows windowed by fieldScroll, the help line
+// for the active field, and the key bar. formMode and fieldMode are the
+// wizard's navigation and text-entry modes, which decide how the active
+// row is drawn.
+func (m Model) viewFieldWizardForm(fields []fieldDef, title string, formMode, fieldMode editorMode) string {
 	var b strings.Builder
 
 	row := 0
@@ -20,7 +29,7 @@ func (m Model) viewFTNWizardForm() string {
 
 	// Find max row in fields.
 	maxRow := 0
-	for _, f := range m.ftnWizardFields {
+	for _, f := range fields {
 		if f.Row > maxRow {
 			maxRow = f.Row
 		}
@@ -29,7 +38,7 @@ func (m Model) viewFTNWizardForm() string {
 	if visibleRows > maxFieldRows {
 		visibleRows = maxFieldRows
 	}
-	helpRegionRows := m.fieldHelpRegionRows(m.ftnWizardFields, boxW)
+	helpRegionRows := m.fieldHelpRegionRows(fields, boxW)
 	extraV := maxInt(0, m.height-visibleRows-8-helpRegionRows)
 	topPad := extraV / 2
 	bottomPad := extraV - topPad
@@ -52,7 +61,7 @@ func (m Model) viewFTNWizardForm() string {
 
 	// Title.
 	titleLine := editBorderStyle.Render("│") +
-		menuHeaderStyle.Render(centerText("FTN Setup Wizard", boxW)) +
+		menuHeaderStyle.Render(centerText(title, boxW)) +
 		editBorderStyle.Render("│")
 	b.WriteString(m.backdrop.Segment(row, 0, padL) + titleLine +
 		m.backdrop.Segment(row, m.width-maxInt(0, padR), maxInt(0, padR)))
@@ -82,7 +91,7 @@ func (m Model) viewFTNWizardForm() string {
 		lastRow = maxRow
 	}
 	for fr := firstRow; fr <= lastRow; fr++ {
-		rowContent := m.renderFTNWizardRow(fr, boxW)
+		rowContent := m.renderWizardFieldRow(fields, formMode, fieldMode, fr, boxW)
 		line := m.backdrop.Segment(row, 0, padL) +
 			editBorderStyle.Render("│") +
 			rowContent +
@@ -138,7 +147,7 @@ func (m Model) viewFTNWizardForm() string {
 	}
 
 	// Message or field help text.
-	b.WriteString(m.renderFieldHelpLine(m.ftnWizardFields, padL, padR, boxW, row, helpRegionRows))
+	b.WriteString(m.renderFieldHelpLine(fields, padL, padR, boxW, row, helpRegionRows))
 	b.WriteByte('\n')
 	row += helpRegionRows
 
@@ -149,15 +158,15 @@ func (m Model) viewFTNWizardForm() string {
 	return b.String()
 }
 
-// renderFTNWizardRow renders a single row of FTN wizard fields.
-func (m Model) renderFTNWizardRow(row, boxW int) string {
+// renderWizardFieldRow renders the fields that share one form row.
+func (m Model) renderWizardFieldRow(fields []fieldDef, formMode, fieldMode editorMode, row, boxW int) string {
 	var parts []string
 
-	for i, f := range m.ftnWizardFields {
+	for i, f := range fields {
 		if f.Row != row {
 			continue
 		}
-		parts = append(parts, m.renderFTNWizardField(i, f))
+		parts = append(parts, m.renderWizardFormField(i, f, formMode, fieldMode))
 	}
 
 	fieldStr := strings.Join(parts, "  ")
@@ -181,8 +190,8 @@ func (m Model) renderFTNWizardRow(row, boxW int) string {
 		fieldDisplayStyle.Render(strings.Repeat(" ", padAfter))
 }
 
-// renderFTNWizardField renders a single FTN wizard field (label : value).
-func (m Model) renderFTNWizardField(fieldIdx int, f fieldDef) string {
+// renderWizardFormField renders a single wizard field (label : value).
+func (m Model) renderWizardFormField(fieldIdx int, f fieldDef, formMode, fieldMode editorMode) string {
 	isActive := m.editField == fieldIdx
 
 	labelText := padRight(f.Label, 16)
@@ -193,7 +202,7 @@ func (m Model) renderFTNWizardField(fieldIdx int, f fieldDef) string {
 		value = f.Get()
 	}
 
-	if isActive && m.mode == modeFTNWizardField {
+	if isActive && m.mode == fieldMode {
 		return fieldLabelStyle.Render(label) + m.textInput.View()
 	}
 
@@ -204,7 +213,7 @@ func (m Model) renderFTNWizardField(fieldIdx int, f fieldDef) string {
 	}
 	displayValue := padRight(displayVal, f.Width)
 
-	if isActive && m.mode == modeFTNWizardForm {
+	if isActive && m.mode == formMode {
 		effectiveWidth := f.Width
 		if f.Type == ftYesNo || f.Type == ftInteger {
 			effectiveWidth = f.Width + 2

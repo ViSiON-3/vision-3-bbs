@@ -334,8 +334,9 @@ func (m Model) wizardHasData() bool {
 
 // updateWizardExitConfirm handles the wizard save/discard dialog.
 func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Determine if this is the FTN wizard or V3Net wizard.
+	// Determine if this is the FTN wizard, the QWK wizard or V3Net wizard.
 	isFTN := m.ftnWizard != nil && m.ftnWizard.hasData()
+	isQWK := !isFTN && m.qwkWizard != nil && m.qwkWizard.hasData()
 
 	formMode := modeWizardForm
 	discardMode := editorMode(modeRecordList)
@@ -343,17 +344,27 @@ func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		formMode = modeFTNWizardForm
 		discardMode = modeCategoryMenu
 	}
+	if isQWK {
+		formMode = modeQWKWizardForm
+		discardMode = modeCategoryMenu
+	}
+	submit := func() (tea.Model, tea.Cmd) {
+		m.mode = formMode
+		switch {
+		case isFTN:
+			return m.submitFTNWizardForm()
+		case isQWK:
+			return m.submitQWKWizardForm()
+		}
+		return m.submitWizardForm()
+	}
 
 	switch msg.Type {
 	case tea.KeyLeft, tea.KeyRight:
 		m.confirmYes = !m.confirmYes
 	case tea.KeyEnter:
 		if m.confirmYes {
-			m.mode = formMode
-			if isFTN {
-				return m.submitFTNWizardForm()
-			}
-			return m.submitWizardForm()
+			return submit()
 		}
 		m.mode = discardMode
 		return m, nil
@@ -363,11 +374,7 @@ func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		switch msg.String() {
 		case "y", "Y":
-			m.mode = formMode
-			if isFTN {
-				return m.submitFTNWizardForm()
-			}
-			return m.submitWizardForm()
+			return submit()
 		case "n", "N":
 			m.mode = discardMode
 			return m, nil

@@ -134,6 +134,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | FTN Echomail/Netmail          | ✅ Working | JAM-backed, tosser, import/export, dupe checking                                                                    |
 | Integrated Binkd Mailer       | ✅ Working | Bundled `bin/binkd` supervised as a child process (auto-restart on crash, clean shutdown); one-toggle echomail — inbound tosses automatically, outbound exports on a timer. See [FTN Echomail](docs/sysop/messages/ftn-echomail.md). |
 | FTN Setup Wizard              | ✅ Working | Guided setup in `./config`: pick network, download echo list, auto-create areas + `binkd.conf`                     |
+| QWK Networking (QWKnet)       | 🧪 Experimental | Node on QWK-based networks such as DOVE-Net: FTP poll of the hub, REP/QWK packing and tossing with HEADERS.DAT and Synchronet kludges, dupe and loop protection, setup wizard in `./config`. See [QWK Networking](docs/sysop/messages/qwk-networking.md). |
 | V3Net Networking              | 🧪 Experimental | Native inter-BBS message networking via REST+SSE (hub/leaf, signed area lists) — see the [V3Net docs](docs/sysop/v3net/message-areas.md)                                 |
 | **Community Features**        |           |                                                                                                                     |
 | Voting System                 | ✅ Working | Voting booths, mandatory topics, SysOp management                                                                   |

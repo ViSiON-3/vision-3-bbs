@@ -26,6 +26,7 @@ type allConfigs struct {
 	Events      config.EventsConfig
 	FTN         config.FTNConfig
 	V3Net       config.V3NetConfig
+	QWKNet      config.QWKNetConfig
 	Protocols   []transfer.ProtocolConfig
 	Archivers   archiver.Config
 	LoginSeq    []config.LoginItem
@@ -88,6 +89,12 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 	ac.V3Net, err = config.LoadV3NetConfig(configPath)
 	if err != nil {
 		return ac, fmt.Errorf("loading v3net: %w", err)
+	}
+
+	// QWK networks
+	ac.QWKNet, err = config.LoadQWKNetConfig(configPath)
+	if err != nil {
+		return ac, fmt.Errorf("loading qwknet: %w", err)
 	}
 
 	// Protocols

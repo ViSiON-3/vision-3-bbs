@@ -10,13 +10,20 @@ import (
 )
 
 // ExtHeader is the subset of HEADERS.DAT fields ViSiON/3 emits and consumes.
+// The key names follow Synchronet's, which defined the file: the sender is
+// written as "Sender" (and read as "Sender" or "From"), the reply reference
+// as "Reply-ID" (read also as "In-Reply-To").
 type ExtHeader struct {
-	Offset      int // byte offset of the message header in MESSAGES.DAT / .MSG
-	MessageID   string
-	Subject     string
-	To          string
-	From        string
-	WhenWritten string
+	Offset        int // byte offset of the message header in MESSAGES.DAT / .MSG
+	MessageID     string
+	ReplyID       string
+	Subject       string
+	To            string
+	From          string
+	WhenWritten   string
+	SenderNetAddr string // QWK ID (route) of the originating system
+	UTF8          bool   // Utf8: true when the body is UTF-8 rather than CP437
+	Conference    int    // Conference: hub conference number (0 = not given)
 }
 
 // encodeHeadersDAT renders HEADERS.DAT sections (ordered by offset) as INI bytes.
@@ -31,11 +38,19 @@ func encodeHeadersDAT(hs []ExtHeader) []byte {
 			buf.WriteString("\r\n")
 		}
 		fmt.Fprintf(&buf, "[%x]\r\n", h.Offset)
+		if h.UTF8 {
+			writeHeaderField(&buf, "Utf8", "true")
+		}
 		writeHeaderField(&buf, "Message-ID", h.MessageID)
-		writeHeaderField(&buf, "Subject", h.Subject)
-		writeHeaderField(&buf, "To", h.To)
-		writeHeaderField(&buf, "From", h.From)
+		writeHeaderField(&buf, "Reply-ID", h.ReplyID)
 		writeHeaderField(&buf, "WhenWritten", h.WhenWritten)
+		writeHeaderField(&buf, "Sender", h.From)
+		writeHeaderField(&buf, "SenderNetAddr", h.SenderNetAddr)
+		writeHeaderField(&buf, "To", h.To)
+		writeHeaderField(&buf, "Subject", h.Subject)
+		if h.Conference > 0 {
+			writeHeaderField(&buf, "Conference", strconv.Itoa(h.Conference))
+		}
 	}
 	return buf.Bytes()
 }
@@ -89,14 +104,24 @@ func parseHeadersDAT(data []byte) map[int]ExtHeader {
 		switch strings.ToLower(strings.TrimSpace(key)) {
 		case "message-id":
 			cur.MessageID = val
+		case "reply-id", "in-reply-to":
+			cur.ReplyID = val
 		case "subject":
 			cur.Subject = val
-		case "to":
+		case "to", "recipient":
 			cur.To = val
-		case "from":
+		case "from", "sender":
 			cur.From = val
 		case "whenwritten":
 			cur.WhenWritten = val
+		case "sendernetaddr":
+			cur.SenderNetAddr = val
+		case "utf8":
+			cur.UTF8 = strings.EqualFold(val, "true")
+		case "conference":
+			if n, err := strconv.Atoi(val); err == nil {
+				cur.Conference = n
+			}
 		}
 	}
 	flush()

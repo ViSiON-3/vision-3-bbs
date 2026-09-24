@@ -1,0 +1,8 @@
+{
+  "_comment": "QWK network (QWKnet) node configuration. Each network is a hub this system polls by FTP: it uploads <hubId>.REP and downloads <hubId>.QWK. Message areas join a network by setting area_type to qwknet, network to the key below, and qwk_conference to the hub's conference number. Use the config editor's QWK Network Wizard (Echomail Networking) to set one up.",
+  "inboundPath": "data/qwknet/in",
+  "outboundPath": "data/qwknet/out",
+  "tempPath": "data/qwknet/temp",
+  "dupeDbPath": "data/qwknet/dupes.json",
+  "networks": {}
+}

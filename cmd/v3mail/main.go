@@ -72,6 +72,14 @@ func main() {
 		cmdScan(os.Args[2:])
 	case "ftn-pack":
 		cmdFtnPack(os.Args[2:])
+	case "qwk-poll":
+		cmdQWKPoll(os.Args[2:])
+	case "qwk-scan":
+		cmdQWKScan(os.Args[2:])
+	case "qwk-toss":
+		cmdQWKToss(os.Args[2:])
+	case "qwk-conferences":
+		cmdQWKConferences(os.Args[2:])
 	default:
 		printUsage(fmt.Sprintf("Unknown command: %s", cmd))
 		os.Exit(1)
@@ -129,6 +137,12 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w, cmd("TOSS", "Unpack inbound FTN bundles and toss .PKT files into JAM bases"))
 	_, _ = fmt.Fprintln(w, cmd("SCAN", "Scan JAM bases for unsent echomail; create outbound .PKT files"))
 	_, _ = fmt.Fprintln(w, cmd("FTN-PACK", "Pack outbound .PKT files into ZIP bundles for binkd"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sQWK Network Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, cmd("QWK-POLL", "Exchange packets with each QWK hub: pack, upload REP, download QWK, toss"))
+	_, _ = fmt.Fprintln(w, cmd("QWK-SCAN", "Pack new posts in QWK network areas into the hub's REP (no connection)"))
+	_, _ = fmt.Fprintln(w, cmd("QWK-TOSS", "Import QWK packets waiting in the inbound directory"))
+	_, _ = fmt.Fprintln(w, cmd("QWK-CONFERENCES", "List a hub's conference numbers (--network required)"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, opt("--all", "Operate on all areas in message_areas.json"))

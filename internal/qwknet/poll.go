@@ -1,0 +1,191 @@
+package qwknet
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
+)
+
+// PollResult reports one full exchange with the hub.
+type PollResult struct {
+	Scan       ScanResult
+	Uploaded   bool
+	Downloaded bool
+	Bytes      int64 // size of the downloaded packet
+	Toss       TossResult
+	Errors     []string
+}
+
+// Poll runs the whole cycle: toss anything left from last time, scan new
+// posts into the REP, upload it, download the hub's packet, toss that.
+// Each step that fails is reported and the later steps still run where
+// they can, so a hub outage never stops local posts from being packed and
+// a packed REP never stops a download from being tossed.
+func (n *Node) Poll(ctx context.Context) PollResult {
+	var res PollResult
+
+	if len(n.inboundPackets()) > 0 {
+		pre := n.Toss()
+		res.Toss.Packets += pre.Packets
+		res.Toss.Imported += pre.Imported
+		res.Toss.Duplicates += pre.Duplicates
+		res.Toss.Unmapped += pre.Unmapped
+		res.Toss.Skipped += pre.Skipped
+		res.Toss.Errors = append(res.Toss.Errors, pre.Errors...)
+	}
+
+	res.Scan = n.Scan()
+
+	if err := n.exchange(ctx, &res); err != nil {
+		res.Errors = append(res.Errors, err.Error())
+	}
+
+	if res.Downloaded || len(n.inboundPackets()) > 0 {
+		post := n.Toss()
+		res.Toss.Packets += post.Packets
+		res.Toss.Imported += post.Imported
+		res.Toss.Duplicates += post.Duplicates
+		res.Toss.Unmapped += post.Unmapped
+		res.Toss.Skipped += post.Skipped
+		res.Toss.Errors = append(res.Toss.Errors, post.Errors...)
+	}
+	return res
+}
+
+// exchange is the FTP session: REP up, QWK down.
+func (n *Node) exchange(ctx context.Context, res *PollResult) error {
+	c, err := n.connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.quit()
+
+	repPath := n.repPath()
+	if st, err := os.Stat(repPath); err == nil && st.Size() > 0 {
+		f, err := os.Open(repPath)
+		if err != nil {
+			return fmt.Errorf("open REP: %w", err)
+		}
+		uerr := c.store(ctx, n.hubID+".REP", f)
+		_ = f.Close() // read-only
+		if uerr != nil {
+			return fmt.Errorf("upload REP: %w", uerr)
+		}
+		res.Uploaded = true
+		if err := os.Remove(repPath); err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("remove uploaded REP: %v", err))
+		}
+		slog.Info("qwknet REP uploaded", "network", n.Key, "hub", n.hubID, "bytes", st.Size())
+	}
+
+	size, path, err := n.download(ctx, c)
+	if err != nil {
+		return err
+	}
+	if path != "" {
+		res.Downloaded = true
+		res.Bytes = size
+		slog.Info("qwknet QWK downloaded", "network", n.Key, "hub", n.hubID, "bytes", size, "path", path)
+	} else {
+		slog.Info("qwknet hub had no packet for us", "network", n.Key, "hub", n.hubID)
+	}
+	return nil
+}
+
+// connect dials and logs in to the hub.
+func (n *Node) connect(ctx context.Context) (*ftpClient, error) {
+	timeout := time.Duration(n.cfg.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+	c, err := ftpDial(ctx, n.cfg.HostPort(), timeout)
+	if err != nil {
+		return nil, fmt.Errorf("connect to hub %s: %w", n.cfg.HostPort(), err)
+	}
+	if err := c.login(n.cfg.LoginUser(n.nodeID), n.cfg.Password); err != nil {
+		c.quit()
+		return nil, fmt.Errorf("hub %s: %w", n.cfg.HostPort(), err)
+	}
+	return c, nil
+}
+
+// download fetches <HUBID>.QWK into the inbound directory via a temp file.
+// It returns "" for the path when the hub had nothing (550, or an empty
+// file, which some hubs send instead).
+func (n *Node) download(ctx context.Context, c *ftpClient) (int64, string, error) {
+	tmp := filepath.Join(n.paths.TempPath, n.hubID+".QWK.part")
+	f, err := os.Create(tmp)
+	if err != nil {
+		return 0, "", fmt.Errorf("create temp download: %w", err)
+	}
+	size, rerr := c.retrieve(ctx, n.hubID+".QWK", f)
+	cerr := f.Close()
+	if rerr != nil {
+		_ = os.Remove(tmp)
+		if rerr == errNoSuchFile {
+			return 0, "", nil
+		}
+		return 0, "", fmt.Errorf("download QWK: %w", rerr)
+	}
+	if cerr != nil {
+		_ = os.Remove(tmp)
+		return 0, "", fmt.Errorf("finish download: %w", cerr)
+	}
+	if size == 0 {
+		_ = os.Remove(tmp)
+		return 0, "", nil
+	}
+	dest := n.newInboundName()
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.Remove(tmp)
+		return 0, "", fmt.Errorf("move download into inbound: %w", err)
+	}
+	return size, dest, nil
+}
+
+// FetchConferences returns the hub's conference list, for choosing which
+// to mirror. A packet already waiting in the inbound directory answers
+// without a connection; otherwise one is downloaded and left there for the
+// next toss, since the hub will not send those messages again.
+func (n *Node) FetchConferences(ctx context.Context) ([]qwk.ConferenceInfo, error) {
+	if waiting := n.inboundPackets(); len(waiting) > 0 {
+		if confs, err := readConferences(waiting[len(waiting)-1]); err == nil && len(confs) > 0 {
+			return confs, nil
+		}
+	}
+	c, err := n.connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer c.quit()
+	_, path, err := n.download(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return nil, fmt.Errorf("hub %s sent no packet, so its conference list could not be read; try again later", n.hubID)
+	}
+	return readConferences(path)
+}
+
+func readConferences(path string) ([]qwk.ConferenceInfo, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }() // read-only
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	p, err := qwk.ReadPacket(f, st.Size())
+	if err != nil {
+		return nil, err
+	}
+	return p.Conferences, nil
+}

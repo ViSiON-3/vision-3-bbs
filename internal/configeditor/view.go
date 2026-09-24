@@ -51,6 +51,8 @@ func (m Model) View() string {
 		bg := m.viewWizardForm()
 		if m.ftnWizard != nil && m.ftnWizard.hasData() {
 			bg = m.viewFTNWizardForm()
+		} else if m.qwkWizard != nil && m.qwkWizard.hasData() {
+			bg = m.viewQWKWizardForm()
 		}
 		return m.overlayConfirmDialog(bg, "-- Unsaved Wizard --",
 			"Save before leaving?")
@@ -78,6 +80,12 @@ func (m Model) View() string {
 		return m.viewV3NetNodes()
 	case modeRegistryBrowser:
 		return m.viewRegistryBrowser()
+	case modeQWKWizardForm, modeQWKWizardField:
+		return m.viewQWKWizardForm()
+	case modeQWKNetworkBrowser:
+		return m.viewQWKNetworkBrowser()
+	case modeQWKConfBrowser, modeQWKConfFetching:
+		return m.viewQWKConfBrowser()
 	case modeFTNWizardForm, modeFTNWizardField, modeFTNNodelistLookup:
 		return m.viewFTNWizardForm()
 	case modeFTNWizardPicker:

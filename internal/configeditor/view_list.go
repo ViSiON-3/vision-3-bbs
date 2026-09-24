@@ -155,6 +155,8 @@ func (m Model) viewRecordList() string {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  P - Position  |  ESC - Return"
 	} else if m.recordType == "ftn" {
 		helpStr = "Enter - Edit  |  I - Insert  |  D - Delete  |  G - Global  |  ESC - Return"
+	} else if m.recordType == "qwknet" {
+		helpStr = "Enter - Edit  |  I - New (Wizard)  |  W - Wizard  |  D - Delete  |  G - Global  |  ESC - Return"
 	} else if m.recordType == "v3netleaf" {
 		helpStr = "Enter - Edit  |  I - New (Wizard)  |  B - Registry  |  D - Delete  |  S - Save  |  ESC - Return"
 	} else if m.recordType == "v3nethub" {
@@ -182,6 +184,8 @@ func (m Model) emptyRecordListHint() string {
 		return "No networks yet — press I to add one (FTN setup wizard)."
 	case "ftnlink":
 		return "No links yet — press I to add this network's uplink."
+	case "qwknet":
+		return "No QWK networks yet — press I to join one (QWK network wizard)."
 	case "v3netleaf":
 		return "No subscriptions yet — press I for the wizard, or B to browse the registry."
 	case "msgarea", "filearea", "conference", "door", "event", "protocol", "archiver", "login":
@@ -217,6 +221,8 @@ func (m Model) recordTypeTitle() string {
 		return "V3Net Subscriptions"
 	case "v3nethub":
 		return "V3Net Hosted Networks"
+	case "qwknet":
+		return "QWK Networks"
 	}
 	return "Records"
 }
@@ -251,6 +257,8 @@ func (m Model) recordColumnHeader(boxW int) string {
 		return fmt.Sprintf("   #  %-30s %-14s %s", "Hub URL", "Network", "Board")
 	case "v3nethub":
 		return fmt.Sprintf("   #  %-16s %s", "Network", "Description")
+	case "qwknet":
+		return fmt.Sprintf("  %-14s %-8s %-30s %s", "Network", "Hub", "Host", "Enabled")
 	}
 	return ""
 }
@@ -339,6 +347,13 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 		if idx < len(m.configs.V3Net.Hub.Networks) {
 			n := m.configs.V3Net.Hub.Networks[idx]
 			content = fmt.Sprintf(" %3d  %-16s %s", idx+1, padRight(n.Name, 16), n.Description)
+		}
+	case "qwknet":
+		keys := m.qwkNetworkKeys()
+		if idx < len(keys) {
+			k := keys[idx]
+			n := m.configs.QWKNet.Networks[k]
+			content = fmt.Sprintf("  %-14s %-8s %-30s %s", padRight(k, 14), padRight(n.HubID, 8), padRight(n.HostPort(), 30), uitext.BoolToYN(n.Enabled))
 		}
 	}
 

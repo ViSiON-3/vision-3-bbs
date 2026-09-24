@@ -11,6 +11,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwknet"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -60,6 +61,11 @@ const (
 	modeFTNNodelistLookup                        // Progress state while downloading nodelist
 	modeQuitConfirm                              // Plain Exit? Y/N confirm (used by Task 10)
 	modeV3NetNodes                               // Node management (hosted network node approvals)
+	modeQWKWizardForm                            // QWK network wizard form navigation
+	modeQWKWizardField                           // QWK network wizard field editing
+	modeQWKNetworkBrowser                        // Known QWK network list
+	modeQWKConfBrowser                           // Hub conference selection
+	modeQWKConfFetching                          // Progress state while the hub's conference list downloads
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -264,6 +270,17 @@ type Model struct {
 	ftnWizardPickerCursor int
 	ftnWizardPickerScroll int
 
+	// QWK network wizard state
+	qwkWizard          *qwkWizardState // pointer so field closures survive value-receiver copies
+	qwkWizardFields    []fieldDef
+	qwkNetBrowserNets  []qwknet.KnownNetwork
+	qwkNetBrowserCur   int
+	qwkNetBrowserScrl  int
+	qwkConfBrowserCur  int
+	qwkConfBrowserScrl int
+	qwkConfBrowserSel  []bool // working copy; Enter commits, ESC discards
+	qwkConfBrowserErr  string
+
 	// FTN area browser state
 	ftnAreaBrowserAreas    []ftn.EchoArea // parsed from downloaded echolist
 	ftnAreaBrowserSelected []bool         // parallel array, true = subscribed
@@ -413,6 +430,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ftnNodelistMsg:
 		return m.handleFTNNodelistMsg(msg)
 
+	case qwkConfsMsg:
+		return m.handleQWKConfsMsg(msg)
+
 	case tea.KeyMsg:
 		if m.splashActive {
 			m.splashActive = false
@@ -486,6 +506,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateFTNAreaDownloading(msg)
 		case modeFTNNodelistLookup:
 			result, cmd = m.updateFTNNodelistLookup(msg)
+		case modeQWKWizardForm:
+			result, cmd = m.updateQWKWizardForm(msg)
+		case modeQWKWizardField:
+			result, cmd = m.updateQWKWizardField(msg)
+		case modeQWKNetworkBrowser:
+			result, cmd = m.updateQWKNetworkBrowser(msg)
+		case modeQWKConfBrowser:
+			result, cmd = m.updateQWKConfBrowser(msg)
+		case modeQWKConfFetching:
+			result, cmd = m.updateQWKConfFetching(msg)
 		default:
 			return m, nil
 		}
@@ -566,6 +596,8 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 			{Label: "Echomail Networks", RecordType: "ftn"},
 			{Label: "Echomail Links", RecordType: "ftnlink"},
 			{Label: "FTN Setup Wizard", Mode: modeFTNWizardForm},
+			{Label: "QWK Networks", RecordType: "qwknet"},
+			{Label: "QWK Network Wizard", Mode: modeQWKWizardForm},
 		}
 		m.catMenuCursor = 0
 		m.mode = modeCategoryMenu

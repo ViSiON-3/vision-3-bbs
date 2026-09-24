@@ -69,6 +69,12 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 		}
 	}
 
+	// A QWK network post carries no FTN address, so the base cannot mint a
+	// MSGID for it; give it the RFC822-style one QWK hubs thread on.
+	if area.IsQWKNet() && msg.MsgID == "" {
+		msg.MsgID = mm.qwkMessageID(area.Tag)
+	}
+
 	var msgNum int
 	if msgType.IsEchomail() || msgType.IsNetmail() {
 		msg.OrigAddr = area.OriginAddr

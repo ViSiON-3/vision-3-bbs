@@ -23,6 +23,18 @@
 | `scan`     | Scan JAM bases for new outbound echomail and create staging `.pkt` files   |
 | `ftn-pack` | Pack staged `.pkt` files into ZIP bundles for binkd; writes BSO flow files |
 
+### QWK Network Commands
+
+For boards that are nodes on a QWK-based network such as DOVE-Net. See
+[QWK Networking](messages/qwk-networking.md).
+
+| Command           | Description                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| `qwk-poll`        | Full exchange with each hub: toss pending packets, pack new posts, upload the REP, download the QWK, toss it |
+| `qwk-scan`        | Pack new posts from `qwknet` areas into `<HUBID>.REP` without connecting                     |
+| `qwk-toss`        | Import `.QWK` packets waiting in the inbound directory without connecting                    |
+| `qwk-conferences` | Print the hub's conference numbers and names (`--network` required)                          |
+
 ### AreaFix Commands (via `helper`)
 
 AreaFix requests are sent as netmail to the hub's `AreaFix` robot using the `helper areafix` command (not via `v3mail` directly).
@@ -62,6 +74,14 @@ The `areafix_password` field on the link config is used as the netmail subject (
 ```text
 --network NAME  Restrict toss/scan/ftn-pack to a single FTN network name
                 (default: all networks with internal_tosser_enabled: true)
+```
+
+## QWK Network Options
+
+```text
+--network KEY   Restrict qwk-poll/qwk-scan/qwk-toss to one network key from
+                qwknet.json (default: every network with "enabled": true).
+                The named network runs even when disabled.
 ```
 
 ## Usage Examples
