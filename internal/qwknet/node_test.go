@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -310,6 +312,111 @@ func TestToss_KeepsReplyTo(t *testing.T) {
 	}
 	if strings.Contains(msg.Text, "@REPLYTO") {
 		t.Errorf("kludge left in the text: %q", msg.Text)
+	}
+}
+
+// A second bad packet must not overwrite the first one set aside: the next
+// download reuses the plain name, so both land on <HUB>.QWK in turn.
+func TestToss_SetAsideKeepsEveryBadPacket(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	path := filepath.Join(e.paths.InboundPath, "VERT.QWK")
+	for i, body := range []string{"first garbage", "second garbage"} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if res := n.Toss(); len(res.Errors) == 0 {
+			t.Fatalf("toss %d of garbage reported no error", i)
+		}
+	}
+	bad, _ := filepath.Glob(filepath.Join(e.paths.InboundPath, "VERT.QWK*.bad"))
+	if len(bad) != 2 {
+		t.Fatalf(".bad files = %v, want two", bad)
+	}
+	seen := map[string]bool{}
+	for _, b := range bad {
+		data, _ := os.ReadFile(b)
+		seen[string(data)] = true
+	}
+	if !seen["first garbage"] || !seen["second garbage"] {
+		t.Errorf("a set-aside packet was overwritten: %v", seen)
+	}
+}
+
+// A message already in the base is a duplicate even when the dupe database
+// never recorded it, as after a crash between the write and the save.
+func TestToss_MessageAlreadyInBaseIsDuplicateWithoutDupeDB(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	pkt := hubPacket(t, qwk.PacketMessage{Conference: 2001, Number: 7, From: "A", To: "All", Subject: "Once", DateTime: time.Now(), Body: "only once"})
+	path := filepath.Join(e.paths.InboundPath, "VERT.QWK")
+	for i := 0; i < 2; i++ {
+		if err := os.WriteFile(path, pkt, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		n.dupes = nil // as if every save had been lost
+		res := n.Toss()
+		if len(res.Errors) != 0 {
+			t.Fatalf("toss %d: %+v", i, res)
+		}
+		if i == 1 && (res.Imported != 0 || res.Duplicates != 1) {
+			t.Errorf("re-toss: %+v, want the message counted as a duplicate", res)
+		}
+	}
+	if c, _ := e.msgMgr.GetMessageCountForArea(1); c != 1 {
+		t.Errorf("area holds %d messages, want 1", c)
+	}
+}
+
+// Tosses run one at a time across processes: while another holds the toss
+// lock, a toss waits, then gives up without touching the inbound packets.
+func TestToss_WaitsForAnotherToss(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	held, err := filelock.Acquire(filepath.Join(e.paths.InboundPath, "toss"), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Release()
+	prev := tossLockTimeout
+	tossLockTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { tossLockTimeout = prev })
+
+	path := filepath.Join(e.paths.InboundPath, "VERT.QWK")
+	pkt := hubPacket(t, qwk.PacketMessage{Conference: 2001, Number: 1, From: "A", To: "All", Subject: "S", DateTime: time.Now(), Body: "b"})
+	if err := os.WriteFile(path, pkt, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := n.Toss()
+	if len(res.Errors) != 1 || !strings.Contains(res.Errors[0], "another toss") || res.Packets != 0 {
+		t.Fatalf("toss under a held lock: %+v", res)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Error("packet was touched while another toss held the lock")
+	}
+}
+
+// Toss purges dupe entries past the retention window.
+func TestToss_PurgesExpiredDupes(t *testing.T) {
+	e := newEnv(t)
+	old := time.Now().Add(-dupeRetention - 24*time.Hour).Unix()
+	fresh := time.Now().Unix()
+	data := fmt.Sprintf(`{"entries":{"<old@vert>":%d,"<fresh@vert>":%d}}`, old, fresh)
+	if err := os.WriteFile(e.paths.DupeDBPath, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dupes, err := OpenDupeDB(e.paths.DupeDBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.dupes = dupes
+	e.node(t).Toss()
+	after, err := OpenDupeDB(e.paths.DupeDBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.IsDupe("<old@vert>") || !after.IsDupe("<fresh@vert>") {
+		t.Errorf("after toss: old=%v fresh=%v, want old purged and fresh kept", after.IsDupe("<old@vert>"), after.IsDupe("<fresh@vert>"))
 	}
 }
 

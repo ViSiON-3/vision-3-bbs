@@ -96,6 +96,16 @@ func (db *DupeDB) Purge() error {
 	return db.saveLocked()
 }
 
+// Reload folds in entries other processes have saved since this one
+// loaded the file. A caller that serialises its own work with other
+// processes (a lock around a whole toss) calls it after taking that lock,
+// so its dupe checks see everything already imported.
+func (db *DupeDB) Reload() {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.mergeFromDiskLocked()
+}
+
 // Save persists the database to disk.
 func (db *DupeDB) Save() error {
 	db.mu.Lock()

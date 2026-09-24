@@ -348,3 +348,18 @@ func TestQWKWizard_RefreshPresetConferencesFromHub(t *testing.T) {
 		t.Error("picker does not show the refresh error")
 	}
 }
+
+// ESC in the V3Net wizard names that wizard as the exit dialog's source, so
+// a source left over from an abandoned QWK wizard cannot capture its Y.
+func TestWizardExitConfirm_V3NetWizardOverridesStaleSource(t *testing.T) {
+	m := qwkTestModel(t)
+	m.wizardExitSource = modeQWKWizardForm // left from an earlier QWK visit
+	m.wizard = &wizardState{flow: "hub", netName: "mynet"}
+	m.wizardFields = m.fieldsHubWizard()
+	m.mode = modeWizardForm
+	next, _ := m.updateWizardForm(tea.KeyMsg{Type: tea.KeyEscape})
+	m = next.(Model)
+	if m.mode != modeWizardExitConfirm || m.wizardExitSource != modeWizardForm {
+		t.Fatalf("mode=%v source=%v, want the V3Net wizard as the source", m.mode, m.wizardExitSource)
+	}
+}

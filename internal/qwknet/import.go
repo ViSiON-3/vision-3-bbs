@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -35,33 +37,62 @@ func (r *TossResult) add(o TossResult) {
 	r.Errors = append(r.Errors, o.Errors...)
 }
 
+// tossLockTimeout is how long a toss waits for another process's toss to
+// finish. A toss of a large packet takes a while; one stuck longer than
+// this is treated as a failure rather than waited on forever. A variable so
+// tests can shorten it.
+var tossLockTimeout = 10 * time.Minute
+
 // Toss imports every waiting packet from the hub. A packet whose messages
 // all land is deleted; one the reader cannot parse, or that came from a
-// different hub, is set aside as <name>.bad; one with a message that could
-// not be written is kept as .bad too, since the dupe database already
-// protects the messages that did land from being posted twice on a retry.
+// different hub, is set aside as .bad; one with a message that could not
+// be written is kept as .bad too, since the dupe database and the Message-ID
+// check against the base protect the messages that did land from being
+// posted twice on a retry.
+//
+// Tosses run one at a time across processes (the scheduler's poll events
+// for each network and any v3mail run by hand), all networks sharing the
+// one lock, since they share the dupe database and possibly the bad area.
+// Under the lock the dupe database is reloaded, so it reflects everything
+// another process imported, and saved after each packet so a crash loses
+// at most the packet in hand, whose messages the Message-ID check covers.
 func (n *Node) Toss() TossResult {
 	var res TossResult
+	lock, err := filelock.Acquire(filepath.Join(n.paths.InboundPath, "toss"), tossLockTimeout)
+	if err != nil {
+		res.Errors = append(res.Errors, fmt.Sprintf("another toss is still running: %v", err))
+		return res
+	}
+	defer lock.Release()
+	if n.dupes != nil {
+		n.dupes.Reload()
+	}
+
 	areas := n.areasByConference()
 	for _, path := range n.inboundPackets() {
 		res.Packets++
 		pr, err := n.tossPacket(path, areas)
 		res.add(pr)
-		if err != nil {
+		switch {
+		case err != nil:
 			res.Errors = append(res.Errors, fmt.Sprintf("%s: %v", path, err))
 			setAside(path)
-			continue
-		}
-		if len(pr.Errors) > 0 {
+		case len(pr.Errors) > 0:
 			setAside(path)
-			continue
+		default:
+			if err := os.Remove(path); err != nil {
+				res.Errors = append(res.Errors, fmt.Sprintf("remove %s: %v", path, err))
+			}
 		}
-		if err := os.Remove(path); err != nil {
-			res.Errors = append(res.Errors, fmt.Sprintf("remove %s: %v", path, err))
+		if n.dupes != nil && pr.Imported > 0 {
+			if err := n.dupes.Save(); err != nil {
+				res.Errors = append(res.Errors, fmt.Sprintf("save dupe db: %v", err))
+			}
 		}
 	}
+	// Purge drops entries past the retention window and saves.
 	if n.dupes != nil {
-		if err := n.dupes.Save(); err != nil {
+		if err := n.dupes.Purge(); err != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("save dupe db: %v", err))
 		}
 	}
@@ -72,13 +103,25 @@ func (n *Node) Toss() TossResult {
 	return res
 }
 
+// setAside renames a packet to a free .bad name for the sysop to inspect.
+// The plain name is reused by the next download, so a fixed <name>.bad
+// would let a second bad packet overwrite the first.
 func setAside(path string) {
-	bad := path + ".bad"
+	bad := freeBadName(path)
 	if err := os.Rename(path, bad); err != nil {
 		slog.Warn("could not set aside packet", "path", path, "error", err)
 		return
 	}
 	slog.Warn("packet set aside for inspection", "path", bad)
+}
+
+// freeBadName returns <path>.bad, or <path>.<time>.bad when that is taken.
+func freeBadName(path string) string {
+	bad := path + ".bad"
+	if _, err := os.Lstat(bad); os.IsNotExist(err) {
+		return bad
+	}
+	return fmt.Sprintf("%s.%d.bad", path, time.Now().UnixNano())
 }
 
 // tossPacket imports one packet. The returned error means the packet as a
@@ -151,20 +194,25 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (res 
 		plan = append(plan, routed{m: m, area: area})
 	}
 
-	// parents[areaID][Message-ID] is the local number of a reply's parent:
-	// resolved from the base now, then extended with each message this
-	// packet imports so a reply to a message earlier in the packet threads.
-	parents := make(map[int]map[string]int)
+	// known[areaID][Message-ID] is the local number of a message already in
+	// the area: looked up from the base now, once per area, for the reply
+	// parents and for the messages themselves, then extended with each one
+	// this packet imports so a reply to an earlier message in it threads.
+	// A message whose own ID is already there is a duplicate even when the
+	// dupe database has lost it (a crash between writing it and saving).
+	wanted := make(map[int][]string)
 	for _, r := range plan {
-		byID := parents[r.area.ID]
-		if byID == nil {
-			byID = make(map[string]int)
-			parents[r.area.ID] = byID
+		if id := r.m.MessageID; id != "" {
+			wanted[r.area.ID] = append(wanted[r.area.ID], id)
 		}
 		if id := r.m.ReplyID; id != "" {
-			if _, seen := byID[id]; !seen {
-				byID[id] = n.msgMgr.FindMessageByMSGID(r.area.ID, id)
-			}
+			wanted[r.area.ID] = append(wanted[r.area.ID], id)
+		}
+	}
+	known := make(map[int]map[string]int)
+	for _, r := range plan {
+		if _, done := known[r.area.ID]; !done {
+			known[r.area.ID] = n.msgMgr.FindMessagesByMSGID(r.area.ID, wanted[r.area.ID])
 		}
 	}
 
@@ -185,6 +233,13 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (res 
 			res.Duplicates++
 			continue
 		}
+		if m.MessageID != "" && known[area.ID][m.MessageID] > 0 {
+			res.Duplicates++
+			if n.dupes != nil {
+				n.dupes.Add(key)
+			}
+			continue
+		}
 		base := bases[area.ID]
 		if base == nil {
 			b, err := n.msgMgr.GetBase(area.ID)
@@ -194,13 +249,13 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (res 
 			}
 			base, bases[area.ID] = b, b
 		}
-		num, err := n.importMessage(base, area, m, parents[area.ID][m.ReplyID])
+		num, err := n.importMessage(base, area, m, known[area.ID][m.ReplyID])
 		if err != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("conference %d -> %s: %v", m.Conference, area.Tag, err))
 			continue
 		}
 		if m.MessageID != "" {
-			parents[area.ID][m.MessageID] = num
+			known[area.ID][m.MessageID] = num
 		}
 		if n.dupes != nil {
 			n.dupes.Add(key)

@@ -81,6 +81,9 @@ func (m Model) updateWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEscape:
 		if m.wizardHasData() {
 			m.confirmYes = true
+			// Name this wizard as the dialog's source; a value left over
+			// from an earlier FTN or QWK wizard would route Y to that one.
+			m.wizardExitSource = modeWizardForm
 			m.mode = modeWizardExitConfirm
 			return m, nil
 		}

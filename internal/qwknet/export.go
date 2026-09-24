@@ -42,7 +42,7 @@ func (n *Node) Scan() ScanResult {
 
 	existing, err := n.pendingREPMessages(repPath)
 	if err != nil {
-		bad := repPath + ".bad"
+		bad := freeBadName(repPath)
 		slog.Warn("unreadable REP set aside", "network", n.Key, "path", repPath, "moved_to", bad, "error", err)
 		if rerr := os.Rename(repPath, bad); rerr != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("set aside unreadable REP: %v", rerr))

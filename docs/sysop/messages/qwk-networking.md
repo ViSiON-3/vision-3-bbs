@@ -277,7 +277,8 @@ outbound directory and the next scan appends new posts to it.
 | `configs/message_areas.json` | `qwknet` areas with their conference numbers | Sysop |
 | `configs/events.json` | `qwknet_poll_<key>` events | Wizard, editable |
 | `data/qwknet/in/<HUBID>.QWK` | Downloaded packets waiting to be tossed (a second one gets a timestamp suffix) | Automatic |
-| `data/qwknet/in/*.bad` | Packets set aside after a failure | Sysop reviews, then deletes or renames back to `.QWK` to retry |
+| `data/qwknet/in/*.bad` | Packets set aside after a failure (`<HUBID>.QWK.bad`, or `<HUBID>.QWK.<time>.bad` when one is already waiting) | Sysop reviews, then deletes or renames back to `<HUBID>.QWK` to retry |
+| `data/qwknet/in/toss.lock` | Lets one toss run at a time across `v3mail` processes | Automatic; leave it |
 | `data/qwknet/out/<HUBID>.REP` | Packed messages waiting for upload | Automatic |
 | `data/qwknet/out/<HUBID>.REP.bad` | A REP that could not be read back when new posts were to be appended | Sysop reviews |
 | `data/qwknet/in/<HUBID>.QWK.*.part` | A download in progress; one left behind after a failed move into place is a complete packet | Automatic; if the log names one, rename it to `<HUBID>.QWK` to toss it |
