@@ -37,6 +37,11 @@ func (m *Model) buildRecordFields() []fieldDef {
 		return m.fieldsV3NetLeaf()
 	case "v3nethub":
 		return m.fieldsV3NetHubNetwork()
+	case "qwknet":
+		if m.recordEditIdx < 0 {
+			return m.fieldsQWKNetGlobal()
+		}
+		return m.fieldsQWKNetwork()
 	}
 	return nil
 }
@@ -71,7 +76,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			Set: func(val string) error { a.Description = val; return nil },
 		},
 		{
-			Label: "Area Type", Help: "local = BBS-only  |  echomail = FTN echo  |  netmail = FTN netmail  |  v3net = V3Net", Type: ftLookup, Col: 3, Row: 5, Width: 10,
+			Label: "Area Type", Help: "local = BBS-only  |  echomail = FTN echo  |  netmail = FTN netmail  |  v3net = V3Net  |  qwknet = QWK network", Type: ftLookup, Col: 3, Row: 5, Width: 10,
 			Get: func() string { return a.AreaType },
 			Set: func(val string) error { a.AreaType = val; return nil },
 			LookupItems: func() []LookupItem {
@@ -80,6 +85,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 					{Value: "echomail", Display: "echomail - FTN echoed message area"},
 					{Value: "netmail", Display: "netmail - FTN point-to-point mail"},
 					{Value: "v3net", Display: "v3net - V3Net networked message area"},
+					{Value: "qwknet", Display: "qwknet - QWK network conference (hub-fed)"},
 				}
 			},
 		},
@@ -196,6 +202,32 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			},
 			fieldDef{
 				Label: "Echo Tag", Help: "V3Net area tag on the hub (e.g. fel.general)", Type: ftString, Col: 3, Row: 16, Width: 34,
+				Get: func() string { return a.EchoTag },
+				Set: func(val string) error { a.EchoTag = val; return nil },
+			},
+		)
+	case "qwknet":
+		fields = append(fields,
+			fieldDef{
+				Label: "Network", Help: "QWK network key from qwknet.json (e.g. dovenet)", Type: ftLookup, Col: 3, Row: 15, Width: 20,
+				Get:         func() string { return a.Network },
+				Set:         func(val string) error { a.Network = val; return nil },
+				LookupItems: func() []LookupItem { return m.buildQWKNetworkLookupItems() },
+			},
+			fieldDef{
+				Label: "QWK Conference", Help: "The hub's conference number for this area (v3mail qwk-conferences lists them)", Type: ftInteger, Col: 3, Row: 16, Width: 6, Min: 0, Max: 65535,
+				Get: func() string { return strconv.Itoa(a.QWKConference) },
+				Set: func(val string) error {
+					n, err := strconv.Atoi(val)
+					if err != nil {
+						return err
+					}
+					a.QWKConference = n
+					return nil
+				},
+			},
+			fieldDef{
+				Label: "Echo Tag", Help: "The hub's name for this conference (informational)", Type: ftString, Col: 3, Row: 17, Width: 34,
 				Get: func() string { return a.EchoTag },
 				Set: func(val string) error { a.EchoTag = val; return nil },
 			},

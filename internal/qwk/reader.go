@@ -59,13 +59,7 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 		return nil, fmt.Errorf("REP packet contains no .MSG file")
 	}
 
-	rc, err := msgFile.Open()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open %s: %w", msgFile.Name, err)
-	}
-	defer func() { _ = rc.Close() }() // read-only zip entry
-
-	data, err := io.ReadAll(rc)
+	data, err := readZipEntryLimited(msgFile, maxMessageDataSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s: %w", msgFile.Name, err)
 	}
@@ -73,13 +67,8 @@ func ReadREPPacket(r io.ReaderAt, size int64, bbsID string) (*REPPacket, error) 
 	headers := map[int]ExtHeader{}
 	for _, f := range zr.File {
 		if strings.EqualFold(f.Name, "HEADERS.DAT") {
-			hrc, err := f.Open()
-			if err == nil {
-				hdata, rerr := io.ReadAll(hrc)
-				_ = hrc.Close() // read-only zip entry
-				if rerr == nil {
-					headers = parseHeadersDAT(hdata)
-				}
+			if hdata, err := readZipEntryLimited(f, maxMessageDataSize); err == nil {
+				headers = parseHeadersDAT(hdata)
 			}
 			break
 		}

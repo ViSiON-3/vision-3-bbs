@@ -53,8 +53,10 @@ Message areas are defined in `configs/message_areas.json` as an array:
 - `acs_write` — ACS required to post messages
 - `conference_id` — Conference this area belongs to (0 or omitted = ungrouped)
 - `base_path` — Relative path to JAM base files (under `data/`). If empty, defaults to `msgbases/<tag>`
-- `area_type` — Message type: `"local"`, `"echomail"`, or `"netmail"`
-- `echo_tag` — FTN echo tag for echomail areas (e.g., `"FSX_GEN"`)
+- `area_type` — Message type: `"local"`, `"echomail"`, `"netmail"`, `"v3net"`, or `"qwknet"`
+- `echo_tag` — FTN echo tag for echomail areas (e.g., `"FSX_GEN"`); for `qwknet` areas, the hub's conference name
+- `network` — Network key this area belongs to (`ftn.json` network for echomail/netmail, `qwknet.json` key for qwknet)
+- `qwk_conference` — For `qwknet` areas, the hub's conference number. Required; it is what messages are routed on.
 - `origin_addr` — FTN origin address for echomail (e.g., `"21:3/110"`)
 - `max_msgs` — Maximum number of messages to retain (0 = no limit). Oldest messages are removed when the count is exceeded.
 - `max_msg_age` — Maximum message age in days (0 = no limit). Messages older than this are removed.
@@ -67,6 +69,7 @@ Message areas are defined in `configs/message_areas.json` as an array:
 - **echomail** — Conference-style networked messages. The tosser imports/exports packets. Messages get MSGID, tearline, origin line, and SEEN-BY/PATH.
 - **netmail** — Point-to-point private FTN mail between addresses.
 - **v3net** — Networked V3Net message area. Messages sync with a V3Net hub.
+- **qwknet** — Conference on a QWK-based network (e.g. DOVE-Net). `v3mail qwk-poll` exchanges packets with the hub; `qwk_conference` selects the hub conference. See [QWK Networking](messages/qwk-networking.md).
 
 ### Auto Join Behavior
 

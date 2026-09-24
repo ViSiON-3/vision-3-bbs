@@ -84,6 +84,9 @@ func (m Model) viewRecordEdit() string {
 	if m.recordType == "ftn" && m.recordEditIdx < 0 {
 		boxTitleText = "FTN Global Settings"
 	}
+	if m.recordType == "qwknet" && m.recordEditIdx < 0 {
+		boxTitleText = "QWK Network Global Settings"
+	}
 	boxTitleLine := editBorderStyle.Render("│") +
 		menuHeaderStyle.Render(centerText(boxTitleText, boxW)) +
 		editBorderStyle.Render("│")
@@ -240,6 +243,14 @@ func (m Model) recordEditHeader() string {
 			return "Paths & Storage"
 		}
 		keys := m.ftnNetworkKeys()
+		if m.recordEditIdx < len(keys) {
+			return keys[m.recordEditIdx]
+		}
+	case "qwknet":
+		if m.recordEditIdx < 0 {
+			return "Paths & Storage"
+		}
+		keys := m.qwkNetworkKeys()
 		if m.recordEditIdx < len(keys) {
 			return keys[m.recordEditIdx]
 		}

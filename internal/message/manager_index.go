@@ -53,10 +53,40 @@ func (mm *MessageManager) FindMessageByMSGID(areaID int, msgID string) int {
 	if msgID == "" {
 		return 0
 	}
+	return mm.FindMessagesByMSGID(areaID, []string{msgID})[msgID]
+}
 
+// FindMessagesByMSGID looks up several MSGIDs in one area with a single
+// open of the base, returning the 1-based number of each one found. IDs
+// not in the area are absent from the result. A tosser resolving a whole
+// packet uses this rather than one FindMessageByMSGID call per message.
+func (mm *MessageManager) FindMessagesByMSGID(areaID int, msgIDs []string) map[string]int {
+	found := make(map[string]int)
+	if len(msgIDs) == 0 {
+		return found
+	}
+	idx := mm.msgidIndexFor(areaID)
+	if idx == nil {
+		return found
+	}
+	for _, id := range msgIDs {
+		if id == "" {
+			continue
+		}
+		if n, ok := idx.msgIDs[id]; ok {
+			found[id] = n
+		}
+	}
+	return found
+}
+
+// msgidIndexFor returns the area's MSGID index, rebuilding the cached one
+// when the base has changed since it was built. nil when the area cannot
+// be opened or is empty.
+func (mm *MessageManager) msgidIndexFor(areaID int) *msgidIndex {
 	b, _, err := mm.openBase(areaID)
 	if err != nil {
-		return 0
+		return nil
 	}
 	defer func() {
 		if cerr := b.Close(); cerr != nil {
@@ -66,7 +96,7 @@ func (mm *MessageManager) FindMessageByMSGID(areaID int, msgID string) int {
 
 	total, err := b.GetMessageCount()
 	if err != nil || total == 0 {
-		return 0
+		return nil
 	}
 
 	modCounter := uint32(0)
@@ -89,11 +119,7 @@ func (mm *MessageManager) FindMessageByMSGID(areaID int, msgID string) int {
 		}
 		mm.mu.Unlock()
 	}
-
-	if n, ok := idx.msgIDs[msgID]; ok {
-		return n
-	}
-	return 0
+	return idx
 }
 
 // buildMSGIDIndex scans all messages and builds a MSGID -> message number map.

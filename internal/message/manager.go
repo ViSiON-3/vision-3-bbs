@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
@@ -59,6 +60,10 @@ type MessageManager struct {
 	networkOrigins map[string]string
 	threadIndex    map[int]*threadIndex
 	msgidIndex     map[int]*msgidIndex
+	// qwkID is the system's QWK ID, the "@host" part of Message-IDs given to
+	// posts in QWK network areas. Blank leaves those posts without one; the
+	// network scanner then synthesizes an ID at export time.
+	qwkID string
 
 	// OnMessagePosted is called after a message is successfully written to a JAM base.
 	// The callback receives the area and the message details. May be nil.
@@ -151,6 +156,34 @@ func (mm *MessageManager) SetNetworkOrigins(origins map[string]string) {
 	mm.mu.Lock()
 	mm.networkOrigins = normalized
 	mm.mu.Unlock()
+}
+
+// SetQWKID records the system's QWK ID so posts in qwknet areas get a
+// Message-ID at write time, letting replies from the network thread back.
+func (mm *MessageManager) SetQWKID(id string) {
+	mm.mu.Lock()
+	mm.qwkID = strings.ToLower(strings.TrimSpace(id))
+	mm.mu.Unlock()
+}
+
+// QWKID returns the QWK ID set by SetQWKID, lower-cased; "" when none.
+func (mm *MessageManager) QWKID() string {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	return mm.qwkID
+}
+
+// qwkMessageID makes the Message-ID for a new post in a qwknet area:
+// <time-hex.areatag@qwkid>. Nanosecond time keeps it unique on one system;
+// the QWK ID keeps it unique across the network.
+func (mm *MessageManager) qwkMessageID(areaTag string) string {
+	mm.mu.RLock()
+	id := mm.qwkID
+	mm.mu.RUnlock()
+	if id == "" {
+		return ""
+	}
+	return fmt.Sprintf("<%x.%s@%s>", time.Now().UnixNano(), strings.ToLower(areaTag), id)
 }
 
 // SetBoardName replaces the fallback origin text, applied when config.json's

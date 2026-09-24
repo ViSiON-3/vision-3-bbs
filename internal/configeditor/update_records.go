@@ -66,6 +66,9 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.recordType == "v3nethub" {
 				return m.enterHubWizard()
 			}
+			if m.recordType == "qwknet" {
+				return m.enterQWKWizard("")
+			}
 			// For ftn, the network keys before the insert: the new one is
 			// whichever key appears afterwards that was not there before.
 			var ftnKeysBefore map[string]bool
@@ -117,11 +120,11 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "g", "G":
-			if m.recordType == "ftn" {
-				m.recordFields = m.fieldsFTNGlobal()
+			if m.recordType == "ftn" || m.recordType == "qwknet" {
+				m.recordEditIdx = -1
+				m.recordFields = m.buildRecordFields()
 				m.editField = 0
 				m.fieldScroll = 0
-				m.recordEditIdx = -1
 				m.mode = modeRecordEdit
 			}
 			return m, nil
@@ -139,6 +142,15 @@ func (m Model) updateRecordList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "b", "B":
 			if m.recordType == "v3netleaf" {
 				return m.enterRegistryBrowserForLeafList()
+			}
+			return m, nil
+		case "w", "W":
+			// Re-run the wizard on a QWK network to add conferences.
+			if m.recordType == "qwknet" && total > 0 {
+				keys := m.qwkNetworkKeys()
+				if m.recordCursor < len(keys) {
+					return m.enterQWKWizard(keys[m.recordCursor])
+				}
 			}
 			return m, nil
 		case "n", "N":

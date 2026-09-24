@@ -678,9 +678,12 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 		slog.Info("updated auto-validate new users", "enabled", newServerConfig.AutoValidateNewUsers)
 	}
 
-	// Keep the message manager's fallback origin (the board name) current.
+	// Keep the message manager's fallback origin (the board name) current,
+	// and the QWK ID new qwknet posts take their Message-IDs from, which
+	// falls back to the board name when qwkID is blank.
 	if cw.menuExecutor.MessageMgr != nil {
 		cw.menuExecutor.MessageMgr.SetBoardName(newServerConfig.BoardName)
+		cw.menuExecutor.MessageMgr.SetQWKID(menu.ResolveQWKID(newServerConfig))
 	}
 
 	// Push connection-security settings into the tracker. Without this the

@@ -1760,6 +1760,9 @@ func main() {
 	if err != nil {
 		logging.Fatal("failed to initialize message manager", "error", err)
 	}
+	// Posts in QWK network areas get a Message-ID keyed on the system's QWK
+	// ID, so replies from the hub can thread back to them.
+	messageMgr.SetQWKID(menu.ResolveQWKID(serverConfig))
 	defer func() {
 		if cerr := messageMgr.Close(); cerr != nil {
 			slog.Error("closing JAM message bases on shutdown", "error", cerr)

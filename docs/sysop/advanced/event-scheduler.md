@@ -280,6 +280,29 @@ once after the last poll — chain the events with `run_after`; see
 }
 ```
 
+### QWK Network Polling (v3mail)
+
+The QWK Network Wizard creates an enabled `qwknet_poll_<key>` event for each
+network you join, on the schedule you chose (default `*/30 * * * *`). One run
+does the whole exchange with the hub, so no separate scan or toss events are
+needed. Edit the schedule to change the cadence; disable the event to stop
+polling that hub. Add one by hand for a network configured without the wizard:
+
+```json
+{
+  "id": "qwknet_poll_dovenet",
+  "name": "Poll QWK Hub (VERT)",
+  "schedule": "*/30 * * * *",
+  "command": "{BBS_ROOT}/v3mail",
+  "args": ["qwk-poll", "--network", "dovenet", "--config", "{BBS_ROOT}/configs", "--data", "{BBS_ROOT}/data"],
+  "working_directory": "{BBS_ROOT}",
+  "timeout_seconds": 600,
+  "enabled": true
+}
+```
+
+See [QWK Networking](messages/qwk-networking.md).
+
 ### Full FTN Mail Workflow
 
 Process mail in stages with timing offsets:

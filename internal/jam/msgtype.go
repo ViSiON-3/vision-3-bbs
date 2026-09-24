@@ -39,9 +39,15 @@ func (mt MessageType) GetJAMAttribute() uint32 {
 }
 
 // DetermineMessageType returns the MessageType based on area configuration.
+//
+// A qwknet area is echomail as far as the base is concerned: its posts are
+// conference mail that leaves the system, so they need DateProcessed left at
+// zero for the QWK network scanner to find them, and a MSGID for threading on
+// the far side. The FTN tosser never touches them because it selects areas by
+// AreaType and Network, not by JAM attribute.
 func DetermineMessageType(areaType, echoTag string) MessageType {
 	switch strings.ToLower(strings.TrimSpace(areaType)) {
-	case "echo", "echomail":
+	case "echo", "echomail", "qwknet":
 		return MsgTypeEchomailMsg
 	case "netmail", "direct":
 		return MsgTypeNetmailMsg

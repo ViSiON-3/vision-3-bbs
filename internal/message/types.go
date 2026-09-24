@@ -1,6 +1,9 @@
 package message
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // MessageArea defines the structure for a message base/forum.
 type MessageArea struct {
@@ -18,11 +21,23 @@ type MessageArea struct {
 	MaxMessages  int    `json:"max_messages,omitempty"`    // Max messages to retain (0=unlimited)
 	MaxAge       int    `json:"max_age,omitempty"`         // Auto-purge messages older than N days (0=unlimited)
 	AutoJoin     bool   `json:"auto_join,omitempty"`       // Auto-join this area for new users
-	AreaType     string `json:"area_type"`                 // "local", "echomail", "netmail", "v3net"
-	EchoTag      string `json:"echo_tag,omitempty"`        // FTN echo tag (e.g., "FSX_GEN")
+	AreaType     string `json:"area_type"`                 // "local", "echomail", "netmail", "v3net", "qwknet"
+	EchoTag      string `json:"echo_tag,omitempty"`        // FTN echo tag (e.g., "FSX_GEN"); for qwknet, the hub's conference name
 	OriginAddr   string `json:"origin_addr,omitempty"`     // FTN origin address (e.g., "21:3/110")
-	Network      string `json:"network,omitempty"`         // FTN network name (e.g., "fsxnet")
+	Network      string `json:"network,omitempty"`         // Network key (e.g., "fsxnet", "dovenet")
 	Sponsor      string `json:"sponsor,omitempty"`         // Handle of the area sponsor/moderator
+	// QWKConference is the hub's conference number for a qwknet area. It is
+	// the only thing a QWK network routes on: the hub numbers its
+	// conferences, and every packet header carries that number. 0 = unset.
+	QWKConference int `json:"qwk_conference,omitempty"`
+}
+
+// AreaTypeQWKNet marks an area fed by a QWK network hub.
+const AreaTypeQWKNet = "qwknet"
+
+// IsQWKNet reports whether the area belongs to a QWK network.
+func (a *MessageArea) IsQWKNet() bool {
+	return a != nil && strings.EqualFold(a.AreaType, AreaTypeQWKNet)
 }
 
 // DisplayMessage is a high-level message view for the UI layer.

@@ -475,6 +475,16 @@ func TestServerConfigReloadUpdatesBoardNameFallback(t *testing.T) {
 		t.Errorf("fallback origin = %q after config.json reload, want New Board", got)
 	}
 
+	// The QWK ID for qwknet Message-IDs follows config.json too.
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"),
+		[]byte(`{"boardName":"New Board","qwkID":"NEWID"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cw.reloadServerConfig()
+	if got := msgMgr.QWKID(); got != "newid" {
+		t.Errorf("QWK ID = %q after config.json reload, want newid", got)
+	}
+
 	// A malformed config.json must leave the fallback untouched.
 	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{broken`), 0644); err != nil {
 		t.Fatal(err)

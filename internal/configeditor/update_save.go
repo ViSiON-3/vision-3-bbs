@@ -53,9 +53,19 @@ func (m *Model) saveAll() bool {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return false
 	}
+	// QWK networks likewise go before events, and only when a network is
+	// configured or the file already exists: a board that never joined one
+	// should not gain an empty qwknet.json on every save.
+	if len(m.configs.QWKNet.Networks) > 0 || fileExists(filepath.Join(m.configPath, "qwknet.json")) {
+		if err := config.SaveQWKNetConfig(m.configPath, m.configs.QWKNet); err != nil {
+			m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+			return false
+		}
+	}
 	// Follow hub changes: existing per-network poll events track the
 	// network's first link address.
 	refreshPollEvents(&m.configs.Events, m.configs.FTN.Networks)
+	refreshQWKPollEvents(&m.configs.Events, m.configs.QWKNet.Networks)
 	if err := saveEventsConfig(m.configPath, m.configs.Events); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return false
@@ -170,6 +180,8 @@ func (m Model) recordCount() int {
 		return len(m.configs.V3Net.Leaves)
 	case "v3nethub":
 		return len(m.configs.V3Net.Hub.Networks)
+	case "qwknet":
+		return len(m.configs.QWKNet.Networks)
 	}
 	return 0
 }
@@ -369,6 +381,11 @@ func (m *Model) deleteRecord() {
 	case "v3nethub":
 		if idx >= 0 && idx < len(m.configs.V3Net.Hub.Networks) {
 			m.configs.V3Net.Hub.Networks = append(m.configs.V3Net.Hub.Networks[:idx], m.configs.V3Net.Hub.Networks[idx+1:]...)
+		}
+	case "qwknet":
+		keys := m.qwkNetworkKeys()
+		if idx >= 0 && idx < len(keys) {
+			delete(m.configs.QWKNet.Networks, keys[idx])
 		}
 	}
 

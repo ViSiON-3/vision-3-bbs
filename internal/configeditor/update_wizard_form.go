@@ -81,6 +81,9 @@ func (m Model) updateWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEscape:
 		if m.wizardHasData() {
 			m.confirmYes = true
+			// Name this wizard as the dialog's source; a value left over
+			// from an earlier FTN or QWK wizard would route Y to that one.
+			m.wizardExitSource = modeWizardForm
 			m.mode = modeWizardExitConfirm
 			return m, nil
 		}
@@ -334,8 +337,11 @@ func (m Model) wizardHasData() bool {
 
 // updateWizardExitConfirm handles the wizard save/discard dialog.
 func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Determine if this is the FTN wizard or V3Net wizard.
-	isFTN := m.ftnWizard != nil && m.ftnWizard.hasData()
+	// The wizard that opened the dialog decides what Y/N act on. Falling
+	// back to hasData() would let stale data from a discarded FTN wizard
+	// capture a QWK wizard's dialog (or the reverse).
+	isFTN := m.wizardExitSource == modeFTNWizardForm
+	isQWK := m.wizardExitSource == modeQWKWizardForm
 
 	formMode := modeWizardForm
 	discardMode := editorMode(modeRecordList)
@@ -343,17 +349,27 @@ func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		formMode = modeFTNWizardForm
 		discardMode = modeCategoryMenu
 	}
+	if isQWK {
+		formMode = modeQWKWizardForm
+		discardMode = m.qwkWizard.exitMode()
+	}
+	submit := func() (tea.Model, tea.Cmd) {
+		m.mode = formMode
+		switch {
+		case isFTN:
+			return m.submitFTNWizardForm()
+		case isQWK:
+			return m.submitQWKWizardForm()
+		}
+		return m.submitWizardForm()
+	}
 
 	switch msg.Type {
 	case tea.KeyLeft, tea.KeyRight:
 		m.confirmYes = !m.confirmYes
 	case tea.KeyEnter:
 		if m.confirmYes {
-			m.mode = formMode
-			if isFTN {
-				return m.submitFTNWizardForm()
-			}
-			return m.submitWizardForm()
+			return submit()
 		}
 		m.mode = discardMode
 		return m, nil
@@ -363,11 +379,7 @@ func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		switch msg.String() {
 		case "y", "Y":
-			m.mode = formMode
-			if isFTN {
-				return m.submitFTNWizardForm()
-			}
-			return m.submitWizardForm()
+			return submit()
 		case "n", "N":
 			m.mode = discardMode
 			return m, nil
