@@ -496,3 +496,41 @@ func rezipWithout(t *testing.T, archive []byte, drop string) []byte {
 	}
 	return out.Bytes()
 }
+
+func TestToss_TruncatedPacketIsSetAside(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	pkt := hubPacket(t,
+		qwk.PacketMessage{Conference: 2001, Number: 1, From: "A", To: "All", Subject: "whole", DateTime: time.Now(), Body: "ok"},
+		qwk.PacketMessage{Conference: 2001, Number: 2, From: "B", To: "All", Subject: "cut", DateTime: time.Now(), Body: strings.Repeat("x", 400)},
+	)
+	// Rewrite MESSAGES.DAT with its last block missing.
+	zr, err := zip.NewReader(bytes.NewReader(pkt), int64(len(pkt)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	zw := zip.NewWriter(&out)
+	for _, f := range zr.File {
+		rc, _ := f.Open()
+		data, _ := io.ReadAll(rc)
+		_ = rc.Close()
+		if strings.EqualFold(f.Name, "MESSAGES.DAT") {
+			data = data[:len(data)-qwk.BlockSize]
+		}
+		w, _ := zw.Create(f.Name)
+		_, _ = w.Write(data)
+	}
+	_ = zw.Close()
+	path := filepath.Join(e.paths.InboundPath, "VERT.QWK")
+	if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := n.Toss()
+	if res.Imported != 1 || len(res.Errors) != 1 {
+		t.Fatalf("toss: %+v", res)
+	}
+	if _, err := os.Stat(path + ".bad"); err != nil {
+		t.Error("truncated packet was not set aside")
+	}
+}

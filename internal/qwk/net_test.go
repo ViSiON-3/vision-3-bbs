@@ -197,6 +197,17 @@ func TestReadPacket_SynchronetStyle(t *testing.T) {
 	}
 }
 
+func TestReadPacket_TruncatedMessagesDAT(t *testing.T) {
+	archive := buildZip(t, map[string][]byte{"CONTROL.DAT": []byte("Hub\r\n\r\n\r\n\r\n1,HUB\r\n"), "MESSAGES.DAT": []byte("short")})
+	if _, err := ReadPacket(bytes.NewReader(archive), int64(len(archive))); err == nil {
+		t.Fatal("truncated MESSAGES.DAT accepted as an empty packet")
+	}
+	archive = buildZip(t, map[string][]byte{"CONTROL.DAT": []byte("Hub\r\n\r\n\r\n\r\n1,HUB\r\n"), "MESSAGES.DAT": nil})
+	if p, err := ReadPacket(bytes.NewReader(archive), int64(len(archive))); err != nil || len(p.Messages) != 0 {
+		t.Fatalf("zero-length MESSAGES.DAT: %+v err=%v", p, err)
+	}
+}
+
 func TestReadPacket_EmptyPacket(t *testing.T) {
 	archive := buildZip(t, map[string][]byte{"CONTROL.DAT": []byte("Hub\r\n\r\n\r\n\r\n1,HUB\r\n")})
 	p, err := ReadPacket(bytes.NewReader(archive), int64(len(archive)))

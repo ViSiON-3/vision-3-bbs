@@ -101,8 +101,13 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (Toss
 		return res, fmt.Errorf("packet is from %s, not hub %s", p.BBSID, n.hubID)
 	}
 	badArea := n.badArea()
+	// A packet that ended early still gets its readable messages imported
+	// (the dupe database keeps a retry from posting them twice), but the
+	// truncation is an error so the file is set aside rather than deleted
+	// with its unreadable tail.
 	if p.ParseError != nil {
-		slog.Warn("packet ended early; importing what was readable", "path", path, "error", p.ParseError)
+		slog.Warn("packet ended early; importing what was readable and setting it aside", "path", path, "error", p.ParseError)
+		res.Errors = append(res.Errors, fmt.Sprintf("packet ended early: %v", p.ParseError))
 	}
 
 	for _, m := range p.Messages {

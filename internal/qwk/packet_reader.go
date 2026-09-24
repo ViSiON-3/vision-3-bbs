@@ -69,8 +69,14 @@ func ReadPacket(r io.ReaderAt, size int64) (*Packet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read MESSAGES.DAT: %w", err)
 	}
-	if len(data) < BlockSize {
+	// An empty MESSAGES.DAT is a hub with nothing to say. Anything shorter
+	// than the header block, though, is a damaged file, and reporting it as
+	// empty would let the caller discard the packet.
+	if len(data) == 0 {
 		return p, nil
+	}
+	if len(data) < BlockSize {
+		return nil, fmt.Errorf("MESSAGES.DAT is %d bytes, shorter than one block", len(data))
 	}
 	p.Messages, p.ParseError = parseNetMessages(data, headers)
 	return p, nil

@@ -91,6 +91,10 @@ func (n *Node) Scan() ScanResult {
 		for num := hwm + 1; num <= count; num++ {
 			hdr, err := base.ReadMessageHeader(num)
 			if err != nil {
+				// Left in place: the pointer stops here and the message is
+				// looked at again next time.
+				slog.Warn("cannot read message header; will retry next scan", "network", n.Key, "area", area.Tag, "msg", num, "error", err)
+				res.Errors = append(res.Errors, fmt.Sprintf("area %s msg %d: %v", area.Tag, num, err))
 				continue
 			}
 			if hdr.DateProcessed != 0 || hdr.Attribute&jam.MsgDeleted != 0 {
@@ -134,7 +138,11 @@ func (n *Node) Scan() ScanResult {
 		if err := p.base.UpdateMessageHeader(p.msgNum, p.hdr); err != nil {
 			slog.Warn("failed to mark message exported", "network", n.Key, "area", p.area.Tag, "msg", p.msgNum, "error", err)
 		}
-		if p.msgNum > highWater(p.base) {
+		// The pointer only moves over an unbroken run. A message that could
+		// not be read sits between the pointer and this one, and jumping
+		// past it would drop it for good; DateProcessed still keeps this
+		// message from being packed twice.
+		if p.msgNum == highWater(p.base)+1 {
 			if err := p.base.SetLastRead(ScannerUser, uint32(p.msgNum), uint32(p.msgNum)); err != nil {
 				slog.Warn("failed to advance export pointer", "network", n.Key, "area", p.area.Tag, "error", err)
 			}
