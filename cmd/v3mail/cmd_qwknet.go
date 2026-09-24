@@ -105,7 +105,7 @@ func cmdQWKPoll(args []string) {
 			res.Scan.Exported, res.Scan.Pending, res.Uploaded, res.Downloaded, res.Bytes,
 			res.Toss.Imported, res.Toss.Duplicates, res.Toss.Unmapped)
 		for _, e := range append(append(res.Errors, res.Scan.Errors...), res.Toss.Errors...) {
-			fmt.Printf("  ERROR: %s\n", e)
+			fmt.Fprintf(os.Stderr, "  [%s] ERROR: %s\n", n.Key, e)
 			failed = true
 		}
 	}
@@ -131,7 +131,7 @@ func cmdQWKScan(args []string) {
 		}
 		fmt.Println()
 		for _, e := range res.Errors {
-			fmt.Printf("  ERROR: %s\n", e)
+			fmt.Fprintf(os.Stderr, "  [%s] ERROR: %s\n", n.Key, e)
 			failed = true
 		}
 	}
@@ -154,7 +154,7 @@ func cmdQWKToss(args []string) {
 		fmt.Printf("%s: %d packet(s), imported %d, dupes %d, unmapped %d, skipped %d\n",
 			n.Key, res.Packets, res.Imported, res.Duplicates, res.Unmapped, res.Skipped)
 		for _, e := range res.Errors {
-			fmt.Printf("  ERROR: %s\n", e)
+			fmt.Fprintf(os.Stderr, "  [%s] ERROR: %s\n", n.Key, e)
 			failed = true
 		}
 	}
