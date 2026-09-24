@@ -83,8 +83,8 @@ func (m Model) confirmQWKWizard() (Model, tea.Cmd) {
 	default:
 		m.message = fmt.Sprintf("QWK network %q saved — %d conference area(s) created; polling %s on schedule %s.", key, created, w.hubID, w.schedule)
 	}
+	m.mode = w.exitMode()
 	m.qwkWizard = nil
-	m.mode = modeCategoryMenu
 	return m, nil
 }
 

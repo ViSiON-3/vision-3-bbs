@@ -363,3 +363,79 @@ func TestWizardExitConfirm_V3NetWizardOverridesStaleSource(t *testing.T) {
 		t.Fatalf("mode=%v source=%v, want the V3Net wizard as the source", m.mode, m.wizardExitSource)
 	}
 }
+
+// A hub ID another network already uses is refused by the wizard and by the
+// QWK Networks editor, since the two would share packet files.
+func TestQWKHubIDMustBeUnique(t *testing.T) {
+	m := qwkTestModel(t)
+	m.configs.QWKNet.Networks = map[string]config.QWKNetworkConfig{
+		"dovenet": {Enabled: true, Name: "DOVE-Net", HubID: "VERT", Host: "vert.synchro.net", Password: "pw"},
+		"other":   {Enabled: true, Name: "Other", HubID: "HUB2", Host: "h", Password: "pw"},
+	}
+	m, _ = m.enterQWKWizard("")
+	w := m.qwkWizard
+	w.networkKey, w.networkName, w.hubID, w.host, w.password = "copy", "Copy", "VERT", "h", "pw"
+	if err := m.validateQWKWizard(); err == nil || !strings.Contains(err.Error(), "dovenet") {
+		t.Errorf("wizard accepted a hub ID in use: %v", err)
+	}
+
+	m.recordType = "qwknet"
+	m.recordEditIdx = 1 // "other"
+	for _, f := range m.buildRecordFields() {
+		if f.Label != "Hub QWK-ID" {
+			continue
+		}
+		if err := f.Set("VERT"); err == nil {
+			t.Error("editor accepted a hub ID another network uses")
+		}
+		if err := f.Set("HUB2"); err != nil {
+			t.Errorf("editor refused the network's own hub ID: %v", err)
+		}
+	}
+}
+
+// Opened from the QWK Networks list, the wizard returns there on ESC,
+// discard and save; opened from the category menu, it returns there.
+func TestQWKWizard_ReturnsToWhereItWasOpened(t *testing.T) {
+	esc := tea.KeyMsg{Type: tea.KeyEscape}
+	for _, from := range []editorMode{modeRecordList, modeCategoryMenu} {
+		// ESC with nothing entered.
+		m := qwkTestModel(t)
+		m.mode = from
+		m, _ = m.enterQWKWizard("")
+		next, _ := m.updateQWKWizardForm(esc)
+		if got := next.(Model).mode; got != from {
+			t.Errorf("from %v: ESC on an empty wizard went to %v", from, got)
+		}
+
+		// ESC with data, then N to discard.
+		m = qwkTestModel(t)
+		m.mode = from
+		m, _ = m.enterQWKWizard("")
+		m.qwkWizard.hubID = "VERT"
+		next, _ = m.updateQWKWizardForm(esc)
+		m = next.(Model)
+		if m.mode != modeWizardExitConfirm {
+			t.Fatalf("from %v: ESC with data did not ask to save (mode %v)", from, m.mode)
+		}
+		next, _ = m.updateWizardExitConfirm(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+		if got := next.(Model).mode; got != from {
+			t.Errorf("from %v: discard went to %v", from, got)
+		}
+
+		// A successful save.
+		m = qwkTestModel(t)
+		m.configs.QWKNet.Networks = map[string]config.QWKNetworkConfig{
+			"dovenet": {Enabled: true, Name: "DOVE-Net", HubID: "VERT", Host: "vert.synchro.net", Password: "pw"},
+		}
+		m.mode = from
+		m, _ = m.enterQWKWizard("dovenet")
+		m, _ = m.confirmQWKWizard()
+		if strings.HasPrefix(m.message, "SAVE ERROR") {
+			t.Fatal(m.message)
+		}
+		if m.mode != from {
+			t.Errorf("from %v: save went to %v", from, m.mode)
+		}
+	}
+}

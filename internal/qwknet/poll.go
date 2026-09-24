@@ -2,7 +2,9 @@ package qwknet
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -54,28 +56,7 @@ func (n *Node) exchange(ctx context.Context, res *PollResult) error {
 	}
 	defer c.quit()
 
-	repPath := n.repPath()
-	if st, err := os.Stat(repPath); err == nil && st.Size() > 0 {
-		f, err := os.Open(repPath)
-		if err != nil {
-			return fmt.Errorf("open REP: %w", err)
-		}
-		uerr := c.store(ctx, n.hubID+".REP", f)
-		_ = f.Close() // read-only
-		if uerr != nil {
-			// The REP stays in outbound for the next poll. The download still
-			// runs: a hub refusing uploads must not also cut off incoming
-			// mail. If the connection itself is gone, it fails at once.
-			res.Errors = append(res.Errors, fmt.Sprintf("upload REP: %v", uerr))
-			slog.Warn("qwknet REP upload failed; kept for the next poll", "network", n.Key, "hub", n.hubID, "error", uerr)
-		} else {
-			res.Uploaded = true
-			if err := retireUploadedREP(repPath); err != nil {
-				res.Errors = append(res.Errors, fmt.Sprintf("uploaded REP left in outbound and will be sent again: %v", err))
-			}
-			slog.Info("qwknet REP uploaded", "network", n.Key, "hub", n.hubID, "bytes", st.Size())
-		}
-	}
+	n.uploadREP(ctx, c, res)
 
 	size, path, err := n.download(ctx, c)
 	if err != nil {
@@ -89,6 +70,71 @@ func (n *Node) exchange(ctx context.Context, res *PollResult) error {
 		slog.Info("qwknet hub had no packet for us", "network", n.Key, "hub", n.hubID)
 	}
 	return nil
+}
+
+// uploadREP sends the waiting REP, if any, and retires it once the hub has
+// it. It holds the REP lock throughout, so a Scan in another process cannot
+// append messages to a REP that is about to be deleted as delivered. A
+// failure is recorded and the caller goes on to download.
+func (n *Node) uploadREP(ctx context.Context, c *ftpClient, res *PollResult) {
+	repPath := n.repPath()
+	lock, err := n.lockREP()
+	if err != nil {
+		res.Errors = append(res.Errors, fmt.Sprintf("upload REP: %v", err))
+		return
+	}
+	defer lock.Release()
+
+	st, err := os.Stat(repPath)
+	if err != nil || st.Size() == 0 {
+		return // nothing waiting
+	}
+	f, err := os.Open(repPath)
+	if err != nil {
+		res.Errors = append(res.Errors, fmt.Sprintf("open REP: %v", err))
+		return
+	}
+	uerr := c.store(ctx, n.hubID+".REP", f)
+	_ = f.Close() // read-only
+	if uerr != nil {
+		// The REP stays in outbound for the next poll. The download still
+		// runs: a hub refusing uploads must not also cut off incoming
+		// mail. If the connection itself is gone, it fails at once.
+		res.Errors = append(res.Errors, fmt.Sprintf("upload REP: %v", uerr))
+		slog.Warn("qwknet REP upload failed; kept for the next poll", "network", n.Key, "hub", n.hubID, "error", uerr)
+		return
+	}
+	res.Uploaded = true
+	if err := retireUploadedREP(repPath); err != nil {
+		res.Errors = append(res.Errors, fmt.Sprintf("uploaded REP left in outbound and will be sent again: %v", err))
+	}
+	slog.Info("qwknet REP uploaded", "network", n.Key, "hub", n.hubID, "bytes", st.Size())
+}
+
+// maxPacketDownload caps a packet download. The hub is reached over plain
+// FTP, so a bad hub or anyone on the path could otherwise stream until the
+// inbound disk fills; the zip limits in package qwk only apply once the
+// file is opened. Far above any real packet. A variable so tests can lower
+// it.
+var maxPacketDownload int64 = 512 << 20
+
+// errPacketTooLarge stops a download that passes maxPacketDownload.
+var errPacketTooLarge = errors.New("packet exceeds the download size limit")
+
+// cappedWriter passes writes through until left bytes have gone, then
+// fails, so io.Copy stops without writing past the limit.
+type cappedWriter struct {
+	w    io.Writer
+	left int64
+}
+
+func (c *cappedWriter) Write(p []byte) (int, error) {
+	if int64(len(p)) > c.left {
+		return 0, fmt.Errorf("%w (%d bytes)", errPacketTooLarge, maxPacketDownload)
+	}
+	n, err := c.w.Write(p)
+	c.left -= int64(n)
+	return n, err
 }
 
 // retireUploadedREP gets a delivered REP out of the way of the next Scan,
@@ -146,7 +192,7 @@ func (n *Node) download(ctx context.Context, c *ftpClient) (int64, string, error
 		return 0, "", fmt.Errorf("create temp download: %w", err)
 	}
 	tmp := f.Name()
-	size, rerr := c.retrieve(ctx, n.hubID+".QWK", f)
+	size, rerr := c.retrieve(ctx, n.hubID+".QWK", &cappedWriter{w: f, left: maxPacketDownload})
 	cerr := f.Close()
 	if rerr != nil {
 		_ = os.Remove(tmp)

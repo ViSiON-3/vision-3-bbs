@@ -396,6 +396,56 @@ func TestToss_WaitsForAnotherToss(t *testing.T) {
 	}
 }
 
+// Scan takes the REP lock: while another process holds it, a scan waits,
+// then gives up without marking anything exported.
+func TestScan_WaitsForREPLock(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	if _, err := e.msgMgr.AddMessage(1, "Robbie", "All", "queued", "wait for the lock", ""); err != nil {
+		t.Fatal(err)
+	}
+	held, err := filelock.Acquire(n.repPath(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev := repLockTimeout
+	repLockTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { repLockTimeout = prev })
+
+	if res := n.Scan(); res.Exported != 0 || len(res.Errors) != 1 || !strings.Contains(res.Errors[0], "busy") {
+		t.Fatalf("scan under a held lock: %+v", res)
+	}
+	held.Release()
+	if res := n.Scan(); res.Exported != 1 || len(res.Errors) != 0 {
+		t.Fatalf("scan after release: %+v (the first scan must not have marked the message)", res)
+	}
+}
+
+// A hub packet past the download cap is abandoned and its partial file
+// removed, before anything can fill the inbound disk.
+func TestPoll_DownloadOverCapIsAbandoned(t *testing.T) {
+	e := newEnv(t)
+	prev := maxPacketDownload
+	maxPacketDownload = 1024
+	t.Cleanup(func() { maxPacketDownload = prev })
+	srv := newFakeFTP(t, "VISION3", "pw", map[string][]byte{"VERT.QWK": bytes.Repeat([]byte("x"), 64<<10)})
+	host, port, _ := strings.Cut(srv.addr(), ":")
+	e.cfg.Host = host
+	e.cfg.Port = atoi(port)
+	n := e.node(t)
+
+	res := n.Poll(context.Background())
+	if res.Downloaded || len(res.Errors) != 1 || !strings.Contains(res.Errors[0], "size limit") {
+		t.Fatalf("poll: %+v", res)
+	}
+	left, _ := os.ReadDir(e.paths.InboundPath)
+	for _, f := range left {
+		if strings.Contains(f.Name(), "QWK") {
+			t.Errorf("oversized download left %s behind", f.Name())
+		}
+	}
+}
+
 // Toss purges dupe entries past the retention window.
 func TestToss_PurgesExpiredDupes(t *testing.T) {
 	e := newEnv(t)

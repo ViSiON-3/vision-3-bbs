@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -88,5 +89,26 @@ func TestValidateQWKNetwork(t *testing.T) {
 	}
 	if err := ValidateQWKNetwork("x", good, ""); err == nil {
 		t.Error("no system ID and no ownId should fail")
+	}
+}
+
+func TestQWKNetConfigRejectsSharedHubID(t *testing.T) {
+	c := QWKNetConfig{Networks: map[string]QWKNetworkConfig{
+		"dovenet": {HubID: "VERT"},
+		"other":   {HubID: "HUB2"},
+	}}
+	if err := c.ValidateHubIDs(); err != nil {
+		t.Fatalf("distinct hubs: %v", err)
+	}
+	if got := c.HubIDOwner("vert", "other"); got != "dovenet" {
+		t.Errorf("HubIDOwner(vert) = %q, want dovenet", got)
+	}
+	if got := c.HubIDOwner("VERT", "dovenet"); got != "" {
+		t.Errorf("a network does not clash with itself, got %q", got)
+	}
+	c.Networks["copy"] = QWKNetworkConfig{HubID: "vert"}
+	err := c.ValidateHubIDs()
+	if err == nil || !strings.Contains(err.Error(), `"copy"`) || !strings.Contains(err.Error(), `"dovenet"`) {
+		t.Fatalf("shared hub ID: err=%v", err)
 	}
 }

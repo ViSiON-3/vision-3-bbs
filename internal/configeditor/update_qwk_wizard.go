@@ -21,7 +21,7 @@ const qwkListVisible = 12
 // enterQWKWizard opens the wizard: blank for a new network, or loaded from
 // qwknet.json when editKey names a configured one.
 func (m Model) enterQWKWizard(editKey string) (Model, tea.Cmd) {
-	w := &qwkWizardState{port: 21, schedule: defaultQWKPollSchedule, autoJoin: true}
+	w := &qwkWizardState{port: 21, schedule: defaultQWKPollSchedule, autoJoin: true, returnMode: m.mode}
 	if editKey != "" {
 		nc, ok := m.configs.QWKNet.Networks[editKey]
 		if !ok {
@@ -71,7 +71,7 @@ func (m Model) enterQWKWizard(editKey string) (Model, tea.Cmd) {
 func (m Model) updateQWKWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if len(m.qwkWizardFields) == 0 {
 		if msg.Type == tea.KeyEscape {
-			m.mode = modeCategoryMenu
+			m.mode = m.qwkWizard.exitMode()
 		}
 		return m, nil
 	}
@@ -120,7 +120,7 @@ func (m Model) updateQWKWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeWizardExitConfirm
 			return m, nil
 		}
-		m.mode = modeCategoryMenu
+		m.mode = m.qwkWizard.exitMode()
 		return m, nil
 
 	case tea.KeyPgDown:

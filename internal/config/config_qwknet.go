@@ -150,6 +150,38 @@ func (c QWKNetConfig) NetworkKeys() []string {
 	return keys
 }
 
+// HubIDOwner returns the key of a network other than except whose hub QWK
+// ID is hubID, or "" when none is. Packets are named by hub ID in the
+// shared inbound and outbound directories, so two networks on one hub ID
+// would read each other's REPs and packets.
+func (c QWKNetConfig) HubIDOwner(hubID, except string) string {
+	id := NormalizeQWKID(hubID)
+	if id == "" {
+		return ""
+	}
+	for _, k := range c.NetworkKeys() {
+		if k != except && NormalizeQWKID(c.Networks[k].HubID) == id {
+			return k
+		}
+	}
+	return ""
+}
+
+// ValidateHubIDs reports the first two networks that share a hub QWK ID.
+func (c QWKNetConfig) ValidateHubIDs() error {
+	for _, k := range c.NetworkKeys() {
+		if other := c.HubIDOwner(c.Networks[k].HubID, k); other != "" {
+			a, b := k, other
+			if b < a {
+				a, b = b, a
+			}
+			return fmt.Errorf("QWK networks %q and %q both use hub ID %s; each network needs its own hub",
+				a, b, NormalizeQWKID(c.Networks[k].HubID))
+		}
+	}
+	return nil
+}
+
 // LoadQWKNetConfig reads configs/qwknet.json. A missing file means no QWK
 // networks are configured and is not an error.
 func LoadQWKNetConfig(configPath string) (QWKNetConfig, error) {

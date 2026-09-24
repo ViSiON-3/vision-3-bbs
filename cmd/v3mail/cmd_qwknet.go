@@ -38,6 +38,9 @@ func loadQWKNetNodes(configDir, dataDir, only string) ([]*qwknet.Node, func(), e
 		return nil, nil, err
 	}
 	qcfg.ResolvePaths(root)
+	if err := qcfg.ValidateHubIDs(); err != nil {
+		return nil, nil, err
+	}
 
 	serverCfg, err := config.LoadServerConfig(configDir)
 	if err != nil {

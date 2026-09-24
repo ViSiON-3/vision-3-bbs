@@ -36,9 +36,19 @@ type pendingExport struct {
 // upload that has not happened yet) keeps its messages: the new ones are
 // appended and the packet rewritten. Pointers advance only after the packet
 // is written, so a failure leaves the messages to be picked up next time.
+//
+// The whole pass holds the REP lock, shared with the upload in Poll: two
+// scans must not each rewrite the REP with only their own additions, and a
+// scan must not append to a REP that is being uploaded and then deleted.
 func (n *Node) Scan() ScanResult {
 	var res ScanResult
 	repPath := n.repPath()
+	lock, lerr := n.lockREP()
+	if lerr != nil {
+		res.Errors = append(res.Errors, lerr.Error())
+		return res
+	}
+	defer lock.Release()
 
 	existing, err := n.pendingREPMessages(repPath)
 	if err != nil {

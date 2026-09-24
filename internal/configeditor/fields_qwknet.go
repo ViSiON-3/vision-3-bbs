@@ -106,6 +106,9 @@ func (m *Model) fieldsQWKNetwork() []fieldDef {
 				if id == "" {
 					return fmt.Errorf("hub QWK ID is required (letters and digits, max 8)")
 				}
+				if other := m.configs.QWKNet.HubIDOwner(id, key); other != "" {
+					return fmt.Errorf("network %q already uses hub %s; each network needs its own hub", other, id)
+				}
 				netPtr.HubID = id
 				save()
 				return nil

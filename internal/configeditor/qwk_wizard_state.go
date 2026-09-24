@@ -25,6 +25,10 @@ type qwkWizardState struct {
 	// Networks editor does field by field instead.
 	editingKey string
 
+	// returnMode is where the wizard goes when it closes: the QWK Networks
+	// list when opened from it, else the category menu.
+	returnMode editorMode
+
 	// Conference selection.
 	available     []qwk.ConferenceInfo
 	selected      []bool // parallel to available
@@ -34,6 +38,14 @@ type qwkWizardState struct {
 	existingConfs map[int]bool // already mirrored by an area (editing)
 	fetchGen      uint64       // guards against a late result after ESC/retry
 	fetching      bool
+}
+
+// exitMode is the mode to return to when the wizard closes.
+func (s *qwkWizardState) exitMode() editorMode {
+	if s != nil && s.returnMode == modeRecordList {
+		return modeRecordList
+	}
+	return modeCategoryMenu
 }
 
 // editing reports whether this run modifies an existing network.

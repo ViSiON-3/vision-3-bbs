@@ -189,5 +189,14 @@ func (m *Model) validateQWKWizard() error {
 	if m.systemQWKID() == "" {
 		return fmt.Errorf("your QWK-ID: this system has no QWK ID; set one under System Setup > Registration first")
 	}
+	if w := m.qwkWizard; w != nil {
+		self := w.networkKey
+		if w.editing() {
+			self = w.editingKey
+		}
+		if other := m.configs.QWKNet.HubIDOwner(w.hubID, self); other != "" {
+			return fmt.Errorf("Hub QWK-ID: network %q already uses hub %s; edit that network instead", other, config.NormalizeQWKID(w.hubID))
+		}
+	}
 	return nil
 }

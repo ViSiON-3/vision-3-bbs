@@ -172,7 +172,7 @@ blank drops it with a log line).
 | `dupeDbPath` | JSON file of imported Message-IDs, kept 90 days. |
 | `badAreaTag` | Tag of a local area that receives messages for conferences no area mirrors. Blank drops them with a log line, as Synchronet does; a hub sends every conference your account subscribes to, so unmapped ones are normal. |
 | `networks.<key>.enabled` | Include this network in unqualified `qwk-poll` / `qwk-scan` runs. |
-| `hubId` | The hub's QWK ID. Names the packets: `<hubId>.REP` up, `<hubId>.QWK` down. |
+| `hubId` | The hub's QWK ID. Names the packets: `<hubId>.REP` up, `<hubId>.QWK` down. Each network needs its own hub ID, since the packet files share the inbound and outbound directories; `v3mail` and the editor refuse a duplicate. |
 | `ownId` | Your QWK ID on this network. Blank uses the system QWK ID. |
 | `host`, `port` | Hub FTP server. Port 0 or absent means 21. |
 | `username` | FTP login. Blank uses `ownId` (or the system QWK ID). |
@@ -279,6 +279,7 @@ outbound directory and the next scan appends new posts to it.
 | `data/qwknet/in/<HUBID>.QWK` | Downloaded packets waiting to be tossed (a second one gets a timestamp suffix) | Automatic |
 | `data/qwknet/in/*.bad` | Packets set aside after a failure (`<HUBID>.QWK.bad`, or `<HUBID>.QWK.<time>.bad` when one is already waiting) | Sysop reviews, then deletes or renames back to `<HUBID>.QWK` to retry |
 | `data/qwknet/in/toss.lock` | Lets one toss run at a time across `v3mail` processes | Automatic; leave it |
+| `data/qwknet/out/<HUBID>.REP.lock` | Keeps a scan and an upload of the same REP from overlapping | Automatic; leave it |
 | `data/qwknet/out/<HUBID>.REP` | Packed messages waiting for upload | Automatic |
 | `data/qwknet/out/<HUBID>.REP.bad` | A REP that could not be read back when new posts were to be appended | Sysop reviews |
 | `data/qwknet/in/<HUBID>.QWK.*.part` | A download in progress; one left behind after a failed move into place is a complete packet | Automatic; if the log names one, rename it to `<HUBID>.QWK` to toss it |

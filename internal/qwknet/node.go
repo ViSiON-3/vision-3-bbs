@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
 )
@@ -85,6 +86,20 @@ func (n *Node) HubID() string { return n.hubID }
 // repPath is where the packed, not-yet-uploaded REP waits.
 func (n *Node) repPath() string {
 	return filepath.Join(n.paths.OutboundPath, n.hubID+".REP")
+}
+
+// repLockTimeout is how long a Scan or upload waits for the REP while
+// another process holds it. An upload holds it for up to the transfer
+// timeout, so this is generous. A variable so tests can shorten it.
+var repLockTimeout = 15 * time.Minute
+
+// lockREP takes the cross-process lock on this hub's outbound REP.
+func (n *Node) lockREP() (*filelock.Lock, error) {
+	lock, err := filelock.Acquire(n.repPath(), repLockTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("the REP is busy in another v3mail run: %w", err)
+	}
+	return lock, nil
 }
 
 // areasByConference maps the hub's conference numbers to the local areas

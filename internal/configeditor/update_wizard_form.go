@@ -351,7 +351,7 @@ func (m Model) updateWizardExitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if isQWK {
 		formMode = modeQWKWizardForm
-		discardMode = modeCategoryMenu
+		discardMode = m.qwkWizard.exitMode()
 	}
 	submit := func() (tea.Model, tea.Cmd) {
 		m.mode = formMode
