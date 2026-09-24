@@ -195,7 +195,7 @@ func (m *Model) validateQWKWizard() error {
 			self = w.editingKey
 		}
 		if other := m.configs.QWKNet.HubIDOwner(w.hubID, self); other != "" {
-			return fmt.Errorf("Hub QWK-ID: network %q already uses hub %s; edit that network instead", other, config.NormalizeQWKID(w.hubID))
+			return fmt.Errorf("hub QWK-ID: network %q already uses hub %s; edit that network instead", other, config.NormalizeQWKID(w.hubID))
 		}
 	}
 	return nil
