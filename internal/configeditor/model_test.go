@@ -236,8 +236,28 @@ func TestTopMenuAccessSecurityEntry(t *testing.T) {
 	}
 	m.topCursor = 4
 	updated, _ = m.selectTopMenuItem()
-	if updated.mode != modeCategoryMenu || updated.catMenuTitle != "QWK Networking" || len(updated.catMenuItems) != 2 {
-		t.Errorf("QWK Networking entry: mode=%v title=%q items=%d", updated.mode, updated.catMenuTitle, len(updated.catMenuItems))
+	if updated.mode != modeCategoryMenu || updated.catMenuTitle != "QWK Networking" {
+		t.Fatalf("QWK Networking entry: mode=%v title=%q", updated.mode, updated.catMenuTitle)
+	}
+	want := []categoryMenuItem{
+		{Label: "QWK Networks", RecordType: "qwknet"},
+		{Label: "QWK Network Wizard", Mode: modeQWKWizardForm},
+	}
+	if len(updated.catMenuItems) != len(want) {
+		t.Fatalf("QWK category items = %+v, want %+v", updated.catMenuItems, want)
+	}
+	for i, w := range want {
+		if got := updated.catMenuItems[i]; got != w {
+			t.Errorf("QWK category item %d = %+v, want %+v", i, got, w)
+		}
+	}
+	// The Echomail category no longer carries the QWK entries.
+	m.topCursor = 3
+	echo, _ := m.selectTopMenuItem()
+	for _, it := range echo.catMenuItems {
+		if strings.Contains(it.Label, "QWK") {
+			t.Errorf("Echomail Networking still lists %q", it.Label)
+		}
 	}
 }
 

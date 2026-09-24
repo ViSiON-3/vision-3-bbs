@@ -682,7 +682,7 @@ Additional structured attributes (node, user, error, etc.) vary by event.
 
 ## message_areas.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (key 2 → Message Areas) to manage message area settings interactively. The JSON structure below is for reference.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (key 3 → Areas and Conferences → Message Areas) to manage message area settings interactively. The JSON structure below is for reference.*
 
 Located in the `configs/` directory. Defines message areas available on the BBS.
 
@@ -690,7 +690,7 @@ See [Message Areas Guide](messages/message-areas.md) for detailed configuration.
 
 ## ftn.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (key 3 → Echomail Networks / Echomail Links) to manage FTN settings interactively. The JSON structure below is for reference.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (key 4 → Echomail Networking → Echomail Networks / Echomail Links) to manage FTN settings interactively. The JSON structure below is for reference.*
 
 Located in the `configs/` directory. Configures the internal FTN tosser (v3mail) for echomail. Global fields include directory paths (`inbound_path`, `outbound_path`, `binkd_outbound_path`, `temp_path`) and routing tags (`bad_area_tag`, `dupe_area_tag`). Per-network fields include `own_address`, `internal_tosser_enabled`, `origin`, and an optional `binkd_outbound_path` (a BSO outbound of the network's own, needed when carrying more than one network). Per-link fields include `address`, `packet_password`, `areafix_password`, `name`, and `flavour`.
 
@@ -702,7 +702,7 @@ See [FTN Echomail Guide](messages/ftn-echomail.md) for setup and full field refe
 
 ## conferences.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (key 2 → Conferences) to manage conference settings interactively. The JSON structure below is for reference.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (key 3 → Areas and Conferences → Conferences) to manage conference settings interactively. The JSON structure below is for reference.*
 
 Located in the `configs/` directory. Defines conferences that group message areas and file areas together for organized display.
 

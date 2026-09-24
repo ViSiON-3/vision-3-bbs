@@ -50,7 +50,7 @@ LORD ships its own `START.BAT`, which takes the node number as its first argumen
 
 ## 4. Define the door
 
-Run `./config`, press **6** for Door Programs, then **I** to insert a record and fill in:
+Run `./config`, press **7** for Door Programs, then **I** to insert a record and fill in:
 
 | Field | Value |
 | --- | --- |

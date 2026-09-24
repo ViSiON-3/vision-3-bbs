@@ -59,7 +59,7 @@ Press **S** to save after making changes.
 ## V3Net Networking Menu
 
 ```
-./config  →  4 — ViSiON/3 Networking (V3Net)
+./config  →  6 — ViSiON/3 Networking (V3Net)
 ```
 
 ```
@@ -86,7 +86,7 @@ Enter - Select  |  ESC/Q - Return
 ## Subscriptions (Joining a Network)
 
 ```
-./config  →  4 — ViSiON/3 Networking (V3Net)  →  2. Subscriptions
+./config  →  6 — ViSiON/3 Networking (V3Net)  →  2. Subscriptions
 ```
 
 ```
@@ -140,7 +140,7 @@ To host your own V3Net network:
 2. Define at least one network via **V3Net Networking → 3. Networks**
 
 ```
-./config  →  4 — ViSiON/3 Networking (V3Net)  →  3. Networks
+./config  →  6 — ViSiON/3 Networking (V3Net)  →  3. Networks
 ```
 
 Press **I** to open the **Hub Setup Wizard**:
@@ -192,7 +192,7 @@ needed; ban and delete still apply.
 ## Node Identity
 
 ```
-./config  →  4 — ViSiON/3 Networking (V3Net)  →  1. Node Identity
+./config  →  6 — ViSiON/3 Networking (V3Net)  →  1. Node Identity
 ```
 
 ```
