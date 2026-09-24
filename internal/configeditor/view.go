@@ -89,6 +89,8 @@ func (m Model) View() string {
 		return m.viewQWKNetworkBrowser()
 	case modeQWKConfBrowser, modeQWKConfFetching:
 		return m.viewQWKConfBrowser()
+	case modeQWKWizardPicker:
+		return m.viewQWKWizardPicker()
 	case modeFTNWizardForm, modeFTNWizardField, modeFTNNodelistLookup:
 		return m.viewFTNWizardForm()
 	case modeFTNWizardPicker:

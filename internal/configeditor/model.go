@@ -66,6 +66,7 @@ const (
 	modeQWKNetworkBrowser                        // Known QWK network list
 	modeQWKConfBrowser                           // Hub conference selection
 	modeQWKConfFetching                          // Progress state while the hub's conference list downloads
+	modeQWKWizardPicker                          // Add-new vs edit-existing choice on QWK wizard entry
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -285,6 +286,11 @@ type Model struct {
 	qwkConfBrowserScrl int
 	qwkConfBrowserSel  []bool // working copy; Enter commits, ESC discards
 	qwkConfBrowserErr  string
+	// QWK wizard entry picker: entry 0 is "add new", the rest index into
+	// qwkWizardPickerKeys.
+	qwkWizardPickerKeys   []string
+	qwkWizardPickerCursor int
+	qwkWizardPickerScroll int
 
 	// FTN area browser state
 	ftnAreaBrowserAreas    []ftn.EchoArea // parsed from downloaded echolist
@@ -522,6 +528,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateQWKConfBrowser(msg)
 		case modeQWKConfFetching:
 			result, cmd = m.updateQWKConfFetching(msg)
+		case modeQWKWizardPicker:
+			result, cmd = m.updateQWKWizardPicker(msg)
 		default:
 			return m, nil
 		}

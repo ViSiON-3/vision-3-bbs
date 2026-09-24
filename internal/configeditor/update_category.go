@@ -64,7 +64,7 @@ func (m Model) selectCategoryMenuItem() (Model, tea.Cmd) {
 			return m.enterFTNWizard()
 		}
 		if item.Mode == modeQWKWizardForm {
-			return m.enterQWKWizard("")
+			return m.enterQWKWizardEntry()
 		}
 		m.mode = item.Mode
 		return m, nil

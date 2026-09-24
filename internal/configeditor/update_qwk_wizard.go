@@ -18,6 +18,45 @@ import (
 // qwkListVisible is how many rows the QWK browsers show at once.
 const qwkListVisible = 12
 
+// enterQWKWizardEntry is the "QWK Network Wizard" menu entry. With networks
+// already configured it offers the choice of adding another or editing one,
+// the same way the FTN wizard does; a blank form would refuse the existing
+// key and leave the sysop with no way to add conferences from here.
+func (m Model) enterQWKWizardEntry() (Model, tea.Cmd) {
+	if keys := m.qwkNetworkKeys(); len(keys) > 0 {
+		m.qwkWizardPickerKeys = keys
+		m.qwkWizardPickerCursor = 0
+		m.qwkWizardPickerScroll = 0
+		m.mode = modeQWKWizardPicker
+		return m, nil
+	}
+	return m.enterQWKWizard("")
+}
+
+// updateQWKWizardPicker handles the add-new vs edit-existing choice.
+func (m Model) updateQWKWizardPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	total := len(m.qwkWizardPickerKeys) + 1
+	if cursor, ok := listNavKey(msg, m.qwkWizardPickerCursor, total); ok {
+		m.qwkWizardPickerCursor = cursor
+		m.qwkWizardPickerScroll = clampListScroll(cursor, m.qwkWizardPickerScroll, qwkListVisible)
+		return m, nil
+	}
+	switch msg.Type {
+	case tea.KeyEnter:
+		if m.qwkWizardPickerCursor == 0 {
+			return m.enterQWKWizard("")
+		}
+		return m.enterQWKWizard(m.qwkWizardPickerKeys[m.qwkWizardPickerCursor-1])
+	case tea.KeyEscape:
+		m.mode = modeCategoryMenu
+		return m, nil
+	}
+	if strings.EqualFold(msg.String(), "n") {
+		return m.enterQWKWizard("")
+	}
+	return m, nil
+}
+
 // enterQWKWizard opens the wizard: blank for a new network, or loaded from
 // qwknet.json when editKey names a configured one.
 func (m Model) enterQWKWizard(editKey string) (Model, tea.Cmd) {
