@@ -65,7 +65,7 @@ func runImmediateLogoffCommand(c *cmdCtx, args string) (*user.User, string, erro
 	nodeNumber := c.nodeNumber
 	outputMode := c.outputMode
 
-	if displayErr := e.displayFile(terminal, "GOODBYE.ANS", outputMode, c.termHeight); displayErr != nil {
+	if displayErr := e.displayFile(terminal, "GOODBYE.ANS", outputMode, c.termWidth, c.termHeight); displayErr != nil {
 		slog.Warn("failed to display GOODBYE.ANS before logoff", "node", nodeNumber, "error", displayErr)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecGoodbye)), outputMode)
 	}
@@ -158,13 +158,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		// Log error but continue if possible
 		slog.Error("failed clearing screen for showstats", "node", nodeNumber, "error", wErr)
 	}
-	// For CP437 mode with raw ANSI content, write bytes directly to avoid UTF-8 decode artifacts
-	if outputMode == ansi.OutputModeCP437 {
-		_, wErr = terminal.Write(statsDisplayBytes)
-	} else {
-		wErr = terminalio.WriteProcessedBytes(terminal, statsDisplayBytes, outputMode)
-	}
-	if wErr != nil {
+	if wErr = writeArt(terminal, statsDisplayBytes, outputMode, termWidth); wErr != nil {
 		slog.Error("failed writing processed YOURSTAT.ANS", "node", nodeNumber, "error", wErr)
 		return nil, "", wErr // Updated return
 	}

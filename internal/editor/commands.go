@@ -298,7 +298,7 @@ func (ch *CommandHandler) HandleHelp(inputHandler *InputHandler) {
 
 	if err == nil {
 		// Display the help file
-		ch.screen.WriteDirect(string(helpContent))
+		ch.screen.WriteArt(helpContent)
 	} else {
 		// Display built-in help
 		ch.displayBuiltInHelp()

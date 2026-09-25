@@ -134,7 +134,7 @@ func runLoginDisplayFile(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running DISPLAYFILE", "node", nodeNumber, "file", filename)
 
-	err := e.displayFile(terminal, filename, outputMode, c.termHeight)
+	err := e.displayFile(terminal, filename, outputMode, c.termWidth, c.termHeight)
 	if err != nil {
 		slog.Warn("failed to display file", "node", nodeNumber, "file", filename, "error", err)
 		// Non-fatal - continue login sequence even if file is missing

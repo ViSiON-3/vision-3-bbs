@@ -52,7 +52,7 @@ func (st *runLoopState) runLightbarInput(options []LightbarOption, cursorHidden 
 				return "LOGOFF", loopReturn, nil
 			}
 			if errors.Is(err, editor.ErrIdleTimeout) {
-				e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
+				e.handleIdleTimeout(terminal, outputMode, nodeNumber, st.termWidth, termHeight)
 				return "LOGOFF", loopReturn, nil
 			}
 			slog.Error("failed to read lightbar input", "menu", st.currentMenuName, "error", err)
@@ -182,7 +182,7 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 			return "LOGOFF", loopReturn, nil
 		}
 		if errors.Is(err, editor.ErrIdleTimeout) {
-			e.handleIdleTimeout(terminal, outputMode, nodeNumber, st.termHeight)
+			e.handleIdleTimeout(terminal, outputMode, nodeNumber, st.termWidth, st.termHeight)
 			return "LOGOFF", loopReturn, nil
 		}
 		slog.Error("failed to read input for menu", "menu", st.currentMenuName, "error", err)

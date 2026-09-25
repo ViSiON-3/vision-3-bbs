@@ -34,7 +34,7 @@ func TestDisplayFile(t *testing.T) {
 
 	t.Run("renders file with pipe codes translated", func(t *testing.T) {
 		ts := newTestSession("")
-		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeAuto, 0); err != nil {
+		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeAuto, 80, 0); err != nil {
 			t.Fatalf("displayFile: %v", err)
 		}
 		out := ts.output()
@@ -48,7 +48,7 @@ func TestDisplayFile(t *testing.T) {
 
 	t.Run("clearFirst prepends clear sequence", func(t *testing.T) {
 		ts := newTestSession("")
-		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeAuto, 0, true); err != nil {
+		if err := e.displayFile(newTestTerminal(ts), "WELCOME.ANS", ansi.OutputModeAuto, 80, 0, true); err != nil {
 			t.Fatalf("displayFile: %v", err)
 		}
 		if !strings.HasPrefix(ts.output(), ansi.ClearScreen()) {
@@ -65,7 +65,7 @@ func TestDisplayFile(t *testing.T) {
 			t.Fatalf("write: %v", err)
 		}
 		ts := newTestSession("")
-		if err := e.displayFile(newTestTerminal(ts), "RAW.ANS", ansi.OutputModeCP437, 0); err != nil {
+		if err := e.displayFile(newTestTerminal(ts), "RAW.ANS", ansi.OutputModeCP437, 80, 0); err != nil {
 			t.Fatalf("displayFile: %v", err)
 		}
 		want := string(ansi.ReplacePipeCodes(raw))
@@ -74,9 +74,33 @@ func TestDisplayFile(t *testing.T) {
 		}
 	})
 
+	t.Run("wrap-dependent art gets explicit breaks on wide terminals", func(t *testing.T) {
+		row := strings.Repeat("x", 80)
+		if err := os.WriteFile(filepath.Join(e.MenuSetPath, "ansi", "WIDE.ANS"), []byte(row+row), 0644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		for _, tc := range []struct {
+			width int
+			want  string
+		}{
+			{80, row + row},
+			// The terminal layer writes every LF as CRLF, so the inserted
+			// CRLF reaches the wire as CR CR LF, as CRLF in art files does.
+			{132, row + "\r\r\n" + row},
+		} {
+			ts := newTestSession("")
+			if err := e.displayFile(newTestTerminal(ts), "WIDE.ANS", ansi.OutputModeCP437, tc.width, 0); err != nil {
+				t.Fatalf("displayFile: %v", err)
+			}
+			if got := ts.output(); got != tc.want {
+				t.Errorf("width %d: output = %q, want %q", tc.width, got, tc.want)
+			}
+		}
+	})
+
 	t.Run("missing file returns error and shows load-error string", func(t *testing.T) {
 		ts := newTestSession("")
-		err := e.displayFile(newTestTerminal(ts), "NOPE.ANS", ansi.OutputModeAuto, 0)
+		err := e.displayFile(newTestTerminal(ts), "NOPE.ANS", ansi.OutputModeAuto, 80, 0)
 		if err == nil {
 			t.Fatal("missing file should return an error")
 		}

@@ -95,6 +95,10 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 		return ansi.ProcessAnsiResult{}, fmt.Errorf("failed to process screen file %s: %w", ansFilename, processErr)
 	}
 
+	// DisplayBytes are still raw CP437 here, one byte per cell, so measure
+	// them as such before any UTF-8 conversion.
+	ansiProcessResult.DisplayBytes = ansi.FitArtToWidth(ansiProcessResult.DisplayBytes, st.termWidth, false)
+
 	// Convert encoding based on output mode (similar to SHOWSTATS fix)
 	if outputMode == ansi.OutputModeUTF8 {
 		// UTF-8 mode: Convert CP437 bytes to UTF-8 for proper display

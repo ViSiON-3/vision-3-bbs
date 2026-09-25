@@ -334,12 +334,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	ansPath := e.menuFile("ansi", "NEWSCAN.ANS")
 	headerContent, ansErr := ansi.GetAnsiFileContent(ansPath)
 	if ansErr == nil {
-		// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-		if outputMode == ansi.OutputModeCP437 {
-			_, _ = terminal.Write(headerContent) // best-effort display
-		} else {
-			terminalio.WriteProcessedBytes(terminal, headerContent, outputMode)
-		}
+		_ = writeArt(terminal, headerContent, outputMode, termWidth) // best-effort display
 	} else {
 		// Fallback to text header
 		header := "|15Newscan Configuration|07\r\n" +

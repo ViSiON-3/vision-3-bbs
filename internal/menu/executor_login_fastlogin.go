@@ -38,7 +38,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 
 	renderFastLoginScreen := func() {
 		clearFirst := fastlognMenu != nil && fastlognMenu.GetClrScrBefore()
-		if displayErr := e.displayFile(terminal, "FASTLOGN.ANS", outputMode, termHeight, clearFirst); displayErr != nil {
+		if displayErr := e.displayFile(terminal, "FASTLOGN.ANS", outputMode, c.termWidth, termHeight, clearFirst); displayErr != nil {
 			slog.Warn("failed to display FASTLOGN.ANS", "node", nodeNumber, "error", displayErr)
 		}
 
@@ -132,7 +132,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 					return nil, "LOGOFF", io.EOF
 				}
 				if errors.Is(readErr, editor.ErrIdleTimeout) {
-					e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
+					e.handleIdleTimeout(terminal, outputMode, nodeNumber, c.termWidth, termHeight)
 					return currentUser, "LOGOFF", nil
 				}
 				return currentUser, "", readErr
@@ -203,7 +203,7 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 				return nil, "LOGOFF", io.EOF
 			}
 			if errors.Is(readErr, editor.ErrIdleTimeout) {
-				e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
+				e.handleIdleTimeout(terminal, outputMode, nodeNumber, c.termWidth, termHeight)
 				return currentUser, "LOGOFF", nil
 			}
 			return currentUser, "", readErr

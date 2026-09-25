@@ -219,10 +219,13 @@ readerLoop:
 		if outputMode == ansi.OutputModeCP437 {
 			substitutions = convertSubsToCP437(substitutions)
 		}
-		autoWidths := buildAutoWidths(substitutions, totalMsgCount, termWidth, outputMode == ansi.OutputModeCP437)
+		// Header templates are 80-column art, so gap fills stop at the art's
+		// width rather than stretching across a wider terminal.
+		autoWidths := buildAutoWidths(substitutions, totalMsgCount, min(termWidth, ansi.ArtWidth), outputMode == ansi.OutputModeCP437)
 
 		// Process template with substitutions (auto-detects @CODE@ or |X format)
 		processedHeader := processTemplate(hdrTemplateBytes, substitutions, autoWidths, outputMode == ansi.OutputModeCP437)
+		processedHeader = ansi.FitArtToWidth(processedHeader, termWidth, outputMode == ansi.OutputModeUTF8)
 
 		// Process message body and pre-format all lines
 		area, _ := e.MessageMgr.GetAreaByID(currentAreaID)
@@ -260,7 +263,10 @@ readerLoop:
 
 		// Calculate available body height
 		// Find the actual bottom row of the header using ANSI cursor tracking
-		headerEndRow := findHeaderEndRow(processedHeader)
+		// Measured with every wrap made explicit, since findHeaderEndRow only
+		// counts line feeds and a template drawn without them would otherwise
+		// measure as a single row.
+		headerEndRow := findHeaderEndRow(ansi.HardWrap(processedHeader, ansi.ArtWidth, outputMode == ansi.OutputModeUTF8))
 		bodyStartRow := headerEndRow + 1 // Start body on next row after header
 		barLines := 2                    // Horizontal line + lightbar
 		bodyAvailHeight := termHeight - bodyStartRow - barLines
@@ -480,6 +486,10 @@ readerLoop:
 					selectedKey = 'N' // Enter = Next
 				} else if key == editor.KeyEsc {
 					selectedKey = 'Q' // ESC = Quit
+				} else if key < 32 {
+					// Stray control byte (e.g. NUL/LF trailing a telnet CR) -
+					// ignore it rather than dropping into the modal lightbar.
+					continue
 				} else {
 					// Multi-byte sequence that wasn't handled as scrolling - show lightbar
 					var suffixText string

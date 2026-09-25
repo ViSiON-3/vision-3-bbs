@@ -19,11 +19,11 @@ import (
 )
 
 // displaySponsorHeader clears the screen (if configured) and displays the SPONSORM.ANS header.
-func (e *MenuExecutor) displaySponsorHeader(terminal *term.Terminal, menuRec *MenuRecord, outputMode ansi.OutputMode, nodeNumber, termHeight int) {
+func (e *MenuExecutor) displaySponsorHeader(terminal *term.Terminal, menuRec *MenuRecord, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) {
 	if menuRec != nil && menuRec.GetClrScrBefore() {
 		_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	}
-	if err := e.displayFile(terminal, "SPONSORM.ANS", outputMode, termHeight); err != nil {
+	if err := e.displayFile(terminal, "SPONSORM.ANS", outputMode, termWidth, termHeight); err != nil {
 		slog.Warn("failed to display SPONSORM.ANS", "node", nodeNumber, "error", err)
 	}
 }
@@ -86,7 +86,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Display the sponsor menu header (clear screen + SPONSORM.ANS).
-	e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termHeight)
+	e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
 
 	for {
 		if menuRec != nil && menuRec.GetUsePrompt() {
@@ -126,7 +126,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			// Redisplay the sponsor menu header on a clean screen after returning
 			// from the edit area so the prompt doesn't appear on a dirty screen.
-			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termHeight)
+			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
 
 		case "[", "]":
 			forward := cmd == "]"
@@ -159,7 +159,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 				area = newArea
 				slog.Info("user sponsor-navigated to area", "node", nodeNumber, "handle", currentUser.Handle, "id", newArea.ID, "tag", newArea.Tag)
-				e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termHeight)
+				e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
 			}
 
 		case "P":
@@ -292,11 +292,11 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 			// Return to sponsor menu
-			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termHeight)
+			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
 
 		case "?":
 			// Reload menu
-			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termHeight)
+			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
 
 		case "Q", "":
 			_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
@@ -306,7 +306,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			msg := "\r\n|01Invalid key.|07\r\n"
 			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			time.Sleep(1 * time.Second)
-			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termHeight)
+			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
 		}
 	}
 }
