@@ -269,8 +269,49 @@ func TestQuoteModeInsertsSelectedLinesWithBannerAndPrefix(t *testing.T) {
 			t.Errorf("line %d = %q, want %q", i+1, gotLines[i], w)
 		}
 	}
-	if line != 5 || col != 1 {
-		t.Errorf("cursor = (%d,%d), want (5,1) — just past the quote block", line, col)
+	// One blank line separates the block from where the reply continues.
+	if l5 := ch.buffer.GetLine(5); l5 != "" {
+		t.Errorf("line 5 = %q, want a blank line after the Done banner", l5)
+	}
+	if line != 6 || col != 1 {
+		t.Errorf("cursor = (%d,%d), want (6,1) — one blank line past the quote block", line, col)
+	}
+}
+
+// Quoting above text the user already wrote leaves one blank line between
+// the Done banner and that text, with the cursor at its start. A line that is
+// already blank there is used as the gap rather than doubled.
+func TestQuoteModeLeavesOneBlankLineAfterBlock(t *testing.T) {
+	for _, tc := range []struct {
+		name, draft string
+		wantLine    int
+	}{
+		{"text follows", "my own words", 6},
+		{"blank line follows", "\nmy own words", 6},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, ch, ih, cleanup := newQuoteHarness(t, "  \x1b", quoteBody)
+			defer cleanup()
+
+			ch.buffer.LoadContent(tc.draft)
+			line, col := ch.HandleQuote(ih, 1, 1)
+
+			got := strings.Split(stripANSI(ch.buffer.GetContent()), "\n")
+			want := []string{
+				"--- Bucko Said ---",
+				"Bu> On 28 Aug 2026, Shurato said the following...",
+				"Bu> Sh> I'd be interested in this as well",
+				"--- Bucko Done ---",
+				"",
+				"my own words",
+			}
+			if strings.Join(got, "\n") != strings.Join(want, "\n") {
+				t.Fatalf("buffer:\n got  %q\n want %q", got, want)
+			}
+			if line != tc.wantLine || col != 1 {
+				t.Errorf("cursor = (%d,%d), want (%d,1)", line, col, tc.wantLine)
+			}
+		})
 	}
 }
 
