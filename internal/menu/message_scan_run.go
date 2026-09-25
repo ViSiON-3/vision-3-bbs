@@ -47,7 +47,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	// Show scan setup menu
-	scanCfg, err := runGetScanType(scanIH, e, terminal, outputMode, numMsgs, currentOnly)
+	scanCfg, err := runGetScanType(scanIH, e, terminal, outputMode, numMsgs, currentOnly, termWidth)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF

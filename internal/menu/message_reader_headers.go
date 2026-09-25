@@ -258,13 +258,8 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 	// Helper to redraw all options
 	redrawAll := func() {
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-		// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 		processedSelBytes := ansi.ReplacePipeCodes(selectionBytes)
-		if outputMode == ansi.OutputModeCP437 {
-			_, _ = terminal.Write(processedSelBytes) // best-effort display
-		} else {
-			terminalio.WriteProcessedBytes(terminal, processedSelBytes, outputMode)
-		}
+		_ = writeArt(terminal, processedSelBytes, outputMode, termWidth) // best-effort display
 
 		// Draw all options from BAR file
 		for i := 0; i < len(options); i++ {
@@ -368,12 +363,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 
 			processedPreview := processTemplate(hdrBytes, sampleSubs, sampleAutoWidths)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-			if outputMode == ansi.OutputModeCP437 {
-				_, _ = terminal.Write(processedPreview) // best-effort display
-			} else {
-				terminalio.WriteProcessedBytes(terminal, processedPreview, outputMode)
-			}
+			_ = writeArt(terminal, processedPreview, outputMode, termWidth) // best-effort display
 
 			// Ask "Pick this header?" - centered at row 14
 			pickPrompt := "|08P|07i|15ck |08t|07h|15is |08h|07e|15ader? "

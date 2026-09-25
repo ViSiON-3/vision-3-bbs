@@ -66,6 +66,9 @@ func (e *MenuExecutor) RunChallengeGate(
 
 	prompt := gatePromptOrFallback(e, cfg.ChallengeGateFile, nodeNumber)
 	prompt = substituteGateTokens(prompt, cfg.ChallengeGateKey, required)
+	// Make wraps explicit before locating the countdown field, so its row is
+	// right on terminals wider than the art.
+	prompt = ansi.FitArtToWidth(prompt, termWidth, outputMode == ansi.OutputModeUTF8)
 	row, col, width, hasField := findCountdownField(prompt)
 	live := cfg.ChallengeGateLiveCountdown && hasField
 

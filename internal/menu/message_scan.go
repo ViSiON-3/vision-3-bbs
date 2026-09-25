@@ -180,7 +180,7 @@ func showScanNotice(terminal *term.Terminal, outputMode ansi.OutputMode, text st
 // Keys are read through the session InputHandler so escape sequences are
 // decoded (and ignored) rather than mis-read as hotkeys.
 func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Terminal,
-	outputMode ansi.OutputMode, numMsgs int, currentOnly bool) (*ScanConfig, error) {
+	outputMode ansi.OutputMode, numMsgs int, currentOnly bool, termWidth int) (*ScanConfig, error) {
 
 	cfg := &ScanConfig{
 		ScanDate:       scanDateNewOnly, // Default: new messages only
@@ -198,12 +198,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		ansPath := e.menuFile("ansi", "NSCANHDR.ANS")
 		headerContent, ansErr := ansi.GetAnsiFileContent(ansPath)
 		if ansErr == nil {
-			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-			if outputMode == ansi.OutputModeCP437 {
-				_, _ = terminal.Write(headerContent) // best-effort display
-			} else {
-				terminalio.WriteProcessedBytes(terminal, headerContent, outputMode)
-			}
+			_ = writeArt(terminal, headerContent, outputMode, termWidth) // best-effort display
 			// Position cursor on line 5 (after 4-row header)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		}

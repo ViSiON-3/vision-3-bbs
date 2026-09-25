@@ -64,6 +64,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 		slog.Warn("failed to load ANS file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
 		return "LOGIN", nil, nil
 	}
+	ansBackground = ansi.FitArtToWidth(ansBackground, termWidth, outputMode == ansi.OutputModeUTF8)
 
 	slog.Info("displaying pre-login matrix screen", "node", nodeNumber, "count", len(options))
 
@@ -91,7 +92,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 		key, err := sessionIH.ReadKey()
 		if err != nil {
 			if errors.Is(err, editor.ErrIdleTimeout) {
-				e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
+				e.handleIdleTimeout(terminal, outputMode, nodeNumber, termWidth, termHeight)
 				return "DISCONNECT", nil, nil
 			}
 			if errors.Is(err, io.EOF) {
@@ -380,12 +381,7 @@ func (e *MenuExecutor) showPrelogon(s ssh.Session, terminal *term.Terminal, node
 
 	slog.Info("displaying prelogon screen", "node", nodeNumber, "file", filepath.Base(candidates[idx]))
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-	if outputMode == ansi.OutputModeCP437 {
-		_, _ = terminal.Write(rawContent) // best-effort display
-	} else {
-		terminalio.WriteProcessedBytes(terminal, rawContent, outputMode)
-	}
+	_ = writeArt(terminal, rawContent, outputMode, termWidth) // best-effort display
 
 	// HoldScreen — pause before proceeding to login
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)

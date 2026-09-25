@@ -293,6 +293,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			artData = chatArtReplace(artData, "NET", currentNetwork)
 			artData = chatArtReplace(artData, "ROOM", currentRoom)
 			artData = chatArtReplace(artData, "TOPIC", currentTopic)
+			// The art is UTF-8 by now; make wraps explicit so each header
+			// row splits out on its own on terminals wider than the art.
+			artData = ansi.FitArtToWidth(artData, termWidth, true)
 			// Split into lines (SAUCE already stripped by GetAnsiFileContent).
 			lines := strings.Split(string(artData), "\n")
 			for i := 0; i < chatHeaderRows && i < len(lines); i++ {
