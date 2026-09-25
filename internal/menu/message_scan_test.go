@@ -505,9 +505,10 @@ func TestNewScanCurrentAreaAppliesFromSearchAndKeepsPointers(t *testing.T) {
 
 // TestNewScanRestoresAreaWhenCallerDrops guards #409. With Update Pointers
 // on, the scan saves the user after each area it reads, and the saved record
-// holds that area. A caller who dropped partway through a later area left it
-// there, so their next login started in the last area scanned rather than
-// where they began.
+// holds that area and its conference. A caller who dropped partway through a
+// later area left them there, so their next login started in the last area
+// scanned rather than where they began. The scanned areas sit in a different
+// conference from the starting one, so the conference must come back too.
 func TestNewScanRestoresAreaWhenCallerDrops(t *testing.T) {
 	scanNoticePause = 0
 	t.Cleanup(func() { scanNoticePause = time.Second })
@@ -516,12 +517,12 @@ func TestNewScanRestoresAreaWhenCallerDrops(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewMessageManager: %v", err)
 	}
-	homeID, err := mm.AddArea(message.MessageArea{Tag: "HOME", Name: "Home", AreaType: "local"})
+	homeID, err := mm.AddArea(message.MessageArea{Tag: "HOME", Name: "Home", AreaType: "local", ConferenceID: 1})
 	if err != nil {
 		t.Fatalf("AddArea: %v", err)
 	}
 	for _, tag := range []string{"FIRST", "SECOND"} {
-		id, err := mm.AddArea(message.MessageArea{Tag: tag, Name: tag, AreaType: "local"})
+		id, err := mm.AddArea(message.MessageArea{Tag: tag, Name: tag, AreaType: "local", ConferenceID: 2})
 		if err != nil {
 			t.Fatalf("AddArea %s: %v", tag, err)
 		}
@@ -555,6 +556,9 @@ func TestNewScanRestoresAreaWhenCallerDrops(t *testing.T) {
 	u.MsgHdr = 2
 	u.CurrentMessageAreaID = homeID
 	u.CurrentMessageAreaTag = "HOME"
+	u.CurrentMsgConferenceID = 1
+	u.CurrentMsgConferenceTag = "LOCAL"
+	u.TaggedMessageAreaTags = []string{"FIRST", "SECOND"}
 	if err := um.UpdateUser(u); err != nil {
 		t.Fatalf("UpdateUser: %v", err)
 	}
@@ -565,10 +569,10 @@ func TestNewScanRestoresAreaWhenCallerDrops(t *testing.T) {
 	})
 	setServerField(e, func(c *config.ServerConfig) { c.CoSysOpLevel = 200 })
 
-	// Scan menu: Date=All, all areas in the conference, Enter to scan.
+	// Scan menu: Date=All, Enter to scan the tagged areas (the default).
 	// FIRST: R to read, N past its only message. The input then ends at
 	// SECOND's prompt, which the scan sees as the caller dropping.
-	ts := newTestSession("Dall\rSA\rRN")
+	ts := newTestSession("Dall\r\rRN")
 	terminal := newTestTerminal(ts)
 	t.Cleanup(func() { resetSessionIH(ts) })
 
@@ -584,11 +588,17 @@ func TestNewScanRestoresAreaWhenCallerDrops(t *testing.T) {
 	if !ok {
 		t.Fatal("user vanished")
 	}
-	if saved.CurrentMessageAreaID != homeID || saved.CurrentMessageAreaTag != "HOME" {
-		t.Errorf("saved area after a dropped scan = %d/%q, want %d/%q",
-			saved.CurrentMessageAreaID, saved.CurrentMessageAreaTag, homeID, "HOME")
-	}
-	if u.CurrentMessageAreaID != homeID {
-		t.Errorf("in-session area after a dropped scan = %d, want %d", u.CurrentMessageAreaID, homeID)
+	for _, got := range []struct {
+		name string
+		u    *user.User
+	}{{"saved", saved}, {"in-session", u}} {
+		if got.u.CurrentMessageAreaID != homeID || got.u.CurrentMessageAreaTag != "HOME" {
+			t.Errorf("%s area after a dropped scan = %d/%q, want %d/%q",
+				got.name, got.u.CurrentMessageAreaID, got.u.CurrentMessageAreaTag, homeID, "HOME")
+		}
+		if got.u.CurrentMsgConferenceID != 1 || got.u.CurrentMsgConferenceTag != "LOCAL" {
+			t.Errorf("%s conference after a dropped scan = %d/%q, want 1/%q",
+				got.name, got.u.CurrentMsgConferenceID, got.u.CurrentMsgConferenceTag, "LOCAL")
+		}
 	}
 }
