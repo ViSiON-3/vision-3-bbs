@@ -23,10 +23,11 @@ const codefenixSignature = "Good to be back!\r" +
 	"|08\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xc4\xd9\r"
 
 // readBodyForTest mirrors what the message reader does to a body before it
-// paints it: format, expand pipe codes, wrap to the terminal width.
+// paints it: format, expand colour pipe codes, wrap to the terminal width and
+// cut whatever is still too wide.
 func readBodyForTest(body string, termWidth int) []string {
 	formatted := formatMessageBody(body, "", false)
-	return wrapAnsiString(string(ansi.ReplacePipeCodes([]byte(formatted))), termWidth, ansi.OutputModeUTF8)
+	return breakOversizedLines(wrapAnsiString(string(ansi.ReplaceColorPipeCodes([]byte(formatted))), termWidth, ansi.OutputModeUTF8), termWidth, ansi.OutputModeUTF8)
 }
 
 // A signature block that already fits the terminal must reach the screen
@@ -272,5 +273,80 @@ func TestMessageBodyMeasuresForTheOutputTerminal(t *testing.T) {
 	}
 	if got := wrapAnsiString(line, width, ansi.OutputModeUTF8); len(got) != 1 {
 		t.Errorf("UTF-8 mode: fits, should not wrap, got %d lines: %q", len(got), got)
+	}
+}
+
+// kuehlboxRow is a row of a real fsxNet/FidoNet BBS ad (Kuehlbox BBS). The
+// author drew the column divider as "||", which is text, not an escape.
+const kuehlboxRow = " | :[FidoNet ]: || 2:240/5853         | | |> Radical Rhythms WHQ             |\r"
+
+// A "||" in a network message is two pipes. Collapsing it to one, as
+// ViSiON/3's own strings are, pulled the right border of every such row one
+// column left of the rows around it (#407).
+func TestMessageBodyKeepsDoublePipes(t *testing.T) {
+	lines := readBodyForTest(kuehlboxRow, 80)
+	if len(lines) == 0 || !strings.Contains(lines[0], "|| 2:240/5853") {
+		t.Fatalf("double pipe was not kept: %q", lines)
+	}
+	if got, want := visibleCols(lines[0]), len(strings.TrimRight(kuehlboxRow, "\r")); got != want {
+		t.Errorf("row is %d cols, want %d", got, want)
+	}
+}
+
+// Only colour pipe codes mean anything in a message body. The screen-control
+// codes fired a clear, a cursor save or an erase partway through painting the
+// body, and "|P" also ate the letter after the pipe.
+func TestMessageBodyLeavesControlPipeCodesAsText(t *testing.T) {
+	lines := readBodyForTest("|CL|12Menu:|07 |Pimp Wars |DE done|CR", 80)
+	joined := strings.Join(lines, "\n")
+	for _, esc := range []string{"\x1b[2J", "\x1b[s", "\x1b[u", "\x1b[K"} {
+		if strings.Contains(joined, esc) {
+			t.Errorf("body expanded a control code to %q: %q", esc, joined)
+		}
+	}
+	if plain := reWrapEsc.ReplaceAllString(joined, ""); plain != "|CLMenu: |Pimp Wars |DE done|CR" {
+		t.Errorf("body text changed: %q", plain)
+	}
+	if !strings.Contains(joined, "\x1b[1;31mMenu:") {
+		t.Errorf("colour code was not expanded: %q", joined)
+	}
+}
+
+// A run with no spaces that is wider than the screen, such as an ASCII rule,
+// has nowhere to word-wrap. Left oversized it spilled onto the row below when
+// drawn and overwrote it, so it is cut at the margin instead (#407).
+func TestMessageBodyCutsRunsWiderThanTheScreen(t *testing.T) {
+	const width = 40
+	rule := strings.Repeat("_", 75)
+	lines := readBodyForTest("  "+rule+"\r|08"+strings.Repeat("\xdf", 60)+"\r", width)
+	for i, ln := range lines {
+		if got := visibleCols(ln); got > width {
+			t.Errorf("line %d is %d cols, over the %d budget: %q", i, got, width, ln)
+		}
+	}
+	joined := reWrapEsc.ReplaceAllString(strings.Join(lines, ""), "")
+	if got := strings.Count(joined, "_"); got != len(rule) {
+		t.Errorf("rule has %d underscores after wrapping, want %d", got, len(rule))
+	}
+	if got := strings.Count(joined, "\xdf"); got != 60 {
+		t.Errorf("block row has %d blocks after wrapping, want 60", got)
+	}
+}
+
+// Two CP437 bytes with a colour change between them are two columns: the
+// writer judges each span on its own and sends both. With the escape stripped
+// they join into one valid UTF-8 rune, so measuring the stripped text counted
+// one column and let the line run past the margin.
+func TestMessageBodyMeasuresCP437SplitByEscapes(t *testing.T) {
+	const width = 10
+	line := strings.Repeat("\xC3\x1b[31m\xA9", 8) // 16 columns once drawn
+	lines := readBodyForTest(line, width)
+	for i, ln := range lines {
+		if got := visibleCols(ln); got > width {
+			t.Errorf("line %d is %d cols, over the %d budget: %q", i, got, width, ln)
+		}
+	}
+	if got := visibleCols(strings.Join(lines, "")); got != 16 {
+		t.Errorf("wrapped body has %d columns, want all 16 kept", got)
 	}
 }

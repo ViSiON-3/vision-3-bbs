@@ -233,8 +233,10 @@ readerLoop:
 			currentMsg.OrigAddr != "" && !hasOriginLine(currentMsg.Body)
 		formattedBody := formatMessageBody(currentMsg.Body, currentMsg.OrigAddr, includeOrigin)
 
-		// Convert pipe codes to ANSI sequences
-		processedBodyBytes := ansi.ReplacePipeCodes([]byte(formattedBody))
+		// Convert colour pipe codes to ANSI sequences. Only colour: the body
+		// was written on another system, so "||" and the screen-control codes
+		// are text, not ViSiON/3 escapes.
+		processedBodyBytes := ansi.ReplaceColorPipeCodes([]byte(formattedBody))
 		processedBodyStr := string(processedBodyBytes)
 
 		var wrappedBodyLines []string
@@ -257,8 +259,11 @@ readerLoop:
 				wrappedBodyLines[i] = string(ansi.CP437BytesToUTF8([]byte(line)))
 			}
 		} else {
-			// Regular text message - use normal wrapping
-			wrappedBodyLines = wrapAnsiString(processedBodyStr, termWidth, outputMode)
+			// Regular text message - use normal wrapping. Word wrap cannot
+			// break a run with no spaces (an ASCII rule, a row of blocks) or a
+			// quote line, which it leaves alone; cut whatever is still too
+			// wide, or it spills onto the row below when drawn.
+			wrappedBodyLines = breakOversizedLines(wrapAnsiString(processedBodyStr, termWidth, outputMode), termWidth, outputMode)
 		}
 
 		// Calculate available body height

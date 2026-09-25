@@ -134,8 +134,8 @@ func stripEscapes(s string) string {
 // the same budget must use it too or the two will disagree about the same
 // line.
 func visibleColumns(s string, mode ansi.OutputMode) int {
-	plain := stripEscapes(s)
-	return columnWidth(plain, utf8.ValidString(plain), mode)
+	// Encoding is judged on s itself, escapes and all: see columnWidth.
+	return columnWidth(stripEscapes(s), utf8.ValidString(s), mode)
 }
 
 func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
@@ -168,7 +168,7 @@ func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 		// Message bodies arrive as raw bytes that may be CP437 or UTF-8, so a
 		// column is not always a byte. asUTF8 settles it once for the whole
 		// line, the same way terminalio decides a span's encoding.
-		asUTF8 := utf8.ValidString(plainLine)
+		asUTF8 := utf8.ValidString(line)
 
 		// A line that already fits is left exactly as the author typed it.
 		// Re-flowing it would collapse the runs of spaces that column-aligned
@@ -191,7 +191,10 @@ func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 // Message bodies are raw bytes that may be CP437 or UTF-8, and the two cannot
 // be told apart byte by byte - plenty of adjacent CP437 pairs form a valid
 // UTF-8 sequence - so asUTF8 is decided once per line, exactly as terminalio
-// resolves the same ambiguity per span.
+// resolves the same ambiguity per span. Callers decide it on the line with its
+// escapes still in: stripped, two CP437 bytes a colour change sat between can
+// join into one valid rune and measure a column short, while the writer, which
+// never sees them joined, sends both.
 //
 // A span that is not valid UTF-8 is CP437 and reaches the terminal untouched:
 // one column per byte in either mode. A valid UTF-8 span depends on where it

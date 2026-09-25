@@ -55,8 +55,7 @@ func hardBreak(s string, width int, mode ansi.OutputMode) []string {
 		b       strings.Builder
 		visible int
 	)
-	plain := stripEscapes(s)
-	asUTF8 := utf8.ValidString(plain)
+	asUTF8 := utf8.ValidString(s) // with escapes in, as columnWidth expects
 
 	for i := 0; i < len(s); {
 		if n := escapeLen(s, i); n > 0 {
