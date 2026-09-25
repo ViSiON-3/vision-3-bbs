@@ -48,6 +48,9 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 	if err != nil {
 		return ac, fmt.Errorf("loading conferences: %w", err)
 	}
+	// Show conferences in the order the BBS uses, so the list matches what
+	// callers see in the conference picker.
+	normalizeConferenceOrder(ac.Conferences)
 
 	// Message areas
 	ac.MsgAreas, err = loadJSONSlice[message.MessageArea](configPath, "message_areas.json")
@@ -226,6 +229,46 @@ func saveFileAreas(configPath string, areas []file.FileArea) error {
 // saveLoginSeq writes login sequence back to disk.
 func saveLoginSeq(configPath string, items []config.LoginItem) error {
 	return saveJSONSlice(configPath, "login.json", items)
+}
+
+// assignUnsetConferencePositions applies the BBS's load-time migration
+// (conference.AssignUnsetPositions) to confs in place.
+func assignUnsetConferencePositions(confs []conference.Conference) {
+	ptrs := make([]*conference.Conference, len(confs))
+	for i := range confs {
+		ptrs[i] = &confs[i]
+	}
+	conference.AssignUnsetPositions(ptrs)
+}
+
+// normalizeConferenceOrder assigns positions to conferences that lack one,
+// the same way the BBS does, then sorts by position (ties by ID) to match
+// ConferenceManager.ListConferences.
+func normalizeConferenceOrder(confs []conference.Conference) {
+	assignUnsetConferencePositions(confs)
+	sort.SliceStable(confs, func(i, j int) bool {
+		if confs[i].Position != confs[j].Position {
+			return confs[i].Position < confs[j].Position
+		}
+		return confs[i].ID < confs[j].ID
+	})
+}
+
+// nextConferenceIDAndPosition returns the ID and position for a new
+// conference appended to confs. Unset positions are assigned first, so the
+// new conference lands after them rather than ahead of them.
+func nextConferenceIDAndPosition(confs []conference.Conference) (id, pos int) {
+	assignUnsetConferencePositions(confs)
+	id = 1
+	for _, c := range confs {
+		if c.ID >= id {
+			id = c.ID + 1
+		}
+		if c.Position > pos {
+			pos = c.Position
+		}
+	}
+	return id, pos + 1
 }
 
 // sortMsgAreasByConference sorts message areas by conference display position,

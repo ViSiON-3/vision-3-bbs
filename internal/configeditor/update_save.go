@@ -225,19 +225,10 @@ func (m *Model) insertRecord() {
 			Path: fmt.Sprintf("files/area_%d", newID),
 		})
 	case "conference":
-		newID := 1
-		maxPos := 0
-		for _, c := range m.configs.Conferences {
-			if c.ID >= newID {
-				newID = c.ID + 1
-			}
-			if c.Position > maxPos {
-				maxPos = c.Position
-			}
-		}
+		newID, newPos := nextConferenceIDAndPosition(m.configs.Conferences)
 		m.configs.Conferences = append(m.configs.Conferences, conference.Conference{
 			ID:       newID,
-			Position: maxPos + 1,
+			Position: newPos,
 			Name:     "New Conference",
 		})
 	case "door":
