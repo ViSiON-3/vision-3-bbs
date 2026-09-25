@@ -199,7 +199,12 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 
 		switch ch {
 		case 13, 10: // Enter or LF
-			// User pressed Enter
+			// User pressed Enter. Clients that send Enter as CR LF would
+			// otherwise leave the LF to answer the next prompt with an empty
+			// line (#415).
+			if ch == 13 {
+				ih.SkipEnterTrailer()
+			}
 			result := string(input)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 			return strings.TrimSpace(result), nil
@@ -220,9 +225,9 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 			return "", errInputAborted
 
-		case 3: // Ctrl+C - abort
+		case 3: // Ctrl+C - abort, like ESC (not a disconnect: #415)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-			return "", io.EOF
+			return "", errInputAborted
 
 		default:
 			if ch >= 32 && ch < 127 {

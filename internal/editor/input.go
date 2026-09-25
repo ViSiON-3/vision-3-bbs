@@ -88,6 +88,12 @@ type InputHandler struct {
 	// (default 500 ms). 0 means use the default. Set via SetEscTimeout.
 	escTimeoutNs atomic.Int64
 
+	// skipEnterTrailer is set when an Enter (CR) was read and its LF or NUL
+	// had not arrived within enterTrailerWindow. The next byte read is then
+	// dropped if it is that LF or NUL, however late it comes. Only the input
+	// goroutine touches it, like unreadBuf.
+	skipEnterTrailer bool
+
 	// Optional read interrupt integration for sessions that support it.
 	readInterrupt    chan struct{}
 	setReadInterrupt func(<-chan struct{})
@@ -197,12 +203,51 @@ func (ih *InputHandler) Read(p []byte) (int, error) {
 		ih.unreadBuf = ih.unreadBuf[1:]
 		return 1, nil
 	}
-	b, ok := <-ih.incoming
-	if !ok {
-		return 0, io.EOF
+	for {
+		b, ok := <-ih.incoming
+		if !ok {
+			return 0, io.EOF
+		}
+		if ih.lateEnterTrailer(b) {
+			continue
+		}
+		p[0] = b
+		return 1, nil
 	}
-	p[0] = b
-	return 1, nil
+}
+
+// lateEnterTrailer reports whether b is the LF or NUL of an Enter whose CR
+// was already returned, and clears the pending flag either way. See
+// SkipEnterTrailer.
+func (ih *InputHandler) lateEnterTrailer(b byte) bool {
+	if !ih.skipEnterTrailer {
+		return false
+	}
+	ih.skipEnterTrailer = false
+	return b == 0x0A || b == 0x00
+}
+
+// enterTrailerWindow is how long SkipEnterTrailer waits for the LF or NUL of
+// a CR LF / CR NUL Enter. Both bytes leave the client in one write, so the
+// second is normally already queued.
+const enterTrailerWindow = 10 * time.Millisecond
+
+// SkipEnterTrailer is called after reading a CR. SSH clients often send Enter
+// as CR LF and telnet NVT clients as CR NUL; the trailing byte must not reach
+// the next reader as a keypress of its own (an empty answer to the next
+// prompt, or a phantom key in a lightbar). A trailer already queued is dropped
+// now; if none has arrived yet, it is dropped whenever it does, provided it is
+// the very next byte. Any other byte is left for the next read.
+func (ih *InputHandler) SkipEnterTrailer() {
+	next, err := ih.readByteWithTimeout(enterTrailerWindow)
+	switch {
+	case err == nil:
+		if next != 0x0A && next != 0x00 {
+			ih.unreadByte(next)
+		}
+	case isTimeoutError(err):
+		ih.skipEnterTrailer = true
+	}
 }
 
 // readByte reads a single byte, blocking until one is available.
@@ -224,11 +269,15 @@ func (ih *InputHandler) readByte() (byte, error) {
 		}
 		return b, nil
 	}
-	b, ok := <-ih.incoming
-	if !ok {
-		return 0, io.EOF
+	for {
+		b, ok := <-ih.incoming
+		if !ok {
+			return 0, io.EOF
+		}
+		if !ih.lateEnterTrailer(b) {
+			return b, nil
+		}
 	}
-	return b, nil
 }
 
 // unreadByte pushes b back so it is returned by the next readByte call.
@@ -244,14 +293,20 @@ func (ih *InputHandler) readByteWithTimeout(timeout time.Duration) (byte, error)
 		ih.unreadBuf = ih.unreadBuf[1:]
 		return b, nil
 	}
-	select {
-	case b, ok := <-ih.incoming:
-		if !ok {
-			return 0, io.EOF
+	deadline := time.After(timeout)
+	for {
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return 0, io.EOF
+			}
+			if ih.lateEnterTrailer(b) {
+				continue
+			}
+			return b, nil
+		case <-deadline:
+			return 0, errTimeout
 		}
-		return b, nil
-	case <-time.After(timeout):
-		return 0, errTimeout
 	}
 }
 
@@ -341,9 +396,7 @@ func (ih *InputHandler) ReadKey() (int, error) {
 	// send CR+NUL (RFC 854). Discard the trailing byte so that callers
 	// (lightbars, menus) don't see a phantom keypress after Enter.
 	if b == KeyEnter {
-		if next, err := ih.readByteWithTimeout(10 * time.Millisecond); err == nil && next != 0x0A && next != 0x00 {
-			ih.unreadByte(next)
-		}
+		ih.SkipEnterTrailer()
 		return int(KeyEnter), nil
 	}
 

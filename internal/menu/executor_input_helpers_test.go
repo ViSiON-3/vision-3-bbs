@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -137,5 +138,31 @@ func TestStyledInput_DefaultValueWithinMaxLenIsUnchanged(t *testing.T) {
 	}
 	if result != "éé" {
 		t.Errorf("result = %q, want unmodified default %q", result, "éé")
+	}
+}
+
+// Ctrl-C at an input prompt abandons the field, like ESC. It used to be
+// reported as a disconnect, which logged the caller off mid-post (#415).
+func TestStyledInput_CtrlCAborts(t *testing.T) {
+	ts := newTestSession("ab\x03")
+	terminal := newTestTerminal(ts)
+	if _, err := styledInput(terminal, ts, ansi.OutputModeUTF8, 10, ""); !errors.Is(err, errInputAborted) {
+		t.Fatalf("err = %v, want errInputAborted", err)
+	}
+}
+
+// Clients that send Enter as CR LF must not have the LF answer the next
+// prompt with an empty value (#415: "Subject is required" repeated).
+func TestStyledInput_CRLFIsOneEnter(t *testing.T) {
+	ts := newTestSession("one\r\ntwo\r\n")
+	terminal := newTestTerminal(ts)
+	for _, want := range []string{"one", "two"} {
+		got, err := styledInput(terminal, ts, ansi.OutputModeUTF8, 10, "")
+		if err != nil {
+			t.Fatalf("styledInput: %v", err)
+		}
+		if got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
 	}
 }

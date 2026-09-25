@@ -108,26 +108,25 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 
-	var subject string
-	for {
-		val, aborted, ferr := e.promptComposeField(s, terminal, titlePrompt, 30, "", "title", outputMode, nodeNumber, termWidth, termHeight)
-		if ferr != nil {
-			if errors.Is(ferr, io.EOF) {
-				return nil, "LOGOFF", io.EOF
-			}
-			slog.Error("failed reading title input", "node", nodeNumber, "error", ferr)
-			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading title.\r\n"), outputMode)
-			time.Sleep(1 * time.Second)
-			return nil, "", nil // Return to menu
+	val, aborted, ferr := e.promptComposeField(s, terminal, titlePrompt, 30, "", "title", outputMode, nodeNumber, termWidth, termHeight)
+	if ferr != nil {
+		if errors.Is(ferr, io.EOF) {
+			return nil, "LOGOFF", io.EOF
 		}
-		if aborted {
-			return nil, "", nil
-		}
-		subject = strings.TrimSpace(val)
-		if subject != "" {
-			break
-		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|01Subject is required.|07\r\n")), outputMode)
+		slog.Error("failed reading title input", "node", nodeNumber, "error", ferr)
+		terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading title.\r\n"), outputMode)
+		time.Sleep(1 * time.Second)
+		return nil, "", nil // Return to menu
+	}
+	if aborted {
+		return nil, "", nil
+	}
+	// A blank title abandons the post: nothing has been written yet, and
+	// re-asking left no way out but ESC (#415).
+	subject := strings.TrimSpace(val)
+	if subject == "" {
+		showPostAborted(terminal, outputMode)
+		return nil, "", nil
 	}
 
 	// 3. Prompt for To (24 chars, default "All")
@@ -135,7 +134,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if toPrompt == "" {
 		toPrompt = "|07To: |15"
 	}
-	val, aborted, ferr := e.promptComposeField(s, terminal, toPrompt, 24, "All", "'to'", outputMode, nodeNumber, termWidth, termHeight)
+	val, aborted, ferr = e.promptComposeField(s, terminal, toPrompt, 24, "All", "'to'", outputMode, nodeNumber, termWidth, termHeight)
 	if ferr != nil {
 		if errors.Is(ferr, io.EOF) {
 			return nil, "LOGOFF", io.EOF
