@@ -332,3 +332,21 @@ func TestMessageBodyCutsRunsWiderThanTheScreen(t *testing.T) {
 		t.Errorf("block row has %d blocks after wrapping, want 60", got)
 	}
 }
+
+// Two CP437 bytes with a colour change between them are two columns: the
+// writer judges each span on its own and sends both. With the escape stripped
+// they join into one valid UTF-8 rune, so measuring the stripped text counted
+// one column and let the line run past the margin.
+func TestMessageBodyMeasuresCP437SplitByEscapes(t *testing.T) {
+	const width = 10
+	line := strings.Repeat("\xC3\x1b[31m\xA9", 8) // 16 columns once drawn
+	lines := readBodyForTest(line, width)
+	for i, ln := range lines {
+		if got := visibleCols(ln); got > width {
+			t.Errorf("line %d is %d cols, over the %d budget: %q", i, got, width, ln)
+		}
+	}
+	if got := visibleCols(strings.Join(lines, "")); got != 16 {
+		t.Errorf("wrapped body has %d columns, want all 16 kept", got)
+	}
+}
