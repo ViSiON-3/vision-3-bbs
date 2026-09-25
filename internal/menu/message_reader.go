@@ -203,11 +203,7 @@ readerLoop:
 		}
 
 		// Build Pascal-style substitution map
-		templateUsesUserNote := bytes.Contains(hdrTemplateBytes, []byte("|U")) ||
-			bytes.Contains(hdrTemplateBytes, []byte("@U@")) ||
-			bytes.Contains(hdrTemplateBytes, []byte("@U:")) ||
-			bytes.Contains(hdrTemplateBytes, []byte("@U#")) ||
-			bytes.Contains(hdrTemplateBytes, []byte("@U*"))
+		templateUsesUserNote := headerTemplateUsesUserNote(hdrTemplateBytes)
 		replyCount := 0
 		if e.MessageMgr != nil {
 			if count, err := e.MessageMgr.GetThreadReplyCount(currentAreaID, currentMsg.MsgNum, currentMsg.Subject); err != nil {
@@ -226,7 +222,7 @@ readerLoop:
 		autoWidths := buildAutoWidths(substitutions, totalMsgCount, termWidth, outputMode == ansi.OutputModeCP437)
 
 		// Process template with substitutions (auto-detects @CODE@ or |X format)
-		processedHeader := processTemplate(hdrTemplateBytes, substitutions, autoWidths)
+		processedHeader := processTemplate(hdrTemplateBytes, substitutions, autoWidths, outputMode == ansi.OutputModeCP437)
 
 		// Process message body and pre-format all lines
 		area, _ := e.MessageMgr.GetAreaByID(currentAreaID)

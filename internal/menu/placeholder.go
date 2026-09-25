@@ -115,7 +115,7 @@ const gapFillMarker = "\x00GAP_FILL\x00"
 //
 // autoWidths is optional (nil = no auto-width support). When provided, @CODE*@ placeholders
 // look up their width from this map.
-func processPlaceholderTemplate(template []byte, substitutions map[byte]string, autoWidths map[byte]int) []byte {
+func processPlaceholderTemplate(template []byte, substitutions map[byte]string, autoWidths map[byte]int, cp437Values bool) []byte {
 	matches := parsePlaceholders(template)
 	if len(matches) == 0 {
 		return template // No placeholders
@@ -158,12 +158,12 @@ func processPlaceholderTemplate(template []byte, substitutions map[byte]string, 
 			// Apply width constraint if specified (with alignment)
 			if match.AutoWidth && autoWidths != nil {
 				if w, ok := autoWidths[match.Code[0]]; ok && w > 0 {
-					value = ansi.ApplyWidthConstraintAligned(value, w, match.Align)
+					value = fitPlaceholderValue(value, w, match.Align, cp437Values)
 				}
 			} else if match.Width > 0 {
-				value = ansi.ApplyWidthConstraintAligned(value, match.Width, match.Align)
+				value = fitPlaceholderValue(value, match.Width, match.Align, cp437Values)
 			} else if match.MaxWidth > 0 {
-				value = ansi.TruncateVisible(value, match.MaxWidth)
+				value = truncatePlaceholderValue(value, match.MaxWidth, cp437Values)
 			}
 
 			// Append processed value
@@ -178,7 +178,7 @@ func processPlaceholderTemplate(template []byte, substitutions map[byte]string, 
 
 	// Second pass: resolve gap fill markers
 	if hasGapFill {
-		result = resolveGapFills(result)
+		result = resolveGapFills(result, cp437Values)
 	}
 
 	return result
@@ -187,7 +187,7 @@ func processPlaceholderTemplate(template []byte, substitutions map[byte]string, 
 // resolveGapFills replaces gap fill markers with ─ characters to fill lines to target width.
 // Each marker encodes its target width. The fill count is calculated per-line:
 // fill = targetWidth - visibleCharsOnLine (excluding the marker itself).
-func resolveGapFills(data []byte) []byte {
+func resolveGapFills(data []byte, cp437Values bool) []byte {
 	markerBytes := []byte(gapFillMarker)
 
 	// Process line by line to calculate per-line visible widths
@@ -219,7 +219,7 @@ func resolveGapFills(data []byte) []byte {
 		lineWithout = append(lineWithout, line[:startIdx]...)
 		lineWithout = append(lineWithout, line[endIdx:]...)
 		// Strip \r for width calculation
-		visibleWidth := ansi.VisibleLength(strings.TrimRight(string(lineWithout), "\r"))
+		visibleWidth := placeholderCells(strings.TrimRight(string(lineWithout), "\r"), cp437Values)
 
 		// Calculate fill count
 		fillCount := targetWidth - visibleWidth
@@ -239,4 +239,100 @@ func resolveGapFills(data []byte) []byte {
 	}
 
 	return bytes.Join(lines, []byte("\n"))
+}
+
+// headerTemplateUsesUserNote reports whether a header template shows the user
+// note itself: a legacy |U code or an @U@ placeholder in any of its forms
+// (@U:20@, @U###@, @U*@, @U<20@, @U|R20@, ...). When it does, the reader
+// leaves the note out of the From value so it is not shown twice.
+func headerTemplateUsesUserNote(template []byte) bool {
+	if bytes.Contains(template, []byte("|U")) {
+		return true
+	}
+	for _, m := range parsePlaceholders(template) {
+		if m.Code == "U" {
+			return true
+		}
+	}
+	return false
+}
+
+// Width helpers for substituted values. The message reader converts values to
+// CP437 bytes for CP437 sessions, and there every byte is one cell. The ansi
+// helpers decode UTF-8 instead, and plenty of CP437 byte pairs happen to be
+// valid UTF-8 (├⌐ is 0xC3 0xA9), so they would count two cells as one and let
+// a value run past its width. cp437Values selects byte counting; UTF-8
+// sessions keep the rune-aware ansi helpers.
+
+// placeholderCells counts the cells s occupies, ignoring ANSI escapes.
+func placeholderCells(s string, cp437Values bool) int {
+	if !cp437Values {
+		return ansi.VisibleLength(s)
+	}
+	cells := 0
+	for i := 0; i < len(s); i++ {
+		if n := placeholderEscapeLen(s[i:]); n > 0 {
+			i += n - 1
+			continue
+		}
+		cells++
+	}
+	return cells
+}
+
+// truncatePlaceholderValue cuts s to at most maxCells cells, keeping ANSI
+// escapes intact.
+func truncatePlaceholderValue(s string, maxCells int, cp437Values bool) string {
+	if !cp437Values {
+		return ansi.TruncateVisible(s, maxCells)
+	}
+	var b strings.Builder
+	cells := 0
+	for i := 0; i < len(s); i++ {
+		if n := placeholderEscapeLen(s[i:]); n > 0 {
+			b.WriteString(s[i : i+n])
+			i += n - 1
+			continue
+		}
+		if cells == maxCells {
+			continue // keep scanning so trailing escapes (colour resets) survive
+		}
+		b.WriteByte(s[i])
+		cells++
+	}
+	return b.String()
+}
+
+// fitPlaceholderValue truncates or pads s to exactly width cells.
+func fitPlaceholderValue(s string, width int, align ansi.Alignment, cp437Values bool) string {
+	if !cp437Values {
+		return ansi.ApplyWidthConstraintAligned(s, width, align)
+	}
+	s = truncatePlaceholderValue(s, width, true)
+	pad := width - placeholderCells(s, true)
+	if pad <= 0 {
+		return s
+	}
+	switch align {
+	case ansi.AlignRight:
+		return strings.Repeat(" ", pad) + s
+	case ansi.AlignCenter:
+		return strings.Repeat(" ", pad/2) + s + strings.Repeat(" ", pad-pad/2)
+	default:
+		return s + strings.Repeat(" ", pad)
+	}
+}
+
+// placeholderEscapeLen returns the length of the CSI escape at the start of s,
+// or 0 if s does not start with one.
+func placeholderEscapeLen(s string) int {
+	if len(s) < 2 || s[0] != 0x1b || s[1] != '[' {
+		return 0
+	}
+	for i := 2; i < len(s); i++ {
+		if c := s[i]; c >= 0x40 && c <= 0x7e {
+			return i + 1
+		}
+	}
+	return len(s)
 }

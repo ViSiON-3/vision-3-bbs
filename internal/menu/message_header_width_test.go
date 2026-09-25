@@ -64,6 +64,16 @@ func TestShippedHeadersStayWithin79Columns(t *testing.T) {
 		'V': "9999999 of 9999999", 'D': "12/31/26", 'W': "12:59 pm", 'P': "9999999",
 		'E': "9999", 'O': long, 'A': long, 'Z': long, 'X': long, 'K': "999",
 	}
+	// CP437 sessions get CP437 bytes; build their long values from pairs that
+	// also happen to be valid UTF-8, so a rune-counting width check would
+	// under-measure them.
+	cp437Subs := make(map[byte]string, len(subs))
+	for k, v := range subs {
+		if v == long {
+			v = strings.Repeat("\xc3\xa9", 50)
+		}
+		cp437Subs[k] = v
+	}
 	dir := filepath.Join("..", "..", "menus", "v3", "templates", "message_headers")
 	for n := 1; n <= 15; n++ {
 		name := "MSGHDR." + strconv.Itoa(n) + ".ans"
@@ -71,9 +81,15 @@ func TestShippedHeadersStayWithin79Columns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		out := processTemplate(tpl, subs, buildAutoWidths(subs, 9999999, 80, true))
-		if col := headerMaxColumn(out); col > 79 {
-			t.Errorf("%s: longest row reaches column %d, want at most 79", name, col)
+		for _, mode := range []struct {
+			label string
+			subs  map[byte]string
+			cp437 bool
+		}{{"UTF-8", subs, false}, {"CP437", cp437Subs, true}} {
+			out := processTemplate(tpl, mode.subs, buildAutoWidths(mode.subs, 9999999, 80, mode.cp437), mode.cp437)
+			if col := headerMaxColumn(out); col > 79 {
+				t.Errorf("%s (%s): longest row reaches column %d, want at most 79", name, mode.label, col)
+			}
 		}
 	}
 }

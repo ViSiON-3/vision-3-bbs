@@ -366,7 +366,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			sampleAutoWidths := buildAutoWidths(sampleSubs, 42, 80, cp437Preview)
 
-			processedPreview := processTemplate(hdrBytes, sampleSubs, sampleAutoWidths)
+			processedPreview := processTemplate(hdrBytes, sampleSubs, sampleAutoWidths, cp437Preview)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
 			if outputMode == ansi.OutputModeCP437 {

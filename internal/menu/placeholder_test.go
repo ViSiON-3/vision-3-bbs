@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -146,7 +147,7 @@ func TestProcessPlaceholderTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := string(processPlaceholderTemplate([]byte(tt.template), substitutions, nil))
+			got := string(processPlaceholderTemplate([]byte(tt.template), substitutions, nil, false))
 			if got != tt.want {
 				t.Errorf("processPlaceholderTemplate() = %q, want %q", got, tt.want)
 			}
@@ -171,7 +172,7 @@ func TestProcessPlaceholderTemplateWithANSI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := string(processPlaceholderTemplate([]byte(tt.template), substitutions, nil))
+			got := string(processPlaceholderTemplate([]byte(tt.template), substitutions, nil, false))
 			if len(tt.wantContains) > 0 && !contains(got, tt.wantContains) {
 				t.Errorf("processPlaceholderTemplate() = %q, should contain %q", got, tt.wantContains)
 			}
@@ -194,7 +195,7 @@ Subj: @T@`
 		'T': "Welcome to Vision3!",
 	}
 
-	result := string(processPlaceholderTemplate([]byte(template), substitutions, nil))
+	result := string(processPlaceholderTemplate([]byte(template), substitutions, nil, false))
 
 	expected := `Posted on 01/15/26 2:30 pm       ECHOMAIL READ
 From: sysop          To: All
@@ -311,7 +312,7 @@ func TestProcessPlaceholderAutoWidth(t *testing.T) {
 			if tt.name != "auto-width no effect without map" {
 				aw = autoWidths
 			}
-			got := string(processPlaceholderTemplate([]byte(tt.template), substitutions, aw))
+			got := string(processPlaceholderTemplate([]byte(tt.template), substitutions, aw, false))
 			if got != tt.want {
 				t.Errorf("processPlaceholderTemplate() = %q, want %q", got, tt.want)
 			}
@@ -365,7 +366,7 @@ func TestProcessPlaceholderGapFill(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := processPlaceholderTemplate([]byte(tt.template), substitutions, tt.aw)
+			got := processPlaceholderTemplate([]byte(tt.template), substitutions, tt.aw, false)
 			// Count visible length (C4 bytes count as visible)
 			visLen := 0
 			i := 0
@@ -429,9 +430,37 @@ func TestProcessPlaceholderMaxWidth(t *testing.T) {
 		{"Hello there", `"Hello"|`}, // longer values are cut
 	}
 	for _, tt := range tests {
-		got := string(processPlaceholderTemplate([]byte(`"@T<5@"|`), map[byte]string{'T': tt.value}, nil))
+		got := string(processPlaceholderTemplate([]byte(`"@T<5@"|`), map[byte]string{'T': tt.value}, nil, false))
 		if got != tt.want {
 			t.Errorf("value %q: got %q, want %q", tt.value, got, tt.want)
+		}
+	}
+}
+
+func TestHeaderTemplateUsesUserNote(t *testing.T) {
+	for tpl, want := range map[string]bool{
+		"@U@": true, "@U:20@": true, "@U#####@": true, "@U*@": true, "@U<20@": true, "@U|R20@": true,
+		"Legacy |U": true, "@F@ @S@": false, "@UX@": false, "": false,
+	} {
+		if got := headerTemplateUsesUserNote([]byte(tpl)); got != want {
+			t.Errorf("headerTemplateUsesUserNote(%q) = %v, want %v", tpl, got, want)
+		}
+	}
+}
+
+func TestProcessPlaceholderCP437Widths(t *testing.T) {
+	// 0xC3 0xA9 is two CP437 cells (├⌐) but also valid UTF-8 (é). CP437 values
+	// must be measured a byte per cell or the field runs past its width.
+	pairs := strings.Repeat("\xc3\xa9", 3) // 6 cells in CP437
+	subs := map[byte]string{'T': pairs}
+	for _, tt := range []struct{ tpl, want string }{
+		{"[@T<4@]", "[\xc3\xa9\xc3\xa9]"},
+		{"[@T:4@]", "[\xc3\xa9\xc3\xa9]"},
+		{"[@T:8@]", "[" + pairs + "  ]"},
+		{"@T@@G:10@|", pairs + "\xc4\xc4\xc4|"},
+	} {
+		if got := string(processPlaceholderTemplate([]byte(tt.tpl), subs, nil, true)); got != tt.want {
+			t.Errorf("%s: got %q, want %q", tt.tpl, got, tt.want)
 		}
 	}
 }
