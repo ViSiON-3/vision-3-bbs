@@ -1416,3 +1416,31 @@ func TestProcessAnsiAndExtractCoords_DualPurposePipeCode(t *testing.T) {
 		})
 	}
 }
+
+func TestReplaceColorPipeCodes(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"foreground", "|12red", "\x1B[1;31mred"},
+		{"reset", "|23x", "\x1B[0mx"},
+		{"background", "|B4x", "\x1B[44mx"},
+		{"longest background wins", "|B10x", "\x1B[102mx"},
+		{"double pipe stays", "a || b", "a || b"},
+		{"double pipe before colour", "||07", "|\x1B[0;37m"},
+		{"clear screen stays", "|CLx", "|CLx"},
+		{"newline stays", "a|CRb", "a|CRb"},
+		{"erase stays", "|DE", "|DE"},
+		{"save cursor stays", "|Pimp", "|Pimp"},
+		{"restore cursor stays", "|PP", "|PP"},
+		{"unknown stays", "|99 |Bx |", "|99 |Bx |"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := string(ReplaceColorPipeCodes([]byte(tt.in))); got != tt.want {
+				t.Errorf("ReplaceColorPipeCodes(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

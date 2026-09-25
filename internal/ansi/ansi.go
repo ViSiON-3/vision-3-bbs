@@ -369,6 +369,52 @@ func ReplacePipeCodes(data []byte) []byte {
 	return buf.Bytes()
 }
 
+// ReplaceColorPipeCodes expands only the colour pipe codes (|00-|23 and
+// |B0-|B15) and leaves every other byte as written.
+//
+// It is for text written elsewhere, such as network message bodies. Their
+// authors used pipe codes for colour, so the screen-control codes (|CL, |CR,
+// |DE, |P, |PP) and the "||" literal-pipe escape are ViSiON/3 conventions that
+// text never asked for: "||" drawn as one pipe knocks a box border a column
+// out of line, and a clear or cursor save fired partway through a body garbles
+// the reader's screen.
+func ReplaceColorPipeCodes(data []byte) []byte {
+	var buf bytes.Buffer
+	for i := 0; i < len(data); {
+		if replacement, n := colorPipeCodeAt(data, i); n > 0 {
+			buf.WriteString(replacement)
+			i += n
+			continue
+		}
+		buf.WriteByte(data[i])
+		i++
+	}
+	return buf.Bytes()
+}
+
+// colorPipeCodeAt returns the expansion of the colour pipe code starting at
+// data[i] and its length, or a zero length if there is none. The longest code
+// wins, so |B10 is not read as |B1 followed by a "0".
+func colorPipeCodeAt(data []byte, i int) (string, int) {
+	if data[i] != '|' {
+		return "", 0
+	}
+	for _, n := range []int{4, 3} {
+		if i+n > len(data) {
+			continue
+		}
+		code := string(data[i : i+n])
+		c := code[1] // |nn is a foreground (|23 resets), |Bn a background
+		if c != 'B' && (c < '0' || c > '9') {
+			return "", 0
+		}
+		if replacement, ok := pipeCodeReplacements[code]; ok {
+			return replacement, n
+		}
+	}
+	return "", 0
+}
+
 // ClearScreen returns an ANSI escape sequence that clears the screen and
 // homes the cursor.
 func ClearScreen() string {
