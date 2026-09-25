@@ -146,11 +146,25 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return nil, "", nil
 	}
 
-	// Snapshot the user's current area/conf so we can restore after the scan
+	// Put the caller back in the conference and area they started from,
+	// however the scan ends (#409). The scan moves the user into each area it
+	// reads, and with Update Pointers on it saves the user after each one, so
+	// the restored state must be saved too — including when the caller drops
+	// or times out mid-scan, or their next login starts in the last area
+	// scanned.
 	origAreaID := currentUser.CurrentMessageAreaID
 	origAreaTag := currentUser.CurrentMessageAreaTag
 	origConfID := currentUser.CurrentMsgConferenceID
 	origConfTag := currentUser.CurrentMsgConferenceTag
+	defer func() {
+		currentUser.CurrentMessageAreaID = origAreaID
+		currentUser.CurrentMessageAreaTag = origAreaTag
+		currentUser.CurrentMsgConferenceID = origConfID
+		currentUser.CurrentMsgConferenceTag = origConfTag
+		if err := userManager.UpdateUser(currentUser); err != nil {
+			slog.Error("failed to restore user area after newscan", "node", nodeNumber, "error", err)
+		}
+	}()
 
 	// Create tagged area map for quick lookup
 	taggedMap := make(map[string]bool)
@@ -308,17 +322,6 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				slog.Error("failed to save user data during newscan", "node", nodeNumber, "error", saveErr)
 			}
 		}
-	}
-
-	// Newscan complete — restore original conf/area before returning.
-	// The scan loop may have called UpdateUser with a scanned area, so we must
-	// persist the restored state back to DB as well.
-	currentUser.CurrentMessageAreaID = origAreaID
-	currentUser.CurrentMessageAreaTag = origAreaTag
-	currentUser.CurrentMsgConferenceID = origConfID
-	currentUser.CurrentMsgConferenceTag = origConfTag
-	if err := userManager.UpdateUser(currentUser); err != nil {
-		slog.Error("failed to restore user area after newscan", "node", nodeNumber, "error", err)
 	}
 
 	if msgFilter != nil && !scannedAny {

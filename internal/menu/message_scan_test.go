@@ -502,3 +502,103 @@ func TestNewScanCurrentAreaAppliesFromSearchAndKeepsPointers(t *testing.T) {
 		t.Errorf("lastread after scan with Update Pointers off = %d, want 1", lr)
 	}
 }
+
+// TestNewScanRestoresAreaWhenCallerDrops guards #409. With Update Pointers
+// on, the scan saves the user after each area it reads, and the saved record
+// holds that area and its conference. A caller who dropped partway through a
+// later area left them there, so their next login started in the last area
+// scanned rather than where they began. The scanned areas sit in a different
+// conference from the starting one, so the conference must come back too.
+func TestNewScanRestoresAreaWhenCallerDrops(t *testing.T) {
+	scanNoticePause = 0
+	t.Cleanup(func() { scanNoticePause = time.Second })
+
+	mm, err := message.NewMessageManager(t.TempDir(), t.TempDir(), "TestBBS", nil)
+	if err != nil {
+		t.Fatalf("NewMessageManager: %v", err)
+	}
+	homeID, err := mm.AddArea(message.MessageArea{Tag: "HOME", Name: "Home", AreaType: "local", ConferenceID: 1})
+	if err != nil {
+		t.Fatalf("AddArea: %v", err)
+	}
+	for _, tag := range []string{"FIRST", "SECOND"} {
+		id, err := mm.AddArea(message.MessageArea{Tag: tag, Name: tag, AreaType: "local", ConferenceID: 2})
+		if err != nil {
+			t.Fatalf("AddArea %s: %v", tag, err)
+		}
+		if _, err := mm.AddMessageWithDate(id, "Alice", "All", tag+"-post", "body", "", time.Now().Add(-time.Hour)); err != nil {
+			t.Fatalf("AddMessageWithDate %s: %v", tag, err)
+		}
+	}
+
+	menuSet := t.TempDir()
+	hdrDir := filepath.Join(menuSet, "templates", "message_headers")
+	if err := os.MkdirAll(hdrDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hdr, err := os.ReadFile(filepath.Join("..", "..", "menus", "v3", "templates", "message_headers", "MSGHDR.2.ans"))
+	if err != nil {
+		t.Fatalf("read shipped MSGHDR.2.ans: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hdrDir, "MSGHDR.2.ans"), hdr, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	um, err := user.NewUserManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewUserManager: %v", err)
+	}
+	u, err := um.AddUser("password", "Tester", "Real Name", "Loc")
+	if err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	u.AccessLevel = 10
+	u.MsgHdr = 2
+	u.CurrentMessageAreaID = homeID
+	u.CurrentMessageAreaTag = "HOME"
+	u.CurrentMsgConferenceID = 1
+	u.CurrentMsgConferenceTag = "LOCAL"
+	u.TaggedMessageAreaTags = []string{"FIRST", "SECOND"}
+	if err := um.UpdateUser(u); err != nil {
+		t.Fatalf("UpdateUser: %v", err)
+	}
+
+	e := newExecutorWithStrings(loadTestStrings(t), func(e *MenuExecutor) {
+		e.MessageMgr = mm
+		e.MenuSetPath = menuSet
+	})
+	setServerField(e, func(c *config.ServerConfig) { c.CoSysOpLevel = 200 })
+
+	// Scan menu: Date=All, Enter to scan the tagged areas (the default).
+	// FIRST: R to read, N past its only message. The input then ends at
+	// SECOND's prompt, which the scan sees as the caller dropping.
+	ts := newTestSession("Dall\r\rRN")
+	terminal := newTestTerminal(ts)
+	t.Cleanup(func() { resetSessionIH(ts) })
+
+	_, action, _ := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, false, 80, 24)
+	if action != "LOGOFF" {
+		t.Fatalf("action = %q, want LOGOFF when the input runs out mid-scan", action)
+	}
+	if out := testAnsiEscape.ReplaceAllString(ts.output(), ""); !strings.Contains(out, "FIRST-post") {
+		t.Fatalf("the scan never read FIRST, so the test proves nothing; output:\n%s", out)
+	}
+
+	saved, ok := um.GetUserByID(u.ID)
+	if !ok {
+		t.Fatal("user vanished")
+	}
+	for _, got := range []struct {
+		name string
+		u    *user.User
+	}{{"saved", saved}, {"in-session", u}} {
+		if got.u.CurrentMessageAreaID != homeID || got.u.CurrentMessageAreaTag != "HOME" {
+			t.Errorf("%s area after a dropped scan = %d/%q, want %d/%q",
+				got.name, got.u.CurrentMessageAreaID, got.u.CurrentMessageAreaTag, homeID, "HOME")
+		}
+		if got.u.CurrentMsgConferenceID != 1 || got.u.CurrentMsgConferenceTag != "LOCAL" {
+			t.Errorf("%s conference after a dropped scan = %d/%q, want 1/%q",
+				got.name, got.u.CurrentMsgConferenceID, got.u.CurrentMsgConferenceTag, "LOCAL")
+		}
+	}
+}
