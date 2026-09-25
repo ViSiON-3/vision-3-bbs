@@ -289,18 +289,23 @@ func TestQuoteModeDoesNotOverwriteExistingText(t *testing.T) {
 }
 
 func TestQuoteModeBackspaceUndoesTheBlock(t *testing.T) {
-	// Add two lines, undo both, leave. The banners go with the last one.
-	_, ch, ih, cleanup := newQuoteHarness(t, "  \x08\x08\x1b", quoteBody)
-	defer cleanup()
+	// Backspace, Ctrl-Y and Ctrl-K (#419) all undo the line added last.
+	for _, undo := range []string{"\x08", "\x19", "\x0b"} {
+		t.Run(fmt.Sprintf("key_%#x", undo[0]), func(t *testing.T) {
+			// Add two lines, undo both, leave. The banners go with the last one.
+			_, ch, ih, cleanup := newQuoteHarness(t, "  "+undo+undo+"\x1b", quoteBody)
+			defer cleanup()
 
-	ch.buffer.LoadContent("draft")
-	line, _ := ch.HandleQuote(ih, 1, 1)
+			ch.buffer.LoadContent("draft")
+			line, _ := ch.HandleQuote(ih, 1, 1)
 
-	if got := stripANSI(ch.buffer.GetContent()); got != "draft" {
-		t.Errorf("buffer = %q, want %q — undoing every quoted line should remove the banners too", got, "draft")
-	}
-	if line != 1 {
-		t.Errorf("cursor line = %d, want 1 — no block left to sit after", line)
+			if got := stripANSI(ch.buffer.GetContent()); got != "draft" {
+				t.Errorf("buffer = %q, want %q — undoing every quoted line should remove the banners too", got, "draft")
+			}
+			if line != 1 {
+				t.Errorf("cursor line = %d, want 1 — no block left to sit after", line)
+			}
+		})
 	}
 }
 
