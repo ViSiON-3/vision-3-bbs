@@ -336,11 +336,12 @@ func (ih *InputHandler) ReadKey() (int, error) {
 		return int(KeyBackspace), nil
 	}
 
-	// CR (0x0D) → normalize CR+LF to plain CR.
-	// SSH clients often send CR+LF for the Enter key. Discard the LF so that
-	// callers (lightbars, menus) don't see a phantom keypress after Enter.
+	// CR (0x0D) → normalize CR+LF and CR+NUL to plain CR.
+	// SSH clients often send CR+LF for the Enter key, and telnet NVT clients
+	// send CR+NUL (RFC 854). Discard the trailing byte so that callers
+	// (lightbars, menus) don't see a phantom keypress after Enter.
 	if b == KeyEnter {
-		if next, err := ih.readByteWithTimeout(10 * time.Millisecond); err == nil && next != 0x0A {
+		if next, err := ih.readByteWithTimeout(10 * time.Millisecond); err == nil && next != 0x0A && next != 0x00 {
 			ih.unreadByte(next)
 		}
 		return int(KeyEnter), nil

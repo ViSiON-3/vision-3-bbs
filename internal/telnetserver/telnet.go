@@ -68,6 +68,7 @@ type TelnetConn struct {
 	state    telnetState
 	sbOption byte   // option byte for current subnegotiation
 	sbData   []byte // accumulated subnegotiation data
+	lastCR   bool   // previous data byte was CR (for CR NUL stripping)
 
 	closed int32 // atomic flag
 
@@ -342,8 +343,16 @@ func (tc *TelnetConn) Read(p []byte) (int, error) {
 			switch tc.state {
 			case stateData:
 				if b == IAC {
+					// Anything but a NUL directly after the CR ends the CR NUL
+					// pair, including a telnet command or an escaped 0xFF.
+					tc.lastCR = false
 					tc.state = stateIAC
+				} else if tc.lastCR && b == 0x00 {
+					// RFC 854: NVT clients send Enter as CR NUL. Drop the
+					// NUL so it doesn't surface as a phantom keypress.
+					tc.lastCR = false
 				} else {
+					tc.lastCR = b == '\r'
 					p[written] = b
 					written++
 				}

@@ -484,6 +484,10 @@ readerLoop:
 					selectedKey = 'N' // Enter = Next
 				} else if key == editor.KeyEsc {
 					selectedKey = 'Q' // ESC = Quit
+				} else if key < 32 {
+					// Stray control byte (e.g. NUL/LF trailing a telnet CR) -
+					// ignore it rather than dropping into the modal lightbar.
+					continue
 				} else {
 					// Multi-byte sequence that wasn't handled as scrolling - show lightbar
 					var suffixText string
