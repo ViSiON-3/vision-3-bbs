@@ -63,7 +63,7 @@ func (e *FSEditor) handleKey(key int) {
 		e.handleDeleteKey()
 	case KeyCtrlT: // Delete word
 		e.deleteWord()
-	case KeyCtrlY: // Delete line
+	case KeyCtrlY, KeyCtrlK: // Delete line (Ctrl-K as in Mystic)
 		e.deleteLine()
 	case KeyCtrlJ: // Join lines
 		e.joinLines()

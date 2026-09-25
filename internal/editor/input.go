@@ -39,6 +39,7 @@ const (
 	KeyCtrlG = 0x07 // Delete character at cursor
 	KeyCtrlT = 0x14 // Delete word
 	KeyCtrlY = 0x19 // Delete line
+	KeyCtrlK = 0x0B // Delete line (Mystic-style alias for Ctrl-Y)
 	KeyCtrlJ = 0x0A // Join lines (also Enter/LF in some contexts)
 	KeyCtrlN = 0x0E // Split line (new line)
 	KeyCtrlB = 0x02 // Reformat paragraph

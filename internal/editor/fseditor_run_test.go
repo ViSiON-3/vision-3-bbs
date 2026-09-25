@@ -155,3 +155,19 @@ func TestRunSpaceTypedAtMarginIsKept(t *testing.T) {
 		t.Fatalf("content = %q, want %q", content, want)
 	}
 }
+
+// TestRunCtrlKDeletesLine checks #419: Ctrl-K removes the whole current line,
+// as Ctrl-Y does and as it does in Mystic.
+func TestRunCtrlKDeletesLine(t *testing.T) {
+	// Three lines, Up to the middle one, Ctrl-K, save.
+	sess := testterm.NewSession(nil, "one\rtwo\rthree\x1b[A\x0b\x1a")
+	ed := NewFSEditor(sess, io.Discard, ansi.OutputModeUTF8, 80, 24,
+		"", "", "", "", "", "", nil)
+	content, saved, err := ed.Run()
+	if err != nil || !saved {
+		t.Fatalf("Run: saved=%v err=%v", saved, err)
+	}
+	if want := "one\nthree"; content != want {
+		t.Fatalf("content = %q, want %q", content, want)
+	}
+}
