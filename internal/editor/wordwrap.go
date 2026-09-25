@@ -136,7 +136,12 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 				// Buffer full: append remaining text to last written line
 				last := startLine + actualNew - 1
 				tail := text[lineStarts[i]:]
-				if tail != "" {
+				if tail == "" {
+					// Only the separator space was left to place (see the
+					// empty continuation line above). Keep it on the last
+					// line so the next word typed does not join this one.
+					ww.buffer.SetLine(last, ww.buffer.GetLine(last)+" ")
+				} else {
 					curr := ww.buffer.GetLine(last)
 					if curr != "" {
 						ww.buffer.SetLine(last, curr+" "+tail)

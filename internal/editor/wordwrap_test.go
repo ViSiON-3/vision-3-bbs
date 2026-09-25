@@ -479,3 +479,26 @@ func TestFindWordRight(t *testing.T) {
 		}
 	}
 }
+
+// TestWrapAfterInsert_SpaceAtMarginOnFullBuffer covers the #412 separator
+// case on the buffer's last line, where no continuation line can be opened:
+// the typed space must stay on the line rather than being dropped.
+func TestWrapAfterInsert_SpaceAtMarginOnFullBuffer(t *testing.T) {
+	mb := NewMessageBuffer()
+	for i := 1; i < MaxLines; i++ {
+		mb.SetLine(i, "filler")
+		mb.SetHardNewline(i, true)
+	}
+	word := strings.Repeat("x", MaxLineLength)
+	mb.SetLine(MaxLines, word+" ")
+	mb.SetHardNewline(MaxLines, true)
+
+	ww := NewWordWrapper(mb)
+	newLine, newCol := ww.WrapAfterInsert(MaxLines, MaxLineLength+2)
+	if got := mb.GetLine(MaxLines); got != word+" " {
+		t.Fatalf("last line = %q, want the word followed by its space", got)
+	}
+	if newLine != MaxLines || newCol != MaxLineLength+2 {
+		t.Fatalf("cursor = (%d,%d), want (%d,%d)", newLine, newCol, MaxLines, MaxLineLength+2)
+	}
+}
