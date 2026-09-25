@@ -3,7 +3,6 @@ package menu
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"regexp"
@@ -199,6 +198,9 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 		}
 		return err
 	}
+	// Settle the art's encoding before anything is substituted into it, so a
+	// UTF-8 rumor or pipe-code expansion is not mistaken for CP437 later.
+	data = artForOutput(data, outputMode)
 	if len(clearFirst) > 0 && clearFirst[0] {
 		data = append([]byte(ansi.ClearScreen()), data...)
 	}
@@ -229,16 +231,16 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 }
 
 // writeArt writes ANSI art to the terminal, making its line breaks explicit on
-// terminals wider than the art (see ansi.FitArtToWidth). CP437 output is
-// written raw to avoid UTF-8 false positives; other modes go through the
-// output-mode writer.
-func writeArt(w io.Writer, data []byte, outputMode ansi.OutputMode, termWidth int) error {
-	data = ansi.FitArtToWidth(data, termWidth, outputMode == ansi.OutputModeUTF8)
+// terminals wider than the art (see fitArt). On a UTF-8 terminal CP437 art is
+// converted first (see artForOutput); CP437 output is written raw.
+func writeArt(terminal *term.Terminal, data []byte, outputMode ansi.OutputMode, termWidth int) error {
+	data = artForOutput(data, outputMode)
+	data = fitArt(terminal, data, termWidth, outputMode == ansi.OutputModeUTF8)
 	if outputMode == ansi.OutputModeCP437 {
-		_, err := w.Write(data)
+		_, err := terminal.Write(data)
 		return err
 	}
-	return terminalio.WriteProcessedBytes(w, data, outputMode)
+	return terminalio.WriteProcessedBytes(terminal, data, outputMode)
 }
 
 // deliverPendingPages checks for and displays any queued page messages.

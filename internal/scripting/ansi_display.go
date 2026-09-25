@@ -70,7 +70,11 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 // fitArt makes the art's line breaks explicit on terminals wider than it (see
 // ansi.FitArtToWidth). The bytes go to the session raw, one byte per cell.
 func fitArt(eng *Engine, data []byte) []byte {
-	return ansi.FitArtToWidth(data, eng.session.ScreenWidth, false)
+	width := eng.session.ArtWidth
+	if width <= 0 {
+		width = eng.session.ScreenWidth
+	}
+	return ansi.FitArtToWidth(data, width, false)
 }
 
 // resolveAnsiPath finds an ANSI file by checking multiple locations:

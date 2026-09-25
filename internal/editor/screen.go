@@ -488,11 +488,13 @@ func (s *Screen) renderInfoRow() {
 		terminalio.WriteProcessedBytes(s.terminal, []byte(numStr), s.outputMode)
 	}
 
-	// Reset all SGR attributes before restoring the cursor so that template colors
+	// Reset all SGR attributes after restoring the cursor so that template colors
 	// (including any blue background from the TO/FROM/SUBJECT rows) do not bleed
 	// into the editing area and cause every typed character to appear on a blue background.
-	s.WriteDirect("\x1b[0m")
+	// After, not before: the restore may be sent as DECRC (see
+	// terminalio.CompatWriter), which restores the attributes saved with it.
 	s.WriteDirect("\x1b[u") // restore cursor
+	s.WriteDirect("\x1b[0m")
 }
 
 // buildCenteredSection constructs the full middle section of the row-4 info bar:
@@ -636,8 +638,8 @@ func (s *Screen) updateDynamicHeaderFields(insertMode bool, currentLine, totalLi
 		s.WriteDirect(s.insertModeColor) // restore template color at @I@ position
 	}
 	s.WriteDirect(fmt.Sprintf("%-3s", modeStr))
-	s.WriteDirect("\x1b[0m") // reset colors to prevent header background bleed into editing area
 	s.WriteDirect("\x1b[u")  // restore cursor position
+	s.WriteDirect("\x1b[0m") // reset colors after the restore (which may restore attributes) to prevent header background bleed into editing area
 }
 
 // RefreshLine redraws a single line if it has changed

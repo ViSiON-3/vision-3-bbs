@@ -55,6 +55,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		Location:         ctx.User.GroupLocation,
 		ScreenWidth:      ctx.User.ScreenWidth,
 		ScreenHeight:     ctx.User.ScreenHeight,
+		ArtWidth:         artWidth(ctx.Terminal, ctx.User.ScreenWidth),
 		NodeNumber:       ctx.NodeNumber,
 		SessionStartTime: ctx.SessionStartTime,
 		BoardName:        ctx.Executor.GetServerConfig().BoardName,

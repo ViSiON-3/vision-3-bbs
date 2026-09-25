@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -68,7 +69,9 @@ func (e *MenuExecutor) RunChallengeGate(
 	prompt = substituteGateTokens(prompt, cfg.ChallengeGateKey, required)
 	// Make wraps explicit before locating the countdown field, so its row is
 	// right on terminals wider than the art.
-	prompt = ansi.FitArtToWidth(prompt, termWidth, outputMode == ansi.OutputModeUTF8)
+	// The prompt stays in its file encoding until writeGateArt, since
+	// findCountdownField counts bytes as columns; measure it the same way.
+	prompt = fitArt(terminal, prompt, termWidth, outputMode == ansi.OutputModeUTF8 && utf8.Valid(prompt))
 	row, col, width, hasField := findCountdownField(prompt)
 	live := cfg.ChallengeGateLiveCountdown && hasField
 
@@ -120,5 +123,5 @@ func writeGateArt(terminal *term.Terminal, b []byte, outputMode ansi.OutputMode)
 		_, _ = terminal.Write(b) // best-effort display
 		return
 	}
-	terminalio.WriteProcessedBytes(terminal, b, outputMode)
+	terminalio.WriteProcessedBytes(terminal, artForOutput(b, outputMode), outputMode)
 }

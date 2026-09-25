@@ -225,7 +225,7 @@ readerLoop:
 
 		// Process template with substitutions (auto-detects @CODE@ or |X format)
 		processedHeader := processTemplate(hdrTemplateBytes, substitutions, autoWidths, outputMode == ansi.OutputModeCP437)
-		processedHeader = ansi.FitArtToWidth(processedHeader, termWidth, outputMode == ansi.OutputModeUTF8)
+		processedHeader = fitArt(terminal, processedHeader, termWidth, outputMode == ansi.OutputModeUTF8)
 
 		// Process message body and pre-format all lines
 		area, _ := e.MessageMgr.GetAreaByID(currentAreaID)

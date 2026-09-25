@@ -2,6 +2,7 @@ package menu
 
 import (
 	"errors"
+	"io"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -321,3 +322,27 @@ func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbor
 
 // errInputAborted is returned by styledInput when the user presses ESC to cancel entry.
 var errInputAborted = errors.New("input aborted")
+
+// sessionOutputs remembers the writer each session's term.Terminal writes
+// through (terminalio.CompatWriter, see cmd/vision3/main.go). Code that writes
+// to the session without going through the terminal — the full-screen editor —
+// uses it too, so its output gets the same translations as everything else.
+var sessionOutputs sync.Map
+
+// SetSessionOutput records w as the output writer for s.
+func SetSessionOutput(s ssh.Session, w io.Writer) {
+	sessionOutputs.Store(s, w)
+}
+
+// ClearSessionOutput drops the remembered writer when a session ends.
+func ClearSessionOutput(s ssh.Session) {
+	sessionOutputs.Delete(s)
+}
+
+// sessionOutput returns the writer registered for s, or s itself.
+func sessionOutput(s ssh.Session) io.Writer {
+	if v, ok := sessionOutputs.Load(s); ok {
+		return v.(io.Writer)
+	}
+	return s
+}

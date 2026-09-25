@@ -254,9 +254,9 @@ func (tc *TelnetConn) handleSubnegotiation() {
 			width = 80
 			height = 25
 		}
-		if width > 80 {
-			width = 80
-		}
+		// Width is passed through so art can be hard-wrapped for terminals
+		// wider than 80 columns (ansi.FitArtToWidth); capping it here would
+		// leave such a terminal autowrapping 80-column art in the wrong place.
 		if height > 25 {
 			height = 25
 		}
@@ -531,7 +531,7 @@ func (tc *TelnetConn) DetectTerminalSize() (width, height int, method string) {
 	nawsW, nawsH := tc.width, tc.height
 	tc.sizeMu.RUnlock()
 
-	if nawsW > 0 && nawsH > 0 && nawsW <= 80 && nawsH <= 25 {
+	if nawsW > 0 && nawsH > 0 && nawsH <= 25 {
 		slog.Info("telnet terminal size via NAWS", "width", nawsW, "height", nawsH)
 		return nawsW, nawsH, "NAWS"
 	}
@@ -630,9 +630,10 @@ func (tc *TelnetConn) detectViaCursorPositioning() (width, height int, err error
 	_, _ = fmt.Sscanf(matches[1], "%d", &rows) // regex guarantees digits
 	_, _ = fmt.Sscanf(matches[2], "%d", &cols) // regex guarantees digits
 
-	// Apply BBS-compatible limits
-	if cols > 80 {
-		cols = 80
+	// Apply BBS-compatible limits. Width is only bounded like NAWS; see
+	// handleSubnegotiation for why it is not capped at 80.
+	if cols > 255 {
+		cols = 255
 	}
 	if rows > 25 {
 		rows = 25

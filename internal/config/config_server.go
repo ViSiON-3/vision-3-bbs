@@ -57,6 +57,11 @@ type ServerConfig struct {
 	// whose new account cannot log on yet is bounced to the login prompt and
 	// would otherwise have no chance to introduce themselves.
 	RequireNewUserEmail bool `json:"requireNewUserEmail"`
+	// DisableVGAPalette stops UTF-8 sessions from loading the VGA palette
+	// into the caller's terminal (see ansi.SetVGAPalette). Negative so that
+	// the default — and every config written before the option existed —
+	// keeps it on.
+	DisableVGAPalette bool `json:"disableVgaPalette"`
 
 	// Challenge Gate — optional pre-login bot challenge (botgate-style).
 	EnableChallengeGate          bool   `json:"enableChallengeGate"`          // master on/off

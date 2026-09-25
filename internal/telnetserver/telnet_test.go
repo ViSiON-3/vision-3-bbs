@@ -147,13 +147,14 @@ func TestRead_NAWSSetsWindowSize(t *testing.T) {
 
 func TestRead_NAWSCapsOversizeDimensions(t *testing.T) {
 	// Width 0x00FF (255) carries a 0xFF that must be doubled inside the SB; the
-	// result is capped to the BBS maximum of 80x25.
+	// width passes through so wide terminals get hard-wrapped art, while the
+	// height is capped to the BBS maximum of 25.
 	in := []byte{IAC, SB, OptNAWS, 0x00, IAC, IAC, 0x00, 100, IAC, SE}
 	tc := NewTelnetConn(newFakeConn(in))
 	drainRead(t, tc)
 	w, h := tc.WindowSize()
-	if w != 80 || h != 25 {
-		t.Errorf("WindowSize() = %dx%d, want 80x25 (capped)", w, h)
+	if w != 255 || h != 25 {
+		t.Errorf("WindowSize() = %dx%d, want 255x25 (height capped)", w, h)
 	}
 }
 

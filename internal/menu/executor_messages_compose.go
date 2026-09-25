@@ -225,7 +225,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 
 	// No quote data for new messages
-	body, saved, err := editor.RunEditorWithMetadata("", s, s, outputMode, subject, toUser, fromName, isAnonymous, "", "", "", "", false, nil, ih, editorCtx)
+	body, saved, err := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, subject, toUser, fromName, isAnonymous, "", "", "", "", false, nil, ih, editorCtx)
 	slog.Debug("editor returned", "node", nodeNumber, "error", err, "saved", saved, "length", len(body))
 
 	if err != nil {

@@ -64,7 +64,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 		slog.Warn("failed to load ANS file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
 		return "LOGIN", nil, nil
 	}
-	ansBackground = ansi.FitArtToWidth(ansBackground, termWidth, outputMode == ansi.OutputModeUTF8)
+	ansBackground = fitArt(terminal, artForOutput(ansBackground, outputMode), termWidth, outputMode == ansi.OutputModeUTF8)
 
 	slog.Info("displaying pre-login matrix screen", "node", nodeNumber, "count", len(options))
 
