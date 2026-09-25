@@ -12,6 +12,12 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
+// testEventTimeout is the timeout for events that are expected to finish on
+// their own. It only has to outlast a slow CI runner: a shell on the Windows
+// runner has taken over 5 s to start and exit, and the timeout then reported
+// the event as killed (exit code -1) instead of its real result.
+const testEventTimeout = 60
+
 // lookPath finds the absolute path to a command, skipping the test if not found.
 func lookPath(t *testing.T, name string) string {
 	t.Helper()
@@ -30,7 +36,7 @@ func TestExecuteEvent_Success(t *testing.T) {
 		Name:           "Test Success Event",
 		Command:        lookPath(t, "echo"),
 		Args:           []string{"Hello, World!"},
-		TimeoutSeconds: 5,
+		TimeoutSeconds: testEventTimeout,
 	}
 
 	result := s.executeEvent(context.Background(), event)
@@ -58,7 +64,7 @@ func TestExecuteEvent_Failure(t *testing.T) {
 		Name:           "Test Failure Event",
 		Command:        shPath,
 		Args:           []string{"-c", "exit 1"},
-		TimeoutSeconds: 5,
+		TimeoutSeconds: testEventTimeout,
 	}
 
 	result := s.executeEvent(context.Background(), event)
@@ -107,7 +113,7 @@ func TestExecuteEvent_WithEnvironmentVars(t *testing.T) {
 		EnvironmentVars: map[string]string{
 			"TEST_VAR": "test_value",
 		},
-		TimeoutSeconds: 5,
+		TimeoutSeconds: testEventTimeout,
 	}
 
 	result := s.executeEvent(context.Background(), event)
@@ -158,7 +164,7 @@ func TestPlaceholderSubstitutionInWorkingDirectory(t *testing.T) {
 		Name:             "Test Working Directory Substitution",
 		Command:          lookPath(t, "pwd"),
 		WorkingDirectory: tmpDir,
-		TimeoutSeconds:   5,
+		TimeoutSeconds:   testEventTimeout,
 	}
 
 	result := s.executeEvent(context.Background(), event)
@@ -182,7 +188,7 @@ func TestPlaceholderSubstitutionInCommand(t *testing.T) {
 		Name:           "Test Command Path Substitution",
 		Command:        "{BBS_ROOT}/nonexistent_should_be_replaced",
 		Args:           []string{"hello"},
-		TimeoutSeconds: 5,
+		TimeoutSeconds: testEventTimeout,
 	}
 
 	// The substituted command won't exist, so it should fail with a path that
@@ -201,7 +207,7 @@ func TestPlaceholderSubstitutionInCommand(t *testing.T) {
 		Name:           "Test Real Command Execution",
 		Command:        echoPath,
 		Args:           []string{"placeholder_test_ok"},
-		TimeoutSeconds: 5,
+		TimeoutSeconds: testEventTimeout,
 	}
 
 	result2 := s.executeEvent(context.Background(), event2)
