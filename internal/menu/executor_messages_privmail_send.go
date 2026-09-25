@@ -131,11 +131,13 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 			time.Sleep(1 * time.Second)
 			return nil, "", nil
 		}
+		// A blank subject abandons the mail, as it does for a public post.
 		subject = strings.TrimSpace(subject)
-		if subject != "" {
-			break
+		if subject == "" {
+			showPostAborted(terminal, outputMode)
+			return nil, "", nil
 		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|01Subject is required.|07\r\n")), outputMode)
+		break
 	}
 
 	// Launch editor
