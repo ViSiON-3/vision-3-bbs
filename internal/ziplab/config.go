@@ -22,27 +22,27 @@ type StepConfig struct {
 // built in, or use the archiver commands from archivers.json.
 type VirusScanConfig struct {
 	StepConfig
-	Command string   `json:"command,omitempty"`        // Scanner executable
-	Args    []string `json:"args,omitempty"`           // Arguments ({WORKDIR} = extracted files, {FILE} = archive)
-	Timeout int      `json:"timeoutSeconds,omitempty"` // Timeout in seconds (0 = default 60s)
+	Command string   `json:"command"`        // Scanner executable
+	Args    []string `json:"args"`           // Arguments ({WORKDIR} = extracted files, {FILE} = archive)
+	Timeout int      `json:"timeoutSeconds"` // Timeout in seconds (0 = default 60s)
 }
 
 // RemoveAdsConfig extends StepConfig with a patterns file.
 type RemoveAdsConfig struct {
 	StepConfig
-	PatternsFile string `json:"patternsFile,omitempty"` // Path to REMOVE.TXT
+	PatternsFile string `json:"patternsFile"` // Path to REMOVE.TXT
 }
 
 // AddCommentConfig extends StepConfig with a comment file.
 type AddCommentConfig struct {
 	StepConfig
-	CommentFile string `json:"commentFile,omitempty"` // Path to ZCOMMENT.TXT
+	CommentFile string `json:"commentFile"` // Path to ZCOMMENT.TXT
 }
 
 // IncludeFileConfig extends StepConfig with the file to include.
 type IncludeFileConfig struct {
 	StepConfig
-	FilePath string `json:"filePath,omitempty"` // Path to BBS.AD or similar
+	FilePath string `json:"filePath"` // Path to BBS.AD or similar
 }
 
 // StepsConfig holds all pipeline step configurations.

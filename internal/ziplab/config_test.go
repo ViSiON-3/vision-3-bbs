@@ -208,6 +208,31 @@ func TestSaveConfig_RoundTripOmitsArchiveTypes(t *testing.T) {
 	}
 }
 
+// A setting cleared in the config editor must stay cleared. With omitempty
+// the empty value was left out of the file and the default came back on the
+// next load.
+func TestSaveConfig_KeepsClearedSettings(t *testing.T) {
+	dir := t.TempDir()
+	cfg := DefaultConfig()
+	cfg.Steps.VirusScan.Command = ""
+	cfg.Steps.VirusScan.Args = nil
+	cfg.Steps.VirusScan.Timeout = 0
+	cfg.Steps.RemoveAds.PatternsFile = ""
+	cfg.Steps.AddComment.CommentFile = ""
+	cfg.Steps.IncludeFile.FilePath = ""
+
+	if err := SaveConfig(dir, cfg); err != nil {
+		t.Fatalf("SaveConfig: %v", err)
+	}
+	got, err := ReadConfig(dir)
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	if !reflect.DeepEqual(got.Steps, cfg.Steps) {
+		t.Errorf("cleared settings came back:\n got  %+v\n want %+v", got.Steps, cfg.Steps)
+	}
+}
+
 // Files written before the step settings were trimmed carry a command on
 // every step and an archiveTypes list. They must still load, keeping the
 // settings that remain.
