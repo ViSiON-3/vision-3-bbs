@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -200,11 +199,11 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 
 		switch ch {
 		case 13, 10: // Enter or LF
-			// User pressed Enter. Clients that send Enter as CR LF leave the
-			// LF queued; drop it, or it answers the next prompt with an empty
+			// User pressed Enter. Clients that send Enter as CR LF would
+			// otherwise leave the LF to answer the next prompt with an empty
 			// line (#415).
 			if ch == 13 {
-				ih.DiscardPendingByte(10, 10*time.Millisecond)
+				ih.SkipEnterTrailer()
 			}
 			result := string(input)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
