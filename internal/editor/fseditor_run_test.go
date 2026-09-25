@@ -133,3 +133,25 @@ func TestDiscardPendingByteOnlyDropsTheMatchingByte(t *testing.T) {
 		t.Fatal("nothing pending must report false")
 	}
 }
+
+// TestRunSpaceTypedAtMarginIsKept guards #412: when the space typed after a
+// word is what pushes the line past the margin, the wrap consumes it as the
+// soft break. The cursor must move to a fresh line so the next word stays a
+// separate word instead of being glued to the last one ("thecursor").
+func TestRunSpaceTypedAtMarginIsKept(t *testing.T) {
+	// The first line is exactly 79 columns once "the" is typed.
+	first := "insight as well as it causes repeating numbers to show up instead of moving the"
+	if len(first) != MaxLineLength {
+		t.Fatalf("setup: first line is %d columns, want %d", len(first), MaxLineLength)
+	}
+	sess := testterm.NewSession(nil, first+" cursor.\x1a")
+	ed := NewFSEditor(sess, io.Discard, ansi.OutputModeUTF8, 80, 24,
+		"", "", "", "", "", "", nil)
+	content, saved, err := ed.Run()
+	if err != nil || !saved {
+		t.Fatalf("Run: saved=%v err=%v", saved, err)
+	}
+	if want := first + "\ncursor."; content != want {
+		t.Fatalf("content = %q, want %q", content, want)
+	}
+}

@@ -97,6 +97,15 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 		pos += wrapPos
 		if pos < len(text) && text[pos] == ' ' {
 			pos++
+			if pos == len(text) {
+				// The separator was the last character — typically the space
+				// just typed past the margin. Open an empty continuation line
+				// so the cursor moves onto it; otherwise the next letter lands
+				// on this line and the following wrap glues the two words
+				// together, losing the space.
+				lineStarts = append(lineStarts, pos)
+				outputLines = append(outputLines, "")
+			}
 		}
 	}
 
