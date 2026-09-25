@@ -112,3 +112,54 @@ func TestVirusScanPlaceholders(t *testing.T) {
 		t.Errorf("scanner arguments = %q, want %q", got, want)
 	}
 }
+
+// Commands written before archivers.json's names were honoured used {FILE}
+// for the archive and {WORKDIR} for the extraction directory. They must keep
+// working, while a step that sets {FILE} itself (the comment and ad steps)
+// keeps its own meaning.
+func TestExternalArchiverLegacyPlaceholders(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "args.log")
+	tool := recorderScript(t, dir, log)
+
+	archive := filepath.Join(dir, "upload.rar")
+	if err := os.WriteFile(archive, []byte("rar"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "BBS.AD"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := DefaultConfig()
+	cfg.ArchiveTypes = []ArchiveType{{
+		Extension:      ".rar",
+		TestCommand:    tool,
+		TestArgs:       []string{"t", "{FILE}"},
+		ExtractCommand: tool,
+		ExtractArgs:    []string{"x", "{FILE}", "{WORKDIR}"},
+		AddCommand:     tool,
+		AddArgs:        []string{"a", "{ARCHIVE}", "{FILE}"},
+	}}
+	p := NewProcessor(cfg, dir)
+
+	if err := p.StepTestIntegrity(archive); err != nil {
+		t.Fatalf("test step: %v", err)
+	}
+	workDir, err := p.StepExtract(archive)
+	if err != nil {
+		t.Fatalf("extract step: %v", err)
+	}
+	defer os.RemoveAll(workDir)
+	if err := p.StepIncludeFile(archive); err != nil {
+		t.Fatalf("include step: %v", err)
+	}
+
+	want := []string{
+		"t", archive,
+		"x", archive, workDir,
+		"a", archive, filepath.Join(dir, "BBS.AD"),
+	}
+	if got := readLog(t, log); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("tool arguments:\n got  %q\n want %q", got, want)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -196,6 +197,19 @@ func (p *Processor) StepIncludeFile(archivePath string) error {
 func (p *Processor) runExternalCommand(command string, args []string, vars map[string]string, dir string, timeoutSeconds int) error {
 	if command == "" {
 		return fmt.Errorf("no command configured")
+	}
+
+	// Before archivers.json's placeholders were honoured, ZipLab passed the
+	// archive as {FILE} and the extraction directory as {WORKDIR}. Keep those
+	// working for commands written against that, unless the step gives the
+	// name its own meaning ({FILE} is the comment or ad file when adding one).
+	vars = maps.Clone(vars)
+	for old, cur := range map[string]string{"{FILE}": "{ARCHIVE}", "{WORKDIR}": "{OUTDIR}"} {
+		if _, set := vars[old]; !set {
+			if v, ok := vars[cur]; ok {
+				vars[old] = v
+			}
+		}
 	}
 
 	pairs := make([]string, 0, 2*len(vars))
