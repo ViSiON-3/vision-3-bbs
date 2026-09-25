@@ -1,6 +1,6 @@
 # ZipLab Upload Processing
 
-ZipLab checks and tidies archives as users upload them. It tests each archive, extracts it, optionally virus-scans it, uses its `FILE_ID.DIZ` as the file description, strips other boards' ads, and stamps your own comment and ad file into it. While it works, the caller sees a status screen that ticks off each step.
+ZipLab checks and tidies archives as users upload them. It tests each archive, extracts it, optionally virus-scans it, uses its `FILE_ID.DIZ` as the file description, strips other boards' ads, and stamps your own comment and ad file into it. While it works, the caller sees a status screen that ticks off each step, if your menu set has `ZIPLAB.ANS` (see [Status screen](#status-screen)).
 
 ZipLab runs on any upload whose extension matches an **enabled** archiver in `archivers.json` (see [Archivers](configuration/configuration.md#archiversjson)). ZIP is handled natively; other formats use the external tools configured there.
 
@@ -63,7 +63,7 @@ The scan is off by default because it needs an external scanner. The default com
 
 In Args, `{WORKDIR}` is the directory of extracted files and `{FILE}` is the uploaded archive. The scanner runs with the extracted files as its working directory.
 
-**Any non-zero exit counts as a failed scan.** That includes a scanner that is missing or not executable, or one that runs past the timeout. If the scan is on and the scanner is not installed, every upload fails. Test with a clean upload after turning it on.
+**Any non-zero exit counts as a failed scan.** That includes a scanner that is missing or not executable, or one that runs past the timeout. If the scan is on and the scanner is not installed, every upload fails, unless Extract is off: the scan needs the extracted files, so it is skipped then. Test with a clean upload after turning it on.
 
 To use the ClamAV daemon instead, which is much faster for repeated scans, set Command to `clamdscan` and Args to `["--fdpass", "--no-summary", "{WORKDIR}"]`.
 
