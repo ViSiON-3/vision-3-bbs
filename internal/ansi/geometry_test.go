@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -216,5 +217,244 @@ func TestMenuArtFitsStandardHeights(t *testing.T) {
 			t.Errorf("%s renders %d rows (last row occupies %d columns) and will scroll a 24-row terminal; "+
 				"trim the last row so it ends at column 79 or shorter", name, rows, cols)
 		}
+	}
+}
+
+func TestHardWrap(t *testing.T) {
+	x80 := strings.Repeat("x", 80)
+	tests := []struct {
+		name      string
+		in        string
+		utf8Spans bool
+		want      string
+	}{
+		{
+			name: "wrap-only art gets an explicit break",
+			in:   x80 + x80,
+			want: x80 + "\r\n" + x80,
+		},
+		{
+			name: "full row followed by CRLF is left alone",
+			in:   x80 + "\r\n" + "y",
+			want: x80 + "\r\n" + "y",
+		},
+		{
+			name: "SGR does not cancel a pending wrap",
+			in:   x80 + "\x1b[31my",
+			want: x80 + "\x1b[31m\r\ny",
+		},
+		{
+			name: "cursor positioning cancels a pending wrap",
+			in:   x80 + "\x1b[5;1Hy",
+			want: x80 + "\x1b[5;1Hy",
+		},
+		{
+			name: "cursor forward is clamped at the right margin",
+			in:   "abc\x1b[100Cz",
+			want: "abc\x1b[76Cz",
+		},
+		{
+			name: "cursor forward at the margin is dropped",
+			in:   strings.Repeat("x", 79) + "\x1b[5Cz" + "w",
+			want: strings.Repeat("x", 79) + "z\r\nw",
+		},
+		{
+			name: "autowrap off keeps overwriting the last column",
+			in:   "\x1b[?7l" + x80 + "yz",
+			want: "\x1b[?7l" + x80 + "\x1b[Dy\x1b[Dz\x1b[D",
+		},
+		{
+			name: "autowrap back on wraps again",
+			in:   "\x1b[?7l" + x80 + "\x1b[?7hy" + x80,
+			want: "\x1b[?7l" + x80 + "\x1b[D\x1b[?7hy\r\n" + x80,
+		},
+		{
+			name: "restore before any save is a no-op",
+			in:   "ab\x1b[u" + strings.Repeat("x", 78) + "y",
+			want: "ab\x1b[u" + strings.Repeat("x", 78) + "\r\ny",
+		},
+		{
+			name: "cursor position past the margin is clamped",
+			in:   "\x1b[5;100Hx\x1b[3;100fy\x1b[100Gz\x1b[7;40Hw",
+			want: "\x1b[5;80Hx\x1b[3;80fy\x1b[80Gz\x1b[7;40Hw",
+		},
+		{
+			name: "OSC payload is not measured or broken",
+			in:   x80 + "\x1b]0;" + x80 + "\a" + "\x1b]8;;http://x\x1b\\y",
+			want: x80 + "\x1b]0;" + x80 + "\a" + "\x1b]8;;http://x\x1b\\\r\ny",
+		},
+		{
+			name:      "UTF-8 spans are measured in runes",
+			in:        strings.Repeat("─", 80) + "x",
+			utf8Spans: true,
+			want:      strings.Repeat("─", 80) + "\r\nx",
+		},
+		{
+			name: "CP437 bytes that happen to form valid UTF-8 are one cell each",
+			in:   strings.Repeat("\xdc\xb3", 40) + "x",
+			want: strings.Repeat("\xdc\xb3", 40) + "\r\nx",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := string(HardWrap([]byte(tt.in), 80, tt.utf8Spans))
+			if got != tt.want {
+				t.Errorf("HardWrap = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFitArtToWidth_LeavesStandardWidthAlone(t *testing.T) {
+	in := []byte(strings.Repeat("x", 160))
+	for _, w := range []int{0, 40, 80} {
+		if got := FitArtToWidth(in, w, false); !bytes.Equal(got, in) {
+			t.Errorf("termWidth %d: art was modified", w)
+		}
+	}
+	if got := FitArtToWidth(in, 132, false); bytes.Equal(got, in) {
+		t.Error("termWidth 132: wrap-only art was not broken into rows")
+	}
+}
+
+// renderCells draws ANSI art onto an unbounded grid width columns wide, the
+// way a terminal with deferred autowrap would, and returns the character in
+// each cell. It understands just the sequences shipped art uses.
+func renderCells(data []byte, width int) map[[2]int]byte {
+	cells := make(map[[2]int]byte)
+	x, y, sx, sy := 1, 1, 1, 1
+	pending, sp := false, false // xterm saves the pending wrap with the cursor
+	autoWrap, saved := true, false
+	clamp := func() {
+		x = min(max(x, 1), width)
+		y = max(y, 1)
+	}
+	for i := 0; i < len(data); i++ {
+		b := data[i]
+		switch {
+		case b == 0x1b && i+1 < len(data) && data[i+1] == '[':
+			j := i + 2
+			for j < len(data) && data[j] >= 0x20 && data[j] <= 0x3f {
+				j++
+			}
+			if j >= len(data) {
+				return cells
+			}
+			var ps []int
+			for _, f := range strings.Split(string(data[i+2:j]), ";") {
+				n := 0
+				for _, c := range f {
+					if c >= '0' && c <= '9' {
+						n = n*10 + int(c-'0')
+					}
+				}
+				ps = append(ps, n)
+			}
+			p := func(k int) int {
+				if k < len(ps) && ps[k] > 0 {
+					return ps[k]
+				}
+				return 1
+			}
+			switch data[j] {
+			case 'H', 'f':
+				y, x = p(0), p(1)
+			case 'A':
+				y -= p(0)
+			case 'B':
+				y += p(0)
+			case 'C':
+				x += p(0)
+			case 'D':
+				x -= p(0)
+			case 'E':
+				y, x = y+p(0), 1
+			case 'F':
+				y, x = y-p(0), 1
+			case 'G', '`':
+				x = p(0)
+			case 'J':
+				if len(ps) > 0 && ps[0] == 2 {
+					clear(cells)
+				}
+			}
+			switch data[j] {
+			case 'm', 'J', 'K':
+			case 's':
+				sx, sy, sp, saved = x, y, pending, true
+			case 'u':
+				if saved {
+					x, y, pending = sx, sy, sp
+				}
+			case 'h', 'l':
+				if bytes.HasPrefix(data[i+2:j], []byte("?")) && slices.Contains(ps, 7) {
+					autoWrap = data[j] == 'h'
+				}
+				pending = false
+			default:
+				pending = false
+			}
+			clamp()
+			i = j
+		case b == 0x1b && i+1 < len(data):
+			i++
+		case b == '\r':
+			x, pending = 1, false
+		case b == '\n':
+			x, y, pending = 1, y+1, false
+		case b == '\b':
+			x, pending = x-1, false
+			clamp()
+		case b == '\t':
+			x, pending = ((x-1)/8+1)*8+1, false
+			clamp()
+		case b < 0x20:
+		default:
+			if pending {
+				x, y, pending = 1, y+1, false
+			}
+			cells[[2]int{y, x}] = b
+			if x == width {
+				pending = autoWrap
+			} else {
+				x++
+			}
+		}
+	}
+	return cells
+}
+
+// TestHardWrapShippedArt checks that every shipped ANSI file, passed through
+// HardWrap, draws exactly the same cells on a 132-column terminal as the
+// original does on an 80-column one.
+func TestHardWrapShippedArt(t *testing.T) {
+	root := filepath.Join("..", "..", "menus", "v3")
+	if _, err := os.Stat(root); err != nil {
+		t.Skipf("menu set not available: %v", err)
+	}
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".ans") {
+			return err
+		}
+		data, err := GetAnsiFileContent(path)
+		if err != nil {
+			return err
+		}
+		want := renderCells(data, 80)
+		got := renderCells(HardWrap(data, 80, false), 132)
+		if len(got) != len(want) {
+			t.Errorf("%s: %d cells drawn at 132 columns, want %d", path, len(got), len(want))
+			return nil
+		}
+		for pos, c := range want {
+			if got[pos] != c {
+				t.Errorf("%s: row %d col %d = %q at 132 columns, want %q", path, pos[0], pos[1], got[pos], c)
+				return nil
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

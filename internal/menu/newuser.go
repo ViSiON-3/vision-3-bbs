@@ -120,7 +120,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	terminalio.WriteProcessedBytes(terminal, []byte("\x1b[?25h\x1b[3 q"), outputMode)
 
 	// 2. Display NEWUSER.ANS welcome screen with pause
-	if err := e.displayNewUserScreen(terminal, outputMode, nodeNumber); err != nil {
+	if err := e.displayNewUserScreen(terminal, outputMode, nodeNumber, termWidth); err != nil {
 		slog.Warn("failed to display NEWUSER.ANS", "node", nodeNumber, "error", err)
 		// Continue without the screen - not fatal
 	} else {
@@ -316,7 +316,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 }
 
 // displayNewUserScreen loads and displays NEWUSER.ANS.
-func (e *MenuExecutor) displayNewUserScreen(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) error {
+func (e *MenuExecutor) displayNewUserScreen(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber, termWidth int) error {
 	fullAnsPath := e.menuFile("ansi", "NEWUSER.ANS")
 	rawContent, err := ansi.GetAnsiFileContent(fullAnsPath)
 	if err != nil {
@@ -328,13 +328,7 @@ func (e *MenuExecutor) displayNewUserScreen(terminal *term.Terminal, outputMode 
 	}
 
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-	// (some CP437 byte pairs accidentally form valid UTF-8)
-	if outputMode == ansi.OutputModeCP437 {
-		_, _ = terminal.Write(rawContent) // best-effort display
-	} else {
-		terminalio.WriteProcessedBytes(terminal, rawContent, outputMode)
-	}
+	_ = writeArt(terminal, rawContent, outputMode, termWidth) // best-effort display
 	return nil
 }
 

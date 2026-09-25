@@ -437,11 +437,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	ansPath := e.menuFile("ansi", "FILESCAN.ANS")
 	headerContent, ansErr := ansi.GetAnsiFileContent(ansPath)
 	if ansErr == nil {
-		if outputMode == ansi.OutputModeCP437 {
-			_, _ = terminal.Write(headerContent) // best-effort display
-		} else {
-			terminalio.WriteProcessedBytes(terminal, headerContent, outputMode)
-		}
+		_ = writeArt(terminal, headerContent, outputMode, termWidth) // best-effort display
 	} else {
 		header := e.Strings().FileNewscanConfigHeader
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header)), outputMode)

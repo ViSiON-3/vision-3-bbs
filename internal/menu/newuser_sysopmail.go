@@ -140,7 +140,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 	// (not merely present) covers a transient read error, which would otherwise
 	// leave the caller with no instruction before the editor. The retry loop
 	// below does not re-show it — only a short reminder.
-	displayed, err := e.displayNewUserEmailScreen(terminal, outputMode, nodeNumber)
+	displayed, err := e.displayNewUserEmailScreen(terminal, outputMode, nodeNumber, termWidth)
 	if err != nil {
 		slog.Warn("failed to display NUEMAIL.ANS", "node", nodeNumber, "error", err)
 	}
@@ -230,7 +230,7 @@ func (e *MenuExecutor) newUserEmailArtPath() string {
 // displayed=true only when the art was actually written, so the caller shows
 // the fallback string on both a missing file (no error) and a read failure
 // (error), rather than leaving the caller with no instruction at all.
-func (e *MenuExecutor) displayNewUserEmailScreen(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) (displayed bool, err error) {
+func (e *MenuExecutor) displayNewUserEmailScreen(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber, termWidth int) (displayed bool, err error) {
 	rawContent, err := ansi.GetAnsiFileContent(e.newUserEmailArtPath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -241,12 +241,6 @@ func (e *MenuExecutor) displayNewUserEmailScreen(terminal *term.Terminal, output
 	}
 
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-	// (some CP437 byte pairs accidentally form valid UTF-8).
-	if outputMode == ansi.OutputModeCP437 {
-		_, _ = terminal.Write(rawContent) // best-effort display
-	} else {
-		terminalio.WriteProcessedBytes(terminal, rawContent, outputMode)
-	}
+	_ = writeArt(terminal, rawContent, outputMode, termWidth) // best-effort display
 	return true, nil
 }

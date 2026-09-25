@@ -39,7 +39,7 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 		// Process pipe codes on raw bytes, then write directly.
 		// No CP437→UTF8 conversion — ANSI art bytes are sent as-is.
 		processed := ansi.ReplacePipeCodes(content)
-		eng.writeBytes(processed)
+		eng.writeBytes(fitArt(eng, processed))
 		return goja.Undefined()
 	})
 
@@ -60,11 +60,17 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 			return goja.Undefined()
 		}
 
-		eng.writeBytes(content)
+		eng.writeBytes(fitArt(eng, content))
 		return goja.Undefined()
 	})
 
 	jsutil.Set(v3, "ansi", obj)
+}
+
+// fitArt makes the art's line breaks explicit on terminals wider than it (see
+// ansi.FitArtToWidth). The bytes go to the session raw, one byte per cell.
+func fitArt(eng *Engine, data []byte) []byte {
+	return ansi.FitArtToWidth(data, eng.session.ScreenWidth, false)
 }
 
 // resolveAnsiPath finds an ANSI file by checking multiple locations:

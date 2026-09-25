@@ -43,7 +43,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 					return "LOGOFF", "", nil, nil
 				}
 				if errors.Is(runErr, editor.ErrIdleTimeout) {
-					e.handleIdleTimeout(terminal, outputMode, nodeNumber, termHeight)
+					e.handleIdleTimeout(terminal, outputMode, nodeNumber, termWidth, termHeight)
 					return "LOGOFF", "", nil, nil
 				}
 				slog.Error("RUN function failed", "target", runTarget, "error", runErr)

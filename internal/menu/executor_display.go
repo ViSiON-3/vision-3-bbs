@@ -3,6 +3,7 @@ package menu
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"regexp"
@@ -182,7 +183,7 @@ func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.
 // cursor positioning (BAR lightbar overlays, field coordinates) stays put, so
 // the two silently desynchronise on short terminals — e.g. SyncTERM at 24 rows
 // with its status line showing.
-func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, outputMode ansi.OutputMode, termHeight int, clearFirst ...bool) error {
+func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, outputMode ansi.OutputMode, termWidth, termHeight int, clearFirst ...bool) error {
 	// Construct full path using MenuSetPath
 	filePath := e.menuFile("ansi", filename)
 
@@ -219,19 +220,25 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 			"file", filename, "termHeight", termHeight, "artRows", rows, "lastRowCols", lastCols)
 	}
 
-	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-	var writeErr error
-	if outputMode == ansi.OutputModeCP437 {
-		_, writeErr = terminal.Write(data)
-	} else {
-		writeErr = terminalio.WriteProcessedBytes(terminal, data, outputMode)
-	}
-	if writeErr != nil {
+	if writeErr := writeArt(terminal, data, outputMode, termWidth); writeErr != nil {
 		slog.Error("failed to write ANSI file", "path", filePath, "error", writeErr)
 		return writeErr
 	}
 
 	return nil
+}
+
+// writeArt writes ANSI art to the terminal, making its line breaks explicit on
+// terminals wider than the art (see ansi.FitArtToWidth). CP437 output is
+// written raw to avoid UTF-8 false positives; other modes go through the
+// output-mode writer.
+func writeArt(w io.Writer, data []byte, outputMode ansi.OutputMode, termWidth int) error {
+	data = ansi.FitArtToWidth(data, termWidth, outputMode == ansi.OutputModeUTF8)
+	if outputMode == ansi.OutputModeCP437 {
+		_, err := w.Write(data)
+		return err
+	}
+	return terminalio.WriteProcessedBytes(w, data, outputMode)
 }
 
 // deliverPendingPages checks for and displays any queued page messages.

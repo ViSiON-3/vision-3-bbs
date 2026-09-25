@@ -204,7 +204,7 @@ func runScanTypeWithInput(t *testing.T, input string, numMsgs int) (*ScanConfig,
 	ih := getSessionIH(ts)
 	t.Cleanup(func() { resetSessionIH(ts) })
 
-	cfg, err := runGetScanType(ih, e, terminal, ansi.OutputModeUTF8, numMsgs, true)
+	cfg, err := runGetScanType(ih, e, terminal, ansi.OutputModeUTF8, numMsgs, true, 80)
 	if err != nil {
 		t.Fatalf("runGetScanType: %v", err)
 	}

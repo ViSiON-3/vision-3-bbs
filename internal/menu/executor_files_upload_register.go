@@ -67,6 +67,11 @@ func (e *MenuExecutor) registerUploadedFiles(
 			nfoPath := e.menuFile("ansi", "ZIPLAB.NFO")
 
 			ansiContent, _ := ansi.GetAnsiFileContent(ansiPath)
+			if ansiContent != nil {
+				// DisplayPipeline writes the art raw, one byte per cell.
+				_, termWidth := resolveTermSize(s)
+				ansiContent = ansi.FitArtToWidth(ansiContent, termWidth, false)
+			}
 			nfo, _ := ziplab.ParseNFO(nfoPath)
 
 			var result ziplab.PipelineResult

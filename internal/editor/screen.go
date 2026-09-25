@@ -407,7 +407,7 @@ func (s *Screen) parseGeometryMarkers(content string) {
 
 // DisplayHeader displays the header template, then overlays dynamic row-4 fields.
 func (s *Screen) DisplayHeader() {
-	terminalio.WriteProcessedBytes(s.terminal, []byte(s.headerContent), s.outputMode)
+	s.WriteArt([]byte(s.headerContent))
 	s.renderInfoRow()
 }
 
@@ -773,6 +773,13 @@ func (s *Screen) Resize(newWidth, newHeight int) {
 // WriteDirect writes directly to the terminal (for special messages)
 func (s *Screen) WriteDirect(text string) {
 	terminalio.WriteProcessedBytes(s.terminal, []byte(text), s.outputMode)
+}
+
+// WriteArt writes ANSI art, making its line breaks explicit on terminals
+// wider than the art (see ansi.FitArtToWidth).
+func (s *Screen) WriteArt(data []byte) {
+	data = ansi.FitArtToWidth(data, s.termWidth, true) // WriteProcessedBytes measures by span
+	terminalio.WriteProcessedBytes(s.terminal, data, s.outputMode)
 }
 
 // WriteDirectProcessed writes directly to the terminal with pipe code processing
