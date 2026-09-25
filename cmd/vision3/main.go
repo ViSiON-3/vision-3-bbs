@@ -1886,14 +1886,27 @@ func main() {
 		eventScheduler = scheduler.NewScheduler(eventsConfig, historyPath)
 		schedulerRef.Store(eventScheduler) // expose to the WFC console's Events tab
 		schedulerCtx, schedulerCancel = context.WithCancel(context.Background())
+		// Start saves the event history on its way out, so wait for it to
+		// return: exiting as soon as the context is cancelled killed the save
+		// midway, leaving event_history.json stale and its temp file behind.
+		// Bounded, so an event that ignores cancellation cannot hold up exit.
+		schedulerDone := make(chan struct{})
 		defer func() {
 			if schedulerCancel != nil {
 				slog.Info("shutting down event scheduler")
 				schedulerCancel()
+				select {
+				case <-schedulerDone:
+				case <-time.After(30 * time.Second):
+					slog.Warn("event scheduler did not stop in time; event history may not be saved")
+				}
 			}
 		}()
 
-		go eventScheduler.Start(schedulerCtx)
+		go func() {
+			defer close(schedulerDone)
+			eventScheduler.Start(schedulerCtx)
+		}()
 		slog.Info("event scheduler started", "count", len(eventsConfig.Events))
 
 		// Let the config watcher hot-reload events.json into the scheduler.
