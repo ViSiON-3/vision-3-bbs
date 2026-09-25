@@ -1,6 +1,7 @@
 package ansi
 
 import (
+	"bytes"
 	"strconv"
 	"unicode/utf8"
 )
@@ -238,7 +239,8 @@ func HardWrap(data []byte, width int, utf8Spans bool) []byte {
 
 	out := make([]byte, 0, len(data)+len(data)/40)
 	x := 1 // column the next character lands in; width+1 means a wrap is pending
-	savedX := 1
+	savedX, savedValid := 1, false
+	autoWrap := true // DECAWM; art can turn it off with ESC[?7l
 
 	param := func(params []byte, idx, def int) int {
 		field := 0
@@ -292,7 +294,14 @@ func HardWrap(data []byte, width int, utf8Spans bool) []byte {
 			x = 1
 		}
 		out = append(out, cell...)
-		x++
+		if x < width || autoWrap {
+			x++
+			return
+		}
+		// Autowrap off: a width-column terminal keeps the cursor on the last
+		// column, so later characters overwrite it. A wider terminal has moved
+		// on a column; step it back.
+		out = append(out, "\x1b[D"...)
 	}
 
 	for i := 0; i < len(data); {
@@ -335,9 +344,23 @@ func HardWrap(data []byte, width int, utf8Spans bool) []byte {
 					seq = []byte("\x1b[" + strconv.Itoa(n) + "C")
 				}
 			case 's': // SCO save
-				savedX = x
-			case 'u': // SCO restore
-				x = savedX
+				savedX, savedValid = x, true
+			case 'u': // SCO restore; a no-op until a position has been saved
+				if savedValid {
+					x = savedX
+				}
+			case 'h', 'l': // mode set / reset — only DECAWM (?7) matters here
+				if len(params) > 0 && params[0] == '?' {
+					for _, f := range bytes.Split(params[1:], []byte{';'}) {
+						if string(f) != "7" {
+							continue
+						}
+						autoWrap = data[j] == 'h'
+						if !autoWrap {
+							settle() // a width-column terminal drops the pending wrap
+						}
+					}
+				}
 			}
 			out = append(out, seq...)
 			i = j + 1
@@ -345,9 +368,11 @@ func HardWrap(data []byte, width int, utf8Spans bool) []byte {
 		case b == 0x1b && i+1 < len(data):
 			switch data[i+1] {
 			case '7': // DECSC
-				savedX = x
+				savedX, savedValid = x, true
 			case '8': // DECRC
-				x = savedX
+				if savedValid {
+					x = savedX
+				}
 			}
 			out = append(out, data[i:i+2]...)
 			i += 2

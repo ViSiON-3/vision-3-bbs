@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -258,6 +259,21 @@ func TestHardWrap(t *testing.T) {
 			want: strings.Repeat("x", 79) + "z\r\nw",
 		},
 		{
+			name: "autowrap off keeps overwriting the last column",
+			in:   "\x1b[?7l" + x80 + "yz",
+			want: "\x1b[?7l" + x80 + "\x1b[Dy\x1b[Dz\x1b[D",
+		},
+		{
+			name: "autowrap back on wraps again",
+			in:   "\x1b[?7l" + x80 + "\x1b[?7hy" + x80,
+			want: "\x1b[?7l" + x80 + "\x1b[D\x1b[?7hy\r\n" + x80,
+		},
+		{
+			name: "restore before any save is a no-op",
+			in:   "ab\x1b[u" + strings.Repeat("x", 78) + "y",
+			want: "ab\x1b[u" + strings.Repeat("x", 78) + "\r\ny",
+		},
+		{
 			name:      "UTF-8 spans are measured in runes",
 			in:        strings.Repeat("─", 80) + "x",
 			utf8Spans: true,
@@ -298,6 +314,7 @@ func renderCells(data []byte, width int) map[[2]int]byte {
 	cells := make(map[[2]int]byte)
 	x, y, sx, sy := 1, 1, 1, 1
 	pending, sp := false, false // xterm saves the pending wrap with the cursor
+	autoWrap, saved := true, false
 	clamp := func() {
 		x = min(max(x, 1), width)
 		y = max(y, 1)
@@ -354,9 +371,16 @@ func renderCells(data []byte, width int) map[[2]int]byte {
 			switch data[j] {
 			case 'm', 'J', 'K':
 			case 's':
-				sx, sy, sp = x, y, pending
+				sx, sy, sp, saved = x, y, pending, true
 			case 'u':
-				x, y, pending = sx, sy, sp
+				if saved {
+					x, y, pending = sx, sy, sp
+				}
+			case 'h', 'l':
+				if bytes.HasPrefix(data[i+2:j], []byte("?")) && slices.Contains(ps, 7) {
+					autoWrap = data[j] == 'h'
+				}
+				pending = false
 			default:
 				pending = false
 			}
@@ -381,7 +405,7 @@ func renderCells(data []byte, width int) map[[2]int]byte {
 			}
 			cells[[2]int{y, x}] = b
 			if x == width {
-				pending = true
+				pending = autoWrap
 			} else {
 				x++
 			}

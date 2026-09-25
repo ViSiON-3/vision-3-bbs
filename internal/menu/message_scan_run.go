@@ -46,7 +46,11 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		numMsgs = cnt
 	}
 
-	// Show scan setup menu
+	// Show scan setup menu, falling back to the user's saved width as the
+	// scan screens below do.
+	if termWidth <= 0 {
+		termWidth = currentUser.ScreenWidth
+	}
 	scanCfg, err := runGetScanType(scanIH, e, terminal, outputMode, numMsgs, currentOnly, termWidth)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
