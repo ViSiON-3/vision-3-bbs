@@ -1513,7 +1513,8 @@ func sessionHandler(s ssh.Session) {
 					effectiveMode = ansi.OutputModeCP437
 					authenticatedUser.PreferredEncoding = "cp437"
 					setupChanged = true
-					applyPalette() // restore the terminal's palette before the rest of setup is drawn
+					// Restore the terminal's palette before the rest of setup is drawn.
+					applyPalette()
 					_, _ = terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Switched to CP437 encoding for retro BBS experience.\r\n")) // best-effort display
 				} else {
 					slog.Info("user selected UTF-8 encoding", "node", nodeID)
