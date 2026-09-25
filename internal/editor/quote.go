@@ -185,15 +185,31 @@ func (qs *quoteSession) handleComposeKey(key int) bool {
 	return false
 }
 
-// finish returns the cursor position for the editor to resume at: the line just
-// after the quote block, or the original line when nothing was quoted.
+// finish returns the cursor position for the editor to resume at, or the
+// original line when nothing was quoted. After a quote block it leaves one
+// blank line below the "Done" banner and puts the cursor on the line after
+// it, so the reply doesn't start hard against the quoted text. A line that is
+// already blank there serves as the gap. When the buffer is too full for the
+// gap, the cursor goes just past the banner as before.
 func (qs *quoteSession) finish() (int, int) {
 	if qs.blockStart == 0 {
 		return qs.origLine, 1
 	}
-	line := qs.insertAt + 1 // insertAt holds the "Done" banner
-	if line > qs.ch.buffer.GetLineCount() {
-		line = qs.ch.buffer.GetLineCount()
+	buf := qs.ch.buffer
+	gap := qs.insertAt + 1 // insertAt holds the "Done" banner
+	gapReady := gap <= buf.GetLineCount() && strings.TrimSpace(buf.GetLine(gap)) == ""
+	if !gapReady {
+		gapReady = qs.insertBufferLine(gap, "")
+	}
+	if gapReady {
+		line := gap + 1
+		if line <= buf.GetLineCount() || qs.insertBufferLine(line, "") {
+			return line, 1
+		}
+	}
+	line := gap
+	if line > buf.GetLineCount() {
+		line = buf.GetLineCount()
 	}
 	return line, 1
 }
