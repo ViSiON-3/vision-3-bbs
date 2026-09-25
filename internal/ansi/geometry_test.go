@@ -274,6 +274,16 @@ func TestHardWrap(t *testing.T) {
 			want: "ab\x1b[u" + strings.Repeat("x", 78) + "\r\ny",
 		},
 		{
+			name: "cursor position past the margin is clamped",
+			in:   "\x1b[5;100Hx\x1b[3;100fy\x1b[100Gz\x1b[7;40Hw",
+			want: "\x1b[5;80Hx\x1b[3;80fy\x1b[80Gz\x1b[7;40Hw",
+		},
+		{
+			name: "OSC payload is not measured or broken",
+			in:   x80 + "\x1b]0;" + x80 + "\a" + "\x1b]8;;http://x\x1b\\y",
+			want: x80 + "\x1b]0;" + x80 + "\a" + "\x1b]8;;http://x\x1b\\\r\ny",
+		},
+		{
 			name:      "UTF-8 spans are measured in runes",
 			in:        strings.Repeat("─", 80) + "x",
 			utf8Spans: true,

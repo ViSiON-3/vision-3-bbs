@@ -319,9 +319,15 @@ func HardWrap(data []byte, width int, utf8Spans bool) []byte {
 			params := data[i+2 : j]
 			seq := data[i : j+1]
 			switch data[j] {
-			case 'H', 'f': // CUP
+			case 'H', 'f': // CUP — a column past the margin is clamped, as a width-column terminal would
+				if col := param(params, 1, 1); col > width {
+					seq = []byte("\x1b[" + strconv.Itoa(param(params, 0, 1)) + ";" + strconv.Itoa(width) + string(data[j]))
+				}
 				x = clampCol(param(params, 1, 1))
 			case 'G', '`': // CHA
+				if param(params, 0, 1) > width {
+					seq = []byte("\x1b[" + strconv.Itoa(width) + string(data[j]))
+				}
 				x = clampCol(param(params, 0, 1))
 			case 'E', 'F': // CNL / CPL
 				x = 1
@@ -364,6 +370,24 @@ func HardWrap(data []byte, width int, utf8Spans bool) []byte {
 			}
 			out = append(out, seq...)
 			i = j + 1
+
+		case b == 0x1b && i+1 < len(data) && data[i+1] == ']':
+			// OSC (window title, hyperlink): pass through to its BEL or ST
+			// terminator without measuring the payload as printable text.
+			j := i + 2
+			for j < len(data) && data[j] != '\a' && (data[j] != 0x1b || j+1 >= len(data) || data[j+1] != '\\') {
+				j++
+			}
+			switch {
+			case j >= len(data):
+				return append(out, data[i:]...) // unterminated
+			case data[j] == '\a':
+				j++
+			default:
+				j += 2 // ESC \
+			}
+			out = append(out, data[i:j]...)
+			i = j
 
 		case b == 0x1b && i+1 < len(data):
 			switch data[i+1] {
