@@ -13,6 +13,7 @@ import (
 type PlaceholderMatch struct {
 	Code      string         // Single letter (T, F, S, etc.)
 	Width     int            // 0 = no width constraint
+	MaxWidth  int            // 0 = no limit; otherwise truncate to this width without padding
 	AutoWidth bool           // true = use auto-calculated width from context
 	Align     ansi.Alignment // AlignLeft (default), AlignRight, AlignCenter
 	FullMatch string         // Complete matched text "@T###@"
@@ -21,13 +22,13 @@ type PlaceholderMatch struct {
 }
 
 // Regex compiled once for performance.
-// Matches: @CODE@, @CODE:20@, @CODE###@, @CODE*@, or @CODE|MODIFIER...@
+// Matches: @CODE@, @CODE:20@, @CODE###@, @CODE*@, @CODE<20@, or @CODE|MODIFIER...@
 // Groups: 1=code letter, 2=modifier(opt), 3=digits-after-modifier(opt),
 //
-//	4=:WIDTH (optional), 5=### (optional), 6=* (optional)
+//	4=:WIDTH (optional), 5=### (optional), 6=* (optional), 7=<MAXWIDTH (optional)
 //
 // G = gap fill: fills remaining line width with ─ (CP437 0xC4) characters.
-var placeholderRegex = regexp.MustCompile(`@([BTFSUL#NDWPEOMAZCXGVK])(?:\|([LRC])(\d+)?)?(?::(\d+)|([#]+)|(\*))?@`)
+var placeholderRegex = regexp.MustCompile(`@([BTFSUL#NDWPEOMAZCXGVK])(?:\|([LRC])(\d+)?)?(?::(\d+)|([#]+)|(\*)|<(\d+))?@`)
 
 // parsePlaceholders extracts all @CODE@ patterns from template bytes.
 func parsePlaceholders(template []byte) []PlaceholderMatch {
@@ -42,6 +43,7 @@ func parsePlaceholders(template []byte) []PlaceholderMatch {
 		// match[8], match[9]   = :WIDTH start/end (or -1 if not present)
 		// match[10], match[11] = ### start/end (or -1 if not present)
 		// match[12], match[13] = * start/end (or -1 if not present)
+		// match[14], match[15] = <MAXWIDTH digits start/end (or -1 if not present)
 
 		code := string(template[match[2]:match[3]])
 		fullMatch := string(template[match[0]:match[1]])
@@ -73,9 +75,17 @@ func parsePlaceholders(template []byte) []PlaceholderMatch {
 			autoWidth = true
 		}
 
+		// Max width (@T<40@): truncate long values but never pad short ones,
+		// so the field keeps its natural length and whatever follows it flows on.
+		maxWidth := 0
+		if match[14] != -1 && match[14] < match[15] {
+			maxWidth, _ = strconv.Atoi(string(template[match[14]:match[15]]))
+		}
+
 		result = append(result, PlaceholderMatch{
 			Code:      code,
 			Width:     width,
+			MaxWidth:  maxWidth,
 			AutoWidth: autoWidth,
 			Align:     align,
 			FullMatch: fullMatch,
@@ -97,6 +107,7 @@ const gapFillMarker = "\x00GAP_FILL\x00"
 //   - @T:20@ - Explicit width (parameter-based)
 //   - @T###########@ - Visual width (width = total placeholder length including delimiters)
 //   - @T*@ - Auto-width (width from autoWidths map, calculated from context)
+//   - @T<40@ - Max width (truncate to 40, never pad)
 //
 // Special code @G@ (gap fill): fills remaining line width with ─ (CP437 0xC4).
 // Width is determined by: @G:80@ (explicit target), @G*@ (auto-width from map),
@@ -151,6 +162,8 @@ func processPlaceholderTemplate(template []byte, substitutions map[byte]string, 
 				}
 			} else if match.Width > 0 {
 				value = ansi.ApplyWidthConstraintAligned(value, match.Width, match.Align)
+			} else if match.MaxWidth > 0 {
+				value = ansi.TruncateVisible(value, match.MaxWidth)
 			}
 
 			// Append processed value

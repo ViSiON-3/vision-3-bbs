@@ -413,3 +413,25 @@ func contains(s, substr string) bool {
 	}
 	return false
 }
+
+func TestProcessPlaceholderMaxWidth(t *testing.T) {
+	m := parsePlaceholders([]byte("@T<5@"))
+	if len(m) != 1 || m[0].MaxWidth != 5 || m[0].Width != 0 || m[0].AutoWidth {
+		t.Fatalf("parse @T<5@ = %+v, want MaxWidth 5 and no fixed or auto width", m)
+	}
+
+	tests := []struct {
+		value string
+		want  string
+	}{
+		{"Hi", `"Hi"|`},             // short values are not padded
+		{"Hello", `"Hello"|`},       // exactly the limit
+		{"Hello there", `"Hello"|`}, // longer values are cut
+	}
+	for _, tt := range tests {
+		got := string(processPlaceholderTemplate([]byte(`"@T<5@"|`), map[byte]string{'T': tt.value}, nil))
+		if got != tt.want {
+			t.Errorf("value %q: got %q, want %q", tt.value, got, tt.want)
+		}
+	}
+}

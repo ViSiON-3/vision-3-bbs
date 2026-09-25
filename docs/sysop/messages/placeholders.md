@@ -4,12 +4,13 @@ Vision3 replaces `@X@` placeholders in message header templates (`menus/v3/templ
 
 ## Placeholder Format
 
-Vision3 supports four placeholder formats, with optional alignment modifiers:
+Vision3 supports five placeholder formats, with optional alignment modifiers:
 
 1. **Simple format**: `@T@` - Inserts value as-is (no width constraint)
 2. **Parameter width**: `@T:20@` - Explicit width (truncates/pads to exactly 20 characters)
 3. **Visual width**: `@T############@` - Width shown by # character count (self-documenting)
 4. **Auto-width**: `@T*@` - Width automatically calculated from context (see below)
+5. **Maximum width**: `@T<40@` - Truncates to 40 characters but never pads (see below)
 
 ### Alignment Modifiers
 
@@ -95,6 +96,21 @@ Use `#` characters to show the intended field width directly in your template:
 - This makes templates self-documenting - you can see the exact field allocations visually
 - ANSI color codes are preserved when truncating values
 
+### Maximum Width (`<` modifier)
+
+Use `<NUMBER` after the code to cap a field's length without padding it:
+
+```text
+@T<72@     - Subject cut at 72 characters; a short subject stays short
+@Z<60@     - Conference > Area cut at 60 characters
+```
+
+**How it works:**
+- Values longer than the limit are truncated; shorter values are inserted as-is, with no padding
+- Text after the field flows on right after the value, so a closing quote, bracket or note sits directly against it
+- Use it for fields followed by other text where padding would leave a gap, and pair it with an absolute column (`ESC[nG`) or `@G@` gap fill to keep borders and rules in place
+- Alignment modifiers have no effect, since the value is never padded
+
 ### Auto-Width (`*` modifier)
 
 Use `*` after the code to have the width automatically calculated from context:
@@ -124,6 +140,7 @@ Use `*` after the code to have the width automatically calculated from context:
 - Use `@#*@` instead of `@#:5@` when you want consistent number alignment without hardcoding the width
 - Use `@Z*@` or `@X*@` when you want the field to fit the current area name exactly
 - Use explicit `:WIDTH` or `###` when you need a specific fixed width for ANSI art layouts
+- Use `<MAX` when the field should keep its natural length but must never overflow the row
 - Use `@T@` (no width) when the field can be any length
 
 **Example template:**
