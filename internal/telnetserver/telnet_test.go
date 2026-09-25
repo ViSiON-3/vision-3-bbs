@@ -62,6 +62,35 @@ func TestRead_StripsIACNegotiation(t *testing.T) {
 	}
 }
 
+func TestRead_StripsCRNUL(t *testing.T) {
+	// NVT clients send Enter as CR NUL; the NUL must not reach the application.
+	// A NUL not preceded by CR is passed through untouched.
+	in := []byte{'a', '\r', 0x00, 'b', 0x00, 'c', '\r', '\n'}
+	tc := NewTelnetConn(newFakeConn(in))
+	got := drainRead(t, tc)
+	want := []byte{'a', '\r', 'b', 0x00, 'c', '\r', '\n'}
+	if !bytes.Equal(got, want) {
+		t.Errorf("decoded payload = %q, want %q", got, want)
+	}
+}
+
+func TestRead_StripsCRNULAcrossReads(t *testing.T) {
+	// CR and NUL arriving in separate Read calls must still be collapsed.
+	tc := NewTelnetConn(newFakeConn([]byte{'\r', 0x00, 'x'}))
+	buf := make([]byte, 1)
+	var out []byte
+	for {
+		n, err := tc.Read(buf)
+		out = append(out, buf[:n]...)
+		if err != nil {
+			break
+		}
+	}
+	if want := []byte{'\r', 'x'}; !bytes.Equal(out, want) {
+		t.Errorf("decoded payload = %q, want %q", out, want)
+	}
+}
+
 func TestRead_UnescapesDoubledIAC(t *testing.T) {
 	// 0xFF in the data stream arrives doubled (IAC IAC) and must decode to one 0xFF.
 	in := []byte{'a', IAC, IAC, 'b'}
