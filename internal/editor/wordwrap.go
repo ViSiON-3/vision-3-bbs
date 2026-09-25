@@ -97,6 +97,15 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 		pos += wrapPos
 		if pos < len(text) && text[pos] == ' ' {
 			pos++
+			if pos == len(text) {
+				// The separator was the last character — typically the space
+				// just typed past the margin. Open an empty continuation line
+				// so the cursor moves onto it; otherwise the next letter lands
+				// on this line and the following wrap glues the two words
+				// together, losing the space.
+				lineStarts = append(lineStarts, pos)
+				outputLines = append(outputLines, "")
+			}
 		}
 	}
 
@@ -127,7 +136,12 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 				// Buffer full: append remaining text to last written line
 				last := startLine + actualNew - 1
 				tail := text[lineStarts[i]:]
-				if tail != "" {
+				if tail == "" {
+					// Only the separator space was left to place (see the
+					// empty continuation line above). Keep it on the last
+					// line so the next word typed does not join this one.
+					ww.buffer.SetLine(last, ww.buffer.GetLine(last)+" ")
+				} else {
 					curr := ww.buffer.GetLine(last)
 					if curr != "" {
 						ww.buffer.SetLine(last, curr+" "+tail)

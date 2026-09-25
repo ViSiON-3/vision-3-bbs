@@ -251,9 +251,12 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		if !nonStop {
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 			// Show per-area lightbar: Read/Post/Jump/Skip/Quit/NonStop
-			selectedKey, lbErr := runMsgLightbar(reader, terminal, scanAreaOptions, outputMode,
-				hiColor, loColor, "", 0, false, 0)
+			selectedKey, _, lbErr := runMsgLightbar(scanIH, terminal, scanAreaOptions, outputMode,
+				hiColor, loColor, "", 0, false, 0, nil)
 			if lbErr != nil {
+				if errors.Is(lbErr, editor.ErrIdleTimeout) {
+					return nil, "LOGOFF", editor.ErrIdleTimeout
+				}
 				if errors.Is(lbErr, io.EOF) {
 					return nil, "LOGOFF", io.EOF
 				}

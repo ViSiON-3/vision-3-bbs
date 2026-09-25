@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"golang.org/x/term"
 )
@@ -19,53 +21,6 @@ type MsgLightbarOption struct {
 	Label   string // Display text including padding, e.g. " Next "
 	HotKey  byte   // Single-char hotkey, e.g. 'N'
 	LoColor int    // Override unselected color (0 = use default loColor)
-}
-
-// readKeyWithEscapeHandling reads a single keypress, handling escape sequences
-// for arrow keys. Returns the rune for normal keys, or special values for arrows:
-//
-//	arrowLeft = 0x1001, arrowRight = 0x1002
-const (
-	arrowLeft  rune = 0x1001
-	arrowRight rune = 0x1002
-)
-
-func readKeyWithEscapeHandling(reader *bufio.Reader) (rune, error) {
-	r, _, err := reader.ReadRune()
-	if err != nil {
-		return 0, err
-	}
-
-	if r == 27 { // ESC
-		// Try to read escape sequence with a short timeout by checking if data is available
-		// We peek to see if there's more data (the '[' of an escape sequence)
-		peekBuf, peekErr := reader.Peek(1)
-		if peekErr != nil || len(peekBuf) == 0 {
-			return 27, nil // Just an ESC key
-		}
-		if peekBuf[0] != '[' {
-			return 27, nil
-		}
-
-		// Read the '[' and direction byte
-		_, _ = reader.ReadByte() // consume '['; next read reports errors
-		dirByte, dirErr := reader.ReadByte()
-		if dirErr != nil {
-			return 27, nil
-		}
-
-		switch dirByte {
-		case 'D': // Left arrow
-			return arrowLeft, nil
-		case 'C': // Right arrow
-			return arrowRight, nil
-		default:
-			// Unknown escape sequence, ignore
-			return 0, nil
-		}
-	}
-
-	return r, nil
 }
 
 // drawMsgLightbarStatic draws the lightbar menu without waiting for input.
@@ -112,13 +67,20 @@ func drawMsgLightbarStatic(terminal *term.Terminal, options []MsgLightbarOption,
 // Enter selects the currently highlighted option.
 //
 // initialDirection: 0=none, -1=left (move to previous), 1=right (move to next)
-func runMsgLightbar(reader *bufio.Reader, terminal *term.Terminal,
+//
+// Keys are decoded by the session InputHandler, so arrow and paging keys read
+// the same here as everywhere else. A key listed in passKeys ends the lightbar
+// without selecting anything: it is returned as the second value with a zero
+// hotkey, and the bar is redrawn with the first option highlighted, the state
+// the caller shows when the bar is idle. The message reader passes its
+// scrolling keys this way so Up/Down keep scrolling after Left/Right (#412).
+func runMsgLightbar(ih *editor.InputHandler, terminal *term.Terminal,
 	options []MsgLightbarOption, outputMode ansi.OutputMode,
 	hiColor int, loColor int, suffix string, initialDirection int,
-	addBounds bool, boundsColor int) (byte, error) {
+	addBounds bool, boundsColor int, passKeys []int) (byte, int, error) {
 
 	if len(options) == 0 {
-		return 0, fmt.Errorf("no lightbar options provided")
+		return 0, 0, fmt.Errorf("no lightbar options provided")
 	}
 
 	currentIdx := 0
@@ -158,16 +120,21 @@ func runMsgLightbar(reader *bufio.Reader, terminal *term.Terminal,
 	drawBar(currentIdx)
 
 	for {
-		key, err := readKeyWithEscapeHandling(reader)
+		key, err := ih.ReadKey()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return 0, io.EOF
+				return 0, 0, io.EOF
 			}
-			return 0, fmt.Errorf("failed reading lightbar input: %w", err)
+			return 0, 0, fmt.Errorf("failed reading lightbar input: %w", err)
+		}
+
+		if slices.Contains(passKeys, key) {
+			drawBar(0)
+			return 0, key, nil
 		}
 
 		switch key {
-		case arrowLeft:
+		case editor.KeyArrowLeft, '4': // '4' = numpad left (Pascal)
 			drawBar(-1) // Unhighlight current by drawing with no selection
 			currentIdx--
 			if currentIdx < 0 {
@@ -175,7 +142,7 @@ func runMsgLightbar(reader *bufio.Reader, terminal *term.Terminal,
 			}
 			drawBar(currentIdx)
 
-		case arrowRight, ' ':
+		case editor.KeyArrowRight, ' ', '6': // '6' = numpad right (Pascal)
 			drawBar(-1)
 			currentIdx++
 			if currentIdx >= len(options) {
@@ -183,40 +150,25 @@ func runMsgLightbar(reader *bufio.Reader, terminal *term.Terminal,
 			}
 			drawBar(currentIdx)
 
-		case '\r', '\n':
+		case editor.KeyEnter, '\n':
 			// Select current option
-			return options[currentIdx].HotKey, nil
+			return options[currentIdx].HotKey, 0, nil
 
 		default:
 			// Check for direct hotkey
-			upperKey := byte(unicode.ToUpper(key))
-			if idx, ok := hotkeyMap[upperKey]; ok {
-				_ = idx
-				return upperKey, nil
+			if key < 32 || key > 126 {
+				continue
 			}
-			// Also handle numpad/arrow key mappings from Pascal (4=left, 6=right)
-			switch key {
-			case '4':
-				drawBar(-1)
-				currentIdx--
-				if currentIdx < 0 {
-					currentIdx = len(options) - 1
-				}
-				drawBar(currentIdx)
-			case '6':
-				drawBar(-1)
-				currentIdx++
-				if currentIdx >= len(options) {
-					currentIdx = 0
-				}
-				drawBar(currentIdx)
+			upperKey := byte(unicode.ToUpper(rune(key)))
+			if _, ok := hotkeyMap[upperKey]; ok {
+				return upperKey, 0, nil
 			}
 		}
 	}
 }
 
 // readSingleKey reads a single keypress using the session's reader.
-// It does NOT handle escape sequences - use readKeyWithEscapeHandling for that.
+// It does NOT handle escape sequences.
 func readSingleKey(reader *bufio.Reader) (rune, error) {
 	r, _, err := reader.ReadRune()
 	return r, err

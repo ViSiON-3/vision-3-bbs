@@ -319,6 +319,15 @@ readerLoop:
 			slog.Error("failed to update last read", "node", nodeNumber, "error", lrErr)
 		}
 
+		// readerScrollKeys end the interactive lightbar and are handed back
+		// here as pendingKey, so scrolling works whether or not the bar has
+		// been entered with Left/Right.
+		readerScrollKeys := []int{
+			editor.KeyArrowUp, editor.KeyArrowDown, editor.KeyPageUp, editor.KeyPageDown,
+			editor.KeyCtrlE, editor.KeyCtrlX, editor.KeyCtrlR, editor.KeyCtrlC,
+		}
+		pendingKey := 0
+
 		// Inner loop for scrolling and command handling
 	scrollLoop:
 		for {
@@ -369,12 +378,20 @@ readerLoop:
 
 			// Read key directly from the shared session input handler so arrow/page
 			// keys are decoded consistently across reader/list/header lightbars.
-			key, keyErr := sessionIH.ReadKey()
-			if keyErr != nil {
-				if errors.Is(keyErr, io.EOF) {
-					return nil, "LOGOFF", io.EOF
+			key := pendingKey
+			pendingKey = 0
+			if key == 0 {
+				var keyErr error
+				key, keyErr = sessionIH.ReadKey()
+				if keyErr != nil {
+					if errors.Is(keyErr, editor.ErrIdleTimeout) {
+						return nil, "LOGOFF", editor.ErrIdleTimeout
+					}
+					if errors.Is(keyErr, io.EOF) {
+						return nil, "LOGOFF", io.EOF
+					}
+					continue
 				}
-				continue
 			}
 
 			// Handle scrolling keys first
@@ -444,13 +461,20 @@ readerLoop:
 					initialDir = 1 // Right arrow
 				}
 
-				selKey, lbErr := runMsgLightbar(reader, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, initialDir, true, boundsColor)
+				selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, initialDir, true, boundsColor, readerScrollKeys)
 				if lbErr != nil {
+					if errors.Is(lbErr, editor.ErrIdleTimeout) {
+						return nil, "LOGOFF", editor.ErrIdleTimeout
+					}
 					if errors.Is(lbErr, io.EOF) {
 						return nil, "LOGOFF", io.EOF
 					}
 					slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 					break readerLoop
+				}
+				if passKey != 0 {
+					pendingKey = passKey // scroll key pressed in the bar
+					continue
 				}
 				selectedKey = rune(selKey)
 				// Don't continue here - fall through to handle the selected command
@@ -477,13 +501,20 @@ readerLoop:
 						// Position cursor at last row for lightbar
 						terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
 
-						selKey, lbErr := runMsgLightbar(reader, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor)
+						selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor, readerScrollKeys)
 						if lbErr != nil {
+							if errors.Is(lbErr, editor.ErrIdleTimeout) {
+								return nil, "LOGOFF", editor.ErrIdleTimeout
+							}
 							if errors.Is(lbErr, io.EOF) {
 								return nil, "LOGOFF", io.EOF
 							}
 							slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 							break readerLoop
+						}
+						if passKey != 0 {
+							pendingKey = passKey // scroll key pressed in the bar
+							continue
 						}
 						selectedKey = rune(selKey)
 					}
@@ -506,13 +537,20 @@ readerLoop:
 
 					terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
 
-					selKey, lbErr := runMsgLightbar(reader, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor)
+					selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor, readerScrollKeys)
 					if lbErr != nil {
+						if errors.Is(lbErr, editor.ErrIdleTimeout) {
+							return nil, "LOGOFF", editor.ErrIdleTimeout
+						}
 						if errors.Is(lbErr, io.EOF) {
 							return nil, "LOGOFF", io.EOF
 						}
 						slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 						break readerLoop
+					}
+					if passKey != 0 {
+						pendingKey = passKey // scroll key pressed in the bar
+						continue
 					}
 					selectedKey = rune(selKey)
 				}
