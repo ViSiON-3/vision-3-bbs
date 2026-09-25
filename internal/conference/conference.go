@@ -93,35 +93,40 @@ func (cm *ConferenceManager) loadConferences() error {
 	}
 
 	// Migration: assign positions to any conferences that have Position <= 0.
-	// Finds the current max position and assigns sequentially after it.
-	maxPos := 0
-	hasUnset := false
+	confs := make([]*Conference, 0, len(cm.conferencesByID))
 	for _, conf := range cm.conferencesByID {
+		confs = append(confs, conf)
+	}
+	if n := AssignUnsetPositions(confs); n > 0 {
+		slog.Info("auto-assigned conference positions (migration)", "count", n)
+	}
+
+	return nil
+}
+
+// AssignUnsetPositions gives every conference with Position <= 0 a position
+// after the current maximum, in ascending ID order, and returns how many it
+// assigned. The BBS applies this on load; the config editor applies it too so
+// both show conferences in the same order.
+func AssignUnsetPositions(confs []*Conference) int {
+	maxPos := 0
+	var unset []*Conference
+	for _, conf := range confs {
 		if conf.Position > maxPos {
 			maxPos = conf.Position
 		}
 		if conf.Position <= 0 {
-			hasUnset = true
+			unset = append(unset, conf)
 		}
 	}
-	if hasUnset && len(cm.conferencesByID) > 0 {
-		sorted := make([]*Conference, 0, len(cm.conferencesByID))
-		for _, conf := range cm.conferencesByID {
-			if conf.Position <= 0 {
-				sorted = append(sorted, conf)
-			}
-		}
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].ID < sorted[j].ID
-		})
-		for _, conf := range sorted {
-			maxPos++
-			conf.Position = maxPos
-		}
-		slog.Info("auto-assigned conference positions (migration)", "count", len(sorted))
+	sort.Slice(unset, func(i, j int) bool {
+		return unset[i].ID < unset[j].ID
+	})
+	for _, conf := range unset {
+		maxPos++
+		conf.Position = maxPos
 	}
-
-	return nil
+	return len(unset)
 }
 
 // Reload re-reads conferences.json, replacing the in-memory definitions.
@@ -178,7 +183,10 @@ func (cm *ConferenceManager) ListConferences() []*Conference {
 		list = append(list, conf)
 	}
 	sort.Slice(list, func(i, j int) bool {
-		return list[i].Position < list[j].Position
+		if list[i].Position != list[j].Position {
+			return list[i].Position < list[j].Position
+		}
+		return list[i].ID < list[j].ID
 	})
 	return list
 }
