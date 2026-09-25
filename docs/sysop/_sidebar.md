@@ -74,6 +74,7 @@
 * **FILES**
 * [File Areas](files/file-areas.md)
 * [File Transfer](files/file-transfer.md)
+* [ZipLab Upload Processing](files/ziplab.md)
 * [Bulk Import](files/bulk-import.md)
 * [SAUCE Metadata](files/sauce-metadata.md)
 

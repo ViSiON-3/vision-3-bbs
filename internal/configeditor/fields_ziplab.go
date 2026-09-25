@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"os/exec"
 	"strconv"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
@@ -46,6 +47,22 @@ func zipLabStepsNote(cfg *ziplab.Config) string {
 		return "Extract is off: virus scan is skipped"
 	case cfg.Steps.RemoveAds.Enabled:
 		return "Extract is off: DIZ/ads step is skipped"
+	}
+	return ""
+}
+
+// zipLabScanNote warns when the virus scan is on but its scanner cannot be
+// found. The pipeline treats a scanner that fails to run as a detection, so
+// every upload would be deleted or quarantined.
+func zipLabScanNote(vs *ziplab.VirusScanConfig) string {
+	if !vs.Enabled {
+		return ""
+	}
+	if vs.Command == "" {
+		return "No command set: every upload will fail the scan"
+	}
+	if _, err := exec.LookPath(vs.Command); err != nil {
+		return "Scanner not found here: uploads will fail the scan"
 	}
 	return ""
 }
@@ -185,6 +202,10 @@ func zipLabFieldsVirusScan(cfg *ziplab.Config) []fieldDef {
 				vs.Timeout = n
 				return nil
 			},
+		},
+		{
+			Label: "Note", Help: "Problems that would make every scan fail", Type: ftDisplay, Col: 3, Row: 6, Width: 48,
+			Get: func() string { return zipLabScanNote(vs) },
 		},
 	}
 }

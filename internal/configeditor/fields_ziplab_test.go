@@ -199,3 +199,23 @@ func TestLoadAllConfigsPropagatesZipLabError(t *testing.T) {
 		t.Error("expected an error for an unparseable ziplab.json")
 	}
 }
+
+func TestZipLabScanNote(t *testing.T) {
+	vs := ziplab.DefaultConfig().Steps.VirusScan
+	if got := zipLabScanNote(&vs); got != "" {
+		t.Errorf("note with the scan off = %q, want none", got)
+	}
+	vs.Enabled = true
+	vs.Command = ""
+	if got := zipLabScanNote(&vs); !strings.Contains(got, "No command") {
+		t.Errorf("no command: note = %q", got)
+	}
+	vs.Command = "no-such-scanner-ziplab-test"
+	if got := zipLabScanNote(&vs); !strings.Contains(got, "not found") {
+		t.Errorf("missing scanner: note = %q", got)
+	}
+	vs.Command = os.Args[0] // the test binary: present on every platform
+	if got := zipLabScanNote(&vs); got != "" {
+		t.Errorf("scanner present: note = %q, want none", got)
+	}
+}
