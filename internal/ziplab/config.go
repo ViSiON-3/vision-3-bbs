@@ -23,7 +23,7 @@ type StepConfig struct {
 type VirusScanConfig struct {
 	StepConfig
 	Command string   `json:"command,omitempty"`        // Scanner executable
-	Args    []string `json:"args,omitempty"`           // Arguments (supports {FILE}, {WORKDIR} placeholders)
+	Args    []string `json:"args,omitempty"`           // Arguments ({WORKDIR} = extracted files, {FILE} = archive)
 	Timeout int      `json:"timeoutSeconds,omitempty"` // Timeout in seconds (0 = default 60s)
 }
 

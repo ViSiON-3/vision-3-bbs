@@ -158,7 +158,7 @@ func TestStepVirusScan_Disabled(t *testing.T) {
 	cfg := DefaultConfig() // virus scan disabled by default
 	p := NewProcessor(cfg, tmpDir)
 
-	err := p.StepVirusScan(tmpDir)
+	err := p.StepVirusScan("", tmpDir)
 	if err != nil {
 		t.Fatalf("disabled virus scan should be skipped: %v", err)
 	}
