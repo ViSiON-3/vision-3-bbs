@@ -74,6 +74,23 @@ func TestRead_StripsCRNUL(t *testing.T) {
 	}
 }
 
+func TestRead_CRNULNotStrippedAcrossIAC(t *testing.T) {
+	// Only a NUL directly after the CR is stripped. An escaped 0xFF (IAC IAC)
+	// or a telnet command between them means the NUL is real data.
+	for _, mid := range [][]byte{{IAC, IAC}, {IAC, 241 /* NOP */}} {
+		in := append(append([]byte{'\r'}, mid...), 0x00)
+		got := drainRead(t, NewTelnetConn(newFakeConn(in)))
+		want := []byte{'\r'}
+		if mid[1] == IAC {
+			want = append(want, 0xFF)
+		}
+		want = append(want, 0x00)
+		if !bytes.Equal(got, want) {
+			t.Errorf("input %q: decoded payload = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestRead_StripsCRNULAcrossReads(t *testing.T) {
 	// CR and NUL arriving in separate Read calls must still be collapsed.
 	tc := NewTelnetConn(newFakeConn([]byte{'\r', 0x00, 'x'}))
