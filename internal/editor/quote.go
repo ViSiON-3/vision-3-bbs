@@ -125,7 +125,7 @@ func (qs *quoteSession) handleKey(key int) bool {
 		qs.moveTo(len(qs.src) - 1)
 	case ' ', KeyEnter:
 		qs.quoteSelected()
-	case KeyBackspace, KeyCtrlY:
+	case KeyBackspace, KeyCtrlY, KeyCtrlK:
 		qs.undoLast()
 	case KeyTab:
 		qs.composeFocus = true

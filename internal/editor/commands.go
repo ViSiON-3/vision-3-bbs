@@ -329,7 +329,7 @@ func (ch *CommandHandler) displayBuiltInHelp() {
   Ctrl+V or Insert       - Toggle Insert/Overwrite mode
   Ctrl+G or Delete       - Delete character at cursor
   Ctrl+T                 - Delete word to the right
-  Ctrl+Y                 - Delete current line
+  Ctrl+Y or Ctrl+K       - Delete current line
   Ctrl+J                 - Join current line with next
   Ctrl+N                 - Split line at cursor
   Ctrl+B                 - Reformat paragraph
@@ -347,7 +347,7 @@ func (ch *CommandHandler) displayBuiltInHelp() {
   Up/Down                - Move the bar over the message you are quoting
   PgUp/PgDn, Home/End    - Jump through the message
   Space or Enter         - Add the highlighted line to your reply
-  Backspace              - Remove the line you added last
+  Backspace, Ctrl+Y/K    - Remove the line you added last
   Tab                    - Switch between your reply and the quoted message
   Escape                 - Leave quote mode and carry on writing
 
