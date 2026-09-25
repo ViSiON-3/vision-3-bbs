@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"reflect"
 	"sort"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
@@ -13,6 +14,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
 )
 
 // saveAll writes all modified configs to disk, reporting whether every file
@@ -130,6 +132,14 @@ func (m *Model) saveAll() bool {
 	if err := saveLoginSeq(m.configPath, m.configs.LoginSeq); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return false
+	}
+	// A board running ZipLab on the built-in defaults, with no ziplab.json,
+	// only gains the file once something differs from them.
+	if fileExists(filepath.Join(m.configPath, "ziplab.json")) || !reflect.DeepEqual(m.configs.ZipLab, ziplab.DefaultConfig()) {
+		if err := ziplab.SaveConfig(m.configPath, m.configs.ZipLab); err != nil {
+			m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+			return false
+		}
 	}
 
 	m.dirty = false

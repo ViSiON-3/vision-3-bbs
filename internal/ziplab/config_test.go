@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -167,5 +168,86 @@ func TestGetArchiveType(t *testing.T) {
 	_, ok = cfg.GetArchiveType("test.rar")
 	if ok {
 		t.Error("expected no archive type for .rar in defaults")
+	}
+}
+
+// An editor saves what it read. The archive types merged in from
+// archivers.json must never land in ziplab.json, or every archiver would be
+// copied there on the first save.
+func TestSaveConfig_RoundTripOmitsArchiveTypes(t *testing.T) {
+	dir := t.TempDir()
+	cfg := DefaultConfig()
+	cfg.ScanFailBehavior = "quarantine"
+	cfg.QuarantinePath = "data/quarantine"
+	cfg.Steps.VirusScan.Enabled = true
+	cfg.Steps.VirusScan.Args = []string{"--infected", "{WORKDIR}"}
+	cfg.ArchiveTypes = []ArchiveType{{Extension: ".rar", ExtractCommand: "unrar"}}
+
+	if err := SaveConfig(dir, cfg); err != nil {
+		t.Fatalf("SaveConfig: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "ziplab.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("saved file is not JSON: %v", err)
+	}
+	if _, ok := raw["archiveTypes"]; ok {
+		t.Error("archiveTypes was written to ziplab.json")
+	}
+
+	got, err := ReadConfig(dir)
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	cfg.ArchiveTypes = DefaultConfig().ArchiveTypes // not persisted
+	if !reflect.DeepEqual(got, cfg) {
+		t.Errorf("round trip changed the config:\n got  %+v\n want %+v", got, cfg)
+	}
+}
+
+// Files written before the step settings were trimmed carry a command on
+// every step and an archiveTypes list. They must still load, keeping the
+// settings that remain.
+func TestReadConfig_AcceptsLegacyFields(t *testing.T) {
+	dir := t.TempDir()
+	legacy := `{
+  "enabled": true,
+  "runOnUpload": false,
+  "steps": {
+    "testIntegrity": {"enabled": false, "command": "x", "args": ["y"], "timeoutSeconds": 5},
+    "virusScan": {"enabled": true, "command": "clamdscan", "timeoutSeconds": 30}
+  },
+  "archiveTypes": [{"extension": ".rar", "native": false}]
+}`
+	if err := os.WriteFile(filepath.Join(dir, "ziplab.json"), []byte(legacy), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := ReadConfig(dir)
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	if cfg.RunOnUpload || cfg.Steps.TestIntegrity.Enabled {
+		t.Error("legacy settings were not applied")
+	}
+	if cfg.Steps.VirusScan.Command != "clamdscan" || cfg.Steps.VirusScan.Timeout != 30 {
+		t.Errorf("virus scan settings lost: %+v", cfg.Steps.VirusScan)
+	}
+	if !reflect.DeepEqual(cfg.ArchiveTypes, DefaultConfig().ArchiveTypes) {
+		t.Errorf("archiveTypes was read from ziplab.json: %+v", cfg.ArchiveTypes)
+	}
+}
+
+// The shipped template is what a new board starts with, so it must say the
+// same thing as the built-in defaults a board without the file runs on.
+func TestTemplateMatchesDefaults(t *testing.T) {
+	cfg, err := ReadConfig(filepath.Join("..", "..", "templates", "configs"))
+	if err != nil {
+		t.Fatalf("reading template: %v", err)
+	}
+	if want := DefaultConfig(); !reflect.DeepEqual(cfg, want) {
+		t.Errorf("templates/configs/ziplab.json differs from DefaultConfig:\n got  %+v\n want %+v", cfg, want)
 	}
 }
