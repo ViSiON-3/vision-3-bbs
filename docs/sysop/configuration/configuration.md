@@ -154,7 +154,7 @@ This file contains all the customizable text strings displayed by the BBS. You c
 
 **Login/Authentication Strings:**
 
-- `whatsYourAlias` - Login username prompt
+- `whatsYourAlias` - Legacy Vision/2 alias prompt; not used (the login prompt is `execUsernamePrompt`)
 - `whatsYourPw` - Login password prompt
 - `systemPasswordStr` - System password prompt
 - `wrongPassword` - Invalid password message

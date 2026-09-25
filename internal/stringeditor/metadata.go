@@ -34,7 +34,7 @@ func stringCatalog() []StringEntry {
 		{Label: "Default User's Prompt", Key: "defPrompt", Description: "This is the Default prompt for new users"},
 		{Label: "System Pause String", Key: "pauseString", Description: "This is displayed anytime the screen pauses awaiting a key to be pressed"},
 		{Label: "System Password String", Key: "systemPasswordStr", Description: "This is displayed when asking the login password (if no SYSPASS.ANS)"},
-		{Label: "Enter Alias String", Key: "whatsYourAlias", Description: "This is displayed when asking a user's alias (if ALIAS.ANS isn't in use)"},
+		{Label: "Enter Alias String", Key: "whatsYourAlias", Description: "Legacy Vision/2 string - not used by ViSiON/3; the login prompt uses Exec: Username Prompt"},
 		{Label: "Enter Password String", Key: "whatsYourPw", Description: "This is displayed when asking a user's password (if PASSWORD.ANS isn't used)"},
 		{Label: "SysOp Working String", Key: "sysopWorkingStr", Description: "This is displayed when the SysOp hits [F2] while a user is online"},
 		{Label: "Enter Chat String", Key: "enterChat", Description: "This is displayed when the sysop hits F2,F3,F4 to enter chat"},
