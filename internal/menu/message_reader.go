@@ -384,6 +384,9 @@ readerLoop:
 				var keyErr error
 				key, keyErr = sessionIH.ReadKey()
 				if keyErr != nil {
+					if errors.Is(keyErr, editor.ErrIdleTimeout) {
+						return nil, "LOGOFF", editor.ErrIdleTimeout
+					}
 					if errors.Is(keyErr, io.EOF) {
 						return nil, "LOGOFF", io.EOF
 					}
@@ -460,6 +463,9 @@ readerLoop:
 
 				selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, initialDir, true, boundsColor, readerScrollKeys)
 				if lbErr != nil {
+					if errors.Is(lbErr, editor.ErrIdleTimeout) {
+						return nil, "LOGOFF", editor.ErrIdleTimeout
+					}
 					if errors.Is(lbErr, io.EOF) {
 						return nil, "LOGOFF", io.EOF
 					}
@@ -497,6 +503,9 @@ readerLoop:
 
 						selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor, readerScrollKeys)
 						if lbErr != nil {
+							if errors.Is(lbErr, editor.ErrIdleTimeout) {
+								return nil, "LOGOFF", editor.ErrIdleTimeout
+							}
 							if errors.Is(lbErr, io.EOF) {
 								return nil, "LOGOFF", io.EOF
 							}
@@ -530,6 +539,9 @@ readerLoop:
 
 					selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor, readerScrollKeys)
 					if lbErr != nil {
+						if errors.Is(lbErr, editor.ErrIdleTimeout) {
+							return nil, "LOGOFF", editor.ErrIdleTimeout
+						}
 						if errors.Is(lbErr, io.EOF) {
 							return nil, "LOGOFF", io.EOF
 						}

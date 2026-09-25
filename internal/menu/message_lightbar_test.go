@@ -2,8 +2,11 @@ package menu
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -59,5 +62,21 @@ func TestMsgLightbarSelects(t *testing.T) {
 		if sel != tc.want || pass != 0 {
 			t.Errorf("input %q: got (sel %q, pass %#x), want (%q, 0)", tc.input, sel, pass, tc.want)
 		}
+	}
+}
+
+// TestMsgLightbarReportsIdleTimeout checks that an idle session's timeout
+// comes back as ErrIdleTimeout, so callers log the user off instead of
+// treating it as an ordinary read error and carrying on.
+func TestMsgLightbarReportsIdleTimeout(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	ih := editor.NewInputHandler(pr)
+	ih.SetSessionIdleTimeout(20 * time.Millisecond)
+	terminal := term.NewTerminal(&bytes.Buffer{}, "")
+	_, _, err := runMsgLightbar(ih, terminal, msgReaderOptions, ansi.OutputModeUTF8,
+		15, 9, "", 0, true, 1, nil)
+	if !errors.Is(err, editor.ErrIdleTimeout) {
+		t.Fatalf("err = %v, want ErrIdleTimeout", err)
 	}
 }

@@ -254,6 +254,9 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			selectedKey, _, lbErr := runMsgLightbar(scanIH, terminal, scanAreaOptions, outputMode,
 				hiColor, loColor, "", 0, false, 0, nil)
 			if lbErr != nil {
+				if errors.Is(lbErr, editor.ErrIdleTimeout) {
+					return nil, "LOGOFF", editor.ErrIdleTimeout
+				}
 				if errors.Is(lbErr, io.EOF) {
 					return nil, "LOGOFF", io.EOF
 				}
