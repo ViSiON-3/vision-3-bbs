@@ -361,7 +361,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			sampleAutoWidths := buildAutoWidths(sampleSubs, 42, 80, cp437Preview)
 
-			processedPreview := processTemplate(hdrBytes, sampleSubs, sampleAutoWidths)
+			processedPreview := processTemplate(hdrBytes, sampleSubs, sampleAutoWidths, cp437Preview)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 			_ = writeArt(terminal, processedPreview, outputMode, termWidth) // best-effort display
 

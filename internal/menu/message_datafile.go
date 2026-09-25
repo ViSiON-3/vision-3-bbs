@@ -7,7 +7,9 @@ package menu
 //
 // Format detection is based on presence of @-delimited codes (@T@, @F@, @S@).
 // autoWidths is optional (nil = no auto-width support for @CODE*@ placeholders).
-func processTemplate(fileBytes []byte, substitutions map[byte]string, autoWidths map[byte]int) []byte {
+// cp437Values is true when the values are CP437 bytes (CP437 sessions), so
+// widths are counted one cell per byte; see placeholderCells.
+func processTemplate(fileBytes []byte, substitutions map[byte]string, autoWidths map[byte]int, cp437Values bool) []byte {
 	// Resolve |{...|} optional groups first, while the placeholder tokens are
 	// still present to test. Blanked groups leave spaces behind, so column
 	// positions and box borders are unaffected.
@@ -16,7 +18,7 @@ func processTemplate(fileBytes []byte, substitutions map[byte]string, autoWidths
 	// Check for new @CODE@ format using the shared regex.
 	// This catches all forms: @T@, @T:20@, @T###@, @T*@, @T|R8@, @G@, etc.
 	if placeholderRegex.Match(fileBytes) {
-		return processPlaceholderTemplate(fileBytes, substitutions, autoWidths)
+		return processPlaceholderTemplate(fileBytes, substitutions, autoWidths, cp437Values)
 	}
 
 	// Fall back to legacy |X format
