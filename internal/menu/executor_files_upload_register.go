@@ -70,7 +70,7 @@ func (e *MenuExecutor) registerUploadedFiles(
 			if ansiContent != nil {
 				// DisplayPipeline writes the art raw, one byte per cell.
 				_, termWidth := resolveTermSize(s)
-				ansiContent = ansi.FitArtToWidth(ansiContent, termWidth, false)
+				ansiContent = fitArt(terminal, ansiContent, termWidth, false)
 			}
 			nfo, _ := ziplab.ParseNFO(nfoPath)
 

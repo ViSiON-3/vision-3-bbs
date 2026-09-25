@@ -177,7 +177,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 	for {
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
-		body, saved, err := editor.RunEditorWithMetadata("", s, s, outputMode, subject,
+		body, saved, err := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, subject,
 			sysop.Handle, newUser.Handle, false, "", "", "", "", false, nil, getSessionIH(s), editorCtx)
 		if err != nil {
 			if errors.Is(err, io.EOF) {

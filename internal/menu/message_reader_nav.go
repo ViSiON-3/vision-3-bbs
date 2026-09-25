@@ -84,7 +84,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		NextMsgNum: replyNextMsg,
 		ConfArea:   fmt.Sprintf("%s > %s", confName, areaName),
 	}
-	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, s, outputMode, newSubject, replyName, currentUser.Handle, false,
+	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, newSubject, replyName, currentUser.Handle, false,
 		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, replyCtx)
 	if editErr != nil {
 		slog.Error("editor failed", "node", nodeNumber, "error", editErr)

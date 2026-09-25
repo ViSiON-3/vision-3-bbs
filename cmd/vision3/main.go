@@ -970,7 +970,8 @@ func sessionHandler(s ssh.Session) {
 			// (the xterm heuristic is an SSH-path fallback for older NetRunner builds
 			// that self-identify as xterm; telnet clients now use TERM_TYPE negotiation
 			// and will report their actual type, so this heuristic is SSH-specific)
-			if termType == "ansi-256color-rgb" || (termType == "xterm" && termCols > 80) {
+			_, isTelnet := s.(*telnetserver.TelnetSessionAdapter)
+			if termType == "ansi-256color-rgb" || (!isTelnet && termType == "xterm" && termCols > 80) {
 				slog.Info("detected NetRunner", "node", nodeID, "term", termType, "cols", termCols)
 				isRetroTerminal = true
 			}
@@ -1019,7 +1020,53 @@ func sessionHandler(s ssh.Session) {
 
 	// --- Create Terminal ---
 	slog.Info("creating terminal for session", "node", nodeID)
-	terminal := term.NewTerminal(s, "") // Use session 's' as the R/W source for the terminal
+	// Terminal output passes through compat, which applyPalette below
+	// configures for the session's output mode (see terminalio.CompatWriter).
+	compat := terminalio.NewCompatWriter(s)
+	terminal := term.NewTerminal(compat, "")
+	menu.SetSessionOutput(s, compat)
+	defer menu.ClearSessionOutput(s) // Use session 's' as the R/W source for the terminal
+
+	// Remember the client's real width for art wrapping. termWidth is later
+	// replaced by the user's saved preference, which can be narrower than the
+	// window; the physical width is only ever updated from the client.
+	var physicalWidth atomic.Int32
+	physicalWidth.Store(termWidth.Load())
+	menu.RegisterTerminalPhysicalWidth(terminal, &physicalWidth)
+	defer menu.ClearTerminalPhysicalWidth(terminal)
+
+	// Load the VGA palette into UTF-8 terminals so art renders the way it
+	// does on a retro terminal rather than in the caller's colour theme (see
+	// ansi.SetVGAPalette). CP437 sessions are on retro terminals already.
+	// applyPalette is re-run when the output mode changes after login, and
+	// the terminal's own palette is restored on the way out.
+	//
+	// The palette makes colours exact, which exposes terminals that render
+	// bold as a heavier font rather than the bright colour: BBS dark grey
+	// (bold black) would come out black. compat's bold-as-bright translation
+	// is switched with it so bold colours are sent as explicit bright codes.
+	// Its ESC[s/ESC[u to DEC cursor save translation is independent of the
+	// palette setting: UTF-8 sessions are modern terminals, many of which
+	// ignore the ANSI.SYS forms art relies on.
+	paletteSet := false
+	applyPalette := func() {
+		want := effectiveMode == ansi.OutputModeUTF8 && !menuExecutor.GetServerConfig().DisableVGAPalette
+		switch {
+		case want && !paletteSet:
+			_, _ = terminal.Write([]byte(ansi.SetVGAPalette())) // best-effort display
+		case !want && paletteSet:
+			_, _ = terminal.Write([]byte(ansi.ResetPalette())) // best-effort display
+		}
+		paletteSet = want
+		compat.SetBoldBright(want)
+		compat.SetDECCursor(effectiveMode == ansi.OutputModeUTF8)
+	}
+	applyPalette()
+	defer func() {
+		if paletteSet {
+			_, _ = terminal.Write([]byte("\x1b[0m" + ansi.ResetPalette())) // best-effort display
+		}
+	}()
 
 	// Set initial terminal size from PTY request (term.NewTerminal defaults to 80 columns)
 	if isPty {
@@ -1073,6 +1120,7 @@ func sessionHandler(s ssh.Session) {
 				slog.Debug("window resize event", "node", nodeID, "width", win.Width, "height", win.Height)
 				if win.Width > 0 {
 					termWidth.Store(int32(win.Width))
+					physicalWidth.Store(int32(win.Width))
 				}
 				if win.Height > 0 {
 					termHeight.Store(int32(win.Height))
@@ -1465,6 +1513,8 @@ func sessionHandler(s ssh.Session) {
 					effectiveMode = ansi.OutputModeCP437
 					authenticatedUser.PreferredEncoding = "cp437"
 					setupChanged = true
+					// Restore the terminal's palette before the rest of setup is drawn.
+					applyPalette()
 					_, _ = terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Switched to CP437 encoding for retro BBS experience.\r\n")) // best-effort display
 				} else {
 					slog.Info("user selected UTF-8 encoding", "node", nodeID)
@@ -1550,6 +1600,7 @@ func sessionHandler(s ssh.Session) {
 	// user preference) — re-record it so post-auth input decodes extended
 	// characters with the mode actually in effect for the rest of the session.
 	menu.SetSessionOutputMode(s, effectiveMode)
+	applyPalette()
 
 	// Run the configurable login sequence (login.json) directly after authentication.
 	// This replaces the old FASTLOGN menu routing — FASTLOGIN is now an optional login.json item.

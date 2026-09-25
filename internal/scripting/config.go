@@ -31,6 +31,10 @@ type SessionContext struct {
 	Location     string
 	ScreenWidth  int
 	ScreenHeight int
+	// ArtWidth is the width art is fitted to: the client's real column count
+	// when it exceeds ScreenWidth (a saved preference), else ScreenWidth.
+	// Zero means ScreenWidth.
+	ArtWidth int
 
 	// Session info
 	NodeNumber       int

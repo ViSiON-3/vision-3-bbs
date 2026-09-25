@@ -73,7 +73,7 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 				ConfArea:   "Auto-Signature",
 			}
 			body, saved, edErr := editor.RunEditorWithMetadata(
-				currentUser.AutoSignature, s, s, outputMode,
+				currentUser.AutoSignature, s, sessionOutput(s), outputMode,
 				"Auto-Signature", "All", currentUser.Handle, false,
 				"", "", "", "", false, nil, ih, editorCtx,
 			)
