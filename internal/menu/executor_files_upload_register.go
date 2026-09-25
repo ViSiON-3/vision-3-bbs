@@ -41,6 +41,11 @@ func (e *MenuExecutor) registerUploadedFiles(
 	if zlErr != nil {
 		slog.Warn("failed to load ziplab config", "node", nodeNumber, "error", zlErr)
 	}
+	// A relative quarantine path is relative to the BBS root, like every
+	// other path in the config, not to wherever the BBS was started from.
+	if zlCfg.QuarantinePath != "" && !filepath.IsAbs(zlCfg.QuarantinePath) {
+		zlCfg.QuarantinePath = filepath.Join(filepath.Dir(e.RootConfigPath), zlCfg.QuarantinePath)
+	}
 
 	for _, nf := range newFiles {
 		incomingPath := filepath.Join(incomingDir, nf.name)

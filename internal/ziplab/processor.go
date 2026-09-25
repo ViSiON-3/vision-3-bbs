@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,7 +54,7 @@ func (p *Processor) StepTestIntegrity(archivePath string) error {
 	if at.Native {
 		return p.testZipIntegrity(archivePath)
 	}
-	return p.runExternalCommand(at.TestCommand, at.TestArgs, archivePath, "", 0)
+	return p.runExternalCommand(at.TestCommand, at.TestArgs, map[string]string{"{ARCHIVE}": archivePath}, "", 0)
 }
 
 // StepExtract (Step 2) extracts the archive to a temporary work directory.
@@ -82,22 +83,26 @@ func (p *Processor) StepExtract(archivePath string) (string, error) {
 		return workDir, nil
 	}
 
-	if err := p.runExternalCommand(at.ExtractCommand, at.ExtractArgs, archivePath, workDir, 0); err != nil {
+	vars := map[string]string{"{ARCHIVE}": archivePath, "{OUTDIR}": workDir}
+	if err := p.runExternalCommand(at.ExtractCommand, at.ExtractArgs, vars, workDir, 0); err != nil {
 		_ = os.RemoveAll(workDir) // cleanup on error path
 		return "", err
 	}
 	return workDir, nil
 }
 
-// StepVirusScan (Step 3) runs a configurable external virus scanner.
-func (p *Processor) StepVirusScan(workDir string) error {
+// StepVirusScan (Step 3) runs a configurable external virus scanner over the
+// files extracted to workDir. Its arguments may name {WORKDIR} or the archive
+// itself as {FILE}.
+func (p *Processor) StepVirusScan(archivePath, workDir string) error {
 	if !p.config.Steps.VirusScan.Enabled {
 		slog.Info("step 3 (virus scan) skipped — disabled")
 		return nil
 	}
 
 	step := p.config.Steps.VirusScan
-	return p.runExternalCommand(step.Command, step.Args, "", workDir, step.Timeout)
+	vars := map[string]string{"{FILE}": archivePath, "{WORKDIR}": workDir}
+	return p.runExternalCommand(step.Command, step.Args, vars, workDir, step.Timeout)
 }
 
 // StepRemoveAdsAndDIZ (Step 5) extracts FILE_ID.DIZ content and removes
@@ -155,7 +160,8 @@ func (p *Processor) StepAddComment(archivePath string) error {
 	if at.Native {
 		return p.setZipComment(archivePath, comment)
 	}
-	return p.runExternalCommand(at.CommentCommand, at.CommentArgs, archivePath, "", 0)
+	vars := map[string]string{"{ARCHIVE}": archivePath, "{FILE}": commentFile}
+	return p.runExternalCommand(at.CommentCommand, at.CommentArgs, vars, "", 0)
 }
 
 // StepIncludeFile (Step 7) adds a file (e.g., BBS.AD) into the archive.
@@ -179,21 +185,41 @@ func (p *Processor) StepIncludeFile(archivePath string) error {
 	if at.Native {
 		return p.addFileToZip(archivePath, filepath.Base(includeFilePath), includeData)
 	}
-	return p.runExternalCommand(at.AddCommand, at.AddArgs, archivePath, "", 0)
+	vars := map[string]string{"{ARCHIVE}": archivePath, "{FILE}": includeFilePath}
+	return p.runExternalCommand(at.AddCommand, at.AddArgs, vars, "", 0)
 }
 
-// runExternalCommand runs an external command with placeholder substitution.
-// timeoutSeconds of 0 uses the default (60s).
-func (p *Processor) runExternalCommand(command string, args []string, archivePath, workDir string, timeoutSeconds int) error {
+// runExternalCommand runs an external command in dir, replacing each
+// placeholder in vars (e.g. "{ARCHIVE}") wherever it appears in args. The
+// archiver commands come from archivers.json, so each step passes the
+// placeholders that file documents for that command. timeoutSeconds of 0 uses
+// the default (60s).
+func (p *Processor) runExternalCommand(command string, args []string, vars map[string]string, dir string, timeoutSeconds int) error {
 	if command == "" {
 		return fmt.Errorf("no command configured")
 	}
 
+	// Before archivers.json's placeholders were honoured, ZipLab passed the
+	// archive as {FILE} and the extraction directory as {WORKDIR}. Keep those
+	// working for commands written against that, unless the step gives the
+	// name its own meaning ({FILE} is the comment or ad file when adding one).
+	vars = maps.Clone(vars)
+	for old, cur := range map[string]string{"{FILE}": "{ARCHIVE}", "{WORKDIR}": "{OUTDIR}"} {
+		if _, set := vars[old]; !set {
+			if v, ok := vars[cur]; ok {
+				vars[old] = v
+			}
+		}
+	}
+
+	pairs := make([]string, 0, 2*len(vars))
+	for k, v := range vars {
+		pairs = append(pairs, k, v)
+	}
+	r := strings.NewReplacer(pairs...)
 	expandedArgs := make([]string, len(args))
 	for i, arg := range args {
-		arg = strings.ReplaceAll(arg, "{FILE}", archivePath)
-		arg = strings.ReplaceAll(arg, "{WORKDIR}", workDir)
-		expandedArgs[i] = arg
+		expandedArgs[i] = r.Replace(arg)
 	}
 
 	timeout := 60 * time.Second
@@ -205,7 +231,7 @@ func (p *Processor) runExternalCommand(command string, args []string, archivePat
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, command, expandedArgs...)
-	cmd.Dir = workDir
+	cmd.Dir = dir
 
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {

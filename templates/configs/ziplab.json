@@ -1,0 +1,35 @@
+{
+  "enabled": true,
+  "runOnUpload": true,
+  "scanFailBehavior": "delete",
+  "steps": {
+    "testIntegrity": {
+      "enabled": true
+    },
+    "extractToTemp": {
+      "enabled": true
+    },
+    "virusScan": {
+      "enabled": false,
+      "command": "clamscan",
+      "args": [
+        "--stdout",
+        "--no-summary",
+        "{WORKDIR}"
+      ],
+      "timeoutSeconds": 120
+    },
+    "removeAds": {
+      "enabled": true,
+      "patternsFile": "REMOVE.TXT"
+    },
+    "addComment": {
+      "enabled": true,
+      "commentFile": "ZCOMMENT.TXT"
+    },
+    "includeFile": {
+      "enabled": true,
+      "filePath": "BBS.AD"
+    }
+  }
+}

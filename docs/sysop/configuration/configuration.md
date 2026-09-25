@@ -18,7 +18,7 @@ ViSiON/3 includes an interactive TUI configuration editor modeled after ViSiON/2
 
 ### Main Menu
 
-The editor opens to a main menu. Keys **1** through **6** open sub-menus, keys **7** through **9**, **0** and **A** open record lists, and **Q** quits.
+The editor opens to a main menu. Keys **1** through **6** and **B** open sub-menus, keys **7** through **9**, **0** and **A** open record lists, and **Q** quits.
 
 | Key | Section | What it covers |
 |-----|---------|----------------|
@@ -33,6 +33,7 @@ The editor opens to a main menu. Keys **1** through **6** open sub-menus, keys *
 | 9 | Archivers | Archive format record list |
 | 0 | Event Scheduler | Automated event record list |
 | A | Login Sequence | Login step record list |
+| B | ZipLab Upload Processing | Sub-menu: General, Pipeline Steps, Virus Scan (see [ZipLab](files/ziplab.md)) |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
 ### System Setup Sub-menu
@@ -131,6 +132,7 @@ Configuration files are split between two directories:
 - `config.json` - General BBS configuration
 - `ftn.json` - FTN echomail configuration (networks, links, paths)
 - `archivers.json` - Archive format definitions (ZIP, 7z, RAR, ARJ, LHA)
+- `ziplab.json` - ZipLab upload processing (see [ZipLab](files/ziplab.md#ziplabjson))
 - SSH host keys (`ssh_host_rsa_key`, etc.)
 
 **In `menus/v3/` directory (menu set):**
@@ -368,6 +370,12 @@ To enable additional archive formats, set `"enabled": true` and ensure the corre
 ### FTN Bundle Note
 
 FTN echomail bundles always use ZIP format (per FidoNet standard practice) and are handled natively by Go's `archive/zip` regardless of this configuration. This config applies to user-facing archive operations: file area uploads, archive viewing, ZipLab pipeline, etc.
+
+## ziplab.json
+
+> *Use the [Configuration Editor](#configuration-editor-tui) (key B — ZipLab Upload Processing) to manage these settings interactively.*
+
+Controls ZipLab, which tests, virus-scans and tidies archives as they are uploaded. Archive formats are not set here: ZipLab uses the enabled archivers from [archivers.json](#archiversjson). See [ZipLab Upload Processing](files/ziplab.md) for the pipeline, the settings, and the file format.
 
 ## file_areas.json
 

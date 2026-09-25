@@ -93,7 +93,7 @@ func (p *Processor) RunPipeline(archivePath string, statusFn StatusCallback) Pip
 	// Step 3: Virus Scan
 	if p.config.Steps.VirusScan.Enabled && workDir != "" {
 		sr := p.runStep(StepVirusScan, "Virus Scan", statusFn, func() error {
-			return p.StepVirusScan(workDir)
+			return p.StepVirusScan(archivePath, workDir)
 		})
 		result.StepResults = append(result.StepResults, sr)
 		if sr.Error != nil {

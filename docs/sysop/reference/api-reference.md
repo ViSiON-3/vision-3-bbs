@@ -542,21 +542,25 @@ Archive upload processing pipeline (virus scan, integrity, ads removal).
 type Processor struct { /* 7-step pipeline executor */ }
 
 type Config struct {
-    Enabled         bool
-    RunOnUpload     bool
+    Enabled          bool
+    RunOnUpload      bool
     ScanFailBehavior string
-    Steps           StepsConfig
-    ArchiveTypes    []ArchiveType
+    QuarantinePath   string
+    Steps            StepsConfig
+    ArchiveTypes     []ArchiveType // from archivers.json; not stored in ziplab.json
 }
 
 func NewProcessor(cfg Config, baseDir string) *Processor
 func DefaultConfig() Config
-func LoadConfig(configPath string) (Config, error)
+func LoadConfig(configPath string) (Config, error) // ziplab.json + archivers.json
+func ReadConfig(configPath string) (Config, error) // ziplab.json only, for editors
+func SaveConfig(configPath string, cfg Config) error
 func (p *Processor) StepTestIntegrity(archivePath string) error
 func (p *Processor) StepExtract(archivePath string) (string, error)
+func (p *Processor) StepVirusScan(archivePath, workDir string) error
 ```
 
-**Pipeline Steps:** Test Integrity → Extract to Temp → Virus Scan → Remove Ads → Add Comment → Include File → Repack.
+**Pipeline Steps:** Test Integrity → Extract to Temp → Virus Scan → FILE_ID.DIZ / Remove Ads → Add Comment → Include File. See [ZipLab Upload Processing](files/ziplab.md).
 
 ### config
 

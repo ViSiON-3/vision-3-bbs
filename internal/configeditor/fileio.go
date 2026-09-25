@@ -14,6 +14,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
 )
 
 // allConfigs holds all loaded configuration data.
@@ -30,6 +31,9 @@ type allConfigs struct {
 	Protocols   []transfer.ProtocolConfig
 	Archivers   archiver.Config
 	LoginSeq    []config.LoginItem
+	// ZipLab is ziplab.json alone. Its ArchiveTypes is left at the default:
+	// ZipLab takes archive formats from archivers.json when the BBS loads it.
+	ZipLab ziplab.Config
 }
 
 // loadAllConfigs loads all configuration files from the given directory.
@@ -111,6 +115,14 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 	ac.Archivers, err = archiver.LoadConfig(configPath)
 	if err != nil {
 		ac.Archivers = archiver.Config{}
+	}
+
+	// ZipLab. Read without the archivers.json merge, so a save writes back
+	// only ZipLab's own settings. A parse error propagates for the same
+	// reason as doors: editing defaults would overwrite the sysop's file.
+	ac.ZipLab, err = ziplab.ReadConfig(configPath)
+	if err != nil {
+		return ac, fmt.Errorf("loading ziplab: %w", err)
 	}
 
 	// Login sequence
