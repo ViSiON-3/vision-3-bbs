@@ -72,21 +72,22 @@ type konfigHeading struct {
 	title    string
 }
 
-// Screen geometry. Everything fits in 20 rows so the form draws on the
-// smallest height the board allows (21), whatever the caller has set.
+// Screen geometry. Everything fits in 21 rows, the smallest height the
+// board allows, so the form draws whatever size the caller has set.
 const (
-	konfigHeaderRows = 5 // rows reserved for KONFIG.ANS
-	konfigTopRow     = konfigHeaderRows + 1
+	konfigHeaderRows = 5                    // rows reserved for KONFIG.ANS
+	konfigTopRow     = konfigHeaderRows + 2 // one blank row under the art
+	konfigFormRows   = 10                   // two sections a column, with their gaps
 	konfigColWidth   = 38
 	konfigLeftCol    = 2
 	konfigRightCol   = 42
 	konfigKeyWidth   = 4  // "[A] "
 	konfigLabelWidth = 16 // label plus gap
 	konfigValueWidth = konfigColWidth - konfigKeyWidth - konfigLabelWidth
-	konfigRuleRow    = 16
-	konfigHelpRow    = 17
-	konfigEditRow    = 18
-	konfigLegendRow  = 20
+	konfigRuleRow    = konfigTopRow + konfigFormRows
+	konfigHelpRow    = konfigRuleRow + 1
+	konfigEditRow    = konfigHelpRow + 1
+	konfigLegendRow  = konfigEditRow + 2
 	konfigLastRow    = konfigLegendRow
 )
 

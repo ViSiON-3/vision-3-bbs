@@ -127,9 +127,34 @@ func TestKonfigStockHeaderArtFits(t *testing.T) {
 		if strings.Contains(snap, "|UH") || strings.Contains(snap, "|LEVEL") {
 			t.Errorf("%v: a raw token reached the screen", mode)
 		}
+		if strings.TrimSpace(screen.Row(konfigHeaderRows+1)) != "" {
+			t.Errorf("%v: row %d under the art is not blank: %q", mode, konfigHeaderRows+1, screen.Row(konfigHeaderRows+1))
+		}
 		if !strings.Contains(screen.Row(konfigTopRow), "Terminal") {
 			t.Errorf("%v: form displaced; row %d = %q", mode, konfigTopRow, screen.Row(konfigTopRow))
 		}
+	}
+}
+
+// The form must fit the smallest screen a caller can set, and the items must
+// stay clear of the rows below them.
+func TestKonfigLayoutFitsMinimumHeight(t *testing.T) {
+	if konfigLastRow > konfigMinHeight {
+		t.Fatalf("form needs %d rows; the smallest allowed screen has %d", konfigLastRow, konfigMinHeight)
+	}
+	items, headings := layoutKonfig(konfigSections())
+	for _, h := range headings {
+		if h.row < konfigTopRow || h.row >= konfigRuleRow {
+			t.Errorf("heading %q on row %d, outside rows %d-%d", h.title, h.row, konfigTopRow, konfigRuleRow-1)
+		}
+	}
+	for _, it := range items {
+		if it.row < konfigTopRow || it.row >= konfigRuleRow {
+			t.Errorf("item %c on row %d, outside rows %d-%d", it.key, it.row, konfigTopRow, konfigRuleRow-1)
+		}
+	}
+	if boxBottom := colBoxTop + len(fileColumns) + 3; boxBottom >= konfigRuleRow {
+		t.Errorf("file-column box ends on row %d, over the rule on row %d", boxBottom, konfigRuleRow)
 	}
 }
 

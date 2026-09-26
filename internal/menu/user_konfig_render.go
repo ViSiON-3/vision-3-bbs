@@ -65,7 +65,7 @@ func (st *konfigState) renderAll() error {
 		return err
 	}
 	var b strings.Builder
-	for row := konfigTopRow; row <= konfigLastRow; row++ {
+	for row := konfigHeaderRows + 1; row <= konfigLastRow; row++ {
 		b.WriteString(clearRow(row))
 	}
 	for _, h := range st.headings {
