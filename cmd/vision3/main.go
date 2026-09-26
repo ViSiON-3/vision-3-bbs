@@ -1332,6 +1332,11 @@ func sessionHandler(s ssh.Session) {
 		slog.Error("reached post-auth loop with nil user", "node", nodeID)
 		return
 	}
+	// The login screens ran under the pre-login idle timeout; from here on,
+	// starting with the invisible-logon and terminal prompts below, the
+	// caller's own applies (SysOps may be exempt), whichever way they got in.
+	menuExecutor.ApplyUserIdleTimeout(s, authenticatedUser)
+
 	// Set default message area if not already set (handles both SSH pre-auth and normal login)
 	defaultsChanged := false
 	if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
@@ -1612,10 +1617,6 @@ func sessionHandler(s ssh.Session) {
 	// characters with the mode actually in effect for the rest of the session.
 	menu.SetSessionOutputMode(s, effectiveMode)
 	applyPalette()
-
-	// The login screens ran under the pre-login idle timeout; from here on the
-	// caller's own applies (SysOps may be exempt), whichever way they got in.
-	menuExecutor.ApplyUserIdleTimeout(s, authenticatedUser)
 
 	// Run the configurable login sequence (login.json) directly after authentication.
 	// This replaces the old FASTLOGN menu routing — FASTLOGIN is now an optional login.json item.
