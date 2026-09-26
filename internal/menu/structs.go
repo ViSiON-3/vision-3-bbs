@@ -14,6 +14,9 @@ type MenuRecord struct {
 	Fallback     string `json:"FALLBACK"`
 	ACS          string `json:"ACS"`
 	Password     string `json:"PASS"`
+	// ForceHotKey makes the menu take single-key input for every caller,
+	// whatever their Hot Keys setting.
+	ForceHotKey bool `json:"FORCEHOTKEY"`
 }
 
 // Getters for boolean fields (using the JSON bool types directly)

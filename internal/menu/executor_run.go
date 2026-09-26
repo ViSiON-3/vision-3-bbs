@@ -42,6 +42,9 @@ type runLoopState struct {
 	currentAreaName  string
 	userInput        string
 	isLightbarMenu   bool
+	// commands is the current menu's command list, which hot-key input
+	// consults to decide whether a key completes a command on its own.
+	commands []CommandRecord
 }
 
 // userHandle returns the current user's handle for logging, or "" when no user
@@ -84,6 +87,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	// Without this, two goroutines compete on the same bufio.Reader, freezing input.
 	defer resetSessionIH(s)
 	defer clearSessionIdleTimeout(s)
+	defer sessionTermSizes.Delete(s)
 
 	if st.currentUser != nil {
 		slog.Debug("running menu for user", "handle", st.currentUser.Handle, "level", st.currentUser.AccessLevel)
@@ -108,6 +112,12 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// dial back.
 		if !st.refreshCurrentUser() {
 			return "LOGOFF", nil, nil
+		}
+
+		// A terminal size the caller changed in the Konfig editor applies
+		// from the next screen on.
+		if w, h, ok := takeSessionTermSize(s); ok {
+			st.termWidth, st.termHeight = w, h
 		}
 
 		st.userInput = "" // Reset per iteration (Keep this one)
@@ -153,6 +163,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			slog.Warn("failed to load commands for menu", "menu", st.currentMenuName, "error", err)
 			commands = []CommandRecord{} // Use empty slice
 		}
+		st.commands = commands
 
 		// Determine default node activity for this menu from autorun entries
 		menuDefaultActivity := st.currentMenuName

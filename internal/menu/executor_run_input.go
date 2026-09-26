@@ -175,7 +175,15 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 	}
 
 	// Read User Input Line via shared InputHandler to avoid reader races.
-	rawInput, err := readLineFromSessionIH(s, terminal)
+	// With hot keys, a single keystroke is the whole command unless it could
+	// begin a longer one.
+	var rawInput string
+	var err error
+	if menuRec.ForceHotKey || (st.currentUser != nil && st.currentUser.HotKeys) {
+		rawInput, err = st.readHotKeyInput()
+	} else {
+		rawInput, err = readLineFromSessionIH(s, terminal)
+	}
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			slog.Info("user disconnected during menu input", "menu", st.currentMenuName)
@@ -206,6 +214,67 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 	// --- End Special Input Handling ---
 
 	return st.userInput, loopFallthrough, nil
+}
+
+// readHotKeyInput reads a menu command a keystroke at a time. Enter alone
+// and ^P come back as they would from a line read. A printable key that is a
+// whole command on its own is returned at once; one that could start a longer
+// command (see hotKeyNeedsLine) drops into ordinary line input with that key
+// already typed. Other keys are ignored.
+func (st *runLoopState) readHotKeyInput() (string, error) {
+	ih := getSessionIH(st.s)
+	for {
+		key, err := ih.ReadKey()
+		if err != nil {
+			return "", err
+		}
+		switch {
+		case key == editor.KeyEnter:
+			_, _ = st.terminal.Write([]byte("\r\n"))
+			return "", nil
+		case key == 0x10: // ^P
+			_, _ = st.terminal.Write([]byte("\r\n"))
+			return "\x10", nil
+		case key >= 33 && key < 127:
+			k := strings.ToUpper(string(rune(key)))
+			if hotKeyNeedsLine(st.commands, k) {
+				return readLineFromSessionIHFrom(st.s, st.terminal, k)
+			}
+			_, _ = st.terminal.Write([]byte(k + "\r\n"))
+			return k, nil
+		}
+	}
+}
+
+// hotKeyNeedsLine reports whether k, the first key of a command typed with
+// hot keys on, might be the start of something longer than one key: a
+// multi-key command in the menu, a number when the menu takes numbers (##),
+// or the global /G hangup.
+func hotKeyNeedsLine(commands []CommandRecord, k string) bool {
+	if k == "/" {
+		return true
+	}
+	isDigit := k[0] >= '0' && k[0] <= '9'
+	for _, cmd := range commands {
+		if cmd.Keys == "//" || cmd.Keys == "~~" {
+			continue // auto-run entries, never typed
+		}
+		for _, key := range strings.Fields(strings.ToUpper(cmd.Keys)) {
+			if key == "^M" {
+				continue
+			}
+			if key == "##" {
+				if isDigit {
+					return true
+				}
+				continue
+			}
+			if len(key) > 1 && strings.HasPrefix(key, k) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // matchCommand finds the command among commands whose Keys match userInput,
@@ -295,9 +364,8 @@ func matchCommand(commands []CommandRecord, userInput string, hasAccess func(acs
 	// Classic BBS convention: G is Goodbye from anywhere. Only menus that
 	// happen to list it get it otherwise, so on the ones that don't (the
 	// email, QWK and sysop menus among them) the only way out was the /G
-	// hangup. Running last means a menu's own G still wins — USERCFG binds
-	// it to the custom-prompt editor — because this is reached only when
-	// nothing in the menu matched.
+	// hangup. Running last means a menu's own G still wins, because this is
+	// reached only when nothing in the menu matched.
 	if !matched && userInput == "G" {
 		nextAction = "RUN:MAINLOGOFF"
 		matched = true

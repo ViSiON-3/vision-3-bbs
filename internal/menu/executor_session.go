@@ -77,6 +77,29 @@ func ClearSessionOutputMode(s ssh.Session) {
 	sessionOutputModes.Delete(s)
 }
 
+// sessionTermSizes carries a terminal size changed mid-session (the user
+// Konfig editor) back to the menu loop, which otherwise keeps the size it was
+// started with. Run takes it at the top of each iteration.
+var sessionTermSizes sync.Map
+
+type termSize struct{ width, height int }
+
+// setSessionTermSize records a new terminal size for s.
+func setSessionTermSize(s ssh.Session, width, height int) {
+	sessionTermSizes.Store(s, termSize{width, height})
+}
+
+// takeSessionTermSize returns and forgets a size recorded by
+// setSessionTermSize.
+func takeSessionTermSize(s ssh.Session) (width, height int, ok bool) {
+	v, ok := sessionTermSizes.LoadAndDelete(s)
+	if !ok {
+		return 0, 0, false
+	}
+	ts := v.(termSize)
+	return ts.width, ts.height, true
+}
+
 // decodeExtendedKey processes one keystroke byte b (128-255) according to
 // mode, returning the line with the decoded character appended (if any), the
 // raw bytes to echo back to the terminal (if any), and the updated
@@ -224,7 +247,13 @@ func (e *MenuExecutor) holdScreen(s ssh.Session, terminal *term.Terminal, output
 // readLineFromSessionIH reads a simple command line from the shared session
 // InputHandler so menu input never races with other session readers.
 func readLineFromSessionIH(s ssh.Session, terminal *term.Terminal) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, false, 0)
+	return readLineFromSessionIHImpl(s, terminal, false, 0, "")
+}
+
+// readLineFromSessionIHFrom reads a command line like readLineFromSessionIH,
+// starting with initial already typed. It echoes initial itself.
+func readLineFromSessionIHFrom(s ssh.Session, terminal *term.Terminal, initial string) (string, error) {
+	return readLineFromSessionIHImpl(s, terminal, false, 0, initial)
 }
 
 // readLineFromSessionIHMax reads a simple command line like
@@ -233,19 +262,20 @@ func readLineFromSessionIH(s ssh.Session, terminal *term.Terminal) (string, erro
 // echo, so the caller never sees a value longer than maxLen. A maxLen of 0
 // means unlimited.
 func readLineFromSessionIHMax(s ssh.Session, terminal *term.Terminal, maxLen int) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, false, maxLen)
+	return readLineFromSessionIHImpl(s, terminal, false, maxLen, "")
 }
 
 // readLineFromSessionIHAllowAbort reads a simple command line like
 // readLineFromSessionIH, but returns errInputAborted when ESC is pressed.
 func readLineFromSessionIHAllowAbort(s ssh.Session, terminal *term.Terminal) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, true, 0)
+	return readLineFromSessionIHImpl(s, terminal, true, 0, "")
 }
 
 // readLineFromSessionIHImpl is the shared implementation behind
-// readLineFromSessionIH, readLineFromSessionIHMax and
-// readLineFromSessionIHAllowAbort; they differ only in whether ESC aborts the
-// read and whether the line length is capped (maxLen > 0, counted in runes).
+// readLineFromSessionIH, readLineFromSessionIHMax, readLineFromSessionIHFrom
+// and readLineFromSessionIHAllowAbort; they differ only in whether ESC aborts
+// the read, whether the line length is capped (maxLen > 0, counted in runes)
+// and whether it starts with text already typed.
 //
 // Extended keystrokes (byte >= 128) are decoded per the session's output
 // mode via decodeExtendedKey: a CP437 byte is a complete character on its
@@ -254,10 +284,14 @@ func readLineFromSessionIHAllowAbort(s ssh.Session, terminal *term.Terminal) (st
 // reports it complete. Backspace deletes one whole rune (see backspaceRune)
 // rather than one byte, and clears any in-progress utf8Pending sequence
 // without touching line or echoing, since nothing was displayed for it yet.
-func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbort bool, maxLen int) (string, error) {
+func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbort bool, maxLen int, initial string) (string, error) {
 	ih := getSessionIH(s)
 	mode := sessionOutputMode(s)
 	line := make([]byte, 0, 64)
+	if initial != "" {
+		line = append(line, initial...)
+		_, _ = terminal.Write([]byte(initial))
+	}
 	var utf8Pending []byte
 	atLimit := func() bool {
 		return maxLen > 0 && utf8.RuneCount(line) >= maxLen
