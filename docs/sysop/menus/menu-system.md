@@ -947,6 +947,11 @@ Command usage examples:
 - `RUN:LASTCALLERS` - Uses default limit of 20 entries
 - `RUN:LASTCALLERS 25` - Shows last 25 entries
 
+Either limit is trimmed to what fits on the caller's terminal: the rows taken
+by `LASTCALL.TOP`, `LASTCALL.BOT` and the pause prompt are subtracted from the
+screen height, so the header never scrolls off the top. With the stock
+templates a 25-row terminal shows 15 entries.
+
 The limit counts entries the viewer actually sees: logins hidden by the
 invisible logon prompt are filtered out before it is applied, so they never
 consume a row. Stored history is deeper than the display limit

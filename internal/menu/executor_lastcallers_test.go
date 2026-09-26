@@ -115,3 +115,36 @@ func TestLastCallerRows_LimitIsNotCapped(t *testing.T) {
 		t.Fatalf("a request for 25 rows returned %d; the default must not cap it", len(got))
 	}
 }
+
+// TestLastCallerRowsThatFit_StockTemplatesOn25Rows covers the login screen
+// overflowing a 25-row terminal: a 7-line header, 2-line footer and the pause
+// prompt line leave room for 15 caller rows, not the default 20.
+func TestLastCallerRowsThatFit_StockTemplatesOn25Rows(t *testing.T) {
+	top := "logo1\r\nlogo2\r\nlogo3\r\nlogo4\r\n----\r\nheader\r\n----" // no trailing break, like LASTCALL.TOP
+	bot := "----\r\nTotal Users: 14"
+	pause := "\r\n|07Press |15[ENTER]|07 to continue... "
+
+	if got := lastCallerRowsThatFit(25, top, bot, pause); got != 15 {
+		t.Errorf("25 rows: got %d caller rows, want 15", got)
+	}
+	if got := lastCallerRowsThatFit(24, top, bot, pause); got != 14 {
+		t.Errorf("24 rows: got %d caller rows, want 14", got)
+	}
+	// A prompt without a leading break still gets one from the pause helper.
+	if got := lastCallerRowsThatFit(25, top, bot, "Press ENTER"); got != 15 {
+		t.Errorf("prompt without leading break: got %d, want 15", got)
+	}
+	// A top template that already ends in a break gets no extra one.
+	if got := lastCallerRowsThatFit(25, top+"\r\n", bot, pause); got != 15 {
+		t.Errorf("top with trailing break: got %d, want 15", got)
+	}
+}
+
+func TestLastCallerRowsThatFit_Edges(t *testing.T) {
+	if got := lastCallerRowsThatFit(0, "a", "b", "c"); got != -1 {
+		t.Errorf("unknown height: got %d, want -1 (no trimming)", got)
+	}
+	if got := lastCallerRowsThatFit(2, "a\r\nb\r\nc", "d", "e"); got != 0 {
+		t.Errorf("screen shorter than the frame: got %d, want 0", got)
+	}
+}
