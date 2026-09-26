@@ -874,6 +874,7 @@ func sessionHandler(s ssh.Session) {
 		delete(activeSessions, s) // Remove using session as key
 		activeSessionsMutex.Unlock()
 		menu.ClearSessionOutputMode(s)
+		menu.ClearSessionIdleTimeout(s)
 		if sessionRegistry != nil {
 			sessionRegistry.Unregister(int(nodeID))
 		}
@@ -1205,26 +1206,25 @@ func sessionHandler(s ssh.Session) {
 	// login menu can handle them.
 	//
 	// Skipping the LOGIN prompt must not skip what it enforces, so the caller
-	// goes through the same intro gate and logon-level check first. One who
-	// fails the level check falls through to the normal login flow.
+	// goes through the same intro gate and logon-level check first. A caller
+	// who fails either is disconnected rather than sent to the LOGIN prompt,
+	// which would authenticate the account a second time.
 	if authedUser, ok := s.Context().Value(sshAuthUserKey{}).(*user.User); ok && authedUser != nil {
 		slog.Info("SSH pre-authenticated user detected", "node", nodeID, "user", authedUser.Handle)
 		admitted, admitErr := menuExecutor.AdmitPreAuthenticatedUser(s, terminal, userMgr, authedUser, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
-		if admitErr != nil {
-			slog.Info("SSH pre-authenticated session ended before admission", "node", nodeID, "user", authedUser.Handle, "error", admitErr)
+		if admitErr != nil || !admitted {
+			slog.Info("SSH pre-authenticated caller not admitted", "node", nodeID, "user", authedUser.Handle, "error", admitErr)
 			return
 		}
-		if admitted {
-			authenticatedUser = authedUser
-			bbsSession.Mutex.Lock()
-			bbsSession.User = authenticatedUser
-			bbsSession.Mutex.Unlock()
+		authenticatedUser = authedUser
+		bbsSession.Mutex.Lock()
+		bbsSession.User = authenticatedUser
+		bbsSession.Mutex.Unlock()
 
-			// Mark user as online
-			userMgr.MarkUserOnline(authenticatedUser.ID)
+		// Mark user as online
+		userMgr.MarkUserOnline(authenticatedUser.ID)
 
-			currentMenuName = "MAIN"
-		}
+		currentMenuName = "MAIN"
 	}
 
 	// Pre-login matrix screen for unauthenticated users (telnet or SSH without account)
@@ -1612,6 +1612,10 @@ func sessionHandler(s ssh.Session) {
 	// characters with the mode actually in effect for the rest of the session.
 	menu.SetSessionOutputMode(s, effectiveMode)
 	applyPalette()
+
+	// The login screens ran under the pre-login idle timeout; from here on the
+	// caller's own applies (SysOps may be exempt), whichever way they got in.
+	menuExecutor.ApplyUserIdleTimeout(s, authenticatedUser)
 
 	// Run the configurable login sequence (login.json) directly after authentication.
 	// This replaces the old FASTLOGN menu routing — FASTLOGIN is now an optional login.json item.

@@ -10,6 +10,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
@@ -38,6 +39,21 @@ func applySessionIdleTimeout(s ssh.Session, d time.Duration) {
 // clearSessionIdleTimeout drops the remembered timeout when a session ends.
 func clearSessionIdleTimeout(s ssh.Session) {
 	sessionIdleTimeouts.Delete(s)
+}
+
+// ClearSessionIdleTimeout is clearSessionIdleTimeout for the session handler,
+// which can set a timeout (SSH pre-auth, login sequence) before any menu runs
+// and so before MenuExecutor.Run's own deferred cleanup is in place.
+func ClearSessionIdleTimeout(s ssh.Session) {
+	clearSessionIdleTimeout(s)
+}
+
+// ApplyUserIdleTimeout applies u's idle timeout (including the SysOp
+// exemption) to the session. The session handler calls it once a caller is
+// authenticated, so the login sequence runs under their timeout rather than
+// the pre-login one the login screens installed.
+func (e *MenuExecutor) ApplyUserIdleTimeout(s ssh.Session, u *user.User) {
+	applySessionIdleTimeout(s, e.idleTimeout(u))
 }
 
 // sessionOutputModes remembers the negotiated ansi.OutputMode for each

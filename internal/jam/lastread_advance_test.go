@@ -51,3 +51,47 @@ func TestAdvanceLastRead(t *testing.T) {
 	}
 	check("advance after rewind", 5, 7)
 }
+
+// Each node opens its own Base handle, so AdvanceLastRead must serialize on
+// the file lock: concurrent advances through separate handles must still end
+// at the highest message number.
+func TestAdvanceLastRead_ConcurrentHandles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "race")
+	seed, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	seed.Close()
+
+	const n = 20
+	errs := make(chan error, n)
+	for i := 1; i <= n; i++ {
+		go func(msgNum int) {
+			b, err := Open(path)
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer b.Close()
+			errs <- b.AdvanceLastRead("sysop", msgNum)
+		}(i)
+	}
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("AdvanceLastRead: %v", err)
+		}
+	}
+
+	b, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer b.Close()
+	lr, err := b.GetLastRead("sysop")
+	if err != nil {
+		t.Fatalf("GetLastRead: %v", err)
+	}
+	if lr.LastReadMsg != n {
+		t.Errorf("LastReadMsg = %d, want %d", lr.LastReadMsg, n)
+	}
+}

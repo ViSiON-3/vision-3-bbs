@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -56,6 +57,10 @@ func newIntroGateFixture(t *testing.T, cfg config.ServerConfig) *introGateFixtur
 	if err := um.UpdateUser(newcomer); err != nil {
 		t.Fatalf("UpdateUser: %v", err)
 	}
+
+	origPause := accessDeniedPause
+	accessDeniedPause = 0
+	t.Cleanup(func() { accessDeniedPause = origPause })
 
 	e := &MenuExecutor{MessageMgr: mm, MenuSetPath: t.TempDir()}
 	e.SetServerConfig(cfg)
@@ -176,7 +181,9 @@ func TestAdmitPreAuthenticatedUser_SentIsAdmitted(t *testing.T) {
 	}
 }
 
-// The SSH path also skipped the logon-level check the LOGIN prompt applies.
+// The SSH path also skipped the logon-level check the LOGIN prompt applies. A
+// caller below it is refused outright (the session handler disconnects them)
+// rather than sent to the LOGIN prompt to authenticate a second time.
 func TestAdmitPreAuthenticatedUser_EnforcesLogonLevel(t *testing.T) {
 	f := newIntroGateFixture(t, config.ServerConfig{LogonLevel: 50})
 	f.stubEditor(t, "", false, errors.New("editor must not open"))
@@ -201,5 +208,42 @@ func TestAdmitPreAuthenticatedUser_OrdinaryUserAdmitted(t *testing.T) {
 	}
 	if f.editorRan != 0 {
 		t.Errorf("intro editor opened %d times for a caller with nothing owed", f.editorRan)
+	}
+}
+
+// The pre-gate idle timeout goes through the session-level store, so it
+// survives an InputHandler reset; once admitted, the caller's own timeout
+// replaces it (a co-SysOp or above is exempt), and session teardown clears it.
+func TestAdmitPreAuthenticatedUser_IdleTimeoutLifecycle(t *testing.T) {
+	f := newIntroGateFixture(t, config.ServerConfig{SessionIdleTimeoutMinutes: 5, CoSysOpLevel: 250})
+	f.stubEditor(t, "Hello!", true, nil)
+
+	ts := newTestSession("")
+	t.Cleanup(func() { ClearSessionIdleTimeout(ts) })
+	admitted, err := f.e.AdmitPreAuthenticatedUser(ts, newTestTerminal(ts), f.um, f.newcomer, 1, ansi.OutputModeCP437, 80, 24)
+	if !admitted || err != nil {
+		t.Fatalf("AdmitPreAuthenticatedUser = (%v, %v), want (true, nil)", admitted, err)
+	}
+
+	stored := func() (time.Duration, bool) {
+		v, ok := sessionIdleTimeouts.Load(ts)
+		if !ok {
+			return 0, false
+		}
+		return v.(time.Duration), true
+	}
+	if d, ok := stored(); !ok || d != 5*time.Minute {
+		t.Fatalf("pre-gate timeout = (%v, %v), want (5m, stored)", d, ok)
+	}
+
+	f.sysop.AccessLevel = 255
+	f.e.ApplyUserIdleTimeout(ts, f.sysop)
+	if d, ok := stored(); !ok || d != 0 {
+		t.Errorf("after ApplyUserIdleTimeout(sysop) = (%v, %v), want (0, stored)", d, ok)
+	}
+
+	ClearSessionIdleTimeout(ts)
+	if _, ok := stored(); ok {
+		t.Error("ClearSessionIdleTimeout left the session's timeout stored")
 	}
 }

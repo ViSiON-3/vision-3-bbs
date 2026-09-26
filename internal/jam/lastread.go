@@ -140,28 +140,33 @@ func (b *Base) MarkMessageRead(username string, msgNum int) error {
 // newer ones unread again. It is MarkMessageRead for readers that display
 // messages out of order.
 func (b *Base) AdvanceLastRead(username string, msgNum int) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	// The file lock, not just b.mu, because every node opens its own Base
+	// handle: without it two readers can both see the old pointer and the
+	// lower message number can land last, undoing the forward-only rule.
+	return b.withFileLock(func() error {
+		b.mu.Lock()
+		defer b.mu.Unlock()
 
-	if !b.isOpen {
-		return ErrBaseNotOpen
-	}
-
-	lr, err := b.getLastReadLocked(username)
-	if err != nil {
-		if err == ErrNotFound {
-			return b.setLastReadLocked(username, uint32(msgNum), uint32(msgNum))
+		if !b.isOpen {
+			return ErrBaseNotOpen
 		}
-		return err
-	}
-	if uint32(msgNum) <= lr.LastReadMsg {
-		return nil
-	}
-	newHigh := lr.HighReadMsg
-	if uint32(msgNum) > newHigh {
-		newHigh = uint32(msgNum)
-	}
-	return b.setLastReadLocked(username, uint32(msgNum), newHigh)
+
+		lr, err := b.getLastReadLocked(username)
+		if err != nil {
+			if err == ErrNotFound {
+				return b.setLastReadLocked(username, uint32(msgNum), uint32(msgNum))
+			}
+			return err
+		}
+		if uint32(msgNum) <= lr.LastReadMsg {
+			return nil
+		}
+		newHigh := lr.HighReadMsg
+		if uint32(msgNum) > newHigh {
+			newHigh = uint32(msgNum)
+		}
+		return b.setLastReadLocked(username, uint32(msgNum), newHigh)
+	})
 }
 
 // setLastReadLocked is the non-locking version of SetLastRead, for use

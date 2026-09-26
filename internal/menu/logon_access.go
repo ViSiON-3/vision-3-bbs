@@ -2,6 +2,7 @@ package menu
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -27,15 +28,20 @@ func canLogonAtLevel(cfg config.ServerConfig, accessLevel int) bool {
 	return accessLevel >= cfg.LogonLevel
 }
 
+// accessDeniedPause holds the access-denied message on screen before an SSH
+// pre-authenticated caller is disconnected. A variable so tests need not wait.
+var accessDeniedPause = time.Second
+
 // AdmitPreAuthenticatedUser applies the post-password login checks to a caller
 // whose password was already verified at the SSH layer, so that path skips
 // the LOGIN prompt without also skipping what the prompt enforces: the
 // required new-user intro gate, then the logon-level check.
 //
 // Returns admitted=false with io.EOF when the caller left the intro gate
-// without sending (the session must end), and admitted=false with a nil error
-// when their level is too low to log on — the caller then falls back to the
-// normal login flow, which will refuse them the same way.
+// without sending, and admitted=false with a nil error when their level is too
+// low to log on. Either way the session must end: falling back to the LOGIN
+// prompt would authenticate the same account a second time, recording a
+// second call for one connection, only to refuse it again.
 func (e *MenuExecutor) AdmitPreAuthenticatedUser(
 	s ssh.Session,
 	terminal *term.Terminal,
@@ -51,8 +57,10 @@ func (e *MenuExecutor) AdmitPreAuthenticatedUser(
 
 	if u.IntroPending {
 		// No menu has run yet, so nothing has applied the idle timeout; without
-		// it an idle caller would hold the node in the gate indefinitely.
-		getSessionIH(s).SetSessionIdleTimeout(e.idleTimeout(nil))
+		// it an idle caller would hold the node in the gate indefinitely. The
+		// session handler applies the caller's own timeout before the login
+		// sequence, and clears the stored value when the session ends.
+		applySessionIdleTimeout(s, e.idleTimeout(nil))
 		if proceed, _, gErr := e.runNewUserIntroGate(s, terminal, userManager, u, nodeNumber, outputMode, termWidth, termHeight); !proceed {
 			return false, gErr
 		}
@@ -61,6 +69,7 @@ func (e *MenuExecutor) AdmitPreAuthenticatedUser(
 	if cfg := e.GetServerConfig(); !canLogonAtLevel(cfg, u.AccessLevel) {
 		slog.Info("SSH pre-auth denied - insufficient access level", "node", nodeNumber, "handle", u.Handle, "has", u.AccessLevel, "needs", cfg.LogonLevel)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecAccessDenied)), outputMode)
+		time.Sleep(accessDeniedPause)
 		return false, nil
 	}
 	return true, nil
