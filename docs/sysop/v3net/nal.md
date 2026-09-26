@@ -101,6 +101,7 @@ Coordinators see the **Coordinator Panel** in the V3Net menu:
 [ V3Net: Coordinator Panel — felonynet ]
 
   [P]ending area proposals  (2)
+  [M]anage area managers
   [Q]uit
 ```
 
@@ -110,12 +111,18 @@ The panel appears only when the NAL of a subscribed network names your node as i
 
 When sysops propose new areas, you review them from the Pending Proposals screen. Type the action letter and the row number, for example `A 1` or `R2`.
 
-- **Approve** — Adds the area to the NAL as it was proposed and publishes it to all nodes
+- **Approve** — Asks for the access mode (`O`pen, `A`pproval or `C`losed; press Enter to keep the one proposed), then adds the area to the NAL and publishes it to all nodes. The proposing node becomes the area's manager.
 - **Reject** — Declines the proposal, optionally with a reason, and notifies the proposing node
 
-### Managers and Coordinator Transfer
+### Changing an Area's Manager
 
-The hub always makes the proposing node the manager of an approved area and has no endpoint for changing it afterwards. Coordinator transfer exists on the hub's HTTP API but needs the new coordinator's public key and an acceptance step, and is not offered from the BBS menu yet.
+**Manage area managers** lists every area in the NAL with its current manager. Type `C` and the row number, for example `C 3`, then enter the node ID of the new manager. The new manager must be an active subscriber of the network: the hub records the node's public key from its own registry, so you never paste a key. A sysop can find their node ID on the V3Net status screen.
+
+The change is published to all nodes straight away, and the new manager sees the area's access requests from then on.
+
+### Coordinator Transfer
+
+Coordinator transfer exists on the hub's HTTP API but is not offered from the BBS menu yet.
 
 ## For Developers
 
