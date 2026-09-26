@@ -122,7 +122,7 @@ func TestLastCallerRows_LimitIsNotCapped(t *testing.T) {
 func TestLastCallerRowsThatFit_StockTemplatesOn25Rows(t *testing.T) {
 	top := "logo1\r\nlogo2\r\nlogo3\r\nlogo4\r\n----\r\nheader\r\n----" // no trailing break, like LASTCALL.TOP
 	bot := "----\r\nTotal Users: 14"
-	pause := "\r\n|07Press |15[ENTER]|07 to continue... "
+	pause := "|15SlAm eNtEr!" // stock prompt: no leading break, so the helper adds one
 
 	if got := lastCallerRowsThatFit(25, top, bot, pause); got != 15 {
 		t.Errorf("25 rows: got %d caller rows, want 15", got)
@@ -130,13 +130,31 @@ func TestLastCallerRowsThatFit_StockTemplatesOn25Rows(t *testing.T) {
 	if got := lastCallerRowsThatFit(24, top, bot, pause); got != 14 {
 		t.Errorf("24 rows: got %d caller rows, want 14", got)
 	}
-	// A prompt without a leading break still gets one from the pause helper.
-	if got := lastCallerRowsThatFit(25, top, bot, "Press ENTER"); got != 15 {
-		t.Errorf("prompt without leading break: got %d, want 15", got)
-	}
 	// A top template that already ends in a break gets no extra one.
 	if got := lastCallerRowsThatFit(25, top+"\r\n", bot, pause); got != 15 {
 		t.Errorf("top with trailing break: got %d, want 15", got)
+	}
+}
+
+// TestLastCallerRowsThatFit_LeadingBreakPrompt mirrors writeCenteredPausePrompt:
+// a prompt that starts with a break has it stripped and no break written, so
+// the break a bottom template ends with is the only one before the prompt.
+func TestLastCallerRowsThatFit_LeadingBreakPrompt(t *testing.T) {
+	// One-line top, "footer\n" bottom, "\r\nprompt": top, one caller, footer
+	// and prompt fill exactly four rows.
+	for _, prompt := range []string{"\r\nprompt", "\nprompt"} {
+		if got := lastCallerRowsThatFit(4, "top", "footer\n", prompt); got != 1 {
+			t.Errorf("prompt %q: got %d caller rows, want 1", prompt, got)
+		}
+	}
+	// Without the bottom's trailing break the helper still adds none, so the
+	// prompt shares the footer's row.
+	if got := lastCallerRowsThatFit(3, "top", "footer", "\r\nprompt"); got != 1 {
+		t.Errorf("unterminated footer: got %d caller rows, want 1", got)
+	}
+	// Breaks inside the prompt text each take a row.
+	if got := lastCallerRowsThatFit(5, "top", "footer", "line one\r\nline two"); got != 1 {
+		t.Errorf("two-line prompt: got %d caller rows, want 1", got)
 	}
 }
 

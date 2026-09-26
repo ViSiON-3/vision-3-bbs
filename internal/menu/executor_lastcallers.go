@@ -215,15 +215,23 @@ func lastCallerRowsThatFit(termHeight int, top, bot, pausePrompt string) int {
 	}
 	// Rows used = line breaks emitted + 1 for the line the cursor ends on.
 	// runLastCallers terminates the top template and every caller row with a
-	// line break, and writeCenteredPausePrompt emits exactly one before the
-	// prompt text whether or not the configured prompt begins with one.
+	// line break. writeCenteredPausePrompt emits one break before the prompt
+	// only when the prompt does not start with one; a leading break is
+	// stripped and not written, so it adds no row.
 	breaks := strings.Count(top, "\n")
 	if !strings.HasSuffix(top, "\n") {
 		breaks++
 	}
 	breaks += strings.Count(bot, "\n")
-	pauseText := strings.TrimPrefix(strings.TrimPrefix(pausePrompt, "\r"), "\n")
-	breaks += 1 + strings.Count(pauseText, "\n")
+	switch {
+	case strings.HasPrefix(pausePrompt, "\r\n"):
+		pausePrompt = strings.TrimPrefix(pausePrompt, "\r\n")
+	case strings.HasPrefix(pausePrompt, "\n"):
+		pausePrompt = strings.TrimPrefix(pausePrompt, "\n")
+	default:
+		breaks++
+	}
+	breaks += strings.Count(pausePrompt, "\n")
 
 	fit := termHeight - (breaks + 1)
 	if fit < 0 {
