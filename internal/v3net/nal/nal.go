@@ -265,20 +265,28 @@ func (c *Cache) FetchAndVerify(ctx context.Context, url, network string) (*proto
 	}
 	c.mu.RUnlock()
 
-	// Fetch and verify.
+	n, err := c.Refresh(ctx, url, network)
+	if err != nil {
+		return c.staleOrError(network, err)
+	}
+	return n, nil
+}
+
+// Refresh fetches and verifies a NAL and caches it, whether or not the
+// cached copy is still fresh. Use it when the hub has announced a change;
+// FetchAndVerify would keep serving the old copy until its TTL runs out.
+// Unlike FetchAndVerify, a failure returns the error, not a stale copy.
+func (c *Cache) Refresh(ctx context.Context, url, network string) (*protocol.NAL, error) {
 	n, err := Fetch(ctx, url, c.client)
 	if err != nil {
-		return c.staleOrError(network, fmt.Errorf("nal: fetch %s: %w", network, err))
+		return nil, fmt.Errorf("nal: fetch %s: %w", network, err)
 	}
-
 	if err := Verify(n); err != nil {
-		return c.staleOrError(network, fmt.Errorf("nal: verify %s: %w", network, err))
+		return nil, fmt.Errorf("nal: verify %s: %w", network, err)
 	}
-
 	if n.Network != network {
-		return c.staleOrError(network, fmt.Errorf("nal: network mismatch: got %q want %q", n.Network, network))
+		return nil, fmt.Errorf("nal: network mismatch: got %q want %q", n.Network, network)
 	}
-
 	c.Put(network, n)
 	return n, nil
 }

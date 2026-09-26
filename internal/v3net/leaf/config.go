@@ -20,8 +20,11 @@ type Config struct {
 	DedupIndex   *dedup.Index
 	JAMWriter    JAMWriter
 	OnEvent      func(protocol.Event)
-	BBSName      string // Local BBS name for subscribe request
-	BBSHost      string // Local BBS hostname for subscribe request
+	// OnNAL is called with each NAL the leaf fetches and verifies: once
+	// after subscribing, and again whenever the hub announces a change.
+	OnNAL   func(*protocol.NAL)
+	BBSName string // Local BBS name for subscribe request
+	BBSHost string // Local BBS hostname for subscribe request
 }
 
 // DefaultPollInterval is used when no poll interval is configured.

@@ -96,15 +96,30 @@ func (l *Leaf) handleNALUpdated(ctx context.Context) {
 		case <-time.After(delay):
 		}
 
-		url := l.cfg.HubURL + fmt.Sprintf("/v3net/v1/%s/nal", l.cfg.Network)
-		if l.nalCache != nil {
-			if _, err := l.nalCache.FetchAndVerify(ctx, url, l.cfg.Network); err != nil {
-				slog.Warn("leaf: NAL re-fetch failed", "network", l.cfg.Network, "error", err)
-			} else {
-				slog.Info("leaf: NAL re-fetched", "network", l.cfg.Network)
-			}
+		if err := l.refreshNAL(ctx); err != nil {
+			slog.Warn("leaf: NAL re-fetch failed", "network", l.cfg.Network, "error", err)
+		} else {
+			slog.Info("leaf: NAL re-fetched", "network", l.cfg.Network)
 		}
 	}()
+}
+
+// refreshNAL fetches and verifies the network's NAL from the hub, bypassing
+// the cache's freshness check, stores it, and hands it to the OnNAL callback
+// if one is set.
+func (l *Leaf) refreshNAL(ctx context.Context) error {
+	if l.nalCache == nil {
+		return fmt.Errorf("leaf: NAL cache not initialized")
+	}
+	url := l.cfg.HubURL + fmt.Sprintf("/v3net/v1/%s/nal", l.cfg.Network)
+	n, err := l.nalCache.Refresh(ctx, url, l.cfg.Network)
+	if err != nil {
+		return err
+	}
+	if l.cfg.OnNAL != nil {
+		l.cfg.OnNAL(n)
+	}
+	return nil
 }
 
 // dispatchNALEvent handles NAL-related SSE events.
