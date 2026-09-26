@@ -134,12 +134,5 @@ func (l *Leaf) dispatchNALEvent(ctx context.Context, ev protocol.Event) {
 			slog.Warn("leaf: subscription denied",
 				"network", payload.Network, "tag", payload.Tag)
 		}
-
-	case protocol.EventCoordTransferPending:
-		var payload protocol.CoordTransferPendingPayload
-		if err := json.Unmarshal(ev.Data, &payload); err == nil {
-			slog.Info("leaf: coordinator transfer pending",
-				"network", payload.Network, "new_node", payload.NewNodeID)
-		}
 	}
 }

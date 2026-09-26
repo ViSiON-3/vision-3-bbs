@@ -17,18 +17,35 @@ import (
 // the screen tests can assert what reached the hub.
 type manageFake struct {
 	fakeV3NetStatus
-	proposals []protocol.AreaProposal
-	requests  map[string][]protocol.AccessRequest // by area tag
-	calls     []string
-	listErr   error
+	proposals  []protocol.AreaProposal
+	requests   map[string][]protocol.AccessRequest // by area tag
+	calls      []string
+	listErr    error
+	managerErr error
 }
 
 func (f *manageFake) ListProposals(context.Context, string) ([]protocol.AreaProposal, error) {
 	return f.proposals, f.listErr
 }
-func (f *manageFake) ApproveProposal(_ context.Context, net, id string, _ protocol.ProposalApproveRequest) error {
-	f.calls = append(f.calls, "approve-proposal "+net+" "+id)
+func (f *manageFake) ApproveProposal(_ context.Context, net, id string, req protocol.ProposalApproveRequest) error {
+	call := "approve-proposal " + net + " " + id
+	if req.AccessMode != "" {
+		call += " " + req.AccessMode
+	}
+	f.calls = append(f.calls, call)
 	f.proposals = nil
+	return nil
+}
+func (f *manageFake) SetAreaManager(_ context.Context, net, tag, nodeID string) error {
+	f.calls = append(f.calls, "set-manager "+net+" "+tag+" "+nodeID)
+	if f.managerErr != nil {
+		return f.managerErr
+	}
+	for i := range f.nal.Areas {
+		if f.nal.Areas[i].Tag == tag {
+			f.nal.Areas[i].ManagerNodeID = nodeID
+		}
+	}
 	return nil
 }
 func (f *manageFake) RejectProposal(_ context.Context, net, id string, req protocol.ProposalRejectRequest) error {
@@ -173,9 +190,48 @@ func TestCoordinatorPanelApprovesAndRejectsProposals(t *testing.T) {
 
 	fake = newManageFake(true)
 	fake.proposals = []protocol.AreaProposal{{ID: "p1", Tag: "test.chat", Name: "Chat"}}
-	runManageScreen(t, fake, "P\ra1\rQ\r", runV3NetCoordinator)
+	runManageScreen(t, fake, "P\ra1\r\rQ\r", runV3NetCoordinator)
 	if len(fake.calls) != 1 || fake.calls[0] != "approve-proposal testnet p1" {
-		t.Errorf("hub calls %v, want one approve of p1", fake.calls)
+		t.Errorf("hub calls %v, want one approve of p1 as proposed", fake.calls)
+	}
+}
+
+func TestCoordinatorPanelApprovesWithAccessModeOverride(t *testing.T) {
+	fake := newManageFake(true)
+	fake.proposals = []protocol.AreaProposal{{ID: "p1", Tag: "test.chat", Name: "Chat", AccessMode: "open"}}
+
+	// An unknown mode is refused without calling the hub, then C approves
+	// the proposal as a closed area.
+	out := runManageScreen(t, fake, "P\ra1\rsecret\ra1\rc\rQ\r", runV3NetCoordinator)
+	if !strings.Contains(out, "Enter O, A or C") {
+		t.Errorf("expected the access mode hint after a bad answer, got %q", out)
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != "approve-proposal testnet p1 closed" {
+		t.Errorf("hub calls %v, want one approve of p1 as closed", fake.calls)
+	}
+}
+
+func TestCoordinatorPanelReassignsAreaManager(t *testing.T) {
+	fake := newManageFake(true)
+
+	// C 2 hands test.theirs to NEWNODE; an empty node ID cancels without a
+	// hub call.
+	out := runManageScreen(t, fake, "M\rC 2\r\rC 2\rNEWNODE\rq\rq\r", runV3NetCoordinator)
+	if !strings.Contains(out, "SOMEONE") || !strings.Contains(out, "TEST (this node)") {
+		t.Errorf("area list should show current managers, got %q", out)
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != "set-manager testnet test.theirs NEWNODE" {
+		t.Errorf("hub calls %v, want one reassignment of test.theirs", fake.calls)
+	}
+	if !strings.Contains(out, "test.theirs is now managed by NEWNODE") {
+		t.Errorf("expected the confirmation, got %q", out)
+	}
+
+	fake = newManageFake(true)
+	fake.managerErr = errors.New("manager must be an active subscriber of this network: NOPE")
+	out = runManageScreen(t, fake, "M\rC 1\rNOPE\rq\rq\r", runV3NetCoordinator)
+	if !strings.Contains(out, "active subscriber") {
+		t.Errorf("expected the hub error on screen, got %q", out)
 	}
 }
 

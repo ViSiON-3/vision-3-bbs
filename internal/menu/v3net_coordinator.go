@@ -21,9 +21,9 @@ type v3netProposalRow struct {
 
 // runV3NetCoordinator is the coordinator panel for the networks whose NAL
 // names this node as coordinator. It offers the pending proposal queue,
-// where A approves a proposal as submitted and R rejects it with an optional
-// reason. Coordinator transfer and manager reassignment are not offered here
-// because the hub has no client endpoint for reassigning managers.
+// where A approves a proposal (optionally with a different access mode) and
+// R rejects it with an optional reason, and the area list, where C hands an
+// area to a different manager node.
 func runV3NetCoordinator(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -64,6 +64,7 @@ func runV3NetCoordinator(c *cmdCtx, args string) (*user.User, string, error) {
 		buf.WriteString(ansi.ClearScreen())
 		buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|12V3Net: Coordinator Panel|07 |08— %s|07\r\n", strings.Join(coordinated, ", ")) + v3netRule(termWidth) + "\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|03  [|15P|03]ending area proposals  |08(%d)|07\r\n", len(rows)))))
+		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15M|03]anage area managers|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15Q|03]uit|07\r\n\r\n")))
 		for _, msg := range fetchErrs {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|04  " + truncateStr(msg, termWidth-4) + "|07\r\n")))
@@ -88,8 +89,14 @@ func runV3NetCoordinator(c *cmdCtx, args string) (*user.User, string, error) {
 				return nil, next, err
 			}
 			status = msg
+		case "M":
+			msg, next, err := runV3NetAreaManagers(c, coordinated)
+			if err != nil {
+				return nil, next, err
+			}
+			status = msg
 		default:
-			status = "|04Enter P or Q.|07"
+			status = "|04Enter P, M or Q.|07"
 		}
 	}
 }
@@ -179,19 +186,33 @@ func runV3NetProposalQueue(c *cmdCtx, networks []string) (string, string, error)
 			continue
 		}
 		row := rows[n-1]
-		// Prompt for the reason before starting the request timeout, so a
-		// slow typist does not hand the hub call an expired context.
+		// Prompt for the reason or access mode before starting the request
+		// timeout, so a slow typist does not hand the hub call an expired
+		// context.
 		reason := ""
-		if action == 'R' {
+		accessMode := ""
+		switch action {
+		case 'R':
 			reason, next, err = v3netPromptLine(s, terminal, outputMode, "|07  Reason (optional): ")
 			if err != nil {
 				return "", next, err
+			}
+		case 'A':
+			line, next, err = v3netPromptLine(s, terminal, outputMode, fmt.Sprintf(
+				"|07  Access mode |08[|15O|08]pen [|15A|08]pproval [|15C|08]losed|07, Enter keeps |15%s|07: ", row.proposal.AccessMode))
+			if err != nil {
+				return "", next, err
+			}
+			var ok bool
+			if accessMode, ok = parseAccessModeChoice(line); !ok {
+				status = "|04Enter O, A or C, or press Enter to keep the proposed mode.|07"
+				continue
 			}
 		}
 		ctx, cancel = context.WithTimeout(context.Background(), v3netManageTimeout)
 		switch action {
 		case 'A':
-			err = svc.ApproveProposal(ctx, row.network, row.proposal.ID, protocol.ProposalApproveRequest{})
+			err = svc.ApproveProposal(ctx, row.network, row.proposal.ID, protocol.ProposalApproveRequest{AccessMode: accessMode})
 			if err == nil {
 				status = fmt.Sprintf("|10Approved %s. The hub has added it to the NAL.|07", row.proposal.Tag)
 			}
@@ -205,5 +226,127 @@ func runV3NetProposalQueue(c *cmdCtx, networks []string) (string, string, error)
 		if err != nil {
 			status = "|04" + truncateStr(err.Error(), termWidth-4) + "|07"
 		}
+	}
+}
+
+// parseAccessModeChoice maps an access mode answer to a protocol mode. An
+// empty answer is valid and means no override.
+func parseAccessModeChoice(line string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "":
+		return "", true
+	case "o", protocol.AccessModeOpen:
+		return protocol.AccessModeOpen, true
+	case "a", protocol.AccessModeApproval:
+		return protocol.AccessModeApproval, true
+	case "c", protocol.AccessModeClosed:
+		return protocol.AccessModeClosed, true
+	}
+	return "", false
+}
+
+// runV3NetAreaManagers lists the areas of the coordinated networks with
+// their managers and reassigns one on C. The hub takes the new manager's
+// key from its own registry, so the sysop only enters a node ID, and the
+// node must be an active subscriber. It returns a status line for the panel.
+func runV3NetAreaManagers(c *cmdCtx, networks []string) (string, string, error) {
+	e := c.e
+	s := c.s
+	terminal := c.terminal
+	outputMode := c.outputMode
+	termWidth := c.termWidth
+	svc := e.V3NetStatus
+	me := svc.NodeID()
+	status := ""
+
+	for {
+		var rows []v3netManagedArea
+		var errs []string
+		ctx, cancel := context.WithTimeout(context.Background(), v3netManageTimeout)
+		for _, net := range networks {
+			n, err := svc.FetchNALForNetwork(ctx, net)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %s", net, err))
+				continue
+			}
+			if n == nil {
+				errs = append(errs, fmt.Sprintf("%s: no NAL returned", net))
+				continue
+			}
+			for _, a := range n.Areas {
+				rows = append(rows, v3netManagedArea{network: net, area: a})
+			}
+		}
+		cancel()
+
+		var buf strings.Builder
+		buf.WriteString(ansi.ClearScreen())
+		buf.Write(ansi.ReplacePipeCodes([]byte("|12V3Net: Area Managers|07\r\n" + v3netRule(termWidth))))
+		buf.Write(ansi.ReplacePipeCodes([]byte("|03  #  NETWORK     AREA TAG          NAME                  MANAGER|07\r\n")))
+		for i, r := range rows {
+			manager := r.area.ManagerNodeID
+			switch manager {
+			case "":
+				manager = "(none)"
+			case me:
+				manager += " (this node)"
+			}
+			line := fmt.Sprintf("|15%3d|07  %-10s  %-16s  %-20s  %s",
+				i+1, truncateStr(r.network, 10), truncateStr(r.area.Tag, 16), truncateStr(r.area.Name, 20),
+				truncateStr(manager, max(termWidth-59, 8)))
+			buf.Write(ansi.ReplacePipeCodes([]byte(line + "\r\n")))
+		}
+		if len(rows) == 0 {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08  No areas in the NAL.|07\r\n")))
+		}
+		for _, msg := range errs {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|04  " + truncateStr(msg, termWidth-4) + "|07\r\n")))
+		}
+		buf.WriteString("\r\n")
+		buf.Write(ansi.ReplacePipeCodes([]byte(v3netRule(termWidth))))
+		if status != "" {
+			buf.Write(ansi.ReplacePipeCodes([]byte("  " + status + "\r\n")))
+			status = ""
+		}
+		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
+
+		if len(rows) == 0 {
+			return "|08No areas to manage.|07", "", nil
+		}
+
+		line, next, err := v3netPromptLine(s, terminal, outputMode,
+			"|08  [|15C|08]hange manager #  [|15Q|08]uit: |07")
+		if err != nil {
+			return "", next, err
+		}
+		if line == "" || strings.EqualFold(line, "Q") {
+			return "", "", nil
+		}
+		action, n, ok := parseListCommand(line)
+		if !ok || n > len(rows) || action != 'C' {
+			status = "|04Enter C followed by a row number, or Q.|07"
+			continue
+		}
+		row := rows[n-1]
+		nodeID, next, err := v3netPromptLine(s, terminal, outputMode,
+			fmt.Sprintf("|07  New manager node ID for |15%s|07 (Enter cancels): ", row.area.Tag))
+		if err != nil {
+			return "", next, err
+		}
+		if nodeID == "" {
+			continue
+		}
+		if nodeID == row.area.ManagerNodeID {
+			status = fmt.Sprintf("|14%s is already the manager of %s.|07", nodeID, row.area.Tag)
+			continue
+		}
+		ctx, cancel = context.WithTimeout(context.Background(), v3netManageTimeout)
+		err = svc.SetAreaManager(ctx, row.network, row.area.Tag, nodeID)
+		cancel()
+		if err != nil {
+			status = "|04" + truncateStr(err.Error(), termWidth-4) + "|07"
+			continue
+		}
+		status = fmt.Sprintf("|10%s is now managed by %s.|07", row.area.Tag, nodeID)
 	}
 }

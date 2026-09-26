@@ -27,7 +27,6 @@ type Hub struct {
 	proposals         *ProposalStore
 	accessRequests    *AccessRequestStore
 	areaSubscriptions *AreaSubscriptionStore
-	coordTransfers    *CoordTransferStore
 	chatStore         *ChatHistoryStore
 	chatRooms         *chatRooms
 }
@@ -81,10 +80,11 @@ func New(cfg Config) (*Hub, error) {
 		return nil, err
 	}
 
-	coordTransfers, err := NewCoordTransferStore(db)
-	if err != nil {
-		_ = db.Close() // cleanup on error path
-		return nil, err
+	// Coordinator transfer was removed (#433): the hub signs the NAL, so the
+	// coordinator is always the hub operator. Drop the pending-transfer table
+	// older hubs created; best-effort, since a leftover table is inert.
+	if _, err := db.Exec("DROP TABLE IF EXISTS coordinator_transfers"); err != nil {
+		slog.Warn("hub: drop coordinator_transfers table", "error", err)
 	}
 
 	chatStore, err := NewChatHistoryStore(db, 7)
@@ -104,7 +104,6 @@ func New(cfg Config) (*Hub, error) {
 		proposals:         proposals,
 		accessRequests:    accessReqs,
 		areaSubscriptions: areaSubs,
-		coordTransfers:    coordTransfers,
 		chatStore:         chatStore,
 		chatRooms:         newChatRooms(),
 	}

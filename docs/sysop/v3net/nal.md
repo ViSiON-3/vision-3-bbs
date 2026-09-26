@@ -101,6 +101,7 @@ Coordinators see the **Coordinator Panel** in the V3Net menu:
 [ V3Net: Coordinator Panel — felonynet ]
 
   [P]ending area proposals  (2)
+  [M]anage area managers
   [Q]uit
 ```
 
@@ -110,12 +111,26 @@ The panel appears only when the NAL of a subscribed network names your node as i
 
 When sysops propose new areas, you review them from the Pending Proposals screen. Type the action letter and the row number, for example `A 1` or `R2`.
 
-- **Approve** — Adds the area to the NAL as it was proposed and publishes it to all nodes
+- **Approve** — Asks for the access mode (`O`pen, `A`pproval or `C`losed; press Enter to keep the one proposed), then adds the area to the NAL and publishes it to all nodes. The proposing node becomes the area's manager.
 - **Reject** — Declines the proposal, optionally with a reason, and notifies the proposing node
 
-### Managers and Coordinator Transfer
+### Changing an Area's Manager
 
-The hub always makes the proposing node the manager of an approved area and has no endpoint for changing it afterwards. Coordinator transfer exists on the hub's HTTP API but needs the new coordinator's public key and an acceptance step, and is not offered from the BBS menu yet.
+**Manage area managers** lists every area in the NAL with its current manager. Type `C` and the row number, for example `C 3`, then enter the node ID of the new manager. The new manager must be an active subscriber of the network: the hub records the node's public key from its own registry, so you never paste a key. A sysop can find their node ID on the V3Net status screen.
+
+The change is published to all nodes straight away, and the new manager sees the area's access requests from then on.
+
+### Handing Over a Network
+
+The hub signs the NAL with its own key, so the coordinator is always the hub operator. There is no separate coordinator transfer. To give a network to a new operator, move the hub:
+
+1. Write down the hub's 24-word recovery phrase, or export it to a file (see [Key Recovery](v3net/recovery.md)).
+2. Copy the hub's data directory to the new server.
+3. On the new server, enter those 24 words in the recovery screen (`./config` → V3Net → Node Identity → `[R] Recover`), then start the hub.
+
+The node ID stays the same, so the NAL, subscribers and area managers carry over unchanged. Point the hub's hostname at the new server; if the address changes instead, every subscriber has to update the hub URL in their V3Net config.
+
+To share the work of running a network without handing it over, reassign individual areas to other sysops with **Manage area managers**.
 
 ## For Developers
 

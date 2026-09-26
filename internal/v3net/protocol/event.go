@@ -11,12 +11,11 @@ const (
 	EventChat       = "chat"
 
 	// NAL-related event types (Phase 13).
-	EventNALUpdated           = "nal_updated"
-	EventAreaProposed         = "area_proposed"
-	EventAreaAccessRequested  = "area_access_requested"
-	EventProposalRejected     = "proposal_rejected"
-	EventSubscriptionDenied   = "subscription_denied"
-	EventCoordTransferPending = "coordinator_transfer_pending"
+	EventNALUpdated          = "nal_updated"
+	EventAreaProposed        = "area_proposed"
+	EventAreaAccessRequested = "area_access_requested"
+	EventProposalRejected    = "proposal_rejected"
+	EventSubscriptionDenied  = "subscription_denied"
 )
 
 // Event represents a Server-Sent Event on the V3Net event stream.
@@ -96,12 +95,6 @@ type SubscriptionDeniedPayload struct {
 	Network string `json:"network"`
 	Tag     string `json:"tag"`
 	NodeID  string `json:"node_id"`
-}
-
-// CoordTransferPendingPayload notifies the incoming coordinator.
-type CoordTransferPendingPayload struct {
-	Network   string `json:"network"`
-	NewNodeID string `json:"new_node_id"`
 }
 
 // NewEvent creates an Event by marshaling the given payload.

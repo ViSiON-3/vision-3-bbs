@@ -115,6 +115,12 @@ type ProposalApproveRequest struct {
 	ManagerNodeID string `json:"manager_node_id,omitempty"`
 }
 
+// AreaManagerRequest is the body of POST /areas/{tag}/manager. The hub looks
+// up the new manager's public key from its own subscriber registry.
+type AreaManagerRequest struct {
+	ManagerNodeID string `json:"manager_node_id"`
+}
+
 // ProposalRejectRequest is the optional body for reject.
 type ProposalRejectRequest struct {
 	Reason string `json:"reason"`
@@ -159,17 +165,6 @@ type SubscribeWithAreasResponse struct {
 	OK     bool                     `json:"ok"`
 	Status string                   `json:"status"`
 	Areas  []AreaSubscriptionStatus `json:"areas,omitempty"`
-}
-
-// CoordTransferRequest is the body of POST /coordinator/transfer.
-type CoordTransferRequest struct {
-	NewNodeID    string `json:"new_node_id"`
-	NewPubKeyB64 string `json:"new_pubkey_b64"`
-}
-
-// CoordAcceptRequest is the body of POST /coordinator/accept.
-type CoordAcceptRequest struct {
-	Token string `json:"token"`
 }
 
 // NodeInfo describes a subscriber node registration on a hub. Served by

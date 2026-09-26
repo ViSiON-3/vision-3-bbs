@@ -54,6 +54,19 @@ func (l *Leaf) RejectProposal(ctx context.Context, proposalID string, req protoc
 	return err
 }
 
+// SetAreaManager makes nodeID the manager of an area. The hub answers only
+// the network coordinator and records the node's key from its own registry,
+// so nodeID must be an active subscriber.
+func (l *Leaf) SetAreaManager(ctx context.Context, tag, nodeID string) error {
+	data, err := json.Marshal(protocol.AreaManagerRequest{ManagerNodeID: nodeID})
+	if err != nil {
+		return fmt.Errorf("leaf: marshal manager: %w", err)
+	}
+	path := fmt.Sprintf("/v3net/v1/%s/areas/%s/manager", l.cfg.Network, tag)
+	_, err = l.signedCall(ctx, http.MethodPost, path, data)
+	return err
+}
+
 // ListAccessRequests returns the pending subscription requests for one area.
 // The hub answers only that area's manager.
 func (l *Leaf) ListAccessRequests(ctx context.Context, tag string) ([]protocol.AccessRequest, error) {

@@ -5,12 +5,14 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term" // Keep for potential future use (e.g., baud check)
 
 	// Update local imports
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -203,6 +205,26 @@ func evaluateRPN(rpnQueue []token, u *user.User, s ssh.Session, terminal *term.T
 	return evalStack[0], nil
 }
 
+// acsSysOpLevel and acsCoSysOpLevel are the thresholds behind the SYSOP and
+// COSYSOP keywords. They follow sysOpLevel and coSysOpLevel in config.json
+// (set via SetServerConfig) so ACS strings and handlers agree on who counts
+// as a sysop. Until a config is set they hold the stock defaults.
+var (
+	acsSysOpLevel   atomic.Int64
+	acsCoSysOpLevel atomic.Int64
+)
+
+func init() {
+	setACSSysOpLevels(config.DefaultSysOpLevel, config.DefaultCoSysOpLevel)
+}
+
+// setACSSysOpLevels updates the SYSOP and COSYSOP keyword thresholds. The
+// caller passes sanitized levels (see ServerConfig.SanitizeAccessLevels).
+func setACSSysOpLevels(sysOp, coSysOp int) {
+	acsSysOpLevel.Store(int64(sysOp))
+	acsCoSysOpLevel.Store(int64(coSysOp))
+}
+
 // CheckUserACS evaluates an ACS string against a user without requiring a
 // session or terminal. Use this for access checks outside of menu execution
 // (e.g., selecting default areas on login).
@@ -274,9 +296,9 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	upper := strings.ToUpper(condition)
 	switch upper {
 	case "SYSOP":
-		return u.AccessLevel >= 255
+		return u.AccessLevel >= int(acsSysOpLevel.Load())
 	case "COSYSOP":
-		return u.AccessLevel >= 250
+		return u.AccessLevel >= int(acsCoSysOpLevel.Load())
 	}
 
 	code := strings.ToUpper(condition[0:1])

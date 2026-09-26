@@ -559,6 +559,8 @@ Operators:
 - `W<day>` - Day of week (0=Sun, 6=Sat)
 - `Y<hh:mm/hh:mm>` - Within time range
 - `Z<string>` - String exists in private note
+- `SYSOP` - Security level >= `sysOpLevel` in `config.json` (default 255)
+- `COSYSOP` - Security level >= `coSysOpLevel` in `config.json` (default 250)
 
 ### Common ACS Examples
 

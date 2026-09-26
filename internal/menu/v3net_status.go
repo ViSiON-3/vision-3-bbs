@@ -30,6 +30,7 @@ type V3NetStatusProvider interface {
 	ListProposals(ctx context.Context, network string) ([]protocol.AreaProposal, error)
 	ApproveProposal(ctx context.Context, network, proposalID string, req protocol.ProposalApproveRequest) error
 	RejectProposal(ctx context.Context, network, proposalID string, req protocol.ProposalRejectRequest) error
+	SetAreaManager(ctx context.Context, network, tag, nodeID string) error
 	ListAccessRequests(ctx context.Context, network, tag string) ([]protocol.AccessRequest, error)
 	ApproveAccess(ctx context.Context, network, tag string, nodeIDs []string) error
 	DenyAccess(ctx context.Context, network, tag string, nodeIDs []string, reason string) error

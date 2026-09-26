@@ -481,8 +481,8 @@ built-in defaults and overlays whatever the file provides.
 
 | Setting | Shipped | Fallback | Meaning |
 | ------- | ------- | -------- | ------- |
-| `sysOpLevel` | `255` | `255` | SysOp access |
-| `coSysOpLevel` | `250` | `250` | Co-SysOp access |
+| `sysOpLevel` | `255` | `255` | SysOp access. `0` or lower falls back to `255`, so a blank value never makes every caller a sysop |
+| `coSysOpLevel` | `250` | `250` | Co-SysOp access. `0` or lower falls back to `250` |
 | `invisibleLevel` | `250` | `0` | Minimum level offered the Invisible Logon prompt, letting the caller keep the session off the Last Callers list (`0` falls back to `coSysOpLevel`) |
 | `newUserLevel` | `10` | `1` | Assigned to a brand-new account |
 | `regularUserLevel` | `25` | `10` | Assigned when a user is validated |

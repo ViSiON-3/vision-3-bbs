@@ -40,6 +40,9 @@ func (f *fakeV3NetStatus) ApproveProposal(context.Context, string, string, proto
 func (f *fakeV3NetStatus) RejectProposal(context.Context, string, string, protocol.ProposalRejectRequest) error {
 	return nil
 }
+func (f *fakeV3NetStatus) SetAreaManager(context.Context, string, string, string) error {
+	return nil
+}
 func (f *fakeV3NetStatus) ListAccessRequests(context.Context, string, string) ([]protocol.AccessRequest, error) {
 	return nil, nil
 }

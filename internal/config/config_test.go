@@ -1049,3 +1049,19 @@ func TestNewUserValDoesNotClearTheScreen(t *testing.T) {
 		t.Error("the shipped login.json no longer includes NEWUSERVAL")
 	}
 }
+
+func TestLoadServerConfig_ZeroSysOpLevelsFallBackToDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	data := []byte(`{"sysOpLevel": 0, "coSysOpLevel": -5}`)
+	if err := os.WriteFile(filepath.Join(tmpDir, "config.json"), data, 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	result, err := LoadServerConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.SysOpLevel != DefaultSysOpLevel || result.CoSysOpLevel != DefaultCoSysOpLevel {
+		t.Errorf("levels = %d/%d, want %d/%d", result.SysOpLevel, result.CoSysOpLevel, DefaultSysOpLevel, DefaultCoSysOpLevel)
+	}
+}

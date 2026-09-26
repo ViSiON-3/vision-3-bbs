@@ -67,10 +67,14 @@ func TestApproveAndRejectProposalPaths(t *testing.T) {
 	if err := l.RejectProposal(ctx, "p2", protocol.ProposalRejectRequest{Reason: "duplicate"}); err != nil {
 		t.Fatalf("RejectProposal: %v", err)
 	}
+	if err := l.SetAreaManager(ctx, "gen.chat", "NODE2"); err != nil {
+		t.Fatalf("SetAreaManager: %v", err)
+	}
 
 	want := []struct{ path, bodyContains string }{
 		{"/v3net/v1/testnet/areas/proposals/p1/approve", `"access_mode":"approval"`},
 		{"/v3net/v1/testnet/areas/proposals/p2/reject", `"reason":"duplicate"`},
+		{"/v3net/v1/testnet/areas/gen.chat/manager", `"manager_node_id":"NODE2"`},
 	}
 	for i, w := range want {
 		c := (*calls)[i]
