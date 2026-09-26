@@ -136,25 +136,30 @@ func runCfgTermType(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	current := currentUser.OutputMode
+	// PreferredEncoding is what login applies; User.OutputMode, which this
+	// used to flip, is read by nothing.
+	current := currentUser.PreferredEncoding
 	if current == "" {
 		current = "cp437"
+		if outputMode == ansi.OutputModeUTF8 {
+			current = "utf8"
+		}
 	}
 
-	original := currentUser.OutputMode
-	if current == "ansi" {
-		currentUser.OutputMode = "cp437"
+	original := currentUser.PreferredEncoding
+	if current == "utf8" {
+		currentUser.PreferredEncoding = "cp437"
 	} else {
-		currentUser.OutputMode = "ansi"
+		currentUser.PreferredEncoding = "utf8"
 	}
 
 	if err := userManager.UpdateUser(currentUser); err != nil {
-		currentUser.OutputMode = original
+		currentUser.PreferredEncoding = original
 		slog.Error("failed to save terminal type", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
 
-	msg := fmt.Sprintf(e.Strings().CfgTermTypeSet, strings.ToUpper(currentUser.OutputMode))
+	msg := fmt.Sprintf(e.Strings().CfgTermTypeSet, encodingName(currentUser.PreferredEncoding))
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(500 * time.Millisecond)
 	return currentUser, "", nil

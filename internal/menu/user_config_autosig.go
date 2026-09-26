@@ -65,41 +65,22 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 
 		switch input {
 		case "C":
-			// Launch the ANSI editor with current signature as initial content
-			ih := getSessionIH(s)
-			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-			editorCtx := editor.EditorContext{
-				NodeNumber: nodeNumber,
-				ConfArea:   "Auto-Signature",
-			}
-			body, saved, edErr := editor.RunEditorWithMetadata(
-				currentUser.AutoSignature, s, sessionOutput(s), outputMode,
-				"Auto-Signature", "All", currentUser.Handle, false,
-				"", "", "", "", false, nil, ih, editorCtx,
-			)
-			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-
+			body, saved, truncated, edErr := runAutoSigEditor(c, currentUser)
 			if edErr != nil {
-				slog.Error("editor failed for auto-sig", "node", nodeNumber, "error", edErr)
-				return currentUser, "", nil
+				if errors.Is(edErr, errAutoSigEditorFailed) {
+					return currentUser, "", nil
+				}
+				return currentUser, "", edErr
 			}
 			if !saved {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Auto-Signature not changed.\r\n")), outputMode)
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
-
-			// Truncate to maxAutoSigLines lines
-			body = strings.TrimRight(body, "\r\n")
-			if body != "" {
-				lines := strings.Split(body, "\n")
-				if len(lines) > maxAutoSigLines {
-					lines = lines[:maxAutoSigLines]
-					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(
-						fmt.Sprintf("\r\n|03Signature truncated to %d lines.|07\r\n", maxAutoSigLines),
-					)), outputMode)
-				}
-				body = strings.Join(lines, "\n")
+			if truncated {
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(
+					fmt.Sprintf("\r\n|03Signature truncated to %d lines.|07\r\n", maxAutoSigLines),
+				)), outputMode)
 			}
 
 			originalSig := currentUser.AutoSignature
@@ -132,4 +113,46 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
+}
+
+// errAutoSigEditorFailed reports that the message editor could not be run
+// for the auto-signature. It has already been logged.
+var errAutoSigEditorFailed = errors.New("auto-signature editor failed")
+
+// runAutoSigEditor opens the full-screen editor on u's auto-signature and
+// returns the edited text, trimmed of trailing newlines and cut to
+// maxAutoSigLines (truncated reports a cut). saved is false when the caller
+// abandoned the edit. Nothing is stored: that is the caller's job.
+func runAutoSigEditor(c *cmdCtx, u *user.User) (body string, saved, truncated bool, err error) {
+	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
+	editorCtx := editor.EditorContext{
+		NodeNumber: c.nodeNumber,
+		ConfArea:   "Auto-Signature",
+	}
+	body, saved, edErr := editor.RunEditorWithMetadata(
+		u.AutoSignature, c.s, sessionOutput(c.s), c.outputMode,
+		"Auto-Signature", "All", u.Handle, false,
+		"", "", "", "", false, nil, getSessionIH(c.s), editorCtx,
+	)
+	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
+	if edErr != nil {
+		if errors.Is(edErr, io.EOF) || errors.Is(edErr, editor.ErrIdleTimeout) {
+			return "", false, false, edErr
+		}
+		slog.Error("editor failed for auto-sig", "node", c.nodeNumber, "error", edErr)
+		return "", false, false, errAutoSigEditorFailed
+	}
+	if !saved {
+		return "", false, false, nil
+	}
+	body = strings.TrimRight(body, "\r\n")
+	if body != "" {
+		lines := strings.Split(body, "\n")
+		if len(lines) > maxAutoSigLines {
+			lines = lines[:maxAutoSigLines]
+			truncated = true
+		}
+		body = strings.Join(lines, "\n")
+	}
+	return body, true, truncated, nil
 }

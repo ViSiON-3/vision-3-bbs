@@ -211,6 +211,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["QWKDOWNLOAD"] = runQWKDownload                         // QWK mail packet download
 	registry["QWKUPLOAD"] = runQWKUpload                             // QWK REP packet upload
 	registry["WHOISONLINE"] = runWhoIsOnline                         // Who's online display
+	registry["USERCONFIG"] = runUserKonfig                           // Full-screen user Konfig editor (K)
 	registry["CFG_HOTKEYS"] = runCfgHotKeys
 	registry["CFG_MOREPROMPTS"] = runCfgMorePrompts
 	registry["CFG_SCREENWIDTH"] = runCfgScreenWidth
