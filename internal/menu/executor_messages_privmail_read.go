@@ -126,8 +126,14 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	currentUser.CurrentMessageAreaID = privmailArea.ID
 	currentUser.CurrentMessageAreaTag = privmailArea.Tag
 
-	// Start reading from the first private message
-	startMsgNum := privateMessages[0]
+	// Start at the first unread message rather than the oldest one, so a
+	// caller sent here by the login new-mail prompt lands on what is new.
+	lastRead, lrErr := e.MessageMgr.GetLastRead(privmailArea.ID, currentUser.Handle)
+	if lrErr != nil {
+		slog.Warn("failed to get lastread for PRIVMAIL", "node", nodeNumber, "error", lrErr)
+		lastRead = 0
+	}
+	startMsgNum := firstUnreadMessage(privateMessages, lastRead)
 
 	// Get terminal dimensions: prefer passed params, then user preferences, then defaults
 	tw := termWidth
@@ -214,4 +220,16 @@ func runListPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	currentUser.CurrentMessageAreaTag = originalAreaTag
 
 	return updatedUser, nextMenu, err
+}
+
+// firstUnreadMessage returns the first message number in msgNums (ascending)
+// past lastRead, or the first one when all have been read, so the reader
+// always has somewhere to open.
+func firstUnreadMessage(msgNums []int, lastRead int) int {
+	for _, n := range msgNums {
+		if n > lastRead {
+			return n
+		}
+	}
+	return msgNums[0]
 }

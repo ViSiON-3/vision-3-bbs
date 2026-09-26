@@ -195,6 +195,24 @@ func (mm *MessageManager) SetLastRead(areaID int, username string, msgNum int) e
 	return b.MarkMessageRead(username, msgNum)
 }
 
+// AdvanceLastRead moves a user's lastread pointer in an area forward to
+// msgNum, leaving it alone when it already stands at or past it. The message
+// reader uses this so viewing an older message does not rewind the pointer
+// that new-mail and newscan counts are measured from.
+func (mm *MessageManager) AdvanceLastRead(areaID int, username string, msgNum int) error {
+	b, _, err := mm.openBase(areaID)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
+
+	return b.AdvanceLastRead(username, msgNum)
+}
+
 // MarkMessageSent sets the MSG_SENT attribute on a message header.
 // Used by V3Net to indicate a locally-posted message was transmitted to the hub.
 func (mm *MessageManager) MarkMessageSent(areaID, msgNum int) error {
