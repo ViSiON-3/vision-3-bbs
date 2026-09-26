@@ -66,6 +66,15 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	slog.Info("leaf: SSE connected", "network", l.cfg.Network)
 	if reconnect {
 		l.chatSessions.notifyReconnect()
+		// A nal_updated sent while the stream was down is lost, and Start's
+		// one-off fetch has long passed, so check the NAL again now.
+		if l.cfg.OnNAL != nil {
+			go func() {
+				if err := l.refreshNAL(ctx); err != nil {
+					slog.Warn("leaf: NAL fetch after SSE reconnect failed", "network", l.cfg.Network, "error", err)
+				}
+			}()
+		}
 	}
 
 	scanner := bufio.NewScanner(resp.Body)

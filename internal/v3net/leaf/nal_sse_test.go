@@ -172,3 +172,61 @@ func TestNALUpdatedRefetchBypassesCacheAndNotifies(t *testing.T) {
 		t.Errorf("cache was not updated with the new NAL")
 	}
 }
+
+// TestSSEReconnectRefetchesNAL covers a hub restart or network drop while the
+// BBS stays up: a nal_updated sent during the gap is never delivered, so the
+// leaf must check the NAL itself when the stream comes back.
+func TestSSEReconnectRefetchesNAL(t *testing.T) {
+	origBase := sseBackoffBase
+	sseBackoffBase = 10 * time.Millisecond
+	t.Cleanup(func() { sseBackoffBase = origBase })
+
+	coordKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "coord.key"))
+	if err != nil {
+		t.Fatalf("load coord keystore: %v", err)
+	}
+	n := &protocol.NAL{V3NetNAL: "1.0", Network: "testnet", CoordNodeID: coordKS.NodeID()}
+	if err := nal.Sign(n, coordKS); err != nil {
+		t.Fatalf("sign NAL: %v", err)
+	}
+	nalJSON, _ := json.Marshal(n)
+
+	var mu sync.Mutex
+	connects := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3net/v1/testnet/events":
+			mu.Lock()
+			connects++
+			first := connects == 1
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(200)
+			w.(http.Flusher).Flush()
+			if first {
+				return // the stream drops; the leaf reconnects
+			}
+			<-r.Context().Done()
+		case "/v3net/v1/testnet/nal":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(nalJSON)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+	got := make(chan struct{}, 4)
+	l.cfg.OnNAL = func(*protocol.NAL) { got <- struct{}{} }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go l.runSSE(ctx)
+
+	select {
+	case <-got:
+	case <-time.After(3 * time.Second):
+		t.Fatal("reconnecting the SSE stream did not re-fetch the NAL")
+	}
+}
