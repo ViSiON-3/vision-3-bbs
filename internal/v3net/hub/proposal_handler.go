@@ -187,7 +187,7 @@ func (h *Hub) handlePropose(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-approve if hub is configured for it.
 	if h.cfg.AutoApprove {
-		if err := h.approveProposal(network, id, accessMode, req.AllowANSI); err != nil {
+		if err := h.approveProposal(network, id, protocol.ProposalApproveRequest{AccessMode: accessMode}); err != nil {
 			slog.Error("auto-approve proposal", "id", id, "error", err)
 			// Fall through — proposal is still stored as pending.
 		} else {
@@ -238,9 +238,10 @@ func (h *Hub) handleListProposals(w http.ResponseWriter, r *http.Request) {
 
 // approveProposal is the core logic for approving a proposal: reads the
 // proposal from the DB, adds the area to the NAL, signs, persists, and
-// broadcasts the nal_updated event. It accepts optional overrides for
-// access mode and allow_ansi (pass empty/false to use proposal defaults).
-func (h *Hub) approveProposal(network, proposalID, accessModeOverride string, _ bool) error {
+// broadcasts the nal_updated event. Empty override fields keep the
+// proposal's access mode and make the proposing node the manager. A manager
+// override must name an active subscriber, or errInvalidManager is returned.
+func (h *Hub) approveProposal(network, proposalID string, overrides protocol.ProposalApproveRequest) error {
 	// Serialize the entire approve operation to prevent concurrent approvals
 	// from overwriting each other or appending duplicate areas.
 	h.nalMu.Lock()
@@ -258,14 +259,19 @@ func (h *Hub) approveProposal(network, proposalID, accessModeOverride string, _ 
 		return fmt.Errorf("read proposal: %w", err)
 	}
 
-	if accessModeOverride != "" {
-		accessMode = accessModeOverride
+	if overrides.AccessMode != "" {
+		accessMode = overrides.AccessMode
 	}
 
 	// Get manager pubkey.
+	managerNodeID := fromNode
 	managerPubKeyB64 := ""
-	managerSub := h.subscribers.Get(fromNode, network)
-	if managerSub != nil {
+	if overrides.ManagerNodeID != "" {
+		managerNodeID = overrides.ManagerNodeID
+		if managerPubKeyB64, err = h.activeSubscriberKey(network, managerNodeID); err != nil {
+			return err
+		}
+	} else if managerSub := h.subscribers.Get(fromNode, network); managerSub != nil {
 		managerPubKeyB64 = managerSub.PubKeyB64
 	}
 
@@ -296,7 +302,7 @@ func (h *Hub) approveProposal(network, proposalID, accessModeOverride string, _ 
 		Name:             name,
 		Description:      desc,
 		Language:         lang,
-		ManagerNodeID:    fromNode,
+		ManagerNodeID:    managerNodeID,
 		ManagerPubKeyB64: managerPubKeyB64,
 		Access: protocol.AreaAccess{
 			Mode: accessMode,
@@ -355,9 +361,20 @@ func (h *Hub) handleApproveProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.approveProposal(network, proposalID, overrides.AccessMode, false); err != nil {
+	if overrides.AccessMode != "" {
+		if err := protocol.ValidateAccessMode(overrides.AccessMode); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if err := h.approveProposal(network, proposalID, overrides); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, `{"error":"proposal not found or not pending"}`, http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, errInvalidManager) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
 		slog.Error("approve proposal", "error", err)

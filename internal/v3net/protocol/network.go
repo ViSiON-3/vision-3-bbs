@@ -115,6 +115,12 @@ type ProposalApproveRequest struct {
 	ManagerNodeID string `json:"manager_node_id,omitempty"`
 }
 
+// AreaManagerRequest is the body of POST /areas/{tag}/manager. The hub looks
+// up the new manager's public key from its own subscriber registry.
+type AreaManagerRequest struct {
+	ManagerNodeID string `json:"manager_node_id"`
+}
+
 // ProposalRejectRequest is the optional body for reject.
 type ProposalRejectRequest struct {
 	Reason string `json:"reason"`

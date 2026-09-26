@@ -95,6 +95,10 @@ func (h *Hub) newMux() http.Handler {
 			case h.matchAreaAccessPath(path, "/access/remove") && r.Method == http.MethodPost:
 				h.handleRemoveFromDenyList(w, r)
 
+			// Area manager reassignment (coordinator only).
+			case h.matchAreaAccessPath(path, "/manager") && r.Method == http.MethodPost:
+				h.handleSetAreaManager(w, r)
+
 			// Coordinator transfer.
 			case strings.HasSuffix(path, "/coordinator/transfer") && r.Method == http.MethodPost:
 				h.handleCoordTransfer(w, r)

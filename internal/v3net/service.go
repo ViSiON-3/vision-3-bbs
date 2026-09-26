@@ -511,6 +511,15 @@ func (s *Service) RejectProposal(ctx context.Context, network, proposalID string
 	return l.RejectProposal(ctx, proposalID, req)
 }
 
+// SetAreaManager reassigns an area's manager on a network's hub.
+func (s *Service) SetAreaManager(ctx context.Context, network, tag, nodeID string) error {
+	l, err := s.leafFor(network)
+	if err != nil {
+		return err
+	}
+	return l.SetAreaManager(ctx, tag, nodeID)
+}
+
 // ListAccessRequests returns the pending subscription requests for an area.
 // The hub answers only that area's manager.
 func (s *Service) ListAccessRequests(ctx context.Context, network, tag string) ([]protocol.AccessRequest, error) {
