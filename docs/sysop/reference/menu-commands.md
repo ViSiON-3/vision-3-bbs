@@ -134,7 +134,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `FILENEWSCANCONFIG` | none | Tag and untag file areas for the file newscan. | |
 | `SETFILESCANDATE` | none | Sets the file newscan cutoff. Accepts a date as MM/DD/YY, `A` for all files, or `R` to reset to the previous logon. | |
 | `WANTLIST` | none | For CoSysOp+, manages the file want list. For everyone else, asks for a filename and reason and adds a request. Stock menus restrict it to sysops. | Branches on CoSysOp+ |
-| `EDITFILERECORD` | none | Upload review queue. Asks whether to review all areas or the current one, then edits, moves, or deletes each unreviewed file. | CoSysOp+, silent otherwise |
+| `EDITFILERECORD` | none | Upload review queue. Asks whether to review all areas or the current one, then edits, moves, or deletes each unreviewed file. | CoSysOp+ |
 
 ## User settings
 
@@ -164,7 +164,7 @@ All of these apply to the logged-in user. The stock main menu binds `K` to `USER
 | --- | --- | --- | --- |
 | `PRINTNEWS` | none | Shows unseen news items plus any marked Always, then marks them seen. Shipped as a login step. | Per-item level range |
 | `LISTNEWS` | none | Lists all visible news items with new markers and lets the user pick items to read. | Per-item level range |
-| `EDITNEWS` | none | News manager: add, delete, edit, list, view. | CoSysOp+, silent otherwise |
+| `EDITNEWS` | none | News manager: add, delete, edit, list, view. | CoSysOp+ |
 
 ## Voting and new user voting
 
@@ -225,7 +225,7 @@ Stock menus bind all of these in `V3NETM` with ACS `S255`. None of them check a 
 | --- | --- | --- | --- |
 | `PENDINGVALIDATIONNOTICE` | none | One-line notice that users await validation. Silent when none do. Bound to the `//` auto-run key in the stock main menu. | SysOp |
 | `NEWUSERVAL` | none | Counts pending users and offers to review them. Silent when none. Shipped as a login step. | SysOp, checked in code regardless of `sec_level` |
-| `SYSOPNOTICES` | none | Shows queued sysop notices such as new user joins. Shipped as the first login step. | CoSysOp+, silent otherwise |
+| `SYSOPNOTICES` | none | Shows queued sysop notices such as new user joins. Shipped as the first login step. | CoSysOp+ |
 | `VALIDATEUSER` | none | The user editor, filtered to accounts awaiting validation. | SysOp |
 | `ADMINLISTUSERS` | none | The full user editor. | SysOp |
 | `UNVALIDATEUSER` | none | Lightbar user picker, then removes validation. Not bound in the stock menus. | SysOp |

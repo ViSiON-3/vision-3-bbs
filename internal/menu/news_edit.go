@@ -27,6 +27,7 @@ func runEditNews(c *cmdCtx, args string) (*user.User, string, error) {
 	termHeight := c.termHeight
 
 	if !e.isCoSysOpOrAbove(currentUser) {
+		wv(terminal, "\r\n|04CoSysOp access required.\r\n", outputMode)
 		return currentUser, "", nil
 	}
 	slog.Debug("running EDITNEWS (sysop)", "node", nodeNumber, "handle", currentUser.Handle)
