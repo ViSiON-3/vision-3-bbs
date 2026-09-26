@@ -91,13 +91,13 @@ func (st *konfigState) renderAll() error {
 	return st.renderStatus()
 }
 
-// renderHeader clears the screen and draws USERCFG.ANS from the menu set,
+// renderHeader clears the screen and draws KONFIG.ANS from the menu set,
 // or a plain title when the set has none. The art should be at most
 // konfigHeaderRows rows; the form is drawn below that.
 func (st *konfigState) renderHeader() error {
 	e := st.c.e
-	if ok, _ := e.Menus().Exists("ansi", "USERCFG.ANS"); ok {
-		if err := e.displayFile(st.c.terminal, "USERCFG.ANS", st.c.outputMode, st.c.termWidth, st.c.termHeight, true); err == nil {
+	if ok, _ := e.Menus().Exists("ansi", "KONFIG.ANS"); ok {
+		if err := e.displayFile(st.c.terminal, "KONFIG.ANS", st.c.outputMode, st.c.termWidth, st.c.termHeight, true); err == nil {
 			return nil
 		}
 	}

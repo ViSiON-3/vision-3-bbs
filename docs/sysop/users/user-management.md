@@ -134,7 +134,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | Password | `passwordHash` (current password required) |
 | Listing Mode, File Columns | `fileListingMode`, `file_list_columns` |
 
-Each change is saved as soon as the caller confirms it. The screen's header is `USERCFG.ANS` in the menu set; keep it to 5 rows or fewer and 79 columns wide. See [User settings](../reference/menu-commands.md#user-settings) for `USERCONFIG` and the single-setting `CFG_*` commands custom menus can use instead.
+Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set; keep it to 5 rows or fewer and 79 columns wide. See [User settings](../reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
 
 #### Soft Delete
 

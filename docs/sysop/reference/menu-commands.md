@@ -138,23 +138,12 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 
 ## User settings
 
-All of these apply to the logged-in user. The stock main menu binds `K` to `USERCONFIG`, which covers every setting below in one screen. The single-setting `CFG_*` commands remain for custom menus.
+All of these apply to the logged-in user. The stock main menu binds `K` to `USERCONFIG`, which covers every setting a caller can change in one screen. The `CFG_*` commands below are shortcuts to single settings that other stock menus bind directly.
 
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
-| `USERCONFIG` | Optional menu name to go to on exit. Without one, the calling menu is redisplayed. | Full-screen settings editor: screen size, encoding, hot keys, message header style, auto-signature, real name, location, note, password, file listing mode and columns. Draws `USERCFG.ANS` (at most 5 rows) as its header. Arrow keys move, Enter changes, a setting's letter jumps straight to it, Q or Esc leaves. Each change is saved as soon as it is confirmed. A new screen size applies at once; a new encoding applies from the next login. | |
-| `CFG_VIEWCONFIG` | none | Read-only summary of the user's settings, wrapped in the `USRCFGV` templates. | |
-| `CFG_HOTKEYS` | none | Toggles hot keys: menu commands run on a single keypress, falling back to line input when the key could start a longer command. | |
-| `CFG_MOREPROMPTS` | none | Toggles more prompts. Stored only: nothing reads it yet. | |
-| `CFG_SCREENWIDTH` | none | Prompts for a screen width from 40 to 255. | |
-| `CFG_SCREENHEIGHT` | none | Prompts for a screen height from 21 to 60. | |
-| `CFG_TERMTYPE` | none | Toggles the saved encoding between CP437 and UTF-8 with no prompt. Applies from the next login. | |
-| `CFG_FILELISTMODE` | none | Toggles the file listing mode between classic and lightbar with no prompt. | |
+| `USERCONFIG` | Optional menu name to go to on exit. Without one, the calling menu is redisplayed. | Full-screen settings editor: screen size, encoding, hot keys, message header style, auto-signature, real name, location, note, password, file listing mode and columns. Draws `KONFIG.ANS` (at most 5 rows, 79 columns) as its header. Arrow keys move, Enter changes, a setting's letter jumps straight to it, Q or Esc leaves. Each change is saved as soon as it is confirmed. A new screen size applies at once; a new encoding applies from the next login. | |
 | `CFG_FILECOLUMNS` | none | Toggle screen for the columns shown in file listings. | |
-| `CFG_COLOR` | Colour slot number 0 to 6. Anything else means slot 0. | Shows the palette and prompts for a colour for one slot: 0 prompt, 1 input, 2 text, 3 stat, 4 text2, 5 stat2, 6 bar. Stored only: nothing reads the colour slots yet. | |
-| `CFG_CUSTOMPROMPT` | none | Prompts for a custom prompt string of up to 80 characters. Stored only: nothing reads it yet. | |
-| `CFG_REALNAME` | none | Prompts for a new real name, validated before saving. | |
-| `CFG_NOTE` | none | Prompts for the user's private note, up to 35 characters. | |
 | `CFG_PASSWORD` | none | Asks for the current password, then a new one. | |
 | `CFG_AUTOSIG` | none | Auto-signature editor. Change, delete, or quit. Up to five lines. | |
 

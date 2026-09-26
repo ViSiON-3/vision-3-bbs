@@ -281,43 +281,11 @@ type StringsConfig struct {
 	StatsTime        string `json:"statsTime"`
 
 	// User config strings (V3-specific)
-	CfgToggleOn            string `json:"cfgToggleOn"`
-	CfgToggleOff           string `json:"cfgToggleOff"`
-	CfgToggleFormat        string `json:"cfgToggleFormat"`
-	CfgSaveError           string `json:"cfgSaveError"`
-	CfgScreenWidthPrompt   string `json:"cfgScreenWidthPrompt"`
-	CfgScreenWidthInvalid  string `json:"cfgScreenWidthInvalid"`
-	CfgScreenWidthSet      string `json:"cfgScreenWidthSet"`
-	CfgScreenHeightPrompt  string `json:"cfgScreenHeightPrompt"`
-	CfgScreenHeightInvalid string `json:"cfgScreenHeightInvalid"`
-	CfgScreenHeightSet     string `json:"cfgScreenHeightSet"`
-	CfgTermTypeSet         string `json:"cfgTermTypeSet"`
-	CfgStringPrompt        string `json:"cfgStringPrompt"`
-	CfgStringPromptCurrent string `json:"cfgStringPromptCurrent"`
-	CfgStringUpdated       string `json:"cfgStringUpdated"`
-	CfgCurrentPwPrompt     string `json:"cfgCurrentPwPrompt"`
-	CfgIncorrectPw         string `json:"cfgIncorrectPw"`
-	CfgPasswordChanged     string `json:"cfgPasswordChanged"`
-	CfgColorSelectPrompt   string `json:"cfgColorSelectPrompt"`
-	CfgColorInputPrompt    string `json:"cfgColorInputPrompt"`
-	CfgColorInvalid        string `json:"cfgColorInvalid"`
-	CfgColorSet            string `json:"cfgColorSet"`
-	CfgCustomPromptHelp    string `json:"cfgCustomPromptHelp"`
-	CfgViewScreenWidth     string `json:"cfgViewScreenWidth"`
-	CfgViewScreenHeight    string `json:"cfgViewScreenHeight"`
-	CfgViewTermType        string `json:"cfgViewTermType"`
-	CfgViewHotKeys         string `json:"cfgViewHotKeys"`
-	CfgViewMorePrompts     string `json:"cfgViewMorePrompts"`
-	CfgViewMsgHeader       string `json:"cfgViewMsgHeader"`
-	CfgViewCustomPrompt    string `json:"cfgViewCustomPrompt"`
-	CfgViewPromptColor     string `json:"cfgViewPromptColor"`
-	CfgViewTextColor       string `json:"cfgViewTextColor"`
-	CfgViewText2Color      string `json:"cfgViewText2Color"`
-	CfgViewBarColor        string `json:"cfgViewBarColor"`
-	CfgViewRealName        string `json:"cfgViewRealName"`
-	CfgViewNote            string `json:"cfgViewNote"`
-	CfgViewFileListMode    string `json:"cfgViewFileListMode"`
-	CfgFileListModeSet     string `json:"cfgFileListModeSet"`
+	CfgToggleOn        string `json:"cfgToggleOn"`
+	CfgToggleOff       string `json:"cfgToggleOff"`
+	CfgCurrentPwPrompt string `json:"cfgCurrentPwPrompt"`
+	CfgIncorrectPw     string `json:"cfgIncorrectPw"`
+	CfgPasswordChanged string `json:"cfgPasswordChanged"`
 
 	// Message reader strings (V3-specific)
 	MsgEndOfMessages     string `json:"msgEndOfMessages"`

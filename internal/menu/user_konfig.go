@@ -14,9 +14,9 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// USERCONFIG is the full-screen "K" user Konfig editor. It replaces the old
+// USERCONFIG is the full-screen "K" user Konfig editor. It replaced the old
 // USERCFG menu of one-shot CFG_* commands with a single form: an ANSI header
-// (USERCFG.ANS from the menu set), every setting a caller can change laid out
+// (KONFIG.ANS from the menu set), every setting a caller can change laid out
 // in two columns with its live value, and an editor suited to each field.
 //
 // Every change is written as soon as it is confirmed, so a dropped carrier
@@ -75,7 +75,7 @@ type konfigHeading struct {
 // Screen geometry. Everything fits in 20 rows so the form draws on the
 // smallest height the board allows (21), whatever the caller has set.
 const (
-	konfigHeaderRows = 5 // rows reserved for USERCFG.ANS
+	konfigHeaderRows = 5 // rows reserved for KONFIG.ANS
 	konfigTopRow     = konfigHeaderRows + 1
 	konfigColWidth   = 38
 	konfigLeftCol    = 2
@@ -394,6 +394,15 @@ func (st *konfigState) effectiveEncoding() (enc string, chosen bool) {
 		return "utf8", false
 	}
 	return "cp437", false
+}
+
+// fileListModeDisplay names a file listing mode for display. Anything but
+// "classic" is the lightbar browser.
+func fileListModeDisplay(mode string) string {
+	if strings.EqualFold(mode, "classic") {
+		return "Classic"
+	}
+	return "Lightbar"
 }
 
 func encodingName(enc string) string {
