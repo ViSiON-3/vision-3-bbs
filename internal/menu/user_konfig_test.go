@@ -161,6 +161,48 @@ func TestKonfigLayoutFitsMinimumHeight(t *testing.T) {
 	}
 }
 
+// A sub-screen that leaves the cursor showing must not leave it blinking
+// under the form once the form repaints.
+func TestKonfigRepaintHidesCursor(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	screen := testterm.New(80, 24)
+	sess := testterm.NewSession(screen, "")
+	t.Cleanup(func() { resetSessionIH(sess) })
+	c := &cmdCtx{e: &MenuExecutor{}, s: sess, terminal: term.NewTerminal(sess, ""),
+		userManager: um, currentUser: u, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	st := &konfigState{c: c}
+	st.items, st.headings = layoutKonfig(konfigSections())
+
+	_, _ = sess.Write([]byte("\x1b[?25h")) // as the header picker leaves it
+	if err := st.renderAll(); err != nil {
+		t.Fatal(err)
+	}
+	if screen.CursorVisible() {
+		t.Fatal("cursor still visible after a full repaint")
+	}
+}
+
+func TestKonfigShowsHeaderStyleName(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	u.MsgHdr = 4
+	screen := testterm.New(80, 24)
+	sess := testterm.NewSession(screen, "q")
+	t.Cleanup(func() { resetSessionIH(sess) })
+	c := &cmdCtx{e: &MenuExecutor{MenuSetPath: "../../menus/v3"}, s: sess,
+		terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
+		outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Style 4 in the stock MSGHDR.BAR, cut to the value column.
+	if !strings.Contains(screen.Snapshot(), "LiQUiD Blue Box") {
+		t.Errorf("header style name not shown:\n%s", screen.Snapshot())
+	}
+	if !strings.Contains(screen.Row(konfigLegendRow), "[Q/ESC] Done") {
+		t.Errorf("legend row = %q", screen.Row(konfigLegendRow))
+	}
+}
+
 func TestKonfigHotkeyTogglesAndSaves(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	screen, got, _ := runKonfig(t, um, u, "dq", "")

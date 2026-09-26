@@ -79,17 +79,21 @@ func (st *konfigState) renderAll() error {
 	}
 	b.WriteString(moveTo(konfigRuleRow, 1) + pc(8) + strings.Repeat("─", 79))
 	b.WriteString(moveTo(konfigLegendRow, 2))
-	b.WriteString(pc(15) + "Arrows" + pc(7) + " Move   " +
-		pc(15) + "Enter" + pc(7) + " Change   " +
-		pc(15) + "A" + pc(8) + "-" + pc(15) + "L" + pc(7) + " Go straight to a setting   " +
-		pc(15) + "Q" + pc(7) + " Done" + konfigReset)
+	b.WriteString(pc(8) + "[" + pc(15) + "Q" + pc(8) + "/" + pc(15) + "ESC" + pc(8) + "] " +
+		pc(7) + "Done" + konfigReset)
 	if err := st.raw(b.String()); err != nil {
 		return err
 	}
 	if err := st.renderHelp(); err != nil {
 		return err
 	}
-	return st.renderStatus()
+	if err := st.renderStatus(); err != nil {
+		return err
+	}
+	// The screens a field hands off to (the header picker, the message
+	// editor) show the cursor again when they finish, so hide it on every
+	// full repaint rather than only on the way in.
+	return st.raw("\x1b[?25l")
 }
 
 // renderHeader clears the screen and draws KONFIG.ANS from the menu set,

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 
@@ -109,6 +110,8 @@ type konfigState struct {
 	headings []konfigHeading
 	sel      int
 	status   string
+	// hdrNames caches the header style names; see headerStyleNames.
+	hdrNames map[string]string
 	// redraw asks for a full repaint after the current edit, for editors
 	// that take over the screen (the message editor, the header picker, the
 	// file-column box).
@@ -448,16 +451,35 @@ func headerStyleValue(st *konfigState) konfigValue {
 	if n <= 0 {
 		return konfigValue{"(not chosen)", toneDim}
 	}
-	if opts, err := loadLightbarOptions("MSGHDR", st.c.e); err == nil {
-		for _, o := range opts {
-			if o.ReturnValue == strconv.Itoa(n) {
-				if name := strings.TrimSpace(o.Text); name != "" {
-					return konfigValue{name, toneValue}
-				}
-			}
-		}
+	if name := st.headerStyleNames()[strconv.Itoa(n)]; name != "" {
+		return konfigValue{name, toneValue}
 	}
 	return konfigValue{fmt.Sprintf("Style %d", n), toneValue}
+}
+
+// headerStyleNames maps each MSGHDR.BAR return value to its display text,
+// read once per visit. It reads the file directly rather than through
+// loadLightbarOptions, which checks every hotkey against a MSGHDR.CFG that
+// does not exist and would log a warning per style on every repaint.
+func (st *konfigState) headerStyleNames() map[string]string {
+	if st.hdrNames != nil {
+		return st.hdrNames
+	}
+	st.hdrNames = map[string]string{}
+	data, err := os.ReadFile(st.c.e.menuFile("bar", "MSGHDR.BAR"))
+	if err != nil {
+		return st.hdrNames
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if parts := strings.SplitN(line, ",", 7); len(parts) == 7 {
+			st.hdrNames[strings.TrimSpace(parts[5])] = strings.TrimSpace(parts[6])
+		}
+	}
+	return st.hdrNames
 }
 
 func autoSigValue(st *konfigState) konfigValue {
