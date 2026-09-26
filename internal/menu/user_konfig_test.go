@@ -351,6 +351,41 @@ func TestKonfigPasswordChange(t *testing.T) {
 	}
 }
 
+// Passwords longer than the room on the edit row scroll instead of being
+// cut, so a long existing password can still be verified and replaced.
+func TestKonfigLongPassword(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	long := strings.Repeat("abcdefghij", 6) // 60 characters
+	hash, err := bcrypt.GenerateFromPassword([]byte(long), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.PasswordHash = string(hash)
+	if err := um.UpdateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	next := strings.Repeat("0123456789", 7) // 70 characters
+	_, got, _ := runKonfig(t, um, u, "j"+long+"\r"+next+"\r"+next+"\rq", "")
+	if bcrypt.CompareHashAndPassword([]byte(got.PasswordHash), []byte(next)) != nil {
+		t.Fatal("a long password was not accepted in full")
+	}
+}
+
+// Opening a field whose stored value is longer than the form's limit must
+// not shorten it.
+func TestKonfigKeepsOverlongExistingValue(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	note := strings.Repeat("n", 35) // the old CFG_NOTE limit
+	u.PrivateNote = note
+	if err := um.UpdateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	_, got, _ := runKonfig(t, um, u, "i\rq", "")
+	if got.PrivateNote != note {
+		t.Fatalf("PrivateNote = %q (%d), want the 35-character value untouched", got.PrivateNote, len(got.PrivateNote))
+	}
+}
+
 func TestKonfigFileColumns(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	// From "all" (nothing chosen), turning Name off leaves the other five on.
@@ -398,15 +433,27 @@ func TestHotKeyNeedsLine(t *testing.T) {
 		"^": false, // ^M is Enter, never typed
 	}
 	for k, want := range cases {
-		if got := hotKeyNeedsLine(cmds, k); got != want {
+		if got := hotKeyNeedsLine(cmds, k, nil); got != want {
 			t.Errorf("hotKeyNeedsLine(%q) = %v, want %v", k, got, want)
 		}
 	}
-	if !hotKeyNeedsLine([]CommandRecord{{Keys: "##"}}, "4") {
+	if !hotKeyNeedsLine([]CommandRecord{{Keys: "##"}}, "4", nil) {
 		t.Error("a digit on a menu that takes numbers must wait for the rest")
 	}
-	if hotKeyNeedsLine([]CommandRecord{{Keys: "##"}}, "A") {
+	if hotKeyNeedsLine([]CommandRecord{{Keys: "##"}}, "A", nil) {
 		t.Error("## must not hold up letters")
+	}
+}
+
+func TestHotKeyNeedsLineIgnoresCommandsTheCallerCannotUse(t *testing.T) {
+	cmds := []CommandRecord{{Keys: "X", ACS: "*"}, {Keys: "XA", ACS: "S255"}}
+	sysop := func(string) bool { return true }
+	caller := func(acs string) bool { return acs != "S255" }
+	if !hotKeyNeedsLine(cmds, "X", sysop) {
+		t.Error("a sysop could mean XA, so X must wait")
+	}
+	if hotKeyNeedsLine(cmds, "X", caller) {
+		t.Error("a caller who cannot run XA should get X at once")
 	}
 }
 

@@ -237,7 +237,10 @@ func (st *runLoopState) readHotKeyInput() (string, error) {
 			return "\x10", nil
 		case key >= 33 && key < 127:
 			k := strings.ToUpper(string(rune(key)))
-			if hotKeyNeedsLine(st.commands, k) {
+			canUse := func(acs string) bool {
+				return checkACS(acs, st.currentUser, st.s, st.terminal, st.sessionStartTime)
+			}
+			if hotKeyNeedsLine(st.commands, k, canUse) {
 				return readLineFromSessionIHFrom(st.s, st.terminal, k)
 			}
 			_, _ = st.terminal.Write([]byte(k + "\r\n"))
@@ -249,8 +252,10 @@ func (st *runLoopState) readHotKeyInput() (string, error) {
 // hotKeyNeedsLine reports whether k, the first key of a command typed with
 // hot keys on, might be the start of something longer than one key: a
 // multi-key command in the menu, a number when the menu takes numbers (##),
-// or the global /G hangup.
-func hotKeyNeedsLine(commands []CommandRecord, k string) bool {
+// or the global /G hangup. Commands the caller cannot use (canUse is false
+// for their ACS) are ignored, so a sysop-only "XA" does not hold up X for
+// everyone else. A nil canUse allows every command.
+func hotKeyNeedsLine(commands []CommandRecord, k string, canUse func(acs string) bool) bool {
 	if k == "/" {
 		return true
 	}
@@ -258,6 +263,9 @@ func hotKeyNeedsLine(commands []CommandRecord, k string) bool {
 	for _, cmd := range commands {
 		if cmd.Keys == "//" || cmd.Keys == "~~" {
 			continue // auto-run entries, never typed
+		}
+		if canUse != nil && !canUse(cmd.ACS) {
+			continue
 		}
 		for _, key := range strings.Fields(strings.ToUpper(cmd.Keys)) {
 			if key == "^M" {

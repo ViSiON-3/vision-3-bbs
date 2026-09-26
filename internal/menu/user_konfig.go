@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -99,7 +100,9 @@ const (
 	konfigMinHeight   = 21
 	konfigMaxHeight   = 60
 	konfigMinPassword = 3
-	konfigMaxPassword = 30
+	// konfigMaxPassword is bcrypt's limit in bytes. Login takes passwords of
+	// any length, but none longer than this can have been stored.
+	konfigMaxPassword = 72
 )
 
 // konfigState is one run of the editor.
@@ -656,6 +659,11 @@ func editNote(st *konfigState) error {
 // value, subject to validate.
 func (st *konfigState) editText(label string, maxLen int, field func(u *user.User) *string, validate func(string) error) error {
 	old := *field(st.user())
+	// Never shorten a value just by opening it: older editors allowed longer
+	// ones (40-rune names, 35-rune notes) than new-user signup does.
+	if n := utf8.RuneCountInString(old); n > maxLen {
+		maxLen = n
+	}
 	input, ok, err := st.readField(label, old, maxLen, false, "")
 	if err != nil || !ok {
 		return err
@@ -704,6 +712,10 @@ func editPassword(st *konfigState) error {
 	}
 	if len([]rune(newPw)) < konfigMinPassword {
 		st.status = fmt.Sprintf("|12Passwords must be at least %d characters.|07 Nothing was changed.", konfigMinPassword)
+		return nil
+	}
+	if len(newPw) > konfigMaxPassword {
+		st.status = fmt.Sprintf("|12Passwords can be at most %d bytes.|07 Nothing was changed.", konfigMaxPassword)
 		return nil
 	}
 	confirm, ok, err := st.readField("Type it again", "", konfigMaxPassword, true, "")

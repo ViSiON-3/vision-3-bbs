@@ -162,15 +162,20 @@ func (st *konfigState) showCursor(on bool) {
 
 // readField edits a single line of text on the edit row, starting from
 // initial. ok is false when the caller pressed Esc. mask shows the text as
-// asterisks; hint is drawn after the box.
+// asterisks; hint is drawn after the box. A value longer than the room left
+// on the row scrolls sideways to keep the cursor in view, so maxLen is never
+// limited by the screen.
 //
 // Keys: printable and extended characters insert, Left/Right/Home/End move,
 // Backspace and Delete remove, Ctrl-U or Ctrl-Y empty the field.
 func (st *konfigState) readField(label, initial string, maxLen int, mask bool, hint string) (string, bool, error) {
 	buf := []rune(ansi.TruncateRunes(initial, maxLen, ""))
-	cur := len(buf)
+	cur, off := len(buf), 0
 	boxCol := 2 + utf8.RuneCountInString(label) + 2
 	width := maxLen + 1
+	if room := 80 - boxCol; width > room {
+		width = room
+	}
 
 	if err := st.raw(clearRow(konfigEditRow) + moveTo(konfigEditRow, 2) +
 		pc(15) + label + pc(8) + ": "); err != nil {
@@ -183,12 +188,22 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 	}
 
 	draw := func() error {
-		shown := string(buf)
+		if cur < off {
+			off = cur
+		}
+		if cur-off >= width {
+			off = cur - width + 1
+		}
+		end := off + width
+		if end > len(buf) {
+			end = len(buf)
+		}
+		shown := string(buf[off:end])
 		if mask {
-			shown = strings.Repeat("*", len(buf))
+			shown = strings.Repeat("*", end-off)
 		}
 		return st.raw(moveTo(konfigEditRow, boxCol) + konfigFieldStyle + shown +
-			strings.Repeat(" ", width-len(buf)) + konfigReset + moveTo(konfigEditRow, boxCol+cur))
+			strings.Repeat(" ", width-(end-off)) + konfigReset + moveTo(konfigEditRow, boxCol+cur-off))
 	}
 
 	st.showCursor(true)

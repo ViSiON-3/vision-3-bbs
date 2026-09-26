@@ -266,8 +266,12 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 			drawOption(i, i == selectedIndex)
 		}
 
-		// Show navigation hint at bottom (row 24), centered
-		const hintY = 24 // Fixed row for footer
+		// Show navigation hint at the bottom, centered: row 24, or the last
+		// row on a shorter screen so the footer is never drawn off it.
+		hintY := 24
+		if termHeight > 0 && termHeight < hintY {
+			hintY = termHeight
+		}
 		// Use CP437 arrow characters: \x18=↑, \x19=↓
 		hint := "|08Use |14\x18|08/|14\x19|08 arrows, |14ENTER|08 to preview, |14SPACE|08 to select, |14Q|08 to quit|07"
 		// Calculate visible text length (without pipe codes) for centering
