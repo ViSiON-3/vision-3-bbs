@@ -142,7 +142,7 @@ All of these apply to the logged-in user. The stock main menu binds `K` to `USER
 
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
-| `USERCONFIG` | Optional menu name to go to on exit. Without one, the calling menu is redisplayed. | Full-screen settings editor: screen size, encoding, hot keys, message header style, auto-signature, real name, location, note, password, file listing mode and columns. Draws `KONFIG.ANS` (at most 5 rows, 79 columns) as its header. Arrow keys move, Enter changes, a setting's letter jumps straight to it, Q or Esc leaves. Each change is saved as soon as it is confirmed. A new screen size applies at once; a new encoding applies from the next login. | |
+| `USERCONFIG` | Optional menu name to go to on exit. Without one, the calling menu is redisplayed. | Full-screen settings editor: screen size, encoding, hot keys, message header style, auto-signature, real name, location, note, password, file listing mode and columns. Draws `KONFIG.ANS` (at most 5 rows) as its header; the art may use the template tokens such as `|UH`, `|LEVEL`, `|NODE` and `|DATE`. Arrow keys move, Enter changes, a setting's letter jumps straight to it, Q or Esc leaves. Each change is saved as soon as it is confirmed. A new screen size applies at once; a new encoding applies from the next login. | |
 | `CFG_FILECOLUMNS` | none | Toggle screen for the columns shown in file listings. | |
 | `CFG_PASSWORD` | none | Asks for the current password, then a new one. | |
 | `CFG_AUTOSIG` | none | Auto-signature editor. Change, delete, or quit. Up to five lines. | |

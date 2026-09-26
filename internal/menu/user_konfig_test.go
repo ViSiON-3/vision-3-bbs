@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -113,8 +114,18 @@ func TestKonfigStockHeaderArtFits(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Logf("%v:\n%s", mode, screen.Snapshot())
-		if !strings.Contains(screen.Row(2), "USER KONFIG") {
-			t.Errorf("%v: header art not drawn; row 2 = %q", mode, screen.Row(2))
+		snap := screen.Snapshot()
+		if !strings.Contains(screen.Row(1), "ViSiON/3") {
+			t.Errorf("%v: header art not drawn; row 1 = %q", mode, screen.Row(1))
+		}
+		if !strings.Contains(snap, "User: Tester") {
+			t.Errorf("%v: |UH not substituted", mode)
+		}
+		if !strings.Contains(snap, fmt.Sprintf("Level: %d", u.AccessLevel)) {
+			t.Errorf("%v: |LEVEL not substituted", mode)
+		}
+		if strings.Contains(snap, "|UH") || strings.Contains(snap, "|LEVEL") {
+			t.Errorf("%v: a raw token reached the screen", mode)
 		}
 		if !strings.Contains(screen.Row(konfigTopRow), "Terminal") {
 			t.Errorf("%v: form displaced; row %d = %q", mode, konfigTopRow, screen.Row(konfigTopRow))

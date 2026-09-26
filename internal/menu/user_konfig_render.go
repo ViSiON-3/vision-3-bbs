@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"unicode/utf8"
 
@@ -93,13 +94,24 @@ func (st *konfigState) renderAll() error {
 
 // renderHeader clears the screen and draws KONFIG.ANS from the menu set,
 // or a plain title when the set has none. The art should be at most
-// konfigHeaderRows rows; the form is drawn below that.
+// konfigHeaderRows rows; the form is drawn below that. The art may use the
+// common template tokens (|UH, |LEVEL, |NODE, |DATE and the rest).
 func (st *konfigState) renderHeader() error {
 	e := st.c.e
 	if ok, _ := e.Menus().Exists("ansi", "KONFIG.ANS"); ok {
-		if err := e.displayFile(st.c.terminal, "KONFIG.ANS", st.c.outputMode, st.c.termWidth, st.c.termHeight, true); err == nil {
-			return nil
+		data, err := ansi.GetAnsiFileContent(e.menuFile("ansi", "KONFIG.ANS"))
+		if err == nil {
+			// Settle the art's encoding before substituting, as displayFile
+			// does, so a UTF-8 handle is not mistaken for CP437.
+			data = artForOutput(data, st.c.outputMode)
+			data = e.applyCommonTemplateTokens(data, st.user(), st.c.nodeNumber)
+			data = ansi.ReplacePipeCodes(data)
+			if err := st.raw(ansi.ClearScreen()); err != nil {
+				return err
+			}
+			return writeArt(st.c.terminal, data, st.c.outputMode, st.c.termWidth)
 		}
+		slog.Warn("failed to read KONFIG.ANS", "node", st.c.nodeNumber, "error", err)
 	}
 	return st.raw(ansi.ClearScreen() + moveTo(2, 2) + pc(15) + "User Konfig" +
 		moveTo(3, 2) + pc(8) + strings.Repeat("─", 11) + konfigReset)
