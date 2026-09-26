@@ -115,8 +115,11 @@ func TestKonfigStockHeaderArtFits(t *testing.T) {
 		}
 		t.Logf("%v:\n%s", mode, screen.Snapshot())
 		snap := screen.Snapshot()
-		if !strings.Contains(screen.Row(1), "ViSiON/3") {
-			t.Errorf("%v: header art not drawn; row 1 = %q", mode, screen.Row(1))
+		if !strings.HasSuffix(strings.TrimRight(screen.Row(1), " "), "[ViSiON/3]") {
+			t.Errorf("%v: row 1 should end at [ViSiON/3]; got %q", mode, screen.Row(1))
+		}
+		if !strings.HasPrefix(screen.Row(2), "█ █") {
+			t.Errorf("%v: row 2 should start the logo at column 1; got %q", mode, screen.Row(2))
 		}
 		if !strings.Contains(snap, "User: Tester") {
 			t.Errorf("%v: |UH not substituted", mode)
