@@ -1,20 +1,4 @@
-|12 User Configuration|07
-|08 ------------------
-|15 Terminal                      |15 Personal Info
-|08 --------                      |08 -------------
-|07 [|15A|07] Screen Width              |07 [|15M|07] Real Name
-|07 [|15B|07] Screen Height             |07 [|15N|07] User Note
-|07 [|15C|07] Terminal Type             |07 [|15P|07] Change Password
-|07 [|15D|07] Hot Keys
-|07 [|15E|07] More Prompts
-|07 [|15F|07] Message Header Style      |15 Colors
-                               |08 ------
-|15 Display                       |07 [|15I|07] Prompt Color
-|08 -------                       |07 [|15J|07] Input Color
-|07 [|15G|07] Custom Prompt             |07 [|15K|07] Text Color
-|07 [|15H|07] File Listing Mode         |07 [|15L|07] Stat Color
-|07 [|15V|07] View Current Config
-|07 [|15R|07] Auto-Signature
-
-|07 [|15Q|07] Return to Main Menu
-|08 -----------------------
+|08‹‹‹‹‹‹‹‹‹‹‹|01‹‹‹‹‹‹‹‹‹‹‹|09‹‹‹‹‹‹‹‹‹‹‹|11‹‹‹‹‹‹‹‹‹‹‹|09‹‹‹‹‹‹‹‹‹‹‹|01‹‹‹‹‹‹‹‹‹‹‹|08‹‹‹‹‹‹‹‹‹‹‹‹‹|07|B0
+ |09∞±≤€|15|B1 USER KONFIG |09|B0€≤±∞                                             |01∞±≤ |09ViSiON|01/|113|07|B0
+|08ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ|01ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ|09ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ|11ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ|09ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ|01ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ|08ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ|07|B0
+|08 Settings save the moment you change them.  |07Esc|08 backs out of any edit.|07|B0

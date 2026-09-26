@@ -291,7 +291,7 @@ Menu configuration files are JSON files that define menu behavior and prompts.
 - `FORCEHELPLEVEL` - Force help display for users at or below this level *(currently unused — reserved from Pascal `MenuRec.ForceHelpLevel`)*
 - `MES_CONF` - Auto-switch user's active message conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.Mes_Conf`)*
 - `FILE_CONF` - Auto-switch user's active file conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.File_Conf`)*
-- `FORCEHOTKEY` - Force single-keypress (hotkey) input mode regardless of user preference *(currently unused — reserved from Pascal `MenuRec.Force_HotKey`)*
+- `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter.
 
 ## Command Definition Files (.CFG)
 
@@ -345,8 +345,7 @@ Two keys work on every standard command menu without appearing in any `.CFG`:
 - `G` - Log off with confirmation and `GOODBYE.ANS`
 
 `G` is a fallback, checked only after every command in the menu has failed to
-match, so a menu that binds `G` to something of its own keeps it — `USERCFG`
-uses it for the custom prompt editor.
+match, so a menu that binds `G` to something of its own keeps it.
 
 Both are matched by the standard menu input loop. The pre-login matrix
 (`PDMATRIX`) reads keys itself and recognises only its own hotkeys, so neither
