@@ -272,11 +272,20 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		if termHeight > 0 && termHeight < hintY {
 			hintY = termHeight
 		}
-		// Use CP437 arrow characters: \x18=↑, \x19=↓
+		// Use CP437 arrow characters: \x18=↑, \x19=↓. A narrow screen gets
+		// the short form, so the footer never wraps and scrolls the picker.
 		hint := "|08Use |14\x18|08/|14\x19|08 arrows, |14ENTER|08 to preview, |14SPACE|08 to select, |14Q|08 to quit|07"
-		// Calculate visible text length (without pipe codes) for centering
+		// Visible text length (without pipe codes), for fitting and centering
 		visibleHint := "Use \x18/\x19 arrows, ENTER to preview, SPACE to select, Q to quit"
-		hintX := (80 - len(visibleHint)) / 2
+		width := 80
+		if termWidth > 0 && termWidth < width {
+			width = termWidth
+		}
+		if len(visibleHint) >= width {
+			hint = "|14\x18|08/|14\x19 ENTER|08 view |14SPACE|08 pick |14Q|08 quit|07"
+			visibleHint = "\x18/\x19 ENTER view SPACE pick Q quit"
+		}
+		hintX := (width - len(visibleHint)) / 2
 		if hintX < 1 {
 			hintX = 1
 		}
