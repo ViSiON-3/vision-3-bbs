@@ -1,8 +1,11 @@
 package jam
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -38,7 +41,7 @@ func (b *Base) acquireFileLock() (func(), error) {
 			_ = f.Close()
 			break
 		}
-		if !os.IsExist(err) {
+		if !lockHeldByOther(err) {
 			return nil, fmt.Errorf("jam: lock %s: %w", lockPath, err)
 		}
 
@@ -61,6 +64,18 @@ func (b *Base) acquireFileLock() (func(), error) {
 	return func() {
 		_ = os.Remove(lockPath)
 	}, nil
+}
+
+// lockHeldByOther reports whether a failed exclusive create of the lock file
+// means another holder has it, so the caller should wait and retry. On Windows
+// a lock file that its holder has just removed stays in a delete-pending state
+// until the last handle closes, and creating it again in that window fails
+// with access denied rather than "exists".
+func lockHeldByOther(err error) bool {
+	if errors.Is(err, fs.ErrExist) {
+		return true
+	}
+	return runtime.GOOS == "windows" && errors.Is(err, fs.ErrPermission)
 }
 
 // withFileLock runs fn with the lock held.

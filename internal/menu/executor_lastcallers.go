@@ -29,8 +29,8 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running LASTCALLERS", "node", nodeNumber)
 
 	// Parse optional caller count argument (e.g., RUN:LASTCALLERS 25).
-	// The default fills the screen; an explicit argument overrides it in either
-	// direction, so a larger request is honoured rather than capped.
+	// An explicit argument overrides the default in either direction; either
+	// way the count is trimmed below to what fits on the caller's terminal.
 	callerLimit := defaultLastCallerRows
 	if strings.TrimSpace(args) != "" {
 		if parsedLimit, parseErr := strconv.Atoi(strings.TrimSpace(args)); parseErr == nil && parsedLimit > 0 {
@@ -83,13 +83,29 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 		userNotesByID[userRecord.ID] = userRecord.PrivateNote
 	}
 	timeLoc := getLastCallerTimeLocation(strings.TrimSpace(e.GetServerConfig().Timezone))
-	lastCallers = mostRecentCallRecords(lastCallers, callerLimit)
 
 	processedTopTemplate = renderLastCallerGlobalATTokens(processedTopTemplate, totalUsers)
 	processedBotTemplate = renderLastCallerGlobalATTokens(processedBotTemplate, totalUsers)
 	usersOnline := strconv.Itoa(e.SessionRegistry.ActiveCount())
 	processedTopTemplate = strings.ReplaceAll(processedTopTemplate, "@U@", usersOnline)
 	processedBotTemplate = strings.ReplaceAll(processedBotTemplate, "@U@", usersOnline)
+
+	pausePrompt := e.Strings().PauseString
+	if pausePrompt == "" {
+		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
+	}
+
+	// Trim the row count so the header is not scrolled off the top of the
+	// screen by the footer and pause prompt.
+	if fit := lastCallerRowsThatFit(termHeight, processedTopTemplate, processedMidTemplate, processedBotTemplate, pausePrompt); fit >= 0 && callerLimit > fit {
+		slog.Debug("trimming LASTCALLERS rows to terminal height", "node", nodeNumber, "requested", callerLimit, "fit", fit, "termHeight", termHeight)
+		callerLimit = fit
+	}
+	if callerLimit == 0 {
+		lastCallers = nil // mostRecentCallRecords would read 0 as "no limit"
+	} else {
+		lastCallers = mostRecentCallRecords(lastCallers, callerLimit)
+	}
 
 	// 3. Build the output string using processed templates and processed data
 	var outputBuffer bytes.Buffer
@@ -168,11 +184,6 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// 5. Wait for Enter using configured PauseString
-	pausePrompt := e.Strings().PauseString
-	if pausePrompt == "" {
-		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... " // Fallback
-	}
-
 	slog.Debug("displaying LASTCALLERS pause prompt (centered)", "node", nodeNumber)
 	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
@@ -191,6 +202,47 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 // command passes no count. Hidden logins are filtered out before this limit is
 // applied, so it is a count of real callers rather than of stored records.
 const defaultLastCallerRows = 20
+
+// lastCallerRowsThatFit returns how many callers can be drawn on a
+// termHeight-row screen without scrolling the header off the top, given the
+// processed top, per-caller and bottom templates and the pause prompt that
+// follows them. A multi-line mid template costs its line count per caller.
+// It returns -1 when the height is unknown, meaning no trimming should occur.
+// The result is never negative otherwise: a screen too short for the frame
+// shows no rows rather than a negative count, which would mean "no limit".
+func lastCallerRowsThatFit(termHeight int, top, mid, bot, pausePrompt string) int {
+	if termHeight <= 0 {
+		return -1
+	}
+	// Rows used = line breaks emitted + 1 for the line the cursor ends on.
+	// runLastCallers terminates the top template and every caller row with a
+	// line break. writeCenteredPausePrompt emits one break before the prompt
+	// only when the prompt does not start with one; a leading break is
+	// stripped and not written, so it adds no row.
+	breaks := strings.Count(top, "\n")
+	if !strings.HasSuffix(top, "\n") {
+		breaks++
+	}
+	breaks += strings.Count(bot, "\n")
+	switch {
+	case strings.HasPrefix(pausePrompt, "\r\n"):
+		pausePrompt = strings.TrimPrefix(pausePrompt, "\r\n")
+	case strings.HasPrefix(pausePrompt, "\n"):
+		pausePrompt = strings.TrimPrefix(pausePrompt, "\n")
+	default:
+		breaks++
+	}
+	breaks += strings.Count(pausePrompt, "\n")
+
+	// runLastCallers trims the mid template's trailing breaks and adds one.
+	rowsPerCaller := strings.Count(strings.TrimRight(mid, "\r\n"), "\n") + 1
+
+	free := termHeight - (breaks + 1)
+	if free < 0 {
+		return 0
+	}
+	return free / rowsPerCaller
+}
 
 // visibleCallRecords drops call records made by users who declined the
 // "add this login to the last caller list?" prompt. The exclusion applies to
