@@ -338,3 +338,44 @@ func TestCoordTransfer_SSEEvent(t *testing.T) {
 		t.Error("timed out waiting for coordinator_transfer_pending SSE event")
 	}
 }
+
+// TestCoordTransfer_NALStillVerifies is the behaviour a working transfer
+// needs: after accept, the NAL the hub serves must still verify. It fails
+// today because the hub signs with its own key while the NAL names the new
+// coordinator's key. See #433.
+func TestCoordTransfer_NALStillVerifies(t *testing.T) {
+	t.Skip("coordinator transfer conflicts with hub-side NAL signing; see #433")
+
+	h, hubKS := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
+	registerAsLeaf(t, ts, hubKS)
+	registerAsLeaf(t, ts, leafKS)
+	seedCoordNAL(t, h, hubKS)
+
+	transferBody := fmt.Sprintf(`{"new_node_id":%q,"new_pubkey_b64":%q}`, leafKS.NodeID(), leafKS.PubKeyBase64())
+	resp, err := http.DefaultClient.Do(signedRequest(t, hubKS, "POST", ts.URL+"/v3net/v1/testnet/coordinator/transfer", transferBody))
+	if err != nil {
+		t.Fatalf("POST transfer: %v", err)
+	}
+	var transferResp map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&transferResp)
+	resp.Body.Close()
+	token, _ := transferResp["token"].(string)
+
+	acceptResp, err := http.DefaultClient.Do(signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/coordinator/accept", fmt.Sprintf(`{"token":%q}`, token)))
+	if err != nil {
+		t.Fatalf("POST accept: %v", err)
+	}
+	acceptResp.Body.Close()
+
+	n := fetchNAL(t, ts) // fails the test if the NAL does not verify
+	if n.CoordNodeID != leafKS.NodeID() {
+		t.Errorf("coordinator = %q, want %q", n.CoordNodeID, leafKS.NodeID())
+	}
+}

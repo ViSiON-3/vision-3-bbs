@@ -122,7 +122,7 @@ The change is published to all nodes straight away, and the new manager sees the
 
 ### Coordinator Transfer
 
-Coordinator transfer exists on the hub's HTTP API but is not offered from the BBS menu yet.
+Coordinator transfer is not available. The hub signs the NAL with its own key, so today the coordinator is always the hub operator. Handing the role to another node needs a protocol change, tracked in [#433](https://github.com/ViSiON-3/vision-3-bbs/issues/433).
 
 ## For Developers
 
