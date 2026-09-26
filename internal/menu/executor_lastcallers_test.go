@@ -124,14 +124,14 @@ func TestLastCallerRowsThatFit_StockTemplatesOn25Rows(t *testing.T) {
 	bot := "----\r\nTotal Users: 14"
 	pause := "|15SlAm eNtEr!" // stock prompt: no leading break, so the helper adds one
 
-	if got := lastCallerRowsThatFit(25, top, bot, pause); got != 15 {
+	if got := lastCallerRowsThatFit(25, top, "row\r\n", bot, pause); got != 15 {
 		t.Errorf("25 rows: got %d caller rows, want 15", got)
 	}
-	if got := lastCallerRowsThatFit(24, top, bot, pause); got != 14 {
+	if got := lastCallerRowsThatFit(24, top, "row\r\n", bot, pause); got != 14 {
 		t.Errorf("24 rows: got %d caller rows, want 14", got)
 	}
 	// A top template that already ends in a break gets no extra one.
-	if got := lastCallerRowsThatFit(25, top+"\r\n", bot, pause); got != 15 {
+	if got := lastCallerRowsThatFit(25, top+"\r\n", "row\r\n", bot, pause); got != 15 {
 		t.Errorf("top with trailing break: got %d, want 15", got)
 	}
 }
@@ -143,26 +143,41 @@ func TestLastCallerRowsThatFit_LeadingBreakPrompt(t *testing.T) {
 	// One-line top, "footer\n" bottom, "\r\nprompt": top, one caller, footer
 	// and prompt fill exactly four rows.
 	for _, prompt := range []string{"\r\nprompt", "\nprompt"} {
-		if got := lastCallerRowsThatFit(4, "top", "footer\n", prompt); got != 1 {
+		if got := lastCallerRowsThatFit(4, "top", "row\r\n", "footer\n", prompt); got != 1 {
 			t.Errorf("prompt %q: got %d caller rows, want 1", prompt, got)
 		}
 	}
 	// Without the bottom's trailing break the helper still adds none, so the
 	// prompt shares the footer's row.
-	if got := lastCallerRowsThatFit(3, "top", "footer", "\r\nprompt"); got != 1 {
+	if got := lastCallerRowsThatFit(3, "top", "row\r\n", "footer", "\r\nprompt"); got != 1 {
 		t.Errorf("unterminated footer: got %d caller rows, want 1", got)
 	}
 	// Breaks inside the prompt text each take a row.
-	if got := lastCallerRowsThatFit(5, "top", "footer", "line one\r\nline two"); got != 1 {
+	if got := lastCallerRowsThatFit(5, "top", "row\r\n", "footer", "line one\r\nline two"); got != 1 {
 		t.Errorf("two-line prompt: got %d caller rows, want 1", got)
 	}
 }
 
 func TestLastCallerRowsThatFit_Edges(t *testing.T) {
-	if got := lastCallerRowsThatFit(0, "a", "b", "c"); got != -1 {
+	if got := lastCallerRowsThatFit(0, "a", "row\r\n", "b", "c"); got != -1 {
 		t.Errorf("unknown height: got %d, want -1 (no trimming)", got)
 	}
-	if got := lastCallerRowsThatFit(2, "a\r\nb\r\nc", "d", "e"); got != 0 {
+	if got := lastCallerRowsThatFit(2, "a\r\nb\r\nc", "row\r\n", "d", "e"); got != 0 {
 		t.Errorf("screen shorter than the frame: got %d, want 0", got)
+	}
+}
+
+// TestLastCallerRowsThatFit_MultiLineMid covers a custom LASTCALL.MID that
+// spans several lines: each caller costs that many rows.
+func TestLastCallerRowsThatFit_MultiLineMid(t *testing.T) {
+	top := "top"      // 1 row
+	bot := "footer"   // 1 row
+	pause := "prompt" // 1 row after the helper's break
+	// 25 rows leave 22 for callers.
+	if got := lastCallerRowsThatFit(25, top, "line one\r\nline two\r\n", bot, pause); got != 11 {
+		t.Errorf("two-line mid: got %d callers, want 11", got)
+	}
+	if got := lastCallerRowsThatFit(25, top, "a\r\nb\r\nc", bot, pause); got != 7 {
+		t.Errorf("three-line mid: got %d callers, want 7", got)
 	}
 }

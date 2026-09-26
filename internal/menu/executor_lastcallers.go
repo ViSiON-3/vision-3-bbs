@@ -97,7 +97,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Trim the row count so the header is not scrolled off the top of the
 	// screen by the footer and pause prompt.
-	if fit := lastCallerRowsThatFit(termHeight, processedTopTemplate, processedBotTemplate, pausePrompt); fit >= 0 && callerLimit > fit {
+	if fit := lastCallerRowsThatFit(termHeight, processedTopTemplate, processedMidTemplate, processedBotTemplate, pausePrompt); fit >= 0 && callerLimit > fit {
 		slog.Debug("trimming LASTCALLERS rows to terminal height", "node", nodeNumber, "requested", callerLimit, "fit", fit, "termHeight", termHeight)
 		callerLimit = fit
 	}
@@ -203,13 +203,14 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 // applied, so it is a count of real callers rather than of stored records.
 const defaultLastCallerRows = 20
 
-// lastCallerRowsThatFit returns how many caller rows can be drawn on a
+// lastCallerRowsThatFit returns how many callers can be drawn on a
 // termHeight-row screen without scrolling the header off the top, given the
-// processed top and bottom templates and the pause prompt that follows them.
+// processed top, per-caller and bottom templates and the pause prompt that
+// follows them. A multi-line mid template costs its line count per caller.
 // It returns -1 when the height is unknown, meaning no trimming should occur.
 // The result is never negative otherwise: a screen too short for the frame
 // shows no rows rather than a negative count, which would mean "no limit".
-func lastCallerRowsThatFit(termHeight int, top, bot, pausePrompt string) int {
+func lastCallerRowsThatFit(termHeight int, top, mid, bot, pausePrompt string) int {
 	if termHeight <= 0 {
 		return -1
 	}
@@ -233,11 +234,14 @@ func lastCallerRowsThatFit(termHeight int, top, bot, pausePrompt string) int {
 	}
 	breaks += strings.Count(pausePrompt, "\n")
 
-	fit := termHeight - (breaks + 1)
-	if fit < 0 {
+	// runLastCallers trims the mid template's trailing breaks and adds one.
+	rowsPerCaller := strings.Count(strings.TrimRight(mid, "\r\n"), "\n") + 1
+
+	free := termHeight - (breaks + 1)
+	if free < 0 {
 		return 0
 	}
-	return fit
+	return free / rowsPerCaller
 }
 
 // visibleCallRecords drops call records made by users who declined the
