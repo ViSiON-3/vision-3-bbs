@@ -262,6 +262,9 @@ func TestKonfigPasswordChange(t *testing.T) {
 	if strings.Contains(screen.Snapshot(), "secret1") {
 		t.Error("password was echoed")
 	}
+	if bcrypt.CompareHashAndPassword([]byte(got.PasswordHash), []byte("secret1")) != nil {
+		t.Fatal("new password not set on the session's user")
+	}
 	if bcrypt.CompareHashAndPassword([]byte(reloadUser(t, um).PasswordHash), []byte("secret1")) != nil {
 		t.Fatal("new password not saved")
 	}
