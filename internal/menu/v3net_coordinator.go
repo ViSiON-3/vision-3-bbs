@@ -285,9 +285,10 @@ func runV3NetAreaManagers(c *cmdCtx, networks []string) (string, string, error) 
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  #  NETWORK     AREA TAG          NAME                  MANAGER|07\r\n")))
 		for i, r := range rows {
 			manager := r.area.ManagerNodeID
-			if manager == "" {
+			switch manager {
+			case "":
 				manager = "(none)"
-			} else if manager == me {
+			case me:
 				manager += " (this node)"
 			}
 			line := fmt.Sprintf("|15%3d|07  %-10s  %-16s  %-20s  %s",
