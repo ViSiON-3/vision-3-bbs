@@ -205,3 +205,47 @@ func TestLoadAreasWarnsWhenEchoTagIsAnotherAreasTag(t *testing.T) {
 		t.Errorf("no warning logged for the tag/echo-tag collision; log was:\n%s", out)
 	}
 }
+
+// FTN echo tags are case-insensitive, so the tosser's fallback must find an
+// upper-case area for a lower-case tag, preferring the tosser's own network.
+func TestFindEchoAreaFold(t *testing.T) {
+	mm := newEchoTagTestManager(t)
+	if _, err := mm.AddArea(MessageArea{Tag: "0N-WAREZ", Name: "Warez", AreaType: "echomail", Network: "zeronet"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mm.AddArea(MessageArea{Tag: "FD_LINUX", Name: "Linux", AreaType: "echomail", EchoTag: "LINUX", Network: "fsxnet"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mm.AddArea(MessageArea{Tag: "AN_LINUX", Name: "Linux", AreaType: "echomail", EchoTag: "LINUX", Network: "agoranet"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if a, ok := mm.FindEchoAreaFold("0n-warez", "zeronet"); !ok || a.Tag != "0N-WAREZ" {
+		t.Errorf("0n-warez on zeronet: got %v, %v; want 0N-WAREZ", a, ok)
+	}
+	if a, ok := mm.FindEchoAreaFold("linux", "agoranet"); !ok || a.Tag != "AN_LINUX" {
+		t.Errorf("linux on agoranet: got %v, %v; want AN_LINUX", a, ok)
+	}
+	// Echo-tag matches are network-gated; a tag match is not, like the exact lookup.
+	if _, ok := mm.FindEchoAreaFold("linux", "othernet"); ok {
+		t.Error("echo tag LINUX matched on a network that has no such area")
+	}
+	if a, ok := mm.FindEchoAreaFold("fd_linux", "othernet"); !ok || a.Tag != "FD_LINUX" {
+		t.Errorf("fd_linux by local tag: got %v, %v; want FD_LINUX", a, ok)
+	}
+	if _, ok := mm.FindEchoAreaFold("nope", "zeronet"); ok {
+		t.Error("unknown tag matched")
+	}
+}
+
+// Tags differing only in case would compete for the same inbound mail once
+// the tosser folds case, so they are refused as duplicates.
+func TestAddAreaRejectsEchoTagDifferingOnlyInCase(t *testing.T) {
+	mm := newEchoTagTestManager(t)
+	if _, err := mm.AddArea(MessageArea{Tag: "FD_LINUX", Name: "Linux", EchoTag: "LINUX", Network: "fsxnet"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mm.AddArea(MessageArea{Tag: "FD_LINUX2", Name: "Linux 2", EchoTag: "linux", Network: "fsxnet"}); err == nil {
+		t.Fatal("echo tag differing only in case on the same network was accepted")
+	}
+}

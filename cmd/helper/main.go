@@ -753,6 +753,11 @@ func cmdFTNSetup(args []string) {
 		})
 	}
 
+	// A network added alongside existing ones gets its own BSO outbound
+	// rather than sharing the global one (see config.AssignSharedOutbounds).
+	if _, exists := ftn.Networks[networkKey]; !exists && len(ftn.Networks) > 0 && netCfg.BinkdOutboundPath == "" {
+		netCfg.BinkdOutboundPath = config.NetworkOutboundPath(ftn.BinkdOutboundPath, networkKey)
+	}
 	ftn.Networks[networkKey] = netCfg
 	if ftn.DupeDBPath == "" {
 		ftn.DupeDBPath = "data/ftn/dupes.json"

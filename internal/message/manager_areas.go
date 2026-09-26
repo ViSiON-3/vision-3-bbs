@@ -37,7 +37,9 @@ func (mm *MessageManager) GetAreaByTag(tag string) (*MessageArea, bool) {
 //     GetAreaByTag first and that lookup is NOT network-gated, so a tag match
 //     always wins and the echo-tagged area would never receive anything.
 //
-// Comparison is exact, matching the areasByEchoTag key. Caller must hold mm.mu.
+// Comparison ignores case: the tosser falls back to a case-insensitive match
+// (FindEchoAreaFold), so two tags differing only in case would compete for the
+// same inbound mail. Caller must hold mm.mu.
 func (mm *MessageManager) echoTagConflict(echoTag, network string, excludeID int) *MessageArea {
 	if echoTag == "" {
 		return nil
@@ -46,10 +48,10 @@ func (mm *MessageManager) echoTagConflict(echoTag, network string, excludeID int
 		if a.ID == excludeID {
 			continue
 		}
-		if a.Tag == echoTag {
+		if strings.EqualFold(a.Tag, echoTag) {
 			return a
 		}
-		if a.EchoTag != "" && a.EchoTag == echoTag && strings.EqualFold(a.Network, network) {
+		if a.EchoTag != "" && strings.EqualFold(a.EchoTag, echoTag) && strings.EqualFold(a.Network, network) {
 			return a
 		}
 	}
@@ -59,7 +61,7 @@ func (mm *MessageManager) echoTagConflict(echoTag, network string, excludeID int
 // echoTagConflictError describes why echoTag cannot be used, naming the area
 // that already claims it and how.
 func echoTagConflictError(echoTag string, c *MessageArea) error {
-	if c.Tag == echoTag {
+	if strings.EqualFold(c.Tag, echoTag) {
 		return fmt.Errorf("echo tag %q is the local tag of area %q (id %d); inbound mail for it already routes there",
 			echoTag, c.Tag, c.ID)
 	}
@@ -74,6 +76,46 @@ func (mm *MessageManager) GetAreaByEchoTag(echoTag string) (*MessageArea, bool) 
 	defer mm.mu.RUnlock()
 	area, exists := mm.areasByEchoTag[echoTag]
 	return area, exists
+}
+
+// FindEchoAreaFold is the tosser's last resort for an echo tag that matched no
+// area exactly. FTN echo tags are case-insensitive by convention, and hubs do
+// send them in lower case ("0n-warez") while area lists and wizards write
+// them in upper case, so an exact-only lookup turns every such message into
+// "unknown area".
+//
+// An area on network whose EchoTag (or Tag, when it has no EchoTag) equals tag
+// ignoring case wins. Failing that, an area on any network whose Tag equals it
+// ignoring case, mirroring the exact tag lookup, which is not network-gated
+// either. When several areas qualify at the same step, the lowest ID wins so
+// routing is stable across restarts.
+func (mm *MessageManager) FindEchoAreaFold(tag, network string) (*MessageArea, bool) {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	var onNetwork, anyNetwork *MessageArea
+	lower := func(cur, a *MessageArea) *MessageArea {
+		if cur == nil || a.ID < cur.ID {
+			return a
+		}
+		return cur
+	}
+	for _, a := range mm.areasByID {
+		echo := a.EchoTag
+		if echo == "" {
+			echo = a.Tag
+		}
+		if strings.EqualFold(a.Network, network) && strings.EqualFold(echo, tag) {
+			onNetwork = lower(onNetwork, a)
+		}
+		if strings.EqualFold(a.Tag, tag) {
+			anyNetwork = lower(anyNetwork, a)
+		}
+	}
+	if onNetwork != nil {
+		return onNetwork, true
+	}
+	return anyNetwork, anyNetwork != nil
 }
 
 // UpdateAreaByID replaces the message area with the given ID with a copy of updated.

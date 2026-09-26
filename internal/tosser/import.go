@@ -392,7 +392,11 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (
 			slog.Info("tossed netmail", "from", msg.From, "to", msg.To, "msgid", msgID)
 			return nil
 		}
-		slog.Debug("skipping netmail, no netmail area configured", "from", msg.From, "to", msg.To, "network", t.networkName)
+		// Warn, not Debug: the message is gone after this, and a sysop whose
+		// netmail area names the network differently (zer0net vs zeronet)
+		// otherwise sees areafix replies vanish with nothing in the log.
+		slog.Warn("dropped netmail: no netmail area for this network — add a message area of type netmail whose network matches ftn.json",
+			"from", msg.From, "to", msg.To, "subject", msg.Subject, "network", t.networkName)
 		return nil
 	}
 
@@ -417,6 +421,9 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (
 		if a, ok := t.msgMgr.GetAreaByEchoTag(parsed.Area); ok && strings.EqualFold(a.Network, t.networkName) {
 			area, found = a, true
 		}
+	}
+	if !found {
+		area, found = t.msgMgr.FindEchoAreaFold(parsed.Area, t.networkName)
 	}
 	if !found {
 		slog.Warn("unknown echo area", "area", parsed.Area, "from", msg.From)

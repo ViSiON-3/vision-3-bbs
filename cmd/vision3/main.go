@@ -39,6 +39,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -1830,6 +1831,9 @@ func main() {
 	// Posts in QWK network areas get a Message-ID keyed on the system's QWK
 	// ID, so replies from the hub can thread back to them.
 	messageMgr.SetQWKID(menu.ResolveQWKID(serverConfig))
+	if ftnErr == nil {
+		tosser.WarnOrphanFTNAreas(ftnConfig, messageMgr.ListAreas())
+	}
 	defer func() {
 		if cerr := messageMgr.Close(); cerr != nil {
 			slog.Error("closing JAM message bases on shutdown", "error", cerr)
