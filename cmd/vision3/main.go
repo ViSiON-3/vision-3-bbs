@@ -874,6 +874,7 @@ func sessionHandler(s ssh.Session) {
 		delete(activeSessions, s) // Remove using session as key
 		activeSessionsMutex.Unlock()
 		menu.ClearSessionOutputMode(s)
+		menu.ClearSessionIdleTimeout(s)
 		if sessionRegistry != nil {
 			sessionRegistry.Unregister(int(nodeID))
 		}
@@ -1203,8 +1204,18 @@ func sessionHandler(s ssh.Session) {
 	// context when the SSH username matches a known BBS handle and the password
 	// is correct. Unknown usernames are accepted without verification so the BBS
 	// login menu can handle them.
+	//
+	// Skipping the LOGIN prompt must not skip what it enforces, so the caller
+	// goes through the same intro gate and logon-level check first. A caller
+	// who fails either is disconnected rather than sent to the LOGIN prompt,
+	// which would authenticate the account a second time.
 	if authedUser, ok := s.Context().Value(sshAuthUserKey{}).(*user.User); ok && authedUser != nil {
 		slog.Info("SSH pre-authenticated user detected", "node", nodeID, "user", authedUser.Handle)
+		admitted, admitErr := menuExecutor.AdmitPreAuthenticatedUser(s, terminal, userMgr, authedUser, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
+		if admitErr != nil || !admitted {
+			slog.Info("SSH pre-authenticated caller not admitted", "node", nodeID, "user", authedUser.Handle, "error", admitErr)
+			return
+		}
 		authenticatedUser = authedUser
 		bbsSession.Mutex.Lock()
 		bbsSession.User = authenticatedUser
@@ -1321,6 +1332,11 @@ func sessionHandler(s ssh.Session) {
 		slog.Error("reached post-auth loop with nil user", "node", nodeID)
 		return
 	}
+	// The login screens ran under the pre-login idle timeout; from here on,
+	// starting with the invisible-logon and terminal prompts below, the
+	// caller's own applies (SysOps may be exempt), whichever way they got in.
+	menuExecutor.ApplyUserIdleTimeout(s, authenticatedUser)
+
 	// Set default message area if not already set (handles both SSH pre-auth and normal login)
 	defaultsChanged := false
 	if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {

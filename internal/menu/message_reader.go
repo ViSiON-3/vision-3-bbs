@@ -314,8 +314,10 @@ readerLoop:
 			}
 		}
 
-		// Update lastread when first displaying message
-		if lrErr := e.MessageMgr.SetLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
+		// Update lastread when first displaying message. Advance only:
+		// paging back to an older message must not mark newer ones unread
+		// again, or the new-mail and newscan counts report them twice.
+		if lrErr := e.MessageMgr.AdvanceLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
 			slog.Error("failed to update last read", "node", nodeNumber, "error", lrErr)
 		}
 
@@ -709,9 +711,9 @@ readerLoop:
 		}
 	}
 
-	// Update lastread on exit
+	// Update lastread on exit (advance only, as above)
 	if currentMsgNum >= 1 && currentMsgNum <= totalMsgCount {
-		if lrErr := e.MessageMgr.SetLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
+		if lrErr := e.MessageMgr.AdvanceLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
 			slog.Error("failed to update last read on exit", "node", nodeNumber, "error", lrErr)
 		}
 	}
