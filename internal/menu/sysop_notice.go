@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 // sysopNotice is one queued message for a sysop, waiting to be shown at their
@@ -27,11 +29,19 @@ import (
 // it fresh against the clock: how long ago the signup happened is only knowable
 // when the sysop actually reads the notice, which may be days later. See
 // MenuExecutor.renderSysopNotice.
+//
+// A new V3Net area notice carries the network, tag and name of the area, and
+// is shown as an "Add?" question rather than a line of text: answering yes
+// subscribes the BBS to the area. See NoteV3NetNAL.
 type sysopNotice struct {
 	Text      string    `json:"text"`
 	Handle    string    `json:"handle,omitempty"`
 	Node      int       `json:"node,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+
+	V3NetNetwork string `json:"v3net_network,omitempty"`
+	V3NetTag     string `json:"v3net_tag,omitempty"`
+	V3NetName    string `json:"v3net_name,omitempty"`
 }
 
 // sysopNoticesMu guards the on-disk notices file against concurrent node writes.
@@ -129,9 +139,52 @@ func clearSysopNotices(path string, userID int) error {
 	return saveSysopNotices(path, m)
 }
 
+// removeSysopNotices removes the given notices from one user's queue and keeps
+// the rest, including any queued since the caller read the queue.
+func removeSysopNotices(path string, userID int, done []sysopNotice) error {
+	sysopNoticesMu.Lock()
+	defer sysopNoticesMu.Unlock()
+
+	m, err := loadSysopNotices(path)
+	if err != nil {
+		return err
+	}
+	queue, ok := m[userID]
+	if !ok {
+		return nil
+	}
+	var kept []sysopNotice
+	for _, n := range queue {
+		match := false
+		for _, d := range done {
+			if sameSysopNotice(n, d) {
+				match = true
+				break
+			}
+		}
+		if !match {
+			kept = append(kept, n)
+		}
+	}
+	if len(kept) == 0 {
+		delete(m, userID)
+	} else {
+		m[userID] = kept
+	}
+	return saveSysopNotices(path, m)
+}
+
+// sameSysopNotice reports whether two notices are the same queued entry.
+func sameSysopNotice(a, b sysopNotice) bool {
+	return a.Text == b.Text && a.Handle == b.Handle && a.Node == b.Node &&
+		a.CreatedAt.Equal(b.CreatedAt) && a.V3NetNetwork == b.V3NetNetwork &&
+		a.V3NetTag == b.V3NetTag && a.V3NetName == b.V3NetName
+}
+
 // drainSysopNotices returns and removes one user's queued notices in a single
 // step. runSysopNotices deliberately does not use this — it peeks, displays,
-// then clears, so a disconnect mid-display does not drop undelivered notices.
+// then removes only what it delivered, so a disconnect mid-display does not
+// drop undelivered notices.
 func drainSysopNotices(path string, userID int) ([]sysopNotice, error) {
 	notices, err := peekSysopNotices(path, userID)
 	if err != nil || len(notices) == 0 {
@@ -195,9 +248,10 @@ func (e *MenuExecutor) renderSysopNotice(n sysopNotice, now time.Time) string {
 }
 
 // runSysopNotices is the SYSOPNOTICES login-sequence handler: it shows any
-// queued notices for a co-sysop-or-above caller and clears them. It is quiet
-// (prints nothing, no pause) for ordinary users or when the queue is empty, so
-// it can sit in the login sequence without disturbing regular logins.
+// queued notices for a co-sysop-or-above caller, asks about any new V3Net
+// areas, and removes what it delivered from the queue. It is quiet (prints
+// nothing, no pause) for ordinary users or when the queue is empty, so it can
+// sit in the login sequence without disturbing regular logins.
 func runSysopNotices(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -216,9 +270,9 @@ func runSysopNotices(c *cmdCtx, args string) (*user.User, string, error) {
 	// read would race an update (and trip the race detector).
 	path := sysopNoticesPath(e.GetServerConfig().DataDir)
 
-	// Peek, not drain: the queue is cleared only after the notices are actually
-	// written, so a disconnect or write error mid-display leaves them queued for
-	// the next login rather than losing them.
+	// Peek, not drain: a notice leaves the queue only once it has actually
+	// been written or answered, so a disconnect or write error mid-display
+	// leaves the rest queued for the next login rather than losing them.
 	notices, err := peekSysopNotices(path, currentUser.ID)
 	if err != nil {
 		slog.Warn("failed to read sysop notices", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
@@ -228,30 +282,156 @@ func runSysopNotices(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	if werr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode); werr != nil {
-		return currentUser, "", nil // not delivered — leave queued
-	}
-	now := time.Now()
+	var plain, offers []sysopNotice
 	for _, n := range notices {
-		text := e.renderSysopNotice(n, now)
-		if werr := terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(text)), outputMode); werr != nil {
-			slog.Warn("failed to write a sysop notice; leaving the queue for next login",
-				"node", nodeNumber, "handle", currentUser.Handle, "error", werr)
-			return currentUser, "", nil
-		}
-		if werr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode); werr != nil {
-			return currentUser, "", nil // leave queued
+		if n.V3NetTag != "" {
+			offers = append(offers, n)
+		} else {
+			plain = append(plain, n)
 		}
 	}
 
-	// Delivered — safe to clear now.
-	if cerr := clearSysopNotices(path, currentUser.ID); cerr != nil {
-		slog.Warn("failed to clear delivered sysop notices", "node", nodeNumber, "handle", currentUser.Handle, "error", cerr)
+	var done []sysopNotice
+	defer func() {
+		if len(done) == 0 {
+			return
+		}
+		if rerr := removeSysopNotices(path, currentUser.ID, done); rerr != nil {
+			slog.Warn("failed to clear delivered sysop notices", "node", nodeNumber, "handle", currentUser.Handle, "error", rerr)
+		}
+		slog.Info("delivered queued sysop notices at login", "node", nodeNumber, "handle", currentUser.Handle, "count", len(done))
+	}()
+
+	wrote := false
+	if len(plain) > 0 {
+		if werr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode); werr != nil {
+			return currentUser, "", nil // not delivered — leave queued
+		}
+		now := time.Now()
+		for _, n := range plain {
+			text := e.renderSysopNotice(n, now)
+			if werr := terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(text)), outputMode); werr != nil {
+				slog.Warn("failed to write a sysop notice; leaving the rest queued for next login",
+					"node", nodeNumber, "handle", currentUser.Handle, "error", werr)
+				return currentUser, "", nil
+			}
+			if werr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode); werr != nil {
+				return currentUser, "", nil // leave queued
+			}
+			done = append(done, n)
+			wrote = true
+		}
 	}
-	slog.Info("delivered queued sysop notices at login", "node", nodeNumber, "handle", currentUser.Handle, "count", len(notices))
+
+	if len(offers) > 0 {
+		handled, asked, aborted := e.offerV3NetAreas(c, offers, !wrote)
+		done = append(done, handled...)
+		wrote = wrote || asked
+		if aborted {
+			return currentUser, "", nil
+		}
+	}
 
 	// Pause so the notices are not scrolled off by the rest of the login
 	// sequence before the sysop can read them.
-	e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+	if wrote {
+		e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+	}
 	return currentUser, "", nil
+}
+
+// offerV3NetAreas asks, one area at a time, whether to add each offered V3Net
+// area, and subscribes the BBS to the ones the sysop accepts. It returns the
+// notices that are settled and can leave the queue, whether anything was
+// written, and whether the caller disconnected part way. leadIn starts the
+// first question on a fresh line, for when nothing was printed above it.
+//
+// An offer is settled without asking when the BBS already carries the area
+// (another sysop or the area browser got there first) or the hub has since
+// dropped it. It stays queued when V3Net is not running, or when adding the
+// area fails, so it is asked again at the next login.
+func (e *MenuExecutor) offerV3NetAreas(c *cmdCtx, offers []sysopNotice, leadIn bool) (handled []sysopNotice, asked, aborted bool) {
+	terminal := c.terminal
+	outputMode := c.outputMode
+	write := func(text string) {
+		_ = terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(text)), outputMode)
+	}
+
+	if !e.isSysOpOrAbove(c.currentUser) {
+		// Queued while this account was a sysop; adding areas is a sysop's
+		// call, so drop the offers rather than ask.
+		return offers, false, false
+	}
+	svc := e.V3NetStatus
+	if svc == nil {
+		return nil, false, false
+	}
+
+	format := e.Strings().V3NetNewAreaNotice
+	nals := map[string]*protocol.NAL{}
+	var added []string
+	for _, n := range offers {
+		if v3netSubscribedBoards(e.RootConfigPath, n.V3NetNetwork)[n.V3NetTag] {
+			handled = append(handled, n)
+			continue
+		}
+		current, fetched := nals[n.V3NetNetwork]
+		if !fetched {
+			ctx, cancel := context.WithTimeout(context.Background(), v3netManageTimeout)
+			current, _ = svc.FetchNALForNetwork(ctx, n.V3NetNetwork)
+			cancel()
+			nals[n.V3NetNetwork] = current
+		}
+		area := protocol.Area{Tag: n.V3NetTag, Name: n.V3NetName}
+		if current != nil {
+			found := current.FindArea(n.V3NetTag)
+			if found == nil {
+				handled = append(handled, n) // dropped by the hub since
+				continue
+			}
+			area = *found
+		}
+
+		prompt := n.Text
+		if format != "" {
+			prompt = fmt.Sprintf(format, v3netNetworkLabel(n.V3NetNetwork), area.Name)
+		}
+		// The lightbar ends its own line once answered, so only the first
+		// question may need a line break in front of it.
+		if leadIn && !asked {
+			write("\r\n")
+		}
+		yes, err := e.PromptYesNo(c.s, terminal, prompt, outputMode, c.nodeNumber, c.termWidth, c.termHeight, true)
+		if err != nil {
+			return handled, asked, true
+		}
+		asked = true
+		if !yes {
+			handled = append(handled, n)
+			continue
+		}
+		if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, n.V3NetNetwork, svc.HubURLForNetwork(n.V3NetNetwork), area, true); err != nil {
+			slog.Warn("v3net: could not add offered area", "network", n.V3NetNetwork, "tag", area.Tag, "error", err)
+			write(fmt.Sprintf("\r\n|04Could not add %s: %s. You will be asked again next time.|07", area.Tag, err))
+			continue
+		}
+		handled = append(handled, n)
+		added = append(added, area.Tag)
+		slog.Info("v3net: sysop added offered area", "network", n.V3NetNetwork, "tag", area.Tag, "handle", c.currentUser.Handle)
+	}
+
+	if len(added) > 0 {
+		list := strings.Join(added, ", ")
+		switch {
+		case e.V3NetReload == nil:
+			write(fmt.Sprintf("\r\n|10Added %s. Restart to activate.|07\r\n", list))
+		default:
+			if rerr := e.V3NetReload(); rerr != nil {
+				write(fmt.Sprintf("\r\n|10Added %s.|07 |04Live apply failed (%s); restart to activate.|07\r\n", list, rerr))
+			} else {
+				write(fmt.Sprintf("\r\n|10Added %s. Now active.|07\r\n", list))
+			}
+		}
+	}
+	return handled, asked, false
 }

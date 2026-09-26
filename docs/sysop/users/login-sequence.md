@@ -179,13 +179,20 @@ regardless of validation state, see `SYSOPNOTICES` below.
 ### SYSOPNOTICES
 
 Delivers any queued SysOp notices to a co-SysOp-or-above caller at login, then
-clears them. Today the only producer is the new-user notice: when someone signs
-up, `notifySysopNewUser` pages each co-SysOp+ account that is online and queues
-the notice for each one that is not — so an offline co-SysOp is caught up here
-even when another SysOp was online and paged in real time. It is purely
-informational — with `autoValidateNewUsers` on there is nothing to do
-but perhaps view the user; with it off, `NEWUSERVAL` (above) is where the
-validation actually happens.
+clears them. There are two kinds:
+
+- **New users.** When someone signs up, `notifySysopNewUser` pages each
+  co-SysOp+ account that is online and queues the notice for each one that is
+  not — so an offline co-SysOp is caught up here even when another SysOp was
+  online and paged in real time. It is purely informational — with
+  `autoValidateNewUsers` on there is nothing to do but perhaps view the user;
+  with it off, `NEWUSERVAL` (above) is where the validation actually happens.
+- **New V3Net areas.** When a hub adds areas to a V3Net network your BBS is on,
+  each SysOp is asked about each one, for example
+  `New Felonynet area: Music. Add?`. Yes subscribes the BBS and creates the
+  local message area, as **Space** does in the V3Net area browser; No
+  dismisses it. See
+  [New areas on your networks](v3net/message-areas.md#new-areas-on-your-networks).
 
 ```json
 {"command": "SYSOPNOTICES"}

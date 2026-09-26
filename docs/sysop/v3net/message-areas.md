@@ -51,6 +51,39 @@ You can also create areas manually through the config editor:
 Set the area's **Tag** to match the network area tag (e.g. `fn.general`), then
 add a leaf subscription via **V3Net → Subscriptions** with the same board tag.
 
+### New Areas on Your Networks
+
+When a hub adds areas to a network your BBS is already on, each SysOp is asked
+about them at their next login, one question per area:
+
+```
+New Felonynet area: Music. Add?  Yes  No
+```
+
+**Yes** does what pressing **Space** on the area in the area browser does: the
+area is added to your subscriptions in `v3net.json`, its local message base is
+created, and the change is applied without a restart. **No** dismisses the
+question. Either way, each area is asked about once.
+
+- The questions come from the `SYSOPNOTICES` login step, so it must be in your
+  `login.json` (the shipped one runs it first). See
+  [SYSOPNOTICES](users/login-sequence.md#sysopnotices).
+- Only full SysOps (`sysOpLevel` and above) are asked, since adding areas is
+  the same access as the area browser. With several SysOps, whoever answers
+  Yes first adds it, and the others are not asked again.
+- Areas the hub added while your BBS was down are caught when it next
+  connects. The areas a network already had when your BBS first joined it are
+  not offered; browse those in the area browser.
+- A closed area is only offered when your node is on its allow list. An
+  approval-mode area is offered, and Yes sends the access request to its
+  manager.
+- If the hub has removed the area by the time you log in, the question is
+  dropped. If you already added it from the area browser, it is skipped.
+
+The areas seen on each network are kept in `data/v3net_seen_areas.json`. The
+question's wording is the `v3netNewAreaNotice` string (`%s` is the network,
+then the area name).
+
 ### Area Auto-Creation
 
 When a leaf syncs the NAL from the hub, any network areas you are subscribed to that do not yet have a local message area are created automatically. The auto-created areas:

@@ -546,5 +546,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Door: Connecting", Key: "doorRemoteConnecting", Description: "Shown while dialling a remote door server (%s=door name)"},
 		{Label: "Door: Connect Failed", Key: "doorRemoteConnectFailed", Description: "Shown when a remote door server cannot be reached (%s=door name)"},
 		{Label: "Door: Disconnected", Key: "doorRemoteDisconnected", Description: "Shown after a remote door session ends (%s=door name)"},
+		{Label: "V3Net: New Area Notice", Key: "v3netNewAreaNotice", Description: "Login question when a hub adds a V3Net area; Yes subscribes (%s=network, %s=area)"},
 	}
 }

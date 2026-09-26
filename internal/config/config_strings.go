@@ -114,6 +114,7 @@ var StringFallbacks = map[string]string{
 	// belongs to the live page only -- a queued notice states the age instead,
 	// since it is read whenever the sysop next calls.
 	"newUserSysopNotice": "|12New user|07: |15%s|07 signed up |15%s ago|07 from node %d.",
+	"v3netNewAreaNotice": "|15New |14%s|15 area: |11%s|15. Add?",
 
 	// The rest of the batch download group. These are written straight to the
 	// terminal, so shipping them blank printed nothing where a message belongs
