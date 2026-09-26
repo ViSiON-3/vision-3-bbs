@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -203,6 +204,31 @@ func evaluateRPN(rpnQueue []token, u *user.User, s ssh.Session, terminal *term.T
 	return evalStack[0], nil
 }
 
+// acsSysOpLevel and acsCoSysOpLevel are the thresholds behind the SYSOP and
+// COSYSOP keywords. They follow sysOpLevel and coSysOpLevel in config.json
+// (set via SetServerConfig) so ACS strings and handlers agree on who counts
+// as a sysop. A non-positive configured level keeps the stock default.
+var (
+	acsSysOpLevel   atomic.Int32
+	acsCoSysOpLevel atomic.Int32
+)
+
+func init() {
+	setACSSysOpLevels(0, 0)
+}
+
+// setACSSysOpLevels updates the SYSOP and COSYSOP keyword thresholds.
+func setACSSysOpLevels(sysOp, coSysOp int) {
+	if sysOp <= 0 {
+		sysOp = 255
+	}
+	if coSysOp <= 0 {
+		coSysOp = 250
+	}
+	acsSysOpLevel.Store(int32(sysOp))
+	acsCoSysOpLevel.Store(int32(coSysOp))
+}
+
 // CheckUserACS evaluates an ACS string against a user without requiring a
 // session or terminal. Use this for access checks outside of menu execution
 // (e.g., selecting default areas on login).
@@ -274,9 +300,9 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 	upper := strings.ToUpper(condition)
 	switch upper {
 	case "SYSOP":
-		return u.AccessLevel >= 255
+		return u.AccessLevel >= int(acsSysOpLevel.Load())
 	case "COSYSOP":
-		return u.AccessLevel >= 250
+		return u.AccessLevel >= int(acsCoSysOpLevel.Load())
 	}
 
 	code := strings.ToUpper(condition[0:1])

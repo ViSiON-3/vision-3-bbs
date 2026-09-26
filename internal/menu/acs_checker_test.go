@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -599,6 +600,35 @@ func TestEvaluateCondition_CoSysOpKeyword(t *testing.T) {
 	u.AccessLevel = 200
 	if evaluateCondition("COSYSOP", u, nil, nil, time.Now()) {
 		t.Error("expected false for COSYSOP with level 200")
+	}
+}
+
+func TestEvaluateCondition_SysOpKeywordsFollowConfig(t *testing.T) {
+	e := &MenuExecutor{}
+	e.SetServerConfig(config.ServerConfig{SysOpLevel: 200, CoSysOpLevel: 150})
+	t.Cleanup(func() { setACSSysOpLevels(0, 0) })
+
+	u := &user.User{AccessLevel: 200}
+	if !evaluateCondition("SYSOP", u, nil, nil, time.Now()) {
+		t.Error("expected true for SYSOP with level 200 when sysOpLevel is 200")
+	}
+	u.AccessLevel = 150
+	if evaluateCondition("SYSOP", u, nil, nil, time.Now()) {
+		t.Error("expected false for SYSOP with level 150 when sysOpLevel is 200")
+	}
+	if !evaluateCondition("COSYSOP", u, nil, nil, time.Now()) {
+		t.Error("expected true for COSYSOP with level 150 when coSysOpLevel is 150")
+	}
+	u.AccessLevel = 149
+	if evaluateCondition("COSYSOP", u, nil, nil, time.Now()) {
+		t.Error("expected false for COSYSOP with level 149 when coSysOpLevel is 150")
+	}
+
+	// A zero level falls back to the stock default rather than admitting everyone.
+	e.SetServerConfig(config.ServerConfig{})
+	u.AccessLevel = 0
+	if evaluateCondition("SYSOP", u, nil, nil, time.Now()) {
+		t.Error("expected false for SYSOP with level 0 when sysOpLevel is unset")
 	}
 }
 

@@ -217,6 +217,7 @@ func (e *MenuExecutor) Theme() *config.ThemeConfig {
 // SetServerConfig atomically updates the server configuration.
 func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
 	e.serverCfg.Store(&serverCfg)
+	setACSSysOpLevels(serverCfg.SysOpLevel, serverCfg.CoSysOpLevel)
 }
 
 // GetServerConfig atomically retrieves the server configuration.
