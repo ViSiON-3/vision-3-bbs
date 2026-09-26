@@ -1203,17 +1203,28 @@ func sessionHandler(s ssh.Session) {
 	// context when the SSH username matches a known BBS handle and the password
 	// is correct. Unknown usernames are accepted without verification so the BBS
 	// login menu can handle them.
+	//
+	// Skipping the LOGIN prompt must not skip what it enforces, so the caller
+	// goes through the same intro gate and logon-level check first. One who
+	// fails the level check falls through to the normal login flow.
 	if authedUser, ok := s.Context().Value(sshAuthUserKey{}).(*user.User); ok && authedUser != nil {
 		slog.Info("SSH pre-authenticated user detected", "node", nodeID, "user", authedUser.Handle)
-		authenticatedUser = authedUser
-		bbsSession.Mutex.Lock()
-		bbsSession.User = authenticatedUser
-		bbsSession.Mutex.Unlock()
+		admitted, admitErr := menuExecutor.AdmitPreAuthenticatedUser(s, terminal, userMgr, authedUser, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
+		if admitErr != nil {
+			slog.Info("SSH pre-authenticated session ended before admission", "node", nodeID, "user", authedUser.Handle, "error", admitErr)
+			return
+		}
+		if admitted {
+			authenticatedUser = authedUser
+			bbsSession.Mutex.Lock()
+			bbsSession.User = authenticatedUser
+			bbsSession.Mutex.Unlock()
 
-		// Mark user as online
-		userMgr.MarkUserOnline(authenticatedUser.ID)
+			// Mark user as online
+			userMgr.MarkUserOnline(authenticatedUser.ID)
 
-		currentMenuName = "MAIN"
+			currentMenuName = "MAIN"
+		}
 	}
 
 	// Pre-login matrix screen for unauthenticated users (telnet or SSH without account)

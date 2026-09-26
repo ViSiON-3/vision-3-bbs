@@ -23,12 +23,17 @@ import (
 // reconnects.
 const newUserIntroMaxAttempts = 3
 
+// introEditor is the message editor the intro gate runs. It is a variable only
+// so tests can stand in for the full-screen editor, which needs a live terminal.
+var introEditor = editor.RunEditorWithMetadata
+
 // runNewUserIntroGate runs the required-intro gate for a user who still owes the
 // SysOp a message and applies the persistent consequences. It is called both at
 // signup and, on reconnect, from the login flow.
 //
 // Returns (proceed, sent, err):
-//   - proceed=false with io.EOF: the caller disconnected without sending. The
+//   - proceed=false with io.EOF: the caller disconnected, or idled out of the
+//     editor, without sending. The
 //     attempt has been counted and persisted; when it reaches the limit the
 //     account is soft-deleted. The session must end.
 //   - proceed=true, sent=true: a message was sent; IntroPending is cleared.
@@ -108,8 +113,10 @@ func newUserSysopRecipient(um *user.UserMgr, excludeID int) (*user.User, bool) {
 // drop the connection. It returns (sent, err): sent is true once a message is
 // saved, so the caller can tell them they are being logged in.
 //
-// Only a dropped connection (io.EOF) propagates as an error, so the caller's
-// logoff bookkeeping runs. The gate is skipped (returning false) only when it
+// Only a dropped connection propagates as an error (io.EOF), so the caller's
+// logoff bookkeeping runs. An idle timeout in the editor is reported the same
+// way: it used to fall through as an editor failure, which cleared the
+// obligation, so waiting out the timer skipped the message entirely. The gate is skipped (returning false) only when it
 // cannot possibly be satisfied — no distinct SysOp account, no PRIVMAIL area,
 // or a non-EOF editor failure — since trapping a caller in a loop that can
 // never deliver would be worse than letting signup finish.
@@ -177,10 +184,17 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 	for {
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
-		body, saved, err := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, subject,
+		body, saved, err := introEditor("", s, sessionOutput(s), outputMode, subject,
 			sysop.Handle, newUser.Handle, false, "", "", "", "", false, nil, getSessionIH(s), editorCtx)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				return false, io.EOF
+			}
+			if errors.Is(err, editor.ErrIdleTimeout) {
+				// The caller walked away without sending: end the session as a
+				// disconnect, so the attempt counts and the obligation stands.
+				slog.Info("new user idled out of the required sysop message", "node", nodeNumber, "handle", newUser.Handle)
+				e.handleIdleTimeout(terminal, outputMode, nodeNumber, termWidth, termHeight)
 				return false, io.EOF
 			}
 			// A non-EOF editor failure cannot be recovered by retrying; do not
