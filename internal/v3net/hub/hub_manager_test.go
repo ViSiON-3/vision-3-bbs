@@ -146,3 +146,21 @@ func TestApproveProposal_Overrides(t *testing.T) {
 		t.Errorf("manager = %q, want %q", area.ManagerNodeID, otherKS.NodeID())
 	}
 }
+
+// TestCoordinatorTransferRemoved guards against the transfer endpoints
+// coming back: the hub signs the NAL, so handing the coordinator role to
+// another node produced a NAL no leaf would verify (#433).
+func TestCoordinatorTransferRemoved(t *testing.T) {
+	h, hubKS := setupTestHubManual(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	registerAndActivate(t, ts, h, hubKS, "Hub BBS", "hub.example.net")
+	seedTestNALForProposals(t, h, hubKS)
+
+	for _, route := range []string{"transfer", "accept"} {
+		req := signedRequest(t, hubKS, "POST", ts.URL+"/v3net/v1/testnet/coordinator/"+route, `{}`)
+		if got := postStatus(t, req); got != http.StatusNotFound {
+			t.Errorf("POST /coordinator/%s: expected 404, got %d", route, got)
+		}
+	}
+}

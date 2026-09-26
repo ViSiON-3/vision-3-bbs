@@ -120,9 +120,17 @@ When sysops propose new areas, you review them from the Pending Proposals screen
 
 The change is published to all nodes straight away, and the new manager sees the area's access requests from then on.
 
-### Coordinator Transfer
+### Handing Over a Network
 
-Coordinator transfer is not available. The hub signs the NAL with its own key, so today the coordinator is always the hub operator. Handing the role to another node needs a protocol change, tracked in [#433](https://github.com/ViSiON-3/vision-3-bbs/issues/433).
+The hub signs the NAL with its own key, so the coordinator is always the hub operator. There is no separate coordinator transfer. To give a network to a new operator, move the hub:
+
+1. Export the hub's key as a seed phrase or file (see [Key Recovery](recovery.md)).
+2. Copy the hub's data directory to the new server.
+3. On the new server, recover the key from the seed phrase and start the hub.
+
+The node ID stays the same, so the NAL, subscribers and area managers carry over unchanged. Point the hub's hostname at the new server; if the address changes instead, every subscriber has to update the hub URL in their V3Net config.
+
+To share the work of running a network without handing it over, reassign individual areas to other sysops with **Manage area managers**.
 
 ## For Developers
 

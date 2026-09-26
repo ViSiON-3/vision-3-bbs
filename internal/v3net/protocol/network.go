@@ -167,17 +167,6 @@ type SubscribeWithAreasResponse struct {
 	Areas  []AreaSubscriptionStatus `json:"areas,omitempty"`
 }
 
-// CoordTransferRequest is the body of POST /coordinator/transfer.
-type CoordTransferRequest struct {
-	NewNodeID    string `json:"new_node_id"`
-	NewPubKeyB64 string `json:"new_pubkey_b64"`
-}
-
-// CoordAcceptRequest is the body of POST /coordinator/accept.
-type CoordAcceptRequest struct {
-	Token string `json:"token"`
-}
-
 // NodeInfo describes a subscriber node registration on a hub. Served by
 // the hub-operator nodes admin endpoints.
 type NodeInfo struct {

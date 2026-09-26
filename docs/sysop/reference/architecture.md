@@ -77,7 +77,7 @@ The system is designed as a single Go application that listens for incoming SSH 
 10. **V3Net Networking (`internal/v3net/`)**
    * Native inter-BBS message networking using REST+SSE over HTTP (ed25519 signatures provide authentication)
    * **Service** (`service.go`) — top-level orchestrator that wires keystore, dedup, hub, and leaf components; manages area-to-network mapping
-   * **Hub** (`hub/`) — HTTP server with SSE broadcaster, subscriber management, message storage, NAL store, area proposals, access requests, coordinator transfers; SQLite-backed
+   * **Hub** (`hub/`) — HTTP server with SSE broadcaster, subscriber management, message storage, NAL store, area proposals, access requests, area manager reassignment; SQLite-backed
    * **Leaf** (`leaf/`) — client that subscribes to a hub, polls for messages, maintains an SSE connection for real-time events, and sends locally-posted messages
    * **Protocol** (`protocol/`) — wire format types, message signing/verification, event definitions, NAL data structures, area tag validation
    * **Keystore** (`keystore/`) — Ed25519 keypair generation, persistence, signing, and verification
