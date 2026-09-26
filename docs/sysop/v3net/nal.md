@@ -124,9 +124,9 @@ The change is published to all nodes straight away, and the new manager sees the
 
 The hub signs the NAL with its own key, so the coordinator is always the hub operator. There is no separate coordinator transfer. To give a network to a new operator, move the hub:
 
-1. Export the hub's key as a seed phrase or file (see [Key Recovery](recovery.md)).
+1. Write down the hub's 24-word recovery phrase, or export it to a file (see [Key Recovery](recovery.md)).
 2. Copy the hub's data directory to the new server.
-3. On the new server, recover the key from the seed phrase and start the hub.
+3. On the new server, enter those 24 words in the recovery screen (`./config` → V3Net → Node Identity → `[R] Recover`), then start the hub.
 
 The node ID stays the same, so the NAL, subscribers and area managers carry over unchanged. Point the hub's hostname at the new server; if the address changes instead, every subscriber has to update the hub URL in their V3Net config.
 

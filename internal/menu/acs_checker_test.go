@@ -606,7 +606,7 @@ func TestEvaluateCondition_CoSysOpKeyword(t *testing.T) {
 func TestEvaluateCondition_SysOpKeywordsFollowConfig(t *testing.T) {
 	e := &MenuExecutor{}
 	e.SetServerConfig(config.ServerConfig{SysOpLevel: 200, CoSysOpLevel: 150})
-	t.Cleanup(func() { setACSSysOpLevels(0, 0) })
+	t.Cleanup(func() { setACSSysOpLevels(config.DefaultSysOpLevel, config.DefaultCoSysOpLevel) })
 
 	u := &user.User{AccessLevel: 200}
 	if !evaluateCondition("SYSOP", u, nil, nil, time.Now()) {
@@ -624,11 +624,18 @@ func TestEvaluateCondition_SysOpKeywordsFollowConfig(t *testing.T) {
 		t.Error("expected false for COSYSOP with level 149 when coSysOpLevel is 150")
 	}
 
-	// A zero level falls back to the stock default rather than admitting everyone.
+	// A zero level falls back to the stock default rather than admitting
+	// everyone, and the handlers see the same sanitized value as ACS.
 	e.SetServerConfig(config.ServerConfig{})
 	u.AccessLevel = 0
 	if evaluateCondition("SYSOP", u, nil, nil, time.Now()) {
 		t.Error("expected false for SYSOP with level 0 when sysOpLevel is unset")
+	}
+	if e.isSysOpOrAbove(u) || e.isCoSysOpOrAbove(u) {
+		t.Error("expected handler checks to deny level 0 when the levels are unset")
+	}
+	if cfg := e.GetServerConfig(); cfg.SysOpLevel != config.DefaultSysOpLevel || cfg.CoSysOpLevel != config.DefaultCoSysOpLevel {
+		t.Errorf("stored levels = %d/%d, want the defaults", cfg.SysOpLevel, cfg.CoSysOpLevel)
 	}
 }
 

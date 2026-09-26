@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term" // Keep for potential future use (e.g., baud check)
 
 	// Update local imports
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -207,26 +208,21 @@ func evaluateRPN(rpnQueue []token, u *user.User, s ssh.Session, terminal *term.T
 // acsSysOpLevel and acsCoSysOpLevel are the thresholds behind the SYSOP and
 // COSYSOP keywords. They follow sysOpLevel and coSysOpLevel in config.json
 // (set via SetServerConfig) so ACS strings and handlers agree on who counts
-// as a sysop. A non-positive configured level keeps the stock default.
+// as a sysop. Until a config is set they hold the stock defaults.
 var (
-	acsSysOpLevel   atomic.Int32
-	acsCoSysOpLevel atomic.Int32
+	acsSysOpLevel   atomic.Int64
+	acsCoSysOpLevel atomic.Int64
 )
 
 func init() {
-	setACSSysOpLevels(0, 0)
+	setACSSysOpLevels(config.DefaultSysOpLevel, config.DefaultCoSysOpLevel)
 }
 
-// setACSSysOpLevels updates the SYSOP and COSYSOP keyword thresholds.
+// setACSSysOpLevels updates the SYSOP and COSYSOP keyword thresholds. The
+// caller passes sanitized levels (see ServerConfig.SanitizeAccessLevels).
 func setACSSysOpLevels(sysOp, coSysOp int) {
-	if sysOp <= 0 {
-		sysOp = 255
-	}
-	if coSysOp <= 0 {
-		coSysOp = 250
-	}
-	acsSysOpLevel.Store(int32(sysOp))
-	acsCoSysOpLevel.Store(int32(coSysOp))
+	acsSysOpLevel.Store(int64(sysOp))
+	acsCoSysOpLevel.Store(int64(coSysOp))
 }
 
 // CheckUserACS evaluates an ACS string against a user without requiring a

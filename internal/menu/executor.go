@@ -214,8 +214,12 @@ func (e *MenuExecutor) Theme() *config.ThemeConfig {
 	return &config.ThemeConfig{}
 }
 
-// SetServerConfig atomically updates the server configuration.
+// SetServerConfig atomically updates the server configuration. The sysop
+// levels are sanitized here as well as at load, since configs also arrive
+// from the config editor and reloads, and the handlers and ACS keywords
+// must agree on them.
 func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
+	serverCfg.SanitizeAccessLevels()
 	e.serverCfg.Store(&serverCfg)
 	setACSSysOpLevels(serverCfg.SysOpLevel, serverCfg.CoSysOpLevel)
 }

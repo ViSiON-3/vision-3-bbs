@@ -175,8 +175,8 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 	defaultConfig := ServerConfig{
 		BoardName:                    "ViSiON/3 BBS",
 		Timezone:                     "",
-		SysOpLevel:                   255,
-		CoSysOpLevel:                 250,
+		SysOpLevel:                   DefaultSysOpLevel,
+		CoSysOpLevel:                 DefaultCoSysOpLevel,
 		WFCEnabled:                   true,
 		NewUserLevel:                 1,
 		AutoValidateNewUsers:         false,
@@ -248,6 +248,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 	}
 
 	config.SanitizeChallengeGate()
+	config.SanitizeAccessLevels()
 	slog.Info("loaded server configuration", "path", filePath)
 	// New User Voting and auto-validation are mutually exclusive: a candidate
 	// that arrives already validated leaves the vote nothing to decide. The
@@ -264,6 +265,26 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 	}
 
 	return config, nil
+}
+
+// DefaultSysOpLevel and DefaultCoSysOpLevel are the stock sysOpLevel and
+// coSysOpLevel.
+const (
+	DefaultSysOpLevel   = 255
+	DefaultCoSysOpLevel = 250
+)
+
+// SanitizeAccessLevels replaces a non-positive sysOpLevel or coSysOpLevel
+// with its default. Every user has at least level 0, so a zero threshold
+// would make every caller a sysop; this keeps a typo or a blanked field in
+// config.json from opening the sysop commands to everyone.
+func (c *ServerConfig) SanitizeAccessLevels() {
+	if c.SysOpLevel <= 0 {
+		c.SysOpLevel = DefaultSysOpLevel
+	}
+	if c.CoSysOpLevel <= 0 {
+		c.CoSysOpLevel = DefaultCoSysOpLevel
+	}
 }
 
 // SanitizeChallengeGate fills invalid/zero Challenge Gate values with safe
