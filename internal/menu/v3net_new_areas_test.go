@@ -26,23 +26,23 @@ func TestRecordV3NetAreas(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "v3net_seen_areas.json")
 
 	// The first NAL for a network only records: those areas predate us.
-	if fresh, err := recordV3NetAreas(path, "felonynet", nalWith("fel.a", "fel.b")); err != nil || len(fresh) != 0 {
+	if fresh, err := recordV3NetAreas(path, "felonynet", nalWith("fel.a", "fel.b"), nil); err != nil || len(fresh) != 0 {
 		t.Fatalf("first sighting: fresh=%v err=%v, want none", fresh, err)
 	}
-	if fresh, _ := recordV3NetAreas(path, "felonynet", nalWith("fel.a", "fel.b")); len(fresh) != 0 {
+	if fresh, _ := recordV3NetAreas(path, "felonynet", nalWith("fel.a", "fel.b"), nil); len(fresh) != 0 {
 		t.Errorf("unchanged NAL: fresh=%v, want none", fresh)
 	}
 
-	fresh, err := recordV3NetAreas(path, "felonynet", nalWith("fel.a", "fel.b", "fel.c", "fel.d"))
+	fresh, err := recordV3NetAreas(path, "felonynet", nalWith("fel.a", "fel.b", "fel.c", "fel.d"), nil)
 	if err != nil || len(fresh) != 2 || fresh[0].Tag != "fel.c" || fresh[1].Tag != "fel.d" {
 		t.Fatalf("two added: fresh=%v err=%v, want fel.c and fel.d", fresh, err)
 	}
-	if fresh, _ := recordV3NetAreas(path, "felonynet", nalWith("fel.a", "fel.b", "fel.c", "fel.d")); len(fresh) != 0 {
+	if fresh, _ := recordV3NetAreas(path, "felonynet", nalWith("fel.a", "fel.b", "fel.c", "fel.d"), nil); len(fresh) != 0 {
 		t.Errorf("areas already offered came back: %v", fresh)
 	}
 
 	// Another network starts its own seen set.
-	if fresh, _ := recordV3NetAreas(path, "othernet", nalWith("oth.a")); len(fresh) != 0 {
+	if fresh, _ := recordV3NetAreas(path, "othernet", nalWith("oth.a"), nil); len(fresh) != 0 {
 		t.Errorf("first sighting of a second network: fresh=%v, want none", fresh)
 	}
 
@@ -50,7 +50,7 @@ func TestRecordV3NetAreas(t *testing.T) {
 	if err := os.WriteFile(path, []byte("null"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := recordV3NetAreas(path, "felonynet", nalWith("fel.a")); err != nil {
+	if _, err := recordV3NetAreas(path, "felonynet", nalWith("fel.a"), nil); err != nil {
 		t.Errorf("null file: %v", err)
 	}
 }
@@ -117,6 +117,29 @@ func TestNoteV3NetNALSkipsCarriedAreasAndMissingText(t *testing.T) {
 	e.SetStrings(config.StringsConfig{})
 	if n := e.NoteV3NetNAL(um, "felonynet", nalWith("fel.a", "fel.b", "fel.z"), "ME"); n != 0 {
 		t.Errorf("blank string still queued %d notices", n)
+	}
+
+	// fel.z was not offered, so it must not have been marked seen: once the
+	// string has text again, the next NAL offers it.
+	e.SetStrings(config.StringsConfig{V3NetNewAreaNotice: "New %s area: %s. Add?"})
+	if n := e.NoteV3NetNAL(um, "felonynet", nalWith("fel.a", "fel.b", "fel.z"), "ME"); n != 1 {
+		t.Errorf("area not offered after the failed attempt (%d notices), want 1", n)
+	}
+}
+
+// TestNoteV3NetNALRetryDoesNotDuplicate covers a retry after a partial queue:
+// a sysop who already holds an offer for an area is not given a second one.
+func TestNoteV3NetNALRetryDoesNotDuplicate(t *testing.T) {
+	e, um := newAreaFixture(t)
+	e.NoteV3NetNAL(um, "felonynet", nalWith("fel.a"), "ME")
+	queueOffer(t, e, "fel.b", "Area fel.b") // as if an earlier attempt got this far
+
+	if n := e.NoteV3NetNAL(um, "felonynet", nalWith("fel.a", "fel.b"), "ME"); n != 0 {
+		t.Errorf("queued %d notices, want 0 (sysop already has the offer)", n)
+	}
+	got, _ := peekSysopNotices(sysopNoticesPath(e.GetServerConfig().DataDir), 1)
+	if len(got) != 1 {
+		t.Errorf("sysop queue = %+v, want the one existing offer", got)
 	}
 }
 
@@ -237,5 +260,29 @@ func TestRemoveSysopNoticesKeepsNewerEntries(t *testing.T) {
 	}
 	if q, _ := peekSysopNotices(path, 1); len(q) != 1 || q[0].Text != "b" {
 		t.Errorf("queue = %+v, want only b", q)
+	}
+}
+
+// TestSysopNoticesDeclineShowsReminder covers No: the offer is settled for
+// good, and the sysop is told so and how to add the area by hand later.
+func TestSysopNoticesDeclineShowsReminder(t *testing.T) {
+	e, _ := newAreaFixture(t)
+	e.SetStrings(config.StringsConfig{
+		V3NetNewAreaNotice:   "New %s area: %s. Add?",
+		V3NetNewAreaDeclined: "Not asked about %s again. Add it later from Area Subscriptions.",
+	})
+	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", nal: nalWith("fel.a", "fel.music")}
+	queueOffer(t, e, "fel.music", "Music")
+
+	out := runNoticeScreen(t, e, 255, "n\r")
+
+	if !strings.Contains(out, "Not asked about fel.music again. Add it later from Area Subscriptions.") {
+		t.Errorf("decline reminder missing: %q", out)
+	}
+	if q, _ := peekSysopNotices(sysopNoticesPath(e.GetServerConfig().DataDir), 1); len(q) != 0 {
+		t.Errorf("declined offer still queued: %+v", q)
+	}
+	if v3netSubscribedBoards(e.RootConfigPath, "felonynet")["fel.music"] {
+		t.Error("declined area was subscribed")
 	}
 }

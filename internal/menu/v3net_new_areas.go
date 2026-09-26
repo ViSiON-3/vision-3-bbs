@@ -41,7 +41,12 @@ func v3netSeenAreasPath(dataDir string) string {
 // returns the areas that were not in the previous set. The first NAL seen for
 // a network only records its tags: those areas were there before this node
 // was watching, and offering every one of them would bury the sysop.
-func recordV3NetAreas(path, network string, n *protocol.NAL) ([]protocol.Area, error) {
+//
+// When there are new areas and offer is non-nil, offer is called with them
+// before the seen set is written, and an error from it leaves the set
+// unchanged. The areas are then still new at the next NAL and are offered
+// again, rather than being marked seen without anyone having been asked.
+func recordV3NetAreas(path, network string, n *protocol.NAL, offer func([]protocol.Area) error) ([]protocol.Area, error) {
 	v3netSeenMu.Lock()
 	defer v3netSeenMu.Unlock()
 
@@ -78,6 +83,11 @@ func recordV3NetAreas(path, network string, n *protocol.NAL) ([]protocol.Area, e
 	}
 	if known && len(fresh) == 0 && len(tags) == len(prev) {
 		return nil, nil // unchanged; skip the write
+	}
+	if len(fresh) > 0 && offer != nil {
+		if err := offer(fresh); err != nil {
+			return nil, err
+		}
 	}
 
 	seen[network] = tags
@@ -127,65 +137,92 @@ func v3netSubscribedBoards(configPath, network string) map[string]bool {
 // new since the last NAL, unless the BBS already carries it or the area is
 // closed to this node. nodeID is this node's V3Net ID. It returns the number
 // of notices queued.
+//
+// If the notices cannot all be queued, the areas are not recorded as seen, so
+// the next NAL offers them again; a sysop who already has a notice for an area
+// is not given a second one.
 func (e *MenuExecutor) NoteV3NetNAL(userManager *user.UserMgr, network string, n *protocol.NAL, nodeID string) int {
 	if n == nil {
 		return 0
 	}
 	dataDir := e.GetServerConfig().DataDir
-	fresh, err := recordV3NetAreas(v3netSeenAreasPath(dataDir), network, n)
-	if err != nil {
-		slog.Warn("v3net: could not record seen areas", "network", network, "error", err)
-		return 0
-	}
-	if len(fresh) == 0 {
-		return 0
-	}
-
-	// LoadStrings fills a blank v3netNewAreaNotice from StringFallbacks, so
-	// this is only empty for an executor built without loaded strings.
-	format := e.Strings().V3NetNewAreaNotice
-	if format == "" {
-		slog.Warn("v3net: new areas found but v3netNewAreaNotice has no text; not offered", "network", network, "count", len(fresh))
-		return 0
-	}
-
-	subscribed := v3netSubscribedBoards(e.RootConfigPath, network)
-	var offers []protocol.Area
-	for _, a := range fresh {
-		if subscribed[a.Tag] {
-			continue
-		}
-		if a.Access.Mode == protocol.AccessModeClosed && !nal.NodeAllowed(&a, nodeID) {
-			continue // this node could not join it anyway
-		}
-		offers = append(offers, a)
-	}
-	if len(offers) == 0 || userManager == nil {
-		return 0
-	}
-
-	path := sysopNoticesPath(dataDir)
-	label := v3netNetworkLabel(network)
 	queued := 0
-	for _, u := range userManager.GetAllUsers() {
-		if u == nil || u.DeletedUser || !e.isSysOpOrAbove(u) {
-			continue
-		}
-		for _, a := range offers {
-			notice := sysopNotice{
-				Text:         fmt.Sprintf(format, label, a.Name),
-				V3NetNetwork: network,
-				V3NetTag:     a.Tag,
-				V3NetName:    a.Name,
-				CreatedAt:    time.Now(),
-			}
-			if err := enqueueSysopNotice(path, u.ID, notice); err != nil {
-				slog.Warn("v3net: could not queue a new-area notice", "network", network, "tag", a.Tag, "recipient", u.Handle, "error", err)
+	offer := func(fresh []protocol.Area) error {
+		subscribed := v3netSubscribedBoards(e.RootConfigPath, network)
+		var offers []protocol.Area
+		for _, a := range fresh {
+			if subscribed[a.Tag] {
 				continue
 			}
-			queued++
+			if a.Access.Mode == protocol.AccessModeClosed && !nal.NodeAllowed(&a, nodeID) {
+				continue // this node could not join it anyway
+			}
+			offers = append(offers, a)
+		}
+		if len(offers) == 0 {
+			return nil
+		}
+
+		// LoadStrings fills a blank v3netNewAreaNotice from StringFallbacks,
+		// so this is only empty for an executor built without loaded strings.
+		format := e.Strings().V3NetNewAreaNotice
+		if format == "" {
+			return fmt.Errorf("v3netNewAreaNotice has no text")
+		}
+		if userManager == nil {
+			return fmt.Errorf("no user manager")
+		}
+
+		path := sysopNoticesPath(dataDir)
+		label := v3netNetworkLabel(network)
+		var failed error
+		for _, u := range userManager.GetAllUsers() {
+			if u == nil || u.DeletedUser || !e.isSysOpOrAbove(u) {
+				continue
+			}
+			pending, err := peekSysopNotices(path, u.ID)
+			if err != nil {
+				failed = err
+				continue
+			}
+			for _, a := range offers {
+				if hasV3NetOffer(pending, network, a.Tag) {
+					continue // queued by an earlier attempt
+				}
+				notice := sysopNotice{
+					Text:         fmt.Sprintf(format, label, a.Name),
+					V3NetNetwork: network,
+					V3NetTag:     a.Tag,
+					V3NetName:    a.Name,
+					CreatedAt:    time.Now(),
+				}
+				if err := enqueueSysopNotice(path, u.ID, notice); err != nil {
+					slog.Warn("v3net: could not queue a new-area notice", "network", network, "tag", a.Tag, "recipient", u.Handle, "error", err)
+					failed = err
+					continue
+				}
+				queued++
+			}
+		}
+		if failed != nil {
+			return fmt.Errorf("queue notices: %w", failed)
+		}
+		slog.Info("v3net: new areas offered to sysops", "network", network, "areas", len(offers), "notices", queued)
+		return nil
+	}
+
+	if _, err := recordV3NetAreas(v3netSeenAreasPath(dataDir), network, n, offer); err != nil {
+		slog.Warn("v3net: new areas not offered; will retry at the next NAL", "network", network, "error", err)
+	}
+	return queued
+}
+
+// hasV3NetOffer reports whether queue already holds an offer for tag on network.
+func hasV3NetOffer(queue []sysopNotice, network, tag string) bool {
+	for _, n := range queue {
+		if n.V3NetNetwork == network && n.V3NetTag == tag {
+			return true
 		}
 	}
-	slog.Info("v3net: new areas offered to sysops", "network", network, "areas", len(offers), "notices", queued)
-	return queued
+	return false
 }
