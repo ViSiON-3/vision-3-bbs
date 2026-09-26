@@ -255,6 +255,7 @@
   "newUserSysopPage": "|12New user|07: |15%s|07 just signed up from node %d.",
   "newUserSysopNotice": "|12New user|07: |15%s|07 signed up |15%s ago|07 from node %d.",
   "v3netNewAreaNotice": "|15New |14%s|15 area: |11%s|15. Add?",
+  "v3netNewAreaDeclined": "|07You won't be asked about |15%s|07 again. To add it later: |15V3Net|07 menu > |15Area Subscriptions|07, highlight it and press |15Space|07.",
   "newUserTooManyAttempts": "\r\n|05Too many invalid attempts.|07\r\n",
   "newUsersClosedStr": "\r\n|12This BBS is not accepting new users at this time.|07\r\n",
   "newUsersWaiting": "|08Y|07o|15u |08h|07a|15ve |04NOT |08v|07o|15ted |08o|07n |13|NE |08N|07e|15w |08U|07s|15ers.",

@@ -408,6 +408,10 @@ func (e *MenuExecutor) offerV3NetAreas(c *cmdCtx, offers []sysopNotice, leadIn b
 		asked = true
 		if !yes {
 			handled = append(handled, n)
+			// No is final, so say so and point at the manual route.
+			if declined := e.Strings().V3NetNewAreaDeclined; declined != "" {
+				write(fmt.Sprintf(declined, area.Tag) + "\r\n")
+			}
 			continue
 		}
 		if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, n.V3NetNetwork, svc.HubURLForNetwork(n.V3NetNetwork), area, true); err != nil {

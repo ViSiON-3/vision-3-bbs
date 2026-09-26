@@ -63,7 +63,9 @@ New Felonynet area: Music. Add?  Yes  No
 **Yes** does what pressing **Space** on the area in the area browser does: the
 area is added to your subscriptions in `v3net.json`, its local message base is
 created, and the change is applied without a restart. **No** dismisses the
-question. Either way, each area is asked about once.
+question for good and reminds you how to add the area later: open the V3Net
+menu, then **Area Subscriptions**, highlight the area, and press **Space**.
+Either way, each area is asked about once.
 
 - The questions come from the `SYSOPNOTICES` login step, so it must be in your
   `login.json` (the shipped one runs it first). See
@@ -71,8 +73,8 @@ question. Either way, each area is asked about once.
 - Only full SysOps (`sysOpLevel` and above) are asked, since adding areas is
   the same access as the area browser. With several SysOps, whoever answers
   Yes first adds it, and the others are not asked again.
-- Areas the hub added while your BBS was down are caught when it next
-  connects. The areas a network already had when your BBS first joined it are
+- Areas the hub added while your BBS was down, or while its connection to the
+  hub was down, are caught when it reconnects. The areas a network already had when your BBS first joined it are
   not offered; browse those in the area browser.
 - A closed area is only offered when your node is on its allow list. An
   approval-mode area is offered, and Yes sends the access request to its
@@ -82,7 +84,8 @@ question. Either way, each area is asked about once.
 
 The areas seen on each network are kept in `data/v3net_seen_areas.json`. The
 question's wording is the `v3netNewAreaNotice` string (`%s` is the network,
-then the area name).
+then the area name), and the reminder after **No** is `v3netNewAreaDeclined`
+(`%s` is the area tag).
 
 ### Area Auto-Creation
 

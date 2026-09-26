@@ -191,7 +191,8 @@ clears them. There are two kinds:
   each SysOp is asked about each one, for example
   `New Felonynet area: Music. Add?`. Yes subscribes the BBS and creates the
   local message area, as **Space** does in the V3Net area browser; No
-  dismisses it. See
+  dismisses it for good and says how to add the area later from the area
+  browser. See
   [New areas on your networks](v3net/message-areas.md#new-areas-on-your-networks).
 
 ```json
