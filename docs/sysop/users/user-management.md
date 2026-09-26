@@ -95,7 +95,7 @@ Users are stored as a JSON array. Each user account contains:
 - `createdAt` - Account creation timestamp
 - `updatedAt` - Last modification timestamp (used for optimistic locking)
 - `group_location` - Group/Location affiliation
-- `privateNote` - SysOp-only note about user
+- `privateNote` - User note. Asked for at signup, editable by the caller from `K`, and shown in user lists and last callers. The `Z` ACS term matches against it.
 
 #### Terminal Preferences
 
@@ -108,13 +108,33 @@ After authentication, the system applies these preferences: if a user's stored s
 
 #### User Configuration Preferences
 
-- `hotKeys` - Hot keys enabled (single-keypress menu selection)
-- `morePrompts` - More prompts enabled (pause on long output)
-- `customPrompt` - Custom command prompt string
-- `outputMode` - Output mode preference
+- `hotKeys` - Hot keys: menu commands run on a single keypress. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter. A menu's `FORCEHOTKEY` turns this on for everyone on that menu.
+- `morePrompts` - Stored but not yet used; nothing pauses long output on it ([#424](https://github.com/ViSiON-3/vision-3-bbs/issues/424)).
+- `customPrompt` - Stored but not yet shown; menus always use their own prompt ([#425](https://github.com/ViSiON-3/vision-3-bbs/issues/425)).
+- `outputMode` - Legacy field, not read by the board. The encoding that login applies is `preferredEncoding`.
 - `fileListingMode` - File listing style: `"lightbar"` or `"classic"` (empty = server default)
+- `file_list_columns` - Which columns the file lister shows. All `false` means every column is shown.
 - `autoSignature` - Auto-signature appended to messages (max 5 lines)
-- `colors` - Array of 7 color values: [prompt, input, text, stat, text2, stat2, bar]
+- `colors` - Array of 7 color values: [prompt, input, text, stat, text2, stat2, bar]. Stored but not yet applied ([#426](https://github.com/ViSiON-3/vision-3-bbs/issues/426)).
+
+#### What callers can change themselves
+
+The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). From it a caller can change:
+
+| Setting | Field |
+| --- | --- |
+| Screen Width, Screen Height | `screenWidth`, `screenHeight` (applies straight away) |
+| Encoding | `preferredEncoding` (applies from the next login) |
+| Hot Keys | `hotKeys` |
+| Header Style | `msgHdr` |
+| Auto-Signature | `autoSignature` |
+| Real Name | `realName` (same rules as signup) |
+| Location | `group_location` |
+| User Note | `privateNote` |
+| Password | `passwordHash` (current password required) |
+| Listing Mode, File Columns | `fileListingMode`, `file_list_columns` |
+
+Each change is saved as soon as the caller confirms it. The screen's header is `USERCFG.ANS` in the menu set; keep it to 5 rows or fewer and 79 columns wide. See [User settings](../reference/menu-commands.md#user-settings) for `USERCONFIG` and the single-setting `CFG_*` commands custom menus can use instead.
 
 #### Soft Delete
 

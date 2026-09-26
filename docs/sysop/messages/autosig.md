@@ -25,9 +25,11 @@ The signature is **not** appended to anonymous messages.
 
 ---
 
-## User Interface (`RUN:CFG_AUTOSIG`)
+## User Interface
 
-Users manage their auto-signature through a simple menu:
+Callers usually manage their signature from the User Konfig editor (`K` on the main menu, `RUN:USERCONFIG`), item **F**. With no signature it opens the editor straight away; with one, it offers **Edit** or **Delete**.
+
+`RUN:CFG_AUTOSIG` is the standalone version for other menus:
 
 ```text
 Auto-Signature
@@ -56,7 +58,7 @@ If the user saves an empty editor session, the signature is cleared.
 
 ## Menu Configuration
 
-The auto-signature editor is available from two default locations:
+The auto-signature editor is available from these default locations:
 
 ### Message Menu (`S` key)
 
@@ -70,16 +72,9 @@ The auto-signature editor is available from two default locations:
 }
 ```
 
-### User Settings Menu (`R` key)
+### User Konfig editor (`K` key)
 
-```json
-{
-    "KEYS": "R",
-    "CMD": "RUN:CFG_AUTOSIG",
-    "ACS": "",
-    "HIDDEN": false
-}
-```
+Item **F** in `RUN:USERCONFIG`, which the main menu binds to `K`.
 
 You can add `RUN:CFG_AUTOSIG` to any menu CFG file to make it accessible from other locations.
 
