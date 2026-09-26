@@ -291,7 +291,7 @@ Menu configuration files are JSON files that define menu behavior and prompts.
 - `FORCEHELPLEVEL` - Force help display for users at or below this level *(currently unused — reserved from Pascal `MenuRec.ForceHelpLevel`)*
 - `MES_CONF` - Auto-switch user's active message conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.Mes_Conf`)*
 - `FILE_CONF` - Auto-switch user's active file conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.File_Conf`)*
-- `FORCEHOTKEY` - Force single-keypress (hotkey) input mode regardless of user preference *(currently unused — reserved from Pascal `MenuRec.Force_HotKey`)*
+- `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter.
 
 ## Command Definition Files (.CFG)
 
@@ -328,12 +328,29 @@ Command files are JSON arrays that define what happens when users press keys.
 - `CMD` - Action to execute
 - `ACS` - Access control string
 - `HIDDEN` - Whether command is hidden from display
+- `NODE_ACTIVITY` - Optional text shown in Who's Online while the command runs; it reverts to the menu's default when the command finishes. On a `//` or `~~` entry it sets that default for the whole menu (otherwise the default is the menu name).
+
+### Example: a Main Menu entry
+
+The stock `MAIN.CFG` binds `K` to the User Konfig editor. `RUN:` commands return to the same menu when they finish, so no `GOTO:` back is needed:
+
+```json
+{
+    "KEYS": "K",
+    "CMD": "RUN:USERCONFIG",
+    "ACS": "*",
+    "HIDDEN": false,
+    "NODE_ACTIVITY": "User Settings"
+}
+```
+
+For a full worked example of a submenu (the `MAIN.CFG` entry, the submenu's `.MNU`, and its `.CFG`), see [BBS List](menus/bbs-list.md#menu-configuration).
 
 ### Special Keys
 
 - `//` - Auto-run once per session
 - `~~` - Auto-run every time menu loads
-- Numbers (`1`, `2`, etc.) - Can be used to select visible commands by index
+- Numbers (`1`, `2`, `10`, etc.) - Only match when listed in `KEYS` like any other key; there is no selection by position. Use `##` to accept any number
 - `^M` - Matches Enter pressed on an empty prompt (the menu's default command)
 - `##` - Matches any all-numeric input, passing the number to the command as args
 
@@ -345,8 +362,7 @@ Two keys work on every standard command menu without appearing in any `.CFG`:
 - `G` - Log off with confirmation and `GOODBYE.ANS`
 
 `G` is a fallback, checked only after every command in the menu has failed to
-match, so a menu that binds `G` to something of its own keeps it — `USERCFG`
-uses it for the custom prompt editor.
+match, so a menu that binds `G` to something of its own keeps it.
 
 Both are matched by the standard menu input loop. The pre-login matrix
 (`PDMATRIX`) reads keys itself and recognises only its own hotkeys, so neither

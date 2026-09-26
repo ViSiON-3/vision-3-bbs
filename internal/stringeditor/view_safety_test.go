@@ -59,7 +59,7 @@ func TestNoOpEditPreservesMultilineValue(t *testing.T) {
 		"pageOnlineNodesHeader", // leading and trailing CRLF
 		"pageNodeListEntry",     // trailing CRLF plus format verbs
 		"newUserAccountCreated", // several embedded CRLFs
-		"cfgColorSelectPrompt",  // consecutive CRLFs
+		"fileViewingHeader",     // consecutive CRLFs
 		"scanInvalidDate",       // long value with CRLFs
 	} {
 		t.Run(key, func(t *testing.T) {

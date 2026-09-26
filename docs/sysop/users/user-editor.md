@@ -42,6 +42,8 @@ Press Enter on any user to open the field editor. Displays 29 fields across two 
 
 **Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User (read-only), Deleted At (read-only), Auto Purge (read-only), InfoForms (read-only), Created At, Updated At, Last Login, Last Bulletin
 
+Custom Prompt, More Prompts and Output Mode are stored but not currently used by the board; see [User Management](users/user-management.md#user-configuration-preferences). Encoding is the field login applies.
+
 The Password field opens a dialog — new password is bcrypt-hashed before saving.
 
 **Read-only fields:** Deleted User, Deleted At, and Auto Purge reflect the user's current deletion state and purge eligibility. InfoForms shows which infoform responses exist on disk (e.g., `1[x] 2[ ] 3[ ]`).

@@ -13,43 +13,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-func runCfgRealName(c *cmdCtx, args string) (*user.User, string, error) {
-	e := c.e
-	s := c.s
-	terminal := c.terminal
-	userManager := c.userManager
-	currentUser := c.currentUser
-	nodeNumber := c.nodeNumber
-	outputMode := c.outputMode
-
-	// Validated like every other writer of the field (signup, the sysop
-	// editors, the scripting API): a real name that fails the rule here would
-	// otherwise be saved unchecked, and a blank or handle-like one silently
-	// turns off real_name_only for this user in every area that sets it.
-	return runCfgValidatedStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
-		"Real Name", 40,
-		func(u *user.User) string { return u.RealName },
-		func(u *user.User, v string) { u.RealName = v },
-		user.ValidateRealName,
-	)
-}
-
-func runCfgNote(c *cmdCtx, args string) (*user.User, string, error) {
-	e := c.e
-	s := c.s
-	terminal := c.terminal
-	userManager := c.userManager
-	currentUser := c.currentUser
-	nodeNumber := c.nodeNumber
-	outputMode := c.outputMode
-
-	return runCfgStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
-		"User Note", 35,
-		func(u *user.User) string { return u.PrivateNote },
-		func(u *user.User, v string) { u.PrivateNote = v },
-	)
-}
-
+// runCfgPassword is CFG_PASSWORD, the standalone password change the stock
+// main menu binds. USERCONFIG has its own, in-form version.
 func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -116,27 +81,4 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	time.Sleep(1 * time.Second)
 	return currentUser, "", nil
-}
-
-func runCfgCustomPrompt(c *cmdCtx, args string) (*user.User, string, error) {
-	e := c.e
-	s := c.s
-	terminal := c.terminal
-	userManager := c.userManager
-	currentUser := c.currentUser
-	nodeNumber := c.nodeNumber
-	outputMode := c.outputMode
-
-	if currentUser == nil {
-		return nil, "", nil
-	}
-
-	help := e.Strings().CfgCustomPromptHelp
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(help)), outputMode)
-
-	return runCfgStringInput(e, s, terminal, userManager, currentUser, nodeNumber, outputMode,
-		"Custom Prompt", 80,
-		func(u *user.User) string { return u.CustomPrompt },
-		func(u *user.User, v string) { u.CustomPrompt = v },
-	)
 }
