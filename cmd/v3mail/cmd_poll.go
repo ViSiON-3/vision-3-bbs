@@ -56,10 +56,7 @@ func cmdPoll(args []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	failed := false
-	if doFTN && pollFTN(ctx, *configDir, *dataDir, ftnKey, *timeout, *verbose) {
-		failed = true
-	}
+	failed := doFTN && pollFTN(ctx, *configDir, *dataDir, ftnKey, *timeout, *verbose)
 	if doQWK && !hasEnabledQWK(*configDir, qwkKey) {
 		fmt.Println("QWK: no enabled networks")
 		doQWK = false
@@ -242,7 +239,7 @@ func callHub(ctx context.Context, binkd, conf, root string, t ftnPollTarget, tim
 	err := cmd.Run()
 
 	if verbose {
-		os.Stdout.Write(out.Bytes())
+		_, _ = os.Stdout.Write(out.Bytes())
 	}
 	sent, rcvd := countTransfers(out.String())
 	switch {
