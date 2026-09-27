@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -159,5 +160,63 @@ func TestFreeNetworkOutboundPath(t *testing.T) {
 	inUse := []string{"data/ftn/out_foo_bar", filepath.FromSlash("data/ftn/out_foo_bar_2")}
 	if p := FreeNetworkOutboundPath("data/ftn/out", "foo.bar", inUse); filepath.ToSlash(p) != "data/ftn/out_foo_bar_3" {
 		t.Errorf("path beside two taken = %q, want data/ftn/out_foo_bar_3", p)
+	}
+}
+
+// The split is written to ftn.json, so the next start (and a network added
+// by hand afterwards) sees it rather than working it out again.
+func TestSaveOutboundSplit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ftn.json")
+	body := `{"binkd_outbound_path":"data/ftn/out","networks":{` +
+		`"fsxnet":{"internal_tosser_enabled":true,"own_address":"21:1/1"},` +
+		`"zeronet":{"internal_tosser_enabled":true,"own_address":"99:1/1"}}}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	moved, err := SaveOutboundSplit(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(moved) != 1 || moved[0].Network != "zeronet" || moved[0].KeptBy != "fsxnet" {
+		t.Fatalf("moved %+v, want zeronet moved and fsxnet kept", moved)
+	}
+	c, err := LoadFTNConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := filepath.ToSlash(c.Networks["fsxnet"].BinkdOutboundPath); p != "data/ftn/out" {
+		t.Errorf("fsxnet saved outbound = %q, want the global one pinned", p)
+	}
+	if p := filepath.ToSlash(c.Networks["zeronet"].BinkdOutboundPath); p != "data/ftn/out_zeronet" {
+		t.Errorf("zeronet saved outbound = %q", p)
+	}
+	saved, _ := os.ReadFile(path)
+	if strings.Contains(string(saved), "bin/binkd") {
+		t.Errorf("load-time binkd defaults were written into ftn.json:\n%s", saved)
+	}
+
+	// Saved once, there is nothing left to split.
+	if again, err := SaveOutboundSplit(dir); err != nil || again != nil {
+		t.Errorf("second save moved %+v (err %v), want nothing", again, err)
+	}
+}
+
+func TestSaveOutboundSplitLeavesUnsharedConfigAlone(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ftn.json")
+	body := `{"networks":{"fsxnet":{}}}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if moved, err := SaveOutboundSplit(dir); err != nil || moved != nil {
+		t.Fatalf("moved %+v (err %v), want nothing", moved, err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != body {
+		t.Errorf("ftn.json was rewritten: %s", got)
+	}
+	if moved, err := SaveOutboundSplit(t.TempDir()); err != nil || moved != nil {
+		t.Errorf("missing ftn.json: moved %+v, err %v", moved, err)
 	}
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -417,6 +418,43 @@ func (c *FTNConfig) AssignSharedOutbounds() []OutboundAssignment {
 		})
 	}
 	return assigned
+}
+
+// SaveOutboundSplit applies AssignSharedOutbounds to ftn.json on disk and
+// writes the result back, so the split made at load survives: without it the
+// split lives only in memory, and a network added to ftn.json by hand before
+// the next config-editor save could change which network keeps the global
+// outbound. It returns the networks it moved; nothing is written when there
+// were none.
+//
+// The file is re-read rather than taken from a loaded FTNConfig, so load-time
+// defaults are not written into it, and it is written the way the config
+// editor writes it.
+func SaveOutboundSplit(configDir string) ([]OutboundAssignment, error) {
+	path := filepath.Join(configDir, "ftn.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var cfg FTNConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	assigned := cfg.AssignSharedOutbounds()
+	if len(assigned) == 0 {
+		return nil, nil
+	}
+	out, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := atomicfile.WriteFile(path, out, 0o644); err != nil {
+		return nil, err
+	}
+	return assigned, nil
 }
 
 // outboundsExcept returns the outbound paths set on every network but skip.

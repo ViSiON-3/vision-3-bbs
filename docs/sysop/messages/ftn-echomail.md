@@ -780,14 +780,15 @@ To add another FTN network (e.g., AgoraNet alongside fsxNet):
    two networks sharing one directory can hand mail to the wrong hub when two
    hubs share a net/node pair. Networks added from **Echomail Networks** get
    one too. Older configs where several networks share the global outbound
-   are split the same way at startup, with a warning in the log naming each
-   network moved. One network keeps the global directory, so mail already
-   queued there still goes out. The one kept is a network whose **Binkd
-   Outbound** already names the global directory, or else a network that is
-   enabled and has an address, or else the first by name. Save ftn.json from
-   the config editor after the split so the choice sticks: a network added
-   by hand later without a path then cannot take the global directory over.
-   If you run binkd yourself, update its `domain` lines to match.
+   are split the same way when the BBS starts: the new paths are saved to
+   `ftn.json`, the `domain` lines in `data/ftn/binkd.conf` are repointed, and
+   the log names each network moved. One network keeps the global directory,
+   so mail already queued there still goes out. The one kept is a network
+   whose **Binkd Outbound** already names the global directory, or else a
+   network that is enabled and has an address, or else the first by name. Its
+   path is saved too, so a network added by hand later cannot take the global
+   directory over. If you run binkd yourself with a config other than
+   `data/ftn/binkd.conf`, update its `domain` lines to match and restart it.
 4. Under **Echomail Links**, make sure the new hub link has a **Hostname**.
    Without one binkd has nothing to dial, the network only ever receives mail
    when the hub calls in, and no poll event is created.

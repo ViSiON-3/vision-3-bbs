@@ -29,6 +29,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/mailer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
@@ -1801,6 +1802,25 @@ func main() {
 	loadedDoors, err := config.LoadDoors(filepath.Join(rootConfigPath, "doors.json")) // Expects full path
 	if err != nil {
 		logging.Fatal("failed to load door configuration", "error", err)
+	}
+
+	// Networks sharing one BSO outbound are split at load. Write the split to
+	// ftn.json, and repoint binkd.conf's domain lines, so it holds from now
+	// on rather than being worked out again at every start.
+	if moved, err := config.SaveOutboundSplit(rootConfigPath); err != nil {
+		slog.Error("could not save the per-network binkd outbounds to ftn.json", "error", err)
+	} else if len(moved) > 0 {
+		for _, a := range moved {
+			slog.Warn("gave an FTN network its own binkd outbound and saved it to ftn.json",
+				"network", a.Network, "outbound", a.Path, "shared_outbound", a.SharedPath, "kept_by", a.KeptBy)
+		}
+		if saved, err := config.LoadFTNConfig(rootConfigPath); err == nil {
+			confPath := filepath.Join(basePath, "data", "ftn", "binkd.conf")
+			if err := ftn.SyncBinkdSettings(confPath, 0, 0, ftn.BinkdOutboundFor(basePath, saved)); err != nil {
+				slog.Error("could not repoint binkd.conf domains at the new outbounds", "path", confPath, "error", err)
+			}
+		}
+		slog.Warn("if you run binkd outside the BBS with its own config, point each moved network's domain line at its new outbound and restart binkd")
 	}
 
 	// Load FTN configuration early so message manager can use per-network origins.
