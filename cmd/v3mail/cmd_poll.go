@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 )
 
 // cmdPoll implements 'v3mail poll': fetch and send mail for every network in
@@ -55,6 +56,14 @@ func cmdPoll(args []string) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// One poll at a time, so two sysops pressing Poll Mail together (or a
+	// hand-run poll beside a menu one) do not scan, pack or toss at once.
+	lock, err := filelock.Acquire(filepath.Join(*dataDir, "v3mail_poll"), 0)
+	if err != nil {
+		fatalf("poll: another poll is already running")
+	}
+	defer lock.Release()
 
 	failed := doFTN && pollFTN(ctx, *configDir, *dataDir, ftnKey, *timeout, *verbose)
 	if doQWK && !hasEnabledQWK(*configDir, qwkKey) {
@@ -134,10 +143,9 @@ type ftnPollTarget struct {
 	Address string // hub address, without the @domain
 }
 
-// ftnPollPlan lists the hubs to call for every enabled network, or only the
-// network keyed only. Links without a hostname cannot be called — the hub has
-// to call in — so they are returned separately for the sysop to see.
-func ftnPollPlan(cfg config.FTNConfig, only string) (targets, uncallable []ftnPollTarget) {
+// ftnPollNetworks returns the enabled FTN networks to poll, sorted: every
+// one, or only the network keyed only.
+func ftnPollNetworks(cfg config.FTNConfig, only string) []string {
 	names := make([]string, 0, len(cfg.Networks))
 	for name, nc := range cfg.Networks {
 		if !nc.InternalTosserEnabled {
@@ -149,7 +157,14 @@ func ftnPollPlan(cfg config.FTNConfig, only string) (targets, uncallable []ftnPo
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	for _, name := range names {
+	return names
+}
+
+// ftnPollPlan lists the hubs to call for every enabled network, or only the
+// network keyed only. Links without a hostname cannot be called — the hub has
+// to call in — so they are returned separately for the sysop to see.
+func ftnPollPlan(cfg config.FTNConfig, only string) (targets, uncallable []ftnPollTarget) {
+	for _, name := range ftnPollNetworks(cfg, only) {
 		for _, lnk := range cfg.Networks[name].Links {
 			t := ftnPollTarget{Network: name, Address: lnk.Address}
 			if lnk.HostPort() == "" {
@@ -167,11 +182,11 @@ func ftnPollPlan(cfg config.FTNConfig, only string) (targets, uncallable []ftnPo
 func pollFTN(ctx context.Context, configDir, dataDir, only string, timeout time.Duration, verbose bool) bool {
 	// Checked before loadFTNDeps, which creates the FTN dupe database, so a
 	// QWK-only board is left untouched.
-	if raw, err := config.LoadFTNConfig(configDir); err == nil {
-		if t, u := ftnPollPlan(raw, only); len(t) == 0 && len(u) == 0 {
-			fmt.Println("FTN: no enabled networks")
-			return false
-		}
+	// A network with no links still tosses: bundles can be waiting in the
+	// inbound from an earlier call.
+	if raw, err := config.LoadFTNConfig(configDir); err == nil && len(ftnPollNetworks(raw, only)) == 0 {
+		fmt.Println("FTN: no enabled networks")
+		return false
 	}
 	ftnCfg, msgMgr, dupeDB, err := loadFTNDeps(configDir, dataDir)
 	if err != nil {
@@ -200,15 +215,18 @@ func pollFTN(ctx context.Context, configDir, dataDir, only string, timeout time.
 		}
 		conf := filepath.Join(root, "data", "ftn", "binkd.conf")
 		if _, err := os.Stat(conf); err != nil {
+			// No calls, but still toss below whatever an earlier call left.
 			fmt.Fprintf(os.Stderr, "FTN: %s not found — start the BBS once or run the FTN Setup Wizard to create it\n", conf)
-			return true
-		}
-		for _, t := range targets {
-			if ctx.Err() != nil {
-				return true
-			}
-			if !callHub(ctx, binkd, conf, root, t, timeout, verbose) {
-				failed = true
+			failed = true
+		} else {
+			for _, t := range targets {
+				if ctx.Err() != nil {
+					failed = true
+					break // asked to stop: skip the other hubs, toss what came in
+				}
+				if !callHub(ctx, binkd, conf, root, t, timeout, verbose) {
+					failed = true
+				}
 			}
 		}
 	}
@@ -236,7 +254,14 @@ func callHub(ctx context.Context, binkd, conf, root string, t ftnPollTarget, tim
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
+	// binkd's exec hooks (the shipped binkd.conf runs v3mail toss) can keep
+	// the output pipes open after binkd itself exits or is killed; without a
+	// bound, Run would wait on them and --timeout would not hold.
+	cmd.WaitDelay = 5 * time.Second
 	err := cmd.Run()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil // binkd exited; only a hook it started still held the output
+	}
 
 	if verbose {
 		_, _ = os.Stdout.Write(out.Bytes())

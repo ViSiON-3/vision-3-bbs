@@ -117,3 +117,40 @@ func TestCallHubRunsBinkd(t *testing.T) {
 		t.Error("callHub reported success for a failed binkd")
 	}
 }
+
+// A hook binkd starts can hold the output pipes open after binkd exits; the
+// call must still return rather than wait on it.
+func TestCallHubReturnsWhenAHookHoldsOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as a stand-in for binkd")
+	}
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "binkd")
+	script := "#!/bin/sh\nsleep 30 &\necho '+ 27 Sep 10:00:02 [42] sent: out.pkt (1, 1.00 CPS, 99:1/1@zeronet)'\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	ok := callHub(context.Background(), fake, "x.conf", dir, ftnPollTarget{"zeronet", "99:1/1"}, time.Minute, false)
+	if elapsed := time.Since(start); elapsed > 15*time.Second {
+		t.Fatalf("callHub waited %s on a hook's open output", elapsed)
+	}
+	if !ok {
+		t.Error("callHub reported failure though binkd exited cleanly")
+	}
+}
+
+// An enabled network with no links has no hub to call but still counts, so
+// the poll tosses what is already in its inbound.
+func TestFTNPollNetworksIncludesLinklessNetworks(t *testing.T) {
+	cfg := config.FTNConfig{Networks: map[string]config.FTNNetworkConfig{
+		"fsxnet":  {InternalTosserEnabled: true},
+		"offline": {},
+	}}
+	if got := ftnPollNetworks(cfg, ""); len(got) != 1 || got[0] != "fsxnet" {
+		t.Errorf("networks = %v, want [fsxnet]", got)
+	}
+	if targets, uncallable := ftnPollPlan(cfg, ""); len(targets)+len(uncallable) != 0 {
+		t.Errorf("plan for a linkless network = %v %v, want none", targets, uncallable)
+	}
+}

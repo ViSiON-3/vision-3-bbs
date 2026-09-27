@@ -12,17 +12,56 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// mailPollTimeout bounds a menu-started poll. v3mail gives each binkd call
-// five minutes and a board may carry several networks, so this is generous;
-// it only exists so a wedged hub cannot hold the sysop's node forever.
-const mailPollTimeout = 20 * time.Minute
+// mailPollCallTimeout is v3mail poll's default limit on one binkd call, and
+// mailPollAllowance covers scanning, packing, tossing and QWK exchanges. A
+// menu-started poll gets one call's worth per hub on top of the allowance, so
+// a board with many hubs is not cut off part way while a wedged hub still
+// cannot hold the sysop's node forever.
+const (
+	mailPollCallTimeout = 5 * time.Minute
+	mailPollAllowance   = 10 * time.Minute
+)
+
+// mailPollStopGrace is how long v3mail has to finish up after being asked to
+// stop (it stops calling hubs, and a toss in progress completes) before it is
+// killed.
+const mailPollStopGrace = 30 * time.Second
+
+// mailPollDeadline returns how long a menu-started poll may run: the
+// allowance plus one call per FTN hub with a hostname on an enabled network
+// and one per enabled QWK network.
+func mailPollDeadline(configDir string) time.Duration {
+	calls := 0
+	if ftnCfg, err := config.LoadFTNConfig(configDir); err == nil {
+		for _, nc := range ftnCfg.Networks {
+			if !nc.InternalTosserEnabled {
+				continue
+			}
+			for _, lnk := range nc.Links {
+				if lnk.HostPort() != "" {
+					calls++
+				}
+			}
+		}
+	}
+	if qcfg, err := config.LoadQWKNetConfig(configDir); err == nil {
+		for _, nc := range qcfg.Networks {
+			if nc.Enabled {
+				calls++
+			}
+		}
+	}
+	return mailPollAllowance + time.Duration(calls)*mailPollCallTimeout
+}
 
 // runMailPoll runs `v3mail poll` and shows its output as it happens, so a
 // sysop can send and fetch mail for every FTN and QWK network without a shell.
@@ -30,8 +69,8 @@ const mailPollTimeout = 20 * time.Minute
 // e.g. "RUN:MAILPOLL --network fsxnet".
 //
 // It shells out rather than polling in-process on purpose: v3mail owns the
-// FTN and QWK dupe databases and the QWK REP lock, and the scheduled polls
-// already go through it, so the menu gets exactly the same locking.
+// FTN and QWK dupe databases, the QWK toss and REP locks, and the poll lock
+// that keeps two polls from running at once.
 func runMailPoll(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	terminal := c.terminal
@@ -62,10 +101,15 @@ func runMailPoll(c *cmdCtx, args string) (*user.User, string, error) {
 		write(fmt.Sprintf("|01v3mail not found at %s|07\r\n", v3mail))
 	} else {
 		write("|03Sending and fetching mail for every network. This can take a few minutes...|07\r\n\r\n")
-		code, err := execMailPoll(v3mail, root, e.RootConfigPath, strings.Fields(args),
-			&crlfWriter{w: terminalWriterFunc(func(p []byte) {
-				_ = terminalio.WriteProcessedBytes(terminal, p, outputMode)
-			})})
+		// Tied to the session, so a sysop who hangs up does not leave the
+		// poll running with their node held.
+		ctx, cancel := context.WithTimeout(c.s.Context(), mailPollDeadline(e.RootConfigPath))
+		out := &crlfWriter{w: terminalWriterFunc(func(p []byte) {
+			_ = terminalio.WriteProcessedBytes(terminal, p, outputMode)
+		})}
+		code, err := execMailPoll(ctx, v3mail, root, e.RootConfigPath, strings.Fields(args), out)
+		cancel()
+		out.Flush()
 		write("\r\n" + rule)
 		switch {
 		case err != nil:
@@ -90,12 +134,15 @@ func runMailPoll(c *cmdCtx, args string) (*user.User, string, error) {
 
 // execMailPoll runs `v3mail poll` from the BBS root with output copied to out,
 // returning v3mail's exit code. err is set only when v3mail could not be run
-// or was stopped by the timeout; a poll that ran and reported errors is a
-// non-zero code with a nil err.
-func execMailPoll(v3mail, root, configDir string, extra []string, out io.Writer) (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), mailPollTimeout)
-	defer cancel()
-
+// or was stopped by ctx; a poll that ran and reported errors is a non-zero
+// code with a nil err.
+//
+// When ctx ends, v3mail is sent SIGTERM rather than killed, so it stops its
+// binkd call (a killed v3mail would leave binkd running) and finishes any
+// toss in hand. It is killed only if it is still running mailPollStopGrace
+// later.
+func execMailPoll(ctx context.Context, v3mail, root, configDir string, extra []string, out io.Writer) (int, error) {
+	start := time.Now()
 	args := append([]string{"poll", "--config", configDir, "--data", filepath.Join(root, "data")}, extra...)
 	cmd := exec.CommandContext(ctx, v3mail, args...)
 	cmd.Dir = root
@@ -106,11 +153,24 @@ func execMailPoll(v3mail, root, configDir string, extra []string, out io.Writer)
 	// stderr lines never interleave mid-line.
 	cmd.Stdout = out
 	cmd.Stderr = out
-	cmd.WaitDelay = 5 * time.Second
+	cmd.Cancel = func() error {
+		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			return cmd.Process.Kill() // Windows cannot deliver SIGTERM
+		}
+		return nil
+	}
+	cmd.WaitDelay = mailPollStopGrace
 
 	err := cmd.Run()
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return -1, fmt.Errorf("gave up after %s", mailPollTimeout)
+	if errors.Is(err, exec.ErrWaitDelay) {
+		// v3mail exited; a child it left behind held the output open.
+		err = nil
+	}
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return -1, fmt.Errorf("gave up after %s", time.Since(start).Round(time.Second))
+	case ctx.Err() != nil:
+		return -1, fmt.Errorf("stopped: %w", ctx.Err())
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -131,23 +191,38 @@ func (f terminalWriterFunc) Write(p []byte) (int, error) {
 }
 
 // crlfWriter turns bare LF line endings into CRLF, which a BBS terminal needs
-// to return to column 0; v3mail writes plain "\n".
+// to return to column 0; v3mail writes plain "\n". It passes on whole lines
+// only, so a multi-byte character split across two pipe reads reaches the
+// terminal's charset conversion in one piece; Flush sends any unfinished
+// last line.
 type crlfWriter struct {
-	w      io.Writer
-	lastCR bool
+	w       io.Writer
+	lastCR  bool
+	pending []byte
 }
 
 func (c *crlfWriter) Write(p []byte) (int, error) {
-	var buf bytes.Buffer
 	for _, b := range p {
 		if b == '\n' && !c.lastCR {
-			buf.WriteByte('\r')
+			c.pending = append(c.pending, '\r')
 		}
-		buf.WriteByte(b)
+		c.pending = append(c.pending, b)
 		c.lastCR = b == '\r'
 	}
-	if _, err := c.w.Write(buf.Bytes()); err != nil {
-		return 0, err
+	if i := bytes.LastIndexByte(c.pending, '\n'); i >= 0 {
+		line := c.pending[:i+1]
+		if _, err := c.w.Write(line); err != nil {
+			return 0, err
+		}
+		c.pending = append(c.pending[:0], c.pending[i+1:]...)
 	}
 	return len(p), nil
+}
+
+// Flush writes any buffered partial line.
+func (c *crlfWriter) Flush() {
+	if len(c.pending) > 0 {
+		_, _ = c.w.Write(c.pending)
+		c.pending = c.pending[:0]
+	}
 }

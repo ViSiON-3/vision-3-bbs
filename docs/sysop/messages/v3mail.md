@@ -46,6 +46,15 @@ Each hub gets a line such as `[fsxnet] 21:1/100: sent 1, received 2 file(s)`.
 A failed call prints binkd's last lines; the full session is in
 `data/logs/binkd.log`. The exit status is 1 if any step failed.
 
+Only one `v3mail poll` runs at a time (the lock is `data/v3mail_poll.lock`); a
+second one exits straight away saying another poll is running. The lock covers
+polls only: the BBS's own export cycle and a scheduled `v3mail toss` can still
+run alongside one. Interrupting a poll (Ctrl-C or SIGTERM) stops the binkd call
+in progress, skips the remaining hubs and still tosses what arrived.
+
+From the admin menu the poll stops when the sysop disconnects. It also stops
+after 10 minutes plus 5 per hub it can call.
+
 ### FTN Echomail Commands
 
 | Command    | Description                                                                |
