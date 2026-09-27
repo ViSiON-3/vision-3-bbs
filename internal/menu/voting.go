@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -101,8 +102,23 @@ func wv(terminal *term.Terminal, msg string, outputMode ansi.OutputMode) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 }
 
+// voteDrawHeader clears the screen and draws VOTEHDR.ANS from the menu set's
+// ansi directory, falling back to a plain text title when the art is absent.
+func voteDrawHeader(e *MenuExecutor, terminal *term.Terminal, outputMode ansi.OutputMode, termWidth int) {
+	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
+	headerContent, err := ansi.GetAnsiFileContent(e.menuFile("ansi", "VOTEHDR.ANS"))
+	if err == nil {
+		_ = writeArt(terminal, headerContent, outputMode, termWidth) // best-effort display
+		if !bytes.HasSuffix(headerContent, []byte("\n")) {
+			wv(terminal, "\r\n", outputMode)
+		}
+		return
+	}
+	wv(terminal, "|15Voting Booths\r\n", outputMode)
+}
+
 func voteListTopics(terminal *term.Terminal, vd *VotingData, currentUser *user.User, outputMode ansi.OutputMode) {
-	wv(terminal, "\r\n|15Voting Booths\r\n|08"+strings.Repeat("\xc4", 50)+"\r\n", outputMode)
+	wv(terminal, "|08"+strings.Repeat("\xc4", 50)+"\r\n", outputMode)
 	for i, t := range vd.Topics {
 		tags := ""
 		if t.Mandatory {
@@ -161,10 +177,12 @@ func voteRecordVote(rootConfigPath string, topicIdx, optionIdx int, handle strin
 	return t, saveVotingData(rootConfigPath, vd)
 }
 
-// doVoteOnTopic handles the vote interaction for one topic. Returns true if the user voted.
+// doVoteOnTopic handles the vote interaction for one topic. Returns true if the
+// user voted; otherwise notice, when non-empty, says why the vote was not taken
+// and is left for the caller to show.
 func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	currentUser *user.User, vd *VotingData, topicIdx int,
-	outputMode ansi.OutputMode, termWidth, termHeight int) bool {
+	outputMode ansi.OutputMode, termWidth, termHeight int) (voted bool, notice string) {
 
 	topic := &vd.Topics[topicIdx]
 	voteListChoices(terminal, topic, outputMode)
@@ -179,7 +197,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	input = strings.TrimSpace(input)
 
@@ -187,7 +205,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		wv(terminal, "|07New choice: ", outputMode)
 		choice, err := readLineFromSessionIH(s, terminal)
 		if err != nil || strings.TrimSpace(choice) == "" {
-			return false
+			return false, ""
 		}
 		votingMu.Lock()
 		fresh, loadErr := loadVotingData(e.RootConfigPath)
@@ -204,28 +222,24 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
 					slog.Error("failed to save voting data after adding choice", "error", saveErr)
 					votingMu.Unlock()
-					wv(terminal, "|04Error saving choice.\r\n", outputMode)
-					return false
+					return false, "|04Error saving choice."
 				}
 				*vd = *fresh
 			}
 		}
 		votingMu.Unlock()
-		wv(terminal, "|10Choice added!\r\n", outputMode)
-		return false
+		return false, "|10Choice added!"
 	}
 
 	n, err := strconv.Atoi(input)
 	if err != nil || n < 1 || n > len(topic.Options) {
-		wv(terminal, "\r\n|07Invalid selection. Vote not recorded.\r\n", outputMode)
-		return false
+		return false, "|07Invalid selection. Vote not recorded."
 	}
 
 	updated, saveErr := voteRecordVote(e.RootConfigPath, topicIdx, n-1, currentUser.Handle)
 	if saveErr != nil {
 		slog.Error("vote save failed", "error", saveErr)
-		wv(terminal, "\r\n|04Error saving vote.\r\n", outputMode)
-		return false
+		return false, "|04Error saving vote."
 	}
 	if updated != nil {
 		vd.Topics[topicIdx] = *updated
@@ -233,7 +247,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	wv(terminal, "\r\n|10Thanks for voting!\r\n\r\n", outputMode)
 	voteShowResults(terminal, &vd.Topics[topicIdx], outputMode)
 	e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
-	return true
+	return true, ""
 }
 
 // runVoteOnMandatory forces the user to vote on any mandatory topics they haven't voted on.
@@ -261,9 +275,25 @@ func runVoteOnMandatory(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 		wv(terminal, "\r\n|12Mandatory Voting!\r\n", outputMode)
-		doVoteOnTopic(e, s, terminal, currentUser, vd, i, outputMode, termWidth, termHeight)
+		if _, notice := doVoteOnTopic(e, s, terminal, currentUser, vd, i, outputMode, termWidth, termHeight); notice != "" {
+			wv(terminal, "\r\n"+notice+"\r\n", outputMode)
+		}
 	}
 	return currentUser, "", nil
+}
+
+// voteBoothPrompt builds the voting booth command prompt. It stays on one
+// 80-column line with room left to type, whichever options are offered.
+func voteBoothPrompt(voted, isSysOp bool, topicCount int) string {
+	prompt := "|15[V]|07ote |15[L]|07ist "
+	if voted {
+		prompt += "|15[R]|07esults "
+	}
+	prompt += fmt.Sprintf("|15[N]|07ext |15[|111-%d|15]|07 Topic ", topicCount)
+	if isSysOp {
+		prompt += "|15[A]|07dd |15[D]|07el "
+	}
+	return prompt + "|15[Q]|07uit: "
 }
 
 // runVote presents the full voting booths interface.
@@ -284,6 +314,8 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running VOTE", "node", nodeNumber, "handle", currentUser.Handle)
 	isSysOp := e.isCoSysOpOrAbove(currentUser)
 
+	voteDrawHeader(e, terminal, outputMode, termWidth)
+
 	votingMu.Lock()
 	vd, err := loadVotingData(e.RootConfigPath)
 	votingMu.Unlock()
@@ -293,38 +325,44 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
+	// notice is a one-line message from the last action, shown above the
+	// prompt after the screen is redrawn.
+	notice := ""
+
 	if len(vd.Topics) == 0 {
 		wv(terminal, "\r\n|07No voting topics right now.\r\n", outputMode)
-		if isSysOp {
-			wv(terminal, "|07Create first topic? [Y/N]: ", outputMode)
-			input, _ := readLineFromSessionIH(s, terminal)
-			if strings.ToUpper(strings.TrimSpace(input)) == "Y" {
-				vd = voteAddTopic(e, s, terminal, vd, outputMode)
-			}
+		if !isSysOp {
+			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+			return currentUser, "", nil
+		}
+		wv(terminal, "|07Create first topic? [Y/N]: ", outputMode)
+		input, _ := readLineFromSessionIH(s, terminal)
+		if strings.ToUpper(strings.TrimSpace(input)) == "Y" {
+			vd, notice = voteAddTopic(e, s, terminal, vd, outputMode)
 		}
 		if len(vd.Topics) == 0 {
+			if notice != "" {
+				wv(terminal, notice+"\r\n", outputMode)
+				e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
+			}
 			return currentUser, "", nil
 		}
 	}
 
 	curIdx := 0
 	for {
+		voteDrawHeader(e, terminal, outputMode, termWidth)
 		voteListTopics(terminal, vd, currentUser, outputMode)
 		topic := &vd.Topics[curIdx]
 		voted := hasVoted(topic, currentUser.Handle)
 
 		wv(terminal, fmt.Sprintf("\r\n|07Current topic |15[|11%d|15]|07: |15%s|07\r\n", curIdx+1, topic.Question), outputMode)
+		if notice != "" {
+			wv(terminal, notice+"|07\r\n", outputMode)
+			notice = ""
+		}
 
-		prompt := "\r\n|15[V]|07ote  |15[L]|07ist choices  "
-		if voted {
-			prompt += "|15[R]|07esults  "
-		}
-		prompt += "|15[N]|07ext  |15[S]|07elect #  "
-		if isSysOp {
-			prompt += "|15[A]|07dd topic  |15[D]|07el topic  "
-		}
-		prompt += "|15[Q]|07uit: "
-		wv(terminal, prompt, outputMode)
+		wv(terminal, "\r\n"+voteBoothPrompt(voted, isSysOp, len(vd.Topics)), outputMode)
 
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
@@ -342,19 +380,19 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 		case cmd == "V":
 			if voted {
-				wv(terminal, "\r\n|07Sorry, can't vote twice!!\r\n", outputMode)
+				notice = "|07Sorry, can't vote twice!!"
 			} else {
-				doVoteOnTopic(e, s, terminal, currentUser, vd, curIdx, outputMode, termWidth, termHeight)
+				_, notice = doVoteOnTopic(e, s, terminal, currentUser, vd, curIdx, outputMode, termWidth, termHeight)
 			}
 		case cmd == "R":
 			if !voted {
-				wv(terminal, "\r\n|07Sorry, you must vote first!\r\n", outputMode)
+				notice = "|07Sorry, you must vote first!"
 			} else {
 				voteShowResults(terminal, topic, outputMode)
 				e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 			}
 		case cmd == "A" && isSysOp:
-			vd = voteAddTopic(e, s, terminal, vd, outputMode)
+			vd, notice = voteAddTopic(e, s, terminal, vd, outputMode)
 		case cmd == "D" && isSysOp:
 			wv(terminal, fmt.Sprintf("\r\n|07Delete topic %d (%s)? [Y/N]: ", curIdx+1, topic.Question), outputMode)
 			confirm, _ := readLineFromSessionIH(s, terminal)
@@ -382,6 +420,7 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 				votingMu.Unlock()
 				if len(vd.Topics) == 0 {
 					wv(terminal, "\r\n|07No voting topics right now.\r\n", outputMode)
+					e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 					return currentUser, "", nil
 				}
 				if curIdx >= len(vd.Topics) {
@@ -397,14 +436,16 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 }
 
-// voteAddTopic interactively creates a new topic (sysop only).
+// voteAddTopic interactively creates a new topic (sysop only). It returns the
+// voting data to carry on with and a one-line notice of the outcome for the
+// caller to show.
 func voteAddTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
-	vd *VotingData, outputMode ansi.OutputMode) *VotingData {
+	vd *VotingData, outputMode ansi.OutputMode) (*VotingData, string) {
 
 	wv(terminal, "\r\n|07Voting question: ", outputMode)
 	question, err := readLineFromSessionIH(s, terminal)
 	if err != nil || strings.TrimSpace(question) == "" {
-		return vd
+		return vd, ""
 	}
 
 	wv(terminal, "|07Make this topic mandatory? [Y/N]: ", outputMode)
@@ -438,24 +479,22 @@ func voteAddTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	if len(t.Options) == 0 {
-		wv(terminal, "|07No choices entered, topic not created.\r\n", outputMode)
-		return vd
+		return vd, "|07No choices entered, topic not created."
 	}
 
 	votingMu.Lock()
+	defer votingMu.Unlock()
 	fresh, loadErr := loadVotingData(e.RootConfigPath)
-	if loadErr == nil {
-		// Assign ID from the reloaded data to avoid duplicates under concurrent creation.
-		t.ID = len(fresh.Topics) + 1
-		fresh.Topics = append(fresh.Topics, t)
-		if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
-			slog.Error("failed to save voting data after topic creation", "error", saveErr)
-		} else {
-			vd = fresh
-		}
+	if loadErr != nil {
+		slog.Error("failed to load voting data for topic creation", "error", loadErr)
+		return vd, "|04Error saving topic."
 	}
-	votingMu.Unlock()
-
-	wv(terminal, "|10Topic created!\r\n", outputMode)
-	return vd
+	// Assign ID from the reloaded data to avoid duplicates under concurrent creation.
+	t.ID = len(fresh.Topics) + 1
+	fresh.Topics = append(fresh.Topics, t)
+	if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
+		slog.Error("failed to save voting data after topic creation", "error", saveErr)
+		return vd, "|04Error saving topic."
+	}
+	return fresh, "|10Topic created!"
 }

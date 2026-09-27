@@ -170,7 +170,7 @@ All of these apply to the logged-in user. The stock main menu binds `K` to `USER
 
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
-| `VOTE` | none | Voting booths: vote, list choices, results, next topic. CoSysOp+ can add and delete topics. | |
+| `VOTE` | none | Voting booths: vote, list choices, results, next topic. CoSysOp+ can add and delete topics. Clears the screen and draws `VOTEHDR.ANS` as a header if the menu set has one, or a plain "Voting Booths" title if not. | |
 | `VOTEMANDATORY` | none | Forces a vote on every mandatory topic the user has not voted on. Meant for the login sequence, not shipped in the default one. | |
 | `LISTNUV` | none | Shows the new user voting queue with tallies. CoSysOp+ get an add, remove, and vote loop. Works even when NUV is off. | |
 | `SCANNUV` | none | Vote on every pending candidate the caller has not voted on yet. | `useNuv` on and level at or above `nuvUseLevel` |
