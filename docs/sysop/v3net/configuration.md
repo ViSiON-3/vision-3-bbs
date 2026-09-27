@@ -52,7 +52,7 @@ Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 | **Hub Port** | Listen port for the hub HTTP server. Default: `8765`. |
 | **Hub Data Dir** | Directory for hub database and NAL files. Recommended: `data/v3net_hub` |
 | **Auto Approve** | When `Y`, new leaf subscriptions are approved automatically. |
-| **Auto Approve Areas** | When `Y`, area proposals are added to the network straight away instead of waiting in the Coordinator Panel. If `autoApproveAreas` has never been set, it follows **Auto Approve**, which used to cover proposals too. |
+| **Auto Approve Areas** | When `Y`, area proposals are added to the network straight away instead of waiting in the Coordinator Panel. If `autoApproveAreas` has never been set, it follows **Auto Approve**, which used to cover proposals too. Changing **Auto Approve** in the editor saves the area setting as it stood, so it no longer follows. |
 
 Press **S** to save after making changes.
 

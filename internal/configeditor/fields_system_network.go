@@ -122,7 +122,16 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 		{
 			Label: "Auto Approve", Help: "Automatically approve new leaf subscriptions", Type: ftYesNo, Col: 3, Row: 19, Width: 1,
 			Get: func() string { return uitext.BoolToYN(hub.AutoApprove) },
-			Set: func(val string) error { hub.AutoApprove = uitext.YNToBool(val); return nil },
+			Set: func(val string) error {
+				// An older config has no area setting and follows this one.
+				// Pin it first so this field only changes subscribers.
+				if hub.AutoApproveAreas == nil {
+					areas := hub.AutoApprove
+					hub.AutoApproveAreas = &areas
+				}
+				hub.AutoApprove = uitext.YNToBool(val)
+				return nil
+			},
 		},
 		{
 			Label: "Auto Approve Areas", Help: "Add proposed areas to the network without coordinator review", Type: ftYesNo, Col: 3, Row: 20, Width: 1,
