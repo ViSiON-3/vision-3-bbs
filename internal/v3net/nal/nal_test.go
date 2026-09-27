@@ -307,3 +307,34 @@ func TestFetchFromServer(t *testing.T) {
 
 	_ = os.TempDir() // silence unused import if needed
 }
+
+func TestCacheRefreshBypassesFreshEntry(t *testing.T) {
+	ks := testKeystore(t)
+	n := testNAL(ks)
+	if err := Sign(n, ks); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	fetches := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetches++
+		json.NewEncoder(w).Encode(n)
+	}))
+	defer srv.Close()
+
+	cache := NewCache(1*time.Hour, nil)
+	ctx := context.Background()
+	if _, err := cache.FetchAndVerify(ctx, srv.URL, "testnet"); err != nil {
+		t.Fatalf("FetchAndVerify: %v", err)
+	}
+	if _, err := cache.FetchAndVerify(ctx, srv.URL, "testnet"); err != nil || fetches != 1 {
+		t.Fatalf("fresh entry: fetches=%d err=%v, want the cached copy", fetches, err)
+	}
+	if _, err := cache.Refresh(ctx, srv.URL, "testnet"); err != nil || fetches != 2 {
+		t.Fatalf("Refresh: fetches=%d err=%v, want a second fetch", fetches, err)
+	}
+
+	srv.Close()
+	if _, err := cache.Refresh(ctx, srv.URL, "testnet"); err == nil {
+		t.Error("Refresh against a dead hub returned no error; it must not fall back to the cache")
+	}
+}

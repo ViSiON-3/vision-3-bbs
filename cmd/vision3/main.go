@@ -43,6 +43,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	v3net "github.com/ViSiON-3/vision-3-bbs/internal/v3net"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 var (
@@ -2072,6 +2073,12 @@ func main() {
 				}
 			}()
 
+			// Offer sysops the areas a hub adds to networks this BBS is on.
+			// Set before Start so each leaf's first NAL fetch is seen.
+			v3netNodeID := v3netService.NodeID()
+			v3netService.SetNALObserver(func(network string, n *protocol.NAL) {
+				menuExecutor.NoteV3NetNAL(userMgr, network, n, v3netNodeID)
+			})
 			go v3netService.Start(v3netCtx)
 			menuExecutor.V3NetStatus = v3netService
 			menuExecutor.ChatLeaves = v3netChatProvider(v3netService)

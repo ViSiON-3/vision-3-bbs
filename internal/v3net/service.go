@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
@@ -54,6 +55,19 @@ type Service struct {
 	// BBSName and BBSHost are sent in subscribe requests.
 	BBSName string
 	BBSHost string
+
+	// nalObserver holds the func(network string, n *protocol.NAL) set by
+	// SetNALObserver, called with each NAL a leaf fetches.
+	nalObserver atomic.Value
+}
+
+// SetNALObserver registers fn to receive every NAL a leaf fetches and
+// verifies, tagged with its network: once when the leaf subscribes, and
+// after each change the hub announces. Calls come from leaf goroutines, one
+// per network, so fn must be safe for concurrent use. Set it before Start so
+// the leaves' first fetches are seen.
+func (s *Service) SetNALObserver(fn func(network string, n *protocol.NAL)) {
+	s.nalObserver.Store(fn)
 }
 
 // AreaBinding ties a message area to the V3Net network it is subscribed on
@@ -252,8 +266,13 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		DedupIndex:   s.dedupIdx,
 		JAMWriter:    writer,
 		OnEvent:      onEvent,
-		BBSName:      s.BBSName,
-		BBSHost:      s.BBSHost,
+		OnNAL: func(n *protocol.NAL) {
+			if fn, ok := s.nalObserver.Load().(func(string, *protocol.NAL)); ok && fn != nil {
+				fn(lcfg.Network, n)
+			}
+		},
+		BBSName: s.BBSName,
+		BBSHost: s.BBSHost,
 	})
 
 	run := &leafRun{l: l}

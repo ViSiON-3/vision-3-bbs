@@ -22,6 +22,15 @@ type Leaf struct {
 	eventCb      atomic.Value // stores func(protocol.Event)
 	nalCache     *nal.Cache
 	chatSessions *chatSessionRegistry
+
+	// nalMu runs NAL refreshes one at a time, so a slow fetch of an older
+	// NAL cannot land after a newer one and replace it.
+	nalMu sync.Mutex
+	// refetchPending is set while an nal_updated re-fetch is waiting to run;
+	// further events are folded into it.
+	refetchPending atomic.Bool
+	// reconnectFetching is set while the post-reconnect fetch is retrying.
+	reconnectFetching atomic.Bool
 }
 
 // New creates a new Leaf with the given configuration.
@@ -114,6 +123,12 @@ func (l *Leaf) Start(ctx context.Context) {
 		break
 	}
 	slog.Info("leaf: subscribed to hub", "network", l.cfg.Network, "hub", l.cfg.HubURL)
+
+	// Fetch the NAL once up front, so areas the hub added while this node
+	// was offline reach OnNAL without waiting for the next change event.
+	if err := l.refreshNAL(ctx); err != nil {
+		slog.Warn("leaf: initial NAL fetch failed", "network", l.cfg.Network, "error", err)
+	}
 
 	var wg sync.WaitGroup
 

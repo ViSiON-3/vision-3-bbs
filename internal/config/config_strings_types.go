@@ -241,6 +241,14 @@ type StringsConfig struct {
 	// read whenever the sysop next calls, so it carries how long ago the signup
 	// happened (%s=handle, %s=age such as "2 hours", %d=node).
 	NewUserSysopNotice string `json:"newUserSysopNotice"`
+	// V3NetNewAreaNotice asks a sysop at login whether to add an area a
+	// V3Net hub has just added to a network the BBS is on (%s=network,
+	// %s=area name).
+	V3NetNewAreaNotice string `json:"v3netNewAreaNotice"`
+	// V3NetNewAreaDeclined follows a No to V3NetNewAreaNotice: the sysop
+	// will not be asked about the area again, so it says how to add it by
+	// hand later (%s=area tag).
+	V3NetNewAreaDeclined string `json:"v3netNewAreaDeclined"`
 
 	// Newuser strings (V3-specific)
 	NewUsersClosedStr       string `json:"newUsersClosedStr"`

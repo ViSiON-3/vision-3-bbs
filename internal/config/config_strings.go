@@ -113,7 +113,9 @@ var StringFallbacks = map[string]string{
 	// not leave the SYSOPNOTICES step with nothing to render. "just signed up"
 	// belongs to the live page only -- a queued notice states the age instead,
 	// since it is read whenever the sysop next calls.
-	"newUserSysopNotice": "|12New user|07: |15%s|07 signed up |15%s ago|07 from node %d.",
+	"newUserSysopNotice":   "|12New user|07: |15%s|07 signed up |15%s ago|07 from node %d.",
+	"v3netNewAreaNotice":   "|15New |14%s|15 area: |11%s|15. Add?",
+	"v3netNewAreaDeclined": "|07You won't be asked about |15%s|07 again. To add it later: |15V3Net|07 menu > |15Area Subscriptions|07, highlight it and press |15Space|07.",
 
 	// The rest of the batch download group. These are written straight to the
 	// terminal, so shipping them blank printed nothing where a message belongs
