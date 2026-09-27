@@ -39,8 +39,10 @@ const mailPollStopGrace = 30 * time.Second
 
 // mailPollDeadline returns how long a menu-started poll may run: the
 // allowance plus one call per FTN hub with a hostname on an enabled network
-// and one per enabled QWK network.
-func mailPollDeadline(configDir string) time.Duration {
+// and one per enabled QWK network. A call is the --timeout given in args (the
+// flags the menu entry passes to v3mail), or v3mail's default.
+func mailPollDeadline(configDir string, args []string) time.Duration {
+	perCall := mailPollArgTimeout(args)
 	calls := 0
 	if ftnCfg, err := config.LoadFTNConfig(configDir); err == nil {
 		for _, nc := range ftnCfg.Networks {
@@ -61,7 +63,31 @@ func mailPollDeadline(configDir string) time.Duration {
 			}
 		}
 	}
-	return mailPollAllowance + time.Duration(calls)*mailPollCallTimeout
+	return mailPollAllowance + time.Duration(calls)*perCall
+}
+
+// mailPollArgTimeout returns the --timeout (or -timeout, with or without "=")
+// in v3mail flags, or mailPollCallTimeout when there is none or it does not
+// parse; v3mail then rejects a bad value itself.
+func mailPollArgTimeout(args []string) time.Duration {
+	perCall := mailPollCallTimeout
+	for i := 0; i < len(args); i++ {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		if name != "timeout" || !strings.HasPrefix(args[i], "-") {
+			continue
+		}
+		if !hasValue {
+			if i+1 >= len(args) {
+				break
+			}
+			i++
+			value = args[i]
+		}
+		if d, err := time.ParseDuration(value); err == nil && d > 0 {
+			perCall = d
+		}
+	}
+	return perCall
 }
 
 // runMailPoll runs `v3mail poll` and shows its output as it happens, so a
@@ -105,7 +131,7 @@ func runMailPoll(c *cmdCtx, args string) (*user.User, string, error) {
 			"|08Press |07ESC|08 or |07Q|08 to stop; mail already received is still tossed.|07\r\n\r\n")
 		// Tied to the session, so a sysop who hangs up does not leave the
 		// poll running with their node held.
-		ctx, cancel := context.WithTimeout(c.s.Context(), mailPollDeadline(e.RootConfigPath))
+		ctx, cancel := context.WithTimeout(c.s.Context(), mailPollDeadline(e.RootConfigPath, strings.Fields(args)))
 		done := make(chan struct{})
 		watched := make(chan struct{})
 		go func() {

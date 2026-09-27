@@ -119,7 +119,7 @@ func TestExecMailPollStopsWithSIGTERM(t *testing.T) {
 
 func TestMailPollDeadlineScalesWithHubs(t *testing.T) {
 	dir := t.TempDir()
-	if got := mailPollDeadline(dir); got != mailPollAllowance {
+	if got := mailPollDeadline(dir, nil); got != mailPollAllowance {
 		t.Errorf("no networks: %s, want %s", got, mailPollAllowance)
 	}
 	ftn := config.FTNConfig{Networks: map[string]config.FTNNetworkConfig{
@@ -131,7 +131,7 @@ func TestMailPollDeadlineScalesWithHubs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "ftn.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := mailPollDeadline(dir), mailPollAllowance+2*mailPollCallTimeout; got != want {
+	if got, want := mailPollDeadline(dir, nil), mailPollAllowance+2*mailPollCallTimeout; got != want {
 		t.Errorf("two callable hubs: %s, want %s", got, want)
 	}
 }
@@ -211,5 +211,32 @@ func TestWatchPollStopKeyOnDisconnect(t *testing.T) {
 	watchPollStopKey(in, done, func() { stopped = true })
 	if !stopped {
 		t.Error("disconnect did not stop the poll")
+	}
+}
+
+// The menu entry can pass --timeout to v3mail; the deadline allows for it so
+// the menu does not stop a call v3mail would still let run.
+func TestMailPollDeadlineUsesMenuTimeout(t *testing.T) {
+	dir := t.TempDir()
+	ftn := config.FTNConfig{Networks: map[string]config.FTNNetworkConfig{
+		"fsxnet": {InternalTosserEnabled: true, Links: []config.FTNLinkConfig{{Address: "21:1/100", Hostname: "hub.example"}}},
+	}}
+	data, _ := json.Marshal(ftn)
+	if err := os.WriteFile(filepath.Join(dir, "ftn.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"--timeout", "15m"},
+		{"--timeout=15m"},
+		{"--network", "fsxnet", "-timeout", "15m"},
+	} {
+		if got, want := mailPollDeadline(dir, args), mailPollAllowance+15*time.Minute; got != want {
+			t.Errorf("%v: %s, want %s", args, got, want)
+		}
+	}
+	for _, args := range [][]string{{"--timeout"}, {"--timeout", "soon"}, {"--network", "timeout"}} {
+		if got, want := mailPollDeadline(dir, args), mailPollAllowance+mailPollCallTimeout; got != want {
+			t.Errorf("%v: %s, want the default %s", args, got, want)
+		}
 	}
 }

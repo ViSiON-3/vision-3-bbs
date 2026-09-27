@@ -58,7 +58,8 @@ in progress, skips the remaining hubs and still tosses what arrived.
 
 From the admin menu, **ESC** or **Q** stops the poll, and so does
 disconnecting. It also stops
-after 10 minutes plus 5 per hub it can call.
+after 10 minutes plus 5 per hub it can call (or plus the `--timeout` given on
+the menu entry per hub).
 
 ### FTN Echomail Commands
 
