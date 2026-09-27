@@ -50,6 +50,7 @@ nothing will change. To actually move the gate, edit the ACS strings themselves:
 | `W` | Edit News | Add, delete, edit, list, and view system news items |
 | `T` | Voting | Manage voting topics (add, delete, edit questions and options) |
 | `U` | NUV Queue | View New User Voting candidates and vote tallies |
+| `M` | Poll Mail Networks | Send and fetch mail for every FTN and QWK network now, showing the progress (runs `v3mail poll`). **ESC** or **Q** stops it |
 | `Q` | Quit | Return to Main Menu |
 
 ---

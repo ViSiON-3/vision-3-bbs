@@ -159,6 +159,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["PURGEUSERS"] = runPurgeUsers                           // Permanently purge soft-deleted users past retention period
 	registry["ADMINLISTUSERS"] = runAdminListUsers                   // Admin detailed user browser
 	registry["TOGGLEALLOWNEWUSERS"] = runAdminToggleAllowNewUsers    // Toggle allowNewUsers config flag
+	registry["MAILPOLL"] = runMailPoll                               // Send and fetch mail for every FTN and QWK network now
 	registry["LISTMSGAR"] = runListMessageAreas                      // <-- ADDED: Register message area list runnable
 	registry["COMPOSEMSG"] = runComposeMessage                       // <-- ADDED: Register compose message runnable
 	registry["PROMPTANDCOMPOSEMESSAGE"] = runPromptAndComposeMessage // <-- ADDED: Register prompt/compose runnable (Corrected key to uppercase)

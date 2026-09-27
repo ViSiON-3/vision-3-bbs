@@ -36,6 +36,12 @@ func setBaseHWM(base *jam.Base, msgNum int) error {
 // creates outbound .PKT files grouped by destination link.
 func (t *Tosser) ScanAndExport() TossResult {
 	result := TossResult{}
+	release, err := t.lockMail()
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result
+	}
+	defer release()
 
 	areas := t.msgMgr.ListAreas()
 

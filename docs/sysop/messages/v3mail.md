@@ -15,6 +15,52 @@
 | `link`     | Build reply-thread chains (`ReplyTo` / `Reply1st` / `ReplyNext` JAM fields)  |
 | `lastread` | Show or reset per-user lastread pointers                                     |
 
+### Poll
+
+`v3mail poll` sends and fetches mail for every enabled network in one step.
+It is the command to reach for when a network looks quiet and the next
+scheduled poll is too long to wait. The sysop can run the same thing from the
+admin menu with **M** (Poll Mail Networks).
+
+For FTN networks it:
+
+1. scans and packs outbound mail, so anything waiting goes out on this call;
+2. calls each hub link that has a hostname with
+   `binkd -p -P <hub>@<network> data/ftn/binkd.conf`, the same call the
+   scheduled poll events make (links without a hostname are listed, since
+   those hubs can only deliver when they call in);
+3. tosses what arrived, for every network, because networks can share an
+   inbound.
+
+For QWK networks it runs the same exchange as `qwk-poll`.
+
+| Option            | Description                                                            |
+| ----------------- | ---------------------------------------------------------------------- |
+| `--network NAME`  | Only this network. The name can be an FTN or a QWK network key         |
+| `--ftn-only`      | Poll FTN networks only                                                 |
+| `--qwk-only`      | Poll QWK networks only                                                 |
+| `--timeout DUR`   | Longest a single binkd call may take (default `5m`)                   |
+| `-v`              | Show binkd's session output instead of a one-line summary per hub      |
+
+Each hub gets a line such as `[fsxnet] 21:1/100: sent 1, received 2 file(s)`.
+A failed call prints binkd's last lines; the full session is in
+`data/logs/binkd.log`. The exit status is 1 if any step failed.
+
+Only one `v3mail poll` runs at a time (the lock is `data/v3mail_poll.lock`); a
+second one exits straight away saying another poll is running. Separately,
+every FTN toss, scan and pack takes `data/ftn/ftn_mail.lock`, whether it comes
+from a poll, the BBS's export cycle or a `v3mail` command (binkd runs
+`v3mail toss` after each session). So a poll that overlaps any of those waits
+its turn instead of exporting or importing the same mail twice. A run that
+waits more than two minutes gives up with an error and leaves the work for
+the next run. Interrupting a poll (Ctrl-C or SIGTERM) stops the binkd call
+in progress, skips the remaining hubs and still tosses what arrived.
+
+From the admin menu, **ESC** or **Q** stops the poll, and so does
+disconnecting. It also stops
+after 10 minutes plus 5 per hub it can call (or plus the `--timeout` given on
+the menu entry per hub).
+
 ### FTN Echomail Commands
 
 | Command    | Description                                                                |
@@ -105,6 +151,11 @@ The `areafix_password` field on the link config is used as the netmail subject (
 
 # Limit to one network
 ./v3mail toss --network fsxnet
+
+# Send and fetch mail for every network now
+./v3mail poll
+./v3mail poll --network fsxnet
+./v3mail poll --qwk-only
 ```
 
 ## FTN Configuration

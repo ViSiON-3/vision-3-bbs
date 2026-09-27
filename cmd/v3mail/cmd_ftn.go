@@ -25,7 +25,15 @@ func cmdToss(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	if tossFTN(ftnCfg, msgMgr, dupeDB, *networkName, *quiet) {
+		os.Exit(1)
+	}
+}
 
+// tossFTN tosses inbound mail for every enabled network, or only networkName
+// when set, and reports whether the run failed: a toss error, or mail left
+// unclaimed long enough to be quarantined.
+func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, networkName string, quiet bool) bool {
 	tosser.WarnOrphanFTNAreas(ftnCfg, msgMgr.ListAreas())
 
 	totalImported, totalDupes, totalPackets := 0, 0, 0
@@ -37,13 +45,13 @@ func cmdToss(args []string) {
 	// actually tossed: a tosser that failed to construct might have been the
 	// one to claim the mail, so its absence has to suppress the check as
 	// surely as --network does.
-	ranAllNetworks := *networkName == ""
+	ranAllNetworks := networkName == ""
 
 	for name, netCfg := range ftnCfg.Networks {
 		if !netCfg.InternalTosserEnabled {
 			continue
 		}
-		if *networkName != "" && name != *networkName {
+		if networkName != "" && name != networkName {
 			continue
 		}
 
@@ -68,7 +76,7 @@ func cmdToss(args []string) {
 			}
 		}
 
-		if !*quiet {
+		if !quiet {
 			fmt.Printf("[%s] toss: %d packets, %d imported, %d dupes",
 				name, result.PacketsProcessed, result.MessagesImported, result.DupesSkipped)
 			if len(result.Errors) > 0 {
@@ -93,7 +101,7 @@ func cmdToss(args []string) {
 		unclaimed.Log()
 	}
 
-	if !*quiet {
+	if !quiet {
 		fmt.Printf("Toss complete: %d packets, %d messages imported, %d dupes skipped\n",
 			totalPackets, totalImported, totalDupes)
 		if n := len(unclaimed.Held); n > 0 {
@@ -122,9 +130,7 @@ func cmdToss(args []string) {
 	// exits non-zero so a scheduler surfaces it. Freshly unclaimed files only
 	// warn (exit 0): they are usually a network briefly misconfigured and will
 	// toss once it is fixed, so failing on them would be noise.
-	if hadErrors || len(unclaimed.Quarantined) > 0 {
-		os.Exit(1)
-	}
+	return hadErrors || len(unclaimed.Quarantined) > 0
 }
 
 // cmdScan implements 'v3mail scan': scan JAM bases for unsent echomail and create outbound .PKT files.
@@ -141,7 +147,15 @@ func cmdScan(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	if scanFTN(ftnCfg, msgMgr, dupeDB, *networkName, *quiet) {
+		os.Exit(1)
+	}
+}
 
+// scanFTN exports unsent echomail and netmail to outbound packets for every
+// enabled network, or only networkName when set, and reports whether any
+// network had errors.
+func scanFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, networkName string, quiet bool) bool {
 	totalExported := 0
 	hadErrors := false
 
@@ -149,7 +163,7 @@ func cmdScan(args []string) {
 		if !netCfg.InternalTosserEnabled {
 			continue
 		}
-		if *networkName != "" && name != *networkName {
+		if networkName != "" && name != networkName {
 			continue
 		}
 
@@ -163,7 +177,7 @@ func cmdScan(args []string) {
 		result := t.ScanAndExport()
 		totalExported += result.MessagesExported
 
-		if !*quiet {
+		if !quiet {
 			fmt.Printf("[%s] scan: %d messages exported",
 				name, result.MessagesExported)
 			if len(result.Errors) > 0 {
@@ -177,13 +191,10 @@ func cmdScan(args []string) {
 		}
 	}
 
-	if !*quiet {
+	if !quiet {
 		fmt.Printf("Scan complete: %d messages exported to outbound\n", totalExported)
 	}
-
-	if hadErrors {
-		os.Exit(1)
-	}
+	return hadErrors
 }
 
 // cmdFtnPack implements 'v3mail ftn-pack': create ZIP bundles from staged .PKT files for binkd.
@@ -200,7 +211,15 @@ func cmdFtnPack(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	if packFTN(ftnCfg, msgMgr, dupeDB, *networkName, *quiet) {
+		os.Exit(1)
+	}
+}
 
+// packFTN bundles staged outbound packets into each network's binkd outbound,
+// for every enabled network or only networkName when set, and reports whether
+// any network had errors.
+func packFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, networkName string, quiet bool) bool {
 	totalBundles, totalPackets := 0, 0
 	hadErrors := false
 
@@ -208,7 +227,7 @@ func cmdFtnPack(args []string) {
 		if !netCfg.InternalTosserEnabled {
 			continue
 		}
-		if *networkName != "" && name != *networkName {
+		if networkName != "" && name != networkName {
 			continue
 		}
 
@@ -223,7 +242,7 @@ func cmdFtnPack(args []string) {
 		totalBundles += result.BundlesCreated
 		totalPackets += result.PacketsPacked
 
-		if !*quiet {
+		if !quiet {
 			fmt.Printf("[%s] ftn-pack: %d bundles created (%d packets)",
 				name, result.BundlesCreated, result.PacketsPacked)
 			if len(result.Errors) > 0 {
@@ -237,13 +256,10 @@ func cmdFtnPack(args []string) {
 		}
 	}
 
-	if !*quiet {
+	if !quiet {
 		fmt.Printf("Pack complete: %d bundles created, %d packets packed\n", totalBundles, totalPackets)
 	}
-
-	if hadErrors {
-		os.Exit(1)
-	}
+	return hadErrors
 }
 
 // loadFTNDeps loads all shared dependencies needed by toss/scan/ftn-pack commands.
