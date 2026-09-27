@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -218,5 +219,54 @@ func TestInsertNetworkOpensEditScreen(t *testing.T) {
 	}
 	if len(got.recordFields) == 0 {
 		t.Error("edit screen opened with no fields")
+	}
+}
+
+// A network added beside existing ones gets its own BSO outbound at once, so
+// it cannot take the global outbound over from a network with mail queued
+// there, and a rename carries the derived outbound along.
+func TestInsertNetworkGetsOwnOutboundThatFollowsRename(t *testing.T) {
+	m := newFTNModel(map[string]config.FTNNetworkConfig{
+		"zeronet": {OwnAddress: "99:1/1"},
+	})
+	m.configs.FTN.BinkdOutboundPath = "data/ftn/out"
+	m.recordType = "ftn"
+	m.mode = modeRecordList
+
+	res, _ := m.updateRecordList(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	got := res.(Model)
+	if p := filepath.ToSlash(got.configs.FTN.Networks["zz_newnet_1"].BinkdOutboundPath); p != "data/ftn/out_zz_newnet_1" {
+		t.Fatalf("new network outbound = %q, want data/ftn/out_zz_newnet_1", p)
+	}
+	if p := got.configs.FTN.Networks["zeronet"].BinkdOutboundPath; p != "" {
+		t.Errorf("existing network's outbound changed to %q", p)
+	}
+
+	commitField(t, &got, "Network Name", "agoranet")
+	if p := filepath.ToSlash(got.configs.FTN.Networks["agoranet"].BinkdOutboundPath); p != "data/ftn/out_agoranet" {
+		t.Errorf("renamed network outbound = %q, want data/ftn/out_agoranet", p)
+	}
+}
+
+// An outbound the sysop typed is theirs: a rename leaves it alone.
+func TestNetworkRenameKeepsChosenOutbound(t *testing.T) {
+	m := newFTNModel(map[string]config.FTNNetworkConfig{
+		"fsxnet": {OwnAddress: "21:4/158.1", BinkdOutboundPath: "data/ftn/fsx"},
+	})
+	m.recordType = "ftn"
+	commitField(t, m, "Network Name", "fsxnet2")
+	if p := m.configs.FTN.Networks["fsxnet2"].BinkdOutboundPath; p != "data/ftn/fsx" {
+		t.Errorf("outbound = %q, want data/ftn/fsx", p)
+	}
+}
+
+// The first network on a board keeps the global outbound.
+func TestInsertFirstNetworkUsesGlobalOutbound(t *testing.T) {
+	m := newFTNModel(map[string]config.FTNNetworkConfig{})
+	m.recordType = "ftn"
+	m.mode = modeRecordList
+	res, _ := m.updateRecordList(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	if p := res.(Model).configs.FTN.Networks["zz_newnet_1"].BinkdOutboundPath; p != "" {
+		t.Errorf("first network outbound = %q, want global", p)
 	}
 }

@@ -91,7 +91,7 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 			}
 		}
 	} else {
-		m.configs.FTN.Networks[netKey] = config.FTNNetworkConfig{
+		netCfg := config.FTNNetworkConfig{
 			InternalTosserEnabled: true,
 			OwnAddress:            w.ownAddress,
 			// Origin as entered in the wizard; blank falls back to the board
@@ -99,6 +99,18 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 			Origin: w.originLine,
 			Links:  []config.FTNLinkConfig{link},
 		}
+		// A second or later network gets its own BSO outbound rather than
+		// sharing the global one with the networks already there (see
+		// config.FTNConfig.AssignSharedOutbounds for why sharing breaks).
+		// A new network has nothing queued, so moving it costs nothing.
+		if len(m.configs.FTN.Networks) > 0 {
+			var inUse []string
+			for _, other := range m.configs.FTN.Networks {
+				inUse = append(inUse, other.BinkdOutboundPath)
+			}
+			netCfg.BinkdOutboundPath = config.FreeNetworkOutboundPath(m.configs.FTN.BinkdOutboundPath, netKey, inUse)
+		}
+		m.configs.FTN.Networks[netKey] = netCfg
 	}
 
 	// 2. Create conference for the network.

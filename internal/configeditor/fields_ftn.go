@@ -56,6 +56,13 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 					}
 				}
 				cfg := m.configs.FTN.Networks[key]
+				// An outbound derived from the old name (as Add sets it)
+				// follows the rename; one the sysop chose stays.
+				global := m.configs.FTN.BinkdOutboundPath
+				if cfg.BinkdOutboundPath != "" && cfg.BinkdOutboundPath ==
+					config.FreeNetworkOutboundPath(global, key, ftnOutboundsExcept(m.configs.FTN, key)) {
+					cfg.BinkdOutboundPath = config.FreeNetworkOutboundPath(global, val, ftnOutboundsExcept(m.configs.FTN, key))
+				}
 				m.configs.FTN.Networks[val] = cfg
 				delete(m.configs.FTN.Networks, key)
 				// Update message areas that reference this network
@@ -416,4 +423,15 @@ func (m Model) ftnLinkCount() int {
 		total += len(net.Links)
 	}
 	return total
+}
+
+// ftnOutboundsExcept returns the outbound paths set on every network but skip.
+func ftnOutboundsExcept(ftn config.FTNConfig, skip string) []string {
+	var paths []string
+	for name, netCfg := range ftn.Networks {
+		if name != skip && netCfg.BinkdOutboundPath != "" {
+			paths = append(paths, netCfg.BinkdOutboundPath)
+		}
+	}
+	return paths
 }

@@ -26,6 +26,8 @@ func cmdToss(args []string) {
 		os.Exit(1)
 	}
 
+	tosser.WarnOrphanFTNAreas(ftnCfg, msgMgr.ListAreas())
+
 	totalImported, totalDupes, totalPackets := 0, 0, 0
 	hadErrors := false
 	// Merged across networks and keyed by inbound file, so the whole-pass

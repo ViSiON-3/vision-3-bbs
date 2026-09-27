@@ -252,6 +252,20 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 // the caller attributes that to whichever inbound file the packet came from,
 // which for a bundle is the bundle rather than the extracted packet.
 func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) string {
+	// An empty packet carries no header and no mail. Some tossers send one
+	// when a packet ends up with nothing in it, and treating it as a parse
+	// failure moved it to temp_path, where it looked like lost mail. binkd
+	// only exposes a file under its final name once it is fully received,
+	// so zero bytes here is the real size, not a transfer in progress.
+	if fi, err := os.Stat(path); err == nil && fi.Size() == 0 {
+		if err := os.Remove(path); err != nil {
+			slog.Warn("failed to remove empty packet", "path", path, "error", err)
+		} else {
+			slog.Info("removed empty packet", "network", t.networkName, "packet", displayName)
+		}
+		return ""
+	}
+
 	imported, dupes, errs, skippedOrigin := t.tossPacket(path)
 	if skippedOrigin != "" {
 		// Not ours; leave it for the tosser whose links include that origin.
@@ -392,7 +406,11 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (
 			slog.Info("tossed netmail", "from", msg.From, "to", msg.To, "msgid", msgID)
 			return nil
 		}
-		slog.Debug("skipping netmail, no netmail area configured", "from", msg.From, "to", msg.To, "network", t.networkName)
+		// Warn, not Debug: the message is gone after this, and a sysop whose
+		// netmail area names the network differently (zer0net vs zeronet)
+		// otherwise sees areafix replies vanish with nothing in the log.
+		slog.Warn("dropped netmail: no netmail area for this network — add a message area of type netmail whose network matches ftn.json",
+			"from", msg.From, "to", msg.To, "subject", msg.Subject, "network", t.networkName)
 		return nil
 	}
 
@@ -417,6 +435,9 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (
 		if a, ok := t.msgMgr.GetAreaByEchoTag(parsed.Area); ok && strings.EqualFold(a.Network, t.networkName) {
 			area, found = a, true
 		}
+	}
+	if !found {
+		area, found = t.msgMgr.FindEchoAreaFold(parsed.Area, t.networkName)
 	}
 	if !found {
 		slog.Warn("unknown echo area", "area", parsed.Area, "from", msg.From)

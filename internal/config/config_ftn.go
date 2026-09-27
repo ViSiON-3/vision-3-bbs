@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -181,6 +182,13 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	}
 	slog.Info("loaded FTN configuration", "networks", len(config.Networks), "tosserEnabled", enabledCount)
 
+	for _, a := range config.AssignSharedOutbounds() {
+		slog.Warn("ftn network was sharing a binkd outbound with another network; giving it its own "+
+			"(set binkd_outbound_path on the network to choose a different one). "+
+			"Mail it had already queued stays in the shared outbound — check there if anything for it goes missing",
+			"network", a.Network, "outbound", a.Path, "shared_outbound", a.SharedPath, "kept_by", a.KeptBy)
+	}
+
 	applyBinkdDefaults(&config.Binkd)
 	return config, nil
 }
@@ -333,6 +341,189 @@ func (c *FTNConfig) ResolvePaths(root string) {
 		netCfg.BinkdOutboundPath = resolve(netCfg.BinkdOutboundPath)
 		c.Networks[name] = netCfg
 	}
+}
+
+// OutboundAssignment records one network AssignSharedOutbounds moved off the
+// shared global outbound.
+type OutboundAssignment struct {
+	Network    string // network key as written in ftn.json
+	Path       string // its new binkd_outbound_path, relative as configured
+	SharedPath string // the global outbound it was sharing
+	KeptBy     string // the network left on the shared outbound
+}
+
+// AssignSharedOutbounds gives each network its own BSO outbound when two or
+// more would otherwise share the global one. Sharing is never safe: BSO flow
+// and bundle names carry only net/node, so a link at 3/123 in one network and
+// 3/123 in another resolve to the same file and one network's mail goes to the
+// other's hub, and binkd itself tells domains apart by their outbound.
+//
+// A network shares the global outbound when it sets no binkd_outbound_path or
+// sets it to the global path; networks with a path of their own are left
+// alone. One sharer keeps the global outbound, so mail already queued there is
+// still sent, and each of the rest gets a free NetworkOutboundPath. The keeper
+// is, in order of preference: one whose path names the global outbound
+// explicitly, then one that is enabled and has an address, then the first by
+// name. The keeper's path is then set to the global outbound, so once ftn.json
+// is saved the choice sticks and a network added later cannot take it over.
+//
+// The assignments are made in memory, where every consumer (tosser, binkd.conf
+// writer, mailer) reads them; the config editor persists them the next time it
+// saves ftn.json.
+func (c *FTNConfig) AssignSharedOutbounds() []OutboundAssignment {
+	global := c.BinkdOutboundPath
+	if global == "" {
+		global = DefaultBinkdOutboundPath
+	}
+	var sharing []string
+	for name, netCfg := range c.Networks {
+		p := strings.TrimSpace(netCfg.BinkdOutboundPath)
+		if p == "" || sameOutbound(p, global) {
+			sharing = append(sharing, name)
+		}
+	}
+	if len(sharing) < 2 {
+		return nil
+	}
+	rank := func(name string) int {
+		netCfg := c.Networks[name]
+		r := 0
+		if strings.TrimSpace(netCfg.BinkdOutboundPath) == "" {
+			r += 2 // an explicit global path marks the network that had it first
+		}
+		if !netCfg.InternalTosserEnabled || strings.TrimSpace(netCfg.OwnAddress) == "" {
+			r++ // a disabled or placeholder network has no mail queued to keep
+		}
+		return r
+	}
+	sort.Slice(sharing, func(i, j int) bool {
+		if ri, rj := rank(sharing[i]), rank(sharing[j]); ri != rj {
+			return ri < rj
+		}
+		return sharing[i] < sharing[j]
+	})
+
+	keeper := sharing[0]
+	keeperCfg := c.Networks[keeper]
+	keeperCfg.BinkdOutboundPath = global
+	c.Networks[keeper] = keeperCfg
+
+	assigned := make([]OutboundAssignment, 0, len(sharing)-1)
+	for _, name := range sharing[1:] {
+		netCfg := c.Networks[name]
+		netCfg.BinkdOutboundPath = FreeNetworkOutboundPath(global, name, c.outboundsExcept(name))
+		c.Networks[name] = netCfg
+		assigned = append(assigned, OutboundAssignment{
+			Network: name, Path: netCfg.BinkdOutboundPath, SharedPath: global, KeptBy: keeper,
+		})
+	}
+	return assigned
+}
+
+// SaveOutboundSplit applies AssignSharedOutbounds to ftn.json on disk and
+// writes the result back, so the split made at load survives: without it the
+// split lives only in memory, and a network added to ftn.json by hand before
+// the next config-editor save could change which network keeps the global
+// outbound. It returns the networks it moved; nothing is written when there
+// were none.
+//
+// The file is re-read rather than taken from a loaded FTNConfig, so load-time
+// defaults are not written into it, and it is written the way the config
+// editor writes it.
+func SaveOutboundSplit(configDir string) ([]OutboundAssignment, error) {
+	path := filepath.Join(configDir, "ftn.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var cfg FTNConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	assigned := cfg.AssignSharedOutbounds()
+	if len(assigned) == 0 {
+		return nil, nil
+	}
+	out, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := atomicfile.WriteFile(path, out, 0o644); err != nil {
+		return nil, err
+	}
+	return assigned, nil
+}
+
+// outboundsExcept returns the outbound paths set on every network but skip.
+func (c *FTNConfig) outboundsExcept(skip string) []string {
+	var paths []string
+	for name, netCfg := range c.Networks {
+		if name != skip && strings.TrimSpace(netCfg.BinkdOutboundPath) != "" {
+			paths = append(paths, netCfg.BinkdOutboundPath)
+		}
+	}
+	return paths
+}
+
+// sameOutbound reports whether two configured outbound paths name the same
+// directory, ignoring separators and trailing slashes.
+func sameOutbound(a, b string) bool {
+	return filepath.ToSlash(filepath.Clean(a)) == filepath.ToSlash(filepath.Clean(b))
+}
+
+// FreeNetworkOutboundPath returns NetworkOutboundPath(global, network), or,
+// when that directory is the global outbound or one in inUse, the same path
+// with the first free _2, _3, ... suffix. Network names that differ only in
+// characters NetworkOutboundPath replaces ("foo.bar", "foo_bar") would
+// otherwise be given the same directory.
+func FreeNetworkOutboundPath(global, network string, inUse []string) string {
+	if global == "" {
+		global = DefaultBinkdOutboundPath
+	}
+	taken := func(p string) bool {
+		if sameOutbound(p, global) {
+			return true
+		}
+		for _, u := range inUse {
+			if sameOutbound(p, u) {
+				return true
+			}
+		}
+		return false
+	}
+	base := NetworkOutboundPath(global, network)
+	p := base
+	for i := 2; taken(p); i++ {
+		p = fmt.Sprintf("%s_%d", base, i)
+	}
+	return p
+}
+
+// DefaultBinkdOutboundPath is the global BSO outbound used when ftn.json sets
+// none.
+const DefaultBinkdOutboundPath = "data/ftn/out"
+
+// NetworkOutboundPath derives a network's own BSO outbound from the global
+// one: a sibling directory named <global>_<network>, e.g. data/ftn/out_fsxnet.
+// The network name is reduced to [a-z0-9_-] so the result never carries the
+// dot binkd rejects on a base outbound (see ValidateBinkdOutboundPath).
+func NetworkOutboundPath(global, network string) string {
+	if global == "" {
+		global = DefaultBinkdOutboundPath
+	}
+	var b strings.Builder
+	for _, r := range strings.ToLower(network) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	clean := filepath.Clean(global)
+	return filepath.Join(filepath.Dir(clean), filepath.Base(clean)+"_"+b.String())
 }
 
 // BinkdOutboundFor returns the BSO outbound directory this network's bundles
