@@ -46,7 +46,7 @@ func TestAssignSharedOutbounds(t *testing.T) {
 		"zeronet": "data/ftn/out_zeronet",
 		"custom":  "data/ftn/mine",
 	} {
-		if p := c.Networks[name].BinkdOutboundPath; p != filepath.FromSlash(want) {
+		if p := c.Networks[name].BinkdOutboundPath; filepath.ToSlash(p) != want {
 			t.Errorf("%s outbound = %q, want %q", name, p, want)
 		}
 	}
