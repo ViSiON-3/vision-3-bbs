@@ -22,6 +22,15 @@ type Leaf struct {
 	eventCb      atomic.Value // stores func(protocol.Event)
 	nalCache     *nal.Cache
 	chatSessions *chatSessionRegistry
+
+	// nalMu runs NAL refreshes one at a time, so a slow fetch of an older
+	// NAL cannot land after a newer one and replace it.
+	nalMu sync.Mutex
+	// refetchPending is set while an nal_updated re-fetch is waiting to run;
+	// further events are folded into it.
+	refetchPending atomic.Bool
+	// reconnectFetching is set while the post-reconnect fetch is retrying.
+	reconnectFetching atomic.Bool
 }
 
 // New creates a new Leaf with the given configuration.

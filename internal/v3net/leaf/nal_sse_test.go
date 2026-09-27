@@ -230,3 +230,129 @@ func TestSSEReconnectRefetchesNAL(t *testing.T) {
 		t.Fatal("reconnecting the SSE stream did not re-fetch the NAL")
 	}
 }
+
+// signedTestNAL returns a signed, empty testnet NAL as JSON.
+func signedTestNAL(t *testing.T) []byte {
+	t.Helper()
+	coordKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "coord.key"))
+	if err != nil {
+		t.Fatalf("load coord keystore: %v", err)
+	}
+	n := &protocol.NAL{V3NetNAL: "1.0", Network: "testnet", CoordNodeID: coordKS.NodeID()}
+	if err := nal.Sign(n, coordKS); err != nil {
+		t.Fatalf("sign NAL: %v", err)
+	}
+	data, _ := json.Marshal(n)
+	return data
+}
+
+// TestNALUpdatedBurstFetchesOnce covers a hub announcing several changes in
+// quick succession: one re-fetch covers them all, instead of one goroutine per
+// event racing to store its NAL last.
+func TestNALUpdatedBurstFetchesOnce(t *testing.T) {
+	origDelay := nalRefetchBase
+	nalRefetchBase = 50 * time.Millisecond
+	t.Cleanup(func() { nalRefetchBase = origDelay })
+
+	nalJSON := signedTestNAL(t)
+	var mu sync.Mutex
+	fetches := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3net/v1/testnet/events":
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(200)
+			for range 3 {
+				fmt.Fprint(w, "event: nal_updated\ndata: {\"network\":\"testnet\"}\n\n")
+			}
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+		case "/v3net/v1/testnet/nal":
+			mu.Lock()
+			fetches++
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(nalJSON)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+	got := make(chan struct{}, 4)
+	l.cfg.OnNAL = func(*protocol.NAL) { got <- struct{}{} }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go l.runSSE(ctx)
+
+	select {
+	case <-got:
+	case <-time.After(2 * time.Second):
+		t.Fatal("nal_updated did not reach OnNAL")
+	}
+	time.Sleep(4 * nalRefetchBase) // room for any extra re-fetch to show up
+	mu.Lock()
+	defer mu.Unlock()
+	if fetches != 1 {
+		t.Errorf("three nal_updated events caused %d NAL fetches, want 1", fetches)
+	}
+}
+
+// TestSSEReconnectRetriesFailedNALFetch covers the hub's NAL endpoint failing
+// just as the stream comes back: the leaf keeps trying rather than waiting for
+// a change announcement that may already have been missed.
+func TestSSEReconnectRetriesFailedNALFetch(t *testing.T) {
+	origBase := sseBackoffBase
+	sseBackoffBase = 10 * time.Millisecond
+	t.Cleanup(func() { sseBackoffBase = origBase })
+
+	nalJSON := signedTestNAL(t)
+	var mu sync.Mutex
+	connects, nalCalls := 0, 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3net/v1/testnet/events":
+			mu.Lock()
+			connects++
+			first := connects == 1
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(200)
+			w.(http.Flusher).Flush()
+			if first {
+				return
+			}
+			<-r.Context().Done()
+		case "/v3net/v1/testnet/nal":
+			mu.Lock()
+			nalCalls++
+			fail := nalCalls <= 2
+			mu.Unlock()
+			if fail {
+				http.Error(w, "busy", http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(nalJSON)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+	got := make(chan struct{}, 4)
+	l.cfg.OnNAL = func(*protocol.NAL) { got <- struct{}{} }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go l.runSSE(ctx)
+
+	select {
+	case <-got:
+	case <-time.After(3 * time.Second):
+		t.Fatal("a failed NAL fetch after reconnect was not retried")
+	}
+}
