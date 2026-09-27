@@ -122,18 +122,19 @@ type wizardState struct {
 	selectedAreas []areaBrowserItem // areas selected during wizard flow
 
 	// Hub wizard fields (steps 0–3)
-	netName       string
-	netDesc       string
-	port          string
-	autoApprove   bool
-	areas         []wizardArea
-	areaEditTag   string
-	areaEditName  string
-	areaEditDesc  string
-	areaAdding    bool // true when the area form is open
-	areaCursor    int  // highlighted area in the area list
-	areaEditField int  // active field in area form (0=tag, 1=name, 2=desc)
-	areaEditIdx   int  // -1=adding new, >=0=editing existing area
+	netName          string
+	netDesc          string
+	port             string
+	autoApprove      bool
+	autoApproveAreas bool
+	areas            []wizardArea
+	areaEditTag      string
+	areaEditName     string
+	areaEditDesc     string
+	areaAdding       bool // true when the area form is open
+	areaCursor       int  // highlighted area in the area list
+	areaEditField    int  // active field in area form (0=tag, 1=name, 2=desc)
+	areaEditIdx      int  // -1=adding new, >=0=editing existing area
 }
 
 // Model is the BubbleTea model for the config editor TUI.

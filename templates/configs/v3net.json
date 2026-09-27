@@ -9,6 +9,7 @@
     "port": 8765,
     "dataDir": "data/v3net_hub",
     "autoApprove": false,
+    "autoApproveAreas": false,
     "networks": []
   },
   "leaves": [

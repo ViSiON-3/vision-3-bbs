@@ -133,6 +133,14 @@ func (m *Model) fieldsHubWizard() []fieldDef {
 			},
 		},
 		{
+			Label: "Auto-Approve Areas", Help: "Add proposed areas without coordinator review", Type: ftYesNo, Col: 3, Row: 5, Width: 1,
+			Get: func() string { return uitext.BoolToYN(w.autoApproveAreas) },
+			Set: func(val string) error {
+				w.autoApproveAreas = uitext.YNToBool(val)
+				return nil
+			},
+		},
+		{
 			Label: "Initial Areas", Help: "Press Enter to manage initial message areas", Type: ftDisplay, Col: 3, Row: 6, Width: 30,
 			Get: func() string {
 				n := len(w.areas)

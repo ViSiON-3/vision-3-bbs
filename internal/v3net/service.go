@@ -214,11 +214,12 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 			return nil, fmt.Errorf("v3net: create hub data dir: %w", err)
 		}
 		h, err := hub.New(hub.Config{
-			ListenAddr:  cfg.Hub.ListenAddr(),
-			DataDir:     cfg.Hub.DataDir,
-			Keystore:    ks,
-			AutoApprove: cfg.Hub.AutoApprove,
-			Networks:    networks,
+			ListenAddr:       cfg.Hub.ListenAddr(),
+			DataDir:          cfg.Hub.DataDir,
+			Keystore:         ks,
+			AutoApprove:      cfg.Hub.AutoApprove,
+			AutoApproveAreas: cfg.Hub.AreaProposalsAutoApproved(),
+			Networks:         networks,
 		})
 		if err != nil {
 			_ = ix.Close() // cleanup on error path
