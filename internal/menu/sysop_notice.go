@@ -426,15 +426,12 @@ func (e *MenuExecutor) offerV3NetAreas(c *cmdCtx, offers []sysopNotice, leadIn b
 
 	if len(added) > 0 {
 		list := strings.Join(added, ", ")
-		switch {
-		case e.V3NetReload == nil:
+		if e.V3NetReload == nil {
 			write(fmt.Sprintf("\r\n|10Added %s. Restart to activate.|07\r\n", list))
-		default:
-			if rerr := e.V3NetReload(); rerr != nil {
-				write(fmt.Sprintf("\r\n|10Added %s.|07 |04Live apply failed (%s); restart to activate.|07\r\n", list, rerr))
-			} else {
-				write(fmt.Sprintf("\r\n|10Added %s. Now active.|07\r\n", list))
-			}
+		} else if rerr := e.V3NetReload(); rerr != nil {
+			write(fmt.Sprintf("\r\n|10Added %s.|07 |04Live apply failed (%s); restart to activate.|07\r\n", list, rerr))
+		} else {
+			write(fmt.Sprintf("\r\n|10Added %s. Now active.|07\r\n", list))
 		}
 	}
 	return handled, asked, false
