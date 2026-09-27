@@ -33,13 +33,14 @@ func (mm *MessageManager) GetAreaByTag(tag string) (*MessageArea, bool) {
 //     FTN networks -- and the tosser disambiguates by network when routing
 //     (internal/tosser/import.go).
 //
-//   - Any area whose Tag equals echoTag, on any network. The tosser tries
-//     GetAreaByTag first and that lookup is NOT network-gated, so a tag match
-//     always wins and the echo-tagged area would never receive anything.
+//   - Any area whose Tag equals echoTag exactly, on any network. The tosser
+//     tries GetAreaByTag first and that lookup is NOT network-gated, so a tag
+//     match always wins and the echo-tagged area would never receive anything.
 //
-// Comparison ignores case: the tosser falls back to a case-insensitive match
-// (FindEchoAreaFold), so two tags differing only in case would compete for the
-// same inbound mail. Caller must hold mm.mu.
+// On the same network the comparison also ignores case, for both kinds: the
+// tosser falls back to a case-insensitive match on its own network
+// (FindEchoAreaFold), so two tags there differing only in case would compete
+// for the same inbound mail. Caller must hold mm.mu.
 func (mm *MessageManager) echoTagConflict(echoTag, network string, excludeID int) *MessageArea {
 	if echoTag == "" {
 		return nil
@@ -48,10 +49,33 @@ func (mm *MessageManager) echoTagConflict(echoTag, network string, excludeID int
 		if a.ID == excludeID {
 			continue
 		}
-		if strings.EqualFold(a.Tag, echoTag) {
+		if a.Tag == echoTag {
 			return a
 		}
-		if a.EchoTag != "" && strings.EqualFold(a.EchoTag, echoTag) && strings.EqualFold(a.Network, network) {
+		if !strings.EqualFold(a.Network, network) {
+			continue
+		}
+		if strings.EqualFold(a.Tag, echoTag) || (a.EchoTag != "" && strings.EqualFold(a.EchoTag, echoTag)) {
+			return a
+		}
+	}
+	return nil
+}
+
+// tagFoldConflict reports another area on network whose Tag or EchoTag equals
+// tag ignoring case, excluding excludeID. FindEchoAreaFold matches local tags
+// on the tosser's network as well as echo tags, so "FOO" and "foo" there would
+// compete for an inbound "AREA: FoO". Areas with no network are never tossed
+// to by the fallback and are not checked. Caller must hold mm.mu.
+func (mm *MessageManager) tagFoldConflict(tag, network string, excludeID int) *MessageArea {
+	if tag == "" || network == "" {
+		return nil
+	}
+	for _, a := range mm.areasByID {
+		if a.ID == excludeID || !strings.EqualFold(a.Network, network) {
+			continue
+		}
+		if strings.EqualFold(a.Tag, tag) || (a.EchoTag != "" && strings.EqualFold(a.EchoTag, tag)) {
 			return a
 		}
 	}
@@ -69,6 +93,12 @@ func echoTagConflictError(echoTag string, c *MessageArea) error {
 		echoTag, c.Tag, c.ID, c.Network)
 }
 
+// tagFoldConflictError describes why tag cannot be used on its network.
+func tagFoldConflictError(tag string, c *MessageArea) error {
+	return fmt.Errorf("tag %q differs only in case from area %q (id %d) on network %q; inbound mail could reach either",
+		tag, c.Tag, c.ID, c.Network)
+}
+
 // GetAreaByEchoTag retrieves a message area by its FTN echo tag.
 // Used when areas have a local tag-prefix (e.g. Tag="FD_LINUX", EchoTag="LINUX").
 func (mm *MessageManager) GetAreaByEchoTag(echoTag string) (*MessageArea, bool) {
@@ -84,16 +114,17 @@ func (mm *MessageManager) GetAreaByEchoTag(echoTag string) (*MessageArea, bool) 
 // them in upper case, so an exact-only lookup turns every such message into
 // "unknown area".
 //
-// An area on network whose EchoTag (or Tag, when it has no EchoTag) equals tag
-// ignoring case wins. Failing that, an area on any network whose Tag equals it
-// ignoring case, mirroring the exact tag lookup, which is not network-gated
-// either. When several areas qualify at the same step, the lowest ID wins so
-// routing is stable across restarts.
+// Only areas on network are considered, so a case variant of another
+// network's tag reports an unknown area rather than tossing the message into
+// that network's base. An area whose EchoTag (or Tag, when it has no EchoTag)
+// equals tag ignoring case wins; failing that, one whose local Tag does. When
+// several areas qualify at the same step, the lowest ID wins so routing is
+// stable across restarts.
 func (mm *MessageManager) FindEchoAreaFold(tag, network string) (*MessageArea, bool) {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
 
-	var onNetwork, anyNetwork *MessageArea
+	var byEcho, byTag *MessageArea
 	lower := func(cur, a *MessageArea) *MessageArea {
 		if cur == nil || a.ID < cur.ID {
 			return a
@@ -101,21 +132,23 @@ func (mm *MessageManager) FindEchoAreaFold(tag, network string) (*MessageArea, b
 		return cur
 	}
 	for _, a := range mm.areasByID {
+		if !strings.EqualFold(a.Network, network) {
+			continue
+		}
 		echo := a.EchoTag
 		if echo == "" {
 			echo = a.Tag
 		}
-		if strings.EqualFold(a.Network, network) && strings.EqualFold(echo, tag) {
-			onNetwork = lower(onNetwork, a)
-		}
-		if strings.EqualFold(a.Tag, tag) {
-			anyNetwork = lower(anyNetwork, a)
+		if strings.EqualFold(echo, tag) {
+			byEcho = lower(byEcho, a)
+		} else if strings.EqualFold(a.Tag, tag) {
+			byTag = lower(byTag, a)
 		}
 	}
-	if onNetwork != nil {
-		return onNetwork, true
+	if byEcho != nil {
+		return byEcho, true
 	}
-	return anyNetwork, anyNetwork != nil
+	return byTag, byTag != nil
 }
 
 // UpdateAreaByID replaces the message area with the given ID with a copy of updated.
@@ -143,8 +176,19 @@ func (mm *MessageManager) UpdateAreaByID(id int, updated MessageArea) error {
 			return fmt.Errorf("tag %q already in use by area %d", updated.Tag, existing.ID)
 		}
 	}
-	if conflict := mm.echoTagConflict(updated.EchoTag, updated.Network, id); conflict != nil {
-		return echoTagConflictError(updated.EchoTag, conflict)
+	// Checked only when the tags or network change, so an area already
+	// loaded beside a case variant can still be edited for other reasons;
+	// LoadAreas warns about those.
+	moved := !strings.EqualFold(old.Network, updated.Network)
+	if moved || oldEchoTag != updated.EchoTag {
+		if conflict := mm.echoTagConflict(updated.EchoTag, updated.Network, id); conflict != nil {
+			return echoTagConflictError(updated.EchoTag, conflict)
+		}
+	}
+	if moved || !strings.EqualFold(oldTag, updated.Tag) {
+		if conflict := mm.tagFoldConflict(updated.Tag, updated.Network, id); conflict != nil {
+			return tagFoldConflictError(updated.Tag, conflict)
+		}
 	}
 	if oldTag != updated.Tag {
 		delete(mm.areasByTag, oldTag)
@@ -177,6 +221,10 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 	if conflict := mm.echoTagConflict(area.EchoTag, area.Network, 0); conflict != nil {
 		mm.mu.Unlock()
 		return 0, echoTagConflictError(area.EchoTag, conflict)
+	}
+	if conflict := mm.tagFoldConflict(area.Tag, area.Network, 0); conflict != nil {
+		mm.mu.Unlock()
+		return 0, tagFoldConflictError(area.Tag, conflict)
 	}
 
 	// Assign next ID and position.

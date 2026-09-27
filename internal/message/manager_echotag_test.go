@@ -226,12 +226,18 @@ func TestFindEchoAreaFold(t *testing.T) {
 	if a, ok := mm.FindEchoAreaFold("linux", "agoranet"); !ok || a.Tag != "AN_LINUX" {
 		t.Errorf("linux on agoranet: got %v, %v; want AN_LINUX", a, ok)
 	}
-	// Echo-tag matches are network-gated; a tag match is not, like the exact lookup.
+	// Every match is gated to the tosser's network, so a case variant of
+	// another network's tag is an unknown area, not that network's mail.
 	if _, ok := mm.FindEchoAreaFold("linux", "othernet"); ok {
 		t.Error("echo tag LINUX matched on a network that has no such area")
 	}
-	if a, ok := mm.FindEchoAreaFold("fd_linux", "othernet"); !ok || a.Tag != "FD_LINUX" {
-		t.Errorf("fd_linux by local tag: got %v, %v; want FD_LINUX", a, ok)
+	if _, ok := mm.FindEchoAreaFold("fd_linux", "othernet"); ok {
+		t.Error("fd_linux matched fsxnet's FD_LINUX from another network")
+	}
+	// On its own network an area is found by its local tag too, even when it
+	// has an echo tag.
+	if a, ok := mm.FindEchoAreaFold("fd_linux", "fsxnet"); !ok || a.Tag != "FD_LINUX" {
+		t.Errorf("fd_linux on fsxnet by local tag: got %v, %v; want FD_LINUX", a, ok)
 	}
 	if _, ok := mm.FindEchoAreaFold("nope", "zeronet"); ok {
 		t.Error("unknown tag matched")
@@ -247,5 +253,45 @@ func TestAddAreaRejectsEchoTagDifferingOnlyInCase(t *testing.T) {
 	}
 	if _, err := mm.AddArea(MessageArea{Tag: "FD_LINUX2", Name: "Linux 2", EchoTag: "linux", Network: "fsxnet"}); err == nil {
 		t.Fatal("echo tag differing only in case on the same network was accepted")
+	}
+}
+
+// Local tags differing only in case on one network would both match an
+// inbound tag once the tosser folds case, so the second is refused.
+func TestAddAreaRejectsLocalTagDifferingOnlyInCase(t *testing.T) {
+	mm := newEchoTagTestManager(t)
+	if _, err := mm.AddArea(MessageArea{Tag: "FOO", Name: "Foo", Network: "fsxnet"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mm.AddArea(MessageArea{Tag: "foo", Name: "Foo 2", Network: "fsxnet"}); err == nil {
+		t.Fatal("local tag differing only in case on the same network was accepted")
+	}
+	if _, err := mm.AddArea(MessageArea{Tag: "foo", Name: "Foo elsewhere", Network: "zeronet"}); err != nil {
+		t.Errorf("same tag in another case on another network: %v", err)
+	}
+}
+
+// An area loaded beside a case variant (allowed before case folding) can
+// still be edited, as long as the edit does not touch its tags or network.
+func TestUpdateAreaAllowsUnrelatedEditBesideCaseVariant(t *testing.T) {
+	mm := newEchoTagTestManager(t)
+	id, err := mm.AddArea(MessageArea{Tag: "LOCAL_LINUX", Name: "Local", Network: "fsxnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ftnID, err := mm.AddArea(MessageArea{Tag: "FD_LINUX", Name: "Linux", EchoTag: "LINUX", Network: "fsxnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// As if loaded from an older message_areas.json.
+	mm.mu.Lock()
+	mm.areasByID[id].Tag = "linux"
+	mm.mu.Unlock()
+
+	a, _ := mm.GetAreaByID(ftnID)
+	edited := *a
+	edited.Name = "Linux Talk"
+	if err := mm.UpdateAreaByID(ftnID, edited); err != nil {
+		t.Errorf("renaming an area beside a case variant: %v", err)
 	}
 }
