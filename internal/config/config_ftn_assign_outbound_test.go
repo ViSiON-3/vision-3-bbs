@@ -14,7 +14,7 @@ func TestNetworkOutboundPath(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := NetworkOutboundPath(c.global, c.network)
-		if got != c.want {
+		if got != filepath.FromSlash(c.want) {
 			t.Errorf("NetworkOutboundPath(%q, %q) = %q, want %q", c.global, c.network, got, c.want)
 		}
 		if err := ValidateBinkdOutboundPath(got); err != nil {
@@ -46,7 +46,7 @@ func TestAssignSharedOutbounds(t *testing.T) {
 		"zeronet": "data/ftn/out_zeronet",
 		"custom":  "data/ftn/mine",
 	} {
-		if p := c.Networks[name].BinkdOutboundPath; p != want {
+		if p := c.Networks[name].BinkdOutboundPath; p != filepath.FromSlash(want) {
 			t.Errorf("%s outbound = %q, want %q", name, p, want)
 		}
 	}
