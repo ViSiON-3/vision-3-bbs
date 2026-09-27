@@ -357,37 +357,111 @@ type OutboundAssignment struct {
 // 3/123 in another resolve to the same file and one network's mail goes to the
 // other's hub, and binkd itself tells domains apart by their outbound.
 //
-// Networks with their own binkd_outbound_path are left alone. Of those that
-// have none, the first by name keeps the global outbound, so mail it already
-// has queued there is still sent; each of the rest gets
-// NetworkOutboundPath(global, name). The assignments are made in memory, where
-// every consumer (tosser, binkd.conf writer, mailer) reads them; the config
-// editor persists them the next time it saves ftn.json.
+// A network shares the global outbound when it sets no binkd_outbound_path or
+// sets it to the global path; networks with a path of their own are left
+// alone. One sharer keeps the global outbound, so mail already queued there is
+// still sent, and each of the rest gets a free NetworkOutboundPath. The keeper
+// is, in order of preference: one whose path names the global outbound
+// explicitly, then one that is enabled and has an address, then the first by
+// name. The keeper's path is then set to the global outbound, so once ftn.json
+// is saved the choice sticks and a network added later cannot take it over.
+//
+// The assignments are made in memory, where every consumer (tosser, binkd.conf
+// writer, mailer) reads them; the config editor persists them the next time it
+// saves ftn.json.
 func (c *FTNConfig) AssignSharedOutbounds() []OutboundAssignment {
+	global := c.BinkdOutboundPath
+	if global == "" {
+		global = DefaultBinkdOutboundPath
+	}
 	var sharing []string
 	for name, netCfg := range c.Networks {
-		if strings.TrimSpace(netCfg.BinkdOutboundPath) == "" {
+		p := strings.TrimSpace(netCfg.BinkdOutboundPath)
+		if p == "" || sameOutbound(p, global) {
 			sharing = append(sharing, name)
 		}
 	}
 	if len(sharing) < 2 {
 		return nil
 	}
-	sort.Strings(sharing)
-	global := c.BinkdOutboundPath
-	if global == "" {
-		global = DefaultBinkdOutboundPath
+	rank := func(name string) int {
+		netCfg := c.Networks[name]
+		r := 0
+		if strings.TrimSpace(netCfg.BinkdOutboundPath) == "" {
+			r += 2 // an explicit global path marks the network that had it first
+		}
+		if !netCfg.InternalTosserEnabled || strings.TrimSpace(netCfg.OwnAddress) == "" {
+			r++ // a disabled or placeholder network has no mail queued to keep
+		}
+		return r
 	}
+	sort.Slice(sharing, func(i, j int) bool {
+		if ri, rj := rank(sharing[i]), rank(sharing[j]); ri != rj {
+			return ri < rj
+		}
+		return sharing[i] < sharing[j]
+	})
+
+	keeper := sharing[0]
+	keeperCfg := c.Networks[keeper]
+	keeperCfg.BinkdOutboundPath = global
+	c.Networks[keeper] = keeperCfg
+
 	assigned := make([]OutboundAssignment, 0, len(sharing)-1)
 	for _, name := range sharing[1:] {
 		netCfg := c.Networks[name]
-		netCfg.BinkdOutboundPath = NetworkOutboundPath(global, name)
+		netCfg.BinkdOutboundPath = FreeNetworkOutboundPath(global, name, c.outboundsExcept(name))
 		c.Networks[name] = netCfg
 		assigned = append(assigned, OutboundAssignment{
-			Network: name, Path: netCfg.BinkdOutboundPath, SharedPath: global, KeptBy: sharing[0],
+			Network: name, Path: netCfg.BinkdOutboundPath, SharedPath: global, KeptBy: keeper,
 		})
 	}
 	return assigned
+}
+
+// outboundsExcept returns the outbound paths set on every network but skip.
+func (c *FTNConfig) outboundsExcept(skip string) []string {
+	var paths []string
+	for name, netCfg := range c.Networks {
+		if name != skip && strings.TrimSpace(netCfg.BinkdOutboundPath) != "" {
+			paths = append(paths, netCfg.BinkdOutboundPath)
+		}
+	}
+	return paths
+}
+
+// sameOutbound reports whether two configured outbound paths name the same
+// directory, ignoring separators and trailing slashes.
+func sameOutbound(a, b string) bool {
+	return filepath.ToSlash(filepath.Clean(a)) == filepath.ToSlash(filepath.Clean(b))
+}
+
+// FreeNetworkOutboundPath returns NetworkOutboundPath(global, network), or,
+// when that directory is the global outbound or one in inUse, the same path
+// with the first free _2, _3, ... suffix. Network names that differ only in
+// characters NetworkOutboundPath replaces ("foo.bar", "foo_bar") would
+// otherwise be given the same directory.
+func FreeNetworkOutboundPath(global, network string, inUse []string) string {
+	if global == "" {
+		global = DefaultBinkdOutboundPath
+	}
+	taken := func(p string) bool {
+		if sameOutbound(p, global) {
+			return true
+		}
+		for _, u := range inUse {
+			if sameOutbound(p, u) {
+				return true
+			}
+		}
+		return false
+	}
+	base := NetworkOutboundPath(global, network)
+	p := base
+	for i := 2; taken(p); i++ {
+		p = fmt.Sprintf("%s_%d", base, i)
+	}
+	return p
 }
 
 // DefaultBinkdOutboundPath is the global BSO outbound used when ftn.json sets

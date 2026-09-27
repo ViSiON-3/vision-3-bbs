@@ -641,7 +641,7 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
 | `internal_tosser_enabled` | Set `true` to enable `v3mail` for this network      |
 | `own_address`             | Your FTN address (e.g., `21:4/158.1`)               |
 | `origin`                  | Origin line text (empty = board name)               |
-| `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one, but when several networks leave it empty all except the first by name are given `<global>_<network>` automatically — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
+| `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one, but when several networks share the global one (empty, or set to the same path) all but one are given `<global>_<network>` automatically — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
 
 Hub polling is controlled by the per-network `echomail_poll_<network>` event
 under **Events**. The wizard creates it with a 15-minute cron schedule; edit
@@ -778,10 +778,16 @@ To add another FTN network (e.g., AgoraNet alongside fsxNet):
    on the base outbound and refuses a dotted one). Every network needs its own
    outbound: bundle and flow filenames carry only the destination net/node, so
    two networks sharing one directory can hand mail to the wrong hub when two
-   hubs share a net/node pair. Older configs where several networks share the
-   global outbound are split the same way at startup: the first network by
-   name keeps the global directory and the others get their own, with a
-   warning in the log naming each one.
+   hubs share a net/node pair. Networks added from **Echomail Networks** get
+   one too. Older configs where several networks share the global outbound
+   are split the same way at startup, with a warning in the log naming each
+   network moved. One network keeps the global directory, so mail already
+   queued there still goes out. The one kept is a network whose **Binkd
+   Outbound** already names the global directory, or else a network that is
+   enabled and has an address, or else the first by name. Save ftn.json from
+   the config editor after the split so the choice sticks: a network added
+   by hand later without a path then cannot take the global directory over.
+   If you run binkd yourself, update its `domain` lines to match.
 4. Under **Echomail Links**, make sure the new hub link has a **Hostname**.
    Without one binkd has nothing to dial, the network only ever receives mail
    when the hub calls in, and no poll event is created.

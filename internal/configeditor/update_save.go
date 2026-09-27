@@ -262,7 +262,15 @@ func (m *Model) insertRecord() {
 		for i := 1; ; i++ {
 			name := fmt.Sprintf("zz_newnet_%d", i)
 			if _, exists := m.configs.FTN.Networks[name]; !exists {
-				m.configs.FTN.Networks[name] = config.FTNNetworkConfig{}
+				// Beside existing networks it gets its own BSO outbound, so
+				// it cannot take the global one over from a network with
+				// mail queued there (see config.AssignSharedOutbounds).
+				var netCfg config.FTNNetworkConfig
+				if len(m.configs.FTN.Networks) > 0 {
+					netCfg.BinkdOutboundPath = config.FreeNetworkOutboundPath(
+						m.configs.FTN.BinkdOutboundPath, name, ftnOutboundsExcept(m.configs.FTN, name))
+				}
+				m.configs.FTN.Networks[name] = netCfg
 				break
 			}
 		}

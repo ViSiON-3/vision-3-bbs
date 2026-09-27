@@ -104,7 +104,11 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		// config.FTNConfig.AssignSharedOutbounds for why sharing breaks).
 		// A new network has nothing queued, so moving it costs nothing.
 		if len(m.configs.FTN.Networks) > 0 {
-			netCfg.BinkdOutboundPath = config.NetworkOutboundPath(m.configs.FTN.BinkdOutboundPath, netKey)
+			var inUse []string
+			for _, other := range m.configs.FTN.Networks {
+				inUse = append(inUse, other.BinkdOutboundPath)
+			}
+			netCfg.BinkdOutboundPath = config.FreeNetworkOutboundPath(m.configs.FTN.BinkdOutboundPath, netKey, inUse)
 		}
 		m.configs.FTN.Networks[netKey] = netCfg
 	}
