@@ -203,11 +203,13 @@ func (m Model) confirmHubWizard() (Model, tea.Cmd) {
 	if m.configs.V3Net.DedupDBPath == "" {
 		m.configs.V3Net.DedupDBPath = "data/v3net_dedup.sqlite"
 	}
+	autoApproveAreas := m.wizard.autoApproveAreas
 	m.configs.V3Net.Hub = config.V3NetHubConfig{
-		Enabled:     true,
-		Port:        port,
-		DataDir:     "data/v3net_hub",
-		AutoApprove: m.wizard.autoApprove,
+		Enabled:          true,
+		Port:             port,
+		DataDir:          "data/v3net_hub",
+		AutoApprove:      m.wizard.autoApprove,
+		AutoApproveAreas: &autoApproveAreas,
 		Networks: []config.V3NetHubNetwork{
 			{Name: m.wizard.netName, Description: m.wizard.netDesc},
 		},

@@ -34,6 +34,7 @@ V3Net settings live in two places in the TUI config editor (`./config`):
 │  Hub Port        : 8765                                              │
 │  Hub Data Dir    :                                                   │
 │  Auto Approve    : N                                                 │
+│  Auto Approve Areas : N                                              │
 │                                                                      │
 │                          Screen 2 of 8                               │
 └──────────────────────────────────────────────────────────────────────┘
@@ -50,7 +51,8 @@ Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 | **Hub Host** | Listen address for the hub. Blank means all interfaces. Set to `127.0.0.1` if behind a reverse proxy. |
 | **Hub Port** | Listen port for the hub HTTP server. Default: `8765`. |
 | **Hub Data Dir** | Directory for hub database and NAL files. Recommended: `data/v3net_hub` |
-| **Auto Approve** | When `Y`, new leaf subscriptions and area proposals are approved automatically. |
+| **Auto Approve** | When `Y`, new leaf subscriptions are approved automatically. |
+| **Auto Approve Areas** | When `Y`, area proposals are added to the network straight away instead of waiting in the Coordinator Panel. If `autoApproveAreas` has never been set, it follows **Auto Approve**, which used to cover proposals too. Changing **Auto Approve** in the editor saves the area setting as it stood, so it no longer follows. |
 
 Press **S** to save after making changes.
 
@@ -153,6 +155,7 @@ Press **I** to open the **Hub Setup Wizard**:
 │  Description     : My BBS Network                                    │
 │  Listen Port     : 8765                                              │
 │  Auto-Approve    : N                                                 │
+│  Auto-Approve Areas : N                                              │
 │                                                                      │
 │  Initial Areas   : (none — press Enter to add)                       │
 │                                                                      │
@@ -246,7 +249,7 @@ Restrict file permissions appropriately and consider the security of any backup 
 
 **Hub operators can read all traffic.** V3Net is a federated public message network. The hub stores and forwards messages in plaintext. The hub sysop — and anyone with access to the hub server — can read all messages routed through it. This is the same trust model as FidoNet echomail and similar networks.
 
-**Auto-approve.** Setting `Auto Approve: Y` allows any node to subscribe to your hub and propose new areas without review. Appropriate for open public networks; set it to `N` and manually approve nodes for curated or private networks.
+**Auto-approve.** Setting `Auto Approve: Y` allows any node to subscribe to your hub without review. Appropriate for open public networks; set it to `N` and manually approve nodes for curated or private networks. `Auto Approve Areas: Y` does the same for area proposals: any subscribed node can add an area to the network. Leave it `N` to review proposals in the Coordinator Panel, even on an open network.
 
 **Public areas are public.** Messages posted to networked areas are replicated to every subscribed node and stored indefinitely on each. Do not post sensitive information in public message areas.
 

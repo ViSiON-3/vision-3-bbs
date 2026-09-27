@@ -29,6 +29,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/mailer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
@@ -39,10 +40,12 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	v3net "github.com/ViSiON-3/vision-3-bbs/internal/v3net"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 var (
@@ -1802,6 +1805,25 @@ func main() {
 		logging.Fatal("failed to load door configuration", "error", err)
 	}
 
+	// Networks sharing one BSO outbound are split at load. Write the split to
+	// ftn.json, and repoint binkd.conf's domain lines, so it holds from now
+	// on rather than being worked out again at every start.
+	if moved, err := config.SaveOutboundSplit(rootConfigPath); err != nil {
+		slog.Error("could not save the per-network binkd outbounds to ftn.json", "error", err)
+	} else if len(moved) > 0 {
+		for _, a := range moved {
+			slog.Warn("gave an FTN network its own binkd outbound and saved it to ftn.json",
+				"network", a.Network, "outbound", a.Path, "shared_outbound", a.SharedPath, "kept_by", a.KeptBy)
+		}
+		if saved, err := config.LoadFTNConfig(rootConfigPath); err == nil {
+			confPath := filepath.Join(basePath, "data", "ftn", "binkd.conf")
+			if err := ftn.SyncBinkdSettings(confPath, 0, 0, ftn.BinkdOutboundFor(basePath, saved)); err != nil {
+				slog.Error("could not repoint binkd.conf domains at the new outbounds", "path", confPath, "error", err)
+			}
+		}
+		slog.Warn("if you run binkd outside the BBS with its own config, point each moved network's domain line at its new outbound and restart binkd")
+	}
+
 	// Load FTN configuration early so message manager can use per-network origins.
 	ftnConfig, ftnErr := config.LoadFTNConfig(rootConfigPath)
 	if ftnErr != nil {
@@ -1830,6 +1852,9 @@ func main() {
 	// Posts in QWK network areas get a Message-ID keyed on the system's QWK
 	// ID, so replies from the hub can thread back to them.
 	messageMgr.SetQWKID(menu.ResolveQWKID(serverConfig))
+	if ftnErr == nil {
+		tosser.WarnOrphanFTNAreas(ftnConfig, messageMgr.ListAreas())
+	}
 	defer func() {
 		if cerr := messageMgr.Close(); cerr != nil {
 			slog.Error("closing JAM message bases on shutdown", "error", cerr)
@@ -2072,6 +2097,12 @@ func main() {
 				}
 			}()
 
+			// Offer sysops the areas a hub adds to networks this BBS is on.
+			// Set before Start so each leaf's first NAL fetch is seen.
+			v3netNodeID := v3netService.NodeID()
+			v3netService.SetNALObserver(func(network string, n *protocol.NAL) {
+				menuExecutor.NoteV3NetNAL(userMgr, network, n, v3netNodeID)
+			})
 			go v3netService.Start(v3netCtx)
 			menuExecutor.V3NetStatus = v3netService
 			menuExecutor.ChatLeaves = v3netChatProvider(v3netService)

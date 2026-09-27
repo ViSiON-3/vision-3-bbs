@@ -86,6 +86,16 @@ func (mm *MessageManager) loadMessageAreas() error {
 		}
 	}
 
+	// Two areas on one network whose tags differ only in case both match an
+	// inbound tag in the tosser's case-insensitive fallback, and the lower ID
+	// wins. AddArea/UpdateAreaByID refuse new ones; warn about any loaded.
+	for _, area := range mm.areasByID {
+		if other := mm.tagFoldConflict(area.Tag, area.Network, area.ID); other != nil && other.ID < area.ID {
+			slog.Warn("area tags on one network differ only in case; mail for them may reach either area",
+				"network", area.Network, "tag", area.Tag, "id", area.ID, "other_tag", other.Tag, "other_id", other.ID)
+		}
+	}
+
 	// Migration: assign positions to any areas that have Position <= 0.
 	// Finds the current max position and assigns sequentially after it.
 	maxPos := 0

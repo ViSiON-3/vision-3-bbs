@@ -419,3 +419,67 @@ func TestPropose_InvalidTag(t *testing.T) {
 		t.Errorf("expected 422 for invalid tag, got %d", resp.StatusCode)
 	}
 }
+
+// TestPropose_SubscribersAutoApprovedAreasReviewed covers the split settings:
+// a hub that lets new nodes join on their own still queues their area
+// proposals for the coordinator when AutoApproveAreas is off.
+func TestPropose_SubscribersAutoApprovedAreasReviewed(t *testing.T) {
+	dir := t.TempDir()
+	hubKS, _, err := keystore.Load(filepath.Join(dir, "hub.key"))
+	if err != nil {
+		t.Fatalf("load hub keystore: %v", err)
+	}
+	h, err := New(Config{
+		ListenAddr:       ":0",
+		DataDir:          dir,
+		Keystore:         hubKS,
+		AutoApprove:      true,
+		AutoApproveAreas: false,
+		Networks:         []NetworkConfig{{Name: "testnet", Description: "Test network"}},
+	})
+	if err != nil {
+		t.Fatalf("create hub: %v", err)
+	}
+	t.Cleanup(func() { h.Close() })
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
+	// registerLeaf leaves the node pending unless the hub auto-approves it, and
+	// a pending node cannot propose — so a 200 below also proves the join half.
+	registerLeaf(t, ts, leafKS)
+	seedTestNALForProposals(t, h, hubKS)
+
+	req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/areas/propose", proposalBody)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST propose: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result["status"] != "pending" {
+		t.Errorf("proposal status = %v, want pending for coordinator review", result["status"])
+	}
+
+	nalResp, err := http.Get(ts.URL + "/v3net/v1/testnet/nal")
+	if err != nil {
+		t.Fatalf("GET nal: %v", err)
+	}
+	defer nalResp.Body.Close()
+	var nalDoc protocol.NAL
+	if err := json.NewDecoder(nalResp.Body).Decode(&nalDoc); err != nil {
+		t.Fatalf("decode NAL: %v", err)
+	}
+	if nalDoc.FindArea("gen.test") != nil {
+		t.Error("proposed area reached the NAL without review")
+	}
+}

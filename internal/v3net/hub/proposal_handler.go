@@ -186,7 +186,7 @@ func (h *Hub) handlePropose(w http.ResponseWriter, r *http.Request) {
 	status := "pending"
 
 	// Auto-approve if hub is configured for it.
-	if h.cfg.AutoApprove {
+	if h.cfg.AutoApproveAreas {
 		if err := h.approveProposal(network, id, protocol.ProposalApproveRequest{AccessMode: accessMode}); err != nil {
 			slog.Error("auto-approve proposal", "id", id, "error", err)
 			// Fall through — proposal is still stored as pending.

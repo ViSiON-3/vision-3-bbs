@@ -34,6 +34,8 @@ func cmdToss(args []string) {
 // when set, and reports whether the run failed: a toss error, or mail left
 // unclaimed long enough to be quarantined.
 func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, networkName string, quiet bool) bool {
+	tosser.WarnOrphanFTNAreas(ftnCfg, msgMgr.ListAreas())
+
 	totalImported, totalDupes, totalPackets := 0, 0, 0
 	hadErrors := false
 	// Merged across networks and keyed by inbound file, so the whole-pass

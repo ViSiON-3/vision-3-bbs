@@ -53,13 +53,29 @@ func (c *QWKAPIConfig) TokenTTL() time.Duration {
 
 // V3NetHubConfig configures this node as a V3Net hub.
 type V3NetHubConfig struct {
-	Enabled      bool              `json:"enabled"`
-	Host         string            `json:"host"` // Listen host (blank = all interfaces)
-	Port         int               `json:"port"` // Listen port (default: 8765)
-	DataDir      string            `json:"dataDir"`
-	AutoApprove  bool              `json:"autoApprove"`
-	Networks     []V3NetHubNetwork `json:"networks,omitempty"`
-	InitialAreas []V3NetHubArea    `json:"initialAreas,omitempty"`
+	Enabled bool   `json:"enabled"`
+	Host    string `json:"host"` // Listen host (blank = all interfaces)
+	Port    int    `json:"port"` // Listen port (default: 8765)
+	DataDir string `json:"dataDir"`
+	// AutoApprove activates new leaf subscriptions without the coordinator
+	// approving each node.
+	AutoApprove bool `json:"autoApprove"`
+	// AutoApproveAreas adds proposed areas to the NAL without the coordinator
+	// reviewing them. Unset follows AutoApprove, which used to cover both;
+	// see AreaProposalsAutoApproved.
+	AutoApproveAreas *bool             `json:"autoApproveAreas,omitempty"`
+	Networks         []V3NetHubNetwork `json:"networks,omitempty"`
+	InitialAreas     []V3NetHubArea    `json:"initialAreas,omitempty"`
+}
+
+// AreaProposalsAutoApproved reports whether the hub approves area proposals
+// as they arrive. A config written before AutoApproveAreas existed keeps its
+// old behaviour, where AutoApprove approved proposals as well as subscribers.
+func (c *V3NetHubConfig) AreaProposalsAutoApproved() bool {
+	if c.AutoApproveAreas != nil {
+		return *c.AutoApproveAreas
+	}
+	return c.AutoApprove
 }
 
 // ListenAddr returns the host:port string for net.Listen / http.Server.

@@ -641,7 +641,7 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
 | `internal_tosser_enabled` | Set `true` to enable `v3mail` for this network      |
 | `own_address`             | Your FTN address (e.g., `21:4/158.1`)               |
 | `origin`                  | Origin line text (empty = board name)               |
-| `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one. Set it on every network beyond the first — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
+| `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one, but when several networks share the global one (empty, or set to the same path) all but one are given `<global>_<network>` automatically — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
 
 Hub polling is controlled by the per-network `echomail_poll_<network>` event
 under **Events**. The wizard creates it with a 15-minute cron schedule; edit
@@ -771,13 +771,24 @@ To add another FTN network (e.g., AgoraNet alongside fsxNet):
   --network agoranet
 ```
 
-3. In `./config` → **Echomail Networks**, open the new network and set
-   **Binkd Outbound** to a directory of its own, e.g. `data/ftn/out_agora`
-   (no dots in the name — binkd reserves `.<zone>` suffixes on the base
-   outbound and refuses a dotted one). Every network needs its own BSO
-   outbound: bundle and flow filenames carry only the destination net/node,
-   so two networks sharing one directory can hand mail to the wrong hub when
-   two hubs share a net/node pair.
+3. The new network gets its own BSO outbound automatically: a directory
+   next to the global one named after the network, e.g. `data/ftn/out_agoranet`
+   (see **Binkd Outbound** under **Echomail Networks**; change it there if you
+   want another, with no dots in the name — binkd reserves `.<zone>` suffixes
+   on the base outbound and refuses a dotted one). Every network needs its own
+   outbound: bundle and flow filenames carry only the destination net/node, so
+   two networks sharing one directory can hand mail to the wrong hub when two
+   hubs share a net/node pair. Networks added from **Echomail Networks** get
+   one too. Older configs where several networks share the global outbound
+   are split the same way when the BBS starts: the new paths are saved to
+   `ftn.json`, the `domain` lines in `data/ftn/binkd.conf` are repointed, and
+   the log names each network moved. One network keeps the global directory,
+   so mail already queued there still goes out. The one kept is a network
+   whose **Binkd Outbound** already names the global directory, or else a
+   network that is enabled and has an address, or else the first by name. Its
+   path is saved too, so a network added by hand later cannot take the global
+   directory over. If you run binkd yourself with a config other than
+   `data/ftn/binkd.conf`, update its `domain` lines to match and restart it.
 4. Under **Echomail Links**, make sure the new hub link has a **Hostname**.
    Without one binkd has nothing to dial, the network only ever receives mail
    when the hub calls in, and no poll event is created.
@@ -791,7 +802,7 @@ If you run an external binkd instead, add the lines to its config yourself and
 restart it:
 
 ```conf
-domain agoranet /home/bbs/vision3/data/ftn/out_agora 46
+domain agoranet /home/bbs/vision3/data/ftn/out_agoranet 46
 address 46:1/100.1@agoranet
 node 46:1/100@agoranet hub-hostname:24554 HUBPASS -
 ```
@@ -809,7 +820,24 @@ node 46:1/100@agoranet hub-hostname:24554 HUBPASS -
 
 - Run `./v3mail toss --config configs --data data` manually to toss pending
   bundles/packets
-- Verify `echo_tag` in message_areas.json matches the AREA tag in the incoming packets
+- Verify `echo_tag` in message_areas.json matches the AREA tag in the incoming
+  packets (case does not matter: `0n-warez` from the hub reaches `0N-WAREZ`)
+- Verify each FTN area's `network` matches the network name in `ftn.json`
+  exactly apart from case — `zer0net` and `zeronet` are different networks.
+  Startup and `v3mail toss` log a warning for any area that names an unknown
+  network, and a network with no matching netmail area logs
+  `dropped netmail` for every netmail it receives.
+- A packet holding any message that failed to import is moved whole to
+  `temp_path` (`data/ftn/temp_in` by default). Once the cause is fixed, move
+  the `.pkt` files back into the inbound and toss again; messages already
+  imported are recognized by MSGID and skipped:
+
+  ```bash
+  mv data/ftn/temp_in/*.pkt data/ftn/in/
+  ./v3mail toss --config configs --data data
+  ```
+- Empty (zero-byte) `.pkt` files carry no mail. Some tossers send them when
+  a packet ends up empty; the tosser deletes them and logs `removed empty packet`.
 - Run `./v3mail stats --all` to verify message counts
 
 ### Outbound messages not sending

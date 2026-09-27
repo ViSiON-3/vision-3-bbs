@@ -66,6 +66,11 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	slog.Info("leaf: SSE connected", "network", l.cfg.Network)
 	if reconnect {
 		l.chatSessions.notifyReconnect()
+		// A nal_updated sent while the stream was down is lost, and Start's
+		// one-off fetch has long passed, so check the NAL again now.
+		if l.cfg.OnNAL != nil && l.reconnectFetching.CompareAndSwap(false, true) {
+			go l.refreshNALAfterReconnect(ctx)
+		}
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -104,6 +109,26 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 		return fmt.Errorf("SSE read: %w", err)
 	}
 	return fmt.Errorf("SSE stream ended")
+}
+
+// refreshNALAfterReconnect fetches the NAL, retrying with backoff until it
+// succeeds or ctx ends. A change the hub announced while the stream was down
+// is otherwise not seen until the next announcement, however long that takes.
+func (l *Leaf) refreshNALAfterReconnect(ctx context.Context) {
+	defer l.reconnectFetching.Store(false)
+	for attempt := 1; ; attempt++ {
+		err := l.refreshNAL(ctx)
+		if err == nil || ctx.Err() != nil {
+			return
+		}
+		delay := backoff(attempt)
+		slog.Warn("leaf: NAL fetch after SSE reconnect failed; retrying", "network", l.cfg.Network, "error", err, "delay", delay)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
 }
 
 func backoff(attempt int) time.Duration {
