@@ -123,6 +123,12 @@ func NewDupeDBFromPath(dupeDBPath string) (*DupeDB, error) {
 // ZIP bundles, unpacking bundles as needed, then tosses each packet.
 func (t *Tosser) ProcessInbound() TossResult {
 	result := TossResult{}
+	release, err := t.lockMail()
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result
+	}
+	defer release()
 
 	for _, inboundDir := range t.inboundDirs() {
 		t.processInboundDir(inboundDir, &result)

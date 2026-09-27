@@ -47,9 +47,13 @@ A failed call prints binkd's last lines; the full session is in
 `data/logs/binkd.log`. The exit status is 1 if any step failed.
 
 Only one `v3mail poll` runs at a time (the lock is `data/v3mail_poll.lock`); a
-second one exits straight away saying another poll is running. The lock covers
-polls only: the BBS's own export cycle and a scheduled `v3mail toss` can still
-run alongside one. Interrupting a poll (Ctrl-C or SIGTERM) stops the binkd call
+second one exits straight away saying another poll is running. Separately,
+every FTN toss, scan and pack takes `data/ftn/ftn_mail.lock`, whether it comes
+from a poll, the BBS's export cycle or a `v3mail` command (binkd runs
+`v3mail toss` after each session). So a poll that overlaps any of those waits
+its turn instead of exporting or importing the same mail twice. A run that
+waits more than two minutes gives up with an error and leaves the work for
+the next run. Interrupting a poll (Ctrl-C or SIGTERM) stops the binkd call
 in progress, skips the remaining hubs and still tosses what arrived.
 
 From the admin menu the poll stops when the sysop disconnects. It also stops

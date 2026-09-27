@@ -28,6 +28,12 @@ type PackResult struct {
 // After successful bundling, the staged .PKT files are removed.
 func (t *Tosser) PackOutbound() PackResult {
 	result := PackResult{}
+	release, err := t.lockMail()
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result
+	}
+	defer release()
 
 	stagingDir := t.paths.OutboundPath
 	binkdDir := t.paths.BinkdOutboundPath
