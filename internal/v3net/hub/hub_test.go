@@ -31,7 +31,8 @@ func setupTestHub(t *testing.T) (*Hub, *keystore.Keystore) {
 		ListenAddr:  ":0",
 		DataDir:     dir,
 		Keystore:    ks,
-		AutoApprove: true,
+		AutoApprove:      true,
+		AutoApproveAreas: true,
 		Networks: []NetworkConfig{
 			{Name: "testnet", Description: "Test network"},
 		},

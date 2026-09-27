@@ -7,11 +7,15 @@ import (
 
 // Config holds hub server configuration.
 type Config struct {
-	ListenAddr  string
-	DataDir     string
-	Keystore    *keystore.Keystore
+	ListenAddr string
+	DataDir    string
+	Keystore   *keystore.Keystore
+	// AutoApprove activates new subscribers on registration.
 	AutoApprove bool
-	Networks    []NetworkConfig
+	// AutoApproveAreas adds area proposals to the NAL on arrival instead of
+	// queueing them for the coordinator.
+	AutoApproveAreas bool
+	Networks         []NetworkConfig
 }
 
 // NetworkConfig defines a single network hosted by this hub.

@@ -49,7 +49,7 @@ Choosing **System Setup** (key 1) opens an inner menu of six numbered items, all
 | 5 | Logging | Log Directory, Min Level, Rolling Type, Cache Writes, Max Files, Max Size KB |
 | 6 | QWK Mobile API | Enabled, Host, Port, Cert File, Key File, Token TTL Hours |
 
-**Server Setup (item 2)** also writes to `configs/v3net.json` for the V3Net fields (keystore path, dedup DB path, registry URL, hub enabled/host/port/data dir/auto-approve).
+**Server Setup (item 2)** also writes to `configs/v3net.json` for the V3Net fields (keystore path, dedup DB path, registry URL, hub enabled/host/port/data dir/auto-approve/auto-approve areas).
 
 ### Access & Security Sub-menu
 

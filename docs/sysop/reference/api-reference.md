@@ -675,6 +675,7 @@ type V3NetHubConfig struct {
     ListenAddr  string
     DataDir     string
     AutoApprove bool
+    AutoApproveAreas *bool // nil follows AutoApprove
     Networks    []V3NetHubNetwork
 }
 

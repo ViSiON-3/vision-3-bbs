@@ -199,6 +199,7 @@ Scroll to the V3Net hub fields and set **Hub TLS Cert** and **Hub TLS Key**:
 │  Hub TLS Key     : /etc/letsencrypt/live/hub.example.com/privkey...  │
 │  Hub Data Dir    : data/v3net_hub                                    │
 │  Auto Approve    : N                                                 │
+│  Auto Approve Areas : N                                              │
 │                                                                      │
 │                          Screen 2 of 8                               │
 └──────────────────────────────────────────────────────────────────────┘

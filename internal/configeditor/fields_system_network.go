@@ -125,6 +125,15 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 			Set: func(val string) error { hub.AutoApprove = uitext.YNToBool(val); return nil },
 		},
 		{
+			Label: "Auto Approve Areas", Help: "Add proposed areas to the network without coordinator review", Type: ftYesNo, Col: 3, Row: 20, Width: 1,
+			Get: func() string { return uitext.BoolToYN(hub.AreaProposalsAutoApproved()) },
+			Set: func(val string) error {
+				v := uitext.YNToBool(val)
+				hub.AutoApproveAreas = &v
+				return nil
+			},
+		},
+		{
 			Label: "Binkd Mailer", Help: "Run bundled binkd FTN mailer at startup", Type: ftYesNo, Col: 3, Row: 21, Width: 1,
 			Get: func() string { return uitext.BoolToYN(binkd.Enabled) },
 			Set: func(val string) error { binkd.Enabled = uitext.YNToBool(val); return nil },

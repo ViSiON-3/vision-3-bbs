@@ -38,7 +38,8 @@ configuration to join an existing network.
 | `tlsCert` | string | `""` | Path to TLS certificate file (PEM). If both `tlsCert` and `tlsKey` are set, the hub serves HTTPS. |
 | `tlsKey` | string | `""` | Path to TLS private key file (PEM). |
 | `dataDir` | string | `""` | Directory for hub data (SQLite database, NAL files). Example: `"data/v3net_hub"` |
-| `autoApprove` | bool | `false` | When `true`, new subscriber registrations and area proposals are approved automatically. Recommended for testing only. |
+| `autoApprove` | bool | `false` | When `true`, new subscriber registrations are approved automatically. |
+| `autoApproveAreas` | bool | unset | When `true`, area proposals are added to the NAL on arrival; when `false`, they wait for the coordinator in the Coordinator Panel. Unset follows `autoApprove`, which covered proposals too before this setting existed. Recommended `false` outside testing. |
 | `networks` | array | `[]` | List of networks hosted by this hub. See below. |
 | `initialAreas` | array | `[]` | Area specs for the initial NAL seed. Consumed once on first hub start, then removed automatically. See below. |
 
@@ -145,6 +146,7 @@ To add your network to the public registry, submit a PR to the
     "tlsKey": "/etc/letsencrypt/live/hub.example.com/privkey.pem",
     "dataDir": "data/v3net_hub",
     "autoApprove": false,
+    "autoApproveAreas": false,
     "networks": [
       {
         "name": "mynet",
