@@ -17,6 +17,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -100,18 +101,29 @@ func runMailPoll(c *cmdCtx, args string) (*user.User, string, error) {
 	if _, err := os.Stat(v3mail); err != nil {
 		write(fmt.Sprintf("|01v3mail not found at %s|07\r\n", v3mail))
 	} else {
-		write("|03Sending and fetching mail for every network. This can take a few minutes...|07\r\n\r\n")
+		write("|03Sending and fetching mail for every network. This can take a few minutes.|07\r\n" +
+			"|08Press |07ESC|08 or |07Q|08 to stop; mail already received is still tossed.|07\r\n\r\n")
 		// Tied to the session, so a sysop who hangs up does not leave the
 		// poll running with their node held.
 		ctx, cancel := context.WithTimeout(c.s.Context(), mailPollDeadline(e.RootConfigPath))
+		done := make(chan struct{})
+		watched := make(chan struct{})
+		go func() {
+			defer close(watched)
+			watchPollStopKey(getSessionIH(c.s), done, cancel)
+		}()
 		out := &crlfWriter{w: terminalWriterFunc(func(p []byte) {
 			_ = terminalio.WriteProcessedBytes(terminal, p, outputMode)
 		})}
 		code, err := execMailPoll(ctx, v3mail, root, e.RootConfigPath, strings.Fields(args), out)
+		close(done)
+		<-watched // the pause prompt below must get the next key, not the watcher
 		cancel()
 		out.Flush()
 		write("\r\n" + rule)
 		switch {
+		case errors.Is(err, errMailPollStopped):
+			write("|14Poll stopped.|07\r\n")
 		case err != nil:
 			slog.Error("menu mail poll failed to run", "node", c.nodeNumber, "error", err)
 			write(fmt.Sprintf("|01Poll did not finish: %v|07\r\n", err))
@@ -130,6 +142,41 @@ func runMailPoll(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", err
 	}
 	return nil, "", nil
+}
+
+// pollKeyReader is the part of the session input the stop-key watcher uses.
+type pollKeyReader interface {
+	ReadKeyWithTimeout(d time.Duration) (int, error)
+}
+
+// pollKeyCheck is how often the stop-key watcher looks for done.
+const pollKeyCheck = 200 * time.Millisecond
+
+// watchPollStopKey calls stop when the sysop presses ESC or Q, or the session
+// input ends, and returns once done is closed. It reads with a short timeout
+// so it notices done promptly and leaves later keys to whatever reads next;
+// a timed-out read consumes nothing.
+func watchPollStopKey(in pollKeyReader, done <-chan struct{}, stop func()) {
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		k, err := in.ReadKeyWithTimeout(pollKeyCheck)
+		switch {
+		case errors.Is(err, editor.ErrIdleTimeout):
+			continue
+		case err != nil:
+			stop() // disconnected; the session context ends the poll too
+			<-done
+			return
+		case k == int(editor.KeyEsc) || k == 'q' || k == 'Q':
+			stop()
+			<-done
+			return
+		}
+	}
 }
 
 // execMailPoll runs `v3mail poll` from the BBS root with output copied to out,
@@ -170,7 +217,7 @@ func execMailPoll(ctx context.Context, v3mail, root, configDir string, extra []s
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return -1, fmt.Errorf("gave up after %s", time.Since(start).Round(time.Second))
 	case ctx.Err() != nil:
-		return -1, fmt.Errorf("stopped: %w", ctx.Err())
+		return -1, errMailPollStopped
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -181,6 +228,9 @@ func execMailPoll(ctx context.Context, v3mail, root, configDir string, extra []s
 	}
 	return 0, nil
 }
+
+// errMailPollStopped reports a poll stopped by the sysop or a disconnect.
+var errMailPollStopped = errors.New("stopped")
 
 // terminalWriterFunc adapts a write callback to io.Writer.
 type terminalWriterFunc func(p []byte)

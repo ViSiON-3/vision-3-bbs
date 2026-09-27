@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
 func TestCRLFWriter(t *testing.T) {
@@ -150,4 +152,64 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// ESC or Q stops the poll; other keys do not. Either way the watcher returns
+// once the poll is done, so it never reads a key meant for the next prompt.
+func TestWatchPollStopKey(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		keys []int
+		stop bool
+	}{
+		{"esc", []int{'x', int(editor.KeyEsc)}, true},
+		{"q", []int{'Q'}, true},
+		{"other keys", []int{'a', 'b'}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := &scriptedInput{}
+			for _, k := range tc.keys {
+				in.events = append(in.events, key(k))
+			}
+			stopped := make(chan struct{})
+			done := make(chan struct{})
+			returned := make(chan struct{})
+			go func() {
+				watchPollStopKey(in, done, func() { close(stopped) })
+				close(returned)
+			}()
+			select {
+			case <-stopped:
+				if !tc.stop {
+					t.Fatal("stopped on a key that should be ignored")
+				}
+			case <-time.After(300 * time.Millisecond):
+				if tc.stop {
+					t.Fatal("did not stop")
+				}
+			}
+			close(done)
+			select {
+			case <-returned:
+			case <-time.After(time.Second):
+				t.Fatal("watcher kept running after the poll ended")
+			}
+		})
+	}
+}
+
+// A disconnect ends the watcher's input: it stops the poll.
+func TestWatchPollStopKeyOnDisconnect(t *testing.T) {
+	in := &scriptedInput{}
+	in.events = append(in.events, struct {
+		key int
+		err error
+	}{0, io.EOF})
+	stopped := false
+	done := make(chan struct{})
+	go func() { time.Sleep(50 * time.Millisecond); close(done) }()
+	watchPollStopKey(in, done, func() { stopped = true })
+	if !stopped {
+		t.Error("disconnect did not stop the poll")
+	}
 }

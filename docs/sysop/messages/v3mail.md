@@ -56,7 +56,8 @@ waits more than two minutes gives up with an error and leaves the work for
 the next run. Interrupting a poll (Ctrl-C or SIGTERM) stops the binkd call
 in progress, skips the remaining hubs and still tosses what arrived.
 
-From the admin menu the poll stops when the sysop disconnects. It also stops
+From the admin menu, **ESC** or **Q** stops the poll, and so does
+disconnecting. It also stops
 after 10 minutes plus 5 per hub it can call.
 
 ### FTN Echomail Commands
