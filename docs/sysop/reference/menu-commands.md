@@ -233,6 +233,7 @@ Stock menus bind all of these in `V3NETM` with ACS `S255`. None of them check a 
 | `DELETEUSER` | none | Lightbar user picker, then soft-deletes the account. Not bound in the stock menus. | SysOp |
 | `PURGEUSERS` | none | Permanently removes soft-deleted users older than `deletedUserRetentionDays`. A negative value disables purging. | SysOp |
 | `TOGGLEALLOWNEWUSERS` | none | Flips `allowNewUsers` in `config.json` and reports the new state. | SysOp |
+| `MAILPOLL` | optional `v3mail poll` flags, e.g. `--network fsxnet` or `--qwk-only` | Runs [`v3mail poll`](messages/v3mail.md#poll) and shows its output: sends and fetches mail for every enabled FTN and QWK network now instead of waiting for the scheduled polls. Bound to `M` on the stock admin menu. | SysOp, checked in code regardless of `sec_level` |
 | `SPONSORMENU` | none | Sponsor menu for the current message area: edit the area, step through sponsored areas, reorder. | Area sponsor, or CoSysOp+ |
 | `SPONSOREDITAREA` | none | Field editor for the current message area. Tag, base path, type, echo and network fields need CoSysOp+. | Area sponsor, or CoSysOp+ |
 

@@ -97,6 +97,14 @@ func cmdQWKPoll(args []string) {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if pollQWK(ctx, nodes) {
+		os.Exit(1)
+	}
+}
+
+// pollQWK runs the full exchange with each node's hub and reports whether any
+// of them had errors.
+func pollQWK(ctx context.Context, nodes []*qwknet.Node) bool {
 	failed := false
 	for _, n := range nodes {
 		fmt.Printf("Polling %s (hub %s as %s)...\n", n.Key, n.HubID(), n.NodeID())
@@ -109,9 +117,7 @@ func cmdQWKPoll(args []string) {
 			failed = true
 		}
 	}
-	if failed {
-		os.Exit(1)
-	}
+	return failed
 }
 
 // cmdQWKScan packs new local posts into each hub's REP without connecting.

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,8 +33,15 @@ func main() {
 	// This also bridges stdlib log.Printf until Phase B migrates call sites to
 	// slog. LoadServerConfig returns defaults when configs/config.json is
 	// absent, and a logging-init failure leaves the stdlib default (stderr).
+	// V3MAIL_NO_CONSOLE_LOG keeps log records in the log file only. The BBS
+	// sets it when it runs v3mail and shows the output to a sysop, where the
+	// records would bury the command's own progress lines.
+	console := os.Getenv("V3MAIL_NO_CONSOLE_LOG") == ""
+	if !console {
+		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}
 	cfg, _ := config.LoadServerConfig("configs")
-	if _, closeLog, err := logging.Init(cfg.Logging, "v3mail.log", true); err == nil {
+	if _, closeLog, err := logging.Init(cfg.Logging, "v3mail.log", console); err == nil {
 		defer func() { _ = closeLog() }() // best-effort log flush at exit
 	} else {
 		_, _ = fmt.Fprintf(os.Stderr, "WARN: failed to initialize logging: %v\n", err)
@@ -72,6 +81,8 @@ func main() {
 		cmdScan(os.Args[2:])
 	case "ftn-pack":
 		cmdFtnPack(os.Args[2:])
+	case "poll":
+		cmdPoll(os.Args[2:])
 	case "qwk-poll":
 		cmdQWKPoll(os.Args[2:])
 	case "qwk-scan":
@@ -132,6 +143,9 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w, cmd("FIX", "Verify and repair JAM base integrity"))
 	_, _ = fmt.Fprintln(w, cmd("LINK", "Build reply-threading chains (ReplyTo/Reply1st/ReplyNext)"))
 	_, _ = fmt.Fprintln(w, cmd("LASTREAD", "Show or reset per-user lastread pointers"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sNetwork Mail:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, cmd("POLL", "Send and fetch mail now for every FTN and QWK network (--network, --ftn-only, --qwk-only, -v)"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sFTN Echomail Commands:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, cmd("TOSS", "Unpack inbound FTN bundles and toss .PKT files into JAM bases"))
