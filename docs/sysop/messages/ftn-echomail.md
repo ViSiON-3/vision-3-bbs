@@ -829,6 +829,8 @@ node 46:1/100@agoranet hub-hostname:24554 HUBPASS -
   mv data/ftn/temp_in/*.pkt data/ftn/in/
   ./v3mail toss --config configs --data data
   ```
+- Empty (zero-byte) `.pkt` files carry no mail. Some tossers send them when
+  a packet ends up empty; the tosser deletes them and logs `removed empty packet`.
 - Run `./v3mail stats --all` to verify message counts
 
 ### Outbound messages not sending
