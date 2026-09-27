@@ -216,7 +216,7 @@ func TestSysopNoticesAddsAcceptedAreas(t *testing.T) {
 
 func TestSysopNoticesKeepsOffersWhenInterrupted(t *testing.T) {
 	e, _ := newAreaFixture(t)
-	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", nal: nalWith("fel.a", "fel.music", "fel.warez")}
+	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", hubURL: "https://hub.example", nal: nalWith("fel.a", "fel.music", "fel.warez")}
 	queueOffer(t, e, "fel.music", "Music")
 	queueOffer(t, e, "fel.warez", "Warez")
 
@@ -231,7 +231,7 @@ func TestSysopNoticesKeepsOffersWhenInterrupted(t *testing.T) {
 
 func TestSysopNoticesDropsOffersForNonSysops(t *testing.T) {
 	e, _ := newAreaFixture(t)
-	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", nal: nalWith("fel.a", "fel.music")}
+	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", hubURL: "https://hub.example", nal: nalWith("fel.a", "fel.music")}
 	queueOffer(t, e, "fel.music", "Music")
 
 	// A co-sysop now: the offer is dropped without asking.
@@ -271,7 +271,7 @@ func TestSysopNoticesDeclineShowsReminder(t *testing.T) {
 		V3NetNewAreaNotice:   "New %s area: %s. Add?",
 		V3NetNewAreaDeclined: "Not asked about %s again. Add it later from Area Subscriptions.",
 	})
-	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", nal: nalWith("fel.a", "fel.music")}
+	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", hubURL: "https://hub.example", nal: nalWith("fel.a", "fel.music")}
 	queueOffer(t, e, "fel.music", "Music")
 
 	out := runNoticeScreen(t, e, 255, "n\r")
@@ -284,5 +284,90 @@ func TestSysopNoticesDeclineShowsReminder(t *testing.T) {
 	}
 	if v3netSubscribedBoards(e.RootConfigPath, "felonynet")["fel.music"] {
 		t.Error("declined area was subscribed")
+	}
+}
+
+// TestSysopNoticesKeepsOffersWhenHubUnavailable covers a network whose leaf
+// is gone or whose hub cannot be reached: answering Yes would write a leaf
+// with no hub URL or an area the hub has since closed, so nothing is asked
+// and the offer waits for the next login.
+func TestSysopNoticesKeepsOffersWhenHubUnavailable(t *testing.T) {
+	for name, svc := range map[string]*fakeV3NetStatus{
+		"no leaf":     {network: "felonynet", nal: nalWith("fel.a", "fel.music")},
+		"NAL failing": {network: "felonynet", hubURL: "https://hub.example"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e, _ := newAreaFixture(t)
+			e.V3NetStatus = svc
+			queueOffer(t, e, "fel.music", "Music")
+
+			out := runNoticeScreen(t, e, 255, "y\r")
+			if strings.Contains(out, "Add?") {
+				t.Errorf("asked without a reachable hub: %q", out)
+			}
+			if q, _ := peekSysopNotices(sysopNoticesPath(e.GetServerConfig().DataDir), 1); len(q) != 1 {
+				t.Errorf("queue = %+v, want the offer kept", q)
+			}
+			if v3netSubscribedBoards(e.RootConfigPath, "felonynet")["fel.music"] {
+				t.Error("area was subscribed")
+			}
+		})
+	}
+}
+
+// TestSysopNoticesSettlesAreaClosedSinceOffered covers an area the hub has
+// closed to this node after the offer was queued.
+func TestSysopNoticesSettlesAreaClosedSinceOffered(t *testing.T) {
+	e, _ := newAreaFixture(t)
+	current := nalWith("fel.a", "fel.music")
+	current.Areas[1].Access.Mode = protocol.AccessModeClosed
+	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", hubURL: "https://hub.example", nal: current}
+	queueOffer(t, e, "fel.music", "Music")
+
+	out := runNoticeScreen(t, e, 255, "y\r")
+	if strings.Contains(out, "Add?") {
+		t.Errorf("asked about an area closed to this node: %q", out)
+	}
+	if q, _ := peekSysopNotices(sysopNoticesPath(e.GetServerConfig().DataDir), 1); len(q) != 0 {
+		t.Errorf("queue = %+v, want the offer settled", q)
+	}
+}
+
+// TestNoteV3NetNALRetrySkipsDeclined covers a retry after a partial queue: a
+// sysop who already said No to an area is not asked again.
+func TestNoteV3NetNALRetrySkipsDeclined(t *testing.T) {
+	e, um := newAreaFixture(t)
+	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", hubURL: "https://hub.example", nal: nalWith("fel.a", "fel.b")}
+	e.NoteV3NetNAL(um, "felonynet", nalWith("fel.a"), "ME")
+	queueOffer(t, e, "fel.b", "Area fel.b")
+	runNoticeScreen(t, e, 255, "n\r")
+
+	// fel.b was never recorded as seen (as after a failed queue), so the next
+	// NAL treats it as new again.
+	if n := e.NoteV3NetNAL(um, "felonynet", nalWith("fel.a", "fel.b"), "ME"); n != 0 {
+		t.Errorf("queued %d notices, want 0 (sysop declined fel.b)", n)
+	}
+}
+
+// TestSysopNoticesSkipsOfferAnotherSessionIsAsking covers two sysops logged
+// in together: the one who gets to an offer second is not asked, and the
+// offer waits for their next login.
+func TestSysopNoticesSkipsOfferAnotherSessionIsAsking(t *testing.T) {
+	e, _ := newAreaFixture(t)
+	e.V3NetStatus = &fakeV3NetStatus{network: "felonynet", hubURL: "https://hub.example", nal: nalWith("fel.a", "fel.music")}
+	queueOffer(t, e, "fel.music", "Music")
+
+	release, ok := claimV3NetOffer("felonynet", "fel.music")
+	if !ok {
+		t.Fatal("could not claim the offer")
+	}
+	defer release()
+
+	out := runNoticeScreen(t, e, 255, "y\r")
+	if strings.Contains(out, "Add?") {
+		t.Errorf("asked about an offer another session holds: %q", out)
+	}
+	if q, _ := peekSysopNotices(sysopNoticesPath(e.GetServerConfig().DataDir), 1); len(q) != 1 {
+		t.Errorf("queue = %+v, want the offer kept", q)
 	}
 }

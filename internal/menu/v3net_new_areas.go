@@ -175,6 +175,12 @@ func (e *MenuExecutor) NoteV3NetNAL(userManager *user.UserMgr, network string, n
 
 		path := sysopNoticesPath(dataDir)
 		label := v3netNetworkLabel(network)
+		v3netDeclinedMu.Lock()
+		declined, err := loadV3NetDeclined(v3netDeclinedAreasPath(dataDir))
+		v3netDeclinedMu.Unlock()
+		if err != nil {
+			return err
+		}
 		var failed error
 		for _, u := range userManager.GetAllUsers() {
 			if u == nil || u.DeletedUser || !e.isSysOpOrAbove(u) {
@@ -188,6 +194,9 @@ func (e *MenuExecutor) NoteV3NetNAL(userManager *user.UserMgr, network string, n
 			for _, a := range offers {
 				if hasV3NetOffer(pending, network, a.Tag) {
 					continue // queued by an earlier attempt
+				}
+				if declined.has(u.ID, network, a.Tag) {
+					continue // answered No to an earlier attempt
 				}
 				notice := sysopNotice{
 					Text:         fmt.Sprintf(format, label, a.Name),
@@ -215,6 +224,93 @@ func (e *MenuExecutor) NoteV3NetNAL(userManager *user.UserMgr, network string, n
 		slog.Warn("v3net: new areas not offered; will retry at the next NAL", "network", network, "error", err)
 	}
 	return queued
+}
+
+// v3netDeclinedMu guards the declined-areas file.
+var v3netDeclinedMu sync.Mutex
+
+// v3netDeclinedAreasPath returns the declined-areas file path for the given
+// data dir, falling back to the conventional "data" dir when none is set.
+func v3netDeclinedAreasPath(dataDir string) string {
+	if strings.TrimSpace(dataDir) == "" {
+		dataDir = "data"
+	}
+	return filepath.Join(dataDir, "v3net_declined_areas.json")
+}
+
+// v3netDeclined maps user ID to network to the area tags that sysop said No to.
+type v3netDeclined map[int]map[string][]string
+
+func loadV3NetDeclined(path string) (v3netDeclined, error) {
+	d := v3netDeclined{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return d, nil
+		}
+		return nil, err
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		return d, nil
+	}
+	if err := json.Unmarshal(data, &d); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if d == nil {
+		d = v3netDeclined{}
+	}
+	return d, nil
+}
+
+func (d v3netDeclined) has(userID int, network, tag string) bool {
+	for _, t := range d[userID][network] {
+		if t == tag {
+			return true
+		}
+	}
+	return false
+}
+
+// recordV3NetDecline remembers that userID said No to tag on network, so a
+// later retry of the same offer does not ask them again.
+func recordV3NetDecline(path string, userID int, network, tag string) error {
+	v3netDeclinedMu.Lock()
+	defer v3netDeclinedMu.Unlock()
+
+	d, err := loadV3NetDeclined(path)
+	if err != nil {
+		return err
+	}
+	if d.has(userID, network, tag) {
+		return nil
+	}
+	if d[userID] == nil {
+		d[userID] = map[string][]string{}
+	}
+	d[userID][network] = append(d[userID][network], tag)
+	out, err := json.MarshalIndent(d, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return atomicfile.WriteFile(path, out, 0o644)
+}
+
+// v3netOffersAsking holds the network/tag offers a session is asking about
+// right now, so two sysops logged in together are not both asked.
+var v3netOffersAsking sync.Map
+
+// claimV3NetOffer reserves an offer for this session. It returns false when
+// another session is already asking about it; release must be called once
+// the question is settled.
+func claimV3NetOffer(network, tag string) (release func(), ok bool) {
+	key := network + "\x00" + tag
+	if _, taken := v3netOffersAsking.LoadOrStore(key, struct{}{}); taken {
+		return nil, false
+	}
+	return func() { v3netOffersAsking.Delete(key) }, true
 }
 
 // hasV3NetOffer reports whether queue already holds an offer for tag on network.

@@ -79,10 +79,15 @@ Either way, each area is asked about once.
 - A closed area is only offered when your node is on its allow list. An
   approval-mode area is offered, and Yes sends the access request to its
   manager.
-- If the hub has removed the area by the time you log in, the question is
-  dropped. If you already added it from the area browser, it is skipped.
+- If the hub has removed the area by the time you log in, or closed it to
+  your node, the question is dropped. If you already added it from the area
+  browser, it is skipped.
+- If the hub cannot be reached when you log in, the question waits for a
+  later login rather than asking about an area it cannot check. The same
+  happens when another SysOp is answering the same question at that moment.
 
-The areas seen on each network are kept in `data/v3net_seen_areas.json`. The
+The areas seen on each network are kept in `data/v3net_seen_areas.json`, and
+each SysOp's **No** answers in `data/v3net_declined_areas.json`. The
 question's wording is the `v3netNewAreaNotice` string (`%s` is the network,
 then the area name), and the reminder after **No** is `v3netNewAreaDeclined`
 (`%s` is the area tag).

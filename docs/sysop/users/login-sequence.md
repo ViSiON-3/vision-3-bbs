@@ -178,8 +178,10 @@ regardless of validation state, see `SYSOPNOTICES` below.
 
 ### SYSOPNOTICES
 
-Delivers any queued SysOp notices to a co-SysOp-or-above caller at login, then
-clears them. There are two kinds:
+Delivers any queued SysOp notices to a co-SysOp-or-above caller at login.
+A plain notice leaves the queue once it has been shown; a V3Net area question
+leaves it only once it is answered or no longer applies, so a question cut off
+by a disconnect is asked again at the next login. There are two kinds:
 
 - **New users.** When someone signs up, `notifySysopNewUser` pages each
   co-SysOp+ account that is online and queues the notice for each one that is

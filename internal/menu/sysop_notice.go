@@ -15,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -368,60 +369,25 @@ func (e *MenuExecutor) offerV3NetAreas(c *cmdCtx, offers []sysopNotice, leadIn b
 	}
 
 	format := e.Strings().V3NetNewAreaNotice
+	declinedPath := v3netDeclinedAreasPath(e.GetServerConfig().DataDir)
 	nals := map[string]*protocol.NAL{}
 	var added []string
 	for _, n := range offers {
-		if v3netSubscribedBoards(e.RootConfigPath, n.V3NetNetwork)[n.V3NetTag] {
-			handled = append(handled, n)
-			continue
+		release, ok := claimV3NetOffer(n.V3NetNetwork, n.V3NetTag)
+		if !ok {
+			continue // another sysop is being asked now; settle it next login
 		}
-		current, fetched := nals[n.V3NetNetwork]
-		if !fetched {
-			ctx, cancel := context.WithTimeout(context.Background(), v3netManageTimeout)
-			current, _ = svc.FetchNALForNetwork(ctx, n.V3NetNetwork)
-			cancel()
-			nals[n.V3NetNetwork] = current
-		}
-		area := protocol.Area{Tag: n.V3NetTag, Name: n.V3NetName}
-		if current != nil {
-			found := current.FindArea(n.V3NetTag)
-			if found == nil {
-				handled = append(handled, n) // dropped by the hub since
-				continue
-			}
-			area = *found
-		}
-
-		prompt := n.Text
-		if format != "" {
-			prompt = fmt.Sprintf(format, v3netNetworkLabel(n.V3NetNetwork), area.Name)
-		}
-		// The lightbar ends its own line once answered, so only the first
-		// question may need a line break in front of it.
-		if leadIn && !asked {
-			write("\r\n")
-		}
-		yes, err := e.PromptYesNo(c.s, terminal, prompt, outputMode, c.nodeNumber, c.termWidth, c.termHeight, true)
-		if err != nil {
+		settled, yes, aborted := e.offerV3NetArea(c, n, svc, nals, format, declinedPath, leadIn && !asked, &asked)
+		release()
+		if aborted {
 			return handled, asked, true
 		}
-		asked = true
-		if !yes {
+		if settled {
 			handled = append(handled, n)
-			// No is final, so say so and point at the manual route.
-			if declined := e.Strings().V3NetNewAreaDeclined; declined != "" {
-				write(fmt.Sprintf(declined, area.Tag) + "\r\n")
-			}
-			continue
 		}
-		if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, n.V3NetNetwork, svc.HubURLForNetwork(n.V3NetNetwork), area, true); err != nil {
-			slog.Warn("v3net: could not add offered area", "network", n.V3NetNetwork, "tag", area.Tag, "error", err)
-			write(fmt.Sprintf("\r\n|04Could not add %s: %s. You will be asked again next time.|07", area.Tag, err))
-			continue
+		if yes {
+			added = append(added, n.V3NetTag)
 		}
-		handled = append(handled, n)
-		added = append(added, area.Tag)
-		slog.Info("v3net: sysop added offered area", "network", n.V3NetNetwork, "tag", area.Tag, "handle", c.currentUser.Handle)
 	}
 
 	if len(added) > 0 {
@@ -435,4 +401,86 @@ func (e *MenuExecutor) offerV3NetAreas(c *cmdCtx, offers []sysopNotice, leadIn b
 		}
 	}
 	return handled, asked, false
+}
+
+// offerV3NetArea settles one offer, asking the sysop if it is still open. It
+// reports whether the offer can leave the queue, whether the area was added,
+// and whether the caller disconnected. nals caches each network's NAL across
+// the offers of one login; a failed fetch is cached as nil.
+//
+// The offer stays queued without asking when the hub cannot be reached: the
+// area may have gone or closed since, and answering Yes to it would write a
+// subscription the hub then refuses.
+func (e *MenuExecutor) offerV3NetArea(c *cmdCtx, n sysopNotice, svc V3NetStatusProvider, nals map[string]*protocol.NAL, format, declinedPath string, leadIn bool, asked *bool) (settled, added, aborted bool) {
+	terminal := c.terminal
+	outputMode := c.outputMode
+	write := func(text string) {
+		_ = terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(text)), outputMode)
+	}
+
+	// Checked after claiming the offer, so an area another sysop has just
+	// added is seen here.
+	if v3netSubscribedBoards(e.RootConfigPath, n.V3NetNetwork)[n.V3NetTag] {
+		return true, false, false
+	}
+	hubURL := svc.HubURLForNetwork(n.V3NetNetwork)
+	if hubURL == "" {
+		return false, false, false // no leaf for this network right now
+	}
+	current, fetched := nals[n.V3NetNetwork]
+	if !fetched {
+		ctx, cancel := context.WithTimeout(context.Background(), v3netManageTimeout)
+		var err error
+		current, err = svc.FetchNALForNetwork(ctx, n.V3NetNetwork)
+		cancel()
+		if err != nil {
+			slog.Warn("v3net: NAL unavailable; leaving area offers queued", "network", n.V3NetNetwork, "error", err)
+			current = nil
+		}
+		nals[n.V3NetNetwork] = current
+	}
+	if current == nil {
+		return false, false, false
+	}
+	found := current.FindArea(n.V3NetTag)
+	if found == nil {
+		return true, false, false // dropped by the hub since
+	}
+	area := *found
+	if area.Access.Mode == protocol.AccessModeClosed && !nal.NodeAllowed(&area, svc.NodeID()) {
+		return true, false, false // closed to this node since it was offered
+	}
+
+	prompt := n.Text
+	if format != "" {
+		prompt = fmt.Sprintf(format, v3netNetworkLabel(n.V3NetNetwork), area.Name)
+	}
+	// The lightbar ends its own line once answered, so only the first
+	// question may need a line break in front of it.
+	if leadIn {
+		write("\r\n")
+	}
+	yes, err := e.PromptYesNo(c.s, terminal, prompt, outputMode, c.nodeNumber, c.termWidth, c.termHeight, true)
+	if err != nil {
+		return false, false, true
+	}
+	*asked = true
+	if !yes {
+		// No is final for this sysop: remember it, so a retried offer does
+		// not ask again, then say so and point at the manual route.
+		if derr := recordV3NetDecline(declinedPath, c.currentUser.ID, n.V3NetNetwork, area.Tag); derr != nil {
+			slog.Warn("v3net: could not record a declined area", "network", n.V3NetNetwork, "tag", area.Tag, "error", derr)
+		}
+		if declined := e.Strings().V3NetNewAreaDeclined; declined != "" {
+			write(fmt.Sprintf(declined, area.Tag) + "\r\n")
+		}
+		return true, false, false
+	}
+	if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, n.V3NetNetwork, hubURL, area, true); err != nil {
+		slog.Warn("v3net: could not add offered area", "network", n.V3NetNetwork, "tag", area.Tag, "error", err)
+		write(fmt.Sprintf("\r\n|04Could not add %s: %s. You will be asked again next time.|07\r\n", area.Tag, err))
+		return false, false, false
+	}
+	slog.Info("v3net: sysop added offered area", "network", n.V3NetNetwork, "tag", area.Tag, "handle", c.currentUser.Handle)
+	return true, true, false
 }
