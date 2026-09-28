@@ -69,6 +69,15 @@ func TestCHECKNUV_OffersScan(t *testing.T) {
 	if r.has(" @") || !r.has("Vote Now?", "No") {
 		t.Errorf("vote prompt not shown as a Yes/No lightbar: %q", r.text())
 	}
+	// Enter takes the lightbar's default, No. Checked while a candidate is
+	// still unvoted, so the prompt is really offered.
+	r = env.run(runCheckNUV, env.sysop, "", "\rQ")
+	if !r.has("Vote Now?") {
+		t.Fatalf("vote prompt not offered before the Enter check: %q", r.text())
+	}
+	if r.has("Candidate #") {
+		t.Errorf("Enter at the vote prompt ran the scan: %q", r.text())
+	}
 	r = env.run(runCheckNUV, env.sysop, "", "YY\rQ")
 	if !r.has("New User Voting - Candidate #1", "One") {
 		t.Errorf("accepted offer did not scan: %q", r.text())
@@ -78,11 +87,6 @@ func TestCHECKNUV_OffersScan(t *testing.T) {
 	}
 	if r.user != env.sysop {
 		t.Error("CHECKNUV did not keep the session user")
-	}
-
-	// Enter takes the lightbar's default, No.
-	if r := env.run(runCheckNUV, env.sysop, "", "\rQ"); r.has("Candidate #") {
-		t.Errorf("Enter at the vote prompt ran the scan: %q", r.text())
 	}
 
 	setServerField(env.e, func(c *config.ServerConfig) { c.UseNUV = false })
