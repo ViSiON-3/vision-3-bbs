@@ -36,6 +36,7 @@ func TestGetstrEncoding(t *testing.T) {
 		{name: "cp437 backspace", mode: cp437, input: "a\x82\x08b\r", expr: `console.getstr(10)`, want: "ab", wantOut: "a\x82\x08 \x08b\r\n"},
 		{name: "cp437 maxlen", mode: cp437, input: "\x82\x82\x82\r", expr: `console.getstr(2)`, want: "\x82\x82", wantOut: "\x82\x82\r\n"},
 		{name: "cp437 escape aborts", mode: cp437, input: "\x82\x1b", expr: `console.getstr(10)`, want: ""},
+		{name: "arrow key in the same read is ignored", mode: cp437, input: "a\x1b[Db\r", expr: `console.getstr(10)`, want: "ab", wantOut: "ab\r\n"},
 		{name: "utf8 e-acute", mode: utf8, input: "café\r", expr: `console.getstr(10)`, want: "café", wantOut: "café\r\n"},
 		{name: "utf8 pound", mode: utf8, input: "£5\r", expr: `console.getstr(10)`, want: "£5", wantOut: "£5\r\n"},
 		{name: "utf8 box char", mode: utf8, input: "─█\r", expr: `console.getstr(10)`, want: "─█", wantOut: "─█\r\n"},

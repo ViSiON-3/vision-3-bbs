@@ -447,10 +447,13 @@ func (eng *Engine) startReader() {
 // readKey reads a single key from the session with optional timeout.
 // Timeout of 0 means block indefinitely.
 func (eng *Engine) readKey(timeout time.Duration) (string, error) {
+	// Leftovers from an earlier read go through parseInput like fresh input,
+	// so an escape sequence that arrived in the same read as other keys is
+	// still decoded as one key rather than handed out as a bare ESC.
 	if len(eng.inputBuf) > 0 {
-		ch := eng.inputBuf[0]
-		eng.inputBuf = eng.inputBuf[1:]
-		return string(ch), nil
+		data := eng.inputBuf
+		eng.inputBuf = nil
+		return eng.parseInput(data), nil
 	}
 
 	eng.startReader()
