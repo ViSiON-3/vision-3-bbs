@@ -42,7 +42,7 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 		// Display error message to terminal
 		msg := "\r\n|01Error loading File Area screen templates.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return fmt.Errorf("failed loading FILEAREA templates")
 	}
 
@@ -183,7 +183,7 @@ func runListFileAreas(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Warn("LISTFILEAR called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to list file areas.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 

@@ -90,7 +90,7 @@ func (e *MenuExecutor) registerUploadedFiles(
 				slog.Error("ziplab pipeline failed", "node", nodeNumber, "name", nf.name, "error", result.Error)
 				errMsg := fmt.Sprintf("\r\n|01ZipLab processing failed for '%s'.|07\r\n", nf.name)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
-				time.Sleep(2 * time.Second)
+				uiPause(2 * time.Second)
 				continue
 			}
 

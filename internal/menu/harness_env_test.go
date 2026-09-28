@@ -22,6 +22,10 @@ import (
 	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
 
+// Tests never wait out on-screen message pauses: they read the output
+// instead of watching it, and the pauses would add minutes to the run.
+func init() { uiPause = func(time.Duration) {} }
+
 // menuEnv is a complete, isolated BBS for handler tests: an executor wired
 // the way NewExecutor wires it, running on the shipped defaults.
 //

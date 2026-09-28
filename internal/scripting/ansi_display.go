@@ -137,8 +137,13 @@ func resolveAnsiPath(eng *Engine, filename string) string {
 // pathUnderBase resolves symlinks in p and returns the real path only if it
 // falls within base. Returns "" if p escapes base or cannot be resolved.
 func pathUnderBase(base, p string) string {
-	baseAbs, err := filepath.Abs(base)
+	// Resolve base the same way as p. Otherwise a symlinked or (on Windows)
+	// 8.3 short-named ancestor makes every file look like it escapes.
+	baseAbs, err := filepath.EvalSymlinks(base)
 	if err != nil {
+		return ""
+	}
+	if baseAbs, err = filepath.Abs(baseAbs); err != nil {
 		return ""
 	}
 	real, err := filepath.EvalSymlinks(p)

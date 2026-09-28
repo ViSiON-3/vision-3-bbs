@@ -199,8 +199,8 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			if wErr != nil {
 				slog.Error("failed writing ACS denied message", "error", wErr)
 			}
-			time.Sleep(1 * time.Second) // Brief pause
-			return "LOGOFF", nil, nil   // Signal logoff
+			uiPause(1 * time.Second)  // Brief pause
+			return "LOGOFF", nil, nil // Signal logoff
 		}
 
 		// --- AutoRun Command Execution ---

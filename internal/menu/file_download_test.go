@@ -114,7 +114,6 @@ func TestBatchDownloadNoProtocolsKeepsBatch(t *testing.T) {
 // TestBatchDownloadDropsUnresolvableBatch pins that a batch whose files have
 // all vanished is cleared and saved rather than offered for transfer.
 func TestBatchDownloadDropsUnresolvableBatch(t *testing.T) {
-	t.Parallel() // the notice holds for a fixed two seconds
 	env := newMenuEnv(t)
 	env.sysop.TaggedFileIDs = []uuid.UUID{uuid.New()}
 
@@ -130,7 +129,6 @@ func TestBatchDownloadDropsUnresolvableBatch(t *testing.T) {
 // TestClearBatchEmptiesQueue pins CLEAR_BATCH: the tagged list is emptied and
 // the empty list is saved.
 func TestClearBatchEmptiesQueue(t *testing.T) {
-	t.Parallel() // the notice holds for a fixed second
 	env := newMenuEnv(t)
 	env.sysop.TaggedFileIDs = addDownloadRecords(t, env, "A.ZIP", "B.ZIP")
 	if err := env.um.UpdateUser(env.sysop); err != nil {

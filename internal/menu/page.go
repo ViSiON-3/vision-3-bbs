@@ -68,20 +68,20 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	targetNodeID, err := strconv.Atoi(nodeInput)
 	if err != nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageInvalidNode)), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	if targetNodeID == nodeNumber {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageSelfError)), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	targetSession := e.SessionRegistry.Get(targetNodeID)
 	if targetSession == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageNodeOffline)), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 	targetSession.Mutex.RLock()
@@ -89,7 +89,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	targetSession.Mutex.RUnlock()
 	if targetInvisible && !e.isCoSysOpOrAbove(currentUser) {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageNodeOffline)), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
@@ -105,7 +105,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	msgInput = strings.TrimSpace(msgInput)
 	if msgInput == "" {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageCancelled)), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
@@ -116,7 +116,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Info("paged node", "node", nodeNumber, "handle", handle, "target", targetNodeID, "chars", len(msgInput))
 	confirm := fmt.Sprintf(e.Strings().PageSent, targetNodeID)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(confirm)), outputMode)
-	time.Sleep(500 * time.Millisecond)
+	uiPause(500 * time.Millisecond)
 
 	return nil, "", nil
 }

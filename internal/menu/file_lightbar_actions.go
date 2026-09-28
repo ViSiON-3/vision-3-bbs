@@ -163,7 +163,7 @@ func (lb *fileLightbar) sendTaggedFiles(filesToDownload []string, fileIDsToDownl
 		failCount += sendFails
 		lb.ih = getSessionIH(lb.s)
 	}
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 	return successCount, failCount, false, "", nil
 }
 
@@ -173,7 +173,7 @@ func (lb *fileLightbar) downloadFiles(frame *lbFrame) (exit bool, result *user.U
 	if len(lb.currentUser.TaggedFileIDs) == 0 {
 		msg := "\r\n|07No files marked for download. Use |15Space|07 to mark files.|07\r\n"
 		_ = lb.writePipe(msg)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
@@ -191,7 +191,7 @@ func (lb *fileLightbar) downloadFiles(frame *lbFrame) (exit bool, result *user.U
 	// Clear the screen before the download process begins.
 	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[2J\x1b[H"), lb.outputMode)
 	_ = lb.writePipe("|07Preparing download...\r\n")
-	time.Sleep(500 * time.Millisecond)
+	uiPause(500 * time.Millisecond)
 
 	filesToDownload, fileIDsToDownload, failCount := collectTaggedPaths(lb.e.FileMgr, lb.nodeNumber, lb.currentUser.TaggedFileIDs)
 
@@ -218,7 +218,7 @@ func (lb *fileLightbar) downloadFiles(frame *lbFrame) (exit bool, result *user.U
 
 	statusMsg := fmt.Sprintf("|07Download finished. Success: %d, Failed: %d.|07\r\n", successCount, failCount)
 	_ = lb.writePipe(statusMsg)
-	time.Sleep(2 * time.Second)
+	uiPause(2 * time.Second)
 
 	// Refresh file list.
 	lb.refreshFileList()

@@ -108,7 +108,6 @@ func TestSelectMessageAreaLightbarConferenceSwitch(t *testing.T) {
 // joins that area and saves it: the sysop moves down to Private Mail and the
 // choice survives a reload of users.json.
 func TestSelectMessageAreaLightbarJoinsSelectedArea(t *testing.T) {
-	t.Parallel() // the confirmation holds for a fixed second
 	env := newMenuEnv(t)
 	env.sysop.CurrentMsgConferenceID = 1
 
@@ -157,7 +156,6 @@ func TestSelectMessageAreaClassicPromptNavigation(t *testing.T) {
 // selector's access check and its save: the caller naming PRIVMAIL by tag is
 // refused, then picking list entry 1 joins General Discussion and persists.
 func TestSelectMessageAreaClassicRefusesThenSelects(t *testing.T) {
-	t.Parallel() // refusal and confirmation each hold for a fixed second
 	env := newMenuEnv(t)
 	env.caller.CurrentMsgConferenceID = 1
 

@@ -60,7 +60,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Warn("SELECTFILEAREA called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to select a file area.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -142,7 +142,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
 			msg := fmt.Sprintf("|01Invalid file area '%s'!|07", inputClean)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
@@ -154,7 +154,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
 			msg := fmt.Sprintf("|01Access denied to file area '%s'!|07", area.Tag)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
@@ -171,7 +171,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 			currentUser.CurrentFileAreaID = area.ID // revert not needed, just don't show success
 			msg := "\r\n|01Error: Could not save area selection.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
 		}
@@ -179,7 +179,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Info("user changed file area", "node", nodeNumber, "handle", currentUser.Handle, "area", area.Tag, "id", area.ID)
 		msg := fmt.Sprintf("\r\n|07Current file area set to: |15%s|07\r\n", area.Name)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 
 		return currentUser, "", nil
 	}

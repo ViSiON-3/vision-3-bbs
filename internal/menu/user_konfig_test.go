@@ -488,3 +488,88 @@ func TestReadHotKeyInput(t *testing.T) {
 		t.Errorf("/G = (%q, %v), want /G", got, err)
 	}
 }
+
+// TestKonfigScreenHeightEditsAndRejects pins the Screen Height field: an
+// in-range value is saved and applied, one out of range is refused with the
+// allowed range and nothing saved.
+func TestKonfigScreenHeightEditsAndRejects(t *testing.T) {
+	env := newMenuEnv(t)
+
+	env.runCmd("USERCONFIG", env.caller, "", "b"+keyClear+"99\rq")
+	if got := env.mustDiskUser(env.caller.ID).ScreenHeight; got != 0 {
+		t.Fatalf("out-of-range height saved as %d", got)
+	}
+	r := env.runCmd("USERCONFIG", env.caller, "", "b"+keyClear+"30\rq")
+	if !r.has("Screen Height is now 30") {
+		t.Errorf("no saved notice:\n%s", r.text())
+	}
+	if got := env.mustDiskUser(env.caller.ID).ScreenHeight; got != 30 {
+		t.Errorf("saved height = %d, want 30", got)
+	}
+}
+
+// TestKonfigHeaderStylePicksAndSaves pins the Header Style field: it opens
+// the MSGHDR picker, and the style picked there (Down, Space) is saved and
+// named in the form.
+func TestKonfigHeaderStylePicksAndSaves(t *testing.T) {
+	env := newMenuEnv(t)
+
+	r := env.runCmd("USERCONFIG", env.caller, "", "e"+keyDown+" q")
+	if got := env.mustDiskUser(env.caller.ID).MsgHdr; got != 2 {
+		t.Fatalf("saved MsgHdr = %d, want 2\n%s", got, r.text())
+	}
+	if !r.has("Generic Blue Box") {
+		t.Errorf("style name not shown:\n%s", r.text())
+	}
+}
+
+// TestKonfigAutoSigCreateEditDelete pins the Auto-Signature field: with none
+// set it opens the editor and saves what was typed; with one set, D deletes
+// it and Esc at the choice leaves it alone.
+func TestKonfigAutoSigCreateEditDelete(t *testing.T) {
+	env := newMenuEnv(t)
+
+	r := env.runCmd("USERCONFIG", env.caller, "", "fline one\rline two\x1aq")
+	if got := env.mustDiskUser(env.caller.ID).AutoSignature; got != "line one\nline two" {
+		t.Fatalf("saved sig = %q\n%s", got, r.text())
+	}
+	if !r.has("Auto-Signature updated.", "2 lines") {
+		t.Errorf("status or value missing:\n%s", r.text())
+	}
+
+	env.caller = env.mustDiskUser(env.caller.ID)
+	env.runCmd("USERCONFIG", env.caller, "", "f"+keyEsc+"q")
+	if got := env.mustDiskUser(env.caller.ID).AutoSignature; got == "" {
+		t.Fatal("Esc at the choice deleted the signature")
+	}
+	r = env.runCmd("USERCONFIG", env.caller, "", "fdq")
+	if got := env.mustDiskUser(env.caller.ID).AutoSignature; got != "" {
+		t.Errorf("sig = %q after delete", got)
+	}
+	if !r.has("Auto-Signature deleted.") {
+		t.Errorf("no delete notice:\n%s", r.text())
+	}
+}
+
+// TestKonfigAutoSigTruncatesAndAbandons pins that a signature longer than
+// the line limit is cut and the cut is reported, and that leaving the editor
+// without saving (Ctrl-A, Y) changes nothing.
+func TestKonfigAutoSigTruncatesAndAbandons(t *testing.T) {
+	env := newMenuEnv(t)
+	r := env.runCmd("USERCONFIG", env.caller, "", "f1\r2\r3\r4\r5\r6\r7\x1aq")
+	if got := env.mustDiskUser(env.caller.ID).AutoSignature; got != "1\n2\n3\n4\n5" {
+		t.Fatalf("saved sig = %q, want the first 5 lines", got)
+	}
+	if !r.has("kept to its first 5 lines") {
+		t.Errorf("no truncation notice:\n%s", r.text())
+	}
+
+	env.caller = env.mustDiskUser(env.caller.ID)
+	r = env.runCmd("USERCONFIG", env.caller, "", "feEXTRA\x01Yq")
+	if got := env.mustDiskUser(env.caller.ID).AutoSignature; got != "1\n2\n3\n4\n5" {
+		t.Errorf("abandoned edit changed sig to %q\n%s", got, r.text())
+	}
+	if !r.has("Auto-Signature not changed.") {
+		t.Errorf("no not-changed notice:\n%s", r.text())
+	}
+}

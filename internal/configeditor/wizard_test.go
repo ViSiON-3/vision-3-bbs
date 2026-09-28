@@ -90,6 +90,7 @@ func TestLeafWizardForm_HubURLValidation(t *testing.T) {
 
 func TestLeafWizardForm_ValidSubmit(t *testing.T) {
 	m := newLeafWizardModel()
+	m.configPath = t.TempDir() // the submit saves every config file
 	m.wizard.hubURL = "https://hub.example.com"
 	m.wizard.networkName = "testnet"
 	m.wizard.selectedAreas = []areaBrowserItem{

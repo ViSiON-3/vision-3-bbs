@@ -32,7 +32,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to send private mail.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -42,7 +42,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("PRIVMAIL area not found", "node", nodeNumber)
 		msg := "\r\n|01Error: Private mail area not configured.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -77,7 +77,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			slog.Error("failed reading recipient input", "node", nodeNumber, "error", inputErr)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading recipient.\r\n"), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
 		break
@@ -86,7 +86,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	if recipient == "" {
 		msg := "\r\n|01Recipient cannot be empty.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -95,7 +95,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	if !found || recipientUser == nil {
 		msg := fmt.Sprintf("\r\n|01Error: User '%s' not found.|07\r\n", recipient)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -128,7 +128,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			slog.Error("failed reading subject input", "node", nodeNumber, "error", inputErr)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading subject.\r\n"), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
 		// A blank subject abandons the mail, as it does for a public post.
@@ -171,14 +171,14 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	if !saved {
 		slog.Info("user aborted private mail composition", "node", nodeNumber, "handle", currentUser.Handle)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nMessage aborted.\r\n"), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if strings.TrimSpace(body) == "" {
 		slog.Info("user saved empty private mail", "node", nodeNumber, "handle", currentUser.Handle)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nMessage body empty. Aborting.\r\n"), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -193,7 +193,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("failed to save private message", "node", nodeNumber, "handle", currentUser.Handle, "recipient", recipientUser.Handle, "error", err)
 		errorMsg := ansi.ReplacePipeCodes([]byte("\r\n|01Error saving private message!|07\r\n"))
 		terminalio.WriteProcessedBytes(terminal, errorMsg, outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return nil, "", fmt.Errorf("failed saving private message: %w", err)
 	}
 
@@ -207,7 +207,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Info("user sent private message", "node", nodeNumber, "handle", currentUser.Handle, "num", msgNum, "recipient", recipientUser.Handle)
 	confirmMsg := ansi.ReplacePipeCodes([]byte(fmt.Sprintf("\r\n|02Private message sent to %s!|07\r\n", recipientUser.Handle)))
 	terminalio.WriteProcessedBytes(terminal, confirmMsg, outputMode)
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 
 	return nil, "", nil
 }

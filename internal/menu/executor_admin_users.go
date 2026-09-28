@@ -46,7 +46,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("failed to load USERLIST template files", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := e.Strings().ExecUserlistTemplateErr
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading USERLIST templates")
 	}
 
@@ -383,7 +383,7 @@ func runAdminToggleAllowNewUsers(c *cmdCtx, args string) (*user.User, string, er
 	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Access denied.|07\r\n")), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -393,7 +393,7 @@ func runAdminToggleAllowNewUsers(c *cmdCtx, args string) (*user.User, string, er
 	if err := config.SaveServerConfig(e.RootConfigPath, cfg); err != nil {
 		slog.Error("failed to save config after toggling allowNewUsers", "node", nodeNumber, "error", err)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error saving config.|07\r\n")), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -405,6 +405,6 @@ func runAdminToggleAllowNewUsers(c *cmdCtx, args string) (*user.User, string, er
 	}
 	msg := fmt.Sprintf("\r\n|07New user registrations: %s\r\n", stateStr)
 	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 	return nil, "", nil
 }

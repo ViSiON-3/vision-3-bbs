@@ -38,7 +38,7 @@ func (e *MenuExecutor) newFileListState(c *cmdCtx, extendedMode bool) (st *fileL
 		slog.Warn("LISTFILES called without logged in user", "node", nodeNumber)
 		msg := "\r\n|01Error: You must be logged in to list files.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, true, nil // Return to menu
 	}
 
@@ -50,7 +50,7 @@ func (e *MenuExecutor) newFileListState(c *cmdCtx, extendedMode bool) (st *fileL
 		slog.Warn("user has no current file area selected", "node", nodeNumber, "handle", currentUser.Handle)
 		msg := "\r\n|01Error: No file area selected.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, true, nil // Return to menu
 	}
 
@@ -104,7 +104,7 @@ func (e *MenuExecutor) newFileListState(c *cmdCtx, extendedMode bool) (st *fileL
 		slog.Error("failed to get file count for area", "node", nodeNumber, "area", currentAreaID, "error", err)
 		msg := fmt.Sprintf("\r\n|01Error retrieving file list for area '%s'.|07\r\n", currentAreaTag)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, false, fmt.Errorf("failed getting file count: %w", err)
 	}
 
@@ -126,7 +126,7 @@ func (e *MenuExecutor) newFileListState(c *cmdCtx, extendedMode bool) (st *fileL
 			slog.Error("failed to get files for area page", "node", nodeNumber, "area", currentAreaID, "page", currentPage, "error", err)
 			msg := fmt.Sprintf("\r\n|01Error retrieving file list page for area '%s'.|07\r\n", currentAreaTag)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, false, fmt.Errorf("failed getting file page: %w", err)
 		}
 	} else {
