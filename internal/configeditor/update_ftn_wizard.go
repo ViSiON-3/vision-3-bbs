@@ -448,7 +448,9 @@ func (m Model) enterFTNAreaBrowser() (Model, tea.Cmd) {
 	// If areas already fetched, go straight to browser.
 	if w.areasFetched {
 		m.ftnAreaBrowserAreas = w.availableAreas
-		m.ftnAreaBrowserSelected = w.selectedAreas
+		// Copy, as handleFTNEcholistMsg does: sharing the wizard's slice
+		// would let toggles survive an ESC that is meant to discard them.
+		m.ftnAreaBrowserSelected = append([]bool(nil), w.selectedAreas...)
 		m.ftnAreaBrowserCursor = 0
 		m.ftnAreaBrowserScroll = 0
 		m.ftnAreaBrowserError = ""

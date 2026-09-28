@@ -105,7 +105,7 @@ func (m Model) updateFTNAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyEnter:
 		// Confirm selection, copy back to wizard state, return.
-		m.ftnWizard.selectedAreas = m.ftnAreaBrowserSelected
+		m.ftnWizard.selectedAreas = append([]bool(nil), m.ftnAreaBrowserSelected...)
 		m.ftnWizardFields = m.fieldsFTNWizard() // refresh display
 		m.mode = modeFTNWizardForm
 		return m, nil
