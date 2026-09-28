@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -57,16 +58,21 @@ func TestFSRoundTrip(t *testing.T) {
 func TestFSErrorsThrow(t *testing.T) {
 	h := newHarness(t, harnessOpts{})
 	h.mustRun(`v3.fs.write("afile", "x")`)
+	// The OS error text differs between platforms.
+	noFile, notDir := "no such file", "not a directory"
+	if runtime.GOOS == "windows" {
+		noFile, notDir = "cannot find the file specified", "cannot find the path specified"
+	}
 	tests := []struct{ expr, want string }{
 		{`v3.fs.read()`, "read requires arguments: path"},
 		{`v3.fs.write("x")`, "write requires arguments: path, content"},
 		{`v3.fs.append("x")`, "append requires arguments: path, content"},
 		{`v3.fs.mkdir()`, "mkdir requires arguments: path"},
-		{`v3.fs.read("missing.txt")`, "no such file"},
-		{`v3.fs.list("missing")`, "no such file"},
-		{`v3.fs.mkdir("afile/child")`, "not a directory"},
-		{`v3.fs.write("afile/child", "x")`, "not a directory"},
-		{`v3.fs.append("afile/child", "x")`, "not a directory"},
+		{`v3.fs.read("missing.txt")`, noFile},
+		{`v3.fs.list("missing")`, noFile},
+		{`v3.fs.mkdir("afile/child")`, notDir},
+		{`v3.fs.write("afile/child", "x")`, notDir},
+		{`v3.fs.append("afile/child", "x")`, notDir},
 	}
 	for _, tt := range tests {
 		if got := h.evalErr(tt.expr); !strings.Contains(got, tt.want) {
@@ -133,8 +139,13 @@ func TestResolveSandboxPath(t *testing.T) {
 	if got, err := resolveSandboxPath(sandbox, ""); err != nil || got != sandbox {
 		t.Errorf("empty path = %q, %v; want sandbox root", got, err)
 	}
-	if got, err := resolveSandboxPath(sandbox, "./a/../f.txt"); err != nil || got != filepath.Join(sandbox, "f.txt") {
-		t.Errorf("cleaned child = %q, %v", got, err)
+	// Results are canonical: symlinks and Windows 8.3 short names resolved.
+	canon, err := filepath.EvalSymlinks(sandbox)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := resolveSandboxPath(sandbox, "./a/../f.txt"); err != nil || got != filepath.Join(canon, "f.txt") {
+		t.Errorf("cleaned child = %q, %v; want %q", got, err, filepath.Join(canon, "f.txt"))
 	}
 	if _, err := resolveSandboxPath(sandbox, "a/b/c.txt"); err == nil || !strings.Contains(err.Error(), "invalid path") {
 		t.Errorf("path under a missing dir = %v, want invalid path", err)
@@ -204,8 +215,12 @@ func TestDataStoreCorruptAndUnwritable(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.writeFile("scripts/data", "blocker")
+	want := "not a directory"
+	if runtime.GOOS == "windows" {
+		want = "cannot find the path specified"
+	}
 	for _, expr := range []string{`v3.data.set("k", 1)`, `v3.data.delete("k")`} {
-		if got := h.evalErr(expr); !strings.Contains(got, "not a directory") {
+		if got := h.evalErr(expr); !strings.Contains(got, want) {
 			t.Errorf("%s threw %q, want a save error", expr, got)
 		}
 	}

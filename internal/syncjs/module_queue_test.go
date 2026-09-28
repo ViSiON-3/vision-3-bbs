@@ -93,11 +93,12 @@ func TestLiveLoadPaths(t *testing.T) {
 	h := newDoor(t, doorOpts{})
 	h.eval(`js.load_path_list.push(42); js.load_path_list.unshift("/first")`)
 	got := h.eng.getLiveLoadPaths()
-	if len(got) != 2 || got[0] != "/first" || got[1] != h.path("lib") {
+	lib := filepath.Join(h.root, "lib") // configured LibraryPaths are native paths
+	if len(got) != 2 || got[0] != "/first" || got[1] != lib {
 		t.Errorf("live paths = %q (non-strings must be skipped)", got)
 	}
 	h.eval(`js.load_path_list = "nonsense"`)
-	if got := h.eng.getLiveLoadPaths(); len(got) != 1 || got[0] != h.path("lib") {
+	if got := h.eng.getLiveLoadPaths(); len(got) != 1 || got[0] != lib {
 		t.Errorf("fallback paths = %q, want configured LibraryPaths", got)
 	}
 	h.eval(`delete js.load_path_list`)

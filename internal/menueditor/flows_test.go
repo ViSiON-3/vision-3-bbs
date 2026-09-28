@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -345,8 +346,8 @@ func TestExitPromptSaveOrDiscard(t *testing.T) {
 // A save that fails on the way out keeps the editor open with the error
 // showing, rather than quitting and losing the edits.
 func TestFailedSaveOnExitDoesNotQuit(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores directory permissions")
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs unix directory permissions enforced")
 	}
 	m, set := editorWithMenus(t, "ALPHA")
 	m = keys(t, m, tea.KeyEnter)

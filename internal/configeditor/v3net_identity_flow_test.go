@@ -3,6 +3,7 @@ package configeditor
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -113,7 +114,10 @@ func TestIdentity_ExportPhrase(t *testing.T) {
 		t.Errorf("dotdot msg = %q", m.message)
 	}
 
-	out := filepath.Join(t.TempDir(), "recovery.txt")
+	// A relative name keeps the path under the prompt's 80-character limit,
+	// which a Windows temp dir alone can exceed.
+	t.Chdir(t.TempDir())
+	out := "recovery.txt"
 	m = press(t, replaceText(t, press(t, m, "E"), out), "enter")
 	if !strings.HasPrefix(m.message, "Saved to "+out) {
 		t.Fatalf("export msg = %q", m.message)
@@ -122,7 +126,7 @@ func TestIdentity_ExportPhrase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fi.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v, want 0600", fi.Mode().Perm())
 	}
 	body, _ := os.ReadFile(out)

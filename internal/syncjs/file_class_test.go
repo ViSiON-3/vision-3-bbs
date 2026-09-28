@@ -82,7 +82,7 @@ func TestFileModesTable(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.mode, func(t *testing.T) {
 			h := newDoor(t, doorOpts{})
-			missing := h.eval(`String(new File("new.dat").open(` + jsStr(tt.mode) + `))`).String()
+			missing := h.eval(`var n = new File("new.dat"); var ok = n.open(` + jsStr(tt.mode) + `); n.close(); String(ok)`).String()
 			if (missing == "true") != tt.create {
 				t.Errorf("open(%q) on missing file = %s, want create=%v", tt.mode, missing, tt.create)
 			}
@@ -142,7 +142,9 @@ func TestFileLockUnlock(t *testing.T) {
 		var f = new File("lock.dat");
 		var closed = f.lock();
 		f.open("w+");
-		[closed, f.lock(), f.unlock(), f.lock(0, 10), f.unlock(0, 10)].join()
+		var r = [closed, f.lock(), f.unlock(), f.lock(0, 10), f.unlock(0, 10)].join();
+		f.close(); // Windows cannot remove the temp dir while it is open
+		r
 	`).String()
 	if got != "false,true,true,true,true" {
 		t.Errorf("lock results = %q", got)
@@ -184,6 +186,12 @@ func TestFileGlobals(t *testing.T) {
 	h.write("game/a.dat", "12345")
 	h.write("game/b.dat", "x")
 	h.write("game/Mixed.TXT", "m")
+	// On a case-insensitive filesystem (Windows, macOS) the exact-name stat
+	// already succeeds, so file_getcase hands back the name as asked.
+	wantCase := "Mixed.TXT"
+	if _, err := os.Stat(filepath.Join(h.game, "mixed.txt")); err == nil {
+		wantCase = "mixed.txt"
+	}
 	tests := []struct{ expr, want string }{
 		{`String(file_exists("a.dat")) + file_exists("zz") + file_exists()`, "truefalsefalse"},
 		{`String(file_size("a.dat")) + "," + file_size("zz") + "," + file_size()`, "5,-1,-1"},
@@ -191,7 +199,7 @@ func TestFileGlobals(t *testing.T) {
 		{`directory("*.dat").map(function(p){return p.split(/[\\/]/).pop()}).sort().join()`, "a.dat,b.dat"},
 		{`directory().length + directory("[").length`, "0"},
 		{`String(mkdir("sub/deeper")) + file_isdir("sub/deeper") + mkdir()`, "truetruefalse"},
-		{`file_getcase("mixed.txt").split(/[\\/]/).pop()`, "Mixed.TXT"},
+		{`file_getcase("mixed.txt").split(/[\\/]/).pop()`, wantCase},
 		{`file_getcase("a.dat").split(/[\\/]/).pop()`, "a.dat"},
 		{`String(file_getcase("none.txt")) + file_getcase() + file_getcase("nodir/x")`, "undefinedundefinedundefined"},
 		{`String(file_rename("b.dat", "c.dat")) + file_exists("c.dat") + file_rename("zz", "yy") + file_rename("c.dat")`, "truetruefalsefalse"},
