@@ -231,6 +231,15 @@ func mouseEvent(p coninput.ButtonState, e coninput.MouseEventRecord) MouseMsg {
 	return ev
 }
 
+// shiftFKey picks the shifted variant of a function key when Shift is held
+// (local modification, see third_party/README.md).
+func shiftFKey(plain, shifted KeyType, shiftPressed bool) KeyType {
+	if shiftPressed {
+		return shifted
+	}
+	return plain
+}
+
 func keyType(e coninput.KeyEventRecord) KeyType {
 	code := e.VirtualKeyCode
 
@@ -324,29 +333,29 @@ func keyType(e coninput.KeyEventRecord) KeyType {
 	case coninput.VK_DELETE:
 		return KeyDelete
 	case coninput.VK_F1:
-		return KeyF1
+		return shiftFKey(KeyF1, KeyShiftF1, shiftPressed)
 	case coninput.VK_F2:
-		return KeyF2
+		return shiftFKey(KeyF2, KeyShiftF2, shiftPressed)
 	case coninput.VK_F3:
-		return KeyF3
+		return shiftFKey(KeyF3, KeyShiftF3, shiftPressed)
 	case coninput.VK_F4:
-		return KeyF4
+		return shiftFKey(KeyF4, KeyShiftF4, shiftPressed)
 	case coninput.VK_F5:
-		return KeyF5
+		return shiftFKey(KeyF5, KeyShiftF5, shiftPressed)
 	case coninput.VK_F6:
-		return KeyF6
+		return shiftFKey(KeyF6, KeyShiftF6, shiftPressed)
 	case coninput.VK_F7:
-		return KeyF7
+		return shiftFKey(KeyF7, KeyShiftF7, shiftPressed)
 	case coninput.VK_F8:
-		return KeyF8
+		return shiftFKey(KeyF8, KeyShiftF8, shiftPressed)
 	case coninput.VK_F9:
-		return KeyF9
+		return shiftFKey(KeyF9, KeyShiftF9, shiftPressed)
 	case coninput.VK_F10:
-		return KeyF10
+		return shiftFKey(KeyF10, KeyShiftF10, shiftPressed)
 	case coninput.VK_F11:
-		return KeyF11
+		return shiftFKey(KeyF11, KeyShiftF11, shiftPressed)
 	case coninput.VK_F12:
-		return KeyF12
+		return shiftFKey(KeyF12, KeyShiftF12, shiftPressed)
 	case coninput.VK_F13:
 		return KeyF13
 	case coninput.VK_F14:

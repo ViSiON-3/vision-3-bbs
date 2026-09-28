@@ -18,11 +18,6 @@ import (
 // reached, bulk actions that hit the wrong users, and an F10 Abort that
 // aborted nothing.
 
-// rawSequence stands in for bubbletea's unexported unknownCSISequenceMsg,
-// which is how a sequence missing from its key table (xterm's Shift+F10)
-// reaches Update.
-type rawSequence []byte
-
 func keyOf(k tea.KeyType) tea.Msg { return tea.KeyMsg{Type: k} }
 
 func runesOf(s string) tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
@@ -89,17 +84,17 @@ func reloaded(t *testing.T, path, handle string) *user.User {
 }
 
 // Each shifted mass action is reachable by the key the vendored bubbletea
-// actually reports for it from an xterm-style terminal. Matching only
-// "shift+fN", as before, left every one of them dead.
+// reports for it (shift+fN, decoded from xterm's ESC[1;2Q, ESC[1;2S and
+// ESC[15;2~, or from Shift on the Windows console).
 func TestShiftedMassActionKeysAreReachable(t *testing.T) {
 	cases := []struct {
 		name string
 		key  tea.Msg
 		want editorMode
 	}{
-		{"Shift+F2 (xterm ESC[1;2Q = f14)", keyOf(tea.KeyF14), modeMassDelete},
-		{"Shift+F4 (xterm ESC[1;2S = f16)", keyOf(tea.KeyF16), modeMassPurge},
-		{"Shift+F5 (xterm ESC[15;2~ = f17)", keyOf(tea.KeyF17), modeMassValidate},
+		{"Shift+F2", keyOf(tea.KeyShiftF2), modeMassDelete},
+		{"Shift+F4", keyOf(tea.KeyShiftF4), modeMassPurge},
+		{"Shift+F5", keyOf(tea.KeyShiftF5), modeMassValidate},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -115,19 +110,38 @@ func TestShiftedMassActionKeysAreReachable(t *testing.T) {
 	}
 }
 
-// Shift+F10 untags everything, whether it arrives as xterm's unmapped
-// ESC[21;2~ or as f20 (the Linux console and rxvt).
+// Shift+F10 (xterm's ESC[21;2~, now decoded as shift+f10) untags everything.
 func TestShiftF10UntagsAll(t *testing.T) {
-	for name, key := range map[string]tea.Msg{
-		"xterm ESC[21;2~":  rawSequence("\x1b[21;2~"),
-		"linux/rxvt (f20)": keyOf(tea.KeyF20),
+	m, _ := seeded(t, "Alpha", "Bravo", "Charlie")
+	m = press(t, m, keyOf(tea.KeyF10), keyOf(tea.KeyShiftF10), keyOf(tea.KeyShiftF5))
+	if m.mode != modeList || !strings.Contains(m.message, "not tagged anyone") {
+		t.Errorf("after untag, mass validate gave mode %v, message %q; want the nobody-tagged message",
+			m.mode, m.message)
+	}
+}
+
+// f13..f20 are what rxvt, PuTTY and the Linux console send for some Shift+F
+// keys, but for different ones than xterm used to be decoded as (#476), so
+// none of them may start a mass action or untag anything any more.
+func TestHighFunctionKeysDoNotTriggerMassActions(t *testing.T) {
+	for _, k := range []tea.KeyType{
+		tea.KeyF13, tea.KeyF14, tea.KeyF15, tea.KeyF16,
+		tea.KeyF17, tea.KeyF18, tea.KeyF19, tea.KeyF20,
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(k.String(), func(t *testing.T) {
 			m, _ := seeded(t, "Alpha", "Bravo", "Charlie")
-			m = press(t, m, keyOf(tea.KeyF10), key, keyOf(tea.KeyF17))
-			if m.mode != modeList || !strings.Contains(m.message, "not tagged anyone") {
-				t.Errorf("after untag, mass validate gave mode %v, message %q; want the nobody-tagged message",
-					m.mode, m.message)
+			// Tag everyone and delete Charlie, so every mass action has a target.
+			m = press(t, m, keyOf(tea.KeyEnd), keyOf(tea.KeyF2), runesOf("y"), runesOf("n"),
+				keyOf(tea.KeyF10))
+			if m.taggedCount() != 3 {
+				t.Fatalf("setup: %d tagged, want 3", m.taggedCount())
+			}
+			m = press(t, m, keyOf(k))
+			if m.mode != modeList {
+				t.Errorf("%s opened mode %v, want to stay on the list", k, m.mode)
+			}
+			if m.taggedCount() != 3 {
+				t.Errorf("%s left %d tagged, want 3", k, m.taggedCount())
 			}
 		})
 	}
@@ -138,7 +152,7 @@ func TestShiftF10UntagsAll(t *testing.T) {
 func TestMassDeleteDeletesExactlyTheTaggedUsers(t *testing.T) {
 	m, path := seeded(t, "Alpha", "Bravo", "Charlie", "Delta")
 	m = press(t, m, keyOf(tea.KeyDown), keyOf(tea.KeySpace), keyOf(tea.KeySpace))
-	m = press(t, m, keyOf(tea.KeyF14), runesOf("y"))
+	m = press(t, m, keyOf(tea.KeyShiftF2), runesOf("y"))
 
 	want := map[string]bool{"Alpha": false, "Bravo": true, "Charlie": true, "Delta": false}
 	for h, deleted := range want {
@@ -160,7 +174,7 @@ func TestTagFollowsItsUserThroughASort(t *testing.T) {
 	m, path := seeded(t, "Delta", "Charlie", "Bravo", "Alpha")
 	m = press(t, m, keyOf(tea.KeyDown), keyOf(tea.KeySpace)) // tag Charlie, row 1
 	m = press(t, m, keyOf(tea.KeyF3))                        // alphabetical: Charlie moves to row 2
-	m = press(t, m, keyOf(tea.KeyF17), runesOf("y"))
+	m = press(t, m, keyOf(tea.KeyShiftF5), runesOf("y"))
 
 	for _, h := range []string{"Alpha", "Bravo", "Charlie", "Delta"} {
 		if got, want := m.byHandle(t, h).Validated, h == "Charlie"; got != want {
@@ -185,7 +199,7 @@ func TestTagFollowsItsUserThroughASingleDelete(t *testing.T) {
 	if !m.byHandle(t, "Bravo").DeletedUser {
 		t.Fatalf("Bravo was not deleted: %q", m.message)
 	}
-	m = press(t, m, keyOf(tea.KeyF17), runesOf("y"))
+	m = press(t, m, keyOf(tea.KeyShiftF5), runesOf("y"))
 
 	for _, h := range []string{"Alpha", "Bravo", "Charlie", "Delta"} {
 		if got, want := m.byHandle(t, h).Validated, h == "Charlie"; got != want {
@@ -210,11 +224,11 @@ func TestMassPurgeKeepsSurvivingTags(t *testing.T) {
 		keyOf(tea.KeyF2), runesOf("y"), runesOf("n"))
 	// List is now Alpha, Charlie, Echo, Bravo*, Delta*. Tag Echo.
 	m = press(t, m, keyOf(tea.KeyHome), keyOf(tea.KeyDown), keyOf(tea.KeyDown), keyOf(tea.KeySpace))
-	m = press(t, m, keyOf(tea.KeyF16), runesOf("y"))
+	m = press(t, m, keyOf(tea.KeyShiftF4), runesOf("y"))
 	if got := len(m.users); got != 3 {
 		t.Fatalf("%d users after mass purge, want 3: %q", got, m.message)
 	}
-	m = press(t, m, keyOf(tea.KeyF17), runesOf("y"))
+	m = press(t, m, keyOf(tea.KeyShiftF5), runesOf("y"))
 
 	for _, h := range []string{"Alpha", "Charlie", "Echo"} {
 		if got, want := m.byHandle(t, h).Validated, h == "Echo"; got != want {

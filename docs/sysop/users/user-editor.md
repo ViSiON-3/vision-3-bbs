@@ -75,6 +75,8 @@ The Password field opens a dialog — new password is bcrypt-hashed before savin
 | Alt-H | Help screen |
 | Esc | Exit (prompts to save if unsaved changes exist) |
 
+The Shift-F keys need a terminal that reports Shift as a modifier on function keys: xterm and the terminal emulators that follow it (sending, for example, `ESC[1;2Q` for Shift-F2), and the Windows console. rxvt, PuTTY's default keyboard mode and the Linux console send Shift+F3 and up as codes that other terminals use for F13–F20, so on those terminals the Shift-F mass actions do nothing rather than risk opening the wrong one.
+
 ### Field Editor
 
 | Key | Action |

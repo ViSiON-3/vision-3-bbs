@@ -172,17 +172,16 @@ func TestF5QuickValidates(t *testing.T) {
 }
 
 // With nothing tagged, the mass actions refuse with a message instead of
-// opening a prompt. Keys are the ones bubbletea reports for xterm's Shift+F2,
-// Shift+F5 and Shift+F4 (f14, f17, f16).
+// opening a prompt (Shift+F2, Shift+F5, Shift+F4).
 func TestMassActionsNeedTags(t *testing.T) {
 	m, _ := three(t)
-	for _, k := range []tea.KeyType{tea.KeyF14, tea.KeyF17} {
+	for _, k := range []tea.KeyType{tea.KeyShiftF2, tea.KeyShiftF5} {
 		m = press(t, m, key(k))
 		if m.mode != modeList || !strings.Contains(m.message, "not tagged anyone") {
 			t.Errorf("%s with no tags: mode=%v message=%q", k, m.mode, m.message)
 		}
 	}
-	m = press(t, m, key(tea.KeyF16))
+	m = press(t, m, key(tea.KeyShiftF4))
 	if m.mode != modeList || m.message != "No deleted users to purge." {
 		t.Errorf("shift+f4 with none deleted: mode=%v message=%q", m.mode, m.message)
 	}
@@ -193,7 +192,7 @@ func TestMassActionsNeedTags(t *testing.T) {
 func TestMassValidateTagged(t *testing.T) {
 	m, path := three(t)
 	m = press(t, m, key(tea.KeyDown), key(tea.KeySpace), key(tea.KeySpace)) // tag Bob, Carol
-	m = press(t, m, key(tea.KeyF17))
+	m = press(t, m, key(tea.KeyShiftF5))
 	if !strings.Contains(stripANSIGolden(m.View()), "Set All Tagged (2) Users") {
 		t.Error("mass-validate prompt does not give the tag count")
 	}
@@ -219,7 +218,7 @@ func TestMassPurgeRemovesAllDeleted(t *testing.T) {
 	if m.deletedCount() != 2 {
 		t.Fatalf("setup: %d deleted, want 2", m.deletedCount())
 	}
-	m = press(t, m, key(tea.KeyF16))
+	m = press(t, m, key(tea.KeyShiftF4))
 	if !strings.Contains(stripANSIGolden(m.View()), "purge 2 deleted user(s)") {
 		t.Error("mass-purge prompt does not give the count")
 	}
@@ -240,7 +239,7 @@ func TestMassPurgeRemovesAllDeleted(t *testing.T) {
 // tags.
 func TestMassDeleteSingleTagged(t *testing.T) {
 	m, _ := three(t)
-	m = press(t, m, key(tea.KeyEnd), key(tea.KeySpace), key(tea.KeyF14))
+	m = press(t, m, key(tea.KeyEnd), key(tea.KeySpace), key(tea.KeyShiftF2))
 	if !strings.Contains(stripANSIGolden(m.View()), "Delete All Tagged (1) Users?") {
 		t.Error("mass-delete prompt does not give the tag count")
 	}
