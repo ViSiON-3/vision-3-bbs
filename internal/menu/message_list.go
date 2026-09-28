@@ -14,10 +14,12 @@ func runListMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	return runListMsgsFiltered(c, args, nil)
 }
 
-// runListMsgsFiltered lists messages in the current area. When msgFilter is
-// non-nil (e.g. PRIVMAIL), only messages it accepts are listed, and the filter
-// is propagated to the reader when a message is opened.
+// runListMsgsFiltered lists messages in the current area. Other users' private
+// messages are never listed; when msgFilter is non-nil (e.g. PRIVMAIL), only
+// messages it accepts are listed too. The filter is propagated to the reader
+// when a message is opened.
 func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (*user.User, string, error) {
+	msgFilter = withPrivacy(c.currentUser, msgFilter)
 	e := c.e
 	s := c.s
 	terminal := c.terminal

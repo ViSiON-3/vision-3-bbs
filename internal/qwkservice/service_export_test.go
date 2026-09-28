@@ -312,3 +312,25 @@ func TestBuildPacket_WritesReplyReference(t *testing.T) {
 		t.Errorf("exported reply reference: want 7, got %d", got)
 	}
 }
+
+// TestBuildPacket_OmitsOthersPrivateMailInPublicAreas pins #465 for QWK: a
+// private message in an ordinary conference is packed only for its sender or
+// recipient, never for another caller.
+func TestBuildPacket_OmitsOthersPrivateMailInPublicAreas(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 5, Tag: "GENERAL", Name: "General"})
+	store.seed(5,
+		dm(1, "alice", "All", "s", "b"), // public -> included
+		privMsg(2, "alice", "bob"),      // someone else's -> excluded
+		privMsg(3, "alice", "Tess Ter"), // to my real name -> included
+	)
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", RealName: "Tess Ter", TaggedTags: []string{"GENERAL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	if res.MessageCount != 2 {
+		t.Errorf("MessageCount = %d, want 2 (public + own private)", res.MessageCount)
+	}
+}

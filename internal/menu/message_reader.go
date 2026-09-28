@@ -44,23 +44,42 @@ var msgReaderOptions = []MsgLightbarOption{
 var msgReaderDeleteOption = MsgLightbarOption{Label: " Delete ", HotKey: 'D', LoColor: 4}
 
 // msgOwnershipFilter reports whether a message may be shown to the current user.
-// A nil filter means no filtering (all non-deleted messages are visible); a
-// non-nil filter is used for areas like PRIVMAIL where a user may only see their
-// own messages, and for newscan To/From/date/range searches (ScanConfig.filter),
-// regardless of how navigation arrives at a message number.
+// A nil filter means no extra filtering; a non-nil filter is used for areas like
+// PRIVMAIL where a user may only see their own messages, and for newscan
+// To/From/date/range searches (ScanConfig.filter), regardless of how navigation
+// arrives at a message number. The reader and message list always add the
+// private-mail rule on top (see withPrivacy), so a nil filter never exposes
+// someone else's private message.
 type msgOwnershipFilter func(*message.DisplayMessage) bool
+
+// withPrivacy returns f narrowed so that private messages are only accepted
+// when u sent or received them (message.DisplayMessage.VisibleTo). A nil u sees
+// no private mail. f may be nil.
+func withPrivacy(u *user.User, f msgOwnershipFilter) msgOwnershipFilter {
+	var handle, realName string
+	if u != nil {
+		handle, realName = u.Handle, u.RealName
+	}
+	return func(m *message.DisplayMessage) bool {
+		if !m.VisibleTo(handle, realName) {
+			return false
+		}
+		return f == nil || f(m)
+	}
+}
 
 // runMessageReader is the core message reading loop matching Pascal's Scanboard + Readcurbul.
 // It displays messages using MSGHDR.<n> templates with DataFile substitution,
 // shows a 10-option lightbar for navigation, and handles single-key input.
-// When msgFilter is non-nil, messages it rejects are skipped (in the direction of
-// the last navigation command) and never rendered.
+// Messages msgFilter rejects, and other users' private messages, are skipped (in
+// the direction of the last navigation command) and never rendered.
 func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	sessionStartTime time.Time, outputMode ansi.OutputMode,
 	startMsg int, totalMsgCount int, isNewScan bool,
 	termWidth int, termHeight int, msgFilter msgOwnershipFilter) (*user.User, string, error) {
 
+	msgFilter = withPrivacy(currentUser, msgFilter)
 	currentAreaID := currentUser.CurrentMessageAreaID
 	currentAreaTag := currentUser.CurrentMessageAreaTag
 
@@ -142,10 +161,11 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// the msgFilter skip so "previous" keeps moving backward past hidden messages.
 	navDir := 1
 
-	// When a msgFilter is active (e.g. PRIVMAIL), next/prev navigation must move
-	// between visible messages only. These helpers locate the adjacent visible
-	// message so the reader can show the usual first/last prompt at the edges
-	// instead of falling off the end and dropping back to the menu.
+	// Next/prev navigation must move between visible messages only (msgFilter
+	// is always set: at minimum it hides other users' private mail). These
+	// helpers locate the adjacent visible message so the reader can show the
+	// usual first/last prompt at the edges instead of falling off the end and
+	// dropping back to the menu.
 	msgVisible := func(n int) bool {
 		if n < 1 || n > totalMsgCount {
 			return false
