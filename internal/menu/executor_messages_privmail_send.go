@@ -90,9 +90,10 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	// Validate recipient user exists
+	// Validate recipient user exists. A deleted account is refused as
+	// COMPOSEMSG refuses it: nobody will read the mail.
 	recipientUser, found := userManager.GetUser(recipient)
-	if !found || recipientUser == nil {
+	if !found || recipientUser == nil || recipientUser.DeletedUser {
 		msg := fmt.Sprintf("\r\n|01Error: User '%s' not found.|07\r\n", recipient)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		uiPause(1 * time.Second)

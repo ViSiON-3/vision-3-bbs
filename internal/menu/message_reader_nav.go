@@ -33,7 +33,7 @@ import (
 // this system, so the reply follows the parent to its addressee instead of
 // looping back here.
 func replyAddressee(area *message.MessageArea, msg *message.DisplayMessage) (name, to string) {
-	if area == nil || area.AreaType != "netmail" {
+	if !isNetmailArea(area) {
 		return msg.From, msg.From
 	}
 
@@ -47,11 +47,60 @@ func replyAddressee(area *message.MessageArea, msg *message.DisplayMessage) (nam
 	return name, fmt.Sprintf("%s@%s", name, addr)
 }
 
+// privateReplyHandle returns the handle a private reply to msg is addressed
+// to, for mail outside netmail. Only the handle in To or From can read a
+// private message (message.DisplayMessage.VisibleTo), so a reply addressed to
+// anything else would be written for no one.
+//
+// The addressee is msg's sender, or its recipient when replier sent msg
+// themselves, so a follow-up goes to the other party rather than back to the
+// replier. The name is resolved with user.UserMgr.ResolveRecipient: a handle
+// stands for itself, and mail signed with a real name before private mail was
+// signed by handle resolves to the one account with that real name.
+//
+// ok is false when the name identifies no current account: it is unknown,
+// shared by two accounts, anonymous, or belongs to a deleted account. reason
+// then says why, for the caller to show.
+func privateReplyHandle(um *user.UserMgr, msg *message.DisplayMessage, replier, anonymousName string) (handle, reason string, ok bool) {
+	name := strings.TrimSpace(msg.From)
+	if replier != "" && strings.EqualFold(name, strings.TrimSpace(replier)) {
+		name = strings.TrimSpace(msg.To)
+	}
+	if name == "" {
+		return "", "The sender of this message is anonymous, so it cannot be answered privately.", false
+	}
+	// An account's handle wins, even one spelled like the anonymous name:
+	// private mail is signed by handle, so that is who sent it.
+	if um != nil && um.HandleExists(name) {
+		if u, found := um.ResolveRecipient(name); found {
+			return u.Handle, "", true
+		}
+		return "", fmt.Sprintf("%s no longer has an account here, so the reply could not be sent.", name), false
+	}
+	// Otherwise a name matching the anonymous signature is an anonymous post:
+	// COMPOSEMSG signed those with the configured name, or "Anonymous".
+	anon := strings.TrimSpace(anonymousName)
+	if strings.EqualFold(name, "Anonymous") || (anon != "" && strings.EqualFold(name, anon)) {
+		return "", "The sender of this message is anonymous, so it cannot be answered privately.", false
+	}
+	if um != nil {
+		if u, found := um.ResolveRecipient(name); found {
+			return u.Handle, "", true
+		}
+	}
+	return "", fmt.Sprintf("Can't tell which user '%s' is, so the reply could not be sent.", name), false
+}
+
 // handleReply manages the reply flow matching Pascal's reply handling.
+//
+// The reader goes on showing the message that was replied to, so a reply
+// leaves the current message number alone and the next N moves on from the
+// message replied to. The reply is appended to the area, so totalMsgCount
+// grows by one.
 func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	outputMode ansi.OutputMode, currentMsg *message.DisplayMessage,
-	currentAreaID int, totalMsgCount *int, currentMsgNum *int, confName, areaName string) string {
+	currentAreaID int, totalMsgCount *int, confName, areaName string) string {
 
 	// Prepare quote data for /Q command
 	// Split message body into lines for quoting
@@ -69,12 +118,28 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		return ""
 	}
 
-	terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgLaunchingEditor), outputMode)
-
 	// Work out who the reply is addressed to before opening the editor, so the
 	// header shows the reply's own addressee rather than the parent's.
 	replyArea, _ := e.MessageMgr.GetAreaByID(currentAreaID)
 	replyName, replyTo := replyAddressee(replyArea, currentMsg)
+
+	// A private reply outside netmail is addressed by handle, the only name
+	// private mail is delivered to (and signed by one: the reply's From is
+	// always the replier's handle). A reply no account could read is refused
+	// before the editor opens, so no typing is lost.
+	if currentMsg.IsPrivate && !isNetmailArea(replyArea) {
+		handle, reason, ok := privateReplyHandle(userManager, currentMsg, currentUser.Handle, e.Strings().AnonymousName)
+		if !ok {
+			slog.Info("private reply refused: addressee not identified", "node", nodeNumber,
+				"handle", currentUser.Handle, "area", currentAreaID, "msg", currentMsg.MsgNum, "from", currentMsg.From)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01"+reason+"|07\r\n")), outputMode)
+			uiPause(1 * time.Second)
+			return ""
+		}
+		replyName, replyTo = handle, handle
+	}
+
+	terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgLaunchingEditor), outputMode)
 
 	// Start with empty editor - user will use /Q command to quote if desired
 	// Pass message metadata for quoting (from, title, date, time, isAnon, lines)
@@ -127,9 +192,6 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplySuccess), outputMode)
 		uiPause(1 * time.Second)
 		*totalMsgCount++
-		if *currentMsgNum < *totalMsgCount {
-			*currentMsgNum++
-		}
 	}
 	return ""
 }

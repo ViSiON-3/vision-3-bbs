@@ -36,11 +36,17 @@ func composeRecipientKindFor(area *message.MessageArea) composeRecipientKind {
 	switch {
 	case strings.EqualFold(area.Tag, "PRIVMAIL"):
 		return recipientPrivate
-	case jam.DetermineMessageType(area.AreaType, area.EchoTag).IsNetmail():
+	case isNetmailArea(area):
 		return recipientNetmail
 	default:
 		return recipientPublic
 	}
+}
+
+// isNetmailArea reports whether area holds netmail, detected the way the
+// message base does when it writes a message.
+func isNetmailArea(area *message.MessageArea) bool {
+	return area != nil && jam.DetermineMessageType(area.AreaType, area.EchoTag).IsNetmail()
 }
 
 const (
