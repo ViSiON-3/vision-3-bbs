@@ -28,3 +28,78 @@ func TestStepIndex(t *testing.T) {
 		})
 	}
 }
+
+// TestNextPrevFileAreaWrapsAndSaves pins NEXTFILEAREA/PREVFILEAREA: from no
+// area the sysop lands on General Files, steps to the Upload Queue, wraps
+// back, and PREV wraps to the last; every step is saved.
+func TestNextPrevFileAreaWrapsAndSaves(t *testing.T) {
+	env := newMenuEnv(t)
+	env.sysop.CurrentFileConferenceID = 1
+
+	for i, st := range []struct{ cmd, want string }{
+		{"NEXTFILEAREA", "GENERAL"},
+		{"NEXTFILEAREA", "UPLOADS"},
+		{"NEXTFILEAREA", "GENERAL"},
+		{"PREVFILEAREA", "UPLOADS"},
+	} {
+		r := env.runCmd(st.cmd, env.sysop, "", "")
+		if r.err != nil {
+			t.Fatalf("step %d %s: err = %v", i, st.cmd, r.err)
+		}
+		if env.sysop.CurrentFileAreaTag != st.want {
+			t.Fatalf("step %d %s: area = %q, want %q", i, st.cmd, env.sysop.CurrentFileAreaTag, st.want)
+		}
+		if !r.has("(" + st.want + ")") {
+			t.Errorf("step %d: missing current-area notice:\n%s", i, r.text())
+		}
+		if saved := env.mustDiskUser(env.sysop.ID); saved.CurrentFileAreaTag != st.want {
+			t.Errorf("step %d: saved area = %q, want %q", i, saved.CurrentFileAreaTag, st.want)
+		}
+	}
+}
+
+// TestNextFileAreaSkipsUnlistableAreas pins that the caller, who may not
+// list the Upload Queue, stays on General Files in both directions.
+func TestNextFileAreaSkipsUnlistableAreas(t *testing.T) {
+	env := newMenuEnv(t)
+	env.caller.CurrentFileConferenceID = 1
+	env.caller.CurrentFileAreaID, env.caller.CurrentFileAreaTag = 1, "GENERAL"
+
+	for _, cmd := range []string{"NEXTFILEAREA", "PREVFILEAREA"} {
+		env.runCmd(cmd, env.caller, "", "")
+		if env.caller.CurrentFileAreaTag != "GENERAL" {
+			t.Errorf("%s moved the caller to %q, which it cannot list", cmd, env.caller.CurrentFileAreaTag)
+		}
+	}
+}
+
+// TestNextPrevFileConfJoinsBothMenus pins NEXTFILECONF/PREVFILECONF: the move
+// joins the conference for messages as well as files (#304), clearing areas
+// in the empty FelonyNet and landing on Local's first areas on the way back.
+func TestNextPrevFileConfJoinsBothMenus(t *testing.T) {
+	env := newMenuEnv(t)
+	u := env.sysop
+	u.CurrentFileConferenceID, u.CurrentMsgConferenceID = 1, 1
+	u.CurrentFileAreaID, u.CurrentMessageAreaID = 2, 2
+
+	r := env.runCmd("NEXTFILECONF", u, "", "")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if u.CurrentFileConferenceTag != "FELONYNET" || u.CurrentMsgConferenceID != 2 {
+		t.Fatalf("after NEXT: file conf %q, msg conf %d; want FELONYNET/2", u.CurrentFileConferenceTag, u.CurrentMsgConferenceID)
+	}
+	if u.CurrentFileAreaID != 0 || u.CurrentMessageAreaID != 0 {
+		t.Errorf("FelonyNet has no areas; want both cleared, got file %d msg %d", u.CurrentFileAreaID, u.CurrentMessageAreaID)
+	}
+	if !r.has("FelonyNet") {
+		t.Errorf("missing conference notice:\n%s", r.text())
+	}
+
+	env.runCmd("PREVFILECONF", u, "", "")
+	saved := env.mustDiskUser(u.ID)
+	if saved.CurrentFileConferenceID != 1 || saved.CurrentFileAreaTag != "GENERAL" || saved.CurrentMessageAreaTag != "GENERAL" {
+		t.Errorf("saved after PREV = conf %d, file %q, msg %q; want 1/GENERAL/GENERAL",
+			saved.CurrentFileConferenceID, saved.CurrentFileAreaTag, saved.CurrentMessageAreaTag)
+	}
+}

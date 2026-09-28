@@ -17,6 +17,9 @@ type InProcessClient struct{ srv *Server }
 // AdminClient interface in-process (no serialization, no network hop).
 func NewInProcessClient(srv *Server) *InProcessClient { return &InProcessClient{srv: srv} }
 
+// Snapshot implements AdminClient. It returns the server's latest snapshot,
+// forcing one poll first if the server has not ticked yet, so the result is
+// never nil. ctx is unused.
 func (c *InProcessClient) Snapshot(ctx context.Context) (*SystemSnapshot, error) {
 	if snap := c.srv.Snapshot(); snap != nil {
 		return snap, nil
@@ -25,12 +28,19 @@ func (c *InProcessClient) Snapshot(ctx context.Context) (*SystemSnapshot, error)
 	return c.srv.Snapshot(), nil
 }
 
+// Subscribe implements AdminClient by subscribing directly to the server:
+// the channel replays the recent event ring, then carries live events, and
+// is closed when ctx is cancelled. The error is always nil.
 func (c *InProcessClient) Subscribe(ctx context.Context) (<-chan Event, error) {
 	return c.srv.Subscribe(ctx), nil
 }
 
+// Execute implements AdminClient by running cmd on the server synchronously.
+// ctx is unused.
 func (c *InProcessClient) Execute(ctx context.Context, cmd AdminCommand) (*Result, error) {
 	return c.srv.Execute(cmd)
 }
 
+// Close implements AdminClient. It is a no-op: there is no connection to
+// release, and the wrapped Server stays running.
 func (c *InProcessClient) Close() error { return nil }

@@ -1,0 +1,4 @@
+# Minimum statement coverage (percent) of internal/, checked by
+# scripts/coverage-check.sh in CI. Raise it whenever coverage goes up; never
+# lower it to get a PR through.
+60.0

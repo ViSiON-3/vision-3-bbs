@@ -1,3 +1,8 @@
+// Package conference loads the conference definitions in
+// configs/conferences.json. A conference groups message and file areas under
+// a tag and an ACS string that controls who can see or enter it.
+// ConferenceManager indexes the definitions by ID and tag, is safe for
+// concurrent use, and can be reloaded in place when the file changes.
 package conference
 
 import (

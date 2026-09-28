@@ -262,3 +262,66 @@ func TestRunInfoFormRequired_NilUserSkipped(t *testing.T) {
 		t.Error("expected nil user returned")
 	}
 }
+
+// TestInfoFormsQuitBlockedByRequiredForm pins that INFOFORMS will not let a
+// caller quit while a required form is unanswered, and lets them once it is.
+func TestInfoFormsQuitBlockedByRequiredForm(t *testing.T) {
+	env := newMenuEnv(t)
+	writeInfoformConfig(t, env, InfoFormConfig{Descriptions: [5]string{"Signup"}, RequiredForms: "1"})
+	writeInfoformTemplate(t, env, 1, "Q: *")
+
+	r := env.runCmd("INFOFORMS", env.caller, "", "Q\r\r1\rdone\rQ\r")
+	if r.err != nil || r.user != env.caller {
+		t.Fatalf("result = (%v, %v)", r.user, r.err)
+	}
+	if !r.has("Signup", "Required", "You still must complete Infoform #1") {
+		t.Errorf("quit was not blocked by the required form:\n%s", r.text())
+	}
+	if !hasCompletedForm(env.cfgDir(), env.caller.ID, 1) {
+		t.Error("form 1 was not saved")
+	}
+}
+
+// TestInfoFormsHonoursMinLevel pins the per-form minimum level: a form above
+// the caller's level is neither listed nor fillable.
+func TestInfoFormsHonoursMinLevel(t *testing.T) {
+	env := newMenuEnv(t)
+	writeInfoformConfig(t, env, InfoFormConfig{MinLevels: [5]int{0, 50}})
+	writeInfoformTemplate(t, env, 1, "Open: *")
+	writeInfoformTemplate(t, env, 2, "Staff: *")
+
+	r := env.runCmd("INFOFORMS", env.caller, "", "2\r\r7\rQ\r")
+	if !r.has("No Description", "Sorry, not a valid Infoform!") {
+		t.Errorf("form 2 should be refused to a level-10 caller:\n%s", r.text())
+	}
+	if r.has("Staff:") || hasCompletedForm(env.cfgDir(), env.caller.ID, 2) {
+		t.Errorf("caller reached form 2:\n%s", r.text())
+	}
+
+	env.caller.AccessLevel = 1
+	writeInfoformConfig(t, env, InfoFormConfig{MinLevels: [5]int{5, 50}})
+	if r := env.runCmd("INFOFORMS", env.caller, "", "Q\r"); !r.has("No infoforms available.") {
+		t.Errorf("want the none-available notice:\n%s", r.text())
+	}
+}
+
+// TestInfoFormsNewUserPromptAndBadConfig pins that an unvalidated user gets
+// the new-user prompt (whose V does not open the viewer), and that a corrupt
+// infoforms config is reported rather than guessed at.
+func TestInfoFormsNewUserPromptAndBadConfig(t *testing.T) {
+	env := newMenuEnv(t)
+	env.caller.Validated = false
+	writeInfoformTemplate(t, env, 1, "Q: *")
+
+	r := env.runCmd("INFOFORMS", env.caller, "", "V\r\r")
+	if r.has("View which") {
+		t.Errorf("new user was offered the viewer:\n%s", r.text())
+	}
+
+	if err := os.WriteFile(infoformsConfigPath(env.cfgDir()), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := env.runCmd("INFOFORMS", env.caller, "", "Q\r"); !r.has("Error loading infoforms config.") {
+		t.Errorf("want the config error:\n%s", r.text())
+	}
+}

@@ -20,13 +20,17 @@ const (
 // CommandType represents a special editor command
 type CommandType int
 
+// Editor commands, chosen from the Escape lightbar menu or bound to CTRL
+// keys (CTRL-A abort, CTRL-Z save, CTRL-Q quote) and run by the FSEditor.
+// The slash forms noted beside each value are the original ViSiON/2
+// command letters.
 const (
-	CommandNone  CommandType = iota
-	CommandSave              // /S - Save and exit
-	CommandAbort             // /A - Abort editing
-	CommandQuote             // /Q - Quote previous message
-	CommandHelp              // /H or /? - Show help
-	CommandView              // /V - View message (not implemented in this version)
+	CommandNone  CommandType = iota // No command; keep editing
+	CommandSave                     // /S - Save and exit
+	CommandAbort                    // /A - Abort editing
+	CommandQuote                    // /Q - Quote previous message
+	CommandHelp                     // /H or /? - Show help
+	CommandView                     // /V - View message (not implemented in this version)
 )
 
 // QuoteData holds message metadata for quoting

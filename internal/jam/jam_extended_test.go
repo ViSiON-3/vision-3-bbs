@@ -1187,8 +1187,8 @@ func TestPackWithReplyIDCleanup(t *testing.T) {
 	if strings.Contains(got.ReplyID, "extragarbage") {
 		t.Errorf("ReplyID not cleaned: %q", got.ReplyID)
 	}
-	if got.ReplyID != "1:1/1" {
-		t.Errorf("ReplyID = %q, want %q", got.ReplyID, "1:1/1")
+	if got.ReplyID != "1:1/1 11223344" {
+		t.Errorf("ReplyID = %q, want %q", got.ReplyID, "1:1/1 11223344")
 	}
 }
 

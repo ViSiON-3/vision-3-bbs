@@ -19,6 +19,10 @@ type MenuRecord struct {
 	ForceHotKey bool `json:"FORCEHOTKEY"`
 }
 
-// Getters for boolean fields (using the JSON bool types directly)
+// GetClrScrBefore reports whether the screen is cleared before the menu is
+// shown; either the CLR or the CLS key in the menu file turns it on.
 func (mr *MenuRecord) GetClrScrBefore() bool { return mr.ClrScrBefore || mr.ClsScrBefore }
-func (mr *MenuRecord) GetUsePrompt() bool    { return mr.UsePrompt }
+
+// GetUsePrompt reports whether the menu displays its prompt (Prompt1/Prompt2)
+// before reading a command; it reflects the USEPROMPT key in the menu file.
+func (mr *MenuRecord) GetUsePrompt() bool { return mr.UsePrompt }

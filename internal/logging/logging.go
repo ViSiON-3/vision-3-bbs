@@ -10,6 +10,11 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
+// activeLevel is the level of the handler Init installed. It is a LevelVar so
+// SetLevel can change the effective level of a running process; nil until Init
+// has run.
+var activeLevel *slog.LevelVar
+
 // Init builds the rolling writer for cfg, wraps it in a JSON slog handler at the
 // configured level, installs it as slog.Default, and returns the logger plus a
 // close function the caller should defer (it flushes the cache, closes the
@@ -26,11 +31,6 @@ import (
 //
 // An unrecognized cfg.Level does not fail startup: Init falls back to INFO and
 // logs a warning through the freshly installed logger.
-// activeLevel is the level of the handler Init installed. It is a LevelVar so
-// SetLevel can change the effective level of a running process; nil until Init
-// has run.
-var activeLevel *slog.LevelVar
-
 func Init(cfg config.LoggingConfig, defaultFile string, console bool) (*slog.Logger, func() error, error) {
 	cfg.Normalize()
 
