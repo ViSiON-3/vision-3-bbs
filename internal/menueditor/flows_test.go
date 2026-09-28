@@ -311,6 +311,36 @@ func TestF10FromMenuEditSavesAndOpensCommands(t *testing.T) {
 	}
 }
 
+// editBlockedByReadOnlyDir edits ALPHA's title to title while ALPHA's .MNU
+// directory is read-only, so the save on leaving the edit screen fails and
+// the edit stays pending in memory. Every other way back to the list saves,
+// so a failed save is how the exit prompt meets unsaved changes. It returns
+// the editor on the menu list and a func that makes the directory writable
+// again.
+func editBlockedByReadOnlyDir(t *testing.T, title string) (Model, menuset.Set, func()) {
+	t.Helper()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs unix directory permissions enforced")
+	}
+	m, set := editorWithMenus(t, "ALPHA")
+	m = keys(t, m, tea.KeyEnter)
+	m = retype(t, m, title)
+	m = keys(t, m, tea.KeyEnter)
+
+	mnu := filepath.Join(set.Base, "mnu")
+	if err := os.Chmod(mnu, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	unblock := func() { _ = os.Chmod(mnu, 0o755) }
+	t.Cleanup(unblock)
+
+	m = keys(t, m, tea.KeyEscape)
+	if m.mode != modeMenuList || !strings.HasPrefix(m.message, "Save error") {
+		t.Fatalf("leaving the edit screen: mode=%v message=%q, want a save error", m.mode, m.message)
+	}
+	return m, set, unblock
+}
+
 // Leaving the editor with unsaved changes and answering No quits without
 // writing them; answering Yes writes them and quits.
 func TestExitPromptSaveOrDiscard(t *testing.T) {
@@ -319,12 +349,9 @@ func TestExitPromptSaveOrDiscard(t *testing.T) {
 		want   string
 	}{{"n", ""}, {"y", "Pending"}} {
 		t.Run(tc.answer, func(t *testing.T) {
-			m, set := editorWithMenus(t, "ALPHA")
-			// F5 then Escape from the edit screen is the path back to the list
-			// that leaves the edit unsaved.
-			m = keys(t, m, tea.KeyEnter)
-			m = retype(t, m, "Pending")
-			m = keys(t, m, tea.KeyEnter, tea.KeyF5, tea.KeyEscape, tea.KeyEscape)
+			m, set, unblock := editBlockedByReadOnlyDir(t, "Pending")
+			unblock()
+			m = keys(t, m, tea.KeyEscape)
 			if m.mode != modeExitConfirm {
 				t.Fatalf("mode = %v, want modeExitConfirm", m.mode)
 			}
@@ -346,19 +373,11 @@ func TestExitPromptSaveOrDiscard(t *testing.T) {
 // A save that fails on the way out keeps the editor open with the error
 // showing, rather than quitting and losing the edits.
 func TestFailedSaveOnExitDoesNotQuit(t *testing.T) {
-	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
-		t.Skip("needs unix directory permissions enforced")
+	m, _, _ := editBlockedByReadOnlyDir(t, "Blocked")
+	m = keys(t, m, tea.KeyEscape)
+	if m.mode != modeExitConfirm {
+		t.Fatalf("mode = %v, want modeExitConfirm", m.mode)
 	}
-	m, set := editorWithMenus(t, "ALPHA")
-	m = keys(t, m, tea.KeyEnter)
-	m = retype(t, m, "Blocked")
-	m = keys(t, m, tea.KeyEnter, tea.KeyF5, tea.KeyEscape, tea.KeyEscape)
-
-	mnu := filepath.Join(set.Base, "mnu")
-	if err := os.Chmod(mnu, 0o555); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(mnu, 0o755) })
 
 	m, cmd := sendKey(t, m, tea.KeyEnter)
 	if quits(cmd) {
@@ -521,8 +540,9 @@ func TestDeleteLastCommandClampsCursor(t *testing.T) {
 	}
 }
 
-// F5 on the command edit screen appends a blank command and opens it; F8
-// returns to the list.
+// F5 on the command edit screen appends a blank command and opens it;
+// Escape keeps it and returns to the list. (F8 would abort it; see
+// TestCommandEditF8DropsAddedCommand.)
 func TestAddCommandFromEditScreen(t *testing.T) {
 	m, set := editorWithCommands(t, 1)
 	m = keys(t, m, tea.KeyEnter, tea.KeyF5)
@@ -531,9 +551,9 @@ func TestAddCommandFromEditScreen(t *testing.T) {
 	}
 	m = keys(t, m, tea.KeyDown)
 	m = retype(t, m, "x")
-	m = keys(t, m, tea.KeyEnter, tea.KeyF8)
+	m = keys(t, m, tea.KeyEnter, tea.KeyEscape)
 	if m.mode != modeCommandList {
-		t.Fatalf("F8: mode = %v", m.mode)
+		t.Fatalf("Escape: mode = %v", m.mode)
 	}
 	m = keys(t, m, tea.KeyEscape)
 	if got := loadCmds(t, set, "ALPHA"); len(got) != 2 || got[1].Keys != "X" {

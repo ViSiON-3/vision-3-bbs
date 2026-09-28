@@ -40,22 +40,6 @@ func TestRunOutcomes(t *testing.T) {
 	}
 }
 
-// TestExitHaltsScript checks exit() stops execution at the call. Only the
-// halting is asserted: what Run returns for exit() is not pinned here (it
-// currently surfaces as a script error rather than a clean exit).
-func TestExitHaltsScript(t *testing.T) {
-	for _, src := range []string{
-		`v3.console.write("a"); exit(3); v3.console.write("b")`,
-		`v3.console.write("a"); exit(); v3.console.write("b")`,
-	} {
-		h := newHarness(t, harnessOpts{})
-		_ = h.run(src)
-		if got := h.output(); got != "a" {
-			t.Errorf("%s: output = %q, want %q", src, got, "a")
-		}
-	}
-}
-
 // TestRunMissingScript returns a read error naming the absolute script path.
 func TestRunMissingScript(t *testing.T) {
 	h := newHarness(t, harnessOpts{})

@@ -23,11 +23,12 @@ func TestWantListCallerSubmitsRequest(t *testing.T) {
 	}
 	env.runCmd("WANTLIST", env.caller, "", "QUAKE.ZIP\r\r")
 
-	got, err := loadWantList(env.cfgDir())
+	wl, err := loadWantList(env.cfgDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].Handle != "Caller" || got[0].Filename != "DOOM2.ZIP" || got[0].Reason != "need it" ||
+	got := wl.Entries
+	if len(got) != 2 || got[0].ID == got[1].ID || got[0].Handle != "Caller" || got[0].Filename != "DOOM2.ZIP" || got[0].Reason != "need it" ||
 		got[1].Filename != "QUAKE.ZIP" || got[0].Date == "" {
 		t.Errorf("want list = %+v", got)
 	}
@@ -45,11 +46,11 @@ func TestWantListSysopReviewsAndDeletes(t *testing.T) {
 		t.Errorf("empty list:\n%s", r.text())
 	}
 
-	if err := saveWantList(env.cfgDir(), []WantListEntry{
-		{Handle: "Caller", Filename: "ONE.ZIP", Reason: "r1", Date: "01/02/2026"},
-		{Handle: "Other", Filename: "TWO.ZIP", Reason: "r2", Date: "01/03/2026"},
-		{Handle: "Third", Filename: "THREE.ZIP", Reason: "r3", Date: "01/04/2026"},
-	}); err != nil {
+	if err := saveWantList(env.cfgDir(), &wantListData{NextID: 4, Entries: []WantListEntry{
+		{ID: 1, Handle: "Caller", Filename: "ONE.ZIP", Reason: "r1", Date: "01/02/2026"},
+		{ID: 2, Handle: "Other", Filename: "TWO.ZIP", Reason: "r2", Date: "01/03/2026"},
+		{ID: 3, Handle: "Third", Filename: "THREE.ZIP", Reason: "r3", Date: "01/04/2026"},
+	}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -59,11 +60,12 @@ func TestWantListSysopReviewsAndDeletes(t *testing.T) {
 	}
 	env.runCmd("WANTLIST", env.sysop, "", "D\r9\r")
 	env.runCmd("WANTLIST", env.sysop, "", "D\rabc\r")
-	if got, _ := loadWantList(env.cfgDir()); len(got) != 3 {
-		t.Fatalf("bad delete numbers changed the list: %+v", got)
+	if wl, _ := loadWantList(env.cfgDir()); len(wl.Entries) != 3 {
+		t.Fatalf("bad delete numbers changed the list: %+v", wl.Entries)
 	}
 	env.runCmd("WANTLIST", env.sysop, "", "d\r2\r")
-	got, _ := loadWantList(env.cfgDir())
+	wl, _ := loadWantList(env.cfgDir())
+	got := wl.Entries
 	if len(got) != 2 || got[0].Filename != "ONE.ZIP" || got[1].Filename != "THREE.ZIP" {
 		t.Errorf("after deleting #2: %+v", got)
 	}
@@ -72,8 +74,8 @@ func TestWantListSysopReviewsAndDeletes(t *testing.T) {
 	if !r.has(stripPipes(env.e.Strings().WantListCleared)) {
 		t.Errorf("no cleared notice:\n%s", r.text())
 	}
-	if got, _ := loadWantList(env.cfgDir()); len(got) != 0 {
-		t.Errorf("after clear: %+v", got)
+	if wl, _ := loadWantList(env.cfgDir()); len(wl.Entries) != 0 || wl.NextID != 4 {
+		t.Errorf("after clear: %+v, want no entries and next_id kept at 4", wl)
 	}
 }
 
