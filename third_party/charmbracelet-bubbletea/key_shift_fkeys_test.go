@@ -50,6 +50,10 @@ func TestShiftedFunctionKeySequences(t *testing.T) {
 		{"\x1bO2Q", KeyShiftF2, false, "shift+f2"},
 		{"\x1bO2R", KeyShiftF3, false, "shift+f3"},
 		{"\x1bO2S", KeyShiftF4, false, "shift+f4"},
+		{"\x1bO4P", KeyShiftF1, true, "alt+shift+f1"},
+		{"\x1bO4Q", KeyShiftF2, true, "alt+shift+f2"},
+		{"\x1bO4R", KeyShiftF3, true, "alt+shift+f3"},
+		{"\x1bO4S", KeyShiftF4, true, "alt+shift+f4"},
 
 		// Alt+Shift ("4").
 		{"\x1b[1;4P", KeyShiftF1, true, "alt+shift+f1"},

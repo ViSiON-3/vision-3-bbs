@@ -534,10 +534,14 @@ var sequences = map[string]Key{
 	"\x1b[1;2Q":  {Type: KeyShiftF2},
 	"\x1b[1;2R":  {Type: KeyShiftF3},
 	"\x1b[1;2S":  {Type: KeyShiftF4},
-	"\x1bO2P":    {Type: KeyShiftF1}, // older xterm, SS3 with modifier
-	"\x1bO2Q":    {Type: KeyShiftF2}, // older xterm, SS3 with modifier
-	"\x1bO2R":    {Type: KeyShiftF3}, // older xterm, SS3 with modifier
-	"\x1bO2S":    {Type: KeyShiftF4}, // older xterm, SS3 with modifier
+	"\x1bO2P":    {Type: KeyShiftF1},            // older xterm, SS3 with modifier
+	"\x1bO2Q":    {Type: KeyShiftF2},            // older xterm, SS3 with modifier
+	"\x1bO2R":    {Type: KeyShiftF3},            // older xterm, SS3 with modifier
+	"\x1bO2S":    {Type: KeyShiftF4},            // older xterm, SS3 with modifier
+	"\x1bO4P":    {Type: KeyShiftF1, Alt: true}, // older xterm, SS3 Alt+Shift
+	"\x1bO4Q":    {Type: KeyShiftF2, Alt: true}, // older xterm, SS3 Alt+Shift
+	"\x1bO4R":    {Type: KeyShiftF3, Alt: true}, // older xterm, SS3 Alt+Shift
+	"\x1bO4S":    {Type: KeyShiftF4, Alt: true}, // older xterm, SS3 Alt+Shift
 	"\x1b[15;2~": {Type: KeyShiftF5},
 	"\x1b[17;2~": {Type: KeyShiftF6},
 	"\x1b[18;2~": {Type: KeyShiftF7},
