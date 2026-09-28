@@ -32,6 +32,11 @@ type VoteTopic struct {
 // VotingData holds all voting topics.
 type VotingData struct {
 	Topics []VoteTopic `json:"topics"`
+	// NextID is the monotonic topic ID allocator. IDs are never reused: a
+	// session that listed a topic before another deleted it must find the
+	// topic gone, not a newer topic that took over its ID. Deriving IDs from
+	// the live topics alone would free the highest ID again on delete.
+	NextID int `json:"next_id,omitempty"`
 }
 
 var votingMu sync.Mutex
@@ -57,20 +62,32 @@ func loadVotingData(rootConfigPath string) (*VotingData, error) {
 			vd.Topics[i].Votes = make(map[string][]string)
 		}
 	}
+	raiseVoteNextID(&vd)
 	normalizeVoteIDs(&vd)
 	return &vd, nil
 }
 
-// nextVoteTopicID returns an ID one past the highest in use. Deriving it from
-// the topic count instead hands out a live ID once any topic is deleted.
-func nextVoteTopicID(vd *VotingData) int {
-	maxID := 0
+// raiseVoteNextID lifts NextID to at least one past the highest live ID, so
+// files written before NextID existed (or with it behind) migrate on load.
+func raiseVoteNextID(vd *VotingData) {
+	floor := 1
 	for _, t := range vd.Topics {
-		if t.ID > maxID {
-			maxID = t.ID
+		if t.ID >= floor {
+			floor = t.ID + 1
 		}
 	}
-	return maxID + 1
+	if vd.NextID < floor {
+		vd.NextID = floor
+	}
+}
+
+// allocVoteTopicID reserves the next topic ID and advances the allocator.
+// IDs are never reused, including after the highest-numbered topic is deleted.
+func allocVoteTopicID(vd *VotingData) int {
+	raiseVoteNextID(vd)
+	id := vd.NextID
+	vd.NextID++
+	return id
 }
 
 // normalizeVoteIDs gives a new ID to any topic that has none or shares one
@@ -92,7 +109,7 @@ func normalizeVoteIDs(vd *VotingData) bool {
 		fix = append(fix, i)
 	}
 	for _, i := range fix {
-		vd.Topics[i].ID = nextVoteTopicID(vd)
+		vd.Topics[i].ID = allocVoteTopicID(vd)
 	}
 	return len(fix) > 0
 }
@@ -550,7 +567,7 @@ func voteAddTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 	// Assign the ID from the reloaded data, under the lock, so concurrent
 	// creations cannot collide.
-	t.ID = nextVoteTopicID(fresh)
+	t.ID = allocVoteTopicID(fresh)
 	fresh.Topics = append(fresh.Topics, t)
 	if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
 		slog.Error("failed to save voting data after topic creation", "error", saveErr)

@@ -60,7 +60,25 @@ func loadNewsData(rootConfigPath string) (*NewsData, error) {
 	if err := json.Unmarshal(data, &nd); err != nil {
 		return nil, fmt.Errorf("parse news.json: %w", err)
 	}
+	raiseNewsNextID(&nd)
 	return &nd, nil
+}
+
+// raiseNewsNextID lifts NextID to at least one past the highest live ID. A
+// news.json written before NextID existed has it zero; without this, deleting
+// the highest item and saving would leave nothing recording that its ID was
+// used, and the next add would hand it out again. Every save after a load
+// persists the raised value.
+func raiseNewsNextID(nd *NewsData) {
+	floor := 1
+	for _, it := range nd.Items {
+		if it.ID >= floor {
+			floor = it.ID + 1
+		}
+	}
+	if nd.NextID < floor {
+		nd.NextID = floor
+	}
 }
 
 func saveNewsData(rootConfigPath string, nd *NewsData) error {
