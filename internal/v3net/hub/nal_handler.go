@@ -156,6 +156,13 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Hold nalMu from the coordinator check through the write, as the
+	// proposal and access handlers do, so a concurrent NAL change cannot land
+	// between the check and the store. Taken after decoding so a slow client
+	// cannot hold it.
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
+
 	// Check that the submitter is the coordinator.
 	existing, err := h.nalStore.Get(network)
 	if err != nil {
