@@ -41,6 +41,11 @@ func TestBBSIDCutOnRuneBoundary(t *testing.T) {
 	if pw := NewPacketWriter(id, "Test", "Admin"); pw.bbsID != "ABCDEFG" {
 		t.Errorf("NewPacketWriter bbsID = %q, want ABCDEFG", pw.bbsID)
 	}
+	// ȿ upper-cases to the 3-byte Ȿ: capping first and upper-casing after
+	// would leave a 9-byte ID.
+	if pw := NewPacketWriter("aaaaaaȿ", "Test", "Admin"); len(pw.bbsID) > 8 || !utf8.ValidString(pw.bbsID) {
+		t.Errorf("NewPacketWriter bbsID = %q (%d bytes), want valid UTF-8 within 8 bytes", pw.bbsID, len(pw.bbsID))
+	}
 
 	msg := PacketMessage{Conference: 1, Number: 1, From: "A", To: "B", Subject: "S", Body: "x",
 		DateTime: time.Date(2026, 3, 5, 10, 0, 0, 0, time.UTC)}

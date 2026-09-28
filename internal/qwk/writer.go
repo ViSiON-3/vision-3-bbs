@@ -28,9 +28,11 @@ type PacketWriter struct {
 // NewPacketWriter creates a new QWK packet writer.
 // bbsID should be a short identifier (max 8 chars, e.g. "VISION3").
 func NewPacketWriter(bbsID, bbsName, sysOpName string) *PacketWriter {
-	bbsID = util.TruncateBytes(bbsID, 8)
+	// Upper-case before the byte cap: some letters grow when upper-cased
+	// (ȿ is 2 bytes, Ȿ is 3), which would push a capped ID past 8 bytes.
+	bbsID = util.TruncateBytes(strings.ToUpper(bbsID), 8)
 	return &PacketWriter{
-		bbsID:     strings.ToUpper(bbsID),
+		bbsID:     bbsID,
 		bbsName:   bbsName,
 		sysOpName: sysOpName,
 		bbsPhone:  "000-000-0000",
