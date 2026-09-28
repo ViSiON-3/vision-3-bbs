@@ -185,7 +185,8 @@ func TestF5QuickValidates(t *testing.T) {
 	}
 }
 
-// The Shift-F bindings are matched by name ("shift+f2" etc.). With nothing
+// The Shift-F bindings are matched by name ("shift+f2" etc.), which a real
+// terminal never sends; see named(). This covers the handlers only. With nothing
 // tagged, the mass actions refuse with a message instead of opening a prompt,
 // and "untag all" clears the tags.
 func TestMassActionsNeedTags(t *testing.T) {

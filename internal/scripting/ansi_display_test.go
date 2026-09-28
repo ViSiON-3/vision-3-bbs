@@ -3,6 +3,7 @@ package scripting
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -65,8 +66,8 @@ func TestAnsiDisplayRejectsEscapes(t *testing.T) {
 // TestAnsiDisplayUnreadableOverlayStops: a stat error other than not-exist
 // in a search dir aborts the lookup instead of falling through.
 func TestAnsiDisplayUnreadableOverlayStops(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores directory permissions")
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs unix directory permissions enforced")
 	}
 	h := newHarness(t, harnessOpts{})
 	h.writeFile("menus/v3/ansi/art.ans", "BASE")
