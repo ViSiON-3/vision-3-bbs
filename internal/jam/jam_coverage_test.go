@@ -555,9 +555,9 @@ func TestPackWithReplyIDCleanup_Coverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage(2) after pack: %v", err)
 	}
-	// ReplyID should be cleaned to just the first token
-	if msg.ReplyID != "1:103/705" {
-		t.Errorf("ReplyID after cleanup = %q, want %q", msg.ReplyID, "1:103/705")
+	// ReplyID should be cleaned to the "address serial" pair
+	if msg.ReplyID != "1:103/705 00000001" {
+		t.Errorf("ReplyID after cleanup = %q, want %q", msg.ReplyID, "1:103/705 00000001")
 	}
 
 	// Verify file sizes decreased

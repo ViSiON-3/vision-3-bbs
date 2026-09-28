@@ -1,3 +1,11 @@
+// Package ansi handles the terminal byte stream the BBS sends callers: CP437
+// to UTF-8 conversion (ConvertCP437ToUTF8, CP437BytesToUTF8 and the
+// Cp437ToUnicode/UnicodeToCP437 tables), ViSiON/2 pipe colour codes
+// (ReplacePipeCodes, ReplaceColorPipeCodes), loading .ANS files with SAUCE
+// stripped, and ProcessAnsiAndExtractCoords for screens that carry input
+// field positions. It also measures and fits ANSI art to a terminal
+// (ArtGeometry, FitArtToWidth), pads and truncates text by visible width
+// while ignoring escape sequences, and builds cursor and palette sequences.
 package ansi
 
 import (
@@ -15,6 +23,9 @@ import (
 // OutputMode defines the character encoding strategy for terminal output.
 type OutputMode int
 
+// Output modes. A session resolves OutputModeAuto to UTF-8 or CP437 when it
+// connects; the rendering code treats any mode other than OutputModeCP437 as
+// UTF-8.
 const (
 	OutputModeAuto  OutputMode = iota // Default: Detect based on TERM variable
 	OutputModeUTF8                    // Force UTF-8 character output
@@ -66,7 +77,8 @@ func ConvertCP437ToUTF8(data []byte) []byte {
 	return out
 }
 
-// This array maps CP437 bytes (0-255) to their Unicode equivalents
+// Cp437ToUnicode maps every CP437 byte (0-255) to its Unicode equivalent.
+// Control bytes 0x00-0x1F map to themselves rather than to CP437's glyphs.
 var Cp437ToUnicode = [256]rune{
 	// ASCII characters (0-127)
 	0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
@@ -104,8 +116,10 @@ var Cp437ToUnicode = [256]rune{
 	0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00A0,
 }
 
-// Reverse map: Unicode Rune -> CP437 Byte (for specific characters needed)
-// Generated carefully to avoid duplicates where multiple runes might map from one byte.
+// UnicodeToCP437 is the reverse of Cp437ToUnicode for the non-ASCII
+// characters: it maps a Unicode rune to its CP437 byte. Runes with no CP437
+// equivalent are absent, so callers must check ok. It was built by hand to
+// avoid duplicates where multiple runes might map from one byte.
 var UnicodeToCP437 = map[rune]byte{
 	// Box drawing/blocks - Use the primary Unicode points
 	'█': 0xDB, '▄': 0xDC, '▌': 0xDD, '▐': 0xDE, '▀': 0xDF,
@@ -319,9 +333,11 @@ func CP437BytesToUTF8(data []byte) []byte {
 	return out
 }
 
-// Helper function to replace pipe codes with ANSI sequences
-// It should ONLY replace |XX codes and pass through all other bytes.
-// Simplified version: Removed complex ||XX handling for now.
+// ReplacePipeCodes expands ViSiON/2 pipe codes into ANSI sequences: colours
+// |00-|15 and |23 (reset), backgrounds |B0-|B15, and the screen codes |CL,
+// |CR, |DE, |P and |PP. The longest matching code wins, "||" becomes a
+// literal "|", and every other byte, including an unknown |XX, passes
+// through unchanged.
 func ReplacePipeCodes(data []byte) []byte {
 	var buf bytes.Buffer
 	i := 0
@@ -451,7 +467,9 @@ func CursorBackward(n int) string {
 	return fmt.Sprintf("\x1B[%dD", n)
 }
 
-// Add StripAnsi if it was used externally
+// StripAnsi removes CSI escape sequences (ESC [ ... final letter) from str
+// and returns the remaining text. Other escapes, such as a bare ESC or OSC
+// sequences, are not recognised and pass through.
 func StripAnsi(str string) string {
 	// Simple ANSI removal regex (may not cover all cases)
 	var result strings.Builder

@@ -31,8 +31,6 @@ type IPLockoutChecker interface {
 	ClearFailedLoginAttempts(ip string)
 }
 
-// RunnableFunc defines the signature for functions executable via RUN:
-// Returns: authenticatedUser, nextAction (e.g., "GOTO:MENU"), err
 // cmdCtx bundles the per-invocation context shared by every RunnableFunc,
 // replacing an 11-parameter signature that was repeated across ~140 handlers.
 type cmdCtx struct {
@@ -48,6 +46,15 @@ type cmdCtx struct {
 	termHeight       int
 }
 
+// RunnableFunc is the signature of a built-in command that a menu reaches with
+// a "RUN:<TARGET> args" action (and of the "DOOR:" handler); implementations
+// are registered in MenuExecutor.RunRegistry under the upper-cased target.
+// args is whatever followed the target on the command line. The returned user
+// replaces the session's current user (login runnables use it to report who
+// authenticated). nextAction may be "GOTO:<MENU>" or "LOGOFF"; anything else,
+// including "", stays on the current menu. An io.EOF or idle-timeout error
+// logs the caller off; any other error is shown to the caller and the menu
+// continues.
 type RunnableFunc func(c *cmdCtx, args string) (authenticatedUser *user.User, nextAction string, err error)
 
 // AutoRunTracker definition removed, using the one from types.go

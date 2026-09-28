@@ -1,3 +1,8 @@
+// Package tuiart holds the shared look of the sysop's full-screen TUI
+// editors (user, menu, config and string editors, and the WFC screen): the
+// DOS VGA Palette and lipgloss styles, embedded ANSI backdrop art that is
+// rasterized and centred behind each screen (Load, LoadFrom, Shaded), the
+// Screen row builder, and width-aware text helpers.
 package tuiart
 
 import (
@@ -18,9 +23,11 @@ import (
 //go:embed assets/*.ANS
 var backdropFS embed.FS
 
+// Dimensions of an embedded backdrop screen. Rasterize always produces a
+// grid of this size, and LoadFrom never builds a canvas smaller than it.
 const (
-	ArtWidth  = 80
-	ArtHeight = 25
+	ArtWidth  = 80 // columns in a backdrop screen
+	ArtHeight = 25 // rows in a backdrop screen
 )
 
 // Arts returns the raw bytes of every embedded backdrop screen, sorted
@@ -270,7 +277,7 @@ func renderCells(cells []Cell) string {
 	return b.String()
 }
 
-// segment returns the styled backdrop slice for row starting at col, width
+// Segment returns the styled backdrop slice for row starting at col, width
 // columns wide. Out-of-range requests are padded with black spaces so callers
 // never need bounds checks. In fallback mode it returns the ░ shaded fill.
 func (b *Backdrop) Segment(row, col, width int) string {
@@ -300,7 +307,8 @@ func (b *Backdrop) Segment(row, col, width int) string {
 	return renderCells(out)
 }
 
-// line returns the full-width styled backdrop row.
+// Line returns the full-width styled backdrop row. A nil Backdrop yields an
+// ArtWidth-wide row of the shaded fill.
 func (b *Backdrop) Line(row int) string {
 	w := ArtWidth
 	if b != nil {

@@ -466,3 +466,37 @@ func TestPackRemapsHugeStalePointer(t *testing.T) {
 			lr.LastReadMsg, lr.HighReadMsg)
 	}
 }
+
+// An "address serial" ReplyID is the tosser's normal form and must survive
+// the cleanup; only extra tokens past the serial are cut.
+func TestPackWithReplyIDCleanupKeepsAddressSerial(t *testing.T) {
+	for _, tc := range []struct {
+		replyID, want string
+	}{
+		{"21:1/100 00000002", "21:1/100 00000002"},
+		{"a1b2c3d4@1:2/3", "a1b2c3d4@1:2/3"},
+		{"21:1/100 00000002 21:1/100 00000003", "21:1/100 00000002"},
+	} {
+		b := openTestBase(t)
+		msg := NewMessage()
+		msg.From, msg.To, msg.Subject, msg.Text = "alice", "All", "Hi", "body"
+		msg.ReplyID = tc.replyID
+		if _, err := b.WriteMessage(msg); err != nil {
+			t.Fatalf("WriteMessage: %v", err)
+		}
+
+		if _, err := b.PackWithReplyIDCleanup(); err != nil {
+			t.Fatalf("PackWithReplyIDCleanup: %v", err)
+		}
+		got, err := b.ReadMessage(1)
+		if err != nil {
+			t.Fatalf("ReadMessage: %v", err)
+		}
+		if got.ReplyID != tc.want {
+			t.Errorf("ReplyID %q after cleanup = %q, want %q", tc.replyID, got.ReplyID, tc.want)
+		}
+		if got.Header.REPLYcrc != CRC32String(tc.want) {
+			t.Errorf("REPLYcrc for %q does not match the cleaned ReplyID", tc.replyID)
+		}
+	}
+}

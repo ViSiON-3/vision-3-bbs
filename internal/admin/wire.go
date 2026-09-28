@@ -23,13 +23,16 @@ type Frame struct {
 	Err      string          `json:"err,omitempty"`
 }
 
+// Frame kinds, carried in Frame.Kind. The server sends KindSnapshot (on
+// connect and periodically), KindEvent, and KindResult or KindError in
+// reply to a client's KindCommand; the reply carries the command's ID.
 const (
-	KindHello    = "hello"
-	KindSnapshot = "snapshot"
-	KindEvent    = "event"
-	KindCommand  = "command"
-	KindResult   = "result"
-	KindError    = "error"
+	KindHello    = "hello"    // reserved for a handshake; not currently sent
+	KindSnapshot = "snapshot" // Frame.Snapshot holds a full system snapshot
+	KindEvent    = "event"    // Frame.Event holds one live event
+	KindCommand  = "command"  // Frame.Command holds a client request
+	KindResult   = "result"   // Frame.Result answers the command with the same ID
+	KindError    = "error"    // Frame.Err explains why the command with the same ID failed
 )
 
 const maxFrameBytes = 1 << 20 // 1 MiB

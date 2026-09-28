@@ -12,10 +12,12 @@ import (
 // Status represents the D/P/F state of a ZipLab step.
 type Status string
 
+// Step states, written as the single letter used for the state in
+// ZIPLAB.NFO entry keys (for example "1D" for step 1 in progress).
 const (
-	StatusDoing Status = "D"
-	StatusPass  Status = "P"
-	StatusFail  Status = "F"
+	StatusDoing Status = "D" // step is running
+	StatusPass  Status = "P" // step finished without error
+	StatusFail  Status = "F" // step returned an error
 )
 
 // NFOEntry holds the parsed display coordinates and colors for one step+status.

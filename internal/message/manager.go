@@ -1,3 +1,9 @@
+// Package message manages the BBS message areas and the JAM bases behind
+// them. MessageManager, built by NewMessageManager, loads area definitions
+// from message_areas.json and handles posting, reading, last-read tracking,
+// thread and MSGID lookups, and area administration. It opens a JAM base only
+// for the duration of each operation so external tools such as v3mail can
+// share the files.
 package message
 
 import (
