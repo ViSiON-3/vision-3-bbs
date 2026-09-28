@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
 // PacketWriter builds a QWK mail packet (ZIP archive) containing
@@ -26,11 +28,11 @@ type PacketWriter struct {
 // NewPacketWriter creates a new QWK packet writer.
 // bbsID should be a short identifier (max 8 chars, e.g. "VISION3").
 func NewPacketWriter(bbsID, bbsName, sysOpName string) *PacketWriter {
-	if len(bbsID) > 8 {
-		bbsID = bbsID[:8]
-	}
+	// Upper-case before the byte cap: some letters grow when upper-cased
+	// (ȿ is 2 bytes, Ȿ is 3), which would push a capped ID past 8 bytes.
+	bbsID = util.TruncateBytes(strings.ToUpper(bbsID), 8)
 	return &PacketWriter{
-		bbsID:     strings.ToUpper(bbsID),
+		bbsID:     bbsID,
 		bbsName:   bbsName,
 		sysOpName: sysOpName,
 		bbsPhone:  "000-000-0000",
@@ -272,11 +274,11 @@ func formatMessage(msg PacketMessage) []byte {
 	return result
 }
 
+// copyPadded copies src into a fixed-width header field of maxLen bytes. QWK
+// fields are byte-counted, but the cut lands on a rune boundary so a UTF-8
+// name or subject never ends in a partial character.
 func copyPadded(dst []byte, src string, maxLen int) {
-	if len(src) > maxLen {
-		src = src[:maxLen]
-	}
-	copy(dst, src)
+	copy(dst, util.TruncateBytes(src, maxLen))
 }
 
 func writeZipEntry(zw *zip.Writer, name string, data []byte) error {

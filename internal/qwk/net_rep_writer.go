@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
 // NetREPOptions controls how a node's REP packet is built.
@@ -40,9 +42,7 @@ func TaglineText(software, tagline string) string {
 // tearline/tagline, and the fuller HEADERS.DAT.
 func WriteNetREP(w io.Writer, hubID string, msgs []NetMessage, opts NetREPOptions) error {
 	hubID = strings.ToUpper(hubID)
-	if len(hubID) > 8 {
-		hubID = hubID[:8]
-	}
+	hubID = util.TruncateBytes(hubID, 8)
 	if hubID == "" {
 		return fmt.Errorf("hub ID is required")
 	}

@@ -113,11 +113,7 @@ func (m Model) renderCmdRow(idx int, boxW int) string {
 	keys := padRight(cmd.Keys, 10)
 	command := padRight(cmd.Command, boxW-36)
 	content := "   " + activity + keys + command
-	if len(content) < boxW {
-		content += strings.Repeat(" ", boxW-len(content))
-	} else if len(content) > boxW {
-		content = content[:boxW]
-	}
+	content = padRight(content, boxW) // rune-aware: pads or cuts to boxW columns
 
 	if isHighlight {
 		return listHighlightStyle.Render(content)

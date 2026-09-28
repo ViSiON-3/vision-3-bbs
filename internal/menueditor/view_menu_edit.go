@@ -3,7 +3,9 @@ package menueditor
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
@@ -144,11 +146,8 @@ func (m Model) renderMenuField(fieldIdx int, f fieldDef, d *MenuData, boxW int) 
 
 	if isActive {
 		// Highlighted field (ready to edit) — truncate to dispW to prevent overflow
-		displayVal := value
-		if len(displayVal) > dispW {
-			displayVal = displayVal[:dispW]
-		}
-		fillStr := strings.Repeat(string(fieldFillChar), max(0, dispW-len(displayVal)))
+		displayVal := ansi.TruncateRunes(value, dispW, "")
+		fillStr := strings.Repeat(string(fieldFillChar), max(0, dispW-utf8.RuneCountInString(displayVal)))
 		result := leftPad + fieldLabelStyle.Render(label) + fieldEditStyle.Render(displayVal+fillStr)
 		result += fieldDisplayStyle.Render(strings.Repeat(" ", max(0, boxW-rawW)))
 		return result

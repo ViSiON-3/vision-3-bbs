@@ -1,6 +1,10 @@
 package configeditor
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+)
 
 // nodesListVisible is the number of rows shown in the node management list.
 const nodesListVisible = 10
@@ -29,10 +33,7 @@ func (m Model) viewV3NetNodes() string {
 	lb.list(listVisible, m.nodesScroll, m.nodesCursor, total,
 		func(i int) string {
 			n := m.nodesList[i]
-			joined := n.CreatedAt
-			if len(joined) > 10 {
-				joined = joined[:10] // date only
-			}
+			joined := ansi.TruncateRunes(n.CreatedAt, 10, "") // date only
 			return fmt.Sprintf("   %-16s %-20s %-8s %s",
 				n.NodeID, padRight(sanitizeRegistryField(n.BBSName), 20), padRight(n.Status, 8), joined)
 		})

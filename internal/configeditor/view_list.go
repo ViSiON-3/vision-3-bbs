@@ -362,11 +362,7 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 	}
 
 	// Ensure content fills the box width
-	if len(content) < boxW {
-		content += strings.Repeat(" ", boxW-len(content))
-	} else if len(content) > boxW {
-		content = content[:boxW]
-	}
+	content = padRight(content, boxW) // rune-aware: pads or cuts to boxW columns
 
 	return content
 }

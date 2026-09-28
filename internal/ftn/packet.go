@@ -9,10 +9,11 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
 // PacketType2Plus is the packet version identifier for Type-2+ packets.
@@ -325,9 +326,9 @@ func writePackedMessage(w io.Writer, msg *PackedMessage) error {
 	}
 
 	// Write null-terminated string fields
-	to := truncateField(msg.To, 36)
-	from := truncateField(msg.From, 36)
-	subject := truncateField(msg.Subject, 72)
+	to := util.TruncateBytes(msg.To, 36)
+	from := util.TruncateBytes(msg.From, 36)
+	subject := util.TruncateBytes(msg.Subject, 72)
 	for _, s := range []string{msg.DateTime, to, from, subject, msg.Body} {
 		if _, err := w.Write(append([]byte(s), 0)); err != nil {
 			return err
@@ -335,29 +336,6 @@ func writePackedMessage(w io.Writer, msg *PackedMessage) error {
 	}
 
 	return nil
-}
-
-// truncateField clamps s to max BYTES, which is what FTS-0001 specifies for the
-// null-terminated To/From/Subject fields — but it cuts on a rune boundary, so a
-// multi-byte character is dropped whole rather than leaving a partial UTF-8
-// sequence on the wire for every other system to parse.
-func truncateField(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	end := 0
-	for end < len(s) {
-		// DecodeRuneInString gives the byte size at this offset, which is 1 for a
-		// stray invalid byte. utf8.RuneLen would report 3 for those, since range
-		// surfaces them as RuneError, and the cut would land inside the next
-		// character.
-		_, size := utf8.DecodeRuneInString(s[end:])
-		if end+size > max {
-			break
-		}
-		end += size
-	}
-	return s[:end]
 }
 
 // ParsedBody holds the components of a parsed FTN message body.

@@ -3,8 +3,11 @@ package configeditor
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // viewSysConfigEdit renders the system config field editor.
@@ -213,10 +216,8 @@ func (m Model) renderSysField(fieldIdx int, f fieldDef) (string, int) {
 		if f.Type == ftYesNo || f.Type == ftInteger {
 			effectiveWidth = f.Width + 2 // Add space for visual padding
 		}
-		if len(v) > effectiveWidth {
-			v = v[:effectiveWidth]
-		}
-		fillStr := strings.Repeat(string(fieldFillChar), maxInt(0, effectiveWidth-len(v)))
+		v = ansi.TruncateRunes(v, effectiveWidth, "")
+		fillStr := strings.Repeat(string(fieldFillChar), maxInt(0, effectiveWidth-utf8.RuneCountInString(v)))
 		return fieldLabelStyle.Render(label) + fieldEditStyle.Render(v+fillStr), rawW
 	}
 

@@ -236,9 +236,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 		if nameWidth < 5 {
 			nameWidth = 5
 		}
-		if len(name) > nameWidth {
-			name = name[:nameWidth]
-		}
+		name = ansi.TruncateVisible(name, nameWidth)
 		return fmt.Sprintf("%s%2d %s", verifiedMark, idx+1, padRight(name, nameWidth))
 	}
 
@@ -271,9 +269,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 		if valWidth < 5 {
 			valWidth = 5
 		}
-		if len(val) > valWidth {
-			val = val[:valWidth]
-		}
+		val = ansi.TruncateVisible(val, valWidth)
 		emitPipe(fmt.Sprintf("|08\xb3 |15%-10s |08: %s%-*s", bbsListSanitize(label), valueColor, valWidth, bbsListSanitize(val)))
 	}
 
@@ -349,9 +345,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 				if maxDesc < 1 {
 					maxDesc = 1
 				}
-				if len(descLine) > maxDesc {
-					descLine = descLine[:maxDesc]
-				}
+				descLine = ansi.TruncateVisible(descLine, maxDesc)
 				emitPipe("|08\xb3 |07" + bbsListSanitize(descLine))
 				detailRow++
 			}
@@ -586,9 +580,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	name = strings.TrimSpace(name)
-	if len(name) > 40 {
-		name = name[:40]
-	}
+	name = ansi.TruncateRunes(name, 40, "")
 
 	// Address (required)
 	wv(terminal, "|08A|07d|15dress |08(|07hostname or IP|08)|05: ", outputMode)
@@ -598,9 +590,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	address = strings.TrimSpace(address)
-	if len(address) > 60 {
-		address = address[:60]
-	}
+	address = ansi.TruncateRunes(address, 60, "")
 
 	// Telnet port (optional)
 	wv(terminal, "|08T|07e|15lnet |13Port |08(|07blank if none|08)|05: ", outputMode)
@@ -609,9 +599,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	telnetPort = strings.TrimSpace(telnetPort)
-	if len(telnetPort) > 10 {
-		telnetPort = telnetPort[:10]
-	}
+	telnetPort = ansi.TruncateRunes(telnetPort, 10, "")
 
 	// SSH port (optional)
 	wv(terminal, "|08S|07S|15H   |13Port |08(|07blank if none|08)|05: ", outputMode)
@@ -620,9 +608,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	sshPort = strings.TrimSpace(sshPort)
-	if len(sshPort) > 10 {
-		sshPort = sshPort[:10]
-	}
+	sshPort = ansi.TruncateRunes(sshPort, 10, "")
 
 	// Web URL (optional)
 	wv(terminal, "|08W|07e|15b   |08(|07URL, or blank|08)|05: ", outputMode)
@@ -631,9 +617,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	webAddr = strings.TrimSpace(webAddr)
-	if len(webAddr) > 80 {
-		webAddr = webAddr[:80]
-	}
+	webAddr = ansi.TruncateRunes(webAddr, 80, "")
 
 	// SysOp name (optional)
 	wv(terminal, "|08S|07y|15sOp|05: ", outputMode)
@@ -642,9 +626,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	sysop = strings.TrimSpace(sysop)
-	if len(sysop) > 30 {
-		sysop = sysop[:30]
-	}
+	sysop = ansi.TruncateRunes(sysop, 30, "")
 
 	// Software (optional, default ViSiON/3)
 	wv(terminal, "|08B|07B|15S |13Software |08[|07ViSiON/3|08]|05: ", outputMode)
@@ -656,9 +638,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	if software == "" {
 		software = "ViSiON/3"
 	}
-	if len(software) > 20 {
-		software = software[:20]
-	}
+	software = ansi.TruncateRunes(software, 20, "")
 
 	// Description (optional)
 	wv(terminal, "|08D|07e|15scription |08(|07one line, or blank|08)|05: ", outputMode)
@@ -667,9 +647,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	desc = strings.TrimSpace(desc)
-	if len(desc) > 200 {
-		desc = desc[:200]
-	}
+	desc = ansi.TruncateRunes(desc, 200, "")
 
 	// Save
 	bbsListMu.Lock()
@@ -778,44 +756,28 @@ func bbsListEditEntry(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		switch choice {
 		case "1":
-			if len(val) > 40 {
-				val = val[:40]
-			}
+			val = ansi.TruncateRunes(val, 40, "")
 			entry.Name = val
 		case "2":
-			if len(val) > 60 {
-				val = val[:60]
-			}
+			val = ansi.TruncateRunes(val, 60, "")
 			entry.Address = val
 		case "3":
-			if len(val) > 10 {
-				val = val[:10]
-			}
+			val = ansi.TruncateRunes(val, 10, "")
 			entry.TelnetPort = val
 		case "4":
-			if len(val) > 10 {
-				val = val[:10]
-			}
+			val = ansi.TruncateRunes(val, 10, "")
 			entry.SSHPort = val
 		case "5":
-			if len(val) > 80 {
-				val = val[:80]
-			}
+			val = ansi.TruncateRunes(val, 80, "")
 			entry.Web = val
 		case "6":
-			if len(val) > 30 {
-				val = val[:30]
-			}
+			val = ansi.TruncateRunes(val, 30, "")
 			entry.Sysop = val
 		case "7":
-			if len(val) > 20 {
-				val = val[:20]
-			}
+			val = ansi.TruncateRunes(val, 20, "")
 			entry.Software = val
 		case "8":
-			if len(val) > 200 {
-				val = val[:200]
-			}
+			val = ansi.TruncateRunes(val, 200, "")
 			entry.Description = val
 		}
 	}

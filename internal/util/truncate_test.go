@@ -1,4 +1,4 @@
-package ftn
+package util
 
 import (
 	"strings"
@@ -6,11 +6,44 @@ import (
 	"unicode/utf8"
 )
 
+func TestTruncateBytes(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		max  int
+		want string
+	}{
+		{"fits", "abc", 8, "abc"},
+		{"exact", "abcdefgh", 8, "abcdefgh"},
+		{"ascii cut", "abcdefghij", 8, "abcdefgh"},
+		{"cut inside two-byte rune drops it", "abcdefgé", 8, "abcdefg"},
+		{"cut inside three-byte rune drops it", "abcdef€", 8, "abcdef"},
+		{"cut after whole rune keeps it", "abcdeféx", 8, "abcdefé"},
+		{"cp437 bytes cut exactly", "\xc4\xc4\xc4\xc4\xc4", 3, "\xc4\xc4\xc4"},
+		{"zero", "abc", 0, ""},
+		{"negative", "abc", -1, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TruncateBytes(tt.s, tt.max)
+			if got != tt.want {
+				t.Errorf("TruncateBytes(%q, %d) = %q, want %q", tt.s, tt.max, got, tt.want)
+			}
+			if len(got) > tt.max && tt.max >= 0 {
+				t.Errorf("TruncateBytes(%q, %d) is %d bytes, over the limit", tt.s, tt.max, len(got))
+			}
+			if utf8.ValidString(tt.s) && !utf8.ValidString(got) {
+				t.Errorf("TruncateBytes(%q, %d) = %q is not valid UTF-8", tt.s, tt.max, got)
+			}
+		})
+	}
+}
+
 // FTS-0001 packed-message fields are null-terminated byte strings with byte
 // limits (36 for To/From, 72 for Subject), so truncation must respect the byte
 // budget — but it must not cut a multi-byte character in half, which would put
 // an invalid UTF-8 sequence on the wire for every other system to parse.
-func TestTruncateFieldCutsOnRuneBoundaryWithinByteBudget(t *testing.T) {
+func TestTruncateBytesFTSFieldBudgets(t *testing.T) {
 	tests := []struct {
 		name string
 		s    string
@@ -30,13 +63,13 @@ func TestTruncateFieldCutsOnRuneBoundaryWithinByteBudget(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := truncateField(tt.s, tt.max)
+			got := TruncateBytes(tt.s, tt.max)
 
 			if len(got) > tt.max {
 				t.Errorf("len = %d bytes, want <= %d (FTS-0001 field limit)", len(got), tt.max)
 			}
 			if !utf8.ValidString(got) {
-				t.Errorf("truncateField produced invalid UTF-8: %q", got)
+				t.Errorf("TruncateBytes produced invalid UTF-8: %q", got)
 			}
 			// Must keep as much as the byte budget allows: adding the next rune
 			// back would have to overflow.
@@ -54,13 +87,13 @@ func TestTruncateFieldCutsOnRuneBoundaryWithinByteBudget(t *testing.T) {
 // stray byte occupies exactly one byte of the budget: range decodes it as
 // RuneError, whose utf8.RuneLen is 3, so sizing by RuneLen would truncate at a
 // third of the real limit.
-func TestTruncateFieldCountsInvalidBytesAsOneByte(t *testing.T) {
+func TestTruncateBytesCountsInvalidBytesAsOneByte(t *testing.T) {
 	// One stray byte, then a 3-byte rune. The stray byte occupies ONE byte, so a
 	// 3-byte budget must keep just it — sizing the stray byte as 3 (utf8.RuneLen
 	// of RuneError) makes the cut land inside the following rune instead.
 	s := "\xff" + "\u65e5" + "tail"
 
-	got := truncateField(s, 3)
+	got := TruncateBytes(s, 3)
 
 	// Not asserting ValidString here: the input itself carries a stray byte, so a
 	// faithful prefix cannot be valid UTF-8. What matters is that the cut lands on
