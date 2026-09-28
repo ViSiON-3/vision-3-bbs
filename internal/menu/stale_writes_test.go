@@ -193,7 +193,7 @@ func TestVoteLandsOnChosenTopicAfterConcurrentDelete(t *testing.T) {
 
 // --- news (#452) -----------------------------------------------------------
 
-func seedNews(t *testing.T, cfg string, items ...NewsItem) {
+func seedNewsItems(t *testing.T, cfg string, items ...NewsItem) {
 	t.Helper()
 	nd := &NewsData{Items: items}
 	for _, it := range items {
@@ -236,7 +236,7 @@ func prependNews(t *testing.T, cfg, title string) {
 
 func TestNewsDeleteHitsChosenItemAfterConcurrentAdd(t *testing.T) {
 	cfg := staleTestConfig(t)
-	seedNews(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
+	seedNewsItems(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
 
 	const marker = "Delete #1 ("
 	ts := runStaleScreen(t, cfg, "D\r1\rY\rQ\r", func(ts *testSession) {
@@ -251,7 +251,7 @@ func TestNewsDeleteHitsChosenItemAfterConcurrentAdd(t *testing.T) {
 
 func TestNewsEditHitsChosenItemAfterConcurrentAdd(t *testing.T) {
 	cfg := staleTestConfig(t)
-	seedNews(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
+	seedNewsItems(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
 
 	const marker = "News #1"
 	ts := runStaleScreen(t, cfg, "E\r1\rT\rRenamed\rQ\rQ\r", func(ts *testSession) {
@@ -266,13 +266,13 @@ func TestNewsEditHitsChosenItemAfterConcurrentAdd(t *testing.T) {
 
 func TestNewsDeleteReportsItemGone(t *testing.T) {
 	cfg := staleTestConfig(t)
-	seedNews(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
+	seedNewsItems(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
 
 	const marker = "Delete #1 ("
 	ts := runStaleScreen(t, cfg, "D\r1\rY\rQ\r", func(ts *testSession) {
 		ts.whenOutput(marker, func() {
 			// Another sysop deletes "Old" first.
-			seedNews(t, cfg, NewsItem{ID: 2, Title: "Older", Body: "b"})
+			seedNewsItems(t, cfg, NewsItem{ID: 2, Title: "Older", Body: "b"})
 		})
 	}, runEditNews)
 	mustHookFire(t, ts, marker)
@@ -287,7 +287,7 @@ func TestNewsDeleteReportsItemGone(t *testing.T) {
 
 // --- BBS list (#452) -------------------------------------------------------
 
-func seedBBSList(t *testing.T, cfg string, names ...string) {
+func seedBBSListings(t *testing.T, cfg string, names ...string) {
 	t.Helper()
 	bld := &bbsListData{NextID: 1}
 	for _, n := range names {
@@ -330,7 +330,7 @@ func bbsListings(t *testing.T, cfg string) map[string]BBSListing {
 
 func TestBBSListDeleteKeepsConcurrentAdd(t *testing.T) {
 	cfg := staleTestConfig(t)
-	seedBBSList(t, cfg, "Alpha", "Beta")
+	seedBBSListings(t, cfg, "Alpha", "Beta")
 
 	const marker = "Delete which entry"
 	ts := runStaleScreen(t, cfg, "1\rY", func(ts *testSession) {
@@ -352,7 +352,7 @@ func TestBBSListDeleteKeepsConcurrentAdd(t *testing.T) {
 
 func TestBBSListDeleteReportsEntryGone(t *testing.T) {
 	cfg := staleTestConfig(t)
-	seedBBSList(t, cfg, "Alpha", "Beta")
+	seedBBSListings(t, cfg, "Alpha", "Beta")
 
 	const marker = "Delete which entry"
 	ts := runStaleScreen(t, cfg, "1\rY", func(ts *testSession) {
@@ -376,7 +376,7 @@ func TestBBSListDeleteReportsEntryGone(t *testing.T) {
 
 func TestBBSListVerifyKeepsConcurrentAdd(t *testing.T) {
 	cfg := staleTestConfig(t)
-	seedBBSList(t, cfg, "Alpha", "Beta")
+	seedBBSListings(t, cfg, "Alpha", "Beta")
 
 	const marker = "Toggle verified on entry"
 	ts := runStaleScreen(t, cfg, "2\r", func(ts *testSession) {

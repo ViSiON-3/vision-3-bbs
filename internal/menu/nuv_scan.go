@@ -235,7 +235,11 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 				continue
 			}
 			num, err := strconv.Atoi(strings.TrimSpace(numStr))
-			if err != nil || num < 1 || num > len(nd.Candidates) {
+			if err != nil || num < 1 {
+				wv(terminal, "|12Invalid number.\r\n", outputMode)
+				continue
+			}
+			if num > len(nd.Candidates) {
 				wv(terminal, "|12Invalid candidate number.\r\n", outputMode)
 				continue
 			}
@@ -276,7 +280,11 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 				continue
 			}
 			num, err := strconv.Atoi(strings.TrimSpace(numStr))
-			if err != nil || num < 1 || num > len(nd.Candidates) {
+			if err != nil || num < 1 {
+				wv(terminal, "|12Invalid number.\r\n", outputMode)
+				continue
+			}
+			if num > len(nd.Candidates) {
 				wv(terminal, "|12Invalid candidate number.\r\n", outputMode)
 				continue
 			}
