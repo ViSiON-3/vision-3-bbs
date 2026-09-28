@@ -3,12 +3,14 @@ package menu
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 	"github.com/google/uuid"
@@ -205,5 +207,52 @@ func TestViewFileByRecord_RegistrationExists(t *testing.T) {
 	}
 	if _, ok := registry["TYPE_TEXT_FILE"]; !ok {
 		t.Error("TYPE_TEXT_FILE not registered in command registry")
+	}
+}
+
+// TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly drives the real
+// session viewer (VIEW_FILE / TYPE_TEXT_FILE / file-list view). Appending CRLF
+// to scanner.Bytes() in place used to overwrite the start of the next line in
+// the scanner's buffer, so only the first line survived and the More-prompt
+// count was off (#461).
+func TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly(t *testing.T) {
+	const numLines = 12
+	var content strings.Builder
+	for i := 1; i <= numLines; i++ {
+		fmt.Fprintf(&content, "LINE-%02d text\n", i)
+	}
+	textPath := filepath.Join(t.TempDir(), "readme.txt")
+	if err := os.WriteFile(textPath, []byte(content.String()), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// termHeight 9 gives 5 lines per page, so 12 lines pause after lines 5
+	// and 10: exactly two More prompts. Space continues each, CR ends the
+	// closing pause.
+	ts := newTestSession("  \r")
+	t.Cleanup(func() { resetSessionIH(ts) })
+	terminal := newTestTerminal(ts)
+
+	displayTextWithPaging(ts, terminal, textPath, "readme.txt", ansi.OutputModeCP437, 9,
+		"Viewing: %s\r\n", "<EOF>", "<MORE>", "<PAUSE>", "<OPENERR>")
+
+	out := ts.output()
+	prev := -1
+	for i := 1; i <= numLines; i++ {
+		want := fmt.Sprintf("LINE-%02d text\r", i)
+		idx := strings.Index(out, want)
+		if idx < 0 {
+			t.Fatalf("output missing %q:\n%q", want, out)
+		}
+		if idx <= prev {
+			t.Errorf("%q out of order in output", want)
+		}
+		prev = idx
+	}
+	if got := strings.Count(out, "<MORE>"); got != 2 {
+		t.Errorf("More prompt shown %d times, want 2:\n%q", got, out)
+	}
+	if !strings.Contains(out, "<EOF>") {
+		t.Errorf("end-of-file marker missing:\n%q", out)
 	}
 }
