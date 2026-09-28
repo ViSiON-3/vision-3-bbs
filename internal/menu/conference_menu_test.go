@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // padRight and truncateStr lay out the area, conference, file and V3Net
@@ -160,5 +162,35 @@ func TestNextPrevMsgConfWraps(t *testing.T) {
 
 	if r := env.runCmd("NEXTMSGCONF", nil, "", ""); r.err != nil || r.user != nil {
 		t.Errorf("anonymous NEXTMSGCONF: user=%v err=%v", r.user, r.err)
+	}
+}
+
+// The empty-list notices on the conference and message-area lists are
+// strings.json values carrying pipe codes; they must reach the caller as
+// colour, not as a literal "|07".
+func TestAreaListsExpandEmptyListNotices(t *testing.T) {
+	env := newMenuEnv(t)
+	env.sysop.CurrentMsgConferenceID = 2 // FelonyNet ships with no areas
+
+	r := env.runCmd("LISTMSGAR", env.sysop, "", "\r")
+	if !r.has("No accessible message areas found.") {
+		t.Fatalf("want the empty-list notice:\n%s", r.text())
+	}
+	if r.has("|07") {
+		t.Errorf("message-area notice printed a raw pipe code:\n%s", r.text())
+	}
+
+	for _, conf := range env.e.ConferenceMgr.ListConferences() {
+		conf.ACS = "s255"
+	}
+	r = env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
+		_, err := displayConferenceList(c.e, c.s, c.terminal, c.currentUser, c.outputMode, c.nodeNumber, c.sessionStartTime)
+		return c.currentUser, "", err
+	}, env.caller, "", "")
+	if r.err != nil || !r.has("No accessible conferences found.") {
+		t.Fatalf("want the no-conferences notice (err=%v):\n%s", r.err, r.text())
+	}
+	if r.has("|07") {
+		t.Errorf("conference notice printed a raw pipe code:\n%s", r.text())
 	}
 }

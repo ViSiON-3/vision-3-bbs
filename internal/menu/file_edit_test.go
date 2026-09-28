@@ -203,6 +203,42 @@ func TestEditFileRecordMoveBadTargets(t *testing.T) {
 	}
 }
 
+// TestEditFileRecordNoReviewPromptAfterNoChange pins that R and M only offer
+// "Mark as reviewed?" after the rename or move actually happened: a
+// cancelled, invalid or failed action goes straight on without the prompt.
+func TestEditFileRecordNoReviewPromptAfterNoChange(t *testing.T) {
+	for _, tc := range []struct {
+		name, input string
+		removeFile  bool // delete the upload from disk so the rename fails
+	}{
+		{"rename cancelled", "Y\rR\r\r", false},
+		{"rename invalid", "Y\rR\r../escape.zip\r", false},
+		{"rename failed", "Y\rR\rGONE.ZIP\r", true},
+		{"rename to the same name", "Y\rR\rSAME.ZIP\r", false},
+		{"move cancelled", "Y\rM\r\r", false},
+		{"move invalid", "Y\rM\rabc\r", false},
+		{"move unknown area", "Y\rM\r99\r", false},
+		{"move declined", "Y\rM\r2\rN\r", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newMenuEnv(t)
+			id, p := addReviewUpload(t, env, 1, "SAME.ZIP", 10)
+			if tc.removeFile {
+				if err := os.Remove(p); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r := env.runCmd("EDITFILERECORD", env.sysop, "", tc.input+"Y\r")
+			if r.has("Mark as reviewed?") {
+				t.Errorf("review offered after an action that changed nothing:\n%s", r.text())
+			}
+			if rec := reloadedFileRecord(t, env, id); rec == nil || rec.Filename != "SAME.ZIP" || rec.AreaID != 1 || rec.Reviewed {
+				t.Errorf("record = %+v, want unchanged and unreviewed", rec)
+			}
+		})
+	}
+}
+
 // TestEditFileRecordSkipAndQuit pins S (skip to the next file, unchanged) and
 // Q (stop reviewing): with two uploads, S then Q shows both and marks none.
 func TestEditFileRecordSkipAndQuit(t *testing.T) {

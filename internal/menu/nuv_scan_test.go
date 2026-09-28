@@ -50,8 +50,6 @@ func TestSCANNUV_SkipsAlreadyVoted(t *testing.T) {
 
 // CHECKNUV at login offers the scan only to a qualified voter with unvoted
 // candidates, counting them; answering Y runs the scan.
-// (It uses the shipped string that ends in the " @" yes/no marker but reads
-// a raw key, so "@" is printed literally; not asserted here.)
 func TestCHECKNUV_OffersScan(t *testing.T) {
 	env := newMenuEnv(t)
 	enableNUV(env, 5, 5, true, false)
@@ -65,6 +63,20 @@ func TestCHECKNUV_OffersScan(t *testing.T) {
 	r := env.run(runCheckNUV, env.sysop, "", "N")
 	if !r.has("You have NOT voted on 1 New Users.") || r.has("Candidate #") {
 		t.Errorf("declined offer: %q", r.text())
+	}
+	// The shipped prompt's trailing " @" is the Yes/No lightbar marker: the
+	// caller gets the lightbar, never a literal "@".
+	if r.has(" @") || !r.has("Vote Now?", "No") {
+		t.Errorf("vote prompt not shown as a Yes/No lightbar: %q", r.text())
+	}
+	// Enter takes the lightbar's default, No. Checked while a candidate is
+	// still unvoted, so the prompt is really offered.
+	r = env.run(runCheckNUV, env.sysop, "", "\rQ")
+	if !r.has("Vote Now?") {
+		t.Fatalf("vote prompt not offered before the Enter check: %q", r.text())
+	}
+	if r.has("Candidate #") {
+		t.Errorf("Enter at the vote prompt ran the scan: %q", r.text())
 	}
 	r = env.run(runCheckNUV, env.sysop, "", "YY\rQ")
 	if !r.has("New User Voting - Candidate #1", "One") {

@@ -113,7 +113,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	// Auto-generate subject with "RE: " prefix (no prompt needed)
 	newSubject := generateReplySubject(currentMsg.Subject)
 	if strings.TrimSpace(newSubject) == "" {
-		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplySubjectEmpty), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgReplySubjectEmpty)), outputMode)
 		uiPause(1 * time.Second)
 		return ""
 	}
@@ -139,7 +139,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		replyName, replyTo = handle, handle
 	}
 
-	terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgLaunchingEditor), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgLaunchingEditor)), outputMode)
 
 	// Start with empty editor - user will use /Q command to quote if desired
 	// Pass message metadata for quoting (from, title, date, time, isAnon, lines)
@@ -153,13 +153,13 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, replyCtx)
 	if editErr != nil {
 		slog.Error("editor failed", "node", nodeNumber, "error", editErr)
-		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgEditorError), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgEditorError)), outputMode)
 		uiPause(2 * time.Second)
 		return ""
 	}
 
 	if !saved {
-		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplyCancelled), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgReplyCancelled)), outputMode)
 		uiPause(1 * time.Second)
 		return ""
 	}
@@ -182,14 +182,14 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	}
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)
-		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplyError), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgReplyError)), outputMode)
 		uiPause(2 * time.Second)
 	} else {
 		currentUser.MessagesPosted++
 		if err := userManager.UpdateUser(currentUser); err != nil {
 			slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		}
-		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplySuccess), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgReplySuccess)), outputMode)
 		uiPause(1 * time.Second)
 		*totalMsgCount++
 	}

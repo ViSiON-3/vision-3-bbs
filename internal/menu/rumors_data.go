@@ -113,18 +113,41 @@ func visibleRumors(rd *rumorsData, userLevel int) []int {
 	return visible
 }
 
-// rumorDisplayAuthor returns the display name for a rumor author.
-func rumorDisplayAuthor(r *RumorRecord, isSysop bool, anonymousName string) string {
+// rumorShownAuthor is the name a rumor was posted under: its stored Author,
+// or the anonymous name for a record with none.
+func rumorShownAuthor(r *RumorRecord, anonymousName string) string {
 	if strings.TrimSpace(anonymousName) == "" {
 		anonymousName = "Anonymous"
 	}
-	if r.Author == "" || r.Author == anonymousName {
-		if isSysop {
-			return fmt.Sprintf("%s (%s)", anonymousName, r.RealUser)
-		}
+	if r.Author == "" {
 		return anonymousName
 	}
 	return r.Author
+}
+
+// rumorMaskedPoster returns the real poster behind a masked rumor, and false
+// when the rumor was posted under its poster's own name. Each record keeps
+// the poster's handle in RealUser, so any record whose shown author differs
+// from RealUser is masked — including rumors posted under an anonymous name
+// the board has since changed.
+func rumorMaskedPoster(r *RumorRecord, anonymousName string) (string, bool) {
+	poster := strings.TrimSpace(r.RealUser)
+	if poster == "" || strings.EqualFold(poster, rumorShownAuthor(r, anonymousName)) {
+		return "", false
+	}
+	return poster, true
+}
+
+// rumorDisplayAuthor returns the display name for a rumor author. A sysop
+// also sees the real poster behind a masked rumor, as "Author (RealUser)".
+func rumorDisplayAuthor(r *RumorRecord, isSysop bool, anonymousName string) string {
+	shown := rumorShownAuthor(r, anonymousName)
+	if isSysop {
+		if poster, ok := rumorMaskedPoster(r, anonymousName); ok {
+			return fmt.Sprintf("%s (%s)", shown, poster)
+		}
+	}
+	return shown
 }
 
 // rumorSanitize replaces pipe characters in user-supplied strings to prevent
