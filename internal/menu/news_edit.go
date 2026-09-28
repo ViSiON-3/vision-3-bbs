@@ -101,6 +101,32 @@ func newsListSysop(terminal *term.Terminal, nd *NewsData, outputMode ansi.Output
 	}
 }
 
+// loadNewsForUpdate reloads news.json for a change about to be saved and
+// repairs its IDs the same way the editor did when it listed the items, so an
+// ID taken from that listing names the same item here. The caller must hold
+// newsMu.
+func loadNewsForUpdate(rootConfigPath string) (*NewsData, error) {
+	nd, err := loadNewsData(rootConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	normalizeNewsIDs(nd)
+	return nd, nil
+}
+
+// findNewsItemByID returns the index of the item with the given ID, or -1.
+// Edits and deletes resolve their target this way rather than by list
+// position: new items are prepended, so a position taken from an earlier
+// listing names a different item once another session adds one.
+func findNewsItemByID(nd *NewsData, id int) int {
+	for i := range nd.Items {
+		if nd.Items[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	currentUser *user.User, nd *NewsData, outputMode ansi.OutputMode) {
 
@@ -200,26 +226,28 @@ func newsDeleteItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		wv(terminal, "\r\n|07Invalid selection.\r\n", outputMode)
 		return
 	}
-	wv(terminal, fmt.Sprintf("|07Delete #%d (%s)? |15[Y/N]|07: ", n, nd.Items[n-1].Title), outputMode)
+	target := nd.Items[n-1]
+	wv(terminal, fmt.Sprintf("|07Delete #%d (%s)? |15[Y/N]|07: ", n, target.Title), outputMode)
 	confirm, _ := readLineFromSessionIH(s, terminal)
 	if strings.ToUpper(strings.TrimSpace(confirm)) != "Y" {
 		return
 	}
 
 	newsMu.Lock()
-	fresh, loadErr := loadNewsData(e.RootConfigPath)
+	fresh, loadErr := loadNewsForUpdate(e.RootConfigPath)
 	if loadErr != nil {
 		newsMu.Unlock()
 		slog.Error("failed to load news data before delete", "error", loadErr)
 		wv(terminal, "|04Error deleting news item.\r\n", outputMode)
 		return
 	}
-	if n > len(fresh.Items) {
+	idx := findNewsItemByID(fresh, target.ID)
+	if idx < 0 {
 		newsMu.Unlock()
-		wv(terminal, "|04Unable to delete item; please try again.\r\n", outputMode)
+		wv(terminal, "|07That news item no longer exists.\r\n", outputMode)
 		return
 	}
-	fresh.Items = append(fresh.Items[:n-1], fresh.Items[n:]...)
+	fresh.Items = append(fresh.Items[:idx], fresh.Items[idx+1:]...)
 	saveErr := saveNewsData(e.RootConfigPath, fresh)
 	newsMu.Unlock()
 	if saveErr != nil {
@@ -270,19 +298,20 @@ func newsEditItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		switch strings.ToUpper(strings.TrimSpace(cmd)) {
 		case "Q", "":
 			newsMu.Lock()
-			fresh, loadErr := loadNewsData(e.RootConfigPath)
+			fresh, loadErr := loadNewsForUpdate(e.RootConfigPath)
 			if loadErr != nil {
 				newsMu.Unlock()
 				slog.Error("failed to load news data before edit save", "error", loadErr)
 				wv(terminal, "|04Error saving news item.\r\n", outputMode)
 				return
 			}
-			if n > len(fresh.Items) {
+			idx := findNewsItemByID(fresh, item.ID)
+			if idx < 0 {
 				newsMu.Unlock()
-				wv(terminal, "|04News item no longer exists.\r\n", outputMode)
+				wv(terminal, "|04News item no longer exists. Changes not saved.\r\n", outputMode)
 				return
 			}
-			fresh.Items[n-1] = item
+			fresh.Items[idx] = item
 			saveErr := saveNewsData(e.RootConfigPath, fresh)
 			newsMu.Unlock()
 			if saveErr != nil {

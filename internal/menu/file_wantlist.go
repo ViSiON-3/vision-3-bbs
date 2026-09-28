@@ -1,10 +1,12 @@
 package menu
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,10 +21,19 @@ import (
 
 // WantListEntry represents a single file request from a user.
 type WantListEntry struct {
+	ID       int    `json:"id"`
 	Handle   string `json:"handle"`
 	Filename string `json:"filename"`
 	Reason   string `json:"reason"`
 	Date     string `json:"date"`
+}
+
+// wantListData is the stored want list. NextID is a monotonic allocator: IDs
+// are never reused, so a delete chosen from an earlier listing can only ever
+// hit the entry that was shown, even when two entries have identical text.
+type wantListData struct {
+	Entries []WantListEntry `json:"entries"`
+	NextID  int             `json:"next_id"`
 }
 
 var wantListMu sync.Mutex
@@ -31,27 +42,72 @@ func wantListFilePath(rootConfigPath string) string {
 	return filepath.Join(rootConfigPath, "..", "data", "wantlist.json")
 }
 
-func loadWantList(rootConfigPath string) ([]WantListEntry, error) {
+// loadWantList reads the want list. It also accepts the legacy format, a bare
+// JSON array of entries without IDs, and gives every entry lacking a unique
+// ID one (see normalizeWantListIDs); the next save persists them.
+func loadWantList(rootConfigPath string) (*wantListData, error) {
 	data, err := os.ReadFile(wantListFilePath(rootConfigPath))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []WantListEntry{}, nil
+			return &wantListData{NextID: 1}, nil
 		}
 		return nil, fmt.Errorf("read wantlist.json: %w", err)
 	}
-	var entries []WantListEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
+	var wl wantListData
+	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && trimmed[0] == '[' {
+		if err := json.Unmarshal(trimmed, &wl.Entries); err != nil {
+			return nil, fmt.Errorf("parse wantlist.json: %w", err)
+		}
+	} else if err := json.Unmarshal(data, &wl); err != nil {
 		return nil, fmt.Errorf("parse wantlist.json: %w", err)
 	}
-	return entries, nil
+	normalizeWantListIDs(&wl)
+	return &wl, nil
 }
 
-func saveWantList(rootConfigPath string, entries []WantListEntry) error {
+// normalizeWantListIDs raises NextID above every live ID, then gives a new ID
+// to each entry that has none or shares one with an earlier entry, in list
+// order. It is deterministic for a given file, so sessions that load a legacy
+// file agree on the IDs before any of them has saved it.
+func normalizeWantListIDs(wl *wantListData) {
+	if wl.NextID < 1 {
+		wl.NextID = 1
+	}
+	for _, en := range wl.Entries {
+		if en.ID >= wl.NextID {
+			wl.NextID = en.ID + 1
+		}
+	}
+	used := make(map[int]bool, len(wl.Entries))
+	for i := range wl.Entries {
+		if id := wl.Entries[i].ID; id > 0 && !used[id] {
+			used[id] = true
+			continue
+		}
+		wl.Entries[i].ID = wl.NextID
+		wl.NextID++
+	}
+}
+
+// findWantListEntryByID returns the index of the entry with the given ID, or -1.
+func findWantListEntryByID(wl *wantListData, id int) int {
+	for i := range wl.Entries {
+		if wl.Entries[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func saveWantList(rootConfigPath string, wl *wantListData) error {
 	dir := filepath.Dir(wantListFilePath(rootConfigPath))
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
-	data, err := json.MarshalIndent(entries, "", "    ")
+	if wl.Entries == nil {
+		wl.Entries = []WantListEntry{}
+	}
+	data, err := json.MarshalIndent(wl, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal wantlist: %w", err)
 	}
@@ -81,11 +137,12 @@ func runWantList(c *cmdCtx, args string) (*user.User, string, error) {
 
 func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	wantListMu.Lock()
-	entries, err := loadWantList(e.RootConfigPath)
+	wl, err := loadWantList(e.RootConfigPath)
 	wantListMu.Unlock()
 	if err != nil {
 		return currentUser, "", err
 	}
+	entries := wl.Entries
 
 	if len(entries) == 0 {
 		msg := e.Strings().WantListEmpty
@@ -114,8 +171,15 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 	choice := strings.ToUpper(strings.TrimSpace(input))
 	switch choice {
 	case "C":
+		// Keep the allocator so cleared IDs are never handed out again.
 		wantListMu.Lock()
-		err = saveWantList(e.RootConfigPath, []WantListEntry{})
+		fresh, loadErr := loadWantList(e.RootConfigPath)
+		if loadErr != nil {
+			wantListMu.Unlock()
+			return currentUser, "", loadErr
+		}
+		fresh.Entries = nil
+		err = saveWantList(e.RootConfigPath, fresh)
 		wantListMu.Unlock()
 		if err != nil {
 			return currentUser, "", err
@@ -130,14 +194,28 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 			return currentUser, "", err
 		}
 		idx, err := strconv.Atoi(strings.TrimSpace(numInput))
+		if err != nil || idx < 1 || idx > len(entries) {
+			return currentUser, "", nil
+		}
+		// The number refers to the list shown above. Resolve it to that
+		// entry's ID and find the ID in the reloaded list, rather than
+		// trusting its position, which shifts if another session deleted one
+		// meanwhile, or its text, which two entries can share.
+		targetID := entries[idx-1].ID
 		wantListMu.Lock()
-		entries, loadErr := loadWantList(e.RootConfigPath)
-		if err != nil || loadErr != nil || idx < 1 || idx > len(entries) {
+		fresh, loadErr := loadWantList(e.RootConfigPath)
+		if loadErr != nil {
 			wantListMu.Unlock()
 			return currentUser, "", nil
 		}
-		entries = append(entries[:idx-1], entries[idx:]...)
-		err = saveWantList(e.RootConfigPath, entries)
+		fi := findWantListEntryByID(fresh, targetID)
+		if fi < 0 {
+			wantListMu.Unlock()
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07That entry no longer exists.\r\n")), outputMode)
+			return currentUser, "", nil
+		}
+		fresh.Entries = slices.Delete(fresh.Entries, fi, fi+1)
+		err = saveWantList(e.RootConfigPath, fresh)
 		wantListMu.Unlock()
 		if err != nil {
 			return currentUser, "", err
@@ -177,13 +255,15 @@ func runWantListUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, cu
 	}
 
 	wantListMu.Lock()
-	entries, err := loadWantList(e.RootConfigPath)
+	wl, err := loadWantList(e.RootConfigPath)
 	if err != nil {
 		wantListMu.Unlock()
 		return currentUser, "", err
 	}
-	entries = append(entries, entry)
-	err = saveWantList(e.RootConfigPath, entries)
+	entry.ID = wl.NextID
+	wl.NextID++
+	wl.Entries = append(wl.Entries, entry)
+	err = saveWantList(e.RootConfigPath, wl)
 	wantListMu.Unlock()
 	if err != nil {
 		return currentUser, "", err

@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
@@ -198,21 +199,21 @@ func TestVoteMandatory(t *testing.T) {
 	}
 }
 
-// voteRecordVote refuses out-of-range topics and options and never records a
-// second vote from the same handle, whatever its case.
+// voteRecordVote refuses unknown topic IDs and out-of-range options and never
+// records a second vote from the same handle, whatever its case.
 func TestVoteRecordVoteBounds(t *testing.T) {
 	env := newMenuEnv(t)
 	seedVoting(t, env, VoteTopic{ID: 1, Question: "Q?", Options: []string{"a", "b"}})
-	if _, err := voteRecordVote(env.cfgDir(), 5, 0, "Caller"); err == nil {
-		t.Error("out-of-range topic accepted")
+	if _, err := voteRecordVote(env.cfgDir(), 5, 0, "Caller"); !errors.Is(err, errVoteTopicGone) {
+		t.Errorf("unknown topic ID: err = %v, want errVoteTopicGone", err)
 	}
-	if _, err := voteRecordVote(env.cfgDir(), 0, 2, "Caller"); err == nil {
+	if _, err := voteRecordVote(env.cfgDir(), 1, 2, "Caller"); err == nil {
 		t.Error("out-of-range option accepted")
 	}
-	if _, err := voteRecordVote(env.cfgDir(), 0, 0, "Caller"); err != nil {
+	if _, err := voteRecordVote(env.cfgDir(), 1, 0, "Caller"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := voteRecordVote(env.cfgDir(), 0, 1, "CALLER"); err != nil {
+	if _, err := voteRecordVote(env.cfgDir(), 1, 1, "CALLER"); err != nil {
 		t.Fatal(err)
 	}
 	tp := readVoting(t, env).Topics[0]
