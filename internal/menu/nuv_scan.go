@@ -239,16 +239,30 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 				wv(terminal, "|12Invalid number.\r\n", outputMode)
 				continue
 			}
-			nuvMu.Lock()
-			nd, err = loadNUVData(e.RootConfigPath)
-			if err != nil || num > len(nd.Candidates) {
-				nuvMu.Unlock()
+			if num > len(nd.Candidates) {
 				wv(terminal, "|12Invalid candidate number.\r\n", outputMode)
 				continue
 			}
-			removed := nd.Candidates[num-1]
-			nd.Candidates = append(nd.Candidates[:num-1], nd.Candidates[num:]...)
-			if err := saveNUVData(e.RootConfigPath, nd); err != nil {
+			// num refers to the list on screen (nd); find that candidate by
+			// handle in the reloaded queue, since other sessions' votes can
+			// remove candidates and shift the positions.
+			handle := nd.Candidates[num-1].Handle
+			nuvMu.Lock()
+			fresh, loadErr := loadNUVData(e.RootConfigPath)
+			if loadErr != nil {
+				nuvMu.Unlock()
+				wv(terminal, "|12Failed to load the NUV queue.\r\n", outputMode)
+				continue
+			}
+			fi := nuvFindCandidate(fresh, handle)
+			if fi < 0 {
+				nuvMu.Unlock()
+				wv(terminal, fmt.Sprintf("|07'%s' is no longer in the queue.\r\n", handle), outputMode)
+				continue
+			}
+			removed := fresh.Candidates[fi]
+			fresh.Candidates = append(fresh.Candidates[:fi], fresh.Candidates[fi+1:]...)
+			if err := saveNUVData(e.RootConfigPath, fresh); err != nil {
 				nuvMu.Unlock()
 				slog.Error("failed to save after removing candidate", "handle", removed.Handle, "error", err)
 				wv(terminal, "|12Failed to save changes.\r\n", outputMode)
@@ -270,15 +284,26 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 				wv(terminal, "|12Invalid number.\r\n", outputMode)
 				continue
 			}
-			nuvMu.Lock()
-			nd, err = loadNUVData(e.RootConfigPath)
-			if err != nil || num > len(nd.Candidates) {
-				nuvMu.Unlock()
+			if num > len(nd.Candidates) {
 				wv(terminal, "|12Invalid candidate number.\r\n", outputMode)
 				continue
 			}
+			// As for remove: resolve the on-screen number to a handle, then
+			// find that candidate in the reloaded queue.
+			handle := nd.Candidates[num-1].Handle
+			nuvMu.Lock()
+			fresh, loadErr := loadNUVData(e.RootConfigPath)
 			nuvMu.Unlock()
-			nuvVoteOn(e, s, terminal, userManager, currentUser, nd, num-1, outputMode, termWidth, termHeight)
+			if loadErr != nil {
+				wv(terminal, "|12Failed to load the NUV queue.\r\n", outputMode)
+				continue
+			}
+			fi := nuvFindCandidate(fresh, handle)
+			if fi < 0 {
+				wv(terminal, fmt.Sprintf("|07'%s' is no longer in the queue.\r\n", handle), outputMode)
+				continue
+			}
+			nuvVoteOn(e, s, terminal, userManager, currentUser, fresh, fi, outputMode, termWidth, termHeight)
 
 		default:
 			continue

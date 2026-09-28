@@ -3,6 +3,7 @@ package menu
 import (
 	"bytes"
 	"net"
+	"strings"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -18,14 +19,54 @@ type testSession struct {
 	in   *bytes.Reader
 	out  bytes.Buffer
 	addr net.Addr // RemoteAddr result; nil means 127.0.0.1
+
+	// hooks run once each, from Write, as soon as the output first contains
+	// their marker. See whenOutput.
+	hooks []outputHook
+}
+
+type outputHook struct {
+	marker string
+	fn     func()
+	fired  bool
 }
 
 func newTestSession(input string) *testSession {
 	return &testSession{in: bytes.NewReader([]byte(input))}
 }
 
-func (ts *testSession) Read(p []byte) (int, error)  { return ts.in.Read(p) }
-func (ts *testSession) Write(p []byte) (int, error) { return ts.out.Write(p) }
+func (ts *testSession) Read(p []byte) (int, error) { return ts.in.Read(p) }
+
+func (ts *testSession) Write(p []byte) (int, error) {
+	n, err := ts.out.Write(p)
+	for i := range ts.hooks {
+		h := &ts.hooks[i]
+		if !h.fired && strings.Contains(ts.out.String(), h.marker) {
+			h.fired = true
+			h.fn()
+		}
+	}
+	return n, err
+}
+
+// whenOutput runs fn once, the first time the function under test has written
+// marker. Because a prompt is written before its reply is read, a hook keyed
+// on the prompt text runs before the scripted reply is acted on, which lets a
+// test play "another session" changing shared data in between.
+func (ts *testSession) whenOutput(marker string, fn func()) {
+	ts.hooks = append(ts.hooks, outputHook{marker: marker, fn: fn})
+}
+
+// hookFired reports whether the hook registered for marker has run, so a test
+// can tell its simulated interleaving actually happened.
+func (ts *testSession) hookFired(marker string) bool {
+	for _, h := range ts.hooks {
+		if h.marker == marker {
+			return h.fired
+		}
+	}
+	return false
+}
 
 // Pty reports no PTY, so functions under test fall back to their default
 // dimensions (typically 80x24). Returning false avoids the nil-interface panic
