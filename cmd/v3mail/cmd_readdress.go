@@ -13,16 +13,18 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// loadUsers opens the BBS's users file in dataDir. Unlike
+// loadUsers opens the BBS's users file, users/users.json under the data
+// directory dataDir (the layout cmd/vision3 uses). Unlike
 // user.NewUserManager alone it never creates one: a missing users.json is an
 // error here rather than a reason to write a default sysop account into a
 // data directory that may simply be the wrong one.
 func loadUsers(dataDir string) (*user.UserMgr, error) {
-	path := filepath.Join(dataDir, "users.json")
+	usersDir := filepath.Join(dataDir, "users")
+	path := filepath.Join(usersDir, "users.json")
 	if _, err := os.Stat(path); err != nil {
 		return nil, fmt.Errorf("users file %s: %w", path, err)
 	}
-	return user.NewUserManager(dataDir)
+	return user.NewUserManager(usersDir)
 }
 
 // loadRecipients returns the accounts inbound private mail is addressed to,

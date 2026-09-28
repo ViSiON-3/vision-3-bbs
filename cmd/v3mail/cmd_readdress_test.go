@@ -26,7 +26,7 @@ var readdressMail = []struct {
 	{"Bob Builder", false, "Bob Builder"},
 }
 
-// seedReaddressBase writes a data directory holding users.json and a base of
+// seedReaddressBase writes a data directory holding users/users.json and a base of
 // readdressMail, as mail imported before recipients were resolved left it.
 // It returns the data directory and the base path.
 func seedReaddressBase(t *testing.T) (string, string) {
@@ -44,7 +44,11 @@ func seedReaddressBase(t *testing.T) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dataDir, "users.json"), users, 0o644); err != nil {
+	usersDir := filepath.Join(dataDir, "users") // the layout cmd/vision3 uses
+	if err := os.MkdirAll(usersDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(usersDir, "users.json"), users, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dataDir, "msgbases", "netmail")
@@ -175,13 +179,31 @@ func TestReaddress(t *testing.T) {
 // the wrong data directory.
 func TestReaddressNeedsUsersFile(t *testing.T) {
 	dataDir, path := seedReaddressBase(t)
-	if err := os.Remove(filepath.Join(dataDir, "users.json")); err != nil {
+	if err := os.Remove(filepath.Join(dataDir, "users", "users.json")); err != nil {
 		t.Fatal(err)
 	}
 	if code, out, _ := runV3mail(t, t.TempDir(), "readdress", "--data", dataDir, path); code != 1 {
 		t.Errorf("exit %d without users.json, want 1:\n%s", code, out)
 	}
-	if _, err := os.Stat(filepath.Join(dataDir, "users.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dataDir, "users", "users.json")); !os.IsNotExist(err) {
 		t.Error("readdress created users.json")
+	}
+}
+
+// TestLoadRecipientsUsesBBSUsersDir pins the users file location v3mail
+// shares with the BBS: users/users.json under --data. Reading dataDir itself
+// would miss the real file, so toss and the QWK imports would silently keep
+// real-name recipients and readdress would refuse to run.
+func TestLoadRecipientsUsesBBSUsersDir(t *testing.T) {
+	dataDir, _ := seedReaddressBase(t)
+	r := loadRecipients(dataDir)
+	if r == nil {
+		t.Fatal("loadRecipients found no users under data/users")
+	}
+	if u, ok := r.ResolveRecipient("Bob Builder"); !ok || u.Handle != "Bob" {
+		t.Errorf("ResolveRecipient(Bob Builder) = %v, %v; want Bob", u, ok)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "users.json")); !os.IsNotExist(err) {
+		t.Error("a users.json was created directly under the data directory")
 	}
 }

@@ -31,7 +31,7 @@ name on the message, ignoring case, to:
    is ambiguous and the mail is left as it came.
 
 Deleted accounts never receive mail. Echomail and other public messages are
-never changed. `toss` and the QWK commands read `users.json` from `--data`; if
+never changed. `toss` and the QWK commands read `users/users.json` under `--data`; if
 it cannot be read they log a warning and store To as received.
 
 Mail stored before this — or that named no account — is not addressed to any
@@ -41,7 +41,7 @@ else can. `v3mail readdress` fixes the mail that can be fixed: for every private
 message whose To is not already a user's handle, it applies the same resolution
 and rewrites To (and the base's index, so the new-mail and "to you" counts see
 it). It reports how many it readdressed and how many it left undeliverable or
-ambiguous. It needs `users.json` (it will not create one), changes nothing on a
+ambiguous. It needs `users/users.json` (it will not create one), changes nothing on a
 second run, and writes nothing with `--dry-run`:
 
 ```bash
