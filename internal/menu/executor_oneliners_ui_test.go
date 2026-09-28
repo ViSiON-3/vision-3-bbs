@@ -3,24 +3,16 @@ package menu
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// onelinerEnv builds a menuEnv and moves the test into a scratch working
-// directory, because ONELINER reads and writes data/oneliners.json relative
-// to the process working directory rather than under ServerConfig.DataDir.
-// Returns the env and the absolute path of the oneliners file.
+// onelinerEnv builds a menuEnv and returns it with the path of its oneliners
+// file, which lives under the env's DataDir.
 func onelinerEnv(t *testing.T) (*menuEnv, string) {
 	t.Helper()
-	env := newMenuEnv(t) // resolves the menu set before the chdir
-	wd := t.TempDir()
-	t.Chdir(wd)
-	if err := os.MkdirAll(filepath.Join(wd, "data"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return env, filepath.Join(wd, "data", "oneliners.json")
+	env := newMenuEnv(t)
+	return env, onelinerFilePath(env.dataDir())
 }
 
 // An empty wall invites the first post, and declining leaves no file behind.
