@@ -160,7 +160,9 @@ func TestTimeLeftEdges(t *testing.T) {
 
 // TestMakeQWKID uppercases, drops spaces and caps at eight characters.
 func TestMakeQWKID(t *testing.T) {
-	for in, want := range map[string]string{"vision bbs": "VISIONBB", "abc": "ABC", "": ""} {
+	// "abcdefgé" upper-cases to 9 bytes; the 8-byte cap drops the "É" whole
+	// rather than keeping its lead byte.
+	for in, want := range map[string]string{"vision bbs": "VISIONBB", "abc": "ABC", "": "", "abcdefgé": "ABCDEFG"} {
 		if got := makeQWKID(in); got != want {
 			t.Errorf("makeQWKID(%q) = %q, want %q", in, got, want)
 		}

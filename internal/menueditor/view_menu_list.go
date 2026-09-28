@@ -116,11 +116,7 @@ func (m Model) renderMenuRow(idx int, boxW int) string {
 	files := fmt.Sprintf("%s.MNU%s / %s.CFG%s", entry.Name, overlayMark(entry.MnuOverlay), entry.Name, overlayMark(entry.CfgOverlay))
 	files = padRight(files, boxW-nameColW-4) // 4 = 3 prefix + 1 separator
 	content := "   " + name + " " + files
-	if len(content) < boxW {
-		content += strings.Repeat(" ", boxW-len(content))
-	} else if len(content) > boxW {
-		content = content[:boxW]
-	}
+	content = padRight(content, boxW) // rune-aware: pads or cuts to boxW columns
 
 	if isHighlight {
 		// MENUEDIT.PAS: Color(1,15) for highlighted row

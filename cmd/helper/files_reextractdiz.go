@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
@@ -97,10 +96,7 @@ func cmdFilesReextractDIZ(args []string) {
 				continue
 			}
 
-			firstLine := strings.SplitN(diz, "\n", 2)[0]
-			if len(firstLine) > 60 {
-				firstLine = firstLine[:57] + "..."
-			}
+			firstLine := dizPreview(diz, 60)
 
 			if *dryRun {
 				fmt.Printf("  UPD   %-40s [DIZ: %s]\n", rec.Filename, firstLine)

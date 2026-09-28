@@ -230,12 +230,9 @@ func (m Model) renderUserRow(idx int, isHighlight bool, boxW int) string {
 
 	// Build the full row content
 	content := tagChar + numStr + " " + handle + dataCols
-	// Ensure it fills the box width
-	if len(content) < boxW {
-		content += strings.Repeat(" ", boxW-len(content))
-	} else if len(content) > boxW {
-		content = content[:boxW]
-	}
+	// Fill the box width exactly; rune-aware, so a multi-byte handle is
+	// neither split nor under-padded.
+	content = padRight(content, boxW)
 
 	if isHighlight {
 		// UE.PAS: Color(0,9) for tag, Color(0,14) for text

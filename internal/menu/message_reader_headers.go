@@ -224,25 +224,12 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(colorSeq), outputMode)
 
 			// Draw text padded to 39 columns
-			displayText := fmt.Sprintf("[%-2d] - %-30s", templateNum, opt.Text)
-			if len(displayText) > 39 {
-				displayText = displayText[:39]
-			} else if len(displayText) < 39 {
-				displayText = fmt.Sprintf("%-39s", displayText)
-			}
+			displayText := templateOptionText(templateNum, opt.Text)
 			terminalio.WriteProcessedBytes(terminal, []byte(displayText), outputMode)
 		} else {
 			// Inactive: white for brackets/number, bright blue for name
 			bracketPart := fmt.Sprintf("[%-2d] - ", templateNum)
-			namePart := fmt.Sprintf("%-30s", opt.Text)
-
-			// Ensure total is 39 columns
-			totalText := bracketPart + namePart
-			if len(totalText) > 39 {
-				totalText = totalText[:39]
-			} else if len(totalText) < 39 {
-				totalText = fmt.Sprintf("%-39s", totalText)
-			}
+			totalText := templateOptionText(templateNum, opt.Text)
 
 			// White for bracket part
 			terminalio.WriteProcessedBytes(terminal, []byte("\x1b[37m"+bracketPart), outputMode)
@@ -458,4 +445,16 @@ func saveHeaderSelection(userManager *user.UserMgr, u *user.User, templateNum, n
 	}
 	slog.Info("user selected header style", "node", nodeNumber, "handle", u.Handle, "style", templateNum)
 	return nil
+}
+
+// templateOptionWidth is the fixed column width of a header template picker row.
+const templateOptionWidth = 39
+
+// templateOptionText formats one header template picker row as
+// "[N ] - name", cut and padded to exactly templateOptionWidth columns. The
+// name comes from the BAR file, which may hold UTF-8 or raw CP437, so the cut
+// counts columns rather than bytes and never splits a multi-byte character.
+func templateOptionText(templateNum int, text string) string {
+	full := fmt.Sprintf("[%-2d] - %-30s", templateNum, text)
+	return ansi.PadVisible(ansi.TruncateVisible(full, templateOptionWidth), templateOptionWidth, ' ')
 }

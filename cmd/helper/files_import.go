@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
@@ -175,11 +176,7 @@ func cmdFilesImport(args []string) {
 		if *dryRun {
 			dizNote := ""
 			if description != "" {
-				firstLine := strings.SplitN(description, "\n", 2)[0]
-				if len(firstLine) > 50 {
-					firstLine = firstLine[:47] + "..."
-				}
-				dizNote = fmt.Sprintf(" [DIZ: %s]", firstLine)
+				dizNote = fmt.Sprintf(" [DIZ: %s]", dizPreview(description, 50))
 			}
 			fmt.Printf("  ADD   %-40s %10s%s\n", name, formatSize(info.Size()), dizNote)
 			stats.imported++
@@ -349,4 +346,12 @@ func formatSize(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
+}
+
+// dizPreview returns the first line of a FILE_ID.DIZ description for dry-run
+// output, cut to maxRunes characters with a trailing "..." when it is longer.
+// The cut counts runes, so a multi-byte character is never split.
+func dizPreview(desc string, maxRunes int) string {
+	firstLine := strings.SplitN(desc, "\n", 2)[0]
+	return ansi.TruncateRunes(firstLine, maxRunes, "...")
 }

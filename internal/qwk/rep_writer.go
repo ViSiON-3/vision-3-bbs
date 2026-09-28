@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
 // WriteREP writes a QWK REP packet (ZIP archive) containing a single
@@ -21,9 +23,7 @@ func WriteREP(w io.Writer, bbsID string, msgs []PacketMessage) error {
 	// Normalize to the QWK BBS-ID form (max 8 chars, upper-case), matching
 	// NewPacketWriter, so the .MSG filename and first-block ID stay standard.
 	bbsID = strings.ToUpper(bbsID)
-	if len(bbsID) > 8 {
-		bbsID = bbsID[:8]
-	}
+	bbsID = util.TruncateBytes(bbsID, 8)
 
 	var msgBuf bytes.Buffer
 

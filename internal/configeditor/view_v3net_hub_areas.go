@@ -91,11 +91,7 @@ func (m Model) viewV3NetHubAreas() string {
 		if content == "" {
 			content = strings.Repeat(" ", boxW)
 		}
-		if len(content) < boxW {
-			content += strings.Repeat(" ", boxW-len(content))
-		} else if len(content) > boxW {
-			content = content[:boxW]
-		}
+		content = padRight(content, boxW) // rune-aware: pads or cuts to boxW columns
 
 		var styled string
 		if visIdx == m.hubAreaCursor {

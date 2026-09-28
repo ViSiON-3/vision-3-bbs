@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 	"github.com/dop251/goja"
 )
 
@@ -37,8 +38,6 @@ func registerSystem(vm *goja.Runtime, eng *Engine) {
 func makeQWKID(name string) string {
 	id := strings.ToUpper(name)
 	id = strings.ReplaceAll(id, " ", "")
-	if len(id) > 8 {
-		id = id[:8]
-	}
+	id = util.TruncateBytes(id, 8)
 	return id
 }

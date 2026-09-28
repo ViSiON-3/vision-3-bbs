@@ -138,9 +138,7 @@ func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return
 	}
 	title = strings.TrimSpace(title)
-	if len(title) > 28 {
-		title = title[:28]
-	}
+	title = ansi.TruncateRunes(title, 28, "")
 
 	wv(terminal, "|07Minimum level to read |15[|110|15]|07: ", outputMode)
 	lvlIn, _ := readLineFromSessionIH(s, terminal)
@@ -325,9 +323,7 @@ func newsEditItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			wv(terminal, "|07New title: ", outputMode)
 			val, _ := readLineFromSessionIH(s, terminal)
 			if v := strings.TrimSpace(val); v != "" {
-				if len(v) > 28 {
-					v = v[:28]
-				}
+				v = ansi.TruncateRunes(v, 28, "")
 				item.Title = v
 			}
 		case "F":

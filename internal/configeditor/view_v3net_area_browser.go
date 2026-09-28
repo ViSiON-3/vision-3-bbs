@@ -35,11 +35,8 @@ func (m Model) viewV3NetAreaBrowser() string {
 			if a.Subscribed {
 				check = "[x]"
 			}
-			tag := padRight(a.Tag, 16)
-			if len(tag) > 16 {
-				tag = tag[:16]
-			}
 			// padRight is rune-aware and both pads and truncates to width.
+			tag := padRight(a.Tag, 16)
 			name := padRight(a.Name, 16)
 			status := padRight(a.Status, 8)
 			maxBoard := boxW - 4 - 16 - 16 - 8 - 5
