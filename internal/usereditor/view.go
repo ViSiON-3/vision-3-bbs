@@ -193,7 +193,7 @@ func (m Model) renderColumnTitle(width int) string {
 // renderUserRow renders a single user row in the list.
 func (m Model) renderUserRow(idx int, isHighlight bool, boxW int) string {
 	u := m.users[idx]
-	tagged := m.tagged[idx]
+	tagged := m.tagged[u]
 
 	// Tag marker
 	var tagChar string
