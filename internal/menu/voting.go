@@ -3,6 +3,7 @@ package menu
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -56,8 +57,59 @@ func loadVotingData(rootConfigPath string) (*VotingData, error) {
 			vd.Topics[i].Votes = make(map[string][]string)
 		}
 	}
+	normalizeVoteIDs(&vd)
 	return &vd, nil
 }
+
+// nextVoteTopicID returns an ID one past the highest in use. Deriving it from
+// the topic count instead hands out a live ID once any topic is deleted.
+func nextVoteTopicID(vd *VotingData) int {
+	maxID := 0
+	for _, t := range vd.Topics {
+		if t.ID > maxID {
+			maxID = t.ID
+		}
+	}
+	return maxID + 1
+}
+
+// normalizeVoteIDs gives a new ID to any topic that has none or shares one
+// with an earlier topic, so each ID names exactly one topic. voting.json files
+// written while IDs were count-based can hold duplicates. Earlier topics keep
+// their ID, and votes are stored inside each topic, so no vote moves.
+//
+// The repair is deterministic for a given file, so every session that loads
+// the file agrees on the new IDs whether or not one of them has saved them yet.
+// Reports whether anything changed.
+func normalizeVoteIDs(vd *VotingData) bool {
+	used := make(map[int]bool, len(vd.Topics))
+	var fix []int
+	for i, t := range vd.Topics {
+		if t.ID > 0 && !used[t.ID] {
+			used[t.ID] = true
+			continue
+		}
+		fix = append(fix, i)
+	}
+	for _, i := range fix {
+		vd.Topics[i].ID = nextVoteTopicID(vd)
+	}
+	return len(fix) > 0
+}
+
+// findVoteTopicByID returns the index of the topic with the given ID, or -1.
+func findVoteTopicByID(vd *VotingData, id int) int {
+	for i := range vd.Topics {
+		if vd.Topics[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// errVoteTopicGone reports that another session deleted a topic after this
+// one listed it.
+var errVoteTopicGone = errors.New("voting topic no longer exists")
 
 func saveVotingData(rootConfigPath string, vd *VotingData) error {
 	data, err := json.MarshalIndent(vd, "", "    ")
@@ -154,16 +206,20 @@ func voteShowResults(terminal *term.Terminal, topic *VoteTopic, outputMode ansi.
 	}
 }
 
-// voteRecordVote atomically records a user's vote. Returns the updated topic.
-func voteRecordVote(rootConfigPath string, topicIdx, optionIdx int, handle string) (*VoteTopic, error) {
+// voteRecordVote atomically records a user's vote on the topic with the given
+// ID. Returns the updated topic, or errVoteTopicGone when another session has
+// deleted it. The topic is found by ID, not by list position, because the list
+// may have changed since the caller loaded it.
+func voteRecordVote(rootConfigPath string, topicID, optionIdx int, handle string) (*VoteTopic, error) {
 	votingMu.Lock()
 	defer votingMu.Unlock()
 	vd, err := loadVotingData(rootConfigPath)
 	if err != nil {
 		return nil, err
 	}
-	if topicIdx < 0 || topicIdx >= len(vd.Topics) {
-		return nil, fmt.Errorf("topic index %d out of range (have %d topics)", topicIdx, len(vd.Topics))
+	topicIdx := findVoteTopicByID(vd, topicID)
+	if topicIdx < 0 {
+		return nil, errVoteTopicGone
 	}
 	t := &vd.Topics[topicIdx]
 	if optionIdx < 0 || optionIdx >= len(t.Options) {
@@ -214,13 +270,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			slog.Error("failed to load voting data for adding choice", "error", loadErr)
 			return false, "|04Error loading voting data."
 		}
-		freshIdx := -1
-		for i := range fresh.Topics {
-			if fresh.Topics[i].ID == topic.ID {
-				freshIdx = i
-				break
-			}
-		}
+		freshIdx := findVoteTopicByID(fresh, topic.ID)
 		if freshIdx < 0 {
 			return false, "|07Topic no longer exists. Choice not added."
 		}
@@ -242,7 +292,10 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return false, "|07Invalid selection. Vote not recorded."
 	}
 
-	updated, saveErr := voteRecordVote(e.RootConfigPath, topicIdx, n-1, currentUser.Handle)
+	updated, saveErr := voteRecordVote(e.RootConfigPath, topic.ID, n-1, currentUser.Handle)
+	if errors.Is(saveErr, errVoteTopicGone) {
+		return false, "|07Topic no longer exists. Vote not recorded."
+	}
 	if saveErr != nil {
 		slog.Error("vote save failed", "error", saveErr)
 		return false, "|04Error saving vote."
@@ -405,22 +458,22 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 			if strings.ToUpper(strings.TrimSpace(confirm)) == "Y" {
 				votingMu.Lock()
 				fresh, loadErr := loadVotingData(e.RootConfigPath)
-				if loadErr == nil {
-					freshIdx := -1
-					for i := range fresh.Topics {
-						if fresh.Topics[i].ID == topic.ID {
-							freshIdx = i
-							break
-						}
-					}
-					if freshIdx >= 0 {
-						fresh.Topics = append(fresh.Topics[:freshIdx], fresh.Topics[freshIdx+1:]...)
-						if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
-							slog.Error("failed to save voting data after topic deletion", "error", saveErr)
-						} else {
-							vd = fresh
-							curIdx = freshIdx
-						}
+				if loadErr != nil {
+					slog.Error("failed to load voting data for topic deletion", "error", loadErr)
+					notice = "|04Error loading voting data."
+				} else if freshIdx := findVoteTopicByID(fresh, topic.ID); freshIdx < 0 {
+					// Another session deleted it first; carry on with the
+					// topics as they are now.
+					notice = "|07Topic no longer exists."
+					vd = fresh
+				} else {
+					fresh.Topics = append(fresh.Topics[:freshIdx], fresh.Topics[freshIdx+1:]...)
+					if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
+						slog.Error("failed to save voting data after topic deletion", "error", saveErr)
+						notice = "|04Error deleting topic."
+					} else {
+						vd = fresh
+						curIdx = freshIdx
 					}
 				}
 				votingMu.Unlock()
@@ -495,8 +548,9 @@ func voteAddTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		slog.Error("failed to load voting data for topic creation", "error", loadErr)
 		return vd, "|04Error loading voting data."
 	}
-	// Assign ID from the reloaded data to avoid duplicates under concurrent creation.
-	t.ID = len(fresh.Topics) + 1
+	// Assign the ID from the reloaded data, under the lock, so concurrent
+	// creations cannot collide.
+	t.ID = nextVoteTopicID(fresh)
 	fresh.Topics = append(fresh.Topics, t)
 	if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
 		slog.Error("failed to save voting data after topic creation", "error", saveErr)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -130,14 +131,27 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 			return currentUser, "", err
 		}
 		idx, err := strconv.Atoi(strings.TrimSpace(numInput))
+		if err != nil || idx < 1 || idx > len(entries) {
+			return currentUser, "", nil
+		}
+		// The number refers to the list shown above. Entries have no ID, so
+		// find that exact entry in the reloaded list rather than trusting its
+		// position, which shifts if another session deleted one meanwhile.
+		target := entries[idx-1]
 		wantListMu.Lock()
-		entries, loadErr := loadWantList(e.RootConfigPath)
-		if err != nil || loadErr != nil || idx < 1 || idx > len(entries) {
+		fresh, loadErr := loadWantList(e.RootConfigPath)
+		if loadErr != nil {
 			wantListMu.Unlock()
 			return currentUser, "", nil
 		}
-		entries = append(entries[:idx-1], entries[idx:]...)
-		err = saveWantList(e.RootConfigPath, entries)
+		fi := slices.Index(fresh, target)
+		if fi < 0 {
+			wantListMu.Unlock()
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07That entry no longer exists.\r\n")), outputMode)
+			return currentUser, "", nil
+		}
+		fresh = slices.Delete(fresh, fi, fi+1)
+		err = saveWantList(e.RootConfigPath, fresh)
 		wantListMu.Unlock()
 		if err != nil {
 			return currentUser, "", err

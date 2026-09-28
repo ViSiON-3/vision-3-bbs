@@ -898,14 +898,18 @@ func runBBSListEdit(c *cmdCtx, args string) (*user.User, string, error) {
 		wv(terminal, "\r\n|04Error loading BBS list data.\r\n", outputMode)
 		return currentUser, "", nil
 	}
-	if fi := findListingIndexByID(freshBld, entryCopy.ID); fi >= 0 {
-		edited.ID = entryCopy.ID
-		freshBld.Listings[fi] = edited
-		if err := saveBBSListData(e.RootConfigPath, freshBld); err != nil {
-			bbsListMu.Unlock()
-			wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
-			return currentUser, "", nil
-		}
+	fi := findListingIndexByID(freshBld, entryCopy.ID)
+	if fi < 0 {
+		bbsListMu.Unlock()
+		wv(terminal, "\r\n|04That listing was deleted by someone else. Changes not saved.\r\n", outputMode)
+		return currentUser, "", nil
+	}
+	edited.ID = entryCopy.ID
+	freshBld.Listings[fi] = edited
+	if err := saveBBSListData(e.RootConfigPath, freshBld); err != nil {
+		bbsListMu.Unlock()
+		wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
+		return currentUser, "", nil
 	}
 	bbsListMu.Unlock()
 
@@ -980,10 +984,24 @@ func runBBSListDelete(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	// Remove entry (compact like V2's shift-down)
+	// Remove the entry from freshly loaded data, found by ID: bld is the copy
+	// taken before the prompts, and saving it would drop listings other
+	// sessions added or edited in the meantime.
 	bbsListMu.Lock()
-	bld.Listings = append(bld.Listings[:idx], bld.Listings[idx+1:]...)
-	if err := saveBBSListData(e.RootConfigPath, bld); err != nil {
+	freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+	if loadErr != nil {
+		bbsListMu.Unlock()
+		wv(terminal, "\r\n|04Error loading BBS list data.\r\n", outputMode)
+		return currentUser, "", nil
+	}
+	fi := findListingIndexByID(freshBld, entry.ID)
+	if fi < 0 {
+		bbsListMu.Unlock()
+		wv(terminal, "\r\n|07That listing no longer exists.\r\n", outputMode)
+		return currentUser, "", nil
+	}
+	freshBld.Listings = append(freshBld.Listings[:fi], freshBld.Listings[fi+1:]...)
+	if err := saveBBSListData(e.RootConfigPath, freshBld); err != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
 		return currentUser, "", nil
@@ -1038,21 +1056,36 @@ func runBBSListVerify(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	idx := n - 1
+	// Toggle on freshly loaded data, found by ID, so listings other sessions
+	// changed since the list was shown are kept.
+	entryID := bld.Listings[n-1].ID
 	bbsListMu.Lock()
-	bld.Listings[idx].Verified = !bld.Listings[idx].Verified
+	freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+	if loadErr != nil {
+		bbsListMu.Unlock()
+		wv(terminal, "\r\n|04Error loading BBS list data.\r\n", outputMode)
+		return currentUser, "", nil
+	}
+	fi := findListingIndexByID(freshBld, entryID)
+	if fi < 0 {
+		bbsListMu.Unlock()
+		wv(terminal, "\r\n|07That listing no longer exists.\r\n", outputMode)
+		return currentUser, "", nil
+	}
+	target := &freshBld.Listings[fi]
+	target.Verified = !target.Verified
 	status := "unverified"
-	if bld.Listings[idx].Verified {
+	if target.Verified {
 		status = "verified"
 	}
-	if err := saveBBSListData(e.RootConfigPath, bld); err != nil {
+	if err := saveBBSListData(e.RootConfigPath, freshBld); err != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
 		return currentUser, "", nil
 	}
 	bbsListMu.Unlock()
 
-	wv(terminal, fmt.Sprintf("\r\n|10%s is now %s.\r\n", bbsListSanitize(bld.Listings[idx].Name), status), outputMode)
+	wv(terminal, fmt.Sprintf("\r\n|10%s is now %s.\r\n", bbsListSanitize(target.Name), status), outputMode)
 	return currentUser, "", nil
 }
 
