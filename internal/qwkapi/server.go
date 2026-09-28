@@ -1,3 +1,10 @@
+// Package qwkapi is the HTTPS API that lets an offline mail reader fetch QWK
+// packets and upload REP replies without a terminal session. A client POSTs
+// BBS credentials to /api/qwk/login for a short-lived bearer token, then GETs
+// /api/qwk/packet and POSTs to /api/qwk/reply; packet building and reply
+// import are delegated to qwkservice. Server, built by NewServer, adds rate
+// limiting, a client-header filter and a sysop-supplied or self-signed TLS
+// certificate.
 package qwkapi
 
 import (

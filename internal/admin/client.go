@@ -12,12 +12,15 @@ import (
 // NodeStatus is a coarse, display-oriented status derived from session state.
 type NodeStatus string
 
+// NodeStatus values. BuildSnapshot currently assigns only StatusLogin,
+// StatusOnline and StatusInMenu; NodeStatusIdle and StatusInChat are
+// reserved for consumers and future session states.
 const (
-	NodeStatusIdle NodeStatus = "idle"
-	StatusLogin    NodeStatus = "login"
-	StatusOnline   NodeStatus = "online"
-	StatusInMenu   NodeStatus = "menu"
-	StatusInChat   NodeStatus = "chat"
+	NodeStatusIdle NodeStatus = "idle"   // reserved; not assigned by BuildSnapshot
+	StatusLogin    NodeStatus = "login"  // connected, no user logged in yet
+	StatusOnline   NodeStatus = "online" // logged in, running an activity (or no menu recorded)
+	StatusInMenu   NodeStatus = "menu"   // logged in, at a menu with no activity set
+	StatusInChat   NodeStatus = "chat"   // reserved; not assigned by BuildSnapshot
 )
 
 // NodeState is one node/caller row in a snapshot.
@@ -91,13 +94,25 @@ type ScheduledEvent struct {
 // EventType enumerates diff-synthesized event kinds.
 type EventType string
 
+// Event kinds, produced by DiffSnapshots comparing consecutive snapshots
+// (except EventNodeKicked, which the server emits directly). The string
+// values are the wire representation.
 const (
-	EventCallerConnected    EventType = "caller.connected"
+	// EventCallerConnected fires when a node appears in a snapshot after the
+	// first (the initial snapshot only seeds state and emits nothing), or when
+	// its ConnectedAt changes because a new caller took the slot.
+	EventCallerConnected EventType = "caller.connected"
+	// EventCallerDisconnected fires when a node drops out of a snapshot, or
+	// just before the EventCallerConnected for a replaced caller.
 	EventCallerDisconnected EventType = "caller.disconnected"
 	// EventCallerLoggedIn fires when a connection acquires a user: the point
 	// at which an anonymous connection becomes a caller.
-	EventCallerLoggedIn  EventType = "caller.login"
-	EventMenuChanged     EventType = "menu.changed"
+	EventCallerLoggedIn EventType = "caller.login"
+	// EventMenuChanged fires when a node's current menu changes; the event
+	// Message is the new menu name.
+	EventMenuChanged EventType = "menu.changed"
+	// EventActivityChanged fires when a node's activity changes; the event
+	// Message is the new activity (empty when it returned to a menu).
 	EventActivityChanged EventType = "activity.changed"
 	// EventNodeKicked is emitted by the server when an admin command
 	// disconnects a caller, so every console sees who was dropped and why.

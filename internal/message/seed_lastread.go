@@ -1,4 +1,5 @@
-// Package message: newscan last-read seeding.
+// Newscan last-read seeding.
+
 package message
 
 import (

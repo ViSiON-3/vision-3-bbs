@@ -1,3 +1,10 @@
+// Package scripting runs Vision/3 (V3) scripts: JavaScript programs, executed
+// in the embedded goja interpreter, that act as doors inside a caller's
+// session. NewEngine builds a per-session Engine and exposes the BBS to the
+// script through a global v3 object (console I/O, ANSI display, session and
+// user details, message and file areas, node list, sandboxed file access and
+// persistent data); Engine.Run executes a script file. The menu package's
+// V3 script door handler is the caller.
 package scripting
 
 import (
@@ -42,11 +49,16 @@ type readResult struct {
 	err  error
 }
 
-// NewEngine creates a new V3 scripting engine for the given session.
-// Providers may be nil for console-only scripts.
 // defaultMaxRunTime is the maximum execution time for a script if not configured.
 const defaultMaxRunTime = 30 * time.Minute
 
+// NewEngine creates a new V3 scripting engine for the given session and
+// registers the v3 API namespaces in a fresh goja runtime. The engine's
+// context is ctx limited to cfg.MaxRunTime (30 minutes when unset); when it
+// ends, running JavaScript is interrupted. providers may be nil for
+// console-only scripts; namespaces whose backing manager is nil (user,
+// message, file, nodes) are simply not registered. The caller must Close the
+// engine when the script finishes.
 func NewEngine(ctx context.Context, session *SessionContext, cfg ScriptConfig, providers *Providers) *Engine {
 	maxRunTime := cfg.MaxRunTime
 	if maxRunTime <= 0 {

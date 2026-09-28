@@ -1,7 +1,9 @@
 package menu
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -179,5 +181,71 @@ func TestLastCallerRowsThatFit_MultiLineMid(t *testing.T) {
 	}
 	if got := lastCallerRowsThatFit(25, top, "a\r\nb\r\nc", bot, pause); got != 7 {
 		t.Errorf("three-line mid: got %d callers, want 7", got)
+	}
+}
+
+// seedLastCallers records three visible calls (oldest first) and one
+// invisible call, and gives the caller a private note for @NOTE@.
+func seedLastCallers(t *testing.T, env *menuEnv) {
+	t.Helper()
+	c := *env.caller
+	c.PrivateNote = "regular"
+	if err := env.um.UpdateUserByID(&c); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Now().Add(-3 * time.Hour)
+	for i, h := range []string{"Alpha", "Bravo", "Caller"} {
+		id := 10 + i
+		if h == "Caller" {
+			id = 2
+		}
+		env.um.AddCallRecord(user.CallRecord{
+			UserID: id, Handle: h, NodeID: i + 1,
+			ConnectTime: base.Add(time.Duration(i) * time.Hour), Duration: 42 * time.Minute,
+		})
+	}
+	env.um.AddCallRecord(user.CallRecord{UserID: 1, Handle: "Sysop", NodeID: 4, ConnectTime: time.Now(), Invisible: true})
+}
+
+// TestLastCallers_ListsRecentVisibleCalls pins the LASTCALLERS screen over
+// seeded call history: each visible call appears with its minutes online and
+// the user's note, invisible logins are hidden, and the footer's user count
+// is filled in.
+func TestLastCallers_ListsRecentVisibleCalls(t *testing.T) {
+	env := newMenuEnv(t)
+	seedLastCallers(t, env)
+	r := env.runCmd("LASTCALLERS", env.caller, "", "\r")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("Alpha", "Bravo", "Caller", "regular", "42") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if r.has("Sysop") {
+		t.Errorf("invisible login listed:\n%s", r.text())
+	}
+	if strings.Contains(r.text(), "@USERCT@") || !r.has("Total Users:") {
+		t.Errorf("user count token not rendered:\n%s", r.text())
+	}
+	if strings.Index(r.text(), "Alpha") > strings.Index(r.text(), "Caller") {
+		t.Error("calls not listed oldest to newest")
+	}
+}
+
+// TestLastCallers_ArgumentLimitsRows pins that a numeric argument keeps only
+// the newest N visible calls, and a junk argument falls back to the default.
+func TestLastCallers_ArgumentLimitsRows(t *testing.T) {
+	env := newMenuEnv(t)
+	seedLastCallers(t, env)
+	r := env.runCmd("LASTCALLERS", env.caller, "1", "\r")
+	if !r.has("Caller") || r.has("Alpha") || r.has("Bravo") {
+		t.Errorf("limit 1 output:\n%s", r.text())
+	}
+	r = env.runCmd("LASTCALLERS", env.caller, "lots", "\r")
+	if !r.has("Alpha", "Bravo", "Caller") {
+		t.Errorf("junk-arg output:\n%s", r.text())
+	}
+	if r := env.runCmd("LASTCALLERS", env.caller, "", ""); r.next != "LOGOFF" {
+		t.Errorf("disconnect at pause: next = %q, want LOGOFF", r.next)
 	}
 }

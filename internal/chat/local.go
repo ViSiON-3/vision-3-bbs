@@ -75,6 +75,10 @@ func NewLocalChatService(handle, dbPath string) (*LocalChatService, error) {
 	}, nil
 }
 
+// Join implements ChatService. The room name is normalised first, so an
+// invalid name returns NormalizeRoom's error. The session is registered in
+// the process-wide room (creating it if needed), its user list is
+// snapshotted for Users, and the other members get a TypeJoin event.
 func (s *LocalChatService) Join(room string) ([]RoomInfo, []ChatMessage, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
@@ -103,6 +107,10 @@ func (s *LocalChatService) Join(room string) ([]RoomInfo, []ChatMessage, error) 
 	return rooms, history, err
 }
 
+// Leave implements ChatService. It removes the session from room, deleting
+// the room once it is empty, clears the current room, and sends TypeLeave to
+// the remaining members. room is used as given, not normalised. It always
+// returns nil.
 func (s *LocalChatService) Leave(room string) error {
 	sharedMu.Lock()
 	if rs := sharedRooms[room]; rs != nil {
@@ -123,6 +131,9 @@ func (s *LocalChatService) Leave(room string) error {
 	return nil
 }
 
+// Post implements ChatService. The message is stored in chat_history and
+// sent as TypeMessage to every other member of room; the poster receives no
+// echo, and a member whose event buffer is full misses it.
 func (s *LocalChatService) Post(room, text string) error {
 	now := time.Now().UTC()
 	_, err := s.db.Exec(
@@ -137,6 +148,10 @@ func (s *LocalChatService) Post(room, text string) error {
 	return nil
 }
 
+// Private implements ChatService. The message is stored in
+// chat_private_history and delivered as TypePrivate to handle if that user
+// is in any local room; the node argument is ignored. Delivery is
+// best-effort: an offline target or a full event buffer drops it silently.
 func (s *LocalChatService) Private(handle, _ string, text string) error {
 	now := time.Now().UTC()
 	_, err := s.db.Exec(
@@ -160,6 +175,9 @@ func (s *LocalChatService) Private(handle, _ string, text string) error {
 	return nil
 }
 
+// SetTopic implements ChatService. It sets the topic of room if the room
+// exists and sends TypeTopic to every member, including the caller. It
+// always returns nil.
 func (s *LocalChatService) SetTopic(room, topic string) error {
 	sharedMu.Lock()
 	if rs := sharedRooms[room]; rs != nil {
@@ -173,10 +191,16 @@ func (s *LocalChatService) SetTopic(room, topic string) error {
 	return nil
 }
 
+// Rooms implements ChatService, listing the rooms that currently have at
+// least one member in this process. Order is unspecified and the error is
+// always nil.
 func (s *LocalChatService) Rooms() ([]RoomInfo, error) {
 	return localRoomList(), nil
 }
 
+// History implements ChatService, returning the most recent limit messages
+// from room in oldest-first order. A limit outside 1-200 means 50. Messages
+// older than seven days are pruned when a service is opened.
 func (s *LocalChatService) History(room string, limit int) ([]ChatMessage, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -209,6 +233,9 @@ func (s *LocalChatService) History(room string, limit int) ([]ChatMessage, error
 	return msgs, nil
 }
 
+// Users implements ChatService. It returns a copy of the member list taken
+// when this session last joined a room; later joins and leaves by others do
+// not update it.
 func (s *LocalChatService) Users() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -217,8 +244,13 @@ func (s *LocalChatService) Users() []string {
 	return out
 }
 
+// Events implements ChatService. The buffered channel (64 events) is closed
+// by Close.
 func (s *LocalChatService) Events() <-chan ChatEvent { return s.events }
 
+// Close implements ChatService. It leaves the current room, closes the
+// events channel and closes the database. It must be called only once: a
+// second call panics on the already-closed channel.
 func (s *LocalChatService) Close() error {
 	if room := func() string {
 		s.mu.RLock()

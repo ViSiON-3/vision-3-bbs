@@ -1,3 +1,9 @@
+// Command helper is the ViSiON/3 sysop maintenance utility. Its subcommands
+// (matched case-insensitively) import FTN echo areas from a FIDONET.NA file
+// (ftnsetup), send AreaFix netmail to a hub (areafix), list or purge
+// soft-deleted user accounts (users), and bulk-import files into a file area
+// or re-extract FILE_ID.DIZ descriptions (files). It works directly on the
+// configs and data directories, selectable with --config and --data.
 package main
 
 import (

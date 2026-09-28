@@ -1,3 +1,9 @@
+// Package scheduler runs the sysop's timed events from events.json: external
+// commands started on a cron schedule, once at startup, or after another
+// event finishes (run_after chaining). Scheduler, built by NewScheduler,
+// limits how many events run at once, never overlaps runs of the same event,
+// applies per-event timeouts, records each run's outcome in a persisted
+// history file, and picks up edited event definitions through Reload.
 package scheduler
 
 import (
