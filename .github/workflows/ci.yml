@@ -107,6 +107,19 @@ jobs:
         run: scripts/coverage-check.sh coverage.out
       - name: go test -race
         run: go test -race ./...
+      # The vendored forks under third_party/ are separate modules (wired in
+      # with replace directives), so ./... above never reaches them. The
+      # bubbletea fork carries local changes with their own tests (shifted
+      # F-key decoding, #476); run them here on both OSes, since it has
+      # Windows-only key handling too.
+      - name: vendored modules (vet, test)
+        shell: bash
+        run: |
+          for m in third_party/*/; do
+            echo "::group::$m"
+            (cd "$m" && go vet ./... && go test ./...) || exit 1
+            echo "::endgroup::"
+          done
 
   # The Docker image went unbuildable for ~6 months: go.mod moved to go 1.25.0
   # (a78bfce) while the Dockerfile stayed on golang:1.24-alpine, and the official
