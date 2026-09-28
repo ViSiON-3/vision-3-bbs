@@ -86,7 +86,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `PREVMSGCONF` | none | Previous accessible conference, selecting its first area. | |
 | `READMSGS` | none | Opens the message reader in the current area at the first unread message. Prompts for a message number if there is nothing new. Runs `GETHEADERTYPE` first if the user has no header style. | Needs a current area |
 | `LISTMSGS` | none | Paged header list for the current area. Enter on a row opens the reader. | Needs a current area |
-| `COMPOSEMSG` | Area tag, optional. Blank posts to the current area. | Posts a new message. Prompts for title and recipient, then opens the editor. An unknown tag prints an error and returns. | Area write ACS |
+| `COMPOSEMSG` | Area tag, optional. Blank posts to the current area. | Posts a new message. Prompts for title and recipient, then opens the editor. In `PRIVMAIL` the recipient must be an existing user and the message is private; in netmail areas it needs an FTN address. An unknown tag prints an error and returns. | Area write ACS |
 | `PROMPTANDCOMPOSEMESSAGE` | none | Lists areas, asks for an area tag or number, then posts as `COMPOSEMSG` would. Not used in the stock menus. | Area write ACS |
 | `NEWSCAN` | `CURRENT` to preset the scope to the current area. Anything else presets tagged areas. | Newscan setup screen (`NSCANHDR.ANS`), then reads new messages. The user can still change the scope on the setup screen. | Area read ACS |
 | `NEWSCANCONFIG` | none | Tag and untag areas for the personal newscan. The same tag set drives QWK downloads. | |

@@ -338,6 +338,18 @@ The `READMSGS` function provides random-access message reading:
 
 The `COMPOSEMSG` function launches the built-in editor. Subject line required. For echomail areas, automatically adds MSGID, tearline, and origin line.
 
+The **To:** prompt depends on the area:
+
+- **Public areas:** To starts as `All`, and a blank answer means `All`.
+- **`PRIVMAIL`:** To starts empty and must be an existing user; an unknown
+  name is reported and asked again. The message is saved as private mail, the
+  same as `SENDPRIVMAIL`.
+- **Netmail areas:** To starts empty. Enter `Name@zone:net/node`, or just the
+  name, in which case you are asked for the address.
+
+In `PRIVMAIL` and netmail, leaving To (or the netmail address) blank abandons
+the post.
+
 ### New Message Scan
 
 The `NEWSCAN` function (or `NEWSCAN CURRENT` for the current area only) opens a

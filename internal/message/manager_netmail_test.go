@@ -24,9 +24,9 @@ func TestSplitNetmailTo(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		name, addr := splitNetmailTo(tt.input)
+		name, addr := SplitNetmailTo(tt.input)
 		if name != tt.wantName || addr != tt.wantAddr {
-			t.Errorf("splitNetmailTo(%q) = (%q, %q), want (%q, %q)",
+			t.Errorf("SplitNetmailTo(%q) = (%q, %q), want (%q, %q)",
 				tt.input, name, addr, tt.wantName, tt.wantAddr)
 		}
 	}

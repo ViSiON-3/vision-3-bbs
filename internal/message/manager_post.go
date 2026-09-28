@@ -8,10 +8,10 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
-// splitNetmailTo splits a "user@zone:net/node" string into the username and
+// SplitNetmailTo splits a "user@zone:net/node" string into the username and
 // FTN address parts. If the string doesn't contain a valid FTN address after
 // the '@', it returns the original string unchanged with an empty address.
-func splitNetmailTo(to string) (name, addr string) {
+func SplitNetmailTo(to string) (name, addr string) {
 	idx := strings.LastIndex(to, "@")
 	if idx <= 0 {
 		return to, ""
@@ -62,7 +62,7 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 
 	// For netmail, split "user@address" into separate To and DestAddr fields.
 	if msgType.IsNetmail() {
-		name, addr := splitNetmailTo(to)
+		name, addr := SplitNetmailTo(to)
 		msg.To = name
 		if addr != "" {
 			msg.DestAddr = addr
