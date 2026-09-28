@@ -53,15 +53,15 @@ var msgReaderDeleteOption = MsgLightbarOption{Label: " Delete ", HotKey: 'D', Lo
 type msgOwnershipFilter func(*message.DisplayMessage) bool
 
 // withPrivacy returns f narrowed so that private messages are only accepted
-// when u sent or received them (message.DisplayMessage.VisibleTo). A nil u sees
-// no private mail. f may be nil.
+// when u sent or received them, by handle (message.DisplayMessage.VisibleTo).
+// A nil u sees no private mail. f may be nil.
 func withPrivacy(u *user.User, f msgOwnershipFilter) msgOwnershipFilter {
-	var handle, realName string
+	var handle string
 	if u != nil {
-		handle, realName = u.Handle, u.RealName
+		handle = u.Handle
 	}
 	return func(m *message.DisplayMessage) bool {
-		if !m.VisibleTo(handle, realName) {
+		if !m.VisibleTo(handle) {
 			return false
 		}
 		return f == nil || f(m)

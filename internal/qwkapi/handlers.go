@@ -65,7 +65,6 @@ func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.deps.Service.BuildPacket(qwkservice.ExportOptions{
 		Handle:     u.Handle,
-		RealName:   u.RealName,
 		TaggedTags: u.TaggedMessageAreaTags,
 	})
 	if err != nil {

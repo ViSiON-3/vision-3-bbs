@@ -64,7 +64,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		}
 		// Scripts run as the caller, so they see what the caller could read
 		// in the message reader: another user's private mail is absent.
-		if !msg.VisibleTo(eng.session.UserHandle, eng.session.UserRealName) {
+		if !msg.VisibleTo(eng.session.UserHandle) {
 			return goja.Null()
 		}
 		return displayMessageToJS(vm, msg)

@@ -81,8 +81,7 @@ type LastReadUpdate struct {
 
 // ExportOptions configure a packet build.
 type ExportOptions struct {
-	Handle   string // user handle (used for PERSONAL.NDX and last-read)
-	RealName string // user's real name; private mail addressed by it is theirs too
+	Handle string // user handle (used for PERSONAL.NDX, last-read and private-mail visibility)
 	// TaggedTags lists the area tags to export. When empty, the service falls
 	// back to every loaded area (ListAreas); note this is not access-filtered —
 	// callers that need ACS enforcement must pre-filter the tags they pass.
@@ -173,12 +172,12 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			if msg.IsDeleted {
 				continue
 			}
-			if isPrivateConf && !ownsPrivateMessage(msg, opts.Handle, opts.RealName) {
+			if isPrivateConf && !ownsPrivateMessage(msg, opts.Handle) {
 				continue
 			}
 			// Other users' private messages never leave the board, whatever
 			// conference they sit in.
-			if !msg.VisibleTo(opts.Handle, opts.RealName) {
+			if !msg.VisibleTo(opts.Handle) {
 				continue
 			}
 
@@ -226,10 +225,10 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 // once the conference is known to be private mail, so it gates purely on
 // ownership; an explicit IsPrivate check here would wrongly skip — and stall the
 // last-read pointer on — any conference-0 record lacking the flag.
-func ownsPrivateMessage(msg *message.DisplayMessage, handle, realName string) bool {
+func ownsPrivateMessage(msg *message.DisplayMessage, handle string) bool {
 	owned := *msg
 	owned.IsPrivate = true // in this conference every message is treated as private
-	return owned.VisibleTo(handle, realName)
+	return owned.VisibleTo(handle)
 }
 
 // CommitExport applies the deferred newscan pointer advances from a successful

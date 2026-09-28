@@ -20,9 +20,10 @@ import (
 
 // privacyFixture is a BBS on the shipped configs (so PRIVMAIL is the real
 // shipped area: read ACS s25, auto-joined) whose PRIVMAIL holds a public
-// note, a private message from Sysop to Bob, and a private message to Bob
-// addressed by his real name. Carol is a third user who passes the area's
-// ACS but is party to neither private message.
+// note, a private message from Sysop to Bob, and a private message signed and
+// addressed only by real names ("Sam Sysop" to "Bob Builder"). Only handles
+// identify a user, so that last message belongs to no one. Carol is a third
+// user who passes the area's ACS but is party to neither private message.
 type privacyFixture struct {
 	e                 *MenuExecutor
 	um                *user.UserMgr
@@ -155,8 +156,10 @@ func TestReadMsgsHidesOthersPrivateMail(t *testing.T) {
 	}
 }
 
-// TestReadMsgsShowsPrivateMailToItsParties pins that the recipient (by handle
-// or by real name) and the sender (likewise) still read their own private mail.
+// TestReadMsgsShowsPrivateMailToItsParties pins that the recipient and the
+// sender, by handle, still read their own private mail, and that mail
+// addressed only by real name is shown to neither (a real name is not an
+// identity).
 func TestReadMsgsShowsPrivateMailToItsParties(t *testing.T) {
 	f := newPrivacyFixture(t)
 	for _, tc := range []struct {
@@ -165,10 +168,11 @@ func TestReadMsgsShowsPrivateMailToItsParties(t *testing.T) {
 	}{{"recipient", f.bob}, {"sender", f.sysop}} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := f.run(t, runReadMsgs, tc.u, "NNNQ")
-			for _, want := range []string{"SECRET-BODY", "REALNAME-BODY"} {
-				if !strings.Contains(out, want) {
-					t.Errorf("%s did not see %q:\n%s", tc.name, want, out)
-				}
+			if !strings.Contains(out, "SECRET-BODY") {
+				t.Errorf("%s did not see their private mail:\n%s", tc.name, out)
+			}
+			if strings.Contains(out, "REALNAME-BODY") {
+				t.Errorf("%s saw mail addressed only by real name", tc.name)
 			}
 		})
 	}
@@ -187,7 +191,7 @@ func TestListMsgsHidesOthersPrivateMail(t *testing.T) {
 			t.Errorf("LISTMSGS listed %q to Carol", leak)
 		}
 	}
-	if out := f.run(t, runListMsgs, f.bob, ""); !strings.Contains(out, "Secret plans") || !strings.Contains(out, "Real-name note") {
+	if out := f.run(t, runListMsgs, f.bob, ""); !strings.Contains(out, "Secret plans") {
 		t.Errorf("Bob's list is missing his own private mail:\n%s", out)
 	}
 }
@@ -206,6 +210,22 @@ func TestNewscanHidesOthersPrivateMail(t *testing.T) {
 	for _, leak := range []string{"SECRET-BODY", "REALNAME-BODY"} {
 		if strings.Contains(out, leak) {
 			t.Errorf("NEWSCAN showed Carol %q", leak)
+		}
+	}
+}
+
+// TestAdoptingARealNameGrantsNoMail pins the review finding on #467: real
+// names are neither unique nor fixed, so a user who sets their real name to
+// someone else's must not gain access to mail addressed to that name.
+func TestAdoptingARealNameGrantsNoMail(t *testing.T) {
+	f := newPrivacyFixture(t)
+	f.carol.RealName = "Bob Builder"
+	for name, fn := range map[string]RunnableFunc{"READMSGS": runReadMsgs, "LISTMSGS": runListMsgs} {
+		out := f.run(t, fn, f.carol, "NNNQ")
+		for _, leak := range []string{"REALNAME-BODY", "Real-name note", "SECRET-BODY", "Secret plans"} {
+			if strings.Contains(out, leak) {
+				t.Errorf("%s showed %q to Carol after she adopted Bob's real name", name, leak)
+			}
 		}
 	}
 }

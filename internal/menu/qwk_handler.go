@@ -67,7 +67,6 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	// not move the pointers.
 	res, err := svc.BuildPacket(qwkservice.ExportOptions{
 		Handle:     currentUser.Handle,
-		RealName:   currentUser.RealName,
 		TaggedTags: currentUser.TaggedMessageAreaTags,
 	})
 	if err != nil {
