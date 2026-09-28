@@ -79,7 +79,7 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 			if wErr != nil {
 				slog.Error("failed writing too many attempts message", "error", wErr)
 			}
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return false, loopReturn, nil // Signal logoff after too many failures
 		}
 	}

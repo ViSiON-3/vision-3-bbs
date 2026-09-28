@@ -28,7 +28,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -81,14 +81,14 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	if scanCfg.WhichAreas == 3 {
 		if currentAreaID <= 0 {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAreaSelected)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
 
 		totalCount, _ := e.MessageMgr.GetMessageCountForArea(currentAreaID)
 		if totalCount == 0 {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoMessages)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
 
@@ -142,7 +142,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// If tagged areas mode, check if user has any tagged areas
 	if scanCfg.WhichAreas == 1 && len(currentUser.TaggedMessageAreaTags) == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoTaggedAreas)), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return nil, "", nil
 	}
 
@@ -346,7 +346,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -354,7 +354,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 
 	cancel := func() (*user.User, string, error) {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsCancelled)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -462,7 +462,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 		msg := fmt.Sprintf(e.Strings().UpdatePtrsSuccess, updatedCount)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	}
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 
 	return currentUser, "", nil
 }

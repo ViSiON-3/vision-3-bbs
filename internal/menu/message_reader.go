@@ -96,7 +96,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		hdrTemplateBytes, hdrErr = ansi.GetAnsiFileContent(hdrTemplatePath)
 		if hdrErr != nil {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgHdrLoadError)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", fmt.Errorf("failed loading MSGHDR templates")
 		}
 	}
@@ -671,7 +671,7 @@ readerLoop:
 					slog.Error("delete message", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", delErr)
 					terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte("\r\n|01Error deleting message.|07\r\n")), outputMode)
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 					needsRedraw = true
 					continue
 				}

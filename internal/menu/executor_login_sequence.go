@@ -216,5 +216,5 @@ func (e *MenuExecutor) confirmAbortPost(s ssh.Session, terminal *term.Terminal, 
 // showPostAborted tells the caller their post was abandoned.
 func showPostAborted(terminal *term.Terminal, outputMode ansi.OutputMode) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Post aborted.|07\r\n")), outputMode)
-	time.Sleep(500 * time.Millisecond)
+	uiPause(500 * time.Millisecond)
 }

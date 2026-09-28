@@ -52,7 +52,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 				if wErr != nil {
 					slog.Error("failed writing RUN command error message", "error", wErr)
 				}
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				// Assign the potentially updated user before returning
 				userResult = authUser                     // Capture potential user changes (like from AUTHENTICATE)
 				return "CONTINUE", "", userResult, runErr // Continue but report error?
@@ -78,7 +78,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			if wErr != nil {
 				slog.Error("failed writing missing RUN command message", "error", wErr)
 			}
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return "CONTINUE", "", currentUser, nil
 		}
 	} else if strings.HasPrefix(action, "DOOR:") {
@@ -98,7 +98,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 				if wErr != nil {
 					slog.Error("failed writing DOOR command error message", "error", wErr)
 				}
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				// Assign potential user result before returning
 				userResult = userResultDoor
 				return "CONTINUE", "", userResult, doorErr // Continue after door error?

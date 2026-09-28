@@ -46,7 +46,7 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 	if bcryptErr := bcrypt.CompareHashAndPassword([]byte(currentUser.PasswordHash), []byte(oldPw)); bcryptErr != nil {
 		msg := e.Strings().CfgIncorrectPw
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -79,6 +79,6 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 
 	msg = e.Strings().CfgPasswordChanged
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 	return currentUser, "", nil
 }

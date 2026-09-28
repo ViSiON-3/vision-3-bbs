@@ -70,7 +70,7 @@ func runUploadFile(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to upload files.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -79,7 +79,7 @@ func runUploadFile(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentAreaID <= 0 {
 		msg := "\r\n|01Error: No file area selected.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -121,7 +121,7 @@ func (e *MenuExecutor) runUploadFiles(
 		slog.Warn("user denied upload access", "node", nodeNumber, "handle", currentUser.Handle, "tag", currentAreaTag, "acs", area.ACSUpload)
 		msg := "\r\n|01You do not have permission to upload to this area.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return nil
 	}
 
@@ -147,7 +147,7 @@ func (e *MenuExecutor) runUploadFiles(
 		}
 		slog.Error("protocol selection error", "node", nodeNumber, "error", protoErr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return nil
 	}
 	if !ok {
@@ -193,7 +193,7 @@ func (e *MenuExecutor) runUploadFiles(
 	}
 	summary += "\r\n"
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(summary)), outputMode)
-	time.Sleep(2 * time.Second)
+	uiPause(2 * time.Second)
 
 	return nil
 }
@@ -250,7 +250,7 @@ func (e *MenuExecutor) receiveUploadBatch(
 			msg = "\r\n|07No new files detected.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		}
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return nil, false
 	}
 

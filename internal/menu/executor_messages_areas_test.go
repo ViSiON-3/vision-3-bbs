@@ -108,7 +108,6 @@ func TestSelectMessageAreaLightbarConferenceSwitch(t *testing.T) {
 // joins that area and saves it: the sysop moves down to Private Mail and the
 // choice survives a reload of users.json.
 func TestSelectMessageAreaLightbarJoinsSelectedArea(t *testing.T) {
-	t.Parallel() // the confirmation holds for a fixed second
 	env := newMenuEnv(t)
 	env.sysop.CurrentMsgConferenceID = 1
 

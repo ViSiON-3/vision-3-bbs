@@ -340,7 +340,7 @@ func (e *MenuExecutor) showUndefinedMenuInput(terminal *term.Terminal, outputMod
 	if wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode); wErr != nil {
 		slog.Error("failed writing unknown command message", "node", nodeNumber, "error", wErr)
 	}
-	time.Sleep(500 * time.Millisecond)
+	uiPause(500 * time.Millisecond)
 }
 
 // setUserMsgConference updates the user's current message conference based on a conference ID.

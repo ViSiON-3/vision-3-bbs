@@ -37,7 +37,7 @@ func (e *MenuExecutor) loadFileListTemplates(currentUser *user.User, nodeNumber 
 			slog.Error("failed to load FILELIST.BOT template", "node", nodeNumber, "error", errBot)
 			msg := "\r\n|01Error loading File List screen templates.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil, fmt.Errorf("failed loading FILELIST templates")
 		}
 	}
@@ -46,7 +46,7 @@ func (e *MenuExecutor) loadFileListTemplates(currentUser *user.User, nodeNumber 
 		slog.Error("failed to load FILELIST template files", "node", nodeNumber, "topError", errTop, "midError", errMid)
 		msg := "\r\n|01Error loading File List screen templates.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil, fmt.Errorf("failed loading FILELIST templates")
 	}
 

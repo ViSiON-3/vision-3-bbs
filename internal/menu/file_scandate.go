@@ -41,7 +41,7 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -85,7 +85,7 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 				msg = "\r\n|12Invalid date.|07\r\n"
 			}
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return currentUser, "", nil
 		}
 		cutoff := t
@@ -97,12 +97,12 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 		currentUser.FileNewscanSince = prevSince // revert so the session doesn't show an unsaved change
 		slog.Error("failed to save file newscan date", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Could not save the setting.|07\r\n")), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(confirm)), outputMode)
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 	slog.Info("user set file newscan date", "node", nodeNumber, "handle", currentUser.Handle, "since", currentUser.FileNewscanSince)
 	return currentUser, "", nil
 }

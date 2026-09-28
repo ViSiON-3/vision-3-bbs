@@ -61,7 +61,7 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if len(unreviewed) == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewNoFiles+"\r\n")), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 

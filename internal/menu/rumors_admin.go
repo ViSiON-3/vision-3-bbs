@@ -154,7 +154,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		addedMsg = "|10Rumor has been added!"
 	}
 	wv(terminal, "\r\n"+addedMsg+"\r\n", outputMode)
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 	slog.Info("rumor added", "node", nodeNumber, "handle", currentUser.Handle, "id", newRumor.ID)
 	return currentUser, "", nil
 }

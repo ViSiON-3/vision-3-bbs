@@ -125,7 +125,7 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("failed to load WHOONLN templates", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := "\r\n|01Error loading Who's Online templates.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading WHOONLN templates")
 	}
 
@@ -144,7 +144,7 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("session registry is nil", "node", nodeNumber)
 		msg := "\r\n|01Who's Online is unavailable.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 

@@ -77,7 +77,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to select a message area.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -202,7 +202,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 			// Move up to overwrite prompt+input line, show error, then restore prompt
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
@@ -212,7 +212,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 		if !checkACS(area.ACSRead, currentUser, s, terminal, sessionStartTime) {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|01Access denied to '%s'.|07", area.Tag))), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
@@ -227,7 +227,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 			slog.Error("failed to save user data after updating message area", "node", nodeNumber, "error", err)
 			msg := "\r\n|01Error: Could not save area selection.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
 		}
@@ -235,7 +235,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Info("user changed message area", "node", nodeNumber, "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
 		msg := fmt.Sprintf("\r\n|07Current message area set to: |15%s|07\r\n", area.Name)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 
 		return currentUser, "", nil
 	}

@@ -36,7 +36,6 @@ func TestSelectFileAreaLightbarNavigatesWithoutJoining(t *testing.T) {
 // TestSelectFileAreaLightbarJoinsSelectedArea pins that Enter joins the
 // highlighted file area and saves it.
 func TestSelectFileAreaLightbarJoinsSelectedArea(t *testing.T) {
-	t.Parallel() // the confirmation holds for a fixed second
 	env := newMenuEnv(t)
 	env.sysop.CurrentFileConferenceID = 1
 

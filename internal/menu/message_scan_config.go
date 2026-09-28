@@ -31,7 +31,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanConfigLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -41,7 +41,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	allAreas := e.MessageMgr.ListAreas()
 	if len(allAreas) == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAreasAvailable)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -113,7 +113,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if len(accessibleAreas) == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAccessibleAreas)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -495,7 +495,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 				msg := fmt.Sprintf(e.Strings().ScanConfigSaved, len(taggedTags))
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			}
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return currentUser, "", nil
 		}
 	}

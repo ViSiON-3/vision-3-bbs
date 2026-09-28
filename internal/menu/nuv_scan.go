@@ -336,7 +336,7 @@ func nuvRunScan(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		i++
 		if i < len(nd.Candidates) {
 			wv(terminal, "\r\n|07Continuing New User Scan...\r\n", outputMode)
-			time.Sleep(500 * time.Millisecond)
+			uiPause(500 * time.Millisecond)
 		}
 	}
 	if found == 0 {

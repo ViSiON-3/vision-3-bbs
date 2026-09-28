@@ -30,14 +30,14 @@ func navigateFileArea(c *cmdCtx, forward bool) (*user.User, string, error) {
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	areas := getAccessibleFileAreasInConference(e, s, terminal, currentUser, currentUser.CurrentFileConferenceID, sessionStartTime)
 	if len(areas) == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleAreas)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -78,19 +78,19 @@ func navigateFileConf(c *cmdCtx, forward bool) (*user.User, string, error) {
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 	if e.ConferenceMgr == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	confs := getAccessibleConferences(e, s, terminal, currentUser, sessionStartTime)
 	if len(confs) == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleConfs)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -107,7 +107,7 @@ func navigateFileConf(c *cmdCtx, forward bool) (*user.User, string, error) {
 	// move that will not survive the session.
 	if !e.commitConferenceJoin(s, terminal, c.userManager, currentUser, newConf.ID, sessionStartTime) {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Could not save the conference change.|07\r\n")), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 

@@ -74,7 +74,7 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			if !saved {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Auto-Signature not changed.\r\n")), outputMode)
-				time.Sleep(500 * time.Millisecond)
+				uiPause(500 * time.Millisecond)
 				continue
 			}
 			if truncated {
@@ -95,7 +95,7 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 			} else {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|02Auto-Signature saved!|07\r\n")), outputMode)
 			}
-			time.Sleep(500 * time.Millisecond)
+			uiPause(500 * time.Millisecond)
 
 		case "D":
 			if currentUser.AutoSignature == "" {
@@ -110,7 +110,7 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|03Auto-Signature has been deleted.|07\r\n")), outputMode)
 			}
-			time.Sleep(500 * time.Millisecond)
+			uiPause(500 * time.Millisecond)
 		}
 	}
 }

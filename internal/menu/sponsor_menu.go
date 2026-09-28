@@ -57,7 +57,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 	if e.MessageMgr == nil || currentUser.CurrentMessageAreaID == 0 {
 		msg := "\r\n|03No message area selected.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -65,7 +65,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 	if !found {
 		msg := "\r\n|03No message area selected.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -168,7 +168,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			if len(confAreas) < 2 {
 				msg := "\r\n|03Need at least 2 areas to reposition.|07\r\n"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				break
 			}
 
@@ -225,7 +225,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				if _, scanErr := fmt.Sscanf(selCmd, "%d", &selIdx); scanErr != nil || selIdx < 1 || selIdx > len(confAreas) {
 					msg := "\r\n|01Invalid selection.|07\r\n"
 					_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 					continue
 				}
 				selectedArea := confAreas[selIdx-1]
@@ -254,7 +254,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 					if _, scanErr := fmt.Sscanf(destCmd, "%d", &newPos); scanErr != nil || newPos < 1 || newPos > len(confAreas) {
 						msg := "\r\n|01Invalid position.|07\r\n"
 						_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-						time.Sleep(1 * time.Second)
+						uiPause(1 * time.Second)
 						continue
 					}
 				}
@@ -276,14 +276,14 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 					slog.Error("failed to move area position", "node", nodeNumber, "error", moveErr)
 					msg := "\r\n|01Error moving area position.|07\r\n"
 					_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 					continue
 				}
 				if saveErr := e.MessageMgr.SaveAreas(); saveErr != nil {
 					slog.Error("failed to save areas after reposition", "node", nodeNumber, "error", saveErr)
 					msg := "\r\n|01Error saving areas.|07\r\n"
 					_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 					continue
 				}
 				slog.Info("user repositioned area",
@@ -305,7 +305,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		default:
 			msg := "\r\n|01Invalid key.|07\r\n"
 			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
 		}
 	}
@@ -350,7 +350,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 	if e.MessageMgr == nil || currentUser.CurrentMessageAreaID == 0 {
 		msg := "\r\n|03No message area selected.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -358,7 +358,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 	if !found {
 		msg := "\r\n|03Area not found.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -453,7 +453,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
 				msg := "|01Tag - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				break
 			}
 			newVal := promptAreaField(s, terminal, outputMode, "Tag", edited.Tag, 32)
@@ -513,7 +513,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 						msg := fmt.Sprintf("|01User '%s' not found - sponsor unchanged.|07", newHandle)
 						_ = terminalio.WriteProcessedBytes(terminal,
 							ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-						time.Sleep(1 * time.Second)
+						uiPause(1 * time.Second)
 					} else {
 						edited.Sponsor = newHandle
 					}
@@ -538,7 +538,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 					msg := "|01Invalid number - unchanged.|07"
 					_ = terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 				}
 			}
 			if edited.MaxMessages != prevMax {
@@ -558,7 +558,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 					msg := "|01Invalid number - unchanged.|07"
 					_ = terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 				}
 			}
 			if edited.MaxAge != prevMaxAge {
@@ -592,7 +592,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				default:
 					msg := "|01Enter yes, no, or default.|07"
 					_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 				}
 			}
 			if !allowAnonEqual(prevAllowAnon, edited.AllowAnon) {
@@ -646,7 +646,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 					msg := "|01Invalid number - unchanged.|07"
 					_ = terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 				}
 			}
 			if edited.ConferenceID != prevConfID {
@@ -658,7 +658,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
 				msg := "|01Base Path - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				break
 			}
 			newVal := promptAreaField(s, terminal, outputMode,
@@ -673,7 +673,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
 				msg := "|01Area Type - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				break
 			}
 			newVal := promptAreaField(s, terminal, outputMode,
@@ -688,7 +688,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
 				msg := "|01Echo Tag - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				break
 			}
 			newVal := promptAreaField(s, terminal, outputMode,
@@ -703,7 +703,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
 				msg := "|01Origin Address - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				break
 			}
 			newVal := promptAreaField(s, terminal, outputMode,
@@ -718,7 +718,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			if currentUser.AccessLevel < cfg.CoSysOpLevel {
 				msg := "|01Network - sysop/co-sysop only.|07"
 				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 				break
 			}
 			newVal := promptAreaField(s, terminal, outputMode,
@@ -752,17 +752,17 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 						slog.Error("failed to update area", "node", nodeNumber, "error", updateErr)
 						msg := "|01Error updating area.|07\r\n"
 						_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-						time.Sleep(1 * time.Second)
+						uiPause(1 * time.Second)
 					} else if saveErr := e.MessageMgr.SaveAreas(); saveErr != nil {
 						slog.Error("failed to save areas", "node", nodeNumber, "error", saveErr)
 						msg := "|01Error saving area.|07\r\n"
 						_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-						time.Sleep(1 * time.Second)
+						uiPause(1 * time.Second)
 					} else {
 						slog.Info("user saved area", "node", nodeNumber, "handle", currentUser.Handle, "tag", edited.Tag)
 						saveMsg := fmt.Sprintf("|02Area |14%s|02 saved.|07\r\n", edited.Tag)
 						_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(saveMsg)), outputMode)
-						time.Sleep(500 * time.Millisecond)
+						uiPause(500 * time.Millisecond)
 						if currentUser.CurrentMessageAreaID == edited.ID {
 							currentUser.CurrentMessageAreaTag = edited.Tag
 						}
@@ -834,7 +834,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				msg := "|01Error updating area - changes may be lost.|07\r\n"
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(2 * time.Second)
+				uiPause(2 * time.Second)
 				return currentUser, "", nil
 			}
 			if saveErr := e.MessageMgr.SaveAreas(); saveErr != nil {
@@ -842,7 +842,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				msg := "|01Error saving area - changes may be lost.|07\r\n"
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(2 * time.Second)
+				uiPause(2 * time.Second)
 				// Roll back in-memory state so edited state is not left applied without disk persist.
 				if hasPrevArea {
 					_ = e.MessageMgr.UpdateAreaByID(edited.ID, prevAreaSnapshot)
@@ -852,7 +852,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				msg := fmt.Sprintf("|02Area |14%s|02 saved.|07\r\n", edited.Tag)
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-				time.Sleep(500 * time.Millisecond)
+				uiPause(500 * time.Millisecond)
 				// Update user's cached tag if it changed
 				if currentUser.CurrentMessageAreaID == edited.ID {
 					currentUser.CurrentMessageAreaTag = edited.Tag
@@ -863,7 +863,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 		case 27: // ESC = discard and quit
 			msg := "|03Changes discarded.|07\r\n"
 			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(500 * time.Millisecond)
+			uiPause(500 * time.Millisecond)
 			return currentUser, "", nil
 		}
 	}

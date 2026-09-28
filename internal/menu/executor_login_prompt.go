@@ -30,7 +30,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		if wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecLoginCriticalError)), outputMode); wErr != nil {
 			slog.Error("failed writing critical login configuration message", "error", wErr)
 		}
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return nil, fmt.Errorf("missing login coordinates P/O in LOGIN.ANS")
 	}
 
@@ -135,7 +135,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 			if wErr != nil {
 				slog.Error("failed writing IP lockout message", "error", wErr)
 			}
-			time.Sleep(2 * time.Second)
+			uiPause(2 * time.Second)
 			return nil, nil
 		}
 	}
@@ -161,8 +161,8 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		if wErr != nil {
 			slog.Error("failed writing login incorrect message", "error", wErr)
 		}
-		time.Sleep(1 * time.Second) // Pause after failed attempt
-		return nil, nil             // Failed auth, but not a critical error. Let LOGIN menu handle retries.
+		uiPause(1 * time.Second) // Pause after failed attempt
+		return nil, nil          // Failed auth, but not a critical error. Let LOGIN menu handle retries.
 	}
 
 	// A new user who owes the SysOp the required introduction message is sent
@@ -192,7 +192,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		if wErr != nil {
 			slog.Error("failed writing access denied message", "error", wErr)
 		}
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, nil // Insufficient level, treat as failed login
 	}
 
