@@ -255,6 +255,25 @@ const (
 	KeyF18
 	KeyF19
 	KeyF20
+
+	// Shifted function keys (local modification, see third_party/README.md).
+	// Appended after KeyF20 so the values of all upstream key types are
+	// unchanged. They are only produced for sequences that unambiguously
+	// carry a Shift modifier (xterm-style "1;2" / "N;2~" parameters, and the
+	// Windows console with Shift held); legacy rxvt/Linux-console codes such
+	// as ESC[25~ still decode as KeyF13..KeyF20.
+	KeyShiftF1
+	KeyShiftF2
+	KeyShiftF3
+	KeyShiftF4
+	KeyShiftF5
+	KeyShiftF6
+	KeyShiftF7
+	KeyShiftF8
+	KeyShiftF9
+	KeyShiftF10
+	KeyShiftF11
+	KeyShiftF12
 )
 
 // Mappings for control keys and other special keys to friendly consts.
@@ -348,6 +367,18 @@ var keyNames = map[KeyType]string{
 	KeyF18:            "f18",
 	KeyF19:            "f19",
 	KeyF20:            "f20",
+	KeyShiftF1:        "shift+f1",
+	KeyShiftF2:        "shift+f2",
+	KeyShiftF3:        "shift+f3",
+	KeyShiftF4:        "shift+f4",
+	KeyShiftF5:        "shift+f5",
+	KeyShiftF6:        "shift+f6",
+	KeyShiftF7:        "shift+f7",
+	KeyShiftF8:        "shift+f8",
+	KeyShiftF9:        "shift+f9",
+	KeyShiftF10:       "shift+f10",
+	KeyShiftF11:       "shift+f11",
+	KeyShiftF12:       "shift+f12",
 }
 
 // Sequence mappings.
@@ -496,28 +527,54 @@ var sequences = map[string]Key{
 	"\x1b[23;3~": {Type: KeyF11, Alt: true}, // vt100, xterm
 	"\x1b[24;3~": {Type: KeyF12, Alt: true}, // vt100, xterm
 
-	"\x1b[1;2P": {Type: KeyF13},
-	"\x1b[1;2Q": {Type: KeyF14},
+	// Shifted function keys, xterm style (local modification): the "2"
+	// modifier parameter means Shift, so these are decoded as shift+fN
+	// rather than being folded into F13..F20. Alt+Shift ("4") sets Alt too.
+	"\x1b[1;2P":  {Type: KeyShiftF1},
+	"\x1b[1;2Q":  {Type: KeyShiftF2},
+	"\x1b[1;2R":  {Type: KeyShiftF3},
+	"\x1b[1;2S":  {Type: KeyShiftF4},
+	"\x1bO2P":    {Type: KeyShiftF1}, // older xterm, SS3 with modifier
+	"\x1bO2Q":    {Type: KeyShiftF2}, // older xterm, SS3 with modifier
+	"\x1bO2R":    {Type: KeyShiftF3}, // older xterm, SS3 with modifier
+	"\x1bO2S":    {Type: KeyShiftF4}, // older xterm, SS3 with modifier
+	"\x1b[15;2~": {Type: KeyShiftF5},
+	"\x1b[17;2~": {Type: KeyShiftF6},
+	"\x1b[18;2~": {Type: KeyShiftF7},
+	"\x1b[19;2~": {Type: KeyShiftF8},
+	"\x1b[20;2~": {Type: KeyShiftF9},
+	"\x1b[21;2~": {Type: KeyShiftF10},
+	"\x1b[23;2~": {Type: KeyShiftF11},
+	"\x1b[24;2~": {Type: KeyShiftF12},
 
+	"\x1b[1;4P":  {Type: KeyShiftF1, Alt: true},
+	"\x1b[1;4Q":  {Type: KeyShiftF2, Alt: true},
+	"\x1b[1;4R":  {Type: KeyShiftF3, Alt: true},
+	"\x1b[1;4S":  {Type: KeyShiftF4, Alt: true},
+	"\x1b[15;4~": {Type: KeyShiftF5, Alt: true},
+	"\x1b[17;4~": {Type: KeyShiftF6, Alt: true},
+	"\x1b[18;4~": {Type: KeyShiftF7, Alt: true},
+	"\x1b[19;4~": {Type: KeyShiftF8, Alt: true},
+	"\x1b[20;4~": {Type: KeyShiftF9, Alt: true},
+	"\x1b[21;4~": {Type: KeyShiftF10, Alt: true},
+	"\x1b[23;4~": {Type: KeyShiftF11, Alt: true},
+	"\x1b[24;4~": {Type: KeyShiftF12, Alt: true},
+
+	// F13..F20 as vt220/rxvt/Linux-console codes. Those terminals send these
+	// for Shift+F3..F10 (rxvt, Linux console) or for real F13..F20 keys
+	// (vt220), so the meaning depends on the terminal and they are left as
+	// F13..F20 rather than guessed at.
 	"\x1b[25~": {Type: KeyF13}, // vt100, xterm, also urxvt
 	"\x1b[26~": {Type: KeyF14}, // vt100, xterm, also urxvt
 
 	"\x1b[25;3~": {Type: KeyF13, Alt: true}, // vt100, xterm
 	"\x1b[26;3~": {Type: KeyF14, Alt: true}, // vt100, xterm
 
-	"\x1b[1;2R": {Type: KeyF15},
-	"\x1b[1;2S": {Type: KeyF16},
-
 	"\x1b[28~": {Type: KeyF15}, // vt100, xterm, also urxvt
 	"\x1b[29~": {Type: KeyF16}, // vt100, xterm, also urxvt
 
 	"\x1b[28;3~": {Type: KeyF15, Alt: true}, // vt100, xterm
 	"\x1b[29;3~": {Type: KeyF16, Alt: true}, // vt100, xterm
-
-	"\x1b[15;2~": {Type: KeyF17},
-	"\x1b[17;2~": {Type: KeyF18},
-	"\x1b[18;2~": {Type: KeyF19},
-	"\x1b[19;2~": {Type: KeyF20},
 
 	"\x1b[31~": {Type: KeyF17},
 	"\x1b[32~": {Type: KeyF18},

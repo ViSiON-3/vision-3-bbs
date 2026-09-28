@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -268,30 +267,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case modeKeyAdd:
 			return m.updateKeyAdd(msg)
 		}
-
-	default:
-		if m.mode == modeList && isRawSequence(msg, xtermShiftF10) {
-			m.untagAll()
-		}
 	}
 	return m, nil
-}
-
-// xtermShiftF10 is what xterm and the terminals that copy it send for
-// Shift+F10. The vendored bubbletea has no key for it (its F-key table stops at
-// F20, which xterm's Shift+F8 already uses), so it arrives as an unrecognised
-// CSI sequence rather than a tea.KeyMsg.
-const xtermShiftF10 = "\x1b[21;2~"
-
-// isRawSequence reports whether msg is an unrecognised input sequence carrying
-// exactly the bytes seq. bubbletea reports those as an unexported []byte type,
-// so it is matched by shape rather than by name.
-func isRawSequence(msg tea.Msg, seq string) bool {
-	v := reflect.ValueOf(msg)
-	if !v.IsValid() || v.Kind() != reflect.Slice || v.Type().Elem().Kind() != reflect.Uint8 {
-		return false
-	}
-	return string(v.Bytes()) == seq
 }
 
 // --- List Mode ---
@@ -419,13 +396,12 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clampScroll()
 		return m, nil
 	default:
-		// Shifted function keys have no "shift+fN" name in the vendored
-		// bubbletea: xterm-style terminals send Shift+F1..F8 as the codes it
-		// names f13..f20 (Shift+F2 is "\x1b[1;2Q", reported as f14). The
-		// "shift+fN" spellings are kept for any key source that produces them.
-		// Shift+F10 from xterm arrives as a raw sequence; see Update. f20 is
-		// Shift+F10 on the Linux console and rxvt, and untagging is harmless
-		// where it means Shift+F8 instead.
+		// Shifted function keys are matched by their "shift+fN" names only.
+		// The vendored bubbletea reports those for sequences that carry an
+		// explicit Shift modifier (xterm's ESC[1;2Q, ESC[21;2~, ...) and for
+		// Shift on the Windows console. The rxvt/Linux-console codes it
+		// reports as f13..f20 mean different Shift+F keys on different
+		// terminals, so they are deliberately not bound to anything here.
 		switch msg.String() {
 		case "left":
 			if m.listType > 1 {
@@ -435,7 +411,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.listType < 4 {
 				m.listType++
 			}
-		case "f14", "shift+f2":
+		case "shift+f2":
 			// Mass delete tagged
 			tagCount := m.taggedCount()
 			if tagCount == 0 {
@@ -445,7 +421,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeMassDelete
 			m.confirmYes = false
 			return m, nil
-		case "f16", "shift+f4":
+		case "shift+f4":
 			// Mass purge all deleted users
 			deletedCount := m.deletedCount()
 			if deletedCount == 0 {
@@ -455,7 +431,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeMassPurge
 			m.confirmYes = false
 			return m, nil
-		case "f17", "shift+f5":
+		case "shift+f5":
 			// Mass validate tagged
 			tagCount := m.taggedCount()
 			if tagCount == 0 {
@@ -465,7 +441,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeMassValidate
 			m.confirmYes = false
 			return m, nil
-		case "f20", "shift+f10":
+		case "shift+f10":
 			m.untagAll()
 			return m, nil
 		case "/":

@@ -51,6 +51,30 @@ The `charmbracelet-bubbletea` copy is the matching fork at the same upstream tag
 its Windows input path (`inputreader_windows.go`, `key_windows.go`) relies on
 `coninput` so it pairs with the x/term fallback above.
 
+## Local modification: shifted function keys (#476)
+
+Upstream v1 decodes xterm's shifted function keys as F13–F20
+(`ESC[1;2P`..`S` → f13–f16, `ESC[15;2~`, `ESC[17;2~`..`ESC[19;2~` → f17–f20),
+which collides with rxvt/PuTTY/Linux-console codes `ESC[25~`..`ESC[34~` that
+also decode as f13–f20 but mean Shift+F3..F10 there. It does not decode
+Shift+F9..F12 (`ESC[20;2~`..`ESC[24;2~`) at all.
+
+`charmbracelet-bubbletea` adds, without changing any upstream constant value:
+
+- **`key.go`:** `KeyShiftF1`..`KeyShiftF12` (appended after `KeyF20`), named
+  `"shift+f1"`..`"shift+f12"`, and sequence entries mapping to them:
+  - `ESC[1;2P`/`Q`/`R`/`S` and SS3 `ESC O2P`/`Q`/`R`/`S` → Shift+F1..F4
+  - `ESC[15;2~`, `ESC[17;2~`..`ESC[21;2~`, `ESC[23;2~`, `ESC[24;2~` → Shift+F5..F12
+  - the same with modifier `4` (`ESC[1;4P`, `ESC[15;4~`, ...) → Shift+Fn with `Alt`
+
+  The ambiguous `ESC[25~`..`ESC[34~` codes still decode as `KeyF13`..`KeyF20`.
+- **`key_windows.go`:** `VK_F1`..`VK_F12` with Shift held report
+  `KeyShiftF1`..`KeyShiftF12` (new `shiftFKey` helper).
+- **`key_shift_fkeys_test.go`:** table test over the raw sequences.
+
+When re-vendoring, re-apply these hunks (or drop them if upstream grows an
+equivalent, e.g. v2's modifier bitmask, and move callers to it).
+
 ## Upgrading upstream
 
 These `replace` copies pin specific upstream versions, so `go get -u` will **not**
