@@ -114,7 +114,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	newSubject := generateReplySubject(currentMsg.Subject)
 	if strings.TrimSpace(newSubject) == "" {
 		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplySubjectEmpty), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return ""
 	}
 
@@ -154,13 +154,13 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	if editErr != nil {
 		slog.Error("editor failed", "node", nodeNumber, "error", editErr)
 		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgEditorError), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return ""
 	}
 
 	if !saved {
 		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplyCancelled), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return ""
 	}
 
@@ -183,14 +183,14 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplyError), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 	} else {
 		currentUser.MessagesPosted++
 		if err := userManager.UpdateUser(currentUser); err != nil {
 			slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte(e.Strings().MsgReplySuccess), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		*totalMsgCount++
 	}
 	return ""
@@ -221,7 +221,7 @@ func handleThread(reader *bufio.Reader, e *MenuExecutor, terminal *term.Terminal
 		}
 		msg := fmt.Sprintf(e.Strings().MsgNoThreadFound, dir)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 	}
 }
 
@@ -276,7 +276,7 @@ func handleJump(reader *bufio.Reader, terminal *term.Terminal, outputMode ansi.O
 	num, parseErr := strconv.Atoi(input)
 	if parseErr != nil || num < 1 || num > totalMsgs {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(invalidMsgStr)), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return
 	}
 
@@ -299,5 +299,5 @@ func displayReaderHelp(terminal *term.Terminal, outputMode ansi.OutputMode, isSy
 	help += "|08" + strings.Repeat("-", 40) + "|07\r\n"
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(help)), outputMode)
-	time.Sleep(2 * time.Second)
+	uiPause(2 * time.Second)
 }

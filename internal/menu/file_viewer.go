@@ -55,7 +55,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	currentAreaID := currentUser.CurrentFileAreaID
 	if currentAreaID <= 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", currentUser, "", nil
 	}
 
@@ -79,7 +79,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	if err != nil {
 		msg := fmt.Sprintf(e.Strings().FileNotFoundFormat, filename)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", currentUser, "", nil
 	}
 
@@ -87,7 +87,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	if err != nil {
 		slog.Error("failed to get path for file", "node", nodeNumber, "id", record.ID, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileLocateError)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", currentUser, "", nil
 	}
 
@@ -163,7 +163,7 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 	if err != nil {
 		slog.Error("failed to get path for file", "id", record.ID, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileLocateError)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return
 	}
 
@@ -194,7 +194,7 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 	if statErr == nil && fi.Size() > maxTextFilePagingBytes {
 		slog.Warn("file too large for text paging, refusing to load", "file", filePath, "bytes", fi.Size())
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(openError)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return
 	}
 
@@ -202,7 +202,7 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 	if err != nil {
 		slog.Error("failed to open file", "file", filePath, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(openError)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return
 	}
 

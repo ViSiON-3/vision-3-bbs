@@ -35,7 +35,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	currentAreaID := currentUser.CurrentFileAreaID
 	if currentAreaID <= 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -60,7 +60,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	if err != nil {
 		msg := fmt.Sprintf(e.Strings().FileNotFoundFormat, filename)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 

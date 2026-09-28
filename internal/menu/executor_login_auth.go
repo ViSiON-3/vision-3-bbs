@@ -38,8 +38,8 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 		if wErr != nil {
 			slog.Error("failed writing already logged in message", "error", wErr)
 		}
-		time.Sleep(1 * time.Second) // Pause after failed attempt
-		return nil, "", nil         // No user change, no error
+		uiPause(1 * time.Second) // Pause after failed attempt
+		return nil, "", nil      // No user change, no error
 	}
 
 	// Define approximate coordinates (MODIFY THESE based on LOGIN.ANS)
@@ -143,7 +143,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 			if wErr != nil {
 				slog.Error("failed writing IP lockout message", "error", wErr)
 			}
-			time.Sleep(2 * time.Second)
+			uiPause(2 * time.Second)
 			return nil, "", nil
 		}
 	}
@@ -170,8 +170,8 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 		if wErr != nil {
 			slog.Error("failed writing login incorrect message", "error", wErr)
 		}
-		time.Sleep(1 * time.Second) // Pause after failed attempt
-		return nil, "", nil         // Failed auth, but not a critical error. Let LOGIN menu handle retries.
+		uiPause(1 * time.Second) // Pause after failed attempt
+		return nil, "", nil      // Failed auth, but not a critical error. Let LOGIN menu handle retries.
 	}
 
 	// A new user who owes the SysOp the required introduction message is sent
@@ -201,7 +201,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 		if wErr != nil {
 			slog.Error("failed writing access denied message", "error", wErr)
 		}
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Insufficient level, treat as failed login
 	}
 
@@ -218,7 +218,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
 	// successMsg := "\r\n|10Login successful!|07\r\n"
 	// terminal.Write(ansi.ReplacePipeCodes([]byte(successMsg)))
-	// time.Sleep(500 * time.Millisecond)
+	// uiPause(500 * time.Millisecond)
 
 	// Return the authenticated user object!
 	return authUser, "", nil

@@ -53,14 +53,14 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 			slog.Warn("COMPOSEMSG called without user and without args", "node", nodeNumber)
 			msg := "\r\n|01Error: Not logged in and no area specified.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil // Return to menu
 		}
 		if currentUser.CurrentMessageAreaTag == "" || currentUser.CurrentMessageAreaID <= 0 {
 			slog.Warn("COMPOSEMSG called but no current message area is set", "node", nodeNumber, "handle", currentUser.Handle)
 			msg := "\r\n|01Error: No current message area selected.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil // Return to menu
 		}
 		areaTag = currentUser.CurrentMessageAreaTag
@@ -78,7 +78,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		slog.Error("COMPOSEMSG called with invalid area tag", "node", nodeNumber, "tag", areaTag)
 		msg := fmt.Sprintf("\r\n|01Invalid message area: %s|07\r\n", areaTag)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Return to menu, not an error
 	}
 
@@ -87,7 +87,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		slog.Warn("COMPOSEMSG reached ACS check without logged in user", "node", nodeNumber, "tag", areaTag)
 		msg := "\r\n|01Error: You must be logged in to post messages.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Return to menu
 	}
 
@@ -95,7 +95,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if !checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime) {
 		slog.Warn("user denied post access to area", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag, "acs", area.ACSWrite)
 		// TODO: Display user-friendly error message (e.g., Access Denied String)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Return to menu, not an error
 	}
 
@@ -115,7 +115,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		}
 		slog.Error("failed reading title input", "node", nodeNumber, "error", ferr)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading title.\r\n"), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Return to menu
 	}
 	if aborted {
@@ -138,7 +138,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		}
 		slog.Error("failed reading 'to' input", "node", nodeNumber, "error", ferr)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nError reading recipient.\r\n"), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 	if aborted {
@@ -243,14 +243,14 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if !saved {
 		slog.Info("user aborted message composition", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nMessage aborted.\r\n"), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Return to current menu
 	}
 
 	if strings.TrimSpace(body) == "" {
 		slog.Info("user saved empty message", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nMessage body empty. Aborting post.\r\n"), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Return to current menu
 	}
 
@@ -273,7 +273,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		slog.Error("failed to save message", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag, "error", err)
 		errorMsg := ansi.ReplacePipeCodes([]byte("\r\n|01Error saving message!|07\r\n"))
 		terminalio.WriteProcessedBytes(terminal, errorMsg, outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return nil, "", fmt.Errorf("failed saving message: %w", err)
 	}
 
@@ -287,7 +287,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	slog.Info("user posted message", "node", nodeNumber, "handle", currentUser.Handle, "num", msgNum, "tag", area.Tag)
 	confirmMsg := ansi.ReplacePipeCodes([]byte("\r\n|02Message Posted!|07\r\n"))
 	terminalio.WriteProcessedBytes(terminal, confirmMsg, outputMode)
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 
 	return nil, "", nil
 }

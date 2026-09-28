@@ -118,5 +118,5 @@ func (p *areaLightbarPicker[T]) redrawChangedRows(prevSelectedIndex int) error {
 func (p *areaLightbarPicker[T]) showConfirm(msg string) {
 	line := ansi.MoveCursor(p.hintRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(msg)))
 	_ = terminalio.WriteProcessedBytes(p.terminal, []byte(line), p.outputMode)
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 }

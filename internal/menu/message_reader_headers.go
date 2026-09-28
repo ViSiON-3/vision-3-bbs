@@ -136,7 +136,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("failed to load MSGHDR.BAR", "node", nodeNumber, "error", err)
 		msg := "\r\n|01Error loading MSGHDR.BAR!|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -144,7 +144,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("no options in MSGHDR.BAR", "node", nodeNumber)
 		msg := "\r\n|01No message header options found!|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -175,7 +175,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("no valid message header templates found", "node", nodeNumber)
 		msg := "\r\n|01No valid message header templates!|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -189,7 +189,7 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("failed to load MSGHDR.ANS", "node", nodeNumber, "error", err)
 		msg := "\r\n|01MSGHDR.ANS not found! Please notify SysOp.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 

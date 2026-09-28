@@ -52,7 +52,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -72,13 +72,13 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	if err != nil {
 		slog.Error("failed to build QWK packet", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error building QWK packet.|07\r\n")), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return currentUser, "", nil
 	}
 
 	if res.MessageCount == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07No new messages to download.|07\r\n")), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -158,7 +158,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		svc.CommitExport(currentUser.Handle, res)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|10QWK packet sent successfully.|07\r\n")), outputMode)
 	}
-	time.Sleep(2 * time.Second)
+	uiPause(2 * time.Second)
 
 	return currentUser, "", nil
 }
@@ -179,7 +179,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -222,7 +222,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	repPath := findREPFile(incomingDir, bbsID)
 	if repPath == "" {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01No REP packet received.|07\r\n")), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -251,24 +251,24 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	if err != nil {
 		if errors.Is(err, qwkservice.ErrWrongBBS) {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01This REP packet is addressed to another BBS.|07\r\n")), outputMode)
-			time.Sleep(2 * time.Second)
+			uiPause(2 * time.Second)
 			return currentUser, "", nil
 		}
 		slog.Error("failed to process REP", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error processing REP packet.|07\r\n")), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return currentUser, "", nil
 	}
 
 	if importRes.Duplicate > 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07This packet was already uploaded - nothing posted.|07\r\n")), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return currentUser, "", nil
 	}
 
 	if importRes.Posted+importRes.Skipped == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07REP packet contains no messages.|07\r\n")), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -284,7 +284,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 
 	statusMsg := strings.ReplaceAll(e.Strings().TotalQWKAdded, "|TO", fmt.Sprintf("%d", posted))
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+statusMsg+"\r\n")), outputMode)
-	time.Sleep(2 * time.Second)
+	uiPause(2 * time.Second)
 
 	return currentUser, "", nil
 }

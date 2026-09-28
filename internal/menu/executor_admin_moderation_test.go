@@ -40,8 +40,7 @@ func modLogField(logs []user.AdminActivityLog, target int, field string) (user.A
 
 // TestSysopCommandsRefuseNonSysop pins that every sysop-only moderation
 // command refuses a regular caller with "Access denied." and changes nothing
-// on disk. The handlers sleep a second on refusal, so the cases run in
-// parallel, each on its own env.
+// on disk. Each case runs on its own env.
 func TestSysopCommandsRefuseNonSysop(t *testing.T) {
 	for _, cmd := range []string{"BANUSER", "DELETEUSER", "UNVALIDATEUSER", "PURGEUSERS", "ADMINLISTUSERS", "VALIDATEUSER", "TOGGLEALLOWNEWUSERS"} {
 		t.Run(cmd, func(t *testing.T) {

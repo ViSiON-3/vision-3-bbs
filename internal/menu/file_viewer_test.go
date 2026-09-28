@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 	"github.com/google/uuid"
 )
@@ -208,6 +210,197 @@ func TestViewFileByRecord_RegistrationExists(t *testing.T) {
 	if _, ok := registry["TYPE_TEXT_FILE"]; !ok {
 		t.Error("TYPE_TEXT_FILE not registered in command registry")
 	}
+}
+
+// addFileWithContent adds a record named name to areaID of env's file
+// manager and writes content to its on-disk path, returning the record ID.
+func addFileWithContent(t *testing.T, env *menuEnv, areaID int, name string, content []byte) uuid.UUID {
+	t.Helper()
+	id := uuid.New()
+	if err := env.e.FileMgr.AddFileRecord(file.FileRecord{
+		ID: id, AreaID: areaID, Filename: name, Description: "desc of " + name,
+		Size: int64(len(content)), UploadedAt: time.Date(2026, 5, 6, 7, 8, 0, 0, time.UTC), UploadedBy: "Sysop",
+	}); err != nil {
+		t.Fatalf("AddFileRecord: %v", err)
+	}
+	p, err := env.e.FileMgr.GetFilePath(id)
+	if err != nil {
+		t.Fatalf("GetFilePath: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// zipBytes builds an in-memory zip archive holding the named entries.
+func zipBytes(t *testing.T, entries map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range entries {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestViewFileShowsTextFile pins VIEW_FILE on a plain text file: the name is
+// matched case-insensitively in the current area and the file is shown
+// between the viewing header and end-of-file marker.
+func TestViewFileShowsTextFile(t *testing.T) {
+	env := newMenuEnv(t)
+	addFileWithContent(t, env, 1, "README.TXT", []byte("first line\nsecond line\n"))
+	env.caller.CurrentFileAreaID = 1
+
+	r := env.runCmd("VIEW_FILE", env.caller, "", "readme.txt\r\r")
+	if r.err != nil || r.user != env.caller {
+		t.Fatalf("result = (%v, %v)", r.user, r.err)
+	}
+	if !r.has("Viewing: README.TXT", "first line", "second line", "End of File") {
+		t.Errorf("text file not shown:\n%s", r.text())
+	}
+}
+
+// TestViewFilePagesLongFile pins that a file longer than the screen stops
+// at a More prompt: Q there ends the listing before the end-of-file marker,
+// and Space/Enter page on through to it.
+func TestViewFilePagesLongFile(t *testing.T) {
+	env := newMenuEnv(t)
+	var sb strings.Builder
+	for i := 1; i <= 60; i++ {
+		fmt.Fprintf(&sb, "row %02d\n", i)
+	}
+	addFileWithContent(t, env, 1, "LONG.TXT", []byte(sb.String()))
+	env.caller.CurrentFileAreaID = 1
+
+	r := env.runCmd("VIEW_FILE", env.caller, "", "LONG.TXT\rq")
+	if !r.has("row 01", "MORE") || r.has("End of File") {
+		t.Errorf("Q at the More prompt should stop paging:\n%s", r.text())
+	}
+
+	r = env.runCmd("VIEW_FILE", env.caller, "", "LONG.TXT\r"+strings.Repeat(" ", 20)+"\r")
+	if n := strings.Count(r.text(), "MORE"); n < 2 || !r.has("End of File") {
+		t.Errorf("paging through: %d More prompts, want several, then the end:\n%s", n, r.text())
+	}
+}
+
+// TestViewFileListsArchive pins that VIEW_FILE on a zip shows the archive's
+// entries through ZipLab rather than dumping the bytes.
+func TestViewFileListsArchive(t *testing.T) {
+	env := newMenuEnv(t)
+	addFileWithContent(t, env, 1, "PACK.ZIP", zipBytes(t, map[string]string{"INSIDE.DOC": "hello"}))
+	env.caller.CurrentFileAreaID = 1
+
+	r := env.run(runViewFile, env.caller, "", "PACK.ZIP\rQ\r")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("INSIDE.DOC", "ZipLab") {
+		t.Errorf("archive listing missing:\n%s", r.text())
+	}
+}
+
+// TestViewFilePromptEdgeCases pins VIEW_FILE's early exits: no user, no
+// area selected, a blank name, an unknown name, and a disconnect.
+func TestViewFilePromptEdgeCases(t *testing.T) {
+	env := newMenuEnv(t)
+	addFileWithContent(t, env, 1, "README.TXT", []byte("x\n"))
+
+	if r := env.runCmd("VIEW_FILE", nil, "", "README.TXT\r"); r.user != nil || r.raw != "" {
+		t.Errorf("no user: user=%v output=%q, want nothing", r.user, r.raw)
+	}
+
+	r := env.runCmd("VIEW_FILE", env.caller, "", "README.TXT\r")
+	if !strings.Contains(r.text(), stripPipes(env.e.Strings().FileNoAreaSelected)) {
+		t.Errorf("no area: missing notice:\n%s", r.text())
+	}
+
+	env.caller.CurrentFileAreaID = 1
+	if r := env.runCmd("VIEW_FILE", env.caller, "", "\r"); r.user != env.caller || r.has("Viewing") {
+		t.Errorf("blank name should just return:\n%s", r.text())
+	}
+	r = env.runCmd("VIEW_FILE", env.caller, "", "NOPE.TXT\r")
+	if !r.has("NOPE.TXT") || r.has("Viewing") {
+		t.Errorf("unknown file: want not-found notice:\n%s", r.text())
+	}
+	if r := env.runCmd("VIEW_FILE", env.caller, "", ""); r.next != "LOGOFF" {
+		t.Errorf("disconnect: next = %q, want LOGOFF", r.next)
+	}
+}
+
+// TestTypeTextFileShowsFileAsText pins TYPE_TEXT_FILE: even an archive is
+// typed out raw with paging rather than listed through ZipLab.
+func TestTypeTextFileShowsFileAsText(t *testing.T) {
+	env := newMenuEnv(t)
+	addFileWithContent(t, env, 1, "NOTES.TXT", []byte("typed content\n"))
+	addFileWithContent(t, env, 1, "PACK.ZIP", zipBytes(t, map[string]string{"INSIDE.DOC": "hello"}))
+	env.caller.CurrentFileAreaID = 1
+
+	r := env.runCmd("TYPE_TEXT_FILE", env.caller, "", "notes.txt\r\r")
+	if !r.has("Viewing: NOTES.TXT", "typed content", "End of File") {
+		t.Errorf("text not typed:\n%s", r.text())
+	}
+	r = env.runCmd("TYPE_TEXT_FILE", env.caller, "", "PACK.ZIP\rq")
+	if r.has("ZipLab") || !r.has("Viewing: PACK.ZIP", "PK") {
+		t.Errorf("archive should be typed raw, not listed:\n%s", r.text())
+	}
+	if r := env.runCmd("TYPE_TEXT_FILE", env.caller, "", "\r"); r.has("Viewing") {
+		t.Errorf("blank name should just return:\n%s", r.text())
+	}
+}
+
+// TestViewFileByRecordMissingPath pins that viewing a record whose area has
+// vanished reports the locate error instead of opening anything.
+func TestViewFileByRecordMissingPath(t *testing.T) {
+	env := newMenuEnv(t)
+	rec := &file.FileRecord{ID: uuid.New(), AreaID: 99, Filename: "GONE.TXT"}
+	r := env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
+		viewFileByRecord(c.e, c.s, c.terminal, rec, c.outputMode, 80, 0)
+		return nil, "", nil
+	}, env.caller, "", "")
+	if !strings.Contains(r.text(), stripPipes(env.e.Strings().FileLocateError)) {
+		t.Errorf("missing locate error:\n%s", r.text())
+	}
+}
+
+// TestDisplayTextWithPagingRefusesHugeFile pins the 4 MB guard: an oversized
+// file is refused with the open error rather than read into memory.
+func TestDisplayTextWithPagingRefusesHugeFile(t *testing.T) {
+	env := newMenuEnv(t)
+	p := filepath.Join(t.TempDir(), "big.txt")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(maxTextFilePagingBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	r := env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
+		displayTextWithPaging(c.s, c.terminal, p, "big.txt", c.outputMode, 24, "Viewing %s", "EOF", "More", "Pause", "OPEN ERROR")
+		return nil, "", nil
+	}, env.caller, "", "")
+	if !r.has("OPEN ERROR") || r.has("Viewing") {
+		t.Errorf("huge file not refused:\n%s", r.text())
+	}
+}
+
+// stripPipes renders a configured string's pipe codes and strips the
+// resulting escapes, giving the plain text a session shows for it.
+func stripPipes(s string) string {
+	return strings.TrimSpace(testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(s))), ""))
 }
 
 // TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly drives the real

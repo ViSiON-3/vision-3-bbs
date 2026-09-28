@@ -32,7 +32,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to select a message area.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 

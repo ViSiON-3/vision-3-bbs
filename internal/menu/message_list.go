@@ -34,7 +34,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	if currentUser == nil {
 		slog.Warn("LISTMSGS called without logged in user", "node", nodeNumber)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -42,7 +42,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	currentAreaID := currentUser.CurrentMessageAreaID
 	if currentAreaID == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListNoAreaSelected)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -50,7 +50,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	area, found := e.MessageMgr.GetAreaByID(currentAreaID)
 	if !found {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListAreaNotFound)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -67,14 +67,14 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	if err != nil {
 		slog.Error("failed to build message list", "node", nodeNumber, "error", err)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListLoadError)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	// Check if area is empty
 	if len(entries) == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListNoMessages)), outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -205,7 +205,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 			// Handle empty area after deletions
 			if state.TotalMessages == 0 {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListNoMessages)), outputMode)
-				time.Sleep(2 * time.Second)
+				uiPause(2 * time.Second)
 				return currentUser, "", nil
 			}
 

@@ -40,7 +40,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 		if wErr != nil {
 			slog.Error("failed writing login required message", "node", nodeNumber, "error", wErr)
 		}
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Return to menu
 	}
 
@@ -60,7 +60,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 		slog.Error("failed to load one or more MSGAREA template files for prompt", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := "\r\n|01Error loading Message Area screen templates.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading MSGAREA templates for prompt")
 	}
 
@@ -77,7 +77,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 		slog.Debug("no message areas available to post in", "node", nodeNumber)
 		noAreasMsg := ansi.ReplacePipeCodes([]byte("\r\n|07No message areas available.|07\r\n"))
 		terminalio.WriteProcessedBytes(terminal, noAreasMsg, outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Return to menu
 	}
 
@@ -123,7 +123,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 	if selectedAreaStr == "" {
 		slog.Info("user cancelled message posting", "node", nodeNumber)
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\nPost cancelled.\r\n"), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return nil, "", nil // Return to current menu
 	}
 
@@ -149,7 +149,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 		// TODO: Use configurable string
 		msg := fmt.Sprintf("\r\n|01Invalid area: %s|07\r\n", selectedAreaStr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		// TODO: Need to redraw menu
 		return nil, "", nil // Return to menu
 	}
@@ -160,7 +160,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 		// TODO: Use configurable string for access denied
 		msg := fmt.Sprintf("\r\n|01Access denied to post in area: %s|07\r\n", selectedArea.Name)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		// TODO: Need to redraw menu
 		return nil, "", nil // Return to menu
 	}

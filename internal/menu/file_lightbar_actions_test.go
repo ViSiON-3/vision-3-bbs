@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 )
 
 // newTestFileManagerWithRecord builds a real *file.FileManager with a single
@@ -85,5 +86,116 @@ func TestCollectTaggedPaths_Mixed(t *testing.T) {
 
 	if failCount != 2 {
 		t.Errorf("failCount = %d, want 2 (unknown ID + missing-from-disk known ID)", failCount)
+	}
+}
+
+// TestFileLightbarViewsSelectedFile pins "v": a text file is paged out and
+// an archive is listed through ZipLab, each returning to the list after.
+func TestFileLightbarViewsSelectedFile(t *testing.T) {
+	env := lightbarListEnv(t)
+	addFileWithContent(t, env, 1, "A.TXT", []byte("text body here\n"))
+	addFileWithContent(t, env, 1, "B.ZIP", zipBytes(t, map[string]string{"PACKED.NFO": "x"}))
+
+	r := env.runCmd("LISTFILES", env.caller, "", "v\rq")
+	if !r.has("Viewing: A.TXT", "text body here", "End of File") {
+		t.Errorf("text view missing:\n%s", r.text())
+	}
+	r = env.run(runListFiles, env.caller, "", "\x1b[BvQ\rq")
+	if !r.has("PACKED.NFO") {
+		t.Errorf("archive listing missing:\n%s", r.text())
+	}
+	if r.next != "" || r.err != nil {
+		t.Errorf("quit after view: next=%q err=%v", r.next, r.err)
+	}
+}
+
+// TestFileLightbarSpaceMarkPersists pins that Space marks the selected file
+// and saves the mark, and a second Space unmarks and saves again.
+func TestFileLightbarSpaceMarkPersists(t *testing.T) {
+	env := lightbarListEnv(t)
+	ids := addDownloadRecords(t, env, "ONE.ZIP", "TWO.ZIP")
+
+	env.runCmd("LISTFILES", env.caller, "", "\x1b[B q")
+	if saved := env.mustDiskUser(env.caller.ID); len(saved.TaggedFileIDs) != 1 || saved.TaggedFileIDs[0] != ids[1] {
+		t.Errorf("saved tags = %v, want [%v]", saved.TaggedFileIDs, ids[1])
+	}
+	env.runCmd("LISTFILES", env.caller, "", "\x1b[B q")
+	if saved := env.mustDiskUser(env.caller.ID); len(saved.TaggedFileIDs) != 0 {
+		t.Errorf("saved tags = %v, want none after unmarking", saved.TaggedFileIDs)
+	}
+}
+
+// TestFileLightbarDownloadFlow pins "d": nothing marked explains how to mark;
+// No at the confirm keeps marks; no protocols keeps marks too; confirming a
+// batch whose files are missing on disk fails them all and clears the marks.
+func TestFileLightbarDownloadFlow(t *testing.T) {
+	env := lightbarListEnv(t)
+	ids := addDownloadRecords(t, env, "GHOST.ZIP")
+
+	if r := env.runCmd("LISTFILES", env.caller, "", "dq"); !r.has("No files marked for download.") {
+		t.Errorf("nothing marked:\n%s", r.text())
+	}
+
+	env.caller.TaggedFileIDs = ids
+	r := env.runCmd("LISTFILES", env.caller, "", "dNq")
+	if !r.has("Download 1 marked file(s)?") || len(env.caller.TaggedFileIDs) != 1 {
+		t.Errorf("decline: tags=%v\n%s", env.caller.TaggedFileIDs, r.text())
+	}
+
+	if r := env.runCmd("LISTFILES", env.caller, "", "d"); r.next != "LOGOFF" {
+		t.Errorf("disconnect at confirm: next = %q, want LOGOFF", r.next)
+	}
+
+	r = env.runCmd("LISTFILES", env.caller, "", "dYq")
+	if !r.has("Could not find any of the marked files", "Success: 0, Failed: 1.") {
+		t.Errorf("missing-file outcome:\n%s", r.text())
+	}
+	if saved := env.mustDiskUser(env.caller.ID); len(saved.TaggedFileIDs) != 0 {
+		t.Errorf("saved tags = %v, want cleared", saved.TaggedFileIDs)
+	}
+}
+
+// TestFileLightbarDownloadProtocolStep pins the lightbar's protocol step for
+// files that are on disk: with no protocols it fails them, and Q at the
+// protocol menu cancels; neither runs a transfer or credits a download.
+func TestFileLightbarDownloadProtocolStep(t *testing.T) {
+	env := lightbarListEnv(t)
+	id := addFileWithContent(t, env, 1, "REAL.ZIP", []byte("zip-ish"))
+
+	env.caller.TaggedFileIDs = []uuid.UUID{id}
+	env.e.SetProtocols(nil)
+	r := env.runCmd("LISTFILES", env.caller, "", "dYq")
+	if !r.has("No transfer protocols configured", "Success: 0, Failed: 1.") {
+		t.Errorf("no protocols:\n%s", r.text())
+	}
+
+	env.caller.TaggedFileIDs = []uuid.UUID{id}
+	env.e.SetProtocols([]transfer.ProtocolConfig{{Key: "Z", Name: "Zmodem", SendCmd: "/nonexistent/sz", Default: true}})
+	r = env.runCmd("LISTFILES", env.caller, "", "dYQ\rq")
+	if !r.has("Transfer Protocols:", "Download cancelled.", "Success: 0, Failed: 0.") {
+		t.Errorf("protocol cancel:\n%s", r.text())
+	}
+	if saved := env.mustDiskUser(env.caller.ID); saved.NumDownloads != 0 {
+		t.Errorf("downloads = %d, want 0", saved.NumDownloads)
+	}
+
+	env.caller.TaggedFileIDs = []uuid.UUID{id}
+	if r := env.runCmd("LISTFILES", env.caller, "", "dY"); r.next != "LOGOFF" {
+		t.Errorf("disconnect at protocol menu: next = %q, want LOGOFF", r.next)
+	}
+}
+
+// TestFileLightbarUploadCancels pins "u": the sysop reaches the upload start
+// prompt and Q there returns to the list with no transfer and no new file.
+func TestFileLightbarUploadCancels(t *testing.T) {
+	env := lightbarListEnv(t)
+	env.e.SetProtocols([]transfer.ProtocolConfig{{Key: "Z", Name: "Zmodem", RecvCmd: "/nonexistent/rz", Default: true}})
+
+	r := env.runCmd("LISTFILES", env.sysop, "", "u\rQ\rq")
+	if !r.has("Uploading to: General Files", "Press ENTER to begin") {
+		t.Errorf("upload prompt missing:\n%s", r.text())
+	}
+	if n, _ := env.e.FileMgr.GetFileCountForArea(1); n != 0 {
+		t.Errorf("area has %d files after cancel", n)
 	}
 }

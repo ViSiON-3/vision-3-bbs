@@ -41,7 +41,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to read private mail.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -51,7 +51,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("PRIVMAIL area not found", "node", nodeNumber)
 		msg := "\r\n|01Error: Private mail area not configured.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -61,7 +61,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("JAM base not open for PRIVMAIL area", "node", nodeNumber, "error", err)
 		msg := "\r\n|01Error: Private mail base not available.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 	defer func() {
@@ -76,14 +76,14 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("failed to get message count for PRIVMAIL", "node", nodeNumber, "error", err)
 		msg := "\r\n|01Error loading private mail.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", err
 	}
 
 	if totalMessages == 0 {
 		msg := "\r\n|07No private mail found.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -111,14 +111,14 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	if len(privateMessages) == 0 {
 		msg := "\r\n|07No private mail found for you.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	// Display count and read messages using the message reader
 	confirmMsg := fmt.Sprintf("\r\n|02Found %d private message(s) for you.|07\r\n", len(privateMessages))
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(confirmMsg)), outputMode)
-	time.Sleep(500 * time.Millisecond)
+	uiPause(500 * time.Millisecond)
 
 	// Temporarily set current area to PRIVMAIL for the message reader
 	originalAreaID := currentUser.CurrentMessageAreaID
@@ -187,7 +187,7 @@ func runListPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to list private mail.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -197,7 +197,7 @@ func runListPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("PRIVMAIL area not found", "node", nodeNumber)
 		msg := "\r\n|01Error: Private mail area not configured.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
