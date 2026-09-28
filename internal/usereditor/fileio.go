@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
@@ -186,9 +187,21 @@ func CloneUser(u *user.User) *user.User {
 		c.TaggedMessageAreaTags = make([]string, len(u.TaggedMessageAreaTags))
 		copy(c.TaggedMessageAreaTags, u.TaggedMessageAreaTags)
 	}
+	// PublicKeys in particular must not share a backing array: removing a key
+	// shifts the slice in place, which would rewrite the copy F10 restores.
+	c.PublicKeys = slices.Clone(u.PublicKeys)
+	c.TaggedFileAreaIDs = slices.Clone(u.TaggedFileAreaIDs)
+	c.TaggedFileAreaTags = slices.Clone(u.TaggedFileAreaTags)
+	c.SeenNewscanNetworks = slices.Clone(u.SeenNewscanNetworks)
+	c.SeenNewscanAreaTags = slices.Clone(u.SeenNewscanAreaTags)
+	c.SeenNewsIDs = slices.Clone(u.SeenNewsIDs)
 	if u.DeletedAt != nil {
 		t := *u.DeletedAt
 		c.DeletedAt = &t
+	}
+	if u.FileNewscanSince != nil {
+		t := *u.FileNewscanSince
+		c.FileNewscanSince = &t
 	}
 	return &c
 }
