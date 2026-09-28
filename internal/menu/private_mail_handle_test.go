@@ -252,3 +252,41 @@ func TestSendPrivMailRefusesDeletedUser(t *testing.T) {
 		t.Errorf("no not-found notice:\n%s", r.text())
 	}
 }
+
+// TestPrivateReplyHandleAccountBeatsAnonymousName pins that a real account
+// whose handle is spelled like the anonymous signature is still answerable:
+// private mail is signed by handle, so that account sent it. Without such an
+// account the name is an anonymous post and the reply is refused.
+func TestPrivateReplyHandleAccountBeatsAnonymousName(t *testing.T) {
+	um := user.NewUserMgrForTest(
+		&user.User{ID: 1, Handle: "Sysop"},
+		&user.User{ID: 2, Handle: "Anonymous Coward"},
+	)
+	for _, tc := range []struct {
+		from, want string
+		ok         bool
+	}{
+		{"Anonymous Coward", "Anonymous Coward", true}, // an account's handle
+		{"Anonymous", "", false},                       // no such account: anonymous post
+		{"", "", false},
+	} {
+		msg := &message.DisplayMessage{From: tc.from, To: "Sysop", IsPrivate: true}
+		got, _, ok := privateReplyHandle(um, msg, "Sysop", "Anonymous Coward")
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("From %q: got (%q, %v), want (%q, %v)", tc.from, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// TestReplyAddresseeTreatsDirectAreasAsNetmail pins that replyAddressee uses
+// the same netmail classification as the rest of the reader, so a reply in a
+// "direct" (or differently cased netmail) area keeps its FTN address.
+func TestReplyAddresseeTreatsDirectAreasAsNetmail(t *testing.T) {
+	msg := &message.DisplayMessage{From: "Remote Guy", OrigAddr: "21:1/100"}
+	for _, typ := range []string{"netmail", "NetMail", "direct"} {
+		area := &message.MessageArea{AreaType: typ}
+		if _, to := replyAddressee(area, msg); to != "Remote Guy@21:1/100" {
+			t.Errorf("area type %q: reply to = %q, want Remote Guy@21:1/100", typ, to)
+		}
+	}
+}

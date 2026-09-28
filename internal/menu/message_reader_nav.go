@@ -33,7 +33,7 @@ import (
 // this system, so the reply follows the parent to its addressee instead of
 // looping back here.
 func replyAddressee(area *message.MessageArea, msg *message.DisplayMessage) (name, to string) {
-	if area == nil || area.AreaType != "netmail" {
+	if !isNetmailArea(area) {
 		return msg.From, msg.From
 	}
 
@@ -66,18 +66,26 @@ func privateReplyHandle(um *user.UserMgr, msg *message.DisplayMessage, replier, 
 	if replier != "" && strings.EqualFold(name, strings.TrimSpace(replier)) {
 		name = strings.TrimSpace(msg.To)
 	}
-	// COMPOSEMSG signs anonymous posts with the configured name, or
-	// "Anonymous" when none is set.
+	if name == "" {
+		return "", "The sender of this message is anonymous, so it cannot be answered privately.", false
+	}
+	// An account's handle wins, even one spelled like the anonymous name:
+	// private mail is signed by handle, so that is who sent it.
+	if um != nil && um.HandleExists(name) {
+		if u, found := um.ResolveRecipient(name); found {
+			return u.Handle, "", true
+		}
+		return "", fmt.Sprintf("%s no longer has an account here, so the reply could not be sent.", name), false
+	}
+	// Otherwise a name matching the anonymous signature is an anonymous post:
+	// COMPOSEMSG signed those with the configured name, or "Anonymous".
 	anon := strings.TrimSpace(anonymousName)
-	if name == "" || strings.EqualFold(name, "Anonymous") || (anon != "" && strings.EqualFold(name, anon)) {
+	if strings.EqualFold(name, "Anonymous") || (anon != "" && strings.EqualFold(name, anon)) {
 		return "", "The sender of this message is anonymous, so it cannot be answered privately.", false
 	}
 	if um != nil {
 		if u, found := um.ResolveRecipient(name); found {
 			return u.Handle, "", true
-		}
-		if um.HandleExists(name) {
-			return "", fmt.Sprintf("%s no longer has an account here, so the reply could not be sent.", name), false
 		}
 	}
 	return "", fmt.Sprintf("Can't tell which user '%s' is, so the reply could not be sent.", name), false

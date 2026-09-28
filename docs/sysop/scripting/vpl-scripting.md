@@ -478,7 +478,8 @@ whose handle is on it, so outside netmail areas `to` must name an existing,
 non-deleted user: their handle, their real name (if no other user shares it),
 or `"Sysop"` for user #1. The message is stored addressed to that user's
 handle, and `postPrivate` throws if `to` matches no user or more than one. In a
-netmail area `to` is stored as given (`"Name@zone:net/node"`).
+netmail area `to` is not resolved: pass `"Name@zone:net/node"`, and the message
+is stored with `to` set to `Name` and the destination address `zone:net/node`.
 
 ```javascript
 // Post a public message
