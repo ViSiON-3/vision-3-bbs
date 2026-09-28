@@ -13,6 +13,9 @@ import (
 // StepNumber maps to the original ZipLab step numbering (1-7, skip 4).
 type StepNumber int
 
+// Pipeline step numbers, in the order RunPipeline runs them. They are also
+// the step numbers ZIPLAB.NFO uses to place each step's status indicator.
+// Number 4 is unused.
 const (
 	StepIntegrity  StepNumber = 1
 	StepExtract    StepNumber = 2

@@ -1,3 +1,10 @@
+// Package stringeditor is the full-screen Bubble Tea editor for the BBS's
+// customizable prompt and message strings (strings.json), modelled on the
+// original ViSiON/2 STRINGS.EXE. New builds the Model that the ./strings
+// command runs; it lists every string in the catalog (StringEntries) with a
+// live color preview, and lets the sysop edit, search, restore factory
+// defaults and save. RenderColorString and PlainTextLength, which render and
+// measure pipe-coded text, are also used by the menu editor.
 package stringeditor
 
 import (

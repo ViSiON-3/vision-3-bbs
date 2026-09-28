@@ -1,3 +1,9 @@
+// Package transfer runs file transfers between the BBS and a caller by
+// driving external protocol programs (lrzsz, sexyz and the like) over the
+// caller's SSH or telnet session. ProtocolConfig describes a sysop-defined
+// protocol loaded by LoadProtocols; ExecuteSend and ExecuteReceive run it,
+// while RunCommandDirect and RunCommandWithPTY handle the binary-safe piping
+// between the session and the child process.
 package transfer
 
 import (
@@ -79,6 +85,10 @@ func LoadProtocols(path string) ([]ProtocolConfig, error) {
 	return protocols, nil
 }
 
+// FindProtocol returns the protocol whose Key matches key, ignoring case, and
+// true. When nothing matches it returns DefaultProtocol(ps) and false, so the
+// caller gets a usable fallback (the zero ProtocolConfig if ps is empty) and
+// can tell that the requested key was not found.
 func FindProtocol(ps []ProtocolConfig, key string) (ProtocolConfig, bool) {
 	u := strings.ToUpper(key)
 	for _, p := range ps {

@@ -1,3 +1,10 @@
+// Package editor is the full-screen message editor used when a caller
+// writes a post, reply, private mail or auto-signature. RunEditorWithMetadata
+// is the entry point: it sizes an FSEditor to the caller's PTY, draws the
+// FSEDITOR.ANS header and FSEDITORF.ANS footer from the menu set, and edits a
+// MessageBuffer of up to MaxLines lines with word wrap, WordStar-style keys,
+// an Escape command menu, and a split-pane quote picker. It returns the
+// finished text and whether the caller chose to save it.
 package editor
 
 import (

@@ -13,8 +13,13 @@ import (
 // ConferenceKind classifies how a QWK conference maps to a local area.
 type ConferenceKind string
 
+// Conference kinds, stored in each ConferenceMapEntry. The kind decides how
+// messages in the conference are exported and how replies to it are posted.
 const (
-	KindPublic      ConferenceKind = "public"
+	// KindPublic is an ordinary message area; replies are posted publicly.
+	KindPublic ConferenceKind = "public"
+	// KindPrivateMail is the PRIVMAIL area, always conference 0; only mail
+	// to or from the caller is exported, and replies are posted as private messages.
 	KindPrivateMail ConferenceKind = "private_mail"
 )
 

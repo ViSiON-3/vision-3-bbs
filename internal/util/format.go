@@ -1,3 +1,5 @@
+// Package util holds small formatting helpers shared across the BBS that do
+// not belong to any one feature package.
 package util
 
 import "fmt"

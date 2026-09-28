@@ -1,3 +1,10 @@
+// Package ziplab processes archives uploaded to the file areas, after the
+// ZipLab utility from the DOS BBS era. A Processor (NewProcessor) runs the
+// sysop-enabled pipeline steps on each upload: integrity test, extraction,
+// virus scan, FILE_ID.DIZ capture and ad removal, adding a ZIP comment and
+// including a BBS advert file. DisplayPipeline animates progress on the
+// ZIPLAB.ANS screen using coordinates parsed from ZIPLAB.NFO, and
+// RunZipLabView lets callers browse and extract from an archive online.
 package ziplab
 
 import (
