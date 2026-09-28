@@ -129,12 +129,9 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		return nil, "", nil
 	}
 
-	// 3. Prompt for To (24 chars, default "All")
-	toPrompt := e.Strings().MsgToStr
-	if toPrompt == "" {
-		toPrompt = "|07To: |15"
-	}
-	val, aborted, ferr = e.promptComposeField(s, terminal, toPrompt, 24, "All", "'to'", outputMode, nodeNumber, termWidth, termHeight)
+	// 3. Prompt for To. Public areas default to "All"; private mail and
+	// netmail must name someone (#441).
+	toUser, toName, aborted, ferr := e.promptComposeRecipient(s, terminal, userManager, area, outputMode, nodeNumber, termWidth, termHeight)
 	if ferr != nil {
 		if errors.Is(ferr, io.EOF) {
 			return nil, "LOGOFF", io.EOF
@@ -147,10 +144,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	if aborted {
 		return nil, "", nil
 	}
-	toUser := strings.TrimSpace(val)
-	if toUser == "" {
-		toUser = "All"
-	}
+	private := composeRecipientKindFor(area) == recipientPrivate
 
 	// 4. Prompt for Anonymous (if user level >= AnonymousLevel)
 	isAnonymous := false
@@ -224,7 +218,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 
 	// No quote data for new messages
-	body, saved, err := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, subject, toUser, fromName, isAnonymous, "", "", "", "", false, nil, ih, editorCtx)
+	body, saved, err := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, subject, toName, fromName, isAnonymous, "", "", "", "", false, nil, ih, editorCtx)
 	slog.Debug("editor returned", "node", nodeNumber, "error", err, "saved", saved, "length", len(body))
 
 	if err != nil {
@@ -256,7 +250,14 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	// 8. Save the Message via JAM backend (fromName already computed above)
 
-	msgNum, err := e.MessageMgr.AddMessage(area.ID, fromName, toUser, subject, body, "")
+	// Mail in PRIVMAIL carries the private flag, or the recipient's mailbox
+	// never shows it and the area lists it to everyone.
+	var msgNum int
+	if private {
+		msgNum, err = e.MessageMgr.AddPrivateMessage(area.ID, fromName, toUser, subject, body, "")
+	} else {
+		msgNum, err = e.MessageMgr.AddMessage(area.ID, fromName, toUser, subject, body, "")
+	}
 	if err != nil {
 		slog.Error("failed to save message", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag, "error", err)
 		errorMsg := ansi.ReplacePipeCodes([]byte("\r\n|01Error saving message!|07\r\n"))

@@ -32,6 +32,8 @@ Users access private mail through the Email Menu (press `E` from the main menu):
 - **READPRIVMAIL** — Read private mail; shows only messages addressed to the current user
 - **LISTPRIVMAIL** — List private mail headers
 
+Posting with `COMPOSEMSG` while `PRIVMAIL` is the current area works the same way: the recipient must be an existing user, and the message is saved as private.
+
 ---
 
 ## Technical Reference
