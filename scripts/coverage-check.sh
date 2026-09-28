@@ -6,8 +6,9 @@
 # The gated number is statement coverage of internal/ only. cmd/ is mostly
 # main() wiring and flag parsing, and third_party/ is vendored upstream code
 # in its own modules, so neither is a useful target. Packages with no tests
-# still count: go test reports them at 0%, so adding code without tests lowers
-# the number. Both totals are printed so the whole-repo figure stays visible.
+# still count: since Go 1.22, go test -coverprofile writes zero-count blocks
+# for packages with no _test.go files (internal/jsutil is one), so adding code
+# without tests lowers the number. go.mod requires a newer Go than that. Both totals are printed so the whole-repo figure stays visible.
 #
 # The floor is a ratchet. When coverage rises, raise the floor in the same PR;
 # the script says so once it is a full point ahead. A small tolerance absorbs
