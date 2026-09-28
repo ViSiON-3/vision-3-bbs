@@ -2,6 +2,7 @@ package menueditor
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,6 +43,7 @@ func (m Model) updateCommandList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyEnter:
 		if total > 0 {
+			m.beginCmdEdit()
 			m.cmdEditIdx = m.cmdCursor
 			m.cmdEditFld = 0
 			m.mode = modeCommandEdit
@@ -55,7 +57,9 @@ func (m Model) updateCommandList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.confirmYes = false
 		return m, nil
 	case tea.KeyF5:
-		// Append a new empty command and open it for editing
+		// Append a new empty command and open it for editing. The snapshot
+		// is taken first so F8 drops the new command too.
+		m.beginCmdEdit()
 		m.cmds = append(m.cmds, CmdData{})
 		m.dirtyCmds = true
 		m.cmdCursor = len(m.cmds) - 1
@@ -79,6 +83,25 @@ func (m Model) updateCommandList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // --- Command Edit Mode ---
+
+// beginCmdEdit snapshots the command list and its dirty flag as the command
+// edit screen opens, so F8 can put both back.
+func (m *Model) beginCmdEdit() {
+	m.cmdsSnapshot = slices.Clone(m.cmds)
+	m.dirtyCmdsSnapshot = m.dirtyCmds
+}
+
+// abortCmdEdit restores the command list and dirty flag captured by
+// beginCmdEdit, discarding field edits and commands added with F5.
+func (m *Model) abortCmdEdit() {
+	m.cmds = slices.Clone(m.cmdsSnapshot)
+	m.dirtyCmds = m.dirtyCmdsSnapshot
+	if m.cmdCursor >= len(m.cmds) {
+		m.cmdCursor = max(len(m.cmds)-1, 0)
+	}
+	m.cmdEditIdx = m.cmdCursor
+	m.clampCmdScroll()
+}
 
 func (m Model) updateCommandEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
@@ -133,7 +156,8 @@ func (m Model) updateCommandEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cmdCursor = m.cmdEditIdx
 		return m, nil
 	case tea.KeyF8:
-		// Abort without saving
+		// Abort without saving: drop every change made on this screen.
+		m.abortCmdEdit()
 		m.mode = modeCommandList
 		return m, nil
 	case tea.KeyEscape:

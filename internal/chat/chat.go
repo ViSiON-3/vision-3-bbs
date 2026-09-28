@@ -1,3 +1,9 @@
+// Package chat defines the multi-user chat contract used by the BBS chat
+// menus: the ChatService interface, the message, room and event types it
+// delivers, and room-name normalisation. LocalChatService is the
+// single-BBS backend, sharing rooms across the nodes of one process and
+// keeping recent history in SQLite; the V3Net leaf provides the networked
+// implementation of the same interface.
 package chat
 
 import (
@@ -27,6 +33,7 @@ type ChatMessage struct {
 // ChatEventType identifies the kind of event in a ChatEvent.
 type ChatEventType int
 
+// Chat event kinds. Each one says which field of ChatEvent is populated.
 const (
 	TypeMessage ChatEventType = iota // incoming room message
 	TypePrivate                      // private/direct message

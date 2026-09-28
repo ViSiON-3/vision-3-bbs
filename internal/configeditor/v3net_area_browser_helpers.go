@@ -230,6 +230,7 @@ func (m *Model) createBrowserMsgAreaIfNeeded(tag, name, network string) {
 		BasePath:     filepath.Join("msgbases", safeName),
 		ConferenceID: confID,
 	})
+	m.dirty = true
 }
 
 // leafAutoJoin returns the newscan-default setting for a network's leaf
@@ -263,6 +264,7 @@ func (m *Model) findOrCreateNetworkConference(network string) int {
 		Description: network + " message network",
 		ACS:         "s10",
 	})
+	m.dirty = true
 	return newID
 }
 

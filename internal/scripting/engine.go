@@ -1,7 +1,15 @@
+// Package scripting runs Vision/3 (V3) scripts: JavaScript programs, executed
+// in the embedded goja interpreter, that act as doors inside a caller's
+// session. NewEngine builds a per-session Engine and exposes the BBS to the
+// script through a global v3 object (console I/O, ANSI display, session and
+// user details, message and file areas, node list, sandboxed file access and
+// persistent data); Engine.Run executes a script file. The menu package's
+// V3 script door handler is the caller.
 package scripting
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -41,11 +49,16 @@ type readResult struct {
 	err  error
 }
 
-// NewEngine creates a new V3 scripting engine for the given session.
-// Providers may be nil for console-only scripts.
 // defaultMaxRunTime is the maximum execution time for a script if not configured.
 const defaultMaxRunTime = 30 * time.Minute
 
+// NewEngine creates a new V3 scripting engine for the given session and
+// registers the v3 API namespaces in a fresh goja runtime. The engine's
+// context is ctx limited to cfg.MaxRunTime (30 minutes when unset); when it
+// ends, running JavaScript is interrupted. providers may be nil for
+// console-only scripts; namespaces whose backing manager is nil (user,
+// message, file, nodes) are simply not registered. The caller must Close the
+// engine when the script finishes.
 func NewEngine(ctx context.Context, session *SessionContext, cfg ScriptConfig, providers *Providers) *Engine {
 	maxRunTime := cfg.MaxRunTime
 	if maxRunTime <= 0 {
@@ -111,7 +124,11 @@ func (eng *Engine) Run(scriptPath string) error {
 
 	_, err = eng.vm.RunScript(scriptPath, string(data))
 	if err != nil {
-		if isExitPanic(err) {
+		if code, ok := exitStatus(err); ok {
+			if code != 0 {
+				slog.Info("V3 script exited with non-zero code",
+					"path", scriptPath, "node", eng.session.NodeNumber, "code", code)
+			}
 			return nil
 		}
 		if eng.ctx.Err() != nil {
@@ -170,7 +187,13 @@ func (eng *Engine) registerGlobals() {
 		if len(call.Arguments) > 0 {
 			code = int(call.Arguments[0].ToInteger())
 		}
-		panic(eng.vm.ToValue(exitCode{code: code}))
+		// Interrupt rather than throw: goja delivers an interrupt as an
+		// uncatchable *goja.InterruptedError at the next instruction
+		// boundary, so try/catch cannot swallow exit() and Run can tell a
+		// clean exit apart from a script error. Returning undefined lets the
+		// runtime reach that boundary.
+		eng.vm.Interrupt(exitCode{code: code})
+		return goja.Undefined()
 	})
 }
 
@@ -377,16 +400,19 @@ func skipCSI(data []byte) int {
 	return len(data)
 }
 
-// isExitPanic checks if an error is from a clean exit() call.
-// Other interrupts (context timeout, disconnect) should not be treated as clean exits.
-func isExitPanic(err error) bool {
-	if ex, ok := err.(*goja.InterruptedError); ok {
-		if _, isExit := ex.Value().(exitCode); isExit {
-			return true
-		}
-		return false
+// exitStatus reports whether err is the interrupt raised by a clean exit()
+// call, and if so the exit code the script passed. Other interrupts (context
+// timeout, disconnect) are not clean exits.
+func exitStatus(err error) (int, bool) {
+	var ie *goja.InterruptedError
+	if !errors.As(err, &ie) {
+		return 0, false
 	}
-	return false
+	ec, ok := ie.Value().(exitCode)
+	if !ok {
+		return 0, false
+	}
+	return ec.code, true
 }
 
 func toUpperASCII(s string) string {

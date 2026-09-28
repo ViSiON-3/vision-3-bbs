@@ -7,7 +7,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"io"
 	"os"
-	"strings"
 )
 
 // PackResult contains statistics from a Pack operation.
@@ -87,7 +86,8 @@ func (b *Base) Pack() (PackResult, error) {
 	return b.packWithReplyIDCleanup(false)
 }
 
-// PackWithReplyIDCleanup performs a pack operation while cleaning malformed ReplyIDs.
+// PackWithReplyIDCleanup performs a pack operation while cleaning malformed
+// ReplyIDs; see CleanReplyID for what counts as malformed.
 func (b *Base) PackWithReplyIDCleanup() (PackResult, error) {
 	return b.packWithReplyIDCleanup(true)
 }
@@ -230,10 +230,7 @@ func (b *Base) packWithReplyIDCleanup(cleanReplyIDs bool) (PackResult, error) {
 		if cleanReplyIDs {
 			for i := range hdr.Subfields {
 				if hdr.Subfields[i].LoID == SfldReplyID {
-					replyID := string(hdr.Subfields[i].Buffer)
-					if parts := strings.Fields(replyID); len(parts) > 1 {
-						// Clean the ReplyID by taking only the first token
-						cleanedReplyID := parts[0]
+					if cleanedReplyID, malformed := CleanReplyID(string(hdr.Subfields[i].Buffer)); malformed {
 						hdr.Subfields[i].Buffer = []byte(cleanedReplyID)
 						hdr.Subfields[i].DatLen = uint32(len(cleanedReplyID))
 						hdr.REPLYcrc = CRC32String(cleanedReplyID)

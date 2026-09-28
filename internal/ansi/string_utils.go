@@ -109,6 +109,7 @@ func PadVisible(s string, width int, padChar rune) string {
 // Alignment specifies how a value is positioned within its field width.
 type Alignment int
 
+// Alignments used by ApplyWidthConstraintAligned and editor placeholders.
 const (
 	AlignLeft   Alignment = iota // Pad right (default)
 	AlignRight                   // Pad left

@@ -127,7 +127,8 @@ func (m Model) updateMenuEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.confirmYes = false
 		return m, nil
 	case tea.KeyF5:
-		// Add new menu
+		// Save current, then prompt for the new menu's filename
+		m.saveCurrentMenu()
 		m.textInput.SetValue("")
 		m.textInput.Placeholder = "NEWMENU"
 		m.textInput.CharLimit = 8
@@ -263,14 +264,12 @@ func (m Model) updateAddMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeMenuList
 			return m, nil
 		}
-		// Reload menus and jump to the new one
-		menus, err := LoadMenus(m.set)
-		if err != nil {
+		// Reload menus, keeping unsaved edits, and jump to the new one
+		if err := m.reloadMenus(); err != nil {
 			m.message = fmt.Sprintf("Reload error: %v", err)
 			m.mode = modeMenuList
 			return m, nil
 		}
-		m.menus = menus
 		// Find the new menu's index
 		for i, me := range m.menus {
 			if me.Name == name {

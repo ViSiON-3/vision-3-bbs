@@ -1,3 +1,8 @@
+// Package telnetserver accepts raw telnet connections and presents each one
+// to the BBS as a gliderlabs/ssh.Session, so the same session handler serves
+// both SSH and telnet callers. Server listens and negotiates options,
+// TelnetConn handles the IAC protocol layer (NAWS, TERM_TYPE, 0xFF escaping),
+// and TelnetSessionAdapter wraps the connection in the ssh.Session interface.
 package telnetserver
 
 import (
@@ -25,6 +30,8 @@ type TelnetSessionContext struct {
 	values     map[interface{}]interface{}
 }
 
+// Value implements context.Context. Values stored with SetValue take
+// precedence over those of the parent context.
 func (c *TelnetSessionContext) Value(key interface{}) interface{} {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -34,54 +41,78 @@ func (c *TelnetSessionContext) Value(key interface{}) interface{} {
 	return c.ctx.Value(key)
 }
 
+// Deadline implements context.Context; telnet sessions have no deadline, so
+// ok is always false.
 func (c *TelnetSessionContext) Deadline() (deadline time.Time, ok bool) {
 	return c.ctx.Deadline()
 }
 
+// Done implements context.Context. The channel is closed when the owning
+// TelnetSessionAdapter is closed.
 func (c *TelnetSessionContext) Done() <-chan struct{} {
 	return c.ctx.Done()
 }
 
+// Err implements context.Context; it returns context.Canceled once the
+// session has been closed and nil before that.
 func (c *TelnetSessionContext) Err() error {
 	return c.ctx.Err()
 }
 
+// Lock implements the sync.Locker part of ssh.Context. It takes the same
+// mutex that guards Value and SetValue, so do not call those while holding it.
 func (c *TelnetSessionContext) Lock() {
 	c.mu.Lock()
 }
 
+// Unlock implements the sync.Locker part of ssh.Context, releasing the lock
+// taken by Lock.
 func (c *TelnetSessionContext) Unlock() {
 	c.mu.Unlock()
 }
 
+// User implements ssh.Context. It always returns "" because telnet carries
+// no username, which sends the caller through the manual login flow.
 func (c *TelnetSessionContext) User() string {
 	return "" // Telnet has no username - forces manual login
 }
 
+// SessionID implements ssh.Context, returning the "telnet-<nanos>-<n>"
+// identifier assigned by NewTelnetSessionAdapter.
 func (c *TelnetSessionContext) SessionID() string {
 	return c.sessionID
 }
 
+// ClientVersion implements ssh.Context; it always returns "telnet".
 func (c *TelnetSessionContext) ClientVersion() string {
 	return "telnet"
 }
 
+// ServerVersion implements ssh.Context; it always returns "vision3-telnet".
 func (c *TelnetSessionContext) ServerVersion() string {
 	return "vision3-telnet"
 }
 
+// RemoteAddr implements ssh.Context, returning the caller's address captured
+// when the session was created.
 func (c *TelnetSessionContext) RemoteAddr() net.Addr {
 	return c.remoteAddr
 }
 
+// LocalAddr implements ssh.Context, returning the listener-side address
+// captured when the session was created.
 func (c *TelnetSessionContext) LocalAddr() net.Addr {
 	return c.localAddr
 }
 
+// Permissions implements ssh.Context; it always returns nil since telnet has
+// no SSH authentication step.
 func (c *TelnetSessionContext) Permissions() *ssh.Permissions {
 	return nil
 }
 
+// SetValue implements ssh.Context, storing a session-scoped value that Value
+// returns in preference to the parent context. It is safe for concurrent use.
 func (c *TelnetSessionContext) SetValue(key, value interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

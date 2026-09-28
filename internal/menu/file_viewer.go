@@ -238,13 +238,18 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 4096), 4096)
 
+	var lineBuf []byte
 	for scanner.Scan() {
-		line := scanner.Bytes()
+		// Copy the line before adding CRLF: scanner.Bytes() is a view into the
+		// scanner's buffer, so appending to it in place would overwrite the
+		// start of the next line.
+		lineBuf = append(lineBuf[:0], scanner.Bytes()...)
+		lineBuf = append(lineBuf, '\r', '\n')
 		// Write directly: data is already in the correct encoding
 		// (UTF-8 after ConvertCP437ToUTF8, or raw CP437 for CP437 terminals).
 		// Going through WriteProcessedBytes would re-interpret the bytes and
 		// produce '?' for byte pairs that form false UTF-8 sequences.
-		_, _ = terminal.Write(append(line, '\r', '\n')) // best-effort display
+		_, _ = terminal.Write(lineBuf) // best-effort display
 		lineCount++
 
 		if lineCount >= linesPerPage {

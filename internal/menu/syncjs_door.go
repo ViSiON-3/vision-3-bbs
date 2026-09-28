@@ -89,6 +89,12 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 
 	runErr := eng.Run(cfg.Script)
 
+	// Run the js.on_exit handlers while session input is still live. Closing
+	// the read interrupt first would make the input copier see EOF and cancel
+	// the engine context, so handlers would see js.terminated on a normal
+	// door exit and could not read a final keypress.
+	eng.RunExitHandlers()
+
 	// Interrupt the copier goroutine's blocked Read() so it exits without
 	// consuming the user's next keypress, then close the engine.
 	close(readInterrupt)

@@ -1,3 +1,12 @@
+// Package syncjs runs JavaScript doors written for Synchronet BBS, in the
+// embedded goja interpreter, inside a caller's session. It emulates the parts
+// of Synchronet's JavaScript object model those doors rely on: the console,
+// bbs, user, system, server and client objects, the File and Queue classes,
+// load()/require() module resolution against Synchronet's exec and library
+// directories, and Ctrl-A attribute codes. NewEngine builds a per-session
+// Engine from a SessionContext and SyncJSDoorConfig, and Engine.Run executes
+// the door's script; the menu package's Synchronet JS door handler is the
+// caller.
 package syncjs
 
 import (
@@ -8,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
@@ -30,9 +40,16 @@ type Engine struct {
 	execDirStack []string
 	execDirMu    sync.Mutex
 
+	// Context watcher lifecycle: closing watchStop asks watchContext to
+	// return; watchDone is closed once it has. See stopWatcher.
+	watchStop     chan struct{}
+	watchDone     chan struct{}
+	watchStopOnce sync.Once
+
 	// Exit handlers registered via js.on_exit()
 	exitHandlers []goja.Callable
 	exitCodes    []string // JS code strings to eval on exit
+	exitOnce     sync.Once
 
 	// Input: interposed pipe reader feeds rawInputCh; inputBuf holds parsed leftovers
 	inputBuf   []byte
@@ -62,6 +79,8 @@ func NewEngine(ctx context.Context, session *SessionContext, cfg SyncJSDoorConfi
 		cancel:       cancel,
 		currentAttr:  7, // default: light gray on black
 		execDirStack: []string{cfg.WorkingDir + string(filepath.Separator)},
+		watchStop:    make(chan struct{}),
+		watchDone:    make(chan struct{}),
 	}
 
 	// Set up interrupt checking — allows context cancellation to halt JS execution
@@ -109,34 +128,95 @@ func (eng *Engine) Run(scriptPath string) error {
 	return nil
 }
 
-// Close runs exit handlers and cleans up the engine.
-func (eng *Engine) Close() {
-	// Run callable exit handlers in reverse order
+// exitHandlerBudget bounds the total wall-clock time the js.on_exit handlers
+// (functions and code strings together) may run. When it expires the engine
+// context is cancelled — unblocking any handler waiting on input — the running
+// handler is interrupted, and any handlers not yet started are skipped. It is
+// a variable so tests can shorten it.
+var exitHandlerBudget = 5 * time.Second
+
+// RunExitHandlers runs the js.on_exit handlers once, in reverse registration
+// order: callable handlers first, then code strings (Synchronet behavior).
+// Later calls, including the one made by Close, are no-ops.
+//
+// A door should call it after Run returns and before stopping session input
+// (closing its read interrupt), so handlers still see a live session and a
+// normal door end is not reported to them as a disconnect via js.terminated.
+//
+// Handlers run with the context watcher stopped and any pending interrupt
+// cleared, so a cancellation from exit(), a disconnect or input shutdown
+// cannot abort them part-way. They are bounded by exitHandlerBudget instead.
+func (eng *Engine) RunExitHandlers() {
+	eng.exitOnce.Do(eng.runExitHandlers)
+}
+
+func (eng *Engine) runExitHandlers() {
+	// Stop and join the watcher first: once it has returned, no
+	// Interrupt(ErrTerminated) can arrive for an earlier cancellation. Then
+	// drop one it may already have delivered while the VM was idle.
+	eng.stopWatcher()
+	eng.vm.ClearInterrupt()
+
+	if len(eng.exitHandlers) == 0 && len(eng.exitCodes) == 0 {
+		return
+	}
+
+	finished := make(chan struct{})
+	budgetDone := make(chan struct{})
+	var expired atomic.Bool
+	go func() {
+		defer close(budgetDone)
+		timer := time.NewTimer(exitHandlerBudget)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			expired.Store(true)
+			eng.cancel()
+			eng.vm.Interrupt(ErrTerminated)
+		case <-finished:
+		}
+	}()
+	defer func() {
+		close(finished)
+		<-budgetDone
+		eng.vm.ClearInterrupt()
+	}()
+
+	run := func(kind string, fn func() error) {
+		if expired.Load() {
+			return
+		}
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Warn(kind+" panic", "panic", r)
+			}
+		}()
+		if err := fn(); err != nil {
+			slog.Warn(kind+" error", "error", err)
+		}
+	}
 	for i := len(eng.exitHandlers) - 1; i >= 0; i-- {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Warn("exit handler panic", "panic", r)
-				}
-			}()
-			if _, err := eng.exitHandlers[i](goja.Undefined()); err != nil {
-				slog.Warn("exit handler error", "error", err)
-			}
-		}()
+		run("exit handler", func() error {
+			_, err := eng.exitHandlers[i](goja.Undefined())
+			return err
+		})
 	}
-	// Eval string exit codes in reverse order (Synchronet behavior)
 	for i := len(eng.exitCodes) - 1; i >= 0; i-- {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Warn("exit code eval panic", "panic", r)
-				}
-			}()
-			if _, err := eng.vm.RunString(eng.exitCodes[i]); err != nil {
-				slog.Warn("exit code eval error", "error", err)
-			}
-		}()
+		run("exit code eval", func() error {
+			_, err := eng.vm.RunString(eng.exitCodes[i])
+			return err
+		})
 	}
+	if expired.Load() {
+		slog.Warn("exit handlers exceeded their time budget; remaining handlers skipped",
+			"budget", exitHandlerBudget)
+	}
+}
+
+// Close runs exit handlers (if RunExitHandlers has not already) and cleans up
+// the engine.
+func (eng *Engine) Close() {
+	eng.RunExitHandlers()
 	// Stop the reader goroutines by closing the pipe. The caller should
 	// close a SetReadInterrupt channel before calling Close() so the
 	// copier goroutine's blocked session.Read() returns immediately.
@@ -174,10 +254,22 @@ func (eng *Engine) Close() {
 	eng.cancel()
 }
 
-// watchContext monitors the context and interrupts the JS runtime on cancellation.
+// watchContext monitors the context and interrupts the JS runtime on
+// cancellation, until stopWatcher is called.
 func (eng *Engine) watchContext() {
-	<-eng.ctx.Done()
-	eng.vm.Interrupt(ErrTerminated)
+	defer close(eng.watchDone)
+	select {
+	case <-eng.ctx.Done():
+		eng.vm.Interrupt(ErrTerminated)
+	case <-eng.watchStop:
+	}
+}
+
+// stopWatcher stops watchContext and waits for it to return, so no further
+// context-driven interrupt can reach the VM afterwards.
+func (eng *Engine) stopWatcher() {
+	eng.watchStopOnce.Do(func() { close(eng.watchStop) })
+	<-eng.watchDone
 }
 
 // --- I/O helpers used by console and other objects ---

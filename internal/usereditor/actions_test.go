@@ -23,20 +23,6 @@ func three(t *testing.T) (Model, string) {
 	return press(t, m, tea.WindowSizeMsg{Width: 80, Height: 25}), path
 }
 
-// saveAndQuit leaves the editor through the "save changes?" prompt, failing
-// unless that quits.
-func saveAndQuit(t *testing.T, m Model) {
-	t.Helper()
-	m = press(t, m, key(tea.KeyEscape))
-	if m.mode != modeExitConfirm {
-		t.Fatalf("Escape: mode = %v, want modeExitConfirm", m.mode)
-	}
-	m, cmd := send(t, m, char('y'))
-	if !quits(cmd) {
-		t.Fatalf("saving on exit did not quit; message = %q", m.message)
-	}
-}
-
 // Deleting a user is a soft delete: it moves them under the DELETED USERS
 // separator, offers a purge, and declining the purge keeps the record. Saved
 // and reloaded, the user is still there and marked deleted.
@@ -185,26 +171,20 @@ func TestF5QuickValidates(t *testing.T) {
 	}
 }
 
-// The Shift-F bindings are matched by name ("shift+f2" etc.), which a real
-// terminal never sends; see named(). This covers the handlers only. With nothing
-// tagged, the mass actions refuse with a message instead of opening a prompt,
-// and "untag all" clears the tags.
+// With nothing tagged, the mass actions refuse with a message instead of
+// opening a prompt. Keys are the ones bubbletea reports for xterm's Shift+F2,
+// Shift+F5 and Shift+F4 (f14, f17, f16).
 func TestMassActionsNeedTags(t *testing.T) {
 	m, _ := three(t)
-	for _, k := range []string{"shift+f2", "shift+f5"} {
-		m = press(t, m, named(k))
+	for _, k := range []tea.KeyType{tea.KeyF14, tea.KeyF17} {
+		m = press(t, m, key(k))
 		if m.mode != modeList || !strings.Contains(m.message, "not tagged anyone") {
 			t.Errorf("%s with no tags: mode=%v message=%q", k, m.mode, m.message)
 		}
 	}
-	m = press(t, m, named("shift+f4"))
+	m = press(t, m, key(tea.KeyF16))
 	if m.mode != modeList || m.message != "No deleted users to purge." {
 		t.Errorf("shift+f4 with none deleted: mode=%v message=%q", m.mode, m.message)
-	}
-
-	m = press(t, m, key(tea.KeyF10), named("shift+f10"))
-	if m.taggedCount() != 0 {
-		t.Errorf("shift+f10 left %d tagged", m.taggedCount())
 	}
 }
 
@@ -213,7 +193,7 @@ func TestMassActionsNeedTags(t *testing.T) {
 func TestMassValidateTagged(t *testing.T) {
 	m, path := three(t)
 	m = press(t, m, key(tea.KeyDown), key(tea.KeySpace), key(tea.KeySpace)) // tag Bob, Carol
-	m = press(t, m, named("shift+f5"))
+	m = press(t, m, key(tea.KeyF17))
 	if !strings.Contains(stripANSIGolden(m.View()), "Set All Tagged (2) Users") {
 		t.Error("mass-validate prompt does not give the tag count")
 	}
@@ -239,7 +219,7 @@ func TestMassPurgeRemovesAllDeleted(t *testing.T) {
 	if m.deletedCount() != 2 {
 		t.Fatalf("setup: %d deleted, want 2", m.deletedCount())
 	}
-	m = press(t, m, named("shift+f4"))
+	m = press(t, m, key(tea.KeyF16))
 	if !strings.Contains(stripANSIGolden(m.View()), "purge 2 deleted user(s)") {
 		t.Error("mass-purge prompt does not give the count")
 	}
@@ -260,7 +240,7 @@ func TestMassPurgeRemovesAllDeleted(t *testing.T) {
 // tags.
 func TestMassDeleteSingleTagged(t *testing.T) {
 	m, _ := three(t)
-	m = press(t, m, key(tea.KeyEnd), key(tea.KeySpace), named("shift+f2"))
+	m = press(t, m, key(tea.KeyEnd), key(tea.KeySpace), key(tea.KeyF14))
 	if !strings.Contains(stripANSIGolden(m.View()), "Delete All Tagged (1) Users?") {
 		t.Error("mass-delete prompt does not give the tag count")
 	}

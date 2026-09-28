@@ -207,8 +207,8 @@ func TestCmdPurgeAllUsesAreaLimits(t *testing.T) {
 	}
 }
 
-// fix passes a healthy base, and --repair rewrites malformed (multi-token)
-// ReplyIDs down to their first token.
+// fix passes a healthy base, and --repair cuts a malformed ReplyID (more
+// than "address serial") back to its first two tokens.
 func TestCmdFix(t *testing.T) {
 	dir := t.TempDir()
 	good := seedBase(t, filepath.Join(dir, "good"), seedMsg{subject: "a"}, seedMsg{subject: "b"})
@@ -225,11 +225,11 @@ func TestCmdFix(t *testing.T) {
 		seedMsg{subject: "parent", msgID: "21:1/100 0000abcd"},
 		seedMsg{subject: "child", replyID: "21:1/100 0000abcd junk"})
 	out, _ = capture(t, func() { cmdFix([]string{"--repair", bad}) })
-	wantContains(t, "fix --repair", out, `REPAIR: Cleaned ReplyID "21:1/100 0000abcd junk" -> "21:1/100"`,
+	wantContains(t, "fix --repair", out, `REPAIR: Cleaned ReplyID "21:1/100 0000abcd junk" -> "21:1/100 0000abcd"`,
 		"REPAIR: Rebuilt message base with cleaned ReplyIDs", "Cleaned 1 malformed ReplyIDs")
 	msg, err := openBase(t, bad).ReadMessage(2)
-	if err != nil || msg.ReplyID != "21:1/100" {
-		t.Errorf("repaired ReplyID = %q, %v; want 21:1/100", msg.ReplyID, err)
+	if err != nil || msg.ReplyID != "21:1/100 0000abcd" {
+		t.Errorf("repaired ReplyID = %q, %v; want 21:1/100 0000abcd", msg.ReplyID, err)
 	}
 }
 

@@ -2,7 +2,8 @@ package tuiart
 
 import "github.com/charmbracelet/lipgloss"
 
-// DOS CGA/VGA color palette as explicit truecolor hex values.
+// Palette is the 16-colour DOS CGA/VGA palette as explicit truecolor hex
+// values, indexed by DOS colour number (0 black through 15 white).
 //
 // These are the canonical IBM VGA RGB values for the standard 16 DOS colors.
 // We pin them to explicit hex (rather than ANSI palette indices 0-15) so the

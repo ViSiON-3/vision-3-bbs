@@ -76,7 +76,7 @@ func newTestModelEditing(u *user.User) Model {
 		mode:      modeEdit,
 		textInput: ti,
 		fields:    editFields(),
-		tagged:    make(map[int]bool),
+		tagged:    make(map[*user.User]bool),
 		width:     minWidth,
 		height:    minHeight,
 	}

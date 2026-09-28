@@ -1,3 +1,9 @@
+// Package usereditor implements the ./ue sysop user editor, a Bubble Tea TUI
+// that recreates Vision/2's UE.EXE for browsing, searching and editing the
+// accounts in users.json while the BBS may be running. New builds the Model
+// that cmd/ue runs; LoadUsers, SaveUsers and SaveUsersChecked do the file I/O,
+// using content fingerprints and a cross-process lock so a save never
+// silently overwrites changes the BBS wrote in the meantime.
 package usereditor
 
 import (
@@ -5,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -63,17 +70,23 @@ type Model struct {
 	retentionDays int // Deleted user retention days from config (-1 = never purge)
 
 	// List mode state
-	cursor       int          // Current position in user list (0-based)
-	scrollOffset int          // First visible row in the list
-	listType     int          // Column view mode (1-4)
-	listAlpha    bool         // Alphabetical sort active
-	tagged       map[int]bool // Tagged user indices (0-based)
+	cursor       int                 // Current position in user list (0-based)
+	scrollOffset int                 // First visible row in the list
+	listType     int                 // Column view mode (1-4)
+	listAlpha    bool                // Alphabetical sort active
+	tagged       map[*user.User]bool // Tagged users, by record: positions move on sort, delete and purge
 
 	// Edit mode state
 	editIndex int        // Index into users slice being edited
 	editField int        // Current field index (0-based)
 	editDirty bool       // Whether changes were made during current edit session
 	fields    []fieldDef // Field definitions
+
+	// F10 (Abort) state: the record being edited, a copy of it as it stood
+	// when the edit session began, and the model's dirty flag at that moment.
+	editTarget    *user.User
+	editOrig      *user.User
+	editBaseDirty bool
 
 	// Text input (shared for editing fields, search, password)
 	textInput textinput.Model
@@ -196,7 +209,7 @@ func New(filePath string, dataDir ...string) (Model, error) {
 		retentionDays: retDays,
 		cursor:        0,
 		listType:      1,
-		tagged:        make(map[int]bool),
+		tagged:        make(map[*user.User]bool),
 		fields:        fields,
 		textInput:     ti,
 		searchInput:   si,
@@ -255,8 +268,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case modeKeyAdd:
 			return m.updateKeyAdd(msg)
 		}
+
+	default:
+		if m.mode == modeList && isRawSequence(msg, xtermShiftF10) {
+			m.untagAll()
+		}
 	}
 	return m, nil
+}
+
+// xtermShiftF10 is what xterm and the terminals that copy it send for
+// Shift+F10. The vendored bubbletea has no key for it (its F-key table stops at
+// F20, which xterm's Shift+F8 already uses), so it arrives as an unrecognised
+// CSI sequence rather than a tea.KeyMsg.
+const xtermShiftF10 = "\x1b[21;2~"
+
+// isRawSequence reports whether msg is an unrecognised input sequence carrying
+// exactly the bytes seq. bubbletea reports those as an unexported []byte type,
+// so it is matched by shape rather than by name.
+func isRawSequence(msg tea.Msg, seq string) bool {
+	v := reflect.ValueOf(msg)
+	if !v.IsValid() || v.Kind() != reflect.Slice || v.Type().Elem().Kind() != reflect.Uint8 {
+		return false
+	}
+	return string(v.Bytes()) == seq
 }
 
 // --- List Mode ---
@@ -297,7 +332,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Open edit screen for highlighted user
 		m.editIndex = m.cursor
 		m.editField = 0
-		m.editDirty = false
+		m.beginEditSession()
 		m.mode = modeEdit
 		return m, nil
 	case tea.KeyEscape:
@@ -366,19 +401,31 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyF10:
 		// Tag all users
-		for i := range m.users {
-			m.tagged[i] = true
+		for _, u := range m.users {
+			m.tagged[u] = true
 		}
 		return m, nil
 	case tea.KeySpace:
 		// Toggle tag
-		m.tagged[m.cursor] = !m.tagged[m.cursor]
+		u := m.users[m.cursor]
+		if m.tagged[u] {
+			delete(m.tagged, u)
+		} else {
+			m.tagged[u] = true
+		}
 		if m.cursor < total-1 {
 			m.cursor++
 		}
 		m.clampScroll()
 		return m, nil
 	default:
+		// Shifted function keys have no "shift+fN" name in the vendored
+		// bubbletea: xterm-style terminals send Shift+F1..F8 as the codes it
+		// names f13..f20 (Shift+F2 is "\x1b[1;2Q", reported as f14). The
+		// "shift+fN" spellings are kept for any key source that produces them.
+		// Shift+F10 from xterm arrives as a raw sequence; see Update. f20 is
+		// Shift+F10 on the Linux console and rxvt, and untagging is harmless
+		// where it means Shift+F8 instead.
 		switch msg.String() {
 		case "left":
 			if m.listType > 1 {
@@ -388,7 +435,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.listType < 4 {
 				m.listType++
 			}
-		case "shift+f2":
+		case "f14", "shift+f2":
 			// Mass delete tagged
 			tagCount := m.taggedCount()
 			if tagCount == 0 {
@@ -398,7 +445,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeMassDelete
 			m.confirmYes = false
 			return m, nil
-		case "shift+f4":
+		case "f16", "shift+f4":
 			// Mass purge all deleted users
 			deletedCount := m.deletedCount()
 			if deletedCount == 0 {
@@ -408,7 +455,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeMassPurge
 			m.confirmYes = false
 			return m, nil
-		case "shift+f5":
+		case "f17", "shift+f5":
 			// Mass validate tagged
 			tagCount := m.taggedCount()
 			if tagCount == 0 {
@@ -418,9 +465,8 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeMassValidate
 			m.confirmYes = false
 			return m, nil
-		case "shift+f10":
-			// Untag all
-			m.tagged = make(map[int]bool)
+		case "f20", "shift+f10":
+			m.untagAll()
 			return m, nil
 		case "/":
 			// Enter search mode. Same key as ./strings, which has the same
@@ -499,7 +545,7 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.editIndex = 0
 		}
 		m.editField = 0
-		m.editDirty = false
+		m.beginEditSession()
 		return m, nil
 
 	case tea.KeyPgUp:
@@ -510,7 +556,7 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.editIndex = len(m.users) - 1
 		}
 		m.editField = 0
-		m.editDirty = false
+		m.beginEditSession()
 		return m, nil
 
 	case tea.KeyF2:
@@ -569,7 +615,9 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyF10:
 		// Abort - discard changes for this user
+		m.abortEditSession()
 		m.mode = modeList
+		m.clampScroll()
 		return m, nil
 
 	default:
@@ -1089,9 +1137,16 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		if m.confirmFromEdit {
 			idx = m.editIndex
 		}
-		m.purgeUser(idx)
+		purged := m.purgeUser(idx)
 		if m.confirmFromEdit {
 			m.mode = modeEdit
+			if len(m.users) == 0 {
+				m.mode = modeList
+			} else if purged {
+				// The purged record is gone and the screen now shows
+				// whichever user took its place: a new edit session.
+				m.beginEditSession()
+			}
 		} else {
 			m.mode = modeList
 		}
@@ -1111,16 +1166,21 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case modeMassPurge:
-		// Purge all deleted users (iterate in reverse to keep indices stable)
+		// Purge all deleted users. The targets are collected before any is
+		// removed, and each is found by record rather than by position.
+		var targets []*user.User
+		for _, u := range m.users {
+			if u.DeletedUser {
+				targets = append(targets, u)
+			}
+		}
 		purged := 0
 		failed := 0
-		for i := len(m.users) - 1; i >= 0; i-- {
-			if m.users[i].DeletedUser {
-				if m.purgeUser(i) {
-					purged++
-				} else {
-					failed++
-				}
+		for _, u := range targets {
+			if m.purgeUser(m.indexOf(u)) {
+				purged++
+			} else {
+				failed++
 			}
 		}
 		if failed > 0 {
@@ -1132,12 +1192,12 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case modeMassDelete:
-		for i := range m.users {
-			if m.tagged[i] {
-				m.softDeleteUser(i)
-			}
+		// softDeleteUser re-sorts the list, so walking it by index while
+		// deleting skips and repeats rows. Snapshot the tagged records first.
+		for _, u := range m.taggedUsers() {
+			m.softDeleteUser(m.indexOf(u))
 		}
-		m.tagged = make(map[int]bool)
+		m.untagAll()
 		m.mode = modeList
 		return m, nil
 
@@ -1155,12 +1215,10 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case modeMassValidate:
-		for i := range m.users {
-			if m.tagged[i] {
-				m.autoValidateUser(i)
-			}
+		for _, u := range m.taggedUsers() {
+			m.autoValidateUser(m.indexOf(u))
 		}
-		m.tagged = make(map[int]bool)
+		m.untagAll()
 		m.mode = modeList
 		return m, nil
 
@@ -1275,19 +1333,9 @@ func (m *Model) purgeUser(idx int) bool {
 		}
 	}
 
-	// Remove user from the list
+	// Remove user from the list, and its tag with it
 	m.users = append(m.users[:idx], m.users[idx+1:]...)
-
-	// Fix tagged indices (shift down indices above removed)
-	newTagged := make(map[int]bool)
-	for k, v := range m.tagged {
-		if k < idx {
-			newTagged[k] = v
-		} else if k > idx {
-			newTagged[k-1] = v
-		}
-	}
-	m.tagged = newTagged
+	delete(m.tagged, u)
 
 	// Clamp cursor and editIndex
 	if m.cursor >= len(m.users) {
@@ -1314,6 +1362,63 @@ func (m *Model) resortAndTrack(target *user.User) {
 			break
 		}
 	}
+}
+
+// indexOf returns u's current position in the list, or -1 if it is not there.
+func (m Model) indexOf(u *user.User) int {
+	for i, cand := range m.users {
+		if cand == u {
+			return i
+		}
+	}
+	return -1
+}
+
+// taggedUsers returns the tagged records in list order, as a snapshot that
+// stays valid while the caller re-sorts or shrinks the list.
+func (m Model) taggedUsers() []*user.User {
+	var out []*user.User
+	for _, u := range m.users {
+		if m.tagged[u] {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// untagAll clears every tag.
+func (m *Model) untagAll() {
+	m.tagged = make(map[*user.User]bool)
+}
+
+// beginEditSession starts editing m.users[m.editIndex], remembering the record
+// as it stands so abortEditSession can put it back.
+func (m *Model) beginEditSession() {
+	m.editDirty = false
+	m.editTarget, m.editOrig = nil, nil
+	if m.editIndex < 0 || m.editIndex >= len(m.users) {
+		return
+	}
+	m.editTarget = m.users[m.editIndex]
+	m.editOrig = CloneUser(m.editTarget)
+	m.editBaseDirty = m.dirty
+}
+
+// abortEditSession discards everything done to the record since its edit
+// session began, and the dirty flag with it. The record is restored in place,
+// so the list, tags and any other reference to it stay pointed at it.
+func (m *Model) abortEditSession() {
+	u, orig := m.editTarget, m.editOrig
+	m.editTarget, m.editOrig = nil, nil
+	m.editDirty = false
+	if u == nil || orig == nil || m.indexOf(u) < 0 {
+		return
+	}
+	*u = *orig
+	m.dirty = m.editBaseDirty
+	m.message = fmt.Sprintf("Changes to %s discarded", u.Handle)
+	// Abort may have undone a delete or undelete, which moves the record.
+	m.resortAndTrack(u)
 }
 
 func (m *Model) autoValidateUser(idx int) {

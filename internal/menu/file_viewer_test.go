@@ -259,9 +259,6 @@ func zipBytes(t *testing.T, entries map[string]string) []byte {
 // TestViewFileShowsTextFile pins VIEW_FILE on a plain text file: the name is
 // matched case-insensitively in the current area and the file is shown
 // between the viewing header and end-of-file marker.
-//
-// It checks only the first line: displayTextWithPaging appends CRLF into
-// the scanner's buffer (file_viewer.go:241), which blanks every later line.
 func TestViewFileShowsTextFile(t *testing.T) {
 	env := newMenuEnv(t)
 	addFileWithContent(t, env, 1, "README.TXT", []byte("first line\nsecond line\n"))
@@ -271,7 +268,7 @@ func TestViewFileShowsTextFile(t *testing.T) {
 	if r.err != nil || r.user != env.caller {
 		t.Fatalf("result = (%v, %v)", r.user, r.err)
 	}
-	if !r.has("Viewing: README.TXT", "first line", "End of File") {
+	if !r.has("Viewing: README.TXT", "first line", "second line", "End of File") {
 		t.Errorf("text file not shown:\n%s", r.text())
 	}
 }
@@ -404,4 +401,51 @@ func TestDisplayTextWithPagingRefusesHugeFile(t *testing.T) {
 // resulting escapes, giving the plain text a session shows for it.
 func stripPipes(s string) string {
 	return strings.TrimSpace(testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(s))), ""))
+}
+
+// TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly drives the real
+// session viewer (VIEW_FILE / TYPE_TEXT_FILE / file-list view). Appending CRLF
+// to scanner.Bytes() in place used to overwrite the start of the next line in
+// the scanner's buffer, so only the first line survived and the More-prompt
+// count was off (#461).
+func TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly(t *testing.T) {
+	const numLines = 12
+	var content strings.Builder
+	for i := 1; i <= numLines; i++ {
+		fmt.Fprintf(&content, "LINE-%02d text\n", i)
+	}
+	textPath := filepath.Join(t.TempDir(), "readme.txt")
+	if err := os.WriteFile(textPath, []byte(content.String()), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// termHeight 9 gives 5 lines per page, so 12 lines pause after lines 5
+	// and 10: exactly two More prompts. Space continues each, CR ends the
+	// closing pause.
+	ts := newTestSession("  \r")
+	t.Cleanup(func() { resetSessionIH(ts) })
+	terminal := newTestTerminal(ts)
+
+	displayTextWithPaging(ts, terminal, textPath, "readme.txt", ansi.OutputModeCP437, 9,
+		"Viewing: %s\r\n", "<EOF>", "<MORE>", "<PAUSE>", "<OPENERR>")
+
+	out := ts.output()
+	prev := -1
+	for i := 1; i <= numLines; i++ {
+		want := fmt.Sprintf("LINE-%02d text\r", i)
+		idx := strings.Index(out, want)
+		if idx < 0 {
+			t.Fatalf("output missing %q:\n%q", want, out)
+		}
+		if idx <= prev {
+			t.Errorf("%q out of order in output", want)
+		}
+		prev = idx
+	}
+	if got := strings.Count(out, "<MORE>"); got != 2 {
+		t.Errorf("More prompt shown %d times, want 2:\n%q", got, out)
+	}
+	if !strings.Contains(out, "<EOF>") {
+		t.Errorf("end-of-file marker missing:\n%q", out)
+	}
 }

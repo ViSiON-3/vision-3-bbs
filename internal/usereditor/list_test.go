@@ -138,14 +138,14 @@ func TestTaggingUsers(t *testing.T) {
 	m := listing(t, "Alice", "Bob", "Carol")
 
 	m = press(t, m, key(tea.KeySpace))
-	if !m.tagged[0] || m.cursor != 1 {
-		t.Fatalf("Space: tagged=%v cursor=%d, want user 0 tagged and cursor 1", m.tagged, m.cursor)
+	if !m.tagged[m.users[0]] || m.cursor != 1 {
+		t.Fatalf("Space: tagged=%d cursor=%d, want Alice tagged and cursor 1", m.taggedCount(), m.cursor)
 	}
 	if !strings.Contains(stripANSIGolden(m.View()), "*  1 Alice") {
 		t.Error("tagged row is not marked with an asterisk")
 	}
 	m = press(t, m, key(tea.KeyUp), key(tea.KeySpace))
-	if m.tagged[0] {
+	if m.tagged[m.users[0]] {
 		t.Error("second Space did not untag")
 	}
 	if m.taggedCount() != 0 {
@@ -153,7 +153,7 @@ func TestTaggingUsers(t *testing.T) {
 	}
 
 	m = press(t, m, key(tea.KeyEnd), key(tea.KeySpace))
-	if m.cursor != 2 || !m.tagged[2] {
+	if m.cursor != 2 || !m.tagged[m.users[2]] {
 		t.Error("Space on the last row must tag it and stay put")
 	}
 

@@ -3,9 +3,21 @@ package menu
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
+
+// onelinerFilePath returns the oneliner wall's JSON file inside the board's
+// data directory (ServerConfig.DataDir), not a path relative to the process
+// working directory. An unset DataDir falls back to "data", matching the
+// other data-file helpers in this package.
+func onelinerFilePath(dataDir string) string {
+	if strings.TrimSpace(dataDir) == "" {
+		dataDir = "data"
+	}
+	return filepath.Join(dataDir, "oneliners.json")
+}
 
 func loadOnelinerRecords(onelinerPath string) ([]onelinerRecord, error) {
 	jsonData, readErr := os.ReadFile(onelinerPath)

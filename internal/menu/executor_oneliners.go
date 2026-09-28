@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -23,7 +22,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running ONELINER", "node", nodeNumber)
 
-	onelinerPath := filepath.Join("data", "oneliners.json")
+	onelinerPath := onelinerFilePath(e.GetServerConfig().DataDir)
 
 	var currentOneLiners []onelinerRecord
 	onelinerMutex.Lock()

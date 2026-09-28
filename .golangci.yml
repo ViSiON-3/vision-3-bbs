@@ -3,6 +3,11 @@ version: "2"
 run:
   timeout: 10m
 
+issues:
+  # Report every finding so the doc-comment gate can't hide a backlog.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
 linters:
   default: none
   enable:
@@ -10,7 +15,20 @@ linters:
     - errcheck
     - staticcheck
     - unused
+    - revive
   settings:
+    revive:
+      # Doc-comment coverage: every exported identifier and every package
+      # needs a Go doc comment that starts with its name. See the "Doc
+      # comments" section of CONTRIBUTING.md for what a good one says.
+      # Listing rules here replaces revive's defaults, so only these run.
+      rules:
+        - name: exported
+          arguments:
+            # Renaming types such as chat.ChatEvent is out of scope for a
+            # docs rule; only the missing/malformed comment checks apply.
+            - disableStutteringCheck
+        - name: package-comments
     errcheck:
       # Best-effort terminal/display writes only: failures mean the user
       # disconnected; every caller intentionally ignores them. Keep this
@@ -29,6 +47,7 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+          - revive
 
 formatters:
   enable:

@@ -47,9 +47,7 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 			if errors.As(err, &shipped) && shipped.Reverted {
 				// The overlay copy is gone and the shipped one shows again.
 				delete(m.dirtyMenus, name)
-				if menus, loadErr := LoadMenus(m.set); loadErr == nil {
-					m.menus = menus
-				}
+				_ = m.reloadMenus() // on failure the list stays as it was
 				m.message = fmt.Sprintf("Reverted %s to the shipped copy (shipped menus cannot be deleted through the overlay)", name)
 			} else {
 				m.message = fmt.Sprintf("Delete error: %v", err)

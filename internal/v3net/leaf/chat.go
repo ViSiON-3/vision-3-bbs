@@ -89,8 +89,10 @@ func (r *chatSessionRegistry) notifyReconnect() {
 	}
 }
 
-// ChatSession is the V3Net-backed implementation of chat.ChatService.
-// ChatService methods (Join, Leave, Post, etc.) will be added in Task 8.
+// ChatSession is the V3Net-backed implementation of chat.ChatService for one
+// user handle. Commands go to the hub as HTTP requests (signed POSTs for
+// anything that changes state); incoming chat events reach the session
+// through the leaf's chatSessionRegistry and are delivered on Events.
 type ChatSession struct {
 	leaf         *Leaf
 	handle       string
@@ -173,6 +175,10 @@ func removeString(ss []string, s string) []string {
 	return out
 }
 
+// Join implements chat.ChatService. It normalizes room, asks the hub to add
+// this handle to it, and on success records it as the current room so hub
+// events for that room are delivered here. It returns the hub's room list and
+// recent history; a non-2xx hub response is reported as an error.
 func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, error) {
 	room, err := chat.NormalizeRoom(room)
 	if err != nil {
@@ -213,6 +219,8 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	return rooms, msgs, nil
 }
 
+// Leave implements chat.ChatService, telling the hub this handle has left
+// room. The current room is cleared only if the hub accepted the request.
 func (s *ChatSession) Leave(room string) error {
 	body, _ := json.Marshal(protocol.ChatLeaveRequest{Room: room, Handle: s.handle})
 	err := s.leaf.signedPostCtx(context.Background(),
@@ -225,24 +233,32 @@ func (s *ChatSession) Leave(room string) error {
 	return err
 }
 
+// Post implements chat.ChatService by sending text to room through the hub.
+// The message comes back to this session as an event like any other.
 func (s *ChatSession) Post(room, text string) error {
 	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/post", s.leaf.cfg.Network), body)
 }
 
+// Private implements chat.ChatService by asking the hub to deliver text
+// privately to handle on the given node.
 func (s *ChatSession) Private(handle, node, text string) error {
 	body, _ := json.Marshal(protocol.ChatPrivateRequest{ToHandle: handle, ToNode: node, Text: text})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/private", s.leaf.cfg.Network), body)
 }
 
+// SetTopic implements chat.ChatService by asking the hub to change room's
+// topic; the change arrives back as a topic event.
 func (s *ChatSession) SetTopic(room, topic string) error {
 	body, _ := json.Marshal(protocol.ChatTopicRequest{Room: room, Topic: topic})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/topic", s.leaf.cfg.Network), body)
 }
 
+// Rooms implements chat.ChatService, fetching the network's active rooms
+// from the hub on every call.
 func (s *ChatSession) Rooms() ([]chat.RoomInfo, error) {
 	data, err := s.leaf.get(fmt.Sprintf("/v3net/v1/%s/chat/rooms", s.leaf.cfg.Network))
 	if err != nil {
@@ -259,6 +275,8 @@ func (s *ChatSession) Rooms() ([]chat.RoomInfo, error) {
 	return rooms, nil
 }
 
+// History implements chat.ChatService, fetching up to limit recent messages
+// for room from the hub. The limit is passed through; the hub enforces any cap.
 func (s *ChatSession) History(room string, limit int) ([]chat.ChatMessage, error) {
 	url := fmt.Sprintf("/v3net/v1/%s/chat/rooms/%s/history?limit=%d",
 		s.leaf.cfg.Network, room, limit)
@@ -277,6 +295,8 @@ func (s *ChatSession) History(room string, limit int) ([]chat.ChatMessage, error
 	return msgs, nil
 }
 
+// Users implements chat.ChatService, returning a copy of the handles in the
+// current room: the list from Join, kept up to date by join and leave events.
 func (s *ChatSession) Users() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -285,8 +305,13 @@ func (s *ChatSession) Users() []string {
 	return out
 }
 
+// Events implements chat.ChatService. Delivery is non-blocking, so events are
+// dropped when the channel's buffer is full. The channel is closed by Close.
 func (s *ChatSession) Events() <-chan chat.ChatEvent { return s.events }
 
+// Close implements chat.ChatService. It closes the Events channel and removes
+// the session from the leaf's registry; it does not send a leave to the hub.
+// Calling it more than once is safe and always returns nil.
 func (s *ChatSession) Close() error {
 	s.mu.Lock()
 	if s.closed {

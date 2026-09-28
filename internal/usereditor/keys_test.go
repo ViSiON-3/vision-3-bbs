@@ -21,19 +21,6 @@ func key(k tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: k} }
 // char returns the KeyMsg for a single typed rune.
 func char(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
 
-// named returns a KeyMsg whose String() is s. It exists only because the
-// list view currently matches its mass actions on the strings "shift+f2",
-// "shift+f4", "shift+f5" and "shift+f10", and no tea.KeyType has those names.
-//
-// A real terminal never produces these messages. Bubble Tea decodes xterm's
-// Shift+F2 as tea.KeyF14 (Shift+Fn arrives as Fn+12; see the sequence table in
-// third_party/charmbracelet-bubbletea/key.go), which String()s as "f14", so
-// the bindings are unreachable from a keyboard. Tests using named() cover
-// what the handlers do once reached, not that a key press reaches them. When
-// the bindings move to the decoded keys, replace named(...) with key(tea.KeyF14)
-// and friends and delete this helper.
-func named(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
-
 // send feeds msgs to m.Update in order and returns the resulting model and
 // the command produced by the last message.
 func send(t *testing.T, m Model, msgs ...tea.Msg) (Model, tea.Cmd) {
@@ -45,13 +32,6 @@ func send(t *testing.T, m Model, msgs ...tea.Msg) (Model, tea.Cmd) {
 		m = updated.(Model)
 	}
 	return m, cmd
-}
-
-// press is send without the command, for the common case.
-func press(t *testing.T, m Model, msgs ...tea.Msg) Model {
-	t.Helper()
-	m, _ = send(t, m, msgs...)
-	return m
 }
 
 // quits reports whether cmd, when run, asks the program to exit.

@@ -1,3 +1,10 @@
+// Command ansitest is a standalone SSH server for checking how a client
+// terminal renders CP437 box-drawing and block characters. It listens on
+// port 2223 with the host key from ../../configs, accepts any password, and
+// offers an interactive prompt whose test commands send the same characters
+// as raw CP437 bytes, Unicode, VT100 line-drawing, and ASCII fallbacks so the
+// working method can be seen side by side. It is a developer diagnostic and
+// is not part of the running BBS.
 package main
 
 import (
