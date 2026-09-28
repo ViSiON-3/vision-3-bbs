@@ -98,7 +98,8 @@ type EventType string
 // (except EventNodeKicked, which the server emits directly). The string
 // values are the wire representation.
 const (
-	// EventCallerConnected fires when a node appears in a snapshot, or when
+	// EventCallerConnected fires when a node appears in a snapshot after the
+	// first (the initial snapshot only seeds state and emits nothing), or when
 	// its ConnectedAt changes because a new caller took the slot.
 	EventCallerConnected EventType = "caller.connected"
 	// EventCallerDisconnected fires when a node drops out of a snapshot, or
