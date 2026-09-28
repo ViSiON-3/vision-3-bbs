@@ -208,27 +208,33 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			return false, ""
 		}
 		votingMu.Lock()
+		defer votingMu.Unlock()
 		fresh, loadErr := loadVotingData(e.RootConfigPath)
-		if loadErr == nil {
-			freshIdx := -1
-			for i := range fresh.Topics {
-				if fresh.Topics[i].ID == topic.ID {
-					freshIdx = i
-					break
-				}
-			}
-			if freshIdx >= 0 {
-				fresh.Topics[freshIdx].Options = append(fresh.Topics[freshIdx].Options, strings.TrimSpace(choice))
-				if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
-					slog.Error("failed to save voting data after adding choice", "error", saveErr)
-					votingMu.Unlock()
-					return false, "|04Error saving choice."
-				}
-				*vd = *fresh
+		if loadErr != nil {
+			slog.Error("failed to load voting data for adding choice", "error", loadErr)
+			return false, "|04Error loading voting data."
+		}
+		freshIdx := -1
+		for i := range fresh.Topics {
+			if fresh.Topics[i].ID == topic.ID {
+				freshIdx = i
+				break
 			}
 		}
-		votingMu.Unlock()
+		if freshIdx < 0 {
+			return false, "|07Topic no longer exists. Choice not added."
+		}
+		fresh.Topics[freshIdx].Options = append(fresh.Topics[freshIdx].Options, strings.TrimSpace(choice))
+		if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
+			slog.Error("failed to save voting data after adding choice", "error", saveErr)
+			return false, "|04Error saving choice."
+		}
+		*vd = *fresh
 		return false, "|10Choice added!"
+	}
+
+	if input == "" {
+		return false, ""
 	}
 
 	n, err := strconv.Atoi(input)
@@ -487,7 +493,7 @@ func voteAddTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	fresh, loadErr := loadVotingData(e.RootConfigPath)
 	if loadErr != nil {
 		slog.Error("failed to load voting data for topic creation", "error", loadErr)
-		return vd, "|04Error saving topic."
+		return vd, "|04Error loading voting data."
 	}
 	// Assign ID from the reloaded data to avoid duplicates under concurrent creation.
 	t.ID = len(fresh.Topics) + 1
