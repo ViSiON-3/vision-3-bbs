@@ -60,6 +60,11 @@ type Model struct {
 	cmdFields  []fieldDef
 	cmdEditFld int
 
+	// Command list as it stood when the command edit screen opened, restored
+	// by F8 (abort without saving).
+	cmdsSnapshot      []CmdData
+	dirtyCmdsSnapshot bool
+
 	// Shared text input for field editing and prompts
 	textInput textinput.Model
 
