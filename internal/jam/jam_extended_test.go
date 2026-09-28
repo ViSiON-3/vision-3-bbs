@@ -1102,8 +1102,45 @@ func TestLinkEmptyBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Link: %v", err)
 	}
-	if result.MessagesScanned != 0 || result.LinksUpdated != 0 {
-		t.Errorf("Link empty: scanned=%d updated=%d", result.MessagesScanned, result.LinksUpdated)
+	if result.TotalMessages != 0 || result.MessagesScanned != 0 || result.LinksUpdated != 0 {
+		t.Errorf("Link empty: %+v", result)
+	}
+}
+
+// TotalMessages counts every index record, MessagesScanned only the active
+// messages, so callers can tell an empty base from one whose messages are
+// all deleted.
+func TestLinkCountsDeletedMessages(t *testing.T) {
+	b := openExtTestBase(t)
+	for i := 0; i < 3; i++ {
+		msg := NewMessage()
+		msg.From, msg.To, msg.Subject, msg.Text = "Alice", "All", "Hi", "body"
+		if _, err := b.WriteMessage(msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := b.DeleteMessage(2); err != nil {
+		t.Fatal(err)
+	}
+	result, err := b.Link()
+	if err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+	if want := (LinkResult{TotalMessages: 3, MessagesScanned: 2}); result != want {
+		t.Errorf("Link = %+v, want %+v", result, want)
+	}
+
+	for _, n := range []int{1, 3} {
+		if err := b.DeleteMessage(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err = b.Link()
+	if err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+	if want := (LinkResult{TotalMessages: 3}); result != want {
+		t.Errorf("Link with all deleted = %+v, want %+v", result, want)
 	}
 }
 

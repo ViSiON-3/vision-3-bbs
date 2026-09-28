@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,5 +93,74 @@ func TestFixRepairThenLinkKeepsParent(t *testing.T) {
 				t.Errorf("parent Reply1st after link = %d, want 3", got)
 			}
 		})
+	}
+}
+
+// A repair pack zeroes every thread pointer; fix --repair relinks the base
+// itself, so the threads are intact without a separate link run.
+func TestFixRepairRelinksThreads(t *testing.T) {
+	dir := t.TempDir()
+	path := seedBase(t, filepath.Join(dir, "echo"),
+		seedMsg{subject: "parent", msgID: "21:1/100 00000001"},
+		seedMsg{subject: "r1", msgID: "21:1/100 00000002", replyID: "21:1/100 00000001"},
+		seedMsg{subject: "r2", replyID: "21:1/100 00000001 21:1/100 00000009"},
+		seedMsg{subject: "r1a", replyID: "21:1/100 00000002"},
+	)
+	if code, out, errOut := runV3mail(t, dir, "link", path); code != 0 {
+		t.Fatalf("link exit code = %d\n%s%s", code, out, errOut)
+	}
+
+	code, out, errOut := runV3mail(t, dir, "fix", "--repair", path)
+	if code != 0 {
+		t.Fatalf("fix --repair exit code = %d, want 0\n%s%s", code, out, errOut)
+	}
+	wantContains(t, "fix --repair", out,
+		"REPAIR: Rebuilt message base with cleaned ReplyIDs",
+		"REPAIR: Relinked reply threads: 4 messages, 4 links updated")
+	if got, want := pointers(t, path), "1:0/2/0 2:1/4/3 3:1/0/0 4:2/0/0"; got != want {
+		t.Errorf("pointers after fix --repair = %q, want %q", got, want)
+	}
+
+	// -q repairs and relinks just the same, without reporting the link pass
+	// (the cleaned-ReplyID count is still printed, as before).
+	setPointers(t, path, map[int][3]uint32{1: {}, 2: {}, 3: {}, 4: {}})
+	seedBase(t, path, seedMsg{subject: "r3", replyID: "21:1/100 00000001 junk"})
+	code, out, errOut = runV3mail(t, dir, "fix", "--repair", "-q", path)
+	if code != 0 || out != "  Cleaned 1 malformed ReplyIDs\n" || errOut != "" {
+		t.Errorf("fix --repair -q: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if got, want := pointers(t, path), "1:0/2/0 2:1/4/3 3:1/0/5 4:2/0/0 5:1/0/0"; got != want {
+		t.Errorf("pointers after fix --repair -q = %q, want %q", got, want)
+	}
+}
+
+// When the repair pack fails, fix reports it, exits non-zero and leaves the
+// base alone: no link pass runs over the unrepaired base.
+func TestFixRepairFailedPackDoesNotLink(t *testing.T) {
+	dir := t.TempDir()
+	path := seedBase(t, filepath.Join(dir, "echo"),
+		seedMsg{subject: "parent", msgID: "21:1/100 00000001"},
+		seedMsg{subject: "r1", replyID: "21:1/100 00000001"},
+		seedMsg{subject: "r2", replyID: "21:1/100 00000001 21:1/100 00000009"},
+	)
+	// A directory where pack wants its temporary header file makes the pack
+	// fail before it touches the base.
+	if err := os.Mkdir(path+".jhr.tmp", 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, errOut := runV3mail(t, dir, "fix", "--repair", path)
+	if code != 1 {
+		t.Errorf("fix --repair exit code = %d, want 1\n%s%s", code, out, errOut)
+	}
+	wantContains(t, "fix --repair", out, "ERROR: Failed to rebuild message base")
+	if strings.Contains(out, "Relinked") {
+		t.Errorf("fix --repair linked after a failed pack:\n%s", out)
+	}
+	if got, want := pointers(t, path), "1:0/0/0 2:0/0/0 3:0/0/0"; got != want {
+		t.Errorf("pointers after failed repair = %q, want %q (untouched)", got, want)
+	}
+	if got := readMessage(t, path, 3).ReplyID; got != "21:1/100 00000001 21:1/100 00000009" {
+		t.Errorf("ReplyID after failed repair = %q, want it unchanged", got)
 	}
 }

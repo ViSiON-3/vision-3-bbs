@@ -7,14 +7,27 @@ import (
 
 // LinkResult contains statistics from a Link operation.
 type LinkResult struct {
+	// TotalMessages is the number of index records in the base, deleted
+	// messages included.
+	TotalMessages int
+	// MessagesScanned is the number of active (non-deleted) messages whose
+	// headers were read and considered for linking.
 	MessagesScanned int
-	LinksUpdated    int
+	// LinksUpdated is the number of message headers rewritten because at
+	// least one of their thread pointers changed.
+	LinksUpdated int
 }
 
 // Link rebuilds reply threading chains (ReplyTo/Reply1st/ReplyNext) by
 // matching MSGID and ReplyID subfields across all active messages. This
 // should be called after Pack or after deleting messages to keep threading
 // consistent.
+//
+// A ReplyID matches a parent's full MSGID or, failing that, its address
+// alone (some tossers store REPLY without the serial). Reply1st and
+// ReplyNext are cleared when they no longer point anywhere; ReplyTo is only
+// ever set, never cleared, so a reply whose parent is not in the base keeps
+// the ReplyTo it had. The whole pass runs under the base's file lock.
 func (b *Base) Link() (LinkResult, error) {
 	var result LinkResult
 
@@ -35,6 +48,7 @@ func (b *Base) Link() (LinkResult, error) {
 	if err != nil {
 		return result, err
 	}
+	result.TotalMessages = total
 	if total == 0 {
 		return result, nil
 	}
@@ -73,8 +87,9 @@ func (b *Base) Link() (LinkResult, error) {
 		headers = append(headers, hdrInfo{hdr: hdr, msgNum: n, msgID: msgID, replyID: replyID})
 		if msgID != "" {
 			msgIDToNum[msgID] = n
-			// FTN MSGIDs are "address serial" — index the address-only
-			// prefix too so prefix-based lookups succeed.
+			// FTN MSGIDs are "address serial" — some tossers store REPLY
+			// kludges without the serial suffix. Index the address part
+			// too so prefix-based lookups succeed.
 			if idx := strings.LastIndex(msgID, " "); idx > 0 {
 				prefix := msgID[:idx]
 				if _, exists := msgIDToNum[prefix]; !exists {
@@ -108,6 +123,8 @@ func (b *Base) Link() (LinkResult, error) {
 		}
 
 		// Reply1st: if this message has a MSGID with replies, point to the first reply.
+		// Check both the full MSGID and the address-only prefix (without serial)
+		// since some tossers may store REPLY kludges without the serial suffix.
 		if h.msgID != "" {
 			replies := replyIDToNums[h.msgID]
 			if len(replies) == 0 {
@@ -116,12 +133,13 @@ func (b *Base) Link() (LinkResult, error) {
 				}
 			}
 			if len(replies) > 0 {
-				firstReply := replies[0]
+				firstReply := replies[0] // replies are in scan order (ascending)
 				if h.hdr.Reply1st != uint32(firstReply) {
 					h.hdr.Reply1st = uint32(firstReply)
 					changed = true
 				}
 			} else if h.hdr.Reply1st != 0 {
+				// No replies exist (anymore) — clear stale pointer
 				h.hdr.Reply1st = 0
 				changed = true
 			}
@@ -130,6 +148,7 @@ func (b *Base) Link() (LinkResult, error) {
 		// ReplyNext: chain sibling replies to the same parent.
 		if h.replyID != "" {
 			if siblings, ok := replyIDToNums[h.replyID]; ok && len(siblings) > 1 {
+				// Find our position and point to the next sibling.
 				nextSibling := uint32(0)
 				for j, sn := range siblings {
 					if sn == h.msgNum && j+1 < len(siblings) {
