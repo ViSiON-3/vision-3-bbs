@@ -133,7 +133,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 			slog.Info("private reply refused: addressee not identified", "node", nodeNumber,
 				"handle", currentUser.Handle, "area", currentAreaID, "msg", currentMsg.MsgNum, "from", currentMsg.From)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01"+reason+"|07\r\n")), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return ""
 		}
 		replyName, replyTo = handle, handle

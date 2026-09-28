@@ -148,7 +148,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 func privateRecipient(mgr *message.MessageManager, um *user.UserMgr, areaID int, to string) (string, error) {
 	area, ok := mgr.GetAreaByID(areaID)
 	if !ok {
-		return "", fmt.Errorf("postPrivate: no message area with id %d", areaID)
+		return "", fmt.Errorf("postPrivate: area %d: %w", areaID, message.ErrAreaNotFound)
 	}
 	if jam.DetermineMessageType(area.AreaType, area.EchoTag).IsNetmail() {
 		return to, nil

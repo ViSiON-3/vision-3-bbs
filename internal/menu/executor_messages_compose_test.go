@@ -57,8 +57,8 @@ func TestComposeMessageUsesCurrentAreaAndSignature(t *testing.T) {
 }
 
 // TestComposeMessagePrivateAreaIsPrivate posts in PRIVMAIL: the message
-// carries the private flag and, the area being real-names-only, is signed
-// with the caller's real name.
+// carries the private flag and, although the area is real-names-only, is
+// signed with the caller's handle, the only name private mail is read by.
 func TestComposeMessagePrivateAreaIsPrivate(t *testing.T) {
 	env := newMsgEnv(t)
 
@@ -70,8 +70,8 @@ func TestComposeMessagePrivateAreaIsPrivate(t *testing.T) {
 	if !m.IsPrivate {
 		t.Error("PRIVMAIL post is not private")
 	}
-	if m.From != "Carl Caller" || m.To != "Sysop" {
-		t.Errorf("from/to = %q/%q, want Carl Caller/Sysop", m.From, m.To)
+	if m.From != "Caller" || m.To != "Sysop" {
+		t.Errorf("from/to = %q/%q, want Caller/Sysop", m.From, m.To)
 	}
 }
 
