@@ -97,3 +97,34 @@ func TestPromptComposeRecipientNetmailRequiresAddress(t *testing.T) {
 		t.Error("blank netmail address did not abort")
 	}
 }
+
+func TestPromptComposeRecipientNetmailAsksAboutOtherZones(t *testing.T) {
+	area := message.MessageArea{Tag: "FSX_NET", AreaType: "netmail", Network: "fsxnet", OriginAddr: "21:4/158"}
+
+	// Same zone as the network: no question.
+	to, _, aborted, out := runRecipientPrompt(t, area, "Joe@21:1/100\r")
+	if aborted || to != "Joe@21:1/100" || strings.Contains(out, "Send anyway") {
+		t.Errorf("same zone: to=%q aborted=%v asked=%v", to, aborted, strings.Contains(out, "Send anyway"))
+	}
+
+	// Another zone, answered Yes: kept as entered.
+	to, _, aborted, out = runRecipientPrompt(t, area, "Joe@1:234/567\ry")
+	if aborted || to != "Joe@1:234/567" {
+		t.Errorf("other zone, yes: to=%q aborted=%v", to, aborted)
+	}
+	if !strings.Contains(out, "1:234/567 is not in fsxnet (zone 21)") {
+		t.Errorf("zone question missing, output %q", out)
+	}
+
+	// Another zone, answered No: the address is asked for again.
+	to, name, aborted, _ := runRecipientPrompt(t, area, "Joe@1:234/567\rn21:1/100\r")
+	if aborted || to != "Joe@21:1/100" || name != "Joe" {
+		t.Errorf("other zone, no: to=%q name=%q aborted=%v", to, name, aborted)
+	}
+
+	// No origin address on the area: nothing to compare with, so no question.
+	area.OriginAddr = ""
+	if to, _, _, out := runRecipientPrompt(t, area, "Joe@1:234/567\r"); to != "Joe@1:234/567" || strings.Contains(out, "Send anyway") {
+		t.Errorf("no origin: to=%q, asked=%v", to, strings.Contains(out, "Send anyway"))
+	}
+}

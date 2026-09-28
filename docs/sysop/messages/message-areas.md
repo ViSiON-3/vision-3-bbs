@@ -345,7 +345,10 @@ The **To:** prompt depends on the area:
   name is reported and asked again. The message is saved as private mail, the
   same as `SENDPRIVMAIL`.
 - **Netmail areas:** To starts empty. Enter `Name@zone:net/node`, or just the
-  name, in which case you are asked for the address.
+  name, in which case you are asked for the address. An address in a
+  different zone from the area's origin address asks "Send anyway?" first,
+  since the mail still goes out through this network's links. Answering No
+  asks for the address again.
 
 In `PRIVMAIL` and netmail, leaving To (or the netmail address) blank abandons
 the post.

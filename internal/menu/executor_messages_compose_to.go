@@ -96,20 +96,43 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 			return "", "", true, nil
 		}
 		name, addr := message.SplitNetmailTo(val)
-		for addr == "" {
-			a, aborted, err := ask("|07Address (zone:net/node): |15", 23, "", "netmail address")
-			if err != nil || aborted {
-				return "", "", aborted, err
+		for {
+			if addr == "" {
+				a, aborted, err := ask("|07Address (zone:net/node): |15", 23, "", "netmail address")
+				if err != nil || aborted {
+					return "", "", aborted, err
+				}
+				if a == "" {
+					showPostAborted(terminal, outputMode)
+					return "", "", true, nil
+				}
+				if _, perr := jam.ParseAddress(a); perr != nil {
+					say(fmt.Sprintf("|01'%s' is not an FTN address, e.g. 1:234/567.|07\r\n", a))
+					continue
+				}
+				addr = a
 			}
-			if a == "" {
-				showPostAborted(terminal, outputMode)
-				return "", "", true, nil
+			// The tosser hands this area's netmail to its own network's
+			// links whatever the zone, so an address in another zone is
+			// probably a mistake. Ask rather than refuse: some networks
+			// span several zones.
+			ownZone, ok := netmailZone(area)
+			if !ok || addrZone(addr) == ownZone {
+				break
 			}
-			if _, perr := jam.ParseAddress(a); perr != nil {
-				say(fmt.Sprintf("|01'%s' is not an FTN address, e.g. 1:234/567.|07\r\n", a))
-				continue
+			network := area.Network
+			if network == "" {
+				network = "this network"
 			}
-			addr = a
+			q := fmt.Sprintf("|07%s is not in %s (zone %d). Send anyway? @", addr, network, ownZone)
+			yes, err := e.PromptYesNo(s, terminal, q, outputMode, nodeNumber, termWidth, termHeight, false)
+			if err != nil {
+				return "", "", false, err
+			}
+			if yes {
+				break
+			}
+			addr = "" // ask for the address again
 		}
 		return name + "@" + addr, name, false, nil
 
@@ -123,4 +146,24 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 		}
 		return val, val, false, nil
 	}
+}
+
+// netmailZone returns the zone of this BBS's own address on area's network,
+// which the area records as its origin address. ok is false when the area
+// has none, and then no zone check is made.
+func netmailZone(area *message.MessageArea) (zone int, ok bool) {
+	a, err := jam.ParseAddress(area.OriginAddr)
+	if err != nil {
+		return 0, false
+	}
+	return a.Zone, true
+}
+
+// addrZone returns the zone of an address already checked by jam.ParseAddress.
+func addrZone(addr string) int {
+	a, err := jam.ParseAddress(addr)
+	if err != nil {
+		return 0
+	}
+	return a.Zone
 }
