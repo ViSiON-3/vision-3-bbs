@@ -545,3 +545,116 @@ func TestMessageListUTF8FieldsKeepAccents(t *testing.T) {
 		}
 	}
 }
+
+// --- LISTMSGS handler ---
+
+// listOpens runs LISTMSGS with keys, then Enter, then Q in the reader and Q
+// in the list, and returns which subj-N the reader opened (0 for none).
+func listOpens(t *testing.T, env *menuEnv, keys string, n int) int {
+	t.Helper()
+	r := env.runCmd("LISTMSGS", env.caller, "", keys+"\rQQ")
+	if r.err != nil {
+		t.Fatalf("LISTMSGS: %v", r.err)
+	}
+	opened := 0
+	for i := 1; i <= n; i++ {
+		if r.has(fmt.Sprintf("subj-%d-body", i)) {
+			if opened != 0 {
+				t.Fatalf("reader opened both subj-%d and subj-%d", opened, i)
+			}
+			opened = i
+		}
+	}
+	return opened
+}
+
+// TestListMsgsNavigationOpensSelectedMessage pages through a list of 30
+// messages (newest first, 14 to a page on a 24-row screen) and checks each
+// movement key selects the message Enter then opens.
+func TestListMsgsNavigationOpensSelectedMessage(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(30)
+
+	cases := []struct {
+		name string
+		keys string
+		want int
+	}{
+		{"first entry is the newest", "", 30},
+		{"down", "\x1b[B\x1b[B", 28},
+		{"down then up", "\x1b[B\x1b[A", 30},
+		{"up at the top stays", "\x1b[A", 30},
+		{"page down", "\x1b[6~", 16},
+		{"page down then up", "\x1b[6~\x1b[5~", 30},
+		{"end", "\x1b[F", 1},
+		{"end then home", "\x1b[F\x1b[H", 30},
+		{"up from page 2 lands on page 1's last", "\x1b[6~\x1b[A", 17},
+		{"down off page 1 lands on page 2's first", strings.Repeat("\x1b[B", 14), 16},
+		{"ctrl keys: ctrl-x down, ctrl-c page", "\x18\x03", 16},
+		{"? just redraws", "?", 30},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := listOpens(t, env.sub(t), tc.keys, 30); got != tc.want {
+				t.Errorf("opened subj-%d, want subj-%d", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestListMsgsReadMarksAndRedraws reads a message from the list: the
+// last-read pointer advances and the list is redrawn with the new status.
+func TestListMsgsReadMarksAndRedraws(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(3)
+
+	r := env.runCmd("LISTMSGS", env.caller, "", "\rQQ")
+	if !r.has("General Discussion - Message List", "subj-1", "subj-2", "subj-3") {
+		t.Errorf("list incomplete; output:\n%s", r.text())
+	}
+	if n := strings.Count(r.text(), "Message List"); n != 2 {
+		t.Errorf("list drawn %d times, want 2 (before and after reading)", n)
+	}
+	if lr := env.diskLastRead(generalAreaID, "Caller"); lr != 3 {
+		t.Errorf("lastread = %d, want 3 after reading the newest", lr)
+	}
+}
+
+// TestListMsgsDeleteLastMessageEmptiesList has the sysop delete the only
+// message from a reader opened off the list: the list reports the area is
+// now empty instead of redrawing.
+func TestListMsgsDeleteLastMessageEmptiesList(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(1)
+
+	r := env.runCmd("LISTMSGS", env.sysop, "", "\rDY")
+	if n := env.msgCount(generalAreaID); n != 0 {
+		t.Fatalf("GENERAL has %d messages, want 0", n)
+	}
+	if !r.has("No messages in this area.") {
+		t.Errorf("empty list not reported; output:\n%s", r.text())
+	}
+}
+
+// TestListMsgsGuards checks LISTMSGS without a caller, without an area, with
+// an unknown area and on an empty area.
+func TestListMsgsGuards(t *testing.T) {
+	env := newMsgEnv(t)
+
+	if r := env.runCmd("LISTMSGS", nil, "", ""); r.err != nil || r.has("Message List") {
+		t.Errorf("anonymous LISTMSGS listed: %v\n%s", r.err, r.text())
+	}
+	noArea := *env.caller
+	noArea.CurrentMessageAreaID = 0
+	if r := env.runCmd("LISTMSGS", &noArea, "", ""); !r.has("Please select a message area first.") {
+		t.Errorf("no area output:\n%s", r.text())
+	}
+	gone := *env.caller
+	gone.CurrentMessageAreaID = 99
+	if r := env.runCmd("LISTMSGS", &gone, "", ""); r.has("Message List") {
+		t.Errorf("unknown area listed:\n%s", r.text())
+	}
+	if r := env.runCmd("LISTMSGS", env.caller, "", ""); !r.has("No messages in this area.") {
+		t.Errorf("empty area output:\n%s", r.text())
+	}
+}

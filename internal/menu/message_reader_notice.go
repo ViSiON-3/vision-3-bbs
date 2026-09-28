@@ -32,7 +32,7 @@ func showReaderNotice(terminal *term.Terminal, outputMode ansi.OutputMode, text 
 		terminalio.WriteProcessedBytes(terminal, []byte(eraseLine), outputMode)
 	}
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(trimNoticeLeadingBlank(text))), outputMode)
-	time.Sleep(readerNoticePause)
+	uiPause(readerNoticePause)
 }
 
 // eraseLine clears the current row without moving the cursor, so the notice

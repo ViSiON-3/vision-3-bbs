@@ -78,7 +78,6 @@ func TestSelectFileAreaClassicPromptCommands(t *testing.T) {
 // ACS check and its save: the caller asking for area 2 (Upload Queue, s250)
 // by ID is refused, then naming GENERAL by tag joins it and persists.
 func TestSelectFileAreaClassicRefusesThenSelects(t *testing.T) {
-	t.Parallel() // refusal and confirmation each hold for a fixed second
 	env := newMenuEnv(t)
 	env.caller.FileListingMode = "classic"
 
