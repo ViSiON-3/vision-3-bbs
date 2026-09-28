@@ -1,3 +1,9 @@
+// Package user owns the BBS's user accounts. UserMgr (NewUserManager) loads
+// users.json into memory and is the single point for looking up, creating,
+// updating and saving User records; it also authenticates callers by
+// password or SSH public key, keeps call history and the online-user set,
+// and soft-deletes and purges accounts. Saves merge in changes the sysop made
+// concurrently with the ./ue user editor instead of overwriting them.
 package user
 
 import (

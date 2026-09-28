@@ -1,3 +1,12 @@
+// Package syncjs runs JavaScript doors written for Synchronet BBS, in the
+// embedded goja interpreter, inside a caller's session. It emulates the parts
+// of Synchronet's JavaScript object model those doors rely on: the console,
+// bbs, user, system, server and client objects, the File and Queue classes,
+// load()/require() module resolution against Synchronet's exec and library
+// directories, and Ctrl-A attribute codes. NewEngine builds a per-session
+// Engine from a SessionContext and SyncJSDoorConfig, and Engine.Run executes
+// the door's script; the menu package's Synchronet JS door handler is the
+// caller.
 package syncjs
 
 import (

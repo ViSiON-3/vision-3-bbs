@@ -13,6 +13,9 @@ import (
 	"fmt"
 )
 
+// FS holds every *.json template in this directory, keyed by bare file name
+// (for example "strings.json"). Non-JSON templates are not included.
+//
 //go:embed *.json
 var FS embed.FS
 

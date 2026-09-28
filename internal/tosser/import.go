@@ -1,3 +1,10 @@
+// Package tosser moves FidoNet-style (FTN) echomail and netmail between
+// packets on disk and the BBS's JAM message bases, one Tosser per configured
+// network. ProcessInbound imports inbound .PKT files and bundles, with SEEN-BY,
+// PATH and a shared DupeDB guarding against loops and duplicates;
+// ScanAndExport writes new local messages to outbound packets; PackOutbound
+// bundles those packets for binkd. FindUnclaimed reports inbound mail that no
+// network accepted. All three passes serialise on a cross-process mail lock.
 package tosser
 
 import (

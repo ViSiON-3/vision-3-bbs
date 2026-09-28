@@ -1,3 +1,9 @@
+// Command v3mail is the ViSiON/3 mail utility. It maintains JAM message
+// bases (stats, pack, purge, fix, link, lastread), moves FTN echomail
+// (toss, scan, ftn-pack), exchanges QWK network packets (qwk-poll, qwk-scan,
+// qwk-toss, qwk-conferences), and runs a full send-and-fetch cycle for every
+// network with poll. The BBS runs it for scheduled events and sysop menus;
+// setting V3MAIL_NO_CONSOLE_LOG keeps log records out of the console output.
 package main
 
 import (

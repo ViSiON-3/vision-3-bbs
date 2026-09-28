@@ -5,6 +5,8 @@ import "strings"
 // MessageType represents the type of message being created.
 type MessageType int
 
+// Message types, chosen per area by DetermineMessageType. The type decides
+// the JAM attribute flags a new message is written with.
 const (
 	MsgTypeLocalMsg    MessageType = iota // Local BBS-only message
 	MsgTypeEchomailMsg                    // FTN conference/echo message

@@ -1,5 +1,12 @@
 // Package jam implements the JAM message base format (JAM-001 specification).
-
+//
+// A base is four files sharing a path stem: .jhr (headers), .jdt (text),
+// .jdx (index) and .jlr (per-user last-read records). Open opens or creates
+// one and returns a Base, which reads, writes, links and packs messages and
+// tracks last-read pointers. The package also carries the FidoNet helpers the
+// message layer needs when writing echomail and netmail into a base: address
+// parsing, MSGID generation, tearline and origin formatting, and CP437
+// conversion.
 package jam
 
 import "errors"

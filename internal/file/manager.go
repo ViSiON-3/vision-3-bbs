@@ -1,3 +1,9 @@
+// Package file manages the BBS file areas and the records of the files in
+// them. FileManager, built by NewFileManager, loads area definitions from
+// file_areas.json and each area's file list from a metadata.json kept in the
+// area's directory under data/files, then serves lookups, searches and
+// paging to the file menus and handles adding, updating, moving and deleting
+// records.
 package file
 
 import (

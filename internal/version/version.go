@@ -1,3 +1,5 @@
+// Package version reports the ViSiON/3 release number, stamped at build time
+// through Number, and the host platform name shown alongside it.
 package version
 
 import (

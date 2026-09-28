@@ -1,3 +1,9 @@
+// Package usereditor implements the ./ue sysop user editor, a Bubble Tea TUI
+// that recreates Vision/2's UE.EXE for browsing, searching and editing the
+// accounts in users.json while the BBS may be running. New builds the Model
+// that cmd/ue runs; LoadUsers, SaveUsers and SaveUsersChecked do the file I/O,
+// using content fingerprints and a cross-process lock so a save never
+// silently overwrites changes the BBS wrote in the meantime.
 package usereditor
 
 import (

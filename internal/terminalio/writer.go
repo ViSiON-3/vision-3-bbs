@@ -1,3 +1,8 @@
+// Package terminalio is the final byte-level stage between the BBS and a
+// caller's terminal. WriteProcessedBytes and WriteStringCP437 translate text
+// and art between CP437 and UTF-8 according to the session's output mode,
+// leaving ANSI escape sequences untouched; CompatWriter rewrites DOS-era
+// escape idioms (bold-as-bright, ESC[s / ESC[u) for modern terminals.
 package terminalio
 
 import (

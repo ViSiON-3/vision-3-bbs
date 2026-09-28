@@ -1,3 +1,8 @@
+// Package session holds the state of each connected caller (BbsSession) and
+// the SessionRegistry that indexes the live sessions by node number. The
+// server registers a session when a caller connects and removes it on
+// disconnect; who's online, node paging, chat, the admin views and V3 scripts
+// read the registry to see who else is on.
 package session
 
 import (
@@ -15,7 +20,10 @@ import (
 	// Remove main import main "github.com/ViSiON-3/vision-3-bbs"
 )
 
-// Session represents an active user connection to the BBS.
+// BbsSession represents one caller's connection to the BBS: the SSH channel
+// and terminal it talks through, the logged-in user (nil until login), and the
+// node, menu and activity details shown to other callers. Fields that change
+// while the session runs are guarded by Mutex.
 type BbsSession struct {
 	ID           int // Unique identifier for the session/node
 	Conn         gossh.Conn

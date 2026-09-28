@@ -391,7 +391,7 @@ All configuration files live in `configs/` and are generated from templates in `
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+Contributions are welcome! Please feel free to submit issues and pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) for the doc-comment conventions enforced by CI.
 
 ## Acknowledgments
 

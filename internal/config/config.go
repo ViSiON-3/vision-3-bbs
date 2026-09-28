@@ -1,3 +1,11 @@
+// Package config defines the BBS's configuration types and loads and saves
+// the JSON files in the configs directory: config.json (LoadServerConfig,
+// SaveServerConfig), ftn.json, qwknet.json, v3net.json, events.json,
+// doors.json, login.json, strings.json, and a menu set's theme.json. Loaders
+// fill in defaults for missing files and fields, and validators catch
+// settings that would break a network or door at run time. The reload
+// sentinel (configs/reload.now) lets config-writing tools tell a running BBS
+// to re-read everything.
 package config
 
 import (
