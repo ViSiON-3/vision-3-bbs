@@ -214,6 +214,7 @@ func TestEditFileRecordNoReviewPromptAfterNoChange(t *testing.T) {
 		{"rename cancelled", "Y\rR\r\r", false},
 		{"rename invalid", "Y\rR\r../escape.zip\r", false},
 		{"rename failed", "Y\rR\rGONE.ZIP\r", true},
+		{"rename to the same name", "Y\rR\rSAME.ZIP\r", false},
 		{"move cancelled", "Y\rM\r\r", false},
 		{"move invalid", "Y\rM\rabc\r", false},
 		{"move unknown area", "Y\rM\r99\r", false},

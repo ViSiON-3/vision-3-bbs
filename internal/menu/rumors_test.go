@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // seedRumors writes rd as the env's rumors.json.
@@ -70,11 +71,35 @@ func TestRumorsListHonoursLevelAndAnonymity(t *testing.T) {
 	if n := strings.Count(r.text(), "(Sysop)"); n != 0 {
 		t.Errorf("sysop list unmasked %d rumors posted under the poster's own name:\n%s", n, r.text())
 	}
-	for _, line := range strings.Split(r.text(), "\n") {
-		if w := utf8.RuneCountInString(strings.TrimRight(line, "\r")); w >= 80 {
+	assertRumorLinesFit(t, r.text())
+}
+
+// assertRumorLinesFit fails for any RUMORSLIST line that would reach column
+// 80, measured in terminal columns (a wide glyph takes two).
+func assertRumorLinesFit(t *testing.T, text string) {
+	t.Helper()
+	for _, line := range strings.Split(text, "\n") {
+		if w := runewidth.StringWidth(strings.TrimRight(line, "\r")); w >= 80 {
 			t.Errorf("list line is %d columns wide, want < 80: %q", w, line)
 		}
 	}
+}
+
+// TestRumorsListWidePosterFits pins that the sysop's real-poster line is cut
+// by screen columns: a 30-character handle of double-width glyphs is 60
+// columns, which a rune-count cap would let run past column 80.
+func TestRumorsListWidePosterFits(t *testing.T) {
+	env := newMenuEnv(t)
+	wide := strings.Repeat("漢", 30)
+	seedRumors(t, env, &rumorsData{NextID: 2, Rumors: []RumorRecord{{
+		ID: 1, Text: "Wide poster", Author: rumorAnonName(env.e), RealUser: wide,
+		UserID: 2, MinLevel: 0, PostedAt: time.Date(2026, 3, 4, 0, 0, 0, 0, time.UTC),
+	}}})
+	r := env.runCmd("RUMORSLIST", env.sysop, "", "\r")
+	if !r.has("Wide poster", "(漢") {
+		t.Fatalf("sysop list should show the wide poster:\n%s", r.text())
+	}
+	assertRumorLinesFit(t, r.text())
 }
 
 // A rumor posted under an anonymous name the board has since changed is

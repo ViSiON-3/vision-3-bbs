@@ -217,6 +217,11 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Invalid filename.\r\n")), outputMode)
 		return false, nil
 	}
+	// The same name is not a rename (a case-only change still is): leave the
+	// disk alone so the caller doesn't treat it as a change to review.
+	if newName == rec.Filename {
+		return false, nil
+	}
 
 	oldPath, pathErr := e.FileMgr.GetFilePath(rec.ID)
 	if pathErr != nil {

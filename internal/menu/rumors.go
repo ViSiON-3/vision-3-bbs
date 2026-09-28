@@ -73,8 +73,13 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 		// under the author column.
 		if isSysop {
 			if poster, ok := rumorMaskedPoster(r, anonName); ok {
+				// Cut by screen columns, not runes: a handle of wide
+				// glyphs would otherwise run past column 80.
+				if parts := hardBreak(poster, rumorListPosterWidth, outputMode); len(parts) > 0 {
+					poster = parts[0]
+				}
 				wv(terminal, fmt.Sprintf("%s|08(|11%s|08)|07\r\n",
-					strings.Repeat(" ", rumorListAuthorCol), truncateRunes(poster, rumorListPosterWidth)), outputMode)
+					strings.Repeat(" ", rumorListAuthorCol), poster), outputMode)
 			}
 		}
 	}
