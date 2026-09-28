@@ -23,6 +23,34 @@ func (m *Model) saveCurrentMenu() {
 	delete(m.dirtyMenus, entry.Name)
 }
 
+// reloadMenus re-reads the menu list from disk while keeping the in-memory
+// data of every menu still marked dirty, so an unsaved edit survives the
+// reload and is what a later save writes. A dirty menu no longer on disk is
+// dropped along with its dirty mark.
+func (m *Model) reloadMenus() error {
+	menus, err := LoadMenus(m.set)
+	if err != nil {
+		return err
+	}
+	edited := make(map[string]MenuData, len(m.dirtyMenus))
+	for _, entry := range m.menus {
+		if m.dirtyMenus[entry.Name] {
+			edited[entry.Name] = entry.Data
+		}
+	}
+	for i, entry := range menus {
+		if data, ok := edited[entry.Name]; ok {
+			menus[i].Data = data
+			delete(edited, entry.Name)
+		}
+	}
+	for name := range edited {
+		delete(m.dirtyMenus, name)
+	}
+	m.menus = menus
+	return nil
+}
+
 func (m *Model) saveCurrentCmdEdit() {
 	// Just marks changes; actual save happens in saveCurrentCommands
 	m.dirtyCmds = true
