@@ -24,6 +24,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // ScannerUser is the synthetic JAM lastread user under which each area's
@@ -43,6 +44,9 @@ type Node struct {
 	dupes  *tosser.DupeDB
 	nodeID string
 	hubID  string
+	// recipients resolves the To of private hub mail to a local handle; nil
+	// stores it as received (see SetRecipientResolver).
+	recipients user.RecipientResolver
 }
 
 // New prepares a node for the network key. paths must already be resolved
@@ -67,6 +71,17 @@ func New(key string, cfg config.QWKNetworkConfig, paths config.QWKNetConfig, sys
 		nodeID: cfg.NodeID(systemQWKID),
 		hubID:  config.NormalizeQWKID(cfg.HubID),
 	}, nil
+}
+
+// SetRecipientResolver gives the node the local accounts, so a private message
+// from the hub addressed to a local user by real name, as "Sysop", or by a
+// differently cased handle is stored with that user's handle as its To (see
+// user.UserMgr.ResolveRecipient). Private mail is readable only by the account
+// whose handle it carries, so without this such mail would reach no one. r may
+// be nil (the default), in which case To is stored exactly as received. Public
+// messages are never readdressed.
+func (n *Node) SetRecipientResolver(r user.RecipientResolver) {
+	n.recipients = r
 }
 
 // OpenDupeDB opens (or creates) the shared dupe database at path.

@@ -60,6 +60,8 @@ func loadQWKNetNodes(configDir, dataDir, only string) ([]*qwknet.Node, func(), e
 		return nil, nil, fmt.Errorf("opening dupe database: %w", err)
 	}
 
+	// Private hub mail is addressed to the local recipient's handle.
+	recipients := loadRecipients(dataDir)
 	var nodes []*qwknet.Node
 	for _, key := range qcfg.NetworkKeys() {
 		nc := qcfg.Networks[key]
@@ -73,6 +75,7 @@ func loadQWKNetNodes(configDir, dataDir, only string) ([]*qwknet.Node, func(), e
 		if err != nil {
 			return nil, nil, err
 		}
+		n.SetRecipientResolver(recipients)
 		nodes = append(nodes, n)
 	}
 	if only != "" && len(nodes) == 0 {

@@ -17,14 +17,15 @@ import "strings"
 //     choosing either could deliver one user's mail to the other.
 //
 // Deleted accounts are never returned. The result is a copy the caller may
-// keep. ok is false when name resolves to no account.
+// keep. ok is false when name resolves to no account, and always on a nil
+// UserMgr, so an importer running without the users file resolves nothing.
 //
 // Resolution is for addressing mail when it is written (imports, replies,
 // migration). Readers must still compare handles only: a real name can be
 // changed at any time, so it must never grant access at read time.
 func (um *UserMgr) ResolveRecipient(name string) (*User, bool) {
 	name = strings.TrimSpace(name)
-	if name == "" {
+	if um == nil || name == "" {
 		return nil, false
 	}
 	um.mu.RLock()
@@ -68,11 +69,32 @@ func (um *UserMgr) ResolveRecipient(name string) (*User, bool) {
 // (see ResolveRecipient); deleted accounts still own their mail.
 func (um *UserMgr) HandleExists(handle string) bool {
 	handle = strings.TrimSpace(handle)
-	if handle == "" {
+	if um == nil || handle == "" {
 		return false
 	}
 	um.mu.RLock()
 	defer um.mu.RUnlock()
 	_, ok := um.users[strings.ToLower(handle)]
 	return ok
+}
+
+// RecipientResolver is the part of UserMgr that writes private mail: mail
+// importers take one so tests can supply a fixed set of accounts, and so a
+// caller without the users file can pass nil and resolve nothing.
+type RecipientResolver interface {
+	ResolveRecipient(name string) (*User, bool)
+}
+
+// AddressByHandle returns the handle of the account to resolves to through r
+// (see UserMgr.ResolveRecipient), or to unchanged when r is nil or to names no
+// single account. Mail importers store the result as a private message's To so
+// the recipient, who is matched by handle alone, can read it.
+func AddressByHandle(r RecipientResolver, to string) string {
+	if r == nil {
+		return to
+	}
+	if u, ok := r.ResolveRecipient(to); ok && u != nil {
+		return u.Handle
+	}
+	return to
 }

@@ -36,6 +36,8 @@ func TestV3mailHelperProcess(t *testing.T) {
 		cmdFix(args)
 	case "link":
 		cmdLink(args)
+	case "readdress":
+		cmdReaddress(args)
 	default:
 		t.Fatalf("unknown helper command %q", cmd)
 	}
