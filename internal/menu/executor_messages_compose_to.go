@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
@@ -42,8 +43,17 @@ func composeRecipientKindFor(area *message.MessageArea) composeRecipientKind {
 	}
 }
 
-// netmailToMaxLen is the FTN limit on a netmail's to-name.
-const netmailToMaxLen = 36
+const (
+	// netmailNameMaxLen is the FTN limit on a netmail's to-name.
+	netmailNameMaxLen = 36
+	// netmailAddrMaxLen fits the longest address jam.ParseAddress accepts,
+	// 65535:65535/65535.65535.
+	netmailAddrMaxLen = 23
+	// netmailToMaxLen fits a full-length name, "@" and a full-length
+	// address. A tighter limit would cut an inline address short, and a cut
+	// address can still parse as a different node.
+	netmailToMaxLen = netmailNameMaxLen + 1 + netmailAddrMaxLen
+)
 
 // promptComposeRecipient asks for the To: field of a new message in area. It
 // returns to, the value to store (for netmail, "name@zone:net/node"), and name,
@@ -87,18 +97,25 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 		}
 
 	case recipientNetmail:
-		val, aborted, err := ask(toPrompt, netmailToMaxLen, "", "'to'")
-		if err != nil || aborted {
-			return "", "", aborted, err
+		var name, addr string
+		for {
+			val, aborted, err := ask(toPrompt, netmailToMaxLen, "", "'to'")
+			if err != nil || aborted {
+				return "", "", aborted, err
+			}
+			if val == "" {
+				showPostAborted(terminal, outputMode)
+				return "", "", true, nil
+			}
+			name, addr = message.SplitNetmailTo(val)
+			if utf8.RuneCountInString(name) <= netmailNameMaxLen {
+				break
+			}
+			say(fmt.Sprintf("|01Name is too long for netmail (%d characters at most).|07\r\n", netmailNameMaxLen))
 		}
-		if val == "" {
-			showPostAborted(terminal, outputMode)
-			return "", "", true, nil
-		}
-		name, addr := message.SplitNetmailTo(val)
 		for {
 			if addr == "" {
-				a, aborted, err := ask("|07Address (zone:net/node): |15", 23, "", "netmail address")
+				a, aborted, err := ask("|07Address (zone:net/node): |15", netmailAddrMaxLen, "", "netmail address")
 				if err != nil || aborted {
 					return "", "", aborted, err
 				}

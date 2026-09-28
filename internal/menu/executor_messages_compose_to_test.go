@@ -128,3 +128,25 @@ func TestPromptComposeRecipientNetmailAsksAboutOtherZones(t *testing.T) {
 		t.Errorf("no origin: to=%q, asked=%v", to, strings.Contains(out, "Send anyway"))
 	}
 }
+
+func TestPromptComposeRecipientNetmailLongNameAndAddress(t *testing.T) {
+	area := message.MessageArea{Tag: "NETMAIL", AreaType: "netmail"}
+	name36 := strings.Repeat("n", 36)
+	addr := "65535:65535/65535.65535"
+
+	// A full-length name and the longest address fit in To: whole, rather
+	// than being cut into a shorter address that still parses.
+	to, name, aborted, _ := runRecipientPrompt(t, area, name36+"@"+addr+"\r")
+	if aborted || to != name36+"@"+addr || name != name36 {
+		t.Errorf("full-length To: to=%q name=%q aborted=%v", to, name, aborted)
+	}
+
+	// A name over the FTN limit is refused and asked again.
+	to, _, aborted, out := runRecipientPrompt(t, area, name36+"x@21:1/100\rJoe@21:1/100\r")
+	if aborted || to != "Joe@21:1/100" {
+		t.Errorf("after long name: to=%q aborted=%v", to, aborted)
+	}
+	if !strings.Contains(out, "too long") {
+		t.Errorf("long name not reported, output %q", out)
+	}
+}
