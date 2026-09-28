@@ -19,7 +19,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
@@ -488,6 +490,9 @@ func (eng *Engine) parseInput(data []byte) string {
 	}
 
 	consumed := 1
+	// Deliberately string(data[0]): converting the byte to a rune makes byte
+	// b the one JS character with code b, Synchronet's representation of a
+	// CP437 byte and the inverse of writeRaw/runesToBytes.
 	result := string(data[0])
 
 	if data[0] == 0x1b && len(data) > 1 {
@@ -690,36 +695,77 @@ func skipCSI(data []byte) int {
 	return len(data) // consume all if unterminated
 }
 
+// keyByte returns the input byte behind a single-byte key. readKey carries
+// input byte b as the one JS character with code b (string(rune(b))), the way
+// Synchronet strings carry CP437 bytes; multi-character keys such as the
+// mapped arrow keys ("\x01\x48") report false.
+func keyByte(key string) (byte, bool) {
+	r, size := utf8.DecodeRuneInString(key)
+	if size == 0 || size != len(key) || r > 0xFF {
+		return 0, false
+	}
+	return byte(r), true
+}
+
 // readLine reads a line of input with echo and basic editing.
+//
+// Input is kept in the representation syncjs output uses: each byte the
+// terminal sent is one JS character with that byte's code (as File reads
+// produce, see bytesToLatin1), and writeRaw/File.write turn those codes back
+// into the same bytes. A typed character therefore round-trips unchanged when
+// the script echoes it or stores it in a data file: on a CP437 session it is
+// its one CP437 byte, on a UTF-8 session its UTF-8 bytes, one JS character
+// per byte.
+//
+// On a UTF-8 session a multi-byte character is assembled before it is
+// accepted, so malformed bytes are dropped, maxLen counts whole characters,
+// and backspace removes all of the last character's bytes. On a CP437
+// session every byte is one character.
 func (eng *Engine) readLine(maxLen int, mode int64) (string, error) {
-	var buf []byte
+	var buf, pending []byte
 	noEcho := mode&kNoEcho != 0
 	upper := mode&kUpper != 0
 	numberOnly := mode&kNumber != 0
+	utf8Mode := eng.session.OutputMode == ansi.OutputModeUTF8
+	chars := func() int {
+		if utf8Mode {
+			return utf8.RuneCount(buf)
+		}
+		return len(buf)
+	}
 
 	for {
 		key, err := eng.readKey(0)
 		if err != nil {
-			return string(buf), err
+			return bytesToLatin1(buf), err
 		}
-		if len(key) == 0 {
+		ch, ok := keyByte(key)
+		if !ok {
+			// Nothing read, or a mapped navigation key: not line content.
 			continue
 		}
+		if ch < 0x80 {
+			// A partial UTF-8 character cannot continue past another key.
+			pending = nil
+		}
 
-		ch := key[0]
 		switch ch {
 		case '\r', '\n':
 			if mode&kNoCRLF == 0 {
 				eng.writeRaw("\r\n")
 			}
-			result := string(buf)
+			result := bytesToLatin1(buf)
 			if upper {
 				result = toUpperASCII(result)
 			}
 			return result, nil
 		case '\x08', '\x7f': // Backspace, DEL
 			if len(buf) > 0 {
-				buf = buf[:len(buf)-1]
+				if utf8Mode {
+					buf = ansi.BackspaceRune(buf)
+				} else {
+					buf = buf[:len(buf)-1]
+				}
 				if !noEcho {
 					eng.writeRaw("\x08 \x08")
 				}
@@ -730,14 +776,22 @@ func (eng *Engine) readLine(maxLen int, mode int64) (string, error) {
 			if numberOnly && (ch < '0' || ch > '9') {
 				continue
 			}
-			if len(buf) < maxLen {
-				if upper && ch >= 'a' && ch <= 'z' {
-					ch = ch - 32
+			seq := []byte{ch}
+			if ch >= 0x80 && utf8Mode {
+				seq, _, pending = ansi.DecodeExtendedKey(nil, ansi.OutputModeUTF8, ch, pending)
+				if len(seq) == 0 {
+					continue // incomplete or malformed
 				}
-				buf = append(buf, ch)
-				if !noEcho {
-					eng.writeRaw(string(ch))
-				}
+			}
+			if chars() >= maxLen {
+				continue
+			}
+			if upper && ch >= 'a' && ch <= 'z' {
+				seq[0] = ch - 32
+			}
+			buf = append(buf, seq...)
+			if !noEcho {
+				eng.writeRaw(bytesToLatin1(seq))
 			}
 		}
 	}
@@ -800,8 +854,11 @@ func (eng *Engine) createInputQueue() goja.Value {
 		if key == "" {
 			return eng.vm.ToValue(false)
 		}
-		// Got a key — buffer it for the next read()
-		eng.inputBuf = append([]byte(key), eng.inputBuf...)
+		// Got a key — buffer it for the next read(). inputBuf holds raw
+		// input bytes, so convert the key's character codes back to bytes:
+		// []byte(key) would buffer the UTF-8 encoding of a code >= 0x80
+		// (0xA9 -> C2 A9) and read() would return two wrong characters.
+		eng.inputBuf = append(runesToBytes(key), eng.inputBuf...)
 		return eng.vm.ToValue(true)
 	})
 

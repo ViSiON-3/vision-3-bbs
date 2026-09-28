@@ -17,7 +17,9 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 	"golang.org/x/text/encoding/charmap"
@@ -35,12 +37,15 @@ type Engine struct {
 	cancel    context.CancelFunc
 
 	// Input: interposed pipe reader feeds rawInputCh; inputBuf holds parsed leftovers.
-	inputBuf   []byte
-	rawInputCh chan readResult
-	pipeReader *io.PipeReader
-	pipeWriter *io.PipeWriter
-	readerOnce sync.Once
-	copierDone chan struct{} // closed when the copier goroutine exits
+	inputBuf []byte
+	// utf8Pending holds the leading bytes of a UTF-8 character whose
+	// remaining bytes have not arrived yet (UTF-8 sessions only).
+	utf8Pending []byte
+	rawInputCh  chan readResult
+	pipeReader  *io.PipeReader
+	pipeWriter  *io.PipeWriter
+	readerOnce  sync.Once
+	copierDone  chan struct{} // closed when the copier goroutine exits
 }
 
 // readResult carries data or an error from the reader goroutine.
@@ -271,43 +276,76 @@ func (eng *Engine) startReader() {
 }
 
 // readKey reads a single key from the session with optional timeout.
-// Timeout of 0 means block indefinitely.
+// Timeout of 0 means block indefinitely. See readKeyEcho for how keys are
+// decoded.
 func (eng *Engine) readKey(timeout time.Duration) (string, error) {
-	if len(eng.inputBuf) > 0 {
-		ch := eng.inputBuf[0]
-		eng.inputBuf = eng.inputBuf[1:]
-		return string(ch), nil
-	}
+	key, _, err := eng.readKeyEcho(timeout)
+	return key, err
+}
 
-	eng.startReader()
-
+// readKeyEcho reads a single key and also returns the bytes that echo it in
+// the session's encoding. Timeout of 0 means block indefinitely.
+//
+// V3 scripts work with Unicode strings, so a typed character >= 0x80 is
+// decoded per the session's output mode (ansi.DecodeExtendedKey): on a CP437
+// session its byte maps through ansi.Cp437ToUnicode and the echo is that same
+// byte; on a UTF-8 session the bytes of one character are assembled, across
+// several reads if need be, and the echo is the UTF-8 sequence. Malformed
+// UTF-8 and unmapped bytes are dropped. Every other key is returned as
+// parseInput yields it ("" for a discarded escape sequence) and echoes as
+// itself. Buffered leftovers go through parseInput too, so an escape sequence
+// or CR LF arriving in the same read as earlier keys is still one key.
+func (eng *Engine) readKeyEcho(timeout time.Duration) (string, []byte, error) {
 	var timer <-chan time.Time
 	if timeout > 0 {
 		timer = time.After(timeout)
 	}
 
-	select {
-	case result := <-eng.rawInputCh:
-		if result.err != nil {
-			eng.cancel()
-			return "", ErrDisconnect
+	for {
+		var data []byte
+		if len(eng.inputBuf) > 0 {
+			data, eng.inputBuf = eng.inputBuf, nil
+		} else {
+			eng.startReader()
+			select {
+			case result := <-eng.rawInputCh:
+				if result.err != nil {
+					eng.cancel()
+					return "", nil, ErrDisconnect
+				}
+				if len(result.data) == 0 {
+					return "", nil, nil
+				}
+				data = result.data
+			case <-timer:
+				return "", nil, nil
+			case <-eng.ctx.Done():
+				return "", nil, ErrTerminated
+			}
 		}
-		if len(result.data) == 0 {
-			return "", nil
+
+		key := eng.parseInput(data)
+		if len(key) != 1 || key[0] < 0x80 {
+			// Any other key abandons a partial UTF-8 character, so its
+			// stray lead bytes cannot absorb the next character's bytes.
+			eng.utf8Pending = nil
+			return key, []byte(key), nil
 		}
-		return eng.parseInput(result.data), nil
-	case <-timer:
-		return "", nil
-	case <-eng.ctx.Done():
-		return "", ErrTerminated
+		var char, echo []byte
+		char, echo, eng.utf8Pending = ansi.DecodeExtendedKey(nil, eng.session.OutputMode, key[0], eng.utf8Pending)
+		if len(char) > 0 {
+			return string(char), echo, nil
+		}
+		// An incomplete UTF-8 sequence or a dropped byte: keep reading.
 	}
 }
 
-// readLine reads a line of input with echo and basic editing.
+// readLine reads a line of input with echo and basic editing. maxLen counts
+// characters, not bytes, and backspace removes one whole character.
 func (eng *Engine) readLine(maxLen int, opts lineOpts) (string, error) {
 	var buf []byte
 	for {
-		key, err := eng.readKey(0)
+		key, echo, err := eng.readKeyEcho(0)
 		if err != nil {
 			return string(buf), err
 		}
@@ -326,7 +364,7 @@ func (eng *Engine) readLine(maxLen int, opts lineOpts) (string, error) {
 			return result, nil
 		case '\x08', '\x7f': // Backspace, DEL
 			if len(buf) > 0 {
-				buf = buf[:len(buf)-1]
+				buf = ansi.BackspaceRune(buf)
 				if !opts.noEcho {
 					eng.writeRaw("\x08 \x08")
 				}
@@ -337,14 +375,24 @@ func (eng *Engine) readLine(maxLen int, opts lineOpts) (string, error) {
 			if opts.numberOnly && (ch < '0' || ch > '9') {
 				continue
 			}
-			if len(buf) < maxLen {
-				if opts.upper && ch >= 'a' && ch <= 'z' {
-					ch = ch - 32
-				}
-				buf = append(buf, ch)
+			if utf8.RuneCount(buf) >= maxLen {
+				continue
+			}
+			if ch >= 0x80 {
+				// A decoded non-ASCII character: store it as UTF-8 and
+				// echo it in the session's encoding.
+				buf = append(buf, key...)
 				if !opts.noEcho {
-					eng.writeRaw(string(ch))
+					eng.writeBytes(echo)
 				}
+				continue
+			}
+			if opts.upper && ch >= 'a' && ch <= 'z' {
+				ch = ch - 32
+			}
+			buf = append(buf, ch)
+			if !opts.noEcho {
+				eng.writeRaw(string(ch))
 			}
 		}
 	}
@@ -364,7 +412,9 @@ func (eng *Engine) parseInput(data []byte) string {
 	}
 
 	consumed := 1
-	result := string(data[0])
+	// The raw byte, not string(data[0]), which would convert the byte to a
+	// rune (0xA9 -> "©", C2 A9). readKeyEcho decodes bytes >= 0x80.
+	result := string(data[:1])
 
 	if data[0] == 0x1b && len(data) > 1 {
 		if data[1] == '[' && len(data) > 2 {

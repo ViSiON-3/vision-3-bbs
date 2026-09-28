@@ -254,7 +254,7 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 				r, pending = rune(key), nil
 			case key >= 128 && key <= 255:
 				var line []byte
-				line, _, pending = decodeExtendedKey(nil, mode, byte(key), pending)
+				line, _, pending = ansi.DecodeExtendedKey(nil, mode, byte(key), pending)
 				if len(line) == 0 {
 					continue
 				}

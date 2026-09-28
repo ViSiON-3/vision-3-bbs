@@ -71,24 +71,6 @@ func TestReadLineFromSessionIHAllowAbort_CP437RoundTrips(t *testing.T) {
 	}
 }
 
-// TestDecodeExtendedKey_CP437UnmappedByteDropped exercises the drop path for
-// a CP437 byte whose Cp437ToUnicode entry is 0 directly against the decode
-// helper: it must not be stored (which would put invalid/unintended data
-// into users.json) and must not be echoed, matching how the reader silently
-// drops anything else it won't accept.
-func TestDecodeExtendedKey_CP437UnmappedByteDropped(t *testing.T) {
-	line, echo, pending := decodeExtendedKey(nil, ansi.OutputModeCP437, 0, nil)
-	if len(line) != 0 {
-		t.Errorf("line = %q, want empty (unmapped byte must not be stored)", line)
-	}
-	if len(echo) != 0 {
-		t.Errorf("echo = %v, want nil (unmapped byte must not be echoed)", echo)
-	}
-	if len(pending) != 0 {
-		t.Errorf("pending = %v, want nil", pending)
-	}
-}
-
 // TestReadLineFromSessionIH_UTF8ModeAccumulatesMultiByteRune drives the three
 // bytes of "日" (U+65E5, encoded E6 97 A5) through one at a time -- exactly
 // how they arrive over a real connection, one byte per ReadKey call -- and

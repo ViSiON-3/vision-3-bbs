@@ -136,14 +136,17 @@ func registerConsole(vm *goja.Runtime, eng *Engine) {
 	jsutil.Set(obj, "getkeys", func(call goja.FunctionCall) goja.Value {
 		validKeys := ""
 		if len(call.Arguments) > 0 {
-			validKeys = strings.ToUpper(call.Arguments[0].String())
+			validKeys = toUpperASCII(call.Arguments[0].String())
 		}
 		for {
 			key, err := eng.readKey(0)
 			if err != nil {
 				panic(vm.NewGoError(err))
 			}
-			upper := strings.ToUpper(key)
+			// ASCII-only, like Synchronet's toupper(): a key >= 0x80 is a
+			// raw byte code, and Unicode case mapping would turn it into a
+			// different byte (0xE9 -> 0xC9) or a code above 0xFF.
+			upper := toUpperASCII(key)
 			if validKeys == "" || strings.Contains(validKeys, upper) {
 				return vm.ToValue(upper)
 			}
