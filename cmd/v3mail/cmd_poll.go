@@ -233,7 +233,7 @@ func pollFTN(ctx context.Context, configDir, dataDir, only string, timeout time.
 
 	// Every enabled network tosses, not just the one polled: networks can
 	// share an inbound, and a packet is only claimed by its own network.
-	if tossFTN(ftnCfg, msgMgr, dupeDB, "", false) {
+	if tossFTN(ftnCfg, msgMgr, dupeDB, loadRecipients(dataDir), "", false) {
 		failed = true
 	}
 	return failed

@@ -2210,6 +2210,8 @@ func main() {
 	// Start QWK packet API if enabled (Phase 7 — experimental).
 	if serverConfig.QWKAPI.Enabled {
 		qwkSvc := qwkservice.New(messageMgr, menu.ResolveQWKID(serverConfig), serverConfig.BoardName, serverConfig.SysOpName, messageMgr.DataPath())
+		// Private replies uploaded through the API are addressed by handle.
+		qwkSvc.SetRecipientResolver(userMgr)
 		apiSrv, apiErr := qwkapi.NewServer(qwkapi.Deps{
 			Config:       serverConfig.QWKAPI,
 			ConfigDir:    rootConfigPath,

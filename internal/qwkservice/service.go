@@ -12,6 +12,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // defaultMaxPerArea caps how many messages are packed from a single area to
@@ -42,6 +43,9 @@ type Service struct {
 	sysOpName   string
 	confMapPath string
 	dedupPath   string
+	// recipients resolves the To of private replies to a local handle; nil
+	// stores it as the reader wrote it (see SetRecipientResolver).
+	recipients user.RecipientResolver
 }
 
 // New creates a QWK service. bbsID is the short packet identifier (e.g.
@@ -56,6 +60,15 @@ func New(store MessageStore, bbsID, bbsName, sysOpName, dataPath string) *Servic
 		confMapPath: filepath.Join(dataPath, "qwk_conferences.json"),
 		dedupPath:   filepath.Join(dataPath, "qwk_dedup.db"),
 	}
+}
+
+// SetRecipientResolver gives the service the local accounts, so a private
+// reply in a REP packet addressed by real name, as "Sysop", or by an uppercased
+// handle is stored with the recipient's handle as its To (see
+// user.UserMgr.ResolveRecipient). r may be nil (the default), in which case To
+// is stored as the reader wrote it. Public replies are never readdressed.
+func (s *Service) SetRecipientResolver(r user.RecipientResolver) {
+	s.recipients = r
 }
 
 // loadConfMap loads the conference map, syncs it against the current areas, and

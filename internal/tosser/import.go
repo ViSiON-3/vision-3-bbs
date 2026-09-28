@@ -19,6 +19,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // inboundDirs returns all inbound directories to scan, deduplicating empty paths.
@@ -83,6 +84,7 @@ type Tosser struct {
 	msgMgr         *message.MessageManager
 	dupeDB         *DupeDB
 	ownAddr        *jam.FidoAddress
+	recipients     user.RecipientResolver // nil: netmail To is stored as received
 }
 
 // New creates a new Tosser instance for a single FTN network.
@@ -118,6 +120,17 @@ func New(networkName string, cfg networkConfig, globalCfg config.FTNConfig, dupe
 		dupeDB:  dupeDB,
 		ownAddr: addr,
 	}, nil
+}
+
+// SetRecipientResolver gives the tosser the local accounts, so inbound netmail
+// for this system addressed by real name or as "Sysop" is stored with the
+// recipient's handle as its To (see user.UserMgr.ResolveRecipient). Netmail
+// is private, and private mail is readable only by the account whose handle it
+// carries, so without this such mail would reach no one. r may be nil (the
+// default), in which case To is stored exactly as received. Echomail and
+// outbound mail are never readdressed.
+func (t *Tosser) SetRecipientResolver(r user.RecipientResolver) {
+	t.recipients = r
 }
 
 // NewDupeDBFromPath creates a shared DupeDB for use across multiple tossers.
@@ -634,6 +647,9 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 	}
 
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
+	if msgType.IsNetmail() && t.addressedToUs(jamMsg.DestAddr) {
+		jamMsg.To = user.AddressByHandle(t.recipients, jamMsg.To)
+	}
 	msgNum, err := base.WriteMessageExt(jamMsg, msgType, area.EchoTag, "")
 	if err != nil {
 		return err
@@ -649,4 +665,22 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 		slog.Warn("failed to read header for routed msg to mark as processed", "msg", msgNum, "area", areaTag, "error", herr)
 	}
 	return nil
+}
+
+// addressedToUs reports whether netmail with destination dest (as
+// resolveDestAddr formats it) is for this system rather than passing through
+// it, so its To names a local user. An unknown destination counts as ours:
+// netmail without one was still delivered here. A zone of 0 on either side
+// matches any zone.
+func (t *Tosser) addressedToUs(dest string) bool {
+	if dest == "" || t.ownAddr == nil {
+		return true
+	}
+	a, err := jam.ParseAddress(dest)
+	if err != nil {
+		return true
+	}
+	own := t.ownAddr
+	return a.Net == own.Net && a.Node == own.Node && a.Point == own.Point &&
+		(a.Zone == own.Zone || a.Zone == 0 || own.Zone == 0)
 }

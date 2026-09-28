@@ -19,7 +19,7 @@ func runListMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 // messages it accepts are listed too. The filter is propagated to the reader
 // when a message is opened.
 func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (*user.User, string, error) {
-	msgFilter = withPrivacy(c.currentUser, msgFilter)
+	msgFilter = withPrivacy(privateMailReaderFor(c.e, c.userManager, c.currentUser), msgFilter)
 	e := c.e
 	s := c.s
 	terminal := c.terminal

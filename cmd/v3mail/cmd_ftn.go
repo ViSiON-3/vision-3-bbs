@@ -9,6 +9,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // cmdToss implements 'v3mail toss': unpack FTN bundles and toss .PKT files into JAM bases.
@@ -25,15 +26,17 @@ func cmdToss(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	if tossFTN(ftnCfg, msgMgr, dupeDB, *networkName, *quiet) {
+	if tossFTN(ftnCfg, msgMgr, dupeDB, loadRecipients(*dataDir), *networkName, *quiet) {
 		os.Exit(1)
 	}
 }
 
 // tossFTN tosses inbound mail for every enabled network, or only networkName
 // when set, and reports whether the run failed: a toss error, or mail left
-// unclaimed long enough to be quarantined.
-func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, networkName string, quiet bool) bool {
+// unclaimed long enough to be quarantined. Netmail for this system is
+// addressed to the handle recipients resolves its To to; recipients may be nil
+// (see tosser.Tosser.SetRecipientResolver).
+func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, recipients user.RecipientResolver, networkName string, quiet bool) bool {
 	tosser.WarnOrphanFTNAreas(ftnCfg, msgMgr.ListAreas())
 
 	totalImported, totalDupes, totalPackets := 0, 0, 0
@@ -62,6 +65,7 @@ func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *to
 			ranAllNetworks = false
 			continue
 		}
+		t.SetRecipientResolver(recipients)
 
 		result := t.ProcessInbound()
 		totalPackets += result.PacketsProcessed

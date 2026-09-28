@@ -11,6 +11,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // ImportOptions configure a REP import.
@@ -104,7 +105,11 @@ func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, err
 
 		var perr error
 		if kind == KindPrivateMail {
-			_, perr = s.store.AddPrivateReply(area.ID, opts.Handle, msg.To, msg.Subject, body, "", msg.ReplyToNumber)
+			// Private mail is readable only by the account whose handle it
+			// carries, and a reader's To is often a real name or the
+			// handle uppercased and cut to 25 characters.
+			to := user.AddressByHandle(s.recipients, msg.To)
+			_, perr = s.store.AddPrivateReply(area.ID, opts.Handle, to, msg.Subject, body, "", msg.ReplyToNumber)
 		} else {
 			_, perr = s.store.AddReply(area.ID, opts.Handle, msg.To, msg.Subject, body, "", msg.ReplyToNumber)
 		}

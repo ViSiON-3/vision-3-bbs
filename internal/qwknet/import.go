@@ -15,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // TossResult reports one import pass.
@@ -312,6 +313,7 @@ func (n *Node) importMessage(base *jam.Base, area *message.MessageArea, m qwk.Ne
 	}
 	if m.Private {
 		jm.Header = &jam.MessageHeader{Attribute: jam.MsgPrivate}
+		jm.To = user.AddressByHandle(n.recipients, jm.To)
 	}
 
 	num, err := base.WriteMessageExt(jm, jam.MsgTypeEchomailMsg, "", "")

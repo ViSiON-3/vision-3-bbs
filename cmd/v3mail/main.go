@@ -1,5 +1,5 @@
 // Command v3mail is the ViSiON/3 mail utility. It maintains JAM message
-// bases (stats, pack, purge, fix, link, lastread), moves FTN echomail
+// bases (stats, pack, purge, fix, link, lastread, readdress), moves FTN echomail
 // (toss, scan, ftn-pack), exchanges QWK network packets (qwk-poll, qwk-scan,
 // qwk-toss, qwk-conferences), and runs a full send-and-fetch cycle for every
 // network with poll. The BBS runs it for scheduled events and sysop menus;
@@ -81,6 +81,8 @@ func main() {
 		cmdLink(os.Args[2:])
 	case "lastread":
 		cmdLastread(os.Args[2:])
+	case "readdress":
+		cmdReaddress(os.Args[2:])
 	case "toss":
 		cmdToss(os.Args[2:])
 	case "scan":
@@ -149,6 +151,7 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w, cmd("FIX", "Verify and repair JAM base integrity"))
 	_, _ = fmt.Fprintln(w, cmd("LINK", "Build reply-threading chains (ReplyTo/Reply1st/ReplyNext)"))
 	_, _ = fmt.Fprintln(w, cmd("LASTREAD", "Show or reset per-user lastread pointers"))
+	_, _ = fmt.Fprintln(w, cmd("READDRESS", "Address stored private mail to the recipient's handle (--dry-run)"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sNetwork Mail:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, cmd("POLL", "Send and fetch mail now for every FTN and QWK network (--network, --ftn-only, --qwk-only, -v)"))
@@ -170,6 +173,7 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w, opt("--data DIR", "Data directory (default: data)"))
 	_, _ = fmt.Fprintln(w, opt("-q", "Suppress output"))
 	_, _ = fmt.Fprintln(w, opt("--network NAME", "FTN: limit to a single network"))
+	_, _ = fmt.Fprintln(w, opt("--dry-run", "READDRESS: report changes without writing"))
 	_, _ = fmt.Fprintln(w)
 }
 

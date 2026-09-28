@@ -14,6 +14,44 @@
 | `fix`      | Verify base integrity; use `--repair` to automatically fix corrupt headers   |
 | `link`     | Build reply-thread chains (`ReplyTo` / `Reply1st` / `ReplyNext` JAM fields)  |
 | `lastread` | Show or reset per-user lastread pointers                                     |
+| `readdress` | Address stored private mail to the recipient's handle; `--dry-run` reports without writing (see below) |
+
+### Readdressing private mail
+
+A private message can be read only by the account whose **handle** is in its
+To or From field; a real name never grants access, because anyone can change
+theirs and two users can share one. Netmail and QWK mail often arrive addressed
+to a real name or to `Sysop`, so `toss`, `qwk-toss`/`qwk-poll` and QWK reply
+(REP) uploads now store such mail with the recipient's handle. They resolve the
+name on the message, ignoring case, to:
+
+1. the user with that handle;
+2. user #1, for `Sysop`;
+3. the one user with that real name. If two or more users share it, the name
+   is ambiguous and the mail is left as it came.
+
+Deleted accounts never receive mail. Echomail and other public messages are
+never changed. `toss` and the QWK commands read `users/users.json` under `--data`; if
+it cannot be read they log a warning and store To as received.
+
+Mail stored before this — or that named no account — is not addressed to any
+handle. The sysop (access level at or above `sysOpLevel`) can read such
+**undeliverable** private mail in the message reader, list and newscan; nobody
+else can. `v3mail readdress` fixes the mail that can be fixed: for every private
+message whose To is not already a user's handle, it applies the same resolution
+and rewrites To (and the base's index, so the new-mail and "to you" counts see
+it). It reports how many it readdressed and how many it left undeliverable or
+ambiguous. It needs `users/users.json` (it will not create one), changes nothing on a
+second run, and writes nothing with `--dry-run`:
+
+```bash
+./v3mail readdress --all --dry-run   # see what would change
+./v3mail readdress --all
+./v3mail readdress data/msgbases/fsx_netmail
+```
+
+The rewritten headers leave their old copies behind in the `.jhr` file; the next
+`v3mail pack` reclaims the space.
 
 ### Poll
 
@@ -113,6 +151,7 @@ The `areafix_password` field on the link config is used as the netmail subject (
 --config DIR    Path to config directory (default: configs)
 --data DIR      Path to data directory (default: data)
 -q              Quiet mode — suppress informational output
+--dry-run       readdress only: report what would change without writing
 ```
 
 ## FTN-Specific Options
@@ -139,6 +178,7 @@ The `areafix_password` field on the link config is used as the netmail subject (
 ./v3mail purge --all
 ./v3mail fix --repair --all
 ./v3mail link --all
+./v3mail readdress --all --dry-run
 
 # Operate on a single area
 ./v3mail stats data/msgbases/fsx_gen

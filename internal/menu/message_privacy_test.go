@@ -40,18 +40,7 @@ func newPrivacyFixture(t *testing.T) *privacyFixture {
 			t.Fatal(err)
 		}
 	}
-	if err := fs.WalkDir(configtemplates.FS, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		b, err := configtemplates.FS.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(filepath.Join(cfgDir, p), b, 0o644)
-	}); err != nil {
-		t.Fatal(err)
-	}
+	writeShippedConfigs(t, cfgDir)
 	strs, err := config.LoadStrings(cfgDir)
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +102,23 @@ func newPrivacyFixture(t *testing.T) *privacyFixture {
 	return f
 }
 
+// writeShippedConfigs copies the shipped config templates into cfgDir.
+func writeShippedConfigs(t *testing.T, cfgDir string) {
+	t.Helper()
+	if err := fs.WalkDir(configtemplates.FS, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := configtemplates.FS.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(cfgDir, p), b, 0o644)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // run drives fn as u with scripted keystrokes and returns the output with
 // ANSI escapes stripped. Input running out reads as a disconnect.
 func (f *privacyFixture) run(t *testing.T, fn RunnableFunc, u *user.User, input string) string {
@@ -158,21 +164,24 @@ func TestReadMsgsHidesOthersPrivateMail(t *testing.T) {
 
 // TestReadMsgsShowsPrivateMailToItsParties pins that the recipient and the
 // sender, by handle, still read their own private mail, and that mail
-// addressed only by real name is shown to neither (a real name is not an
-// identity).
+// addressed only by real name is not shown to the user that real name
+// belongs to (a real name is not an identity). Such mail is undeliverable, so
+// the sender here, who is the sysop, sees it for that reason alone (see
+// withPrivacy).
 func TestReadMsgsShowsPrivateMailToItsParties(t *testing.T) {
 	f := newPrivacyFixture(t)
 	for _, tc := range []struct {
-		name string
-		u    *user.User
-	}{{"recipient", f.bob}, {"sender", f.sysop}} {
+		name              string
+		u                 *user.User
+		seesUndeliverable bool
+	}{{"recipient", f.bob, false}, {"sender", f.sysop, true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := f.run(t, runReadMsgs, tc.u, "NNNQ")
 			if !strings.Contains(out, "SECRET-BODY") {
 				t.Errorf("%s did not see their private mail:\n%s", tc.name, out)
 			}
-			if strings.Contains(out, "REALNAME-BODY") {
-				t.Errorf("%s saw mail addressed only by real name", tc.name)
+			if got := strings.Contains(out, "REALNAME-BODY"); got != tc.seesUndeliverable {
+				t.Errorf("%s saw mail addressed only by real name: %v, want %v", tc.name, got, tc.seesUndeliverable)
 			}
 		})
 	}
@@ -234,7 +243,7 @@ func TestAdoptingARealNameGrantsNoMail(t *testing.T) {
 // (a logged-out path) rejects every private message and still applies f.
 func TestWithPrivacyNilUserSeesNoPrivateMail(t *testing.T) {
 	onlyOdd := func(m *message.DisplayMessage) bool { return m.MsgNum%2 == 1 }
-	f := withPrivacy(nil, onlyOdd)
+	f := withPrivacy(privateMailReader{}, onlyOdd)
 	if f(&message.DisplayMessage{MsgNum: 1, IsPrivate: true, To: "", From: ""}) {
 		t.Error("nil user saw a private message")
 	}

@@ -159,7 +159,7 @@ func TestTossFTNUnclaimedMail(t *testing.T) {
 	defer func() { _ = msgMgr.Close() }()
 
 	var failed bool
-	out, _ := capture(t, func() { failed = tossFTN(ftnCfg, msgMgr, dupeDB, "", false) })
+	out, _ := capture(t, func() { failed = tossFTN(ftnCfg, msgMgr, dupeDB, nil, "", false) })
 	if failed {
 		t.Error("freshly unclaimed mail failed the run")
 	}
@@ -174,7 +174,7 @@ func TestTossFTNUnclaimedMail(t *testing.T) {
 	if err := os.Chtimes(stranger, old, old); err != nil {
 		t.Fatal(err)
 	}
-	out, _ = capture(t, func() { failed = tossFTN(ftnCfg, msgMgr, dupeDB, "", false) })
+	out, _ = capture(t, func() { failed = tossFTN(ftnCfg, msgMgr, dupeDB, nil, "", false) })
 	if !failed {
 		t.Error("quarantined backlog did not fail the run")
 	}
@@ -189,7 +189,7 @@ func TestTossFTNUnclaimedMail(t *testing.T) {
 	if err := os.Chtimes(stranger, old, old); err != nil {
 		t.Fatal(err)
 	}
-	out, _ = capture(t, func() { failed = tossFTN(ftnCfg, msgMgr, dupeDB, "testnet", false) })
+	out, _ = capture(t, func() { failed = tossFTN(ftnCfg, msgMgr, dupeDB, nil, "testnet", false) })
 	if failed || strings.Contains(out, "WARNING") {
 		t.Errorf("--network run judged unclaimed mail: failed=%v\n%s", failed, out)
 	}
@@ -207,7 +207,7 @@ func TestFTNCommandsReportBrokenNetwork(t *testing.T) {
 	ftnCfg.Networks["broken"] = config.FTNNetworkConfig{InternalTosserEnabled: true, OwnAddress: "not-an-address"}
 
 	for name, run := range map[string]func(string) bool{
-		"toss":     func(n string) bool { return tossFTN(ftnCfg, msgMgr, dupeDB, n, true) },
+		"toss":     func(n string) bool { return tossFTN(ftnCfg, msgMgr, dupeDB, nil, n, true) },
 		"scan":     func(n string) bool { return scanFTN(ftnCfg, msgMgr, dupeDB, n, true) },
 		"ftn-pack": func(n string) bool { return packFTN(ftnCfg, msgMgr, dupeDB, n, true) },
 	} {

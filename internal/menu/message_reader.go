@@ -52,16 +52,64 @@ var msgReaderDeleteOption = MsgLightbarOption{Label: " Delete ", HotKey: 'D', Lo
 // someone else's private message.
 type msgOwnershipFilter func(*message.DisplayMessage) bool
 
+// handleDirectory tells whether a handle belongs to an account (deleted or
+// not). *user.UserMgr implements it.
+type handleDirectory interface {
+	HandleExists(handle string) bool
+}
+
+// privateMailReader is who is reading, for withPrivacy: the user, the access
+// level at which a user is a sysop (ServerConfig.SysOpLevel), and the account
+// directory that decides whether a private message is deliverable.
+type privateMailReader struct {
+	user       *user.User
+	sysOpLevel int
+	handles    handleDirectory
+}
+
+// privateMailReaderFor describes u reading through e, with um as the account
+// directory. um may be nil (no undeliverable-mail allowance).
+func privateMailReaderFor(e *MenuExecutor, um *user.UserMgr, u *user.User) privateMailReader {
+	r := privateMailReader{user: u}
+	if e != nil {
+		r.sysOpLevel = e.GetServerConfig().SysOpLevel
+	}
+	if um != nil {
+		r.handles = um
+	}
+	return r
+}
+
 // withPrivacy returns f narrowed so that private messages are only accepted
-// when u sent or received them, by handle (message.DisplayMessage.VisibleTo).
-// A nil u sees no private mail. f may be nil.
-func withPrivacy(u *user.User, f msgOwnershipFilter) msgOwnershipFilter {
+// when the reader may see them. f may be nil. The rule, for the message
+// reader, the message list and newscan:
+//
+//   - A private message is visible to the account whose handle is its To or
+//     From (message.DisplayMessage.VisibleTo). This is the only rule for
+//     every other user and for all mail that reached an account.
+//   - A private message is "undeliverable" when its To is not the handle of
+//     any account, deleted or not (user.UserMgr.HandleExists): typically
+//     netmail or QWK mail addressed to a real name that could not be resolved
+//     to one user when it was imported (see user.UserMgr.ResolveRecipient and
+//     'v3mail readdress'). A sysop (access level at or above SysOpLevel) may
+//     read undeliverable mail too, so it is not lost to everyone.
+//
+// The allowance lives here rather than in VisibleTo because it depends on the
+// account directory and on board configuration; QWK export and the script API
+// stay handle-only. A nil user sees no private mail. Without a directory, or
+// with one that does not know the reader's own handle, no mail counts as
+// undeliverable, so a missing directory never widens access.
+func withPrivacy(r privateMailReader, f msgOwnershipFilter) msgOwnershipFilter {
 	var handle string
-	if u != nil {
-		handle = u.Handle
+	sysop := false
+	if r.user != nil {
+		handle = r.user.Handle
+		sysop = r.sysOpLevel > 0 && r.user.AccessLevel >= r.sysOpLevel &&
+			r.handles != nil && r.handles.HandleExists(handle)
 	}
 	return func(m *message.DisplayMessage) bool {
-		if !m.VisibleTo(handle) {
+		undeliverable := sysop && !r.handles.HandleExists(m.To)
+		if !m.VisibleTo(handle) && !undeliverable {
 			return false
 		}
 		return f == nil || f(m)
@@ -79,7 +127,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	startMsg int, totalMsgCount int, isNewScan bool,
 	termWidth int, termHeight int, msgFilter msgOwnershipFilter) (*user.User, string, error) {
 
-	msgFilter = withPrivacy(currentUser, msgFilter)
+	msgFilter = withPrivacy(privateMailReaderFor(e, userManager, currentUser), msgFilter)
 	currentAreaID := currentUser.CurrentMessageAreaID
 	currentAreaTag := currentUser.CurrentMessageAreaTag
 

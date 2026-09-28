@@ -234,6 +234,8 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	svc := qwkservice.New(e.MessageMgr, bbsID, e.GetServerConfig().BoardName, e.GetServerConfig().SysOpName, e.MessageMgr.DataPath())
+	// Private replies are stored addressed to the recipient's handle.
+	svc.SetRecipientResolver(userManager)
 
 	// The service owns parsing and posting; the menu supplies the ACS gate and
 	// per-area progress output as callbacks so terminal/UI concerns stay here.
