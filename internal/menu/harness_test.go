@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bytes"
+	"net"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -14,8 +15,9 @@ import (
 // only methods a function under test actually calls need to be overridden here.
 type testSession struct {
 	ssh.Session
-	in  *bytes.Reader
-	out bytes.Buffer
+	in   *bytes.Reader
+	out  bytes.Buffer
+	addr net.Addr // RemoteAddr result; nil means 127.0.0.1
 }
 
 func newTestSession(input string) *testSession {
@@ -30,6 +32,15 @@ func (ts *testSession) Write(p []byte) (int, error) { return ts.out.Write(p) }
 // the embedded ssh.Session would otherwise cause.
 func (ts *testSession) Pty() (ssh.Pty, <-chan ssh.Window, bool) {
 	return ssh.Pty{}, nil, false
+}
+
+// RemoteAddr reports addr, or a loopback address when none was set, so
+// handlers that log or lock out by IP work without a network connection.
+func (ts *testSession) RemoteAddr() net.Addr {
+	if ts.addr != nil {
+		return ts.addr
+	}
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2222}
 }
 
 // output returns everything written to the session so far.

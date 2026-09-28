@@ -74,3 +74,37 @@ func TestRunShowStats(t *testing.T) {
 		t.Errorf("placeholder codes not substituted: %q", out)
 	}
 }
+
+// TestShowStats_HarnessUTF8 pins SHOWSTATS on the shipped YOURSTAT.ANS in
+// UTF-8 mode: the handle and level are substituted, a time-limited user sees
+// minutes remaining rather than "Unlimited", and no |XX placeholder survives.
+func TestShowStats_HarnessUTF8(t *testing.T) {
+	env := newMenuEnv(t)
+	r := env.runCmd("SHOWSTATS", env.caller, "", "\r")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("Caller", "10") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if r.has("Unlimited") {
+		t.Errorf("60-minute user shown as unlimited:\n%s", r.text())
+	}
+	for _, code := range []string{"|UH", "|UL", "|TL"} {
+		if strings.Contains(r.raw, code) {
+			t.Errorf("placeholder %s not substituted", code)
+		}
+	}
+	if r := env.runCmd("SHOWSTATS", env.caller, "", ""); r.next != "LOGOFF" {
+		t.Errorf("disconnect at pause: next = %q, want LOGOFF", r.next)
+	}
+}
+
+// TestShowStats_RequiresLogin pins the error shown to a session with no user.
+func TestShowStats_RequiresLogin(t *testing.T) {
+	env := newMenuEnv(t)
+	r := env.runCmd("SHOWSTATS", nil, "", "\r")
+	if r.err != nil || !r.has("You must be logged in to view stats.") {
+		t.Errorf("err = %v output:\n%s", r.err, r.text())
+	}
+}
