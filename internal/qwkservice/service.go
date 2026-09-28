@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"log/slog"
 	"path/filepath"
-	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -82,7 +81,7 @@ type LastReadUpdate struct {
 
 // ExportOptions configure a packet build.
 type ExportOptions struct {
-	Handle string // user handle (used for PERSONAL.NDX and last-read)
+	Handle string // user handle (used for PERSONAL.NDX, last-read and private-mail visibility)
 	// TaggedTags lists the area tags to export. When empty, the service falls
 	// back to every loaded area (ListAreas); note this is not access-filtered —
 	// callers that need ACS enforcement must pre-filter the tags they pass.
@@ -176,6 +175,11 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			if isPrivateConf && !ownsPrivateMessage(msg, opts.Handle) {
 				continue
 			}
+			// Other users' private messages never leave the board, whatever
+			// conference they sit in.
+			if !msg.VisibleTo(opts.Handle) {
+				continue
+			}
 
 			pw.AddMessage(qwk.PacketMessage{
 				Conference:    entry.QWKNumber,
@@ -222,7 +226,9 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 // ownership; an explicit IsPrivate check here would wrongly skip — and stall the
 // last-read pointer on — any conference-0 record lacking the flag.
 func ownsPrivateMessage(msg *message.DisplayMessage, handle string) bool {
-	return strings.EqualFold(msg.To, handle) || strings.EqualFold(msg.From, handle)
+	owned := *msg
+	owned.IsPrivate = true // in this conference every message is treated as private
+	return owned.VisibleTo(handle)
 }
 
 // CommitExport applies the deferred newscan pointer advances from a successful

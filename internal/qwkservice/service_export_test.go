@@ -4,11 +4,13 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
 )
 
 func TestBuildPacket_PacksNewMessages(t *testing.T) {
@@ -310,5 +312,38 @@ func TestBuildPacket_WritesReplyReference(t *testing.T) {
 	}
 	if got := firstMsgReplyRef(t, res.Packet); got != 7 {
 		t.Errorf("exported reply reference: want 7, got %d", got)
+	}
+}
+
+// TestBuildPacket_OmitsOthersPrivateMailInPublicAreas pins #465 for QWK: a
+// private message in an ordinary conference is packed only for its sender or
+// recipient by handle, never for another caller, and addressing it to the
+// caller's real name does not make it theirs.
+func TestBuildPacket_OmitsOthersPrivateMailInPublicAreas(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 5, Tag: "GENERAL", Name: "General"})
+	store.seed(5,
+		dm(1, "alice", "All", "s", "b"), // public -> included
+		privMsg(2, "alice", "bob"),      // someone else's -> excluded
+		privMsg(3, "alice", "Tess Ter"), // a real name, not a handle -> excluded
+		privMsg(4, "alice", "TESTER"),   // to my handle -> included
+		privMsg(5, "tester", "carol"),   // from my handle -> included
+	)
+
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester", TaggedTags: []string{"GENERAL"}})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	pkt, err := qwk.ReadPacket(bytes.NewReader(res.Packet), int64(len(res.Packet)))
+	if err != nil {
+		t.Fatalf("ReadPacket: %v", err)
+	}
+	var got []int
+	for _, m := range pkt.Messages {
+		got = append(got, m.Number)
+	}
+	if want := []int{1, 4, 5}; !slices.Equal(got, want) {
+		t.Errorf("packed message numbers = %v, want %v", got, want)
 	}
 }
