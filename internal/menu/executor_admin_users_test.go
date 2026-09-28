@@ -1,6 +1,12 @@
 package menu
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+)
 
 // adminTruncate trims surrounding whitespace before measuring, then appends an
 // ASCII "..." ellipsis when it cuts (hard-cutting instead when max is 3 or
@@ -40,5 +46,84 @@ func TestAdminTruncate(t *testing.T) {
 				t.Errorf("adminTruncate(%q, %d) = %q, want %q", tt.s, tt.max, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestListUsers_ShowsSeededUsers pins the public user list: every live user
+// appears with level and location, unvalidated users carry [NV], deleted
+// users are hidden, and the header counts users pending validation (banned
+// and deleted accounts are not pending).
+func TestListUsers_ShowsSeededUsers(t *testing.T) {
+	env := newMenuEnv(t)
+	gone := &user.User{ID: 4, Handle: "Vanished", AccessLevel: 10, DeletedUser: true}
+	env.seedUsers(
+		&user.User{ID: 3, Handle: "Pending", GroupLocation: "Pittsburgh", AccessLevel: 5},
+		gone,
+		&user.User{ID: 5, Handle: "Exiled", AccessLevel: 0},
+	)
+	r := env.runCmd("LISTUSERS", env.caller, "", "\r")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("Sysop", "Caller", "Pending [NV]", "Pittsburgh", "255", "Pending validation: 1") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if r.has("Vanished") {
+		t.Errorf("deleted user listed:\n%s", r.text())
+	}
+}
+
+// TestListUsers_DisconnectAtPauseLogsOff pins that losing the caller at the
+// closing pause is reported as a logoff.
+func TestListUsers_DisconnectAtPauseLogsOff(t *testing.T) {
+	env := newMenuEnv(t)
+	if r := env.runCmd("LISTUSERS", env.caller, "", ""); r.next != "LOGOFF" {
+		t.Errorf("next = %q, want LOGOFF", r.next)
+	}
+}
+
+// TestPendingValidationNotice pins that the login notice shows the pending
+// count to sysops only, and stays silent when nothing is pending.
+func TestPendingValidationNotice(t *testing.T) {
+	env := newMenuEnv(t)
+	if r := env.runCmd("PENDINGVALIDATIONNOTICE", env.sysop, "", ""); strings.TrimSpace(r.text()) != "" {
+		t.Errorf("empty queue output: %q", r.text())
+	}
+	env.seedUsers(pendingNewbie(3, "A"), pendingNewbie(4, "B"), &user.User{ID: 5, Handle: "Banned"})
+	r := env.runCmd("PENDINGVALIDATIONNOTICE", env.sysop, "", "")
+	if !r.has("Validate user account [2]") {
+		t.Errorf("sysop output: %q", r.text())
+	}
+	for _, u := range []*user.User{env.caller, nil} {
+		if r := env.runCmd("PENDINGVALIDATIONNOTICE", u, "", ""); strings.TrimSpace(r.text()) != "" {
+			t.Errorf("non-sysop %v saw notice: %q", u, r.text())
+		}
+	}
+}
+
+// TestToggleAllowNewUsers_PersistsFlag pins that the toggle flips the live
+// flag, writes it to config.json, and reports the new state. (The handler
+// always sleeps one second after reporting.)
+func TestToggleAllowNewUsers_PersistsFlag(t *testing.T) {
+	env := newMenuEnv(t)
+	if !env.e.GetServerConfig().AllowNewUsers {
+		t.Fatal("shipped config should allow new users")
+	}
+	r := env.runCmd("TOGGLEALLOWNEWUSERS", env.sysop, "", "")
+	if r.err != nil || !r.has("New user registrations: CLOSED") {
+		t.Errorf("err = %v output:\n%s", r.err, r.text())
+	}
+	if env.e.GetServerConfig().AllowNewUsers {
+		t.Error("live config still allows new users")
+	}
+	disk, err := config.LoadServerConfig(env.cfgDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disk.AllowNewUsers {
+		t.Error("config.json still allows new users")
+	}
+	if r := env.runCmd("TOGGLEALLOWNEWUSERS", nil, "", ""); r.raw != "" {
+		t.Errorf("logged-out toggle wrote output: %q", r.text())
 	}
 }
