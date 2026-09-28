@@ -50,7 +50,8 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		return vm.ToValue(count)
 	})
 
-	// get(areaID, msgNum) — get a message, returns object or null.
+	// get(areaID, msgNum) — get a message, returns object or null (also null
+	// for another user's private message).
 	jsutil.Set(obj, "get", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
 			return goja.Null()
@@ -59,6 +60,11 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		msgNum := int(call.Arguments[1].ToInteger())
 		msg, err := mgr.GetMessage(areaID, msgNum)
 		if err != nil {
+			return goja.Null()
+		}
+		// Scripts run as the caller, so they see what the caller could read
+		// in the message reader: another user's private mail is absent.
+		if !msg.VisibleTo(eng.session.UserHandle) {
 			return goja.Null()
 		}
 		return displayMessageToJS(vm, msg)
