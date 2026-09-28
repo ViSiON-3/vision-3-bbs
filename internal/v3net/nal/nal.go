@@ -38,6 +38,9 @@ var (
 //
 // AreaAccess: allow_list, deny_list, mode
 // AreaPolicy: allow_ansi, max_body_bytes, require_tearline
+//
+// Area.Added is deliberately not signed: the hub stamps it after the
+// coordinator signs, and older leaves rebuild this form without it.
 
 // canonicalNAL is the struct used for deterministic JSON marshalling during
 // signing. It has signature_b64 always set to empty string and uses the same

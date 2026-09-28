@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -49,13 +50,38 @@ func (ns *NALStore) Get(network string) (*protocol.NAL, error) {
 	return &n, nil
 }
 
-// Put stores (upserts) a NAL for a network.
+// Put stores (upserts) a NAL for a network. It stamps each area's Added
+// time first: an area already in the stored NAL keeps the time it had there
+// (empty for areas stored before the field existed), and an area that is not
+// gets the current time. Any Added the caller sent is ignored, so the hub's
+// record is the only source. Added is outside the signature, so stamping
+// leaves the NAL verifiable.
 func (ns *NALStore) Put(network string, n *protocol.NAL) error {
+	tx, err := ns.db.Begin()
+	if err != nil {
+		return fmt.Errorf("hub: put nal: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var prev *protocol.NAL
+	var prevData string
+	switch err := tx.QueryRow("SELECT nal_json FROM network_nal WHERE network = ?", network).Scan(&prevData); err {
+	case nil:
+		prev = &protocol.NAL{}
+		if err := json.Unmarshal([]byte(prevData), prev); err != nil {
+			return fmt.Errorf("hub: unmarshal nal: %w", err)
+		}
+	case sql.ErrNoRows:
+	default:
+		return fmt.Errorf("hub: get nal: %w", err)
+	}
+	stampAreasAdded(prev, n, time.Now())
+
 	data, err := json.Marshal(n)
 	if err != nil {
 		return fmt.Errorf("hub: marshal nal: %w", err)
 	}
-	_, err = ns.db.Exec(
+	_, err = tx.Exec(
 		`INSERT INTO network_nal (network, nal_json) VALUES (?, ?)
 		 ON CONFLICT(network) DO UPDATE SET nal_json = excluded.nal_json, verified_at = datetime('now')`,
 		network, string(data),
@@ -63,7 +89,28 @@ func (ns *NALStore) Put(network string, n *protocol.NAL) error {
 	if err != nil {
 		return fmt.Errorf("hub: put nal: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("hub: put nal: %w", err)
+	}
 	return nil
+}
+
+// stampAreasAdded sets Added on each area of n: carried over from prev for
+// an area prev has, now for one it does not. prev may be nil.
+func stampAreasAdded(prev, n *protocol.NAL, now time.Time) {
+	stamp := now.UTC().Format(time.RFC3339)
+	for i := range n.Areas {
+		a := &n.Areas[i]
+		if prev == nil {
+			a.Added = stamp
+			continue
+		}
+		if old := prev.FindArea(a.Tag); old != nil {
+			a.Added = old.Added
+		} else {
+			a.Added = stamp
+		}
+	}
 }
 
 // handleGetNAL serves the current signed NAL for a network (public, no auth).
@@ -108,6 +155,13 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"network mismatch"}`, http.StatusBadRequest)
 		return
 	}
+
+	// Hold nalMu from the coordinator check through the write, as the
+	// proposal and access handlers do, so a concurrent NAL change cannot land
+	// between the check and the store. Taken after decoding so a slow client
+	// cannot hold it.
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
 
 	// Check that the submitter is the coordinator.
 	existing, err := h.nalStore.Get(network)

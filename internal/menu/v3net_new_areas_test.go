@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -52,6 +53,52 @@ func TestRecordV3NetAreas(t *testing.T) {
 	}
 	if _, err := recordV3NetAreas(path, "felonynet", nalWith("fel.a"), nil); err != nil {
 		t.Errorf("null file: %v", err)
+	}
+}
+
+func TestRecordV3NetAreasFirstNALOffersRecentAreas(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v3net_seen_areas.json")
+	now := time.Now().UTC()
+
+	n := nalWith("fel.old", "fel.undated", "fel.recent", "fel.bad")
+	n.Areas[0].Added = now.Add(-v3netRecentAreaWindow - time.Hour).Format(time.RFC3339)
+	n.Areas[2].Added = now.Add(-48 * time.Hour).Format(time.RFC3339)
+	n.Areas[3].Added = "last tuesday"
+
+	// Only the area added inside the window is new to a node seeing this
+	// network for the first time; undated and unparseable times count as old.
+	fresh, err := recordV3NetAreas(path, "felonynet", n, nil)
+	if err != nil || len(fresh) != 1 || fresh[0].Tag != "fel.recent" {
+		t.Fatalf("first sighting: fresh=%v err=%v, want only fel.recent", fresh, err)
+	}
+	if fresh, _ := recordV3NetAreas(path, "felonynet", n, nil); len(fresh) != 0 {
+		t.Errorf("recent area offered twice: %v", fresh)
+	}
+
+	// A failed offer leaves the network unseen, so the next NAL offers it again.
+	other := nalWith("oth.recent")
+	other.Areas[0].Added = now.Format(time.RFC3339)
+	fail := func([]protocol.Area) error { return errors.New("no") }
+	if _, err := recordV3NetAreas(path, "othernet", other, fail); err == nil {
+		t.Fatal("offer error was swallowed")
+	}
+	if fresh, _ := recordV3NetAreas(path, "othernet", other, nil); len(fresh) != 1 {
+		t.Errorf("retry after failed offer: fresh=%v, want oth.recent", fresh)
+	}
+}
+
+func TestNoteV3NetNALFirstNALSkipsCarriedRecentArea(t *testing.T) {
+	e, um := newAreaFixture(t)
+	n := nalWith("fel.a", "fel.b")
+	stamp := time.Now().UTC().Format(time.RFC3339)
+	n.Areas[0].Added = stamp // already carried by the fixture
+	n.Areas[1].Added = stamp
+	if got := e.NoteV3NetNAL(um, "felonynet", n, "ME"); got != 1 {
+		t.Fatalf("queued %d notices, want 1 (fel.b to the sysop)", got)
+	}
+	q, _ := peekSysopNotices(sysopNoticesPath(e.GetServerConfig().DataDir), 1)
+	if len(q) != 1 || q[0].V3NetTag != "fel.b" {
+		t.Errorf("sysop queue = %+v, want fel.b", q)
 	}
 }
 

@@ -37,10 +37,18 @@ func v3netSeenAreasPath(dataDir string) string {
 	return filepath.Join(dataDir, "v3net_seen_areas.json")
 }
 
+// v3netRecentAreaWindow is how recently an area must have been added to its
+// network to be offered from the first NAL a node sees for that network.
+const v3netRecentAreaWindow = 30 * 24 * time.Hour
+
 // recordV3NetAreas stores the NAL's area tags as the seen set for network and
 // returns the areas that were not in the previous set. The first NAL seen for
-// a network only records its tags: those areas were there before this node
-// was watching, and offering every one of them would bury the sysop.
+// a network mostly just records its tags: those areas were there before this
+// node was watching, and offering every one of them would bury the sysop. The
+// exception is an area the hub stamped as added within v3netRecentAreaWindow,
+// so a node that joins or upgrades just after an area appears still hears of
+// it. An area with no Added time (an older hub, or an area that predates the
+// field) counts as old.
 //
 // When there are new areas and offer is non-nil, offer is called with them
 // before the seen set is written, and an error from it leaves the set
@@ -75,9 +83,12 @@ func recordV3NetAreas(path, network string, n *protocol.NAL, offer func([]protoc
 
 	var fresh []protocol.Area
 	tags := make([]string, 0, len(n.Areas))
+	cutoff := time.Now().Add(-v3netRecentAreaWindow)
 	for _, a := range n.Areas {
 		tags = append(tags, a.Tag)
 		if known && !prevSet[a.Tag] {
+			fresh = append(fresh, a)
+		} else if !known && v3netAddedSince(a, cutoff) {
 			fresh = append(fresh, a)
 		}
 	}
@@ -102,6 +113,16 @@ func recordV3NetAreas(path, network string, n *protocol.NAL, offer func([]protoc
 		return nil, err
 	}
 	return fresh, nil
+}
+
+// v3netAddedSince reports whether the hub stamped a as added after cutoff.
+// A missing or unparseable time is treated as old.
+func v3netAddedSince(a protocol.Area, cutoff time.Time) bool {
+	if a.Added == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, a.Added)
+	return err == nil && t.After(cutoff)
 }
 
 // v3netNetworkLabel is how a network name reads in a notice: "felonynet"
