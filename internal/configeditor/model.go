@@ -453,6 +453,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		prevMode := m.mode
+		prevMessage := m.message
 		var result tea.Model
 		var cmd tea.Cmd
 		switch m.mode {
@@ -535,8 +536,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			return m, nil
 		}
-		// Clear non-error flash messages when navigating to a different screen.
-		if nm, ok := result.(Model); ok && nm.mode != prevMode && !strings.HasPrefix(nm.message, "SAVE ERROR") {
+		// Clear a stale non-error flash message when navigating to a
+		// different screen. A message set by this key's own handler (a save
+		// confirmation, or why a submitted form reopened) is the result of the
+		// navigation and must stay visible.
+		if nm, ok := result.(Model); ok && nm.mode != prevMode && nm.message == prevMessage && !strings.HasPrefix(nm.message, "SAVE ERROR") {
 			nm.message = ""
 			return nm, cmd
 		}

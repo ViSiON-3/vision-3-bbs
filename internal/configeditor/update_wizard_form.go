@@ -289,15 +289,16 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 	}
 	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, leaf)
 	m.configs.V3Net.Enabled = true
-	m.dirty = true
-	m.saveAll()
-	// Create MsgAreas for selected areas.
+	// Create MsgAreas for selected areas, then save everything in one pass.
+	// Saving before this point cleared dirty, so the areas and conference
+	// created here were never written.
 	for _, a := range m.wizard.selectedAreas {
 		if !a.Subscribed {
 			continue
 		}
 		m.createBrowserMsgAreaIfNeeded(a.Tag, a.LocalBoard, m.wizard.networkName)
 	}
+	m.dirty = true
 	if !m.saveAll() {
 		return m, nil
 	}
