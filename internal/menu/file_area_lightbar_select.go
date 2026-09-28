@@ -103,14 +103,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 		return strings.TrimRight(line, "\r\n")
 	}
 
-	confNameFor := func(confID int) string {
-		if e.ConferenceMgr != nil {
-			if conf, ok := e.ConferenceMgr.GetByID(confID); ok {
-				return conf.Name
-			}
-		}
-		return "None"
-	}
+	confNameFor := func(confID int) string { return fileConferenceName(e, confID) }
 
 	// Load optional highlight BAR file (FILEAREAHI.BAR) — same pattern as MSGAREAHI.BAR.
 	hiBarOptions, hiBarErr := loadBarFile("FILEAREAHI", e)

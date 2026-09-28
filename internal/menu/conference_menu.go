@@ -282,7 +282,7 @@ func displayConferenceList(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 	}
 
 	if len(displayedConfs) == 0 {
-		buf.WriteString(e.Strings().ConfNoAccessibleConferences)
+		buf.Write(ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleConferences)))
 	}
 
 	buf.Write(processedBot)
@@ -388,7 +388,7 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 	}
 
 	if len(displayedAreas) == 0 {
-		outputBuffer.WriteString(e.Strings().ConfNoAccessibleMsgAreas)
+		outputBuffer.Write(ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleMsgAreas)))
 	}
 
 	outputBuffer.Write(processedBotTemplate)

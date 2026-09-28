@@ -88,10 +88,11 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 			markReviewed = true
 
 		case "R":
-			if err := editFileRename(e, s, terminal, rec, nodeNumber, outputMode); err != nil {
+			renamed, err := editFileRename(e, s, terminal, rec, nodeNumber, outputMode)
+			if err != nil {
 				return currentUser, "", err
 			}
-			markReviewed = true
+			markReviewed = renamed // Only offer review after a rename that happened.
 
 		case "D":
 			deleted, err := editFileDelete(e, s, terminal, rec, nodeNumber, outputMode)
@@ -103,10 +104,11 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 		case "M":
-			if err := editFileMove(e, s, terminal, rec, nodeNumber, outputMode); err != nil {
+			moved, err := editFileMove(e, s, terminal, rec, nodeNumber, outputMode)
+			if err != nil {
 				return currentUser, "", err
 			}
-			markReviewed = true
+			markReviewed = moved // Only offer review after a move that happened.
 
 		case "S":
 			continue
@@ -192,29 +194,35 @@ func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Te
 	return nil
 }
 
+// editFileRenameFailed tells the sysop a rename did not happen.
+const editFileRenameFailed = "\r\n|12Rename failed.\r\n"
+
 // editFileRename prompts for a new filename, validates it, renames on disk, and updates the record.
-func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, nodeNumber int, outputMode ansi.OutputMode) error {
+// It reports whether the file was renamed; a cancelled, invalid or failed
+// rename returns false.
+func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15New filename: |07")), outputMode)
 	newName, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
-		return err
+		return false, err
 	}
 	newName = strings.TrimSpace(newName)
 	if newName == "" {
-		return nil
+		return false, nil
 	}
 
 	// Prevent path traversal: only use the base name.
 	safeName := filepath.Base(newName)
 	if safeName != newName || safeName == "." || safeName == ".." {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Invalid filename.\r\n")), outputMode)
-		return nil
+		return false, nil
 	}
 
 	oldPath, pathErr := e.FileMgr.GetFilePath(rec.ID)
 	if pathErr != nil {
 		slog.Error("failed to get file path", "node", nodeNumber, "file", rec.Filename, "error", pathErr)
-		return nil
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(editFileRenameFailed)), outputMode)
+		return false, nil
 	}
 
 	dir := filepath.Dir(oldPath)
@@ -222,7 +230,8 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 
 	if renameErr := os.Rename(oldPath, newPath); renameErr != nil {
 		slog.Error("failed to rename file", "node", nodeNumber, "from", oldPath, "to", newPath, "error", renameErr)
-		return nil
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(editFileRenameFailed)), outputMode)
+		return false, nil
 	}
 
 	updateErr := e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
@@ -233,11 +242,12 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
 			slog.Error("rollback rename failed (disk/DB inconsistent)", "node", nodeNumber, "from", newPath, "to", oldPath, "error", rollbackErr)
 		}
-		return nil
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(editFileRenameFailed)), outputMode)
+		return false, nil
 	}
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewRenamed+"\r\n")), outputMode)
-	return nil
+	return true, nil
 }
 
 // editFileDelete confirms deletion and removes the file record and disk file.
@@ -260,7 +270,9 @@ func editFileDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 }
 
 // editFileMove shows a list of areas, prompts for a target, confirms, and moves the file.
-func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, nodeNumber int, outputMode ansi.OutputMode) error {
+// It reports whether the file was moved; a cancelled, invalid or failed move
+// returns false.
+func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
 	areas := e.FileMgr.ListAreas()
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15Available areas:\r\n")), outputMode)
@@ -275,39 +287,41 @@ func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec f
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|15Move to area #: |07")), outputMode)
 	areaInput, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
-		return err
+		return false, err
 	}
 	areaInput = strings.TrimSpace(areaInput)
 	if areaInput == "" {
-		return nil
+		return false, nil
 	}
 
 	var targetID int
 	if _, scanErr := fmt.Sscanf(areaInput, "%d", &targetID); scanErr != nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Invalid area number.\r\n")), outputMode)
-		return nil
+		return false, nil
 	}
 
 	targetArea, found := e.FileMgr.GetAreaByID(targetID)
 	if !found {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Area not found.\r\n")), outputMode)
-		return nil
+		return false, nil
 	}
 
 	confirmMsg := fmt.Sprintf("\r\n|15Move to |11%s|15? |07[|15Y|07/|15N|07]: ", targetArea.Name)
 	confirm, err := editFilePromptYN(e, s, terminal, confirmMsg, outputMode)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !strings.EqualFold(confirm, "Y") {
-		return nil
+		return false, nil
 	}
 
 	moveErr := e.FileMgr.MoveFileRecord(rec.ID, targetID)
 	if moveErr != nil {
 		slog.Error("failed to move file to area", "node", nodeNumber, "file", rec.Filename, "area", targetID, "error", moveErr)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Move failed.\r\n")), outputMode)
+		return false, nil
 	}
-	return nil
+	return true, nil
 }
 
 // editFilePromptYN writes a prompt and reads a single-line response.

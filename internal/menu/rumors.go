@@ -12,6 +12,15 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
+const (
+	// rumorListAuthorCol is where RUMORSLIST's author column starts (after
+	// the 4-wide # and 42-wide rumor columns).
+	rumorListAuthorCol = 46
+	// rumorListPosterWidth caps the sysop's real-poster line so it fits in
+	// 80 columns with its parentheses and without touching the last column.
+	rumorListPosterWidth = 79 - rumorListAuthorCol - 2
+)
+
 // runRumorsList displays all visible rumors.
 // Maps to V2's ListRumors procedure (simplified — no Stats/Both modes).
 func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
@@ -56,9 +65,18 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 
 	for _, idx := range visible {
 		r := &rd.Rumors[idx]
-		author := rumorDisplayAuthor(r, isSysop, anonName)
+		author := rumorShownAuthor(r, anonName)
 		wv(terminal, fmt.Sprintf("|03%-4d|07%-42s|11%-16s|07%s\r\n",
 			r.ID, truncateRunes(r.Text, 41), truncateRunes(author, 15), r.PostedAt.Format("01/02/06")), outputMode)
+		// The author column is too narrow for "Author (RealUser)", so a sysop
+		// gets the real poster of a masked rumor on a line of its own,
+		// under the author column.
+		if isSysop {
+			if poster, ok := rumorMaskedPoster(r, anonName); ok {
+				wv(terminal, fmt.Sprintf("%s|08(|11%s|08)|07\r\n",
+					strings.Repeat(" ", rumorListAuthorCol), truncateRunes(poster, rumorListPosterWidth)), outputMode)
+			}
+		}
 	}
 
 	e.holdScreen(s, terminal, outputMode, termWidth, termHeight)

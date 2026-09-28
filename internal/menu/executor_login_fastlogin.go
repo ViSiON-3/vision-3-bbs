@@ -63,6 +63,13 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Warn("failed to load FASTLOGN.CFG", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
+	// A missing or empty CFG loads as no commands. With nothing to match,
+	// every key would answer "Unknown command!" and trap the caller, so
+	// continue the login as for a malformed CFG.
+	if len(commands) == 0 {
+		slog.Warn("FASTLOGN.CFG is missing or has no commands; continuing login", "node", nodeNumber)
+		return currentUser, "", nil
+	}
 
 	renderFastLoginScreen()
 

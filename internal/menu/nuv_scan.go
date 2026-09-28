@@ -62,22 +62,16 @@ func runCheckNUV(c *cmdCtx, args string) (*user.User, string, error) {
 	waitingStr = strings.ReplaceAll(waitingStr, "|NE", fmt.Sprintf("%d", unvoted))
 	wv(terminal, waitingStr+"\r\n", outputMode)
 
+	// The shipped string ends in " @", the Yes/No lightbar marker; the
+	// lightbar strips it and echoes the answer with a line break.
 	voteNowStr := e.Strings().VoteOnNewUsers
 	if voteNowStr == "" {
-		voteNowStr = "|07Vote now? |15[Y/N]|07: "
+		voteNowStr = "|07Vote now? @"
 	}
-	wv(terminal, voteNowStr, outputMode)
-
-	ih := getSessionIH(s)
-	key, err := ih.ReadKey()
-	if err != nil {
+	voteNow, err := e.PromptYesNo(s, terminal, voteNowStr, outputMode, c.nodeNumber, termWidth, termHeight, false)
+	if err != nil || !voteNow {
 		return currentUser, "", nil
 	}
-	if key != 'Y' && key != 'y' {
-		wv(terminal, "\r\n", outputMode)
-		return currentUser, "", nil
-	}
-	wv(terminal, "\r\n", outputMode)
 
 	// Quick-scan: iterate through unvoted candidates.
 	nuvMu.Lock()

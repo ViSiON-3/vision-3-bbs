@@ -46,8 +46,12 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 		return fmt.Errorf("failed loading FILEAREA templates")
 	}
 
-	// 3. Process Pipe Codes in Templates FIRST
-	processedTopTemplate := ansi.ReplacePipeCodes(topTemplateBytes)
+	// 3. Expand the TOP template's tokens (^CN plus the common template
+	// tokens such as |CFAN) before its pipe codes, the same pipeline the
+	// message-area list and the SELECTFILEAREA lightbar use.
+	topStr := strings.ReplaceAll(string(topTemplateBytes), "^CN", fileConferenceName(e, currentUser.CurrentFileConferenceID))
+	withTokens := e.applyCommonTemplateTokens([]byte(topStr), currentUser, nodeNumber)
+	processedTopTemplate := ansi.ReplacePipeCodes(withTokens)
 	processedMidTemplate := string(ansi.ReplacePipeCodes(midTemplateBytes))
 	processedBotTemplate := ansi.ReplacePipeCodes(botTemplateBytes)
 
@@ -163,6 +167,18 @@ func displayFileAreaList(e *MenuExecutor, s ssh.Session, terminal *term.Terminal
 	}
 
 	return nil // Success
+}
+
+// fileConferenceName names a file conference for a template's ^CN, falling
+// back to "None" (as the SELECTFILEAREA lightbar does) when the conference is
+// unknown or conferences are not configured.
+func fileConferenceName(e *MenuExecutor, confID int) string {
+	if e.ConferenceMgr != nil {
+		if conf, ok := e.ConferenceMgr.GetByID(confID); ok {
+			return conf.Name
+		}
+	}
+	return "None"
 }
 
 // runListFileAreas displays a list of file areas using templates.

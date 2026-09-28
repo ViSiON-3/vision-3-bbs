@@ -139,3 +139,33 @@ func TestFastLogin_BrokenConfigContinues(t *testing.T) {
 		t.Errorf("next=%q user=%v err=%v", r.next, r.user, r.err)
 	}
 }
+
+// A missing or empty FASTLOGN.CFG leaves FASTLOGIN nothing to match; it
+// continues the login like a malformed CFG instead of answering every key
+// with "Unknown command!".
+func TestFastLogin_MissingOrEmptyConfigContinues(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		prep func(cfg string) error
+	}{
+		{"missing", os.Remove},
+		{"empty", func(cfg string) error { return os.WriteFile(cfg, nil, 0o644) }},
+		{"empty array", func(cfg string) error { return os.WriteFile(cfg, []byte("[]"), 0o644) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newMenuEnv(t)
+			set := fastLoginMenuSet(t)
+			if err := tc.prep(filepath.Join(set, "cfg", "FASTLOGN.CFG")); err != nil {
+				t.Fatal(err)
+			}
+			env.e.MenuSetPath = set
+			r := env.runCmd("FASTLOGIN", env.caller, "", "1")
+			if r.next != "" || r.user != env.caller || r.err != nil {
+				t.Errorf("next=%q user=%v err=%v", r.next, r.user, r.err)
+			}
+			if r.has("Unknown command!") {
+				t.Errorf("caller trapped at the FASTLOGIN prompt: %q", r.text())
+			}
+		})
+	}
+}

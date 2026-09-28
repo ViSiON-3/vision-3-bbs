@@ -71,3 +71,21 @@ func TestListFileAreasDisconnectAtPause(t *testing.T) {
 		t.Errorf("next = %q, want LOGOFF", r.next)
 	}
 }
+
+// TestListFileAreasExpandsHeaderTokens pins that the shipped FILEAREA.TOP
+// header has its ^CN (current file conference) and |CFAN (current file area)
+// tokens filled in rather than printed literally.
+func TestListFileAreasExpandsHeaderTokens(t *testing.T) {
+	env := newMenuEnv(t)
+	env.caller.CurrentFileConferenceID = 1
+	env.caller.CurrentFileAreaID = 1
+	env.caller.CurrentFileAreaTag = "GENERAL"
+
+	r := env.runCmd("LISTFILEAR", env.caller, "", "\r")
+	if r.has("^CN") || r.has("|CFAN") {
+		t.Errorf("header shows raw template tokens:\n%s", r.text())
+	}
+	if !r.has("Current Conf: Local Areas", "Current Area: General Files") {
+		t.Errorf("header should name the current conference and area:\n%s", r.text())
+	}
+}
