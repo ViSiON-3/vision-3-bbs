@@ -146,7 +146,17 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 	private := composeRecipientKindFor(area) == recipientPrivate
 
-	// 4. Prompt for Anonymous (if user level >= AnonymousLevel)
+	// Private mail belongs to the handles on it: only the account whose
+	// handle is in To or From can read it (message.DisplayMessage.VisibleTo).
+	// So it is signed with the sender's handle whatever the area's
+	// real_name_only says — a real name would hide the message from its own
+	// sender and give the recipient no one to reply to — and it cannot be
+	// anonymous, which would do both. Netmail is the exception: it leaves the
+	// system, and FidoNet expects real names.
+	signByHandle := private && !isNetmailArea(area)
+
+	// 4. Prompt for Anonymous (if user level >= AnonymousLevel). Private mail
+	// is never offered it: see signByHandle.
 	isAnonymous := false
 	var confAllowAnon *bool
 	if e.ConferenceMgr != nil && area.ConferenceID != 0 {
@@ -154,7 +164,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 			confAllowAnon = conf.AllowAnon
 		}
 	}
-	allowAnon := anonymousPostingAllowed(currentUser.AccessLevel, e.GetServerConfig().AnonymousLevel, area.AllowAnon, confAllowAnon)
+	allowAnon := !signByHandle && anonymousPostingAllowed(currentUser.AccessLevel, e.GetServerConfig().AnonymousLevel, area.AllowAnon, confAllowAnon)
 	if allowAnon {
 		anonPrompt := e.Strings().MsgAnonStr
 		if anonPrompt == "" {
@@ -175,8 +185,9 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 
 	// 5. Determine the sender display name for the editor header (@F@ field).
 	// Priority: anonymous string > real name (if area requires it) > handle.
+	// Private mail is always signed with the handle (see signByHandle).
 	fromName := currentUser.Handle
-	if area.RealNameOnly {
+	if area.RealNameOnly && !signByHandle {
 		if currentUser.HasRealName() {
 			fromName = currentUser.RealName
 		} else {

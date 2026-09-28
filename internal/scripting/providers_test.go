@@ -153,7 +153,9 @@ func newMessageProviders(t *testing.T) *Providers {
 	if err != nil {
 		t.Fatalf("NewMessageManager: %v", err)
 	}
-	return &Providers{MessageMgr: mm}
+	// postPrivate resolves its recipient against the user base.
+	um := user.NewUserMgrForTest(&user.User{ID: 1, Handle: "Sysop"})
+	return &Providers{MessageMgr: mm, UserMgr: um}
 }
 
 // TestMessageObject posts and reads messages through v3.message and checks
