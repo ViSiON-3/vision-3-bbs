@@ -19,6 +19,7 @@ import (
 type interruptibleSession struct {
 	mu        sync.Mutex
 	data      []byte
+	chunks    [][]byte // replayed after data, one chunk per Read
 	interrupt chan struct{}
 	out       []byte
 }
@@ -29,6 +30,9 @@ func newInterruptibleSession(data string) *interruptibleSession {
 
 func (s *interruptibleSession) Read(p []byte) (int, error) {
 	s.mu.Lock()
+	if len(s.data) == 0 && len(s.chunks) > 0 {
+		s.data, s.chunks = s.chunks[0], s.chunks[1:]
+	}
 	if len(s.data) > 0 {
 		n := copy(p, s.data)
 		s.data = s.data[n:]

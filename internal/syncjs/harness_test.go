@@ -40,10 +40,13 @@ type doorHarness struct {
 
 // doorOpts tweaks the engine a harness builds; the zero value is fine.
 type doorOpts struct {
-	input   string
-	args    []string
-	ctx     context.Context
-	session func(*SessionContext)
+	input string
+	// inputChunks follow input, each delivered by its own session Read,
+	// as bytes split across network reads arrive.
+	inputChunks []string
+	args        []string
+	ctx         context.Context
+	session     func(*SessionContext)
 }
 
 // newDoor builds an engine for one test and registers its cleanup.
@@ -78,6 +81,9 @@ func newDoor(t *testing.T, o doorOpts) *doorHarness {
 		o.session(sc)
 	}
 	sess := newInterruptibleSession(o.input)
+	for _, c := range o.inputChunks {
+		sess.chunks = append(sess.chunks, []byte(c))
+	}
 	sc.Session = sess
 	ctx := o.ctx
 	if ctx == nil {

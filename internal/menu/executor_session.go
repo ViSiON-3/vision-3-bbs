@@ -77,7 +77,7 @@ func SetSessionOutputMode(s ssh.Session, mode ansi.OutputMode) {
 // ansi.OutputModeCP437 when unset. CP437 is the safe default: most users of
 // this BBS are on CP437 terminals, and a CP437 byte is never mistaken for
 // part of a UTF-8 continuation sequence (so getting this wrong for a UTF-8
-// session degrades gracefully — see decodeExtendedKey below — while getting
+// session degrades gracefully — see ansi.DecodeExtendedKey — while getting
 // it wrong for a CP437 session the other way around does not).
 func sessionOutputMode(s ssh.Session) ansi.OutputMode {
 	if v, ok := sessionOutputModes.Load(s); ok {
@@ -114,75 +114,6 @@ func takeSessionTermSize(s ssh.Session) (width, height int, ok bool) {
 	}
 	ts := v.(termSize)
 	return ts.width, ts.height, true
-}
-
-// decodeExtendedKey processes one keystroke byte b (128-255) according to
-// mode, returning the line with the decoded character appended (if any), the
-// raw bytes to echo back to the terminal (if any), and the updated
-// utf8Pending accumulator for the next call.
-//
-// CP437 mode is a single-byte table lookup: b maps through
-// ansi.Cp437ToUnicode to exactly one rune, which is appended to line as
-// UTF-8 (so callers only ever store valid UTF-8) while the RAW byte b is
-// echoed unchanged -- a CP437 terminal draws directly from the byte value,
-// so echoing anything else would not round-trip. A byte with no mapping
-// (Cp437ToUnicode[b] == 0) is dropped: it is not stored, matching how the
-// reader already drops any other keystroke it won't accept, and it avoids
-// ever writing invalid/unintended data into users.json.
-//
-// UTF-8 mode receives one byte of a multi-byte sequence per call (that is
-// how bytes >= 128 arrive from ReadKey on a real connection), so b is
-// accumulated into utf8Pending until utf8.FullRune reports a complete
-// sequence (or 4 bytes -- utf8.UTFMax, the longest possible UTF-8 encoding --
-// have accumulated without one, which guards against a malformed sequence
-// that would otherwise never complete and silently swallow all subsequent
-// input). Once complete, the sequence is appended to line and echoed
-// verbatim.
-//
-// A malformed sequence is not stored or echoed, and the decoder resynchronises
-// by discarding one byte at a time rather than the whole accumulator: a stray
-// lead byte is often immediately followed by a real character's lead byte, and
-// dropping the buffer wholesale would swallow that character too.
-func decodeExtendedKey(line []byte, mode ansi.OutputMode, b byte, utf8Pending []byte) (newLine []byte, echo []byte, pending []byte) {
-	if mode == ansi.OutputModeUTF8 {
-		utf8Pending = append(utf8Pending, b)
-		for len(utf8Pending) > 0 {
-			if !utf8.FullRune(utf8Pending) && len(utf8Pending) < utf8.UTFMax {
-				return line, nil, utf8Pending
-			}
-			r, size := utf8.DecodeRune(utf8Pending)
-			if r == utf8.RuneError && size <= 1 {
-				// Malformed: drop one byte and retry, so a stray lead byte does
-				// not take the following character down with it. Discarding the
-				// whole buffer would swallow a valid lead byte sitting behind it.
-				utf8Pending = utf8Pending[1:]
-				continue
-			}
-			seq := append([]byte(nil), utf8Pending[:size]...)
-			return append(line, seq...), seq, nil
-		}
-		return line, nil, nil
-	}
-	r := ansi.Cp437ToUnicode[b]
-	if r == 0 {
-		return line, nil, utf8Pending
-	}
-	var buf [utf8.UTFMax]byte
-	n := utf8.EncodeRune(buf[:], r)
-	return append(line, buf[:n]...), []byte{b}, utf8Pending
-}
-
-// backspaceRune removes the last RUNE (not byte) from line. line always holds
-// valid UTF-8 (ASCII, or a CP437/UTF-8 extended character decoded via
-// decodeExtendedKey above), so a byte-based backspace would cut a multi-byte
-// character in half. The caller still echoes "\b \b" exactly once, matching
-// the single terminal column every stored character occupies.
-func backspaceRune(line []byte) []byte {
-	if len(line) == 0 {
-		return line
-	}
-	_, size := utf8.DecodeLastRune(line)
-	return line[:len(line)-size]
 }
 
 // getSessionIH returns (creating if necessary) the session-scoped InputHandler
@@ -294,10 +225,10 @@ func readLineFromSessionIHAllowAbort(s ssh.Session, terminal *term.Terminal) (st
 // and whether it starts with text already typed.
 //
 // Extended keystrokes (byte >= 128) are decoded per the session's output
-// mode via decodeExtendedKey: a CP437 byte is a complete character on its
+// mode via ansi.DecodeExtendedKey: a CP437 byte is a complete character on its
 // own, while a UTF-8 byte may be one of several making up a single rune and
-// is accumulated in utf8Pending across loop iterations until decodeExtendedKey
-// reports it complete. Backspace deletes one whole rune (see backspaceRune)
+// is accumulated in utf8Pending across loop iterations until ansi.DecodeExtendedKey
+// reports it complete. Backspace deletes one whole rune (see ansi.BackspaceRune)
 // rather than one byte, and clears any in-progress utf8Pending sequence
 // without touching line or echoing, since nothing was displayed for it yet.
 func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbort bool, maxLen int, initial string) (string, error) {
@@ -327,7 +258,7 @@ func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbor
 			if len(utf8Pending) > 0 {
 				utf8Pending = nil
 			} else if len(line) > 0 {
-				line = backspaceRune(line)
+				line = ansi.BackspaceRune(line)
 				_, _ = terminal.Write([]byte("\b \b"))
 			}
 		case editor.KeyEsc:
@@ -356,7 +287,7 @@ func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbor
 				utf8Pending = nil
 			} else if key >= 128 && key <= 255 {
 				var echo []byte
-				line, echo, utf8Pending = decodeExtendedKey(line, mode, byte(key), utf8Pending)
+				line, echo, utf8Pending = ansi.DecodeExtendedKey(line, mode, byte(key), utf8Pending)
 				if len(echo) > 0 {
 					_, _ = terminal.Write(echo)
 				}

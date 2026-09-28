@@ -38,12 +38,15 @@ type scriptHarness struct {
 // harnessOpts tweaks the engine a harness builds. Zero value is a
 // console-only engine with no providers and the default run time.
 type harnessOpts struct {
-	input      string
-	providers  *Providers
-	maxRunTime time.Duration
-	ctx        context.Context
-	args       []string
-	session    func(*SessionContext)
+	input string
+	// inputChunks follow input, each delivered by its own session Read,
+	// as bytes split across network reads arrive.
+	inputChunks []string
+	providers   *Providers
+	maxRunTime  time.Duration
+	ctx         context.Context
+	args        []string
+	session     func(*SessionContext)
 	// workingDir overrides the engine working dir (relative to root).
 	workingDir string
 }
@@ -87,6 +90,9 @@ func newHarness(t *testing.T, o harnessOpts) *scriptHarness {
 		o.session(sc)
 	}
 	sess := newInterruptibleSession(o.input)
+	for _, c := range o.inputChunks {
+		sess.chunks = append(sess.chunks, []byte(c))
+	}
 	sc.Session = sess
 	ctx := o.ctx
 	if ctx == nil {

@@ -107,7 +107,7 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 	shadeChar := "\u2591"
 
 	// maxLen is counted in runes, not bytes: input holds UTF-8 (ASCII, or an
-	// extended character decoded via decodeExtendedKey below), so a multi-byte
+	// extended character decoded via ansi.DecodeExtendedKey), so a multi-byte
 	// rune is one unit of the budget but several bytes. defaultValue is clamped
 	// with ansi.TruncateRunes rather than a raw byte slice, which would cut a
 	// multi-byte value mid-rune.
@@ -212,12 +212,12 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 		case 8, 127: // Backspace or Delete
 			// A byte in progress toward a multi-byte UTF-8 character was never
 			// appended to input or rendered, so just discard it. Otherwise
-			// remove the whole last RUNE (see backspaceRune) -- not one byte,
+			// remove the whole last RUNE (see ansi.BackspaceRune) -- not one byte,
 			// which would cut a multi-byte character in half.
 			if len(utf8Pending) > 0 {
 				utf8Pending = nil
 			} else if len(input) > 0 {
-				input = backspaceRune(input)
+				input = ansi.BackspaceRune(input)
 				renderBox(true)
 			}
 
@@ -244,14 +244,14 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 				utf8Pending = nil
 			} else if ch >= 128 {
 				// Extended character (CP437 byte, or one byte of a multi-byte
-				// UTF-8 sequence). decodeExtendedKey only appends once a full
+				// UTF-8 sequence). ansi.DecodeExtendedKey only appends once a full
 				// character is known; the echo it returns is not needed here
 				// since renderBox already re-writes the whole visible box
 				// through terminalio.WriteStringCP437, which re-encodes per
 				// outputMode.
 				if utf8.RuneCount(input) < maxLen {
 					var newInput []byte
-					newInput, _, utf8Pending = decodeExtendedKey(input, outputMode, ch, utf8Pending)
+					newInput, _, utf8Pending = ansi.DecodeExtendedKey(input, outputMode, ch, utf8Pending)
 					if len(newInput) != len(input) {
 						input = newInput
 						renderBox(true)
@@ -261,7 +261,7 @@ func styledInput(terminal *term.Terminal, session ssh.Session, outputMode ansi.O
 					// the next byte of an in-flight sequence isn't
 					// misinterpreted as the start of a new one, but don't
 					// grow input past maxLen.
-					_, _, utf8Pending = decodeExtendedKey(nil, outputMode, ch, utf8Pending)
+					_, _, utf8Pending = ansi.DecodeExtendedKey(nil, outputMode, ch, utf8Pending)
 				}
 			} else {
 				// Any other ignored byte (e.g. an untranslated control
