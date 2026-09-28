@@ -74,8 +74,12 @@ Either way, each area is asked about once.
   the same access as the area browser. With several SysOps, whoever answers
   Yes first adds it, and the others are not asked again.
 - Areas the hub added while your BBS was down, or while its connection to the
-  hub was down, are caught when it reconnects. The areas a network already had when your BBS first joined it are
-  not offered; browse those in the area browser.
+  hub was down, are caught when it reconnects.
+- When your BBS first sees a network (a new join, or the first start of a
+  build with this feature), only areas the hub added in the last 30 days are
+  offered. Older areas are not; browse those in the area browser. The hub
+  records when each area was added, so this needs a hub running a build that
+  does; with an older hub, no areas are offered at this point.
 - A closed area is only offered when your node is on its allow list. An
   approval-mode area is offered, and Yes sends the access request to its
   manager.

@@ -365,3 +365,76 @@ func TestGetMessages_Pagination(t *testing.T) {
 		t.Errorf("expected no X-V3Net-Has-More on final batch, got %q", hasMore2)
 	}
 }
+
+func TestNALStorePut_StampsAreasAdded(t *testing.T) {
+	h, hubKS := setupTestHub(t)
+	seedTestNAL(t, h, hubKS)
+
+	first, err := h.nalStore.Get("testnet")
+	if err != nil || first == nil {
+		t.Fatalf("get seeded NAL: %v", err)
+	}
+	orig := first.FindArea("gen.general").Added
+	if _, err := time.Parse(time.RFC3339, orig); err != nil {
+		t.Fatalf("seeded area Added = %q, want an RFC 3339 time", orig)
+	}
+
+	// Add an area, and send a made-up time for the existing one: the hub's
+	// record wins for the old area and the new one is stamped fresh.
+	first.FindArea("gen.general").Added = "1999-01-01T00:00:00Z"
+	first.Areas = append(first.Areas, protocol.Area{
+		Tag: "gen.helper", Name: "Ask Helper", Language: "en",
+		Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+		Added:  "1999-01-01T00:00:00Z",
+	})
+	if err := nal.Sign(first, hubKS); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.nalStore.Put("testnet", first); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := h.nalStore.Get("testnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := got.FindArea("gen.general").Added; a != orig {
+		t.Errorf("existing area Added = %q, want the original %q", a, orig)
+	}
+	added, err := time.Parse(time.RFC3339, got.FindArea("gen.helper").Added)
+	if err != nil || time.Since(added) > time.Minute {
+		t.Errorf("new area Added = %q, want about now", got.FindArea("gen.helper").Added)
+	}
+	// Added is outside the signature, so the stamped NAL still verifies.
+	if err := nal.Verify(got); err != nil {
+		t.Errorf("stamped NAL fails verification: %v", err)
+	}
+}
+
+func TestNALStorePut_LegacyAreasStayUndated(t *testing.T) {
+	h, hubKS := setupTestHub(t)
+
+	// A NAL stored by a hub from before Added existed.
+	legacy := &protocol.NAL{V3NetNAL: "1.0", Network: "testnet", Areas: []protocol.Area{
+		{Tag: "gen.general", Name: "General", Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}},
+	}}
+	if err := nal.Sign(legacy, hubKS); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(legacy)
+	if _, err := h.nalStore.db.Exec("INSERT INTO network_nal (network, nal_json) VALUES (?, ?)", "testnet", string(data)); err != nil {
+		t.Fatal(err)
+	}
+
+	legacy.Areas = append(legacy.Areas, protocol.Area{Tag: "gen.helper", Name: "Ask Helper", Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}})
+	if err := h.nalStore.Put("testnet", legacy); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := h.nalStore.Get("testnet")
+	if a := got.FindArea("gen.general").Added; a != "" {
+		t.Errorf("legacy area Added = %q, want empty: its real age is unknown", a)
+	}
+	if a := got.FindArea("gen.helper").Added; a == "" {
+		t.Error("area added after the upgrade was not stamped")
+	}
+}

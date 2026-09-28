@@ -33,6 +33,14 @@ type Area struct {
 	ManagerPubKeyB64 string     `json:"manager_pubkey_b64"`
 	Access           AreaAccess `json:"access"`
 	Policy           AreaPolicy `json:"policy"`
+
+	// Added is when the area first appeared in this network's NAL, as an
+	// RFC 3339 UTC time. The hub stamps it when it stores a NAL (see
+	// hub.NALStore.Put), so it is not covered by the coordinator's signature
+	// and is left out of the canonical form: signing it would make every
+	// older leaf, which drops the field, fail to verify the NAL. Empty for
+	// areas that predate the field.
+	Added string `json:"added,omitempty"`
 }
 
 // AreaAccess controls which leaf nodes may subscribe to an area.
