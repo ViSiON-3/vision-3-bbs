@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -146,4 +147,86 @@ Total: 0 links updated across 5 areas
 		t.Errorf("link -q: exit %d, stdout %q, stderr %q", code, out, errOut)
 	}
 	checkPointers("link -q")
+}
+
+// seedPackThread writes, at dir/name, a linked thread with a deleted message
+// in the middle, so packing renumbers the survivors. Before the pack the
+// pointers are "1:0/3/0 2:0/0/0 3:1/5/4 4:1/0/0 5:3/0/0".
+func seedPackThread(t *testing.T, dir, name string) string {
+	t.Helper()
+	path := seedBase(t, filepath.Join(dir, name),
+		seedMsg{subject: "parent", msgID: "21:1/100 00000001"},
+		seedMsg{subject: "junk"},
+		seedMsg{subject: "r1", msgID: "21:1/100 00000002", replyID: "21:1/100 00000001"},
+		seedMsg{subject: "r2", replyID: "21:1/100 00000001"},
+		seedMsg{subject: "r1a", replyID: "21:1/100 00000002"},
+	)
+	if code, out, errOut := runV3mail(t, dir, "link", path); code != 0 {
+		t.Fatalf("link exit code = %d\n%s%s", code, out, errOut)
+	}
+	deleteMsgs(t, path, 2)
+	return path
+}
+
+// A pack renumbers messages and zeroes every thread pointer; pack relinks
+// the base itself, so the threads are intact without a separate link run.
+func TestPackRelinksThreads(t *testing.T) {
+	dir := t.TempDir()
+	path := seedPackThread(t, dir, "echo")
+	const linked = "1:0/2/0 2:1/4/3 3:1/0/0 4:2/0/0"
+
+	code, out, errOut := runV3mail(t, dir, "pack", path)
+	if code != 0 || errOut != "" {
+		t.Fatalf("pack: exit %d, stderr %q\n%s", code, errOut, out)
+	}
+	wantContains(t, "pack", out, "After:  4 messages",
+		"Relinked reply threads: 4 messages, 4 links updated")
+	if got := pointers(t, path); got != linked {
+		t.Errorf("pointers after pack = %q, want %q", got, linked)
+	}
+
+	// -q packs and relinks just the same, silently.
+	path = seedPackThread(t, dir, "quiet")
+	code, out, errOut = runV3mail(t, dir, "pack", "-q", path)
+	if code != 0 || out != "" || errOut != "" {
+		t.Errorf("pack -q: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if got := pointers(t, path); got != linked {
+		t.Errorf("pointers after pack -q = %q, want %q", got, linked)
+	}
+}
+
+// A dry run or a failed pack leaves the base alone: no link pass runs.
+func TestPackWithoutRepackDoesNotLink(t *testing.T) {
+	dir := t.TempDir()
+
+	dry := seedPackThread(t, dir, "dry")
+	// Scramble the pointers so a link pass would show.
+	setPointers(t, dry, map[int][3]uint32{1: {}, 3: {}})
+	code, out, errOut := runV3mail(t, dir, "pack", "--dry-run", dry)
+	if code != 0 || errOut != "" || strings.Contains(out, "Relinked") {
+		t.Errorf("pack --dry-run: exit %d, stderr %q\n%s", code, errOut, out)
+	}
+	if got, want := pointers(t, dry), "1:0/0/0 2:0/0/0 3:0/0/0 4:1/0/0 5:3/0/0"; got != want {
+		t.Errorf("pointers after dry run = %q, want %q", got, want)
+	}
+
+	failed := seedPackThread(t, dir, "failed")
+	setPointers(t, failed, map[int][3]uint32{1: {}, 3: {}})
+	// A directory where pack wants its temporary header file makes the pack
+	// fail before it touches the base.
+	if err := os.Mkdir(failed+".jhr.tmp", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errOut = runV3mail(t, dir, "pack", failed)
+	if code != 1 {
+		t.Errorf("failed pack exit code = %d, want 1", code)
+	}
+	wantContains(t, "pack stderr", errOut, "Error packing")
+	if strings.Contains(out, "Relinked") {
+		t.Errorf("pack linked after a failed pack:\n%s", out)
+	}
+	if got, want := pointers(t, failed), "1:0/0/0 2:0/0/0 3:0/0/0 4:1/0/0 5:3/0/0"; got != want {
+		t.Errorf("pointers after failed pack = %q, want %q", got, want)
+	}
 }

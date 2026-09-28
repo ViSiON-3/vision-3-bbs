@@ -344,9 +344,8 @@ func cmdPack(args []string) {
 		result, err := b.Pack()
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error packing %s: %v\n", meta.Path, err)
-			if !closeBase(b, meta.Path) {
-				hadErrors = true
-			}
+			hadErrors = true
+			_ = closeBase(b, meta.Path)
 			continue
 		}
 
@@ -355,6 +354,16 @@ func cmdPack(args []string) {
 				result.MessagesBefore, result.MessagesBefore-result.DeletedRemoved, result.DeletedRemoved)
 			fmt.Printf("  After:  %d messages\n", result.MessagesAfter)
 			fmt.Printf("  Reclaimed: %s\n", formatBytes(result.BytesBefore-result.BytesAfter))
+		}
+
+		// Packing renumbers messages and zeroes every ReplyTo/Reply1st/
+		// ReplyNext; rebuild the threads against the new numbering.
+		if res, linkErr := b.Link(); linkErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error linking %s: %v\n", meta.Path, linkErr)
+			hadErrors = true
+		} else if !*quiet {
+			fmt.Printf("  Relinked reply threads: %d messages, %d links updated\n",
+				res.MessagesScanned, res.LinksUpdated)
 		}
 		if !closeBase(b, meta.Path) {
 			hadErrors = true
