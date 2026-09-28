@@ -150,3 +150,28 @@ func TestPromptComposeRecipientNetmailLongNameAndAddress(t *testing.T) {
 		t.Errorf("long name not reported, output %q", out)
 	}
 }
+
+func TestPromptComposeRecipientNetmailBadInlineAddress(t *testing.T) {
+	area := message.MessageArea{Tag: "NETMAIL", AreaType: "netmail"}
+
+	// A mistyped inline address is refused rather than kept as the name.
+	to, name, aborted, out := runRecipientPrompt(t, area, "Joe@21:1/100x\rJoe@21:1/100\r")
+	if aborted || to != "Joe@21:1/100" || name != "Joe" {
+		t.Errorf("bad inline address: to=%q name=%q aborted=%v", to, name, aborted)
+	}
+	if !strings.Contains(out, "'21:1/100x' is not an FTN address") {
+		t.Errorf("bad inline address not reported, output %q", out)
+	}
+
+	// An address with no name in front of it is refused too.
+	to, _, _, out = runRecipientPrompt(t, area, "@21:1/100\rJoe@21:1/100\r")
+	if to != "Joe@21:1/100" || !strings.Contains(out, "Enter a name") {
+		t.Errorf("missing name: to=%q, output %q", to, out)
+	}
+
+	// An "@" that is not an address attempt is part of the name.
+	to, name, _, _ = runRecipientPrompt(t, area, "Th3 D@rk\r21:1/100\r")
+	if to != "Th3 D@rk@21:1/100" || name != "Th3 D@rk" {
+		t.Errorf("@ in name: to=%q name=%q", to, name)
+	}
+}

@@ -108,6 +108,20 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 				return "", "", true, nil
 			}
 			name, addr = message.SplitNetmailTo(val)
+			if addr == "" {
+				// SplitNetmailTo keeps a bad address as part of the name, so
+				// catch an attempt at one here; otherwise the mail would be
+				// addressed to "Joe@21:1/100x". An "@" followed by something
+				// else is left alone, as handles can contain one.
+				if at := strings.LastIndex(val, "@"); at >= 0 && looksLikeFTNAddress(val[at+1:]) {
+					if strings.TrimSpace(val[:at]) == "" {
+						say("|01Enter a name before the address.|07\r\n")
+					} else {
+						say(fmt.Sprintf("|01'%s' is not an FTN address, e.g. 1:234/567.|07\r\n", strings.TrimSpace(val[at+1:])))
+					}
+					continue
+				}
+			}
 			if utf8.RuneCountInString(name) <= netmailNameMaxLen {
 				break
 			}
@@ -183,4 +197,14 @@ func addrZone(addr string) int {
 		return 0
 	}
 	return a.Zone
+}
+
+// looksLikeFTNAddress reports whether s reads as an attempt at an FTN
+// address, parseable or not: it starts with a digit or holds ":" or "/".
+func looksLikeFTNAddress(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	return (s[0] >= '0' && s[0] <= '9') || strings.ContainsAny(s, ":/")
 }
