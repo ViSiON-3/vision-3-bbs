@@ -3,8 +3,10 @@ package scripting
 import (
 	"fmt"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/dop251/goja"
 )
 
@@ -117,6 +119,11 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")
 
+		to, err := privateRecipient(mgr, eng.providers.UserMgr, areaID, to)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+
 		msgNum, err := mgr.AddPrivateMessage(areaID, eng.session.UserHandle, to, subject, body, replyTo)
 		if err != nil {
 			panic(vm.NewGoError(err))
@@ -130,6 +137,30 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 	})
 
 	jsutil.Set(v3, "message", obj)
+}
+
+// privateRecipient returns the To a script's private message to areaID is
+// stored with. Outside netmail, private mail is read only by the account
+// whose handle is on it (message.DisplayMessage.VisibleTo), so to must name
+// an existing, non-deleted account (its handle, its real name if no other
+// account shares it, or "Sysop"), and that account's handle is returned.
+// Netmail goes by name and FTN address, so to is returned as given.
+func privateRecipient(mgr *message.MessageManager, um *user.UserMgr, areaID int, to string) (string, error) {
+	area, ok := mgr.GetAreaByID(areaID)
+	if !ok {
+		return "", fmt.Errorf("postPrivate: no message area with id %d", areaID)
+	}
+	if jam.DetermineMessageType(area.AreaType, area.EchoTag).IsNetmail() {
+		return to, nil
+	}
+	if um == nil {
+		return "", fmt.Errorf("postPrivate: no user base to check recipient %q against", to)
+	}
+	u, ok := um.ResolveRecipient(to)
+	if !ok {
+		return "", fmt.Errorf("postPrivate: recipient %q is not a user of this BBS (or matches more than one)", to)
+	}
+	return u.Handle, nil
 }
 
 func messageAreaToJS(vm *goja.Runtime, a *message.MessageArea) goja.Value {

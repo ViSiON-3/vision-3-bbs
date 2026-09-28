@@ -433,7 +433,7 @@ Message area access — read, post, and search messages.
 | `get(areaID, msgNum)` | object \| `null` | Get a specific message |
 | `newCount(areaID)` | number | Unread message count for the current user |
 | `post(areaID, opts)` | number | Post a message, returns message number. Throws on error |
-| `postPrivate(areaID, opts)` | number | Post a private message, returns message number. Throws on error |
+| `postPrivate(areaID, opts)` | number | Post a private message, returns message number. Throws on error, including an unknown recipient (see below) |
 | `totalCount()` | number | Total messages across all areas |
 
 **Message area object fields** (returned by `areas`, `area`):
@@ -472,6 +472,13 @@ Message area access — read, post, and search messages.
 | `subject` | No | `""` | Subject line |
 | `body` | No | `""` | Message body |
 | `replyTo` | No | `""` | Message ID being replied to |
+
+For `postPrivate`, `to` is required. Private mail can only be read by the user
+whose handle is on it, so outside netmail areas `to` must name an existing,
+non-deleted user: their handle, their real name (if no other user shares it),
+or `"Sysop"` for user #1. The message is stored addressed to that user's
+handle, and `postPrivate` throws if `to` matches no user or more than one. In a
+netmail area `to` is stored as given (`"Name@zone:net/node"`).
 
 ```javascript
 // Post a public message

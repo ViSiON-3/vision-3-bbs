@@ -1140,7 +1140,7 @@ Scripts are executed via the `v3_script` door type using the goja JavaScript eng
 | `get(areaID, msgNum)`       | integer, integer | object \| null | Get message by area and number                      |
 | `newCount(areaID)`          | integer          | integer        | Unread message count for current user               |
 | `post(areaID, opts)`        | integer, object  | integer        | Post message; opts: `{to, subject, body, replyTo?}` |
-| `postPrivate(areaID, opts)` | integer, object  | integer        | Post private message                                |
+| `postPrivate(areaID, opts)` | integer, object  | integer        | Post private message; outside netmail `to` must name a user (stored as their handle), else throws |
 | `totalCount()`              | —                | integer        | Total messages across all areas                     |
 
 ### v3.file — File Area Access
