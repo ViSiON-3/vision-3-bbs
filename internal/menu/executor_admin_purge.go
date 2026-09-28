@@ -31,7 +31,7 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil || userManager == nil {
 		msg := "\r\n|01Error: You must be logged in to purge users.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -39,7 +39,7 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
 		msg := "\r\n|01Access denied.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 

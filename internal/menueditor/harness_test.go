@@ -47,3 +47,46 @@ func typeText(t *testing.T, m Model, s string) Model {
 	t.Helper()
 	return press(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
 }
+
+// keys presses each special key in order and returns the updated Model.
+func keys(t *testing.T, m Model, ks ...tea.KeyType) Model {
+	t.Helper()
+	for _, k := range ks {
+		m = press(t, m, tea.KeyMsg{Type: k})
+	}
+	return m
+}
+
+// sendKey presses one special key and returns the updated Model together with
+// the command Update produced.
+func sendKey(t *testing.T, m Model, k tea.KeyType) (Model, tea.Cmd) {
+	t.Helper()
+	updated, cmd := m.Update(tea.KeyMsg{Type: k})
+	return asModel(t, updated), cmd
+}
+
+// quits reports whether cmd, when run, asks the program to exit.
+func quits(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
+}
+
+// retype opens the focused field with Enter, erases its current value and
+// types s, leaving the input open. It works on both edit screens.
+func retype(t *testing.T, m Model, s string) Model {
+	t.Helper()
+	m = keys(t, m, tea.KeyEnter)
+	if m.mode != modeMenuEditField && m.mode != modeCommandEditField {
+		t.Fatalf("Enter did not open a field, mode = %v", m.mode)
+	}
+	for range m.textInput.Value() {
+		m = keys(t, m, tea.KeyBackspace)
+	}
+	if s == "" {
+		return m
+	}
+	return typeText(t, m, s)
+}

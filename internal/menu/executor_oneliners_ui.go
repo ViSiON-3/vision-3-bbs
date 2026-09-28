@@ -33,7 +33,7 @@ func displayOnelinerScreen(e *MenuExecutor, terminal *term.Terminal, outputMode 
 		slog.Error("failed to load one or more ONELINER template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
 		msg := e.Strings().ExecOnelinerTemplateErr
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return fmt.Errorf("failed loading ONELINER templates")
 	}
 
@@ -230,7 +230,7 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 	if containsDisallowedOnelinerColorCode(newOneliner) {
 		msg := e.Strings().ExecOnelinerColorError
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
@@ -269,12 +269,12 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 			slog.Info("successfully saved updated oneliners", "node", nodeNumber, "path", onelinerPath)
 			msg := e.Strings().ExecOnelinerAdded
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(500 * time.Millisecond)
+			uiPause(500 * time.Millisecond)
 		}
 	} else {
 		msg := e.Strings().ExecOnelinerEmpty
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 	}
 
 	return nil, "", nil

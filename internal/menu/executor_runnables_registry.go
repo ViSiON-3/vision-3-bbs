@@ -31,7 +31,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			if wErr != nil {
 				slog.Error("failed writing readmail error message", "error", wErr)
 			}
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil // No user change, no next action, no error
 		}
 		msg := fmt.Sprintf(e.Strings().ExecReadmailPlaceholder, currentUser.Handle)
@@ -39,7 +39,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		if wErr != nil {
 			slog.Error("failed writing readmail placeholder message", "error", wErr)
 		}
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return nil, "", nil // No user change, no next action, no error
 	}
 
@@ -91,7 +91,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			if wErr != nil {
 				slog.Error("failed writing door access denied message", "error", wErr)
 			}
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
 
@@ -122,11 +122,11 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 				}
 				busyMsg := fmt.Sprintf(busyFmt, doorName)
 				terminalio.WriteProcessedBytes(s.Stderr(), ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 			} else {
 				slog.Error("door execution failed", "node", nodeNumber, "handle", currentUser.Handle, "door", doorName, "error", cmdErr)
 				doorErrorMessage(ctx, fmt.Sprintf("Error running external program '%s': %v", doorName, cmdErr))
-				time.Sleep(2 * time.Second)
+				uiPause(2 * time.Second)
 			}
 		} else {
 			slog.Info("door completed", "node", nodeNumber, "handle", currentUser.Handle, "door", doorName)

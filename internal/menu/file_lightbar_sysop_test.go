@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // newTestFileManagerTwoAreas builds a real *file.FileManager with two areas
@@ -189,5 +190,147 @@ func TestToggleTaggedID(t *testing.T) {
 	got = toggleTaggedID([]uuid.UUID{a, b, c}, b)
 	if len(got) != 2 || got[0] != a || got[1] != c {
 		t.Errorf("toggle remove = %v, want [%v %v]", got, a, c)
+	}
+}
+
+// lightbarListEnv returns an env whose sysop and caller list General Files
+// in the lightbar file lister.
+func lightbarListEnv(t *testing.T) *menuEnv {
+	t.Helper()
+	env := newMenuEnv(t)
+	for _, u := range []*user.User{env.caller, env.sysop} {
+		u.FileListingMode = "lightbar"
+		u.CurrentFileAreaID = 1
+		u.CurrentFileAreaTag = "GENERAL"
+	}
+	return env
+}
+
+// TestFileLightbarSysopEditsDescription pins the sysop "e" command: the new
+// description is saved to the file record; a blank entry keeps the old one.
+func TestFileLightbarSysopEditsDescription(t *testing.T) {
+	env := lightbarListEnv(t)
+	id, _ := addReviewUpload(t, env, 1, "EDIT.ZIP", 4)
+
+	env.runCmd("LISTFILES", env.sysop, "", "e\rq")
+	if got := reloadedFileRecord(t, env, id).Description; got != "original desc" {
+		t.Errorf("blank edit changed description to %q", got)
+	}
+	r := env.runCmd("LISTFILES", env.sysop, "", "eFresh words\rq")
+	if !r.has("New description:") {
+		t.Errorf("no description prompt:\n%s", r.text())
+	}
+	if got := reloadedFileRecord(t, env, id).Description; got != "Fresh words" {
+		t.Errorf("description = %q, want Fresh words", got)
+	}
+}
+
+// TestFileLightbarSysopKeysIgnoredForCaller pins that e/k/m/r do nothing for
+// a caller below sysop level: the record and its file are untouched.
+func TestFileLightbarSysopKeysIgnoredForCaller(t *testing.T) {
+	env := lightbarListEnv(t)
+	id, p := addReviewUpload(t, env, 1, "KEEP.ZIP", 4)
+
+	r := env.runCmd("LISTFILES", env.caller, "", "eX\rkYm2\rYrNEW.ZIP\rq")
+	for _, p := range []string{"New description:", "Delete KEEP.ZIP", "Move to area", "New filename:"} {
+		if r.has(p) {
+			t.Errorf("sysop prompt %q shown to caller", p)
+		}
+	}
+	if !r.has("KEEP.ZIP") {
+		t.Errorf("caller did not see the listing:\n%s", r.text())
+	}
+	rec := reloadedFileRecord(t, env, id)
+	if rec == nil || rec.Filename != "KEEP.ZIP" || rec.AreaID != 1 || rec.Description != "original desc" {
+		t.Errorf("record changed: %+v", rec)
+	}
+	if _, err := os.Stat(p); err != nil {
+		t.Errorf("file gone: %v", err)
+	}
+}
+
+// TestFileLightbarSysopKillsFile pins "k": No keeps the file, Yes deletes the
+// record and its bytes and drops the file from the sysop's marks.
+func TestFileLightbarSysopKillsFile(t *testing.T) {
+	env := lightbarListEnv(t)
+	id, p := addReviewUpload(t, env, 1, "DOOMED.ZIP", 4)
+	env.sysop.TaggedFileIDs = []uuid.UUID{id}
+
+	env.runCmd("LISTFILES", env.sysop, "", "kNq")
+	if reloadedFileRecord(t, env, id) == nil {
+		t.Fatal("No at the prompt deleted the file")
+	}
+	r := env.runCmd("LISTFILES", env.sysop, "", "kYq")
+	if !r.has("Delete DOOMED.ZIP from disk?") {
+		t.Errorf("no delete prompt:\n%s", r.text())
+	}
+	if reloadedFileRecord(t, env, id) != nil {
+		t.Error("record survived delete")
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Errorf("file still on disk: %v", err)
+	}
+	if len(env.sysop.TaggedFileIDs) != 0 {
+		t.Errorf("tags = %v, want the deleted file dropped", env.sysop.TaggedFileIDs)
+	}
+	if r := env.runCmd("LISTFILES", env.sysop, "", "k"); r.next != "LOGOFF" {
+		t.Errorf("disconnect at delete prompt: next = %q, want LOGOFF", r.next)
+	}
+}
+
+// TestFileLightbarSysopMovesFile pins "m": an unknown area is refused, a
+// blank answer or No leaves the file, and Yes moves it to the tagged area.
+func TestFileLightbarSysopMovesFile(t *testing.T) {
+	env := lightbarListEnv(t)
+	id, _ := addReviewUpload(t, env, 1, "MOVER.ZIP", 4)
+
+	r := env.runCmd("LISTFILES", env.sysop, "", "mNOWHERE\rm\rmuploads\rNq")
+	if !r.has("Area not found.", "Move MOVER.ZIP to Upload Queue?") {
+		t.Errorf("move prompts missing:\n%s", r.text())
+	}
+	if got := reloadedFileRecord(t, env, id).AreaID; got != 1 {
+		t.Fatalf("area = %d after refusals, want 1", got)
+	}
+	env.runCmd("LISTFILES", env.sysop, "", "m2\rYq")
+	if got := reloadedFileRecord(t, env, id).AreaID; got != 2 {
+		t.Errorf("area = %d, want 2", got)
+	}
+	if r := env.runCmd("LISTFILES", env.sysop, "", "m2\r"); r.next != "LOGOFF" {
+		t.Errorf("disconnect at move confirm: next = %q, want LOGOFF", r.next)
+	}
+}
+
+// TestFileLightbarSysopRenamesFile pins "r": reserved names and a name taken
+// by another record are refused, a file already on disk under the new name
+// is not clobbered, and a clean name renames both the record and the file.
+func TestFileLightbarSysopRenamesFile(t *testing.T) {
+	env := lightbarListEnv(t)
+	id, p := addReviewUpload(t, env, 1, "AAA.ZIP", 4)
+	addReviewUpload(t, env, 1, "TAKEN.ZIP", 4)
+	stray := filepath.Join(filepath.Dir(p), "STRAY.ZIP")
+	if err := os.WriteFile(stray, []byte("untracked"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := env.runCmd("LISTFILES", env.sysop, "", "r..\rrtaken.zip\rrSTRAY.ZIP\rr\rq")
+	if !r.has("Invalid filename.", "Filename already exists in this area.", "A file with that name already exists.") {
+		t.Errorf("rename refusals missing:\n%s", r.text())
+	}
+	if got := reloadedFileRecord(t, env, id).Filename; got != "AAA.ZIP" {
+		t.Fatalf("filename = %q after refusals", got)
+	}
+	if b, _ := os.ReadFile(stray); string(b) != "untracked" {
+		t.Error("untracked file clobbered")
+	}
+
+	env.runCmd("LISTFILES", env.sysop, "", "rBBB.ZIP\rq")
+	if got := reloadedFileRecord(t, env, id).Filename; got != "BBB.ZIP" {
+		t.Errorf("filename = %q, want BBB.ZIP", got)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(p), "BBB.ZIP")); err != nil {
+		t.Errorf("renamed file not on disk: %v", err)
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Errorf("old name still on disk: %v", err)
 	}
 }

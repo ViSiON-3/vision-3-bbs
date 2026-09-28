@@ -1,6 +1,8 @@
 package menu
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -73,5 +75,76 @@ func TestRunNewscanConfigAreaNameRuneCorrect(t *testing.T) {
 	if !strings.Contains(stripped, wantPadded) {
 		t.Errorf("rendered short area name row missing %d columns of padding before the bracket; want substring %q in %q",
 			20, wantPadded, stripped)
+	}
+}
+
+// TestNewscanConfigTogglesAndPersists drives NEWSCANCONFIG over the shipped
+// areas plus one in another conference: SPACE/Enter toggle the highlighted
+// area, arrows and paging move past conference headers, A tags all, N clears
+// all, and ESC or Q saves the result to the user record.
+func TestNewscanConfigTogglesAndPersists(t *testing.T) {
+	env := newMsgEnv(t)
+	addScanArea(env, "FAR", 2, 0)
+
+	cases := []struct {
+		name  string
+		start []string
+		keys  string
+		want  []string
+	}{
+		{"space tags the first area", nil, " \x1b", []string{"GENERAL"}},
+		{"space again untags it", []string{"GENERAL"}, " q", nil},
+		{"down then enter tags the second", nil, "\x1b[B\rQ", []string{"PRIVMAIL"}},
+		{"down crosses the conference header", nil, "\x1b[B\x1b[B\x1b[B \x1b", []string{"FAR"}},
+		{"up comes back", nil, "\x1b[B\x1b[B\x1b[A \x1b", []string{"PRIVMAIL"}},
+		{"page down reaches the last", nil, "\x1b[6~ \x1b", []string{"FAR"}},
+		{"page up returns to the first", nil, "\x1b[6~\x1b[5~ \x1b", []string{"GENERAL"}},
+		{"ctrl-x and ctrl-e move too", nil, "\x18\x18\x05 \x1b", []string{"PRIVMAIL"}},
+		{"A tags all", nil, "a\x1b", []string{"FAR", "GENERAL", "PRIVMAIL"}},
+		{"N clears all", []string{"GENERAL", "FAR"}, "n\x1b", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := env.sub(t)
+			env.caller.TaggedMessageAreaTags = tc.start
+			if err := env.um.UpdateUser(env.caller); err != nil {
+				t.Fatal(err)
+			}
+			r := env.runCmd("NEWSCANCONFIG", env.caller, "", tc.keys)
+			if r.err != nil {
+				t.Fatalf("NEWSCANCONFIG: %v", r.err)
+			}
+			got := slices.Clone(env.mustDiskUser(2).TaggedMessageAreaTags)
+			slices.Sort(got)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("saved tags = %v, want %v", got, tc.want)
+			}
+			if !r.has(fmt.Sprintf("Newscan configuration saved (%d areas tagged).", len(tc.want))) {
+				t.Errorf("save notice missing; output:\n%s", r.text())
+			}
+		})
+	}
+}
+
+// TestNewscanConfigListsOnlyReadableAreas checks areas the caller cannot
+// read are not offered, and conference names head their areas.
+func TestNewscanConfigListsOnlyReadableAreas(t *testing.T) {
+	env := newMsgEnv(t)
+	lowly := *env.caller
+	lowly.AccessLevel = 10 // PRIVMAIL needs 25
+
+	r := env.runCmd("NEWSCANCONFIG", &lowly, "", "a\x1b")
+	if r.has("Private Mail") {
+		t.Errorf("unreadable PRIVMAIL offered; output:\n%s", r.text())
+	}
+	if !r.has("Local Areas", "General Discussion") {
+		t.Errorf("conference header or area missing; output:\n%s", r.text())
+	}
+	if got := lowly.TaggedMessageAreaTags; !slices.Equal(got, []string{"GENERAL"}) {
+		t.Errorf("A tagged %v, want only GENERAL", got)
+	}
+
+	if r := env.runCmd("NEWSCANCONFIG", nil, "", "q"); r.err != nil || r.has("Newscan configuration saved") {
+		t.Errorf("anonymous NEWSCANCONFIG saved: %v\n%s", r.err, r.text())
 	}
 }

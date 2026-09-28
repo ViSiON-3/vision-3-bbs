@@ -34,7 +34,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to read messages.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -44,7 +44,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentAreaID <= 0 || currentAreaTag == "" {
 		msg := "\r\n|01Error: No message area selected.|07\r\n"
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -57,7 +57,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 		selPath := e.menuFile("templates", "message_headers", "MSGHDR.ANS")
 		if _, statErr := os.Stat(selPath); statErr == nil {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Please select a message header style.|07\r\n")), outputMode)
-			time.Sleep(500 * time.Millisecond)
+			uiPause(500 * time.Millisecond)
 			_, _, _ = runGetHeaderType(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 		}
 	}
@@ -66,14 +66,14 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	if err != nil {
 		msg := fmt.Sprintf("\r\n|01Error loading message info for area %s.|07\r\n", currentAreaTag)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", err
 	}
 
 	if totalMessageCount == 0 {
 		msg := fmt.Sprintf("\r\n|07No messages in area |15%s|07.\r\n", currentAreaTag)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -109,7 +109,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 		if parseErr != nil || selectedNum < 1 || selectedNum > totalMessageCount {
 			msg := fmt.Sprintf("\r\n|01Invalid message number: %s|07\r\n", selectedNumStr)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
 		currentMsgNum = selectedNum

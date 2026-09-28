@@ -26,7 +26,7 @@ func (lb *fileLightbar) writePipe(s string) error {
 // because the frame is owned by the run() loop.
 func (lb *fileLightbar) errMsgPause(msg string) {
 	_ = lb.writePipe(msg)
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 }
 
 func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) []string {

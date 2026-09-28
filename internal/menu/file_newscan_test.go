@@ -143,3 +143,161 @@ func TestRunFileNewscanConfigAreaNameRuneCorrect(t *testing.T) {
 			20, wantPadded, stripped)
 	}
 }
+
+// addNewscanRecord adds a metadata-only record uploaded at when.
+func addNewscanRecord(t *testing.T, env *menuEnv, areaID int, name string, when time.Time) {
+	t.Helper()
+	if err := env.e.FileMgr.AddFileRecord(file.FileRecord{
+		ID: uuid.New(), AreaID: areaID, Filename: name, Description: name + " desc\nsecond line",
+		Size: 3000, UploadedAt: when, UploadedBy: "Sysop",
+	}); err != nil {
+		t.Fatalf("AddFileRecord: %v", err)
+	}
+}
+
+// TestFileNewscanListsFilesSinceCutoff pins FILE_NEWSCAN: only files newer
+// than the cutoff are shown, grouped under their area with a count; the
+// summary counts them; and with no new files the no-new notice appears.
+func TestFileNewscanListsFilesSinceCutoff(t *testing.T) {
+	env := newMenuEnv(t)
+	cut := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	addNewscanRecord(t, env, 1, "OLD.ZIP", cut.Add(-time.Hour))
+	addNewscanRecord(t, env, 1, "FRESH.ZIP", cut.Add(time.Hour))
+	addNewscanRecord(t, env, 2, "QUEUED.ZIP", cut.Add(time.Hour))
+	env.sysop.FileNewscanSince = &cut
+
+	r := env.runCmd("FILE_NEWSCAN", env.sysop, "", "\r")
+	if !r.has("FRESH.ZIP", "QUEUED.ZIP", "FRESH.ZIP desc", "03/01/2026") {
+		t.Errorf("new files missing:\n%s", r.text())
+	}
+	if r.has("OLD.ZIP") || r.has("second line") {
+		t.Errorf("old file or second description line shown:\n%s", r.text())
+	}
+
+	// The caller cannot list the Upload Queue, so its file is not scanned.
+	env.caller.FileNewscanSince = &cut
+	r = env.runCmd("FILE_NEWSCAN", env.caller, "", "\r")
+	if !r.has("FRESH.ZIP") || r.has("QUEUED.ZIP") {
+		t.Errorf("caller scan:\n%s", r.text())
+	}
+
+	later := cut.Add(48 * time.Hour)
+	env.caller.FileNewscanSince = &later
+	r = env.runCmd("FILE_NEWSCAN", env.caller, "", "\r")
+	if !r.has(stripPipes(env.e.Strings().FileNewscanNoNew)) || r.has("FRESH.ZIP") {
+		t.Errorf("no-new notice missing:\n%s", r.text())
+	}
+
+	zero := time.Time{}
+	env.caller.FileNewscanSince = &zero
+	if r := env.runCmd("FILE_NEWSCAN", env.caller, "", "\r"); !r.has("all files", "OLD.ZIP") {
+		t.Errorf("zero cutoff should scan all files:\n%s", r.text())
+	}
+	if r := env.runCmd("FILE_NEWSCAN", nil, "", ""); r.raw != "" {
+		t.Errorf("no user should print nothing:\n%s", r.text())
+	}
+}
+
+// TestFileNewscanHonoursTagsAndCurrent pins area selection: tagged areas
+// limit the scan, and the CURRENT argument scans only the current area.
+func TestFileNewscanHonoursTagsAndCurrent(t *testing.T) {
+	env := newMenuEnv(t)
+	zero := time.Time{}
+	env.sysop.FileNewscanSince = &zero
+	addNewscanRecord(t, env, 1, "GEN.ZIP", time.Now())
+	addNewscanRecord(t, env, 2, "UPQ.ZIP", time.Now())
+
+	env.sysop.TaggedFileAreaTags = []string{"uploads"}
+	r := env.runCmd("FILE_NEWSCAN", env.sysop, "", "\r")
+	if !r.has("UPQ.ZIP") || r.has("GEN.ZIP") {
+		t.Errorf("tagged scan:\n%s", r.text())
+	}
+
+	env.sysop.CurrentFileAreaID = 1
+	r = env.runCmd("FILE_NEWSCAN", env.sysop, "current", "\r")
+	if !r.has("GEN.ZIP") || r.has("UPQ.ZIP") {
+		t.Errorf("CURRENT scan:\n%s", r.text())
+	}
+}
+
+// TestFileNewscanPausesLongResults pins that a long scan pauses each screen
+// and a disconnect at the pause ends the scan early.
+func TestFileNewscanPausesLongResults(t *testing.T) {
+	env := newMenuEnv(t)
+	zero := time.Time{}
+	env.sysop.FileNewscanSince = &zero
+	for i := 0; i < 30; i++ {
+		addNewscanRecord(t, env, 1, "F"+string(rune('A'+i%26))+string(rune('A'+i/26))+".ZIP", time.Now())
+	}
+	r := env.runCmd("FILE_NEWSCAN", env.sysop, "", "")
+	if r.err != nil || !r.has("FAA.ZIP") || r.has("FDB.ZIP") {
+		t.Errorf("scan should stop at the first pause (err %v):\n%s", r.err, r.text())
+	}
+	r = env.runCmd("FILE_NEWSCAN", env.sysop, "", "\r\r\r")
+	if !r.has("FDB.ZIP") {
+		t.Errorf("continuing should reach the last file:\n%s", r.text())
+	}
+}
+
+// TestFileNewscanConfigTogglesAndSaves pins FILENEWSCANCONFIG: Space/Enter
+// toggle the highlighted area, arrows move between areas, and Q saves the
+// tagged set to the user record.
+func TestFileNewscanConfigTogglesAndSaves(t *testing.T) {
+	env := newMenuEnv(t)
+
+	r := env.runCmd("FILENEWSCANCONFIG", env.sysop, "", " \x1b[B\r\x1b[A\x1b[Aq")
+	if !r.has("General Files", "Upload Queue") {
+		t.Errorf("areas not listed:\n%s", r.text())
+	}
+	saved := env.mustDiskUser(env.sysop.ID)
+	if len(saved.TaggedFileAreaTags) != 2 {
+		t.Errorf("tags = %v, want both areas", saved.TaggedFileAreaTags)
+	}
+
+	env.runCmd("FILENEWSCANCONFIG", env.sysop, "", " q")
+	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileAreaTags) != 1 || saved.TaggedFileAreaTags[0] != "UPLOADS" {
+		t.Errorf("after untagging General: %v, want [UPLOADS]", saved.TaggedFileAreaTags)
+	}
+}
+
+// TestFileNewscanConfigAllNoneAndExit pins N (tag none), A (tag all), the
+// paging keys, Esc as save-and-exit, and that a disconnect saves nothing.
+func TestFileNewscanConfigAllNoneAndExit(t *testing.T) {
+	env := newMenuEnv(t)
+
+	env.runCmd("FILENEWSCANCONFIG", env.sysop, "", "a\x1b[6~\x1b[5~\x1b")
+	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileAreaTags) != 2 {
+		t.Errorf("A: tags = %v, want both", saved.TaggedFileAreaTags)
+	}
+	r := env.runCmd("FILENEWSCANCONFIG", env.sysop, "", "Aq")
+	if !r.has("2") {
+		t.Errorf("saved notice missing count:\n%s", r.text())
+	}
+	env.runCmd("FILENEWSCANCONFIG", env.sysop, "", "nQ")
+	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileAreaTags) != 0 {
+		t.Errorf("N: tags = %v, want none", saved.TaggedFileAreaTags)
+	}
+
+	if r := env.runCmd("FILENEWSCANCONFIG", env.sysop, "", "a"); r.next != "LOGOFF" {
+		t.Errorf("disconnect: next = %q, want LOGOFF", r.next)
+	}
+	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileAreaTags) != 0 {
+		t.Errorf("disconnect saved tags %v", saved.TaggedFileAreaTags)
+	}
+	if r := env.runCmd("FILENEWSCANCONFIG", nil, "", "q"); r.user != nil {
+		t.Errorf("no user: got %v", r.user)
+	}
+}
+
+// TestFileNewscanConfigNoAccessibleAreas pins that a user who can list no
+// area is told so and nothing is saved.
+func TestFileNewscanConfigNoAccessibleAreas(t *testing.T) {
+	env := newMenuEnv(t)
+	env.seedUsers(&user.User{ID: 3, Handle: "Newbie", AccessLevel: 1, Validated: true})
+	u, _ := env.um.GetUserByID(3)
+
+	r := env.runCmd("FILENEWSCANCONFIG", u, "", "q")
+	if !r.has(stripPipes(env.e.Strings().ScanNoAccessibleAreas)) || r.has("General Files") {
+		t.Errorf("no-access notice missing:\n%s", r.text())
+	}
+}

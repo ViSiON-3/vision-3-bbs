@@ -216,7 +216,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 			slog.Error("failed to save new-user sysop email", "node", nodeNumber, "handle", newUser.Handle, "error", err)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
 				[]byte("\r\n|01Error saving your message.|07\r\n")), outputMode)
-			time.Sleep(2 * time.Second)
+			uiPause(2 * time.Second)
 			// The store, not the caller, is at fault, and retrying cannot fix a
 			// persistent fault. Give up the same way a non-EOF editor failure
 			// does: don't trap them in an undeliverable loop whose only exit is
@@ -228,7 +228,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 		slog.Info("new user left a message for the sysop", "node", nodeNumber, "handle", newUser.Handle, "sysop", sysop.Handle)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
 			[]byte(fmt.Sprintf("\r\n|02Your message has been sent to %s.|07\r\n", sysop.Handle))), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return true, nil
 	}
 }

@@ -126,7 +126,7 @@ func TestReaddress(t *testing.T) {
 	readdressed := func(i int) string { return readdressMail[i].wantTo }
 	before := baseFiles(t, path)
 
-	out, code := runV3mail(t, "readdress", "--data", dataDir, "--dry-run", path)
+	code, out, _ := runV3mail(t, t.TempDir(), "readdress", "--data", dataDir, "--dry-run", path)
 	if code != 0 {
 		t.Fatalf("dry run exited %d:\n%s", code, out)
 	}
@@ -138,7 +138,7 @@ func TestReaddress(t *testing.T) {
 	}
 	checkBase(t, path, original, map[string]int{"Bob": 1, "Hermit": 0})
 
-	out, code = runV3mail(t, "readdress", "--data", dataDir, path)
+	code, out, _ = runV3mail(t, t.TempDir(), "readdress", "--data", dataDir, path)
 	if code != 0 {
 		t.Fatalf("readdress exited %d:\n%s", code, out)
 	}
@@ -148,7 +148,7 @@ func TestReaddress(t *testing.T) {
 	checkBase(t, path, readdressed, map[string]int{"Bob": 2, "Hermit": 1, "Sysop": 0, "Bob Builder": 1})
 
 	after := baseFiles(t, path)
-	out, code = runV3mail(t, "readdress", "--data", dataDir, path)
+	code, out, _ = runV3mail(t, t.TempDir(), "readdress", "--data", dataDir, path)
 	if code != 0 || !strings.Contains(out, "Readdress complete: 0 readdressed, 1 left undeliverable, 1 ambiguous") {
 		t.Errorf("second run exited %d:\n%s", code, out)
 	}
@@ -178,7 +178,7 @@ func TestReaddressNeedsUsersFile(t *testing.T) {
 	if err := os.Remove(filepath.Join(dataDir, "users.json")); err != nil {
 		t.Fatal(err)
 	}
-	if out, code := runV3mail(t, "readdress", "--data", dataDir, path); code != 1 {
+	if code, out, _ := runV3mail(t, t.TempDir(), "readdress", "--data", dataDir, path); code != 1 {
 		t.Errorf("exit %d without users.json, want 1:\n%s", code, out)
 	}
 	if _, err := os.Stat(filepath.Join(dataDir, "users.json")); !os.IsNotExist(err) {

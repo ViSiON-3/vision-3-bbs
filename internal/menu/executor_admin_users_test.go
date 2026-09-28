@@ -102,8 +102,7 @@ func TestPendingValidationNotice(t *testing.T) {
 }
 
 // TestToggleAllowNewUsers_PersistsFlag pins that the toggle flips the live
-// flag, writes it to config.json, and reports the new state. (The handler
-// always sleeps one second after reporting.)
+// flag, writes it to config.json, and reports the new state.
 func TestToggleAllowNewUsers_PersistsFlag(t *testing.T) {
 	env := newMenuEnv(t)
 	if !env.e.GetServerConfig().AllowNewUsers {

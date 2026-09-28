@@ -310,7 +310,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -326,7 +326,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load DOORLIST templates", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorTemplateError)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -396,7 +396,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -438,7 +438,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
 			msg := fmt.Sprintf(e.Strings().DoorNotFoundFormat, inputClean)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
@@ -450,7 +450,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
 			msg := fmt.Sprintf(e.Strings().DoorAccessDenied, upperInput)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
 		}
@@ -476,7 +476,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 				busyMsg := fmt.Sprintf(busyFmt, upperInput)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
-				time.Sleep(1 * time.Second)
+				uiPause(1 * time.Second)
 			} else {
 				slog.Error("door execution failed", "node", nodeNumber, "user", currentUser.Handle, "door", upperInput, "error", cmdErr)
 				doorErrorMessage(ctx, fmt.Sprintf("Error running door '%s': %v", upperInput, cmdErr))
@@ -506,7 +506,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorInfoLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -547,7 +547,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
 			msg := fmt.Sprintf(e.Strings().DoorNotFoundFormat, inputClean)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
@@ -559,7 +559,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
 			msg := fmt.Sprintf(e.Strings().DoorAccessDenied, upperInput)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
 		}

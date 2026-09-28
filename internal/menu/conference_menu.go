@@ -36,13 +36,13 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if e.ConferenceMgr == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -118,7 +118,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
 			msg := fmt.Sprintf(e.Strings().ConfNotFound, inputClean)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
@@ -129,7 +129,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 		// behavior with the lightbar path or the two menus can desync.
 		if !e.commitConferenceJoin(s, terminal, userManager, currentUser, confID, sessionStartTime) {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Could not save the conference change.|07\r\n")), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 			return currentUser, "", nil
 		}
 
@@ -142,7 +142,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 		joinedMsg = strings.ReplaceAll(joinedMsg, "^CN", conf.Name)
 		joinedMsg = strings.ReplaceAll(joinedMsg, "^CT", conf.Tag)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(joinedMsg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 
 		slog.Info("user changed conference",
 			"node", nodeNumber, "handle", currentUser.Handle, "id", confID, "tag", conf.Tag, "area", currentUser.CurrentMessageAreaTag)
@@ -189,7 +189,7 @@ func navigateMsgArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -198,7 +198,7 @@ func navigateMsgArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 
 	if len(accessibleAreas) == 0 {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleAreas)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -303,7 +303,7 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load MSGAREA template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfAreaTemplateError)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, fmt.Errorf("failed loading MSGAREA templates")
 	}
 
@@ -459,13 +459,13 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 
 	if currentUser == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if e.ConferenceMgr == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -478,7 +478,7 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 			msg = "\r\n|12No accessible conferences.|07\r\n"
 		}
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
@@ -505,7 +505,7 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	// Join for both messages and files (#304), reverting on a save failure.
 	if !e.commitConferenceJoin(s, terminal, userManager, currentUser, newConf.ID, sessionStartTime) {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Could not save the conference change.|07\r\n")), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 

@@ -153,12 +153,12 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 				// Fetch files for the new page
 				if fetchErr := st.fetchPage(); fetchErr != nil {
 					// Display error message to user?
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 				}
 			} else {
 				// Indicate last page (optional feedback)
 				terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Already on last page.|07")), st.outputMode)
-				time.Sleep(500 * time.Millisecond)
+				uiPause(500 * time.Millisecond)
 			}
 			continue // Redraw loop
 		case "P": // Previous Page
@@ -167,12 +167,12 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 				// Fetch files for the new page
 				if fetchErr := st.fetchPage(); fetchErr != nil {
 					// Display error message to user?
-					time.Sleep(1 * time.Second)
+					uiPause(1 * time.Second)
 				}
 			} else {
 				// Indicate first page (optional feedback)
 				terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Already on first page.|07")), st.outputMode)
-				time.Sleep(500 * time.Millisecond)
+				uiPause(500 * time.Millisecond)
 			}
 			continue // Redraw loop
 		case "Q": // Quit
@@ -200,7 +200,7 @@ func runListFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			slog.Debug("area change command entered (handled by menu)", "node", st.nodeNumber)
 			msg := "\r\n|01Use menu options to change area.|07\r\n"
 			terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte(msg)), st.outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 		default: // Includes 'T' (Tagging) and potential numeric input
 			st.toggleFileTag(upperInput)
 		} // end switch

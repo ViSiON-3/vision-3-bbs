@@ -84,6 +84,12 @@ func (ts *testSession) RemoteAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2222}
 }
 
+// Context returns nil, which transferContext treats as context.Background,
+// so handlers that start ZipLab or a transfer can run. Code that derives a
+// context directly from s.Context() (context.WithTimeout and the like) would
+// panic on nil; give such tests a session with a real ssh.Context.
+func (ts *testSession) Context() ssh.Context { return nil }
+
 // output returns everything written to the session so far.
 func (ts *testSession) output() string { return ts.out.String() }
 

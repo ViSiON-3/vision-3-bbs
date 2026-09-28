@@ -49,7 +49,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 	if currentUser == nil {
 		msg := "\r\n|01Error: You must be logged in to select a file area.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
@@ -393,7 +393,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 			confirmMsg := "|08[ |15" + area.Name + " |08] |15Area Joined!|07"
 			hintLine := ansi.MoveCursor(hintRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(confirmMsg)))
 			_ = terminalio.WriteProcessedBytes(terminal, []byte(hintLine), outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 
 			slog.Info("user changed file area", "node", nodeNumber, "handle", currentUser.Handle, "id", area.ID, "tag", area.Tag)
 			return currentUser, "", nil

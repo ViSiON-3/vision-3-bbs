@@ -39,7 +39,7 @@ func (st *fileListState) handleFileDownload() (logoff bool, err error) {
 	if len(st.currentUser.TaggedFileIDs) == 0 {
 		msg := "\r\n|07No files marked for download. Use |15#|07 to mark files.|07\r\n"
 		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte(msg)), st.outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return false, nil // Go back to file list display
 	}
 
@@ -62,14 +62,14 @@ func (st *fileListState) handleFileDownload() (logoff bool, err error) {
 		slog.Error("error getting download confirmation", "node", st.nodeNumber, "error", err)
 		msg := "\r\n|01Error during confirmation.|07\r\n"
 		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte(msg)), st.outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return false, nil // Back to file list
 	}
 
 	if !proceed {
 		slog.Debug("user cancelled download", "node", st.nodeNumber)
 		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Download cancelled.|07")), st.outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return false, nil // Back to file list
 	}
 
@@ -81,12 +81,12 @@ func (st *fileListState) handleFileDownload() (logoff bool, err error) {
 		}
 		slog.Error("protocol selection error", "node", st.nodeNumber, "error", protoErr)
 		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), st.outputMode)
-		time.Sleep(2 * time.Second)
+		uiPause(2 * time.Second)
 		return false, nil
 	}
 	if !protoOK {
 		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Download cancelled.|07\r\n")), st.outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return false, nil
 	}
 
@@ -127,7 +127,7 @@ func (st *fileListState) handleFileDownload() (logoff bool, err error) {
 		transferSuccess, transferFail := st.e.runTransferSend(st.s, st.terminal, proto, paths, fileIDs, st.outputMode, st.nodeNumber)
 		successCount += transferSuccess
 		failCount += transferFail
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 	}
 
 	// 4. Clear tags, update download count, and save user state
@@ -143,7 +143,7 @@ func (st *fileListState) handleFileDownload() (logoff bool, err error) {
 	// 5. Final status message
 	statusMsg := fmt.Sprintf("|07Download attempt finished. Success: %d, Failed: %d.|07\r\n", successCount, failCount)
 	terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte(statusMsg)), st.outputMode)
-	time.Sleep(2 * time.Second)
+	uiPause(2 * time.Second)
 
 	// Go back to the file list (will redraw with cleared marks)
 	return false, nil
@@ -199,13 +199,13 @@ func (st *fileListState) handleFileView() (logoff bool, err error) {
 	fileNumToView, parseErr := strconv.Atoi(viewNum)
 	if parseErr != nil || fileNumToView <= 0 {
 		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Invalid file number.|07\r\n")), st.outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return false, nil
 	}
 	viewIndex := fileNumToView - 1 - (st.currentPage-1)*st.filesPerPage
 	if viewIndex < 0 || viewIndex >= len(st.filesOnPage) {
 		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01File number not on current page.|07\r\n")), st.outputMode)
-		time.Sleep(500 * time.Millisecond)
+		uiPause(500 * time.Millisecond)
 		return false, nil
 	}
 	fileToView := st.filesOnPage[viewIndex]
@@ -214,7 +214,7 @@ func (st *fileListState) handleFileView() (logoff bool, err error) {
 		if pathErr != nil {
 			slog.Error("failed to get path for file", "node", st.nodeNumber, "fileID", fileToView.ID, "error", pathErr)
 			terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error locating file.|07\r\n")), st.outputMode)
-			time.Sleep(1 * time.Second)
+			uiPause(1 * time.Second)
 		} else {
 			ctx, cancel := st.e.transferContext(st.s.Context())
 			ziplab.RunZipLabView(ctx, st.s, st.terminal, viewFilePath, fileToView.Filename, st.outputMode, sessionReadLine(st.s, st.terminal), sessionReadKey(st.s))

@@ -70,7 +70,7 @@ func runImmediateLogoffCommand(c *cmdCtx, args string) (*user.User, string, erro
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecGoodbye)), outputMode)
 	}
 
-	time.Sleep(1 * time.Second)
+	uiPause(1 * time.Second)
 	return currentUser, "LOGOFF", nil
 }
 
@@ -93,7 +93,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		if wErr != nil {
 			slog.Error("failed writing showstats error message", "error", wErr)
 		}
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", nil // Updated return
 	}
 
@@ -108,7 +108,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		if wErr != nil {
 			slog.Error("failed writing showstats file read error message", "error", wErr)
 		}
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", fmt.Errorf("failed to read %s: %w", ansFilename, readErr) // Updated return
 	}
 

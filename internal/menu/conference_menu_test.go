@@ -78,3 +78,87 @@ func TestPadRightAfterTruncateStrHoldsColumnBudget(t *testing.T) {
 		}
 	}
 }
+
+// TestChangeMsgConferenceJoinsAndPersists picks a conference from the text
+// list by number and by tag: the caller joins it (for messages and files),
+// lands in its first readable area, and the choice is saved.
+func TestChangeMsgConferenceJoinsAndPersists(t *testing.T) {
+	env := newMsgEnv(t)
+	farID := addScanArea(env, "FAR", 2, 0)
+
+	for _, tc := range []struct{ name, input string }{
+		{"by number", "2\r"},
+		{"by tag", "felonynet\r"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := env.sub(t)
+			u := *env.caller
+			r := env.run(runChangeMsgConference, &u, "", tc.input)
+			if r.err != nil {
+				t.Fatalf("runChangeMsgConference: %v", r.err)
+			}
+			if !r.has("Local Areas", "FelonyNet", "Conference Joined!") {
+				t.Errorf("list or confirmation missing; output:\n%s", r.text())
+			}
+			saved := env.mustDiskUser(2)
+			if saved.CurrentMsgConferenceID != 2 || saved.CurrentMessageAreaID != farID {
+				t.Errorf("saved conference/area = %d/%d, want 2/%d", saved.CurrentMsgConferenceID, saved.CurrentMessageAreaID, farID)
+			}
+			if saved.CurrentFileConferenceID != 2 {
+				t.Errorf("saved file conference = %d, want 2 (joined for both)", saved.CurrentFileConferenceID)
+			}
+		})
+	}
+}
+
+// TestChangeMsgConferencePromptLoop checks Enter re-prompts, ? redraws the
+// list, an unknown entry is reported, and Q leaves the conference unchanged.
+func TestChangeMsgConferencePromptLoop(t *testing.T) {
+	env := newMsgEnv(t)
+	u := *env.caller
+
+	r := env.run(runChangeMsgConference, &u, "", "\r?\r9\rnope\rq\r")
+	if n := strings.Count(r.text(), "FelonyNet message network areas"); n != 2 {
+		t.Errorf("list drawn %d times, want 2 (initial and ?)", n)
+	}
+	for _, want := range []string{"Conference '9' not found", "Conference 'nope' not found"} {
+		if !r.has(want) {
+			t.Errorf("output lacks %q:\n%s", want, r.text())
+		}
+	}
+	if saved := env.mustDiskUser(2); saved.CurrentMsgConferenceID != 1 {
+		t.Errorf("saved conference = %d after Q, want 1", saved.CurrentMsgConferenceID)
+	}
+
+	if r := env.run(runChangeMsgConference, nil, "", "2\r"); r.has("FelonyNet") {
+		t.Errorf("anonymous caller shown the list:\n%s", r.text())
+	}
+	env.e.ConferenceMgr = nil
+	if r := env.run(runChangeMsgConference, &u, "", "2\r"); r.has("FelonyNet") || r.err != nil {
+		t.Errorf("no conference manager: err=%v output:\n%s", r.err, r.text())
+	}
+}
+
+// TestNextPrevMsgConfWraps steps through the conferences with NEXTMSGCONF
+// and PREVMSGCONF: each wraps at the ends and the choice is saved.
+func TestNextPrevMsgConfWraps(t *testing.T) {
+	env := newMsgEnv(t)
+	u := env.caller
+
+	for _, step := range []struct {
+		cmd  string
+		want int
+	}{{"NEXTMSGCONF", 2}, {"NEXTMSGCONF", 1}, {"PREVMSGCONF", 2}, {"PREVMSGCONF", 1}} {
+		r := env.runCmd(step.cmd, u, "", "")
+		if r.err != nil {
+			t.Fatalf("%s: %v", step.cmd, r.err)
+		}
+		if got := env.mustDiskUser(2).CurrentMsgConferenceID; got != step.want {
+			t.Fatalf("after %s saved conference = %d, want %d", step.cmd, got, step.want)
+		}
+	}
+
+	if r := env.runCmd("NEXTMSGCONF", nil, "", ""); r.err != nil || r.user != nil {
+		t.Errorf("anonymous NEXTMSGCONF: user=%v err=%v", r.user, r.err)
+	}
+}

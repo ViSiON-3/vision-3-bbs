@@ -51,7 +51,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Error("failed to load LASTCALL template files", "node", nodeNumber, "top", errTop, "mid", errMid, "bot", errBot)
 		msg := e.Strings().ExecLastcallTemplateErr
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		time.Sleep(1 * time.Second)
+		uiPause(1 * time.Second)
 		return nil, "", fmt.Errorf("failed loading LASTCALL templates")
 	}
 
