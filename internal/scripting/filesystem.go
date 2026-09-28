@@ -4,72 +4,88 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
 // registerFS creates the v3.fs object for sandboxed file operations.
-// All paths are resolved relative to scripts/data/ and path traversal is blocked.
+//
+// All paths are relative to scripts/data/. Every operation goes through an
+// os.Root opened on that directory, so path lookup refuses anything —
+// including a path reached through a symbolic link, dangling or not — that
+// would leave the sandbox. Paths are also checked lexically first so obvious
+// traversal ("../x", absolute paths) fails with a clear message.
 func registerFS(v3 *goja.Object, eng *Engine) {
 	vm := eng.vm
 	obj := vm.NewObject()
 
 	sandbox := sandboxRoot(eng.cfg)
 
+	// throw converts a Go error into a JS exception.
+	throw := func(err error) {
+		panic(vm.NewGoError(err))
+	}
+
 	// read(path) — read a text file, returns string or throws on error.
 	jsutil.Set(obj, "read", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
-			panic(vm.NewGoError(errMissingArgs("read", "path")))
+			throw(errMissingArgs("read", "path"))
 		}
-		path, err := resolveSandboxPath(sandbox, call.Arguments[0].String())
+		var data []byte
+		err := withSandbox(sandbox, call.Arguments[0].String(), false, func(root *os.Root, rel string) error {
+			var err error
+			data, err = root.ReadFile(rel)
+			return err
+		})
 		if err != nil {
-			panic(vm.NewGoError(err))
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			panic(vm.NewGoError(err))
+			throw(err)
 		}
 		return vm.ToValue(string(data))
 	})
 
 	// write(path, content) — write a text file (overwrites if exists).
+	// Missing parent directories are created.
 	jsutil.Set(obj, "write", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
-			panic(vm.NewGoError(errMissingArgs("write", "path, content")))
+			throw(errMissingArgs("write", "path, content"))
 		}
-		path, err := resolveSandboxPath(sandbox, call.Arguments[0].String())
+		content := []byte(call.Arguments[1].String())
+		err := withSandbox(sandbox, call.Arguments[0].String(), true, func(root *os.Root, rel string) error {
+			if err := root.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
+				return err
+			}
+			return root.WriteFile(rel, content, 0o644)
+		})
 		if err != nil {
-			panic(vm.NewGoError(err))
-		}
-		os.MkdirAll(filepath.Dir(path), 0o755) //nolint:errcheck
-		if err := os.WriteFile(path, []byte(call.Arguments[1].String()), 0o644); err != nil {
-			panic(vm.NewGoError(err))
+			throw(err)
 		}
 		return goja.Undefined()
 	})
 
 	// append(path, content) — append content to a file (creates if not exists).
+	// Missing parent directories are created.
 	jsutil.Set(obj, "append", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) < 2 {
-			panic(vm.NewGoError(errMissingArgs("append", "path, content")))
+			throw(errMissingArgs("append", "path, content"))
 		}
-		path, err := resolveSandboxPath(sandbox, call.Arguments[0].String())
+		content := call.Arguments[1].String()
+		err := withSandbox(sandbox, call.Arguments[0].String(), true, func(root *os.Root, rel string) error {
+			if err := root.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
+				return err
+			}
+			f, err := root.OpenFile(rel, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			if err != nil {
+				return err
+			}
+			if _, err := f.WriteString(content); err != nil {
+				_ = f.Close() // best-effort; the write error takes precedence
+				return err
+			}
+			return f.Close()
+		})
 		if err != nil {
-			panic(vm.NewGoError(err))
-		}
-		os.MkdirAll(filepath.Dir(path), 0o755) //nolint:errcheck
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			panic(vm.NewGoError(err))
-		}
-		if _, err := f.WriteString(call.Arguments[1].String()); err != nil {
-			_ = f.Close() // best-effort; the write error takes precedence
-			panic(vm.NewGoError(err))
-		}
-		if err := f.Close(); err != nil {
-			panic(vm.NewGoError(err))
+			throw(err)
 		}
 		return goja.Undefined()
 	})
@@ -79,11 +95,10 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
-		path, err := resolveSandboxPath(sandbox, call.Arguments[0].String())
-		if err != nil {
-			return vm.ToValue(false)
-		}
-		_, err = os.Stat(path)
+		err := withSandbox(sandbox, call.Arguments[0].String(), false, func(root *os.Root, rel string) error {
+			_, err := root.Stat(rel)
+			return err
+		})
 		return vm.ToValue(err == nil)
 	})
 
@@ -92,11 +107,9 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 		if len(call.Arguments) == 0 {
 			return vm.ToValue(false)
 		}
-		path, err := resolveSandboxPath(sandbox, call.Arguments[0].String())
-		if err != nil {
-			return vm.ToValue(false)
-		}
-		err = os.Remove(path)
+		err := withSandbox(sandbox, call.Arguments[0].String(), false, func(root *os.Root, rel string) error {
+			return root.Remove(rel)
+		})
 		return vm.ToValue(err == nil)
 	})
 
@@ -106,26 +119,33 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 		if len(call.Arguments) > 0 {
 			dir = call.Arguments[0].String()
 		}
-		path, err := resolveSandboxPath(sandbox, dir)
-		if err != nil {
-			panic(vm.NewGoError(err))
-		}
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			panic(vm.NewGoError(err))
-		}
 		arr := vm.NewArray()
-		for i, entry := range entries {
-			info, _ := entry.Info()
-			obj := vm.NewObject()
-			jsutil.Set(obj, "name", entry.Name())
-			jsutil.Set(obj, "isDir", entry.IsDir())
-			if info != nil {
-				jsutil.Set(obj, "size", info.Size())
-			} else {
-				jsutil.Set(obj, "size", 0)
+		err := withSandbox(sandbox, dir, false, func(root *os.Root, rel string) error {
+			d, err := root.Open(rel)
+			if err != nil {
+				return err
 			}
-			jsutil.Set(arr, itoa(i), obj)
+			entries, err := d.ReadDir(-1)
+			_ = d.Close() // read-only handle; nothing to flush
+			if err != nil {
+				return err
+			}
+			for i, entry := range entries {
+				item := vm.NewObject()
+				jsutil.Set(item, "name", entry.Name())
+				jsutil.Set(item, "isDir", entry.IsDir())
+				// Lstat through the root so metadata lookups stay confined too.
+				if info, err := root.Lstat(filepath.Join(rel, entry.Name())); err == nil {
+					jsutil.Set(item, "size", info.Size())
+				} else {
+					jsutil.Set(item, "size", 0)
+				}
+				jsutil.Set(arr, itoa(i), item)
+			}
+			return nil
+		})
+		if err != nil {
+			throw(err)
 		}
 		return arr
 	})
@@ -133,14 +153,13 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 	// mkdir(path) — create a directory (and parents).
 	jsutil.Set(obj, "mkdir", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
-			panic(vm.NewGoError(errMissingArgs("mkdir", "path")))
+			throw(errMissingArgs("mkdir", "path"))
 		}
-		path, err := resolveSandboxPath(sandbox, call.Arguments[0].String())
+		err := withSandbox(sandbox, call.Arguments[0].String(), true, func(root *os.Root, rel string) error {
+			return root.MkdirAll(rel, 0o755)
+		})
 		if err != nil {
-			panic(vm.NewGoError(err))
-		}
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			panic(vm.NewGoError(err))
+			throw(err)
 		}
 		return goja.Undefined()
 	})
@@ -153,55 +172,45 @@ func sandboxRoot(cfg ScriptConfig) string {
 	return resolveDataDir(cfg.WorkingDir)
 }
 
-// resolveSandboxPath resolves a user-provided path within the sandbox.
-// Returns an error if the resolved path escapes the sandbox directory.
-// Symlinks are resolved to prevent traversal via symbolic links.
-func resolveSandboxPath(sandbox, userPath string) (string, error) {
+// sandboxRelPath lexically validates a script-supplied path and returns it
+// in the cleaned, root-relative form that os.Root expects. An empty path
+// means the sandbox directory itself.
+//
+// This is only a first line of defence that gives traversal attempts a clear
+// error; the os.Root used for the actual operation is what enforces the
+// sandbox, including against symbolic links.
+func sandboxRelPath(userPath string) (string, error) {
 	if userPath == "" {
-		return sandbox, nil
+		return ".", nil
 	}
-
-	// Resolve the sandbox to a canonical absolute path.
-	// If the sandbox directory doesn't exist yet (fresh install), fall back to
-	// filepath.Abs so that mkdir/write calls can create it.
-	sandboxAbs, err := filepath.EvalSymlinks(sandbox)
-	if err != nil {
-		sandboxAbs, err = filepath.Abs(sandbox)
-		if err != nil {
-			return "", fmt.Errorf("invalid sandbox path: %w", err)
-		}
-	} else {
-		sandboxAbs, err = filepath.Abs(sandboxAbs)
-		if err != nil {
-			return "", fmt.Errorf("invalid sandbox path: %w", err)
-		}
-	}
-
-	// Join and clean the user path.
-	resolved := filepath.Join(sandboxAbs, filepath.Clean(userPath))
-
-	// Resolve symlinks in the user-provided path. If the target doesn't
-	// exist yet (e.g. new file), resolve the parent directory instead.
-	eval, err := filepath.EvalSymlinks(resolved)
-	if err != nil {
-		// Target may not exist; resolve the parent directory.
-		parentEval, perr := filepath.EvalSymlinks(filepath.Dir(resolved))
-		if perr != nil {
-			return "", fmt.Errorf("invalid path %q: %w", userPath, perr)
-		}
-		eval = filepath.Join(parentEval, filepath.Base(resolved))
-	}
-	eval, err = filepath.Abs(eval)
-	if err != nil {
-		return "", fmt.Errorf("invalid path %q: %w", userPath, err)
-	}
-
-	// Ensure the evaluated path is within the sandbox using filepath.Rel,
-	// which is more robust than string prefix matching against path separators.
-	rel, err := filepath.Rel(sandboxAbs, eval)
-	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+	rel := filepath.Clean(filepath.FromSlash(userPath))
+	// IsLocal rejects absolute paths, paths that climb out with "..", and
+	// (on Windows) reserved device names, while allowing names such as
+	// "..foo" that merely start with two dots.
+	if !filepath.IsLocal(rel) {
 		return "", fmt.Errorf("access denied: path %q is outside sandbox", userPath)
 	}
+	return rel, nil
+}
 
-	return eval, nil
+// withSandbox validates userPath, opens the sandbox directory as an os.Root
+// and runs fn with the root and the root-relative path. When create is true
+// the sandbox directory itself is created first if it does not exist yet
+// (fresh install), so writes work without a pre-made scripts/data.
+func withSandbox(sandbox, userPath string, create bool, fn func(root *os.Root, rel string) error) error {
+	rel, err := sandboxRelPath(userPath)
+	if err != nil {
+		return err
+	}
+	if create {
+		if err := os.MkdirAll(sandbox, 0o755); err != nil {
+			return fmt.Errorf("creating sandbox directory: %w", err)
+		}
+	}
+	root, err := os.OpenRoot(sandbox)
+	if err != nil {
+		return fmt.Errorf("opening sandbox directory: %w", err)
+	}
+	defer func() { _ = root.Close() }() // directory handle; close error is not actionable
+	return fn(root, rel)
 }
