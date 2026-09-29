@@ -113,9 +113,13 @@ You can still edit `data/users/users.json` by hand if you prefer — add a
 > hot-reload that file. After adding or removing a key while the BBS is running,
 > **restart the BBS** for the change to take effect.
 
-## Building `wfc`
+## Getting `wfc`
 
-`wfc` is built alongside the other binaries:
+The release bundle includes `wfc` from v0.9.4, next to `vision3`, for every
+platform. A remote sysop can take it from the bundle for their own machine's
+platform; it does not have to match the BBS.
+
+From source, `wfc` is built alongside the other binaries:
 
 ```bash
 ./build.sh                       # builds vision3 … menuedit … wfc (in place)

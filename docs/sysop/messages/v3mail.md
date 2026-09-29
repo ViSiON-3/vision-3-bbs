@@ -36,8 +36,8 @@ it cannot be read they log a warning and store To as received.
 
 Mail stored before this — or that named no account — is not addressed to any
 handle. The sysop (access level at or above `sysOpLevel`) can read such
-**undeliverable** private mail in the message reader, list and newscan; nobody
-else can. `v3mail readdress` fixes the mail that can be fixed: for every private
+**undeliverable** private mail in the message reader, list and newscan; apart
+from its sender, nobody else can. `v3mail readdress` fixes the mail that can be fixed: for every private
 message whose To is not already a user's handle, it applies the same resolution
 and rewrites To (and the base's index, so the new-mail and "to you" counts see
 it). It reports how many it readdressed and how many it left undeliverable or
