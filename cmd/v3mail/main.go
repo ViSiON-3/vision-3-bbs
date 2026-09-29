@@ -492,6 +492,9 @@ func cmdPurge(args []string) {
 		for _, n := range toDelete {
 			if err := b.DeleteMessage(n); err == nil {
 				deleted++
+			} else {
+				_, _ = fmt.Fprintf(os.Stderr, "Error deleting message %d from %s: %v\n", n, meta.Path, err)
+				hadErrors = true
 			}
 		}
 		if !*quiet {
@@ -688,6 +691,7 @@ func cmdLastread(args []string) {
 		if *resetUser != "" {
 			if err := b.ResetLastRead(*resetUser); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Error resetting lastread for %s in %s: %v\n", *resetUser, meta.Tag, err)
+				hadErrors = true
 			} else if !*quiet {
 				fmt.Printf("%s: reset lastread for %q\n", meta.Tag, *resetUser)
 			}
@@ -700,6 +704,7 @@ func cmdLastread(args []string) {
 		records, err := b.GetAllLastReadRecords()
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error reading lastread for %s: %v\n", meta.Tag, err)
+			hadErrors = true
 			if !closeBase(b, meta.Path) {
 				hadErrors = true
 			}
