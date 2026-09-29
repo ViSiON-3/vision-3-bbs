@@ -213,7 +213,7 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 		if len(st.pendingChanges) == 0 {
 			sel := st.users[st.selectedIndex]
 			infoformsMu.Lock()
-			ifCfg, ifErr := loadInfoFormConfig(st.e.RootConfigPath)
+			ifCfg, ifErr := loadInfoFormConfig(st.e.dataDir())
 			infoformsMu.Unlock()
 
 			if ifErr != nil {

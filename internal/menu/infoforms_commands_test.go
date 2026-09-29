@@ -94,7 +94,7 @@ func TestInfoFormRequiredForcesUnvalidatedUser(t *testing.T) {
 	if got := savedInfoformAnswers(t, env, env.caller, 1); len(got) != 1 || got[0] != "Carl Caller" {
 		t.Errorf("form 1 answers = %q, want [Carl Caller]", got)
 	}
-	if hasCompletedForm(env.cfgDir(), env.caller.ID, 2) {
+	if hasCompletedForm(env.dataDir(), env.caller.ID, 2) {
 		t.Error("optional form 2 was forced")
 	}
 	if r.has("Already:") {
@@ -117,7 +117,7 @@ func TestInfoFormRequiredLogsOffOnIncompleteForm(t *testing.T) {
 	if !r.has("Required form #1 was not completed. Disconnecting.") {
 		t.Errorf("missing disconnect notice:\n%s", r.text())
 	}
-	if hasCompletedForm(env.cfgDir(), env.caller.ID, 1) {
+	if hasCompletedForm(env.dataDir(), env.caller.ID, 1) {
 		t.Error("partial required form was saved")
 	}
 }
@@ -135,11 +135,11 @@ func TestInfoFormNukeErasesAllForms(t *testing.T) {
 		t.Errorf("missing confirm/done text:\n%s", r.text())
 	}
 	for _, n := range []int{1, 5} {
-		if hasCompletedForm(env.cfgDir(), env.caller.ID, n) {
+		if hasCompletedForm(env.dataDir(), env.caller.ID, n) {
 			t.Errorf("caller form %d survived the nuke", n)
 		}
 	}
-	if !hasCompletedForm(env.cfgDir(), env.sysop.ID, 1) {
+	if !hasCompletedForm(env.dataDir(), env.sysop.ID, 1) {
 		t.Error("nuke removed another user's form")
 	}
 }
@@ -170,7 +170,7 @@ func TestInfoFormNukeRefusals(t *testing.T) {
 		if !r.has(tc.want) {
 			t.Errorf("%s: want %q:\n%s", tc.name, tc.want, r.text())
 		}
-		if !hasCompletedForm(env.cfgDir(), env.caller.ID, 1) {
+		if !hasCompletedForm(env.dataDir(), env.caller.ID, 1) {
 			t.Fatalf("%s: form deleted", tc.name)
 		}
 	}

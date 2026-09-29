@@ -23,7 +23,7 @@ func TestWantListCallerSubmitsRequest(t *testing.T) {
 	}
 	env.runCmd("WANTLIST", env.caller, "", "QUAKE.ZIP\r\r")
 
-	wl, err := loadWantList(env.cfgDir())
+	wl, err := loadWantList(env.dataDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestWantListSysopReviewsAndDeletes(t *testing.T) {
 		t.Errorf("empty list:\n%s", r.text())
 	}
 
-	if err := saveWantList(env.cfgDir(), &wantListData{NextID: 4, Entries: []WantListEntry{
+	if err := saveWantList(env.dataDir(), &wantListData{NextID: 4, Entries: []WantListEntry{
 		{ID: 1, Handle: "Caller", Filename: "ONE.ZIP", Reason: "r1", Date: "01/02/2026"},
 		{ID: 2, Handle: "Other", Filename: "TWO.ZIP", Reason: "r2", Date: "01/03/2026"},
 		{ID: 3, Handle: "Third", Filename: "THREE.ZIP", Reason: "r3", Date: "01/04/2026"},
@@ -60,11 +60,11 @@ func TestWantListSysopReviewsAndDeletes(t *testing.T) {
 	}
 	env.runCmd("WANTLIST", env.sysop, "", "D\r9\r")
 	env.runCmd("WANTLIST", env.sysop, "", "D\rabc\r")
-	if wl, _ := loadWantList(env.cfgDir()); len(wl.Entries) != 3 {
+	if wl, _ := loadWantList(env.dataDir()); len(wl.Entries) != 3 {
 		t.Fatalf("bad delete numbers changed the list: %+v", wl.Entries)
 	}
 	env.runCmd("WANTLIST", env.sysop, "", "d\r2\r")
-	wl, _ := loadWantList(env.cfgDir())
+	wl, _ := loadWantList(env.dataDir())
 	got := wl.Entries
 	if len(got) != 2 || got[0].Filename != "ONE.ZIP" || got[1].Filename != "THREE.ZIP" {
 		t.Errorf("after deleting #2: %+v", got)
@@ -74,7 +74,7 @@ func TestWantListSysopReviewsAndDeletes(t *testing.T) {
 	if !r.has(stripPipes(env.e.Strings().WantListCleared)) {
 		t.Errorf("no cleared notice:\n%s", r.text())
 	}
-	if wl, _ := loadWantList(env.cfgDir()); len(wl.Entries) != 0 || wl.NextID != 4 {
+	if wl, _ := loadWantList(env.dataDir()); len(wl.Entries) != 0 || wl.NextID != 4 {
 		t.Errorf("after clear: %+v, want no entries and next_id kept at 4", wl)
 	}
 }

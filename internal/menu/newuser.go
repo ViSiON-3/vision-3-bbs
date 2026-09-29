@@ -245,7 +245,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	// Add to NUV queue if configured.
 	cfg := e.GetServerConfig()
 	if cfg.UseNUV && cfg.AutoAddNUV {
-		if err := nuvAddCandidate(e.RootConfigPath, newUser.Handle); err == nil {
+		if err := nuvAddCandidate(e.dataDir(), newUser.Handle); err == nil {
 			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Your account has been submitted for community review.\r\n")), outputMode)
 		}
 	}

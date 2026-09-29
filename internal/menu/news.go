@@ -44,12 +44,12 @@ type NewsData struct {
 
 var newsMu sync.Mutex
 
-func newsFilePath(rootConfigPath string) string {
-	return filepath.Join(rootConfigPath, "..", "data", "news.json")
+func newsFilePath(dataDir string) string {
+	return filepath.Join(boardDataDir(dataDir), "news.json")
 }
 
-func loadNewsData(rootConfigPath string) (*NewsData, error) {
-	data, err := os.ReadFile(newsFilePath(rootConfigPath))
+func loadNewsData(dataDir string) (*NewsData, error) {
+	data, err := os.ReadFile(newsFilePath(dataDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &NewsData{}, nil
@@ -81,12 +81,12 @@ func raiseNewsNextID(nd *NewsData) {
 	}
 }
 
-func saveNewsData(rootConfigPath string, nd *NewsData) error {
+func saveNewsData(dataDir string, nd *NewsData) error {
 	data, err := json.MarshalIndent(nd, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal news data: %w", err)
 	}
-	return os.WriteFile(newsFilePath(rootConfigPath), data, 0644)
+	return os.WriteFile(newsFilePath(dataDir), data, 0644)
 }
 
 // allocNewsID reserves the next unused ID and advances the allocator. IDs are
@@ -205,7 +205,7 @@ func initNewsSeen(u *user.User, items []NewsItem, seen map[int]bool) {
 // silently never displays news. There is no config migration framework, and
 // rewriting a sysop-owned file to add the step would not be able to tell
 // "never had it" from "deliberately removed it" — so this only reports.
-func WarnIfNewsUnwired(rootConfigPath string, loginSequence []config.LoginItem) {
+func WarnIfNewsUnwired(dataDir string, loginSequence []config.LoginItem) {
 	for _, item := range loginSequence {
 		if strings.EqualFold(item.Command, "PRINTNEWS") {
 			return
@@ -213,7 +213,7 @@ func WarnIfNewsUnwired(rootConfigPath string, loginSequence []config.LoginItem) 
 	}
 
 	newsMu.Lock()
-	nd, err := loadNewsData(rootConfigPath)
+	nd, err := loadNewsData(dataDir)
 	newsMu.Unlock()
 	if err != nil || len(nd.Items) == 0 {
 		// No news to show, so nothing is being missed.
@@ -440,7 +440,7 @@ func runPrintNews(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	newsMu.Lock()
-	nd, err := loadNewsData(e.RootConfigPath)
+	nd, err := loadNewsData(e.dataDir())
 	newsMu.Unlock()
 	if err != nil {
 		slog.Warn("failed to load news data", "node", nodeNumber, "error", err)
@@ -541,7 +541,7 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running LISTNEWS", "node", nodeNumber, "handle", currentUser.Handle)
 
 	newsMu.Lock()
-	nd, err := loadNewsData(e.RootConfigPath)
+	nd, err := loadNewsData(e.dataDir())
 	newsMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading news.\r\n", outputMode)

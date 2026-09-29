@@ -230,7 +230,7 @@ func TestNewUser_AutoAddsToNUVQueue(t *testing.T) {
 	if !r.has("submitted for community review") {
 		t.Errorf("no NUV message: %q", r.text())
 	}
-	nd, err := loadNUVData(env.cfgDir())
+	nd, err := loadNUVData(env.dataDir())
 	if err != nil {
 		t.Fatal(err)
 	}

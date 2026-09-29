@@ -47,7 +47,7 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 	anonName := rumorAnonName(e)
 
 	rumorsMu.Lock()
-	rd, err := loadRumorsData(e.RootConfigPath)
+	rd, err := loadRumorsData(e.dataDir())
 	rumorsMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading rumors.\r\n", outputMode)
@@ -109,7 +109,7 @@ func runRumorsSearch(c *cmdCtx, args string) (*user.User, string, error) {
 	anonName := rumorAnonName(e)
 
 	rumorsMu.Lock()
-	rd, err := loadRumorsData(e.RootConfigPath)
+	rd, err := loadRumorsData(e.dataDir())
 	rumorsMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading rumors.\r\n", outputMode)
@@ -183,7 +183,7 @@ func runRumorsNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	anonName := rumorAnonName(e)
 
 	rumorsMu.Lock()
-	rd, err := loadRumorsData(e.RootConfigPath)
+	rd, err := loadRumorsData(e.dataDir())
 	rumorsMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading rumors.\r\n", outputMode)
@@ -228,7 +228,7 @@ func runRandomRumor(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	rumorsMu.Lock()
-	rd, err := loadRumorsData(e.RootConfigPath)
+	rd, err := loadRumorsData(e.dataDir())
 	rumorsMu.Unlock()
 	if err != nil {
 		return currentUser, "", nil

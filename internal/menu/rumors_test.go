@@ -12,7 +12,7 @@ import (
 // seedRumors writes rd as the env's rumors.json.
 func seedRumors(t *testing.T, env *menuEnv, rd *rumorsData) {
 	t.Helper()
-	if err := saveRumorsData(env.cfgDir(), rd); err != nil {
+	if err := saveRumorsData(env.dataDir(), rd); err != nil {
 		t.Fatalf("seed rumors: %v", err)
 	}
 }
@@ -20,7 +20,7 @@ func seedRumors(t *testing.T, env *menuEnv, rd *rumorsData) {
 // loadEnvRumors reloads rumors.json the way the handlers do.
 func loadEnvRumors(t *testing.T, env *menuEnv) *rumorsData {
 	t.Helper()
-	rd, err := loadRumorsData(env.cfgDir())
+	rd, err := loadRumorsData(env.dataDir())
 	if err != nil {
 		t.Fatalf("reload rumors: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestRumorsListEmptyAndLoggedOut(t *testing.T) {
 // A corrupt rumors.json is reported rather than treated as an empty board.
 func TestRumorsHandlersReportCorruptFile(t *testing.T) {
 	env := newMenuEnv(t)
-	if err := os.WriteFile(rumorsFilePath(env.cfgDir()), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(rumorsFilePath(env.dataDir()), []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, cmd := range []string{"RUMORSLIST", "RUMORSSEARCH", "RUMORSNEWSCAN", "RUMORSADD", "RUMORSDELETE"} {

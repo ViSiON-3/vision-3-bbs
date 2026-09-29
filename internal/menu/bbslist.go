@@ -57,12 +57,12 @@ func findListingIndexByID(bld *bbsListData, id int) int {
 	return -1
 }
 
-func bbsListFilePath(rootConfigPath string) string {
-	return filepath.Join(rootConfigPath, "..", "data", "bbslist.json")
+func bbsListFilePath(dataDir string) string {
+	return filepath.Join(boardDataDir(dataDir), "bbslist.json")
 }
 
-func loadBBSListData(rootConfigPath string) (*bbsListData, error) {
-	data, err := os.ReadFile(bbsListFilePath(rootConfigPath))
+func loadBBSListData(dataDir string) (*bbsListData, error) {
+	data, err := os.ReadFile(bbsListFilePath(dataDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &bbsListData{NextID: 1}, nil
@@ -85,12 +85,12 @@ func loadBBSListData(rootConfigPath string) (*bbsListData, error) {
 	return &bld, nil
 }
 
-func saveBBSListData(rootConfigPath string, bld *bbsListData) error {
+func saveBBSListData(dataDir string, bld *bbsListData) error {
 	data, err := json.MarshalIndent(bld, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal bbslist data: %w", err)
 	}
-	fp := bbsListFilePath(rootConfigPath)
+	fp := bbsListFilePath(dataDir)
 	if err := os.MkdirAll(filepath.Dir(fp), 0755); err != nil {
 		return fmt.Errorf("ensure bbslist directory: %w", err)
 	}
@@ -155,7 +155,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	bbsListMu.Lock()
-	bld, err := loadBBSListData(e.RootConfigPath)
+	bld, err := loadBBSListData(e.dataDir())
 	bbsListMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading BBS listings.\r\n", outputMode)
@@ -473,12 +473,12 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 					edited, saved := bbsListEditEntry(e, s, terminal, currentUser, entryCopy, selectedIndex, nodeNumber, outputMode)
 					if saved {
 						bbsListMu.Lock()
-						freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+						freshBld, loadErr := loadBBSListData(e.dataDir())
 						if loadErr == nil {
 							if fi := findListingIndexByID(freshBld, entryID); fi >= 0 {
 								edited.ID = entryID
 								freshBld.Listings[fi] = edited
-								if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
+								if saveErr := saveBBSListData(e.dataDir(), freshBld); saveErr != nil {
 									slog.Error("failed to save BBS list after edit", "node", nodeNumber, "error", saveErr)
 								} else {
 									bld = freshBld
@@ -501,11 +501,11 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 					emit("\x1b[?25l") // hide cursor
 					if cerr == nil && confirm {
 						bbsListMu.Lock()
-						freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+						freshBld, loadErr := loadBBSListData(e.dataDir())
 						if loadErr == nil {
 							if fi := findListingIndexByID(freshBld, entryID); fi >= 0 {
 								freshBld.Listings = append(freshBld.Listings[:fi], freshBld.Listings[fi+1:]...)
-								if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
+								if saveErr := saveBBSListData(e.dataDir(), freshBld); saveErr != nil {
 									slog.Error("failed to save BBS list after delete", "node", nodeNumber, "error", saveErr)
 								} else {
 									bld = freshBld
@@ -527,7 +527,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 				if (ch == 'v' || ch == 'V') && isCoSysOp && len(bld.Listings) > 0 {
 					entryID := bld.Listings[selectedIndex].ID
 					bbsListMu.Lock()
-					freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+					freshBld, loadErr := loadBBSListData(e.dataDir())
 					if loadErr == nil {
 						if fi := findListingIndexByID(freshBld, entryID); fi >= 0 {
 							freshBld.Listings[fi].Verified = !freshBld.Listings[fi].Verified
@@ -535,7 +535,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 							if freshBld.Listings[fi].Verified {
 								status = "verified"
 							}
-							if saveErr := saveBBSListData(e.RootConfigPath, freshBld); saveErr != nil {
+							if saveErr := saveBBSListData(e.dataDir(), freshBld); saveErr != nil {
 								slog.Error("failed to save BBS list after verify toggle", "node", nodeNumber, "error", saveErr)
 							} else {
 								bld = freshBld
@@ -651,7 +651,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Save
 	bbsListMu.Lock()
-	bld, err := loadBBSListData(e.RootConfigPath)
+	bld, err := loadBBSListData(e.dataDir())
 	if err != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error loading BBS list data.\r\n", outputMode)
@@ -675,7 +675,7 @@ func runBBSListAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	bld.Listings = append(bld.Listings, entry)
 	bld.NextID++
 
-	if err := saveBBSListData(e.RootConfigPath, bld); err != nil {
+	if err := saveBBSListData(e.dataDir(), bld); err != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error saving BBS listing.\r\n", outputMode)
 		return currentUser, "", nil
@@ -802,7 +802,7 @@ func runBBSListEdit(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	bbsListMu.Lock()
-	bld, err := loadBBSListData(e.RootConfigPath)
+	bld, err := loadBBSListData(e.dataDir())
 	bbsListMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading BBS listings.\r\n", outputMode)
@@ -854,7 +854,7 @@ func runBBSListEdit(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Reload fresh data and apply edits to avoid clobbering concurrent changes.
 	bbsListMu.Lock()
-	freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+	freshBld, loadErr := loadBBSListData(e.dataDir())
 	if loadErr != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error loading BBS list data.\r\n", outputMode)
@@ -868,7 +868,7 @@ func runBBSListEdit(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	edited.ID = entryCopy.ID
 	freshBld.Listings[fi] = edited
-	if err := saveBBSListData(e.RootConfigPath, freshBld); err != nil {
+	if err := saveBBSListData(e.dataDir(), freshBld); err != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
 		return currentUser, "", nil
@@ -899,7 +899,7 @@ func runBBSListDelete(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	bbsListMu.Lock()
-	bld, err := loadBBSListData(e.RootConfigPath)
+	bld, err := loadBBSListData(e.dataDir())
 	bbsListMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading BBS listings.\r\n", outputMode)
@@ -950,7 +950,7 @@ func runBBSListDelete(c *cmdCtx, args string) (*user.User, string, error) {
 	// taken before the prompts, and saving it would drop listings other
 	// sessions added or edited in the meantime.
 	bbsListMu.Lock()
-	freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+	freshBld, loadErr := loadBBSListData(e.dataDir())
 	if loadErr != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error loading BBS list data.\r\n", outputMode)
@@ -963,7 +963,7 @@ func runBBSListDelete(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	freshBld.Listings = append(freshBld.Listings[:fi], freshBld.Listings[fi+1:]...)
-	if err := saveBBSListData(e.RootConfigPath, freshBld); err != nil {
+	if err := saveBBSListData(e.dataDir(), freshBld); err != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
 		return currentUser, "", nil
@@ -993,7 +993,7 @@ func runBBSListVerify(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	bbsListMu.Lock()
-	bld, err := loadBBSListData(e.RootConfigPath)
+	bld, err := loadBBSListData(e.dataDir())
 	bbsListMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading BBS listings.\r\n", outputMode)
@@ -1022,7 +1022,7 @@ func runBBSListVerify(c *cmdCtx, args string) (*user.User, string, error) {
 	// changed since the list was shown are kept.
 	entryID := bld.Listings[n-1].ID
 	bbsListMu.Lock()
-	freshBld, loadErr := loadBBSListData(e.RootConfigPath)
+	freshBld, loadErr := loadBBSListData(e.dataDir())
 	if loadErr != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error loading BBS list data.\r\n", outputMode)
@@ -1040,7 +1040,7 @@ func runBBSListVerify(c *cmdCtx, args string) (*user.User, string, error) {
 	if target.Verified {
 		status = "verified"
 	}
-	if err := saveBBSListData(e.RootConfigPath, freshBld); err != nil {
+	if err := saveBBSListData(e.dataDir(), freshBld); err != nil {
 		bbsListMu.Unlock()
 		wv(terminal, "\r\n|04Error saving changes.\r\n", outputMode)
 		return currentUser, "", nil
