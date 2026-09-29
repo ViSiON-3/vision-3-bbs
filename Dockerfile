@@ -62,6 +62,12 @@ COPY --from=builder /vision3/wfc       .
 # Note: bin/sexyz and bin/binkd must be provided via a volume or added to a derived image
 COPY templates/ ./templates/
 
+# ZipLab's support files: the ad-removal patterns, the archive comment and the
+# board ad it adds to uploads. Kept under templates/ rather than at
+# /vision3/ziplab so a mount there cannot hide them; the entrypoint copies any
+# that are missing, and leaves the sysop's own edits alone.
+COPY ziplab/ ./templates/ziplab/
+
 # Ship the default menu set so the image runs without a menus/ mount. Mount over
 # /vision3/menus only if you keep a customised set on the host.
 COPY menus/ ./menus/
@@ -69,12 +75,13 @@ COPY menus/ ./menus/
 # Create the mount points before declaring them so a named volume inherits
 # vision3 ownership. Bind mounts still arrive owned by the host uid, which the
 # entrypoint corrects at runtime.
-RUN mkdir -p /vision3/configs /vision3/data /vision3/menus.d /vision3/temp /vision3/bin \
+RUN mkdir -p /vision3/configs /vision3/data /vision3/menus.d /vision3/ziplab /vision3/temp /vision3/bin \
     && chown -R vision3:vision3 /vision3
 
 VOLUME /vision3/configs
 VOLUME /vision3/menus
 VOLUME /vision3/menus.d
+VOLUME /vision3/ziplab
 VOLUME /vision3/data
 
 EXPOSE 2222 2323

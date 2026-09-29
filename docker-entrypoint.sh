@@ -12,7 +12,7 @@
 # chown; carry on and let the writes succeed or fail on their own merits.
 # ---------------------------------------------------------------------------
 if [ "$(id -u)" = "0" ]; then
-    mkdir -p /vision3/configs /vision3/data /vision3/menus /vision3/menus.d /vision3/temp /vision3/bin
+    mkdir -p /vision3/configs /vision3/data /vision3/menus /vision3/menus.d /vision3/ziplab /vision3/temp /vision3/bin
     # Walk the tree only when the mount root is not already ours. Docker creates
     # these owned by root on a fresh install, which is the case worth repairing;
     # on every restart afterwards a recursive pass would traverse the whole of
@@ -31,6 +31,14 @@ if [ "$(id -u)" = "0" ]; then
     #
     # menus.d/ also keeps its host ownership. Run menuedit with the host
     # uid:gid so both host and container edits remain writable by the host.
+    #
+    # ziplab/ is taken over only while it is empty: a mount Docker has just
+    # created, which the support files below have to be copied into. One that
+    # already holds files is the host's -- the checkout, under compose -- and
+    # ZipLab only reads them.
+    if [ -z "$(ls -A /vision3/ziplab 2>/dev/null)" ]; then
+        chown vision3:vision3 /vision3/ziplab 2>/dev/null
+    fi
     exec su-exec vision3 "$0" "$@"
 fi
 
@@ -100,6 +108,20 @@ for template_file in /vision3/templates/infoforms/form_*.txt; do
             echo "  Creating $(basename "$template_file") from template..."
             cp "$template_file" "$target"
         fi
+    fi
+done
+
+# Copy any missing ZipLab support files (patterns, archive comment, board ad).
+# Without them the comment, include and ad-removal steps log an error on every
+# upload and do nothing. A file the sysop has edited is never overwritten.
+mkdir -p /vision3/ziplab 2>/dev/null
+for template_file in /vision3/templates/ziplab/*; do
+    [ -f "$template_file" ] || continue
+    target="/vision3/ziplab/$(basename "$template_file")"
+    if [ ! -f "$target" ]; then
+        echo "  Creating ziplab/$(basename "$target") from template..."
+        cp "$template_file" "$target" \
+            || echo "WARNING: could not create $target; ZipLab will skip the step that uses it" >&2
     fi
 done
 

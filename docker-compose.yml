@@ -19,6 +19,9 @@ services:
       # Your menu overrides. Read before menus/, file by file; menuedit
       # saves here when run with the host uid:gid; ownership stays on the host.
       - ./menus.d:/vision3/menus.d
+      # ZipLab's support files: ad-removal patterns, archive comment and
+      # board ad. Edit them here; missing ones are copied in at startup.
+      - ./ziplab:/vision3/ziplab
     environment:
       # Optional: Override default settings
       - TZ=America/Los_Angeles

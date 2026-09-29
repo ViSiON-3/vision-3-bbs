@@ -79,6 +79,9 @@ If you prefer not to use Docker Compose:
    `-v "$(pwd)/menus.d:/vision3/menus.d"`. Files in it are read before the
    built-in ones, file by file, and `menuedit` inside the container saves there
    (see [Customising menus without losing your changes](menus/menu-system.md#customising-menus-without-losing-your-changes)).
+   To edit ZipLab's comment and board ad on the host, add
+   `-v "$(pwd)/ziplab:/vision3/ziplab"`; an empty directory is filled with the
+   shipped files at startup.
    Add `-v "$(pwd)/menus:/vision3/menus"` only if you keep a complete set of
    your own on the host — mounting an *empty* directory there hides the
    built-in menus and the pre-flight check will refuse to start.
@@ -91,6 +94,7 @@ ViSiON/3 uses a pure-Go SSH implementation (`gliderlabs/ssh`) — no CGO or nati
 
 - Builds all Go binaries: `ViSiON3`, `v3mail`, `config`, `strings`, `ue`, `menuedit`, `helper`, `wfc`
 - Ships the default menu set at `/vision3/menus`
+- Ships ZipLab's support files, which the entrypoint copies to `ziplab/`
 - Ships `sexyz.ini`, which the entrypoint copies to `bin/`
 
 The builder stage is pinned to the Go version in `go.mod`. The official `golang`
@@ -137,6 +141,10 @@ leave root-owned files in `configs/` that the BBS cannot rewrite.
 taking ownership of it would leave you unable to `git pull` or edit your own menu
 set on the host. The BBS only reads menus, so a normal checkout works as-is.
 
+`ziplab/` is taken over only while it is empty, which is a directory Docker
+has just created for the mount. One that already holds files, such as your
+checkout's, keeps its host ownership: ZipLab only reads them.
+
 `menus.d/` also keeps its host ownership, including its tracked README. Run
 `menuedit` with your host UID and GID so files created inside the container
 remain editable on the host. Create the directory on the host before mounting
@@ -180,6 +188,12 @@ The following directories are mounted as volumes and persist across container re
 - **`menus.d/`** - Your menu overrides
   - Read before `menus/`, file by file; `menuedit` saves here
 
+- **`ziplab/`** - [ZipLab](files/ziplab.md) support files
+  - `REMOVE.TXT`, `ZCOMMENT.TXT` and `BBS.AD`: the ad-removal patterns, the
+    archive comment and the board ad added to uploads
+  - Any that are missing are copied in at startup; your edits are never
+    overwritten
+
 ### First Run Initialization
 
 On first run, the entrypoint script will:
@@ -188,8 +202,9 @@ On first run, the entrypoint script will:
 2. Create necessary directories
 3. Generate SSH host keys (RSA and ED25519)
 4. Copy template configs and IP list files to `configs/` if missing
-5. Seed `data/oneliners.json` and the call-history counters
-6. Initialize the JAM message bases
+5. Copy ZipLab's support files to `ziplab/` if missing
+6. Seed `data/oneliners.json` and the call-history counters
+7. Initialize the JAM message bases
 
 The default sysop account (`felonius` / `password`, access level 255) is created
 by the BBS itself on first start, not by the entrypoint — watch for the
@@ -250,7 +265,7 @@ git pull
 docker compose up -d --build
 ```
 
-Your data in `configs/`, `data/`, and `menus/` volumes will be preserved.
+Your data in the `configs/`, `data/`, `menus/`, `menus.d/` and `ziplab/` volumes will be preserved.
 
 ## Troubleshooting
 
