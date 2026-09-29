@@ -1,8 +1,8 @@
 # Private Mail
 
-ViSiON/3 includes a dedicated user-to-user mail system. "Private" here means the message is addressed to a specific user rather than posted publicly to a board — it is **not** encrypted or secure in any modern sense. Messages are stored as plaintext in a JAM base on disk, and sysops can read them. This is how BBS mail worked in the 90s.
+ViSiON/3 includes a dedicated user-to-user mail system. "Private" here means the message is addressed to a specific user rather than posted publicly to a board — it is **not** encrypted or secure in any modern sense. Messages are stored as plaintext in a JAM base on disk, where anyone with access to the files can read them. This is how BBS mail worked in the 90s.
 
-The `MSG_PRIVATE` JAM flag simply controls whether the BBS filters the message out of other users' mail readers.
+Inside the BBS, a message with the `MSG_PRIVATE` JAM flag is shown only to its sender and its recipient, on every path that shows message content: the mail reader, the message reader and list, newscan, QWK packets and the script API.
 
 ## Setup
 
@@ -40,18 +40,32 @@ Posting with `COMPOSEMSG` while `PRIVMAIL` is the current area works the same wa
 
 ### Read Filter
 
-The private mail reader applies a two-part filter before showing any message:
+A private message is visible to a user when their **handle** matches its To or
+From field, ignoring case:
 
 ```go
-if msg.IsPrivate() && strings.EqualFold(msg.To, currentUser.Handle) {
-    // User can read this message
+func (m *DisplayMessage) VisibleTo(handle string) bool {
+    if !m.IsPrivate {
+        return true
+    }
+    // ...
+    return strings.EqualFold(strings.TrimSpace(m.To), handle) ||
+        strings.EqualFold(strings.TrimSpace(m.From), handle)
 }
 ```
 
 This means:
-- The message must have the `MSG_PRIVATE` flag set (0x00000004)
-- The `To` field must match the current user's handle (case-insensitive)
-- Other users' mail readers will not show the message — but it is not encrypted and sysops with filesystem access can read anything
+- Only the handle counts. Real names are neither unique nor fixed, so a
+  message addressed by real name is visible to no ordinary user. Mail is
+  addressed by handle when it is written, tossed or imported;
+  `v3mail readdress` fixes mail stored before that
+  (see [Readdressing private mail](messages/v3mail.md#readdressing-private-mail)).
+- There is no sysop bypass for delivered mail. A user at or above
+  `sysOpLevel` can also read **undeliverable** mail, whose To is no account's
+  handle, in the message reader, list and newscan.
+- The rule applies on top of the area's read ACS, which alone does not protect
+  private mail.
+- None of this is encryption: anyone with filesystem access can read the base.
 
 ### Message Attributes
 
