@@ -204,7 +204,12 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 			Set: func(val string) error { w.autoJoinAreas = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Echo Areas", Help: "Press Enter to download and browse echo areas", Type: ftDisplay, Col: 3, Row: 18, Width: 40,
+			Label: "Bad/Dupe Areas", Help: "Create sysop-only areas for mail in echoes you don't carry and for duplicates (Y/n)", Type: ftYesNo, Col: 3, Row: 18, Width: 1,
+			Get: func() string { return uitext.BoolToYN(w.rejectAreas) },
+			Set: func(val string) error { w.rejectAreas = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Echo Areas", Help: "Press Enter to download and browse echo areas", Type: ftDisplay, Col: 3, Row: 19, Width: 40,
 			Get: func() string {
 				n := w.selectedAreaCount()
 				if n == 0 {

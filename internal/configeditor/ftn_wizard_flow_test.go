@@ -139,6 +139,27 @@ func TestFTNWizard_KeyboardFlowSavesNetwork(t *testing.T) {
 	if strings.Join(echoes, ",") != "FSX_GEN,FSX_TST" {
 		t.Errorf("echo areas = %v", echoes)
 	}
+
+	// Bad/Dupe Areas defaults to Y on a board without them: both are created
+	// sysop-only and local (so scan never exports them), and ftn.json names them.
+	if ac.FTN.BadAreaTag != "ftn_bad" || ac.FTN.DupeAreaTag != "ftn_dupe" {
+		t.Errorf("bad/dupe tags = %q/%q", ac.FTN.BadAreaTag, ac.FTN.DupeAreaTag)
+	}
+	for _, tag := range []string{"ftn_bad", "ftn_dupe"} {
+		found := false
+		for _, a := range ac.MsgAreas {
+			if a.Tag != tag {
+				continue
+			}
+			found = true
+			if a.AreaType != "local" || a.ACSRead != "SYSOP" || a.ACSWrite != "SYSOP" || a.Network != "" {
+				t.Errorf("area %s = type %q read %q write %q network %q", tag, a.AreaType, a.ACSRead, a.ACSWrite, a.Network)
+			}
+		}
+		if !found {
+			t.Errorf("no %s message area", tag)
+		}
+	}
 	conf, err := os.ReadFile(filepath.Join(dir, "..", "data", "ftn", "binkd.conf"))
 	if err != nil {
 		t.Fatalf("binkd.conf: %v", err)

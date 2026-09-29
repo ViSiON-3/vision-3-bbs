@@ -125,13 +125,18 @@ The wizard walks you through:
    (fsxNet, FidoNet, etc.). Selecting one pre-fills the hub address, hostname,
    BinkP port, and coordinator details.
 2. **Enter your details** — your FTN address (validated), AreaFix / session /
-   packet passwords, and origin line.
+   packet passwords, and origin line. **Bad/Dupe Areas** (Y by default when
+   they are not set up yet) creates the sysop-only areas described in
+   [Bad/undeliverable messages](#badundeliverable-messages).
 3. **Select echo areas** — the wizard downloads the network's echo list
    (`backbone.na`) and lets you check the areas you want to carry.
 4. **Save** — it then creates everything for you:
    - the network and uplink in `configs/ftn.json`
    - a single conference for the network, plus one message area per selected echo
    - a netmail area for the network
+   - with Bad/Dupe Areas on, `ftn_bad` and `ftn_dupe` message areas (local,
+     ungrouped, read and post access `SYSOP`), set as `bad_area_tag` and
+     `dupe_area_tag`. A setting that already names an existing area is kept.
    - a matching `data/ftn/binkd.conf` (identity, domains, your FTN address,
      mailer/inbound/outbound paths, and the hub node)
    - an enabled scheduler event that polls your hub every 15 minutes (the
@@ -930,8 +935,15 @@ persists.
 ### Bad/undeliverable messages
 
 When a packet contains an `AREA:` tag that doesn't match any subscribed echo
-area, the message is written to the `BAD` message area (sysop-only) instead of
-being silently dropped.
+area, the message is written to the bad area instead of being dropped.
+
+Both the bad and dupe areas are ordinary message areas that `ftn.json` names by
+tag. The FTN Setup Wizard can create them for you (**Bad/Dupe Areas**), or you
+can create your own under Message Areas and choose them in **Echomail
+Networks → G (Global)** as **Bad Area** and **Dupe Area**. Make them `local`
+rather than echomail, and restrict read access to the sysop. With no bad area,
+a message for an unknown echo fails the toss and its packet is moved to
+`temp_path`; with no dupe area, dupes are logged and discarded.
 
 **BAD area:** Read it via the BBS message reader. Each message will show the
 original `AREA:` tag in the header — that tells you what echo the sender thought
