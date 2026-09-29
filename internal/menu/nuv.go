@@ -41,12 +41,12 @@ type NUVData struct {
 
 var nuvMu sync.Mutex
 
-func nuvFilePath(rootConfigPath string) string {
-	return filepath.Join(rootConfigPath, "..", "data", "nuv.json")
+func nuvFilePath(dataDir string) string {
+	return filepath.Join(boardDataDir(dataDir), "nuv.json")
 }
 
-func loadNUVData(rootConfigPath string) (*NUVData, error) {
-	data, err := os.ReadFile(nuvFilePath(rootConfigPath))
+func loadNUVData(dataDir string) (*NUVData, error) {
+	data, err := os.ReadFile(nuvFilePath(dataDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &NUVData{}, nil
@@ -60,20 +60,20 @@ func loadNUVData(rootConfigPath string) (*NUVData, error) {
 	return &nd, nil
 }
 
-func saveNUVData(rootConfigPath string, nd *NUVData) error {
+func saveNUVData(dataDir string, nd *NUVData) error {
 	data, err := json.MarshalIndent(nd, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal nuv data: %w", err)
 	}
-	return os.WriteFile(nuvFilePath(rootConfigPath), data, 0644)
+	return os.WriteFile(nuvFilePath(dataDir), data, 0644)
 }
 
 // nuvAddCandidate adds a new user handle to the NUV queue.
 // Called automatically after new user registration when AutoAddNUV is true.
-func nuvAddCandidate(rootConfigPath, handle string) error {
+func nuvAddCandidate(dataDir, handle string) error {
 	nuvMu.Lock()
 	defer nuvMu.Unlock()
-	nd, err := loadNUVData(rootConfigPath)
+	nd, err := loadNUVData(dataDir)
 	if err != nil {
 		slog.Warn("failed to load nuv.json", "error", err)
 		return fmt.Errorf("load nuv data: %w", err)
@@ -88,7 +88,7 @@ func nuvAddCandidate(rootConfigPath, handle string) error {
 		Handle: handle,
 		When:   time.Now(),
 	})
-	if err := saveNUVData(rootConfigPath, nd); err != nil {
+	if err := saveNUVData(dataDir, nd); err != nil {
 		slog.Warn("failed to save nuv.json", "error", err)
 		return fmt.Errorf("save nuv data: %w", err)
 	}
@@ -267,14 +267,14 @@ func nuvPromptComment(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		comment = string(runes[:80])
 	}
 	nuvMu.Lock()
-	fresh, loadErr := loadNUVData(e.RootConfigPath)
+	fresh, loadErr := loadNUVData(e.dataDir())
 	if loadErr == nil {
 		freshIdx := nuvFindCandidate(fresh, c.Handle)
 		if freshIdx >= 0 {
 			vi := nuvVoteIndex(&fresh.Candidates[freshIdx], currentUser.Handle)
 			if vi >= 0 {
 				fresh.Candidates[freshIdx].Votes[vi].Comment = comment
-				if err := saveNUVData(e.RootConfigPath, fresh); err != nil {
+				if err := saveNUVData(e.dataDir(), fresh); err != nil {
 					slog.Warn("failed to save comment", "error", err)
 				} else {
 					*nd = *fresh
@@ -403,7 +403,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		case 'Y', 'y', 'N', 'n':
 			castYes := key == 'Y' || key == 'y'
 			nuvMu.Lock()
-			fresh, loadErr := loadNUVData(e.RootConfigPath)
+			fresh, loadErr := loadNUVData(e.dataDir())
 			removed := false
 			if loadErr == nil {
 				freshIdx := nuvFindCandidate(fresh, c.Handle)
@@ -443,7 +443,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 							wv(terminal, "\r\n"+noMsg+"\r\n", outputMode)
 						}
 					}
-					_ = saveNUVData(e.RootConfigPath, fresh)
+					_ = saveNUVData(e.dataDir(), fresh)
 					*nd = *fresh
 					idx = freshIdx
 					c = &nd.Candidates[idx]
@@ -454,7 +454,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 					}
 					slog.Info("user voted on candidate", "handle", currentUser.Handle, "vote", voteStr, "candidate", c.Handle)
 					removed = nuvApplyThresholds(e, nd, idx, userManager)
-					_ = saveNUVData(e.RootConfigPath, nd)
+					_ = saveNUVData(e.dataDir(), nd)
 
 					// V2 auto-prompts for comment immediately after new vote.
 					// Unlock before nuvPromptComment — it acquires nuvMu internally.
@@ -463,7 +463,7 @@ func nuvVoteOn(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 						nuvPromptComment(e, s, terminal, currentUser, nd, c, outputMode)
 						nuvMu.Lock()
 						// Reload after comment to ensure consistency.
-						fresh, loadErr = loadNUVData(e.RootConfigPath)
+						fresh, loadErr = loadNUVData(e.dataDir())
 						if loadErr == nil {
 							*nd = *fresh
 						}

@@ -25,7 +25,7 @@ func enableNUV(env *menuEnv, yes, no int, validate, kill bool) {
 // seedNUV writes the NUV queue directly.
 func seedNUV(t *testing.T, env *menuEnv, cands ...NUVCandidate) {
 	t.Helper()
-	if err := saveNUVData(env.cfgDir(), &NUVData{Candidates: cands}); err != nil {
+	if err := saveNUVData(env.dataDir(), &NUVData{Candidates: cands}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -33,7 +33,7 @@ func seedNUV(t *testing.T, env *menuEnv, cands ...NUVCandidate) {
 // readNUV loads the NUV queue from disk.
 func readNUV(t *testing.T, env *menuEnv) *NUVData {
 	t.Helper()
-	nd, err := loadNUVData(env.cfgDir())
+	nd, err := loadNUVData(env.dataDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func addCandidateUser(t *testing.T, env *menuEnv, handle string) {
 	if _, err := env.um.AddUser("pw123", handle, handle+" Person", "Here"); err != nil {
 		t.Fatal(err)
 	}
-	if err := nuvAddCandidate(env.cfgDir(), handle); err != nil {
+	if err := nuvAddCandidate(env.dataDir(), handle); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -61,7 +61,7 @@ func TestNUVQueueStorage(t *testing.T) {
 		t.Fatalf("fresh queue = %+v", nd.Candidates)
 	}
 	for _, h := range []string{"Newbie", "NEWBIE", "newbie"} {
-		if err := nuvAddCandidate(env.cfgDir(), h); err != nil {
+		if err := nuvAddCandidate(env.dataDir(), h); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -73,13 +73,13 @@ func TestNUVQueueStorage(t *testing.T) {
 		t.Errorf("nuv.json not in the data dir: %v", err)
 	}
 
-	if err := os.WriteFile(nuvFilePath(env.cfgDir()), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(nuvFilePath(env.dataDir()), []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadNUVData(env.cfgDir()); err == nil {
+	if _, err := loadNUVData(env.dataDir()); err == nil {
 		t.Error("corrupt nuv.json loaded without error")
 	}
-	if err := nuvAddCandidate(env.cfgDir(), "Other"); err == nil {
+	if err := nuvAddCandidate(env.dataDir(), "Other"); err == nil {
 		t.Error("adding to a corrupt queue did not fail")
 	}
 }
@@ -221,7 +221,7 @@ func TestNUVVote_InfoformKey(t *testing.T) {
 	enableNUV(env, 5, 5, true, false)
 	setServerField(env.e, func(c *config.ServerConfig) { c.NUVForm = 1 })
 	addCandidateUser(t, env, "Newbie")
-	if err := nuvAddCandidate(env.cfgDir(), "Ghost"); err != nil {
+	if err := nuvAddCandidate(env.dataDir(), "Ghost"); err != nil {
 		t.Fatal(err)
 	}
 

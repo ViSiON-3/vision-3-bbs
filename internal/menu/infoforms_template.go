@@ -39,8 +39,8 @@ type parsedTemplate struct {
 }
 
 // parseTemplateFile reads and parses a form template file.
-func parseTemplateFile(rootConfigPath string, formNum int) (*parsedTemplate, error) {
-	data, err := os.ReadFile(infoformsTemplatePath(rootConfigPath, formNum))
+func parseTemplateFile(dataDir string, formNum int) (*parsedTemplate, error) {
+	data, err := os.ReadFile(infoformsTemplatePath(dataDir, formNum))
 	if err != nil {
 		return nil, fmt.Errorf("read template: %w", err)
 	}

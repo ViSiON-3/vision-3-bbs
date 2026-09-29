@@ -79,7 +79,7 @@ func runInfoFormHunt(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	if !templateExists(e.RootConfigPath, formNum) {
+	if !templateExists(e.dataDir(), formNum) {
 		wv(terminal, "\r\n|04That form template doesn't exist.\r\n", outputMode)
 		return currentUser, "", nil
 	}
@@ -88,7 +88,7 @@ func runInfoFormHunt(c *cmdCtx, args string) (*user.User, string, error) {
 	wv(terminal, "|08"+strings.Repeat("\xc4", 50)+"\r\n", outputMode)
 
 	// Scan responses directory for this form number
-	respDir := filepath.Join(infoformsDataDir(e.RootConfigPath), "responses")
+	respDir := filepath.Join(infoformsDataDir(e.dataDir()), "responses")
 	entries, err := os.ReadDir(respDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -115,7 +115,7 @@ func runInfoFormHunt(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
-		resp, rerr := loadInfoFormResponse(e.RootConfigPath, uid, formNum)
+		resp, rerr := loadInfoFormResponse(e.dataDir(), uid, formNum)
 		if rerr != nil || resp == nil {
 			continue
 		}
@@ -160,7 +160,7 @@ func runInfoFormRequired(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	infoformsMu.Lock()
-	cfg, err := loadInfoFormConfig(e.RootConfigPath)
+	cfg, err := loadInfoFormConfig(e.dataDir())
 	infoformsMu.Unlock()
 	if err != nil {
 		slog.Error("failed to load infoforms config in required check", "node", nodeNumber, "error", err)
@@ -172,16 +172,16 @@ func runInfoFormRequired(c *cmdCtx, args string) (*user.User, string, error) {
 		if !isFormRequired(cfg, formNum) {
 			continue
 		}
-		if !templateExists(e.RootConfigPath, formNum) {
+		if !templateExists(e.dataDir(), formNum) {
 			continue
 		}
-		if hasCompletedForm(e.RootConfigPath, currentUser.ID, formNum) {
+		if hasCompletedForm(e.dataDir(), currentUser.ID, formNum) {
 			continue
 		}
 		// Force fill out this required form
 		fillInfoForm(e, s, terminal, outputMode, nodeNumber, currentUser, formNum, termWidth, termHeight)
 		// Re-check: if form still not completed (save failed, user disconnected, etc.), block login
-		if !hasCompletedForm(e.RootConfigPath, currentUser.ID, formNum) {
+		if !hasCompletedForm(e.dataDir(), currentUser.ID, formNum) {
 			slog.Warn("required infoform not completed, blocking login",
 				"node", nodeNumber, "form", formNum, "handle", currentUser.Handle)
 			wv(terminal, fmt.Sprintf("\r\n|04Required form #%d was not completed. Disconnecting.\r\n", formNum), outputMode)
@@ -241,7 +241,7 @@ func runInfoFormNuke(c *cmdCtx, args string) (*user.User, string, error) {
 
 	infoformsMu.Lock()
 	for i := 1; i <= 5; i++ {
-		_ = deleteInfoFormResponse(e.RootConfigPath, targetUser.ID, i)
+		_ = deleteInfoFormResponse(e.dataDir(), targetUser.ID, i)
 	}
 	infoformsMu.Unlock()
 

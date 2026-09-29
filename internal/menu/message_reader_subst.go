@@ -23,7 +23,7 @@ func convertSubsToCP437(subs map[byte]string) map[byte]string {
 }
 
 // buildMsgSubstitutions creates the Pascal-style substitution map for MSGHDR templates.
-func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, totalMsgs int, userLevel int, includeNoteInFrom bool, replyCount int, confName string, areaName string, msgMgr *message.MessageManager, areaID int, userMgr *user.UserMgr, nodeNumber int, v3netStatus V3NetStatusProvider) map[byte]string {
+func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, totalMsgs int, includeNoteInFrom bool, replyCount int, confName string, areaName string, msgMgr *message.MessageManager, areaID int, userMgr *user.UserMgr, nodeNumber int, v3netStatus V3NetStatusProvider) map[byte]string {
 	// Import jam constants
 	const (
 		msgTypeEcho = 0x01000000
@@ -51,11 +51,18 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	}
 	isV3Net := v3netNetwork != ""
 
-	// Look up the message author's user note from users.json
+	// Look up the message author (From as a local handle) for the user note
+	// and access level. A From that is not a local handle — a remote or
+	// netmail author, a real-name or anonymous post — leaves both blank, so
+	// @L@ never shows the reader's own level in the author's place (#487).
 	userNoteToUse := ""
+	authorLevel := ""
 	if userMgr != nil {
 		if authorUser, found := userMgr.GetUser(msg.From); found {
 			userNoteToUse = authorUser.PrivateNote
+			if !authorUser.DeletedUser {
+				authorLevel = strconv.Itoa(authorUser.AccessLevel)
+			}
 		}
 	}
 
@@ -146,11 +153,11 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	return map[byte]string{
 		'B': areaTag,
 		'T': msg.Subject,
-		'F': fromStr,                 // From with network address
-		'S': toStr,                   // To with network address
-		'U': userNoteToUse,           // User note from user profile (local only)
-		'M': msgStatusStr,            // Message status (LOCAL, ECHOMAIL, NETMAIL, V3NET, etc.)
-		'L': strconv.Itoa(userLevel), // User level/access level
+		'F': fromStr,       // From with network address
+		'S': toStr,         // To with network address
+		'U': userNoteToUse, // User note from user profile (local only)
+		'M': msgStatusStr,  // Message status (LOCAL, ECHOMAIL, NETMAIL, V3NET, etc.)
+		'L': authorLevel,   // Author's access level; blank if From is not a local handle
 		'#': strconv.Itoa(msgNum),
 		'N': strconv.Itoa(totalMsgs),
 		'C': fmt.Sprintf("[%d/%d]", msgNum, totalMsgs), // Message count display

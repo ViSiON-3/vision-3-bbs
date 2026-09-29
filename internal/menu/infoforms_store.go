@@ -32,28 +32,28 @@ type InfoFormResponse struct {
 var infoformsMu sync.Mutex
 
 // infoformsDataDir returns the path to the infoforms data directory.
-func infoformsDataDir(rootConfigPath string) string {
-	return filepath.Join(rootConfigPath, "..", "data", "infoforms")
+func infoformsDataDir(dataDir string) string {
+	return filepath.Join(boardDataDir(dataDir), "infoforms")
 }
 
 // infoformsConfigPath returns the path to the infoforms config file.
-func infoformsConfigPath(rootConfigPath string) string {
-	return filepath.Join(infoformsDataDir(rootConfigPath), "config.json")
+func infoformsConfigPath(dataDir string) string {
+	return filepath.Join(infoformsDataDir(dataDir), "config.json")
 }
 
 // infoformsTemplatePath returns the path to a form template file.
-func infoformsTemplatePath(rootConfigPath string, formNum int) string {
-	return filepath.Join(infoformsDataDir(rootConfigPath), "templates", fmt.Sprintf("form_%d.txt", formNum))
+func infoformsTemplatePath(dataDir string, formNum int) string {
+	return filepath.Join(infoformsDataDir(dataDir), "templates", fmt.Sprintf("form_%d.txt", formNum))
 }
 
 // infoformsResponsePath returns the path to a user's response file.
-func infoformsResponsePath(rootConfigPath string, userID int, formNum int) string {
-	return filepath.Join(infoformsDataDir(rootConfigPath), "responses", fmt.Sprintf("%d_%d.json", userID, formNum))
+func infoformsResponsePath(dataDir string, userID int, formNum int) string {
+	return filepath.Join(infoformsDataDir(dataDir), "responses", fmt.Sprintf("%d_%d.json", userID, formNum))
 }
 
 // loadInfoFormConfig loads the infoforms configuration.
-func loadInfoFormConfig(rootConfigPath string) (*InfoFormConfig, error) {
-	data, err := os.ReadFile(infoformsConfigPath(rootConfigPath))
+func loadInfoFormConfig(dataDir string) (*InfoFormConfig, error) {
+	data, err := os.ReadFile(infoformsConfigPath(dataDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Return defaults matching V2 (CONFIG.PAS:73-78)
@@ -73,8 +73,8 @@ func loadInfoFormConfig(rootConfigPath string) (*InfoFormConfig, error) {
 }
 
 // loadInfoFormResponse loads a user's response for a specific form.
-func loadInfoFormResponse(rootConfigPath string, userID int, formNum int) (*InfoFormResponse, error) {
-	data, err := os.ReadFile(infoformsResponsePath(rootConfigPath, userID, formNum))
+func loadInfoFormResponse(dataDir string, userID int, formNum int) (*InfoFormResponse, error) {
+	data, err := os.ReadFile(infoformsResponsePath(dataDir, userID, formNum))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil // No response yet
@@ -92,12 +92,12 @@ func loadInfoFormResponse(rootConfigPath string, userID int, formNum int) (*Info
 // Uses temp file + rename to prevent torn reads by concurrent sessions.
 // Note: os.Rename is atomic on Unix/POSIX but not guaranteed atomic on Windows.
 // On Windows, concurrent readers may briefly see a missing file during the rename.
-func saveInfoFormResponse(rootConfigPath string, resp *InfoFormResponse) error {
+func saveInfoFormResponse(dataDir string, resp *InfoFormResponse) error {
 	data, err := json.MarshalIndent(resp, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal infoform response: %w", err)
 	}
-	fp := infoformsResponsePath(rootConfigPath, resp.UserID, resp.FormNum)
+	fp := infoformsResponsePath(dataDir, resp.UserID, resp.FormNum)
 	dir := filepath.Dir(fp)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create infoforms response directory: %w", err)
@@ -130,8 +130,8 @@ func saveInfoFormResponse(rootConfigPath string, resp *InfoFormResponse) error {
 }
 
 // deleteInfoFormResponse deletes a user's response for a specific form.
-func deleteInfoFormResponse(rootConfigPath string, userID int, formNum int) error {
-	fp := infoformsResponsePath(rootConfigPath, userID, formNum)
+func deleteInfoFormResponse(dataDir string, userID int, formNum int) error {
+	fp := infoformsResponsePath(dataDir, userID, formNum)
 	err := os.Remove(fp)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("delete infoform response: %w", err)
@@ -141,14 +141,14 @@ func deleteInfoFormResponse(rootConfigPath string, userID int, formNum int) erro
 
 // hasCompletedForm checks if a user has completed a specific form.
 // Uses file existence check — no User struct field needed.
-func hasCompletedForm(rootConfigPath string, userID int, formNum int) bool {
-	_, err := os.Stat(infoformsResponsePath(rootConfigPath, userID, formNum))
+func hasCompletedForm(dataDir string, userID int, formNum int) bool {
+	_, err := os.Stat(infoformsResponsePath(dataDir, userID, formNum))
 	return err == nil
 }
 
 // templateExists checks if a form template file exists.
-func templateExists(rootConfigPath string, formNum int) bool {
-	_, err := os.Stat(infoformsTemplatePath(rootConfigPath, formNum))
+func templateExists(dataDir string, formNum int) bool {
+	_, err := os.Stat(infoformsTemplatePath(dataDir, formNum))
 	return err == nil
 }
 

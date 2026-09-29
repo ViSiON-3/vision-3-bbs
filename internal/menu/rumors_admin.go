@@ -40,7 +40,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Check max rumors (V2: 999 limit)
 	rumorsMu.Lock()
-	rd, err := loadRumorsData(e.RootConfigPath)
+	rd, err := loadRumorsData(e.dataDir())
 	rumorsMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading rumors.\r\n", outputMode)
@@ -126,7 +126,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	rumorsMu.Lock()
-	rd, err = loadRumorsData(e.RootConfigPath)
+	rd, err = loadRumorsData(e.dataDir())
 	if err != nil {
 		rumorsMu.Unlock()
 		wv(terminal, "\r\n|04Error saving rumor.\r\n", outputMode)
@@ -140,7 +140,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	newRumor.ID = rd.NextID
 	rd.NextID++
 	rd.Rumors = append(rd.Rumors, newRumor)
-	saveErr := saveRumorsData(e.RootConfigPath, rd)
+	saveErr := saveRumorsData(e.dataDir(), rd)
 	rumorsMu.Unlock()
 
 	if saveErr != nil {
@@ -183,9 +183,9 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 	anonName := rumorAnonName(e)
 
 	rumorsMu.Lock()
-	rd, err := loadRumorsData(e.RootConfigPath)
+	rd, err := loadRumorsData(e.dataDir())
 	if err == nil && backfillRumorUserIDs(rd, userManager) {
-		_ = saveRumorsData(e.RootConfigPath, rd) // best-effort migration; non-fatal
+		_ = saveRumorsData(e.dataDir(), rd) // best-effort migration; non-fatal
 	}
 	rumorsMu.Unlock()
 	if err != nil {
@@ -286,7 +286,7 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	rumorsMu.Lock()
-	rd, err = loadRumorsData(e.RootConfigPath)
+	rd, err = loadRumorsData(e.dataDir())
 	if err != nil {
 		rumorsMu.Unlock()
 		return currentUser, "", nil
@@ -306,7 +306,7 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 		wv(terminal, "\r\n|04Rumor not found.\r\n", outputMode)
 		return currentUser, "", nil
 	}
-	saveErr := saveRumorsData(e.RootConfigPath, rd)
+	saveErr := saveRumorsData(e.dataDir(), rd)
 	rumorsMu.Unlock()
 
 	if saveErr != nil {

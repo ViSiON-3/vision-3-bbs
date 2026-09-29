@@ -33,7 +33,7 @@ func seedVoting(t *testing.T, env *menuEnv, topics ...VoteTopic) {
 			topics[i].Votes = map[string][]string{}
 		}
 	}
-	if err := saveVotingData(env.cfgDir(), &VotingData{Topics: topics}); err != nil {
+	if err := saveVotingData(env.dataDir(), &VotingData{Topics: topics}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -41,7 +41,7 @@ func seedVoting(t *testing.T, env *menuEnv, topics ...VoteTopic) {
 // readVoting loads voting.json.
 func readVoting(t *testing.T, env *menuEnv) *VotingData {
 	t.Helper()
-	vd, err := loadVotingData(env.cfgDir())
+	vd, err := loadVotingData(env.dataDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,16 +204,16 @@ func TestVoteMandatory(t *testing.T) {
 func TestVoteRecordVoteBounds(t *testing.T) {
 	env := newMenuEnv(t)
 	seedVoting(t, env, VoteTopic{ID: 1, Question: "Q?", Options: []string{"a", "b"}})
-	if _, err := voteRecordVote(env.cfgDir(), 5, 0, "Caller"); !errors.Is(err, errVoteTopicGone) {
+	if _, err := voteRecordVote(env.dataDir(), 5, 0, "Caller"); !errors.Is(err, errVoteTopicGone) {
 		t.Errorf("unknown topic ID: err = %v, want errVoteTopicGone", err)
 	}
-	if _, err := voteRecordVote(env.cfgDir(), 1, 2, "Caller"); err == nil {
+	if _, err := voteRecordVote(env.dataDir(), 1, 2, "Caller"); err == nil {
 		t.Error("out-of-range option accepted")
 	}
-	if _, err := voteRecordVote(env.cfgDir(), 1, 0, "Caller"); err != nil {
+	if _, err := voteRecordVote(env.dataDir(), 1, 0, "Caller"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := voteRecordVote(env.cfgDir(), 1, 1, "CALLER"); err != nil {
+	if _, err := voteRecordVote(env.dataDir(), 1, 1, "CALLER"); err != nil {
 		t.Fatal(err)
 	}
 	tp := readVoting(t, env).Topics[0]

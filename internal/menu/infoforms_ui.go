@@ -23,7 +23,7 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	outputMode ansi.OutputMode, nodeNumber int, currentUser *user.User,
 	formNum int, termWidth int, termHeight int) {
 
-	tmpl, err := parseTemplateFile(e.RootConfigPath, formNum)
+	tmpl, err := parseTemplateFile(e.dataDir(), formNum)
 	if err != nil {
 		wv(terminal, fmt.Sprintf("\r\n|04There isn't an information #%d form right now.\r\n", formNum), outputMode)
 		return
@@ -31,7 +31,7 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// Check if already completed — prompt to replace but don't delete yet.
 	// The old response is preserved until the new one is fully saved (atomic rename).
-	if hasCompletedForm(e.RootConfigPath, currentUser.ID, formNum) {
+	if hasCompletedForm(e.dataDir(), currentUser.ID, formNum) {
 		replaceYes, err := e.PromptYesNo(s, terminal,
 			fmt.Sprintf("|07You have already filled out form #%d! Replace it? @", formNum),
 			outputMode, nodeNumber, termWidth, termHeight, false)
@@ -98,7 +98,7 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	infoformsMu.Lock()
-	saveErr := saveInfoFormResponse(e.RootConfigPath, resp)
+	saveErr := saveInfoFormResponse(e.dataDir(), resp)
 	infoformsMu.Unlock()
 
 	if saveErr != nil {
@@ -116,7 +116,7 @@ func fillInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode,
 	userID int, formNum int, termHeight int) {
 
-	resp, err := loadInfoFormResponse(e.RootConfigPath, userID, formNum)
+	resp, err := loadInfoFormResponse(e.dataDir(), userID, formNum)
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading form response.\r\n", outputMode)
 		return
@@ -126,7 +126,7 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 		return
 	}
 
-	tmpl, err := parseTemplateFile(e.RootConfigPath, formNum)
+	tmpl, err := parseTemplateFile(e.dataDir(), formNum)
 	if err != nil {
 		wv(terminal, fmt.Sprintf("\r\n|07Infoform #%d is blank.\r\n", formNum), outputMode)
 		return
@@ -227,7 +227,7 @@ func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		hasAnyForm := false
 		for i := 0; i < 5; i++ {
 			formNum := i + 1
-			if !templateExists(e.RootConfigPath, formNum) {
+			if !templateExists(e.dataDir(), formNum) {
 				continue
 			}
 			hasAnyForm = true
@@ -235,7 +235,7 @@ func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			if desc == "" {
 				desc = fmt.Sprintf("Form #%d", formNum)
 			}
-			if hasCompletedForm(e.RootConfigPath, sel.ID, formNum) {
+			if hasCompletedForm(e.dataDir(), sel.ID, formNum) {
 				wv(terminal, fmt.Sprintf("  |15%d|08. |15%-30s |10[Completed]\r\n", formNum, desc), outputMode)
 			} else {
 				wv(terminal, fmt.Sprintf("  |08%d|08. |07%-30s |04[Incomplete]\r\n", formNum, desc), outputMode)
@@ -261,7 +261,7 @@ func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		}
 		if key >= int('1') && key <= int('5') {
 			formNum := key - int('0')
-			if !templateExists(e.RootConfigPath, formNum) {
+			if !templateExists(e.dataDir(), formNum) {
 				continue
 			}
 			_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
@@ -271,7 +271,7 @@ func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			}
 			wv(terminal, fmt.Sprintf("\r\n|15%s|07\r\n", desc), outputMode)
 			wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n", outputMode)
-			if hasCompletedForm(e.RootConfigPath, sel.ID, formNum) {
+			if hasCompletedForm(e.dataDir(), sel.ID, formNum) {
 				showInfoForm(e, s, terminal, outputMode, sel.ID, formNum, termHeight)
 			} else {
 				wv(terminal, "\r\n|04This form has not been completed.\r\n", outputMode)

@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -38,7 +39,7 @@ func runCheckNUV(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	nuvMu.Lock()
-	nd, err := loadNUVData(e.RootConfigPath)
+	nd, err := loadNUVData(e.dataDir())
 	nuvMu.Unlock()
 	if err != nil || len(nd.Candidates) == 0 {
 		return currentUser, "", nil
@@ -69,13 +70,21 @@ func runCheckNUV(c *cmdCtx, args string) (*user.User, string, error) {
 		voteNowStr = "|07Vote now? @"
 	}
 	voteNow, err := e.PromptYesNo(s, terminal, voteNowStr, outputMode, c.nodeNumber, termWidth, termHeight, false)
-	if err != nil || !voteNow {
+	if err != nil {
+		// A caller who drops (or idles out) at the prompt must not be
+		// carried on through the rest of the login sequence (#488).
+		if logoffIfDisconnected(err) {
+			return nil, "LOGOFF", io.EOF
+		}
+		return currentUser, "", nil
+	}
+	if !voteNow {
 		return currentUser, "", nil
 	}
 
 	// Quick-scan: iterate through unvoted candidates.
 	nuvMu.Lock()
-	nd, err = loadNUVData(e.RootConfigPath)
+	nd, err = loadNUVData(e.dataDir())
 	nuvMu.Unlock()
 	if err != nil {
 		return currentUser, "", nil
@@ -114,7 +123,7 @@ func runNUVScan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	nuvMu.Lock()
-	nd, err := loadNUVData(e.RootConfigPath)
+	nd, err := loadNUVData(e.dataDir())
 	nuvMu.Unlock()
 	if err != nil {
 		slog.Warn("SCANNUV load error", "node", nodeNumber, "error", err)
@@ -154,7 +163,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	nuvMu.Lock()
-	nd, err := loadNUVData(e.RootConfigPath)
+	nd, err := loadNUVData(e.dataDir())
 	nuvMu.Unlock()
 	if err != nil {
 		slog.Warn("LISTNUV load error", "node", nodeNumber, "error", err)
@@ -215,7 +224,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 				wv(terminal, fmt.Sprintf("|12User '%s' not found.\r\n", handle), outputMode)
 				continue
 			}
-			if err := nuvAddCandidate(e.RootConfigPath, handle); err != nil {
+			if err := nuvAddCandidate(e.dataDir(), handle); err != nil {
 				wv(terminal, fmt.Sprintf("|12Failed to add '%s': %v\r\n", handle, err), outputMode)
 				continue
 			}
@@ -242,7 +251,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			// remove candidates and shift the positions.
 			handle := nd.Candidates[num-1].Handle
 			nuvMu.Lock()
-			fresh, loadErr := loadNUVData(e.RootConfigPath)
+			fresh, loadErr := loadNUVData(e.dataDir())
 			if loadErr != nil {
 				nuvMu.Unlock()
 				wv(terminal, "|12Failed to load the NUV queue.\r\n", outputMode)
@@ -256,7 +265,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			removed := fresh.Candidates[fi]
 			fresh.Candidates = append(fresh.Candidates[:fi], fresh.Candidates[fi+1:]...)
-			if err := saveNUVData(e.RootConfigPath, fresh); err != nil {
+			if err := saveNUVData(e.dataDir(), fresh); err != nil {
 				nuvMu.Unlock()
 				slog.Error("failed to save after removing candidate", "handle", removed.Handle, "error", err)
 				wv(terminal, "|12Failed to save changes.\r\n", outputMode)
@@ -286,7 +295,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			// find that candidate in the reloaded queue.
 			handle := nd.Candidates[num-1].Handle
 			nuvMu.Lock()
-			fresh, loadErr := loadNUVData(e.RootConfigPath)
+			fresh, loadErr := loadNUVData(e.dataDir())
 			nuvMu.Unlock()
 			if loadErr != nil {
 				wv(terminal, "|12Failed to load the NUV queue.\r\n", outputMode)
@@ -305,7 +314,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 
 		// Reload and redisplay the list.
 		nuvMu.Lock()
-		nd, err = loadNUVData(e.RootConfigPath)
+		nd, err = loadNUVData(e.dataDir())
 		nuvMu.Unlock()
 		if err != nil {
 			return currentUser, "", nil

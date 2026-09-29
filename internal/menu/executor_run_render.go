@@ -70,7 +70,7 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 		if st.currentUser != nil {
 			rumorLevel = st.currentUser.AccessLevel
 		}
-		rawAnsiContent = expandRandomRumorATCode(rawAnsiContent, e.RootConfigPath, rumorLevel)
+		rawAnsiContent = expandRandomRumorATCode(rawAnsiContent, e.dataDir(), rumorLevel)
 	}
 	var ansiProcessResult ansi.ProcessAnsiResult
 	var processErr error
