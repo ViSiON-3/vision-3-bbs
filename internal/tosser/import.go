@@ -150,6 +150,10 @@ func (t *Tosser) ProcessInbound() TossResult {
 	}
 	defer release()
 
+	// The DB was loaded when this process started, before the lock; a toss
+	// that ran in between has recorded messages this one must treat as seen.
+	t.dupeDB.Reload()
+
 	for _, inboundDir := range t.inboundDirs() {
 		t.processInboundDir(inboundDir, &result)
 	}
@@ -345,17 +349,13 @@ func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, sk
 	// against our known links. This prevents cross-contamination when multiple
 	// networks share the same inbound directory.
 	if !t.isPacketFromKnownLink(pktHdr) {
-		pktZone := pktHdr.OrigZone
-		if pktZone == 0 {
-			pktZone = pktHdr.QOrigZone
-		}
-		origin := fmt.Sprintf("%d:%d/%d", pktZone, pktHdr.OrigNet, pktHdr.OrigNode)
+		origin := packetOrigin(pktHdr)
 		slog.Debug("skipping packet from unknown link", "network", t.networkName, "packet", filepath.Base(path), "origin", origin)
 		return 0, 0, nil, origin
 	}
 
 	for i, msg := range msgs {
-		if err := t.tossMessage(msg, pktHdr); err != nil {
+		if err := t.tossMessage(msg, pktHdr, filepath.Base(path)); err != nil {
 			if err == errDupe {
 				dupes++
 				continue
@@ -370,6 +370,24 @@ func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, sk
 }
 
 var errDupe = fmt.Errorf("duplicate message")
+
+// packetOrigin formats a packet header's source address as zone:net/node.
+func packetOrigin(hdr *ftn.PacketHeader) string {
+	zone := hdr.OrigZone
+	if zone == 0 {
+		zone = hdr.QOrigZone
+	}
+	return fmt.Sprintf("%d:%d/%d", zone, hdr.OrigNet, hdr.OrigNode)
+}
+
+// echoDupeKey is the dupe DB key for an echomail message: the echo tag as
+// received, upper-cased, then the MSGID. Keying on the area as well as the
+// MSGID matches hpt and other traditional tossers, so a message crossposted
+// to several echoes under one MSGID is imported into each of them rather
+// than dropped from all but the first.
+func echoDupeKey(areaTag, msgID string) string {
+	return strings.ToUpper(strings.TrimSpace(areaTag)) + " " + msgID
+}
 
 // isPacketFromKnownLink checks whether a packet header's source address matches
 // any configured link for this network. Compares zone, net, and node; point is
@@ -404,7 +422,21 @@ func (t *Tosser) isPacketFromKnownLink(hdr *ftn.PacketHeader) bool {
 }
 
 // tossMessage processes a single message from a packet.
-func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (retErr error) {
+// pktName identifies the packet in log lines.
+func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, pktName string) (retErr error) {
+	// The message is recorded as seen only once it is safely stored. Recording
+	// it up front meant a message that failed to toss (an unlinked area, a JAM
+	// write error) was already "seen" when its quarantined packet was tossed
+	// again, and every message in it was discarded as a dupe. This defer is
+	// registered before the JAM base's close, so it runs after it and sees a
+	// close failure in retErr.
+	var dupeKey string
+	defer func() {
+		if retErr == nil && dupeKey != "" {
+			t.dupeDB.Add(dupeKey)
+		}
+	}()
+
 	parsed := ftn.ParsePackedMessageBody(msg.Body)
 
 	// Extract MSGID and CHRS from kludges
@@ -441,8 +473,16 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader) (
 	}
 
 	// Dupe check (only meaningful if message has a MSGID)
-	if msgID != "" && t.dupeDB.Add(msgID) {
-		slog.Debug("dupe message", "msgid", msgID, "area", parsed.Area)
+	if msgID != "" {
+		dupeKey = echoDupeKey(parsed.Area, msgID)
+	}
+	if firstSeen, seen := t.dupeDB.FirstSeen(dupeKey); seen {
+		// Info, not Debug: a sysop asking why mail seems to be missing needs
+		// to see which link sent what, and when it first arrived.
+		slog.Info("dupe message", "network", t.networkName, "area", parsed.Area, "msgid", msgID,
+			"from", msg.From, "subject", msg.Subject, "packet", pktName, "origin", packetOrigin(pktHdr),
+			"first_seen", firstSeen.Format(time.RFC3339))
+		dupeKey = "" // already recorded; nothing to add
 		if t.paths.DupeAreaTag != "" {
 			if err := t.writeMsgToArea(t.paths.DupeAreaTag, msg, pktHdr, parsed, msgID); err != nil {
 				slog.Warn("dupe area write failed", "error", err)

@@ -67,6 +67,20 @@ func (db *DupeDB) IsDupe(msgID string) bool {
 	return exists
 }
 
+// FirstSeen reports when msgID was first recorded, and whether it has been.
+func (db *DupeDB) FirstSeen(msgID string) (time.Time, bool) {
+	if msgID == "" {
+		return time.Time{}, false
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	ts, exists := db.entries[msgID]
+	if !exists {
+		return time.Time{}, false
+	}
+	return time.Unix(ts, 0), true
+}
+
 // Add records a MSGID as seen. Returns true if it was already a dupe.
 func (db *DupeDB) Add(msgID string) bool {
 	if msgID == "" {

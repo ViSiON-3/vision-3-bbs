@@ -531,6 +531,66 @@ func TestTossDupeArea(t *testing.T) {
 	}
 }
 
+// TestFailedTossDoesNotRecordMsgID verifies that a message the tosser could
+// not store is not recorded as seen, so tossing its quarantined packet again
+// once the problem is fixed imports it rather than discarding it as a dupe.
+func TestFailedTossDoesNotRecordMsgID(t *testing.T) {
+	env, extCfg := setupExtendedTestEnv(t)
+	env.globalCfg.BadAreaTag = "" // unknown area is then an error, not a BAD import
+	tosser, err := New("testnet", extCfg, env.globalCfg, env.dupeDB, env.msgMgr)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	msgID := "21:4/100 RETOSS01"
+	os.WriteFile(filepath.Join(env.inboundDir, "first.pkt"),
+		makePktSimple(t, "NOT_LINKED", "Sender", "All", "Retoss", "Body\r", msgID), 0644)
+	r1 := tosser.ProcessInbound()
+	if len(r1.Errors) == 0 {
+		t.Fatal("first toss: expected an unknown-area error")
+	}
+	if n := env.dupeDB.Count(); n != 0 {
+		t.Errorf("dupe DB has %d entries after a failed toss, want 0", n)
+	}
+
+	// The sysop links the area and tosses the quarantined packet again.
+	os.WriteFile(filepath.Join(env.inboundDir, "again.pkt"),
+		makePktSimple(t, "FSX_TEST", "Sender", "All", "Retoss", "Body\r", msgID), 0644)
+	r2 := tosser.ProcessInbound()
+	if r2.MessagesImported != 1 || r2.DupesSkipped != 0 {
+		t.Errorf("re-toss: imported=%d dupes=%d, want 1 and 0 (errors: %v)",
+			r2.MessagesImported, r2.DupesSkipped, r2.Errors)
+	}
+}
+
+// TestSameMsgIDInTwoAreasIsNotDupe verifies that dupes are tracked per echo:
+// one MSGID crossposted to two areas is imported into both.
+func TestSameMsgIDInTwoAreasIsNotDupe(t *testing.T) {
+	env, extCfg := setupExtendedTestEnv(t)
+	tosser, err := New("testnet", extCfg, env.globalCfg, env.dupeDB, env.msgMgr)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	msgID := "21:4/100 XPOST001"
+	os.WriteFile(filepath.Join(env.inboundDir, "a.pkt"),
+		makePktSimple(t, "FSX_TEST", "Sender", "All", "Xpost", "Body\r", msgID), 0644)
+	os.WriteFile(filepath.Join(env.inboundDir, "b.pkt"),
+		makePktSimple(t, "OTHER_ECHO", "Sender", "All", "Xpost", "Body\r", msgID), 0644) // lands in BAD
+	r := tosser.ProcessInbound()
+	if r.MessagesImported != 2 || r.DupesSkipped != 0 {
+		t.Errorf("imported=%d dupes=%d, want 2 and 0 (errors: %v)", r.MessagesImported, r.DupesSkipped, r.Errors)
+	}
+
+	// The same message in the same echo again is still a dupe.
+	os.WriteFile(filepath.Join(env.inboundDir, "c.pkt"),
+		makePktSimple(t, "fsx_test", "Sender", "All", "Xpost", "Body\r", msgID), 0644)
+	r = tosser.ProcessInbound()
+	if r.DupesSkipped != 1 {
+		t.Errorf("repeat in same echo: dupes=%d, want 1", r.DupesSkipped)
+	}
+}
+
 // TestPacketFromUnknownLinkSkipped verifies that a packet from a node not in
 // this network's links is left untouched (not processed, not deleted).
 // This prevents cross-contamination when multiple networks share an inbound directory.

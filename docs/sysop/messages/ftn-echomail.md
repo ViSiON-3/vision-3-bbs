@@ -894,23 +894,38 @@ the host and password from your link settings.
 
 ### Duplicate messages
 
-The tosser tracks seen MSGIDs in `data/ftn/dupes.json`. When a message arrives
-whose MSGID was already recorded, it is written to the `DUPE` message area
-(sysop-only) instead of the normal area. Entries older than 30 days are
+The tosser records every echomail message it imports in `data/ftn/dupes.json`,
+by echo tag and MSGID. The file is a record of what has been seen, not a list
+of dupes, so it grows with ordinary traffic. When a message arrives in an echo
+that already has its MSGID, it is written to the `DUPE` message area
+(sysop-only) instead of the normal area. The same MSGID crossposted to two
+different echoes is imported into both. Entries older than 30 days are
 auto-purged.
+
+A message is recorded only once it has been stored. One that fails to toss
+(for example an unlinked echo with no `bad_area_tag` set) leaves its packet in
+`temp_path`, and moving that packet back to the inbound directory after fixing
+the cause imports it normally.
+
+Each dupe is logged at Info level in `v3mail.log` as `dupe message`, with the
+echo, MSGID, sender, subject, packet name, the link that sent the packet and
+when the message was first seen. That is usually enough to tell a second
+uplink or a resent bundle from a real problem.
 
 **Reading `dupes.json`:** Each entry is a key/value pair:
 
 ```json
 {
   "entries": {
-    "21:4/100 deadbeef": 1772208000,
-    "21:4/100 cafebabe": 1772208001
+    "FSX_GEN 21:4/100 deadbeef": 1772208000,
+    "FSX_BOT 21:4/100 cafebabe": 1772208001
   }
 }
 ```
 
-- Key: `<originating FTN address> <8-char hex MSGID serial>`
+- Key: `<ECHO TAG> <MSGID>`, e.g. `FSX_GEN 21:4/100 deadbeef`. Entries written
+  by older versions have no echo tag; they are no longer matched and age out
+  after 30 days.
 - Value: Unix timestamp when the MSGID was first seen
 
 You will rarely need to look at this file. It is fully managed by the tosser.
