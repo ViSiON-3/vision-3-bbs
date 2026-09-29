@@ -216,6 +216,8 @@ Terminal input/output. Output functions accept Vision/3 pipe codes (`|07`, `|15`
 | `reset()` | Reset all terminal color/style attributes |
 | `center(text)` | Print text centered on screen (pipe-code aware) + newline |
 
+Text is sent in the caller's encoding: UTF-8 terminals receive UTF-8, and CP437 terminals receive the CP437 character for each one (`─` becomes byte `0xC4`). A character CP437 has no equivalent for, such as `€`, is shown as `?`.
+
 #### Input
 
 | Function | Returns | Description |
@@ -589,7 +591,7 @@ Display ANSI art files (.ANS) from scripts. Files are resolved by searching the 
 | `display(filename)` | Read and display an .ANS file with pipe-code processing |
 | `displayRaw(filename)` | Display an .ANS file without pipe-code processing |
 
-SAUCE metadata is automatically stripped. Raw bytes are sent as-is to the terminal (no CP437-to-UTF-8 conversion).
+SAUCE metadata is automatically stripped. Art is displayed as menu screens are: CP437 terminals receive the file's bytes unchanged, and on UTF-8 terminals CP437 art is converted to UTF-8 (a file that is already valid UTF-8 is sent unchanged).
 
 ```javascript
 v3.ansi.display("welcome.ans");     // with pipe codes

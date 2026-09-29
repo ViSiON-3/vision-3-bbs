@@ -61,24 +61,3 @@ func TestWriteArt_HardWrapsForPhysicalWidth(t *testing.T) {
 		t.Errorf("art not hard-wrapped at column 80 for a 120-column terminal: %q", out.Bytes())
 	}
 }
-
-func TestArtForOutput_DecidesEncodingForWholeFile(t *testing.T) {
-	// █▓ (DB B2) is valid UTF-8 on its own (U+06F2). Between escapes it used to
-	// be sent raw, losing a cell; as part of CP437 art it must be converted.
-	art := []byte("\x1b[1;30m\xdb\xb2\x1b[0m\xb2\xb2")
-	got := string(artForOutput(art, ansi.OutputModeUTF8))
-	if want := "\x1b[1;30m█▓\x1b[0m▓▓"; got != want {
-		t.Errorf("artForOutput(CP437) = %q, want %q", got, want)
-	}
-
-	// Art that is valid UTF-8 throughout is already UTF-8.
-	utf := []byte("\x1b[0m█▓ Hello")
-	if got := artForOutput(utf, ansi.OutputModeUTF8); !bytes.Equal(got, utf) {
-		t.Errorf("artForOutput(UTF-8) = %q, want unchanged", got)
-	}
-
-	// CP437 terminals get the file bytes untouched.
-	if got := artForOutput(art, ansi.OutputModeCP437); !bytes.Equal(got, art) {
-		t.Errorf("artForOutput(CP437 mode) = %q, want unchanged", got)
-	}
-}

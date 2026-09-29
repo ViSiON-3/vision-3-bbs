@@ -766,6 +766,17 @@ func TestUnicodeToCP437RoundTrip(t *testing.T) {
 	}
 }
 
+// TestUnicodeToCP437CoversHighBytes: every CP437 glyph 0x80-0xFE can be
+// written back to a CP437 terminal. Only 0xFF (NBSP) is left out on purpose.
+func TestUnicodeToCP437CoversHighBytes(t *testing.T) {
+	for b := 0x80; b < 0xFF; b++ {
+		r := Cp437ToUnicode[b]
+		if got, ok := UnicodeToCP437[r]; !ok || got != byte(b) {
+			t.Errorf("UnicodeToCP437[U+%04X] = 0x%02X, %v; want 0x%02X", r, got, ok, b)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // pipeCodeReplacements map sanity
 // ---------------------------------------------------------------------------
@@ -1442,5 +1453,26 @@ func TestReplaceColorPipeCodes(t *testing.T) {
 				t.Errorf("ReplaceColorPipeCodes(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestArtForOutput_DecidesEncodingForWholeFile(t *testing.T) {
+	// █▓ (DB B2) is valid UTF-8 on its own (U+06F2). Between escapes it used to
+	// be sent raw, losing a cell; as part of CP437 art it must be converted.
+	art := []byte("\x1b[1;30m\xdb\xb2\x1b[0m\xb2\xb2")
+	got := string(ArtForOutput(art, OutputModeUTF8))
+	if want := "\x1b[1;30m█▓\x1b[0m▓▓"; got != want {
+		t.Errorf("ArtForOutput(CP437) = %q, want %q", got, want)
+	}
+
+	// Art that is valid UTF-8 throughout is already UTF-8.
+	utf := []byte("\x1b[0m█▓ Hello")
+	if got := ArtForOutput(utf, OutputModeUTF8); !bytes.Equal(got, utf) {
+		t.Errorf("ArtForOutput(UTF-8) = %q, want unchanged", got)
+	}
+
+	// CP437 terminals get the file bytes untouched.
+	if got := ArtForOutput(art, OutputModeCP437); !bytes.Equal(got, art) {
+		t.Errorf("ArtForOutput(CP437 mode) = %q, want unchanged", got)
 	}
 }

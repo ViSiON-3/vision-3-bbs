@@ -21,8 +21,8 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/dop251/goja"
-	"golang.org/x/text/encoding/charmap"
 )
 
 // Engine is the Vision/3 scripting runtime for a single BBS session.
@@ -204,25 +204,22 @@ func (eng *Engine) registerGlobals() {
 
 // --- I/O helpers ---
 
-// writeRaw writes a string to the session, encoding Unicode text to CP437.
-// This ensures characters like ½ (U+00BD) map to the correct CP437 byte (0xAB)
-// rather than being truncated to their Unicode codepoint value.
+// writeRaw writes script text to the session in the session's encoding
+// (terminalio.WriteProcessedBytes). A UTF-8 session gets the UTF-8 bytes. A
+// CP437 session gets each character's CP437 byte (½ U+00BD -> 0xAB), and a
+// character CP437 lacks becomes '?' on its own without affecting the rest.
+// ANSI escape sequences pass through untouched in both.
 func (eng *Engine) writeRaw(s string) {
 	if s == "" {
 		return
 	}
-	encoded, err := charmap.CodePage437.NewEncoder().Bytes([]byte(s))
-	if err != nil {
-		// Fallback: send UTF-8 bytes as-is if encoding fails.
-		encoded = []byte(s)
-	}
-	if _, err := eng.session.Session.Write(encoded); err != nil {
+	if err := terminalio.WriteProcessedBytes(eng.session.Session, []byte(s), eng.session.OutputMode); err != nil {
 		eng.cancel()
 	}
 }
 
-// writeBytes writes raw bytes directly to the session without any encoding conversion.
-// Used for ANSI art where CP437 bytes must be sent as-is.
+// writeBytes writes bytes to the session without any encoding conversion.
+// The caller has already put them in the session's encoding.
 func (eng *Engine) writeBytes(b []byte) {
 	if len(b) == 0 {
 		return
@@ -380,7 +377,10 @@ func (eng *Engine) readLine(maxLen int, opts lineOpts) (string, error) {
 			}
 			if ch >= 0x80 {
 				// A decoded non-ASCII character: store it as UTF-8 and
-				// echo it in the session's encoding.
+				// echo the bytes the caller typed. They are already in the
+				// session's encoding, and re-encoding key through writeRaw
+				// would not always give them back (CP437 0xFF, NBSP, has
+				// no reverse mapping and would echo as '?').
 				buf = append(buf, key...)
 				if !opts.noEcho {
 					eng.writeBytes(echo)

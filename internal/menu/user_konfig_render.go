@@ -107,7 +107,7 @@ func (st *konfigState) renderHeader() error {
 		if err == nil {
 			// Settle the art's encoding before substituting, as displayFile
 			// does, so a UTF-8 handle is not mistaken for CP437.
-			data = artForOutput(data, st.c.outputMode)
+			data = ansi.ArtForOutput(data, st.c.outputMode)
 			data = e.applyCommonTemplateTokens(data, st.user(), st.c.nodeNumber)
 			data = ansi.ReplacePipeCodes(data)
 			if err := st.raw(ansi.ClearScreen()); err != nil {

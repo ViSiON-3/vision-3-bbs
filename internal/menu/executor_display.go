@@ -200,7 +200,7 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 	}
 	// Settle the art's encoding before anything is substituted into it, so a
 	// UTF-8 rumor or pipe-code expansion is not mistaken for CP437 later.
-	data = artForOutput(data, outputMode)
+	data = ansi.ArtForOutput(data, outputMode)
 	if len(clearFirst) > 0 && clearFirst[0] {
 		data = append([]byte(ansi.ClearScreen()), data...)
 	}
@@ -232,9 +232,9 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 
 // writeArt writes ANSI art to the terminal, making its line breaks explicit on
 // terminals wider than the art (see fitArt). On a UTF-8 terminal CP437 art is
-// converted first (see artForOutput); CP437 output is written raw.
+// converted first (see ansi.ArtForOutput); CP437 output is written raw.
 func writeArt(terminal *term.Terminal, data []byte, outputMode ansi.OutputMode, termWidth int) error {
-	data = artForOutput(data, outputMode)
+	data = ansi.ArtForOutput(data, outputMode)
 	data = fitArt(terminal, data, termWidth, outputMode == ansi.OutputModeUTF8)
 	if outputMode == ansi.OutputModeCP437 {
 		_, err := terminal.Write(data)

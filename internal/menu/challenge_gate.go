@@ -123,5 +123,5 @@ func writeGateArt(terminal *term.Terminal, b []byte, outputMode ansi.OutputMode)
 		_, _ = terminal.Write(b) // best-effort display
 		return
 	}
-	terminalio.WriteProcessedBytes(terminal, artForOutput(b, outputMode), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ArtForOutput(b, outputMode), outputMode)
 }
