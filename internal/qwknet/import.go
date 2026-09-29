@@ -141,12 +141,19 @@ func (n *Node) tossPacket(path string, areas map[int]*message.MessageArea) (res 
 	if err != nil {
 		return res, err
 	}
-	// CONTROL.DAT names the sender. A packet without one cannot be trusted
-	// to be the hub's, so it is set aside rather than imported blind.
-	if p.BBSID == "" {
-		return res, fmt.Errorf("packet has no CONTROL.DAT BBS ID; expected hub %s", n.hubID)
-	}
-	if !strings.EqualFold(p.BBSID, n.hubID) {
+	// CONTROL.DAT names the sender, and one that names anybody but the hub
+	// sets the packet aside. A packet with no CONTROL.DAT at all is what a
+	// Synchronet hub sends an account with "Include Control Files" off, as
+	// DOVE-Net asks of its nodes, so it is taken as the hub's on the
+	// strength of its file name: inboundPackets only hands over the exact
+	// names our own download from the hub produces.
+	switch {
+	case !p.HasControl:
+		slog.Debug("qwknet packet has no CONTROL.DAT; taken as the hub's by its file name",
+			"network", n.Key, "hub", n.hubID, "path", path)
+	case p.BBSID == "":
+		return res, fmt.Errorf("packet's CONTROL.DAT has no BBS ID; expected hub %s", n.hubID)
+	case !strings.EqualFold(p.BBSID, n.hubID):
 		return res, fmt.Errorf("packet is from %s, not hub %s", p.BBSID, n.hubID)
 	}
 	badArea := n.badArea()

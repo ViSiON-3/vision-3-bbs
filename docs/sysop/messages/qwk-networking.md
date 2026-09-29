@@ -72,6 +72,48 @@ has been through your system before and is dropped.
 - The hub's **FTP host and port** (DOVE-Net: `vert.synchro.net`, port 21) and
   its **QWK ID** (`VERT`).
 
+### Packet settings on the hub
+
+A Synchronet hub keeps packet settings per account. Log on to the hub with the
+node's account, go to the `QWK:` prompt and choose **(C)hange Packet
+Configuration**. These are the settings ViSiON/3 is run with against DOVE-Net:
+
+| Key | Setting | Value | Why |
+|-----|---------|-------|-----|
+| A | Ctrl-A Color Codes | Strip | ViSiON/3 does not interpret Synchronet's Ctrl-A codes; left in, they land in the message text. |
+| T | Archive Type | zip | The only archive format the node reads. |
+| E | Include E-mail Messages | Un-read Only | Private mail is not imported either way (see [Limitations](#limitations)). |
+| I | Include File Attachments | No | Attachments are not imported. |
+| D | Delete E-mail Automatically | Yes | |
+| F | Include New Files List | No | |
+| N | Include Index Files | No | `.NDX` files are not used. |
+| C | Include Control Files | Yes | `CONTROL.DAT` names the hub, which the toss checks, and lists its conferences, which the wizard and `v3mail qwk-conferences` read. |
+| V | Include VOTING.DAT File | No | Votes are not supported. |
+| H | Include HEADERS.DAT File | Yes | Carries the full-length names and subject, the Message-ID and Reply-ID that threading and duplicate detection use, and the date with its time zone. |
+| Y | Include Messages from You | No | Your own posts are not sent back. |
+| Z | Include Time Zone (@TZ) | No | `HEADERS.DAT` already carries it. |
+| P | Include Message Path (@VIA) | No | |
+| M | Include Message/Reply IDs | No | `HEADERS.DAT` already carries them. |
+| U | Include UTF-8 Characters | Yes | UTF-8 text is converted to CP437 on import. |
+| G | MIME-encoded Message Text | Yes | |
+| W | Word-wrap Message Text | No | The reader wraps to the caller's terminal. |
+| X | Extended (QWKE) Packet Format | No | |
+
+While there, **(S)elect Areas to Scan** and turn on the conferences you want
+the hub to send.
+
+**This differs from DOVE-Net's own instructions**
+([dove-net.txt](https://www.synchro.net/docs/dove-net.txt), step 2), which are
+written for a Synchronet node: they leave Ctrl-A codes in, turn control files
+off, put the IDs, time zone and path in the message body, and do not mention
+the `HEADERS.DAT` option. A node set up that way still tosses. `@MSGID`,
+`@REPLY`, `@TZ` and `@VIA` in the body are read when `HEADERS.DAT` does not
+supply the field, and a packet with no `CONTROL.DAT` is taken as the hub's
+because it is the file your node downloaded from the hub under the hub's name
+(`<HUBID>.QWK`). A packet that does carry a `CONTROL.DAT` must name the hub:
+one naming another BBS is set aside as `.bad`. What is lost with control files
+off is the live conference list; see [Troubleshooting](#troubleshooting).
+
 ## Joining a Network with the Wizard
 
 Run `./config`, choose **5 - QWK Networking**, then **QWK Network Wizard**.
@@ -93,7 +135,7 @@ The form asks for:
 | Tagline | Added under the tearline of every message you send (e.g. `My BBS - bbs.example.org`). |
 | Poll Schedule | Cron schedule for the poll event. Default `*/30 * * * *` (every 30 minutes). |
 | Newscan Default | Y adds the new areas to users' newscan by default. |
-| Conferences | Press Enter. For a known network the preset list appears at once; otherwise the wizard logs in to the hub, downloads its packet and reads the conference list from `CONTROL.DAT`. Space toggles a conference, A selects all, N clears, Enter confirms. **F** refreshes a preset list from the hub (once the password is filled in), which picks up conferences added since this release; ticks carry over by conference number. The downloaded packet stays in the inbound directory for the first poll to toss. |
+| Conferences | Press Enter. For a known network the preset list appears at once; otherwise the wizard logs in to the hub, downloads its packet and reads the conference list from `CONTROL.DAT` (which the hub sends only while **Include Control Files** is on for the account). Space toggles a conference, A selects all, N clears, Enter confirms. **F** refreshes a preset list from the hub (once the password is filled in), which picks up conferences added since this release; ticks carry over by conference number. The downloaded packet stays in the inbound directory for the first poll to toss. |
 
 Press **S** or **PgDn** to save. The wizard then:
 
@@ -310,7 +352,7 @@ watching, each with `network` and usually `hub`, `area` or `path` fields:
 | WARN | `two areas claim the same QWK conference; the first wins` | Fix the duplicate number. |
 | WARN | `qwknet message already passed through this node, dropped` | Loop protection: the `@VIA` route named your QWK ID. |
 | WARN | `packet ended early; importing what was readable` | Truncated or corrupt `MESSAGES.DAT`; the readable part was tossed. |
-| WARN | `packet set aside for inspection` | The packet was renamed `.bad`: it was unreadable, came from another hub, or a message could not be written. Messages that did land are in the dupe database, so renaming it back to retry is safe. |
+| WARN | `packet set aside for inspection` | The packet was renamed `.bad`: it was unreadable, its `CONTROL.DAT` named another BBS or nobody, or a message could not be written. Messages that did land are in the dupe database, so renaming it back to retry is safe. |
 | WARN | `unreadable REP set aside` | The waiting REP could not be parsed to append to it; it was moved to `.REP.bad` and a fresh one written. |
 | WARN | `failed to mark message exported` / `failed to advance export pointer` | The REP was written but the JAM base would not update; the message may be exported again next time. Check the base with `v3mail fix`. |
 
@@ -351,6 +393,15 @@ date and body when no ID is present.
 For a custom hub the list comes from the packet the hub sends, and a hub with
 no new mail may send none. Enter the conferences under Message Areas by hand,
 or try again after posting a test message.
+
+**`packet has no CONTROL.DAT (Include Control Files is off on the hub)`**
+The wizard's hub refresh, or `v3mail qwk-conferences`, downloaded a packet
+with no conference list in it. Mail is unaffected: the packet stays in the
+inbound directory and the next poll tosses it. For a network with a preset
+list (DOVE-Net), keep using the preset. For a custom hub, either enter the
+conference numbers under Message Areas by hand, or turn **Include Control
+Files** on at the hub (see
+[Packet settings on the hub](#packet-settings-on-the-hub)).
 
 ## Limitations
 

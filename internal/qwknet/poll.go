@@ -255,5 +255,14 @@ func readConferences(path string) ([]qwk.ConferenceInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !p.HasControl {
+		return nil, errNoControlFile
+	}
 	return p.Conferences, nil
 }
+
+// errNoControlFile is why a conference list could not be read from a packet
+// that is otherwise fine to toss: CONTROL.DAT carries the list, and the hub
+// leaves the file out while "Include Control Files" is off for the account.
+// Kept short, since the config editor shows it on one row.
+var errNoControlFile = errors.New("packet has no CONTROL.DAT (Include Control Files is off on the hub)")

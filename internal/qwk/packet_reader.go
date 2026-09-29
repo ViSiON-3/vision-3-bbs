@@ -10,6 +10,11 @@ import (
 
 // Packet is a parsed QWK packet as a network node receives it from its hub.
 type Packet struct {
+	// HasControl reports whether the archive held a CONTROL.DAT. A
+	// Synchronet hub leaves it out, with DOOR.ID and NETFLAGS.DAT, for an
+	// account whose "Include Control Files" is off, which is how DOVE-Net's
+	// instructions have a node set it.
+	HasControl  bool
 	BBSID       string // hub's QWK ID from CONTROL.DAT
 	BBSName     string
 	Conferences []ConferenceInfo // hub's conference list from CONTROL.DAT
@@ -42,6 +47,7 @@ func ReadPacket(r io.ReaderAt, size int64) (*Packet, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read CONTROL.DAT: %w", err)
 		}
+		p.HasControl = true
 		p.BBSID, p.BBSName, p.Conferences = parseControlDAT(data)
 	}
 
