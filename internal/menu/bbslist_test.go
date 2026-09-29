@@ -11,7 +11,7 @@ import (
 
 func TestLoadBBSListDataEmpty(t *testing.T) {
 	tmpDir := t.TempDir()
-	bld, err := loadBBSListData(filepath.Join(tmpDir, "configs"))
+	bld, err := loadBBSListData(filepath.Join(tmpDir, "data"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -29,7 +29,6 @@ func TestSaveAndLoadBBSListData(t *testing.T) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	configPath := filepath.Join(tmpDir, "configs")
 
 	now := time.Now().Truncate(time.Second)
 	bld := &bbsListData{
@@ -63,16 +62,16 @@ func TestSaveAndLoadBBSListData(t *testing.T) {
 		},
 	}
 
-	if err := saveBBSListData(configPath, bld); err != nil {
+	if err := saveBBSListData(dataDir, bld); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 
-	fp := bbsListFilePath(configPath)
+	fp := bbsListFilePath(dataDir)
 	if _, err := os.Stat(fp); os.IsNotExist(err) {
 		t.Fatal("bbslist.json was not created")
 	}
 
-	loaded, err := loadBBSListData(configPath)
+	loaded, err := loadBBSListData(dataDir)
 	if err != nil {
 		t.Fatalf("load failed: %v", err)
 	}
@@ -165,7 +164,7 @@ func TestBBSListNextIDStartsAt1(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	bld, err := loadBBSListData(filepath.Join(tmpDir, "configs"))
+	bld, err := loadBBSListData(filepath.Join(tmpDir, "data"))
 	if err != nil {
 		t.Fatalf("load failed: %v", err)
 	}
@@ -188,7 +187,7 @@ func TestBBSListNextIDFromMaxExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	bld, err := loadBBSListData(filepath.Join(tmpDir, "configs"))
+	bld, err := loadBBSListData(filepath.Join(tmpDir, "data"))
 	if err != nil {
 		t.Fatalf("load failed: %v", err)
 	}
@@ -203,7 +202,6 @@ func TestBBSListDeleteCompacts(t *testing.T) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	configPath := filepath.Join(tmpDir, "configs")
 
 	bld := &bbsListData{
 		NextID: 4,
@@ -214,7 +212,7 @@ func TestBBSListDeleteCompacts(t *testing.T) {
 		},
 	}
 
-	if err := saveBBSListData(configPath, bld); err != nil {
+	if err := saveBBSListData(dataDir, bld); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 
@@ -222,12 +220,12 @@ func TestBBSListDeleteCompacts(t *testing.T) {
 	idx := 1
 	bld.Listings = append(bld.Listings[:idx], bld.Listings[idx+1:]...)
 
-	if err := saveBBSListData(configPath, bld); err != nil {
+	if err := saveBBSListData(dataDir, bld); err != nil {
 		t.Fatalf("save after delete failed: %v", err)
 	}
 
 	// Reload and verify compaction
-	loaded, err := loadBBSListData(configPath)
+	loaded, err := loadBBSListData(dataDir)
 	if err != nil {
 		t.Fatalf("load after delete failed: %v", err)
 	}
@@ -303,7 +301,7 @@ func seedBBSList(t *testing.T, env *menuEnv) {
 			Software: "Mystic", Description: "Door games galore", AddedBy: "caller"},
 		{ID: 3, Name: "Other Board", Address: "other.example", AddedBy: "Someone"},
 	}}
-	if err := saveBBSListData(env.cfgDir(), bld); err != nil {
+	if err := saveBBSListData(env.dataDir(), bld); err != nil {
 		t.Fatalf("seed bbslist: %v", err)
 	}
 }
@@ -311,7 +309,7 @@ func seedBBSList(t *testing.T, env *menuEnv) {
 // loadEnvBBSList reloads bbslist.json the way the handlers do.
 func loadEnvBBSList(t *testing.T, env *menuEnv) *bbsListData {
 	t.Helper()
-	bld, err := loadBBSListData(env.cfgDir())
+	bld, err := loadBBSListData(env.dataDir())
 	if err != nil {
 		t.Fatalf("reload bbslist: %v", err)
 	}
@@ -364,7 +362,7 @@ func TestBBSListAddRequiresNameAndAddress(t *testing.T) {
 			if !r.has("Aborted.") || r.has("added") {
 				t.Errorf("output:\n%s", r.text())
 			}
-			if _, err := os.Stat(bbsListFilePath(env.cfgDir())); !os.IsNotExist(err) {
+			if _, err := os.Stat(bbsListFilePath(env.dataDir())); !os.IsNotExist(err) {
 				t.Errorf("bbslist.json written on abort (stat err %v)", err)
 			}
 		})
@@ -574,7 +572,7 @@ func TestBBSListBrowseAsSysop(t *testing.T) {
 // nothing left to show.
 func TestBBSListBrowseDeleteLastEntryExits(t *testing.T) {
 	env := newMenuEnv(t)
-	if err := saveBBSListData(env.cfgDir(), &bbsListData{NextID: 2, Listings: []BBSListing{{ID: 1, Name: "Lonely", Address: "x"}}}); err != nil {
+	if err := saveBBSListData(env.dataDir(), &bbsListData{NextID: 2, Listings: []BBSListing{{ID: 1, Name: "Lonely", Address: "x"}}}); err != nil {
 		t.Fatal(err)
 	}
 	// Anything after the confirmation would be read only if the browser stayed.

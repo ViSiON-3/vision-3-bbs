@@ -12,7 +12,7 @@ import (
 
 func TestLoadRumorsData_MissingFileDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
-	rd, err := loadRumorsData(filepath.Join(tmpDir, "configs"))
+	rd, err := loadRumorsData(filepath.Join(tmpDir, "data"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestLoadRumorsData_NextIDFromMaxExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rd, err := loadRumorsData(filepath.Join(tmpDir, "configs"))
+	rd, err := loadRumorsData(filepath.Join(tmpDir, "data"))
 	if err != nil {
 		t.Fatalf("load failed: %v", err)
 	}
@@ -51,7 +51,6 @@ func TestSaveAndLoadRumorsData(t *testing.T) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	configPath := filepath.Join(tmpDir, "configs")
 
 	now := time.Now().Truncate(time.Second)
 	rd := &rumorsData{
@@ -77,16 +76,16 @@ func TestSaveAndLoadRumorsData(t *testing.T) {
 		},
 	}
 
-	if err := saveRumorsData(configPath, rd); err != nil {
+	if err := saveRumorsData(dataDir, rd); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 
-	fp := rumorsFilePath(configPath)
+	fp := rumorsFilePath(dataDir)
 	if _, err := os.Stat(fp); os.IsNotExist(err) {
 		t.Fatal("rumors.json was not created")
 	}
 
-	loaded, err := loadRumorsData(configPath)
+	loaded, err := loadRumorsData(dataDir)
 	if err != nil {
 		t.Fatalf("load failed: %v", err)
 	}
@@ -268,17 +267,16 @@ func TestExpandRandomRumorATCode(t *testing.T) {
 		if err := os.MkdirAll(dataDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		configPath := filepath.Join(tmpDir, "configs")
 		rd := &rumorsData{
 			NextID: 2,
 			Rumors: []RumorRecord{{ID: 1, Text: "life is a test", MinLevel: 0}},
 		}
-		if err := saveRumorsData(configPath, rd); err != nil {
+		if err := saveRumorsData(dataDir, rd); err != nil {
 			t.Fatal(err)
 		}
 
 		content := []byte("hello @RR@ world")
-		got := expandRandomRumorATCode(content, configPath, 10)
+		got := expandRandomRumorATCode(content, dataDir, 10)
 		want := "hello life is a test world"
 		if string(got) != want {
 			t.Errorf("got %q, want %q", got, want)
@@ -289,7 +287,7 @@ func TestExpandRandomRumorATCode(t *testing.T) {
 func TestGetRandomRumorText(t *testing.T) {
 	t.Run("no data file returns empty string", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		got := getRandomRumorText(filepath.Join(tmpDir, "configs"), 10)
+		got := getRandomRumorText(filepath.Join(tmpDir, "data"), 10)
 		if got != "" {
 			t.Errorf("got %q, want empty string", got)
 		}
@@ -301,12 +299,11 @@ func TestGetRandomRumorText(t *testing.T) {
 		if err := os.MkdirAll(dataDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		configPath := filepath.Join(tmpDir, "configs")
 		rd := &rumorsData{NextID: 2, Rumors: []RumorRecord{{ID: 1, Text: "secret", MinLevel: 100}}}
-		if err := saveRumorsData(configPath, rd); err != nil {
+		if err := saveRumorsData(dataDir, rd); err != nil {
 			t.Fatal(err)
 		}
-		got := getRandomRumorText(configPath, 10)
+		got := getRandomRumorText(dataDir, 10)
 		if got != "" {
 			t.Errorf("got %q, want empty string", got)
 		}
@@ -318,12 +315,11 @@ func TestGetRandomRumorText(t *testing.T) {
 		if err := os.MkdirAll(dataDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		configPath := filepath.Join(tmpDir, "configs")
 		rd := &rumorsData{NextID: 2, Rumors: []RumorRecord{{ID: 1, Text: "the only rumor", MinLevel: 0}}}
-		if err := saveRumorsData(configPath, rd); err != nil {
+		if err := saveRumorsData(dataDir, rd); err != nil {
 			t.Fatal(err)
 		}
-		got := getRandomRumorText(configPath, 10)
+		got := getRandomRumorText(dataDir, 10)
 		if got != "the only rumor" {
 			t.Errorf("got %q, want %q", got, "the only rumor")
 		}

@@ -23,13 +23,13 @@ func TestParseTemplateFile(t *testing.T) {
 		t.Fatalf("write template: %v", err)
 	}
 
-	configPath := filepath.Join(dir, "configs")
-	if err := os.MkdirAll(configPath, 0755); err != nil {
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
 	// parseTemplateFile expects rootConfigPath where ../data/infoforms is the data dir
-	tmpl, err := parseTemplateFile(configPath, 1)
+	tmpl, err := parseTemplateFile(dataDir, 1)
 	if err != nil {
 		t.Fatalf("parseTemplateFile: %v", err)
 	}
@@ -106,8 +106,8 @@ func TestTemplateExists(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	configPath := filepath.Join(dir, "configs")
-	if err := os.MkdirAll(configPath, 0755); err != nil {
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -116,10 +116,10 @@ func TestTemplateExists(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	if !templateExists(configPath, 1) {
+	if !templateExists(dataDir, 1) {
 		t.Error("form 1 template should exist")
 	}
-	if templateExists(configPath, 2) {
+	if templateExists(dataDir, 2) {
 		t.Error("form 2 template should not exist")
 	}
 }
@@ -131,8 +131,8 @@ func TestHasCompletedForm(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	configPath := filepath.Join(dir, "configs")
-	if err := os.MkdirAll(configPath, 0755); err != nil {
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -141,25 +141,25 @@ func TestHasCompletedForm(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	if !hasCompletedForm(configPath, 42, 1) {
+	if !hasCompletedForm(dataDir, 42, 1) {
 		t.Error("user 42 should have completed form 1")
 	}
-	if hasCompletedForm(configPath, 42, 2) {
+	if hasCompletedForm(dataDir, 42, 2) {
 		t.Error("user 42 should not have completed form 2")
 	}
-	if hasCompletedForm(configPath, 99, 1) {
+	if hasCompletedForm(dataDir, 99, 1) {
 		t.Error("user 99 should not have completed form 1")
 	}
 }
 
 func TestLoadInfoFormConfig_Defaults(t *testing.T) {
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "configs")
-	if err := os.MkdirAll(configPath, 0755); err != nil {
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	// No data/infoforms dir — should return defaults
-	cfg, err := loadInfoFormConfig(configPath)
+	cfg, err := loadInfoFormConfig(dataDir)
 	if err != nil {
 		t.Fatalf("loadInfoFormConfig: %v", err)
 	}
@@ -176,8 +176,8 @@ func TestLoadInfoFormConfig_Defaults(t *testing.T) {
 
 func TestSaveAndLoadInfoFormResponse(t *testing.T) {
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "configs")
-	if err := os.MkdirAll(configPath, 0755); err != nil {
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -188,11 +188,11 @@ func TestSaveAndLoadInfoFormResponse(t *testing.T) {
 		Answers: []string{"Answer1", "Answer2"},
 	}
 
-	if err := saveInfoFormResponse(configPath, resp); err != nil {
+	if err := saveInfoFormResponse(dataDir, resp); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	loaded, err := loadInfoFormResponse(configPath, 1, 2)
+	loaded, err := loadInfoFormResponse(dataDir, 1, 2)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestInfoFormsQuitBlockedByRequiredForm(t *testing.T) {
 	if !r.has("Signup", "Required", "You still must complete Infoform #1") {
 		t.Errorf("quit was not blocked by the required form:\n%s", r.text())
 	}
-	if !hasCompletedForm(env.cfgDir(), env.caller.ID, 1) {
+	if !hasCompletedForm(env.dataDir(), env.caller.ID, 1) {
 		t.Error("form 1 was not saved")
 	}
 }
@@ -294,7 +294,7 @@ func TestInfoFormsHonoursMinLevel(t *testing.T) {
 	if !r.has("No Description", "Sorry, not a valid Infoform!") {
 		t.Errorf("form 2 should be refused to a level-10 caller:\n%s", r.text())
 	}
-	if r.has("Staff:") || hasCompletedForm(env.cfgDir(), env.caller.ID, 2) {
+	if r.has("Staff:") || hasCompletedForm(env.dataDir(), env.caller.ID, 2) {
 		t.Errorf("caller reached form 2:\n%s", r.text())
 	}
 
@@ -318,7 +318,7 @@ func TestInfoFormsNewUserPromptAndBadConfig(t *testing.T) {
 		t.Errorf("new user was offered the viewer:\n%s", r.text())
 	}
 
-	if err := os.WriteFile(infoformsConfigPath(env.cfgDir()), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(infoformsConfigPath(env.dataDir()), []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if r := env.runCmd("INFOFORMS", env.caller, "", "Q\r"); !r.has("Error loading infoforms config.") {

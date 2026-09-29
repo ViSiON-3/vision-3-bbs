@@ -38,15 +38,15 @@ type wantListData struct {
 
 var wantListMu sync.Mutex
 
-func wantListFilePath(rootConfigPath string) string {
-	return filepath.Join(rootConfigPath, "..", "data", "wantlist.json")
+func wantListFilePath(dataDir string) string {
+	return filepath.Join(boardDataDir(dataDir), "wantlist.json")
 }
 
 // loadWantList reads the want list. It also accepts the legacy format, a bare
 // JSON array of entries without IDs, and gives every entry lacking a unique
 // ID one (see normalizeWantListIDs); the next save persists them.
-func loadWantList(rootConfigPath string) (*wantListData, error) {
-	data, err := os.ReadFile(wantListFilePath(rootConfigPath))
+func loadWantList(dataDir string) (*wantListData, error) {
+	data, err := os.ReadFile(wantListFilePath(dataDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &wantListData{NextID: 1}, nil
@@ -99,8 +99,8 @@ func findWantListEntryByID(wl *wantListData, id int) int {
 	return -1
 }
 
-func saveWantList(rootConfigPath string, wl *wantListData) error {
-	dir := filepath.Dir(wantListFilePath(rootConfigPath))
+func saveWantList(dataDir string, wl *wantListData) error {
+	dir := filepath.Dir(wantListFilePath(dataDir))
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
@@ -111,7 +111,7 @@ func saveWantList(rootConfigPath string, wl *wantListData) error {
 	if err != nil {
 		return fmt.Errorf("marshal wantlist: %w", err)
 	}
-	return os.WriteFile(wantListFilePath(rootConfigPath), data, 0644)
+	return os.WriteFile(wantListFilePath(dataDir), data, 0644)
 }
 
 func runWantList(c *cmdCtx, args string) (*user.User, string, error) {
@@ -137,7 +137,7 @@ func runWantList(c *cmdCtx, args string) (*user.User, string, error) {
 
 func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, outputMode ansi.OutputMode, termWidth int, termHeight int) (*user.User, string, error) {
 	wantListMu.Lock()
-	wl, err := loadWantList(e.RootConfigPath)
+	wl, err := loadWantList(e.dataDir())
 	wantListMu.Unlock()
 	if err != nil {
 		return currentUser, "", err
@@ -173,13 +173,13 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 	case "C":
 		// Keep the allocator so cleared IDs are never handed out again.
 		wantListMu.Lock()
-		fresh, loadErr := loadWantList(e.RootConfigPath)
+		fresh, loadErr := loadWantList(e.dataDir())
 		if loadErr != nil {
 			wantListMu.Unlock()
 			return currentUser, "", loadErr
 		}
 		fresh.Entries = nil
-		err = saveWantList(e.RootConfigPath, fresh)
+		err = saveWantList(e.dataDir(), fresh)
 		wantListMu.Unlock()
 		if err != nil {
 			return currentUser, "", err
@@ -203,7 +203,7 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 		// meanwhile, or its text, which two entries can share.
 		targetID := entries[idx-1].ID
 		wantListMu.Lock()
-		fresh, loadErr := loadWantList(e.RootConfigPath)
+		fresh, loadErr := loadWantList(e.dataDir())
 		if loadErr != nil {
 			wantListMu.Unlock()
 			return currentUser, "", nil
@@ -215,7 +215,7 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 			return currentUser, "", nil
 		}
 		fresh.Entries = slices.Delete(fresh.Entries, fi, fi+1)
-		err = saveWantList(e.RootConfigPath, fresh)
+		err = saveWantList(e.dataDir(), fresh)
 		wantListMu.Unlock()
 		if err != nil {
 			return currentUser, "", err
@@ -255,7 +255,7 @@ func runWantListUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, cu
 	}
 
 	wantListMu.Lock()
-	wl, err := loadWantList(e.RootConfigPath)
+	wl, err := loadWantList(e.dataDir())
 	if err != nil {
 		wantListMu.Unlock()
 		return currentUser, "", err
@@ -263,7 +263,7 @@ func runWantListUser(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, cu
 	entry.ID = wl.NextID
 	wl.NextID++
 	wl.Entries = append(wl.Entries, entry)
-	err = saveWantList(e.RootConfigPath, wl)
+	err = saveWantList(e.dataDir(), wl)
 	wantListMu.Unlock()
 	if err != nil {
 		return currentUser, "", err

@@ -62,12 +62,12 @@ func backfillRumorUserIDs(rd *rumorsData, um *user.UserMgr) bool {
 	return changed
 }
 
-func rumorsFilePath(rootConfigPath string) string {
-	return filepath.Join(rootConfigPath, "..", "data", "rumors.json")
+func rumorsFilePath(dataDir string) string {
+	return filepath.Join(boardDataDir(dataDir), "rumors.json")
 }
 
-func loadRumorsData(rootConfigPath string) (*rumorsData, error) {
-	data, err := os.ReadFile(rumorsFilePath(rootConfigPath))
+func loadRumorsData(dataDir string) (*rumorsData, error) {
+	data, err := os.ReadFile(rumorsFilePath(dataDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &rumorsData{NextID: 1}, nil
@@ -90,12 +90,12 @@ func loadRumorsData(rootConfigPath string) (*rumorsData, error) {
 	return &rd, nil
 }
 
-func saveRumorsData(rootConfigPath string, rd *rumorsData) error {
+func saveRumorsData(dataDir string, rd *rumorsData) error {
 	data, err := json.MarshalIndent(rd, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal rumors data: %w", err)
 	}
-	fp := rumorsFilePath(rootConfigPath)
+	fp := rumorsFilePath(dataDir)
 	if err := os.MkdirAll(filepath.Dir(fp), 0755); err != nil {
 		return fmt.Errorf("create rumors data directory: %w", err)
 	}
@@ -168,18 +168,18 @@ func rumorAnonName(e *MenuExecutor) string {
 // expandRandomRumorATCode replaces @RR@ AT-codes in content with a random
 // visible rumor. Centralises the Contains guard + level resolution so callers
 // don't duplicate the pattern.
-func expandRandomRumorATCode(content []byte, rootConfigPath string, userLevel int) []byte {
+func expandRandomRumorATCode(content []byte, dataDir string, userLevel int) []byte {
 	if !bytes.Contains(content, []byte("@RR")) {
 		return content
 	}
-	return replaceMenuATCode(content, "RR", getRandomRumorText(rootConfigPath, userLevel))
+	return replaceMenuATCode(content, "RR", getRandomRumorText(dataDir, userLevel))
 }
 
 // getRandomRumorText returns a random visible rumor's text for MCI substitution.
 // Returns empty string if no rumors are available.
-func getRandomRumorText(rootConfigPath string, userLevel int) string {
+func getRandomRumorText(dataDir string, userLevel int) string {
 	rumorsMu.Lock()
-	rd, err := loadRumorsData(rootConfigPath)
+	rd, err := loadRumorsData(dataDir)
 	rumorsMu.Unlock()
 	if err != nil || len(rd.Rumors) == 0 {
 		return ""

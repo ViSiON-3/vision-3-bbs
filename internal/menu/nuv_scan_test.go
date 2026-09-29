@@ -27,7 +27,7 @@ func TestSCANNUV_Gates(t *testing.T) {
 		t.Errorf("empty queue: %q", r.text())
 	}
 	// A corrupt queue is logged and skipped rather than shown as empty.
-	if err := os.WriteFile(nuvFilePath(env.cfgDir()), []byte("{"), 0o644); err != nil {
+	if err := os.WriteFile(nuvFilePath(env.dataDir()), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if r := env.runCmd("SCANNUV", env.sysop, "", ""); r.has("No NEW users right now!") || r.err != nil {
@@ -92,6 +92,27 @@ func TestCHECKNUV_OffersScan(t *testing.T) {
 	setServerField(env.e, func(c *config.ServerConfig) { c.UseNUV = false })
 	if r := env.run(runCheckNUV, env.sysop, "", "Y"); r.raw != "" {
 		t.Errorf("NUV off still offered: %q", r.text())
+	}
+}
+
+// A caller who disconnects at CHECKNUV's "Vote now?" prompt ends the login
+// sequence with LOGOFF instead of being carried on through its remaining
+// steps (#488).
+func TestCHECKNUV_DisconnectAtPromptLogsOff(t *testing.T) {
+	env := newMenuEnv(t)
+	enableNUV(env, 5, 5, true, false)
+	seedNUV(t, env, NUVCandidate{Handle: "One", When: time.Now()})
+
+	// No input: the prompt's first read reports the disconnect.
+	r := env.run(runCheckNUV, env.sysop, "", "")
+	if !r.has("Vote Now?") {
+		t.Fatalf("vote prompt not offered: %q", r.text())
+	}
+	if r.next != "LOGOFF" {
+		t.Errorf("next = %q after a disconnect at the vote prompt, want LOGOFF", r.next)
+	}
+	if r.user != nil {
+		t.Errorf("user = %v after a disconnect, want nil", r.user)
 	}
 }
 

@@ -36,11 +36,11 @@ func runEditNews(c *cmdCtx, args string) (*user.User, string, error) {
 		terminalio.WriteProcessedBytes(terminal, []byte("\x1b[2J\x1b[H"), outputMode)
 
 		newsMu.Lock()
-		nd, err := loadNewsData(e.RootConfigPath)
+		nd, err := loadNewsData(e.dataDir())
 		if err == nil && normalizeNewsIDs(nd) {
 			// Repair data written before IDs were required to be unique;
 			// best-effort, non-fatal.
-			if saveErr := saveNewsData(e.RootConfigPath, nd); saveErr != nil {
+			if saveErr := saveNewsData(e.dataDir(), nd); saveErr != nil {
 				slog.Warn("failed to persist normalized news IDs", "error", saveErr)
 			}
 		}
@@ -105,8 +105,8 @@ func newsListSysop(terminal *term.Terminal, nd *NewsData, outputMode ansi.Output
 // repairs its IDs the same way the editor did when it listed the items, so an
 // ID taken from that listing names the same item here. The caller must hold
 // newsMu.
-func loadNewsForUpdate(rootConfigPath string) (*NewsData, error) {
-	nd, err := loadNewsData(rootConfigPath)
+func loadNewsForUpdate(dataDir string) (*NewsData, error) {
+	nd, err := loadNewsData(dataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// Prepend newest first (matches V2: seek(0), shift all down, write at position 0)
 	newsMu.Lock()
-	fresh, loadErr := loadNewsData(e.RootConfigPath)
+	fresh, loadErr := loadNewsData(e.dataDir())
 	if loadErr != nil {
 		newsMu.Unlock()
 		slog.Error("failed to load news data before add", "error", loadErr)
@@ -195,7 +195,7 @@ func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		Body:     strings.Join(bodyLines, "\n"),
 	}
 	fresh.Items = append([]NewsItem{item}, fresh.Items...)
-	saveErr := saveNewsData(e.RootConfigPath, fresh)
+	saveErr := saveNewsData(e.dataDir(), fresh)
 	newsMu.Unlock()
 	if saveErr != nil {
 		slog.Error("failed to save news data after add", "error", saveErr)
@@ -232,7 +232,7 @@ func newsDeleteItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	newsMu.Lock()
-	fresh, loadErr := loadNewsForUpdate(e.RootConfigPath)
+	fresh, loadErr := loadNewsForUpdate(e.dataDir())
 	if loadErr != nil {
 		newsMu.Unlock()
 		slog.Error("failed to load news data before delete", "error", loadErr)
@@ -246,7 +246,7 @@ func newsDeleteItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return
 	}
 	fresh.Items = append(fresh.Items[:idx], fresh.Items[idx+1:]...)
-	saveErr := saveNewsData(e.RootConfigPath, fresh)
+	saveErr := saveNewsData(e.dataDir(), fresh)
 	newsMu.Unlock()
 	if saveErr != nil {
 		slog.Error("failed to save news data after delete", "error", saveErr)
@@ -296,7 +296,7 @@ func newsEditItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		switch strings.ToUpper(strings.TrimSpace(cmd)) {
 		case "Q", "":
 			newsMu.Lock()
-			fresh, loadErr := loadNewsForUpdate(e.RootConfigPath)
+			fresh, loadErr := loadNewsForUpdate(e.dataDir())
 			if loadErr != nil {
 				newsMu.Unlock()
 				slog.Error("failed to load news data before edit save", "error", loadErr)
@@ -310,7 +310,7 @@ func newsEditItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				return
 			}
 			fresh.Items[idx] = item
-			saveErr := saveNewsData(e.RootConfigPath, fresh)
+			saveErr := saveNewsData(e.dataDir(), fresh)
 			newsMu.Unlock()
 			if saveErr != nil {
 				slog.Error("failed to save news data after edit", "error", saveErr)

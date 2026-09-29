@@ -28,7 +28,7 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running INFOFORMS", "node", nodeNumber, "handle", currentUser.Handle)
 
 	infoformsMu.Lock()
-	cfg, err := loadInfoFormConfig(e.RootConfigPath)
+	cfg, err := loadInfoFormConfig(e.dataDir())
 	infoformsMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading infoforms config.\r\n", outputMode)
@@ -47,7 +47,7 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 
 		for i := 0; i < 5; i++ {
 			formNum := i + 1
-			if !templateExists(e.RootConfigPath, formNum) {
+			if !templateExists(e.dataDir(), formNum) {
 				continue
 			}
 			if cfg.MinLevels[i] > currentUser.AccessLevel {
@@ -66,7 +66,7 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 			status := "|04Incomplete!"
-			if hasCompletedForm(e.RootConfigPath, currentUser.ID, formNum) {
+			if hasCompletedForm(e.dataDir(), currentUser.ID, formNum) {
 				status = "|10Completed.."
 			}
 
@@ -112,8 +112,8 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 			allDone := true
 			for i := 0; i < 5; i++ {
 				formNum := i + 1
-				if isFormRequired(cfg, formNum) && templateExists(e.RootConfigPath, formNum) {
-					if !hasCompletedForm(e.RootConfigPath, currentUser.ID, formNum) {
+				if isFormRequired(cfg, formNum) && templateExists(e.dataDir(), formNum) {
+					if !hasCompletedForm(e.dataDir(), currentUser.ID, formNum) {
 						wv(terminal, fmt.Sprintf("|05You still must complete Infoform #%d\r\n", formNum), outputMode)
 						allDone = false
 					}
@@ -141,7 +141,7 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 				wv(terminal, "\r\n|04Invalid form number.\r\n", outputMode)
 				continue
 			}
-			if !templateExists(e.RootConfigPath, viewNum) {
+			if !templateExists(e.dataDir(), viewNum) {
 				wv(terminal, "\r\n|04That form doesn't exist.\r\n", outputMode)
 				continue
 			}
@@ -155,7 +155,7 @@ func runInfoForms(c *cmdCtx, args string) (*user.User, string, error) {
 		if nerr != nil || formNum < 1 || formNum > 5 {
 			continue
 		}
-		if !templateExists(e.RootConfigPath, formNum) || cfg.MinLevels[formNum-1] > currentUser.AccessLevel {
+		if !templateExists(e.dataDir(), formNum) || cfg.MinLevels[formNum-1] > currentUser.AccessLevel {
 			wv(terminal, "\r\n|04Sorry, not a valid Infoform!\r\n", outputMode)
 			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 			continue

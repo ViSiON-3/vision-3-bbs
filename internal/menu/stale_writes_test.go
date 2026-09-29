@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -18,22 +19,23 @@ import (
 // "Another session" is simulated with testSession.whenOutput, which writes the
 // file after a prompt is shown and before its reply is acted on.
 
-// staleTestConfig returns a RootConfigPath whose sibling data directory exists
-// and lives inside the test's temp dir.
-func staleTestConfig(t *testing.T) string {
+// staleTestDataDir returns a data directory (ServerConfig.DataDir) inside the
+// test's temp dir.
+func staleTestDataDir(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "data"), 0o755); err != nil {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(root, "configs")
+	return dataDir
 }
 
 // runStaleScreen drives fn as a sysop with the scripted input. setup may
 // register output hooks on the session before fn runs.
-func runStaleScreen(t *testing.T, cfg, input string, setup func(ts *testSession), fn RunnableFunc) *testSession {
+func runStaleScreen(t *testing.T, dataDir, input string, setup func(ts *testSession), fn RunnableFunc) *testSession {
 	t.Helper()
-	e := &MenuExecutor{RootConfigPath: cfg}
+	e := &MenuExecutor{}
+	e.SetServerConfig(config.ServerConfig{DataDir: dataDir})
 	ts := newTestSession(input)
 	if setup != nil {
 		setup(ts)
@@ -58,9 +60,9 @@ func mustHookFire(t *testing.T, ts *testSession, marker string) {
 
 // --- voting (#451) ---------------------------------------------------------
 
-func voteTopicQuestions(t *testing.T, cfg string) map[string]int {
+func voteTopicQuestions(t *testing.T, dataDir string) map[string]int {
 	t.Helper()
-	vd, err := loadVotingData(cfg)
+	vd, err := loadVotingData(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +77,8 @@ func voteTopicQuestions(t *testing.T, cfg string) map[string]int {
 // could be the ID of a live topic; deleting the new topic then removed the
 // other one.
 func TestVoteNewTopicAfterDeleteGetsUniqueID(t *testing.T) {
-	cfg := staleTestConfig(t)
-	if err := saveVotingData(cfg, &VotingData{Topics: []VoteTopic{
+	dataDir := staleTestDataDir(t)
+	if err := saveVotingData(dataDir, &VotingData{Topics: []VoteTopic{
 		{ID: 1, Question: "A?", Options: []string{"x"}, Votes: map[string][]string{}},
 		{ID: 2, Question: "B?", Options: []string{"y"}, Votes: map[string][]string{}},
 	}}); err != nil {
@@ -84,9 +86,9 @@ func TestVoteNewTopicAfterDeleteGetsUniqueID(t *testing.T) {
 	}
 
 	// Delete A, add C, select topic 2 (C), delete it, quit.
-	runStaleScreen(t, cfg, "D\rY\rA\rC?\rN\rN\rz\r\r2\rD\rY\rQ\r", nil, runVote)
+	runStaleScreen(t, dataDir, "D\rY\rA\rC?\rN\rN\rz\r\r2\rD\rY\rQ\r", nil, runVote)
 
-	got := voteTopicQuestions(t, cfg)
+	got := voteTopicQuestions(t, dataDir)
 	if _, ok := got["B?"]; !ok || len(got) != 1 {
 		t.Fatalf("topics after deleting C = %v, want only B?", got)
 	}
@@ -110,19 +112,19 @@ func TestVoteTopicIDAllocatorIsMonotonic(t *testing.T) {
 // listed the old topic would otherwise act on the new one. The file here has
 // no next_id, as voting.json files written before the allocator existed.
 func TestVoteDeleteHighestThenCreateDoesNotReuseID(t *testing.T) {
-	cfg := staleTestConfig(t)
+	dataDir := staleTestDataDir(t)
 	raw := `{"topics":[
 		{"id":1,"question":"A?","options":["x"],"votes":{}},
 		{"id":2,"question":"B?","options":["y"],"votes":{}}
 	]}`
-	if err := os.WriteFile(votingFilePath(cfg), []byte(raw), 0o644); err != nil {
+	if err := os.WriteFile(votingFilePath(dataDir), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// Select B (ID 2, the highest), delete it, then add C.
-	runStaleScreen(t, cfg, "2\rD\rY\rA\rC?\rN\rN\rz\r\rQ\r", nil, runVote)
+	runStaleScreen(t, dataDir, "2\rD\rY\rA\rC?\rN\rN\rz\r\rQ\r", nil, runVote)
 
-	got := voteTopicQuestions(t, cfg)
+	got := voteTopicQuestions(t, dataDir)
 	if _, ok := got["B?"]; ok {
 		t.Fatalf("B? was not deleted: %v", got)
 	}
@@ -134,7 +136,7 @@ func TestVoteDeleteHighestThenCreateDoesNotReuseID(t *testing.T) {
 		t.Errorf("C? reused deleted topic B?'s ID 2; a stale session's vote or delete for B? would hit C?")
 	}
 	// A session still holding B?'s ID must find it gone.
-	if _, err := voteRecordVote(cfg, 2, 0, "Stale"); !errors.Is(err, errVoteTopicGone) {
+	if _, err := voteRecordVote(dataDir, 2, 0, "Stale"); !errors.Is(err, errVoteTopicGone) {
 		t.Errorf("vote on deleted topic ID 2: err = %v, want errVoteTopicGone", err)
 	}
 }
@@ -142,17 +144,17 @@ func TestVoteDeleteHighestThenCreateDoesNotReuseID(t *testing.T) {
 // voting.json files written by the old allocator may already hold duplicate
 // IDs. Loading must give each topic its own ID without moving any votes.
 func TestLoadVotingDataRepairsDuplicateIDs(t *testing.T) {
-	cfg := staleTestConfig(t)
+	dataDir := staleTestDataDir(t)
 	raw := `{"topics":[
 		{"id":2,"question":"B?","options":["y","n"],"votes":{"0":["alice"]}},
 		{"id":2,"question":"C?","options":["y","n"],"votes":{"1":["bob"]}},
 		{"id":0,"question":"D?","options":["y"],"votes":null},
 		{"id":1,"question":"E?","options":["y"],"votes":{}}
 	]}`
-	if err := os.WriteFile(votingFilePath(cfg), []byte(raw), 0o644); err != nil {
+	if err := os.WriteFile(votingFilePath(dataDir), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	vd, err := loadVotingData(cfg)
+	vd, err := loadVotingData(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +179,7 @@ func TestLoadVotingDataRepairsDuplicateIDs(t *testing.T) {
 	}
 
 	// The repair is deterministic, so a second load agrees with the first.
-	again, err := loadVotingData(cfg)
+	again, err := loadVotingData(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,27 +193,27 @@ func TestLoadVotingDataRepairsDuplicateIDs(t *testing.T) {
 // A vote used to be recorded by list position against freshly loaded data, so
 // a topic deleted by another session shifted it onto the next topic.
 func TestVoteLandsOnChosenTopicAfterConcurrentDelete(t *testing.T) {
-	cfg := staleTestConfig(t)
+	dataDir := staleTestDataDir(t)
 	topics := []VoteTopic{
 		{ID: 1, Question: "A?", Options: []string{"x"}, Votes: map[string][]string{}},
 		{ID: 2, Question: "B?", Options: []string{"y"}, Votes: map[string][]string{}},
 		{ID: 3, Question: "C?", Options: []string{"z"}, Votes: map[string][]string{}},
 	}
-	if err := saveVotingData(cfg, &VotingData{Topics: topics}); err != nil {
+	if err := saveVotingData(dataDir, &VotingData{Topics: topics}); err != nil {
 		t.Fatal(err)
 	}
 	const marker = "Your selection"
-	ts := runStaleScreen(t, cfg, "2\rV\r1\r\rQ\r", func(ts *testSession) {
+	ts := runStaleScreen(t, dataDir, "2\rV\r1\r\rQ\r", func(ts *testSession) {
 		ts.whenOutput(marker, func() {
 			// Another sysop deletes A while this caller is choosing.
-			if err := saveVotingData(cfg, &VotingData{Topics: topics[1:]}); err != nil {
+			if err := saveVotingData(dataDir, &VotingData{Topics: topics[1:]}); err != nil {
 				t.Error(err)
 			}
 		})
 	}, runVote)
 	mustHookFire(t, ts, marker)
 
-	vd, err := loadVotingData(cfg)
+	vd, err := loadVotingData(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +233,7 @@ func TestVoteLandsOnChosenTopicAfterConcurrentDelete(t *testing.T) {
 
 // --- news (#452) -----------------------------------------------------------
 
-func seedNewsItems(t *testing.T, cfg string, items ...NewsItem) {
+func seedNewsItems(t *testing.T, dataDir string, items ...NewsItem) {
 	t.Helper()
 	nd := &NewsData{Items: items}
 	for _, it := range items {
@@ -239,14 +241,14 @@ func seedNewsItems(t *testing.T, cfg string, items ...NewsItem) {
 			nd.NextID = it.ID + 1
 		}
 	}
-	if err := saveNewsData(cfg, nd); err != nil {
+	if err := saveNewsData(dataDir, nd); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func newsTitles(t *testing.T, cfg string) []string {
+func newsTitles(t *testing.T, dataDir string) []string {
 	t.Helper()
-	nd, err := loadNewsData(cfg)
+	nd, err := loadNewsData(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,46 +260,46 @@ func newsTitles(t *testing.T, cfg string) []string {
 }
 
 // prependNews plays another session adding a news item, which goes first.
-func prependNews(t *testing.T, cfg, title string) {
+func prependNews(t *testing.T, dataDir, title string) {
 	newsMu.Lock()
 	defer newsMu.Unlock()
-	nd, err := loadNewsData(cfg)
+	nd, err := loadNewsData(dataDir)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	nd.Items = append([]NewsItem{{ID: allocNewsID(nd), Title: title, Body: "b"}}, nd.Items...)
-	if err := saveNewsData(cfg, nd); err != nil {
+	if err := saveNewsData(dataDir, nd); err != nil {
 		t.Error(err)
 	}
 }
 
 func TestNewsDeleteHitsChosenItemAfterConcurrentAdd(t *testing.T) {
-	cfg := staleTestConfig(t)
-	seedNewsItems(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
+	dataDir := staleTestDataDir(t)
+	seedNewsItems(t, dataDir, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
 
 	const marker = "Delete #1 ("
-	ts := runStaleScreen(t, cfg, "D\r1\rY\rQ\r", func(ts *testSession) {
-		ts.whenOutput(marker, func() { prependNews(t, cfg, "Fresh") })
+	ts := runStaleScreen(t, dataDir, "D\r1\rY\rQ\r", func(ts *testSession) {
+		ts.whenOutput(marker, func() { prependNews(t, dataDir, "Fresh") })
 	}, runEditNews)
 	mustHookFire(t, ts, marker)
 
-	if got := strings.Join(newsTitles(t, cfg), ","); got != "Fresh,Older" {
+	if got := strings.Join(newsTitles(t, dataDir), ","); got != "Fresh,Older" {
 		t.Errorf("news after deleting #1 (Old) = %s, want Fresh,Older", got)
 	}
 }
 
 func TestNewsEditHitsChosenItemAfterConcurrentAdd(t *testing.T) {
-	cfg := staleTestConfig(t)
-	seedNewsItems(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
+	dataDir := staleTestDataDir(t)
+	seedNewsItems(t, dataDir, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
 
 	const marker = "News #1"
-	ts := runStaleScreen(t, cfg, "E\r1\rT\rRenamed\rQ\rQ\r", func(ts *testSession) {
-		ts.whenOutput(marker, func() { prependNews(t, cfg, "Fresh") })
+	ts := runStaleScreen(t, dataDir, "E\r1\rT\rRenamed\rQ\rQ\r", func(ts *testSession) {
+		ts.whenOutput(marker, func() { prependNews(t, dataDir, "Fresh") })
 	}, runEditNews)
 	mustHookFire(t, ts, marker)
 
-	if got := strings.Join(newsTitles(t, cfg), ","); got != "Fresh,Renamed,Older" {
+	if got := strings.Join(newsTitles(t, dataDir), ","); got != "Fresh,Renamed,Older" {
 		t.Errorf("news after editing #1 (Old) = %s, want Fresh,Renamed,Older", got)
 	}
 }
@@ -306,19 +308,19 @@ func TestNewsEditHitsChosenItemAfterConcurrentAdd(t *testing.T) {
 // item through the editor must still record that its ID was used, so the
 // next add cannot hand it out again (users' seen-sets are keyed by ID).
 func TestNewsDeleteHighestThenAddDoesNotReuseID(t *testing.T) {
-	cfg := staleTestConfig(t)
+	dataDir := staleTestDataDir(t)
 	raw := `{"items":[
 		{"id":2,"title":"New","body":"b"},
 		{"id":1,"title":"Old","body":"b"}
 	]}`
-	if err := os.WriteFile(newsFilePath(cfg), []byte(raw), 0o644); err != nil {
+	if err := os.WriteFile(newsFilePath(dataDir), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// Delete #1 (New, ID 2), then add "Fresh" with defaults and one body line.
-	runStaleScreen(t, cfg, "D\r1\rY\rA\rFresh\r\r\r\r\rhello\r\rQ\r", nil, runEditNews)
+	runStaleScreen(t, dataDir, "D\r1\rY\rA\rFresh\r\r\r\r\rhello\r\rQ\r", nil, runEditNews)
 
-	nd, err := loadNewsData(cfg)
+	nd, err := loadNewsData(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,19 +342,19 @@ func TestNewsDeleteHighestThenAddDoesNotReuseID(t *testing.T) {
 }
 
 func TestNewsDeleteReportsItemGone(t *testing.T) {
-	cfg := staleTestConfig(t)
-	seedNewsItems(t, cfg, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
+	dataDir := staleTestDataDir(t)
+	seedNewsItems(t, dataDir, NewsItem{ID: 1, Title: "Old", Body: "b"}, NewsItem{ID: 2, Title: "Older", Body: "b"})
 
 	const marker = "Delete #1 ("
-	ts := runStaleScreen(t, cfg, "D\r1\rY\rQ\r", func(ts *testSession) {
+	ts := runStaleScreen(t, dataDir, "D\r1\rY\rQ\r", func(ts *testSession) {
 		ts.whenOutput(marker, func() {
 			// Another sysop deletes "Old" first.
-			seedNewsItems(t, cfg, NewsItem{ID: 2, Title: "Older", Body: "b"})
+			seedNewsItems(t, dataDir, NewsItem{ID: 2, Title: "Older", Body: "b"})
 		})
 	}, runEditNews)
 	mustHookFire(t, ts, marker)
 
-	if got := strings.Join(newsTitles(t, cfg), ","); got != "Older" {
+	if got := strings.Join(newsTitles(t, dataDir), ","); got != "Older" {
 		t.Errorf("news = %s, want Older left alone", got)
 	}
 	if !strings.Contains(ts.output(), "no longer exists") {
@@ -362,37 +364,37 @@ func TestNewsDeleteReportsItemGone(t *testing.T) {
 
 // --- BBS list (#452) -------------------------------------------------------
 
-func seedBBSListings(t *testing.T, cfg string, names ...string) {
+func seedBBSListings(t *testing.T, dataDir string, names ...string) {
 	t.Helper()
 	bld := &bbsListData{NextID: 1}
 	for _, n := range names {
 		bld.Listings = append(bld.Listings, BBSListing{ID: bld.NextID, Name: n, Address: strings.ToLower(n) + ".example"})
 		bld.NextID++
 	}
-	if err := saveBBSListData(cfg, bld); err != nil {
+	if err := saveBBSListData(dataDir, bld); err != nil {
 		t.Fatal(err)
 	}
 }
 
 // appendBBSListing plays another session adding a listing.
-func appendBBSListing(t *testing.T, cfg, name string) {
+func appendBBSListing(t *testing.T, dataDir, name string) {
 	bbsListMu.Lock()
 	defer bbsListMu.Unlock()
-	bld, err := loadBBSListData(cfg)
+	bld, err := loadBBSListData(dataDir)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	bld.Listings = append(bld.Listings, BBSListing{ID: bld.NextID, Name: name})
 	bld.NextID++
-	if err := saveBBSListData(cfg, bld); err != nil {
+	if err := saveBBSListData(dataDir, bld); err != nil {
 		t.Error(err)
 	}
 }
 
-func bbsListings(t *testing.T, cfg string) map[string]BBSListing {
+func bbsListings(t *testing.T, dataDir string) map[string]BBSListing {
 	t.Helper()
-	bld, err := loadBBSListData(cfg)
+	bld, err := loadBBSListData(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,16 +406,16 @@ func bbsListings(t *testing.T, cfg string) map[string]BBSListing {
 }
 
 func TestBBSListDeleteKeepsConcurrentAdd(t *testing.T) {
-	cfg := staleTestConfig(t)
-	seedBBSListings(t, cfg, "Alpha", "Beta")
+	dataDir := staleTestDataDir(t)
+	seedBBSListings(t, dataDir, "Alpha", "Beta")
 
 	const marker = "Delete which entry"
-	ts := runStaleScreen(t, cfg, "1\rY", func(ts *testSession) {
-		ts.whenOutput(marker, func() { appendBBSListing(t, cfg, "Gamma") })
+	ts := runStaleScreen(t, dataDir, "1\rY", func(ts *testSession) {
+		ts.whenOutput(marker, func() { appendBBSListing(t, dataDir, "Gamma") })
 	}, runBBSListDelete)
 	mustHookFire(t, ts, marker)
 
-	got := bbsListings(t, cfg)
+	got := bbsListings(t, dataDir)
 	if _, ok := got["Alpha"]; ok {
 		t.Errorf("Alpha was not deleted: %v", got)
 	}
@@ -426,22 +428,22 @@ func TestBBSListDeleteKeepsConcurrentAdd(t *testing.T) {
 }
 
 func TestBBSListDeleteReportsEntryGone(t *testing.T) {
-	cfg := staleTestConfig(t)
-	seedBBSListings(t, cfg, "Alpha", "Beta")
+	dataDir := staleTestDataDir(t)
+	seedBBSListings(t, dataDir, "Alpha", "Beta")
 
 	const marker = "Delete which entry"
-	ts := runStaleScreen(t, cfg, "1\rY", func(ts *testSession) {
+	ts := runStaleScreen(t, dataDir, "1\rY", func(ts *testSession) {
 		ts.whenOutput(marker, func() {
 			// Another sysop deletes Alpha and adds Gamma.
 			bld := &bbsListData{NextID: 4, Listings: []BBSListing{{ID: 2, Name: "Beta"}, {ID: 3, Name: "Gamma"}}}
-			if err := saveBBSListData(cfg, bld); err != nil {
+			if err := saveBBSListData(dataDir, bld); err != nil {
 				t.Error(err)
 			}
 		})
 	}, runBBSListDelete)
 	mustHookFire(t, ts, marker)
 
-	if got := bbsListings(t, cfg); len(got) != 2 {
+	if got := bbsListings(t, dataDir); len(got) != 2 {
 		t.Errorf("listings = %v, want Beta and Gamma untouched", got)
 	}
 	if !strings.Contains(ts.output(), "no longer exists") {
@@ -450,16 +452,16 @@ func TestBBSListDeleteReportsEntryGone(t *testing.T) {
 }
 
 func TestBBSListVerifyKeepsConcurrentAdd(t *testing.T) {
-	cfg := staleTestConfig(t)
-	seedBBSListings(t, cfg, "Alpha", "Beta")
+	dataDir := staleTestDataDir(t)
+	seedBBSListings(t, dataDir, "Alpha", "Beta")
 
 	const marker = "Toggle verified on entry"
-	ts := runStaleScreen(t, cfg, "2\r", func(ts *testSession) {
-		ts.whenOutput(marker, func() { appendBBSListing(t, cfg, "Gamma") })
+	ts := runStaleScreen(t, dataDir, "2\r", func(ts *testSession) {
+		ts.whenOutput(marker, func() { appendBBSListing(t, dataDir, "Gamma") })
 	}, runBBSListVerify)
 	mustHookFire(t, ts, marker)
 
-	got := bbsListings(t, cfg)
+	got := bbsListings(t, dataDir)
 	if !got["Beta"].Verified {
 		t.Errorf("Beta not verified: %v", got)
 	}
@@ -474,28 +476,28 @@ func TestBBSListVerifyKeepsConcurrentAdd(t *testing.T) {
 // --- want list and NUV queue (same pattern) --------------------------------
 
 func TestWantListDeleteHitsChosenEntryAfterConcurrentDelete(t *testing.T) {
-	cfg := staleTestConfig(t)
+	dataDir := staleTestDataDir(t)
 	entries := []WantListEntry{
 		{ID: 1, Handle: "a", Filename: "one.zip"},
 		{ID: 2, Handle: "b", Filename: "two.zip"},
 		{ID: 3, Handle: "c", Filename: "three.zip"},
 	}
-	if err := saveWantList(cfg, &wantListData{Entries: entries, NextID: 4}); err != nil {
+	if err := saveWantList(dataDir, &wantListData{Entries: entries, NextID: 4}); err != nil {
 		t.Fatal(err)
 	}
 
 	const marker = "Entry # to delete"
-	ts := runStaleScreen(t, cfg, "D\r2\r", func(ts *testSession) {
+	ts := runStaleScreen(t, dataDir, "D\r2\r", func(ts *testSession) {
 		ts.whenOutput(marker, func() {
 			// Another sysop deletes entry 1 first.
-			if err := saveWantList(cfg, &wantListData{Entries: entries[1:], NextID: 4}); err != nil {
+			if err := saveWantList(dataDir, &wantListData{Entries: entries[1:], NextID: 4}); err != nil {
 				t.Error(err)
 			}
 		})
 	}, runWantList)
 	mustHookFire(t, ts, marker)
 
-	got, err := loadWantList(cfg)
+	got, err := loadWantList(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -508,26 +510,26 @@ func TestWantListDeleteHitsChosenEntryAfterConcurrentDelete(t *testing.T) {
 // another session deletes that same one first, the first must survive:
 // matching by content would find it and delete it instead.
 func TestWantListDeleteIdenticalEntriesByID(t *testing.T) {
-	cfg := staleTestConfig(t)
+	dataDir := staleTestDataDir(t)
 	dup := WantListEntry{Handle: "a", Filename: "same.zip", Reason: "r", Date: "01/01/2026"}
 	first, second := dup, dup
 	first.ID, second.ID = 1, 2
 	other := WantListEntry{ID: 3, Handle: "c", Filename: "other.zip"}
-	if err := saveWantList(cfg, &wantListData{Entries: []WantListEntry{first, second, other}, NextID: 4}); err != nil {
+	if err := saveWantList(dataDir, &wantListData{Entries: []WantListEntry{first, second, other}, NextID: 4}); err != nil {
 		t.Fatal(err)
 	}
 
 	const marker = "Entry # to delete"
-	ts := runStaleScreen(t, cfg, "D\r2\r", func(ts *testSession) {
+	ts := runStaleScreen(t, dataDir, "D\r2\r", func(ts *testSession) {
 		ts.whenOutput(marker, func() {
-			if err := saveWantList(cfg, &wantListData{Entries: []WantListEntry{first, other}, NextID: 4}); err != nil {
+			if err := saveWantList(dataDir, &wantListData{Entries: []WantListEntry{first, other}, NextID: 4}); err != nil {
 				t.Error(err)
 			}
 		})
 	}, runWantList)
 	mustHookFire(t, ts, marker)
 
-	got, err := loadWantList(cfg)
+	got, err := loadWantList(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -542,13 +544,13 @@ func TestWantListDeleteIdenticalEntriesByID(t *testing.T) {
 // A legacy wantlist.json is a bare array without IDs. Loading it assigns IDs
 // in list order, the same on every load, and the allocator starts after them.
 func TestLoadWantListMigratesLegacyArray(t *testing.T) {
-	cfg := staleTestConfig(t)
+	dataDir := staleTestDataDir(t)
 	raw := `[{"handle":"a","filename":"x.zip"},{"handle":"a","filename":"x.zip"},{"handle":"b","filename":"y.zip"}]`
-	if err := os.WriteFile(wantListFilePath(cfg), []byte(raw), 0o644); err != nil {
+	if err := os.WriteFile(wantListFilePath(dataDir), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for range 2 {
-		wl, err := loadWantList(cfg)
+		wl, err := loadWantList(dataDir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -559,24 +561,24 @@ func TestLoadWantListMigratesLegacyArray(t *testing.T) {
 }
 
 func TestNUVRemoveHitsChosenCandidateAfterConcurrentChange(t *testing.T) {
-	cfg := staleTestConfig(t)
+	dataDir := staleTestDataDir(t)
 	nd := &NUVData{Candidates: []NUVCandidate{{Handle: "one"}, {Handle: "two"}, {Handle: "three"}}}
-	if err := saveNUVData(cfg, nd); err != nil {
+	if err := saveNUVData(dataDir, nd); err != nil {
 		t.Fatal(err)
 	}
 
 	const marker = "Remove candidate #"
-	ts := runStaleScreen(t, cfg, "R2\r", func(ts *testSession) {
+	ts := runStaleScreen(t, dataDir, "R2\r", func(ts *testSession) {
 		ts.whenOutput(marker, func() {
 			// A vote elsewhere resolves "one" and drops it from the queue.
-			if err := saveNUVData(cfg, &NUVData{Candidates: nd.Candidates[1:]}); err != nil {
+			if err := saveNUVData(dataDir, &NUVData{Candidates: nd.Candidates[1:]}); err != nil {
 				t.Error(err)
 			}
 		})
 	}, runNUVList)
 	mustHookFire(t, ts, marker)
 
-	got, err := loadNUVData(cfg)
+	got, err := loadNUVData(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}

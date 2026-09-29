@@ -8,15 +8,26 @@ import (
 	"sync"
 )
 
+// boardDataDir returns the board's data directory (ServerConfig.DataDir),
+// falling back to "data" when it is unset. Every menu feature that keeps its
+// own file (oneliners, news, voting, rumors, infoforms, BBS list, want list,
+// NUV) resolves it through here, so a relocated data directory moves them all.
+func boardDataDir(dataDir string) string {
+	if strings.TrimSpace(dataDir) == "" {
+		return "data"
+	}
+	return dataDir
+}
+
+// dataDir is the executor's configured data directory, unresolved; the file
+// helpers apply boardDataDir's fallback.
+func (e *MenuExecutor) dataDir() string { return e.GetServerConfig().DataDir }
+
 // onelinerFilePath returns the oneliner wall's JSON file inside the board's
 // data directory (ServerConfig.DataDir), not a path relative to the process
-// working directory. An unset DataDir falls back to "data", matching the
-// other data-file helpers in this package.
+// working directory. An unset DataDir falls back to "data".
 func onelinerFilePath(dataDir string) string {
-	if strings.TrimSpace(dataDir) == "" {
-		dataDir = "data"
-	}
-	return filepath.Join(dataDir, "oneliners.json")
+	return filepath.Join(boardDataDir(dataDir), "oneliners.json")
 }
 
 func loadOnelinerRecords(onelinerPath string) ([]onelinerRecord, error) {

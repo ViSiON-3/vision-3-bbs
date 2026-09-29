@@ -149,20 +149,17 @@ func TestInitNewsSeenNewUserSeesEverything(t *testing.T) {
 func newsWarningFor(t *testing.T, newsItems []NewsItem, seq []config.LoginItem) string {
 	t.Helper()
 
-	root := t.TempDir()
-	configPath := filepath.Join(root, "configs")
-	dataPath := filepath.Join(root, "data")
-	for _, d := range []string{configPath, dataPath} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", d, err)
-		}
+	// A data directory that is not <configs>/../data, so the warning must
+	// follow DataDir (#484).
+	dataPath := filepath.Join(t.TempDir(), "boarddata")
+	if err := os.MkdirAll(dataPath, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", dataPath, err)
 	}
 	if newsItems != nil {
 		body, err := json.Marshal(NewsData{Items: newsItems})
 		if err != nil {
 			t.Fatalf("marshal news: %v", err)
 		}
-		// newsFilePath resolves to <configPath>/../data/news.json
 		if err := os.WriteFile(filepath.Join(dataPath, "news.json"), body, 0o644); err != nil {
 			t.Fatalf("write news.json: %v", err)
 		}
@@ -173,7 +170,7 @@ func newsWarningFor(t *testing.T, newsItems []NewsItem, seq []config.LoginItem) 
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	defer slog.SetDefault(prev)
 
-	WarnIfNewsUnwired(configPath, seq)
+	WarnIfNewsUnwired(dataPath, seq)
 	return buf.String()
 }
 

@@ -297,7 +297,7 @@ func (e *MenuExecutor) handleCheckAccess(
 		// If NUV is enabled, show voting progress for this candidate.
 		if cfg.UseNUV {
 			nuvMu.Lock()
-			nd, err := loadNUVData(e.RootConfigPath)
+			nd, err := loadNUVData(e.dataDir())
 			nuvMu.Unlock()
 			if err == nil {
 				for _, c := range nd.Candidates {

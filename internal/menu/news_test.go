@@ -14,7 +14,7 @@ import (
 // seedNews writes nd as the env's news.json.
 func seedNews(t *testing.T, env *menuEnv, nd *NewsData) {
 	t.Helper()
-	if err := saveNewsData(env.cfgDir(), nd); err != nil {
+	if err := saveNewsData(env.dataDir(), nd); err != nil {
 		t.Fatalf("seed news: %v", err)
 	}
 }
@@ -22,7 +22,7 @@ func seedNews(t *testing.T, env *menuEnv, nd *NewsData) {
 // loadEnvNews reloads news.json the way the handlers do.
 func loadEnvNews(t *testing.T, env *menuEnv) *NewsData {
 	t.Helper()
-	nd, err := loadNewsData(env.cfgDir())
+	nd, err := loadNewsData(env.dataDir())
 	if err != nil {
 		t.Fatalf("reload news: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestPrintNewsQuietCases(t *testing.T) {
 	if r := env.runCmd("PRINTNEWS", env.caller, "", ""); r.err != nil || strings.TrimSpace(r.text()) != "" {
 		t.Errorf("no news: %q %v", r.text(), r.err)
 	}
-	if err := os.WriteFile(newsFilePath(env.cfgDir()), []byte("{"), 0o644); err != nil {
+	if err := os.WriteFile(newsFilePath(env.dataDir()), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if r := env.runCmd("PRINTNEWS", env.caller, "", ""); r.err != nil || r.raw != "" {

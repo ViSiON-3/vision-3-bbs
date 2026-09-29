@@ -41,12 +41,12 @@ type VotingData struct {
 
 var votingMu sync.Mutex
 
-func votingFilePath(rootConfigPath string) string {
-	return filepath.Join(rootConfigPath, "..", "data", "voting.json")
+func votingFilePath(dataDir string) string {
+	return filepath.Join(boardDataDir(dataDir), "voting.json")
 }
 
-func loadVotingData(rootConfigPath string) (*VotingData, error) {
-	data, err := os.ReadFile(votingFilePath(rootConfigPath))
+func loadVotingData(dataDir string) (*VotingData, error) {
+	data, err := os.ReadFile(votingFilePath(dataDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &VotingData{}, nil
@@ -128,12 +128,12 @@ func findVoteTopicByID(vd *VotingData, id int) int {
 // one listed it.
 var errVoteTopicGone = errors.New("voting topic no longer exists")
 
-func saveVotingData(rootConfigPath string, vd *VotingData) error {
+func saveVotingData(dataDir string, vd *VotingData) error {
 	data, err := json.MarshalIndent(vd, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal voting data: %w", err)
 	}
-	fp := votingFilePath(rootConfigPath)
+	fp := votingFilePath(dataDir)
 	if err := os.MkdirAll(filepath.Dir(fp), 0755); err != nil {
 		return fmt.Errorf("create voting data dir: %w", err)
 	}
@@ -227,10 +227,10 @@ func voteShowResults(terminal *term.Terminal, topic *VoteTopic, outputMode ansi.
 // ID. Returns the updated topic, or errVoteTopicGone when another session has
 // deleted it. The topic is found by ID, not by list position, because the list
 // may have changed since the caller loaded it.
-func voteRecordVote(rootConfigPath string, topicID, optionIdx int, handle string) (*VoteTopic, error) {
+func voteRecordVote(dataDir string, topicID, optionIdx int, handle string) (*VoteTopic, error) {
 	votingMu.Lock()
 	defer votingMu.Unlock()
-	vd, err := loadVotingData(rootConfigPath)
+	vd, err := loadVotingData(dataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +247,7 @@ func voteRecordVote(rootConfigPath string, topicID, optionIdx int, handle string
 	}
 	key := strconv.Itoa(optionIdx)
 	t.Votes[key] = append(t.Votes[key], handle)
-	return t, saveVotingData(rootConfigPath, vd)
+	return t, saveVotingData(dataDir, vd)
 }
 
 // doVoteOnTopic handles the vote interaction for one topic. Returns true if the
@@ -282,7 +282,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		}
 		votingMu.Lock()
 		defer votingMu.Unlock()
-		fresh, loadErr := loadVotingData(e.RootConfigPath)
+		fresh, loadErr := loadVotingData(e.dataDir())
 		if loadErr != nil {
 			slog.Error("failed to load voting data for adding choice", "error", loadErr)
 			return false, "|04Error loading voting data."
@@ -292,7 +292,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			return false, "|07Topic no longer exists. Choice not added."
 		}
 		fresh.Topics[freshIdx].Options = append(fresh.Topics[freshIdx].Options, strings.TrimSpace(choice))
-		if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
+		if saveErr := saveVotingData(e.dataDir(), fresh); saveErr != nil {
 			slog.Error("failed to save voting data after adding choice", "error", saveErr)
 			return false, "|04Error saving choice."
 		}
@@ -309,7 +309,7 @@ func doVoteOnTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return false, "|07Invalid selection. Vote not recorded."
 	}
 
-	updated, saveErr := voteRecordVote(e.RootConfigPath, topic.ID, n-1, currentUser.Handle)
+	updated, saveErr := voteRecordVote(e.dataDir(), topic.ID, n-1, currentUser.Handle)
 	if errors.Is(saveErr, errVoteTopicGone) {
 		return false, "|07Topic no longer exists. Vote not recorded."
 	}
@@ -341,7 +341,7 @@ func runVoteOnMandatory(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	votingMu.Lock()
-	vd, err := loadVotingData(e.RootConfigPath)
+	vd, err := loadVotingData(e.dataDir())
 	votingMu.Unlock()
 	if err != nil {
 		return currentUser, "", nil
@@ -393,7 +393,7 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 	voteDrawHeader(e, terminal, outputMode, termWidth)
 
 	votingMu.Lock()
-	vd, err := loadVotingData(e.RootConfigPath)
+	vd, err := loadVotingData(e.dataDir())
 	votingMu.Unlock()
 	if err != nil {
 		wv(terminal, "\r\n|04Error loading voting data.\r\n", outputMode)
@@ -474,7 +474,7 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 			confirm, _ := readLineFromSessionIH(s, terminal)
 			if strings.ToUpper(strings.TrimSpace(confirm)) == "Y" {
 				votingMu.Lock()
-				fresh, loadErr := loadVotingData(e.RootConfigPath)
+				fresh, loadErr := loadVotingData(e.dataDir())
 				if loadErr != nil {
 					slog.Error("failed to load voting data for topic deletion", "error", loadErr)
 					notice = "|04Error loading voting data."
@@ -485,7 +485,7 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 					vd = fresh
 				} else {
 					fresh.Topics = append(fresh.Topics[:freshIdx], fresh.Topics[freshIdx+1:]...)
-					if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
+					if saveErr := saveVotingData(e.dataDir(), fresh); saveErr != nil {
 						slog.Error("failed to save voting data after topic deletion", "error", saveErr)
 						notice = "|04Error deleting topic."
 					} else {
@@ -560,7 +560,7 @@ func voteAddTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	votingMu.Lock()
 	defer votingMu.Unlock()
-	fresh, loadErr := loadVotingData(e.RootConfigPath)
+	fresh, loadErr := loadVotingData(e.dataDir())
 	if loadErr != nil {
 		slog.Error("failed to load voting data for topic creation", "error", loadErr)
 		return vd, "|04Error loading voting data."
@@ -569,7 +569,7 @@ func voteAddTopic(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// creations cannot collide.
 	t.ID = allocVoteTopicID(fresh)
 	fresh.Topics = append(fresh.Topics, t)
-	if saveErr := saveVotingData(e.RootConfigPath, fresh); saveErr != nil {
+	if saveErr := saveVotingData(e.dataDir(), fresh); saveErr != nil {
 		slog.Error("failed to save voting data after topic creation", "error", saveErr)
 		return vd, "|04Error saving topic."
 	}

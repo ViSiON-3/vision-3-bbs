@@ -13,10 +13,10 @@ import (
 )
 
 // writeInfoformTemplate installs form formNum's template in env's infoforms
-// data directory (configs/../data/infoforms, i.e. env.dataDir()/infoforms).
+// data directory (env.dataDir()/infoforms).
 func writeInfoformTemplate(t *testing.T, env *menuEnv, formNum int, body string) {
 	t.Helper()
-	p := infoformsTemplatePath(env.cfgDir(), formNum)
+	p := infoformsTemplatePath(env.dataDir(), formNum)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func writeInfoformConfig(t *testing.T, env *menuEnv, cfg InfoFormConfig) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := infoformsConfigPath(env.cfgDir())
+	p := infoformsConfigPath(env.dataDir())
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func writeInfoformConfig(t *testing.T, env *menuEnv, cfg InfoFormConfig) {
 // session would have.
 func saveInfoformAnswers(t *testing.T, env *menuEnv, u *user.User, formNum int, answers ...string) {
 	t.Helper()
-	if err := saveInfoFormResponse(env.cfgDir(), &InfoFormResponse{
+	if err := saveInfoFormResponse(env.dataDir(), &InfoFormResponse{
 		UserID: u.ID, Handle: u.Handle, FormNum: formNum,
 		FilledOutAt: time.Date(2026, 5, 6, 14, 30, 0, 0, time.UTC), Answers: answers,
 	}); err != nil {
@@ -56,7 +56,7 @@ func saveInfoformAnswers(t *testing.T, env *menuEnv, u *user.User, formNum int, 
 // savedInfoformAnswers loads u's stored answers for formNum, or nil.
 func savedInfoformAnswers(t *testing.T, env *menuEnv, u *user.User, formNum int) []string {
 	t.Helper()
-	resp, err := loadInfoFormResponse(env.cfgDir(), u.ID, formNum)
+	resp, err := loadInfoFormResponse(env.dataDir(), u.ID, formNum)
 	if err != nil {
 		t.Fatalf("loadInfoFormResponse: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestInfoFormsDisconnectMidFormSavesNothing(t *testing.T) {
 	writeInfoformTemplate(t, env, 1, "A: * B: *")
 
 	env.runCmd("INFOFORMS", env.caller, "", "1\ronly-one\r")
-	if hasCompletedForm(env.cfgDir(), env.caller.ID, 1) {
+	if hasCompletedForm(env.dataDir(), env.caller.ID, 1) {
 		t.Error("partial form was saved")
 	}
 }

@@ -107,7 +107,7 @@ func TestBBSListBrowseColumnsCutByRune(t *testing.T) {
 	bld := &bbsListData{NextID: 2, Listings: []BBSListing{
 		{ID: 1, Name: name, Sysop: sysop, Address: "bbs.example", Description: desc, AddedBy: "Someone"},
 	}}
-	if err := saveBBSListData(env.cfgDir(), bld); err != nil {
+	if err := saveBBSListData(env.dataDir(), bld); err != nil {
 		t.Fatal(err)
 	}
 
