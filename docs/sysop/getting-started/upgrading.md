@@ -15,8 +15,7 @@ what makes upgrading safe, and also what makes two steps necessary:
 - The binaries in `bin/` (`binkd`, `sexyz`) are prebuilt — a source build
   (`git pull` + `build.sh`) never touches them, so they stay at the version you
   first installed. Most releases don't change them; when one does, the release
-  notes and the worked example below say so. **v0.9.0 is one that does** — its
-  binkd fixes a broken build, and every install has to take the new one.
+  notes and the worked example below say so.
 
 Nothing warns you about any of these, so this is the part of an upgrade worth
 reading.
@@ -165,8 +164,9 @@ cp /tmp/v3new/bin/{binkd,sexyz} bin/    # the bundle carries these; a source bui
 Then compare `/tmp/v3new/configs/` against your own, as below, and copy across
 any menu or artwork files you have not customised.
 
-A bundle is the simplest way to get the new `bin/binkd` this release requires:
-it is already in the archive, so the `cp` above is all it takes.
+When a release changes `bin/binkd` or `bin/sexyz`, a bundle is the simplest
+way to get the new one: it is already in the archive, so the `cp` above is all
+it takes.
 
 ## Settings added since your version
 
@@ -228,390 +228,31 @@ system.
 Restart the BBS. A running `vision3` keeps executing the binary it started with,
 so new programs do nothing until it does.
 
-Once it is running, these reload on save with no restart:
-
-- `strings.json`
-- `login.json`
-- `doors.json`
-- `theme.json` (in the menu set)
-
-`config.json` reloads too, but **not every setting in it takes effect**. Access
-levels, new-user settings and the like apply immediately; ports, host keys and
-the IP connection limits are read once at startup and keep their old values
-until you restart. The BBS logs a reminder to that effect on every reload of
-that file.
-
-`events.json` needs a restart, because the scheduler is built at startup.
-
-## Worked example: upgrading to v0.9.0
-
-v0.9.0 is a large release, and it touches every category above — a prebuilt
-binary, config keys, login steps and menu artwork. Work through it in this
-order.
-
-### 1. Replace `bin/binkd` — required for FidoNet
-
-Every Unix binkd shipped before v0.9.0 was built with a broken MD5, so binkp
-sessions that negotiated CRAM-MD5 failed against every peer, in both directions,
-with a correct password. v0.9.0 fixes the build. Because `bin/binkd` is a
-prebuilt binary a source build never rebuilds, you must take the new one
-yourself:
-
-- **Bundle upgrade:** already done — the `cp .../bin/{binkd,sexyz}` step above
-  installed it.
-- **Repo-in-place or instance upgrade:** copy `bin/binkd` from a v0.9.0 release
-  bundle, or build it with `./scripts/build-binkd.sh --out bin/binkd` (it
-  verifies the result against the RFC 2202 test vector and refuses to install a
-  broken one).
-
-If you had worked around the old bug, undo the workaround now, or CRAM-MD5 stays
-off: set `disable_cram_md5` back to `false` under `ftn.binkd` in
-`configs/ftn.json`, and drop any `-m` you added to the poll events in
-`configs/events.json`. A repaired link logs `pwd protected session (MD5)`
-instead of `(plain text)`. Windows binkd was never affected.
-
-### 2. `config.json` — new keys, all with working defaults
-
-Two keys were added; both default to something sensible, so the BBS runs
-correctly with no edit. Read them so you know they exist:
-
-- `notifySysopNewUser` (default `true`) — real-time SysOp page when a new user
-  signs up.
-- `autoValidateNewUsers` (default `false`) — when `true`, new users are granted
-  their full access immediately instead of waiting for validation. Leave it off
-  unless you want an open board.
-
-### 3. `login.json` — two new steps you must add yourself
-
-Neither runs unless you list it (a login step that is not present simply does
-not execute):
-
-```json
-{ "command": "NEWUSERVAL", "sec_level": 255 }
-```
-
-Place `NEWUSERVAL` before `CHECKNUV`, using your own `sysOpLevel` if it is not
-255. Without it the real-time new-user page still works; you lose only the
-"N users pending" prompt at login.
-
-```json
-{ "command": "PRINTNEWS" }
-```
-
-`PRINTNEWS` shows System News at login. Add it wherever you want the news to
-appear in the sequence; without it, news is reachable only from the menus.
-
-### 4. `strings.json` — new text, mostly with fallbacks
-
-v0.9.0 adds a batch of strings (new-user flow, file-area and batch messages,
-conference prompts). Most carry a built-in fallback, so they print sensible
-text with no edit; `./strings` marks which are genuinely empty versus falling
-back. Add or reword only what you want to change — see the listing script above
-to see exactly which keys your `strings.json` is missing.
-
-### 5. Menu artwork and layout — copy for non-repo installs
-
-v0.9.0 changed several menu files. A **repo-in-place** install gets them from
-the pull (mind your own edits); an **instance or bundle** install needs each one
-copied across by hand:
-
-| File(s) | What changed |
-| ------- | ------------ |
-| `menus/v3/ansi/MAIN.ANS`, `cfg/MAIN.CFG`, `mnu/MAIN.MNU` | Main menu cleaned up; Newscan Pointers moved off it |
-| `menus/v3/ansi/MSGMENU.ANS` | Corrected scan labels and a wrong hotkey (artwork advertised `[Z]` for an entry bound to `U`) |
-| `menus/v3/ansi/DOORSM.ANS`, `cfg/DOORSM.CFG` | Doors menu now advertises only doors that actually run |
-| `menus/v3/templates/message_headers/MSGHDR.*.ans` | Header templates: every one is now reachable, MSGHDR.3 shows the subject, and MSGHDR.9's title row is fixed |
-
-Copy a screen's files as a set — the `.ANS`, `.CFG` and `.MNU`/template that
-make up one menu must agree, so taking one and not the others can leave you
-worse off than before.
-
-### 6. Restart
-
-Follow [Restarting](#restarting). The new `vision3` and the new `bin/binkd` both
-take effect only once you restart.
-
-## Worked example: upgrading to v0.9.1
-
-v0.9.1 is a much lighter upgrade than v0.9.0 — most of it is either automatic
-once you deploy the new binaries, or optional. The only things that need your
-hand are edits to **customized** config and menu files, since an upgrade never
-overwrites those. This section covers those; everything else just works after
-you drop in the new bundle.
-
-### Anonymous posting is off by default
-
-Anonymous posting is now a per-area opt-in. Each message area has an **Allow
-Anonymous** setting, and an area that has never set it is treated as **No** —
-where before, anonymous posting was offered in every area to any user who met
-the `anonymousLevel` access level.
-
-Nothing in your config files changes on upgrade, and nothing needs migrating.
-But if you had areas where users posted anonymously, that stops until you turn
-it back on:
-
-- In `./config` → **Message Areas**, edit each area that should allow it and set
-  **Allow Anonymous** to `Y`.
-- The access-level gate still applies on top: a user is offered the anonymous
-  prompt only if they meet `anonymousLevel` **and** the area allows it.
-- A conference can still veto it — an area set to `Y` inside a conference whose
-  own Allow Anonymous is `N` stays off.
-
-`message_areas.json` is read at startup, so restart the BBS after editing areas
-for the change to take effect.
-
-### New: optionally require new users to message the SysOp
-
-Signup can now end by making the caller leave you a private message — the
-classic "leave the SysOp feedback to finish registration" gate. It is **off by
-default**, so nothing changes unless you turn it on.
-
-- In `./config` → **System** → **Default Settings**, set **Require Email** to
-  `Y` (or set `"requireNewUserEmail": true` in `config.json`).
-- With it on, once an account is created the caller is shown `NUEMAIL.ANS`,
-  paused, then dropped into the message editor addressed to the SysOp (user #1).
-  The message lands in **Private Mail** like any other.
-- **It cannot be skipped.** Aborting the editor (Ctrl-A) or saving an empty
-  message re-prompts and returns them to the editor. The only ways out are to
-  send a message or to drop the connection.
-- **Dropping the connection doesn't dodge it.** The obligation is stored on the
-  account, so on their next login they are sent straight back into the editor —
-  even if their access level is below `logonLevel` and they otherwise couldn't
-  get on yet. After **three** abandoned attempts (the signup plus two
-  reconnects) the account is soft-deleted, and is removed for good by the usual
-  deleted-user purge.
-- Customize the screen by dropping a `NUEMAIL.ANS` into your menu set's `ansi`
-  directory (a starter one ships with the `v3` set). With no file present, a
-  configurable string (`newUserEmailPrompt`) is shown instead; the default
-  subject line comes from `newUserEmailSubject`.
-
-This pairs well with leaving `autoValidateNewUsers` off: the signup-time message
-is your one chance to hear from a caller before you validate them, and the
-requirement now follows them across reconnects until they either introduce
-themselves or the account ages out.
-
-### New: new-user notices reach an offline SysOp, and a "read mail now?" prompt
-
-Two login-sequence quality-of-life changes. **Both require an edit to
-`configs/login.json` if you maintain your own** (installs without the file get
-them from the built-in default automatically):
-
-- **`SYSOPNOTICES`** — the "new user signed up" notice (`notifySysopNewUser`)
-  used to be a live page only, so it was lost whenever no SysOp was online at
-  signup time (which is most of the time). It is now also **queued and shown at
-  the SysOp's next login**. Add a `{"command": "SYSOPNOTICES"}` item to your
-  login sequence — put it **first**, above `FASTLOGIN`, since a fast-login jump
-  ends the sequence and would skip everything below it. It is informational
-  and fires regardless of `autoValidateNewUsers` — unlike `NEWUSERVAL`, which is
-  silent when nothing is pending validation. Queued notices live in
-  `data/sysop_notices.json`. The wording is its own string,
-  `newUserSysopNotice` — the live page's "just signed up" is not true of a
-  notice read on the SysOp's next call, so the queued form states how long ago
-  the signup happened. No strings.json edit is needed; the key has a built-in
-  default.
-- **"Read it now?" after `NMAILSCAN`** — when the login mail scan reports new
-  private mail, the caller is now asked whether to read it immediately, dropping
-  them into the reader (reply/skip per message). No config change needed beyond
-  already having `NMAILSCAN` in your sequence.
-
-### New: file-menu commands (`FILEM.CFG`)
-
-The file/transfer menu gained commands that mirror the message menu. Installs
-using the shipped `FILEM.CFG` get them automatically; if you maintain a custom
-one, add the keys you want:
-
-- `[C]` → `RUN:CHANGEFILECONF` — change file conference. Changing conference in
-  either the file **or** message menu now sets it for both.
-- `]` / `[` → `RUN:NEXTFILEAREA` / `RUN:PREVFILEAREA` — step through file areas.
-- `}` / `{` → `RUN:NEXTFILECONF` / `RUN:PREVFILECONF` — step through conferences.
-- `[Y]` → `RUN:SETFILESCANDATE` — set the file newscan cutoff (a date, all, or
-  reset to "since last logon"). The message menu keeps this on `U`, but the file
-  menu uses `U` for Upload.
-- `[Z]` → `RUN:FILENEWSCANCONFIG` — set scan areas (previously unlabeled).
-
-If you use a custom `FILEM.ANS`, refresh it — the shipped art now lists these
-commands (and adds a rumor line). Menu art is read live, so no restart is needed
-for an art change.
-
-### No restart for `ftn.json` changes
-
-The integrated mailer now re-reads `ftn.json` on its own. A config-editor save
-of `export_interval_seconds` applies live; other binkd settings apply on binkd's
-next (re)launch — and, importantly, the supervisor no longer overwrites a newer
-`binkd.conf` with stale boot-time values. No action needed; it just stops
-silently reverting your changes.
-
-## Worked example: upgrading to v0.9.2
-
-v0.9.2 is almost entirely automatic: deploy the new bundle, restart, and the
-fixes and the new live config reload are active. The one thing that needs your
-hand is a **customized `login.json`** — and even that is only a small edit.
-
-### Custom `login.json`: put SYSOPNOTICES and NMAILSCAN first
-
-Two things changed around the login sequence:
-
-- `SYSOPNOTICES` now actually runs at login. It was silently dead — the login
-  sequence dispatcher never knew the command, so queued "new user joined"
-  notices piled up undelivered (you'd see `unknown login sequence command`
-  warnings in the log). Any notices already queued are delivered on your next
-  login after the upgrade.
-- The shipped sequences now lead with `SYSOPNOTICES` then `NMAILSCAN`, **above**
-  `FASTLOGIN`. A `FASTLOGIN` jump ends the sequence, so anything below it is
-  skipped for callers who take the shortcut — which is how sysop notices and
-  the new-mail scan were being missed.
-
-An upgrade never touches your `login.json`, so if you maintain a custom one:
-
-1. **Add whichever of the two is missing.** Older custom files may have neither
-   (`NMAILSCAN` is new to the built-in default too). An item is just
-   `{ "command": "SYSOPNOTICES" }` — copy the first two entries from the
-   shipped `templates/configs/login.json` if in doubt.
-2. **Make them the first two items**, `SYSOPNOTICES` then `NMAILSCAN`, above
-   `FASTLOGIN`. (Earlier docs suggested adding `SYSOPNOTICES` after
-   `NEWUSERVAL`, which lands below `FASTLOGIN` — move it up.)
-
-### Config edits now apply to the running BBS
-
-Saving from `./config` (or editing a config file by hand) no longer needs a
-restart for most files — see
-[Configuration](configuration/configuration.md) for the full live-vs-restart
-table and how the `configs/reload.now` / `configs/reload.force` semaphore files
-and `SIGHUP` work. Structural files (`file_areas.json`, `message_areas.json`,
-`v3net.json` hand edits) are validated on save and applied the moment the board
-is empty, so live callers are never yanked around — unless you explicitly
-`touch configs/reload.force`, which applies queued structural changes with
-callers online. Nothing to migrate — this is just a behavior change to know
-about.
-
-> **Note:** the earlier worked examples on this page predate live reload —
-> where they say to restart after a config edit (e.g. `message_areas.json` in
-> the v0.9.1 section), that advice is superseded on v0.9.2 by the table linked
-> above.
-
-### Stranded "already read" mail heals on the next pack
-
-If mail ever showed as already-read without being opened (typically after the
-nightly purge/pack emptied an area), that was a stale lastread pointer left on
-the old message numbering by `Pack`. Packs now remap pointers, so the problem
-stops recurring — and pointers stranded by *past* packs are clamped back into
-range the next time that area is packed. `v3mail lastread` can reset one by
-hand if you don't want to wait.
-
-### Optional: hang up bot connections sooner
-
-The challenge gate's stray-key limit (previously hard-coded at 8) is now
-**Stray Keys** on the Bot Defense screen (`challengeGateStrayLimit` in
-`config.json`, minimum 1). Existing configs without the key keep the old
-behavior. Setting it to `1` drops a caller on the first wrong key — aggressive,
-since callers who lean on Enter at connect get dropped too.
-
-### Last callers list
-
-Invisible logins are now hidden from **every** viewer (before, CoSysOp+ still
-saw them), and they no longer crowd real callers off the screen — the list
-shows up to 20 visible callers by default (a `RUN:LASTCALLERS <n>` argument in
-your menu CFG still overrides the row count). Real callers evicted from the
-old, shallower history are gone for good; the screen refills as calls arrive.
-No action needed.
-
-## Worked example: upgrading to v0.9.3
-
-v0.9.3 is automatic for a board carrying **one** FTN network: deploy the new
-bundle and restart. A board carrying **two or more** networks has one thing to
-do by hand, and everyone should know about several behaviour changes.
-
-### Two or more FTN networks: give each its own binkd outbound
-
-Until now every network's mail went into the single global
-`binkd_outbound_path`, and the mailer put it back there even if you had split
-the directories by hand. Sharing one BSO outbound between networks is unsafe:
-bundle and flow filenames are built from the destination net/node with no zone
-component, so two hubs in different networks that share a net/node pair
-collide on one filename, and one network's mail is handed to the other's hub.
-
-Each network can now have its own outbound. In `./config` → **Echomail
-Networks**, open each network beyond the first and set **Binkd Outbound** to a
-directory of its own — `data/ftn/out_tqw`, say. No dots in the directory name:
-binkd reserves `.<zone>` suffixes on the base outbound for zone directories and
-refuses to start on a dotted one, so the editor rejects it up front. Leave the
-field empty on a network to keep using the global directory.
-
-On save the mailer creates the directory, repoints that network's `domain`
-line in `binkd.conf`, and restarts binkd on the new configuration. Do this
-when the outbound is empty — right after a successful poll — or move that
-hub's bundle and flow files across by hand, since binkd only looks in the
-domain's current directory.
-
-### `binkd.conf` is kept in step, and binkd restarts itself
-
-Two things used to need a hand-edit and a restart:
-
-- A network added outside the FTN Setup Wizard (by hand in the editor, or with
-  `helper ftnsetup`) got a `node` line in `binkd.conf` and nothing else, so
-  binkd refused its sessions with `unknown domain`. The `domain` and
-  `address` lines are now added for any network missing them, on save and
-  before each mailer launch.
-- binkd reads `binkd.conf` once, at startup, and nothing asked it to re-read.
-  A new node, a changed hostname or password, or a different listen port sat
-  inert until binkd happened to exit. The integrated mailer now re-checks the
-  file every 15 seconds and recycles binkd when it has changed — a sub-second
-  gap in the listener — whether the change came from the editor or from a
-  hand edit.
-
-Your configuration is the source of truth for the `node` lines, each `domain`
-line's outbound path, the listen port and log level (`iport`, `loglevel`), and
-the board identity (`sysname`, `sysop`, `location`); those are rewritten from
-`ftn.json` and `config.json` on every sync. Everything else in `binkd.conf`
-is left exactly as you wrote it.
-
-### Poll events follow your networks
-
-The per-network `echomail_poll_<network>` event used to be created only by the
-wizard. It is now created on save for any network whose hub link has a
-**Hostname**, renamed along with its network, and **disabled** (never deleted,
-so a tuned schedule survives) when the network is removed or its hub loses its
-hostname. A link with no hostname is receive-only — binkd has nothing to dial —
-and the editor's log says so; set the hostname under **Echomail Links** to
-poll it.
-
-### Event chaining now works
-
-`run_after` and `delay_after_seconds` have been in `events.json` and the
-events editor since the scheduler shipped, but nothing read them. They do what
-they say now: the chained event runs when the named event finishes (whatever
-its exit status), after the delay. If you set **Run After** on an event in the
-past and shrugged when nothing happened, that event will start chaining after
-this upgrade — check `events.json` for stray values. A cycle (A after B after
-A) disables chaining for every event and logs an error naming the loop. See
-[Event Chaining](advanced/event-scheduler.md#event-chaining-run_after).
-
-### Real names are validated everywhere
-
-Sign-up has always required a real name of at least four characters with a
-space in it. The sysop user editors, the scripting API's
-`user.set('realName', ...)`, and the caller's own **Real Name** prompt in the
-config menu now apply the same rule instead of saving anything, including
-blank. Existing users are untouched, and editing another field leaves a blank
-real name alone; it is caught only when someone changes the Real Name field
-itself. (An area flagged real-name-only still falls back to
-the handle for a user with no real name — that is the behaviour the validation
-exists to stop happening silently.)
-
-### Where the config editor's warnings went
-
-`./config` now writes a rolling `data/logs/config.log` instead of discarding
-its log. Warnings raised by a save — a link with no hostname, a network
-declared in `binkd.conf`, a `binkd.conf` sync that failed — land there. (A
-rejected outbound path is refused in the field itself and shown in the status
-line, not logged.) If the log cannot be opened, the editor says so in its
-status line at startup.
-
-### 32-bit Windows and Docker
-
-Nothing to do. The 386 build no longer panics on every telnet connect, and the
-Docker image builds and starts again (see
-[Docker](getting-started/docker.md)) — both were broken in v0.9.0 through v0.9.2.
+Once it is running, most configuration changes need no restart. Saving from
+`./config`, or editing a config file by hand, is picked up within a couple of
+seconds. Changes to message areas, file areas and `v3net.json` wait until no
+callers are online. Some settings still need a restart, among them listening
+ports and hosts, SSH host keys, turning SSH or telnet on or off, and the
+logging directory and rolling settings. The full list is under
+[Applying Configuration Changes](configuration/configuration.md#applying-configuration-changes).
+
+## Coming from a version older than v0.9.3
+
+The worked example below covers one step, v0.9.3 to v0.9.4. Upgrade notes are
+cumulative: coming from further back, work through each release you are
+skipping, oldest first, before the one below. The notes for v0.9.0 to v0.9.3
+are in the guide as it stood at v0.9.3:
+
+| Upgrading to | What needs doing by hand |
+| ------------ | ------------------------ |
+| [v0.9.0](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.3/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v090) | Replace `bin/binkd`, which was a broken build; add two steps to `login.json`; copy the menu set |
+| [v0.9.1](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.3/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v091) | Anonymous posting is off by default; new file-menu commands in `FILEM.CFG` |
+| [v0.9.2](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.3/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v092) | Custom `login.json`: put `SYSOPNOTICES` and `NMAILSCAN` first |
+| [v0.9.3](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.3/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v093) | Two or more FTN networks: each needed its own binkd outbound, which v0.9.4 now does for you |
+
+Where those notes say to restart after a config edit, see
+[Restarting](#restarting) instead: most files have reloaded on save since
+v0.9.2.
 
 ## Worked example: upgrading to v0.9.4
 
