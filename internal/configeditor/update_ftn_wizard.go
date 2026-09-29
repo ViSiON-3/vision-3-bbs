@@ -59,6 +59,7 @@ func (m Model) startFTNWizardAdd() (Model, tea.Cmd) {
 		hubPort:       24554,
 		originLine:    origin,
 		autoJoinAreas: true,
+		rejectAreas:   m.ftnRejectAreasMissing(),
 	}
 	m.ftnWizardFields = m.fieldsFTNWizard()
 	m.editField = 0
@@ -114,6 +115,7 @@ func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
 		originLine:     net.Origin,
 		hubPort:        24554,
 		autoJoinAreas:  true,
+		rejectAreas:    m.ftnRejectAreasMissing(),
 		subscribedTags: make(map[string]bool),
 	}
 

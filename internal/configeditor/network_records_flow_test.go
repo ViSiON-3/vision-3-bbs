@@ -25,6 +25,10 @@ func refuseRecField(t *testing.T, m Model, label, val string) Model {
 func TestFTNGlobalFields_Persist(t *testing.T) {
 	m, dir := newDiskModel(t)
 	seedFTN(&m)
+	m.configs.MsgAreas = []message.MessageArea{
+		{ID: 1, Position: 1, Tag: "BAD", Name: "Bad Mail", AreaType: "local"},
+		{ID: 2, Position: 2, Tag: "DUPE", Name: "Dupes", AreaType: "local"},
+	}
 	m = press(t, openRecordList(t, m, "ftn"), "G")
 	wantScreen(t, m, "Dupe DB Path")
 	m = refuseRecField(t, m, "Binkd Outbound", "data/ftn/out.dir")
@@ -35,12 +39,13 @@ func TestFTNGlobalFields_Persist(t *testing.T) {
 		"Outbound Path":  "d/outpkt",
 		"Binkd Outbound": "d/out",
 		"Temp Path":      "d/tmp",
-		"Bad Area Tag":   "BAD",
-		"Dupe Area Tag":  "DUPE",
 	}
-	for _, label := range []string{"Dupe DB Path", "Inbound Path", "Secure Inbound", "Outbound Path", "Binkd Outbound", "Temp Path", "Bad Area Tag", "Dupe Area Tag"} {
+	for _, label := range []string{"Dupe DB Path", "Inbound Path", "Secure Inbound", "Outbound Path", "Binkd Outbound", "Temp Path"} {
 		m = setRecField(t, m, label, vals[label])
 	}
+	// Bad and dupe areas are picked from the configured message areas.
+	m = pickRecField(t, m, "Bad Area", "BAD")
+	m = pickRecField(t, m, "Dupe Area", "DUPE")
 	saveAndQuit(t, m)
 	f := reloadConfigs(t, dir).FTN
 	got := []string{f.DupeDBPath, f.InboundPath, f.SecureInboundPath, f.OutboundPath, f.BinkdOutboundPath, f.TempPath, f.BadAreaTag, f.DupeAreaTag}

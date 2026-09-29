@@ -208,14 +208,16 @@ func (m *Model) fieldsFTNGlobal() []fieldDef {
 			Set: func(val string) error { fc.TempPath = val; return nil },
 		},
 		{
-			Label: "Bad Area Tag", Help: "Area tag for unrecognized echomail", Type: ftString, Col: 3, Row: 7, Width: 20,
-			Get: func() string { return fc.BadAreaTag },
-			Set: func(val string) error { fc.BadAreaTag = val; return nil },
+			Label: "Bad Area", Help: "Message area for echomail in echoes you don't carry (none = quarantine the packet)", Type: ftLookup, Col: 3, Row: 7, Width: 30,
+			Get:         func() string { return fc.BadAreaTag },
+			Set:         func(val string) error { fc.BadAreaTag = val; return nil },
+			LookupItems: func() []LookupItem { return m.buildMsgAreaLookupItems() },
 		},
 		{
-			Label: "Dupe Area Tag", Help: "Area tag for duplicate messages", Type: ftString, Col: 3, Row: 8, Width: 20,
-			Get: func() string { return fc.DupeAreaTag },
-			Set: func(val string) error { fc.DupeAreaTag = val; return nil },
+			Label: "Dupe Area", Help: "Message area that keeps a copy of each duplicate (none = log and discard)", Type: ftLookup, Col: 3, Row: 8, Width: 30,
+			Get:         func() string { return fc.DupeAreaTag },
+			Set:         func(val string) error { fc.DupeAreaTag = val; return nil },
+			LookupItems: func() []LookupItem { return m.buildMsgAreaLookupItems() },
 		},
 	}
 }
@@ -412,6 +414,17 @@ func (m *Model) buildFTNNetworkLookupItems() []LookupItem {
 	items := make([]LookupItem, 0, len(keys))
 	for _, k := range keys {
 		items = append(items, LookupItem{Value: k, Display: k})
+	}
+	return items
+}
+
+// buildMsgAreaLookupItems lists every message area by tag, after a "(none)"
+// entry. The tosser finds its bad and dupe areas by exact tag, so picking from
+// the configured areas rules out a typo that would silently disable routing.
+func (m *Model) buildMsgAreaLookupItems() []LookupItem {
+	items := []LookupItem{{Value: "", Display: "(none)"}}
+	for _, a := range m.configs.MsgAreas {
+		items = append(items, LookupItem{Value: a.Tag, Display: fmt.Sprintf("%s (%s)", a.Tag, a.Name)})
 	}
 	return items
 }

@@ -136,6 +136,11 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		filepath.Join("msgbases", "fn."+netKey+"_netmail"),
 	)
 
+	// 3b. Bad and dupe areas, shared by every network.
+	if w.rejectAreas {
+		m.ensureFTNRejectAreas()
+	}
+
 	// 4. Create message areas for each selected echo.
 	for i, sel := range w.selectedAreas {
 		if !sel || i >= len(w.availableAreas) {
@@ -270,20 +275,10 @@ func (m *Model) createFTNMsgAreaIfNeeded(tag, name, areaType, network, echoTag, 
 		}
 	}
 
-	newID := 1
-	maxPos := 0
-	for _, ma := range m.configs.MsgAreas {
-		if ma.ID >= newID {
-			newID = ma.ID + 1
-		}
-		if ma.Position > maxPos {
-			maxPos = ma.Position
-		}
-	}
-
+	newID, pos := m.nextMsgAreaSlot()
 	m.configs.MsgAreas = append(m.configs.MsgAreas, message.MessageArea{
 		ID:           newID,
-		Position:     maxPos + 1,
+		Position:     pos,
 		Tag:          tag,
 		Name:         name,
 		AreaType:     areaType,
@@ -296,4 +291,83 @@ func (m *Model) createFTNMsgAreaIfNeeded(tag, name, areaType, network, echoTag, 
 		BasePath:     basePath,
 		ConferenceID: confID,
 	})
+}
+
+// nextMsgAreaSlot returns the ID and position for a message area appended to
+// the end of the list.
+func (m *Model) nextMsgAreaSlot() (id, position int) {
+	id = 1
+	for _, ma := range m.configs.MsgAreas {
+		if ma.ID >= id {
+			id = ma.ID + 1
+		}
+		if ma.Position > position {
+			position = ma.Position
+		}
+	}
+	return id, position + 1
+}
+
+// ftnRejectArea describes one of the two areas the tosser routes rejected
+// mail to.
+type ftnRejectArea struct {
+	tag      *string // ftn.json field naming the area
+	newTag   string
+	name     string
+	basePath string
+}
+
+// ftnRejectAreas returns the bad and dupe area settings with the tag, name
+// and message base each gets when the wizard creates it.
+func (m *Model) ftnRejectAreas() []ftnRejectArea {
+	fc := &m.configs.FTN
+	return []ftnRejectArea{
+		{&fc.BadAreaTag, "ftn_bad", "FTN Bad Mail", filepath.Join("msgbases", "ftn_bad")},
+		{&fc.DupeAreaTag, "ftn_dupe", "FTN Duplicates", filepath.Join("msgbases", "ftn_dupe")},
+	}
+}
+
+// ftnRejectAreasMissing reports whether the bad or dupe area is unset, or set
+// to a tag no message area has. The tosser treats either the same as unset.
+func (m *Model) ftnRejectAreasMissing() bool {
+	if m.configs == nil {
+		return true
+	}
+	for _, r := range m.ftnRejectAreas() {
+		if _, ok := m.msgAreaTag(*r.tag); !ok {
+			return true
+		}
+	}
+	return false
+}
+
+// ensureFTNRejectAreas points the bad and dupe settings at real message areas,
+// creating them where needed. A setting that already names an area is left
+// alone. The areas are local rather than echomail, so v3mail scan never
+// exports what lands in them, ungrouped because they serve every network, and
+// sysop-only because they hold mail nobody else was meant to see yet.
+func (m *Model) ensureFTNRejectAreas() {
+	for _, r := range m.ftnRejectAreas() {
+		if tag, ok := m.msgAreaTag(*r.tag); ok {
+			*r.tag = tag
+			continue
+		}
+		// Reuse an area left by an earlier run whose setting was cleared.
+		if tag, ok := m.msgAreaTag(r.newTag); ok {
+			*r.tag = tag
+			continue
+		}
+		id, pos := m.nextMsgAreaSlot()
+		m.configs.MsgAreas = append(m.configs.MsgAreas, message.MessageArea{
+			ID:       id,
+			Position: pos,
+			Tag:      r.newTag,
+			Name:     r.name,
+			AreaType: "local",
+			ACSRead:  "SYSOP",
+			ACSWrite: "SYSOP",
+			BasePath: r.basePath,
+		})
+		*r.tag = r.newTag
+	}
 }

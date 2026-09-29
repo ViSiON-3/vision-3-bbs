@@ -35,6 +35,10 @@ type ftnWizardState struct {
 	// Newscan default for created areas (wizard Y/n, default yes).
 	autoJoinAreas bool
 
+	// Create sysop-only bad and dupe areas on save and point ftn.json at
+	// them, for whichever of the two is not already set to a real area.
+	rejectAreas bool
+
 	// Area selection (populated after echolist download).
 	availableAreas []ftn.EchoArea // parsed from downloaded echolist
 	selectedAreas  []bool         // parallel array, true = subscribed
