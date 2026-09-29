@@ -344,9 +344,8 @@ func cmdPack(args []string) {
 		result, err := b.Pack()
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error packing %s: %v\n", meta.Path, err)
-			if !closeBase(b, meta.Path) {
-				hadErrors = true
-			}
+			hadErrors = true
+			_ = closeBase(b, meta.Path)
 			continue
 		}
 
@@ -355,6 +354,16 @@ func cmdPack(args []string) {
 				result.MessagesBefore, result.MessagesBefore-result.DeletedRemoved, result.DeletedRemoved)
 			fmt.Printf("  After:  %d messages\n", result.MessagesAfter)
 			fmt.Printf("  Reclaimed: %s\n", formatBytes(result.BytesBefore-result.BytesAfter))
+		}
+
+		// Packing renumbers messages and zeroes every ReplyTo/Reply1st/
+		// ReplyNext; rebuild the threads against the new numbering.
+		if res, linkErr := b.Link(); linkErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error linking %s: %v\n", meta.Path, linkErr)
+			hadErrors = true
+		} else if !*quiet {
+			fmt.Printf("  Relinked reply threads: %d messages, %d links updated\n",
+				res.MessagesScanned, res.LinksUpdated)
 		}
 		if !closeBase(b, meta.Path) {
 			hadErrors = true
@@ -588,20 +597,41 @@ func cmdFix(args []string) {
 		// Check 6: ReplyID integrity (clean malformed values)
 		if *repair {
 			// Use specialized pack operation that cleans ReplyIDs during rebuild
-			cleanedReplyIDs = cleanReplyIDsInBase(b, *quiet)
-			if cleanedReplyIDs > 0 && !*quiet {
-				fmt.Printf("  REPAIR: Rebuilt message base with cleaned ReplyIDs\n")
+			var repairErr error
+			cleanedReplyIDs, repairErr = cleanReplyIDsInBase(b, *quiet)
+			switch {
+			case repairErr != nil:
+				// The scan or the pack failed and the base was not
+				// rebuilt, so there is nothing to relink.
+				issues++
+			case cleanedReplyIDs > 0:
+				if !*quiet {
+					fmt.Printf("  REPAIR: Rebuilt message base with cleaned ReplyIDs\n")
+				}
+				// Packing zeroes every ReplyTo/Reply1st/ReplyNext; rebuild
+				// the threads so the repaired base is usable as it stands.
+				res, linkErr := b.Link()
+				if linkErr != nil {
+					_, _ = fmt.Fprintf(os.Stderr, "Error linking %s: %v\n", meta.Path, linkErr)
+					issues++
+				} else if !*quiet {
+					fmt.Printf("  REPAIR: Relinked reply threads: %d messages, %d links updated\n",
+						res.MessagesScanned, res.LinksUpdated)
+				}
 			}
 		} else {
 			// In non-repair mode, just check for malformed ReplyIDs
+			// (checking whatever a failed scan still returned).
 			messages, err := b.ScanMessages(1, 0)
-			if err == nil {
-				for _, msg := range messages {
-					if msg.ReplyID != "" {
-						if _, malformed := jam.CleanReplyID(msg.ReplyID); malformed {
-							fmt.Printf("  ISSUE: Malformed ReplyID: %q (use --repair to fix)\n", msg.ReplyID)
-							issues++
-						}
+			if err != nil {
+				fmt.Printf("  ERROR: Failed to scan messages: %v\n", err)
+				issues++
+			}
+			for _, msg := range messages {
+				if msg.ReplyID != "" {
+					if _, malformed := jam.CleanReplyID(msg.ReplyID); malformed {
+						fmt.Printf("  ISSUE: Malformed ReplyID: %q (use --repair to fix)\n", msg.ReplyID)
+						issues++
 					}
 				}
 			}
@@ -750,164 +780,46 @@ func cmdLink(args []string) {
 	}
 }
 
-// linkBase builds reply chains for a single JAM base by matching MSGID ↔ ReplyID
-// and writing ReplyTo/Reply1st/ReplyNext in-place via UpdateMessageHeader.
+// linkBase rebuilds the reply chains of a single JAM base with jam.Base.Link
+// and reports the result under tag unless quiet. It returns the number of
+// headers updated.
 func linkBase(b *jam.Base, quiet bool, tag string) (int, error) {
-	total, err := b.GetMessageCount()
+	res, err := b.Link()
 	if err != nil {
-		return 0, err
+		return res.LinksUpdated, err
 	}
-	if total == 0 {
-		if !quiet {
-			fmt.Printf("%s: no messages\n", tag)
-		}
-		return 0, nil
-	}
-
-	// Phase 1: Scan all headers and build MSGID → msgNum / ReplyID → []msgNum maps.
-	type hdrInfo struct {
-		hdr     *jam.MessageHeader
-		msgNum  int
-		msgID   string
-		replyID string
-	}
-
-	var headers []hdrInfo
-	msgIDToNum := make(map[string]int)      // MSGID string → 1-based message number
-	replyIDToNums := make(map[string][]int) // ReplyID string → list of replying message numbers
-
-	for n := 1; n <= total; n++ {
-		hdr, readErr := b.ReadMessageHeader(n)
-		if readErr != nil {
-			continue
-		}
-		if hdr.Attribute&jam.MsgDeleted != 0 {
-			continue
-		}
-
-		var msgID, replyID string
-		for _, sf := range hdr.Subfields {
-			switch sf.LoID {
-			case jam.SfldMsgID:
-				msgID = string(sf.Buffer)
-			case jam.SfldReplyID:
-				replyID = string(sf.Buffer)
-			}
-		}
-
-		headers = append(headers, hdrInfo{hdr: hdr, msgNum: n, msgID: msgID, replyID: replyID})
-		if msgID != "" {
-			msgIDToNum[msgID] = n
-			// FTN MSGIDs are "address serial" — some tossers store REPLY
-			// kludges without the serial suffix.  Index the address part
-			// too so prefix-based lookups succeed.
-			if idx := strings.LastIndex(msgID, " "); idx > 0 {
-				prefix := msgID[:idx]
-				if _, exists := msgIDToNum[prefix]; !exists {
-					msgIDToNum[prefix] = n
-				}
-			}
-		}
-		if replyID != "" {
-			replyIDToNums[replyID] = append(replyIDToNums[replyID], n)
-		}
-	}
-
-	if len(headers) == 0 {
-		if !quiet {
-			fmt.Printf("%s: no active messages\n", tag)
-		}
-		return 0, nil
-	}
-
-	// Phase 2: Compute desired threading fields.
-	updated := 0
-
-	for i := range headers {
-		h := &headers[i]
-		changed := false
-
-		// ReplyTo: if this message has a ReplyID, find the parent's message number.
-		if h.replyID != "" {
-			if parentNum, ok := msgIDToNum[h.replyID]; ok {
-				if h.hdr.ReplyTo != uint32(parentNum) {
-					h.hdr.ReplyTo = uint32(parentNum)
-					changed = true
-				}
-			}
-		}
-
-		// Reply1st: if this message has a MSGID with replies, point to the first reply.
-		// Check both the full MSGID and the address-only prefix (without serial)
-		// since some tossers may store REPLY kludges without the serial suffix.
-		if h.msgID != "" {
-			replies := replyIDToNums[h.msgID]
-			if len(replies) == 0 {
-				if idx := strings.LastIndex(h.msgID, " "); idx > 0 {
-					replies = replyIDToNums[h.msgID[:idx]]
-				}
-			}
-			if len(replies) > 0 {
-				firstReply := replies[0] // replies are in scan order (ascending)
-				if h.hdr.Reply1st != uint32(firstReply) {
-					h.hdr.Reply1st = uint32(firstReply)
-					changed = true
-				}
-			} else if h.hdr.Reply1st != 0 {
-				// No replies exist (anymore) — clear stale pointer
-				h.hdr.Reply1st = 0
-				changed = true
-			}
-		}
-
-		// ReplyNext: chain sibling replies to the same parent.
-		if h.replyID != "" {
-			if siblings, ok := replyIDToNums[h.replyID]; ok && len(siblings) > 1 {
-				// Find our position and point to the next sibling.
-				nextSibling := uint32(0)
-				for j, sn := range siblings {
-					if sn == h.msgNum && j+1 < len(siblings) {
-						nextSibling = uint32(siblings[j+1])
-						break
-					}
-				}
-				if h.hdr.ReplyNext != nextSibling {
-					h.hdr.ReplyNext = nextSibling
-					changed = true
-				}
-			} else if h.hdr.ReplyNext != 0 {
-				h.hdr.ReplyNext = 0
-				changed = true
-			}
-		}
-
-		if changed {
-			if err := b.UpdateMessageHeader(h.msgNum, h.hdr); err != nil {
-				return updated, fmt.Errorf("updating message %d: %w", h.msgNum, err)
-			}
-			updated++
-		}
-	}
-
 	if !quiet {
-		if updated > 0 {
-			fmt.Printf("%s: %d messages, %d links updated\n", tag, len(headers), updated)
-		} else {
-			fmt.Printf("%s: %d messages, all links current\n", tag, len(headers))
+		switch {
+		case res.TotalMessages == 0:
+			fmt.Printf("%s: no messages\n", tag)
+		case res.MessagesScanned == 0:
+			fmt.Printf("%s: no active messages\n", tag)
+		case res.LinksUpdated > 0:
+			fmt.Printf("%s: %d messages, %d links updated\n", tag, res.MessagesScanned, res.LinksUpdated)
+		default:
+			fmt.Printf("%s: %d messages, all links current\n", tag, res.MessagesScanned)
 		}
 	}
-
-	return updated, nil
+	return res.LinksUpdated, nil
 }
 
-// cleanReplyIDsInBase performs a pack operation that cleans malformed ReplyIDs during rebuild.
-func cleanReplyIDsInBase(b *jam.Base, quiet bool) int {
+// cleanReplyIDsInBase performs a pack operation that cleans malformed
+// ReplyIDs during rebuild. It returns how many ReplyIDs were cleaned (0 when
+// none needed cleaning, in which case the base is not packed) and any scan or
+// pack error, which is also reported (on stdout, or stderr when quiet). A
+// failed scan may have missed messages, so the base is not packed after one.
+func cleanReplyIDsInBase(b *jam.Base, quiet bool) (int, error) {
 	cleanedCount := 0
 
 	// Count messages that need cleaning first
 	messages, err := b.ScanMessages(1, 0)
 	if err != nil {
-		return 0
+		if quiet {
+			_, _ = fmt.Fprintf(os.Stderr, "Error scanning %s: %v\n", b.BasePath, err)
+		} else {
+			fmt.Printf("  ERROR: Failed to scan messages: %v\n", err)
+		}
+		return 0, err
 	}
 
 	type repairEntry struct{ orig, fixed string }
@@ -924,10 +836,12 @@ func cleanReplyIDsInBase(b *jam.Base, quiet bool) int {
 		// Attempt the pack before printing repair messages so we only report
 		// success when the rebuild actually succeeds.
 		if err := cleanReplyIDsPack(b); err != nil {
-			if !quiet {
+			if quiet {
+				_, _ = fmt.Fprintf(os.Stderr, "Error rebuilding %s: %v\n", b.BasePath, err)
+			} else {
 				fmt.Printf("  ERROR: Failed to rebuild message base: %v\n", err)
 			}
-			return 0
+			return 0, err
 		}
 		// Pack succeeded — now report what was cleaned.
 		cleanedCount = len(repairs)
@@ -938,7 +852,7 @@ func cleanReplyIDsInBase(b *jam.Base, quiet bool) int {
 		}
 	}
 
-	return cleanedCount
+	return cleanedCount, nil
 }
 
 // cleanReplyIDsPack performs a pack operation while cleaning ReplyIDs.

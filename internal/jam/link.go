@@ -7,14 +7,28 @@ import (
 
 // LinkResult contains statistics from a Link operation.
 type LinkResult struct {
+	// TotalMessages is the number of index records in the base, deleted
+	// messages included.
+	TotalMessages int
+	// MessagesScanned is the number of active (non-deleted) messages whose
+	// headers were read and considered for linking.
 	MessagesScanned int
-	LinksUpdated    int
+	// LinksUpdated is the number of message headers rewritten because at
+	// least one of their thread pointers changed.
+	LinksUpdated int
 }
 
 // Link rebuilds reply threading chains (ReplyTo/Reply1st/ReplyNext) by
 // matching MSGID and ReplyID subfields across all active messages. This
 // should be called after Pack or after deleting messages to keep threading
 // consistent.
+//
+// A ReplyID matches a parent's full MSGID or, failing that, its address
+// alone (some tossers store REPLY without the serial). Reply1st and
+// ReplyNext are always recomputed, so a stale value is cleared, including on
+// a message with no MSGID (nothing can reply to it) or no ReplyID (it has no
+// siblings). ReplyTo is only ever set, never cleared, so a reply whose parent
+// is not in the base keeps the ReplyTo it had. The whole pass runs under the base's file lock.
 func (b *Base) Link() (LinkResult, error) {
 	var result LinkResult
 
@@ -35,6 +49,7 @@ func (b *Base) Link() (LinkResult, error) {
 	if err != nil {
 		return result, err
 	}
+	result.TotalMessages = total
 	if total == 0 {
 		return result, nil
 	}
@@ -73,8 +88,9 @@ func (b *Base) Link() (LinkResult, error) {
 		headers = append(headers, hdrInfo{hdr: hdr, msgNum: n, msgID: msgID, replyID: replyID})
 		if msgID != "" {
 			msgIDToNum[msgID] = n
-			// FTN MSGIDs are "address serial" — index the address-only
-			// prefix too so prefix-based lookups succeed.
+			// FTN MSGIDs are "address serial" — some tossers store REPLY
+			// kludges without the serial suffix. Index the address part
+			// too so prefix-based lookups succeed.
 			if idx := strings.LastIndex(msgID, " "); idx > 0 {
 				prefix := msgID[:idx]
 				if _, exists := msgIDToNum[prefix]; !exists {
@@ -107,7 +123,12 @@ func (b *Base) Link() (LinkResult, error) {
 			}
 		}
 
-		// Reply1st: if this message has a MSGID with replies, point to the first reply.
+		// Reply1st: point to the first reply to this message's MSGID. Check
+		// both the full MSGID and the address-only prefix (without serial)
+		// since some tossers may store REPLY kludges without the serial
+		// suffix. With no MSGID nothing can reply to it, so it stays 0; any
+		// other value is stale and is cleared.
+		wantFirst := uint32(0)
 		if h.msgID != "" {
 			replies := replyIDToNums[h.msgID]
 			if len(replies) == 0 {
@@ -116,35 +137,30 @@ func (b *Base) Link() (LinkResult, error) {
 				}
 			}
 			if len(replies) > 0 {
-				firstReply := replies[0]
-				if h.hdr.Reply1st != uint32(firstReply) {
-					h.hdr.Reply1st = uint32(firstReply)
-					changed = true
-				}
-			} else if h.hdr.Reply1st != 0 {
-				h.hdr.Reply1st = 0
-				changed = true
+				wantFirst = uint32(replies[0]) // replies are in scan order (ascending)
 			}
 		}
+		if h.hdr.Reply1st != wantFirst {
+			h.hdr.Reply1st = wantFirst
+			changed = true
+		}
 
-		// ReplyNext: chain sibling replies to the same parent.
+		// ReplyNext: chain sibling replies to the same parent. With no
+		// ReplyID the message has no siblings, so it stays 0.
+		wantNext := uint32(0)
 		if h.replyID != "" {
-			if siblings, ok := replyIDToNums[h.replyID]; ok && len(siblings) > 1 {
-				nextSibling := uint32(0)
-				for j, sn := range siblings {
-					if sn == h.msgNum && j+1 < len(siblings) {
-						nextSibling = uint32(siblings[j+1])
-						break
-					}
+			siblings := replyIDToNums[h.replyID]
+			// Find our position and point to the next sibling.
+			for j, sn := range siblings {
+				if sn == h.msgNum && j+1 < len(siblings) {
+					wantNext = uint32(siblings[j+1])
+					break
 				}
-				if h.hdr.ReplyNext != nextSibling {
-					h.hdr.ReplyNext = nextSibling
-					changed = true
-				}
-			} else if h.hdr.ReplyNext != 0 {
-				h.hdr.ReplyNext = 0
-				changed = true
 			}
+		}
+		if h.hdr.ReplyNext != wantNext {
+			h.hdr.ReplyNext = wantNext
+			changed = true
 		}
 
 		if changed {

@@ -9,9 +9,9 @@
 | Command    | Description                                                                  |
 | ---------- | ---------------------------------------------------------------------------- |
 | `stats`    | Display message counts, base sizes, and metadata for one or all areas        |
-| `pack`     | Defragment a base — physically removes deleted messages and compacts storage. Surviving messages are renumbered from 1, and each user's lastread pointer is moved with them so it keeps naming the same message rather than leaving unread mail looking read |
+| `pack`     | Defragment a base — physically removes deleted messages and compacts storage. Surviving messages are renumbered from 1, and each user's lastread pointer is moved with them so it keeps naming the same message rather than leaving unread mail looking read. Reply threads are then relinked against the new numbers, so no separate `link` run is needed |
 | `purge`    | Delete messages exceeding per-area `max_messages` or `max_age` limits        |
-| `fix`      | Verify base integrity; use `--repair` to automatically fix corrupt headers   |
+| `fix`      | Verify base integrity; use `--repair` to automatically fix corrupt headers. A repair that rebuilds the base also relinks its reply threads, so no separate `link` run is needed |
 | `link`     | Build reply-thread chains (`ReplyTo` / `Reply1st` / `ReplyNext` JAM fields)  |
 | `lastread` | Show or reset per-user lastread pointers                                     |
 | `readdress` | Address stored private mail to the recipient's handle; `--dry-run` reports without writing (see below) |

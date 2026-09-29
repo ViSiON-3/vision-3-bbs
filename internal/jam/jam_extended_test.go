@@ -1102,8 +1102,100 @@ func TestLinkEmptyBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Link: %v", err)
 	}
-	if result.MessagesScanned != 0 || result.LinksUpdated != 0 {
-		t.Errorf("Link empty: scanned=%d updated=%d", result.MessagesScanned, result.LinksUpdated)
+	if result.TotalMessages != 0 || result.MessagesScanned != 0 || result.LinksUpdated != 0 {
+		t.Errorf("Link empty: %+v", result)
+	}
+}
+
+// A message with no MSGID cannot be replied to, so its Reply1st must be 0;
+// one with no ReplyID has no siblings, so its ReplyNext must be 0. Link
+// clears stale values left in either.
+func TestLinkClearsPointersWithoutIDs(t *testing.T) {
+	b := openExtTestBase(t)
+	for _, ids := range [][2]string{
+		{"", ""},                             // neither subfield
+		{"", "1:1/9 00000009"},               // ReplyID only, parent absent
+		{"1:1/1 00000001", ""},               // MSGID only, no replies
+		{"1:1/2 00000002", "1:1/1 00000001"}, // well linked, stays put
+	} {
+		msg := NewMessage()
+		msg.From, msg.To, msg.Subject, msg.Text = "Alice", "All", "Hi", "body"
+		msg.MsgID, msg.ReplyID = ids[0], ids[1]
+		if _, err := b.WriteMessage(msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := b.Link(); err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+	for n, p := range map[int][2]uint32{1: {5, 6}, 2: {7, 0}, 3: {0, 8}} {
+		hdr, err := b.ReadMessageHeader(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hdr.Reply1st, hdr.ReplyNext = p[0], p[1]
+		if err := b.UpdateMessageHeader(n, hdr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := b.Link()
+	if err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+	if result.LinksUpdated != 3 {
+		t.Errorf("LinksUpdated = %d, want 3", result.LinksUpdated)
+	}
+	for n, want := range map[int][3]uint32{1: {0, 0, 0}, 2: {0, 0, 0}, 3: {0, 4, 0}, 4: {3, 0, 0}} {
+		hdr, err := b.ReadMessageHeader(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := [3]uint32{hdr.ReplyTo, hdr.Reply1st, hdr.ReplyNext}; got != want {
+			t.Errorf("msg %d ReplyTo/Reply1st/ReplyNext = %v, want %v", n, got, want)
+		}
+	}
+
+	// Nothing stale is left, so a second pass writes nothing.
+	if result, err := b.Link(); err != nil || result.LinksUpdated != 0 {
+		t.Errorf("second Link = %+v, %v; want no updates", result, err)
+	}
+}
+
+// TotalMessages counts every index record, MessagesScanned only the active
+// messages, so callers can tell an empty base from one whose messages are
+// all deleted.
+func TestLinkCountsDeletedMessages(t *testing.T) {
+	b := openExtTestBase(t)
+	for i := 0; i < 3; i++ {
+		msg := NewMessage()
+		msg.From, msg.To, msg.Subject, msg.Text = "Alice", "All", "Hi", "body"
+		if _, err := b.WriteMessage(msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := b.DeleteMessage(2); err != nil {
+		t.Fatal(err)
+	}
+	result, err := b.Link()
+	if err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+	if want := (LinkResult{TotalMessages: 3, MessagesScanned: 2}); result != want {
+		t.Errorf("Link = %+v, want %+v", result, want)
+	}
+
+	for _, n := range []int{1, 3} {
+		if err := b.DeleteMessage(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err = b.Link()
+	if err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+	if want := (LinkResult{TotalMessages: 3}); result != want {
+		t.Errorf("Link with all deleted = %+v, want %+v", result, want)
 	}
 }
 
