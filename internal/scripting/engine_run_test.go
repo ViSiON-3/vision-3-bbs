@@ -116,18 +116,20 @@ func TestRegisteredNamespaces(t *testing.T) {
 	}
 }
 
-// TestWriteEncodesCP437 checks Unicode output is transcoded to CP437 bytes.
+// TestWriteEncodesCP437 checks Unicode output is transcoded to CP437 bytes on
+// a CP437 session (the harness default). See TestOutputEncoding for more.
 func TestWriteEncodesCP437(t *testing.T) {
 	h := newHarness(t, harnessOpts{})
 	h.mustRun(`v3.console.write("½░")`)
 	if got := h.output(); got != "\xab\xb0" {
 		t.Errorf("output = %q, want CP437 \\xab\\xb0", got)
 	}
-	// Characters with no CP437 mapping fall back to raw UTF-8.
+	// A character with no CP437 mapping becomes '?' (#491); it used to send
+	// the whole string as UTF-8.
 	h.resetOutput()
-	h.mustRun(`v3.console.write("€")`)
-	if got := h.output(); got != "€" {
-		t.Errorf("unmappable output = %q, want UTF-8 passthrough", got)
+	h.mustRun(`v3.console.write("€½")`)
+	if got := h.output(); got != "?\xab" {
+		t.Errorf("unmappable output = %q, want \"?\\xab\"", got)
 	}
 }
 

@@ -28,6 +28,7 @@ func TestInputEncoding(t *testing.T) {
 		{name: "cp437 backspace", mode: cp437, input: "a\x82\x08b\r", expr: `v3.console.getstr(10)`, want: "ab", wantOut: "a\x82\x08 \x08b\r\n"},
 		{name: "cp437 maxlen counts characters", mode: cp437, input: "\x82\x82\x82\r", expr: `v3.console.getstr(2)`, want: "éé", wantOut: "\x82\x82\r\n"},
 		{name: "cp437 upper leaves non-ASCII", mode: cp437, input: "a\x82\r", expr: `v3.console.getstr(10, {upper: true})`, want: "Aé", wantOut: "A\x82\r\n"},
+		{name: "cp437 NBSP echoes its own byte", mode: cp437, input: "a\xff\r", expr: `v3.console.getstr(10)`, want: "a ", wantOut: "a\xff\r\n"},
 		{name: "cp437 escape aborts", mode: cp437, input: "\x82\x1b", expr: `v3.console.getstr(10)`, want: ""},
 		{name: "cp437 getkey", mode: cp437, input: "\x82", expr: `v3.console.getkey()`, want: "é"},
 		{name: "utf8 e-acute", mode: utf8, input: "café\r", expr: `v3.console.getstr(10)`, want: "café", wantOut: "café\r\n"},

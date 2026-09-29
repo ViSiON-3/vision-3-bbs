@@ -36,15 +36,14 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 			return goja.Undefined()
 		}
 
-		// Process pipe codes on raw bytes, then write directly.
-		// No CP437→UTF8 conversion — ANSI art bytes are sent as-is.
+		// Pipe codes expand to ASCII escape sequences, so they can be
+		// processed on the raw CP437 bytes before the art is encoded.
 		processed := ansi.ReplacePipeCodes(content)
-		eng.writeBytes(fitArt(eng, processed))
+		eng.writeBytes(artForSession(eng, processed))
 		return goja.Undefined()
 	})
 
 	// displayRaw(filename) — display an .ANS file without pipe-code processing.
-	// Sends raw CP437 bytes directly to the terminal.
 	jsutil.Set(obj, "displayRaw", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
@@ -60,21 +59,25 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 			return goja.Undefined()
 		}
 
-		eng.writeBytes(fitArt(eng, content))
+		eng.writeBytes(artForSession(eng, content))
 		return goja.Undefined()
 	})
 
 	jsutil.Set(v3, "ansi", obj)
 }
 
-// fitArt makes the art's line breaks explicit on terminals wider than it (see
-// ansi.FitArtToWidth). The bytes go to the session raw, one byte per cell.
-func fitArt(eng *Engine, data []byte) []byte {
+// artForSession prepares art file bytes for the session, as the menu does for
+// its screens: line breaks are made explicit on terminals wider than the art
+// (ansi.FitArtToWidth, measured one byte per cell while the bytes are still
+// CP437), then CP437 art is converted to UTF-8 for a UTF-8 session
+// (ansi.ArtForOutput). A CP437 session gets the file's bytes unchanged. The
+// result is written raw: it is already in the session's encoding.
+func artForSession(eng *Engine, data []byte) []byte {
 	width := eng.session.ArtWidth
 	if width <= 0 {
 		width = eng.session.ScreenWidth
 	}
-	return ansi.FitArtToWidth(data, width, false)
+	return ansi.ArtForOutput(ansi.FitArtToWidth(data, width, false), eng.session.OutputMode)
 }
 
 // resolveAnsiPath finds an ANSI file by checking multiple locations:

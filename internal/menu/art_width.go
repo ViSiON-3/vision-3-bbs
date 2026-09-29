@@ -3,7 +3,6 @@ package menu
 import (
 	"sync"
 	"sync/atomic"
-	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"golang.org/x/term"
@@ -48,20 +47,4 @@ func artWidth(t *term.Terminal, termWidth int) int {
 // fitArt is ansi.FitArtToWidth against t's art width (see artWidth).
 func fitArt(t *term.Terminal, data []byte, termWidth int, utf8Spans bool) []byte {
 	return ansi.FitArtToWidth(data, artWidth(t, termWidth), utf8Spans)
-}
-
-// artForOutput returns art in the encoding the terminal expects. On a UTF-8
-// terminal, art that is not valid UTF-8 as a whole is CP437 and is converted
-// byte for byte; anything else is returned unchanged.
-//
-// The decision has to be made for the whole file. Left to
-// terminalio.WriteProcessedBytes, it is made per span between escape
-// sequences, and short CP437 runs are often valid UTF-8 on their own — █▓
-// (DB B2) decodes as U+06F2 — so they went out raw: one wrong glyph in place
-// of two cells, shifting the rest of the row and its colours.
-func artForOutput(data []byte, outputMode ansi.OutputMode) []byte {
-	if outputMode != ansi.OutputModeUTF8 || utf8.Valid(data) {
-		return data
-	}
-	return ansi.CP437BytesToUTF8(data)
 }
