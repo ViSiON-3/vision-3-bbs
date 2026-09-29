@@ -231,9 +231,9 @@ so new programs do nothing until it does.
 Once it is running, most configuration changes need no restart. Saving from
 `./config`, or editing a config file by hand, is picked up within a couple of
 seconds. Changes to message areas, file areas and `v3net.json` wait until no
-callers are online. Listening ports and hosts, SSH host keys, turning SSH or
-telnet on or off, and the logging directory still need a restart. The full
-list is under
+callers are online. Some settings still need a restart, among them listening
+ports and hosts, SSH host keys, turning SSH or telnet on or off, and the
+logging directory and rolling settings. The full list is under
 [Applying Configuration Changes](configuration/configuration.md#applying-configuration-changes).
 
 ## Coming from a version older than v0.9.3
