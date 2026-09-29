@@ -2,7 +2,7 @@
 
 ViSiON/3 includes a dedicated user-to-user mail system. "Private" here means the message is addressed to a specific user rather than posted publicly to a board — it is **not** encrypted or secure in any modern sense. Messages are stored as plaintext in a JAM base on disk, where anyone with access to the files can read them. This is how BBS mail worked in the 90s.
 
-Inside the BBS, a message with the `MSG_PRIVATE` JAM flag is shown only to its sender and its recipient, on every path that shows message content: the mail reader, the message reader and list, newscan, QWK packets and the script API.
+Inside the BBS, a message with the `MSG_PRIVATE` JAM flag is shown only to its sender and its recipient, on every path that shows message content: the message reader and list, newscan, QWK packets and the script API. The mailbox commands are narrower still and show only mail addressed to you. The one exception is undeliverable mail, which a sysop can read; see [Read Filter](#read-filter).
 
 ## Setup
 
@@ -30,7 +30,9 @@ Users access private mail through the Email Menu (press `E` from the main menu):
 
 - **SENDPRIVMAIL** — Send private mail to another user; validates recipient exists, prompts for subject, launches the full-screen editor
 - **READPRIVMAIL** — Read private mail; shows only messages addressed to the current user
-- **LISTPRIVMAIL** — List private mail headers
+- **LISTPRIVMAIL** — List private mail headers, for the same messages
+
+Mail you have sent is not in your mailbox. It shows when you read the `PRIVMAIL` area with the message reader, list or newscan.
 
 Posting with `COMPOSEMSG` while `PRIVMAIL` is the current area works the same way: the recipient must be an existing user, and the message is saved as private.
 
@@ -60,9 +62,12 @@ This means:
   addressed by handle when it is written, tossed or imported;
   `v3mail readdress` fixes mail stored before that
   (see [Readdressing private mail](messages/v3mail.md#readdressing-private-mail)).
+- `READPRIVMAIL` and `LISTPRIVMAIL` apply a narrower filter on top: private
+  messages whose To is the current user's handle.
 - There is no sysop bypass for delivered mail. A user at or above
   `sysOpLevel` can also read **undeliverable** mail, whose To is no account's
-  handle, in the message reader, list and newscan.
+  handle, in the message reader, list and newscan. QWK packets and the script
+  API make no such allowance.
 - The rule applies on top of the area's read ACS, which alone does not protect
   private mail.
 - None of this is encryption: anyone with filesystem access can read the base.

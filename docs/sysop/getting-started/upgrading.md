@@ -647,21 +647,24 @@ It rewrites To with the recipient's handle wherever the name resolves to one
 account (a handle, `Sysop` for user #1, or a real name only one user has), and
 reports what it left alone. It is safe to run twice. Mail it cannot resolve is
 **undeliverable**: a sysop can read it in the message reader, list and
-newscan, and nobody else can. New mail is addressed by handle as it is tossed
-or imported. See [Readdressing private mail](messages/v3mail.md#readdressing-private-mail).
+newscan. Apart from its sender, if the sender is a local user, nobody else
+can. New mail is addressed by handle as it is tossed or imported. See [Readdressing private mail](messages/v3mail.md#readdressing-private-mail).
 
 Other things that follow from the same rule:
 
 - There is no sysop bypass for delivered mail. A sysop reads their own mail
   and undeliverable mail, not other users'.
+- The mailbox commands (`READPRIVMAIL`, `LISTPRIVMAIL`) show mail addressed
+  **to** you. Mail you sent, and undeliverable mail for a sysop, shows in the
+  message reader, list and newscan for the area.
 - `COMPOSEMSG` requires a recipient in `PRIVMAIL` and in netmail areas, where
   it used to default to "All". Netmail needs an address: enter
   `Name@zone:net/node`, or the name and then the address. Netmail with no
   address used to go to the first link, usually the hub, so writing to the hub
   sysop now means typing the hub's address.
 - Scripts: `v3.message.get` returns null for a private message the running
-  user cannot see, and `v3.message.postPrivate` throws unless `to` resolves
-  to an account.
+  user cannot see. Outside netmail areas, `v3.message.postPrivate` throws
+  unless `to` resolves to an account; in a netmail area `to` is used as given.
 
 ### 2. Bring the menu set up to date
 
