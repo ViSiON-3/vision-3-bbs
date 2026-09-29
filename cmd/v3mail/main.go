@@ -597,11 +597,12 @@ func cmdFix(args []string) {
 		// Check 6: ReplyID integrity (clean malformed values)
 		if *repair {
 			// Use specialized pack operation that cleans ReplyIDs during rebuild
-			var packErr error
-			cleanedReplyIDs, packErr = cleanReplyIDsInBase(b, *quiet)
+			var repairErr error
+			cleanedReplyIDs, repairErr = cleanReplyIDsInBase(b, *quiet)
 			switch {
-			case packErr != nil:
-				// The base was not rebuilt, so there is nothing to relink.
+			case repairErr != nil:
+				// The scan or the pack failed and the base was not
+				// rebuilt, so there is nothing to relink.
 				issues++
 			case cleanedReplyIDs > 0:
 				if !*quiet {
@@ -620,14 +621,17 @@ func cmdFix(args []string) {
 			}
 		} else {
 			// In non-repair mode, just check for malformed ReplyIDs
+			// (checking whatever a failed scan still returned).
 			messages, err := b.ScanMessages(1, 0)
-			if err == nil {
-				for _, msg := range messages {
-					if msg.ReplyID != "" {
-						if _, malformed := jam.CleanReplyID(msg.ReplyID); malformed {
-							fmt.Printf("  ISSUE: Malformed ReplyID: %q (use --repair to fix)\n", msg.ReplyID)
-							issues++
-						}
+			if err != nil {
+				fmt.Printf("  ERROR: Failed to scan messages: %v\n", err)
+				issues++
+			}
+			for _, msg := range messages {
+				if msg.ReplyID != "" {
+					if _, malformed := jam.CleanReplyID(msg.ReplyID); malformed {
+						fmt.Printf("  ISSUE: Malformed ReplyID: %q (use --repair to fix)\n", msg.ReplyID)
+						issues++
 					}
 				}
 			}
@@ -801,15 +805,21 @@ func linkBase(b *jam.Base, quiet bool, tag string) (int, error) {
 
 // cleanReplyIDsInBase performs a pack operation that cleans malformed
 // ReplyIDs during rebuild. It returns how many ReplyIDs were cleaned (0 when
-// none needed cleaning, in which case the base is not packed) and the pack's
-// error, which is also reported (on stdout, or stderr when quiet).
+// none needed cleaning, in which case the base is not packed) and any scan or
+// pack error, which is also reported (on stdout, or stderr when quiet). A
+// failed scan may have missed messages, so the base is not packed after one.
 func cleanReplyIDsInBase(b *jam.Base, quiet bool) (int, error) {
 	cleanedCount := 0
 
 	// Count messages that need cleaning first
 	messages, err := b.ScanMessages(1, 0)
 	if err != nil {
-		return 0, nil
+		if quiet {
+			_, _ = fmt.Fprintf(os.Stderr, "Error scanning %s: %v\n", b.BasePath, err)
+		} else {
+			fmt.Printf("  ERROR: Failed to scan messages: %v\n", err)
+		}
+		return 0, err
 	}
 
 	type repairEntry struct{ orig, fixed string }

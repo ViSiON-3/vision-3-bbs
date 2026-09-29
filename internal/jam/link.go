@@ -25,9 +25,10 @@ type LinkResult struct {
 //
 // A ReplyID matches a parent's full MSGID or, failing that, its address
 // alone (some tossers store REPLY without the serial). Reply1st and
-// ReplyNext are cleared when they no longer point anywhere; ReplyTo is only
-// ever set, never cleared, so a reply whose parent is not in the base keeps
-// the ReplyTo it had. The whole pass runs under the base's file lock.
+// ReplyNext are always recomputed, so a stale value is cleared, including on
+// a message with no MSGID (nothing can reply to it) or no ReplyID (it has no
+// siblings). ReplyTo is only ever set, never cleared, so a reply whose parent
+// is not in the base keeps the ReplyTo it had. The whole pass runs under the base's file lock.
 func (b *Base) Link() (LinkResult, error) {
 	var result LinkResult
 
@@ -122,9 +123,12 @@ func (b *Base) Link() (LinkResult, error) {
 			}
 		}
 
-		// Reply1st: if this message has a MSGID with replies, point to the first reply.
-		// Check both the full MSGID and the address-only prefix (without serial)
-		// since some tossers may store REPLY kludges without the serial suffix.
+		// Reply1st: point to the first reply to this message's MSGID. Check
+		// both the full MSGID and the address-only prefix (without serial)
+		// since some tossers may store REPLY kludges without the serial
+		// suffix. With no MSGID nothing can reply to it, so it stays 0; any
+		// other value is stale and is cleared.
+		wantFirst := uint32(0)
 		if h.msgID != "" {
 			replies := replyIDToNums[h.msgID]
 			if len(replies) == 0 {
@@ -133,37 +137,30 @@ func (b *Base) Link() (LinkResult, error) {
 				}
 			}
 			if len(replies) > 0 {
-				firstReply := replies[0] // replies are in scan order (ascending)
-				if h.hdr.Reply1st != uint32(firstReply) {
-					h.hdr.Reply1st = uint32(firstReply)
-					changed = true
-				}
-			} else if h.hdr.Reply1st != 0 {
-				// No replies exist (anymore) — clear stale pointer
-				h.hdr.Reply1st = 0
-				changed = true
+				wantFirst = uint32(replies[0]) // replies are in scan order (ascending)
 			}
 		}
+		if h.hdr.Reply1st != wantFirst {
+			h.hdr.Reply1st = wantFirst
+			changed = true
+		}
 
-		// ReplyNext: chain sibling replies to the same parent.
+		// ReplyNext: chain sibling replies to the same parent. With no
+		// ReplyID the message has no siblings, so it stays 0.
+		wantNext := uint32(0)
 		if h.replyID != "" {
-			if siblings, ok := replyIDToNums[h.replyID]; ok && len(siblings) > 1 {
-				// Find our position and point to the next sibling.
-				nextSibling := uint32(0)
-				for j, sn := range siblings {
-					if sn == h.msgNum && j+1 < len(siblings) {
-						nextSibling = uint32(siblings[j+1])
-						break
-					}
+			siblings := replyIDToNums[h.replyID]
+			// Find our position and point to the next sibling.
+			for j, sn := range siblings {
+				if sn == h.msgNum && j+1 < len(siblings) {
+					wantNext = uint32(siblings[j+1])
+					break
 				}
-				if h.hdr.ReplyNext != nextSibling {
-					h.hdr.ReplyNext = nextSibling
-					changed = true
-				}
-			} else if h.hdr.ReplyNext != 0 {
-				h.hdr.ReplyNext = 0
-				changed = true
 			}
+		}
+		if h.hdr.ReplyNext != wantNext {
+			h.hdr.ReplyNext = wantNext
+			changed = true
 		}
 
 		if changed {

@@ -164,3 +164,59 @@ func TestFixRepairFailedPackDoesNotLink(t *testing.T) {
 		t.Errorf("ReplyID after failed repair = %q, want it unchanged", got)
 	}
 }
+
+// When fix cannot scan the base's messages it reports the scan error and
+// exits non-zero; with --repair it then neither packs nor links. (Here the
+// text-offset check also flags the truncated base, so the exit code alone
+// would not show the scan error; the reported line does.)
+func TestFixRepairScanFailureReported(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		checkOnly  bool // without --repair
+		quiet      bool
+		wantOut    string // in stdout
+		wantErrOut string // in stderr
+	}{
+		{name: "verbose", wantOut: "ERROR: Failed to scan messages"},
+		{name: "quiet", quiet: true, wantErrOut: "Error scanning"},
+		{name: "check only", checkOnly: true, wantOut: "ERROR: Failed to scan messages"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := seedBase(t, filepath.Join(dir, "echo"),
+				seedMsg{subject: "parent", msgID: "21:1/100 00000001"},
+				seedMsg{subject: "r1", replyID: "21:1/100 00000001"},
+				seedMsg{subject: "r2", replyID: "21:1/100 00000001 21:1/100 00000009"},
+			)
+			// With the message text gone every text read fails, so
+			// ScanMessages returns an error; the headers stay readable.
+			if err := os.Truncate(path+".jdt", 0); err != nil {
+				t.Fatal(err)
+			}
+
+			args := []string{"fix"}
+			if !tc.checkOnly {
+				args = append(args, "--repair")
+			}
+			if tc.quiet {
+				args = append(args, "-q")
+			}
+			code, out, errOut := runV3mail(t, dir, append(args, path)...)
+			if code != 1 {
+				t.Errorf("exit code = %d, want 1\n%s%s", code, out, errOut)
+			}
+			if tc.wantOut != "" {
+				wantContains(t, "stdout", out, tc.wantOut)
+			}
+			if tc.wantErrOut != "" {
+				wantContains(t, "stderr", errOut, tc.wantErrOut)
+			}
+			if strings.Contains(out, "REPAIR:") {
+				t.Errorf("fix --repair repaired after a failed scan:\n%s", out)
+			}
+			if got, want := pointers(t, path), "1:0/0/0 2:0/0/0 3:0/0/0"; got != want {
+				t.Errorf("pointers after failed scan = %q, want %q (untouched)", got, want)
+			}
+		})
+	}
+}

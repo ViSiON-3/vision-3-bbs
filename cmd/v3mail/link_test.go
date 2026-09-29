@@ -27,8 +27,11 @@ func linkFixture(t *testing.T, dir string) []string {
 	deleteMsgs(t, gone, 1)
 	stale := seedBase(t, filepath.Join(dir, "stale"),
 		seedMsg{subject: "parent", msgID: "21:1/100 0000abcd"},
-		seedMsg{subject: "sole", replyID: "21:1/999 00000009"})
-	setPointers(t, stale, map[int][3]uint32{1: {0, 7, 0}, 2: {5, 0, 9}})
+		seedMsg{subject: "sole", replyID: "21:1/999 00000009"},
+		seedMsg{subject: "bare"})
+	// Message 3 has neither MSGID nor ReplyID, so nothing can reply to it
+	// and it has no siblings: its Reply1st and ReplyNext are stale too.
+	setPointers(t, stale, map[int][3]uint32{1: {0, 7, 0}, 2: {5, 0, 9}, 3: {0, 1, 2}})
 	holes := seedBase(t, filepath.Join(dir, "holes"),
 		seedMsg{subject: "parent", msgID: "21:1/100 00000001"},
 		seedMsg{subject: "r1", msgID: "21:1/100 00000002", replyID: "21:1/100 00000001"},
@@ -87,12 +90,14 @@ func pointers(t *testing.T, path string) string {
 
 // linkFixturePointers is what link leaves in linkFixture's bases. The stale
 // ReplyTo=5 in "stale" survives: a reply whose parent is not in the base
-// keeps whatever ReplyTo it had.
+// keeps whatever ReplyTo it had. Message 3 there, with no MSGID or ReplyID,
+// has its stale Reply1st/ReplyNext cleared (before #493's review it kept
+// them, and the first run reported 2 links updated for "stale").
 var linkFixturePointers = map[string]string{
 	"general": "1:0/2/0 2:1/4/3 3:1/0/0 4:2/0/0",
 	"empty":   "",
 	"gone":    "1:0/0/0",
-	"stale":   "1:0/0/0 2:5/0/0",
+	"stale":   "1:0/0/0 2:5/0/0 3:0/0/0",
 	"holes":   "1:0/2/0 2:1/0/4 3:0/0/0 4:1/0/0 5:0/0/0",
 }
 
@@ -125,15 +130,15 @@ func TestCmdLinkOutputAndPointers(t *testing.T) {
 	run("first run", `general: 4 messages, 4 links updated
 empty: no messages
 gone: no active messages
-stale: 2 messages, 2 links updated
+stale: 3 messages, 3 links updated
 holes: 4 messages, 3 links updated
 
-Total: 9 links updated across 5 areas
+Total: 10 links updated across 5 areas
 `)
 	run("second run", `general: 4 messages, all links current
 empty: no messages
 gone: no active messages
-stale: 2 messages, all links current
+stale: 3 messages, all links current
 holes: 4 messages, all links current
 
 Total: 0 links updated across 5 areas
