@@ -299,7 +299,7 @@ Run `v3mail scan` then `v3mail ftn-pack` manually. Check that `binkd_outbound_pa
 The echo area tag in the inbound packet does not match any area in `configs/message_areas.json`. Either add the area or update `bad_area_tag` in `configs/ftn.json` to route these to a catchall area.
 
 **High duplicate rate**
-Check `data/ftn/dupes.json`. If the file is corrupt or very large, remove it and let `v3mail toss` recreate it. Messages since the last toss will pass through on the next run.
+Search `v3mail.log` for `dupe message`: each line names the echo, MSGID, packet, sending link and when the message was first seen. Dupes from a second uplink, or a bundle resent after a dropped session, are normal. Set `dupe_area_tag` to keep a copy of every dupe for inspection. The size of `data/ftn/dupes.json` is not a dupe count: it holds every message seen in the last 30 days.
 
 ## See Also
 

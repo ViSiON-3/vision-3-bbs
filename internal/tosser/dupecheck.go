@@ -67,6 +67,20 @@ func (db *DupeDB) IsDupe(msgID string) bool {
 	return exists
 }
 
+// FirstSeen reports when msgID was first recorded, and whether it has been.
+func (db *DupeDB) FirstSeen(msgID string) (time.Time, bool) {
+	if msgID == "" {
+		return time.Time{}, false
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	ts, exists := db.entries[msgID]
+	if !exists {
+		return time.Time{}, false
+	}
+	return time.Unix(ts, 0), true
+}
+
 // Add records a MSGID as seen. Returns true if it was already a dupe.
 func (db *DupeDB) Add(msgID string) bool {
 	if msgID == "" {
@@ -100,10 +114,15 @@ func (db *DupeDB) Purge() error {
 // loaded the file. A caller that serialises its own work with other
 // processes (a lock around a whole toss) calls it after taking that lock,
 // so its dupe checks see everything already imported.
-func (db *DupeDB) Reload() {
+//
+// It returns an error when the file exists but cannot be read: the caller
+// cannot then tell a dupe from new mail, and should not toss. A file that
+// does not parse is not an error — it is logged, and the next save
+// overwrites it.
+func (db *DupeDB) Reload() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	db.mergeFromDiskLocked()
+	return db.mergeFromDiskLocked()
 }
 
 // Save persists the database to disk.
@@ -130,7 +149,10 @@ func (db *DupeDB) saveLocked() error {
 	}
 	defer lock.Release() // nil-safe: no-op when the acquire above failed
 
-	db.mergeFromDiskLocked()
+	if err := db.mergeFromDiskLocked(); err != nil {
+		slog.Warn("could not re-read dupe DB before saving; entries saved by other processes may be lost",
+			"path", db.path, "error", err)
+	}
 
 	f := dupeFile{Entries: db.entries}
 	data, err := json.MarshalIndent(f, "", "  ")
@@ -142,23 +164,24 @@ func (db *DupeDB) saveLocked() error {
 
 // mergeFromDiskLocked adds the on-disk entries this process does not have,
 // skipping any older than maxAge so a Purge here is not undone by the merge.
-// Where both sides know an ID, the earlier first-seen time is kept.
-func (db *DupeDB) mergeFromDiskLocked() {
+// Where both sides know an ID, the earlier first-seen time is kept. It
+// returns an error only when the file exists and cannot be read; a missing
+// or unparsable file leaves the entries as they are.
+func (db *DupeDB) mergeFromDiskLocked() error {
 	data, err := os.ReadFile(db.path)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			slog.Warn("could not re-read dupe DB before saving; entries saved by other processes may be lost",
-				"path", db.path, "error", err)
+		if os.IsNotExist(err) {
+			return nil
 		}
-		return
+		return err
 	}
 	if len(data) == 0 {
-		return
+		return nil
 	}
 	var f dupeFile
 	if err := json.Unmarshal(data, &f); err != nil {
 		slog.Warn("corrupt dupe DB on disk, overwriting it", "path", db.path, "error", err)
-		return
+		return nil
 	}
 	var cutoff int64
 	if db.maxAge > 0 {
@@ -172,6 +195,7 @@ func (db *DupeDB) mergeFromDiskLocked() {
 			db.entries[id] = ts
 		}
 	}
+	return nil
 }
 
 // atomicWriteFile writes data to a temp file then renames it to path,
