@@ -158,7 +158,7 @@ Extract to a scratch directory, then copy the programs across:
 mkdir -p /tmp/v3new
 tar xzf vision3-bundle-linux-amd64-vX.Y.Z.tar.gz -C /tmp/v3new
 cd /opt/vision3
-cp /tmp/v3new/{vision3,ue,strings,config,menuedit,helper,v3mail} .
+cp /tmp/v3new/{vision3,ue,strings,config,menuedit,helper,v3mail,wfc} .   # wfc ships from v0.9.4
 cp /tmp/v3new/bin/{binkd,sexyz} bin/    # the bundle carries these; a source build does not
 ```
 
@@ -620,9 +620,10 @@ do three things by hand: run `v3mail readdress` once, bring your menu set up
 to date, and repoint any custom menu that uses a removed command. The rest of
 this section is behaviour that changed and is worth knowing about.
 
-`bin/binkd` and `bin/sexyz` are unchanged. If you use the `wfc` console,
-rebuild it along with the BBS (`build.sh` does). A new console works against
-an older BBS, but kick and the new counters need the BBS updated too. See
+`bin/binkd` and `bin/sexyz` are unchanged. The `wfc` console is one of the
+programs to copy: it ships in the release bundle from this version, and
+`build.sh` builds it. A new console works against an older BBS, but kick and
+the new counters need the BBS updated too. See
 [WFC Console](how-to-guides/wfc-console.md).
 
 ### 1. Run `v3mail readdress` once
@@ -858,5 +859,8 @@ changes on a board that uses those defaults.
   on xterm-style terminals. On rxvt, PuTTY's default keyboard mode and the
   Linux console those combinations do nothing. See
   [User Editor](users/user-editor.md).
-- **Docker:** add the `./menus.d:/vision3/menus.d` mount from the shipped
-  `docker-compose.yml` to yours. See [Docker](getting-started/docker.md).
+- **Docker:** add the `./menus.d:/vision3/menus.d` and
+  `./ziplab:/vision3/ziplab` mounts from the shipped `docker-compose.yml` to
+  yours. The image now carries ZipLab's support files, which were missing, and
+  copies any you do not have into `ziplab/` at startup. See
+  [Docker](getting-started/docker.md).
