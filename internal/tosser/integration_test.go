@@ -1010,3 +1010,31 @@ func TestExportedEchomailHasSingleAreaLine(t *testing.T) {
 		t.Errorf("body has an SOH-prefixed AREA kludge: %q", body)
 	}
 }
+
+// TestUnreadableDupeDBStopsToss verifies that a toss which cannot re-read the
+// dupe database leaves the inbound alone rather than importing mail it cannot
+// tell from a dupe.
+func TestUnreadableDupeDBStopsToss(t *testing.T) {
+	env, extCfg := setupExtendedTestEnv(t)
+	tosser, err := New("testnet", extCfg, env.globalCfg, env.dupeDB, env.msgMgr)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// A directory where the file should be fails to read on every platform.
+	if err := os.MkdirAll(env.dupeDB.path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pktPath := filepath.Join(env.inboundDir, "held.pkt")
+	os.WriteFile(pktPath, makePktSimple(t, "FSX_TEST", "Sender", "All", "Held", "Body\r", "21:4/100 HELD0001"), 0644)
+	r := tosser.ProcessInbound()
+	if len(r.Errors) == 0 || !strings.Contains(r.Errors[0], "reload dupe DB") {
+		t.Errorf("errors = %v, want a reload failure", r.Errors)
+	}
+	if r.MessagesImported != 0 || r.PacketsProcessed != 0 {
+		t.Errorf("imported=%d packets=%d, want nothing tossed", r.MessagesImported, r.PacketsProcessed)
+	}
+	if _, err := os.Stat(pktPath); err != nil {
+		t.Errorf("packet not left in inbound: %v", err)
+	}
+}

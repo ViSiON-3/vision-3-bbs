@@ -152,7 +152,12 @@ func (t *Tosser) ProcessInbound() TossResult {
 
 	// The DB was loaded when this process started, before the lock; a toss
 	// that ran in between has recorded messages this one must treat as seen.
-	t.dupeDB.Reload()
+	// Without it a dupe cannot be told from new mail, so leave the inbound
+	// alone until the file can be read.
+	if err := t.dupeDB.Reload(); err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("reload dupe DB: %v", err))
+		return result
+	}
 
 	for _, inboundDir := range t.inboundDirs() {
 		t.processInboundDir(inboundDir, &result)

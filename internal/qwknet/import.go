@@ -66,7 +66,12 @@ func (n *Node) Toss() TossResult {
 	}
 	defer lock.Release()
 	if n.dupes != nil {
-		n.dupes.Reload()
+		// Without it a dupe cannot be told from new mail; leave the
+		// packets for a toss that can read the database.
+		if err := n.dupes.Reload(); err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("reload dupe db: %v", err))
+			return res
+		}
 	}
 
 	areas := n.areasByConference()
