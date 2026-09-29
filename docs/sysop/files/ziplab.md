@@ -43,6 +43,8 @@ When the archive carries a `FILE_ID.DIZ`, its text becomes the file description 
 
 The patterns, comment and include files live in the `ziplab/` directory under the BBS root. Relative paths in the settings resolve against that directory; absolute paths are used as given.
 
+Under Docker the directory is the `ziplab/` volume. The image carries the shipped files and copies any that are missing into it at startup, so edit them on the host through the `./ziplab` mount (see [Docker](getting-started/docker.md#persistent-data)).
+
 | File | Default | Purpose |
 | --- | --- | --- |
 | Patterns file | `REMOVE.TXT` | Filenames to strip, one per line. Exact names, case-insensitive; lines starting with `;` are comments. |
