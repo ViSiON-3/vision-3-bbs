@@ -99,7 +99,12 @@ func TestCmdStats(t *testing.T) {
 	if err := os.WriteFile(blocker, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, errOut := capture(t, func() { cmdStats([]string{filepath.Join(blocker, "base")}) })
+	// An unopenable base now fails the command (exit 1, #496), which would
+	// end this test process, so run it as a child.
+	code, out, errOut := runV3mail(t, b.root, "stats", filepath.Join(blocker, "base"))
+	if code != 1 {
+		t.Errorf("exit for unopenable base = %d, want 1", code)
+	}
 	if out != "" {
 		t.Errorf("stdout for unopenable base = %q", out)
 	}

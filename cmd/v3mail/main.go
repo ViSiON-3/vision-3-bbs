@@ -251,6 +251,7 @@ func cmdStats(args []string) {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			hadErrors = true
 			continue
 		}
 
@@ -309,6 +310,7 @@ func cmdPack(args []string) {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			hadErrors = true
 			continue
 		}
 
@@ -420,6 +422,7 @@ func cmdPurge(args []string) {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			hadErrors = true
 			continue
 		}
 
@@ -678,6 +681,7 @@ func cmdLastread(args []string) {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			hadErrors = true
 			continue
 		}
 
@@ -758,6 +762,7 @@ func cmdLink(args []string) {
 		b, err := jam.Open(meta.Path)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error opening %s: %v\n", meta.Path, err)
+			hadErrors = true
 			continue
 		}
 
@@ -767,6 +772,7 @@ func cmdLink(args []string) {
 		}
 		if linkErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error linking %s: %v\n", meta.Path, linkErr)
+			hadErrors = true
 			continue
 		}
 		totalUpdated += updated
