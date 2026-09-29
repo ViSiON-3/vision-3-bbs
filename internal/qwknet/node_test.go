@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -680,18 +681,44 @@ func TestInboundPackets_ExactNamesAndOrder(t *testing.T) {
 	}
 }
 
-func TestToss_RejectsPacketWithoutHubID(t *testing.T) {
+// A Synchronet hub sends no CONTROL.DAT to an account with "Include Control
+// Files" off, which is how DOVE-Net tells its nodes to set theirs.
+func TestToss_ImportsPacketWithoutControlFile(t *testing.T) {
 	e := newEnv(t)
 	n := e.node(t)
-	// MESSAGES.DAT only, no CONTROL.DAT: must not be imported blind.
-	pw := qwk.NewPacketWriter("VERT", "V", "S")
-	var full bytes.Buffer
-	if err := pw.WritePacket(&full); err != nil {
+	full := hubPacket(t, qwk.PacketMessage{Conference: 2001, Number: 1, From: "Digital Man", To: "All",
+		Subject: "no control file", DateTime: time.Now(), Body: "hello from the hub"})
+	path := filepath.Join(e.paths.InboundPath, "VERT.QWK")
+	if err := os.WriteFile(path, rezipWithout(t, full, "CONTROL.DAT"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stripped := rezipWithout(t, full.Bytes(), "CONTROL.DAT")
+	res := n.Toss()
+	if len(res.Errors) != 0 || res.Imported != 1 {
+		t.Fatalf("toss: %+v", res)
+	}
+	if c, _ := e.msgMgr.GetMessageCountForArea(1); c != 1 {
+		t.Errorf("area holds %d messages, want 1", c)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("tossed packet not removed")
+	}
+	if _, err := os.Stat(path + ".bad"); err == nil {
+		t.Error("packet without CONTROL.DAT set aside")
+	}
+}
+
+func TestToss_RejectsControlFileWithoutHubID(t *testing.T) {
+	e := newEnv(t)
+	n := e.node(t)
+	// A CONTROL.DAT that names nobody is a damaged packet, not a hub with
+	// control files off: it must not be imported blind.
+	pw := qwk.NewPacketWriter("", "V", "S")
+	var buf bytes.Buffer
+	if err := pw.WritePacket(&buf); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(e.paths.InboundPath, "VERT.QWK")
-	if err := os.WriteFile(path, stripped, 0o644); err != nil {
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	res := n.Toss()
@@ -700,6 +727,23 @@ func TestToss_RejectsPacketWithoutHubID(t *testing.T) {
 	}
 	if _, err := os.Stat(path + ".bad"); err != nil {
 		t.Error("packet without hub ID not set aside")
+	}
+}
+
+func TestFetchConferences_PacketWithoutControlFile(t *testing.T) {
+	e := newEnv(t)
+	pkt := rezipWithout(t, hubPacket(t), "CONTROL.DAT")
+	srv := newFakeFTP(t, "VISION3", "pw", map[string][]byte{"VERT.QWK": pkt})
+	host, port, _ := strings.Cut(srv.addr(), ":")
+	e.cfg.Host = host
+	e.cfg.Port = atoi(port)
+	n := e.node(t)
+	if confs, err := n.FetchConferences(context.Background()); !errors.Is(err, errNoControlFile) {
+		t.Fatalf("confs=%+v err=%v, want errNoControlFile", confs, err)
+	}
+	// The packet still holds mail, so it is kept for the next toss.
+	if len(n.inboundPackets()) != 1 {
+		t.Error("downloaded packet not kept in inbound")
 	}
 }
 
