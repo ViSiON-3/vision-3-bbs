@@ -184,6 +184,35 @@ func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 	return wrappedLines
 }
 
+// clipColumns cuts s to at most width on-screen columns for mode, keeping
+// every escape sequence (so colours still apply and reset) and dropping only
+// visible text. Columns are measured as columnWidth measures them, with the
+// encoding judged once on the whole of s.
+func clipColumns(s string, width int, mode ansi.OutputMode) string {
+	asUTF8 := utf8.ValidString(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	used := 0
+	for i := 0; i < len(s); {
+		if n := escapeLen(s, i); n > 0 {
+			b.WriteString(s[i : i+n])
+			i += n
+			continue
+		}
+		size := 1
+		if asUTF8 {
+			_, size = utf8.DecodeRuneInString(s[i:])
+		}
+		w := columnWidth(s[i:i+size], asUTF8, mode)
+		if used+w <= width {
+			b.WriteString(s[i : i+size])
+			used += w
+		}
+		i += size
+	}
+	return b.String()
+}
+
 // columnWidth is the on-screen width of escape-free text. Measure it the way
 // the writer will actually render it, or wrapping decides against a width the
 // terminal never sees.

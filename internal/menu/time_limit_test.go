@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -75,6 +76,53 @@ func TestTimeLimit_WarnsOnLightbarBottomRow(t *testing.T) {
 	}
 	if !strings.Contains(r.raw, "\x1b[u") {
 		t.Errorf("cursor not restored: %q", r.raw)
+	}
+}
+
+// A warning wider than the terminal is clipped a column short of its width,
+// colours kept, so it cannot wrap off the bottom row and scroll the screen.
+func TestTimeLimit_LightbarWarningClippedToWidth(t *testing.T) {
+	env, m := timeLimitEnv(t)
+	execcovStrings(env, func(s *config.StringsConfig) {
+		s.TimeLimitWarning = "|12W%d" + strings.Repeat("x", 100)
+	})
+	m.menu("BARM", MenuRecord{}, "BARM-SCREEN\r\n", CommandRecord{Keys: "A", Command: "LOGOFF"})
+	m.write("bar", "BARM.BAR", execcovBar)
+
+	r := execcovRun(env, execcovCall{user: env.caller, start: "BARM", input: "A", height: 25,
+		started: time.Now().Add(-57*time.Minute - 30*time.Second)})
+	_, after, ok := strings.Cut(r.raw, "\x1b[25;1H\x1b[2K")
+	if !ok {
+		t.Fatalf("no bottom-row warning in %q", r.raw)
+	}
+	line, _, _ := strings.Cut(after, "\x1b[u")
+	if got := visibleColumns(line, env.outputMode); got != 79 {
+		t.Errorf("warning is %d columns on an 80-column terminal, want 79: %q", got, line)
+	}
+	if !strings.HasPrefix(line, "\x1b[") {
+		t.Errorf("colour code lost: %q", line)
+	}
+}
+
+// clipColumns keeps escapes and counts columns the way the writer renders
+// them: display width in UTF-8 mode, one per rune in CP437 mode, one per byte
+// for text that is not UTF-8.
+func TestClipColumns(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		width    int
+		mode     ansi.OutputMode
+		want     string
+	}{
+		{"fits", "\x1b[31mabc\x1b[0m", 5, ansi.OutputModeUTF8, "\x1b[31mabc\x1b[0m"},
+		{"clipped, escapes kept", "\x1b[31mabcdef\x1b[0m", 3, ansi.OutputModeUTF8, "\x1b[31mabc\x1b[0m"},
+		{"wide rune does not split", "ab漢字", 3, ansi.OutputModeUTF8, "ab"},
+		{"wide rune in CP437 mode is one column", "ab漢字", 3, ansi.OutputModeCP437, "ab漢"},
+		{"CP437 bytes", "ab\xb0\xb1\xb2", 4, ansi.OutputModeCP437, "ab\xb0\xb1"},
+	} {
+		if got := clipColumns(tc.in, tc.width, tc.mode); got != tc.want {
+			t.Errorf("%s: clipColumns(%q, %d) = %q, want %q", tc.name, tc.in, tc.width, got, tc.want)
+		}
 	}
 }
 

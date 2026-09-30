@@ -431,10 +431,12 @@ func (e *MenuExecutor) warnTimeLeft(s ssh.Session, terminal *term.Terminal, outp
 }
 
 // warnTimeLeftOnRow draws the time-limit warning, if one is due, on screen
-// row row and puts the cursor back. Lightbar menus use it: their screens are
-// drawn at fixed positions, so the warning goes on the bottom row, with the
-// string's line breaks dropped so it cannot scroll the screen.
-func (e *MenuExecutor) warnTimeLeftOnRow(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, row int) {
+// row row of a width-column terminal and puts the cursor back. Lightbar menus
+// use it: their screens are drawn at fixed positions, so the warning goes on
+// the bottom row and must not scroll it. The string's line breaks are dropped
+// and it is clipped a column short of the width, since text reaching the last
+// column of the bottom row makes some terminals scroll too.
+func (e *MenuExecutor) warnTimeLeftOnRow(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, row, width int) {
 	msg, ok := e.timeLeftWarning(s)
 	if !ok {
 		return
@@ -443,7 +445,11 @@ func (e *MenuExecutor) warnTimeLeftOnRow(s ssh.Session, terminal *term.Terminal,
 	if row < 1 {
 		row = 1
 	}
-	out := fmt.Sprintf("\x1b[s\x1b[%d;1H\x1b[2K%s\x1b[0m\x1b[u", row, ansi.ReplacePipeCodes([]byte(msg)))
+	if width < 2 {
+		width = 80
+	}
+	msg = clipColumns(string(ansi.ReplacePipeCodes([]byte(msg))), width-1, outputMode)
+	out := fmt.Sprintf("\x1b[s\x1b[%d;1H\x1b[2K%s\x1b[0m\x1b[u", row, msg)
 	_ = terminalio.WriteProcessedBytes(terminal, []byte(out), outputMode) // best-effort notice
 }
 
