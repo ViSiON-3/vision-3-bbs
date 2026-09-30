@@ -227,6 +227,98 @@ func TestLoadConfig_InvalidJSON(t *testing.T) {
 	}
 }
 
+// writeArchiversJSON writes raw JSON as archivers.json in a temp dir and
+// returns the directory.
+func writeArchiversJSON(t *testing.T, raw string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "archivers.json"), []byte(raw), 0644); err != nil {
+		t.Fatalf("write archivers.json: %v", err)
+	}
+	return dir
+}
+
+func TestLoadConfig_EntriesDoNotInheritDefaults(t *testing.T) {
+	dir := writeArchiversJSON(t, `{"archivers": [
+		{"id": "tst", "name": "Test", "extension": ".tst", "enabled": true},
+		{"id": "zip", "name": "ZIP", "extension": ".zip", "native": true, "enabled": true}
+	]}`)
+
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadConfig error: %v", err)
+	}
+	if len(cfg.Archivers) != 2 {
+		t.Fatalf("loaded %d archivers, want 2", len(cfg.Archivers))
+	}
+
+	tst := cfg.Archivers[0]
+	if tst.ID != "tst" {
+		t.Fatalf("first archiver ID = %q, want tst", tst.ID)
+	}
+	if tst.Magic != "" {
+		t.Errorf("tst Magic = %q, want empty (not inherited from ZIP)", tst.Magic)
+	}
+	if tst.Native {
+		t.Error("tst Native = true, want false")
+	}
+	for name, cmd := range map[string]CommandDef{
+		"pack": tst.Pack, "unpack": tst.Unpack, "test": tst.Test,
+		"list": tst.List, "comment": tst.Comment, "addFile": tst.AddFile,
+	} {
+		if !cmd.IsEmpty() || len(cmd.Args) != 0 {
+			t.Errorf("tst %s = %+v, want empty (not inherited from ZIP)", name, cmd)
+		}
+	}
+
+	// The second entry sits where the default 7z archiver is; it must not
+	// pick up 7z's magic or commands.
+	zip := cfg.Archivers[1]
+	if zip.Magic != "" || !zip.Unpack.IsEmpty() || len(zip.Extensions) != 0 {
+		t.Errorf("zip entry inherited default fields: %+v", zip)
+	}
+}
+
+func TestLoadConfig_NoArchiversFallsBackToDefaults(t *testing.T) {
+	want := len(DefaultConfig().Archivers)
+	for name, raw := range map[string]string{
+		"empty object": `{}`,
+		"empty list":   `{"archivers": []}`,
+		"null list":    `{"archivers": null}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := LoadConfig(writeArchiversJSON(t, raw))
+			if err != nil {
+				t.Fatalf("LoadConfig error: %v", err)
+			}
+			if len(cfg.Archivers) != want {
+				t.Errorf("loaded %d archivers, want the %d defaults", len(cfg.Archivers), want)
+			}
+		})
+	}
+}
+
+// TestLoadConfig_ShippedTemplate checks that the stock archivers.json is
+// complete on its own and loads to exactly the built-in definitions, so
+// installs that copied it do not depend on fields inherited from defaults.
+func TestLoadConfig_ShippedTemplate(t *testing.T) {
+	cfg, err := LoadConfig(filepath.Join("..", "..", "templates", "configs"))
+	if err != nil {
+		t.Fatalf("LoadConfig error: %v", err)
+	}
+	got, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal loaded config: %v", err)
+	}
+	want, err := json.Marshal(DefaultConfig())
+	if err != nil {
+		t.Fatalf("marshal default config: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("shipped template differs from DefaultConfig:\n got %s\nwant %s", got, want)
+	}
+}
+
 func TestCommandDefIsEmpty(t *testing.T) {
 	empty := CommandDef{}
 	if !empty.IsEmpty() {

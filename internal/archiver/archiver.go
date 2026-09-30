@@ -249,24 +249,33 @@ func DefaultConfig() Config {
 }
 
 // LoadConfig loads archiver definitions from archivers.json in the given
-// config directory. Returns defaults if the file doesn't exist.
+// config directory. Returns defaults if the file doesn't exist or defines
+// no archivers. Entries in the file are taken as written: fields they omit
+// stay empty rather than being filled in from the built-in definitions.
 func LoadConfig(configPath string) (Config, error) {
 	filePath := filepath.Join(configPath, "archivers.json")
 	slog.Info("loading archivers config", "path", filePath)
-
-	cfg := DefaultConfig()
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			slog.Info("archivers.json not found; using defaults", "path", filePath)
-			return cfg, nil
+			return DefaultConfig(), nil
 		}
-		return cfg, fmt.Errorf("failed to read archivers config %s: %w", filePath, err)
+		return DefaultConfig(), fmt.Errorf("failed to read archivers config %s: %w", filePath, err)
 	}
 
+	// Decode into a zero Config. Decoding over DefaultConfig() would reuse
+	// the default slice elements, so entry N of the file would inherit any
+	// omitted fields (magic, commands) from default archiver N.
+	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("failed to parse archivers config %s: %w", filePath, err)
+	}
+
+	if len(cfg.Archivers) == 0 {
+		slog.Warn("archivers.json defines no archivers; using defaults", "path", filePath)
+		return DefaultConfig(), nil
 	}
 
 	slog.Info("loaded archiver definitions", "count", len(cfg.Archivers), "path", filePath)
