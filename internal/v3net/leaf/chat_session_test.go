@@ -209,6 +209,47 @@ func TestChatSession_ReceivesHubEventsOverSSE(t *testing.T) {
 	}
 }
 
+// TestChatSession_JoinLeaveWhileStreaming changes rooms while the leaf's SSE
+// loop is dispatching the resulting chat events. Under -race it catches
+// dispatch reading currentRoom without the session lock (#517).
+func TestChatSession_JoinLeaveWhileStreaming(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	aliceLeaf := subscribedLeaf(t, ts, "alicebbs")
+	bobLeaf := subscribedLeaf(t, ts, "bobbbs")
+	watchEvents(t, aliceLeaf)
+
+	alice := aliceLeaf.NewChatSession("alice")
+	defer alice.Close()
+	bob := bobLeaf.NewChatSession("bob")
+	defer bob.Close()
+
+	// Bob's joins and leaves keep chat events flowing to alice's stream
+	// while she changes room herself.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 20; i++ {
+			if _, _, err := bob.Join("lobby"); err != nil {
+				t.Errorf("bob join: %v", err)
+				return
+			}
+			if err := bob.Leave("lobby"); err != nil {
+				t.Errorf("bob leave: %v", err)
+				return
+			}
+		}
+	}()
+	for i := 0; i < 20; i++ {
+		if _, _, err := alice.Join("lobby"); err != nil {
+			t.Fatalf("alice join: %v", err)
+		}
+		if err := alice.Leave("lobby"); err != nil {
+			t.Fatalf("alice leave: %v", err)
+		}
+	}
+	<-done
+}
+
 func TestChatSession_HubErrors(t *testing.T) {
 	t.Run("join rejected by hub", func(t *testing.T) {
 		l, _ := setupLeaf(t, cannedHub(t, 500, `{"error":"boom"}`).URL, &mockJAMWriter{})
@@ -331,6 +372,24 @@ func TestDispatch_JoinLeaveTopicUpdateSession(t *testing.T) {
 	noEvent(t, other, "session in another room")
 	if users := other.Users(); len(users) != 1 {
 		t.Errorf("other room's users changed: %v", users)
+	}
+}
+
+// TestDispatch_JoinOfListedHandleNotDuplicated covers the hub's broadcast of
+// a join arriving after Join has already stored a user list that names the
+// joiner (#519).
+func TestDispatch_JoinOfListedHandleNotDuplicated(t *testing.T) {
+	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+	alice := newRoomSession(l, "alice", "lobby", "bob", "alice")
+
+	l.chatSessions.dispatch(chatEvent(t, protocol.EventChatJoin, protocol.ChatJoinPayload{Room: "lobby", Handle: "alice", BBS: "A"}))
+
+	// The event is still delivered, so the UI can announce the join.
+	if ev := <-alice.events; ev.Type != chat.TypeJoin || ev.Join.Handle != "alice" {
+		t.Errorf("join event = %+v", ev)
+	}
+	if users := alice.Users(); len(users) != 2 || users[0] != "bob" || users[1] != "alice" {
+		t.Errorf("users after own join event = %v, want [bob alice]", users)
 	}
 }
 

@@ -29,6 +29,10 @@ type Hub struct {
 	areaSubscriptions *AreaSubscriptionStore
 	chatStore         *ChatHistoryStore
 	chatRooms         *chatRooms
+
+	// closeOnce makes Close idempotent; closeErr is the first call's result.
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // New creates a new Hub with the given configuration.
@@ -137,8 +141,15 @@ func (h *Hub) Start(ctx context.Context) error {
 	return err
 }
 
-// Close gracefully shuts down the hub and releases resources.
+// Close gracefully shuts down the hub and releases resources. Shutdown paths
+// often run more than once (a signal handler plus deferred cleanup), so only
+// the first call does the work; later calls return its result.
 func (h *Hub) Close() error {
+	h.closeOnce.Do(func() { h.closeErr = h.close() })
+	return h.closeErr
+}
+
+func (h *Hub) close() error {
 	h.chatLimiter.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

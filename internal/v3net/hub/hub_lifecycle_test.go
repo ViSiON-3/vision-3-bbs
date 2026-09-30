@@ -192,6 +192,24 @@ func TestAuth_RejectsBadCredentials(t *testing.T) {
 	}
 }
 
+// TestHub_CloseTwice checks that a second Close, as a signal handler plus a
+// deferred cleanup would make, neither panics nor reports an error (#518).
+func TestHub_CloseTwice(t *testing.T) {
+	h, _ := setupTestHub(t) // its cleanup closes the hub a third time
+	if err := h.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := h.Close(); err != nil {
+		t.Errorf("second Close: %v", err)
+	}
+}
+
+func TestRateLimiter_StopTwice(t *testing.T) {
+	rl := newRateLimiter(time.Minute)
+	rl.Stop()
+	rl.Stop()
+}
+
 func TestRateLimiter_EvictDropsOnlyStaleKeys(t *testing.T) {
 	rl := newRateLimiter(time.Minute) // ttl is 10 minutes
 	defer rl.Stop()

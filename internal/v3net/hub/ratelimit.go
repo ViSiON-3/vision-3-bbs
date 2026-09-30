@@ -14,6 +14,7 @@ type rateLimiter struct {
 	ttl      time.Duration
 	last     map[string]time.Time
 	done     chan struct{}
+	stopOnce sync.Once
 }
 
 func newRateLimiter(interval time.Duration) *rateLimiter {
@@ -43,9 +44,10 @@ func (rl *rateLimiter) Allow(key string) bool {
 	return true
 }
 
-// Stop shuts down the background cleanup goroutine.
+// Stop shuts down the background cleanup goroutine. It is safe to call more
+// than once.
 func (rl *rateLimiter) Stop() {
-	close(rl.done)
+	rl.stopOnce.Do(func() { close(rl.done) })
 }
 
 func (rl *rateLimiter) cleanupLoop() {

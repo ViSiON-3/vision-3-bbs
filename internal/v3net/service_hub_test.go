@@ -471,6 +471,11 @@ func TestService_StartRunsHubAndLeaf(t *testing.T) {
 				case ev := <-events:
 					var p protocol.LogonPayload
 					if ev.Type == eventType && json.Unmarshal(ev.Data, &p) == nil && p.Handle == "alice" {
+						// The hub's own row carries the configured host, not
+						// the placeholder hubAutoInit registered (#521).
+						if p.Node != "svc.example.net" {
+							t.Errorf("%s event node = %q, want svc.example.net", eventType, p.Node)
+						}
 						return
 					}
 				case <-retry:
@@ -485,6 +490,93 @@ func TestService_StartRunsHubAndLeaf(t *testing.T) {
 	awaitPresence(protocol.EventLogoff, svc.SendLogoff)
 
 	stop()
+}
+
+// TestService_HubSelfProfileRepairsExistingRow covers a hub database from
+// before #521, where the hub's own row says "hub" with an empty host: the
+// configured name and host replace it on start, and only that row changes.
+func TestService_HubSelfProfileRepairsExistingRow(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.V3NetConfig{
+		Enabled:      true,
+		KeystorePath: filepath.Join(dir, "v3net.key"),
+		DedupDBPath:  filepath.Join(dir, "dedup.sqlite"),
+		Hub: config.V3NetHubConfig{
+			Enabled:     true,
+			Host:        "127.0.0.1",
+			DataDir:     filepath.Join(dir, "hub"),
+			AutoApprove: true,
+			Networks:    []config.V3NetHubNetwork{{Name: "testnet"}},
+		},
+	}
+	open := func() *Service {
+		t.Helper()
+		svc, err := New(cfg)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		return svc
+	}
+
+	// First run: the old self-registration, plus another node on the network.
+	svc := open()
+	ts := httptest.NewServer(svc.Hub().Mux())
+	other := newRemoteNode(t, ts.URL, "other", nil)
+	ts.Close()
+	self := svc.Hub().Subscribers().Get(svc.NodeID(), "testnet")
+	if self == nil || self.BBSName != "hub" || self.BBSHost != "" {
+		t.Fatalf("self row before update = %+v, want the hub placeholder", self)
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// Restart with a configured name: New alone leaves the old row as it is.
+	svc = open()
+	if got := svc.Hub().Subscribers().Get(svc.NodeID(), "testnet").BBSName; got != "hub" {
+		t.Fatalf("self row name after reopen = %q, want hub", got)
+	}
+	svc.BBSName = "Real BBS"
+	svc.BBSHost = "bbs.example.net"
+	svc.updateHubSelfProfile()
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// The change is persisted, and the other node's row is untouched.
+	svc = open()
+	defer svc.Close()
+	if s := svc.Hub().Subscribers().Get(svc.NodeID(), "testnet"); s.BBSName != "Real BBS" || s.BBSHost != "bbs.example.net" || s.Status != "active" {
+		t.Errorf("self row after restart = %+v, want Real BBS at bbs.example.net, active", s)
+	}
+	if s := svc.Hub().Subscribers().Get(other.nodeID, "testnet"); s == nil || s.BBSName != "other" || s.BBSHost != "other.example.net" {
+		t.Errorf("other node's row = %+v, want it unchanged", s)
+	}
+}
+
+func TestService_HubSelfProfileSkippedWithoutName(t *testing.T) {
+	svc, _ := newHubService(t, 0)
+	svc.updateHubSelfProfile()
+	if s := svc.Hub().Subscribers().Get(svc.NodeID(), "testnet"); s.BBSName != "hub" || s.BBSHost != "" {
+		t.Errorf("self row with nothing configured = %+v, want the placeholder kept", s)
+	}
+	svc.BBSHost = "only-host.example.net"
+	svc.updateHubSelfProfile()
+	if s := svc.Hub().Subscribers().Get(svc.NodeID(), "testnet"); s.BBSName != "hub" || s.BBSHost != "only-host.example.net" {
+		t.Errorf("self row with only a host = %+v", s)
+	}
+}
+
+// TestService_CloseTwice checks that closing a hub-enabled service twice does
+// not panic (#518); newHubService's cleanup closes it a third time.
+func TestService_CloseTwice(t *testing.T) {
+	svc, _ := newHubService(t, 0)
+	if err := svc.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := svc.Close(); err != nil {
+		t.Errorf("second Close: %v", err)
+	}
 }
 
 func TestNew_Errors(t *testing.T) {
