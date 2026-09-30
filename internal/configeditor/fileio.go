@@ -205,6 +205,27 @@ func saveFTNConfig(configPath string, cfg config.FTNConfig) error {
 	return nil
 }
 
+// savedFTNOwnAddresses returns each network's own address as ftn.json holds
+// it on disk, keyed by network name. It reads the file directly rather than
+// through config.LoadFTNConfig, which logs every network and reassigns shared
+// outbounds — neither belongs in a save. A missing or unreadable file gives an
+// empty map: there is then no earlier address to compare with.
+func savedFTNOwnAddresses(configPath string) map[string]string {
+	addrs := make(map[string]string)
+	data, err := os.ReadFile(filepath.Join(configPath, "ftn.json"))
+	if err != nil {
+		return addrs
+	}
+	var saved config.FTNConfig
+	if err := json.Unmarshal(data, &saved); err != nil {
+		return addrs
+	}
+	for name, net := range saved.Networks {
+		addrs[name] = net.OwnAddress
+	}
+	return addrs
+}
+
 // saveArchivers writes archivers config back to disk.
 func saveArchivers(configPath string, cfg archiver.Config) error {
 	filePath := filepath.Join(configPath, "archivers.json")

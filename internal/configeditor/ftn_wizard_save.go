@@ -210,6 +210,12 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		m.message += binkdWarning
 		return m, nil
 	}
+	// The save syncs binkd.conf as well, and reports a failure only in the
+	// status message that the result below replaces. When the update above
+	// failed too it is the same fault, already reported.
+	if binkdWarning == "" && m.binkdSyncErr != nil {
+		binkdWarning = fmt.Sprintf(" Warning: binkd.conf sync failed: %v — fix it before restarting.", m.binkdSyncErr)
+	}
 
 	selectedCount := w.selectedAreaCount()
 	if editing {

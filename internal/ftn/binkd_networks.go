@@ -89,6 +89,15 @@ func SyncBinkdNetworks(confPath, bbsRoot string, ftnCfg config.FTNConfig) error 
 			fmt.Fprintf(&out, "address %s\n", akaLine)
 			have["address "+strings.ToLower(akaLine)] = true
 			wrote = true
+		} else if !have["address "+strings.ToLower(akaLine)] {
+			// Left alone, because it may be an AKA the sysop chose — but it
+			// is also what an own address changed outside the editor looks
+			// like, and that fails silently: the uplink holds mail for the
+			// address in ftn.json while binkd announces a different one.
+			slog.Warn("binkd.conf declares a different address for this ftn network than own_address; "+
+				"binkd presents the binkd.conf one, so the uplink never offers mail it holds for own_address — "+
+				"correct the address line in binkd.conf unless the difference is deliberate",
+				"network", name, "own_address", netCfg.OwnAddress, "binkd_address", strings.Join(declaredAddresses(have, domain), ", "))
 		}
 		if wrote {
 			slog.Info("declared ftn network in binkd.conf", "network", name,
@@ -123,9 +132,14 @@ func declaredDirectives(content string) map[string]bool {
 		}
 		// binkd reads its keywords case-insensitively too, so a hand-written
 		// "DOMAIN" line is as much a declaration as "domain".
-		keyword := strings.ToLower(fields[0])
-		if keyword == "domain" || keyword == "address" {
-			have[keyword+" "+strings.ToLower(fields[1])] = true
+		switch strings.ToLower(fields[0]) {
+		case "domain":
+			have["domain "+strings.ToLower(fields[1])] = true
+		case "address":
+			// One line may carry several addresses.
+			for _, f := range fields[1:] {
+				have["address "+strings.ToLower(f)] = true
+			}
 		}
 	}
 	return have
@@ -138,11 +152,18 @@ func declaredDirectives(content string) map[string]bool {
 // treats every address line as one of ours, so an extra one changes which AKA
 // it presents.
 func ourAddressDeclared(have map[string]bool, domain string) bool {
+	return len(declaredAddresses(have, domain)) > 0
+}
+
+// declaredAddresses returns the addresses declared in a domain, sorted.
+func declaredAddresses(have map[string]bool, domain string) []string {
 	suffix := "@" + domain
+	var addrs []string
 	for k := range have {
 		if rest, ok := strings.CutPrefix(k, "address "); ok && strings.HasSuffix(rest, suffix) {
-			return true
+			addrs = append(addrs, rest)
 		}
 	}
-	return false
+	sort.Strings(addrs)
+	return addrs
 }

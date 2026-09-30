@@ -145,6 +145,16 @@ type Model struct {
 	configPath string
 	dirty      bool
 
+	// Own addresses binkd.conf may still declare, keyed by network: changes
+	// saved to ftn.json that have not been applied to binkd.conf yet. See
+	// saveAll.
+	staleBinkdAddrs map[string]string
+
+	// Why the last save could not sync binkd.conf, nil if it could. saveAll
+	// puts this in its status message; a caller that replaces the message
+	// with its own result has to carry the warning across.
+	binkdSyncErr error
+
 	// Top menu state
 	topCursor int
 	topItems  []topMenuItem

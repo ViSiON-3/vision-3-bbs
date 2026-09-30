@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
@@ -27,6 +28,7 @@ func (m *Model) saveAll() bool {
 	if !m.dirty {
 		return true
 	}
+	m.binkdSyncErr = nil
 
 	if err := saveServerConfig(m.configPath, m.configs.Server); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
@@ -48,6 +50,17 @@ func (m *Model) saveAll() bool {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return false
 	}
+	// Read before ftn.json is overwritten: the addresses binkd.conf was last
+	// written from are what identify its stale lines further down.
+	prevOwnAddrs := savedFTNOwnAddresses(m.configPath)
+	// A change that an earlier save wrote to ftn.json without it reaching
+	// binkd.conf — the sync failed, or the save stopped partway — has left
+	// the disk holding the new address, so the old one is carried over from
+	// that save until it has been applied.
+	for netKey, addr := range m.staleBinkdAddrs {
+		prevOwnAddrs[netKey] = addr
+	}
+	m.staleBinkdAddrs = changedOwnAddresses(prevOwnAddrs, m.configs.FTN.Networks)
 	// FTN before events: the FTN wizard enables a hub-poll event for the
 	// network it saves, so if the sequence fails midway the poll must not be
 	// persisted for a network that never made it to ftn.json.
@@ -106,6 +119,20 @@ func (m *Model) saveAll() bool {
 		if binkdSyncErr == nil {
 			binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
 		}
+		// An own address changed since the last save is rewritten where
+		// binkd.conf still declares the old one; no later sync touches an
+		// address line that already exists. Sorted so a failure is reported
+		// for the same network each time.
+		for _, netKey := range m.ftnNetworkKeys() {
+			if binkdSyncErr != nil {
+				break
+			}
+			binkdSyncErr = ftn.UpdateBinkdOwnAddress(binkdPath, netKey,
+				prevOwnAddrs[netKey], m.configs.FTN.Networks[netKey].OwnAddress)
+			if binkdSyncErr == nil {
+				delete(m.staleBinkdAddrs, netKey)
+			}
+		}
 		// A network added here or by "helper ftnsetup" has no domain or
 		// address line of its own — only the wizard wrote those — so binkd
 		// refused its sessions with "unknown domain". Declare what is missing.
@@ -153,12 +180,27 @@ func (m *Model) saveAll() bool {
 		slog.Warn("failed to signal config reload", "error", err)
 	}
 
+	m.binkdSyncErr = binkdSyncErr
 	if binkdSyncErr != nil {
 		m.message = fmt.Sprintf("Saved (warning: binkd.conf sync failed: %v)", binkdSyncErr)
 	} else {
 		m.message = "All configurations saved successfully"
 	}
 	return true
+}
+
+// changedOwnAddresses returns the previous own address of every network whose
+// address now differs from it, keyed by network. A network with no previous
+// address has nothing in binkd.conf to replace and is left out.
+func changedOwnAddresses(prev map[string]string, networks map[string]config.FTNNetworkConfig) map[string]string {
+	changed := make(map[string]string)
+	for netKey, nc := range networks {
+		old := strings.TrimSpace(prev[netKey])
+		if old != "" && !strings.EqualFold(old, strings.TrimSpace(nc.OwnAddress)) {
+			changed[netKey] = old
+		}
+	}
+	return changed
 }
 
 // --- Record count and helpers ---
