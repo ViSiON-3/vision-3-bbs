@@ -150,6 +150,11 @@ type Model struct {
 	// saveAll.
 	staleBinkdAddrs map[string]string
 
+	// Why the last save could not sync binkd.conf, nil if it could. saveAll
+	// puts this in its status message; a caller that replaces the message
+	// with its own result has to carry the warning across.
+	binkdSyncErr error
+
 	// Top menu state
 	topCursor int
 	topItems  []topMenuItem

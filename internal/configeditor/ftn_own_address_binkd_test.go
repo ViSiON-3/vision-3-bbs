@@ -3,6 +3,7 @@ package configeditor
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -178,5 +179,41 @@ func TestSaveAllRetriesBinkdAddressAfterFailedSync(t *testing.T) {
 	}
 	if len(m.staleBinkdAddrs) != 0 {
 		t.Errorf("nothing should be left to retry, got %v", m.staleBinkdAddrs)
+	}
+}
+
+// The wizard's own binkd.conf update can succeed — the hub's line is already
+// right, so nothing is written — and the save's sync still fail. The wizard
+// replaces the save's status message with its result, and used to drop the
+// warning with it: "Restart BBS to activate", for a binkd.conf left stale.
+func TestConfirmFTNWizardKeepsSaveSyncWarning(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory that refuses writes")
+	}
+	m := configuredModel()
+	binkdPath, conf := boardWithBinkdConf(t, &m, fsxnetBinkdConf)
+
+	// binkd.conf stays readable, but its replacement cannot be written.
+	dir := filepath.Dir(binkdPath)
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	m, _ = m.startFTNWizardEdit("fsxnet")
+	m.ftnWizard.ownAddress = "21:4/159"
+	m, _ = m.confirmFTNWizard()
+
+	if strings.HasPrefix(m.message, "SAVE ERROR") {
+		t.Fatalf("config save failed, so this did not exercise the success path: %q", m.message)
+	}
+	if !strings.Contains(m.message, "updated") {
+		t.Errorf("message = %q, want the success result retained", m.message)
+	}
+	if !strings.Contains(m.message, "binkd.conf sync failed") {
+		t.Errorf("message = %q, want the save's binkd warning kept", m.message)
+	}
+	if got, err := os.ReadFile(binkdPath); err != nil || string(got) != conf {
+		t.Errorf("binkd.conf was meant to be left stale (err %v):\n%s", err, got)
 	}
 }

@@ -28,6 +28,7 @@ func (m *Model) saveAll() bool {
 	if !m.dirty {
 		return true
 	}
+	m.binkdSyncErr = nil
 
 	if err := saveServerConfig(m.configPath, m.configs.Server); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
@@ -179,6 +180,7 @@ func (m *Model) saveAll() bool {
 		slog.Warn("failed to signal config reload", "error", err)
 	}
 
+	m.binkdSyncErr = binkdSyncErr
 	if binkdSyncErr != nil {
 		m.message = fmt.Sprintf("Saved (warning: binkd.conf sync failed: %v)", binkdSyncErr)
 	} else {
