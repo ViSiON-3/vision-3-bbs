@@ -146,7 +146,7 @@ func (e *MenuExecutor) runUploadFiles(
 			return protoErr
 		}
 		slog.Error("protocol selection error", "node", nodeNumber, "error", protoErr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01"+protocolSelectionErrorText(protoErr)+"|07\r\n")), outputMode)
 		uiPause(2 * time.Second)
 		return nil
 	}

@@ -99,7 +99,8 @@ func TestBatchDownloadCancelAtProtocolKeepsBatch(t *testing.T) {
 }
 
 // TestBatchDownloadNoProtocolsKeepsBatch pins that with no protocol usable
-// on the connection the download is abandoned and the batch left intact.
+// on the connection the download is abandoned, the caller is told why, and
+// the batch is left intact.
 func TestBatchDownloadNoProtocolsKeepsBatch(t *testing.T) {
 	env := newMenuEnv(t)
 	env.sysop.TaggedFileIDs = addDownloadRecords(t, env, "GAME.ZIP")
@@ -108,6 +109,9 @@ func TestBatchDownloadNoProtocolsKeepsBatch(t *testing.T) {
 	r := env.runCmd("BATCHDOWNLOAD", env.sysop, "", "\r")
 	if r.err != nil || len(env.sysop.TaggedFileIDs) != 1 {
 		t.Errorf("err=%v tags=%v, want the batch kept", r.err, env.sysop.TaggedFileIDs)
+	}
+	if !r.has("No transfer protocols configured") {
+		t.Errorf("no-protocols message not shown:\n%s", r.text())
 	}
 }
 

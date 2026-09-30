@@ -197,7 +197,7 @@ func TestDoorcovQWKDownloadNotSent(t *testing.T) {
 		{"cancel at the protocol menu", "\rQ\r", nil, "Transfer Protocols:", "Sending", false},
 		{"disconnect at the protocol menu", "\r", nil, "Transfer Protocols:", "Sending", true},
 		{"no protocols configured", "\r", func(_ *testing.T, env *menuEnv) { env.e.SetProtocols(nil) },
-			qwkNoProtocolsMsg, "Sending", false},
+			protocolSelectionErrorText(errNoTransferProtocols), "Sending", false},
 		{"transfer program missing", "\r\r", func(_ *testing.T, env *menuEnv) {
 			env.e.SetProtocols([]transfer.ProtocolConfig{{Key: "T", Name: "Testmodem", SendCmd: "/nonexistent/sz", Default: true}})
 		}, "Transfer program not found!", "sent successfully", false},
@@ -467,7 +467,7 @@ func TestDoorcovQWKUploadProtocolPrompt(t *testing.T) {
 
 	env.e.SetProtocols(nil)
 	r = env.runCmd("QWKUPLOAD", env.sysop, "", "\r")
-	if r.user != env.sysop || r.next != "" || r.has("Send your") || !r.has(qwkNoProtocolsMsg) {
+	if r.user != env.sysop || r.next != "" || r.has("Send your") || !r.has(protocolSelectionErrorText(errNoTransferProtocols)) {
 		t.Errorf("no protocols: user=%v next=%q output:\n%s", r.user, r.next, r.text())
 	}
 }
