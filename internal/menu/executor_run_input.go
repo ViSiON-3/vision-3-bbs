@@ -39,6 +39,8 @@ func (st *runLoopState) runLightbarInput(options []LightbarOption, cursorHidden 
 	// triggered from this menu (e.g. COMPOSEMSG). This prevents the
 	// orphaned goroutine from consuming the first keystroke after the
 	// editor exits, which caused the "double key press" bug.
+	e.warnTimeLeftOnRow(s, terminal, outputMode, termHeight)
+
 	lightbarResult := "" // Use a local variable for the result
 	inputLoop := true
 	selectedIndex := 0

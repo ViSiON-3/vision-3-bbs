@@ -10,22 +10,22 @@ import (
 )
 
 // timeLimitEnv is execcovRunEnv with the time limit strings pinned to markers.
-func timeLimitEnv(t *testing.T) *menuEnv {
+func timeLimitEnv(t *testing.T) (*menuEnv, *execcovMenus) {
 	t.Helper()
-	env, _ := execcovRunEnv(t)
+	env, m := execcovRunEnv(t)
 	execcovStrings(env, func(s *config.StringsConfig) {
 		s.TimeLimitExpired = "\r\nTIME-UP\r\n"
 		s.TimeLimitWarning = "\r\nWARN=%d\r\n"
 		s.IdleTimeout = "\r\nIDLE\r\n"
 	})
-	return env
+	return env, m
 }
 
 // A caller whose time has run out is logged off before the next menu is drawn.
 // A sysop with the same stored limit is not, since CoSysOps and above have no
 // time limit.
 func TestTimeLimit_ExpiredLogsOffAtMenu(t *testing.T) {
-	env := timeLimitEnv(t)
+	env, _ := timeLimitEnv(t)
 	started := time.Now().Add(-2 * time.Hour)
 
 	r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "Q\r", started: started})
@@ -42,7 +42,7 @@ func TestTimeLimit_ExpiredLogsOffAtMenu(t *testing.T) {
 // In the last minutes of their time a caller is warned at each menu prompt,
 // with part of a minute counted as a whole one. Earlier they are not.
 func TestTimeLimit_WarnsNearTheEnd(t *testing.T) {
-	env := timeLimitEnv(t)
+	env, _ := timeLimitEnv(t)
 
 	r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "Q\r",
 		started: time.Now().Add(-57*time.Minute - 30*time.Second)})
@@ -57,10 +57,31 @@ func TestTimeLimit_WarnsNearTheEnd(t *testing.T) {
 	}
 }
 
+// A lightbar menu shows the warning on the bottom row, with its line breaks
+// dropped so the fixed-position screen does not scroll, and puts the cursor
+// back afterwards.
+func TestTimeLimit_WarnsOnLightbarBottomRow(t *testing.T) {
+	env, m := timeLimitEnv(t)
+	m.menu("BARM", MenuRecord{}, "BARM-SCREEN\r\n", CommandRecord{Keys: "A", Command: "LOGOFF"})
+	m.write("bar", "BARM.BAR", execcovBar)
+
+	r := execcovRun(env, execcovCall{user: env.caller, start: "BARM", input: "A", height: 25,
+		started: time.Now().Add(-57*time.Minute - 30*time.Second)})
+	if want := "\x1b[s\x1b[25;1H\x1b[2KWARN=3"; !strings.Contains(r.raw, want) {
+		t.Errorf("no bottom-row warning in %q", r.raw)
+	}
+	if strings.Contains(r.raw, "\r\nWARN=") || strings.Contains(r.raw, "WARN=3\r\n") {
+		t.Errorf("warning kept its line breaks: %q", r.raw)
+	}
+	if !strings.Contains(r.raw, "\x1b[u") {
+		t.Errorf("cursor not restored: %q", r.raw)
+	}
+}
+
 // An input loop reports an expired time limit as an idle timeout, so the
 // session's deadline decides which notice the caller sees.
 func TestTimeLimit_SessionTimeoutNotice(t *testing.T) {
-	env := timeLimitEnv(t)
+	env, _ := timeLimitEnv(t)
 	for _, tc := range []struct {
 		name     string
 		deadline time.Time

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // timeNow is overridable in tests; defaults to time.Now.
@@ -32,6 +34,11 @@ type ServerConfig struct {
 	PendingReloads func() []string
 	// ScheduledEvents reports the event scheduler's entries; may be nil.
 	ScheduledEvents func() []ScheduledEvent
+	// TimeLimit reports u's effective time limit in minutes, 0 for none, so
+	// the time left shown matches what the BBS enforces (CoSysOps and above
+	// have no limit whatever their record says). Nil means u.TimeLimit as
+	// stored.
+	TimeLimit func(u *user.User) int
 	// Kick disconnects the caller on nodeID whose session started at
 	// connectedAt (a zero time skips that check). Nil means the server
 	// rejects CommandKick as unsupported.
@@ -125,7 +132,7 @@ func (s *Server) tickLocked(now time.Time) {
 	if s.cfg.PendingReloads != nil {
 		pending = s.cfg.PendingReloads()
 	}
-	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, counters)
+	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, counters, s.cfg.TimeLimit)
 	snap.Schema = SnapshotSchema
 	snap.PendingReloads = pending
 	if s.cfg.MaxNodes != nil {

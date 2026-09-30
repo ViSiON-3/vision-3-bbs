@@ -1953,6 +1953,7 @@ func main() {
 		Kick: func(nodeID int, connectedAt time.Time) error {
 			return kickNode(sessionRegistry, nodeID, connectedAt)
 		},
+		TimeLimit: menuExecutor.TimeLimit,
 	})
 	go adminServer.Run(context.Background())
 

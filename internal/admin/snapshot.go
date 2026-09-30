@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // RegistrySource is the read-only view of active sessions the builder needs.
@@ -15,8 +16,12 @@ type RegistrySource interface {
 // BuildSnapshot copies live session state into a serialization-safe snapshot.
 // It reads each session under its RLock. counters supplies the header values
 // the registry cannot derive (-1 where unavailable); ActiveNodes is always
-// overwritten with the live count.
-func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Time, counters Counters) *SystemSnapshot {
+// overwritten with the live count. timeLimit gives a caller's effective time
+// limit in minutes (see ServerConfig.TimeLimit); nil uses the stored one.
+func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Time, counters Counters, timeLimit func(*user.User) int) *SystemSnapshot {
+	if timeLimit == nil {
+		timeLimit = func(u *user.User) int { return u.TimeLimit }
+	}
 	sessions := reg.ListActive()
 	nodes := make([]NodeState, 0, len(sessions))
 	for _, s := range sessions {
@@ -41,9 +46,11 @@ func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Ti
 			if s.Activity == "" && s.CurrentMenu != "" {
 				ns.Status = StatusInMenu
 			}
-			if s.User.TimeLimit > 0 && !s.StartTime.IsZero() {
+			if limit := timeLimit(s.User); limit <= 0 {
+				ns.TimeUnlimited = true
+			} else if !s.StartTime.IsZero() {
 				used := int(now.Sub(s.StartTime).Minutes())
-				left := s.User.TimeLimit - used
+				left := limit - used
 				if left < 0 {
 					left = 0
 				}
