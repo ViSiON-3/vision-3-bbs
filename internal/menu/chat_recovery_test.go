@@ -161,17 +161,25 @@ func TestChatJoinFailureRejoinFails(t *testing.T) {
 	joins := 0
 	net.joinErr = func(string) error {
 		joins++
-		if joins > 1 {
+		// The initial join works; the /join and the rejoin of lobby fail;
+		// the next /join works again.
+		if joins == 2 || joins == 3 {
 			return errors.New("hub gone")
 		}
 		return nil
 	}
 
-	r := chatcovChat(env, env.caller, "\r\r/join vault\rstill here\r/q\r")
-	if !chatcovHas(r, "Could not join room: hub gone", "Could not rejoin #lobby: hub gone") {
-		t.Errorf("failed rejoin not reported:\n%s", chatcovText(r))
+	r := chatcovChat(env, env.caller, "\r\r/join vault\rstill here\r/topic lost\r/join den\rhi\r/q\r")
+	if !chatcovHas(r, "Could not join room: hub gone", "Could not rejoin #lobby: hub gone",
+		"You are not in a room. Use /JOIN <room> to join one.", "*** Joined #den") {
+		t.Errorf("failed rejoin not reported, or no-room state not shown:\n%s", chatcovText(r))
 	}
-	chatcovEqual(t, "posts", net.chatted()[0].log("post"), []string{"lobby: still here"})
+	svc := net.chatted()[0]
+	// Nothing goes to lobby once the caller has left it, and the next /join
+	// does not try to leave a room they are not in.
+	chatcovEqual(t, "posts", svc.log("post"), []string{"den: hi"})
+	chatcovEqual(t, "topics", svc.log("topic"), nil)
+	chatcovEqual(t, "leaves", svc.log("leave"), []string{"lobby", "den"})
 }
 
 // A room name the service would refuse is rejected before the caller leaves

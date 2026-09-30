@@ -209,6 +209,10 @@ func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, termin
 	return trimmed
 }
 
+// chatNoRoomMsg is shown when the caller is in no room, after a /JOIN whose
+// fallback rejoin of the previous room also failed.
+const chatNoRoomMsg = "You are not in a room. Use /JOIN <room> to join one."
+
 // chatContPrefix is the visual continuation-line prefix for word-wrapped messages (8 visible chars).
 const chatContPrefix = "|08      \xC0|07 "
 const chatContPrefixLen = 8
@@ -496,8 +500,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	}()
 
 	cleanup := func() {
-		svc.Leave(currentRoom) //nolint:errcheck
-		svc.Close()            //nolint:errcheck
+		if currentRoom != "" {
+			svc.Leave(currentRoom) //nolint:errcheck
+		}
+		svc.Close() //nolint:errcheck
 		<-done
 	}
 
@@ -539,17 +545,34 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// named, so leaving the old room second would drop the new one.
 			// If the join fails, go back to the old room instead.
 			oldRoom := currentRoom
-			svc.Leave(oldRoom) //nolint:errcheck
+			if oldRoom != "" {
+				svc.Leave(oldRoom) //nolint:errcheck
+			}
 			_, joinHistory, joinErr := svc.Join(newRoom)
 			if joinErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
-				if _, _, rejoinErr := svc.Join(oldRoom); rejoinErr != nil {
-					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not rejoin #"+oldRoom+": "+rejoinErr.Error()))
+				rejoined := false
+				if oldRoom != "" {
+					if _, _, rejoinErr := svc.Join(oldRoom); rejoinErr != nil {
+						writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not rejoin #"+oldRoom+": "+rejoinErr.Error()))
+					} else {
+						rejoined = true
+					}
 				}
 				rawMu.Lock()
+				if !rejoined {
+					// In no room now: clear it so nothing is posted to a room
+					// the caller has left, until a /JOIN succeeds.
+					currentRoom = ""
+					currentTopic = ""
+					drawHeaderLocked()
+				}
 				currentUsers = svc.Users()
 				drawStatusBarLocked()
 				rawMu.Unlock()
+				if !rejoined {
+					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatNoRoomMsg))
+				}
 				continue
 			}
 			rawMu.Lock()
@@ -752,6 +775,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		if strings.HasPrefix(upper, "/TOPIC ") {
+			if currentRoom == "" {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatNoRoomMsg))
+				continue
+			}
 			topicText := strings.TrimSpace(trimmed[7:])
 			if topicErr := svc.SetTopic(currentRoom, topicText); topicErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not set topic: "+topicErr.Error()))
@@ -786,6 +813,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
+		if currentRoom == "" {
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatNoRoomMsg))
+			continue
+		}
 		if postErr := svc.Post(currentRoom, trimmed); postErr != nil {
 			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not post: "+postErr.Error()))
 			continue
