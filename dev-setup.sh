@@ -224,7 +224,7 @@ if [[ ! -f "$TARGET/data/users/users.json" ]]; then
     "validated": true,
     "filePoints": 0,
     "numUploads": 0,
-    "timeLimit": 60,
+    "timeLimit": 0,
     "privateNote": "SysOp",
     "current_msg_conference_id": 1,
     "current_msg_conference_tag": "LOCAL",

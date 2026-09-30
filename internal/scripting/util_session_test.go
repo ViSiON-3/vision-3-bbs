@@ -86,12 +86,15 @@ func TestSessionObject(t *testing.T) {
 	}
 }
 
-// TestSessionTimeLeftEdges: no limit defaults to an hour; an overrun limit
-// floors at zero.
+// TestSessionTimeLeftEdges: no limit reports a steady hour, however long the
+// caller has been on; an overrun limit floors at zero.
 func TestSessionTimeLeftEdges(t *testing.T) {
-	h := newHarness(t, harnessOpts{session: func(sc *SessionContext) { sc.TimeLimit = 0 }})
-	if left := h.eval(`v3.session.timeLeft`).ToInteger(); left < 3590 || left > 3600 {
-		t.Errorf("no-limit timeLeft = %d, want ~3600", left)
+	h := newHarness(t, harnessOpts{session: func(sc *SessionContext) {
+		sc.TimeLimit = 0
+		sc.SessionStartTime = time.Now().Add(-2 * time.Hour)
+	}})
+	if left := h.eval(`v3.session.timeLeft`).ToInteger(); left != 3600 {
+		t.Errorf("no-limit timeLeft = %d, want 3600", left)
 	}
 	h2 := newHarness(t, harnessOpts{session: func(sc *SessionContext) {
 		sc.TimeLimit = 5

@@ -117,7 +117,7 @@ func NewUserManager(dataPath string) (*UserMgr, error) { // Return renamed type
 				// runs when neither did, such as a Docker first start.
 				AccessLevel: 255,
 				Validated:   true,
-				TimeLimit:   60,
+				TimeLimit:   0, // unlimited; a sysop is not timed out of their own board
 				CreatedAt:   now,
 				UpdatedAt:   now,
 			}

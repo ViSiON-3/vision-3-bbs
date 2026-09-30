@@ -18,12 +18,13 @@ func registerSession(v3 *goja.Object, eng *Engine) {
 
 	// timeLeft — seconds remaining in session (dynamic)
 	jsutil.DefineAccessor(obj, "timeLeft", vm.ToValue(func(call goja.FunctionCall) goja.Value {
-		elapsed := time.Since(eng.session.SessionStartTime)
 		limit := time.Duration(eng.session.TimeLimit) * time.Minute
 		if limit <= 0 {
-			limit = time.Hour // default 1 hour if no limit configured
+			// No limit: report a steady hour rather than counting one down,
+			// which would tell the script the caller had run out.
+			return vm.ToValue(int(time.Hour.Seconds()))
 		}
-		remaining := limit - elapsed
+		remaining := limit - time.Since(eng.session.SessionStartTime)
 		if remaining < 0 {
 			remaining = 0
 		}

@@ -42,7 +42,7 @@ The four positional formats carry the same core session data:
 | Baud rate | Always `38400` (`115200` in `DORINFO1.DEF`, `9600` in `CHAIN.TXT`) |
 | Real name and handle | User record |
 | Security level | User access level |
-| Time remaining | Session time left, in minutes or seconds depending on the format |
+| Time remaining | Session time left, in minutes or seconds depending on the format. Users with no time limit, and CoSysOps and above, are reported as 540 minutes. |
 | User record number | User ID |
 | BBS name | `boardName` from `config.json` |
 | Screen size | User's saved screen height (and width in `CHAIN.TXT`), default 25 rows / 80 columns |
