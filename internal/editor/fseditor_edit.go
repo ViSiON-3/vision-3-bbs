@@ -1,6 +1,9 @@
 package editor
 
-import "unicode"
+import (
+	"unicode"
+	"unicode/utf8"
+)
 
 // Text-changing operations: inserting, deleting, splitting and joining lines,
 // and reflowing a paragraph.
@@ -102,8 +105,11 @@ func (e *FSEditor) joinLines() {
 	}
 	first := e.buffer.GetLine(e.currentLine)
 	second := e.buffer.GetLine(e.currentLine + 1)
-	if first != "" && second != "" &&
-		!unicode.IsSpace(rune(first[len(first)-1])) && !unicode.IsSpace(rune(second[0])) {
+	// Look at whole characters: the last byte of a multi-byte one, such as
+	// the A0 of "à", would read as a space on its own.
+	last, _ := utf8.DecodeLastRuneInString(first)
+	next, _ := utf8.DecodeRuneInString(second)
+	if first != "" && second != "" && !unicode.IsSpace(last) && !unicode.IsSpace(next) {
 		e.buffer.SetLine(e.currentLine, first+" ")
 	}
 	// Clear hardNewline so reflow can flow across the boundary

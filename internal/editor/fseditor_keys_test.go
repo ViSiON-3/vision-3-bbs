@@ -51,6 +51,22 @@ func runKeys(t *testing.T, initial, keys string) (content string, saved bool) {
 	return content, saved
 }
 
+// Ctrl-J decides whether to add a space on whole characters, not bytes: "à"
+// and "Š" end in the byte A0, which on its own reads as a space (NBSP).
+// Typed input is ASCII, so the lines are loaded as they would be by a quote.
+func TestJoinLinesMultiByteBoundary(t *testing.T) {
+	for _, tc := range []struct{ initial, want string }{
+		{"voilà\ntwo", "voilà two"},
+		{"one\nŠtwo", "one Štwo"},
+		{"voilà\n two", "voilà two"},
+	} {
+		got, saved := runKeys(t, tc.initial, keyUp+"\x0a"+keySave)
+		if !saved || got != tc.want {
+			t.Errorf("Ctrl-J on %q = (%q, saved=%v), want %q", tc.initial, got, saved, tc.want)
+		}
+	}
+}
+
 // Each case types into an empty editor and saves; the saved text shows where
 // the cursor went and what the edit did.
 func TestRunNavigationAndEditKeys(t *testing.T) {
