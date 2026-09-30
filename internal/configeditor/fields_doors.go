@@ -458,6 +458,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 					{Value: "DOOR32.SYS", Display: "DOOR32.SYS"},
 					{Value: "CHAIN.TXT", Display: "CHAIN.TXT"},
 					{Value: "DORINFO1.DEF", Display: "DORINFO1.DEF"},
+					{Value: "DROPFILE.INI", Display: "DROPFILE.INI"},
 				}
 			},
 		})

@@ -36,8 +36,8 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	// Configurable dropfile location: "node" uses a unique per-node temp directory.
 	// Uses os.MkdirTemp for unique names and defers os.RemoveAll unconditionally
 	// so the directory is always cleaned up, even if no recognized dropfile is generated.
-	dropfileLoc := strings.ToLower(doorConfig.DropfileLocation)
-	if dropfileLoc == "node" {
+	useNodeDir := doorUsesNodeDir(doorConfig)
+	if useNodeDir {
 		nodeDir, err := os.MkdirTemp("", fmt.Sprintf("vision3_node%d_", ctx.NodeNumber))
 		if err != nil {
 			return fmt.Errorf("failed to create node dropfile directory: %w", err)
@@ -52,7 +52,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 	dropfileTypeUpper := strings.ToUpper(doorConfig.DropfileType)
 
-	if dropfileTypeUpper == "DOOR.SYS" || dropfileTypeUpper == "CHAIN.TXT" || dropfileTypeUpper == "DOOR32.SYS" || dropfileTypeUpper == "DORINFO1.DEF" {
+	if isGeneratedDropfileType(dropfileTypeUpper) {
 		fname := dropfileName(dropfileTypeUpper, doorConfig.DropfileCase)
 		dropfilePath = filepath.Join(dropfileDir, fname)
 		slog.Info("generating dropfile", "type", dropfileTypeUpper, "path", dropfilePath)
@@ -68,6 +68,13 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			genErr = generateChainTxt(ctx, dropfileDir, fname)
 		case "DORINFO1.DEF":
 			genErr = generateDorInfo(ctx, dropfileDir, fname)
+		case dropfileIniType:
+			// Only a per-node directory is private enough to offer as TEMP_DIR.
+			tempDir := ""
+			if useNodeDir {
+				tempDir = dropfileDir
+			}
+			genErr = generateDropfileIni(ctx, dropfileDir, fname, tempDir)
 		}
 
 		if genErr != nil {
@@ -166,6 +173,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	}
 	if _, exists := envMap["BBS_USERIP"]; !exists {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_USERIP=%s", ctx.Subs["{USERIP}"]))
+	}
+	if _, exists := envMap[dropfileIniEnvVar]; !exists && dropfileTypeUpper == dropfileIniType {
+		cmd.Env = append(cmd.Env, dropfileIniEnv(dropfilePath))
 	}
 
 	// Set LINES and COLUMNS from user's saved preferences (for terminal size detection).
