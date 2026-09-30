@@ -36,8 +36,10 @@ func doorcovBatch(t *testing.T, cfg config.DoorConfig) []string {
 	if err := writeBatchFile(ctx, path); err != nil {
 		t.Fatalf("writeBatchFile: %v", err)
 	}
-	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
-		t.Errorf("batch file mode %v, err %v; want 0600", fi.Mode().Perm(), err)
+	if fi, err := os.Stat(path); err != nil {
+		t.Errorf("stat batch file: %v", err)
+	} else if fi.Mode().Perm() != 0o600 {
+		t.Errorf("batch file mode %v, want 0600", fi.Mode().Perm())
 	}
 	return doorcovLines(t, path)
 }

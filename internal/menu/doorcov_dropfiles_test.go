@@ -183,8 +183,10 @@ func TestDoorcovGenerateAllDropfiles(t *testing.T) {
 			t.Errorf("%s has %d lines, want %d", name, got, wantLines)
 		}
 		// Dropfiles carry the caller's details: nobody else gets to read them.
-		if fi, err := os.Stat(filepath.Join(dir, name)); err != nil || fi.Mode().Perm() != 0o600 {
-			t.Errorf("%s: mode %v, err %v; want 0600", name, fi.Mode().Perm(), err)
+		if fi, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("stat %s: %v", name, err)
+		} else if fi.Mode().Perm() != 0o600 {
+			t.Errorf("%s: mode %v, want 0600", name, fi.Mode().Perm())
 		}
 	}
 }
