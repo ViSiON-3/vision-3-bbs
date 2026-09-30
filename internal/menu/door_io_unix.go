@@ -11,14 +11,6 @@ import (
 	"time"
 )
 
-// doorOutputDrainTimeout bounds how long a door's remaining output is relayed
-// after the door process exits. A door that exits normally closes its end of
-// the PTY or socket, so the output copier reaches EOF (or EIO on a PTY) almost
-// at once; the timeout only matters when something else, such as a background
-// child the door started, still holds that end open. A variable so tests can
-// shorten it.
-var doorOutputDrainTimeout = 2 * time.Second
-
 // pollableDoorFile returns a copy of f that is registered with the runtime
 // poller, so read deadlines work on it and closing it unblocks a pending Read.
 // pty.Start leaves the PTY master in blocking mode, where neither holds, and
