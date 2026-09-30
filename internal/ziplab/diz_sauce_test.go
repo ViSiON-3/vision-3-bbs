@@ -77,12 +77,63 @@ func TestCleanDIZ_ConvertsCP437(t *testing.T) {
 		{"plain ASCII", "Just text", "Just text"},
 		{"CP437 shading and blocks", "\xb0\xb1\xb2 \xdb\xdb\xdb", "░▒▓ ███"},
 		{"already UTF-8", "café ░", "café ░"},
-		{"UTF-8 and CP437 mixed", "caf\xc3\xa9 \xdb\xdb", "café ██"},
+		// The encoding is decided for the whole text: once any byte is
+		// invalid UTF-8, every high byte is CP437, including C3 A9.
+		{"invalid UTF-8 is CP437 throughout", "caf\xc3\xa9 \xdb\xdb", "caf├⌐ ██"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := cleanDIZ(tt.in + " \r\n\x1a"); got != tt.want {
 				t.Errorf("cleanDIZ(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// Several CP437 box-drawing pairs are also valid two-byte UTF-8 sequences
+// (CD BB is U+037B, C4 BF is U+013F), so they must not be kept as UTF-8.
+func TestCP437BytesToUTF8_CP437Boxes(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		{"double box", "\xc9\xcd\xcd\xbb\r\n\xba  \xba\r\n\xc8\xcd\xcd\xbc", "╔══╗\r\n║  ║\r\n╚══╝"},
+		{"single box", "\xda\xc4\xc4\xbf\r\n\xb3  \xb3\r\n\xc0\xc4\xc4\xd9", "┌──┐\r\n│  │\r\n└──┘"},
+		{"top edge only", "\xc9\xcd\xbb", "╔═╗"},
+		{"CD BB alone is valid UTF-8", "\xcd\xbb", "═╗"},
+		{"CD BC alone is valid UTF-8", "\xcd\xbc", "═╝"},
+		{"C4 BF alone is valid UTF-8", "\xc4\xbf", "─┐"},
+		{"box pairs between ASCII", "Title \xcd\xbb and \xc4\xbf", "Title ═╗ and ─┐"},
+		{"title bar", "\xc4\xc4\xb4 Cool Util \xc3\xc4\xc4", "──┤ Cool Util ├──"},
+		{"block and shade run", "\xdb\xb2\xb1\xb0", "█▓▒░"},
+		{"four-byte look-alike", "\xf0\xb0\xb1\xb2", "≡░▒▓"},
+		{"CP437 accented letters", "Caf\x82 na\x8bve", "Café naïve"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cp437BytesToUTF8(tt.in); got != tt.want {
+				t.Errorf("cp437BytesToUTF8(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCP437BytesToUTF8_KeepsUTF8(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		{"accented Latin", "naïve résumé café", "naïve résumé café"},
+		{"single accented letter", "Björk", "Björk"},
+		{"Latin-1 symbols", "25°C ±1 ½", "25°C ±1 ½"},
+		{"Central European", "Žluťoučký kůň", "Žluťoučký kůň"},
+		{"Turkish dotless i", "Kılıç", "Kılıç"},
+		{"Cyrillic", "Привет мир", "Привет мир"},
+		{"Greek", "Ελληνικά", "Ελληνικά"},
+		{"CJK", "日本語", "日本語"},
+		{"UTF-8 double box", "╔══╗\r\n║  ║\r\n╚══╝", "╔══╗\r\n║  ║\r\n╚══╝"},
+		{"UTF-8 single box", "┌──┐\r\n└──┘", "┌──┐\r\n└──┘"},
+		{"UTF-8 blocks", "░▒▓█", "░▒▓█"},
+		{"byte order mark is dropped", "\xef\xbb\xbfcafé", "café"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cp437BytesToUTF8(tt.in); got != tt.want {
+				t.Errorf("cp437BytesToUTF8(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}
@@ -135,6 +186,14 @@ func TestFindAndReadDIZ(t *testing.T) {
 		write(t, dir, "release/file_id.diz", "nested description\r\n")
 		if got := p.findAndReadDIZ(dir); got != "nested description" {
 			t.Errorf("description = %q, want the nested DIZ", got)
+		}
+	})
+
+	t.Run("only one level of subdirectories is searched", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, "a/b/FILE_ID.DIZ", "two levels down")
+		if got := p.findAndReadDIZ(dir); got != "" {
+			t.Errorf("description = %q, want none", got)
 		}
 	})
 
