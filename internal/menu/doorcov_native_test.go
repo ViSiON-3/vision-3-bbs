@@ -255,7 +255,8 @@ func TestDoorcovNativeDoorConfigErrors(t *testing.T) {
 
 // doorcovReply reads the file a door script recorded the caller's reply in.
 // The scripts report what they read through a file rather than by printing
-// it: output a door writes just before it exits is not reliably relayed.
+// it, so the check does not also depend on the door's final output being
+// relayed (TestDoorFinalOutputAlwaysDelivered covers that).
 func doorcovReply(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)

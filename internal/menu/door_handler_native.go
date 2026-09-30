@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -28,27 +27,11 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	// --- Dropfile Generation ---
 	// Must happen before arg substitution so {DROPFILE} and {NODEDIR} are available.
 	var dropfilePath string
-	dropfileDir := "."
-	if doorConfig.WorkingDirectory != "" {
-		dropfileDir = doorConfig.WorkingDirectory
+	dropfileDir, useNodeDir, removeDropfileDir, err := nativeDropfileDir(doorConfig, ctx.NodeNumber)
+	if err != nil {
+		return err
 	}
-
-	// Configurable dropfile location: "node" uses a unique per-node temp directory.
-	// Uses os.MkdirTemp for unique names and defers os.RemoveAll unconditionally
-	// so the directory is always cleaned up, even if no recognized dropfile is generated.
-	useNodeDir := doorUsesNodeDir(doorConfig)
-	if useNodeDir {
-		nodeDir, err := os.MkdirTemp("", fmt.Sprintf("vision3_node%d_", ctx.NodeNumber))
-		if err != nil {
-			return fmt.Errorf("failed to create node dropfile directory: %w", err)
-		}
-		defer func() {
-			if err := os.RemoveAll(nodeDir); err != nil {
-				slog.Warn("failed to remove node dropfile dir", "dir", nodeDir, "error", err)
-			}
-		}()
-		dropfileDir = nodeDir
-	}
+	defer removeDropfileDir()
 
 	dropfileTypeUpper := strings.ToUpper(doorConfig.DropfileType)
 
@@ -220,6 +203,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to start pty for door '%s': %w", ctx.DoorName, err)
 		} else {
+			ptmx = pollableDoorFile(ptmx)
 			ctx.Session.Signals(nil)
 			ctx.Session.Break(nil)
 
@@ -241,14 +225,17 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				}
 			}()
 
-			fd := int(ptmx.Fd())
-			originalState, err := term.MakeRaw(fd)
-			if err != nil {
-				slog.Warn("failed to put PTY into raw mode for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
+			var originalState *term.State
+			var rawErr error
+			if err := withRawFD(ptmx, func(fd int) { originalState, rawErr = term.MakeRaw(fd) }); err != nil {
+				rawErr = err
+			}
+			if rawErr != nil {
+				slog.Warn("failed to put PTY into raw mode for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", rawErr)
 			} else {
 				slog.Debug("PTY set to raw mode for door", "node", ctx.NodeNumber, "door", ctx.DoorName)
 			}
-			needsRestore := (err == nil)
+			needsRestore := (rawErr == nil)
 
 			// Set up a read interrupt so we can cleanly stop the input goroutine
 			// when the door exits, preventing it from consuming the next keypress.
@@ -280,9 +267,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			go func() {
 				defer close(outputDone)
 				_, err := io.Copy(ctx.Session, ptmx)
-				if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
-					// "input/output error" on PTY is expected when closing during active read
-					if strings.Contains(err.Error(), "input/output error") {
+				if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) && !errors.Is(err, os.ErrDeadlineExceeded) {
+					// EIO is how a PTY master reports that the door side has closed
+					if errors.Is(err, syscall.EIO) {
 						slog.Debug("output goroutine I/O error for door (expected during shutdown)", "node", ctx.NodeNumber, "door", ctx.DoorName)
 					} else {
 						slog.Warn("error copying PTY stdout to session for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
@@ -296,22 +283,28 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			slog.Debug("door process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 			// Interrupt the input goroutine's blocked Read() so it exits without
-			// consuming the user's next keypress, then restore PTY state and close.
+			// consuming the user's next keypress.
 			close(readInterrupt)
 			if hasInterrupt {
 				<-inputDone
 			}
 
+			// Relay what the door wrote on its way out before closing the PTY.
+			drainDoorOutput(ptmx, outputDone, ctx.NodeNumber, ctx.DoorName)
+
 			// Restore PTY state before closing the file descriptor
 			if needsRestore {
 				slog.Debug("restoring PTY mode after door", "node", ctx.NodeNumber, "door", ctx.DoorName)
-				if err := term.Restore(fd, originalState); err != nil {
-					slog.Error("failed to restore PTY state after door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
+				var rErr error
+				if ctlErr := withRawFD(ptmx, func(fd int) { rErr = term.Restore(fd, originalState) }); ctlErr != nil {
+					rErr = ctlErr
+				}
+				if rErr != nil {
+					slog.Error("failed to restore PTY state after door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", rErr)
 				}
 			}
 
 			_ = ptmx.Close() // best-effort PTY teardown
-			<-outputDone
 		}
 	} else if strings.ToUpper(doorConfig.IOMode) == "SOCKET" {
 		// Socket I/O: create a Unix socketpair and pass one end to the door as FD 3.
@@ -322,7 +315,13 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to create socketpair for door '%s': %w", ctx.DoorName, err)
 		} else {
-			// fds[0] = BBS side, fds[1] = door side (will become FD 3 in child)
+			// fds[0] = BBS side, fds[1] = door side (will become FD 3 in child).
+			// The BBS side is non-blocking so os.NewFile registers it with the
+			// runtime poller and drainDoorOutput can interrupt a pending read.
+			// The door side is a separate open file and stays blocking.
+			if err := syscall.SetNonblock(fds[0], true); err != nil {
+				slog.Debug("cannot make door socket non-blocking; output drain will not be interruptible", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
+			}
 			bbsSock := os.NewFile(uintptr(fds[0]), "bbs-socket")
 			doorSock := os.NewFile(uintptr(fds[1]), "door-socket")
 
@@ -361,7 +360,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				go func() {
 					defer close(outputDone)
 					_, err := io.Copy(ctx.Session, bbsSock)
-					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
+					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) && !errors.Is(err, os.ErrDeadlineExceeded) {
 						slog.Warn("socket I/O output error for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 					}
 				}()
@@ -373,8 +372,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				if hasInterrupt {
 					<-inputDone
 				}
+				// Relay what the door wrote on its way out before closing the socket.
+				drainDoorOutput(bbsSock, outputDone, ctx.NodeNumber, ctx.DoorName)
 				_ = bbsSock.Close() // best-effort socket teardown
-				<-outputDone
 			}
 		}
 	} else {
@@ -383,17 +383,80 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		}
 		slog.Info("starting door with standard I/O redirection", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
-		cmd.Stdout = ctx.Session
-		cmd.Stderr = ctx.Session
-		cmd.Stdin = ctx.Session
-		cmdErr = cmd.Run()
-
-		// Brief delay to let terminal state settle and prevent double-keypress issues
-		time.Sleep(100 * time.Millisecond)
+		cmdErr = runStdioDoor(ctx, cmd)
 	}
 
 	// Run cleanup while dropfiles/node dirs still exist (before deferred cleanup fires)
 	executeCleanup(ctx)
 
+	return cmdErr
+}
+
+// runStdioDoor runs cmd with its standard input, output and error connected
+// to the caller's session and returns once the door exits.
+//
+// Input reaches the door through a pipe rather than by handing exec the
+// session as cmd.Stdin. exec's own input copier would stay parked in
+// Session.Read after the door exited, so the caller would have to press a key
+// to get back to the menu and that key would be lost. Here the read is
+// interrupted when the door exits, as on the PTY and socket paths. Output is
+// relayed by exec, which drains it before Wait returns; WaitDelay keeps a
+// background child that still holds the door's output open from hanging the
+// node.
+func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		return fmt.Errorf("failed to create input pipe for door '%s': %w", ctx.DoorName, err)
+	}
+	cmd.Stdin = stdinR
+	cmd.Stdout = ctx.Session
+	cmd.Stderr = ctx.Session
+	cmd.WaitDelay = doorOutputDrainTimeout
+
+	if err := cmd.Start(); err != nil {
+		_ = stdinR.Close() // best-effort pipe teardown
+		_ = stdinW.Close() // best-effort pipe teardown
+		return err
+	}
+	_ = stdinR.Close() // the door holds its own copy
+
+	// Sessions that support SetReadInterrupt (SSH, telnet) stop the input
+	// goroutine cleanly when the door exits. On others it stays in Read until
+	// the next keypress, which then fails to reach the exited door.
+	readInterrupt := make(chan struct{})
+	hasInterrupt := false
+	if ri, ok := ctx.Session.(interface{ SetReadInterrupt(<-chan struct{}) }); ok {
+		ri.SetReadInterrupt(readInterrupt)
+		defer ri.SetReadInterrupt(nil)
+		hasInterrupt = true
+	}
+
+	inputDone := make(chan struct{})
+	go func() {
+		defer close(inputDone)
+		// Closing the pipe when the session ends gives the door end-of-file.
+		defer func() { _ = stdinW.Close() }() // best-effort pipe teardown
+		_, err := io.Copy(stdinW, ctx.Session)
+		if err != nil && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EPIPE) {
+			if strings.Contains(err.Error(), "read interrupted") {
+				slog.Debug("input goroutine interrupted for door (expected during shutdown)", "node", ctx.NodeNumber, "door", ctx.DoorName)
+			} else {
+				slog.Warn("error copying session stdin to door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
+			}
+		}
+	}()
+
+	cmdErr := cmd.Wait()
+	slog.Debug("door (standard I/O) process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
+	if errors.Is(cmdErr, exec.ErrWaitDelay) {
+		slog.Warn("door output still open after the door exited; is a child process holding it? Closed it",
+			"node", ctx.NodeNumber, "door", ctx.DoorName, "timeout", doorOutputDrainTimeout)
+		cmdErr = nil
+	}
+
+	close(readInterrupt)
+	if hasInterrupt {
+		<-inputDone
+	}
 	return cmdErr
 }

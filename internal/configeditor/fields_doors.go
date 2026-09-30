@@ -470,7 +470,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Set: func(val string) error { dPtr.DropfileLocation = val; save(); return nil },
 			LookupItems: func() []LookupItem {
 				return []LookupItem{
-					{Value: "startup", Display: "startup - Working directory (or '.')"},
+					{Value: "startup", Display: "startup - Working directory (or node)"},
 					{Value: "node", Display: "node - Per-node temp directory"},
 				}
 			},

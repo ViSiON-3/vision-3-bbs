@@ -251,11 +251,16 @@ func executeDOSDoor(ctx *DoorCtx) error {
 		return fmt.Errorf("failed to start dosemu2 with pty: %w", err)
 	}
 
-	// Set PTY master to raw mode for clean passthrough of CP437 bytes
-	fd := int(ptmx.Fd())
-	if oldState, err := term.MakeRaw(fd); err == nil {
-		defer func() { _ = term.Restore(fd, oldState) }() // best-effort terminal restore
-	}
+	ptmx = pollableDoorFile(ptmx)
+
+	// Set PTY master to raw mode for clean passthrough of CP437 bytes. The
+	// original state is restored after the output drain, before the PTY closes.
+	var oldState *term.State
+	_ = withRawFD(ptmx, func(fd int) { // best-effort: the door runs either way
+		if st, err := term.MakeRaw(fd); err == nil {
+			oldState = st
+		}
+	})
 
 	// Set up a read interrupt so we can cleanly stop the input goroutine
 	// when the door exits, preventing it from consuming the next keypress.
@@ -331,7 +336,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 					if gated && len(accum) > 0 {
 						slog.Warn("FOSSIL boot text gate never opened", "node", ctx.NodeNumber, "bytes", len(accum))
 					}
-					if err != io.EOF && !errors.Is(err, os.ErrClosed) {
+					if !isDoorOutputEnd(err) {
 						slog.Warn("error copying dosemu PTY to session", "node", ctx.NodeNumber, "error", err)
 					}
 					return
@@ -371,7 +376,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 				if gated && len(accum) > 0 {
 					slog.Warn("DOS boot text gate never opened", "node", ctx.NodeNumber, "bytes", len(accum), "first200", accum[:min(200, len(accum))])
 				}
-				if err != io.EOF && !errors.Is(err, os.ErrClosed) {
+				if !isDoorOutputEnd(err) {
 					slog.Warn("error copying dosemu PTY to session", "node", ctx.NodeNumber, "error", err)
 				}
 				return
@@ -389,8 +394,12 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	if hasInterrupt {
 		<-inputDone
 	}
+	// Relay what the door wrote on its way out before closing the PTY.
+	drainDoorOutput(ptmx, outputDone, ctx.NodeNumber, ctx.DoorName)
+	if oldState != nil {
+		_ = withRawFD(ptmx, func(fd int) { _ = term.Restore(fd, oldState) }) // best-effort terminal restore
+	}
 	_ = ptmx.Close() // best-effort PTY teardown
-	<-outputDone
 
 	if cmdErr != nil {
 		slog.Error("DOS door failed", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", cmdErr)
