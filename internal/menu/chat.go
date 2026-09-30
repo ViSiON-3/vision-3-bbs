@@ -70,47 +70,72 @@ func chatSelectService(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 	return svc, room, netName, nil
 }
 
-// chatNetworkPicker displays a numbered network list, probes each for user
-// counts (2 s timeout), and returns the ChatService for the selected network.
-func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, handle, dbPath string, leaves []ChatLeafInfo, outputMode ansi.OutputMode, wt func(string)) (chat.ChatService, string, error) {
-	type netInfo struct {
-		name    string
-		users   int
-		avail   bool
-		isLocal bool
-	}
+// chatNetInfo is one entry in a chat network picker.
+type chatNetInfo struct {
+	name    string
+	users   int
+	avail   bool
+	isLocal bool
+}
 
-	nets := make([]netInfo, len(leaves)+1)
+// chatProbeTimeout is how long the network pickers wait for a leaf's room
+// list before listing that network as unavailable.
+var chatProbeTimeout = 2 * time.Second
+
+// probeChatNetworks asks every leaf for its room list concurrently and returns
+// one entry per leaf, in order, followed by the Local entry. A leaf is marked
+// available only when it hands out a probe session and that session answers
+// Rooms without error within chatProbeTimeout; users is then the total across
+// its rooms.
+func probeChatNetworks(leaves []ChatLeafInfo, handle string) []chatNetInfo {
+	nets := make([]chatNetInfo, len(leaves)+1)
 	var wg sync.WaitGroup
 	for i, leaf := range leaves {
-		i, leaf := i, leaf
 		nets[i].name = leaf.NetworkName
-		nets[i].avail = true
+		if leaf.NewSession == nil {
+			continue
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// A nil session here would otherwise panic in this goroutine and
+			// take the whole BBS down, not just this node.
 			probe := leaf.NewSession(handle)
+			if probe == nil {
+				return
+			}
 			defer probe.Close() //nolint:errcheck
-			ch := make(chan []chat.RoomInfo, 1)
+			type result struct {
+				rooms []chat.RoomInfo
+				err   error
+			}
+			ch := make(chan result, 1)
 			go func() {
 				rooms, err := probe.Rooms()
-				if err == nil {
-					ch <- rooms
-				} else {
-					ch <- nil
-				}
+				ch <- result{rooms, err}
 			}()
 			select {
-			case rooms := <-ch:
-				for _, room := range rooms {
+			case res := <-ch:
+				if res.err != nil {
+					return
+				}
+				nets[i].avail = true
+				for _, room := range res.rooms {
 					nets[i].users += room.UserCount
 				}
-			case <-time.After(2 * time.Second):
+			case <-time.After(chatProbeTimeout):
 			}
 		}()
 	}
 	wg.Wait()
-	nets[len(leaves)] = netInfo{name: "Local", users: -1, avail: true, isLocal: true}
+	nets[len(leaves)] = chatNetInfo{name: "Local", users: -1, avail: true, isLocal: true}
+	return nets
+}
+
+// chatNetworkPicker displays a numbered network list, probes each for user
+// counts, and returns the ChatService for the selected network.
+func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, handle, dbPath string, leaves []ChatLeafInfo, outputMode ansi.OutputMode, wt func(string)) (chat.ChatService, string, error) {
+	nets := probeChatNetworks(leaves, handle)
 
 	wt("\r\n" + e.Strings().ChatNetworkPickerHeader + "\r\n")
 	for i, net := range nets {
@@ -211,7 +236,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	height := 24
 	if termHeight > 0 {
 		height = termHeight
-	} else if sess := e.SessionRegistry.Get(nodeNumber); sess != nil {
+	} else if sess := e.nodeSession(nodeNumber); sess != nil {
 		sess.Mutex.RLock()
 		if sess.Height > 0 {
 			height = sess.Height
@@ -394,6 +419,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			slog.Error("local chat fallback failed", "node", nodeNumber, "error", localErr)
 			return nil, "", nil
 		}
+		currentNetwork = "Local"
 		_, history, err = svc.Join(currentRoom)
 		if err != nil {
 			slog.Error("local chat join failed", "node", nodeNumber, "error", err)
@@ -499,25 +525,43 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		if strings.HasPrefix(upper, "/JOIN ") {
-			newRoom := strings.TrimSpace(trimmed[6:])
-			if newRoom != "" {
-				svc.Leave(currentRoom) //nolint:errcheck
-				currentRoom = newRoom
-				_, joinHistory, joinErr := svc.Join(currentRoom)
-				if joinErr != nil {
-					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
-				} else {
-					rawMu.Lock()
-					currentTopic = ""
-					currentUsers = svc.Users()
-					drawHeaderLocked()
-					drawStatusBarLocked()
-					rawMu.Unlock()
-					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+currentRoom))
-					for _, msg := range joinHistory {
-						writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
-					}
+			// Normalise up front, as Join would: a name the service will
+			// refuse is rejected without leaving the current room, and
+			// currentRoom then names the room actually joined, which later
+			// posts and the final Leave are addressed to.
+			newRoom, nameErr := chat.NormalizeRoom(strings.TrimSpace(trimmed[6:]))
+			if nameErr != nil {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+nameErr.Error()))
+				continue
+			}
+			// Leave before joining rather than after: both services track a
+			// single current room, and Leave clears it whichever room is
+			// named, so leaving the old room second would drop the new one.
+			// If the join fails, go back to the old room instead.
+			oldRoom := currentRoom
+			svc.Leave(oldRoom) //nolint:errcheck
+			_, joinHistory, joinErr := svc.Join(newRoom)
+			if joinErr != nil {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
+				if _, _, rejoinErr := svc.Join(oldRoom); rejoinErr != nil {
+					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not rejoin #"+oldRoom+": "+rejoinErr.Error()))
 				}
+				rawMu.Lock()
+				currentUsers = svc.Users()
+				drawStatusBarLocked()
+				rawMu.Unlock()
+				continue
+			}
+			rawMu.Lock()
+			currentRoom = newRoom
+			currentTopic = ""
+			currentUsers = svc.Users()
+			drawHeaderLocked()
+			drawStatusBarLocked()
+			rawMu.Unlock()
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+currentRoom))
+			for _, msg := range joinHistory {
+				writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 			}
 			continue
 		}
@@ -532,44 +576,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				leaves = e.ChatLeaves.ActiveChatLeaves()
 			}
 			dbPath := e.GetServerConfig().DataDir + "/chat.db"
-
-			type netInfo struct {
-				name    string
-				users   int
-				avail   bool
-				isLocal bool
-			}
-			nets := make([]netInfo, len(leaves)+1)
-			var wg2 sync.WaitGroup
-			for i, leaf := range leaves {
-				i, leaf := i, leaf
-				nets[i].name = leaf.NetworkName
-				nets[i].avail = true
-				wg2.Add(1)
-				go func() {
-					defer wg2.Done()
-					probe := leaf.NewSession(handle)
-					defer probe.Close() //nolint:errcheck
-					ch := make(chan []chat.RoomInfo, 1)
-					go func() {
-						rooms, err := probe.Rooms()
-						if err == nil {
-							ch <- rooms
-						} else {
-							ch <- nil
-						}
-					}()
-					select {
-					case rooms := <-ch:
-						for _, r := range rooms {
-							nets[i].users += r.UserCount
-						}
-					case <-time.After(2 * time.Second):
-					}
-				}()
-			}
-			wg2.Wait()
-			nets[len(leaves)] = netInfo{name: "Local", users: -1, avail: true, isLocal: true}
+			nets := probeChatNetworks(leaves, handle)
 
 			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Chat Networks:"))
 			for i, net := range nets {
@@ -652,6 +659,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					rawWrite([]byte("\x1B[r"))
 					return nil, "", nil
 				}
+				newNetName = "Local"
 				_, newHistory, joinErr = newSvc.Join(newRoom)
 				if joinErr != nil {
 					newSvc.Close() //nolint:errcheck
