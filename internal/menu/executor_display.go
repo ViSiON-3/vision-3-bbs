@@ -408,11 +408,11 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		}
 
 		// Calculate Time Left |TL
-		if currentUser.TimeLimit <= 0 {
+		if limit := e.timeLimit(currentUser); limit <= 0 {
 			placeholders["|TL"] = "Unlimited"
 		} else {
 			elapsedSeconds := time.Since(sessionStartTime).Seconds()
-			totalSeconds := float64(currentUser.TimeLimit * 60)
+			totalSeconds := float64(limit * 60)
 			remainingSeconds := totalSeconds - elapsedSeconds
 			if remainingSeconds < 0 {
 				remainingSeconds = 0

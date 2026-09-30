@@ -360,6 +360,8 @@
   "termSizeNewDetectedPrompt": "\r\n|03New terminal size detected: |15%dx%d|07 (saved: |08%dx%d|07).\r\nUse it?",
   "termSizeUpdateDefaultsPrompt": "|03Update your defaults to this size?|07",
   "threadWhichWay": "|09Message Threading, |08[|15F|08]|09orward or |08[|15B|08]|09ackwards : ",
+  "timeLimitExpired": "\r\n|12Your time limit for this call is up. Call again soon!|07\r\n",
+  "timeLimitWarning": "\r\n|14You have |15%d|14 minute(s) left this call.|07\r\n",
   "totalQWKAdded": "|09Total Processed|08: |15|TO",
   "typeFilePrompt": "|15File(s) to |08[|09Type|08] (|09Cr/|DE|08): ",
   "untaggingBatchFile": "|05De-Tagging|13: |15|FN",

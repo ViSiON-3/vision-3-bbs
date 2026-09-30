@@ -87,7 +87,7 @@ Users are stored as a JSON array. Each user account contains:
 - `numUploads` - Number of file uploads
 - `numDownloads` - Number of file downloads (used for ACS 'B' ratio)
 - `messagesPosted` - Number of messages posted
-- `timeLimit` - Time limit per call in minutes (0=unlimited)
+- `timeLimit` - Time limit per call in minutes (0=unlimited). See [Time Limits](#time-limits)
 
 #### Personal Information
 
@@ -365,6 +365,26 @@ INFO: Login denied for user 'bob' - insufficient access level (has 5, needs 10)
 
 These logs help track unauthorized access attempts and verify your access control configuration is working correctly.
 
+## Time Limits
+
+`timeLimit` is how many minutes a caller may stay on per call, counted from
+the moment they connect. `0` means no limit. CoSysOps and above (`coSysOpLevel`)
+have no limit whatever their record says, as they have no idle timeout.
+
+- In the last five minutes, every menu prompt shows `timeLimitWarning` with the
+  minutes left. Lightbar menus don't show it.
+- When the time runs out, the caller sees `timeLimitExpired` and is
+  disconnected. This happens at the next key they press or wait on, anywhere in
+  the BBS. The full-screen message editor is the exception: a caller writing a
+  message can finish and save it, and is disconnected when the editor closes.
+- A remote door (rlogin or telnet) is closed when the time runs out, and a
+  caller with no time left can't open one. A local door is told the time left
+  through its drop file and is expected to end itself. The caller is
+  disconnected when they come back from it.
+
+A limit changed in the User Editor while the caller is online applies from
+their next menu.
+
 ## User Flags
 
 Flags are single characters (A-Z) that grant specific permissions:
@@ -384,6 +404,7 @@ The system creates a default user on first run:
 - Password: `password`
 - Access Level: 255 (SysOp)
 - Validated: true
+- Time Limit: 0 (unlimited)
 
 **Important**: Change this password immediately! It is published here and in the
 README, and it belongs to a full SysOp account.

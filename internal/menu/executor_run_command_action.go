@@ -43,7 +43,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			// RunnableFunc now returns user, nextActionString, error
 			authUser, nextActionStr, runErr := runnableFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, runArgs)
 			if runErr != nil {
-				actionType, userResult = e.commandFailure("RUN", runTarget, fmt.Sprintf(e.Strings().ExecRunCommandError, runTarget, runErr), runErr, nextActionStr, authUser, terminal, outputMode, nodeNumber, termWidth, termHeight)
+				actionType, userResult = e.commandFailure("RUN", runTarget, fmt.Sprintf(e.Strings().ExecRunCommandError, runTarget, runErr), runErr, nextActionStr, authUser, s, terminal, outputMode, nodeNumber, termWidth, termHeight)
 				return actionType, "", userResult
 			}
 			slog.Debug("RUN function completed", "target", runTarget)
@@ -77,7 +77,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			// DOOR runnable returns user, "", error
 			userResultDoor, nextActionStrDoor, doorErr := doorFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, doorTarget)
 			if doorErr != nil {
-				actionType, userResult = e.commandFailure("DOOR", doorTarget, fmt.Sprintf(e.Strings().ExecRunDoorError, doorTarget, doorErr), doorErr, nextActionStrDoor, userResultDoor, terminal, outputMode, nodeNumber, termWidth, termHeight)
+				actionType, userResult = e.commandFailure("DOOR", doorTarget, fmt.Sprintf(e.Strings().ExecRunDoorError, doorTarget, doorErr), doorErr, nextActionStrDoor, userResultDoor, s, terminal, outputMode, nodeNumber, termWidth, termHeight)
 				return actionType, "", userResult
 			}
 			// Handle potential LOGOFF request from DOOR runnable (though currently returns "")
@@ -114,15 +114,15 @@ func isSessionFatal(err error) bool {
 // the call site so the stringformat call-site check can see the arguments.
 //
 // A session-fatal error (see isSessionFatal) is LOGOFF, after the idle
-// timeout screen when that was the cause. Any other error is logged and
+// timeout or time limit notice when that was the cause. Any other error is logged and
 // shown, and the loop then goes where the handler said: LOGOFF if it asked
 // for one, otherwise CONTINUE, which redisplays the menu. One broken door or
 // runnable therefore no longer drops the caller out of the menus. u is the
 // handler's user, which may be nil for "unchanged".
-func (e *MenuExecutor) commandFailure(kind, target, errMsg string, err error, next string, u *user.User, terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (string, *user.User) {
+func (e *MenuExecutor) commandFailure(kind, target, errMsg string, err error, next string, u *user.User, s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (string, *user.User) {
 	if isSessionFatal(err) {
 		if errors.Is(err, editor.ErrIdleTimeout) {
-			e.handleIdleTimeout(terminal, outputMode, nodeNumber, termWidth, termHeight)
+			e.handleSessionTimeout(s, terminal, outputMode, nodeNumber, termWidth, termHeight)
 		} else {
 			slog.Info("user disconnected during command", "node", nodeNumber, "kind", kind, "target", target)
 		}

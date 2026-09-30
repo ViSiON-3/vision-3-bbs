@@ -87,6 +87,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	// Without this, two goroutines compete on the same bufio.Reader, freezing input.
 	defer resetSessionIH(s)
 	defer clearSessionIdleTimeout(s)
+	defer sessionDeadlines.Delete(s)
 	defer sessionTermSizes.Delete(s)
 
 	if st.currentUser != nil {
@@ -115,6 +116,17 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			// gone, and handing it back would invite end-of-session code to
 			// save a deleted record.
 			return "LOGOFF", nil, nil
+		}
+
+		// Re-arm the time limit on every menu, so a limit the sysop changed
+		// while the caller is online (or a promotion to CoSysOp) applies from
+		// the next screen, and end the call here if it has run out.
+		if st.currentUser != nil {
+			applySessionDeadline(s, e.sessionDeadline(st.currentUser, sessionStartTime))
+			if timeLimitReached(s) {
+				e.handleTimeLimit(terminal, outputMode, nodeNumber)
+				return "LOGOFF", st.currentUser, nil
+			}
 		}
 
 		// A terminal size the caller changed in the Konfig editor applies

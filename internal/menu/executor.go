@@ -276,6 +276,26 @@ func (e *MenuExecutor) idleTimeout(u *user.User) time.Duration {
 	return time.Duration(cfg.SessionIdleTimeoutMinutes) * time.Minute
 }
 
+// timeLimit returns u's time limit per call in minutes, 0 meaning none.
+// CoSysOps and above have none whatever their record says, as they have no
+// idle timeout.
+func (e *MenuExecutor) timeLimit(u *user.User) int {
+	if u == nil || u.TimeLimit <= 0 || e.isCoSysOpOrAbove(u) {
+		return 0
+	}
+	return u.TimeLimit
+}
+
+// sessionDeadline returns when u's time runs out for a session that started
+// at sessionStart, or the zero time if u has no limit.
+func (e *MenuExecutor) sessionDeadline(u *user.User, sessionStart time.Time) time.Time {
+	limit := e.timeLimit(u)
+	if limit == 0 {
+		return time.Time{}
+	}
+	return sessionStart.Add(time.Duration(limit) * time.Minute)
+}
+
 // transferContext returns a context for file transfers rooted at the caller's
 // session context so that transfers are cancelled when the session ends.
 // If TransferTimeoutMinutes > 0, an additional deadline is layered on top —
@@ -356,6 +376,53 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	}
 	slog.Info("idle timeout, disconnecting", "node", nodeNumber, "minutes", e.GetServerConfig().SessionIdleTimeoutMinutes)
+}
+
+// timeLimitReached reports whether s has a time limit and it has run out.
+func timeLimitReached(s ssh.Session) bool {
+	d, ok := sessionDeadlines.Load(s)
+	return ok && !time.Now().Before(d.(time.Time))
+}
+
+// handleSessionTimeout shows why a session is ending after an input loop
+// returned editor.ErrIdleTimeout: the time-limit message if the caller's time
+// has run out, the idle timeout screen otherwise. The two share an error
+// (editor.ErrTimeLimit wraps editor.ErrIdleTimeout, and many loops pass on the
+// plain sentinel), so the session's deadline is what tells them apart.
+func (e *MenuExecutor) handleSessionTimeout(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int, termWidth, termHeight int) {
+	if timeLimitReached(s) {
+		e.handleTimeLimit(terminal, outputMode, nodeNumber)
+		return
+	}
+	e.handleIdleTimeout(terminal, outputMode, nodeNumber, termWidth, termHeight)
+}
+
+// timeLimitWarnWindow is how close to the end of their time a caller starts
+// being warned at each menu prompt.
+const timeLimitWarnWindow = 5 * time.Minute
+
+// warnTimeLeft tells the caller how many minutes they have left once they are
+// within timeLimitWarnWindow of their time limit. Part of a minute counts as
+// a whole one, so the last warning says 1 rather than 0.
+func (e *MenuExecutor) warnTimeLeft(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode) {
+	d, ok := sessionDeadlines.Load(s)
+	if !ok {
+		return
+	}
+	left := time.Until(d.(time.Time))
+	if left <= 0 || left > timeLimitWarnWindow {
+		return
+	}
+	minutes := int((left + time.Minute - 1) / time.Minute)
+	msg := fmt.Sprintf(e.Strings().TimeLimitWarning, minutes)
+	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode) // best-effort notice
+}
+
+// handleTimeLimit tells the caller their time limit is up and logs it. Call
+// it before returning LOGOFF for an expired time limit.
+func (e *MenuExecutor) handleTimeLimit(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) {
+	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().TimeLimitExpired)), outputMode) // best-effort notice
+	slog.Info("time limit reached, disconnecting", "node", nodeNumber)
 }
 
 // remoteIPFromSession extracts the IP address from an SSH session's remote address,

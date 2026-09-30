@@ -1339,6 +1339,8 @@ func sessionHandler(s ssh.Session) {
 	// starting with the invisible-logon and terminal prompts below, the
 	// caller's own applies (SysOps may be exempt), whichever way they got in.
 	menuExecutor.ApplyUserIdleTimeout(s, authenticatedUser)
+	// Their time limit runs from connect, so the login screens count too.
+	menuExecutor.ApplyUserTimeLimit(s, authenticatedUser, sessionStartTime)
 
 	// Set default message area if not already set (handles both SSH pre-auth and normal login)
 	defaultsChanged := false

@@ -398,8 +398,9 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 			slog.Warn("invalid time left value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
-			if u.TimeLimit <= 0 {
-				slog.Debug("ACS 'T' check: user has no time limit, passing", "timeLimit", u.TimeLimit)
+			// CoSysOps and above have no time limit (MenuExecutor.timeLimit).
+			if u.TimeLimit <= 0 || int64(u.AccessLevel) >= acsCoSysOpLevel.Load() {
+				slog.Debug("ACS 'T' check: user has no time limit, passing", "timeLimit", u.TimeLimit, "level", u.AccessLevel)
 				result = true
 			} else {
 				elapsedSeconds := time.Since(startTime).Seconds()

@@ -52,7 +52,7 @@ func (st *runLoopState) runLightbarInput(options []LightbarOption, cursorHidden 
 				return "LOGOFF", loopReturn, nil
 			}
 			if errors.Is(err, editor.ErrIdleTimeout) {
-				e.handleIdleTimeout(terminal, outputMode, nodeNumber, st.termWidth, termHeight)
+				e.handleSessionTimeout(s, terminal, outputMode, nodeNumber, st.termWidth, termHeight)
 				return "LOGOFF", loopReturn, nil
 			}
 			slog.Error("failed to read lightbar input", "menu", st.currentMenuName, "error", err)
@@ -160,6 +160,7 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 
 	// --- Standard Menu Input Handling ---
 	e.deliverPendingPages(terminal, nodeNumber, outputMode)
+	e.warnTimeLeft(s, terminal, outputMode)
 	// Display Prompt (Skip if USEPROMPT is false)
 	slog.Debug("checking prompt display for menu", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt())
 	if menuRec.GetUsePrompt() { // Condition changed: Only check UsePrompt
@@ -190,7 +191,7 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 			return "LOGOFF", loopReturn, nil
 		}
 		if errors.Is(err, editor.ErrIdleTimeout) {
-			e.handleIdleTimeout(terminal, outputMode, nodeNumber, st.termWidth, st.termHeight)
+			e.handleSessionTimeout(s, terminal, outputMode, nodeNumber, st.termWidth, st.termHeight)
 			return "LOGOFF", loopReturn, nil
 		}
 		slog.Error("failed to read input for menu", "menu", st.currentMenuName, "error", err)

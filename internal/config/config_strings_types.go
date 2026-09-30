@@ -445,6 +445,8 @@ type StringsConfig struct {
 	// "%!(EXTRA int=..., int=...)" to every strings.json already in the wild.
 	MatrixAccountCannotLogon string `json:"matrixAccountCannotLogon"`
 	IdleTimeout              string `json:"idleTimeout"`
+	TimeLimitExpired         string `json:"timeLimitExpired"`
+	TimeLimitWarning         string `json:"timeLimitWarning"`
 
 	// Conference menu strings (V3-specific)
 	ConfLoginRequired           string `json:"confLoginRequired"`

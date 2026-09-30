@@ -43,9 +43,27 @@ func clearSessionIdleTimeout(s ssh.Session) {
 
 // ClearSessionIdleTimeout is clearSessionIdleTimeout for the session handler,
 // which can set a timeout (SSH pre-auth, login sequence) before any menu runs
-// and so before MenuExecutor.Run's own deferred cleanup is in place.
+// and so before MenuExecutor.Run's own deferred cleanup is in place. It drops
+// the session's time-limit deadline too.
 func ClearSessionIdleTimeout(s ssh.Session) {
 	clearSessionIdleTimeout(s)
+	sessionDeadlines.Delete(s)
+}
+
+// sessionDeadlines remembers when each session's time limit runs out, for the
+// same reason as sessionIdleTimeouts: getSessionIH re-applies it to a
+// recreated InputHandler. A session with no limit has no entry.
+var sessionDeadlines sync.Map
+
+// applySessionDeadline records the time-limit deadline for s and applies it to
+// the current InputHandler. The zero time means no limit.
+func applySessionDeadline(s ssh.Session, deadline time.Time) {
+	if deadline.IsZero() {
+		sessionDeadlines.Delete(s)
+	} else {
+		sessionDeadlines.Store(s, deadline)
+	}
+	getSessionIH(s).SetSessionDeadline(deadline)
 }
 
 // ApplyUserIdleTimeout applies u's idle timeout (including the SysOp
@@ -54,6 +72,14 @@ func ClearSessionIdleTimeout(s ssh.Session) {
 // the pre-login one the login screens installed.
 func (e *MenuExecutor) ApplyUserIdleTimeout(s ssh.Session, u *user.User) {
 	applySessionIdleTimeout(s, e.idleTimeout(u))
+}
+
+// ApplyUserTimeLimit arms u's time limit (including the CoSysOp exemption)
+// for a session that started at sessionStart. Like ApplyUserIdleTimeout, the
+// session handler calls it once the caller is authenticated, so the login
+// sequence counts against their time; Run re-arms it on every menu.
+func (e *MenuExecutor) ApplyUserTimeLimit(s ssh.Session, u *user.User, sessionStart time.Time) {
+	applySessionDeadline(s, e.sessionDeadline(u, sessionStart))
 }
 
 // sessionOutputModes remembers the negotiated ansi.OutputMode for each
@@ -127,6 +153,9 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	ih := editor.NewInputHandler(s)
 	if d, ok := sessionIdleTimeouts.Load(s); ok {
 		ih.SetSessionIdleTimeout(d.(time.Duration))
+	}
+	if d, ok := sessionDeadlines.Load(s); ok {
+		ih.SetSessionDeadline(d.(time.Time))
 	}
 	sessionInputHandlers.Store(s, ih)
 	return ih

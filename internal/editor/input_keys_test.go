@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"io"
@@ -176,6 +177,67 @@ func TestSessionIdleTimeout(t *testing.T) {
 	}
 	if _, err := ih.ReadKey(); err != io.EOF {
 		t.Errorf("at end of input: err = %v, want io.EOF", err)
+	}
+}
+
+// The session deadline ends a key wait with ErrTimeLimit, which is also an
+// ErrIdleTimeout so existing idle handling logs the caller off. Whichever of
+// the idle timeout and the deadline comes first decides the error.
+func TestSessionDeadline(t *testing.T) {
+	quiet, _ := silentInput(t)
+	quiet.SetSessionIdleTimeout(time.Minute)
+	quiet.SetSessionDeadline(time.Now().Add(5 * time.Millisecond))
+	if _, err := quiet.ReadKey(); !errors.Is(err, ErrTimeLimit) || !errors.Is(err, ErrIdleTimeout) {
+		t.Errorf("deadline before idle timeout: err = %v, want ErrTimeLimit wrapping ErrIdleTimeout", err)
+	}
+
+	quiet.SetSessionIdleTimeout(5 * time.Millisecond)
+	quiet.SetSessionDeadline(time.Now().Add(time.Minute))
+	if _, err := quiet.ReadKey(); !errors.Is(err, ErrIdleTimeout) || errors.Is(err, ErrTimeLimit) {
+		t.Errorf("idle timeout before deadline: err = %v, want plain ErrIdleTimeout", err)
+	}
+
+	// With no idle timeout at all the deadline still bounds the wait.
+	quiet.SetSessionIdleTimeout(0)
+	quiet.SetSessionDeadline(time.Now().Add(5 * time.Millisecond))
+	if _, err := quiet.ReadKey(); !errors.Is(err, ErrTimeLimit) {
+		t.Errorf("deadline alone: err = %v, want ErrTimeLimit", err)
+	}
+
+	// The event-aware read honours it too.
+	quiet.SetSessionDeadline(time.Now().Add(5 * time.Millisecond))
+	if _, _, _, err := readKeyOrEvent[struct{}](quiet, nil); !errors.Is(err, ErrTimeLimit) {
+		t.Errorf("readKeyOrEvent: err = %v, want ErrTimeLimit", err)
+	}
+
+	// So does the io.Reader path, which prompts wrap in a bufio.Reader.
+	quiet.SetSessionDeadline(time.Now().Add(5 * time.Millisecond))
+	if _, _, err := bufio.NewReader(quiet).ReadRune(); !errors.Is(err, ErrTimeLimit) {
+		t.Errorf("bufio ReadRune: err = %v, want ErrTimeLimit", err)
+	}
+
+	// Once passed, a caller who keeps typing is stopped too: input waiting in
+	// the queue is not read.
+	busy := NewInputHandler(bytes.NewReader([]byte("abc")))
+	busy.SetSessionDeadline(time.Now().Add(-time.Second))
+	if k, err := busy.ReadKey(); !errors.Is(err, ErrTimeLimit) {
+		t.Errorf("past deadline with input queued = %#x, %v; want ErrTimeLimit", k, err)
+	}
+
+	// Suspending it lets reads through; restoring it brings it back.
+	restore := busy.SuspendSessionDeadline()
+	if k, err := busy.ReadKey(); err != nil || k != 'a' {
+		t.Errorf("while suspended = %#x, %v; want 'a'", k, err)
+	}
+	restore()
+	if _, err := busy.ReadKey(); !errors.Is(err, ErrTimeLimit) {
+		t.Errorf("after restoring: err = %v, want ErrTimeLimit", err)
+	}
+
+	// Clearing it restores ordinary reads.
+	busy.SetSessionDeadline(time.Time{})
+	if k, err := busy.ReadKey(); err != nil || k != 'b' {
+		t.Errorf("after clearing = %#x, %v; want 'b'", k, err)
 	}
 }
 
