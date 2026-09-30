@@ -207,11 +207,20 @@ func (n *NFOConfig) MaxRow() int {
 	return maxRow
 }
 
+// dosToANSIColor maps a DOS palette index (black, blue, green, cyan, red,
+// magenta, brown, grey) to the ANSI SGR colour with the same appearance
+// (ANSI orders them black, red, green, yellow, blue, magenta, cyan, white).
+var dosToANSIColor = [8]int{0, 4, 2, 6, 1, 5, 3, 7}
+
 // DOSColorToANSI converts a DOS color attribute (bg*16 + fg) to ANSI components.
-// Returns foreground color (0-15), background color (0-7), and whether bold is needed.
+// Returns the foreground as an ANSI colour index (0-7, plus 8 when bright),
+// the background as an ANSI colour index (0-7), and whether bold is needed.
+// For example, attribute 30 (bright yellow on blue) gives fg 11, bg 4, bold.
 func DOSColorToANSI(dosAttr int) (fg int, bg int, bold bool) {
-	fg = dosAttr & 0x0F        // Lower 4 bits = foreground (0-15)
-	bg = (dosAttr >> 4) & 0x07 // Bits 4-6 = background (0-7)
-	bold = fg >= 8             // High bit of foreground = bold/bright
+	dosFG := dosAttr & 0x0F        // Lower 4 bits = foreground (0-15)
+	dosBG := (dosAttr >> 4) & 0x07 // Bits 4-6 = background (0-7)
+	bold = dosFG >= 8              // High bit of foreground = bold/bright
+	fg = dosToANSIColor[dosFG&0x07] + dosFG&0x08
+	bg = dosToANSIColor[dosBG]
 	return fg, bg, bold
 }
