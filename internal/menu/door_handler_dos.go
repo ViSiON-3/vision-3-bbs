@@ -26,6 +26,8 @@ func dosDropfileName(dropfileType string) string {
 		return "CHAIN.TXT"
 	case "DORINFO1.DEF":
 		return "DORINFO1.DEF"
+	case dropfileIniType:
+		return dropfileIniType
 	default:
 		return "DOOR.SYS"
 	}
@@ -45,6 +47,12 @@ func writeBatchFile(ctx *DoorCtx, batchPath string) error {
 	// Load FOSSIL driver if configured (needed by most BBS door games for serial I/O)
 	if ctx.Config.FossilDriver != "" {
 		b.WriteString(ctx.Config.FossilDriver + crlf)
+	}
+
+	// dosemu does not pass the host environment through, so a DROPFILE.INI
+	// door gets its DROPFILE_INI variable from the batch file instead.
+	if dosDropfileName(ctx.Config.DropfileType) == dropfileIniType && ctx.Subs["{DOSDROPFILE}"] != "" {
+		b.WriteString("SET " + dropfileIniEnvVar + "=" + ctx.Subs["{DOSDROPFILE}"] + crlf)
 	}
 
 	// Clear screen — the PTY bridge detects this ESC[2J sequence to know
@@ -180,14 +188,15 @@ func executeDOSDoor(ctx *DoorCtx) error {
 		return fmt.Errorf("failed to create node directory %s: %w", nodePath, err)
 	}
 
+	dosNodeDir := fmt.Sprintf("C:\\NODES\\%s", strings.ToUpper(nodeDir))
+
 	// Generate all dropfiles
-	if err := generateAllDropfiles(ctx, nodePath); err != nil {
+	if err := generateAllDropfiles(ctx, nodePath, dosNodeDir); err != nil {
 		return fmt.Errorf("failed to generate dropfiles: %w", err)
 	}
 	defer cleanupDropfiles(nodePath)
 
 	// Populate placeholders for batch file substitution
-	dosNodeDir := fmt.Sprintf("C:\\NODES\\%s", strings.ToUpper(nodeDir))
 	dropfileName := dosDropfileName(ctx.Config.DropfileType)
 	ctx.Subs["{NODEDIR}"] = nodePath
 	ctx.Subs["{DROPFILE}"] = filepath.Join(nodePath, dropfileName)
