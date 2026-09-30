@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -422,6 +424,16 @@ func TestService_StartRunsHubAndLeaf(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
+			// The port was released before Start rebound it, so another
+			// process may have taken it in between. Start only logs a bind
+			// failure; if the port is in use, skip this check rather than
+			// fail. The rest of the test talks to the hub through ts.
+			if probe, lnErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port)); lnErr != nil && errors.Is(lnErr, syscall.EADDRINUSE) {
+				t.Logf("port %d was taken before the hub could bind it; skipping the listener check", port)
+				break
+			} else if lnErr == nil {
+				probe.Close()
+			}
 			t.Fatalf("hub never listened on port %d: %v", port, err)
 		}
 		time.Sleep(10 * time.Millisecond)
