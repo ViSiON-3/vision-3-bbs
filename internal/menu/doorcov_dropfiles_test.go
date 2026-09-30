@@ -5,6 +5,7 @@ package menu
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +63,39 @@ func TestDoorcovBuildDoorCtx(t *testing.T) {
 	}
 	if ctx.DoorName != "LORD" || ctx.NodeNumber != 3 || ctx.OutputMode != ansi.OutputModeCP437 || ctx.Session != s {
 		t.Errorf("context not carried through: %+v", ctx)
+	}
+}
+
+// A caller with no limit is told unlimitedDoorMinutes rather than 0, which
+// doors read as "out of time". A CoSysOp gets the same whatever their stored
+// limit, and TimeLimit is cleared so the remote door deadline never fires.
+func TestDoorcovBuildDoorCtxUnlimited(t *testing.T) {
+	env := newMenuEnv(t)
+	coSysOp := env.e.GetServerConfig().CoSysOpLevel
+	start := time.Now().Add(-2 * time.Hour)
+	want := strconv.Itoa(unlimitedDoorMinutes)
+
+	for _, tc := range []struct {
+		name         string
+		level, limit int
+	}{
+		{"no limit", 10, 0},
+		{"cosysop with limit", coSysOp, 60},
+		{"sysop with limit", 255, 60},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := buildDoorCtx(env.e, nil, nil, 1, "U", "U U", tc.level, tc.limit, 0, "",
+				0, 0, 1, start, ansi.OutputModeUTF8, config.DoorConfig{}, "X")
+			if ctx.TimeLeftMin != unlimitedDoorMinutes || ctx.Subs["{TIMELEFT}"] != want {
+				t.Errorf("time left = %d / %q, want %s", ctx.TimeLeftMin, ctx.Subs["{TIMELEFT}"], want)
+			}
+			if ctx.User.TimeLimit != 0 {
+				t.Errorf("User.TimeLimit = %d, want 0", ctx.User.TimeLimit)
+			}
+			if deadline, _, expired := doorDeadline(ctx.User.TimeLimit, start, 0, time.Now()); expired || !deadline.IsZero() {
+				t.Errorf("doorDeadline = %v expired=%v, want no deadline", deadline, expired)
+			}
+		})
 	}
 }
 

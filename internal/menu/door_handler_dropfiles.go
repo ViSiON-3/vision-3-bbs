@@ -25,6 +25,13 @@ func doorUserIP(s ssh.Session) string {
 	return remoteIPFromSession(s)
 }
 
+// unlimitedDoorMinutes is the time left a door is told about for a caller with
+// no time limit. Dropfiles have no way to say "unlimited", and reporting the
+// literal 0 makes doors throw the caller straight back out. It is kept low
+// enough that the seconds fields (DOOR.SYS, CHAIN.TXT) still fit
+// the signed 16-bit integers old doors read them into.
+const unlimitedDoorMinutes = 540
+
 // buildDoorCtx creates a DoorCtx from the standard RunnableFunc parameters.
 func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userID int, handle, realName string, accessLevel, timeLimit, timesCalled int,
@@ -35,10 +42,20 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	nodeNumStr := strconv.Itoa(nodeNumber)
 	portStr := nodeNumStr
 
-	elapsedMinutes := int(time.Since(sessionStartTime).Minutes())
-	remainingMinutes := timeLimit - elapsedMinutes
-	if remainingMinutes < 0 {
-		remainingMinutes = 0
+	// CoSysOps and above have no time limit in a door, as they have no idle
+	// timeout. Clearing it here covers everything downstream: the remote door
+	// deadline, the dropfiles and the script engines all read TimeLimit <= 0
+	// as unlimited.
+	if accessLevel >= e.GetServerConfig().CoSysOpLevel {
+		timeLimit = 0
+	}
+
+	remainingMinutes := unlimitedDoorMinutes
+	if timeLimit > 0 {
+		remainingMinutes = timeLimit - int(time.Since(sessionStartTime).Minutes())
+		if remainingMinutes < 0 {
+			remainingMinutes = 0
+		}
 	}
 	timeLeftStr := strconv.Itoa(remainingMinutes)
 	baudStr := "38400"

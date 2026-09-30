@@ -93,7 +93,7 @@ If it does not work, `data/logs/vision3.log` records the address of every attemp
 
 **A door that needs Ctrl-] itself.** Change **Disconnect Key** to another control key in `^X` notation, or to `none` to pass every key through. With `none` a caller has no way out of a wedged session except dropping carrier, so only do it if the door genuinely needs the key.
 
-**Time limits.** Remote doors obey the caller's time limit like local ones: the connection is closed when it runs out, and a caller with no time left never reaches the server.
+**Time limits.** Remote doors obey the caller's time limit like local ones: the connection is closed when it runs out, and a caller with no time left never reaches the server. CoSysOps and above are not timed out of doors.
 
 **A server that only speaks Telnet.** Set **Type** to `Telnet` instead. The host, port, timeout and hang-up key work the same; there is no handshake, so the caller arrives at the server's own login or menu, and **Send On Connect** can type a login for them. See [Door Servers — Telnet](doors/door-servers.md#telnet).
 
