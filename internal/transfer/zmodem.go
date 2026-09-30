@@ -128,6 +128,76 @@ func adaptiveCopy(dst io.Writer, src io.Reader, backoff *atomic.Int32) (int64, e
 	}
 }
 
+// ZRPOS headers sent by a receiver asking for retransmission.
+var (
+	// Hex header "**\x18B09": ZPAD ZPAD ZDLE ZHEX, then frame type 09
+	// (ZRPOS) as two hex digits.
+	zrposHexHeader = []byte{0x2a, 0x2a, 0x18, 0x42, '0', '9'}
+	// Binary header "*\x18A\x09": ZPAD ZDLE ZBIN ZRPOS.
+	zrposBinHeader = []byte{0x2a, 0x18, 0x41, 0x09}
+)
+
+// zrposTailLen is how many bytes of earlier reads zrposDetector keeps: one
+// less than the longest header, so any header that is not wholly inside a
+// read still has its start in the carried tail.
+const zrposTailLen = 5
+
+// zrposDetector finds ZRPOS headers in a byte stream that arrives in reads
+// of arbitrary size. Each header is reported once, from the read holding
+// its last byte, whether it lies wholly in that read or started in earlier
+// ones.
+type zrposDetector struct {
+	tail    [zrposTailLen]byte
+	tailLen int
+}
+
+// scan calls found for every ZRPOS header whose last byte is in p. end is
+// the index of that byte in p; straddles is true when the header began in
+// an earlier read.
+func (d *zrposDetector) scan(p []byte, found func(hex bool, end int, straddles bool)) {
+	headers := [...]struct {
+		b   []byte
+		hex bool
+	}{{zrposHexHeader, true}, {zrposBinHeader, false}}
+
+	// Headers that start in the carried tail and end in p. Matches lying
+	// wholly inside the tail were reported with an earlier read.
+	if d.tailLen > 0 {
+		var window [2 * zrposTailLen]byte
+		w := append(window[:0], d.tail[:d.tailLen]...)
+		w = append(w, p[:min(len(p), zrposTailLen)]...)
+		for e := d.tailLen; e < len(w); e++ {
+			for _, h := range headers {
+				start := e - len(h.b) + 1
+				if start >= 0 && start < d.tailLen && bytes.Equal(w[start:e+1], h.b) {
+					found(h.hex, e-d.tailLen, true)
+				}
+			}
+		}
+	}
+
+	// Headers wholly inside p.
+	for e, b := range p {
+		for _, h := range headers {
+			if b == h.b[len(h.b)-1] && e >= len(h.b)-1 && bytes.Equal(p[e-len(h.b)+1:e+1], h.b) {
+				found(h.hex, e, false)
+			}
+		}
+	}
+
+	// Carry the last bytes of the stream so far, which may span several
+	// short reads.
+	if len(p) >= zrposTailLen {
+		copy(d.tail[:], p[len(p)-zrposTailLen:])
+		d.tailLen = zrposTailLen
+		return
+	}
+	keep := min(d.tailLen, zrposTailLen-len(p))
+	copy(d.tail[:], d.tail[d.tailLen-keep:d.tailLen])
+	copy(d.tail[keep:], p)
+	d.tailLen = keep + len(p)
+}
+
 // RunCommandDirect executes an external command with its stdin/stdout/stderr
 // piped directly to the SSH session — no PTY allocated. This is essential for
 // binary file-transfer protocols (ZMODEM, YMODEM, XMODEM) where a PTY's line
@@ -202,56 +272,29 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		buf := make([]byte, 32*1024)
 		var total int64
 		var cpErr error
-		var canRun int       // consecutive CAN (0x18) bytes seen so far
-		var killed bool      // set once CAN abort fires; stops further writes
-		var prevTail [6]byte // tail bytes from previous read for split-header detection
-		var prevLen int
+		var canRun int  // consecutive CAN (0x18) bytes seen so far
+		var killed bool // set once CAN abort fires; stops further writes
+		var zrpos zrposDetector
 		for {
 			nr, rerr := s.Read(buf)
 			if nr > 0 {
-				// Check for ZRPOS headers split across read boundaries.
-				// Concatenate previous tail with start of current buffer.
-				if prevLen > 0 {
-					combined := make([]byte, prevLen+nr)
-					copy(combined, prevTail[:prevLen])
-					copy(combined[prevLen:], buf[:nr])
-					// Only need to scan the overlap region (positions where a header could span)
-					scanEnd := prevLen + 5 // max header is 6 bytes
-					if scanEnd > len(combined) {
-						scanEnd = len(combined)
+				// Detect ZRPOS headers, including ones split across reads.
+				zrpos.scan(buf[:nr], func(hex bool, end int, straddles bool) {
+					kind, where := "binary", "in stdin"
+					if hex {
+						kind = "hex"
 					}
-					for i := 0; i < scanEnd; i++ {
-						b := combined[i]
-						if b == 0x09 && i >= 3 {
-							chunk := combined[i-3 : i+1]
-							if chunk[0] == 0x2a && chunk[1] == 0x18 && chunk[2] == 0x41 {
-								zrposBackoff.Add(1)
-								slog.Debug("ZRPOS binary header detected across boundary", "cmd", cmd.Path, "offset", total-int64(prevLen)+int64(i), "backoff", zrposBackoff.Load())
-							}
-						}
-						if b == '9' && i >= 5 {
-							chunk := combined[i-5 : i+1]
-							if chunk[0] == 0x2a && chunk[1] == 0x2a && chunk[2] == 0x18 &&
-								chunk[3] == 0x42 && chunk[4] == '0' {
-								zrposBackoff.Add(1)
-								slog.Debug("ZRPOS hex header detected across boundary", "cmd", cmd.Path, "offset", total-int64(prevLen)+int64(i), "backoff", zrposBackoff.Load())
-							}
-						}
+					if straddles {
+						where = "across boundary"
 					}
-				}
-				// Save tail for next iteration
-				if nr >= 6 {
-					copy(prevTail[:], buf[nr-6:nr])
-					prevLen = 6
-				} else {
-					copy(prevTail[:], buf[:nr])
-					prevLen = nr
-				}
+					zrposBackoff.Add(1)
+					slog.Debug("ZRPOS "+kind+" header detected "+where, "cmd", cmd.Path, "offset", total+int64(end), "backoff", zrposBackoff.Load())
+				})
 
-				// Scan for consecutive CAN bytes, ZRPOS frames, and decide
-				// whether this chunk counts as real file activity.
+				// Scan for consecutive CAN bytes and decide whether this
+				// chunk counts as real file activity.
 				hasNonCAN := false
-				for i, b := range buf[:nr] {
+				for _, b := range buf[:nr] {
 					if b == 0x18 { // CAN
 						canRun++
 						if canRun >= 5 && !killed {
@@ -265,28 +308,6 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 					} else {
 						canRun = 0
 						hasNonCAN = true
-					}
-
-					// Detect ZRPOS headers in the byte stream.
-					// Hex header: 2A 2A 18 42 30 39 (ZDLE ZHEX "B" "09")
-					//   → "**\x18B09" where 09 = ZRPOS frame type
-					// Binary header: 2A 18 41 09 (ZPAD ZDLE ZBIN ZRPOS)
-					if b == 0x09 && i >= 3 {
-						chunk := buf[i-3 : i+1]
-						if chunk[0] == 0x2a && chunk[1] == 0x18 && chunk[2] == 0x41 {
-							// Binary ZRPOS header: * ZDLE A ZRPOS
-							zrposBackoff.Add(1)
-							slog.Debug("ZRPOS binary header detected in stdin", "cmd", cmd.Path, "offset", total+int64(i), "backoff", zrposBackoff.Load())
-						}
-					}
-					if b == '9' && i >= 5 {
-						chunk := buf[i-5 : i+1]
-						if chunk[0] == 0x2a && chunk[1] == 0x2a && chunk[2] == 0x18 &&
-							chunk[3] == 0x42 && chunk[4] == '0' {
-							// Hex ZRPOS header: ** ZDLE B 0 9
-							zrposBackoff.Add(1)
-							slog.Debug("ZRPOS hex header detected in stdin", "cmd", cmd.Path, "offset", total+int64(i), "backoff", zrposBackoff.Load())
-						}
 					}
 				}
 				if killed {
@@ -547,18 +568,31 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	}
 	// ptmx is closed explicitly during shutdown sequence below
 
-	// Handle window resizing.
+	// Handle window resizing. The session owns winCh and may never close it,
+	// so the goroutine also stops on resizeStop, and must have exited before
+	// ptmx is closed so no Setsize can run on a closed (or reused) descriptor.
+	resizeStop := make(chan struct{})
+	resizeDone := make(chan struct{})
 	go func() {
+		defer close(resizeDone)
 		if ptyReq.Window.Width > 0 || ptyReq.Window.Height > 0 {
 			wErr := pty.Setsize(ptmx, &pty.Winsize{Rows: uint16(ptyReq.Window.Height), Cols: uint16(ptyReq.Window.Width)})
 			if wErr != nil {
 				slog.Warn("failed to set initial PTY size", "error", wErr)
 			}
 		}
-		for win := range winCh {
-			wErr := pty.Setsize(ptmx, &pty.Winsize{Rows: uint16(win.Height), Cols: uint16(win.Width)})
-			if wErr != nil {
-				slog.Warn("failed to resize PTY", "error", wErr)
+		for {
+			select {
+			case <-resizeStop:
+				return
+			case win, ok := <-winCh:
+				if !ok {
+					return
+				}
+				wErr := pty.Setsize(ptmx, &pty.Winsize{Rows: uint16(win.Height), Cols: uint16(win.Width)})
+				if wErr != nil {
+					slog.Warn("failed to resize PTY", "error", wErr)
+				}
 			}
 		}
 	}()
@@ -635,6 +669,10 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 
 	// Restore terminal before closing PTY
 	restoreTerminal()
+
+	// Stop the resize goroutine before the PTY goes away.
+	close(resizeStop)
+	<-resizeDone
 
 	// Close PTY and wait for both goroutines
 	_ = ptmx.Close()
