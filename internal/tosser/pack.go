@@ -42,6 +42,14 @@ func (t *Tosser) PackOutbound() PackResult {
 		return result
 	}
 
+	// A staging path that is a regular file is a configuration error. Check
+	// it here: on Windows, ReadDir on a file reports "not found", which
+	// would pass for an empty staging directory.
+	if fi, statErr := os.Stat(stagingDir); statErr == nil && !fi.IsDir() {
+		result.Errors = append(result.Errors, fmt.Sprintf("read staging dir: %s is not a directory", stagingDir))
+		return result
+	}
+
 	// Collect all .PKT files in the staging directory
 	entries, err := os.ReadDir(stagingDir)
 	if err != nil {
