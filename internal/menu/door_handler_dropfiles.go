@@ -295,8 +295,9 @@ func generateChainTxt(ctx *DoorCtx, dir, filename string) error {
 	return os.WriteFile(path, []byte(b.String()), 0600)
 }
 
-// generateAllDropfiles generates all four standard dropfile formats in the given directory.
-func generateAllDropfiles(ctx *DoorCtx, dir string) error {
+// generateAllDropfiles generates every supported dropfile format in the given
+// directory. doorDir is that directory as the door sees it (its DOS path).
+func generateAllDropfiles(ctx *DoorCtx, dir, doorDir string) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("failed to create dropfile directory %s: %w", dir, err)
 	}
@@ -313,6 +314,9 @@ func generateAllDropfiles(ctx *DoorCtx, dir string) error {
 	if err := generateChainTxt(ctx, dir, "CHAIN.TXT"); err != nil {
 		return fmt.Errorf("failed to generate CHAIN.TXT: %w", err)
 	}
+	if err := generateDropfileIni(ctx, dir, dropfileIniType, doorDir); err != nil {
+		return fmt.Errorf("failed to generate %s: %w", dropfileIniType, err)
+	}
 
 	slog.Info("all dropfiles generated", "dir", dir)
 	return nil
@@ -320,7 +324,7 @@ func generateAllDropfiles(ctx *DoorCtx, dir string) error {
 
 // cleanupDropfiles removes all generated dropfiles from the directory.
 func cleanupDropfiles(dir string) {
-	files := []string{"DOOR.SYS", "DOOR32.SYS", "DORINFO1.DEF", "CHAIN.TXT", "EXTERNAL.BAT"}
+	files := []string{"DOOR.SYS", "DOOR32.SYS", "DORINFO1.DEF", "CHAIN.TXT", dropfileIniType, "EXTERNAL.BAT"}
 	for _, f := range files {
 		path := filepath.Join(dir, f)
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {

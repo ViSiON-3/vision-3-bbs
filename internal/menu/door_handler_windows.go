@@ -52,7 +52,7 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 
 	dropfileTypeUpper := strings.ToUpper(doorConfig.DropfileType)
 
-	if dropfileTypeUpper == "DOOR.SYS" || dropfileTypeUpper == "CHAIN.TXT" || dropfileTypeUpper == "DOOR32.SYS" || dropfileTypeUpper == "DORINFO1.DEF" {
+	if isGeneratedDropfileType(dropfileTypeUpper) {
 		fname := dropfileName(dropfileTypeUpper, doorConfig.DropfileCase)
 		dropfilePath = filepath.Join(dropfileDir, fname)
 		slog.Info("generating dropfile", "type", dropfileTypeUpper, "path", dropfilePath)
@@ -67,6 +67,13 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 			genErr = generateChainTxt(ctx, dropfileDir, fname)
 		case "DORINFO1.DEF":
 			genErr = generateDorInfo(ctx, dropfileDir, fname)
+		case dropfileIniType:
+			// Only a per-node directory is private enough to offer as TEMP_DIR.
+			tempDir := ""
+			if dropfileLoc == "node" {
+				tempDir = dropfileDir
+			}
+			genErr = generateDropfileIni(ctx, dropfileDir, fname, tempDir)
 		}
 
 		if genErr != nil {
@@ -173,6 +180,9 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	}
 	if _, exists := envMap["BBS_USERIP"]; !exists {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_USERIP=%s", ctx.Subs["{USERIP}"]))
+	}
+	if _, exists := envMap[dropfileIniEnvVar]; !exists && dropfileTypeUpper == dropfileIniType {
+		cmd.Env = append(cmd.Env, dropfileIniEnv(dropfilePath))
 	}
 
 	if strings.EqualFold(doorConfig.IOMode, "SOCKET") {
