@@ -145,6 +145,11 @@ type Model struct {
 	configPath string
 	dirty      bool
 
+	// Own addresses binkd.conf may still declare, keyed by network: changes
+	// saved to ftn.json that have not been applied to binkd.conf yet. See
+	// saveAll.
+	staleBinkdAddrs map[string]string
+
 	// Top menu state
 	topCursor int
 	topItems  []topMenuItem

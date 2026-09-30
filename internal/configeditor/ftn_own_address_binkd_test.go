@@ -132,3 +132,51 @@ func TestSaveAllLeavesSysopBinkdAKA(t *testing.T) {
 		t.Errorf("binkd.conf should be untouched:\n%s", got)
 	}
 }
+
+// A binkd.conf that could not be synced leaves ftn.json saved with the new
+// address all the same. The old one is then gone from disk, so the next save
+// has to remember it, or the stale line outlives the failure that caused it.
+func TestSaveAllRetriesBinkdAddressAfterFailedSync(t *testing.T) {
+	cm := configuredModel()
+	m := &cm
+	binkdPath, conf := boardWithBinkdConf(t, m, fsxnetBinkdConf)
+
+	// A directory where the file should be fails every read of it.
+	if err := os.Remove(binkdPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(binkdPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	setField(t, m.fieldsFTNLink(), "Own Address", "21:4/159")
+	m.dirty = true
+	if !m.saveAll() {
+		t.Fatalf("saveAll: %q", m.message)
+	}
+	if !strings.Contains(m.message, "binkd.conf sync failed") {
+		t.Fatalf("the sync was meant to fail, got: %q", m.message)
+	}
+
+	if err := os.Remove(binkdPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binkdPath, []byte(conf), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m.dirty = true
+	if !m.saveAll() {
+		t.Fatalf("second saveAll: %q", m.message)
+	}
+
+	got, err := os.ReadFile(binkdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := strings.Replace(conf, "address 21:4/158@fsxnet", "address 21:4/159@fsxnet", 1); string(got) != want {
+		t.Errorf("binkd.conf after the retry:\n%s\nwant:\n%s", got, want)
+	}
+	if len(m.staleBinkdAddrs) != 0 {
+		t.Errorf("nothing should be left to retry, got %v", m.staleBinkdAddrs)
+	}
+}
