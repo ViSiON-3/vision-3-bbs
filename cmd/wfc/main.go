@@ -21,11 +21,9 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
+	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 	"github.com/ViSiON-3/vision-3-bbs/internal/wfcui"
 )
-
-// version is set at link time via -ldflags "-X main.version=<tag>".
-var version = "dev"
 
 func main() {
 	fs := flag.NewFlagSet("wfc", flag.ExitOnError)
@@ -38,7 +36,7 @@ func main() {
 	}
 
 	if f.version {
-		fmt.Printf("wfc %s\n", version)
+		fmt.Printf("wfc %s\n", version.Number)
 		os.Exit(0)
 	}
 
@@ -114,7 +112,7 @@ func main() {
 		ReadOnly:  f.readonly,
 		MaxEvents: f.maxEvents,
 		Refresh:   time.Duration(f.refresh) * time.Millisecond,
-		Version:   version,
+		Version:   version.Number,
 		Dial:      dial,
 	})
 
