@@ -218,18 +218,27 @@ func (s *Screen) LoadFooterTemplate(menuSetPath string) error {
 }
 
 // DisplayFooter renders the footer template at the bottom of the terminal.
-// Must be called after ClearScreen (e.g. within FullRedraw) to repaint the footer.
+// It is called from FullRedraw and to restore the footer after a prompt has
+// used its last row, so it clears its rows first: a footer row narrower than
+// the prompt would otherwise leave the end of the prompt showing.
 func (s *Screen) DisplayFooter() {
 	if s.footerContent == "" {
 		return
 	}
 	footerStartY := s.termHeight - s.footerHeight + 1
+	s.WriteDirect("\x1b[0m") // clear to the default background, not a prompt's colours
+	for row := footerStartY; row <= s.termHeight; row++ {
+		s.GoXY(1, row)
+		s.ClearEOL()
+	}
 	s.GoXY(1, footerStartY)
 	terminalio.WriteProcessedBytes(s.terminal, []byte(s.footerContent), s.outputMode)
 	s.WriteDirect("\x1b[0m") // reset colors so editing area is not affected
 }
 
-// createMinimalHeader creates a simple header when no template is available
+// createMinimalHeader creates a simple header when no template is available.
+// The result is ready to write: its pipe codes are already expanded, because
+// DisplayHeader writes the header as art and does not expand them.
 func (s *Screen) createMinimalHeader(subject, recipient string) string {
 	var header strings.Builder
 	header.WriteString(ansi.ClearScreen())
@@ -240,8 +249,10 @@ func (s *Screen) createMinimalHeader(subject, recipient string) string {
 	header.WriteString("|07Subject: |11")
 	header.WriteString(subject)
 	header.WriteString("\r\n")
-	header.WriteString("|07" + strings.Repeat("-", 79) + "\r\n")
-	return header.String()
+	// One column short of the 80-column art width (WriteArt wraps there on
+	// any terminal), so the rule never wraps.
+	header.WriteString("|07" + strings.Repeat("-", ansi.ArtWidth-1) + "\r\n")
+	return string(ansi.ReplacePipeCodes([]byte(header.String())))
 }
 
 // isEditorNewFormat reports whether the template uses @CODE@ placeholder syntax.
@@ -521,9 +532,11 @@ func buildCenteredSection(confArea, borderColor string, totalWidth int) string {
 		return borderColor + strings.Repeat(dash, totalWidth)
 	}
 
-	// inner = totalWidth minus the two border chars (▌ and ▐)
+	// inner = totalWidth minus the two border chars (▌ and ▐). It needs room
+	// for the two spaces and at least one character of the name; anything
+	// narrower would overflow totalWidth or box nothing, so draw a plain rule.
 	innerWidth := totalWidth - 2
-	if innerWidth <= 0 {
+	if innerWidth < 3 {
 		return borderColor + strings.Repeat(dash, totalWidth)
 	}
 
@@ -757,9 +770,16 @@ func (s *Screen) PromptRow() int {
 
 // Resize handles terminal resize events
 func (s *Screen) Resize(newWidth, newHeight int) {
+	startY := s.editingStartY
 	s.termWidth = newWidth
 	s.termHeight = newHeight
 	s.calculateGeometry()
+	// Keep the first editing row a |#N header marker chose: the header is the
+	// same height at any size, and calculateGeometry only knows the default.
+	if startY != s.editingStartY && s.termHeight-startY-1 >= 5 {
+		s.editingStartY = startY
+		s.screenLines = s.termHeight - startY - 1
+	}
 	// Re-apply footer geometry if the footer template was loaded.
 	if s.footerHeight > 0 {
 		s.statusLineY = s.termHeight - s.footerHeight + 1

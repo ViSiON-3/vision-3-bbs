@@ -197,7 +197,7 @@ func TestDoorcovQWKDownloadNotSent(t *testing.T) {
 		{"cancel at the protocol menu", "\rQ\r", nil, "Transfer Protocols:", "Sending", false},
 		{"disconnect at the protocol menu", "\r", nil, "Transfer Protocols:", "Sending", true},
 		{"no protocols configured", "\r", func(_ *testing.T, env *menuEnv) { env.e.SetProtocols(nil) },
-			"Send QWK Packet", "Sending", false},
+			qwkNoProtocolsMsg, "Sending", false},
 		{"transfer program missing", "\r\r", func(_ *testing.T, env *menuEnv) {
 			env.e.SetProtocols([]transfer.ProtocolConfig{{Key: "T", Name: "Testmodem", SendCmd: "/nonexistent/sz", Default: true}})
 		}, "Transfer program not found!", "sent successfully", false},
@@ -241,11 +241,35 @@ func TestDoorcovQWKDownloadNoTempSpace(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(tmp, "missing"))
 
 	r := doorcovRun(env, newDoorcovScripted("\r\r"), runQWKDownload, env.sysop, "")
-	if r.err != nil || r.user != env.sysop || r.next != "" || r.has("Transfer Protocols:") {
+	if r.err != nil || r.user != env.sysop || r.next != "" || r.has("Transfer Protocols:") || !r.has(qwkPrepareFailedMsg) {
 		t.Errorf("err=%v user=%v next=%q output:\n%s", r.err, r.user, r.next, r.text())
 	}
 	if got := env.diskLastRead(generalAreaID, env.sysop.Handle); got != 0 {
 		t.Errorf("last-read = %d though nothing was sent, want 0", got)
+	}
+}
+
+// If the packet cannot be given its BBSID.QWK name the caller is told, and the
+// staged packet is not left behind.
+func TestDoorcovQWKDownloadRenameFails(t *testing.T) {
+	env, tmp := doorcovQWKEnv(t)
+	env.generalMsgs(2)
+	doorcovSendProtocol(t, env, "0")
+	// A non-empty directory where the packet should go makes the rename fail.
+	blocker := filepath.Join(tmp, doorcovQWKID+".QWK")
+	if err := os.MkdirAll(filepath.Join(blocker, "in-the-way"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	r := doorcovRun(env, newDoorcovScripted("\r\r"), runQWKDownload, env.sysop, "")
+	if r.err != nil || r.user != env.sysop || r.next != "" || r.has("Transfer Protocols:") || !r.has(qwkPrepareFailedMsg) {
+		t.Errorf("err=%v user=%v next=%q output:\n%s", r.err, r.user, r.next, r.text())
+	}
+	if got := env.diskLastRead(generalAreaID, env.sysop.Handle); got != 0 {
+		t.Errorf("last-read = %d though nothing was sent, want 0", got)
+	}
+	if left := doorcovTempLeft(t, tmp); len(left) != 1 || left[0] != doorcovQWKID+".QWK" {
+		t.Errorf("temp directory holds %v, want only the blocking directory", left)
 	}
 }
 
@@ -402,11 +426,28 @@ func TestDoorcovQWKUploadTransferFails(t *testing.T) {
 	env.e.SetProtocols([]transfer.ProtocolConfig{{Key: "T", Name: "Testmodem", RecvCmd: "touch", RecvArgs: []string{marker}, Default: true}})
 	t.Setenv("TMPDIR", filepath.Join(tmp, "missing"))
 	r = doorcovRun(env, newDoorcovScripted("\r"), runQWKUpload, env.sysop, "")
-	if r.err != nil || r.user != env.sysop || r.has("No REP packet received.") {
+	if r.err != nil || r.user != env.sysop || r.has("No REP packet received.") || !r.has("Error preparing to receive the REP packet.") {
 		t.Errorf("no temp space: err=%v user=%v output:\n%s", r.err, r.user, r.text())
 	}
 	if doorcovExists(marker) {
 		t.Error("receive ran with no directory to receive into")
+	}
+}
+
+// A received REP that cannot be read is reported, not silently dropped.
+func TestDoorcovQWKUploadUnreadableREP(t *testing.T) {
+	env, tmp := doorcovQWKEnv(t)
+	// A directory named like the packet is found but cannot be read as one.
+	env.e.SetProtocols([]transfer.ProtocolConfig{{
+		Key: "T", Name: "Testmodem", RecvCmd: "/bin/sh", RecvArgs: []string{doorcovScript(t, "mkdir ./"+doorcovQWKID+".REP")}, Default: true,
+	}})
+
+	r := doorcovRun(env, newDoorcovScripted("\r"), runQWKUpload, env.sysop, "")
+	if r.err != nil || r.user != env.sysop || r.next != "" || !r.has("Error reading REP packet.") || r.has("Total Processed") {
+		t.Errorf("err=%v user=%v next=%q output:\n%s", r.err, r.user, r.next, r.text())
+	}
+	if left := doorcovTempLeft(t, tmp); len(left) != 0 {
+		t.Errorf("upload files left in the temp directory: %v", left)
 	}
 }
 
@@ -426,7 +467,7 @@ func TestDoorcovQWKUploadProtocolPrompt(t *testing.T) {
 
 	env.e.SetProtocols(nil)
 	r = env.runCmd("QWKUPLOAD", env.sysop, "", "\r")
-	if r.user != env.sysop || r.next != "" || r.has("Send your") {
+	if r.user != env.sysop || r.next != "" || r.has("Send your") || !r.has(qwkNoProtocolsMsg) {
 		t.Errorf("no protocols: user=%v next=%q output:\n%s", r.user, r.next, r.text())
 	}
 }

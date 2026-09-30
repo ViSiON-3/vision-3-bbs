@@ -2,6 +2,7 @@ package menu
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -109,8 +110,8 @@ func TestExeccovRun_BackNavigation(t *testing.T) {
 }
 
 // A menu with a password asks up to three times. The right one lets the
-// caller in; three wrong ones, a disconnect or an abort end the call with no
-// user.
+// caller in; three wrong ones, a disconnect or an abort end the call, still
+// handing back the logged-in user (#529).
 func TestExeccovRun_MenuPassword(t *testing.T) {
 	env, m := execcovRunEnv(t)
 	m.menu("VAULT", MenuRecord{Password: "sesame"}, "VAULT-SCREEN\r\n",
@@ -139,17 +140,24 @@ func TestExeccovRun_MenuPassword(t *testing.T) {
 		"ctrl-c":      "\x03",
 	} {
 		r := execcovRun(env, execcovCall{user: env.caller, start: "VAULT", input: input})
-		if r.err != nil || r.next != "LOGOFF" || r.user != nil {
-			t.Errorf("%s: next=%q user=%s err=%v, want LOGOFF with no user", name, r.next, execcovHandle(r.user), r.err)
+		if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" {
+			t.Errorf("%s: next=%q user=%s err=%v, want LOGOFF as Caller", name, r.next, execcovHandle(r.user), r.err)
 		}
 		if got := r.has("PW-LOCKED"); got != (name == "three wrong") {
 			t.Errorf("%s: too-many-attempts shown = %v", name, got)
 		}
 	}
+
+	// A caller who has not logged in still gets no user back: main.go reads
+	// that as "authentication did not happen".
+	r = execcovRun(env, execcovCall{start: "VAULT", input: "a\rb\rc\r"})
+	if r.err != nil || r.next != "LOGOFF" || r.user != nil {
+		t.Errorf("guest: next=%q user=%s err=%v, want LOGOFF with no user", r.next, execcovHandle(r.user), r.err)
+	}
 }
 
 // A menu the caller's level does not reach is refused before any of it runs:
-// no autorun command, no screen, and the call ends.
+// no autorun command, no screen, and the call ends with the user handed back.
 func TestExeccovRun_MenuACSDenied(t *testing.T) {
 	env, m := execcovRunEnv(t)
 	ran := false
@@ -163,7 +171,7 @@ func TestExeccovRun_MenuACSDenied(t *testing.T) {
 	execcovStrings(env, func(s *config.StringsConfig) { s.ExecAccessDenied = "\r\nNO-ENTRY\r\n" })
 
 	r := execcovRun(env, execcovCall{user: env.caller, start: "STAFF", input: "Q\r"})
-	if r.err != nil || r.next != "LOGOFF" || r.user != nil {
+	if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" {
 		t.Errorf("next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
 	}
 	if !r.has("NO-ENTRY") || r.has("STAFF-SCREEN") || ran {
@@ -172,7 +180,7 @@ func TestExeccovRun_MenuACSDenied(t *testing.T) {
 
 	// Nor is a caller who has not logged in.
 	r = execcovRun(env, execcovCall{start: "STAFF", input: "Q\r"})
-	if r.next != "LOGOFF" || !r.has("NO-ENTRY") || r.has("STAFF-SCREEN") || ran {
+	if r.next != "LOGOFF" || r.user != nil || !r.has("NO-ENTRY") || r.has("STAFF-SCREEN") || ran {
 		t.Errorf("guest: next=%q autorun=%v output:\n%s", r.next, ran, r.text())
 	}
 
@@ -189,7 +197,7 @@ func TestExeccovRun_MissingMenuFiles(t *testing.T) {
 	execcovStrings(env, func(s *config.StringsConfig) { s.ExecMenuLoadError = "\r\nLOADERR %s: %v\r\n" })
 
 	r := execcovRun(env, execcovCall{user: env.caller, start: "NOPE", input: "Q\r"})
-	if r.err == nil || !strings.Contains(r.err.Error(), "failed to read screen file NOPE.ANS") || r.user != nil {
+	if r.err == nil || !strings.Contains(r.err.Error(), "failed to read screen file NOPE.ANS") || execcovHandle(r.user) != "Caller" {
 		t.Errorf("no screen: user=%s err=%v", execcovHandle(r.user), r.err)
 	}
 	if !r.has("Error reading screen file: NOPE.ANS") {
@@ -198,7 +206,7 @@ func TestExeccovRun_MissingMenuFiles(t *testing.T) {
 
 	m.write("ansi", "HALF.ANS", "HALF-SCREEN\r\n")
 	r = execcovRun(env, execcovCall{user: env.caller, start: "HALF", input: "Q\r"})
-	if r.err == nil || !strings.Contains(r.err.Error(), "failed to load menu HALF") || r.user != nil {
+	if r.err == nil || !strings.Contains(r.err.Error(), "failed to load menu HALF") || execcovHandle(r.user) != "Caller" {
 		t.Errorf("no record: user=%s err=%v", execcovHandle(r.user), r.err)
 	}
 	if !r.has("LOADERR HALF: ") || r.has("HALF-SCREEN") {
@@ -268,8 +276,8 @@ func TestExeccovRun_AutoRunOnceAndEvery(t *testing.T) {
 }
 
 // What an autorun command returns steers the run: GOTO enters another menu
-// without drawing this one, LOGOFF and an error end the run, and a user it
-// hands back replaces the session's.
+// without drawing this one, LOGOFF ends the run, an error is shown and the
+// menu comes up anyway, and a user it hands back replaces the session's.
 func TestExeccovRun_AutoRunOutcomes(t *testing.T) {
 	t.Run("goto", func(t *testing.T) {
 		env, m := execcovRunEnv(t)
@@ -299,10 +307,10 @@ func TestExeccovRun_AutoRunOutcomes(t *testing.T) {
 		execcovStrings(env, func(s *config.StringsConfig) { s.ExecRunCommandError = "\r\nRUNERR %s: %v\r\n" })
 		m.menu("MAIN", MenuRecord{}, "MAIN-SCREEN\r\n", CommandRecord{Keys: "//", Command: "RUN:EXECCOVFAIL"})
 		r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "Q\r"})
-		if !errors.Is(r.err, boom) || r.next != "" || r.user != nil {
+		if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" {
 			t.Errorf("next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
 		}
-		if !r.has("RUNERR EXECCOVFAIL: boom") || r.has("MAIN-SCREEN") {
+		if !r.has("RUNERR EXECCOVFAIL: boom", "MAIN-SCREEN") {
 			t.Errorf("output:\n%s", r.text())
 		}
 	})
@@ -341,7 +349,13 @@ func execcovDispatchEnv(t *testing.T) (env *menuEnv, m *execcovMenus, args *[]st
 	reg["EXECCOVFAIL"] = func(c *cmdCtx, _ string) (*user.User, string, error) {
 		return c.currentUser, "", errors.New("boom")
 	}
+	reg["EXECCOVFAILOFF"] = func(*cmdCtx, string) (*user.User, string, error) {
+		return nil, "LOGOFF", errors.New("bang")
+	}
 	reg["EXECCOVEOF"] = func(c *cmdCtx, _ string) (*user.User, string, error) { return c.currentUser, "", io.EOF }
+	reg["EXECCOVWRAPEOF"] = func(*cmdCtx, string) (*user.User, string, error) {
+		return nil, "", fmt.Errorf("reading keys: %w", io.EOF)
+	}
 	reg["EXECCOVIDLE"] = func(c *cmdCtx, _ string) (*user.User, string, error) {
 		return c.currentUser, "", editor.ErrIdleTimeout
 	}
@@ -351,7 +365,9 @@ func execcovDispatchEnv(t *testing.T) (env *menuEnv, m *execcovMenus, args *[]st
 		CommandRecord{Keys: "J", Command: "RUN:EXECCOVGOTO"},
 		CommandRecord{Keys: "L", Command: "RUN:EXECCOVLOGOFF"},
 		CommandRecord{Keys: "E", Command: "RUN:EXECCOVFAIL"},
+		CommandRecord{Keys: "F", Command: "RUN:EXECCOVFAILOFF"},
 		CommandRecord{Keys: "D", Command: "RUN:EXECCOVEOF"},
+		CommandRecord{Keys: "U", Command: "RUN:EXECCOVWRAPEOF"},
 		CommandRecord{Keys: "I", Command: "RUN:EXECCOVIDLE"},
 		CommandRecord{Keys: "N", Command: "RUN:NOSUCHTHING"},
 		CommandRecord{Keys: "B", Command: "BOGUS:THING"},
@@ -412,29 +428,44 @@ func TestExeccovRun_CommandOutcomes(t *testing.T) {
 	})
 	t.Run("handler asks for logoff", func(t *testing.T) {
 		r := execcovRun(env.sub(t), execcovCall{user: env.caller, start: "CMDS", input: "L\rQ\r"})
-		// The handler returned no user, and that is what Run reports.
-		if r.err != nil || r.next != "LOGOFF" || r.user != nil || execcovCount(r, "CMDS-SCREEN") != 1 {
+		// The handler returned no user, which leaves the caller's in place.
+		if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" || execcovCount(r, "CMDS-SCREEN") != 1 {
 			t.Errorf("next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
 		}
 	})
 	t.Run("handler fails", func(t *testing.T) {
+		// The error is shown and the menu comes back (#528).
 		r := execcovRun(env.sub(t), execcovCall{user: env.caller, start: "CMDS", input: "E\rQ\r"})
-		if r.err == nil || r.err.Error() != "boom" || r.next != "" || execcovHandle(r.user) != "Caller" {
+		if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" {
 			t.Errorf("next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
 		}
-		if !r.has("RUNERR EXECCOVFAIL: boom") {
+		if !r.has("RUNERR EXECCOVFAIL: boom") || execcovCount(r, "CMDS-SCREEN") != 2 {
+			t.Errorf("output:\n%s", r.text())
+		}
+	})
+	t.Run("handler fails and asks for logoff", func(t *testing.T) {
+		r := execcovRun(env.sub(t), execcovCall{user: env.caller, start: "CMDS", input: "F\rQ\r"})
+		if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" {
+			t.Errorf("next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
+		}
+		if !r.has("RUNERR EXECCOVFAILOFF: bang") || execcovCount(r, "CMDS-SCREEN") != 1 {
 			t.Errorf("output:\n%s", r.text())
 		}
 	})
 	t.Run("handler sees a disconnect", func(t *testing.T) {
 		r := execcovRun(env.sub(t), execcovCall{user: env.caller, start: "CMDS", input: "D\rQ\r"})
-		if r.err != nil || r.next != "LOGOFF" || r.user != nil || r.has("RUNERR") {
+		if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" || r.has("RUNERR") {
 			t.Errorf("next=%q user=%s err=%v output:\n%s", r.next, execcovHandle(r.user), r.err, r.text())
+		}
+		// Wrapped, it is still a disconnect.
+		r = execcovRun(env.sub(t), execcovCall{user: env.caller, start: "CMDS", input: "U\rQ\r"})
+		if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" || r.has("RUNERR") || execcovCount(r, "CMDS-SCREEN") != 1 {
+			t.Errorf("wrapped: next=%q user=%s err=%v output:\n%s", r.next, execcovHandle(r.user), r.err, r.text())
 		}
 	})
 	t.Run("handler times out idle", func(t *testing.T) {
 		r := execcovRun(env.sub(t), execcovCall{user: env.caller, start: "CMDS", input: "I\rQ\r"})
-		if r.err != nil || r.next != "LOGOFF" || r.user != nil || !r.has("IDLE-TOO-LONG") {
+		if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" || !r.has("IDLE-TOO-LONG") {
 			t.Errorf("next=%q user=%s err=%v output:\n%s", r.next, execcovHandle(r.user), r.err, r.text())
 		}
 		// With a TIMEOUT.ANS in the menu set, that is shown instead.
@@ -486,7 +517,9 @@ func TestExeccovRun_GlobalLogoffKeys(t *testing.T) {
 }
 
 // A DOOR: command goes to the registry's door handler with the door's name
-// as written, and the handler's result is treated like a RUN: handler's.
+// as written, and the handler's result is treated like a RUN: handler's: a
+// failed door is reported and the menu comes back, and only a disconnect or
+// an idle timeout ends the call.
 func TestExeccovRun_DoorCommand(t *testing.T) {
 	env, _, _ := execcovDispatchEnv(t)
 	var (
@@ -512,15 +545,25 @@ func TestExeccovRun_DoorCommand(t *testing.T) {
 
 	next, fail = "", errors.New("no dosemu")
 	r = execcovRun(env, execcovCall{user: env.caller, start: "CMDS", input: "O\rQ\r"})
-	if r.err == nil || r.err.Error() != "no dosemu" || !r.has("DOORERR Tetris: no dosemu") {
-		t.Errorf("door failed: err=%v output:\n%s", r.err, r.text())
+	if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" {
+		t.Errorf("door failed: next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
+	}
+	if !r.has("DOORERR Tetris: no dosemu") || execcovCount(r, "CMDS-SCREEN") != 2 {
+		t.Errorf("door failed: output:\n%s", r.text())
 	}
 
 	fail = io.EOF
 	r = execcovRun(env, execcovCall{user: env.caller, start: "CMDS", input: "O\rQ\r"})
-	if r.err != nil || r.next != "LOGOFF" || r.user != nil || r.has("DOORERR") {
+	if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" || r.has("DOORERR") || execcovCount(r, "CMDS-SCREEN") != 1 {
 		t.Errorf("disconnect in door: next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
 	}
+
+	fail = editor.ErrIdleTimeout
+	r = execcovRun(env, execcovCall{user: env.caller, start: "CMDS", input: "O\rQ\r"})
+	if r.err != nil || r.next != "LOGOFF" || !r.has("IDLE-TOO-LONG") || r.has("DOORERR") || execcovCount(r, "CMDS-SCREEN") != 1 {
+		t.Errorf("idle in door: next=%q err=%v output:\n%s", r.next, r.err, r.text())
+	}
+	fail = nil
 
 	// With no door handler at all the command is a no-op.
 	delete(env.e.RunRegistry, "DOOR:")
@@ -827,5 +870,28 @@ func TestExeccovRun_MainPromptPendingValidations(t *testing.T) {
 	}
 	if r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN"}); r.has("WAITING=") || !r.has("CMD>") {
 		t.Errorf("one waiting, caller:\n%s", r.text())
+	}
+}
+
+// An executor built without a SessionRegistry, as tests and tools may do,
+// runs its menus with no one online instead of panicking in the node count
+// or activity lookups (#530).
+func TestExeccovRun_NoSessionRegistry(t *testing.T) {
+	env, m := execcovRunEnv(t)
+	env.e.SessionRegistry = nil
+	m.menu("SUB", MenuRecord{}, "SUB-SCREEN online=@U@\r\n",
+		CommandRecord{Keys: "~~", Command: "RUN:EXECCOVNOP", NodeActivity: "Idling"},
+		CommandRecord{Keys: "A", Command: "RUN:EXECCOVNOP", NodeActivity: "Busy"},
+		CommandRecord{Keys: "Q", Command: "LOGOFF"})
+	env.e.RunRegistry["EXECCOVNOP"] = func(c *cmdCtx, _ string) (*user.User, string, error) {
+		return c.currentUser, "", nil
+	}
+
+	r := execcovRun(env, execcovCall{user: env.caller, start: "SUB", input: "A\rQ\r"})
+	if r.err != nil || r.next != "LOGOFF" || execcovCount(r, "SUB-SCREEN online=0") != 2 {
+		t.Errorf("next=%q err=%v output:\n%s", r.next, r.err, r.text())
+	}
+	if env.e.nodeSession(1) != nil || env.e.activeNodeCount() != 0 || env.e.activeSessions() != nil {
+		t.Error("registry helpers should report nothing online without a registry")
 	}
 }

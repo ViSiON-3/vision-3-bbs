@@ -91,6 +91,43 @@ func TestSubscriberStore_SetStatusRejectsUnknownNodeAndBadStatus(t *testing.T) {
 	}
 }
 
+func TestSubscriberStore_SetProfileUpdatesOnlyThatRow(t *testing.T) {
+	ss := newTestStore(t)
+	addTestSub(t, ss, "aaaa000000000001", "active")
+	addTestSub(t, ss, "aaaa000000000002", "active")
+
+	// Add leaves an existing row alone; SetProfile is what changes it.
+	if _, err := ss.Add(Subscriber{NodeID: "aaaa000000000001", Network: "testnet",
+		PubKeyB64: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", BBSName: "Renamed", Status: "active"}); err != nil {
+		t.Fatalf("re-add: %v", err)
+	}
+	if got := ss.Get("aaaa000000000001", "testnet").BBSName; got != "BBS aaaa000000000001" {
+		t.Fatalf("Add changed an existing row's name to %q", got)
+	}
+
+	if err := ss.SetProfile("aaaa000000000001", "testnet", "Real BBS", "bbs.example.net"); err != nil {
+		t.Fatalf("set profile: %v", err)
+	}
+	check := func(when string) {
+		t.Helper()
+		if s := ss.Get("aaaa000000000001", "testnet"); s.BBSName != "Real BBS" || s.BBSHost != "bbs.example.net" || s.Status != "active" {
+			t.Errorf("%s: row = %+v, want Real BBS at bbs.example.net, still active", when, s)
+		}
+		if s := ss.Get("aaaa000000000002", "testnet"); s.BBSName != "BBS aaaa000000000002" || s.BBSHost != "" {
+			t.Errorf("%s: another node's row changed: %+v", when, s)
+		}
+	}
+	check("cache")
+	if err := ss.loadCache(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	check("db")
+
+	if err := ss.SetProfile("ffff000000000000", "testnet", "X", "x"); !errors.Is(err, ErrUnknownNode) {
+		t.Errorf("unknown node: got %v, want ErrUnknownNode", err)
+	}
+}
+
 func TestSubscriberStore_DeleteRemovesRowAndCache(t *testing.T) {
 	ss := newTestStore(t)
 	addTestSub(t, ss, "aaaa000000000001", "active")

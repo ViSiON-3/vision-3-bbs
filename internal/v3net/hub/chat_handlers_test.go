@@ -113,7 +113,8 @@ func TestChatJoin_NormalizesRoomAndBroadcasts(t *testing.T) {
 	if err := json.Unmarshal(waitEvent(t, ch, protocol.EventChatJoin).Data, &payload); err != nil {
 		t.Fatalf("decode join event: %v", err)
 	}
-	want := protocol.ChatJoinPayload{Room: "dev-talk", Handle: "alice", BBS: "Test BBS"}
+	// Node lets the joining leaf recognise the echo of its own join.
+	want := protocol.ChatJoinPayload{Room: "dev-talk", Handle: "alice", BBS: "Test BBS", Node: leafKS.NodeID()}
 	if payload != want {
 		t.Errorf("join event = %+v, want %+v", payload, want)
 	}
@@ -318,19 +319,15 @@ func TestChatPrivate_Errors(t *testing.T) {
 		{"missing to_handle", `{"to_node":"abcd","text":"x"}`, http.StatusBadRequest},
 		{"unknown target node", `{"to_handle":"bob","to_node":"0000000000000000","text":"x"}`, http.StatusNotFound},
 	}
+	// The cases run back to back with no limit reset: a rejected request must
+	// not take the node's rate-limit token, so each one gets its own error
+	// rather than a 429.
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetChatLimit(h, leafKS.NodeID())
 			if code := sendSigned(t, leafKS, "POST", url, tc.body, nil); code != tc.want {
 				t.Errorf("expected %d, got %d", tc.want, code)
 			}
 		})
-	}
-
-	// Private messages share the chat rate limit: the request above consumed
-	// the node's token, so an immediate follow-up is rejected.
-	if code := sendSigned(t, leafKS, "POST", url, cases[3].body, nil); code != http.StatusTooManyRequests {
-		t.Errorf("expected 429 for back-to-back private message, got %d", code)
 	}
 
 	var count int
@@ -339,6 +336,44 @@ func TestChatPrivate_Errors(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("rejected private messages must not be stored, got %d rows", count)
+	}
+
+	// The token is still there for the first valid message; an immediate
+	// second one is throttled.
+	valid := fmt.Sprintf(`{"to_handle":"me","to_node":%q,"text":"x"}`, leafKS.NodeID())
+	if code := sendSigned(t, leafKS, "POST", url, valid, nil); code != http.StatusNoContent {
+		t.Fatalf("valid private message after rejected ones: expected 204, got %d", code)
+	}
+	if code := sendSigned(t, leafKS, "POST", url, valid, nil); code != http.StatusTooManyRequests {
+		t.Errorf("expected 429 for back-to-back private message, got %d", code)
+	}
+}
+
+func TestChatPost_RejectedRequestsKeepRateLimitToken(t *testing.T) {
+	h, ts, leafKS := setupChatTest(t)
+	base := ts.URL + "/v3net/v1/testnet/chat/rooms/"
+
+	// 400 (invalid JSON, bad room) and 403 (not joined) are all rejected
+	// without touching the limiter.
+	for _, body := range []string{`{"room":`, `{"room":"bad room!","text":"x"}`, `{"room":"lobby","text":"x"}`} {
+		if code := sendSigned(t, leafKS, "POST", base+"post", body, nil); code != http.StatusBadRequest && code != http.StatusForbidden {
+			t.Errorf("post %s: expected 400 or 403, got %d", body, code)
+		}
+	}
+
+	sendSigned(t, leafKS, "POST", base+"join", `{"room":"lobby","handle":"alice"}`, nil)
+	if code := sendSigned(t, leafKS, "POST", base+"post", `{"room":"lobby","text":"hi"}`, nil); code != http.StatusNoContent {
+		t.Fatalf("first valid post after rejected ones: expected 204, got %d", code)
+	}
+	if code := sendSigned(t, leafKS, "POST", base+"post", `{"room":"lobby","text":"again"}`, nil); code != http.StatusTooManyRequests {
+		t.Errorf("back-to-back post: expected 429, got %d", code)
+	}
+	// Room posts and private messages share the node's bucket.
+	resetChatLimit(h, leafKS.NodeID())
+	sendSigned(t, leafKS, "POST", base+"post", `{"room":"lobby","text":"one"}`, nil)
+	private := fmt.Sprintf(`{"to_handle":"me","to_node":%q,"text":"x"}`, leafKS.NodeID())
+	if code := sendSigned(t, leafKS, "POST", base+"private", private, nil); code != http.StatusTooManyRequests {
+		t.Errorf("private right after a post: expected 429, got %d", code)
 	}
 }
 

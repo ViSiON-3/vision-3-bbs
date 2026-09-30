@@ -95,6 +95,39 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 }
 
+// nativeDropfileDir returns the directory a native door's dropfile is written
+// to, which is also its {NODEDIR}, whether that directory is a private
+// per-node one, and a function that removes the directory again if it was
+// created for this run.
+//
+// A door for which doorUsesNodeDir is true gets a fresh per-node temp
+// directory, and so does a door at the default "startup" location that has no
+// working_directory: the alternative, the BBS's own current directory, would
+// be shared by every node running the door at once. Otherwise the dropfile
+// goes in the working directory, made absolute so that {DROPFILE} and
+// {NODEDIR} still name it from inside the door, which runs in that directory.
+func nativeDropfileDir(cfg config.DoorConfig, nodeNumber int) (dir string, perNode bool, cleanup func(), err error) {
+	if cfg.WorkingDirectory != "" && !doorUsesNodeDir(cfg) {
+		dir = cfg.WorkingDirectory
+		if abs, absErr := filepath.Abs(dir); absErr == nil {
+			dir = abs
+		}
+		return dir, false, func() {}, nil
+	}
+
+	// os.MkdirTemp gives each run a unique name; the cleanup removes it whether
+	// or not a dropfile was written into it.
+	nodeDir, err := os.MkdirTemp("", fmt.Sprintf("vision3_node%d_", nodeNumber))
+	if err != nil {
+		return "", false, nil, fmt.Errorf("failed to create node dropfile directory: %w", err)
+	}
+	return nodeDir, true, func() {
+		if err := os.RemoveAll(nodeDir); err != nil {
+			slog.Warn("failed to remove node dropfile dir", "dir", nodeDir, "error", err)
+		}
+	}, nil
+}
+
 // --- Dropfile Generators ---
 
 // dropfileName resolves the on-disk filename for a dropfile type, applying the

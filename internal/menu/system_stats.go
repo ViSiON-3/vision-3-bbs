@@ -61,7 +61,7 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 		"TOTALCALLS":  strconv.FormatUint(userManager.GetTotalCalls(), 10),
 		"TOTALMSGS":   strconv.Itoa(e.MessageMgr.GetTotalMessageCount()),
 		"TOTALFILES":  strconv.Itoa(e.FileMgr.GetTotalFileCount()),
-		"ACTIVENODES": strconv.Itoa(e.SessionRegistry.ActiveCount()),
+		"ACTIVENODES": strconv.Itoa(e.activeNodeCount()),
 		"MAXNODES":    strconv.Itoa(e.GetServerConfig().MaxNodes),
 		"DATE":        now.Format("01/02/2006"),
 		"TIME":        now.Format("03:04 PM"),

@@ -157,6 +157,84 @@ func TestRunEditorWithMetadataSizesToPTY(t *testing.T) {
 	}
 }
 
+// Window changes arrive on the SSH library's goroutine while the editor is
+// reading keys (#514). They must be applied on the editor's own goroutine,
+// which -race checks, and nothing may keep reading them once the editor has
+// returned.
+func TestRunEditorWithMetadataAppliesResizes(t *testing.T) {
+	installEditorConfig(t)
+	tt := testterm.New(100, 30)
+	sess := &ptySession{
+		Session: testterm.NewSession(tt, ""),
+		width:   80, height: 24,
+		resize: make(chan ssh.Window),
+	}
+
+	type result struct {
+		content string
+		saved   bool
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		content, saved, err := RunEditorWithMetadata("", sess, tt, ansi.OutputModeUTF8,
+			"Hello", "bob", "alice", false, "", "", "", "", false, nil, nil)
+		done <- result{content, saved, err}
+	}()
+
+	resize := func(w, h int) {
+		t.Helper()
+		select {
+		case sess.resize <- ssh.Window{Width: w, Height: h}:
+		case r := <-done:
+			t.Fatalf("editor returned while still resizing: %+v", r)
+		case <-time.After(5 * time.Second):
+			t.Fatal("window change was not taken")
+		}
+	}
+
+	// Keys and window changes interleaved, including a size below the minimum.
+	sizes := [][2]int{{100, 30}, {90, 26}, {40, 10}, {80, 24}}
+	for i := 0; i < 20; i++ {
+		sess.Send("x")
+		resize(sizes[i%len(sizes)][0], sizes[i%len(sizes)][1])
+	}
+
+	// A final size used nowhere above: once its footer row is drawn, the
+	// editor has caught up with every change.
+	resize(100, 28)
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.HasPrefix(tt.Row(27), " └─▌Test Board▐") {
+		if time.Now().After(deadline) {
+			t.Fatalf("footer never moved to row 27 after the last resize:\n%s", tt.Snapshot())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	sess.Send("\x1a")
+	var r result
+	select {
+	case r = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("editor did not return after CTRL-Z")
+	}
+	if r.err != nil || !r.saved || r.content != strings.Repeat("x", 20) {
+		t.Fatalf("RunEditorWithMetadata = (%q, %v, %v), want 20 x's saved", r.content, r.saved, r.err)
+	}
+
+	// The header's |#5 marker still decides where the text starts.
+	if got := tt.Row(5); got != strings.Repeat("x", 20) {
+		t.Errorf("Row(5) = %q, want the message on the header's first editing row", got)
+	}
+
+	// The forwarder has stopped: nobody takes a window change any more.
+	select {
+	case sess.resize <- ssh.Window{Width: 120, Height: 40}:
+		t.Error("a window change was still read after the editor returned")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 // A caller-supplied InputHandler is used as-is and left open for the caller.
 func TestRunEditorWithMetadataSharesInputHandler(t *testing.T) {
 	installEditorConfig(t)

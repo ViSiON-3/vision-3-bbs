@@ -17,8 +17,10 @@ func (p *Processor) findAndReadDIZ(workDir string) string {
 		if err != nil {
 			return nil
 		}
+		// Descend into workDir's own subdirectories ("a") but no further
+		// ("a/b"): a DIZ deeper down belongs to something bundled inside.
 		rel, _ := filepath.Rel(workDir, path)
-		if d.IsDir() && strings.Count(rel, string(filepath.Separator)) > 1 {
+		if d.IsDir() && strings.Contains(rel, string(filepath.Separator)) {
 			return filepath.SkipDir
 		}
 		if !d.IsDir() {

@@ -304,6 +304,35 @@ func (e *MenuExecutor) isSysOpOrAbove(u *user.User) bool {
 	return u != nil && u.AccessLevel >= e.GetServerConfig().SysOpLevel
 }
 
+// nodeSession returns the registered session for nodeNumber, or nil when
+// there is none. The server always sets SessionRegistry, but tests and tools
+// that build an executor by hand may not, so every lookup goes through here
+// rather than dereferencing the registry directly.
+func (e *MenuExecutor) nodeSession(nodeNumber int) *session.BbsSession {
+	if e.SessionRegistry == nil {
+		return nil
+	}
+	return e.SessionRegistry.Get(nodeNumber)
+}
+
+// activeSessions returns the online sessions sorted by node, or nil when the
+// executor has no SessionRegistry (see nodeSession).
+func (e *MenuExecutor) activeSessions() []*session.BbsSession {
+	if e.SessionRegistry == nil {
+		return nil
+	}
+	return e.SessionRegistry.ListActive()
+}
+
+// activeNodeCount returns how many sessions are online, or 0 when the
+// executor has no SessionRegistry (see nodeSession).
+func (e *MenuExecutor) activeNodeCount() int {
+	if e.SessionRegistry == nil {
+		return 0
+	}
+	return e.SessionRegistry.ActiveCount()
+}
+
 // handleIdleTimeout displays TIMEOUT.ANS (if available) or falls back to the
 // idle timeout string, then logs the disconnection. Call this before returning
 // LOGOFF/DISCONNECT whenever ErrIdleTimeout is received from any input loop.

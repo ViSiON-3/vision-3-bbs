@@ -28,7 +28,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	handle := currentUser.Handle
 
 	// Show online nodes
-	sessions := e.SessionRegistry.ListActive()
+	sessions := e.activeSessions()
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageOnlineNodesHeader)), outputMode)
 	for _, sess := range sessions {
 		sess.Mutex.RLock()
@@ -78,7 +78,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	targetSession := e.SessionRegistry.Get(targetNodeID)
+	targetSession := e.nodeSession(targetNodeID)
 	if targetSession == nil {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageNodeOffline)), outputMode)
 		uiPause(500 * time.Millisecond)

@@ -3,6 +3,7 @@ package transfer
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"testing"
@@ -124,4 +125,92 @@ func (f *failAfterN) Write(p []byte) (int, error) {
 	}
 	f.written += len(p)
 	return len(p), nil
+}
+
+// zrposHit is one header reported by zrposDetector.scan, with end made
+// absolute within the whole stream.
+type zrposHit struct {
+	hex       bool
+	end       int
+	straddles bool
+}
+
+// scanReads feeds reads through a fresh zrposDetector and returns every hit.
+func scanReads(reads ...[]byte) []zrposHit {
+	var d zrposDetector
+	var hits []zrposHit
+	offset := 0
+	for _, r := range reads {
+		d.scan(r, func(hex bool, end int, straddles bool) {
+			hits = append(hits, zrposHit{hex, offset + end, straddles})
+		})
+		offset += len(r)
+	}
+	return hits
+}
+
+// bytewise splits b into one-byte reads.
+func bytewise(b []byte) [][]byte {
+	reads := make([][]byte, len(b))
+	for i := range b {
+		reads[i] = b[i : i+1]
+	}
+	return reads
+}
+
+func TestZRPOSDetector_eachHeaderReportedOnce(t *testing.T) {
+	for name, h := range map[string][]byte{"hex": zrposHexHeader, "binary": zrposBinHeader} {
+		isHex := name == "hex"
+		pre, post := []byte("lead-in data "), []byte(" trailing data")
+		stream := append(append(append([]byte{}, pre...), h...), post...)
+		end := len(pre) + len(h) - 1
+
+		check := func(t *testing.T, hits []zrposHit, straddles bool) {
+			t.Helper()
+			if len(hits) != 1 {
+				t.Fatalf("got %d hits %+v, want exactly 1", len(hits), hits)
+			}
+			if want := (zrposHit{isHex, end, straddles}); hits[0] != want {
+				t.Errorf("hit = %+v, want %+v", hits[0], want)
+			}
+		}
+
+		t.Run(name+"/in buffer", func(t *testing.T) {
+			check(t, scanReads(stream), false)
+		})
+		// The header ends its read, so it is carried in the tail as well.
+		t.Run(name+"/in tail", func(t *testing.T) {
+			check(t, scanReads(stream[:end+1], stream[end+1:]), false)
+		})
+		t.Run(name+"/in tail then short reads", func(t *testing.T) {
+			reads := append([][]byte{stream[:end+1]}, bytewise(stream[end+1:])...)
+			check(t, scanReads(reads...), false)
+		})
+		for k := 1; k < len(h); k++ {
+			split := len(pre) + k // k bytes of the header in the first read
+			t.Run(fmt.Sprintf("%s/straddling %d+%d", name, k, len(h)-k), func(t *testing.T) {
+				check(t, scanReads(stream[:split], stream[split:]), true)
+			})
+		}
+		t.Run(name+"/one byte per read", func(t *testing.T) {
+			check(t, scanReads(bytewise(stream)...), true)
+		})
+	}
+}
+
+func TestZRPOSDetector_multipleAndNonMatching(t *testing.T) {
+	stream := []byte("x" + string(zrposHexHeader) + "**\x18B01" +
+		string(zrposBinHeader) + string(zrposBinHeader) + "y")
+	for split := 0; split <= len(stream); split++ {
+		if hits := scanReads(stream[:split], stream[split:]); len(hits) != 3 {
+			t.Errorf("split at %d: got %d hits %+v, want 3", split, len(hits), hits)
+		}
+	}
+	if hits := scanReads(bytewise(stream)...); len(hits) != 3 {
+		t.Errorf("one byte per read: got %d hits %+v, want 3", len(hits), hits)
+	}
+	// ZRINIT (hex type 01) and a binary ZDATA (0x0a) are not ZRPOS.
+	if hits := scanReads([]byte("**\x18B01 *\x18A\x0a")); len(hits) != 0 {
+		t.Errorf("non-ZRPOS headers reported: %+v", hits)
+	}
 }

@@ -200,6 +200,30 @@ func (ss *SubscriberStore) SetStatus(nodeID, network, status string) error {
 	return nil
 }
 
+// SetProfile updates a subscriber's BBS name and host in the DB and cache
+// together. Add never changes an existing row, so this is how a row's
+// details are corrected; callers must only pass a node ID they have
+// authenticated.
+func (ss *SubscriberStore) SetProfile(nodeID, network, bbsName, bbsHost string) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	res, err := ss.db.Exec(
+		"UPDATE subscribers SET bbs_name = ?, bbs_host = ? WHERE node_id = ? AND network = ?",
+		bbsName, bbsHost, nodeID, network)
+	if err != nil {
+		return fmt.Errorf("hub: set profile: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return fmt.Errorf("%w: %s on %s", ErrUnknownNode, nodeID, network)
+	}
+	if s := ss.cache[nodeID+":"+network]; s != nil {
+		s.BBSName = bbsName
+		s.BBSHost = bbsHost
+	}
+	return nil
+}
+
 // Delete removes a subscriber registration from the DB and cache.
 func (ss *SubscriberStore) Delete(nodeID, network string) error {
 	ss.mu.Lock()

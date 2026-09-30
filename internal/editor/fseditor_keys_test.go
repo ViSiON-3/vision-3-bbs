@@ -51,6 +51,22 @@ func runKeys(t *testing.T, initial, keys string) (content string, saved bool) {
 	return content, saved
 }
 
+// Ctrl-J decides whether to add a space on whole characters, not bytes: "à"
+// and "Š" end in the byte A0, which on its own reads as a space (NBSP).
+// Typed input is ASCII, so the lines are loaded as they would be by a quote.
+func TestJoinLinesMultiByteBoundary(t *testing.T) {
+	for _, tc := range []struct{ initial, want string }{
+		{"voilà\ntwo", "voilà two"},
+		{"one\nŠtwo", "one Štwo"},
+		{"voilà\n two", "voilà two"},
+	} {
+		got, saved := runKeys(t, tc.initial, keyUp+"\x0a"+keySave)
+		if !saved || got != tc.want {
+			t.Errorf("Ctrl-J on %q = (%q, saved=%v), want %q", tc.initial, got, saved, tc.want)
+		}
+	}
+}
+
 // Each case types into an empty editor and saves; the saved text shows where
 // the cursor went and what the edit did.
 func TestRunNavigationAndEditKeys(t *testing.T) {
@@ -82,6 +98,12 @@ func TestRunNavigationAndEditKeys(t *testing.T) {
 		{"ctrl-n splits the line at the cursor", "onetwo" + keyLeft + keyLeft + keyLeft + "\x0e", "one\ntwo"},
 		{"ctrl-j joins the next line on", "one \rtwo" + keyUp + "\x0a", "one two"},
 		{"ctrl-j on the last line does nothing", "one\rtwo" + "\x0a", "one\ntwo"},
+		// Ctrl-J joins words, so it supplies the space the line break stood for
+		// (#516), but only where there is none already.
+		{"ctrl-j puts a space between words", "one\rtwo" + keyUp + "\x0a", "one two"},
+		{"ctrl-j keeps leading space on the next line", "one\r  two" + keyUp + "\x0a", "one  two"},
+		{"ctrl-j onto an empty line adds no space", "\rtwo" + keyUp + "\x0a", "two"},
+		{"ctrl-j with an empty next line adds no space", "one\r" + keyUp + "\x0a", "one"},
 		{"unbound control key is ignored", "a\x0fb", "ab"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -301,8 +323,9 @@ func TestRunEscapeMenu(t *testing.T) {
 		}
 	})
 	t.Run("help returns to the message", func(t *testing.T) {
-		// 'k' dismisses the help screen.
-		tt, ed := newRunHarness(t, "ab"+keyEsc+keyRight+"\r"+"k"+"c"+keySave)
+		// The built-in help is two pages on 24 rows: 'k' turns the page, the
+		// second 'k' dismisses the help screen.
+		tt, ed := newRunHarness(t, "ab"+keyEsc+keyRight+"\r"+"k"+"k"+"c"+keySave)
 		content, saved, err := ed.Run()
 		if err != nil || !saved || content != "abc" {
 			t.Errorf("Run = (%q, saved=%v, %v), want (%q, true, nil)", content, saved, err, "abc")

@@ -28,27 +28,11 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 
 	// --- Dropfile Generation ---
 	var dropfilePath string
-	dropfileDir := "."
-	if doorConfig.WorkingDirectory != "" {
-		dropfileDir = doorConfig.WorkingDirectory
+	dropfileDir, useNodeDir, removeDropfileDir, err := nativeDropfileDir(doorConfig, ctx.NodeNumber)
+	if err != nil {
+		return err
 	}
-
-	// Configurable dropfile location: "node" uses a unique per-node temp directory.
-	// Uses os.MkdirTemp for unique names and defers os.RemoveAll unconditionally
-	// so the directory is always cleaned up, even if no recognized dropfile is generated.
-	useNodeDir := doorUsesNodeDir(doorConfig)
-	if useNodeDir {
-		nodeDir, err := os.MkdirTemp("", fmt.Sprintf("vision3_node%d_", ctx.NodeNumber))
-		if err != nil {
-			return fmt.Errorf("failed to create node dropfile directory: %w", err)
-		}
-		defer func() {
-			if err := os.RemoveAll(nodeDir); err != nil {
-				slog.Warn("failed to remove node dropfile dir", "dir", nodeDir, "error", err)
-			}
-		}()
-		dropfileDir = nodeDir
-	}
+	defer removeDropfileDir()
 
 	dropfileTypeUpper := strings.ToUpper(doorConfig.DropfileType)
 

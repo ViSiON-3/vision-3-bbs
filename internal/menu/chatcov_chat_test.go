@@ -30,6 +30,12 @@ type chatcovNet struct {
 	joinErr                              func(room string) error
 	// nilFrom makes NewSession return nil from that call on (1-based); 0 = never.
 	nilFrom int
+	// roomsErrFrom limits roomsErr to the sessions from that call of
+	// NewSession on (1-based), so a probe can succeed and the session chatted
+	// on then fail; 0 = every session.
+	roomsErrFrom int
+	// roomsBlock, when set, holds every Rooms call until it is closed.
+	roomsBlock chan struct{}
 
 	mu       sync.Mutex
 	calls    int
@@ -45,7 +51,7 @@ func (n *chatcovNet) leaf() ChatLeafInfo {
 		if n.nilFrom > 0 && n.calls >= n.nilFrom {
 			return nil
 		}
-		svc := &chatcovSvc{net: n, handle: handle, events: make(chan chat.ChatEvent, len(n.events))}
+		svc := &chatcovSvc{net: n, seq: n.calls, handle: handle, events: make(chan chat.ChatEvent, len(n.events))}
 		for _, ev := range n.events {
 			svc.events <- ev
 		}
@@ -83,6 +89,7 @@ func (n *chatcovNet) allClosed() bool {
 // chatcovSvc is one session on a chatcovNet.
 type chatcovSvc struct {
 	net    *chatcovNet
+	seq    int // which call of NewSession created it, from 1
 	handle string
 	events chan chat.ChatEvent
 
@@ -138,7 +145,15 @@ func (s *chatcovSvc) SetTopic(room, topic string) error {
 	return s.net.topicErr
 }
 
-func (s *chatcovSvc) Rooms() ([]chat.RoomInfo, error) { return s.net.rooms, s.net.roomsErr }
+func (s *chatcovSvc) Rooms() ([]chat.RoomInfo, error) {
+	if s.net.roomsBlock != nil {
+		<-s.net.roomsBlock
+	}
+	if s.net.roomsErr != nil && s.seq >= s.net.roomsErrFrom {
+		return nil, s.net.roomsErr
+	}
+	return s.net.rooms, nil
+}
 
 func (s *chatcovSvc) History(string, int) ([]chat.ChatMessage, error) { return s.net.history, nil }
 
@@ -674,18 +689,22 @@ func TestChatcovNetworkErrorsAreReported(t *testing.T) {
 		t.Errorf("failed post echoed to the chat area:\n%s", chatcovText(r))
 	}
 
-	// A failing room list is reported by /rooms, and at the picker just
-	// means "no rooms": straight into the lobby without a prompt.
+	// A room list that fails once the network has been picked is reported by
+	// /rooms, and at the room picker just means "no rooms": straight into the
+	// lobby without a prompt. (A probe that fails marks the network
+	// unavailable instead; see TestChatProbeFailureMarksNetworkUnavailable.)
+	net = chatcovFakeNet(env)
 	net.roomsErr = errors.New("rooms boom")
+	net.roomsErrFrom = 2 // session 1 is the probe
 	r = chatcovChat(env, env.caller, "\r/rooms\r/q\r")
-	if !chatcovHas(r, "*** Joined #lobby", "Could not list rooms: rooms boom") {
+	if !chatcovHas(r, "(5 users online)", "*** Joined #lobby", "Could not list rooms: rooms boom") {
 		t.Errorf("room list failure not handled:\n%s", chatcovText(r))
 	}
 	if chatcovHas(r, "Select room") {
 		t.Errorf("room prompt shown although the room list failed:\n%s", chatcovText(r))
 	}
-	if !chatcovHas(r, "(0 users online)") {
-		t.Errorf("network with no readable room list should count 0 users:\n%s", chatcovText(r))
+	if len(net.chatted()) != 1 {
+		t.Errorf("not chatting on the network whose room list failed")
 	}
 }
 
@@ -873,7 +892,7 @@ func TestChatcovNetworkCommandNoSession(t *testing.T) {
 }
 
 // chatcovReadLine feeds input to chatReadLine on row 24 and returns the line,
-// everything it drew and the error.
+// the error and everything it drew.
 func chatcovReadLine(t *testing.T, input string, width int, prompt string) (string, string, error) {
 	t.Helper()
 	ts := newTestSession(input)

@@ -259,17 +259,21 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 					}
 				}
 
-				// No-op if already at that position
-				if newPos == selIdx {
+				// No-op if already at that position. "Before the next one" is the
+				// same slot too, and must not hop over areas the list leaves out.
+				if newPos == selIdx || (destCmd != "E" && newPos == selIdx+1) {
 					continue
 				}
 
-				// "before N" semantics: when moving downward, removing the source
-				// shifts indices, so decrement to land at the correct slot.
-				targetPos := newPos
-				if destCmd != "E" && newPos > selIdx {
-					targetPos--
+				// The list shown is only the areas this user may sponsor, but the
+				// move indexes every area in the conference, so resolve the
+				// destination against the full list.
+				beforeIdx := newPos - 1
+				if destCmd == "E" {
+					beforeIdx = -1
 				}
+				targetPos := sponsorMoveTarget(
+					getAllAreasInConference(e, selectedArea.ConferenceID), confAreas, selectedArea, beforeIdx)
 
 				// Perform the move within this conference
 				if moveErr := e.MessageMgr.MoveAreaPositionInConference(selectedArea.ID, targetPos); moveErr != nil {
@@ -333,7 +337,10 @@ func allowAnonEqual(a, b *bool) bool {
 //	C=Conf ID B=Base Path Y=Area Type E=Echo Tag O=Origin K=Network
 //	[/]=Prev/Next area (co-sysop+) Q=Save ESC=Cancel
 //
-// The Sponsor field is validated against the user database. Enter "-" to clear.
+// The Sponsor field is validated against the user database. Enter "-" to clear
+// it or any other optional text field; Tag, Name and Base Path cannot be
+// cleared. Conference ID must name an existing conference (or 0) and Area Type
+// must be a recognised type.
 func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -474,7 +481,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			refreshFieldRow(5, fmt.Sprintf("|11N|07) Name          : |15%s", edited.Name))
 
 		case int('d'), int('D'):
-			newVal := promptAreaField(s, terminal, outputMode,
+			newVal := promptClearableAreaField(s, terminal, outputMode,
 				"Description", edited.Description, 80)
 			if newVal != edited.Description {
 				dirty = true
@@ -483,7 +490,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			refreshFieldRow(6, fmt.Sprintf("|11D|07) Description   : |15%s", edited.Description))
 
 		case int('r'), int('R'):
-			newVal := promptAreaField(s, terminal, outputMode,
+			newVal := promptClearableAreaField(s, terminal, outputMode,
 				"ACS Read", edited.ACSRead, 40)
 			if newVal != edited.ACSRead {
 				dirty = true
@@ -492,7 +499,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			refreshFieldRow(7, fmt.Sprintf("|11R|07) ACS Read      : |15%s", edited.ACSRead))
 
 		case int('w'), int('W'):
-			newVal := promptAreaField(s, terminal, outputMode,
+			newVal := promptClearableAreaField(s, terminal, outputMode,
 				"ACS Write", edited.ACSWrite, 40)
 			if newVal != edited.ACSWrite {
 				dirty = true
@@ -501,6 +508,12 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			refreshFieldRow(8, fmt.Sprintf("|11W|07) ACS Write     : |15%s", edited.ACSWrite))
 
 		case int('s'), int('S'):
+			if currentUser.AccessLevel < cfg.CoSysOpLevel {
+				msg := "|01Sponsor - sysop/co-sysop only.|07"
+				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+				uiPause(1 * time.Second)
+				break
+			}
 			prevSponsor := edited.Sponsor
 			newHandle := promptAreaField(s, terminal, outputMode,
 				"Sponsor handle (- to clear)", edited.Sponsor, 30)
@@ -635,18 +648,29 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			refreshFieldRow(14, fmt.Sprintf("|11J|07) Auto Join     : |15%t", edited.AutoJoin))
 
 		case int('c'), int('C'):
+			if currentUser.AccessLevel < cfg.CoSysOpLevel {
+				msg := "|01Conference ID - sysop/co-sysop only.|07"
+				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+				uiPause(1 * time.Second)
+				break
+			}
 			prevConfID := edited.ConferenceID
 			raw := promptAreaField(s, terminal, outputMode,
 				"Conference ID (0=ungrouped)", fmt.Sprintf("%d", edited.ConferenceID), 6)
 			if raw != "" {
 				var n int
-				if _, scanErr := fmt.Sscanf(raw, "%d", &n); scanErr == nil && n >= 0 {
-					edited.ConferenceID = n
-				} else {
+				if _, scanErr := fmt.Sscanf(raw, "%d", &n); scanErr != nil || n < 0 {
 					msg := "|01Invalid number - unchanged.|07"
 					_ = terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 					uiPause(1 * time.Second)
+				} else if !e.conferenceExists(n) {
+					msg := fmt.Sprintf("|01Conference %d does not exist - unchanged.|07", n)
+					_ = terminalio.WriteProcessedBytes(terminal,
+						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+					uiPause(1 * time.Second)
+				} else {
+					edited.ConferenceID = n
 				}
 			}
 			if edited.ConferenceID != prevConfID {
@@ -677,10 +701,19 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				break
 			}
 			newVal := promptAreaField(s, terminal, outputMode,
-				"Area Type (local/echomail/netmail/v3net)", edited.AreaType, 16)
+				"Area Type ("+strings.Join(sponsorAreaTypes, "/")+")", edited.AreaType, 16)
 			if newVal != edited.AreaType {
-				dirty = true
-				edited.AreaType = newVal
+				if canon, ok := canonicalAreaType(newVal); ok {
+					if canon != edited.AreaType {
+						dirty = true
+						edited.AreaType = canon
+					}
+				} else {
+					msg := fmt.Sprintf("|01Unknown area type '%s' - unchanged.|07", newVal)
+					_ = terminalio.WriteProcessedBytes(terminal,
+						ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+					uiPause(1 * time.Second)
+				}
 			}
 			refreshFieldRow(17, fmt.Sprintf("|11Y|07) Area Type     : |15%s", edited.AreaType))
 
@@ -691,7 +724,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				uiPause(1 * time.Second)
 				break
 			}
-			newVal := promptAreaField(s, terminal, outputMode,
+			newVal := promptClearableAreaField(s, terminal, outputMode,
 				"Echo Tag", edited.EchoTag, 32)
 			if newVal != edited.EchoTag {
 				dirty = true
@@ -706,7 +739,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				uiPause(1 * time.Second)
 				break
 			}
-			newVal := promptAreaField(s, terminal, outputMode,
+			newVal := promptClearableAreaField(s, terminal, outputMode,
 				"Origin Address", edited.OriginAddr, 32)
 			if newVal != edited.OriginAddr {
 				dirty = true
@@ -721,7 +754,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				uiPause(1 * time.Second)
 				break
 			}
-			newVal := promptAreaField(s, terminal, outputMode,
+			newVal := promptClearableAreaField(s, terminal, outputMode,
 				"Network", edited.Network, 32)
 			if newVal != edited.Network {
 				dirty = true
@@ -763,9 +796,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 						saveMsg := fmt.Sprintf("|02Area |14%s|02 saved.|07\r\n", edited.Tag)
 						_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(saveMsg)), outputMode)
 						uiPause(500 * time.Millisecond)
-						if currentUser.CurrentMessageAreaID == edited.ID {
-							currentUser.CurrentMessageAreaTag = edited.Tag
-						}
+						syncCurrentAreaTag(userManager, currentUser, &edited, nodeNumber)
 						saveOK = true
 					}
 				case int('n'), int('N'):
@@ -853,10 +884,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				_ = terminalio.WriteProcessedBytes(terminal,
 					ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 				uiPause(500 * time.Millisecond)
-				// Update user's cached tag if it changed
-				if currentUser.CurrentMessageAreaID == edited.ID {
-					currentUser.CurrentMessageAreaTag = edited.Tag
-				}
+				syncCurrentAreaTag(userManager, currentUser, &edited, nodeNumber)
 			}
 			return currentUser, "", nil
 
@@ -866,6 +894,23 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			uiPause(500 * time.Millisecond)
 			return currentUser, "", nil
 		}
+	}
+}
+
+// syncCurrentAreaTag updates the user's cached current-area tag after area has
+// been saved, and saves the user when it changed so users.json never points at
+// a tag that no longer exists.
+func syncCurrentAreaTag(userManager *user.UserMgr, currentUser *user.User, area *message.MessageArea, nodeNumber int) {
+	if currentUser.CurrentMessageAreaID != area.ID || currentUser.CurrentMessageAreaTag == area.Tag {
+		return
+	}
+	currentUser.CurrentMessageAreaTag = area.Tag
+	if userManager == nil {
+		slog.Warn("userManager is nil; renamed area tag not persisted", "node", nodeNumber)
+		return
+	}
+	if err := userManager.UpdateUser(currentUser); err != nil {
+		slog.Error("failed to save user after area tag change", "node", nodeNumber, "error", err)
 	}
 }
 
@@ -888,6 +933,48 @@ func getSponsorableAreasInConference(e *MenuExecutor, currentUser *user.User) []
 		return result[i].Position < result[j].Position
 	})
 	return result
+}
+
+// sponsorMoveTarget converts a destination picked in the sponsor's filtered
+// area list into the 1-based index MoveAreaPositionInConference expects, which
+// counts every area in the conference once moving is taken out.
+//
+// all is every area in the conference and listed is the subset shown to the
+// user, both in position order. beforeIdx is the 0-based index in listed of the
+// area to place moving before, or -1 to place it after the last listed area.
+// Areas the user cannot see keep their order relative to each other.
+func sponsorMoveTarget(all, listed []*message.MessageArea, moving *message.MessageArea, beforeIdx int) int {
+	rest := make([]*message.MessageArea, 0, len(all))
+	for _, a := range all {
+		if a.ID != moving.ID {
+			rest = append(rest, a)
+		}
+	}
+	indexOf := func(id int) int {
+		for i, a := range rest {
+			if a.ID == id {
+				return i
+			}
+		}
+		return -1
+	}
+
+	if beforeIdx >= 0 && beforeIdx < len(listed) {
+		if i := indexOf(listed[beforeIdx].ID); i >= 0 {
+			return i + 1
+		}
+		return len(rest) + 1
+	}
+	// End: directly after the last listed area other than the one moving.
+	for j := len(listed) - 1; j >= 0; j-- {
+		if listed[j].ID == moving.ID {
+			continue
+		}
+		if i := indexOf(listed[j].ID); i >= 0 {
+			return i + 2
+		}
+	}
+	return len(rest) + 1
 }
 
 // getAllAreasInConference returns all areas in the given conference, sorted by Position.
@@ -928,4 +1015,45 @@ func promptAreaField(s ssh.Session, terminal *term.Terminal,
 		input = string(runes[:maxLen])
 	}
 	return input
+}
+
+// promptClearableAreaField is promptAreaField for an optional text field: the
+// label says so, and a reply of "-" clears the value.
+func promptClearableAreaField(s ssh.Session, terminal *term.Terminal,
+	outputMode ansi.OutputMode, label, current string, maxLen int) string {
+
+	newVal := promptAreaField(s, terminal, outputMode, label+" (- to clear)", current, maxLen)
+	if newVal == "-" {
+		return ""
+	}
+	return newVal
+}
+
+// sponsorAreaTypes are the message area types the area editor accepts, the
+// same set the config editor offers.
+var sponsorAreaTypes = []string{"local", "echomail", "netmail", "v3net", message.AreaTypeQWKNet}
+
+// canonicalAreaType returns the recognised area type matching v, ignoring
+// case and surrounding space, and whether there was one.
+func canonicalAreaType(v string) (string, bool) {
+	v = strings.ToLower(strings.TrimSpace(v))
+	for _, t := range sponsorAreaTypes {
+		if v == t {
+			return t, true
+		}
+	}
+	return "", false
+}
+
+// conferenceExists reports whether id names a configured conference. 0 is
+// always valid: it means the area is ungrouped.
+func (e *MenuExecutor) conferenceExists(id int) bool {
+	if id == 0 {
+		return true
+	}
+	if e.ConferenceMgr == nil {
+		return false
+	}
+	_, ok := e.ConferenceMgr.GetByID(id)
+	return ok
 }

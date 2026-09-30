@@ -30,9 +30,6 @@ func (s *fakeSession) waitForWrite(t *testing.T, want string) {
 	}
 }
 
-// Window changes are deliberately not exercised: the resize goroutine's
-// pty.Setsize is unsynchronised with the ptmx.Close at the end of
-// RunCommandWithPTY, which the race detector reports intermittently.
 func TestRunCommandWithPTY_relaysIO(t *testing.T) {
 	s := newRawSession()
 	s.hasPty = true
@@ -61,6 +58,62 @@ func TestRunCommandWithPTY_relaysIO(t *testing.T) {
 	}
 	if !s.interruptCleared() {
 		t.Error("read interrupt left armed after PTY command")
+	}
+}
+
+// TestRunCommandWithPTY_windowChanges resizes the PTY throughout a command,
+// including while it shuts down, without ever closing winCh. Run under -race
+// it catches a Setsize racing the final ptmx.Close; the resize goroutine must
+// also have stopped listening on winCh by the time the call returns.
+func TestRunCommandWithPTY_windowChanges(t *testing.T) {
+	s := newRawSession()
+	s.hasPty = true
+	s.window = ssh.Window{Width: 80, Height: 25}
+	s.winCh = make(chan ssh.Window) // never closed, like a live session's
+	cmd := helperCommand(t, "pty")
+	done := make(chan error, 1)
+	go func() { done <- RunCommandWithPTY(nilCtx, s, cmd, 0) }()
+
+	// Keep resizing until the call returns.
+	stopResizing := make(chan struct{})
+	resizerDone := make(chan int, 1)
+	go func() {
+		sent := 0
+		for {
+			select {
+			case s.winCh <- ssh.Window{Width: 80 + sent%40, Height: 25 + sent%10}:
+				sent++
+			case <-stopResizing:
+				resizerDone <- sent
+				return
+			}
+		}
+	}()
+
+	s.waitForWrite(t, "READY")
+	s.in <- []byte("k")
+	s.waitForWrite(t, "key=k tty=true;")
+	s.in <- []byte("k") // helper exits while resizes are still arriving
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(helperTimeout):
+		t.Fatal("RunCommandWithPTY did not return")
+	}
+	close(stopResizing)
+	if sent := <-resizerDone; sent == 0 {
+		t.Error("no window changes were delivered during the command")
+	}
+	if err != nil {
+		t.Fatalf("RunCommandWithPTY: %v", err)
+	}
+
+	// Nothing may still be receiving from winCh once the call has returned.
+	select {
+	case s.winCh <- ssh.Window{Width: 1, Height: 1}:
+		t.Error("resize goroutine still receiving window changes after return")
+	case <-time.After(100 * time.Millisecond):
 	}
 }
 

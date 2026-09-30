@@ -38,6 +38,21 @@ func resolveQWKID(cfg config.ServerConfig) string {
 	return qwkBBSID(cfg.BoardName)
 }
 
+// Failure messages for qwkFailed, shown in red.
+const (
+	qwkPrepareFailedMsg = "Error preparing QWK packet."
+	// qwkNoProtocolsMsg matches the file upload's message for the same failure.
+	qwkNoProtocolsMsg = "Error: No transfer protocols configured on this system."
+)
+
+// qwkFailed logs a QWK transfer failure and tells the caller, so a download or
+// upload that cannot go ahead does not just drop back to the menu unexplained.
+func qwkFailed(c *cmdCtx, logMsg string, err error, userMsg string) {
+	slog.Error(logMsg, "node", c.nodeNumber, "error", err)
+	terminalio.WriteProcessedBytes(c.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01"+userMsg+"|07\r\n")), c.outputMode)
+	uiPause(2 * time.Second)
+}
+
 // runQWKDownload builds and sends a QWK mail packet to the user.
 func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
@@ -101,7 +116,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	// Write packet to temp file
 	tmpFile, err := os.CreateTemp("", "qwk-*.zip")
 	if err != nil {
-		slog.Error("failed to create temp file", "node", nodeNumber, "error", err)
+		qwkFailed(c, "failed to create QWK packet temp file", err, qwkPrepareFailedMsg)
 		return currentUser, "", nil
 	}
 	tmpPath := tmpFile.Name()
@@ -109,18 +124,18 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if _, err := tmpFile.Write(res.Packet); err != nil {
 		_ = tmpFile.Close() // cleanup on error path
-		slog.Error("failed to write packet", "node", nodeNumber, "error", err)
+		qwkFailed(c, "failed to write QWK packet", err, qwkPrepareFailedMsg)
 		return currentUser, "", nil
 	}
 	if err := tmpFile.Close(); err != nil {
-		slog.Error("failed to finalize packet file", "node", nodeNumber, "error", err)
+		qwkFailed(c, "failed to finalize QWK packet file", err, qwkPrepareFailedMsg)
 		return currentUser, "", nil
 	}
 
 	// Rename to BBSID.QWK for the transfer
 	qwkPath := filepath.Join(filepath.Dir(tmpPath), bbsID+".QWK")
 	if err := os.Rename(tmpPath, qwkPath); err != nil {
-		slog.Error("rename failed", "node", nodeNumber, "error", err)
+		qwkFailed(c, "failed to rename QWK packet", err, qwkPrepareFailedMsg)
 		return currentUser, "", nil
 	}
 	defer func() { _ = os.Remove(qwkPath) }() // best-effort temp cleanup
@@ -131,6 +146,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(protoErr, io.EOF) {
 			return nil, "LOGOFF", protoErr
 		}
+		qwkFailed(c, "QWK protocol selection failed", protoErr, qwkNoProtocolsMsg)
 		return currentUser, "", nil
 	}
 	if !ok {
@@ -191,6 +207,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(protoErr, io.EOF) {
 			return nil, "LOGOFF", protoErr
 		}
+		qwkFailed(c, "QWK protocol selection failed", protoErr, qwkNoProtocolsMsg)
 		return currentUser, "", nil
 	}
 	if !ok {
@@ -202,7 +219,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	// Receive into temp directory
 	incomingDir, err := os.MkdirTemp("", "qwk-rep-*")
 	if err != nil {
-		slog.Error("failed to create temp dir", "node", nodeNumber, "error", err)
+		qwkFailed(c, "failed to create QWK REP temp dir", err, "Error preparing to receive the REP packet.")
 		return currentUser, "", nil
 	}
 	defer func() { _ = os.RemoveAll(incomingDir) }() // best-effort temp cleanup
@@ -229,7 +246,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	// Process the REP packet
 	repData, err := os.ReadFile(repPath)
 	if err != nil {
-		slog.Error("failed to read REP", "node", nodeNumber, "error", err)
+		qwkFailed(c, "failed to read REP", err, "Error reading REP packet.")
 		return currentUser, "", nil
 	}
 

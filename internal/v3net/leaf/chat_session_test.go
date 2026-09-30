@@ -209,6 +209,47 @@ func TestChatSession_ReceivesHubEventsOverSSE(t *testing.T) {
 	}
 }
 
+// TestChatSession_JoinLeaveWhileStreaming changes rooms while the leaf's SSE
+// loop is dispatching the resulting chat events. Under -race it catches
+// dispatch reading currentRoom without the session lock (#517).
+func TestChatSession_JoinLeaveWhileStreaming(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	aliceLeaf := subscribedLeaf(t, ts, "alicebbs")
+	bobLeaf := subscribedLeaf(t, ts, "bobbbs")
+	watchEvents(t, aliceLeaf)
+
+	alice := aliceLeaf.NewChatSession("alice")
+	defer alice.Close()
+	bob := bobLeaf.NewChatSession("bob")
+	defer bob.Close()
+
+	// Bob's joins and leaves keep chat events flowing to alice's stream
+	// while she changes room herself.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 20; i++ {
+			if _, _, err := bob.Join("lobby"); err != nil {
+				t.Errorf("bob join: %v", err)
+				return
+			}
+			if err := bob.Leave("lobby"); err != nil {
+				t.Errorf("bob leave: %v", err)
+				return
+			}
+		}
+	}()
+	for i := 0; i < 20; i++ {
+		if _, _, err := alice.Join("lobby"); err != nil {
+			t.Fatalf("alice join: %v", err)
+		}
+		if err := alice.Leave("lobby"); err != nil {
+			t.Fatalf("alice leave: %v", err)
+		}
+	}
+	<-done
+}
+
 func TestChatSession_HubErrors(t *testing.T) {
 	t.Run("join rejected by hub", func(t *testing.T) {
 		l, _ := setupLeaf(t, cannedHub(t, 500, `{"error":"boom"}`).URL, &mockJAMWriter{})
@@ -331,6 +372,51 @@ func TestDispatch_JoinLeaveTopicUpdateSession(t *testing.T) {
 	noEvent(t, other, "session in another room")
 	if users := other.Users(); len(users) != 1 {
 		t.Errorf("other room's users changed: %v", users)
+	}
+}
+
+// TestDispatch_JoinAndLeaveCountMemberships covers the hub's broadcast of a
+// join arriving after Join has stored a user list that already counts the
+// joiner (#519), without hiding other BBSes' users who share a handle: the
+// hub lists one entry per membership.
+func TestDispatch_JoinAndLeaveCountMemberships(t *testing.T) {
+	const self = "<this leaf>"
+	for _, tc := range []struct {
+		name      string
+		users     []string // the session's list before the event
+		leave     bool     // a chat_leave rather than a chat_join
+		node      string   // the join's node field; self means this leaf
+		wantUsers []string
+	}{
+		{"echo of our own join is not added again", []string{"alice", "sysop"}, false, self, []string{"alice", "sysop"}},
+		{"same handle from another BBS is added", []string{"alice", "sysop"}, false, "node-b", []string{"alice", "sysop", "sysop"}},
+		{"join from a hub without the node field is added", []string{"alice", "sysop"}, false, "", []string{"alice", "sysop", "sysop"}},
+		{"leave of a shared handle removes one entry", []string{"alice", "sysop", "sysop"}, true, "", []string{"alice", "sysop"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+			sess := newRoomSession(l, "sysop", "lobby", tc.users...)
+			node := tc.node
+			if node == self {
+				node = l.chatSessions.nodeID
+			}
+			ev := chatEvent(t, protocol.EventChatJoin, protocol.ChatJoinPayload{Room: "lobby", Handle: "sysop", BBS: "X", Node: node})
+			wantType := chat.TypeJoin
+			if tc.leave {
+				ev = chatEvent(t, protocol.EventChatLeave, protocol.ChatLeavePayload{Room: "lobby", Handle: "sysop", BBS: "X"})
+				wantType = chat.TypeLeave
+			}
+
+			l.chatSessions.dispatch(ev)
+
+			// The event is still delivered, so the UI can announce it.
+			if got := <-sess.events; got.Type != wantType {
+				t.Errorf("event = %+v, want type %v", got, wantType)
+			}
+			if got := sess.Users(); strings.Join(got, ",") != strings.Join(tc.wantUsers, ",") {
+				t.Errorf("users = %v, want %v", got, tc.wantUsers)
+			}
+		})
 	}
 }
 

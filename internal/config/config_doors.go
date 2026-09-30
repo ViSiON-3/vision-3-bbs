@@ -15,7 +15,7 @@ type DoorConfig struct {
 	WorkingDirectory    string            `json:"working_directory,omitempty"`     // Directory to run the command in (optional)
 	Commands            []string          `json:"commands,omitempty"`              // Commands to execute (native: [0]=executable, [1:]=args; DOS: batch lines)
 	DropfileType        string            `json:"dropfile_type,omitempty"`         // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "DROPFILE.INI", "NONE") (optional, defaults to NONE)
-	DropfileLocation    string            `json:"dropfile_location,omitempty"`     // Where to write dropfile: "startup" (working dir, default) or "node" (per-node temp dir)
+	DropfileLocation    string            `json:"dropfile_location,omitempty"`     // Where to write dropfile: "startup" (working dir, default; per-node temp dir if none) or "node" (per-node temp dir)
 	DropfileCase        string            `json:"dropfile_case,omitempty"`         // Dropfile filename case: "upper" (default) or "lower"
 	IOMode              string            `json:"io_mode,omitempty"`               // I/O handling ("STDIO", "SOCKET") (optional, defaults to STDIO)
 	RequiresRawTerminal bool              `json:"requires_raw_terminal,omitempty"` // Whether the BBS should attempt to put the terminal in raw mode (optional, defaults to false)

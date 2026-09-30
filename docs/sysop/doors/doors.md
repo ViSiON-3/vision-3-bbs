@@ -84,7 +84,7 @@ The door finds the file through the `DROPFILE_INI` environment variable, which h
 
 **Filename case.** Native doors on case-sensitive filesystems sometimes look for `door32.sys` rather than `DOOR32.SYS`. Set **Dropfile Case** (`dropfile_case`) to `lower` for those doors. The default, `upper`, writes the conventional uppercase name.
 
-**Where the file goes.** See [Dropfile Location](#dropfile-location) below. The short version: `startup` (the default) writes into the door's working directory, `node` writes into a fresh per-node temporary directory so several nodes can run the same door at once.
+**Where the file goes.** See [Dropfile Location](#dropfile-location) below. The short version: `startup` (the default) writes into the door's working directory, or into a per-node temporary directory if the door has none; `node` always writes into a fresh per-node temporary directory so several nodes can run the same door at once.
 
 ### Door Command Line
 
@@ -194,7 +194,7 @@ These fields apply to both native and DOS doors:
 | `working_directory` | string | Native: Linux directory to run the command in. DOS: DOS path to `cd` into before running commands (e.g., `C:\DOORS\LORD`) |
 | `type` | string | `synchronet_js`, `v3_script`, or blank for a native/DOS door (see `is_dos`) |
 | `dropfile_type` | string | Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, `DROPFILE.INI`, or blank for none. See [Supported Dropfile Types](#supported-dropfile-types) |
-| `dropfile_location` | string | Where to write dropfile: `startup` (working dir, default) or `node` (per-node temp dir). Native doors only |
+| `dropfile_location` | string | Where to write dropfile: `startup` (working dir, default; per-node temp dir if there is no working dir) or `node` (per-node temp dir). Native doors only |
 | `dropfile_case` | string | Dropfile filename case: `upper` (default, `DOOR32.SYS`) or `lower` (`door32.sys`). Native doors only |
 | `min_access_level` | int | Minimum user access level required (0 = no restriction) |
 | `single_instance` | bool | Only allow one node to run this door at a time |
@@ -248,7 +248,7 @@ Creates a Unix socketpair and passes one end to the door process as file descrip
 
 ## Dropfile Location
 
-By default (`dropfile_location: "startup"` or blank), the dropfile is written to the door's `working_directory`. Set `dropfile_location: "node"` to write it to a fresh per-node temporary directory (named like `vision3_node1_XXXXXX` under the system temp directory) instead. The directory is removed when the door exits. This is useful for multi-instance doors where multiple nodes may run simultaneously and need isolated dropfiles. A `DROPFILE.INI` door that is not `single_instance` always uses a per-node directory, whatever this setting says.
+By default (`dropfile_location: "startup"` or blank), the dropfile is written to the door's `working_directory`. A door with no `working_directory` is treated as if it had `node`, so nodes running it at once never share a dropfile. Set `dropfile_location: "node"` to write it to a fresh per-node temporary directory (named like `vision3_node1_XXXXXX` under the system temp directory) instead. The directory is removed when the door exits. This is useful for multi-instance doors where multiple nodes may run simultaneously and need isolated dropfiles. A `DROPFILE.INI` door that is not `single_instance` always uses a per-node directory, whatever this setting says.
 
 For DOS doors, `dropfile_location` is ignored: every dropfile format is always written to the per-node directory inside `drive_c` (at `C:\NODES\TEMPn\`). Point the door game at that directory using the `{DOSNODEDIR}` or `{DOSDROPFILE}` placeholder on its command line.
 

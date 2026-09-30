@@ -2,8 +2,10 @@ package editor
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -234,6 +236,70 @@ func TestHandleHelpFallsBackToBuiltInText(t *testing.T) {
 	}
 }
 
+// On a 24-row terminal the built-in help is longer than the screen. It must
+// be paged rather than scrolled off, and each line must start in column 1
+// rather than where the one above ended (#515).
+func TestHandleHelpBuiltInTextIsPaged(t *testing.T) {
+	newHelp := func() (*testterm.Term, *strings.Builder, *CommandHandler) {
+		tt := testterm.New(80, 24)
+		var raw strings.Builder
+		screen := NewScreen(io.MultiWriter(tt, &raw), ansi.OutputModeUTF8, 80, 24)
+		return tt, &raw, NewCommandHandler(screen, NewMessageBuffer(), t.TempDir(), "", "", "", "", "")
+	}
+
+	t.Run("first page", func(t *testing.T) {
+		tt, raw, ch := newHelp()
+		ch.HandleHelp(endedInput("")) // input ends at the first "more" prompt
+
+		for row, want := range map[int]string{
+			1: "Full Screen Message Editor Help",
+			3: "Navigation Commands:",
+			4: "  Ctrl+E or Up Arrow     - Move up one line",
+			5: "  Ctrl+X or Down Arrow   - Move down one line",
+		} {
+			if got := tt.Row(row); got != want {
+				t.Errorf("Row(%d) = %q, want %q", row, got, want)
+			}
+		}
+		if !strings.Contains(raw.String(), "Press any key for more...") {
+			t.Error("first page did not pause for a key")
+		}
+		if strings.Contains(tt.Snapshot(), "Word Wrapping:") {
+			t.Error("the end of the help was drawn on the first page")
+		}
+	})
+
+	t.Run("second page", func(t *testing.T) {
+		tt, raw, ch := newHelp()
+		ch.HandleHelp(endedInput("k"))
+
+		snap := tt.Snapshot()
+		if strings.Contains(snap, "Full Screen Message Editor Help") {
+			t.Error("first page still on screen after a key was pressed")
+		}
+		if !strings.Contains(snap, "Word Wrapping:") {
+			t.Errorf("second page is missing the end of the help:\n%s", snap)
+		}
+		if tt.Row(1) == "" {
+			t.Error("second page opens on a blank row")
+		}
+		if got := tt.Row(24); got != "Press any key to continue..." {
+			t.Errorf("Row(24) = %q, want the key prompt", got)
+		}
+		// Between them the two pages show every line of the help.
+		out := raw.String()
+		for _, line := range strings.Split(builtInHelp, "\n") {
+			text := regexp.MustCompile(`\|\d\d`).ReplaceAllString(line, "")
+			if strings.TrimSpace(text) != "" && !strings.Contains(out, text) {
+				t.Errorf("help line %q was never shown", text)
+			}
+		}
+		if got := tt.Unhandled(); len(got) != 0 {
+			t.Errorf("Unhandled() = %q, want empty", got)
+		}
+	})
+}
+
 func TestHandleViewListsTheMessage(t *testing.T) {
 	tt, ch, _, cleanup := newQuoteHarness(t, "", nil)
 	defer cleanup()
@@ -320,9 +386,10 @@ func fillBuffer(buffer *MessageBuffer, n int) {
 }
 
 // Quoting into a message with no room left must say so and leave the message
-// exactly as it was, with no stray banner.
+// exactly as it was, with no stray banner. Two lines short of full, the banner
+// pair fits but no quoted line does, and the empty pair must go again (#516).
 func TestQuoteModeReportsFullMessage(t *testing.T) {
-	for _, lines := range []int{MaxLines, MaxLines - 1} {
+	for _, lines := range []int{MaxLines, MaxLines - 1, MaxLines - 2} {
 		t.Run(fmt.Sprintf("%d lines", lines), func(t *testing.T) {
 			tt, ch, ih, cleanup := newQuoteHarness(t, " \x1b", quoteBody)
 			defer cleanup()

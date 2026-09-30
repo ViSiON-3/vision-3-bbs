@@ -22,7 +22,7 @@ All other users are silently refused — the `%` key does nothing for them, and 
 
 ## Configuring a Sponsor
 
-The easiest way is from within the BBS: enter the Sponsor Menu for the area (`%` from Messages Menu) and press `E` → `S` to set the Sponsor field. See [Edit Area Screen](#edit-area-screen) below.
+The easiest way is from within the BBS: as a SysOp or Co-SysOp, enter the Sponsor Menu for the area (`%` from Messages Menu) and press `E` → `S` to set the Sponsor field. See [Edit Area Screen](#edit-area-screen) below.
 
 Alternatively, set the `"sponsor"` field directly in `configs/message_areas.json`:
 
@@ -95,21 +95,21 @@ Edit (T N D R W S M G A L J C B Y E O K)  Q=Save/Quit  ESC=Cancel:
 |-----|-------|-----------|--------|-------|
 | `T` | Tag | 32 chars | Co-SysOp+ | Area tag used in routing; changing may break FTN echomail references |
 | `N` | Name | 60 chars | Sponsor | Display name shown in area lists |
-| `D` | Description | 80 chars | Sponsor | Longer description |
-| `R` | ACS Read | 40 chars | Sponsor | ACS string required to read (empty = public) |
-| `W` | ACS Write | 40 chars | Sponsor | ACS string required to post (empty = all) |
-| `S` | Sponsor | 30 chars | Sponsor | Handle of area sponsor; enter `-` to clear; validated against user database |
+| `D` | Description | 80 chars | Sponsor | Longer description; enter `-` to clear |
+| `R` | ACS Read | 40 chars | Sponsor | ACS string required to read (empty = public); enter `-` to clear |
+| `W` | ACS Write | 40 chars | Sponsor | ACS string required to post (empty = all); enter `-` to clear |
+| `S` | Sponsor | 30 chars | Co-SysOp+ | Handle of area sponsor; enter `-` to clear; validated against user database |
 | `M` | Max Messages | integer | Sponsor | Maximum messages to retain (0 = unlimited) |
 | `G` | Max Age (days) | integer | Sponsor | Purge messages older than N days (0 = unlimited) |
 | `A` | Allow Anon | yes/no/default | Sponsor | Allow anonymous posts; `default` inherits system setting |
 | `L` | Real Name Only | yes/no | Sponsor | Require users to post under their real name |
 | `J` | Auto Join | yes/no | Sponsor | Automatically add new users to this area |
-| `C` | Conference ID | integer | Sponsor | Groups area under a conference (0 = ungrouped) |
+| `C` | Conference ID | integer | Co-SysOp+ | Groups area under a conference (0 = ungrouped); must be an existing conference |
 | `B` | Base Path | 80 chars | Co-SysOp+ | Filesystem path for message storage |
-| `Y` | Area Type | 16 chars | Co-SysOp+ | `local`, `echomail`, or `netmail` |
-| `E` | Echo Tag | 32 chars | Co-SysOp+ | FTN echomail tag for routing |
-| `O` | Origin Address | 32 chars | Co-SysOp+ | FTN origin address |
-| `K` | Network | 32 chars | Co-SysOp+ | FTN network name |
+| `Y` | Area Type | 16 chars | Co-SysOp+ | `local`, `echomail`, `netmail`, `v3net` or `qwknet`; anything else is rejected |
+| `E` | Echo Tag | 32 chars | Co-SysOp+ | FTN echomail tag for routing; enter `-` to clear |
+| `O` | Origin Address | 32 chars | Co-SysOp+ | FTN origin address; enter `-` to clear |
+| `K` | Network | 32 chars | Co-SysOp+ | FTN network name; enter `-` to clear |
 
 ### Editing a Field
 
@@ -121,6 +121,7 @@ Name [Tech Talk]:
 
 - Type a new value and press **Enter** to apply it.
 - Press **Enter** with no input to keep the current value.
+- Enter a single dash (`-`) to clear an optional text field (those marked "enter `-` to clear" above). Tag, Name and Base Path cannot be cleared.
 - Input is truncated to the field's maximum length automatically.
 
 ### Sponsor Field Validation

@@ -53,42 +53,83 @@ func cleanDIZ(raw string) string {
 	return cp437BytesToUTF8(s)
 }
 
-// cp437BytesToUTF8 converts a string that may contain raw CP437 high bytes
-// (0x80–0xFF) to valid UTF-8, preserving bytes that are already valid UTF-8.
+// utf8BOM is the UTF-8 byte order mark some editors write at the start of
+// a file.
+const utf8BOM = "\xef\xbb\xbf"
+
+// cp437BytesToUTF8 converts FILE_ID.DIZ text to valid UTF-8. The encoding
+// is decided for the whole text, not per character: many CP437 box-drawing
+// pairs are also valid two-byte UTF-8 (CD BB, "═╗", decodes as U+037B), so
+// keeping every valid UTF-8 sequence would corrupt CP437 art. Text is kept
+// as UTF-8 when it starts with a byte order mark, or when it is valid UTF-8
+// and holds at least one multi-byte character that is not a look-alike of
+// CP437 drawing characters. Anything else is CP437 throughout.
 func cp437BytesToUTF8(s string) string {
-	b := []byte(s)
-	// Fast path: if already valid UTF-8 with no high bytes, return as-is.
-	allASCII := true
-	for _, c := range b {
-		if c >= 0x80 {
-			allASCII = false
-			break
-		}
+	if bom, ok := strings.CutPrefix(s, utf8BOM); ok && utf8.ValidString(bom) {
+		return bom
 	}
-	if allASCII {
+	if isLikelyUTF8(s) {
 		return s
 	}
 
-	var out []byte
-	i := 0
-	for i < len(b) {
-		r, size := utf8.DecodeRune(b[i:])
-		if r != utf8.RuneError || size != 1 {
-			// Already a valid UTF-8 rune — keep as-is.
-			out = append(out, b[i:i+size]...)
-			i += size
-		} else {
-			// Invalid UTF-8 byte — treat as CP437.
-			cp := b[i]
-			mapped := ansi.Cp437ToUnicode[cp]
-			if mapped != 0 {
-				out = append(out, []byte(string(mapped))...)
+	var out strings.Builder
+	out.Grow(len(s) * 2)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < 0x80 {
+			out.WriteByte(c)
+			continue
+		}
+		// Every high byte has a CP437 mapping.
+		out.WriteRune(ansi.Cp437ToUnicode[c])
+	}
+	return out.String()
+}
+
+// isLikelyUTF8 reports whether s should be read as UTF-8 rather than CP437:
+// it must be valid UTF-8 and contain a multi-byte character that
+// cp437LookAlike does not claim. Pure ASCII is trivially UTF-8.
+func isLikelyUTF8(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	multiByte := false
+	for i := 0; i < len(s); {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		if size > 1 {
+			multiByte = true
+			if !cp437LookAlike(s[i : i+size]) {
+				return true
 			}
-			// Drop bytes that have no CP437 mapping (shouldn't happen).
-			i++
+		}
+		i += size
+	}
+	return !multiByte
+}
+
+// cp437LookAlike reports whether seq, one valid multi-byte UTF-8 sequence,
+// is more plausibly a run of CP437 characters. CP437 continuation bytes
+// 0xB0-0xBF are the shade and box-drawing characters (░▒▓│┤╡╢╖╕╣║╗╝╜╛┐),
+// and every lead byte is a line, block or Greek/math character, so a
+// sequence whose continuation bytes all fall in that range reads as drawing
+// characters. The exceptions are lead bytes of common letters and symbols,
+// whose sequences are real text: Latin-1 symbols (C2, except C1 control
+// codes) and letters (C3), Latin Extended-A (C5), Greek (CE, CF), Cyrillic
+// (D0, D1) and Arabic (D8).
+func cp437LookAlike(seq string) bool {
+	switch seq[0] {
+	case 0xC2:
+		// U+0080-U+009F are C1 control codes, never real DIZ text.
+		return seq[1] < 0xA0
+	case 0xC3, 0xC5, 0xCE, 0xCF, 0xD0, 0xD1, 0xD8:
+		return false
+	}
+	for i := 1; i < len(seq); i++ {
+		if seq[i] < 0xB0 {
+			return false
 		}
 	}
-	return string(out)
+	return true
 }
 
 // ExtractDIZFromZip opens a ZIP archive and reads the file description,

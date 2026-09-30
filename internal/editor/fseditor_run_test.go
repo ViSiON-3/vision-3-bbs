@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
+	"github.com/gliderlabs/ssh"
 )
 
 func TestRunBackspacePreservesSpaces(t *testing.T) {
@@ -131,6 +132,104 @@ func TestDiscardPendingByteOnlyDropsTheMatchingByte(t *testing.T) {
 	}
 	if ih.DiscardPendingByte(KeyCtrlP, 20*time.Millisecond) {
 		t.Fatal("nothing pending must report false")
+	}
+}
+
+// forwardResizes keeps only the newest window change for the editor, never
+// blocks on one the editor has not collected, and stops on either signal.
+func TestForwardResizes(t *testing.T) {
+	in := make(chan ssh.Window)
+	out := make(chan ssh.Window, 1)
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		forwardResizes(in, out, done)
+		close(stopped)
+	}()
+
+	for w := 81; w <= 85; w++ {
+		in <- ssh.Window{Width: w, Height: 24} // would block if the forwarder did
+	}
+	// The forwarder only takes a sixth change once the fifth is in out, so the
+	// editor now sees 85 then 86, or 86 alone if 85 was already replaced.
+	in <- ssh.Window{Width: 86, Height: 25}
+	for reads := 1; ; reads++ {
+		var got ssh.Window
+		select {
+		case got = <-out:
+		case <-time.After(2 * time.Second):
+			t.Fatal("newest change never reached the editor")
+		}
+		if got.Width < 85 || reads > 2 {
+			t.Fatalf("read %d was %+v: an older change was not replaced", reads, got)
+		}
+		if got.Width == 86 {
+			break
+		}
+	}
+
+	close(done)
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("forwardResizes did not stop when done closed")
+	}
+
+	// A closed source stops it too.
+	in2 := make(chan ssh.Window)
+	close(in2)
+	finished := make(chan struct{})
+	go func() {
+		forwardResizes(in2, out, make(chan struct{}))
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("forwardResizes did not stop when its source closed")
+	}
+}
+
+// A key already waiting is read before a pending window change, and the
+// change is still delivered on the next call.
+func TestReadKeyOrEventPrefersBufferedKey(t *testing.T) {
+	ih := NewInputHandler(strings.NewReader(""))
+	ih.unreadByte('a')
+	events := make(chan ssh.Window, 1)
+	events <- ssh.Window{Width: 100, Height: 30}
+
+	key, _, isEvent, err := readKeyOrEvent(ih, events)
+	if err != nil || isEvent || key != 'a' {
+		t.Fatalf("first call = (%q, event=%v, %v), want the buffered key", key, isEvent, err)
+	}
+	_, win, isEvent, err := readKeyOrEvent(ih, events)
+	if err != nil || !isEvent || win.Width != 100 {
+		t.Fatalf("second call = (%+v, event=%v, %v), want the window change", win, isEvent, err)
+	}
+	if _, _, _, err := readKeyOrEvent(ih, events); err != io.EOF {
+		t.Errorf("after input ends: err = %v, want io.EOF", err)
+	}
+}
+
+// HandleResize ignores a report of the size the editor already has (an SSH
+// session queues one at the start), and raises small windows to 80x24.
+func TestHandleResize(t *testing.T) {
+	var out strings.Builder
+	ed := NewFSEditor(testterm.NewSession(nil, ""), &out, ansi.OutputModeUTF8, 80, 24,
+		"", "", "", "", "", "", NewInputHandler(strings.NewReader("")))
+
+	ed.HandleResize(80, 24)
+	ed.HandleResize(40, 10)
+	if out.Len() != 0 {
+		t.Errorf("a resize to the current size (or below the minimum) redrew the screen: %q", out.String())
+	}
+
+	ed.HandleResize(100, 30)
+	if out.Len() == 0 {
+		t.Error("a real resize did not redraw the screen")
+	}
+	if ed.screen.termWidth != 100 || ed.screen.termHeight != 30 {
+		t.Errorf("screen is %dx%d, want 100x30", ed.screen.termWidth, ed.screen.termHeight)
 	}
 }
 

@@ -52,7 +52,8 @@ type Service struct {
 	// reloadMu serializes ReloadLeaves calls; it is never held together with mu.
 	reloadMu sync.Mutex
 
-	// BBSName and BBSHost are sent in subscribe requests.
+	// BBSName and BBSHost are sent in subscribe requests and, when the hub
+	// is enabled, written to the hub's own subscriber row by Start.
 	BBSName string
 	BBSHost string
 
@@ -101,7 +102,8 @@ type leafRun struct {
 // Note: The hub data directory is created by New() before calling hub.New(),
 // which is the correct location for SQLite database initialization.
 func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
-	// Step 1: self-register the hub node for each network.
+	// Step 1: self-register the hub node for each network. The name and
+	// host are placeholders here; Start fills in the configured ones.
 	for _, n := range cfg.Hub.Networks {
 		sub := hub.Subscriber{
 			NodeID:    ks.NodeID(),
@@ -314,12 +316,35 @@ func (s *Service) stopLeaf(run *leafRun) {
 	})
 }
 
+// updateHubSelfProfile writes the configured BBSName and BBSHost into the
+// hub's own subscriber row for each hosted network. hubAutoInit runs in New,
+// before the caller has set them, so it registers the node under a
+// placeholder; and a leaf subscribing to its own hub cannot correct the row,
+// because subscribe never changes an existing one. Doing it here on every
+// start also repairs rows left as "hub" with an empty host by older
+// versions. The row is keyed on this process's own node ID.
+func (s *Service) updateHubSelfProfile() {
+	if s.BBSName == "" && s.BBSHost == "" {
+		return
+	}
+	name := s.BBSName
+	if name == "" {
+		name = "hub"
+	}
+	for _, n := range s.cfg.Hub.Networks {
+		if err := s.hub.Subscribers().SetProfile(s.ks.NodeID(), n.Name, name, s.BBSHost); err != nil {
+			slog.Warn("v3net: could not update hub self-registration", "network", n.Name, "error", err)
+		}
+	}
+}
+
 // Start launches the hub (if enabled) and all leaf clients, then blocks
 // until ctx is cancelled, at which point every running leaf is stopped and
 // waited for.
 func (s *Service) Start(ctx context.Context) {
 	hubDone := make(chan struct{})
 	if s.hub != nil {
+		s.updateHubSelfProfile()
 		go func() {
 			defer close(hubDone)
 			if err := s.hub.Start(ctx); err != nil {

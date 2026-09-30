@@ -92,12 +92,12 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 // st.currentMenuName, st.currentUser) happen in place here exactly as they
 // did inline in Run.
 //
-// On a command execution error, st.currentUser is set to the userResult
-// executeCommandAction returned (which may be nil) before returning
-// loopReturn with that error, so that Run's call site — which returns
-// st.currentUser as Run's second value — produces exactly what the original
-// inline `return "", userResult, err` produced. The LOGOFF path mirrors this
-// the same way for `return "LOGOFF", userResult, nil`.
+// On LOGOFF (including a session-fatal handler error, which
+// executeCommandAction turns into LOGOFF), st.currentUser takes the command's
+// userResult when there is one and is otherwise left alone, so Run hands the
+// logged-in user back to its caller rather than nil. A handler's non-fatal
+// error has already been shown by executeCommandAction and does not end the
+// loop.
 //
 // A GOTO command sets autoRunActionTaken and breaks the inner command loop,
 // exactly as the original inline `break` did; once the loop over commands
@@ -132,18 +132,16 @@ func (st *runLoopState) runAutoRunCommands(commands []CommandRecord) (act loopAc
 				if cmd.Keys == "//" {
 					autoRunLog[autoRunKey] = true
 				}
-				nextAction, nextMenu, userResult, err := e.executeCommandAction(cmd.Command, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
-				if err != nil {
-					st.currentUser = userResult
-					return loopReturn, "", err
-				}
+				nextAction, nextMenu, userResult := e.executeCommandAction(cmd.Command, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
 				if nextAction == "GOTO" {
 					st.previousMenuName = st.currentMenuName
 					st.currentMenuName = nextMenu
 					autoRunActionTaken = true
 					break
 				} else if nextAction == "LOGOFF" {
-					st.currentUser = userResult
+					if userResult != nil {
+						st.currentUser = userResult
+					}
 					return loopReturn, "LOGOFF", nil
 				} else if nextAction == "CONTINUE" {
 					if userResult != nil {
@@ -166,15 +164,15 @@ func (st *runLoopState) runAutoRunCommands(commands []CommandRecord) (act loopAc
 // dispatchMatchedAction executes the command matched against user input by
 // matchCommand and dispatches the resulting action (GOTO/LOGOFF/CONTINUE, or
 // an unrecognized fallthrough action type), exactly as Run's original inline
-// "matched" branch did. Every path in the original block ended in either
-// `continue` or `return`, so the returned act is always loopContinue or
-// loopReturn, never loopFallthrough.
+// "matched" branch did. The returned act is always loopContinue or
+// loopReturn, never loopFallthrough, and retErr is always nil: a failed
+// RUN: or DOOR: has been reported by executeCommandAction and the menu is
+// redisplayed, and a session-fatal one arrives here as LOGOFF.
 //
-// On error and on LOGOFF, st.currentUser is set to executeCommandAction's
-// userResult before returning, so that Run's call site (which returns
-// st.currentUser as Run's second value) reproduces exactly what the original
-// inline `return "", userResult, err` / `return "LOGOFF", userResult, nil`
-// produced.
+// On LOGOFF, st.currentUser takes executeCommandAction's userResult when
+// there is one and is otherwise left alone, so Run (which returns
+// st.currentUser as its second value) hands back the logged-in user rather
+// than nil.
 func (st *runLoopState) dispatchMatchedAction(nextAction, nodeActivity, menuDefaultActivity string) (act loopAction, retAction string, retErr error) {
 	e := st.e
 	s := st.s
@@ -188,7 +186,7 @@ func (st *runLoopState) dispatchMatchedAction(nextAction, nodeActivity, menuDefa
 
 	// Update session activity before executing command
 	if nodeActivity != "" {
-		if sess := e.SessionRegistry.Get(nodeNumber); sess != nil {
+		if sess := e.nodeSession(nodeNumber); sess != nil {
 			sess.Mutex.Lock()
 			sess.Activity = nodeActivity
 			sess.Mutex.Unlock()
@@ -196,22 +194,20 @@ func (st *runLoopState) dispatchMatchedAction(nextAction, nodeActivity, menuDefa
 	}
 
 	// Execute the determined action here
-	nextActionType, nextMenuName, userResult, err := e.executeCommandAction(nextAction, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
-	if err != nil {
-		st.currentUser = userResult
-		return loopReturn, "", err
-	}
+	nextActionType, nextMenuName, userResult := e.executeCommandAction(nextAction, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
 	switch nextActionType {
 	case "GOTO":
 		st.previousMenuName = st.currentMenuName // Store current before going to next
 		st.currentMenuName = nextMenuName
 		return loopContinue, "", nil // Continue main loop to the new menu
 	case "LOGOFF":
-		st.currentUser = userResult
+		if userResult != nil {
+			st.currentUser = userResult
+		}
 		return loopReturn, "LOGOFF", nil // Return specific logoff action
 	case "CONTINUE":
 		// Reset activity to menu default after command completes
-		if sess := e.SessionRegistry.Get(nodeNumber); sess != nil {
+		if sess := e.nodeSession(nodeNumber); sess != nil {
 			sess.Mutex.Lock()
 			sess.Activity = menuDefaultActivity
 			sess.Mutex.Unlock()

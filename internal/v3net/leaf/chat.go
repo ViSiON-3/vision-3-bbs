@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -51,7 +52,8 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 			return // drop malformed event rather than routing it to the wrong room
 		}
 		for _, s := range r.sessions {
-			if s.currentRoom == msg.Room {
+			// room() takes and releases s.mu before deliver takes it again.
+			if s.room() == msg.Room {
 				s.deliver(ev)
 			}
 		}
@@ -103,6 +105,15 @@ type ChatSession struct {
 	closed       bool
 }
 
+// room returns the session's current room. Join and Leave change it from
+// user goroutines while the SSE loop dispatches events, so it is read under
+// s.mu.
+func (s *ChatSession) room() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.currentRoom
+}
+
 // deliver converts a protocol.Event into a chat.ChatEvent and sends it
 // to the session's events channel (non-blocking; drops if full).
 func (s *ChatSession) deliver(ev protocol.Event) {
@@ -125,9 +136,16 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 		if err := json.Unmarshal(ev.Data, &p); err != nil {
 			return // drop malformed event rather than corrupting the user list
 		}
-		s.mu.Lock()
-		s.currentUsers = append(s.currentUsers, p.Handle)
-		s.mu.Unlock()
+		// The list from Join already counts this session, and the hub also
+		// broadcasts that join, so skip the echo of our own join. It is
+		// matched on node as well as handle: users on other BBSes can share
+		// a handle, and the hub lists each of them.
+		ownEcho := p.Handle == s.handle && p.Node != "" && p.Node == s.leaf.chatSessions.nodeID
+		if !ownEcho {
+			s.mu.Lock()
+			s.currentUsers = append(s.currentUsers, p.Handle)
+			s.mu.Unlock()
+		}
 		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS}}
 	case protocol.EventChatLeave:
 		var p protocol.ChatLeavePayload
@@ -135,7 +153,7 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 			return // drop malformed event rather than corrupting the user list
 		}
 		s.mu.Lock()
-		s.currentUsers = removeString(s.currentUsers, p.Handle)
+		s.currentUsers = removeOne(s.currentUsers, p.Handle)
 		s.mu.Unlock()
 		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS}}
 	case protocol.EventChatTopic:
@@ -165,14 +183,14 @@ func protoMsgToDomain(p protocol.ChatMsgPayload) *chat.ChatMessage {
 	}
 }
 
-func removeString(ss []string, s string) []string {
-	out := ss[:0]
-	for _, v := range ss {
-		if v != s {
-			out = append(out, v)
-		}
+// removeOne returns ss without its first occurrence of s. The user list has
+// one entry per membership, so when one of several users sharing a handle
+// leaves, the others stay listed.
+func removeOne(ss []string, s string) []string {
+	if i := slices.Index(ss, s); i >= 0 {
+		return slices.Delete(ss, i, i+1)
 	}
-	return out
+	return ss
 }
 
 // Join implements chat.ChatService. It normalizes room, asks the hub to add

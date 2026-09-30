@@ -119,6 +119,7 @@ type fakeSession struct {
 	wrote    chan struct{} // signalled after every Write
 
 	hasPty bool
+	window ssh.Window // initial window size reported by Pty
 	winCh  chan ssh.Window
 }
 
@@ -182,8 +183,7 @@ func (s *fakeSession) Pty() (ssh.Pty, <-chan ssh.Window, bool) {
 	if !s.hasPty {
 		return ssh.Pty{}, nil, false
 	}
-	// No window size: see the note on TestRunCommandWithPTY_relaysIO.
-	return ssh.Pty{Term: "ansi"}, s.winCh, true
+	return ssh.Pty{Term: "ansi", Window: s.window}, s.winCh, true
 }
 
 func (s *fakeSession) written() string {
@@ -482,6 +482,34 @@ func TestRunCommandDirect_detectsZRPOS(t *testing.T) {
 	}
 	if !strings.Contains(out, "backoff=4") || strings.Contains(out, "backoff=5") {
 		t.Errorf("want exactly 4 backoff signals, log:\n%s", out)
+	}
+}
+
+// A header at the very end of a read also lands in the tail carried into
+// the next read; it must still produce only one backoff signal.
+func TestRunCommandDirect_ZRPOSAtEndOfReadCountedOnce(t *testing.T) {
+	for name, header := range map[string]string{
+		"hex":    "**\x18B09",
+		"binary": "*\x18A\x09",
+	} {
+		t.Run(name, func(t *testing.T) {
+			logs := captureDebugLog(t)
+			s := newRawSession()
+			s.in <- []byte("data" + header)
+			s.in <- []byte("more data")
+			close(s.in)
+
+			if err := runDirect(t, context.Background(), s, helperCommand(t, "echo"), 0); err != nil {
+				t.Fatalf("RunCommandDirect: %v", err)
+			}
+			out := logs()
+			if n := strings.Count(out, "ZRPOS "+name+" header detected"); n != 1 {
+				t.Errorf("header detected %d times, want 1; log:\n%s", n, out)
+			}
+			if !strings.Contains(out, "backoff=1") || strings.Contains(out, "backoff=2") {
+				t.Errorf("want exactly 1 backoff signal, log:\n%s", out)
+			}
+		})
 	}
 }
 

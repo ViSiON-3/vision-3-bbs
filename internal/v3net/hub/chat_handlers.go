@@ -34,7 +34,7 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 	users := h.chatRooms.Join(network, room, nodeID, req.Handle)
 
 	broadcastChatEvent(h.broadcaster, network, protocol.EventChatJoin, protocol.ChatJoinPayload{
-		Room: room, Handle: req.Handle, BBS: bbsName,
+		Room: room, Handle: req.Handle, BBS: bbsName, Node: nodeID,
 	})
 
 	history, _ := h.chatStore.RoomHistory(network, room, 50)
@@ -73,10 +73,6 @@ func (h *Hub) handleChatLeave(w http.ResponseWriter, r *http.Request, network st
 // handleChatPost: POST /v3net/v1/{network}/chat/rooms/post
 func (h *Hub) handleChatPost(w http.ResponseWriter, r *http.Request, network string) {
 	nodeID := r.Header.Get(headerNodeID)
-	if !h.chatLimiter.Allow(nodeID) {
-		jsonError(w, "rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
 	bbsName := h.subscriberBBSName(nodeID, network)
 
 	var req protocol.ChatPostRequest
@@ -96,6 +92,13 @@ func (h *Hub) handleChatPost(w http.ResponseWriter, r *http.Request, network str
 		return
 	}
 
+	// Take the rate-limit token only once the request is known to be valid,
+	// so a rejected request does not throttle the node's next real message.
+	if !h.chatLimiter.Allow(nodeID) {
+		jsonError(w, "rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
+
 	if err := h.chatStore.SaveMessage(network, room, handle, nodeID, bbsName, req.Text); err != nil {
 		jsonError(w, "storage error", http.StatusInternalServerError)
 		return
@@ -110,10 +113,6 @@ func (h *Hub) handleChatPost(w http.ResponseWriter, r *http.Request, network str
 // handleChatPrivate: POST /v3net/v1/{network}/chat/rooms/private
 func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network string) {
 	nodeID := r.Header.Get(headerNodeID)
-	if !h.chatLimiter.Allow(nodeID) {
-		jsonError(w, "rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
 	bbsName := h.subscriberBBSName(nodeID, network)
 
 	var req protocol.ChatPrivateRequest
@@ -128,6 +127,12 @@ func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network 
 
 	if h.subscribers.Get(req.ToNode, network) == nil {
 		jsonError(w, "target node not found", http.StatusNotFound)
+		return
+	}
+
+	// As for room posts, only a valid request takes the rate-limit token.
+	if !h.chatLimiter.Allow(nodeID) {
+		jsonError(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
 
