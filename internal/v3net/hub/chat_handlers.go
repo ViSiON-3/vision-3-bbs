@@ -34,7 +34,7 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 	users := h.chatRooms.Join(network, room, nodeID, req.Handle)
 
 	broadcastChatEvent(h.broadcaster, network, protocol.EventChatJoin, protocol.ChatJoinPayload{
-		Room: room, Handle: req.Handle, BBS: bbsName,
+		Room: room, Handle: req.Handle, BBS: bbsName, Node: nodeID,
 	})
 
 	history, _ := h.chatStore.RoomHistory(network, room, 50)

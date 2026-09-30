@@ -375,21 +375,48 @@ func TestDispatch_JoinLeaveTopicUpdateSession(t *testing.T) {
 	}
 }
 
-// TestDispatch_JoinOfListedHandleNotDuplicated covers the hub's broadcast of
-// a join arriving after Join has already stored a user list that names the
-// joiner (#519).
-func TestDispatch_JoinOfListedHandleNotDuplicated(t *testing.T) {
-	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
-	alice := newRoomSession(l, "alice", "lobby", "bob", "alice")
+// TestDispatch_JoinAndLeaveCountMemberships covers the hub's broadcast of a
+// join arriving after Join has stored a user list that already counts the
+// joiner (#519), without hiding other BBSes' users who share a handle: the
+// hub lists one entry per membership.
+func TestDispatch_JoinAndLeaveCountMemberships(t *testing.T) {
+	const self = "<this leaf>"
+	for _, tc := range []struct {
+		name      string
+		users     []string // the session's list before the event
+		leave     bool     // a chat_leave rather than a chat_join
+		node      string   // the join's node field; self means this leaf
+		wantUsers []string
+	}{
+		{"echo of our own join is not added again", []string{"alice", "sysop"}, false, self, []string{"alice", "sysop"}},
+		{"same handle from another BBS is added", []string{"alice", "sysop"}, false, "node-b", []string{"alice", "sysop", "sysop"}},
+		{"join from a hub without the node field is added", []string{"alice", "sysop"}, false, "", []string{"alice", "sysop", "sysop"}},
+		{"leave of a shared handle removes one entry", []string{"alice", "sysop", "sysop"}, true, "", []string{"alice", "sysop"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+			sess := newRoomSession(l, "sysop", "lobby", tc.users...)
+			node := tc.node
+			if node == self {
+				node = l.chatSessions.nodeID
+			}
+			ev := chatEvent(t, protocol.EventChatJoin, protocol.ChatJoinPayload{Room: "lobby", Handle: "sysop", BBS: "X", Node: node})
+			wantType := chat.TypeJoin
+			if tc.leave {
+				ev = chatEvent(t, protocol.EventChatLeave, protocol.ChatLeavePayload{Room: "lobby", Handle: "sysop", BBS: "X"})
+				wantType = chat.TypeLeave
+			}
 
-	l.chatSessions.dispatch(chatEvent(t, protocol.EventChatJoin, protocol.ChatJoinPayload{Room: "lobby", Handle: "alice", BBS: "A"}))
+			l.chatSessions.dispatch(ev)
 
-	// The event is still delivered, so the UI can announce the join.
-	if ev := <-alice.events; ev.Type != chat.TypeJoin || ev.Join.Handle != "alice" {
-		t.Errorf("join event = %+v", ev)
-	}
-	if users := alice.Users(); len(users) != 2 || users[0] != "bob" || users[1] != "alice" {
-		t.Errorf("users after own join event = %v, want [bob alice]", users)
+			// The event is still delivered, so the UI can announce it.
+			if got := <-sess.events; got.Type != wantType {
+				t.Errorf("event = %+v, want type %v", got, wantType)
+			}
+			if got := sess.Users(); strings.Join(got, ",") != strings.Join(tc.wantUsers, ",") {
+				t.Errorf("users = %v, want %v", got, tc.wantUsers)
+			}
+		})
 	}
 }
 

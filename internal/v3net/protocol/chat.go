@@ -71,6 +71,10 @@ type ChatJoinPayload struct {
 	Room   string `json:"room"`
 	Handle string `json:"handle"`
 	BBS    string `json:"bbs"`
+	// Node is the joining node's ID, so a leaf can recognise the echo of its
+	// own join, which its join response already counted. Empty from hubs
+	// that predate the field.
+	Node string `json:"node,omitempty"`
 }
 
 // ChatLeavePayload is the data for a "chat_leave" SSE event.

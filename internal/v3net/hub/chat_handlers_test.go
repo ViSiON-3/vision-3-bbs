@@ -113,7 +113,8 @@ func TestChatJoin_NormalizesRoomAndBroadcasts(t *testing.T) {
 	if err := json.Unmarshal(waitEvent(t, ch, protocol.EventChatJoin).Data, &payload); err != nil {
 		t.Fatalf("decode join event: %v", err)
 	}
-	want := protocol.ChatJoinPayload{Room: "dev-talk", Handle: "alice", BBS: "Test BBS"}
+	// Node lets the joining leaf recognise the echo of its own join.
+	want := protocol.ChatJoinPayload{Room: "dev-talk", Handle: "alice", BBS: "Test BBS", Node: leafKS.NodeID()}
 	if payload != want {
 		t.Errorf("join event = %+v, want %+v", payload, want)
 	}
