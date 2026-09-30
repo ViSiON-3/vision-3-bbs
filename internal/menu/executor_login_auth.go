@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -137,7 +138,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 			logging.Security("login attempt from locked IP",
 				"node", nodeNumber, "ip", remoteIP, "locked_until", lockedUntil.Format("2006-01-02 15:04:05"), "attempts", attempts)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
-			minutesLeft := int(time.Until(lockedUntil).Minutes()) + 1
+			minutesLeft := int(math.Ceil(time.Until(lockedUntil).Minutes()))
 			errMsg := fmt.Sprintf(e.Strings().ExecIPLockout, minutesLeft)
 			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if wErr != nil {
