@@ -220,10 +220,17 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sub := h.subscribers.Get(nodeID, network)
-	nodeName := ""
-	if sub != nil {
-		nodeName = sub.BBSHost
+	// Name the node by its host, as other boards know it. A subscriber that
+	// never gave a host falls back to its BBS name, then to its node ID, so
+	// a presence event always says where the user is.
+	nodeName := nodeID
+	if sub := h.subscribers.Get(nodeID, network); sub != nil {
+		switch {
+		case sub.BBSHost != "":
+			nodeName = sub.BBSHost
+		case sub.BBSName != "":
+			nodeName = sub.BBSName
+		}
 	}
 
 	ts := time.Now().UTC().Format(time.RFC3339)
