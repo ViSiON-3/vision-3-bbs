@@ -605,7 +605,7 @@ type DoorConfig struct {
     CleanupArgs         []string
     EnvironmentVars     map[string]string
     // Script door fields
-    Type                string              // "synchronet_js", "v3_script" or "rlogin"
+    Type                string              // "synchronet_js", "v3_script", "rlogin" or "telnet"
     Script              string
     LibraryPaths        []string
     ExecDir             string
@@ -616,7 +616,7 @@ type DoorConfig struct {
     DOSEmulator         string
     FossilDriver        string
     DosemuConfig        string
-    // RLogin door fields
+    // Remote door fields (rlogin and telnet)
     Host                string
     Port                int
     ClientUsername      string
@@ -624,6 +624,9 @@ type DoorConfig struct {
     TerminalType        string
     ConnectTimeout      int
     DisconnectKey       string
+    // Telnet door fields
+    SendOnConnect       string
+    RawTCP              bool
 }
 
 type LoginItem struct {
@@ -1038,15 +1041,16 @@ The `RUN:` registry is built in `internal/menu/executor_runnables_registry.go`. 
 
 ### Door Types
 
-The system supports five door execution types:
+The system supports six door execution types:
 
-| Type          | Config Field            | Description                                 |
-| ------------- | ----------------------- | ------------------------------------------- |
-| Native        | (default)               | Direct executable programs on any platform  |
-| DOS           | `IsDOS: true`           | Legacy DOS doors via dosemu2 emulator       |
-| Synchronet JS | `Type: "synchronet_js"` | Synchronet-compatible JavaScript scripts    |
-| Vision/3 VPL  | `Type: "v3_script"`     | Native Vision/3 JavaScript scripts          |
-| RLogin        | `Type: "rlogin"`        | Outbound connection to a remote door server |
+| Type          | Config Field            | Description                                            |
+| ------------- | ----------------------- | ------------------------------------------------------ |
+| Native        | (default)               | Direct executable programs on any platform             |
+| DOS           | `IsDOS: true`           | Legacy DOS doors via dosemu2 emulator                  |
+| Synchronet JS | `Type: "synchronet_js"` | Synchronet-compatible JavaScript scripts               |
+| Vision/3 VPL  | `Type: "v3_script"`     | Native Vision/3 JavaScript scripts                     |
+| RLogin        | `Type: "rlogin"`        | Outbound connection to a remote door server            |
+| Telnet        | `Type: "telnet"`        | Outbound connection to a remote door server, or a BBS  |
 
 **Dropfile formats:** `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, or none.
 

@@ -95,6 +95,8 @@ If it does not work, `data/logs/vision3.log` records the address of every attemp
 
 **Time limits.** Remote doors obey the caller's time limit like local ones: the connection is closed when it runs out, and a caller with no time left never reaches the server.
 
+**A server that only speaks Telnet.** Set **Type** to `Telnet` instead. The host, port, timeout and hang-up key work the same; there is no handshake, so the caller arrives at the server's own login or menu, and **Send On Connect** can type a login for them. See [Door Servers — Telnet](doors/door-servers.md#telnet).
+
 ## See also
 
 - [Door Servers](doors/door-servers.md) for the handshake fields, security notes and full troubleshooting

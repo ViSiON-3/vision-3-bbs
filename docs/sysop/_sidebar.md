@@ -82,7 +82,7 @@
 * [Setting Up Doors (How-To)](how-to-guides/doors.md)
 * [Door Programs](doors/doors.md)
 * [Synchronet JS Doors](doors/synchronet-js-doors.md)
-* [Door Servers (RLogin)](doors/door-servers.md)
+* [Door Servers (RLogin, Telnet)](doors/door-servers.md)
 
 * **SCRIPTING (VPL)**
 * [VPL Scripting](scripting/vpl-scripting.md)

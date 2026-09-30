@@ -26,7 +26,7 @@ type DoorConfig struct {
 	CleanupArgs         []string          `json:"cleanup_args,omitempty"`          // Arguments for cleanup command (supports placeholders)
 	EnvironmentVars     map[string]string `json:"environment_variables,omitempty"` // Additional environment variables (optional)
 	// Script door fields
-	Type         string   `json:"type,omitempty"`          // "synchronet_js", "v3_script", "rlogin", or empty (legacy native/DOS)
+	Type         string   `json:"type,omitempty"`          // "synchronet_js", "v3_script", "rlogin", "telnet", or empty (legacy native/DOS)
 	Script       string   `json:"script,omitempty"`        // Main JS file to execute (relative to working_directory)
 	LibraryPaths []string `json:"library_paths,omitempty"` // Search paths for load()/require()
 	Args         []string `json:"args,omitempty"`          // Script arguments (available as argv in JS)
@@ -38,14 +38,35 @@ type DoorConfig struct {
 	FossilDriver string `json:"fossil_driver,omitempty"` // DOS FOSSIL driver command (e.g. "C:\\UTILS\\X00.EXE eliminate")
 	// dosemu2-specific fields (Linux x86 only)
 	DosemuConfig string `json:"dosemu_config,omitempty"` // Path to custom .dosemurc (optional)
-	// Remote door fields (type "rlogin"): an outbound connection to a door server
+	// Remote door fields (type "rlogin" or "telnet"): an outbound connection to a door server
 	Host           string `json:"host,omitempty"`            // Door server hostname or IP
-	Port           int    `json:"port,omitempty"`            // Door server TCP port (0 = 513)
+	Port           int    `json:"port,omitempty"`            // Door server TCP port (0 = 513 for rlogin, 23 for telnet)
 	ClientUsername string `json:"client_username,omitempty"` // RLogin client-user-name field (placeholders supported)
 	ServerUsername string `json:"server_username,omitempty"` // RLogin server-user-name field (placeholders supported)
-	TerminalType   string `json:"terminal_type,omitempty"`   // RLogin terminal-type field, e.g. "xtrn=LORD" (placeholders supported)
+	TerminalType   string `json:"terminal_type,omitempty"`   // RLogin terminal-type field, e.g. "xtrn=LORD"; the terminal type a telnet door reports (placeholders supported)
 	ConnectTimeout int    `json:"connect_timeout,omitempty"` // Seconds to wait for the connection (0 = 10)
 	DisconnectKey  string `json:"disconnect_key,omitempty"`  // Local hang-up key, e.g. "^]" (empty = "^]", "none" = disabled)
+	// Telnet door fields
+	SendOnConnect string `json:"send_on_connect,omitempty"` // Sent to the server once connected, e.g. a login (placeholders supported)
+	RawTCP        bool   `json:"raw_tcp,omitempty"`         // Plain TCP: no telnet negotiation or escaping
+}
+
+// IsRemote reports whether the door is an outbound connection to a door
+// server rather than a program run on this machine.
+func (d DoorConfig) IsRemote() bool {
+	return d.Type == "rlogin" || d.Type == "telnet"
+}
+
+// RemoteProtocol names a remote door's protocol as a sysop would write it, or
+// "" for a door that is not remote.
+func (d DoorConfig) RemoteProtocol() string {
+	switch d.Type {
+	case "rlogin":
+		return "RLogin"
+	case "telnet":
+		return "Telnet"
+	}
+	return ""
 }
 
 // DefaultDisconnectKey is the control character that hangs up a remote door
@@ -79,9 +100,9 @@ func ParseDisconnectKey(setting string) (key byte, enabled bool, err error) {
 	return 0, false, fmt.Errorf("disconnect key must be \"none\" or a control key such as \"^]\", got %q", setting)
 }
 
-// ValidateRLogin checks the settings an rlogin door cannot run without.
+// ValidateRemote checks the settings a remote door cannot run without.
 //
-// It is deliberately limited to rlogin doors and to settings whose absence is
+// It is deliberately limited to remote doors and to settings whose absence is
 // unambiguously a mistake. LoadDoors does not call it: a door configuration
 // error is fatal at startup, and refusing to boot the whole BBS over one
 // mistyped door would be a worse outcome than the door failing when somebody
@@ -90,12 +111,17 @@ func ParseDisconnectKey(setting string) (key byte, enabled bool, err error) {
 //
 // Doors of other types are accepted unchanged, so this can never reject a
 // configuration that already worked.
-func (d DoorConfig) ValidateRLogin() error {
-	if d.Type != "rlogin" {
+func (d DoorConfig) ValidateRemote() error {
+	if !d.IsRemote() {
 		return nil
 	}
 	if strings.TrimSpace(d.Host) == "" {
-		return fmt.Errorf("door %q: an RLogin door needs a host", d.Code)
+		// "an RLogin door", "a Telnet door"
+		article := "a"
+		if d.Type == "rlogin" {
+			article = "an"
+		}
+		return fmt.Errorf("door %q: %s %s door needs a host", d.Code, article, d.RemoteProtocol())
 	}
 	if d.Port < 0 || d.Port > 65535 {
 		return fmt.Errorf("door %q: port must be 0-65535, got %d", d.Code, d.Port)

@@ -1,6 +1,6 @@
-# Door Servers (Outbound RLogin)
+# Door Servers (Outbound RLogin and Telnet)
 
-A **door server** is a separate machine that hosts door games for one or more BBSes. Instead of installing every door on every board you run, you install them once on the door server and point each BBS at it. ViSiON/3 connects out to the server over [RLogin](https://datatracker.ietf.org/doc/html/rfc1282), hands the user's terminal across, and returns them to the menu when the door ends.
+A **door server** is a separate machine that hosts door games for one or more BBSes. Instead of installing every door on every board you run, you install them once on the door server and point each BBS at it. ViSiON/3 connects out to the server over [RLogin](https://datatracker.ietf.org/doc/html/rfc1282) or [Telnet](https://datatracker.ietf.org/doc/html/rfc854), hands the user's terminal across, and returns them to the menu when the door ends.
 
 This is configured as a door like any other, so it appears in the door list, obeys access levels and time limits, and is opened with the same `DOOR:CODE` menu command. See [Door Programs](doors/doors.md) for settings shared by every door type.
 
@@ -8,9 +8,18 @@ This is configured as a door like any other, so it appears in the door list, obe
 
 - You run more than one BBS and want them to share one set of doors.
 - You want to reach a door server that speaks plain RLogin, including **DoorParty** by way of [its connector](#doorparty-via-the-connector). BBSLink and Exodus need handshakes of their own and are not supported yet — see [Limitations](#limitations).
+- You want to reach a door server, or another BBS, that only answers Telnet — see [Telnet](#telnet).
 - You want to run doors on a different machine from the BBS.
 
 If the doors run on the same machine as ViSiON/3, you do not need this — use a native, DOS, or script door instead.
+
+## Which protocol
+
+**Use RLogin when the server offers it.** It is what door servers are built around: the handshake carries the caller's identity and a door code, so the user lands in the game already logged in. Every door server built for BBS use — Synchronet's, Mystic's, DoorParty — speaks it.
+
+**Use Telnet when RLogin is not on offer.** Telnet has no handshake, so the server sees an anonymous connection and shows whatever it shows a new caller, usually a login prompt. ViSiON/3 can type a login for the user on connect ([Send On Connect](#logging-in-automatically)), but there is no standard way to name a door, so the user usually arrives at the server's menu rather than in a game.
+
+The settings shared by both — host, port, timeout and the hang-up key — are described under [Quick start](#quick-start). The rest of this page is about RLogin up to the [Telnet](#telnet) section.
 
 ## Quick start
 
@@ -25,6 +34,8 @@ In the [Configuration Editor](configuration/configuration.md#configuration-edito
 | Terminal Type | `terminal_type` | Third handshake field. Blank sends `ANSI/38400`. |
 | Connect Timeout | `connect_timeout` | Seconds to wait for the server. Blank or `0` uses 10. |
 | Disconnect Key | `disconnect_key` | Key that hangs up the session. Blank uses `^]`. |
+
+A Telnet door has the same **Host**, **Port** (defaulting to 23), **Connect Timeout** and **Disconnect Key**, and its own fields in place of the handshake — see [Telnet](#telnet).
 
 The smallest entry that will work against a server wanting no authentication:
 
@@ -156,6 +167,68 @@ Three things to know:
 
 Add `"terminal_type": "lord"` to go straight into a game — DoorParty takes the door code bare, without the `xtrn=` prefix. Its [door code list](https://wiki.throwbackbbs.com/doku.php?id=doorcode) has the valid values.
 
+## Telnet
+
+Set **Type** to `Telnet` for a server that speaks Telnet rather than RLogin. The connection is negotiated the way any Telnet client would: the server is told the caller's terminal type and screen size when it asks, and its echo is accepted. What the caller sees is then the server's own session, from its opening screen onward.
+
+| Field | JSON key | Meaning |
+| --- | --- | --- |
+| Host | `host` | Door server hostname or IP address. Required. |
+| Port | `port` | TCP port. Blank or `0` uses 23. |
+| Terminal Type | `terminal_type` | What to report when the server asks for the terminal type. Blank sends `ANSI`. |
+| Send On Connect | `send_on_connect` | Typed into the session as soon as it connects — see [Logging in automatically](#logging-in-automatically). |
+| Raw TCP | `raw_tcp` | `Yes` turns the Telnet protocol off — see [Raw TCP](#raw-tcp). |
+| Connect Timeout | `connect_timeout` | Seconds to wait for the server. Blank or `0` uses 10. |
+| Disconnect Key | `disconnect_key` | Key that hangs up the session. Blank uses `^]`. |
+
+The smallest entry:
+
+```json
+{
+  "code": "OTHERBBS",
+  "name": "The Other BBS",
+  "type": "telnet",
+  "host": "bbs.example.com",
+  "port": 2323
+}
+```
+
+The caller's stored screen size is what the server is told, so a door server that draws to the window size gets the right one. Terminal Type accepts the same [placeholders](#placeholders) as the RLogin fields.
+
+### Logging in automatically
+
+Telnet carries no identity, so a server that wants a login shows its prompt to every caller. **Send On Connect** (`send_on_connect`) is typed into the session for them, before anything they press themselves. Placeholders are substituted, so a login can carry the caller's handle:
+
+```json
+{
+  "code": "OTHERBBS",
+  "name": "The Other BBS",
+  "type": "telnet",
+  "host": "bbs.example.com",
+  "send_on_connect": "{USERHANDLE}\rthe-shared-password\r"
+}
+```
+
+In `doors.json` the Enter key is JSON's `\r`. In the config editor type the same thing — `\r` for Enter, `\n` for a line feed, `\\` for a backslash — and the editor stores the real characters.
+
+Three things to know:
+
+- **It is sent blind, the moment the connection is up**, the same way Synchronet's Telnet gateway sends its strings. A server that clears its input while it detects the terminal, or that takes a while to show its prompt, may never see it. Try it against your server before relying on it; if it does not take, leave the field blank and let the caller log in by hand.
+- **It is one login for everyone.** A shared password goes in the field as written; there is no placeholder for a caller's own BBS password, for the reason given under [Security](#security).
+- **A bare `\r` is a real value**: it is what gets a server past a "press Enter to continue" screen.
+
+### Raw TCP
+
+Some servers listen on a port a sysop would expect Telnet on but speak none of it: no negotiation, and every byte is data. Set **Raw TCP** (`raw_tcp`) to `Yes` for those. Nothing is negotiated and nothing is rewritten in either direction; **Send On Connect** is still sent.
+
+Leave it at `No` for anything that is actually a Telnet server. With the protocol off, its negotiation arrives on the caller's screen as garbage, and it never learns the terminal type or screen size.
+
+### What Telnet does not do
+
+- **No door selection.** There is no field a door code can travel in, as there is in RLogin. Where the user lands is up to the server.
+- **No identity.** The server does not learn who is calling unless Send On Connect tells it.
+- **Line endings.** Outside binary mode the Enter key is sent as the protocol requires (CR NUL), and a NUL the server sends after a CR is dropped. Servers that negotiate binary mode get the bytes as they are. A server that misreads either is one for **Raw TCP**.
+
 ## Hanging up
 
 Pressing **Ctrl-]** disconnects from the door server and returns the user to the BBS. This is deliberately the same key Synchronet uses, so users of other boards already know it.
@@ -172,12 +245,12 @@ Users with no time limit set (`0`) stay connected for as long as the door server
 
 ## Security
 
-**RLogin sends everything in the clear, including whatever is in the handshake fields.** Anyone who can watch the network between your BBS and the door server sees it.
+**RLogin and Telnet both send everything in the clear, including whatever is in the handshake fields or Send On Connect.** Anyone who can watch the network between your BBS and the door server sees it.
 
 - Only point doors at servers you trust. The fields are sent as configured, so a server can be told whatever it asks for — including a password.
 - Prefer a door server on your own network, or reachable over a VPN or tunnel, over one across the public internet.
 - `configs/doors.json` holds these values in plain text. Keep its permissions tight if a door server requires a password.
-- The handshake fields are kept out of the default log for the same reason. They appear only at debug level.
+- The RLogin handshake fields are kept out of the default log for the same reason, and appear only at debug level. Send On Connect is never logged at all.
 
 ## Troubleshooting
 
@@ -191,12 +264,19 @@ Users with no time limit set (`0`) stay connected for as long as the door server
 
 **Garbled output** — the door server is sending a character set the terminal is not expecting. RLogin has no binary-mode negotiation, so file transfers through a door server are unreliable; this affects doors that try to send files.
 
+**Telnet: the screen fills with stray characters on connect** — the server is not speaking Telnet and its bytes are being read as negotiation, or the reverse. Toggle **Raw TCP**.
+
+**Telnet: the login is not typed, or only part of it is** — the server discarded what arrived before it was ready; see [Logging in automatically](#logging-in-automatically). Blank the field and let the caller log in by hand.
+
+**Telnet: typed characters do not appear** — the server did not offer to echo. ViSiON/3 does not echo locally; a server that expects the client to is one this door type does not suit.
+
 The BBS log records the address of every remote door connection. The handshake fields themselves are logged at debug level only, since they can carry a shared password on servers that authenticate that way; raise the log level to see them when diagnosing which field a server is unhappy with.
 
 ## Limitations
 
 - **Connection establishment only.** The rest of the RLogin protocol — cooked mode, out-of-band window-size changes — is not implemented, matching what Synchronet and ENiGMA½ do. Door servers do not rely on it.
-- **The window size is not sent.** The door server uses its own default, generally 80x24.
-- **RLogin only.** Outbound Telnet and SSH are not implemented yet.
+- **The window size is not sent over RLogin.** The door server uses its own default, generally 80x24. Telnet does report it.
+- **No SSH.** Outbound SSH to a door server is not implemented yet ([#381](https://github.com/ViSiON-3/vision-3-bbs/issues/381)).
+- **Telnet has no login script.** Send On Connect is sent once, blind; there is no waiting for a prompt.
 - **No built-in provider support.** Public services that wrap RLogin in something else are not spoken directly: DoorParty needs an SSH tunnel, BBSLink an HTTP pre-authentication step, Exodus an HTTPS ticket and a key-based SSH login. DoorParty is reachable today through [its connector](#doorparty-via-the-connector), which does the tunnelling for you. Native support for all three is [#382](https://github.com/ViSiON-3/vision-3-bbs/issues/382).
 - **No per-user passwords.** The password in the handshake is one value for the whole system. Synchronet can send a caller's own password, or a hash of it, to a door server; ViSiON/3 does not.

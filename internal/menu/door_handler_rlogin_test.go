@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
-	"github.com/ViSiON-3/vision-3-bbs/internal/rlogin"
 )
 
 func TestParseDisconnectKeyViaDoorConfig(t *testing.T) {
@@ -342,8 +341,8 @@ func TestDoorDeadline(t *testing.T) {
 		if !deadline.IsZero() || expired {
 			t.Errorf("got deadline=%v expired=%v, want no limit", deadline, expired)
 		}
-		if timeout != rlogin.DefaultTimeout {
-			t.Errorf("timeout = %v, want the default %v", timeout, rlogin.DefaultTimeout)
+		if timeout != remoteDoorDefaultTimeout {
+			t.Errorf("timeout = %v, want the default %v", timeout, remoteDoorDefaultTimeout)
 		}
 	})
 
@@ -385,7 +384,7 @@ func TestDoorDeadline(t *testing.T) {
 		}
 	})
 
-	// rlogin.Dial reads a nonpositive timeout as "unset" and substitutes its
+	// The dialers read a nonpositive timeout as "unset" and substitute their
 	// own default, so a caller out of time must never reach it with one.
 	t.Run("never yields a nonpositive timeout", func(t *testing.T) {
 		for _, tc := range []struct {
@@ -411,7 +410,7 @@ func TestDoorDeadline(t *testing.T) {
 
 // The relay must stop at the deadline even while the door server is still
 // happily connected.
-func TestRelayRLoginSessionStopsAtDeadline(t *testing.T) {
+func TestRelayRemoteSessionStopsAtDeadline(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
 	sess := newRelaySession()
@@ -427,7 +426,7 @@ func TestRelayRLoginSessionStopsAtDeadline(t *testing.T) {
 	started := time.Now()
 	go func() {
 		defer close(done)
-		relayRLoginSession(ctx, conn, 0x1D, true, time.Now().Add(300*time.Millisecond))
+		relayRemoteSession(ctx, conn, conn, 0x1D, true, time.Now().Add(300*time.Millisecond))
 	}()
 
 	select {
