@@ -1,5 +1,7 @@
 package editor
 
+import "unicode"
+
 // Text-changing operations: inserting, deleting, splitting and joining lines,
 // and reflowing a paragraph.
 
@@ -90,10 +92,19 @@ func (e *FSEditor) deleteLine() {
 	}
 }
 
-// joinLines joins current line with next line and reflows
+// joinLines joins current line with next line and reflows. Unlike the joins
+// Backspace and Delete make at a line boundary, Ctrl-J joins two lines as
+// words: a space goes between them unless one side already has whitespace at
+// the join or is empty, so "one" and "two" become "one two", not "onetwo".
 func (e *FSEditor) joinLines() {
 	if e.currentLine >= e.buffer.GetLineCount() {
 		return
+	}
+	first := e.buffer.GetLine(e.currentLine)
+	second := e.buffer.GetLine(e.currentLine + 1)
+	if first != "" && second != "" &&
+		!unicode.IsSpace(rune(first[len(first)-1])) && !unicode.IsSpace(rune(second[0])) {
+		e.buffer.SetLine(e.currentLine, first+" ")
 	}
 	// Clear hardNewline so reflow can flow across the boundary
 	e.buffer.SetHardNewline(e.currentLine, false)

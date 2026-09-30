@@ -305,7 +305,7 @@ func (ch *CommandHandler) HandleHelp(inputHandler *InputHandler) {
 		ch.screen.WriteArt(helpContent)
 	} else {
 		// Display built-in help
-		ch.displayBuiltInHelp()
+		ch.displayBuiltInHelp(inputHandler)
 	}
 
 	// Wait for key press
@@ -314,9 +314,43 @@ func (ch *CommandHandler) HandleHelp(inputHandler *InputHandler) {
 	_, _ = inputHandler.ReadKey() // wait for any key
 }
 
-// displayBuiltInHelp displays built-in help text
-func (ch *CommandHandler) displayBuiltInHelp() {
-	help := `|15Full Screen Message Editor Help|07
+// displayBuiltInHelp shows builtInHelp a screenful at a time, leaving the
+// bottom row free for a prompt. Every page but the last waits for a key;
+// HandleHelp puts up the prompt after the last one.
+func (ch *CommandHandler) displayBuiltInHelp(inputHandler *InputHandler) {
+	lines := strings.Split(strings.TrimRight(builtInHelp, "\n"), "\n")
+	perPage := ch.screen.termHeight - 1
+	if perPage < 1 {
+		perPage = 1
+	}
+	for {
+		// A page never opens on the blank line that ended a section.
+		for len(lines) > 0 && lines[0] == "" {
+			lines = lines[1:]
+		}
+		page := lines
+		if len(page) > perPage {
+			page = page[:perPage]
+		}
+		lines = lines[len(page):]
+		// |07 first: the previous page's prompt left the colour at |15.
+		ch.screen.WriteDirectProcessed("|07" + strings.Join(page, "\r\n"))
+		if len(lines) == 0 {
+			return
+		}
+		ch.screen.GoXY(1, ch.screen.termHeight)
+		ch.screen.WriteDirectProcessed("|15Press any key for more...")
+		if _, err := inputHandler.ReadKey(); err != nil {
+			return
+		}
+		ch.screen.ClearScreen()
+	}
+}
+
+// builtInHelp is the key reference shown when the menu set has no
+// EDITHELP.ANS. Lines end in a bare newline; displayBuiltInHelp pages it and
+// sends each line break as CR LF.
+const builtInHelp = `|15Full Screen Message Editor Help|07
 
 |11Navigation Commands:|07
   Ctrl+E or Up Arrow     - Move up one line
@@ -359,10 +393,7 @@ func (ch *CommandHandler) displayBuiltInHelp() {
   Lines automatically wrap at 79 characters.
   Words are kept together when wrapping.
   Use Ctrl+B to reformat paragraphs.
-
 `
-	ch.screen.WriteDirectProcessed(help)
-}
 
 // HandleView handles the /V (view) command
 // Displays the current message (not fully implemented)

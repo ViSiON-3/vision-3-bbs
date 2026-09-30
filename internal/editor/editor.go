@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -86,12 +87,7 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	}
 
 	// Ensure minimum dimensions
-	if termWidth < 80 {
-		termWidth = 80
-	}
-	if termHeight < 24 {
-		termHeight = 24
-	}
+	termWidth, termHeight = clampTermSize(termWidth, termHeight)
 
 	menuSetPath, rootConfigPath := resolveEditorPaths()
 
@@ -162,24 +158,24 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 		editor.LoadContent(initialContent)
 	}
 
-	// Handle window resize events in background if we have PTY
-	done := make(chan struct{})
-	defer close(done)
-
+	// Pass window changes to the editor loop, which applies them between keys
+	// on this goroutine; Screen is not safe for concurrent use. The forwarder
+	// is stopped and waited for before returning, so it cannot outlive the
+	// editor and go on taking window changes meant for whoever reads next.
 	if isPty && winCh != nil {
+		resizes := make(chan ssh.Window, 1)
+		done := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(1)
 		go func() {
-			for {
-				select {
-				case win, ok := <-winCh:
-					if !ok {
-						return
-					}
-					editor.HandleResize(win.Width, win.Height)
-				case <-done:
-					return
-				}
-			}
+			defer wg.Done()
+			forwardResizes(winCh, resizes, done)
 		}()
+		defer func() {
+			close(done)
+			wg.Wait()
+		}()
+		editor.resizes = resizes
 	}
 
 	// Run the editor
@@ -187,4 +183,30 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 
 	// Return results
 	return finalContent, wasSaved, editorErr
+}
+
+// forwardResizes copies window changes from in to out until in is closed or
+// done is closed. It keeps draining in even while the editor is busy in a
+// prompt, because the SSH library blocks on delivering the next change until
+// the previous one is read. out holds at most the latest change: an older one
+// that the editor has not picked up yet is replaced, since only the final
+// size matters.
+func forwardResizes(in <-chan ssh.Window, out chan ssh.Window, done <-chan struct{}) {
+	for {
+		select {
+		case win, ok := <-in:
+			if !ok {
+				return
+			}
+			// This goroutine is the only sender, so once any stale value is
+			// drained the send below cannot block.
+			select {
+			case <-out:
+			default:
+			}
+			out <- win
+		case <-done:
+			return
+		}
+	}
 }

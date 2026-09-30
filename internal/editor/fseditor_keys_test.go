@@ -82,6 +82,12 @@ func TestRunNavigationAndEditKeys(t *testing.T) {
 		{"ctrl-n splits the line at the cursor", "onetwo" + keyLeft + keyLeft + keyLeft + "\x0e", "one\ntwo"},
 		{"ctrl-j joins the next line on", "one \rtwo" + keyUp + "\x0a", "one two"},
 		{"ctrl-j on the last line does nothing", "one\rtwo" + "\x0a", "one\ntwo"},
+		// Ctrl-J joins words, so it supplies the space the line break stood for
+		// (#516), but only where there is none already.
+		{"ctrl-j puts a space between words", "one\rtwo" + keyUp + "\x0a", "one two"},
+		{"ctrl-j keeps leading space on the next line", "one\r  two" + keyUp + "\x0a", "one  two"},
+		{"ctrl-j onto an empty line adds no space", "\rtwo" + keyUp + "\x0a", "two"},
+		{"ctrl-j with an empty next line adds no space", "one\r" + keyUp + "\x0a", "one"},
 		{"unbound control key is ignored", "a\x0fb", "ab"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -301,8 +307,9 @@ func TestRunEscapeMenu(t *testing.T) {
 		}
 	})
 	t.Run("help returns to the message", func(t *testing.T) {
-		// 'k' dismisses the help screen.
-		tt, ed := newRunHarness(t, "ab"+keyEsc+keyRight+"\r"+"k"+"c"+keySave)
+		// The built-in help is two pages on 24 rows: 'k' turns the page, the
+		// second 'k' dismisses the help screen.
+		tt, ed := newRunHarness(t, "ab"+keyEsc+keyRight+"\r"+"k"+"k"+"c"+keySave)
 		content, saved, err := ed.Run()
 		if err != nil || !saved || content != "abc" {
 			t.Errorf("Run = (%q, saved=%v, %v), want (%q, true, nil)", content, saved, err, "abc")

@@ -1,8 +1,10 @@
 package editor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -161,6 +163,10 @@ func TestBuildCenteredSection(t *testing.T) {
 		{"no width", "Local", 0, ""},
 		{"no name is a plain rule", "", 5, "<B>─────"},
 		{"too narrow for the box", "Local", 2, "<B>──"},
+		// Widths 3 and 4 fit the box but not a character of the name (#516).
+		{"box with no room for a name is a rule", "Local", 3, "<B>───"},
+		{"box with no room for a name is a rule, 4", "Local", 4, "<B>────"},
+		{"narrowest box shows one character", "Local", 5, "<B>▌ |07L<B> ▐"},
 		{"centred with even flanks", "ab", 10, "<B>──▌ |07a|15b<B> ▐──"},
 		{"odd slack goes to the right flank", "ab", 9, "<B>─▌ |07a|15b<B> ▐──"},
 		{"exact fit has no flanks", "ab", 6, "<B>▌ |07a|15b<B> ▐"},
@@ -171,6 +177,17 @@ func TestBuildCenteredSection(t *testing.T) {
 				t.Errorf("buildCenteredSection(%q, %d) = %q, want %q", tc.confArea, tc.width, got, tc.want)
 			}
 		})
+	}
+
+	// Whatever the width, the section fills exactly that many columns.
+	colourCodes := regexp.MustCompile(`<B>|\|\d\d`)
+	for width := 0; width <= 40; width++ {
+		for _, area := range []string{"", "a", "Local > General"} {
+			got := colourCodes.ReplaceAllString(buildCenteredSection(area, "<B>", width), "")
+			if n := len([]rune(got)); n != width {
+				t.Errorf("buildCenteredSection(%q, %d) is %d columns wide: %q", area, width, n, got)
+			}
+		}
 	}
 }
 
@@ -262,34 +279,46 @@ func TestGeometryMarkerIgnoredWhenItLeavesTooFewRows(t *testing.T) {
 }
 
 // With no FSEDITOR.ANS in the menu set the editor draws a plain header of its
-// own, naming the recipient and the subject. Only the wording is checked here,
-// not the colouring around it.
+// own, naming the recipient and the subject. Its colour codes are expanded,
+// not printed (#515), and the rule under it fits the row without wrapping.
 func TestLoadHeaderTemplateFallsBackToMinimalHeader(t *testing.T) {
-	tt := testterm.New(80, 24)
-	s := NewScreen(tt, ansi.OutputModeUTF8, 80, 24)
-	if err := s.LoadHeaderTemplate(t.TempDir(), "Hello", "bob", "alice", false); err != nil {
-		t.Fatalf("LoadHeaderTemplate: %v", err)
-	}
-	s.GoXY(1, 12)
-	s.WriteDirect("stale text")
-	s.DisplayHeader()
-
-	for i, want := range [][]string{
-		{"Full Screen Message Editor"},
-		{"To: ", "bob"},
-		{"Subject: ", "Hello"},
-		{strings.Repeat("-", 40)},
-	} {
-		row := tt.Row(i + 1)
-		for _, w := range want {
-			if !strings.Contains(row, w) {
-				t.Errorf("Row(%d) = %q, want it to contain %q", i+1, row, w)
+	for _, width := range []int{80, 100} {
+		t.Run(fmt.Sprintf("%d columns", width), func(t *testing.T) {
+			tt := testterm.New(width, 24)
+			s := NewScreen(tt, ansi.OutputModeUTF8, width, 24)
+			if err := s.LoadHeaderTemplate(t.TempDir(), "Hello", "bob", "alice", false); err != nil {
+				t.Fatalf("LoadHeaderTemplate: %v", err)
 			}
-		}
-	}
-	// The minimal header clears the screen itself.
-	if got := tt.Row(12); got != "" {
-		t.Errorf("Row(12) = %q, want the screen cleared", got)
+			s.GoXY(1, 12)
+			s.WriteDirect("stale text")
+			s.DisplayHeader()
+
+			for i, want := range []string{
+				"Full Screen Message Editor",
+				"To: bob",
+				"Subject: Hello",
+				strings.Repeat("-", 79), // header art is 80 columns wide on any terminal
+				"",                      // the rule did not wrap onto this row
+			} {
+				if got := tt.Row(i + 1); got != want {
+					t.Errorf("Row(%d) = %q, want %q", i+1, got, want)
+				}
+			}
+			// |15 on the title, |11 on the recipient.
+			if c := tt.Cell(1, 1); c.Fg != 37 || !c.Bold {
+				t.Errorf("title cell = %+v, want bright white", c)
+			}
+			if c := tt.Cell(2, 5); c.Rune != 'b' || c.Fg != 36 || !c.Bold {
+				t.Errorf("recipient cell = %+v, want 'b' in bright cyan", c)
+			}
+			// The minimal header clears the screen itself.
+			if got := tt.Row(12); got != "" {
+				t.Errorf("Row(12) = %q, want the screen cleared", got)
+			}
+			if got := tt.Unhandled(); len(got) != 0 {
+				t.Errorf("Unhandled() = %q, want empty", got)
+			}
+		})
 	}
 }
 
@@ -362,6 +391,51 @@ func TestFooterBoardNameFitsTheRow(t *testing.T) {
 				t.Errorf("footer row is %d columns, want 79", got)
 			}
 		})
+	}
+}
+
+// Restoring the footer after a prompt must not leave the tail of the prompt
+// beside a tagline that is shorter than it (#516).
+func TestDisplayFooterClearsItsRows(t *testing.T) {
+	menuSet := writeFooterTemplate(t, "short")
+	tt := testterm.New(80, 24)
+	s := NewScreen(tt, ansi.OutputModeUTF8, 80, 24)
+	if err := s.LoadFooterTemplate(menuSet); err != nil {
+		t.Fatalf("LoadFooterTemplate: %v", err)
+	}
+	s.DisplayFooter()
+
+	// A prompt in lightbar colours over the tagline row, as the Escape menu
+	// and the abort question draw.
+	s.GoXY(1, 24)
+	s.WriteDirect(lbSelected + " Select an Option: Save Abort Edit Help Quote ")
+	s.DisplayFooter()
+
+	if got := tt.Row(24); got != "short" {
+		t.Errorf("Row(24) = %q, want only the tagline", got)
+	}
+	if c := tt.Cell(24, 20); c.Bg == lightbarBg {
+		t.Errorf("Cell(24,20) = %+v, cleared in the prompt's background", c)
+	}
+	if got := tt.Row(22); got != "" {
+		t.Errorf("Row(22) = %q, want the row above the footer untouched", got)
+	}
+}
+
+// Resize keeps the first editing row a |#N header marker chose; without that
+// the text would jump down to the default row and leave a gap under the header.
+func TestResizeKeepsHeaderMarkerStartRow(t *testing.T) {
+	menuSet := writeMenuSet(t, map[string]string{"FSEDITOR.ANS": infoBarTemplate})
+	s := NewScreen(testterm.New(100, 30), ansi.OutputModeUTF8, 80, 24)
+	if err := s.LoadHeaderTemplate(menuSet, "s", "r", "f", false); err != nil {
+		t.Fatalf("LoadHeaderTemplate: %v", err)
+	}
+	s.Resize(100, 30)
+	if got := s.GetEditingStartY(); got != 5 {
+		t.Errorf("GetEditingStartY() = %d, want 5 from the |#5 marker", got)
+	}
+	if got := s.GetScreenLines(); got != 24 {
+		t.Errorf("GetScreenLines() = %d, want 24 (rows 5-28)", got)
 	}
 }
 

@@ -46,6 +46,7 @@ type FSEditor struct {
 	// Terminal
 	session    ssh.Session
 	outputMode ansi.OutputMode
+	resizes    <-chan ssh.Window // window changes for Run to apply between keys (nil = none)
 }
 
 // NewFSEditor creates a new full-screen editor instance.
@@ -159,17 +160,21 @@ func (e *FSEditor) Run() (string, bool, error) {
 
 	// Main edit loop
 	for !e.quit {
-		// Read key
-		key, err := e.input.ReadKeyTranslated()
+		// Read a key, or a window change that arrives while waiting for one.
+		// Resizes are applied here, on the session goroutine, because Screen
+		// is not safe for concurrent use. One that arrives while a prompt or
+		// the quote picker is reading keys waits until that returns.
+		key, win, resized, err := readKeyOrEvent(e.input, e.resizes)
 		if err != nil {
 			return "", false, err
+		}
+		if resized {
+			e.HandleResize(win.Width, win.Height)
+			continue
 		}
 
 		// Handle the key
 		e.handleKey(key)
-
-		// Check for window resize (non-blocking)
-		// This would be handled by the caller (editor.go) if needed
 
 		// Ensure view is updated to keep cursor visible
 		e.ensureCursorVisible()
@@ -195,8 +200,31 @@ func (e *FSEditor) redrawScreen() {
 	e.screen.FullRedraw(e.buffer, e.topLine, e.currentLine, e.currentCol, e.insertMode)
 }
 
-// HandleResize handles terminal resize events
+// HandleResize applies a terminal size change and redraws the screen. Sizes
+// below 80x24 are raised to it, as at startup. A size equal to the current
+// one is ignored, so the initial window report that an SSH session queues
+// does not cause a second full redraw.
+//
+// HandleResize touches the Screen, so it must only be called from the
+// goroutine running Run, or while Run is not running. RunEditorWithMetadata
+// hands Run the session's window changes so Run calls it between keys.
 func (e *FSEditor) HandleResize(newWidth, newHeight int) {
+	newWidth, newHeight = clampTermSize(newWidth, newHeight)
+	if newWidth == e.screen.termWidth && newHeight == e.screen.termHeight {
+		return
+	}
 	e.screen.Resize(newWidth, newHeight)
+	e.ensureCursorVisible() // a shorter window may have pushed the cursor off the bottom
 	e.screen.FullRedraw(e.buffer, e.topLine, e.currentLine, e.currentCol, e.insertMode)
+}
+
+// clampTermSize raises a terminal size to the 80x24 the editor needs.
+func clampTermSize(width, height int) (int, int) {
+	if width < 80 {
+		width = 80
+	}
+	if height < 24 {
+		height = 24
+	}
+	return width, height
 }

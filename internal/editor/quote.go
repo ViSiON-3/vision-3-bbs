@@ -300,6 +300,11 @@ func (qs *quoteSession) quoteSelected() {
 		written++
 	}
 	if written == 0 {
+		// The banners took the last free lines. A block that has nothing in
+		// it yet is taken out again rather than left in the message empty.
+		if len(qs.stack) == 0 {
+			qs.dropBlock()
+		}
 		qs.notifyFull()
 		return
 	}
@@ -337,14 +342,20 @@ func (qs *quoteSession) undoLast() {
 
 	if len(qs.stack) == 0 {
 		// Only the two banners are left — drop the block entirely.
-		qs.ch.buffer.DeleteLine(qs.blockStart) // "Said"
-		qs.ch.buffer.DeleteLine(qs.blockStart) // "Done" shifted up into its place
-		qs.blockStart = 0
-		qs.insertAt = 0
+		qs.dropBlock()
 	}
 
 	qs.drawCompose(true)
 	qs.drawQuotePane()
+}
+
+// dropBlock removes the "Said" / "Done" banner pair of a block that holds no
+// quoted lines.
+func (qs *quoteSession) dropBlock() {
+	qs.ch.buffer.DeleteLine(qs.blockStart) // "Said"
+	qs.ch.buffer.DeleteLine(qs.blockStart) // "Done" shifted up into its place
+	qs.blockStart = 0
+	qs.insertAt = 0
 }
 
 // ensureBlock lazily opens the "Said" / "Done" banner pair at the cursor line so

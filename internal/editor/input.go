@@ -546,6 +546,43 @@ func (ih *InputHandler) ReadKeyTranslated() (int, error) {
 	return TranslateToWordStar(key), nil
 }
 
+// readKeyOrEvent is ReadKeyTranslated for a reader that also has to react to
+// events from another goroutine, such as terminal resizes. While it waits for
+// the first byte of a key it also watches events; if one arrives first it is
+// returned with isEvent set and no input is consumed. Once a byte has arrived
+// the rest of the key is read as usual. A nil events channel is never ready,
+// so the call then behaves exactly like ReadKeyTranslated.
+func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, isEvent bool, err error) {
+	if len(ih.unreadBuf) == 0 {
+		var idle <-chan time.Time
+		if t := ih.sessionIdleTimeout(); t > 0 {
+			timer := time.NewTimer(t)
+			defer timer.Stop()
+			idle = timer.C
+		}
+	wait:
+		for {
+			select {
+			case b, ok := <-ih.incoming:
+				if !ok {
+					return 0, ev, false, io.EOF
+				}
+				if ih.lateEnterTrailer(b) {
+					continue
+				}
+				ih.unreadByte(b)
+				break wait
+			case ev = <-events:
+				return 0, ev, true, nil
+			case <-idle:
+				return 0, ev, false, ErrIdleTimeout
+			}
+		}
+	}
+	key, err = ih.ReadKeyTranslated()
+	return key, ev, false, err
+}
+
 // IsPrintable returns true if the key is a printable character
 func IsPrintable(key int) bool {
 	return key >= 32 && key < 127 && key != KeyEsc
