@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"io"
@@ -207,6 +208,12 @@ func TestSessionDeadline(t *testing.T) {
 	quiet.SetSessionDeadline(time.Now().Add(5 * time.Millisecond))
 	if _, _, _, err := readKeyOrEvent[struct{}](quiet, nil); !errors.Is(err, ErrTimeLimit) {
 		t.Errorf("readKeyOrEvent: err = %v, want ErrTimeLimit", err)
+	}
+
+	// So does the io.Reader path, which prompts wrap in a bufio.Reader.
+	quiet.SetSessionDeadline(time.Now().Add(5 * time.Millisecond))
+	if _, _, err := bufio.NewReader(quiet).ReadRune(); !errors.Is(err, ErrTimeLimit) {
+		t.Errorf("bufio ReadRune: err = %v, want ErrTimeLimit", err)
 	}
 
 	// Once passed, a caller who keeps typing is stopped too: input waiting in

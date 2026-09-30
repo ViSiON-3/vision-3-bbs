@@ -245,26 +245,20 @@ func (ih *InputHandler) CloseAndWait() {
 // InputHandler to be wrapped by bufio.NewReader and shared between callers (e.g.
 // menu loops and the full-screen editor) so that the background goroutine's bytes
 // are not lost when the editor returns.
+//
+// It is bounded like a key read: the session idle timeout and deadline end the
+// wait with ErrIdleTimeout or ErrTimeLimit, so a prompt read through a
+// bufio.Reader cannot hold a caller past either.
 func (ih *InputHandler) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	if len(ih.unreadBuf) > 0 {
-		p[0] = ih.unreadBuf[0]
-		ih.unreadBuf = ih.unreadBuf[1:]
-		return 1, nil
+	b, err := ih.readByte()
+	if err != nil {
+		return 0, err
 	}
-	for {
-		b, ok := <-ih.incoming
-		if !ok {
-			return 0, io.EOF
-		}
-		if ih.lateEnterTrailer(b) {
-			continue
-		}
-		p[0] = b
-		return 1, nil
-	}
+	p[0] = b
+	return 1, nil
 }
 
 // lateEnterTrailer reports whether b is the LF or NUL of an Enter whose CR
