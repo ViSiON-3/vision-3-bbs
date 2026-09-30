@@ -152,7 +152,10 @@ then initialize the message bases and test the connection (see
 > (Echomail Links is the source of truth) update or create the matching `node`
 > line, and the network's poll event follows a changed hub address (created
 > automatically if missing when the link has a hostname — manually created
-> networks poll without any Events-editor setup). If
+> networks poll without any Events-editor setup). A changed own address
+> replaces the `address` line that declared the old one; any other `address`
+> line is treated as an AKA of your own and left alone, and if none matches
+> `own_address` the BBS log says so. If
 > `binkd.conf` has been deleted, saving from the config editor regenerates a
 > complete file from your configuration — deleting it is a supported reset.
 

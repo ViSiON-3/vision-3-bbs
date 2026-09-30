@@ -10,5 +10,5 @@
 // The binkd files manage the binkd mailer's binkd.conf: generating it from
 // the FTN configuration, and keeping node links, domains, outbounds and
 // settings in sync with it (EnsureBinkdConf, SyncBinkdConf,
-// SyncBinkdNetworks, SyncBinkdSettings).
+// SyncBinkdNetworks, SyncBinkdSettings, UpdateBinkdOwnAddress).
 package ftn

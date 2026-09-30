@@ -48,6 +48,9 @@ func (m *Model) saveAll() bool {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return false
 	}
+	// Read before ftn.json is overwritten: the addresses binkd.conf was last
+	// written from are what identify its stale lines further down.
+	prevOwnAddrs := savedFTNOwnAddresses(m.configPath)
 	// FTN before events: the FTN wizard enables a hub-poll event for the
 	// network it saves, so if the sequence fails midway the poll must not be
 	// persisted for a network that never made it to ftn.json.
@@ -105,6 +108,17 @@ func (m *Model) saveAll() bool {
 		}
 		if binkdSyncErr == nil {
 			binkdSyncErr = ftn.SyncBinkdConf(binkdPath, identity, links) // non-fatal; surfaced below
+		}
+		// An own address changed since the last save is rewritten where
+		// binkd.conf still declares the old one; no later sync touches an
+		// address line that already exists. Sorted so a failure is reported
+		// for the same network each time.
+		for _, netKey := range m.ftnNetworkKeys() {
+			if binkdSyncErr != nil {
+				break
+			}
+			binkdSyncErr = ftn.UpdateBinkdOwnAddress(binkdPath, netKey,
+				prevOwnAddrs[netKey], m.configs.FTN.Networks[netKey].OwnAddress)
 		}
 		// A network added here or by "helper ftnsetup" has no domain or
 		// address line of its own — only the wizard wrote those — so binkd
