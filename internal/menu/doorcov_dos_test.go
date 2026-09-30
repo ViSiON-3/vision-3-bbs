@@ -251,7 +251,7 @@ echo "$key" > `+reply)
 		"ARGS:-t -f "+filepath.Join(nodePath, "dosemurc")+" --Fdrive_c "+driveC+
 			` -E C:\NODES\TEMP3\EXTERNAL.BAT -o `+filepath.Join(nodePath, "dosemu_boot.log"),
 		"CWD:"+realDriveC+" QUIET:1",
-		"FILES:CHAIN.TXT DOOR.SYS DOOR32.SYS DORINFO1.DEF EXTERNAL.BAT dosemurc ",
+		"FILES:CHAIN.TXT DOOR.SYS DOOR32.SYS DORINFO1.DEF DROPFILE.INI EXTERNAL.BAT dosemurc ",
 		`BATCH:@echo off|SET PATH=%PATH%;D:\dosemu|c:|cls|LORD.EXE /N3 C:\NODES\TEMP3\DOOR32.SYS C:\NODES\TEMP3|exitemu|`,
 		"RC:1",
 	)

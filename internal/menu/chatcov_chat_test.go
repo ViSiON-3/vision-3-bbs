@@ -873,15 +873,15 @@ func TestChatcovNetworkCommandNoSession(t *testing.T) {
 }
 
 // chatcovReadLine feeds input to chatReadLine on row 24 and returns the line,
-// the error and everything it drew.
-func chatcovReadLine(t *testing.T, input string, width int, prompt string) (string, error, string) {
+// everything it drew and the error.
+func chatcovReadLine(t *testing.T, input string, width int, prompt string) (string, string, error) {
 	t.Helper()
 	ts := newTestSession(input)
 	t.Cleanup(func() { resetSessionIH(ts) })
 	var mu sync.Mutex
 	var out strings.Builder
 	line, err := chatReadLine(ts, &mu, func(b []byte) { out.Write(b) }, 24, width, prompt)
-	return line, err, out.String()
+	return line, out.String(), err
 }
 
 func TestChatcovReadLine(t *testing.T) {
@@ -899,7 +899,7 @@ func TestChatcovReadLine(t *testing.T) {
 		{"always room for one character", "xyz\r", 1, "x"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err, _ := chatcovReadLine(t, tc.input, tc.width, "> ")
+			got, _, err := chatcovReadLine(t, tc.input, tc.width, "> ")
 			if err != nil || got != tc.want {
 				t.Errorf("chatReadLine(%q) = (%q, %v), want %q", tc.input, got, err, tc.want)
 			}
@@ -908,7 +908,7 @@ func TestChatcovReadLine(t *testing.T) {
 
 	// Each keystroke redraws the input row with the cursor after the text;
 	// Enter leaves the row showing just the prompt.
-	_, _, out := chatcovReadLine(t, "ab\r", 80, "> ")
+	_, out, _ := chatcovReadLine(t, "ab\r", 80, "> ")
 	for _, want := range []string{
 		"\x1b[24;1H\x1b[2K> \x1b[24;3H",
 		"\x1b[24;1H\x1b[2K> a\x1b[24;4H",
@@ -926,7 +926,7 @@ func TestChatcovReadLine(t *testing.T) {
 	for name, input := range map[string]string{
 		"Ctrl-C": "abc\x03", "Ctrl-A": "abc\x01", "ESC": "abc\x1b", "end of input": "abc",
 	} {
-		if got, err, _ := chatcovReadLine(t, input, 80, "> "); !errors.Is(err, io.EOF) || got != "" {
+		if got, _, err := chatcovReadLine(t, input, 80, "> "); !errors.Is(err, io.EOF) || got != "" {
 			t.Errorf("%s: chatReadLine = (%q, %v), want io.EOF", name, got, err)
 		}
 	}

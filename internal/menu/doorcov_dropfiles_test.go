@@ -175,7 +175,7 @@ func TestDoorcovGenerateDoor32Sys(t *testing.T) {
 func TestDoorcovGenerateAllDropfiles(t *testing.T) {
 	// The directory is created on demand, private to the BBS user.
 	dir := filepath.Join(t.TempDir(), "nodes", "temp3")
-	if err := generateAllDropfiles(doorcovDropCtx(), dir); err != nil {
+	if err := generateAllDropfiles(doorcovDropCtx(), dir, `C:\NODES\TEMP1`); err != nil {
 		t.Fatalf("generateAllDropfiles: %v", err)
 	}
 	for name, wantLines := range map[string]int{"DOOR.SYS": 52, "DOOR32.SYS": 11, "DORINFO1.DEF": 13, "CHAIN.TXT": 30} {
@@ -198,7 +198,7 @@ func TestDoorcovGenerateAllDropfilesErrors(t *testing.T) {
 			if err := os.Mkdir(filepath.Join(dir, name), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			err := generateAllDropfiles(doorcovDropCtx(), dir)
+			err := generateAllDropfiles(doorcovDropCtx(), dir, `C:\NODES\TEMP1`)
 			if err == nil || !strings.Contains(err.Error(), "failed to generate "+name) {
 				t.Errorf("err = %v, want a failure naming %s", err, name)
 			}
@@ -210,7 +210,7 @@ func TestDoorcovGenerateAllDropfilesErrors(t *testing.T) {
 		if err := os.WriteFile(file, nil, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		err := generateAllDropfiles(doorcovDropCtx(), filepath.Join(file, "node"))
+		err := generateAllDropfiles(doorcovDropCtx(), filepath.Join(file, "node"), `C:\NODES\TEMP1`)
 		if err == nil || !strings.Contains(err.Error(), "failed to create dropfile directory") {
 			t.Errorf("err = %v, want a directory creation failure", err)
 		}
@@ -219,7 +219,7 @@ func TestDoorcovGenerateAllDropfilesErrors(t *testing.T) {
 
 func TestDoorcovCleanupDropfiles(t *testing.T) {
 	dir := t.TempDir()
-	if err := generateAllDropfiles(doorcovDropCtx(), dir); err != nil {
+	if err := generateAllDropfiles(doorcovDropCtx(), dir, `C:\NODES\TEMP1`); err != nil {
 		t.Fatalf("generateAllDropfiles: %v", err)
 	}
 	for _, name := range []string{"EXTERNAL.BAT", "SAVEGAME.DAT"} {
