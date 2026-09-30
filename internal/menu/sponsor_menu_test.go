@@ -545,13 +545,14 @@ func TestSponsorEditAreaSysopEditsEveryField(t *testing.T) {
 }
 
 // TestSponsorEditAreaSponsorRestrictions pins what a plain sponsor cannot do
-// in the editor: the structural fields are sysop/co-sysop only, [ and ] are
-// ignored, and the fields they may edit still save.
+// in the editor: the structural fields, the conference and the sponsor are
+// sysop/co-sysop only, [ and ] are ignored, and the fields they may edit still
+// save.
 func TestSponsorEditAreaSponsorRestrictions(t *testing.T) {
 	env := sponsorNewEnv(t)
 	before := sponsorArea(env, 1)
 
-	r := env.runCmd("SPONSOREDITAREA", env.caller, "", "tbyeok]q")
+	r := env.runCmd("SPONSOREDITAREA", env.caller, "", "tbyeokcs]q")
 	if r.err != nil || r.user != env.caller {
 		t.Fatalf("got (%v, %v), want the caller and nil", r.user, r.err)
 	}
@@ -559,6 +560,7 @@ func TestSponsorEditAreaSponsorRestrictions(t *testing.T) {
 		"Tag - sysop/co-sysop only.", "Base Path - sysop/co-sysop only.",
 		"Area Type - sysop/co-sysop only.", "Echo Tag - sysop/co-sysop only.",
 		"Origin Address - sysop/co-sysop only.", "Network - sysop/co-sysop only.",
+		"Conference ID - sysop/co-sysop only.", "Sponsor - sysop/co-sysop only.",
 	} {
 		if !r.has(want) {
 			t.Errorf("missing refusal %q:\n%s", want, r.text())
@@ -622,8 +624,9 @@ func TestSponsorEditAreaSponsorField(t *testing.T) {
 	}
 }
 
-// TestSponsorEditAreaNumericFields pins the three numeric fields: a
-// non-negative number is taken, anything else is reported and ignored.
+// TestSponsorEditAreaNumericFields pins the two numeric fields a sponsor may
+// edit: a non-negative number is taken, anything else is reported and ignored.
+// Conference ID has its own test, as it is co-sysop only and validated.
 func TestSponsorEditAreaNumericFields(t *testing.T) {
 	fields := []struct {
 		key  string
@@ -631,7 +634,6 @@ func TestSponsorEditAreaNumericFields(t *testing.T) {
 	}{
 		{"m", func(a message.MessageArea) int { return a.MaxMessages }},
 		{"g", func(a message.MessageArea) int { return a.MaxAge }},
-		{"c", func(a message.MessageArea) int { return a.ConferenceID }},
 	}
 	for _, f := range fields {
 		t.Run(f.key, func(t *testing.T) {
@@ -1008,4 +1010,184 @@ func TestSponsorEditAreaNavigationWithPendingEdits(t *testing.T) {
 			t.Errorf("saved name = %q, want the edit dropped", got)
 		}
 	})
+}
+
+// TestSponsorMenuRepositionAsSponsor pins P for a plain sponsor, whose list
+// leaves out PRIVMAIL (which sits between GENERAL and THIRD). The position
+// picked in that shorter list must be resolved against the whole conference,
+// and the area the sponsor cannot see must keep its place relative to others.
+func TestSponsorMenuRepositionAsSponsor(t *testing.T) {
+	tests := []struct {
+		name, keys, want string
+	}{
+		{"first to the end", "1\re\r", "PRIVMAIL THIRD GENERAL"},
+		{"first before the second is a no-op", "1\r2\r", "GENERAL PRIVMAIL THIRD"},
+		{"last before the first", "2\r1\r", "THIRD GENERAL PRIVMAIL"},
+		{"last to the end is a no-op", "2\re\r", "GENERAL PRIVMAIL THIRD"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := sponsorNewEnv(t)
+			r := env.runCmd("SPONSORMENU", env.caller, "", "p\r"+tc.keys+"q\rq\r")
+			if r.err != nil || r.user != env.caller {
+				t.Fatalf("got (%v, %v), want the caller and nil", r.user, r.err)
+			}
+			if !r.has("Select area to move (1-2, Q=Quit): ") || r.has("Private Mail") {
+				t.Errorf("want only the two sponsored areas listed:\n%s", r.text())
+			}
+			if got := sponsorDiskOrder(env, 1); got != tc.want {
+				t.Errorf("saved order = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSponsorMoveTarget pins the translation from a position in a filtered
+// list to the conference-wide index MoveAreaPositionInConference takes.
+func TestSponsorMoveTarget(t *testing.T) {
+	a := func(id int) *message.MessageArea { return &message.MessageArea{ID: id} }
+	// Conference order 1..5; the user sees 1, 3 and 5.
+	all := []*message.MessageArea{a(1), a(2), a(3), a(4), a(5)}
+	listed := []*message.MessageArea{all[0], all[2], all[4]}
+	tests := []struct {
+		name      string
+		moving    *message.MessageArea
+		beforeIdx int
+		want      int
+	}{
+		{"1 before 5", all[0], 2, 4},
+		{"5 before 1", all[4], 0, 1},
+		{"5 before 3", all[4], 1, 3},
+		{"1 to the end", all[0], -1, 5},
+		{"3 to the end", all[2], -1, 5},
+		{"5 to the end lands straight after 3", all[4], -1, 4},
+		{"out of range falls back to the end", all[0], 9, 5},
+	}
+	for _, tc := range tests {
+		if got := sponsorMoveTarget(all, listed, tc.moving, tc.beforeIdx); got != tc.want {
+			t.Errorf("%s: got %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestSponsorEditAreaRenamePersistsUser pins that renaming the tag of the
+// user's current area saves the new tag to the user record, both on Q and on
+// the save-before-switching path.
+func TestSponsorEditAreaRenamePersistsUser(t *testing.T) {
+	env := sponsorNewEnv(t)
+	env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "tRENAMED\rq")
+	if saved := env.mustDiskUser(env.sysop.ID); saved.CurrentMessageAreaTag != "RENAMED" {
+		t.Errorf("Q: saved area tag = %q, want RENAMED", saved.CurrentMessageAreaTag)
+	}
+
+	// FAR is alone in its conference, so ] saves and then has nowhere to go.
+	env.sysop.CurrentMsgConferenceID = 2
+	env.sysop.CurrentMessageAreaID, env.sysop.CurrentMessageAreaTag = 4, "FAR"
+	r := env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "tFARTHER\r]y\x1b")
+	if !r.has("Area FARTHER saved.") {
+		t.Fatalf("want the save notice:\n%s", r.text())
+	}
+	if saved := env.mustDiskUser(env.sysop.ID); saved.CurrentMessageAreaTag != "FARTHER" {
+		t.Errorf("save-before-switch: saved area tag = %q, want FARTHER", saved.CurrentMessageAreaTag)
+	}
+}
+
+// TestSponsorEditAreaClearsOptionalFields pins "-" on the optional text
+// fields: it empties them, where Enter keeps them. Name takes "-" as a literal
+// value rather than clearing.
+func TestSponsorEditAreaClearsOptionalFields(t *testing.T) {
+	env := sponsorNewEnv(t)
+	env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "eECHO\roOrigin\rkfsxnet\rq")
+
+	r := env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "d-\rr-\rw-\re-\ro-\rk-\rq")
+	for _, want := range []string{
+		"Description (- to clear) [General discussion area]: ",
+		"ACS Read (- to clear) [s10]: ", "ACS Write (- to clear) [s20]: ",
+		"Echo Tag (- to clear) [ECHO]: ", "Origin Address (- to clear) [Origin]: ",
+		"Network (- to clear) [fsxnet]: ",
+	} {
+		if !r.has(want) {
+			t.Errorf("missing prompt %q:\n%s", want, r.text())
+		}
+	}
+	got := sponsorDiskArea(env, 1)
+	if got.Description != "" || got.ACSRead != "" || got.ACSWrite != "" ||
+		got.EchoTag != "" || got.OriginAddr != "" || got.Network != "" {
+		t.Errorf("want every optional text field cleared, got %+v", got)
+	}
+
+	// A plain sponsor may clear the fields they may edit, and Enter keeps them.
+	env.sub(t).runCmd("SPONSOREDITAREA", env.caller, "", "dWords\rq")
+	env.sub(t).runCmd("SPONSOREDITAREA", env.caller, "", "d\rq")
+	if got := sponsorDiskArea(env, 1).Description; got != "Words" {
+		t.Errorf("Enter should keep the description, got %q", got)
+	}
+	env.sub(t).runCmd("SPONSOREDITAREA", env.caller, "", "d-\rq")
+	if got := sponsorDiskArea(env, 1).Description; got != "" {
+		t.Errorf("sponsor's - should clear the description, got %q", got)
+	}
+
+	env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "n-\rq")
+	if got := sponsorDiskArea(env, 1).Name; got != "-" {
+		t.Errorf("name = %q, want - taken literally", got)
+	}
+}
+
+// TestSponsorEditAreaConferenceID pins the Conference ID field for a sysop: it
+// must be a non-negative number naming a configured conference, or 0 for
+// ungrouped.
+func TestSponsorEditAreaConferenceID(t *testing.T) {
+	env := sponsorNewEnv(t)
+
+	for _, bad := range []string{"abc", "-5"} {
+		r := env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "c"+bad+"\rq")
+		if !r.has("Invalid number - unchanged.") || r.has("saved.") {
+			t.Errorf("reply %q: want it rejected and nothing saved:\n%s", bad, r.text())
+		}
+	}
+	r := env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "c9\rq")
+	if !r.has("Conference 9 does not exist - unchanged.") || r.has("saved.") {
+		t.Errorf("unknown conference: want it rejected and nothing saved:\n%s", r.text())
+	}
+	if got := sponsorDiskArea(env, 1).ConferenceID; got != 1 {
+		t.Errorf("saved conference = %d, want 1 untouched", got)
+	}
+
+	for _, tc := range []struct {
+		reply string
+		want  int
+	}{{"2", 2}, {"0", 0}} {
+		env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "c"+tc.reply+"\rq")
+		if got := sponsorDiskArea(env, 1).ConferenceID; got != tc.want {
+			t.Errorf("saved conference = %d, want %d", got, tc.want)
+		}
+	}
+
+	// Without a conference manager only 0 can be vouched for.
+	env.e.ConferenceMgr = nil
+	r = env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "c1\rq")
+	if !r.has("Conference 1 does not exist - unchanged.") {
+		t.Errorf("no conference manager: want 1 rejected:\n%s", r.text())
+	}
+}
+
+// TestSponsorEditAreaAreaType pins the Area Type field: only the recognised
+// types are taken, in any case, and are saved in lower case.
+func TestSponsorEditAreaAreaType(t *testing.T) {
+	env := sponsorNewEnv(t)
+
+	r := env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "ybogus\rq")
+	if !r.has("Area Type (local/echomail/netmail/v3net/qwknet) [local]: ",
+		"Unknown area type 'bogus' - unchanged.") || r.has("saved.") {
+		t.Errorf("want the prompt listing the types and bogus rejected:\n%s", r.text())
+	}
+	for _, tc := range []struct{ reply, want string }{
+		{"EchoMail", "echomail"}, {"netmail", "netmail"}, {"v3net", "v3net"},
+		{"qwknet", "qwknet"}, {"LOCAL", "local"},
+	} {
+		env.sub(t).runCmd("SPONSOREDITAREA", env.sysop, "", "y"+tc.reply+"\rq")
+		if got := sponsorDiskArea(env, 1).AreaType; got != tc.want {
+			t.Errorf("reply %q: saved type = %q, want %q", tc.reply, got, tc.want)
+		}
+	}
 }
