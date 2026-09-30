@@ -279,6 +279,18 @@ Set `type` to `rlogin` for an outbound connection to a door server. See [Door Se
 - `connect_timeout` - Seconds to wait for the door server (0 or omitted = 10)
 - `disconnect_key` - Key that hangs up the session, in `^X` notation (blank = `^]`, `none` = disabled)
 
+### Telnet Door Fields
+
+Set `type` to `telnet` for an outbound connection to a server that speaks Telnet rather than RLogin. See [Door Servers — Telnet](doors/door-servers.md#telnet).
+
+- `host` - Server hostname or IP address (required)
+- `port` - Server TCP port (0 or omitted = 23)
+- `terminal_type` - Terminal type reported when the server asks (blank = `ANSI`)
+- `send_on_connect` - Typed into the session as soon as it connects, e.g. a login: `"{USERHANDLE}\rsecret\r"`. Sent blind, before anything the caller presses
+- `raw_tcp` - `true` turns the Telnet protocol off, for a server that speaks plain TCP on the port
+- `connect_timeout` - Seconds to wait for the server (0 or omitted = 10)
+- `disconnect_key` - Key that hangs up the session, in `^X` notation (blank = `^]`, `none` = disabled)
+
 ### DOS Door Fields
 
 - `is_dos` - Set to `true` for DOS doors launched via dosemu2
@@ -302,7 +314,7 @@ Set `type` to `rlogin` for an outbound connection to a door server. See [Door Se
 - `{NODEDIR}` - Host OS path to the dropfile's directory, **no trailing slash**. Some door libraries (e.g. godoors) concatenate the filename directly and need a trailing slash — pass `{NODEDIR}/` in that case.
 - `{DOSDROPFILE}` / `{DOSNODEDIR}` - DOS paths (e.g., `C:\NODES\TEMP1\DOOR.SYS`)
 
-Placeholders are substituted in `commands`, `cleanup_args` and `environment_variables`, and for RLogin doors in `client_username`, `server_username` and `terminal_type`. The dropfile and DOS placeholders do not apply to RLogin doors, which run no local process.
+Placeholders are substituted in `commands`, `cleanup_args` and `environment_variables`; for RLogin doors in `client_username`, `server_username` and `terminal_type`; and for Telnet doors in `terminal_type` and `send_on_connect`. The dropfile and DOS placeholders do not apply to RLogin or Telnet doors, which run no local process.
 
 ## archivers.json
 

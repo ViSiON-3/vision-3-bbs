@@ -59,6 +59,6 @@ See [Menus & ACS](menus/menu-system.md) for the menu editor and the overlay.
 
 - [Door Programs](doors/doors.md) for every field, placeholder and dropfile format
 - [Synchronet JS Doors](doors/synchronet-js-doors.md) for the JavaScript runtime, its API surface and module resolution
-- [Door Servers](doors/door-servers.md) for connecting out to a shared door server over RLogin
+- [Door Servers](doors/door-servers.md) for connecting out to a shared door server over RLogin or Telnet
 - [VPL Scripting](scripting/vpl-scripting.md) for the script API
 - [Menu Commands Reference](reference/menu-commands.md) for `DOOR:`, `LISTDOORS`, `OPENDOOR` and `DOORINFO`

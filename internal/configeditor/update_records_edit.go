@@ -38,7 +38,7 @@ func doorExitWarning(d config.DoorConfig, ok bool) string {
 	if !ok {
 		return ""
 	}
-	if err := d.ValidateRLogin(); err != nil {
+	if err := d.ValidateRemote(); err != nil {
 		// Leaving a record does not write anything -- the change sits in
 		// memory until the sysop saves -- so the wording must not suggest it
 		// has already reached disk.

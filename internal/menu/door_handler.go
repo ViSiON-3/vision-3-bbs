@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/rlogin"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -100,6 +99,9 @@ func executeDoor(ctx *DoorCtx) error {
 	}
 	if ctx.Config.Type == "rlogin" {
 		return executeRLoginDoor(ctx)
+	}
+	if ctx.Config.Type == "telnet" {
+		return executeTelnetDoor(ctx)
 	}
 	if ctx.Config.IsDOS {
 		return executeDOSDoor(ctx)
@@ -409,8 +411,8 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			doorType = "VPL Script"
 		case doorConfig.Type == "synchronet_js":
 			doorType = "Synchronet JS"
-		case doorConfig.Type == "rlogin":
-			doorType = "RLogin (remote)"
+		case doorConfig.IsRemote():
+			doorType = doorConfig.RemoteProtocol() + " (remote)"
 		case doorConfig.IsDOS:
 			doorType = "DOS (dosemu2)"
 		}
@@ -419,8 +421,8 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		if len(doorConfig.Commands) > 0 {
 			info += fmt.Sprintf("|15Commands: |07%s\r\n", strings.Join(doorConfig.Commands, ", "))
 		}
-		if doorConfig.Type == "rlogin" {
-			info += fmt.Sprintf("|15Server: |07%s\r\n", rlogin.JoinHostPort(doorConfig.Host, doorConfig.Port))
+		if doorConfig.IsRemote() {
+			info += fmt.Sprintf("|15Server: |07%s\r\n", remoteDoorAddr(doorConfig))
 		}
 		if doorConfig.WorkingDirectory != "" {
 			info += fmt.Sprintf("|15Directory: |07%s\r\n", doorConfig.WorkingDirectory)

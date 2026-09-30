@@ -126,6 +126,30 @@ func TestDoorFields_RLogin(t *testing.T) {
 	}
 }
 
+// TestDoorFields_Telnet pins the Telnet door fields through the record editor:
+// the login is typed as escapes, Raw TCP is a yes/no, and the RLogin handshake
+// fields are not offered.
+func TestDoorFields_Telnet(t *testing.T) {
+	m, dir := newDoorRecord(t)
+	m = pickRecField(t, m, "Type", "telnet")
+	for _, f := range m.recordFields {
+		if f.Label == "Client User" || f.Label == "Server User" {
+			t.Fatalf("telnet door offers the rlogin field %q", f.Label)
+		}
+	}
+	m = setRecField(t, m, "Host", "doors.example")
+	m = setRecField(t, m, "Port", "2323")
+	m = setRecField(t, m, "Terminal Type", "ANSI-BBS")
+	m = setRecField(t, m, "Send On Connect", `{USERHANDLE}\rsecret\r`)
+	m = press(t, gotoField(t, m, "Raw TCP"), "space")
+	m = setRecField(t, m, "Cleanup Command", "")
+	d := savedDoor(t, m, dir)
+	if d.Type != "telnet" || d.Host != "doors.example" || d.Port != 2323 || d.TerminalType != "ANSI-BBS" ||
+		d.SendOnConnect != "{USERHANDLE}\rsecret\r" || !d.RawTCP {
+		t.Errorf("door = %+v", d)
+	}
+}
+
 // TestDoorFields_DOS pins the DOS door fields: commands split on commas,
 // emulator choice, cleanup command parsing, and env vars.
 func TestDoorFields_DOS(t *testing.T) {

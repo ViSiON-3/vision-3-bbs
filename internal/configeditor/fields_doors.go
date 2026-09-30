@@ -135,6 +135,8 @@ func doorTypeLabel(d *config.DoorConfig) string {
 		return "VPL"
 	case "rlogin":
 		return "RLogin"
+	case "telnet":
+		return "Telnet"
 	}
 	if d.IsDOS {
 		return "DOS"
@@ -155,6 +157,11 @@ func isV3Script(d *doorEditProxy) bool {
 // isRLogin returns true if the door is an outbound RLogin door-server link.
 func isRLogin(d *doorEditProxy) bool {
 	return d.Type == "rlogin"
+}
+
+// isTelnet returns true if the door is an outbound Telnet door-server link.
+func isTelnet(d *doorEditProxy) bool {
+	return d.Type == "telnet"
 }
 
 // fieldsDoor returns fields for editing a door program.
@@ -226,7 +233,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 	// Door type selector — determines which type-specific fields are shown
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Type", Help: "Door type: Native, DOS (dosemu2), Synchronet JS, VPL script, or RLogin", Type: ftLookup, Col: 3, Row: row, Width: 20,
+		Label: "Type", Help: "Door type: Native, DOS (dosemu2), Synchronet JS, VPL script, RLogin, or Telnet", Type: ftLookup, Col: 3, Row: row, Width: 20,
 		Get: func() string {
 			switch dPtr.Type {
 			case "synchronet_js":
@@ -235,6 +242,8 @@ func (m *Model) fieldsDoor() []fieldDef {
 				return "v3_script"
 			case "rlogin":
 				return "rlogin"
+			case "telnet":
+				return "telnet"
 			}
 			if dPtr.IsDOS {
 				return "dos"
@@ -251,6 +260,9 @@ func (m *Model) fieldsDoor() []fieldDef {
 				dPtr.IsDOS = false
 			case "rlogin":
 				dPtr.Type = "rlogin"
+				dPtr.IsDOS = false
+			case "telnet":
+				dPtr.Type = "telnet"
 				dPtr.IsDOS = false
 			case "dos":
 				dPtr.Type = ""
@@ -269,6 +281,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 				{Value: "synchronet_js", Display: "Synchronet JS - JavaScript door game"},
 				{Value: "v3_script", Display: "VPL Script - Vision/3 JavaScript script"},
 				{Value: "rlogin", Display: "RLogin - Outbound link to a door server"},
+				{Value: "telnet", Display: "Telnet - Outbound link to a door server"},
 			}
 		},
 	})
@@ -320,9 +333,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Get: func() string { return sliceToCSV(dPtr.Args) },
 			Set: func(val string) error { dPtr.Args = csvToSlice(val); save(); return nil },
 		})
-	} else if isRLogin(dPtr) {
-		// Outbound RLogin door-server fields. There is no local program, so
-		// nothing here concerns commands, dropfiles or the environment.
+	} else if isRLogin(dPtr) || isTelnet(dPtr) {
+		// Outbound door-server fields. There is no local program, so nothing
+		// here concerns commands, dropfiles or the environment. Host, port,
+		// timeout and the hang-up key are the same for either protocol;
+		// what identifies the caller to the server is not.
+		portHelp := "Door server TCP port (0 = 513, the RLogin default)"
+		if isTelnet(dPtr) {
+			portHelp = "Door server TCP port (0 = 23, the Telnet default)"
+		}
 		row++
 		fields = append(fields, fieldDef{
 			Label: "Host", Help: "Door server hostname or IP address", Type: ftString, Col: 3, Row: row, Width: 45,
@@ -331,7 +350,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Port", Help: "Door server TCP port (0 = 513, the RLogin default)", Type: ftInteger, Col: 3, Row: row, Width: 6, Min: 0, Max: 65535,
+			Label: "Port", Help: portHelp, Type: ftInteger, Col: 3, Row: row, Width: 6, Min: 0, Max: 65535,
 			Get: func() string { return strconv.Itoa(dPtr.Port) },
 			Set: func(val string) error {
 				v, err := strconv.Atoi(strings.TrimSpace(val))
@@ -343,24 +362,53 @@ func (m *Model) fieldsDoor() []fieldDef {
 				return nil
 			},
 		})
-		row++
-		fields = append(fields, fieldDef{
-			Label: "Client User", Help: "RLogin client-user-name; some servers expect a password here (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: 45,
-			Get: func() string { return dPtr.ClientUsername },
-			Set: func(val string) error { dPtr.ClientUsername = val; save(); return nil },
-		})
-		row++
-		fields = append(fields, fieldDef{
-			Label: "Server User", Help: "RLogin server-user-name, e.g. [TAG]{USERHANDLE} (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: 45,
-			Get: func() string { return dPtr.ServerUsername },
-			Set: func(val string) error { dPtr.ServerUsername = val; save(); return nil },
-		})
-		row++
-		fields = append(fields, fieldDef{
-			Label: "Terminal Type", Help: "RLogin terminal-type; door servers read the door code here, e.g. xtrn=LORD (blank = ANSI/38400)", Type: ftString, Col: 3, Row: row, Width: 45,
-			Get: func() string { return dPtr.TerminalType },
-			Set: func(val string) error { dPtr.TerminalType = val; save(); return nil },
-		})
+		if isRLogin(dPtr) {
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Client User", Help: "RLogin client-user-name; some servers expect a password here (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: 45,
+				Get: func() string { return dPtr.ClientUsername },
+				Set: func(val string) error { dPtr.ClientUsername = val; save(); return nil },
+			})
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Server User", Help: "RLogin server-user-name, e.g. [TAG]{USERHANDLE} (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: 45,
+				Get: func() string { return dPtr.ServerUsername },
+				Set: func(val string) error { dPtr.ServerUsername = val; save(); return nil },
+			})
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Terminal Type", Help: "RLogin terminal-type; door servers read the door code here, e.g. xtrn=LORD (blank = ANSI/38400)", Type: ftString, Col: 3, Row: row, Width: 45,
+				Get: func() string { return dPtr.TerminalType },
+				Set: func(val string) error { dPtr.TerminalType = val; save(); return nil },
+			})
+		} else {
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Terminal Type", Help: "Terminal type reported to the server when it asks (blank = ANSI)", Type: ftString, Col: 3, Row: row, Width: 45,
+				Get: func() string { return dPtr.TerminalType },
+				Set: func(val string) error { dPtr.TerminalType = val; save(); return nil },
+			})
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Send On Connect", Help: "Sent once connected, e.g. a login: {USERHANDLE}\\rsecret\\r (\\r = Enter, \\n = LF, \\\\ = backslash)", Type: ftString, Col: 3, Row: row, Width: 45,
+				Get: func() string { return showControlEscapes(dPtr.SendOnConnect) },
+				Set: func(val string) error {
+					parsed, err := parseControlEscapes(val)
+					if err != nil {
+						return err
+					}
+					dPtr.SendOnConnect = parsed
+					save()
+					return nil
+				},
+			})
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Raw TCP", Help: "Plain TCP with no Telnet negotiation, for a server that does not speak Telnet", Type: ftYesNo, Col: 3, Row: row, Width: 1,
+				Get: func() string { return uitext.BoolToYN(dPtr.RawTCP) },
+				Set: func(val string) error { dPtr.RawTCP = uitext.YNToBool(val); save(); return nil },
+			})
+		}
 		row++
 		fields = append(fields, fieldDef{
 			Label: "Connect Timeout", Help: "Seconds to wait for the door server (0 = 10)", Type: ftInteger, Col: 3, Row: row, Width: 5, Min: 0, Max: 300,
@@ -518,7 +566,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 
 		// Environment variables need a local process to apply to, so they are
 		// not offered for a door that is only a socket to somewhere else.
-		if !isRLogin(dPtr) {
+		if !dPtr.IsRemote() {
 			row++
 			fields = append(fields, fieldDef{
 				Label: "Env Vars", Help: "Environment variables: KEY=VALUE, KEY2=VALUE2", Type: ftString, Col: 3, Row: row, Width: 45,
@@ -568,7 +616,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Get: func() string { return dPtr.DosemuConfig },
 			Set: func(val string) error { dPtr.DosemuConfig = val; save(); return nil },
 		})
-	} else if !dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) && !isRLogin(dPtr) {
+	} else if !dPtr.IsDOS && !isSyncJS(dPtr) && !isV3Script(dPtr) && !dPtr.IsRemote() {
 		// Native-specific fields
 		row++
 		fields = append(fields, fieldDef{
