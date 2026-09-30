@@ -116,3 +116,26 @@ func TestLocalChatPrivate(t *testing.T) {
 		t.Fatal("bob did not receive private message")
 	}
 }
+
+// A history load that fails after the session has joined does not turn the
+// join into an error: the caller is in the room either way (#538).
+func TestLocalChatJoinSurvivesHistoryError(t *testing.T) {
+	resetSharedState()
+	alice, err := NewLocalChatService("alice", filepath.Join(t.TempDir(), "chat.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer alice.Close()
+	_ = alice.db.Close() // every history query now fails
+
+	rooms, history, err := alice.Join("lobby")
+	if err != nil {
+		t.Fatalf("Join = %v, want success without history", err)
+	}
+	if len(history) != 0 || len(rooms) != 1 || rooms[0].Name != "lobby" {
+		t.Errorf("rooms = %+v, history = %v; want lobby and no history", rooms, history)
+	}
+	if users := alice.Users(); len(users) != 1 || users[0] != "alice" {
+		t.Errorf("users = %v, want alice in the room", users)
+	}
+}

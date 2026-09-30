@@ -442,6 +442,47 @@ func TestPresence_LogonLogoff(t *testing.T) {
 	}
 }
 
+// A presence event names the node by its host, falling back to its BBS name
+// and then its node ID, so it is never empty (#537).
+func TestPresence_NodeName(t *testing.T) {
+	h, _ := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
+	registerLeaf(t, ts, leafKS)
+	ch, cancel := h.broadcaster.Subscribe("testnet")
+	defer cancel()
+
+	for _, tc := range []struct{ name, host, want string }{
+		{"Test BBS", "test.example.net", "test.example.net"},
+		{"Test BBS", "", "Test BBS"},
+		{"", "", leafKS.NodeID()},
+	} {
+		if err := h.subscribers.SetProfile(leafKS.NodeID(), "testnet", tc.name, tc.host); err != nil {
+			t.Fatalf("SetProfile: %v", err)
+		}
+		if code := sendSigned(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/presence", `{"type":"logon","handle":"Darkstar"}`, nil); code != http.StatusOK {
+			t.Fatalf("logon status: %d", code)
+		}
+		select {
+		case ev := <-ch:
+			var p protocol.LogonPayload
+			if err := json.Unmarshal(ev.Data, &p); err != nil {
+				t.Fatalf("decode logon: %v", err)
+			}
+			if p.Node != tc.want {
+				t.Errorf("name %q, host %q: node = %q, want %q", tc.name, tc.host, p.Node, tc.want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for logon event")
+		}
+	}
+}
+
 func TestPresence_InvalidType(t *testing.T) {
 	h, _ := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())

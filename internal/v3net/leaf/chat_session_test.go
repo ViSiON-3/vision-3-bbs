@@ -2,7 +2,10 @@ package leaf
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
@@ -489,5 +492,44 @@ func TestNotifyReconnect_TellsEverySession(t *testing.T) {
 		default:
 			t.Errorf("%s was not told about the reconnect", s.handle)
 		}
+	}
+}
+
+// A join the hub accepted but whose reply cannot be read is undone with a
+// leave, so the error means the caller is not in the room (#538). The
+// session's current room is left as it was.
+func TestChatSession_JoinUndoneWhenReplyUnreadable(t *testing.T) {
+	var mu sync.Mutex
+	var leaves []string
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3net/v1/testnet/chat/rooms/join":
+			_, _ = w.Write([]byte("not json"))
+		case "/v3net/v1/testnet/chat/rooms/leave":
+			var req protocol.ChatLeaveRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			mu.Lock()
+			leaves = append(leaves, req.Room+"/"+req.Handle)
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer hub.Close()
+
+	l, _ := setupLeaf(t, hub.URL, &mockJAMWriter{})
+	sess := newRoomSession(l, "alice", "lobby", "alice")
+
+	if _, _, err := sess.Join("den"); err == nil {
+		t.Fatal("Join succeeded on an unreadable reply")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(leaves) != 1 || leaves[0] != "den/alice" {
+		t.Errorf("leaves sent = %v, want [den/alice]", leaves)
+	}
+	if room := sess.room(); room != "lobby" {
+		t.Errorf("current room = %q, want lobby unchanged", room)
 	}
 }

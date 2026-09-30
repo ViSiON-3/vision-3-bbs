@@ -394,6 +394,41 @@ func TestFooterBoardNameFitsTheRow(t *testing.T) {
 	}
 }
 
+// The footer's first line is sized to the terminal width, so a resize
+// rebuilds it (#539): the key legend stays at the right edge and the row
+// neither falls short of it nor wraps.
+func TestFooterFollowsResize(t *testing.T) {
+	menuSet := writeFooterTemplate(t, "tagline")
+	for _, tc := range []struct {
+		name                   string
+		fromW, fromH, toW, toH int
+	}{
+		{"wider", 80, 24, 120, 30},
+		{"narrower", 120, 30, 80, 24},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tt := testterm.New(tc.toW, tc.toH)
+			s := NewScreen(tt, ansi.OutputModeUTF8, tc.fromW, tc.fromH)
+			if err := s.LoadFooterTemplate(menuSet); err != nil {
+				t.Fatalf("LoadFooterTemplate: %v", err)
+			}
+			s.Resize(tc.toW, tc.toH)
+			s.DisplayFooter()
+
+			row := tt.Row(tc.toH - 1)
+			if got := len([]rune(row)); got != tc.toW-1 {
+				t.Errorf("footer row is %d columns at width %d, want %d: %q", got, tc.toW, tc.toW-1, row)
+			}
+			if !strings.HasSuffix(row, "────▌CTRL (A)Abort (Z)Save (Q)Quote▐─┘") {
+				t.Errorf("footer row = %q, want the key legend at the end", row)
+			}
+			if got := tt.Row(tc.toH); got != "tagline" {
+				t.Errorf("footer line 2 = %q, want the template's tagline", got)
+			}
+		})
+	}
+}
+
 // Restoring the footer after a prompt must not leave the tail of the prompt
 // beside a tagline that is shorter than it (#516).
 func TestDisplayFooterClearsItsRows(t *testing.T) {

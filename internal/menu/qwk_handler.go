@@ -41,8 +41,6 @@ func resolveQWKID(cfg config.ServerConfig) string {
 // Failure messages for qwkFailed, shown in red.
 const (
 	qwkPrepareFailedMsg = "Error preparing QWK packet."
-	// qwkNoProtocolsMsg matches the file upload's message for the same failure.
-	qwkNoProtocolsMsg = "Error: No transfer protocols configured on this system."
 )
 
 // qwkFailed logs a QWK transfer failure and tells the caller, so a download or
@@ -146,7 +144,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(protoErr, io.EOF) {
 			return nil, "LOGOFF", protoErr
 		}
-		qwkFailed(c, "QWK protocol selection failed", protoErr, qwkNoProtocolsMsg)
+		qwkFailed(c, "QWK protocol selection failed", protoErr, protocolSelectionErrorText(protoErr))
 		return currentUser, "", nil
 	}
 	if !ok {
@@ -207,7 +205,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		if errors.Is(protoErr, io.EOF) {
 			return nil, "LOGOFF", protoErr
 		}
-		qwkFailed(c, "QWK protocol selection failed", protoErr, qwkNoProtocolsMsg)
+		qwkFailed(c, "QWK protocol selection failed", protoErr, protocolSelectionErrorText(protoErr))
 		return currentUser, "", nil
 	}
 	if !ok {

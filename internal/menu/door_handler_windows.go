@@ -178,12 +178,7 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	}
 
 	slog.Info("starting door with standard I/O redirection (Windows)", "node", ctx.NodeNumber, "door", ctx.DoorName)
-	cmd.Stdout = ctx.Session
-	cmd.Stderr = ctx.Session
-	cmd.Stdin = ctx.Session
-	cmdErr := cmd.Run()
-
-	time.Sleep(100 * time.Millisecond)
+	cmdErr := runStdioDoor(ctx, cmd)
 
 	// Run cleanup while dropfiles/node dirs still exist (before deferred cleanup fires)
 	executeCleanupWindows(ctx)

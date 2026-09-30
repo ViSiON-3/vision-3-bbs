@@ -9,35 +9,32 @@ import (
 
 // Locating and reading FILE_ID.DIZ from an extracted archive.
 
-// findAndReadDIZ searches for FILE_ID.ANS (preferred) or FILE_ID.DIZ
-// (case-insensitive) in the work directory and one level of subdirectories.
+// findAndReadDIZ reads the file description from an extracted archive in
+// workDir, choosing among FILE_ID.ANS and FILE_ID.DIZ (case-insensitive) in
+// workDir and its immediate subdirectories as dizRank does. It returns "" if
+// there is none.
 func (p *Processor) findAndReadDIZ(workDir string) string {
-	var ansPath, dizPath string
+	var target string
+	bestRank := 0
 	_ = filepath.WalkDir(workDir, func(path string, d os.DirEntry, err error) error { // callback never returns an error
 		if err != nil {
 			return nil
 		}
-		// Descend into workDir's own subdirectories ("a") but no further
-		// ("a/b"): a DIZ deeper down belongs to something bundled inside.
 		rel, _ := filepath.Rel(workDir, path)
-		if d.IsDir() && strings.Contains(rel, string(filepath.Separator)) {
-			return filepath.SkipDir
-		}
-		if !d.IsDir() {
-			switch {
-			case strings.EqualFold(d.Name(), "FILE_ID.ANS"):
-				ansPath = path
-			case strings.EqualFold(d.Name(), "FILE_ID.DIZ") && ansPath == "":
-				dizPath = path
+		depth := strings.Count(rel, string(filepath.Separator))
+		if d.IsDir() {
+			// Descend into workDir's own subdirectories ("a") but no further.
+			if depth > 0 {
+				return filepath.SkipDir
 			}
+			return nil
+		}
+		if rank, ok := dizRank(d.Name(), depth); ok && (target == "" || rank < bestRank) {
+			target, bestRank = path, rank
 		}
 		return nil
 	})
 
-	target := ansPath
-	if target == "" {
-		target = dizPath
-	}
 	if target == "" {
 		return ""
 	}

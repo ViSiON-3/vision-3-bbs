@@ -104,13 +104,16 @@ func probeChatNetworks(leaves []ChatLeafInfo, handle string) []chatNetInfo {
 			if probe == nil {
 				return
 			}
-			defer probe.Close() //nolint:errcheck
 			type result struct {
 				rooms []chat.RoomInfo
 				err   error
 			}
 			ch := make(chan result, 1)
+			// The goroutine asking for the room list owns the session and
+			// closes it once Rooms returns, so a probe that times out stops
+			// waiting without closing the session under a request in flight.
 			go func() {
+				defer probe.Close() //nolint:errcheck
 				rooms, err := probe.Rooms()
 				ch <- result{rooms, err}
 			}()
@@ -199,14 +202,34 @@ func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, termin
 	wt("|07Select room |08[|07lobby|08]|07: ")
 
 	input, err := readLineFromSessionIH(s, terminal)
-	if err != nil || strings.TrimSpace(input) == "" {
+	if err != nil {
 		return "lobby"
 	}
-	trimmed := strings.TrimSpace(input)
-	if n, parseErr := strconv.Atoi(trimmed); parseErr == nil && n >= 1 && n <= len(rooms) {
-		return rooms[n-1].Name
+	room, nameErr := chatRoomChoice(input, rooms)
+	if nameErr != nil {
+		wt("\r\n|07" + nameErr.Error() + " - joining lobby.\r\n")
 	}
-	return trimmed
+	return room
+}
+
+// chatRoomChoice turns the answer to a room picker into the room to join: a
+// blank answer is lobby, a number picks from rooms, and anything else is a
+// room name, normalised as the services will join it, so that currentRoom
+// matches the room actually joined. A name that cannot be a room gives lobby
+// and NormalizeRoom's error, for the caller to report.
+func chatRoomChoice(input string, rooms []chat.RoomInfo) (string, error) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "lobby", nil
+	}
+	if n, parseErr := strconv.Atoi(trimmed); parseErr == nil && n >= 1 && n <= len(rooms) {
+		return rooms[n-1].Name, nil
+	}
+	room, err := chat.NormalizeRoom(trimmed)
+	if err != nil {
+		return "lobby", err
+	}
+	return room, nil
 }
 
 // chatNoRoomMsg is shown when the caller is in no room, after a /JOIN whose
@@ -662,12 +685,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 				roomInput, roomErr2 := chatReadLine(s, &rawMu, rawWriteLocked, chatInputRow, termWidth, "Select room [lobby]: ")
 				if roomErr2 == nil {
-					if t := strings.TrimSpace(roomInput); t != "" {
-						if n, parseErr := strconv.Atoi(t); parseErr == nil && n >= 1 && n <= len(netRooms) {
-							newRoom = netRooms[n-1].Name
-						} else {
-							newRoom = t
-						}
+					var nameErr error
+					if newRoom, nameErr = chatRoomChoice(roomInput, netRooms); nameErr != nil {
+						writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, nameErr.Error()+" - joining lobby."))
 					}
 				}
 			}

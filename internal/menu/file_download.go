@@ -232,6 +232,8 @@ func (e *MenuExecutor) downloadLoop(
 				return currentUser, err
 			}
 			slog.Error("protocol selection error", "node", nodeNumber, "error", err)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01"+protocolSelectionErrorText(err)+"|07\r\n")), outputMode)
+			uiPause(2 * time.Second)
 			return currentUser, nil
 		}
 		if !ok {

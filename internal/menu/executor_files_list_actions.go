@@ -80,7 +80,7 @@ func (st *fileListState) handleFileDownload() (logoff bool, err error) {
 			return true, protoErr
 		}
 		slog.Error("protocol selection error", "node", st.nodeNumber, "error", protoErr)
-		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")), st.outputMode)
+		terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01"+protocolSelectionErrorText(protoErr)+"|07\r\n")), st.outputMode)
 		uiPause(2 * time.Second)
 		return false, nil
 	}

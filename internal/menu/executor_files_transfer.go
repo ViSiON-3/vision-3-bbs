@@ -35,6 +35,21 @@ func isTelnetSession(s ssh.Session) bool {
 //
 // Returns (selected, true, nil) on selection, (zero, false, nil) on cancel,
 // or (zero, false, err) on I/O error.
+// errNoTransferProtocols is returned by selectTransferProtocol when no
+// protocol is configured for the caller's connection type. It is a sysop
+// configuration problem, unlike the session errors the prompt can also return.
+var errNoTransferProtocols = errors.New("no transfer protocols configured for this connection type")
+
+// protocolSelectionErrorText is the message to show the caller for a
+// non-EOF error from selectTransferProtocol: the missing-configuration text
+// for errNoTransferProtocols, and a generic failure otherwise.
+func protocolSelectionErrorText(err error) string {
+	if errors.Is(err, errNoTransferProtocols) {
+		return "Error: No transfer protocols configured on this system."
+	}
+	return "Error: Could not select a transfer protocol."
+}
+
 func (e *MenuExecutor) selectTransferProtocol(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode) (transfer.ProtocolConfig, bool, error) {
 	// Filter protocols for this connection type.
 	connType := transfer.ConnTypeSSH
@@ -48,7 +63,7 @@ func (e *MenuExecutor) selectTransferProtocol(s ssh.Session, terminal *term.Term
 		}
 	}
 	if len(available) == 0 {
-		return transfer.ProtocolConfig{}, false, fmt.Errorf("no transfer protocols configured for this connection type")
+		return transfer.ProtocolConfig{}, false, errNoTransferProtocols
 	}
 
 	defaultProto, hasDefault := transfer.DefaultProtocol(available)

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 )
 
 // chatLastHeader returns everything drawn from the last header on, starting at
@@ -198,4 +200,72 @@ func TestChatJoinNormalisesRoomName(t *testing.T) {
 	chatcovEqual(t, "joins", svc.log("join"), []string{"lobby", "back-room"})
 	chatcovEqual(t, "leaves", svc.log("leave"), []string{"lobby", "back-room"})
 	chatcovEqual(t, "posts", svc.log("post"), []string{"back-room: hi"})
+}
+
+func TestChatRoomChoice(t *testing.T) {
+	rooms := []chat.RoomInfo{{Name: "lobby"}, {Name: "den"}}
+	for _, tc := range []struct {
+		input, want string
+		wantErr     bool
+	}{
+		{"", "lobby", false},
+		{"  ", "lobby", false},
+		{"2", "den", false},
+		{"3", "3", false}, // out of range, so a room name
+		{"Den", "den", false},
+		{" Back Room ", "back-room", false},
+		{"Bad!Room", "lobby", true},
+	} {
+		got, err := chatRoomChoice(tc.input, rooms)
+		if got != tc.want || (err != nil) != tc.wantErr {
+			t.Errorf("chatRoomChoice(%q) = %q, %v; want %q, error %v", tc.input, got, err, tc.want, tc.wantErr)
+		}
+	}
+}
+
+// A room name typed at the picker is normalised before the join, so posts
+// and the final Leave go to the room actually joined (#538).
+func TestChatPickerNormalisesRoomName(t *testing.T) {
+	env := newMenuEnv(t)
+	net := chatcovFakeNet(env)
+	net.events = nil
+
+	chatcovChat(env, env.caller, "\rDen\rhi\r/q\r")
+	svc := net.chatted()[0]
+	chatcovEqual(t, "joins", svc.log("join"), []string{"den"})
+	chatcovEqual(t, "posts", svc.log("post"), []string{"den: hi"})
+	chatcovEqual(t, "leaves", svc.log("leave"), []string{"den"})
+}
+
+// A probe that times out stops waiting for the room list but does not close
+// the session while that request is still running; it is closed once the
+// request returns (#538).
+func TestChatProbeTimeoutClosesSessionAfterRooms(t *testing.T) {
+	oldTimeout := chatProbeTimeout
+	chatProbeTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { chatProbeTimeout = oldTimeout })
+
+	env := newMenuEnv(t)
+	net := chatcovFakeNet(env)
+	net.roomsBlock = make(chan struct{})
+
+	nets := probeChatNetworks([]ChatLeafInfo{net.leaf()}, "caller")
+	if nets[0].avail {
+		t.Fatal("timed-out network marked available")
+	}
+	net.mu.Lock()
+	probe := net.sessions[0]
+	net.mu.Unlock()
+	if closes := probe.log("close"); len(closes) != 0 {
+		t.Fatal("probe session closed while its room list request was still running")
+	}
+
+	close(net.roomsBlock)
+	deadline := time.Now().Add(2 * time.Second)
+	for len(probe.log("close")) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("probe session never closed after its room list returned")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }

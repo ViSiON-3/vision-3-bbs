@@ -66,7 +66,9 @@ type ChatEvent struct {
 // ChatService is the interface for all chat backends (local or V3Net).
 type ChatService interface {
 	// Join subscribes the user to a room, returning the current room list
-	// and up to 50 recent messages of history.
+	// and up to 50 recent messages of history. An error means the user is not
+	// in the room: an implementation that has already joined when a later
+	// step fails either undoes the join or reports success without that part.
 	Join(room string) ([]RoomInfo, []ChatMessage, error)
 
 	// Leave unsubscribes the user from a room.

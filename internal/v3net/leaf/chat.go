@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sync"
 	"time"
@@ -212,13 +213,18 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	if resp.StatusCode/100 != 2 {
 		return nil, nil, fmt.Errorf("join chat: hub returned status %d", resp.StatusCode)
 	}
+	// The hub has joined us to the room and announced it. If its reply can't
+	// be read, leave again so the error means "not in the room", as the
+	// ChatService contract says.
 	respBytes, err := readBody(resp.Body, maxRespBytes)
 	if err != nil {
+		s.undoJoin(room)
 		return nil, nil, fmt.Errorf("join chat: %w", err)
 	}
 	var joinResp protocol.ChatJoinResponse
 	if err := json.Unmarshal(respBytes, &joinResp); err != nil {
-		return nil, nil, err
+		s.undoJoin(room)
+		return nil, nil, fmt.Errorf("join chat: %w", err)
 	}
 	s.mu.Lock()
 	s.currentRoom = room
@@ -235,6 +241,18 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 		msgs[i].Room = room
 	}
 	return rooms, msgs, nil
+}
+
+// undoJoin asks the hub to take this handle out of room after a Join that
+// the hub accepted but whose reply could not be used. Unlike Leave it leaves
+// currentRoom alone, since the session never switched to room. Best effort:
+// a failure is only logged.
+func (s *ChatSession) undoJoin(room string) {
+	body, _ := json.Marshal(protocol.ChatLeaveRequest{Room: room, Handle: s.handle})
+	if err := s.leaf.signedPostCtx(context.Background(),
+		fmt.Sprintf("/v3net/v1/%s/chat/rooms/leave", s.leaf.cfg.Network), body); err != nil {
+		slog.Warn("leaf: could not undo a failed chat join", "network", s.leaf.cfg.Network, "room", room, "error", err)
+	}
 }
 
 // Leave implements chat.ChatService, telling the hub this handle has left

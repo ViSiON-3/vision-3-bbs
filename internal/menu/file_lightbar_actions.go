@@ -153,7 +153,7 @@ func (lb *fileLightbar) sendTaggedFiles(filesToDownload []string, fileIDsToDownl
 			return 0, failCount, true, "LOGOFF", io.EOF
 		}
 		slog.Error("protocol selection error", "node", lb.nodeNumber, "error", protoErr)
-		_ = lb.writePipe("\r\n|01Error: No transfer protocols configured on this system.|07\r\n")
+		_ = lb.writePipe("\r\n|01" + protocolSelectionErrorText(protoErr) + "|07\r\n")
 		failCount += len(filesToDownload)
 	} else if !protoOK {
 		_ = lb.writePipe("\r\n|07Download cancelled.|07\r\n")

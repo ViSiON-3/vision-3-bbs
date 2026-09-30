@@ -159,6 +159,33 @@ func TestExtractDIZFromZip_PrefersANSAndStripsSauce(t *testing.T) {
 	}
 }
 
+// Native ZIP reading follows the same rules as the extracted-archive search
+// (#540): ANS over DIZ, root over a subdirectory, and nothing deeper than one
+// level, whatever order the entries are stored in.
+func TestExtractDIZFromZip_SearchDepth(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		entries []zipEntry
+		want    string
+	}{
+		{"one level down is found", []zipEntry{{"release/FILE_ID.DIZ", "nested"}}, "nested"},
+		{"two levels down is ignored", []zipEntry{{"a/b/FILE_ID.DIZ", "too deep"}}, ""},
+		{"deep ANS does not beat root DIZ", []zipEntry{{"a/b/FILE_ID.ANS", "too deep"}, {"FILE_ID.DIZ", "root"}}, "root"},
+		{"root beats a subdirectory", []zipEntry{{"zz/FILE_ID.DIZ", "bundled"}, {"FILE_ID.DIZ", "root"}}, "root"},
+		{"subdirectory ANS beats root DIZ", []zipEntry{{"FILE_ID.DIZ", "root plain"}, {"art/FILE_ID.ANS", "art"}}, "art"},
+		{"directory entries are skipped", []zipEntry{{"FILE_ID.DIZ/", ""}, {"FILE_ID.DIZ", "the file"}}, "the file"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			zipPath := filepath.Join(t.TempDir(), "test.zip")
+			writeOrderedZip(t, zipPath, "", tc.entries)
+			got, err := ExtractDIZFromZip(zipPath)
+			if err != nil || got != tc.want {
+				t.Errorf("ExtractDIZFromZip(%s) = %q, %v; want %q", entryNames(tc.entries), got, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestFindAndReadDIZ(t *testing.T) {
 	p := NewProcessor(DefaultConfig(), "")
 	write := func(t *testing.T, root, rel, content string) {
@@ -202,6 +229,17 @@ func TestFindAndReadDIZ(t *testing.T) {
 		write(t, dir, "a/b/c/FILE_ID.DIZ", "belongs to a bundled archive")
 		if got := p.findAndReadDIZ(dir); got != "" {
 			t.Errorf("description = %q, want none", got)
+		}
+	})
+
+	// WalkDir visits "zz" after the root's files; the root file must still win.
+	t.Run("root preferred over a subdirectory", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, "FILE_ID.ANS", "root art")
+		write(t, dir, "zz/FILE_ID.ANS", "bundled art")
+		write(t, dir, "zz/FILE_ID.DIZ", "bundled plain")
+		if got := p.findAndReadDIZ(dir); got != "root art" {
+			t.Errorf("description = %q, want the root ANS", got)
 		}
 	})
 

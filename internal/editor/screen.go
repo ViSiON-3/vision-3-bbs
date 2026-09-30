@@ -53,7 +53,8 @@ type Screen struct {
 	// Footer
 	boardName     string // BBS board name for @B@ placeholder in FSEDITORF.ANS
 	footerContent string
-	footerHeight  int // Number of rows the footer occupies (0 = no footer)
+	footerLine2   string // FSEDITORF.ANS line 2, processed; line 1 is built per width
+	footerHeight  int    // Number of rows the footer occupies (0 = no footer)
 }
 
 // NewScreen creates a new screen manager
@@ -153,6 +154,23 @@ func (s *Screen) LoadFooterTemplate(menuSetPath string) error {
 		s.screenLines = 5
 	}
 
+	// Extract line 2 from the original template (it's static, no substitution needed)
+	parts := bytes.SplitN(content, []byte("\r\n"), 2)
+	var line2Content []byte
+	if len(parts) > 1 {
+		line2Content = parts[1]
+	}
+	s.footerLine2 = string(ansi.ReplacePipeCodes(ansi.CP437BytesToUTF8(line2Content)))
+	s.rebuildFooter()
+
+	return nil
+}
+
+// rebuildFooter builds footerContent for the current terminal width: line 1
+// is generated so its filler dashes fit the width, and line 2 is the
+// template's. LoadFooterTemplate calls it, and Resize calls it again so the
+// footer follows a window change.
+func (s *Screen) rebuildFooter() {
 	// Dynamically build footer line 1 so the filler dashes between the board
 	// name and the CTRL command labels adjust to fit within termWidth.
 	boardName := s.boardName
@@ -202,19 +220,8 @@ func (s *Screen) LoadFooterTemplate(menuSetPath string) error {
 	// colorizeConfAreaText uses pipe codes — expand them to ANSI.
 	line1Processed := ansi.ReplacePipeCodes([]byte(line1.String()))
 
-	// Extract line 2 from the original template (it's static, no substitution needed)
-	parts := bytes.SplitN(content, []byte("\r\n"), 2)
-	var line2Content []byte
-	if len(parts) > 1 {
-		line2Content = parts[1]
-	}
-	line2UTF8 := ansi.CP437BytesToUTF8(line2Content)
-	line2Processed := ansi.ReplacePipeCodes(line2UTF8)
-
 	// Combine: line 1 (dynamically built) + CRLF + line 2 (from template)
-	s.footerContent = string(line1Processed) + "\r\n" + string(line2Processed)
-
-	return nil
+	s.footerContent = string(line1Processed) + "\r\n" + s.footerLine2
 }
 
 // DisplayFooter renders the footer template at the bottom of the terminal.
@@ -780,8 +787,11 @@ func (s *Screen) Resize(newWidth, newHeight int) {
 		s.editingStartY = startY
 		s.screenLines = s.termHeight - startY - 1
 	}
-	// Re-apply footer geometry if the footer template was loaded.
+	// Re-apply footer geometry and rebuild line 1 for the new width if the
+	// footer template was loaded. The header needs nothing: it is 80-column
+	// art, drawn the same at any width the editor allows.
 	if s.footerHeight > 0 {
+		s.rebuildFooter()
 		s.statusLineY = s.termHeight - s.footerHeight + 1
 		s.screenLines = s.termHeight - s.editingStartY - s.footerHeight
 		if s.screenLines < 5 {
