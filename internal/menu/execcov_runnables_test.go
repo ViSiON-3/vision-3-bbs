@@ -51,14 +51,16 @@ func TestExeccovLogoffCommands(t *testing.T) {
 		t.Errorf("immediate: next=%q user=%s output:\n%s", r.next, execcovHandle(r.user), r.text())
 	}
 
-	// No GOODBYE.ANS, and no logoff question configured.
+	// No GOODBYE.ANS, and no logoff question configured. Only the goodbye
+	// string is shown, not the file-load error ahead of it (#530).
 	env, _ = execcovRunEnv(t)
 	execcovStrings(env, func(s *config.StringsConfig) {
 		s.LogOffStr = ""
 		s.ExecGoodbye = "\r\nBYE-FOR-NOW\r\n"
+		s.ExecFileLoadError = "\r\nFILE-LOAD-ERR %s\r\n"
 	})
 	r = env.runCmd("MAINLOGOFF", env.caller, "", "Y")
-	if r.next != "LOGOFF" || !r.has("Log off now?", "BYE-FOR-NOW") {
+	if r.next != "LOGOFF" || !r.has("Log off now?", "BYE-FOR-NOW") || r.has("FILE-LOAD-ERR") {
 		t.Errorf("fallbacks: next=%q output:\n%s", r.next, r.text())
 	}
 }

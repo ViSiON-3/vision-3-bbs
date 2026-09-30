@@ -198,10 +198,29 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 		}
 		return err
 	}
+	return e.writeDisplayFile(terminal, filename, filePath, data, outputMode, termWidth, termHeight, len(clearFirst) > 0 && clearFirst[0])
+}
+
+// displayFileIfPresent is displayFile for a screen with a fallback of its
+// own: when the file cannot be read it writes nothing and returns the read
+// error, so the caller shows only its fallback instead of displayFile's load
+// error text followed by the fallback.
+func (e *MenuExecutor) displayFileIfPresent(terminal *term.Terminal, filename string, outputMode ansi.OutputMode, termWidth, termHeight int) error {
+	filePath := e.menuFile("ansi", filename)
+	data, err := ansi.GetAnsiFileContent(filePath)
+	if err != nil {
+		return err
+	}
+	return e.writeDisplayFile(terminal, filename, filePath, data, outputMode, termWidth, termHeight, false)
+}
+
+// writeDisplayFile writes the loaded contents of filename (at filePath) for
+// displayFile and displayFileIfPresent, expanding AT and pipe codes.
+func (e *MenuExecutor) writeDisplayFile(terminal *term.Terminal, filename, filePath string, data []byte, outputMode ansi.OutputMode, termWidth, termHeight int, clearFirst bool) error {
 	// Settle the art's encoding before anything is substituted into it, so a
 	// UTF-8 rumor or pipe-code expansion is not mistaken for CP437 later.
 	data = ansi.ArtForOutput(data, outputMode)
-	if len(clearFirst) > 0 && clearFirst[0] {
+	if clearFirst {
 		data = append([]byte(ansi.ClearScreen()), data...)
 	}
 
@@ -245,10 +264,7 @@ func writeArt(terminal *term.Terminal, data []byte, outputMode ansi.OutputMode, 
 
 // deliverPendingPages checks for and displays any queued page messages.
 func (e *MenuExecutor) deliverPendingPages(terminal *term.Terminal, nodeNumber int, outputMode ansi.OutputMode) {
-	if e.SessionRegistry == nil {
-		return
-	}
-	sess := e.SessionRegistry.Get(nodeNumber)
+	sess := e.nodeSession(nodeNumber)
 	if sess == nil {
 		return
 	}
@@ -415,7 +431,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		rumorLevel = currentUser.AccessLevel
 	}
 	rawPromptBytes := e.renderPromptText(promptString, placeholders,
-		userManager.GetUserCount(), e.SessionRegistry.ActiveCount(), rumorLevel)
+		userManager.GetUserCount(), e.activeNodeCount(), rumorLevel)
 
 	// 4. Process character encoding based on outputMode (Reverted to manual loop)
 	var finalBuf bytes.Buffer

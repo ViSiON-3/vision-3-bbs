@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -159,22 +160,77 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Info("running login door script", "node", nodeNumber, "path", scriptPath)
 
-	// Verify script exists
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		slog.Warn("login door script not found", "node", nodeNumber, "path", scriptPath)
+	if reason := loginDoorUnrunnable(scriptPath); reason != "" {
+		slog.Warn("login door script cannot be run", "node", nodeNumber, "path", scriptPath, "reason", reason)
 		return currentUser, "", nil
 	}
 
 	// Execute the script with node number as argument
 	cmd := exec.Command(scriptPath, strconv.Itoa(nodeNumber))
-	cmd.Stdin = s
 	cmd.Stdout = s
 	cmd.Stderr = s.Stderr()
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		slog.Warn("login door script stdin pipe failed", "node", nodeNumber, "path", scriptPath, "error", err)
+		return currentUser, "", nil
+	}
 
-	if err := cmd.Run(); err != nil {
+	// The door reads the session directly, so the session's input handler
+	// must let go of it first, as the menu door handler does.
+	resetSessionIH(s)
+
+	// Set up a read interrupt so the stdin copier can be stopped once the
+	// script exits, as the native door handler does. With cmd.Stdin = s,
+	// exec's own copier stayed blocked in Read until the next keypress,
+	// which it then swallowed, and cmd.Run waited for it. Sessions without
+	// SetReadInterrupt keep that behaviour, minus the wait.
+	readInterrupt := make(chan struct{})
+	hasInterrupt := false
+	if ri, ok := s.(interface{ SetReadInterrupt(<-chan struct{}) }); ok {
+		ri.SetReadInterrupt(readInterrupt)
+		defer ri.SetReadInterrupt(nil)
+		hasInterrupt = true
+	}
+
+	if err := cmd.Start(); err != nil {
+		slog.Warn("login door script failed to start", "node", nodeNumber, "path", scriptPath, "error", err)
+		return currentUser, "", nil
+	}
+	inputDone := make(chan struct{})
+	go func() {
+		defer close(inputDone)
+		// Ends on interrupt, disconnect or a closed pipe; closing stdin then
+		// hands a disconnect on to the script as end of input.
+		_, _ = io.Copy(stdin, s)
+		_ = stdin.Close()
+	}()
+
+	if err := cmd.Wait(); err != nil {
 		slog.Warn("login door script exited with error", "node", nodeNumber, "path", scriptPath, "error", err)
 		// Non-fatal - continue login sequence
 	}
+	close(readInterrupt)
+	if hasInterrupt {
+		<-inputDone
+	}
 
 	return currentUser, "", nil
+}
+
+// loginDoorUnrunnable returns why path cannot be run as a login door, or ""
+// when it can: it must stat cleanly (a missing file, a permission error on
+// the way to it and the like are all refusals) and be a regular file, which
+// outside Windows must also have an execute bit set.
+func loginDoorUnrunnable(path string) string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err.Error()
+	}
+	if !info.Mode().IsRegular() {
+		return "not a regular file"
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+		return "not executable"
+	}
+	return ""
 }

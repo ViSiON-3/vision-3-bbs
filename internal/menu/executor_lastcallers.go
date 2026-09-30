@@ -86,7 +86,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	processedTopTemplate = renderLastCallerGlobalATTokens(processedTopTemplate, totalUsers)
 	processedBotTemplate = renderLastCallerGlobalATTokens(processedBotTemplate, totalUsers)
-	usersOnline := strconv.Itoa(e.SessionRegistry.ActiveCount())
+	usersOnline := strconv.Itoa(e.activeNodeCount())
 	processedTopTemplate = strings.ReplaceAll(processedTopTemplate, "@U@", usersOnline)
 	processedBotTemplate = strings.ReplaceAll(processedBotTemplate, "@U@", usersOnline)
 

@@ -111,6 +111,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// this an edit made while the caller is online does nothing until they
 		// dial back.
 		if !st.refreshCurrentUser() {
+			// The one exit that deliberately drops the user: the account is
+			// gone, and handing it back would invite end-of-session code to
+			// save a deleted record.
 			return "LOGOFF", nil, nil
 		}
 
@@ -128,7 +131,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// regions, pipe/token substitution, CP437/encoding conversion).
 		ansiProcessResult, renderErr := st.renderMenuAnsi()
 		if renderErr != nil {
-			return "", nil, renderErr
+			return "", st.currentUser, renderErr
 		}
 
 		// --- SPECIAL HANDLING FOR LOGIN MENU INTERACTION ---
@@ -154,7 +157,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				slog.Error("failed writing menu load error message", "error", wErr)
 			}
 			slog.Error(errMsg)
-			return "", nil, fmt.Errorf("failed to load menu %s: %w", st.currentMenuName, err)
+			return "", st.currentUser, fmt.Errorf("failed to load menu %s: %w", st.currentMenuName, err)
 		}
 
 		// 2. Load Commands (.CFG) for the *current* menu (which might be LOGIN)
@@ -174,7 +177,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			}
 		}
 		// Set default activity on session for Who's Online display
-		if sess := e.SessionRegistry.Get(nodeNumber); sess != nil {
+		if sess := e.nodeSession(nodeNumber); sess != nil {
 			sess.Mutex.Lock()
 			sess.Activity = menuDefaultActivity
 			sess.Mutex.Unlock()
@@ -183,9 +186,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Check Menu Password if required
 		if _, act, retErr := st.checkMenuPassword(menuRec); act == loopReturn {
 			if retErr != nil {
-				return "", nil, retErr
+				return "", st.currentUser, retErr
 			}
-			return "LOGOFF", nil, nil
+			return "LOGOFF", st.currentUser, nil
 		}
 
 		// Check Menu ACS before proceeding
@@ -199,8 +202,8 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			if wErr != nil {
 				slog.Error("failed writing ACS denied message", "error", wErr)
 			}
-			uiPause(1 * time.Second)  // Brief pause
-			return "LOGOFF", nil, nil // Signal logoff
+			uiPause(1 * time.Second)             // Brief pause
+			return "LOGOFF", st.currentUser, nil // Signal logoff
 		}
 
 		// --- AutoRun Command Execution ---
@@ -219,7 +222,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// Note: ansBackgroundBytes is currently unused but will be needed for full lightbar implementation
 		// ansBackgroundBytes := ansiProcessResult.DisplayBytes
 		if err := st.displayMenuScreen(ansiProcessResult, menuRec); err != nil {
-			return "", nil, err
+			return "", st.currentUser, err
 		}
 
 		// --- Check for Lightbar Menu (.BAR) ---
@@ -238,9 +241,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		input, act, retErr := st.readMenuInput(ansiProcessResult, menuRec)
 		switch act {
 		case loopReturn:
-			// Propagate the user like every other loopReturn site: nil here dropped
-			// an authenticated user on the disconnect paths, and main.go reads a nil
-			// user as "authentication did not happen".
+			// Every exit but the removed-account one hands back st.currentUser,
+			// so end-of-session work keeps a logged-in caller. main.go reads a
+			// nil user as "authentication did not happen", and st.currentUser
+			// is still nil for a caller who has not logged in.
 			return input, st.currentUser, retErr
 		case loopContinue:
 			continue
