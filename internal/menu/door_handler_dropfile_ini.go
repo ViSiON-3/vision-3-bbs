@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
@@ -42,6 +43,17 @@ func isGeneratedDropfileType(upperType string) bool {
 	return false
 }
 
+// doorUsesNodeDir reports whether a native door's dropfile goes in a per-node
+// temporary directory instead of the working directory. That is the sysop's
+// choice, except that DROPFILE.INI may never share a path between nodes: a
+// door that several nodes can run at once always gets a per-node directory.
+func doorUsesNodeDir(cfg config.DoorConfig) bool {
+	if strings.EqualFold(cfg.DropfileLocation, "node") {
+		return true
+	}
+	return strings.EqualFold(cfg.DropfileType, dropfileIniType) && !cfg.SingleInstance
+}
+
 // dropfileIniEnv returns the DROPFILE_INI environment entry for the dropfile at
 // path. The door must be given an absolute path.
 func dropfileIniEnv(path string) string {
@@ -61,14 +73,14 @@ func dropfileIniText(key, val string) string {
 		switch {
 		case c == 0xFF:
 			b[i] = ' '
-		case c < 0x20 && c != '\t', c == 0x7F:
+		case c < 0x20, c == 0x7F:
 			b[i] = '?'
 		}
 	}
 	if maxLen := dropfileIniMaxLine - len(key) - 1; len(b) > maxLen {
 		b = b[:maxLen]
 	}
-	return strings.Trim(string(b), " \t")
+	return strings.TrimSpace(string(b))
 }
 
 // dropfileIniASCII returns val if it is a valid ascii value (printable ASCII,
@@ -91,10 +103,12 @@ type dropfileIniWriter struct {
 	b strings.Builder
 }
 
+// line writes one CRLF-terminated line.
 func (w *dropfileIniWriter) line(s string) {
 	w.b.WriteString(s + "\r\n")
 }
 
+// section starts a new section, separated from the previous one by a blank line.
 func (w *dropfileIniWriter) section(name string) {
 	w.line("")
 	w.line("[" + name + "]")
@@ -124,6 +138,7 @@ func (w *dropfileIniWriter) ascii(key, val string) {
 	}
 }
 
+// num writes an int key; a negative value is written as 0.
 func (w *dropfileIniWriter) num(key string, val int) {
 	if val < 0 {
 		val = 0

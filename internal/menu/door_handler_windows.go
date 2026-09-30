@@ -36,8 +36,8 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 	// Configurable dropfile location: "node" uses a unique per-node temp directory.
 	// Uses os.MkdirTemp for unique names and defers os.RemoveAll unconditionally
 	// so the directory is always cleaned up, even if no recognized dropfile is generated.
-	dropfileLoc := strings.ToLower(doorConfig.DropfileLocation)
-	if dropfileLoc == "node" {
+	useNodeDir := doorUsesNodeDir(doorConfig)
+	if useNodeDir {
 		nodeDir, err := os.MkdirTemp("", fmt.Sprintf("vision3_node%d_", ctx.NodeNumber))
 		if err != nil {
 			return fmt.Errorf("failed to create node dropfile directory: %w", err)
@@ -70,7 +70,7 @@ func executeNativeDoorWindows(ctx *DoorCtx) error {
 		case dropfileIniType:
 			// Only a per-node directory is private enough to offer as TEMP_DIR.
 			tempDir := ""
-			if dropfileLoc == "node" {
+			if useNodeDir {
 				tempDir = dropfileDir
 			}
 			genErr = generateDropfileIni(ctx, dropfileDir, fname, tempDir)

@@ -156,7 +156,7 @@ func TestGenerateDropfileIniSanitizesText(t *testing.T) {
 
 	_, keys := readDropfileIni(t, ctx, "")
 
-	if got, want := keys["USER_ALIAS"], "J\x94rg\tthe?Red??COMM_TYPE=local"; got != want {
+	if got, want := keys["USER_ALIAS"], "J\x94rg?the?Red??COMM_TYPE=local"; got != want {
 		t.Errorf("USER_ALIAS = %q, want %q", got, want)
 	}
 	if got := keys["COMM_TYPE"]; got != "stdio" {
@@ -212,6 +212,27 @@ func TestGenerateDropfileIniComm(t *testing.T) {
 			}
 			if tt.cfg.IsDOS && (keys["TERM_COLS"] != "80" || keys["TERM_ROWS"] != "25") {
 				t.Errorf("DOS door screen = %sx%s, want 80x25", keys["TERM_COLS"], keys["TERM_ROWS"])
+			}
+		})
+	}
+}
+
+func TestDoorUsesNodeDir(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  config.DoorConfig
+		want bool
+	}{
+		{"startup door.sys", config.DoorConfig{DropfileType: "DOOR.SYS"}, false},
+		{"node door.sys", config.DoorConfig{DropfileType: "DOOR.SYS", DropfileLocation: "Node"}, true},
+		{"startup ini multi-node", config.DoorConfig{DropfileType: "dropfile.ini", DropfileLocation: "startup"}, true},
+		{"startup ini single instance", config.DoorConfig{DropfileType: "DROPFILE.INI", SingleInstance: true}, false},
+		{"no dropfile", config.DoorConfig{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := doorUsesNodeDir(tt.cfg); got != tt.want {
+				t.Errorf("doorUsesNodeDir = %v, want %v", got, tt.want)
 			}
 		})
 	}
