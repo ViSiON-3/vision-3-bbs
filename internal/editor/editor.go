@@ -123,6 +123,13 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	// Pass ih (may be nil) so a shared InputHandler is reused when available.
 	editor := NewFSEditor(session, output, outputMode, termWidth, termHeight, menuSetPath, yesNoHi, yesNoLo, yesText, noText, abortText, ih)
 
+	// A caller whose time runs out mid-message keeps what they are writing:
+	// the time limit is held off until the editor closes, and the menu loop
+	// ends the call after that. The idle timeout still applies.
+	if ih != nil {
+		defer ih.SuspendSessionDeadline()()
+	}
+
 	// Load server config: timezone and board name (for footer @B@ placeholder)
 	if serverCfg, cfgErr := config.LoadServerConfig(rootConfigPath); cfgErr == nil {
 		editor.SetTimezone(serverCfg.Timezone)

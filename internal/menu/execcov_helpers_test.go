@@ -90,6 +90,7 @@ type execcovCall struct {
 	start   string     // menu to start in
 	input   string     // keystrokes; reads report a disconnect once they run out
 	height  int        // terminal rows; 0 means 24
+	started time.Time  // when the session connected; zero means now
 	tracker types.AutoRunTracker
 }
 
@@ -111,6 +112,9 @@ func execcovRun(env *menuEnv, c execcovCall) runResult {
 	if c.tracker == nil {
 		c.tracker = types.AutoRunTracker{}
 	}
+	if c.started.IsZero() {
+		c.started = time.Now()
+	}
 
 	type ret struct {
 		action string
@@ -120,7 +124,7 @@ func execcovRun(env *menuEnv, c execcovCall) runResult {
 	done := make(chan ret, 1)
 	go func() {
 		action, u, err := env.e.Run(ts, newTestTerminal(ts), env.um, c.user, c.start, 1,
-			time.Now(), c.tracker, env.outputMode, "", 80, c.height)
+			c.started, c.tracker, env.outputMode, "", 80, c.height)
 		done <- ret{action, u, err}
 	}()
 	select {

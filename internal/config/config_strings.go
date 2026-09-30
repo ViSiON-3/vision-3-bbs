@@ -211,6 +211,11 @@ var StringFallbacks = map[string]string{
 	"doorRemoteConnecting":    "\r\n|15Connecting to |11%s|15, please wait...|07\r\n",
 	"doorRemoteConnectFailed": "\r\n|12Unable to connect to |11%s|12. Please try again later.|07\r\n",
 	"doorRemoteDisconnected":  "\r\n|08Disconnected from |07%s|08.|07\r\n",
+
+	// Time limit notices. Without them an upgraded strings.json would warn
+	// nobody and disconnect callers with no word of why.
+	"timeLimitExpired": "\r\n|12Your time limit for this call is up. Call again soon!|07\r\n",
+	"timeLimitWarning": "\r\n|14You have |15%d|14 minute(s) left this call.|07\r\n",
 }
 
 // applyStringDefaults fills in StringFallbacks values for any string field that

@@ -391,6 +391,8 @@ func stringCatalog() []StringEntry {
 		{Label: "Matrix: Validated", Key: "matrixAccountValidated", Description: "Shown for validated account (%s=user, %d=level)"},
 		{Label: "Matrix: Not Validated", Key: "matrixAccountNotValidated", Description: "Shown for unvalidated account"},
 		{Label: "Idle Timeout", Key: "idleTimeout", Description: "Shown when user is disconnected for idle timeout"},
+		{Label: "Time Limit Expired", Key: "timeLimitExpired", Description: "Shown when user is disconnected because their time limit is up"},
+		{Label: "Time Limit Warning", Key: "timeLimitWarning", Description: "Shown at menu prompts in the last minutes of a call (%d=minutes left)"},
 
 		// Conference (V3)
 		{Label: "Conf: Login Required", Key: "confLoginRequired", Description: "Shown when not logged in for conferences"},

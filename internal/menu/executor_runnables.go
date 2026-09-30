@@ -121,11 +121,11 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		"|NU": strconv.Itoa(currentUser.NumUploads),
 		"|DK": "0", "|ND": "0", "|TP": "0", "|NM": "0", "|LC": "N/A",
 	}
-	if currentUser.TimeLimit <= 0 {
+	if limit := e.timeLimit(currentUser); limit <= 0 {
 		placeholders["|TL"] = "Unlimited"
 	} else {
 		elapsedSeconds := time.Since(sessionStartTime).Seconds()
-		totalSeconds := float64(currentUser.TimeLimit * 60)
+		totalSeconds := float64(limit * 60)
 		remainingSeconds := totalSeconds - elapsedSeconds
 		if remainingSeconds < 0 {
 			remainingSeconds = 0

@@ -239,7 +239,7 @@ If a door legitimately needs Ctrl-] for itself, change **Disconnect Key** to ano
 
 ## Time limits
 
-A remote door obeys the caller's time limit like a local one. If the limit is reached during the session the connection is closed and the user is returned to the BBS. A user with no time left never reaches the door server at all.
+A remote door obeys the caller's time limit (see [Time Limits](users/user-management.md#time-limits)). If the limit is reached during the session the connection is closed and the user is returned to the BBS. A user with no time left never reaches the door server at all.
 
 Users with no time limit set (`0`), and CoSysOps and above whatever their limit, stay connected for as long as the door server keeps the session open.
 

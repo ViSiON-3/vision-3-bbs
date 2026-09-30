@@ -2,6 +2,7 @@ package editor
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,12 @@ import (
 // escape-sequence timeout so that callers can handle user-visible idle
 // disconnects without false-positive matches on sequence parsing.
 var ErrIdleTimeout = errors.New("idle timeout")
+
+// ErrTimeLimit is returned by a session key read once the caller's time limit
+// has passed (see SetSessionDeadline). It wraps ErrIdleTimeout, so every input
+// loop that already logs the caller off on an idle timeout does the same when
+// their time runs out.
+var ErrTimeLimit = fmt.Errorf("time limit reached: %w", ErrIdleTimeout)
 
 // Special key codes for editor commands (using WordStar-style control characters)
 const (
@@ -85,6 +92,11 @@ type InputHandler struct {
 	// atomic access panics with "unaligned 64-bit atomic operation".
 	idleNs atomic.Int64
 
+	// deadlineNs is the session's time-limit deadline as Unix nanoseconds
+	// (0 = none). Once it passes, key reads return ErrTimeLimit. Set via
+	// SetSessionDeadline.
+	deadlineNs atomic.Int64
+
 	// escTimeoutNs overrides the inter-byte ESC disambiguation window
 	// (default 500 ms). 0 means use the default. Set via SetEscTimeout.
 	escTimeoutNs atomic.Int64
@@ -105,6 +117,44 @@ type InputHandler struct {
 // ReadKey call. Pass 0 to disable. Thread-safe.
 func (ih *InputHandler) SetSessionIdleTimeout(d time.Duration) {
 	ih.idleNs.Store(d.Nanoseconds())
+}
+
+// SetSessionDeadline sets the time at which the caller's time limit runs out.
+// Key reads waiting past it, or started after it, return ErrTimeLimit. Pass
+// the zero time for no limit. Thread-safe.
+func (ih *InputHandler) SetSessionDeadline(t time.Time) {
+	if t.IsZero() {
+		ih.deadlineNs.Store(0)
+		return
+	}
+	ih.deadlineNs.Store(t.UnixNano())
+}
+
+// SuspendSessionDeadline lifts the session deadline and returns a function
+// that puts it back. Use it around input that must not be cut short, such as
+// a message being written; if the deadline passed meanwhile, the next read
+// after restoring returns ErrTimeLimit.
+func (ih *InputHandler) SuspendSessionDeadline() (restore func()) {
+	ns := ih.deadlineNs.Swap(0)
+	return func() { ih.deadlineNs.CompareAndSwap(0, ns) }
+}
+
+// keyWait returns how long a key read may wait for its first byte, 0 meaning
+// no bound, and the error to return if nothing arrives in that time: the idle
+// timeout or the time limit, whichever runs out first. expired reports a time
+// limit that has already passed, when the read should not wait at all.
+func (ih *InputHandler) keyWait() (wait time.Duration, onTimeout error, expired bool) {
+	wait, onTimeout = ih.sessionIdleTimeout(), ErrIdleTimeout
+	if ns := ih.deadlineNs.Load(); ns != 0 {
+		left := time.Until(time.Unix(0, ns))
+		if left <= 0 {
+			return 0, ErrTimeLimit, true
+		}
+		if wait <= 0 || left < wait {
+			wait, onTimeout = left, ErrTimeLimit
+		}
+	}
+	return wait, onTimeout, false
 }
 
 // SetEscTimeout overrides the ESC disambiguation window used in ReadKey.
@@ -253,18 +303,24 @@ func (ih *InputHandler) SkipEnterTrailer() {
 
 // readByte reads a single byte, blocking until one is available.
 // If a session idle timeout is set (via SetSessionIdleTimeout) and no byte
-// arrives within that window, ErrIdleTimeout is returned.
+// arrives within that window, ErrIdleTimeout is returned. Once the session
+// deadline (SetSessionDeadline) passes, ErrTimeLimit is returned instead, even
+// to a caller who is still typing.
 func (ih *InputHandler) readByte() (byte, error) {
 	if len(ih.unreadBuf) > 0 {
 		b := ih.unreadBuf[0]
 		ih.unreadBuf = ih.unreadBuf[1:]
 		return b, nil
 	}
-	if t := ih.sessionIdleTimeout(); t > 0 {
-		b, err := ih.readByteWithTimeout(t)
+	wait, onTimeout, expired := ih.keyWait()
+	if expired {
+		return 0, onTimeout
+	}
+	if wait > 0 {
+		b, err := ih.readByteWithTimeout(wait)
 		if err != nil {
 			if isTimeoutError(err) {
-				return 0, ErrIdleTimeout
+				return 0, onTimeout
 			}
 			return 0, err
 		}
@@ -555,8 +611,12 @@ func (ih *InputHandler) ReadKeyTranslated() (int, error) {
 func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, isEvent bool, err error) {
 	if len(ih.unreadBuf) == 0 {
 		var idle <-chan time.Time
-		if t := ih.sessionIdleTimeout(); t > 0 {
-			timer := time.NewTimer(t)
+		wait, onTimeout, expired := ih.keyWait()
+		if expired {
+			return 0, ev, false, onTimeout
+		}
+		if wait > 0 {
+			timer := time.NewTimer(wait)
 			defer timer.Stop()
 			idle = timer.C
 		}
@@ -575,7 +635,7 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 			case ev = <-events:
 				return 0, ev, true, nil
 			case <-idle:
-				return 0, ev, false, ErrIdleTimeout
+				return 0, ev, false, onTimeout
 			}
 		}
 	}
