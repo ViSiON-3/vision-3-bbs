@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -62,11 +63,13 @@ func parseControlEscapes(s string) (string, error) {
 			if i+2 >= len(s) {
 				return "", fmt.Errorf(`\x needs two hex digits, as in \x1B`)
 			}
-			var v byte
-			if _, err := fmt.Sscanf(s[i+1:i+3], "%02x", &v); err != nil {
+			// ParseUint rather than Sscanf, which would stop at a non-hex
+			// second byte without complaint and read "1G" as 0x01.
+			v, err := strconv.ParseUint(s[i+1:i+3], 16, 8)
+			if err != nil {
 				return "", fmt.Errorf(`\x needs two hex digits, as in \x1B`)
 			}
-			b.WriteByte(v)
+			b.WriteByte(byte(v))
 			i += 2
 		default:
 			return "", fmt.Errorf(`unknown escape \%c: use \r, \n, \t, \xHH or \\`, s[i])

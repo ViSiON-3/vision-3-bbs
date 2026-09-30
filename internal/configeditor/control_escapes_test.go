@@ -37,7 +37,7 @@ func TestParseControlEscapesAcceptsLowercaseHex(t *testing.T) {
 // A stray backslash is far more likely a mistyped escape than a character
 // meant for the door server.
 func TestParseControlEscapesRejectsWhatItCannotRead(t *testing.T) {
-	for _, in := range []string{`\`, `abc\`, `\q`, `\x`, `\x1`, `\xZZ`} {
+	for _, in := range []string{`\`, `abc\`, `\q`, `\x`, `\x1`, `\xZZ`, `\x1G`, `\x 1`, `\x+1`} {
 		if got, err := parseControlEscapes(in); err == nil {
 			t.Errorf("parseControlEscapes(%q) = %q, want an error", in, got)
 		}
