@@ -862,16 +862,17 @@ func TestChatcovNetworkCommandJoinFailure(t *testing.T) {
 		t.Errorf("refusing network session was not closed")
 	}
 
-	// A room the local service will not take either ends the chat session.
-	r = chatcovChat(env, env.caller, "2\r/network\r1\rNo!Room\rnever sent\r/q\r")
+	// A name that cannot be a room is replaced by lobby before any join
+	// (#538), so the local fallback still has a room to join.
+	r = chatcovChat(env, env.caller, "2\r/network\r1\rNo!Room\rstill here\r/q\r")
 	if r.next != "" || r.err != nil {
 		t.Errorf("runChat = (%q, %v), want a plain return", r.next, r.err)
 	}
-	if chatcovHas(r, "<Caller> never sent") || !strings.HasSuffix(r.raw, "\x1b[r") {
-		t.Errorf("chat carried on, or left the scroll region set, after both joins failed:\n%s", chatcovText(r))
+	if !chatcovHas(r, "joining lobby.", "Could not join room: hub down", "<Caller> still here") || !strings.HasSuffix(r.raw, "\x1b[r") {
+		t.Errorf("bad room name not replaced by lobby, or scroll region left set:\n%s", chatcovText(r))
 	}
 	if rooms, _ := chatcovLocal(env, "observer").Rooms(); len(rooms) != 0 {
-		t.Errorf("rooms still occupied after the failed switch: %+v", rooms)
+		t.Errorf("rooms still occupied after leaving chat: %+v", rooms)
 	}
 }
 

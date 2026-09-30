@@ -3,6 +3,7 @@ package chat
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -78,7 +79,9 @@ func NewLocalChatService(handle, dbPath string) (*LocalChatService, error) {
 // Join implements ChatService. The room name is normalised first, so an
 // invalid name returns NormalizeRoom's error. The session is registered in
 // the process-wide room (creating it if needed), its user list is
-// snapshotted for Users, and the other members get a TypeJoin event.
+// snapshotted for Users, and the other members get a TypeJoin event. The
+// join has happened by the time history is loaded, so a history error is
+// logged and the join still succeeds, with no history.
 func (s *LocalChatService) Join(room string) ([]RoomInfo, []ChatMessage, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
@@ -104,7 +107,11 @@ func (s *LocalChatService) Join(room string) ([]RoomInfo, []ChatMessage, error) 
 
 	rooms := localRoomList()
 	history, err := s.History(room, 50)
-	return rooms, history, err
+	if err != nil {
+		slog.Warn("chat: could not load room history", "room", room, "error", err)
+		history = nil
+	}
+	return rooms, history, nil
 }
 
 // Leave implements ChatService. It removes the session from room, deleting
