@@ -84,6 +84,7 @@ var FormattedKeys = []string{
 	"statsTotalMessages",
 	"statsTotalUsers",
 	"statsVersion",
+	"timeLimitWarning",
 	"updatePtrsSuccess",
 	"v3netNewAreaDeclined",
 	"v3netNewAreaNotice",
