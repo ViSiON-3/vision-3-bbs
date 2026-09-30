@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -132,8 +133,28 @@ func cp437LookAlike(seq string) bool {
 	return true
 }
 
+// dizRank ranks a candidate description file named name, found depth
+// directories below the archive root (0 for the root itself). Lower ranks
+// win: FILE_ID.ANS beats FILE_ID.DIZ, and at each a file at the root beats one
+// in a subdirectory. Only the root and one level of subdirectories count; a
+// description deeper down belongs to something bundled inside the archive.
+// ok is false for any other file or depth.
+func dizRank(name string, depth int) (rank int, ok bool) {
+	if depth < 0 || depth > 1 {
+		return 0, false
+	}
+	switch {
+	case strings.EqualFold(name, "FILE_ID.ANS"):
+		return depth, true
+	case strings.EqualFold(name, "FILE_ID.DIZ"):
+		return 2 + depth, true
+	}
+	return 0, false
+}
+
 // ExtractDIZFromZip opens a ZIP archive and reads the file description,
-// preferring FILE_ID.ANS over FILE_ID.DIZ. Returns empty string if neither found.
+// choosing among FILE_ID.ANS and FILE_ID.DIZ as dizRank does. Returns empty
+// string if neither is found.
 func ExtractDIZFromZip(archivePath string) (string, error) {
 	r, err := zip.OpenReader(archivePath)
 	if err != nil {
@@ -142,14 +163,16 @@ func ExtractDIZFromZip(archivePath string) (string, error) {
 	defer func() { _ = r.Close() }() // read-only zip reader
 
 	var dizFile *zip.File
+	bestRank := 0
 	for _, f := range r.File {
-		baseName := filepath.Base(f.Name)
-		if strings.EqualFold(baseName, "FILE_ID.ANS") {
-			dizFile = f
-			break // ANS takes priority; stop searching
+		if f.FileInfo().IsDir() {
+			continue
 		}
-		if strings.EqualFold(baseName, "FILE_ID.DIZ") && dizFile == nil {
-			dizFile = f // keep as fallback, continue in case ANS appears later
+		// ZIP entry names always use "/", whatever system made the archive.
+		name := strings.TrimPrefix(path.Clean(f.Name), "/")
+		rank, ok := dizRank(path.Base(name), strings.Count(name, "/"))
+		if ok && (dizFile == nil || rank < bestRank) {
+			dizFile, bestRank = f, rank
 		}
 	}
 
