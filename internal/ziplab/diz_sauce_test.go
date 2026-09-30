@@ -282,7 +282,7 @@ func TestParseNFO_SkipsMalformedLines(t *testing.T) {
 
 	// A failed step is drawn in the highlight colour: DOS attribute 30 is
 	// bright yellow (14) on blue (1).
-	if got, want := nfo.BuildStatusSequence(3, StatusFail), "\x1b[8;7H\x1b[1;36;41ma,b\x1b[0m"; got != want {
+	if got, want := nfo.BuildStatusSequence(3, StatusFail), "\x1b[8;7H\x1b[1;33;44ma,b\x1b[0m"; got != want {
 		t.Errorf("BuildStatusSequence(3, F) = %q, want %q", got, want)
 	}
 	if got := nfo.BuildStatusSequence(9, StatusPass); got != "" {
