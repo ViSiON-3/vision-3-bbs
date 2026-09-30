@@ -88,7 +88,11 @@ func TestSetReceiverNameReaddressesMessage(t *testing.T) {
 		t.Errorf("active message count = %d, want 3", n)
 	}
 
-	// The change is on disk, and survives a pack.
+	// The change is on disk, and survives a pack. Close the first handle
+	// first: Windows will not let Pack rename files another handle has open.
+	if err := b.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 	reopened, err := Open(basePath)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
