@@ -154,15 +154,17 @@ func TestSetTransferMovesBBSAndBack(t *testing.T) {
 	}
 }
 
-func TestSetTransferLeavesDoorMode(t *testing.T) {
-	tp := NewTap()
-	tp.SetMode(ModeDoor)
-	tp.SetTransfer(true)
-	if tp.Mode() != ModeDoor {
-		t.Fatalf("mode = %v after start, want door", tp.Mode())
-	}
-	tp.SetTransfer(false)
-	if tp.Mode() != ModeDoor {
-		t.Fatalf("mode = %v after end, want door", tp.Mode())
+func TestSetTransferLeavesDoorAndTeleconfMode(t *testing.T) {
+	for _, m := range []Mode{ModeDoor, ModeTeleconf} {
+		tp := NewTap()
+		tp.SetMode(m)
+		tp.SetTransfer(true)
+		if tp.Mode() != m {
+			t.Fatalf("mode = %v after start, want %v", tp.Mode(), m)
+		}
+		tp.SetTransfer(false)
+		if tp.Mode() != m {
+			t.Fatalf("mode = %v after end, want %v", tp.Mode(), m)
+		}
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -255,6 +256,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	handle := currentUser.Handle
+
+	// The room is drawn with absolute positioning from another goroutine,
+	// so a sysop chat break-in here would garble both.
+	if t := tapOf(s); t != nil {
+		t.SetMode(snoop.ModeTeleconf)
+		defer t.SetMode(snoop.ModeBBS)
+	}
 
 	if termWidth <= 0 {
 		termWidth = 80

@@ -338,6 +338,21 @@ func TestChatBeganDropsQueuedTypeIn(t *testing.T) {
 	}
 }
 
+func TestRequestChatRefusedInTeleconference(t *testing.T) {
+	tp := newWatchedTap("a")
+	tp.SetMode(ModeTeleconf)
+	err := tp.RequestChat("a", 50*time.Millisecond)
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("err = %v; want ErrBusy", err)
+	}
+	if want := "caller is busy: in a teleconference"; err.Error() != want {
+		t.Fatalf("err = %q; want %q", err, want)
+	}
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatalf("type-in refused in teleconference: %v", err)
+	}
+}
+
 func TestChatEndedLeavesLaterHolder(t *testing.T) {
 	tp := newWatchedTap("a", "b")
 	beginChat(t, tp, "a")

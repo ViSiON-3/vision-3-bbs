@@ -9,6 +9,9 @@ const (
 	ModeBBS Mode = iota
 	ModeDoor
 	ModeTransfer
+	// ModeTeleconf is the teleconference, whose room output is drawn with
+	// absolute positioning that a split screen would garble.
+	ModeTeleconf
 )
 
 func (m Mode) String() string {
@@ -17,6 +20,8 @@ func (m Mode) String() string {
 		return "door"
 	case ModeTransfer:
 		return "transfer"
+	case ModeTeleconf:
+		return "teleconference"
 	default:
 		return "bbs"
 	}
@@ -196,8 +201,9 @@ func (t *Tap) SetMode(m Mode) {
 }
 
 // SetTransfer records a binary transfer starting or ending. A transfer
-// started from the BBS moves the tap to ModeTransfer and back; a door's
-// ModeDoor is left alone, since chat must stay refused for the whole door.
+// started from the BBS moves the tap to ModeTransfer and back; ModeDoor and
+// ModeTeleconf are left alone, since chat must stay refused for their whole
+// length.
 func (t *Tap) SetTransfer(active bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
