@@ -1,11 +1,13 @@
 package hub
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -240,7 +242,7 @@ func TestSubscribe_ApprovedAreaSurvivesResubscribe(t *testing.T) {
 // list, e.g. it joined while the area was open.
 func TestSubscribe_ActiveAreaNotDowngradedByModeChange(t *testing.T) {
 	h, ts, _, leafKS := setupAccessTest(t)
-	if err := h.areaSubscriptions.Upsert(leafKS.NodeID(), "testnet", "gen.general", "active"); err != nil {
+	if _, err := h.areaSubscriptions.Upsert(leafKS.NodeID(), "testnet", "gen.general", "active"); err != nil {
 		t.Fatalf("seed area subscription: %v", err)
 	}
 
@@ -254,5 +256,171 @@ func TestSubscribe_ActiveAreaNotDowngradedByModeChange(t *testing.T) {
 	}
 	if len(pending) != 0 {
 		t.Errorf("re-subscribe filed access requests for an active area: %+v", pending)
+	}
+}
+
+// An older leaf on a hub that approves nodes by hand registers unsigned and
+// is pending, so its areas are skipped. Once approved it re-sends the same
+// unsigned request, which must then subscribe the areas it first asked for,
+// and nothing more.
+func TestSubscribe_LegacyLeafGetsAreasAfterManualApproval(t *testing.T) {
+	h, hubKS := setupTestHubManual(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	leafKS := loadTestKeystore(t, "leaf.key")
+	seedNALWithAreas(t, h, hubKS, []protocol.Area{
+		{Tag: "gen.general", Name: "General", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}},
+		{Tag: "gen.private", Name: "Private", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeApproval}},
+		{Tag: "gen.extra", Name: "Extra", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}},
+	})
+	url := ts.URL + "/v3net/v1/subscribe"
+	post := func(body string) protocol.SubscribeWithAreasResponse {
+		t.Helper()
+		resp, err := http.Post(url, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST subscribe: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("subscribe: expected 200, got %d", resp.StatusCode)
+		}
+		var out protocol.SubscribeWithAreasResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out
+	}
+
+	first := subscribeBody(t, leafKS, "Test BBS", "test.example.net", "gen.general", "gen.private")
+	if out := post(first); out.Status != "pending" || len(out.Areas) != 0 {
+		t.Fatalf("first subscribe = %+v, want pending with no areas", out)
+	}
+	activateSubscriber(t, h, leafKS.NodeID(), "testnet")
+
+	// The retry also names an area the first request did not, and a
+	// different BBS name; neither is taken from an unsigned request.
+	retry := subscribeBody(t, leafKS, "Impostor", "evil.example.net", "gen.general", "gen.private", "gen.extra")
+	out := post(retry)
+	if out.Status != "active" || len(out.Areas) != 2 {
+		t.Fatalf("retry after approval = %+v, want active with 2 areas", out)
+	}
+	want := map[string]string{"gen.general": "active", "gen.private": "pending"}
+	subs, err := h.areaSubscriptions.ListForNode(leafKS.NodeID(), "testnet")
+	if err != nil {
+		t.Fatalf("list area subscriptions: %v", err)
+	}
+	if len(subs) != len(want) {
+		t.Errorf("area subscriptions = %+v, want %v", subs, want)
+	}
+	for _, sub := range subs {
+		if want[sub.Tag] != sub.Status {
+			t.Errorf("area %s = %q, want %q", sub.Tag, sub.Status, want[sub.Tag])
+		}
+	}
+	pending, err := h.accessRequests.ListPending("testnet", "gen.private")
+	if err != nil {
+		t.Fatalf("list access requests: %v", err)
+	}
+	if len(pending) != 1 || pending[0].BBSName != "Test BBS" {
+		t.Errorf("access requests = %+v, want one under the registered name", pending)
+	}
+	assertProfile(t, h, leafKS.NodeID(), "Test BBS", "test.example.net")
+}
+
+func TestSubscriberStore_RequestedAreasSurviveReload(t *testing.T) {
+	ss := newTestStore(t)
+	if _, err := ss.Add(Subscriber{
+		NodeID: "n1", Network: "testnet", PubKeyB64: "k", Status: "pending",
+		RequestedAreas: []string{"gen.general", "gen.private"},
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if err := ss.loadCache(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	got := ss.Get("n1", "testnet")
+	if got == nil || strings.Join(got.RequestedAreas, ",") != "gen.general,gen.private" {
+		t.Errorf("requested areas after reload = %+v", got)
+	}
+}
+
+func TestSubscriberStore_SetProfileUnlessBanned(t *testing.T) {
+	ss := newTestStore(t)
+	addTestSub(t, ss, "ok", "active")
+	addTestSub(t, ss, "bad", "banned")
+
+	if updated, err := ss.SetProfileUnlessBanned("ok", "testnet", "New", "new.example.net"); err != nil || !updated {
+		t.Errorf("active node: updated=%v err=%v, want true", updated, err)
+	}
+	if s := ss.Get("ok", "testnet"); s.BBSName != "New" || s.BBSHost != "new.example.net" {
+		t.Errorf("active node profile = %q/%q", s.BBSName, s.BBSHost)
+	}
+
+	before := *ss.Get("bad", "testnet")
+	if updated, err := ss.SetProfileUnlessBanned("bad", "testnet", "New", "new.example.net"); err != nil || updated {
+		t.Errorf("banned node: updated=%v err=%v, want false", updated, err)
+	}
+	if err := ss.loadCache(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if s := ss.Get("bad", "testnet"); s.BBSName != before.BBSName || s.BBSHost != before.BBSHost {
+		t.Errorf("banned node profile changed to %q/%q", s.BBSName, s.BBSHost)
+	}
+}
+
+// Upsert decides "never downgrade active" in the write itself, so an
+// approval that lands after a caller read the old status is kept.
+func TestAreaSubscriptionUpsert_KeepsActive(t *testing.T) {
+	h, _ := setupTestHub(t)
+	as := h.areaSubscriptions
+
+	if got, err := as.Upsert("n1", "testnet", "gen.general", "pending"); err != nil || got != "pending" {
+		t.Fatalf("new pending subscription: got %q, %v", got, err)
+	}
+	if err := as.SetStatus("n1", "testnet", "gen.general", "active"); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	if got, err := as.Upsert("n1", "testnet", "gen.general", "pending"); err != nil || got != "active" {
+		t.Errorf("stale pending upsert over active: got %q, %v; want active", got, err)
+	}
+	if active, _ := as.IsActive("n1", "testnet", "gen.general"); !active {
+		t.Error("subscription was downgraded")
+	}
+	// Non-active statuses are still replaced.
+	if err := as.SetStatus("n1", "testnet", "gen.general", "denied"); err != nil {
+		t.Fatalf("deny: %v", err)
+	}
+	if got, err := as.Upsert("n1", "testnet", "gen.general", "pending"); err != nil || got != "pending" {
+		t.Errorf("upsert over denied: got %q, %v; want pending", got, err)
+	}
+}
+
+// A hub database from before requested_area_tags existed is migrated, and
+// its rows load with no requested areas.
+func TestSubscriberStore_MigratesRequestedAreasColumn(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "old.sqlite"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(subscribersSchema); err != nil {
+		t.Fatalf("create old schema: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO subscribers (node_id, network, pubkey_b64, bbs_name, bbs_host, status)
+		VALUES ('n1', 'testnet', 'k', 'Old BBS', 'old.example.net', 'active')`); err != nil {
+		t.Fatalf("seed old row: %v", err)
+	}
+
+	ss, err := NewSubscriberStore(db)
+	if err != nil {
+		t.Fatalf("open store on old database: %v", err)
+	}
+	got := ss.Get("n1", "testnet")
+	if got == nil || got.Status != "active" || got.BBSName != "Old BBS" || len(got.RequestedAreas) != 0 {
+		t.Errorf("migrated row = %+v", got)
+	}
+	// Opening again finds the column already there.
+	if _, err := NewSubscriberStore(db); err != nil {
+		t.Errorf("reopen migrated database: %v", err)
 	}
 }

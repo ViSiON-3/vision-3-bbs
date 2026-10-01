@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -318,12 +319,13 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sub := Subscriber{
-		NodeID:    req.NodeID,
-		Network:   req.Network,
-		PubKeyB64: req.PubKeyB64,
-		BBSName:   req.BBSName,
-		BBSHost:   req.BBSHost,
-		Status:    status,
+		NodeID:         req.NodeID,
+		Network:        req.Network,
+		PubKeyB64:      req.PubKeyB64,
+		BBSName:        req.BBSName,
+		BBSHost:        req.BBSHost,
+		Status:         status,
+		RequestedAreas: req.AreaTags,
 	}
 
 	actualStatus, err := h.subscribers.Add(sub)
@@ -335,9 +337,9 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	// A signed re-subscribe updates the node's name and host. Banned nodes
 	// keep the details they were banned under.
-	if existing != nil && signed && actualStatus != "banned" &&
+	if existing != nil && signed &&
 		(existing.BBSName != req.BBSName || existing.BBSHost != req.BBSHost) {
-		if err := h.subscribers.SetProfile(req.NodeID, req.Network, req.BBSName, req.BBSHost); err != nil {
+		if _, err := h.subscribers.SetProfileUnlessBanned(req.NodeID, req.Network, req.BBSName, req.BBSHost); err != nil {
 			slog.Error("v3net hub: update subscriber profile", "node", req.NodeID, "error", err)
 			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 			return
@@ -346,20 +348,35 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	// Anyone can build an unsigned request for a known node, so one must not
 	// change an existing node's area subscriptions or file access requests
-	// in its name.
-	if len(req.AreaTags) > 0 && existing != nil && !signed {
-		slog.Warn("v3net hub: ignoring area_tags on unsigned re-subscribe", "node", req.NodeID, "network", req.Network)
-		writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
-		return
+	// in its name. It may only apply the areas the node's first registration
+	// asked for: an older leaf on a hub that approves nodes by hand gets
+	// none while pending, and re-sends that same request once approved.
+	// Replaying the node's own request grants nothing new.
+	areaTags := req.AreaTags
+	if existing != nil && !signed {
+		areaTags = nil
+		for _, tag := range req.AreaTags {
+			if slices.Contains(existing.RequestedAreas, tag) {
+				areaTags = append(areaTags, tag)
+			}
+		}
+		if len(areaTags) < len(req.AreaTags) {
+			slog.Warn("v3net hub: ignoring area_tags not in the node's first registration on unsigned re-subscribe",
+				"node", req.NodeID, "network", req.Network)
+		}
+		if len(areaTags) == 0 && len(req.AreaTags) > 0 {
+			writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
+			return
+		}
 	}
 
 	// If area_tags are provided, process area subscriptions.
 	// Only process area subscriptions for active network subscribers.
-	if len(req.AreaTags) > 0 && actualStatus != "active" {
+	if len(areaTags) > 0 && actualStatus != "active" {
 		writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
 		return
 	}
-	if len(req.AreaTags) > 0 {
+	if len(areaTags) > 0 {
 		currentNAL, nalErr := h.nalStore.Get(req.Network)
 		if nalErr != nil {
 			slog.Error("get NAL for subscribe", "network", req.Network, "error", nalErr)
@@ -378,13 +395,9 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 			status string
 		}
 		var pending []pendingSubscription
-		type pendingAccessRequest struct {
-			tag string
-		}
-		var pendingRequests []pendingAccessRequest
 
 		// First pass: validate all tags and determine statuses.
-		for _, tag := range req.AreaTags {
+		for _, tag := range areaTags {
 			area := currentNAL.FindArea(tag)
 			if area == nil {
 				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
@@ -399,29 +412,18 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// Re-subscribing never downgrades an active area subscription,
-			// e.g. one a manager approved in an approval-mode area.
-			active, err := h.areaSubscriptions.IsActive(req.NodeID, req.Network, tag)
-			if err != nil {
-				slog.Error("v3net hub: check area subscription", "node", req.NodeID, "tag", tag, "error", err)
-				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
-				return
-			}
-
 			var areaStatus string
-			switch {
-			case active:
+			switch area.Access.Mode {
+			case protocol.AccessModeOpen:
 				areaStatus = "active"
-			case area.Access.Mode == protocol.AccessModeOpen:
-				areaStatus = "active"
-			case area.Access.Mode == protocol.AccessModeApproval:
+			case protocol.AccessModeApproval:
+				// Approval adds the node to the allow list.
 				if containsStr(area.Access.AllowList, req.NodeID) {
 					areaStatus = "active"
 				} else {
 					areaStatus = "pending"
-					pendingRequests = append(pendingRequests, pendingAccessRequest{tag: tag})
 				}
-			case area.Access.Mode == protocol.AccessModeClosed:
+			case protocol.AccessModeClosed:
 				// Only allowed if already on allow list.
 				if containsStr(area.Access.AllowList, req.NodeID) {
 					areaStatus = "active"
@@ -438,21 +440,37 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		// Persistence failures must not be reported as success: Upsert and
 		// Add are both idempotent, so the leaf can safely retry the whole
 		// subscribe request after a 500.
+		//
+		// Upsert never downgrades an active subscription (one a manager
+		// approved, or one made while the area was open), so the status it
+		// stored, not the one asked for, decides whether the node still
+		// needs a manager's approval.
+		var pendingRequests []string
 		for _, ps := range pending {
-			if err := h.areaSubscriptions.Upsert(req.NodeID, req.Network, ps.tag, ps.status); err != nil {
+			stored, err := h.areaSubscriptions.Upsert(req.NodeID, req.Network, ps.tag, ps.status)
+			if err != nil {
 				slog.Error("v3net hub: persist area subscription", "node", req.NodeID, "tag", ps.tag, "error", err)
 				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 				return
 			}
+			if stored == "pending" {
+				pendingRequests = append(pendingRequests, ps.tag)
+			}
 			areaStatuses = append(areaStatuses, protocol.AreaSubscriptionStatus{
 				Tag:    ps.tag,
-				Status: ps.status,
+				Status: stored,
 			})
 		}
 
-		for _, pr := range pendingRequests {
-			if _, err := h.accessRequests.Add(req.Network, pr.tag, req.NodeID, req.BBSName); err != nil {
-				slog.Error("v3net hub: persist access request", "node", req.NodeID, "tag", pr.tag, "error", err)
+		// Name the node as the hub has it registered: an unsigned request's
+		// bbs_name was never checked.
+		bbsName := req.BBSName
+		if reg := h.subscribers.Get(req.NodeID, req.Network); reg != nil {
+			bbsName = reg.BBSName
+		}
+		for _, tag := range pendingRequests {
+			if _, err := h.accessRequests.Add(req.Network, tag, req.NodeID, bbsName); err != nil {
+				slog.Error("v3net hub: persist access request", "node", req.NodeID, "tag", tag, "error", err)
 				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 				return
 			}
@@ -460,9 +478,9 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 			// are never notified about a request that does not exist.
 			ev, _ := protocol.NewEvent(protocol.EventAreaAccessRequested, protocol.AreaAccessRequestedPayload{
 				Network: req.Network,
-				Tag:     pr.tag,
+				Tag:     tag,
 				NodeID:  req.NodeID,
-				BBSName: req.BBSName,
+				BBSName: bbsName,
 			})
 			h.broadcaster.Publish(req.Network, ev)
 		}
