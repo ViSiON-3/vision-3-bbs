@@ -272,7 +272,7 @@ func (s *ChatSession) Leave(room string) error {
 // Post implements chat.ChatService by sending text to room through the hub.
 // The message comes back to this session as an event like any other.
 func (s *ChatSession) Post(room, text string) error {
-	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text})
+	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text, Handle: s.handle})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/post", s.leaf.cfg.Network), body)
 }
@@ -280,7 +280,7 @@ func (s *ChatSession) Post(room, text string) error {
 // Private implements chat.ChatService by asking the hub to deliver text
 // privately to handle on the given node.
 func (s *ChatSession) Private(handle, node, text string) error {
-	body, _ := json.Marshal(protocol.ChatPrivateRequest{ToHandle: handle, ToNode: node, Text: text})
+	body, _ := json.Marshal(protocol.ChatPrivateRequest{ToHandle: handle, ToNode: node, Text: text, Handle: s.handle})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/private", s.leaf.cfg.Network), body)
 }
@@ -288,7 +288,7 @@ func (s *ChatSession) Private(handle, node, text string) error {
 // SetTopic implements chat.ChatService by asking the hub to change room's
 // topic; the change arrives back as a topic event.
 func (s *ChatSession) SetTopic(room, topic string) error {
-	body, _ := json.Marshal(protocol.ChatTopicRequest{Room: room, Topic: topic})
+	body, _ := json.Marshal(protocol.ChatTopicRequest{Room: room, Topic: topic, Handle: s.handle})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/topic", s.leaf.cfg.Network), body)
 }

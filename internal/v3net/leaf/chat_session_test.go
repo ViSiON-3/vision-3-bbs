@@ -125,11 +125,8 @@ func TestChatSession_TopicPrivateAndLeave(t *testing.T) {
 	if private.FromHandle != "alice" || private.ToHandle != "bob" || private.ToNode != bobNode || private.Text != "psst" {
 		t.Errorf("hub relayed private message %+v", private)
 	}
-	// Private messages to a node the hub does not know are refused. bob has
-	// already spent his chat token on the rejected post, so use a fresh leaf.
-	carol := subscribedLeaf(t, ts, "carolbbs").NewChatSession("carol")
-	defer carol.Close()
-	if err := carol.Private("nobody", "0000000000000000", "x"); err == nil || !strings.Contains(err.Error(), "404") {
+	// Private messages to a node the hub does not know are refused.
+	if err := bob.Private("nobody", "0000000000000000", "x"); err == nil || !strings.Contains(err.Error(), "404") {
 		t.Errorf("Private to unknown node = %v, want a 404 error", err)
 	}
 
@@ -145,6 +142,55 @@ func TestChatSession_TopicPrivateAndLeave(t *testing.T) {
 	}
 	if rooms, err := bob.Rooms(); err != nil || len(rooms) != 0 {
 		t.Errorf("Rooms after last member left = %+v, %v; want none", rooms, err)
+	}
+}
+
+// Users on the same BBS each have their own chat allowance at the hub, and
+// each message is credited to the user who sent it.
+func TestChatSession_UsersOnOneBBS(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	board := subscribedLeaf(t, ts, "boardbbs")
+	events := watchEvents(t, subscribedLeaf(t, ts, "observer"))
+
+	alice := board.NewChatSession("alice")
+	defer alice.Close()
+	bob := board.NewChatSession("bob")
+	defer bob.Close()
+	for _, s := range []*ChatSession{alice, bob} {
+		if _, _, err := s.Join("lobby"); err != nil {
+			t.Fatalf("%s join: %v", s.handle, err)
+		}
+	}
+
+	if err := alice.Post("lobby", "hi from alice"); err != nil {
+		t.Fatalf("alice post: %v", err)
+	}
+	if err := bob.Post("lobby", "hi from bob"); err != nil {
+		t.Fatalf("bob post straight after alice: %v", err)
+	}
+	if err := alice.Private("bob", board.cfg.Keystore.NodeID(), "psst"); err != nil {
+		t.Fatalf("alice private straight after her post: %v", err)
+	}
+	if err := alice.Post("lobby", "too fast"); err == nil || !strings.Contains(err.Error(), "429") {
+		t.Errorf("alice back-to-back post = %v, want a 429 error", err)
+	}
+
+	for _, want := range []string{"alice", "bob"} {
+		msg := awaitEvent[protocol.ChatMsgPayload](t, events, protocol.EventChatMessage, nil)
+		if msg.FromHandle != want || msg.Text != "hi from "+want {
+			t.Errorf("hub broadcast %+v, want a post from %s", msg, want)
+		}
+	}
+	private := awaitEvent[protocol.ChatMsgPayload](t, events, protocol.EventChatPrivate, nil)
+	if private.FromHandle != "alice" || private.ToHandle != "bob" {
+		t.Errorf("hub relayed private message %+v, want alice to bob", private)
+	}
+
+	if err := bob.SetTopic("lobby", "bob's room now"); err != nil {
+		t.Fatalf("SetTopic: %v", err)
+	}
+	if topic := awaitEvent[protocol.ChatTopicPayload](t, events, protocol.EventChatTopic, nil); topic.SetBy != "bob" {
+		t.Errorf("topic set by %q, want bob", topic.SetBy)
 	}
 }
 

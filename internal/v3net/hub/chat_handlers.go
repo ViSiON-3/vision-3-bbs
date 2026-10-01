@@ -11,6 +11,47 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
+// Chat rate limits. Each user has one allowance for room posts and another
+// for private messages, so users on the same BBS do not throttle each other.
+// The node-wide cap stops one node flooding the hub by spreading messages
+// over many handles; it is loose enough that a busy board never reaches it
+// in normal use.
+const (
+	chatUserInterval = time.Second            // per user, per kind of message
+	chatNodeInterval = 200 * time.Millisecond // per node, sustained...
+	chatNodeBurst    = 10                     // ...after a burst of this many
+)
+
+// Message kinds with separate per-user chat allowances.
+const (
+	chatKindPost    = "post"
+	chatKindPrivate = "private"
+)
+
+// allowChat reports whether handle on nodeID may send a chat message of the
+// given kind now, taking from its allowances if so. The user's own allowance
+// is checked first, so a user sending too fast is refused without using up
+// the node-wide allowance that the node's other users share.
+func (h *Hub) allowChat(kind, nodeID, handle string) bool {
+	if !h.chatLimiter.Allow(kind + "\x00" + nodeID + "\x00" + handle) {
+		return false
+	}
+	return h.chatNodeLimiter.Allow(nodeID)
+}
+
+// roomSender returns the handle a room request from nodeID is sent as, or ""
+// if it is not joined to the room. A request without a handle comes from an
+// older leaf and is credited to the node's first handle in the room.
+func (h *Hub) roomSender(network, room, nodeID, handle string) string {
+	if handle == "" {
+		return h.chatRooms.HandleForNode(network, room, nodeID)
+	}
+	if !h.chatRooms.IsJoined(network, room, nodeID, handle) {
+		return ""
+	}
+	return handle
+}
+
 // handleChatJoin: POST /v3net/v1/{network}/chat/rooms/join
 func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network string) {
 	nodeID := r.Header.Get(headerNodeID)
@@ -86,15 +127,15 @@ func (h *Hub) handleChatPost(w http.ResponseWriter, r *http.Request, network str
 		return
 	}
 
-	handle := h.chatRooms.HandleForNode(network, room, nodeID)
+	handle := h.roomSender(network, room, nodeID, req.Handle)
 	if handle == "" {
 		jsonError(w, "not joined to room", http.StatusForbidden)
 		return
 	}
 
 	// Take the rate-limit token only once the request is known to be valid,
-	// so a rejected request does not throttle the node's next real message.
-	if !h.chatLimiter.Allow(nodeID) {
+	// so a rejected request does not throttle the user's next real message.
+	if !h.allowChat(chatKindPost, nodeID, handle) {
 		jsonError(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
@@ -130,15 +171,20 @@ func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network 
 		return
 	}
 
-	// As for room posts, only a valid request takes the rate-limit token.
-	if !h.chatLimiter.Allow(nodeID) {
-		jsonError(w, "rate limit exceeded", http.StatusTooManyRequests)
-		return
+	// The node vouches for its own users, so the handle need not be joined
+	// to a room: users can send private messages from outside any room.
+	fromHandle := req.Handle
+	if fromHandle == "" {
+		fromHandle = h.chatRooms.AnyHandleForNode(network, nodeID)
 	}
-
-	fromHandle := h.chatRooms.AnyHandleForNode(network, nodeID)
 	if fromHandle == "" {
 		fromHandle = bbsName
+	}
+
+	// As for room posts, only a valid request takes the rate-limit token.
+	if !h.allowChat(chatKindPrivate, nodeID, fromHandle) {
+		jsonError(w, "rate limit exceeded", http.StatusTooManyRequests)
+		return
 	}
 
 	if err := h.chatStore.SavePrivate(network, fromHandle, nodeID, req.ToHandle, req.ToNode, req.Text); err != nil {
@@ -167,7 +213,7 @@ func (h *Hub) handleChatTopic(w http.ResponseWriter, r *http.Request, network st
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	handle := h.chatRooms.HandleForNode(network, room, nodeID)
+	handle := h.roomSender(network, room, nodeID, req.Handle)
 	if handle == "" {
 		jsonError(w, "not joined to room", http.StatusForbidden)
 		return
