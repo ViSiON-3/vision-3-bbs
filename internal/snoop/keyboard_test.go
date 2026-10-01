@@ -284,15 +284,57 @@ func TestChatEndedReleasesKeyboardChatTook(t *testing.T) {
 	}
 }
 
-func TestChatEndedKeepsTypeInHold(t *testing.T) {
+func TestChatEndedByHolderKeepsTypeInHold(t *testing.T) {
 	tp := newWatchedTap("a")
 	if err := tp.TakeKeyboard("a"); err != nil {
 		t.Fatal(err)
 	}
 	beginChat(t, tp, "a")
+	if err := tp.StopChat("a"); err != nil {
+		t.Fatal(err)
+	}
 	tp.ChatEnded()
 	if h := tp.KeyboardHolder(); h != "a" {
 		t.Fatalf("holder after chat = %q; want a", h)
+	}
+}
+
+func TestChatEndedByCallerDropsTypeInHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	beginChat(t, tp, "a")
+	tp.ChatEnded() // the caller pressed ESC ESC
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder after caller ended chat = %q; want none", h)
+	}
+	if n := tp.Inject("a", []byte("ok, bye\r")); n != 0 {
+		t.Fatalf("Inject after caller ended chat = %d; want 0", n)
+	}
+	select {
+	case b := <-tp.Input():
+		t.Fatalf("type-in queued after caller ended chat: %q", b)
+	default:
+	}
+}
+
+func TestChatBeganDropsQueuedTypeIn(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	tp.Inject("a", []byte("queued"))
+	beginChat(t, tp, "a")
+	select {
+	case b := <-tp.Input():
+		t.Fatalf("type-in still queued in chat: %q", b)
+	default:
+	}
+	select {
+	case <-tp.InputReady():
+		t.Fatal("ready token left after drain")
+	default:
 	}
 }
 

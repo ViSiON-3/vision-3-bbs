@@ -34,6 +34,11 @@ type keyboard struct {
 	// current chat; ChatEnded gives it back. Empty when the sysop already
 	// held it for type-in.
 	chatTook string
+	// holderEnded is set when the holder ended the current chat with
+	// StopChat or ReleaseKeyboard. A chat that ended any other way (the
+	// caller left it) drops the keyboard, so the sysop's next keys are
+	// discarded rather than typed at the caller's prompt.
+	holderEnded bool
 }
 
 func (k *keyboard) init() {
@@ -88,6 +93,7 @@ func (t *Tap) ReleaseKeyboard(handle string) (held time.Duration, injected int) 
 		return 0, 0
 	}
 	held, injected = t.kb.drop()
+	t.kb.holderEnded = true
 	t.stopChatLocked()
 	return held, injected
 }
@@ -163,6 +169,7 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) error {
 	}
 	tookIt := t.kb.holder == ""
 	t.kb.take(handle)
+	t.kb.holderEnded = false
 	t.kb.chatTook = ""
 	if tookIt {
 		t.kb.chatTook = handle
@@ -213,30 +220,45 @@ func (t *Tap) ChatBegan() bool {
 	}
 	t.kb.chatting = true
 	t.kb.chats++
-	// Bytes left from a previous chat must not open this one.
-	for drained := false; !drained; {
-		select {
-		case <-t.kb.chatIn:
-		default:
-			drained = true
-		}
+	// Bytes left from a previous chat must not open this one, and queued
+	// type-in must not reach the chat as the caller's keys.
+	drain(t.kb.chatIn)
+	drain(t.kb.input)
+	select {
+	case <-t.kb.ready:
+	default:
 	}
 	close(t.kb.began)
 	t.kb.began = nil
 	return true
 }
 
+func drain(ch chan []byte) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
+}
+
 // ChatEnded is called by the session after chat has closed and the screen
-// has been restored. A keyboard taken only for the chat is released, so the
-// sysop's next keys do not land on the caller's prompt as type-in.
+// has been restored. The keyboard is released, so the sysop's next keys do
+// not land on the caller's prompt as type-in, unless the holder ended the
+// chat and already had type-in before it.
 func (t *Tap) ChatEnded() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.kb.chatting = false
-	if t.kb.chatTook != "" && t.kb.holder == t.kb.chatTook {
+	switch {
+	case !t.kb.holderEnded && t.kb.holder != "":
+		t.kb.drop()
+	case t.kb.chatTook != "" && t.kb.holder == t.kb.chatTook:
 		t.kb.drop()
 	}
 	t.kb.chatTook = ""
+	t.kb.holderEnded = false
 }
 
 // EndChat is closed when the sysop ends chat or drops the keyboard.
@@ -255,6 +277,7 @@ func (t *Tap) StopChat(handle string) error {
 	if t.kb.holder != handle {
 		return ErrNotHolder
 	}
+	t.kb.holderEnded = true
 	t.stopChatLocked()
 	return nil
 }
