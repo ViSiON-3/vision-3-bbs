@@ -454,7 +454,7 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 
 // timeLimitReached reports whether s has a time limit and it has run out.
 func timeLimitReached(s ssh.Session) bool {
-	d, ok := sessionDeadlines.Load(s)
+	d, ok := sessionDeadlines.Load(unwrapSession(s))
 	return ok && !time.Now().Before(d.(time.Time))
 }
 
@@ -480,7 +480,7 @@ const timeLimitWarnWindow = 5 * time.Minute
 // limit. Part of a minute counts as a whole one, so the last warning says 1
 // rather than 0.
 func (e *MenuExecutor) timeLeftWarning(s ssh.Session) (string, bool) {
-	d, ok := sessionDeadlines.Load(s)
+	d, ok := sessionDeadlines.Load(unwrapSession(s))
 	if !ok {
 		return "", false
 	}

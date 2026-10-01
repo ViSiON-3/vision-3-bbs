@@ -11,6 +11,7 @@ import (
 	"github.com/gliderlabs/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 )
 
 // A door reads the caller's session directly, with the InputHandler that
@@ -254,13 +255,16 @@ func unwrapSession(s ssh.Session) ssh.Session {
 }
 
 // doorTimeLimitDeadline returns when the caller's time runs out, or the zero
-// time with no limit. buildDoorCtx has already cleared the limit for
-// CoSysOps and above.
+// time with no limit, pushed out by the time the caller spent in sysop chat
+// as the menus' own deadline is. buildDoorCtx has already cleared the limit
+// for CoSysOps and above.
 func doorTimeLimitDeadline(ctx *DoorCtx) time.Time {
-	if ctx.User.TimeLimit <= 0 {
+	now := time.Now()
+	left, limited := timeleft.Remaining(ctx.User.TimeLimit, ctx.SessionStartTime, now, chatCredit(ctx.Session))
+	if !limited {
 		return time.Time{}
 	}
-	return ctx.SessionStartTime.Add(time.Duration(ctx.User.TimeLimit) * time.Minute)
+	return now.Add(left)
 }
 
 // runDoorWatched runs a door with run under a doorWatch. If the BBS ended the

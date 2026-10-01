@@ -62,7 +62,10 @@ var sessionDeadlines sync.Map
 // the session. It outlives MenuExecutor.Run, which runs once per menu.
 var sessionChatCredits sync.Map
 
+// chatCredit and the other per-session lookups key on the transport session,
+// so a door's wrapper is unwrapped first.
 func chatCredit(s ssh.Session) time.Duration {
+	s = unwrapSession(s)
 	if v, ok := sessionChatCredits.Load(s); ok {
 		return v.(time.Duration)
 	}
@@ -79,6 +82,7 @@ func addChatCredit(s ssh.Session, d time.Duration) {
 	if d <= 0 {
 		return
 	}
+	s = unwrapSession(s)
 	sessionChatCredits.Store(s, chatCredit(s)+d)
 	if v, ok := sessionDeadlines.Load(s); ok {
 		sessionDeadlines.Store(s, v.(time.Time).Add(d))
@@ -89,6 +93,7 @@ func addChatCredit(s ssh.Session, d time.Duration) {
 // its chat credit, and applies it to the current InputHandler. The zero time
 // means no limit.
 func applySessionDeadline(s ssh.Session, deadline time.Time) {
+	s = unwrapSession(s)
 	if !deadline.IsZero() {
 		deadline = deadline.Add(chatCredit(s))
 	}
@@ -138,6 +143,7 @@ func SetSessionOutputMode(s ssh.Session, mode ansi.OutputMode) {
 
 // tapOf returns the snoop tap carried by s, or nil.
 func tapOf(s ssh.Session) *snoop.Tap {
+	s = unwrapSession(s)
 	if tp, ok := s.(snoop.Tapped); ok {
 		return tp.Tap()
 	}
