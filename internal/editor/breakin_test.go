@@ -205,3 +205,57 @@ func TestReadKeyOrEventServicesBreakIn(t *testing.T) {
 	}
 	_ = pw.Close()
 }
+
+// pushBackInBreakIn sets a break-in whose fn reads ESC followed by q, which
+// ReadKey resolves as a lone ESC with q pushed back.
+func pushBackInBreakIn(t *testing.T) (*InputHandler, chan struct{}, chan struct{}) {
+	t.Helper()
+	pr, pw := io.Pipe()
+	ih := NewInputHandler(pr)
+	t.Cleanup(ih.Close)
+	brk := make(chan struct{}, 1)
+	ran := make(chan struct{})
+	ih.SetBreakIn(brk, func() {
+		go func() { _, _ = pw.Write([]byte("\x1bq")) }()
+		if k, err := ih.ReadKey(); err != nil || k != KeyEsc {
+			t.Errorf("inner key = %q, %v; want ESC", k, err)
+		}
+		close(ran)
+	})
+	return ih, brk, ran
+}
+
+func TestBreakInPushedBackByteReadFirst(t *testing.T) {
+	ih, brk, ran := pushBackInBreakIn(t)
+	outer := make(chan int, 1)
+	go func() { k, _ := ih.ReadKey(); outer <- k }()
+	brk <- struct{}{}
+	<-ran
+	select {
+	case k := <-outer:
+		if k != 'q' {
+			t.Fatalf("outer = %q; want q", k)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("pushed-back byte stranded after break-in")
+	}
+}
+
+func TestBreakInPushedBackByteReadFirstWithEvents(t *testing.T) {
+	ih, brk, ran := pushBackInBreakIn(t)
+	outer := make(chan int, 1)
+	go func() {
+		k, _, _, _ := ReadKeyOrEvent(ih, make(chan struct{}))
+		outer <- k
+	}()
+	brk <- struct{}{}
+	<-ran
+	select {
+	case k := <-outer:
+		if k != 'q' {
+			t.Fatalf("outer = %q; want q", k)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("pushed-back byte stranded after break-in")
+	}
+}

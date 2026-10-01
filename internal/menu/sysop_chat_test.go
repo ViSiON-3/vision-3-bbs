@@ -223,7 +223,18 @@ func TestServiceSysopChatSkipsExpiredRequest(t *testing.T) {
 	}
 }
 
-func TestBreakInMidLinePreservesPartialInput(t *testing.T) {
+// promptRig is a caller part-way through a line prompt on a session wired
+// for break-in through getSessionIH.
+type promptRig struct {
+	term *testterm.Term
+	sess *testterm.Session
+	tap  *snoop.Tap
+	keys chan int
+	line chan string
+}
+
+func newPromptRig(t *testing.T) *promptRig {
+	t.Helper()
 	term := testterm.New(80, 25)
 	tap := snoop.NewTap()
 	t.Cleanup(tap.Close)
@@ -242,47 +253,78 @@ func TestBreakInMidLinePreservesPartialInput(t *testing.T) {
 	ih := getSessionIH(s)
 
 	tap.Output([]byte("\x1b[2JName: ab"))
-	keys := make(chan int, 16)
-	line := make(chan string, 1)
+	r := &promptRig{term: term, sess: sess, tap: tap, keys: make(chan int, 16), line: make(chan string, 1)}
 	go func() {
 		var b []byte
 		for {
 			k, err := ih.ReadKey()
 			if err != nil || k == editor.KeyEnter {
-				line <- string(b)
+				r.line <- string(b)
 				return
 			}
-			keys <- k
+			r.keys <- k
 			b = append(b, byte(k))
 		}
 	}()
 	sess.Send("ab")
 	for range 2 {
-		select {
-		case <-keys:
-		case <-time.After(3 * time.Second):
-			t.Fatal("prompt did not read ab")
-		}
+		r.nextKey(t)
 	}
+	return r
+}
 
-	if err := tap.RequestChat("SysOp", 2*time.Second); err != nil {
+func (r *promptRig) nextKey(t *testing.T) int {
+	t.Helper()
+	select {
+	case k := <-r.keys:
+		return k
+	case <-time.After(3 * time.Second):
+		t.Fatal("prompt read no key")
+		return 0
+	}
+}
+
+func (r *promptRig) openChat(t *testing.T) {
+	t.Helper()
+	if err := r.tap.RequestChat("SysOp", 2*time.Second); err != nil {
 		t.Fatalf("RequestChat: %v", err)
 	}
-	waitFor(t, func() bool { return strings.Contains(term.Row(13), "chatting with") }, "chat screen not drawn")
-	if err := tap.StopChat("SysOp"); err != nil {
-		t.Fatalf("StopChat: %v", err)
-	}
-	waitFor(t, func() bool { return !tap.Chatting() }, "chat did not end")
-	if got := term.Row(1); !strings.Contains(got, "Name: ab") {
-		t.Fatalf("partial line not restored: %q", got)
-	}
-	sess.Send("c\r")
+	waitFor(t, func() bool { return strings.Contains(r.term.Row(13), "chatting with") }, "chat screen not drawn")
+}
+
+func (r *promptRig) finish(t *testing.T, rest, want string) {
+	t.Helper()
+	r.sess.Send(rest)
 	select {
-	case got := <-line:
-		if got != "abc" {
-			t.Fatalf("line = %q; want abc", got)
+	case got := <-r.line:
+		if got != want {
+			t.Fatalf("line = %q; want %q", got, want)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("prompt did not finish the line")
 	}
+}
+
+func TestBreakInMidLinePreservesPartialInput(t *testing.T) {
+	r := newPromptRig(t)
+	r.openChat(t)
+	if err := r.tap.StopChat("SysOp"); err != nil {
+		t.Fatalf("StopChat: %v", err)
+	}
+	waitFor(t, func() bool { return !r.tap.Chatting() }, "chat did not end")
+	if got := r.term.Row(1); !strings.Contains(got, "Name: ab") {
+		t.Fatalf("partial line not restored: %q", got)
+	}
+	r.finish(t, "c\r", "abc")
+}
+
+func TestChatEscEscKeyGoesToPromptFirst(t *testing.T) {
+	r := newPromptRig(t)
+	r.openChat(t)
+	// x arrives inside the ESC window, so ReadKey pushes it back.
+	r.sess.Send("\x1b\x1bx")
+	if k := r.nextKey(t); k != 'x' {
+		t.Fatalf("prompt key after chat = %q; want x", k)
+	}
+	r.finish(t, "z\r", "abxz")
 }

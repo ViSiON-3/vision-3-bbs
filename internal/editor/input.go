@@ -354,12 +354,13 @@ func (ih *InputHandler) readByte() (byte, error) {
 // readByteOpt is readByte; breakIn says whether the wait may service the
 // break-in hook.
 func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
-	if len(ih.unreadBuf) > 0 {
-		b := ih.unreadBuf[0]
-		ih.unreadBuf = ih.unreadBuf[1:]
-		return b, nil
-	}
 	for {
+		// Checked every pass: reads inside a break-in can push bytes back.
+		if len(ih.unreadBuf) > 0 {
+			b := ih.unreadBuf[0]
+			ih.unreadBuf = ih.unreadBuf[1:]
+			return b, nil
+		}
 		wait, onTimeout, expired := ih.keyWait()
 		if expired {
 			return 0, onTimeout
@@ -724,6 +725,9 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 				return 0, ev, false, onTimeout
 			case <-ih.breakInChan(true):
 				ih.runBreakIn()
+				if len(ih.unreadBuf) > 0 {
+					break wait
+				}
 				wait, onTimeout, expired = ih.keyWait()
 				if expired {
 					return 0, ev, false, onTimeout
