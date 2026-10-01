@@ -29,6 +29,10 @@ type keyboard struct {
 	began    chan struct{} // closed by ChatBegan for the current request
 	endChat  chan struct{} // closed by StopChat/ReleaseKeyboard
 	chatting bool
+	// chatTook is the handle whose RequestChat took a free keyboard for the
+	// current chat; ChatEnded gives it back. Empty when the sysop already
+	// held it for type-in.
+	chatTook string
 }
 
 func (k *keyboard) init() {
@@ -53,6 +57,7 @@ func (k *keyboard) take(handle string) {
 func (k *keyboard) drop() (time.Duration, int) {
 	held, n := time.Since(k.since), k.injected
 	k.holder, k.since, k.injected = "", time.Time{}, 0
+	k.chatTook = ""
 	return held, n
 }
 
@@ -157,6 +162,10 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) error {
 	}
 	tookIt := t.kb.holder == ""
 	t.kb.take(handle)
+	t.kb.chatTook = ""
+	if tookIt {
+		t.kb.chatTook = handle
+	}
 	began := make(chan struct{})
 	t.kb.began = began
 	t.kb.endChat = make(chan struct{})
@@ -183,6 +192,7 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) error {
 	default:
 	}
 	t.kb.began = nil
+	t.kb.chatTook = ""
 	if tookIt && t.kb.holder == handle {
 		t.kb.drop()
 	}
@@ -201,17 +211,30 @@ func (t *Tap) ChatBegan() bool {
 		return false
 	}
 	t.kb.chatting = true
+	// Bytes left from a previous chat must not open this one.
+	for drained := false; !drained; {
+		select {
+		case <-t.kb.chatIn:
+		default:
+			drained = true
+		}
+	}
 	close(t.kb.began)
 	t.kb.began = nil
 	return true
 }
 
 // ChatEnded is called by the session after chat has closed and the screen
-// has been restored.
+// has been restored. A keyboard taken only for the chat is released, so the
+// sysop's next keys do not land on the caller's prompt as type-in.
 func (t *Tap) ChatEnded() {
 	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.kb.chatting = false
-	t.mu.Unlock()
+	if t.kb.chatTook != "" && t.kb.holder == t.kb.chatTook {
+		t.kb.drop()
+	}
+	t.kb.chatTook = ""
 }
 
 // EndChat is closed when the sysop ends chat or drops the keyboard.

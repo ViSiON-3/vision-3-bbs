@@ -263,3 +263,76 @@ func TestTapCloseDropsKeyboardAndEndsChat(t *testing.T) {
 		t.Fatal("EndChat not closed")
 	}
 }
+
+func beginChat(t *testing.T, tp *Tap, handle string) {
+	t.Helper()
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if err := tp.RequestChat(handle, time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestChatEndedReleasesKeyboardChatTook(t *testing.T) {
+	tp := newWatchedTap("a")
+	beginChat(t, tp, "a")
+	tp.ChatEnded()
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder after chat = %q; want none", h)
+	}
+	if n := tp.Inject("a", []byte("x")); n != 0 {
+		t.Fatal("sysop keys became type-in after chat")
+	}
+}
+
+func TestChatEndedKeepsTypeInHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	beginChat(t, tp, "a")
+	tp.ChatEnded()
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder after chat = %q; want a", h)
+	}
+}
+
+func TestChatEndedLeavesLaterHolder(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	beginChat(t, tp, "a")
+	tp.ReleaseKeyboard("a")
+	if err := tp.TakeKeyboard("b"); err != nil {
+		t.Fatal(err)
+	}
+	tp.ChatEnded()
+	if h := tp.KeyboardHolder(); h != "b" {
+		t.Fatalf("holder after chat = %q; want b", h)
+	}
+}
+
+func TestChatBeganDropsStaleChatInput(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	beginChat(t, tp, "a")
+	tp.Inject("a", []byte("stale"))
+	tp.ChatEnded()
+	beginChat(t, tp, "a")
+	tp.Inject("a", []byte("fresh"))
+	if got := <-tp.ChatInput(); string(got) != "fresh" {
+		t.Fatalf("ChatInput = %q; want fresh", got)
+	}
+}
+
+func TestChatEndedKeepsHoldRetakenForTypeIn(t *testing.T) {
+	tp := newWatchedTap("a")
+	beginChat(t, tp, "a")
+	tp.ReleaseKeyboard("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	tp.ChatEnded()
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder after chat = %q; want a", h)
+	}
+}
