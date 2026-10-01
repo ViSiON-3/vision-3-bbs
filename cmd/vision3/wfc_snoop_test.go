@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -68,5 +69,13 @@ func TestChatHookRefusedInDoor(t *testing.T) {
 	err := chatHook(reg)("jim", 4, start, true)
 	if err == nil || !strings.Contains(err.Error(), "door") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestTypeInHookOffWithoutHoldIsRefused(t *testing.T) {
+	start := time.Unix(100, 0)
+	reg, _ := regWithNode(start)
+	if err := typeInHook(reg)("jim", 4, start, false); !errors.Is(err, snoop.ErrNotHolder) {
+		t.Fatalf("err = %v, want ErrNotHolder", err)
 	}
 }

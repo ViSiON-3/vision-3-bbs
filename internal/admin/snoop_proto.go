@@ -119,6 +119,12 @@ func ServeSnoop(rw io.ReadWriteCloser, sysop string, resolve SnoopTarget, audit 
 	}
 }
 
+// WriteSnoopError refuses a snoop channel with a header carrying msg, the
+// way ServeSnoop refuses a request it cannot serve.
+func WriteSnoopError(w io.Writer, msg string) error {
+	return writeHeader(w, SnoopHeader{Error: msg})
+}
+
 func writeHeader(w io.Writer, h SnoopHeader) error {
 	b, err := json.Marshal(h)
 	if err != nil {

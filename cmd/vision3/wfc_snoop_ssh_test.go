@@ -169,8 +169,8 @@ func TestWFCQueryThenPasswordIsDenied(t *testing.T) {
 	for name, fallback := range cases {
 		t.Run(name, func(t *testing.T) {
 			c := dialWFC(t, addr, gossh.PublicKeys(unsignedSigner{adminSigner}), fallback)
-			if _, err := snoopOpen(t, c, 4, start); err == nil {
-				t.Fatal("wfc-snoop opened without proof of the key")
+			if _, err := snoopOpen(t, c, 4, start); err == nil || err.Error() != "access denied" {
+				t.Fatalf("wfc-snoop err = %v, want access denied", err)
 			}
 			if !adminDenied(t, c) {
 				t.Fatal("wfc-admin opened without proof of the key")
@@ -196,5 +196,26 @@ func TestWFCSignedKeyOpensSnoop(t *testing.T) {
 	n, err := st.Read(buf)
 	if err != nil || !strings.Contains(string(buf[:n]), "x") {
 		t.Fatalf("read %q %v", buf[:n], err)
+	}
+}
+
+func TestWFCNoStashIsDenied(t *testing.T) {
+	addr, _, start := startWFCTestServer(t, newTestSigner(t))
+	c := dialWFC(t, addr, gossh.Password("anything"))
+	if _, err := snoopOpen(t, c, 4, start); err == nil || err.Error() != "access denied" {
+		t.Fatalf("wfc-snoop err = %v, want access denied", err)
+	}
+	if !adminDenied(t, c) {
+		t.Fatal("wfc-admin opened with no key")
+	}
+}
+
+func TestWFCSnoopRefusesReusedNode(t *testing.T) {
+	adminSigner := newTestSigner(t)
+	addr, _, start := startWFCTestServer(t, adminSigner)
+	c := dialWFC(t, addr, gossh.PublicKeys(adminSigner))
+	_, err := snoopOpen(t, c, 4, start.Add(time.Second))
+	if err == nil || !strings.Contains(err.Error(), "different caller") {
+		t.Fatalf("err = %v, want different caller", err)
 	}
 }

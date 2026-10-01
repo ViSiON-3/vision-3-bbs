@@ -64,6 +64,9 @@ func typeInHook(reg *session.SessionRegistry) func(string, int, time.Time, bool)
 		}
 		if !on {
 			held, injected := tap.ReleaseKeyboard(sysop)
+			if held == 0 {
+				return snoop.ErrNotHolder
+			}
 			slog.Info("wfc-snoop: type-in off", "sysop", sysop, "node", nodeID,
 				"duration", held.Round(time.Second), "bytes", injected)
 			return nil
@@ -113,6 +116,7 @@ func wfcSnoopSubsystem(sess ssh.Session) {
 	keyBytes, _ := sess.Context().Value(wfcAdminPubKey{}).([]byte)
 	if handle == "" || len(keyBytes) == 0 || !authorizeAdminKey(handle, keyBytes) {
 		slog.Warn("wfc-snoop: access denied", "user", handle, "addr", sess.RemoteAddr())
+		_ = admin.WriteSnoopError(sess, "access denied") // best-effort notice to client
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
