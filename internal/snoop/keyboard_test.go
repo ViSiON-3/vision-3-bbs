@@ -134,3 +134,44 @@ func TestReleaseKeyboardEndsChat(t *testing.T) {
 		t.Fatal("dropping the sysop must end chat")
 	}
 }
+
+func TestLateChatBeganAfterTimeoutIsRefused(t *testing.T) {
+	tp := NewTap()
+	serviced := make(chan struct{})
+	go func() { <-tp.BreakIn(); close(serviced) }()
+	err := tp.RequestChat("a", 50*time.Millisecond)
+	if !errors.Is(err, ErrChatNotStarted) {
+		t.Fatalf("err = %v; want ErrChatNotStarted", err)
+	}
+	<-serviced
+	if tp.ChatBegan() {
+		t.Fatal("ChatBegan accepted a request that already timed out")
+	}
+	if tp.Chatting() {
+		t.Fatal("chatting after a refused ChatBegan")
+	}
+
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if err := tp.RequestChat("b", time.Second); err != nil {
+		t.Fatalf("fresh request: %v", err)
+	}
+	if !tp.Chatting() || tp.KeyboardHolder() != "b" {
+		t.Fatalf("chatting=%v holder=%q; want true, b", tp.Chatting(), tp.KeyboardHolder())
+	}
+}
+
+func TestTimeoutClosesEndChat(t *testing.T) {
+	tp := NewTap()
+	done := make(chan error, 1)
+	go func() { done <- tp.RequestChat("a", 50*time.Millisecond) }()
+	<-tp.BreakIn()
+	end := tp.EndChat()
+	if err := <-done; !errors.Is(err, ErrChatNotStarted) {
+		t.Fatalf("err = %v", err)
+	}
+	select {
+	case <-end:
+	default:
+		t.Fatal("EndChat of the expired request not closed")
+	}
+}

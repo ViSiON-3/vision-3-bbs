@@ -165,18 +165,24 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) error {
 	if tookIt && t.kb.holder == handle {
 		t.kb.drop()
 	}
+	// Release anyone already waiting on this request's EndChat.
+	t.stopChatLocked()
 	return ErrChatNotStarted
 }
 
-// ChatBegan is called by the session when it has opened chat.
-func (t *Tap) ChatBegan() {
+// ChatBegan is called by the session when it is ready to open chat. It
+// returns false, and changes nothing, when no request is pending (the
+// request timed out first); the session must then not open chat.
+func (t *Tap) ChatBegan() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.kb.chatting = true
-	if t.kb.began != nil {
-		close(t.kb.began)
-		t.kb.began = nil
+	if t.kb.began == nil {
+		return false
 	}
+	t.kb.chatting = true
+	close(t.kb.began)
+	t.kb.began = nil
+	return true
 }
 
 // ChatEnded is called by the session after chat has closed and the screen
