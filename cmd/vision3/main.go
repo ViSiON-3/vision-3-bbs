@@ -1961,6 +1961,9 @@ func main() {
 			return kickNode(sessionRegistry, nodeID, connectedAt)
 		},
 		TimeLimit: menuExecutor.TimeLimit,
+		TypeIn:    typeInHook(sessionRegistry),
+		Chat:      chatHook(sessionRegistry),
+		Snoop:     snoopTarget(sessionRegistry),
 	})
 	go adminServer.Run(context.Background())
 

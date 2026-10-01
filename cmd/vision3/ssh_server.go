@@ -53,6 +53,7 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 		PublicKeyHandler: wfcPublicKeyHandler,
 		SubsystemHandlers: map[string]func(ssh.Session){
 			"wfc-admin": wfcAdminSubsystem,
+			"wfc-snoop": wfcSnoopSubsystem,
 		},
 	})
 	if err != nil {
