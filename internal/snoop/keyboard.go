@@ -143,29 +143,29 @@ func (t *Tap) BreakIn() <-chan struct{} { return t.kb.breakIn }
 // RequestChat takes the keyboard for handle and asks the caller's session to
 // open chat. It waits up to wait for ChatBegan; on failure nothing is left
 // pending and the keyboard is released if this call took it.
-func (t *Tap) RequestChat(handle string, wait time.Duration) error {
+func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err error) {
 	t.mu.Lock()
 	if t.closed {
 		t.mu.Unlock()
-		return ErrTapClosed
+		return false, ErrTapClosed
 	}
 	if !t.watchingLocked(handle) {
 		t.mu.Unlock()
-		return ErrNotWatching
+		return false, ErrNotWatching
 	}
 	if t.mode != ModeBBS {
 		m := t.mode
 		t.mu.Unlock()
-		return fmt.Errorf("%w: in a %s", ErrBusy, m)
+		return false, fmt.Errorf("%w: in a %s", ErrBusy, m)
 	}
 	if t.kb.holder != "" && t.kb.holder != handle {
 		h := t.kb.holder
 		t.mu.Unlock()
-		return fmt.Errorf("%w: %s", ErrKeyboardHeld, h)
+		return false, fmt.Errorf("%w: %s", ErrKeyboardHeld, h)
 	}
 	if t.kb.chatting {
 		t.mu.Unlock()
-		return nil
+		return false, nil
 	}
 	tookIt := t.kb.holder == ""
 	t.kb.take(handle)
@@ -185,15 +185,15 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) error {
 
 	select {
 	case <-began:
-		return nil
+		return true, nil
 	case <-t.done:
-		return ErrTapClosed
+		return false, ErrTapClosed
 	case <-time.After(wait):
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.kb.chatting { // began raced the timer
-		return nil
+		return true, nil
 	}
 	select {
 	case <-t.kb.breakIn:
@@ -206,7 +206,7 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) error {
 	}
 	// Release anyone already waiting on this request's EndChat.
 	t.stopChatLocked()
-	return ErrChatNotStarted
+	return false, ErrChatNotStarted
 }
 
 // ChatBegan is called by the session when it is ready to open chat. It

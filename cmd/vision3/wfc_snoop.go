@@ -79,21 +79,25 @@ func typeInHook(reg *session.SessionRegistry) func(string, int, time.Time, bool)
 	}
 }
 
-func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) error {
-	return func(sysop string, nodeID int, connectedAt time.Time, start bool) error {
+func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) (bool, error) {
+	return func(sysop string, nodeID int, connectedAt time.Time, start bool) (bool, error) {
 		s, tap, err := nodeTap(reg, nodeID, connectedAt)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if !start {
 			if err := tap.StopChat(sysop); err != nil {
-				return err
+				return false, err
 			}
 			slog.Info("wfc-snoop: chat end requested", "sysop", sysop, "node", nodeID)
-			return nil
+			return false, nil
 		}
-		if err := tap.RequestChat(sysop, chatStartWait); err != nil {
-			return err
+		started, err := tap.RequestChat(sysop, chatStartWait)
+		if err != nil {
+			return false, err
+		}
+		if !started {
+			return false, nil
 		}
 		slog.Info("wfc-snoop: chat requested", "sysop", sysop, "node", nodeID)
 		if adminServer != nil {
@@ -105,7 +109,7 @@ func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) e
 			s.Mutex.RUnlock()
 			adminServer.ClearPage(nodeID, handle, "answered")
 		}
-		return nil
+		return true, nil
 	}
 }
 

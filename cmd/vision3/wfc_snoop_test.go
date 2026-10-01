@@ -66,7 +66,7 @@ func TestChatHookRefusedInDoor(t *testing.T) {
 	reg, bs := regWithNode(start)
 	bs.Tap.AttachAs("jim")
 	bs.Tap.SetMode(snoop.ModeDoor)
-	err := chatHook(reg)("jim", 4, start, true)
+	_, err := chatHook(reg)("jim", 4, start, true)
 	if err == nil || !strings.Contains(err.Error(), "door") {
 		t.Fatalf("err = %v", err)
 	}

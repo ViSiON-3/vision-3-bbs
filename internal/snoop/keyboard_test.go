@@ -67,7 +67,7 @@ func TestRequestChatRefusedInDoorAndTransfer(t *testing.T) {
 	for _, m := range []Mode{ModeDoor, ModeTransfer} {
 		tp := newWatchedTap("a", "b")
 		tp.SetMode(m)
-		err := tp.RequestChat("a", 50*time.Millisecond)
+		_, err := tp.RequestChat("a", 50*time.Millisecond)
 		if !errors.Is(err, ErrBusy) {
 			t.Fatalf("mode %v: err = %v; want ErrBusy", m, err)
 		}
@@ -76,7 +76,7 @@ func TestRequestChatRefusedInDoorAndTransfer(t *testing.T) {
 
 func TestRequestChatTimesOutWhenNobodyServicesBreakIn(t *testing.T) {
 	tp := newWatchedTap("a", "b")
-	err := tp.RequestChat("a", 50*time.Millisecond)
+	_, err := tp.RequestChat("a", 50*time.Millisecond)
 	if !errors.Is(err, ErrChatNotStarted) {
 		t.Fatalf("err = %v; want ErrChatNotStarted", err)
 	}
@@ -96,7 +96,7 @@ func TestChatHandshakeAndRouting(t *testing.T) {
 		<-tp.BreakIn()
 		tp.ChatBegan()
 	}()
-	if err := tp.RequestChat("a", time.Second); err != nil {
+	if _, err := tp.RequestChat("a", time.Second); err != nil {
 		t.Fatal(err)
 	}
 	if !tp.Chatting() {
@@ -123,7 +123,7 @@ func TestChatHandshakeAndRouting(t *testing.T) {
 func TestReleaseKeyboardEndsChat(t *testing.T) {
 	tp := newWatchedTap("a", "b")
 	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
-	if err := tp.RequestChat("a", time.Second); err != nil {
+	if _, err := tp.RequestChat("a", time.Second); err != nil {
 		t.Fatal(err)
 	}
 	end := tp.EndChat()
@@ -139,7 +139,7 @@ func TestLateChatBeganAfterTimeoutIsRefused(t *testing.T) {
 	tp := newWatchedTap("a", "b")
 	serviced := make(chan struct{})
 	go func() { <-tp.BreakIn(); close(serviced) }()
-	err := tp.RequestChat("a", 50*time.Millisecond)
+	_, err := tp.RequestChat("a", 50*time.Millisecond)
 	if !errors.Is(err, ErrChatNotStarted) {
 		t.Fatalf("err = %v; want ErrChatNotStarted", err)
 	}
@@ -152,7 +152,7 @@ func TestLateChatBeganAfterTimeoutIsRefused(t *testing.T) {
 	}
 
 	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
-	if err := tp.RequestChat("b", time.Second); err != nil {
+	if _, err := tp.RequestChat("b", time.Second); err != nil {
 		t.Fatalf("fresh request: %v", err)
 	}
 	if !tp.Chatting() || tp.KeyboardHolder() != "b" {
@@ -163,7 +163,7 @@ func TestLateChatBeganAfterTimeoutIsRefused(t *testing.T) {
 func TestTimeoutClosesEndChat(t *testing.T) {
 	tp := newWatchedTap("a", "b")
 	done := make(chan error, 1)
-	go func() { done <- tp.RequestChat("a", 50*time.Millisecond) }()
+	go func() { _, err := tp.RequestChat("a", 50*time.Millisecond); done <- err }()
 	<-tp.BreakIn()
 	end := tp.EndChat()
 	if err := <-done; !errors.Is(err, ErrChatNotStarted) {
@@ -201,7 +201,7 @@ func TestTakeKeyboardNeedsWatch(t *testing.T) {
 	if err := tp.TakeKeyboard("a"); !errors.Is(err, ErrNotWatching) {
 		t.Fatalf("TakeKeyboard err = %v, want ErrNotWatching", err)
 	}
-	if err := tp.RequestChat("a", 50*time.Millisecond); !errors.Is(err, ErrNotWatching) {
+	if _, err := tp.RequestChat("a", 50*time.Millisecond); !errors.Is(err, ErrNotWatching) {
 		t.Fatalf("RequestChat err = %v, want ErrNotWatching", err)
 	}
 	tp.Attach() // an anonymous watch does not count for a handle
@@ -267,7 +267,7 @@ func TestTapCloseDropsKeyboardAndEndsChat(t *testing.T) {
 func beginChat(t *testing.T, tp *Tap, handle string) {
 	t.Helper()
 	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
-	if err := tp.RequestChat(handle, time.Second); err != nil {
+	if _, err := tp.RequestChat(handle, time.Second); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -341,7 +341,7 @@ func TestChatBeganDropsQueuedTypeIn(t *testing.T) {
 func TestRequestChatRefusedInTeleconference(t *testing.T) {
 	tp := newWatchedTap("a")
 	tp.SetMode(ModeTeleconf)
-	err := tp.RequestChat("a", 50*time.Millisecond)
+	_, err := tp.RequestChat("a", 50*time.Millisecond)
 	if !errors.Is(err, ErrBusy) {
 		t.Fatalf("err = %v; want ErrBusy", err)
 	}
@@ -406,7 +406,7 @@ func TestChatsCountsStartedChats(t *testing.T) {
 		t.Fatal("refused ChatBegan was counted")
 	}
 	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
-	if err := tp.RequestChat("a", time.Second); err != nil {
+	if _, err := tp.RequestChat("a", time.Second); err != nil {
 		t.Fatal(err)
 	}
 	if tp.Chats() != 1 {
@@ -451,5 +451,14 @@ func TestChatEndedReportsNothingWhenHolderEnds(t *testing.T) {
 	}
 	if dropped, _, _ := tp.ChatEnded(); dropped != "" {
 		t.Fatalf("dropped = %q after the holder ended chat", dropped)
+	}
+}
+
+func TestRequestChatOnRunningChatIsNotStarted(t *testing.T) {
+	tp := newWatchedTap("a")
+	beginChat(t, tp, "a")
+	started, err := tp.RequestChat("a", 50*time.Millisecond)
+	if err != nil || started {
+		t.Fatalf("RequestChat on running chat = %v, %v; want false, nil", started, err)
 	}
 }

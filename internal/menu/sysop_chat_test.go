@@ -63,7 +63,7 @@ func (r *chatRig) begin(t *testing.T) {
 		<-r.tap.BreakIn()
 		r.tap.ChatBegan()
 	}()
-	if err := r.tap.RequestChat("SysOp", 2*time.Second); err != nil {
+	if _, err := r.tap.RequestChat("SysOp", 2*time.Second); err != nil {
 		t.Fatalf("RequestChat: %v", err)
 	}
 }
@@ -293,7 +293,7 @@ func (r *promptRig) nextKey(t *testing.T) int {
 
 func (r *promptRig) openChat(t *testing.T) {
 	t.Helper()
-	if err := r.tap.RequestChat("SysOp", 2*time.Second); err != nil {
+	if _, err := r.tap.RequestChat("SysOp", 2*time.Second); err != nil {
 		t.Fatalf("RequestChat: %v", err)
 	}
 	waitFor(t, func() bool { return strings.Contains(r.term.Row(13), "chatting with") }, "chat screen not drawn")
@@ -431,7 +431,7 @@ func TestChatTimeIsCreditedToTimeLimit(t *testing.T) {
 		keys <- err
 	}()
 
-	if err := tap.RequestChat("SysOp", 2*time.Second); err != nil {
+	if _, err := tap.RequestChat("SysOp", 2*time.Second); err != nil {
 		t.Fatalf("RequestChat: %v", err)
 	}
 	time.Sleep(800 * time.Millisecond)

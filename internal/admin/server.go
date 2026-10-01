@@ -51,7 +51,7 @@ type ServerConfig struct {
 	// session started at connectedAt. Nil means unsupported.
 	TypeIn func(sysop string, nodeID int, connectedAt time.Time, on bool) error
 	// Chat starts or ends split-screen chat. Nil means unsupported.
-	Chat func(sysop string, nodeID int, connectedAt time.Time, start bool) error
+	Chat func(sysop string, nodeID int, connectedAt time.Time, start bool) (started bool, err error)
 	// Snoop resolves wfc-snoop requests; used by the in-process client.
 	Snoop SnoopTarget
 }
@@ -302,12 +302,13 @@ func (s *Server) ExecuteAs(sysop string, cmd AdminCommand) (*Result, error) {
 			return nil, errNoSysop
 		}
 		start := payloadBool(cmd.Payload, "start")
-		if err := s.cfg.Chat(sysop, cmd.NodeID, cmd.ConnectedAt, start); err != nil {
+		started, err := s.cfg.Chat(sysop, cmd.NodeID, cmd.ConnectedAt, start)
+		if err != nil {
 			return nil, err
 		}
 		// The end of chat is reported by ChatEnded, from the caller's
 		// session, however it ended.
-		if start {
+		if start && started {
 			handle, _ := s.nodeIdentity(cmd.NodeID, cmd.ConnectedAt)
 			s.emit(Event{Time: timeNow(), Type: EventChatState, NodeID: cmd.NodeID, Handle: handle, Message: "on " + sysop})
 		}
