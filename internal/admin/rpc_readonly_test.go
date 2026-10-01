@@ -29,13 +29,22 @@ func readOnlyRPC(t *testing.T, ro *atomic.Bool) (*StreamClient, *atomic.Int32) {
 	return c, &calls
 }
 
-var nodeCommands = []AdminCommand{
+// grabCommands act on a node, so a read-only console may not send them.
+var grabCommands = []AdminCommand{
 	{Command: CommandKick, NodeID: 1},
 	{Command: CommandTypeIn, NodeID: 1, Payload: map[string]any{"on": true}},
-	{Command: CommandTypeIn, NodeID: 1, Payload: map[string]any{"on": false}},
 	{Command: CommandChat, NodeID: 1, Payload: map[string]any{"start": true}},
-	{Command: CommandChat, NodeID: 1, Payload: map[string]any{"start": false}},
 }
+
+// releaseCommands only give the keyboard back, so a read-only console may.
+var releaseCommands = []AdminCommand{
+	{Command: CommandTypeIn, NodeID: 1, Payload: map[string]any{"on": false}},
+	{Command: CommandChat, NodeID: 1, Payload: map[string]any{"start": false}},
+	{Command: CommandTypeIn, NodeID: 1},
+	{Command: CommandChat, NodeID: 1},
+}
+
+var nodeCommands = append(append([]AdminCommand{}, grabCommands...), releaseCommands...)
 
 func TestReadOnlyConsoleIsRefusedNodeCommands(t *testing.T) {
 	var ro atomic.Bool
@@ -49,13 +58,21 @@ func TestReadOnlyConsoleIsRefusedNodeCommands(t *testing.T) {
 	if !snap.ReadOnly {
 		t.Fatal("snapshot does not tell a read-only console")
 	}
-	for _, cmd := range nodeCommands {
+	for _, cmd := range grabCommands {
 		if _, err := c.Execute(ctx, cmd); err == nil || err.Error() != ErrReadOnly.Error() {
 			t.Fatalf("%s %v: err = %v, want %q", cmd.Command, cmd.Payload, err, ErrReadOnly)
 		}
 	}
 	if n := calls.Load(); n != 0 {
 		t.Fatalf("%d node-control hooks ran for a read-only console", n)
+	}
+	for _, cmd := range releaseCommands {
+		if _, err := c.Execute(ctx, cmd); err != nil {
+			t.Fatalf("%s %v: %v", cmd.Command, cmd.Payload, err)
+		}
+	}
+	if n := calls.Load(); n != int32(len(releaseCommands)) {
+		t.Fatalf("release hooks ran %d times, want %d", n, len(releaseCommands))
 	}
 	if res, err := c.Execute(ctx, AdminCommand{Command: CommandRefresh}); err != nil || !res.OK {
 		t.Fatalf("refresh: %+v %v", res, err)

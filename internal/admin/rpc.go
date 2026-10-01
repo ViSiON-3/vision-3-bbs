@@ -112,7 +112,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 			continue
 		}
 		var res *Result
-		if f.Command.Command != CommandRefresh && isReadOnly() {
+		if !readOnlyAllowed(*f.Command) && isReadOnly() {
 			err = ErrReadOnly
 			if audit != nil {
 				audit(string(f.Command.Command) + " refused: read-only")
@@ -134,6 +134,20 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 			return werr
 		}
 	}
+}
+
+// readOnlyAllowed reports whether a read-only console may send cmd: a
+// refresh, or a command that only gives a node's keyboard back.
+func readOnlyAllowed(cmd AdminCommand) bool {
+	switch cmd.Command {
+	case CommandRefresh:
+		return true
+	case CommandTypeIn:
+		return !payloadBool(cmd.Payload, "on")
+	case CommandChat:
+		return !payloadBool(cmd.Payload, "start")
+	}
+	return false
 }
 
 // StreamClient is the client engine for the admin protocol over a stream.
