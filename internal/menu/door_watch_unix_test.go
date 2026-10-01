@@ -4,6 +4,7 @@ package menu
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -219,5 +220,76 @@ func TestDoorIdleIgnoresCleanupTime(t *testing.T) {
 	})
 	if err := doorcovExec(t, s, executeDoor, ctx); err != nil {
 		t.Errorf("err = %v; a slow cleanup after the door exited must not count as idle", err)
+	}
+}
+
+// doorEndCases are the ways a native door can be run.
+var doorEndCases = []struct {
+	name  string
+	cfg   config.DoorConfig
+	isPty bool
+}{
+	{"stdio", config.DoorConfig{}, false},
+	{"socket", config.DoorConfig{IOMode: "SOCKET"}, false},
+	{"pty", config.DoorConfig{RequiresRawTerminal: true}, true},
+}
+
+// blockingDoorScript is a door that starts a background child, says READY and
+// then waits for input that never comes, on stdin or on its socket. A SOCKET
+// door's standard output goes nowhere, so it says READY on its socket too.
+const blockingDoorScript = `sleep 30 & echo $! > "$1"; echo READY; (echo READY >&3) 2>/dev/null; cat <&0 >/dev/null; cat <&3 >/dev/null; wait`
+
+// A caller who hangs up ends the door (#562), however it is run, and the
+// door's whole process group goes with it.
+func TestDoorEndsWhenCallerDisconnects(t *testing.T) {
+	for _, tt := range doorEndCases {
+		t.Run(tt.name, func(t *testing.T) {
+			doorcovIsolateTemp(t)
+			pidFile := filepath.Join(t.TempDir(), "child.pid")
+			script := doorcovScript(t, blockingDoorScript)
+			s := newDoorcovSession()
+			s.isPty = tt.isPty
+			cfg := tt.cfg
+			cfg.Commands = []string{"/bin/sh", script, pidFile}
+			ctx := doorcovCtx(newMenuEnv(t), s, cfg)
+			ctx.IdleTimeout = 0 // only the hang-up may end it
+			s.whenOutput("READY", s.eof)
+
+			err := doorcovExec(t, s, executeDoor, ctx)
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("err = %v, want io.EOF for a caller who hung up", err)
+			}
+			if !pidGone(t, pidFile) {
+				t.Error("the door's child process outlived the caller")
+			}
+		})
+	}
+}
+
+// The caller's time limit ends the door when it runs out (#563).
+func TestDoorEndsAtTimeLimit(t *testing.T) {
+	for _, tt := range doorEndCases {
+		t.Run(tt.name, func(t *testing.T) {
+			doorcovIsolateTemp(t)
+			pidFile := filepath.Join(t.TempDir(), "child.pid")
+			script := doorcovScript(t, blockingDoorScript)
+			s := newDoorcovSession()
+			s.isPty = tt.isPty
+			cfg := tt.cfg
+			cfg.Commands = []string{"/bin/sh", script, pidFile}
+			ctx := doorcovCtx(newMenuEnv(t), s, cfg)
+			ctx.IdleTimeout = 0
+			// A one-minute limit with all but 400ms of it already used.
+			ctx.User.TimeLimit = 1
+			ctx.SessionStartTime = time.Now().Add(-time.Minute + 400*time.Millisecond)
+
+			err := doorcovExec(t, s, executeDoor, ctx)
+			if !errors.Is(err, editor.ErrTimeLimit) {
+				t.Fatalf("err = %v, want editor.ErrTimeLimit", err)
+			}
+			if !pidGone(t, pidFile) {
+				t.Error("the door's child process outlived the time limit")
+			}
+		})
 	}
 }

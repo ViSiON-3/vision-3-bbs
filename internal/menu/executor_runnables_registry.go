@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -114,8 +113,9 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		cmdErr := executeDoor(ctx)
 		_ = getSessionIH(s)
 
-		// The caller went idle in the door: log off, as a menu would.
-		if errors.Is(cmdErr, editor.ErrIdleTimeout) {
+		// The BBS ended the door because the caller went idle, ran out of
+		// time or hung up: log off, as a menu would.
+		if isSessionFatal(cmdErr) {
 			return currentUser, "LOGOFF", cmdErr
 		}
 		if cmdErr != nil {

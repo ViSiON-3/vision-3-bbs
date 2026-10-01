@@ -13,8 +13,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
-func TestDoorIdleWatch(t *testing.T) {
-	w := newDoorIdleWatch(150 * time.Millisecond)
+func TestDoorWatchIdle(t *testing.T) {
+	w := newDoorWatch(150*time.Millisecond, time.Time{})
 	defer w.freeze()
 
 	// Input keeps restarting the countdown, so it outlasts the timeout.
@@ -22,26 +22,26 @@ func TestDoorIdleWatch(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		w.touch()
 	}
-	if w.hasFired() {
+	if w.endReason() != 0 {
 		t.Fatal("watch fired although the caller kept typing")
 	}
 
 	select {
-	case <-w.Fired():
+	case <-w.Ended():
 	case <-time.After(2 * time.Second):
 		t.Fatal("watch never fired once input stopped")
 	}
 	// Late input doesn't revive a watch that has fired.
 	w.touch()
-	if !w.hasFired() {
+	if w.endReason() == 0 {
 		t.Error("touch after firing revived the watch")
 	}
 }
 
-func TestDoorIdleWatchNil(t *testing.T) {
-	var w *doorIdleWatch
+func TestDoorWatchNil(t *testing.T) {
+	var w *doorWatch
 	w.freeze()
-	if w.hasFired() || w.Fired() != nil {
+	if w.endReason() != 0 || w.Ended() != nil {
 		t.Error("a nil watch, for a caller with no idle timeout, must never fire")
 	}
 }
@@ -63,7 +63,7 @@ type interruptReadSession struct {
 func (s *interruptReadSession) SetReadInterrupt(ch <-chan struct{}) { s.got = ch }
 
 func TestWrapDoorSession(t *testing.T) {
-	w := newDoorIdleWatch(time.Hour)
+	w := newDoorWatch(time.Hour, time.Time{})
 	defer w.freeze()
 
 	// Reads pass through, and the wrapper is seen through by type checks.
@@ -98,7 +98,7 @@ func TestWrapDoorSession(t *testing.T) {
 // Reads from the caller restart the countdown; a read that returns nothing
 // does not.
 func TestIdleTrackingSessionTouches(t *testing.T) {
-	w := newDoorIdleWatch(150 * time.Millisecond)
+	w := newDoorWatch(150*time.Millisecond, time.Time{})
 	defer w.freeze()
 	pr, pw := io.Pipe()
 	ws := wrapDoorSession(plainReadSession{r: pr}, w)
@@ -114,7 +114,7 @@ func TestIdleTrackingSessionTouches(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 	}
-	if w.hasFired() {
+	if w.endReason() != 0 {
 		t.Error("watch fired although every read brought input")
 	}
 	_ = pw.Close()
@@ -176,28 +176,28 @@ func TestDoorIdleEndsRemoteDoor(t *testing.T) {
 
 // A frozen watch never fires, keeps a firing that already happened, and
 // isn't revived by input.
-func TestDoorIdleWatchFreeze(t *testing.T) {
-	w := newDoorIdleWatch(100 * time.Millisecond)
+func TestDoorWatchFreeze(t *testing.T) {
+	w := newDoorWatch(100*time.Millisecond, time.Time{})
 	w.freeze()
 	w.touch()
 	time.Sleep(250 * time.Millisecond)
-	if w.hasFired() {
+	if w.endReason() != 0 {
 		t.Error("frozen watch fired")
 	}
 
-	w = newDoorIdleWatch(50 * time.Millisecond)
-	<-w.Fired()
+	w = newDoorWatch(50*time.Millisecond, time.Time{})
+	<-w.Ended()
 	w.freeze()
-	if !w.hasFired() {
+	if w.endReason() == 0 {
 		t.Error("freezing a fired watch forgot that it fired")
 	}
 }
 
 // Connecting to a remote door server is abandoned when the caller goes idle.
 func TestIdleDialContext(t *testing.T) {
-	ctx := &DoorCtx{idle: newDoorIdleWatch(100 * time.Millisecond)}
-	defer ctx.idle.freeze()
-	dialCtx, cancel := idleDialContext(ctx)
+	ctx := &DoorCtx{watch: newDoorWatch(100*time.Millisecond, time.Time{})}
+	defer ctx.watch.freeze()
+	dialCtx, cancel := doorDialContext(ctx)
 	defer cancel()
 	select {
 	case <-dialCtx.Done():
@@ -206,11 +206,66 @@ func TestIdleDialContext(t *testing.T) {
 	}
 
 	// With no idle timeout it lasts until the caller cancels it.
-	dialCtx, cancel = idleDialContext(&DoorCtx{})
+	dialCtx, cancel = doorDialContext(&DoorCtx{})
 	select {
 	case <-dialCtx.Done():
 		t.Fatal("dial context ended with no idle timeout")
 	case <-time.After(150 * time.Millisecond):
 	}
 	cancel()
+}
+
+// The time limit ends the door at the deadline, and reports it as such.
+func TestDoorWatchTimeLimit(t *testing.T) {
+	w := newDoorWatch(0, time.Now().Add(100*time.Millisecond))
+	defer w.freeze()
+	select {
+	case <-w.Ended():
+	case <-time.After(2 * time.Second):
+		t.Fatal("watch outlived the time limit")
+	}
+	if got := w.endReason(); got != doorEndTimeLimit {
+		t.Errorf("reason = %v, want time limit", got)
+	}
+	if err := w.endReason().err(); !errors.Is(err, editor.ErrTimeLimit) {
+		t.Errorf("err = %v, want editor.ErrTimeLimit", err)
+	}
+}
+
+// A failed read means the caller hung up, unless the door cancelled it with
+// its read interrupt, which on telnet also looks like end of file.
+func TestWatchedSessionDisconnect(t *testing.T) {
+	w := newDoorWatch(0, time.Time{})
+	ws := wrapDoorSession(plainReadSession{r: strings.NewReader("")}, w)
+	if _, err := ws.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+		t.Fatalf("Read = %v, want EOF", err)
+	}
+	if got := w.endReason(); got != doorEndDisconnect {
+		t.Errorf("reason = %v, want disconnect", got)
+	}
+
+	w = newDoorWatch(0, time.Time{})
+	ir := &interruptReadSession{plainReadSession: plainReadSession{r: strings.NewReader("")}}
+	wi := wrapDoorSession(ir, w).(readInterrupter)
+	ch := make(chan struct{})
+	wi.SetReadInterrupt(ch)
+	close(ch)
+	wi.SetReadInterrupt(nil) // executors clear it on their way out
+	if _, err := wi.(io.Reader).Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+		t.Fatalf("Read = %v, want EOF", err)
+	}
+	if got := w.endReason(); got != 0 {
+		t.Errorf("an interrupted read ended the door: %v", got)
+	}
+}
+
+// A caller with no time left isn't let into a door at all.
+func TestRunDoorWatchedRefusesExhaustedTime(t *testing.T) {
+	ctx := &DoorCtx{SessionStartTime: time.Now().Add(-31 * time.Minute)}
+	ctx.User.TimeLimit = 30
+	ran := false
+	err := runDoorWatched(ctx, func(*DoorCtx) error { ran = true; return nil })
+	if !errors.Is(err, editor.ErrTimeLimit) || ran {
+		t.Errorf("err=%v ran=%v, want editor.ErrTimeLimit without running the door", err, ran)
+	}
 }

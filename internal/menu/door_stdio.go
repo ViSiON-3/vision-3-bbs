@@ -48,7 +48,7 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 		return err
 	}
 	_ = stdinR.Close() // the door holds its own copy
-	stopIdleWatch := watchDoorIdle(ctx, cmd.Process)
+	stopDoorWatch := watchDoorProcess(ctx, cmd.Process)
 
 	// Sessions that support SetReadInterrupt (SSH, telnet) stop the input
 	// goroutine cleanly when the door exits. On others it stays in Read until
@@ -77,7 +77,7 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 	}()
 
 	cmdErr := cmd.Wait()
-	stopIdleWatch()
+	stopDoorWatch()
 	slog.Debug("door (standard I/O) process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 	if errors.Is(cmdErr, exec.ErrWaitDelay) {
 		slog.Warn("door output still open after the door exited; is a child process holding it? Closed it",

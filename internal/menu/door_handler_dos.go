@@ -250,7 +250,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	if err != nil {
 		return fmt.Errorf("failed to start dosemu2 with pty: %w", err)
 	}
-	stopIdleWatch := watchDoorIdle(ctx, cmd.Process)
+	stopDoorWatch := watchDoorProcess(ctx, cmd.Process)
 
 	ptmx = pollableDoorFile(ptmx)
 
@@ -387,7 +387,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 
 	// Wait for dosemu to exit, then cleanly shut down I/O goroutines
 	cmdErr := cmd.Wait()
-	stopIdleWatch()
+	stopDoorWatch()
 	slog.Debug("dosemu2 process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 	// Interrupt the input goroutine's blocked Read() so it exits without

@@ -93,17 +93,17 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 	}
 	defer closeConn()
 
-	// A caller who goes idle is hung up on, as when their time runs out.
-	// Once the relay ends the idle countdown stops, so the door's cleanup
-	// command isn't counted as idle time.
+	// The connection is closed when the BBS must end the door (see
+	// door_watch.go). Once the relay ends the watch stops, so the door's
+	// cleanup command isn't counted against the caller.
 	relayDone := make(chan struct{})
 	defer close(relayDone)
-	defer ctx.idle.freeze()
+	defer ctx.watch.freeze()
 	go func() {
 		select {
-		case <-ctx.idle.Fired():
-			slog.Info("caller idle in remote door, disconnecting",
-				"node", ctx.NodeNumber, "door", ctx.DoorName, "protocol", proto)
+		case <-ctx.watch.Ended():
+			slog.Info("ending remote door", "node", ctx.NodeNumber, "door", ctx.DoorName,
+				"protocol", proto, "reason", ctx.watch.endReason().String())
 			closeConn()
 		case <-relayDone:
 		}
