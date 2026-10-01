@@ -1207,6 +1207,9 @@ func sessionHandler(s ssh.Session) {
 		// The channel lets the WFC console drop this caller (kick): closing
 		// it makes the session's next read return EOF and unwind normally.
 		Channel: s,
+		// Live size for the WFC snoop header: resizes and the post-login
+		// size prompts update termWidth and termHeight.
+		Size: func() (int, int) { return int(termWidth.Load()), int(termHeight.Load()) },
 	}
 	sessionRegistry.Register(bbsSession)
 

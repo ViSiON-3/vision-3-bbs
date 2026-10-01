@@ -47,8 +47,9 @@ func snoopTarget(reg *session.SessionRegistry) admin.SnoopTarget {
 		if err != nil {
 			return nil, admin.SnoopHeader{}, err
 		}
+		hdr := admin.SnoopHeader{OutputMode: "utf8"}
+		hdr.Width, hdr.Height = s.TermSize()
 		s.Mutex.RLock()
-		hdr := admin.SnoopHeader{OutputMode: "utf8", Width: s.Width, Height: s.Height}
 		if s.User != nil {
 			hdr.Handle = s.User.Handle
 		}

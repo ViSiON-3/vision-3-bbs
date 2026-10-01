@@ -42,6 +42,21 @@ func TestSnoopTargetHeader(t *testing.T) {
 	}
 }
 
+func TestSnoopTargetHeaderUsesLiveSize(t *testing.T) {
+	start := time.Unix(100, 0)
+	reg, bs := regWithNode(start)
+	w, h := 80, 25
+	bs.Size = func() (int, int) { return w, h }
+	w, h = 132, 50 // the caller resized after login
+	_, hdr, err := snoopTarget(reg)(admin.SnoopRequest{NodeID: 4, ConnectedAt: start})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hdr.Width != 132 || hdr.Height != 50 {
+		t.Fatalf("header size %dx%d, want 132x50", hdr.Width, hdr.Height)
+	}
+}
+
 func TestTypeInHookTakesAndReleases(t *testing.T) {
 	start := time.Unix(100, 0)
 	reg, bs := regWithNode(start)

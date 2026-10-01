@@ -48,6 +48,20 @@ type BbsSession struct {
 	Invisible    bool                 // True if user logged in invisibly (SysOp/CoSysOp only)
 	Tap          *snoop.Tap           // WFC snoop point for this node; nil in tests
 	ChatCredit   func() time.Duration // Sysop chat time credited to the caller; nil means none
+	// Size returns the caller's current terminal size. nil means Width and
+	// Height hold it.
+	Size func() (width, height int)
+}
+
+// TermSize returns the caller's current terminal size.
+func (s *BbsSession) TermSize() (width, height int) {
+	s.Mutex.RLock()
+	size, width, height := s.Size, s.Width, s.Height
+	s.Mutex.RUnlock()
+	if size != nil {
+		return size()
+	}
+	return width, height
 }
 
 // AddPage queues a page message for delivery at the user's next menu prompt.
