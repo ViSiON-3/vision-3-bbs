@@ -1,10 +1,8 @@
 package main
 
 import (
-	"net"
 	"testing"
 
-	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -57,44 +55,33 @@ func TestAuthorizeAdmin_WFCDisabled(t *testing.T) {
 	}
 }
 
-// stashCtx is the part of ssh.Context wfcPublicKeyHandler uses.
-type stashCtx struct {
-	ssh.Context
-	vals map[any]any
-}
-
-func (c *stashCtx) SetValue(k, v any)    { c.vals[k] = v }
-func (c *stashCtx) Value(k any) any      { return c.vals[k] }
-func (c *stashCtx) RemoteAddr() net.Addr { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
-
-func TestWFCRejectedKeyClearsEarlierStash(t *testing.T) {
-	admin, other := newTestSigner(t), newTestSigner(t)
-	keyLine := string(gossh.MarshalAuthorizedKey(admin.PublicKey()))
+func TestWFCVerifiedKeyNamesTheKeyOwner(t *testing.T) {
+	boss, chief, other := newTestSigner(t), newTestSigner(t), newTestSigner(t)
+	line := func(s gossh.Signer) string { return string(gossh.MarshalAuthorizedKey(s.PublicKey())) }
 	oldUM, oldMin, oldEn := userMgr, adminMinLevel, wfcEnabled
 	t.Cleanup(func() { userMgr, adminMinLevel, wfcEnabled = oldUM, oldMin, oldEn })
-	userMgr = user.NewUserMgrForTest(&user.User{Handle: "boss", AccessLevel: 255, PublicKeys: []string{keyLine}})
+	userMgr = user.NewUserMgrForTest(
+		&user.User{Handle: "boss", AccessLevel: 255, PublicKeys: []string{line(boss)}},
+		&user.User{Handle: "chief", AccessLevel: 255, PublicKeys: []string{line(chief)}},
+	)
 	adminMinLevel = func() int { return 250 }
 	wfcEnabled = func() bool { return true }
 
-	ctx := &stashCtx{vals: map[any]any{}}
-	adminKey, err := ssh.ParsePublicKey(admin.PublicKey().Marshal())
+	in := &gossh.Permissions{Extensions: map[string]string{"keep": "me"}}
+	out, err := wfcVerifiedKey(nil, chief.PublicKey(), in, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !wfcPublicKeyHandler(ctx, adminKey) {
-		t.Fatal("admin key rejected")
+	if out.Extensions[wfcHandleExt] != "chief" || out.Extensions[wfcKeyExt] != string(chief.PublicKey().Marshal()) {
+		t.Fatalf("extensions %v, want chief's identity", out.Extensions)
 	}
-	otherKey, err := ssh.ParsePublicKey(other.PublicKey().Marshal())
-	if err != nil {
-		t.Fatal(err)
+	if out.Extensions["keep"] != "me" {
+		t.Fatal("existing extension dropped")
 	}
-	if wfcPublicKeyHandler(ctx, otherKey) {
-		t.Fatal("unregistered key accepted")
+	if _, ok := in.Extensions[wfcHandleExt]; ok {
+		t.Fatal("incoming permissions modified")
 	}
-	if h, _ := ctx.Value(wfcAdminHandleKey{}).(string); h != "" {
-		t.Fatalf("handle stash = %q after rejected key", h)
-	}
-	if k, _ := ctx.Value(wfcAdminPubKey{}).([]byte); len(k) != 0 {
-		t.Fatal("key stash left after rejected key")
+	if _, err := wfcVerifiedKey(nil, other.PublicKey(), &gossh.Permissions{}, ""); err == nil {
+		t.Fatal("unregistered key verified as an admin")
 	}
 }

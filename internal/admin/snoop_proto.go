@@ -133,6 +133,25 @@ func WriteSnoopError(w io.Writer, msg string) error {
 	return writeHeader(w, SnoopHeader{Error: msg})
 }
 
+// RefuseSnoop reads the client's request line, waiting at most wait, then
+// refuses the channel with msg. The client writes its request before reading
+// the header, so a channel closed without reading it can fail that write and
+// lose msg.
+func RefuseSnoop(rw io.ReadWriter, msg string, wait time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = readLine(bufio.NewReaderSize(rw, maxSnoopLine))
+	}()
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-done:
+	case <-t.C:
+	}
+	return WriteSnoopError(rw, msg)
+}
+
 func writeHeader(w io.Writer, h SnoopHeader) error {
 	b, err := json.Marshal(h)
 	if err != nil {

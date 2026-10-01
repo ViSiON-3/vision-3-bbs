@@ -46,8 +46,7 @@ func (unsignedSigner) Sign(io.Reader, []byte) (*gossh.Signature, error) {
 	return nil, errors.New("no private key")
 }
 
-// startWFCTestServer runs a real sshserver with the production auth handlers
-// and WFC subsystems. It registers one admin whose key is adminSigner and one
+// startWFCTestServer runs a real sshserver with the production config. It registers one admin whose key is adminSigner and one
 // caller on node 4 (started at the returned time). opts may replace handlers.
 func startWFCTestServer(t *testing.T, adminSigner gossh.Signer, opts ...func(*sshserver.Config)) (addr string, tap *snoop.Tap, start time.Time) {
 	t.Helper()
@@ -79,20 +78,8 @@ func startWFCTestServer(t *testing.T, adminSigner gossh.Signer, opts ...func(*ss
 	port := ln.Addr().(*net.TCPAddr).Port
 	_ = ln.Close()
 
-	cfg := sshserver.Config{
-		HostKeyPath:                hostKey,
-		Host:                       "127.0.0.1",
-		Port:                       port,
-		SessionHandler:             func(ssh.Session) {},
-		PasswordHandler:            sshPasswordHandler,
-		KeyboardInteractiveHandler: sshKeyboardInteractiveHandler,
-		PublicKeyHandler:           wfcPublicKeyHandler,
-		VerifiedPublicKeyCallback:  wfcVerifiedKey,
-		SubsystemHandlers: map[string]func(ssh.Session){
-			"wfc-admin": wfcAdminSubsystem,
-			"wfc-snoop": wfcSnoopSubsystem,
-		},
-	}
+	cfg := sshServerConfig(hostKey, "127.0.0.1", port, false)
+	cfg.SessionHandler = func(ssh.Session) {}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -260,30 +247,31 @@ func TestWFCIdentityIsTheSigningKey(t *testing.T) {
 	}
 }
 
-// A stash for one admin key while another admin key signs is what a
-// multi-entry pubkey cache leaves after query A, query B, sign B.
-func TestWFCStashForAnotherKeyIsDenied(t *testing.T) {
+// With a multi-entry pubkey cache, query chief, query boss, sign chief
+// leaves the last key callback on boss. The identity must still be chief.
+func TestWFCIdentityIgnoresTheLastKeyQueried(t *testing.T) {
 	boss, chief := newTestSigner(t), newTestSigner(t)
-	addr, _, start := startWFCTestServer(t, boss, func(cfg *sshserver.Config) {
+	addr, tap, start := startWFCTestServer(t, boss, func(cfg *sshserver.Config) {
 		cfg.PublicKeyHandler = func(ctx ssh.Context, key ssh.PublicKey) bool {
 			ok := wfcPublicKeyHandler(ctx, key)
-			if ok && string(key.Marshal()) == string(chief.PublicKey().Marshal()) {
-				wfcPublicKeyHandler(ctx, boss.PublicKey())
-			}
+			wfcPublicKeyHandler(ctx, boss.PublicKey())
 			return ok
 		}
 	})
 	addAdmin(t, boss, chief)
 	c := dialWFC(t, addr, gossh.PublicKeys(chief))
-	if _, err := snoopOpen(t, c, 4, start); err == nil || err.Error() != "access denied" {
-		t.Fatalf("wfc-snoop err = %v, want access denied", err)
+	st, err := snoopOpen(t, c, 4, start)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !adminDenied(t, c) {
-		t.Fatal("wfc-admin opened as a key that did not sign")
+	defer st.Close()
+	if !snoopsAs(tap, "chief") || snoopsAs(tap, "boss") {
+		t.Fatal("snoop identity is not the key that signed")
 	}
 }
 
-func TestWFCStashWithoutSignatureIsDenied(t *testing.T) {
+// An admin key the server saw without a signature must not grant access.
+func TestWFCAdminKeyWithoutSignatureIsDenied(t *testing.T) {
 	adminSigner := newTestSigner(t)
 	addr, _, start := startWFCTestServer(t, adminSigner, func(cfg *sshserver.Config) {
 		cfg.PasswordHandler = func(ctx ssh.Context, _ string) bool {

@@ -13,15 +13,12 @@ import (
 // Context key for storing a pre-authenticated BBS user from SSH-level auth.
 type sshAuthUserKey struct{}
 
-// startSSHServer creates, configures, and starts the pure-Go SSH server.
-// Returns a cleanup function to shut down the server.
-func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms bool) (func(), error) {
-	slog.Info("configuring SSH server", "host", sshHost, "port", sshPort)
-
-	server, err := sshserver.NewServer(sshserver.Config{
+// sshServerConfig is the production SSH server configuration.
+func sshServerConfig(hostKeyPath, host string, port int, legacyAlgorithms bool) sshserver.Config {
+	return sshserver.Config{
 		HostKeyPath:                hostKeyPath,
-		Host:                       sshHost,
-		Port:                       sshPort,
+		Host:                       host,
+		Port:                       port,
 		LegacySSHAlgorithms:        legacyAlgorithms,
 		SessionHandler:             sshSessionHandler,
 		Version:                    "Vision3",
@@ -33,7 +30,15 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 			"wfc-admin": wfcAdminSubsystem,
 			"wfc-snoop": wfcSnoopSubsystem,
 		},
-	})
+	}
+}
+
+// startSSHServer creates, configures, and starts the pure-Go SSH server.
+// Returns a cleanup function to shut down the server.
+func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms bool) (func(), error) {
+	slog.Info("configuring SSH server", "host", sshHost, "port", sshPort)
+
+	server, err := sshserver.NewServer(sshServerConfig(hostKeyPath, sshHost, sshPort, legacyAlgorithms))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SSH server: %w", err)
 	}
@@ -54,17 +59,7 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 	return cleanup, nil
 }
 
-// clearWFCKeyStash drops the admin identity wfcPublicKeyHandler stashed.
-// x/crypto calls the public-key callback for unsigned key queries too, so a
-// stash can exist on a connection whose client never proved it holds the
-// key. Any connection that authenticates another way must not keep it.
-func clearWFCKeyStash(ctx ssh.Context) {
-	ctx.SetValue(wfcAdminHandleKey{}, nil)
-	ctx.SetValue(wfcAdminPubKey{}, nil)
-}
-
 func sshPasswordHandler(ctx ssh.Context, password string) bool {
-	clearWFCKeyStash(ctx)
 	username := ctx.User()
 	slog.Debug("SSH password auth", "user", username, "addr", ctx.RemoteAddr())
 
@@ -88,7 +83,6 @@ func sshPasswordHandler(ctx ssh.Context, password string) bool {
 }
 
 func sshKeyboardInteractiveHandler(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool {
-	clearWFCKeyStash(ctx)
 	slog.Debug("SSH keyboard-interactive auth", "user", ctx.User(), "addr", ctx.RemoteAddr())
 	return true
 }

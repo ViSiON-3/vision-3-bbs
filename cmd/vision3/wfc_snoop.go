@@ -18,6 +18,10 @@ import (
 // session to reach an input point.
 const chatStartWait = 3 * time.Second
 
+// snoopRefuseWait bounds how long a refused wfc-snoop channel waits for the
+// client's request line before answering.
+const snoopRefuseWait = 2 * time.Second
+
 // nodeTap finds the tap of the caller on nodeID whose session started at
 // connectedAt, refusing a node that now holds someone else.
 func nodeTap(reg *session.SessionRegistry, nodeID int, connectedAt time.Time) (*session.BbsSession, *snoop.Tap, error) {
@@ -116,10 +120,10 @@ func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) (
 // wfcSnoopSubsystem serves one wfc-snoop channel. Authorization matches
 // wfc-admin and is re-checked for the life of the channel.
 func wfcSnoopSubsystem(sess ssh.Session) {
-	handle, keyBytes := wfcStashedIdentity(sess.Context())
+	handle, keyBytes := wfcVerifiedIdentity(sess.Context())
 	if handle == "" || !authorizeAdminKey(handle, keyBytes) {
 		slog.Warn("wfc-snoop: access denied", "user", handle, "addr", sess.RemoteAddr())
-		_ = admin.WriteSnoopError(sess, "access denied") // best-effort notice to client
+		_ = admin.RefuseSnoop(sess, "access denied", snoopRefuseWait) // best-effort notice to client
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())

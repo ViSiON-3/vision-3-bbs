@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -228,5 +229,34 @@ func TestSnoopTakeKeyboardRightAfterOpen(t *testing.T) {
 	defer st.Close()
 	if err := tap.TakeKeyboard("sysop"); err != nil {
 		t.Fatalf("TakeKeyboard right after open: %v", err)
+	}
+}
+
+func TestRefuseSnoopReadsTheRequestFirst(t *testing.T) {
+	cli, srv := net.Pipe()
+	defer cli.Close()
+	go func() {
+		defer srv.Close()
+		_ = RefuseSnoop(srv, "access denied", 5*time.Second)
+	}()
+	// net.Pipe is unbuffered: the request write completes only if the
+	// server reads it.
+	_ = cli.SetDeadline(time.Now().Add(2 * time.Second))
+	if _, err := ClientSnoop(cli, SnoopRequest{NodeID: 1}); err == nil || err.Error() != "access denied" {
+		t.Fatalf("err = %v, want access denied", err)
+	}
+}
+
+func TestRefuseSnoopAnswersASilentClient(t *testing.T) {
+	cli, srv := net.Pipe()
+	defer cli.Close()
+	go func() {
+		defer srv.Close()
+		_ = RefuseSnoop(srv, "access denied", 50*time.Millisecond)
+	}()
+	_ = cli.SetDeadline(time.Now().Add(2 * time.Second))
+	line, err := bufio.NewReader(cli).ReadString('\n')
+	if err != nil || !strings.Contains(line, "access denied") {
+		t.Fatalf("line %q err %v", line, err)
 	}
 }
