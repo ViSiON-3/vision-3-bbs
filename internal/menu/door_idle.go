@@ -1,12 +1,15 @@
 package menu
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/gliderlabs/ssh"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
 // The session idle timeout is enforced in the BBS's own input loops, which
@@ -32,30 +35,51 @@ type doorIdleWatch struct {
 	timeout time.Duration
 	timer   *time.Timer
 	fired   chan struct{}
-	once    sync.Once
+
+	mu     sync.Mutex
+	frozen bool // the countdown has stopped for good
 }
 
 // newDoorIdleWatch starts a countdown of timeout.
 func newDoorIdleWatch(timeout time.Duration) *doorIdleWatch {
 	w := &doorIdleWatch{timeout: timeout, fired: make(chan struct{})}
-	w.timer = time.AfterFunc(timeout, func() { w.once.Do(func() { close(w.fired) }) })
+	w.timer = time.AfterFunc(timeout, w.fire)
 	return w
 }
 
+// fire marks the caller idle, unless the countdown was frozen first.
+func (w *doorIdleWatch) fire() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.frozen {
+		return
+	}
+	w.frozen = true
+	close(w.fired)
+}
+
 // touch restarts the countdown after input from the caller. Input that
-// arrives once the watch has fired does not revive it: the door is already
-// being ended.
+// arrives once the watch has fired or been frozen does not revive it.
 func (w *doorIdleWatch) touch() {
-	if !w.hasFired() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.frozen {
 		w.timer.Reset(w.timeout)
 	}
 }
 
-// stop ends the countdown. It is safe on a nil watch.
-func (w *doorIdleWatch) stop() {
-	if w != nil {
-		w.timer.Stop()
+// freeze stops the countdown for good, keeping whether it had fired. The
+// door executors call it as soon as the door itself has ended, so time
+// spent afterwards, such as running a cleanup command, is never taken for
+// the caller being idle. It is safe on a nil watch.
+func (w *doorIdleWatch) freeze() {
+	if w == nil {
+		return
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.frozen = true
+	w.timer.Stop()
 }
 
 // Fired is closed when the caller has been idle for the timeout. A nil watch,
@@ -129,10 +153,44 @@ func unwrapSession(s ssh.Session) ssh.Session {
 	}
 }
 
+// runDoorWithIdleTimeout runs a door with run, enforcing the caller's idle
+// timeout for as long as it takes. It returns editor.ErrIdleTimeout if the
+// caller went idle, whatever run returned.
+func runDoorWithIdleTimeout(ctx *DoorCtx, run func(*DoorCtx) error) error {
+	if ctx.IdleTimeout <= 0 {
+		return run(ctx)
+	}
+	ctx.idle = newDoorIdleWatch(ctx.IdleTimeout)
+	defer ctx.idle.freeze()
+	ctx.Session = wrapDoorSession(ctx.Session, ctx.idle)
+
+	err := run(ctx)
+	if ctx.idle.hasFired() {
+		slog.Info("door ended: caller idle", "node", ctx.NodeNumber, "door", ctx.DoorName, "doorError", err)
+		return editor.ErrIdleTimeout
+	}
+	return err
+}
+
+// idleDialContext returns a context that is cancelled if the caller goes
+// idle, for connecting to a remote door server: a connect timeout can be
+// longer than the idle timeout. cancel must be called once connected.
+func idleDialContext(ctx *DoorCtx) (context.Context, context.CancelFunc) {
+	dialCtx, cancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-ctx.idle.Fired():
+			cancel()
+		case <-dialCtx.Done():
+		}
+	}()
+	return dialCtx, cancel
+}
+
 // watchDoorIdle hangs up on the door process p if the caller goes idle while
 // it runs. Call it once p has started; the returned stop must be called once
-// the process has been waited for. It does nothing for a caller with no idle
-// timeout.
+// the process has been waited for, and freezes the idle countdown. It does
+// nothing for a caller with no idle timeout.
 func watchDoorIdle(ctx *DoorCtx, p *os.Process) (stop func()) {
 	if ctx.idle == nil || p == nil {
 		return func() {}
@@ -150,5 +208,10 @@ func watchDoorIdle(ctx *DoorCtx, p *os.Process) (stop func()) {
 		hangUpDoorProcess(p, exited, grace)
 	}()
 	var once sync.Once
-	return func() { once.Do(func() { close(exited) }) }
+	return func() {
+		once.Do(func() {
+			ctx.idle.freeze()
+			close(exited)
+		})
+	}
 }

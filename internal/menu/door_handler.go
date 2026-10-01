@@ -95,18 +95,7 @@ func executeDoor(ctx *DoorCtx) error {
 	// The BBS idle timeout is enforced in its input loops, which a door
 	// bypasses, so it is enforced here for the door's lifetime (see
 	// door_idle.go).
-	if ctx.IdleTimeout > 0 {
-		ctx.idle = newDoorIdleWatch(ctx.IdleTimeout)
-		defer ctx.idle.stop()
-		ctx.Session = wrapDoorSession(ctx.Session, ctx.idle)
-	}
-
-	err := runDoorByType(ctx)
-	if ctx.idle.hasFired() {
-		slog.Info("door ended: caller idle", "node", ctx.NodeNumber, "door", ctx.DoorName, "doorError", err)
-		return editor.ErrIdleTimeout
-	}
-	return err
+	return runDoorWithIdleTimeout(ctx, runDoorByType)
 }
 
 // runDoorByType runs the door with the executor for its type.

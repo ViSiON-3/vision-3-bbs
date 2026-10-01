@@ -15,7 +15,7 @@ import (
 
 func TestDoorIdleWatch(t *testing.T) {
 	w := newDoorIdleWatch(150 * time.Millisecond)
-	defer w.stop()
+	defer w.freeze()
 
 	// Input keeps restarting the countdown, so it outlasts the timeout.
 	for range 5 {
@@ -40,7 +40,7 @@ func TestDoorIdleWatch(t *testing.T) {
 
 func TestDoorIdleWatchNil(t *testing.T) {
 	var w *doorIdleWatch
-	w.stop()
+	w.freeze()
 	if w.hasFired() || w.Fired() != nil {
 		t.Error("a nil watch, for a caller with no idle timeout, must never fire")
 	}
@@ -64,7 +64,7 @@ func (s *interruptReadSession) SetReadInterrupt(ch <-chan struct{}) { s.got = ch
 
 func TestWrapDoorSession(t *testing.T) {
 	w := newDoorIdleWatch(time.Hour)
-	defer w.stop()
+	defer w.freeze()
 
 	// Reads pass through, and the wrapper is seen through by type checks.
 	plain := plainReadSession{r: strings.NewReader("hi")}
@@ -99,7 +99,7 @@ func TestWrapDoorSession(t *testing.T) {
 // does not.
 func TestIdleTrackingSessionTouches(t *testing.T) {
 	w := newDoorIdleWatch(150 * time.Millisecond)
-	defer w.stop()
+	defer w.freeze()
 	pr, pw := io.Pipe()
 	ws := wrapDoorSession(plainReadSession{r: pr}, w)
 	go func() {
@@ -172,4 +172,45 @@ func TestDoorIdleEndsRemoteDoor(t *testing.T) {
 	if _, err := conn.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
 		t.Errorf("door server read after idle hang-up: %v, want EOF", err)
 	}
+}
+
+// A frozen watch never fires, keeps a firing that already happened, and
+// isn't revived by input.
+func TestDoorIdleWatchFreeze(t *testing.T) {
+	w := newDoorIdleWatch(100 * time.Millisecond)
+	w.freeze()
+	w.touch()
+	time.Sleep(250 * time.Millisecond)
+	if w.hasFired() {
+		t.Error("frozen watch fired")
+	}
+
+	w = newDoorIdleWatch(50 * time.Millisecond)
+	<-w.Fired()
+	w.freeze()
+	if !w.hasFired() {
+		t.Error("freezing a fired watch forgot that it fired")
+	}
+}
+
+// Connecting to a remote door server is abandoned when the caller goes idle.
+func TestIdleDialContext(t *testing.T) {
+	ctx := &DoorCtx{idle: newDoorIdleWatch(100 * time.Millisecond)}
+	defer ctx.idle.freeze()
+	dialCtx, cancel := idleDialContext(ctx)
+	defer cancel()
+	select {
+	case <-dialCtx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("dial context outlived the idle timeout")
+	}
+
+	// With no idle timeout it lasts until the caller cancels it.
+	dialCtx, cancel = idleDialContext(&DoorCtx{})
+	select {
+	case <-dialCtx.Done():
+		t.Fatal("dial context ended with no idle timeout")
+	case <-time.After(150 * time.Millisecond):
+	}
+	cancel()
 }

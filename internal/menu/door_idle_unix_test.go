@@ -186,3 +186,38 @@ func TestDoorIdleLogsCallerOff(t *testing.T) {
 		t.Errorf("err=%v next=%q, want editor.ErrIdleTimeout and LOGOFF", r.err, r.next)
 	}
 }
+
+// A child that ignores SIGHUP is killed with the rest of the door's process
+// group, even after the door itself has exited.
+func TestDoorIdleKillsChildIgnoringHangup(t *testing.T) {
+	doorcovIsolateTemp(t)
+	old := doorHangupGrace
+	doorHangupGrace = 200 * time.Millisecond
+	t.Cleanup(func() { doorHangupGrace = old })
+
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	script := doorcovScript(t, `(trap '' HUP; sleep 30) & echo $! > "$1"; cat >/dev/null`)
+	s := newDoorcovSession()
+	ctx := idleDoorCtx(t, s, config.DoorConfig{Commands: []string{"/bin/sh", script, pidFile}})
+	if err := doorcovExec(t, s, executeDoor, ctx); !errors.Is(err, editor.ErrIdleTimeout) {
+		t.Fatalf("err = %v, want editor.ErrIdleTimeout", err)
+	}
+	if !pidGone(t, pidFile) {
+		t.Error("a child that ignored SIGHUP outlived the hang-up")
+	}
+}
+
+// Time spent in the cleanup command after the door has exited is not the
+// caller being idle.
+func TestDoorIdleIgnoresCleanupTime(t *testing.T) {
+	doorcovIsolateTemp(t)
+	s := newDoorcovSession()
+	ctx := idleDoorCtx(t, s, config.DoorConfig{
+		Commands:       []string{"/bin/sh", "-c", "echo DONE"},
+		CleanupCommand: "sleep",
+		CleanupArgs:    []string{"1"},
+	})
+	if err := doorcovExec(t, s, executeDoor, ctx); err != nil {
+		t.Errorf("err = %v; a slow cleanup after the door exited must not count as idle", err)
+	}
+}

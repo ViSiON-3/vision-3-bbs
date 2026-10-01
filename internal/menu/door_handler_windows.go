@@ -204,23 +204,26 @@ func executeDoor(ctx *DoorCtx) error {
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
 
-	if ctx.Config.Type == "synchronet_js" {
-		return executeSyncJSDoor(ctx)
-	}
-	if ctx.Config.Type == "v3_script" {
-		return executeV3ScriptDoor(ctx)
-	}
-	if ctx.Config.Type == "rlogin" {
-		return executeRLoginDoor(ctx)
-	}
-	if ctx.Config.Type == "telnet" {
-		return executeTelnetDoor(ctx)
-	}
+	// The BBS idle timeout is enforced in its input loops, which a door
+	// bypasses, so it is enforced here for the door's lifetime (see
+	// door_idle.go).
+	return runDoorWithIdleTimeout(ctx, runDoorByType)
+}
 
-	if ctx.Config.IsDOS {
+// runDoorByType runs the door with the executor for its type.
+func runDoorByType(ctx *DoorCtx) error {
+	switch {
+	case ctx.Config.Type == "synchronet_js":
+		return executeSyncJSDoor(ctx)
+	case ctx.Config.Type == "v3_script":
+		return executeV3ScriptDoor(ctx)
+	case ctx.Config.Type == "rlogin":
+		return executeRLoginDoor(ctx)
+	case ctx.Config.Type == "telnet":
+		return executeTelnetDoor(ctx)
+	case ctx.Config.IsDOS:
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
 	}
-
 	return executeNativeDoorWindows(ctx)
 }
 

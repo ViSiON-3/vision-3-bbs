@@ -94,8 +94,11 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 	defer closeConn()
 
 	// A caller who goes idle is hung up on, as when their time runs out.
+	// Once the relay ends the idle countdown stops, so the door's cleanup
+	// command isn't counted as idle time.
 	relayDone := make(chan struct{})
 	defer close(relayDone)
+	defer ctx.idle.freeze()
 	go func() {
 		select {
 		case <-ctx.idle.Fired():
