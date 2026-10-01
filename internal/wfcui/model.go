@@ -131,10 +131,14 @@ type Model struct {
 	kickTarget admin.NodeState
 	// pages are the callers' page requests, one per node. A cleared page
 	// stays listed with Type EventPageCleared until the caller logs off.
-	pages   []admin.Event
-	pageSel int
-	width   int
-	height  int
+	pages []admin.Event
+	// seenPages holds the pages this console has seen, by node and time, so
+	// replayed history never rings the bell. It survives reconnects.
+	seenPages    map[pageKey]time.Time
+	snoopPending bool // a snoop is opening or running
+	pageSel      int
+	width        int
+	height       int
 	// scrollBack is how many log lines the lower box is held back from
 	// the newest entry (PgUp/PgDn); zero follows the tail.
 	scrollBack int
@@ -175,7 +179,7 @@ func New(client admin.AdminClient, opts Options) Model {
 	if opts.bell == nil {
 		opts.bell = func() { _, _ = fmt.Fprint(os.Stdout, "\a") }
 	}
-	m := Model{client: client, opts: opts, mode: modeList, conn: connLost}
+	m := Model{client: client, opts: opts, mode: modeList, conn: connLost, seenPages: map[pageKey]time.Time{}}
 	if client != nil {
 		m.conn = connConnected
 		m.everLinked = true
@@ -676,6 +680,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.snoopOpened(msg)
 
 	case snoopResult:
+		m.snoopPending = false
 		if msg.reason != "" {
 			m.setStatus(msg.reason, false)
 		}

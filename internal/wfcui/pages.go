@@ -34,6 +34,34 @@ func (m Model) pageIndex(node int) int {
 	return -1
 }
 
+// pageKey identifies one page request.
+type pageKey struct {
+	node int
+	at   int64
+}
+
+// bellWindow is how recent a page must be to ring the bell; older ones are
+// history replayed by the server.
+const bellWindow = 30 * time.Second
+
+// firstSight records a page and reports whether this console has not seen it
+// before and it is recent. Keys older than an hour are dropped.
+func (m *Model) firstSight(ev admin.Event) bool {
+	now := m.now()
+	for k, t := range m.seenPages {
+		if now.Sub(t) > time.Hour {
+			delete(m.seenPages, k)
+		}
+	}
+	k := pageKey{ev.NodeID, ev.Time.UnixNano()}
+	if _, ok := m.seenPages[k]; ok {
+		return false
+	}
+	m.seenPages[k] = now
+	d := now.Sub(ev.Time)
+	return d <= bellWindow && d >= -bellWindow
+}
+
 // applyPageEvent folds a page or page-cleared event into m.pages. It reports
 // whether a new pending page arrived. The server replays recent events after
 // a reconnect, so a page already held (same time) is ignored.
@@ -44,13 +72,14 @@ func (m *Model) applyPageEvent(ev admin.Event) bool {
 		if i >= 0 && m.pages[i].Time.Equal(ev.Time) {
 			return false
 		}
+		ring := m.firstSight(ev)
 		if i < 0 {
 			m.pages = append(m.pages, ev)
-			return true
+			return ring
 		}
 		fresh := !pending(m.pages[i])
 		m.pages[i] = ev
-		return fresh
+		return ring && fresh
 	case admin.EventPageCleared:
 		if i < 0 {
 			return false
@@ -126,6 +155,11 @@ func (m Model) beginSnoop(n admin.NodeState, chat bool) (tea.Model, tea.Cmd) {
 		m.setStatus("Snoop is not available on this connection", true)
 		return m, nil
 	}
+	if m.snoopPending {
+		m.setStatus("A snoop is already opening", true)
+		return m, nil
+	}
+	m.snoopPending = true
 	c, id := m.client, m.connID
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
@@ -137,6 +171,9 @@ func (m Model) beginSnoop(n admin.NodeState, chat bool) (tea.Model, tea.Cmd) {
 
 // snoopOpened starts the snoop screen once the stream is open.
 func (m Model) snoopOpened(msg snoopOpenedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil || msg.st == nil || msg.connID != m.connID {
+		m.snoopPending = false
+	}
 	if msg.connID != m.connID {
 		if msg.st != nil {
 			_ = msg.st.Close()
@@ -203,7 +240,7 @@ func (m Model) handleKeySnoop() (tea.Model, tea.Cmd) {
 func (m Model) handleKeyPages(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc, tea.KeyBackspace:
-		m.mode = modeList
+		m.mode = m.prevMode
 	case tea.KeyDown:
 		m.pageSel++
 		m.clampPageSel()
@@ -217,7 +254,7 @@ func (m Model) handleKeyPages(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "q", "Q":
 			return m, tea.Quit
 		case "p", "P":
-			m.mode = modeList
+			m.mode = m.prevMode
 		}
 	}
 	return m, nil

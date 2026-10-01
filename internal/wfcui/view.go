@@ -805,8 +805,6 @@ func (m Model) drawCmdBar(s *screen, g geometry) {
 		segs = append(segs, keySeg("ESC", "back")...)
 		if canKick {
 			segs = append(segs, keySeg("K", "kick")...)
-		}
-		if canKick {
 			segs = append(segs, keySeg("S", "snoop")...)
 		}
 		segs = append(segs, keySeg("Q", "quit")...)

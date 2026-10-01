@@ -36,6 +36,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "s", "S":
 			return m.handleKeySnoop()
 		case "p", "P":
+			if len(m.pages) == 0 {
+				m.setStatus("No pages", false)
+				return m, nil
+			}
+			m.prevMode = m.mode
 			m.mode = modePages
 			m.clampPageSel()
 			return m, nil

@@ -49,33 +49,128 @@ func TestPageEventAddsBadge(t *testing.T) {
 	}
 }
 
+func pageAt(m Model, node int, reason string, age time.Duration) admin.Event {
+	return admin.Event{Time: m.now().Add(-age), Type: admin.EventPage, NodeID: node, Handle: "caller", Message: reason}
+}
+
+func ringModel(rings *int, opts Options) Model {
+	opts.bell = func() { *rings++ }
+	m, _ := newTestModel(newFakeClient(), opts)
+	return m
+}
+
+func feedRun(t *testing.T, m Model, ev admin.Event) Model {
+	t.Helper()
+	m, cmd := feed(t, m, ev)
+	collect(cmd)
+	return m
+}
+
 func TestPageBellOnlyForNewPendingPage(t *testing.T) {
 	rings := 0
-	m, _ := newTestModel(newFakeClient(), Options{bell: func() { rings++ }})
-	m, cmd := feed(t, m, pageEvent(3, "help"))
-	collect(cmd)
+	m := ringModel(&rings, Options{})
+	m = feedRun(t, m, pageAt(m, 3, "help", time.Second))
 	if rings != 1 {
-		t.Fatalf("new page rang %d times", rings)
+		t.Fatalf("fresh page rang %d times", rings)
 	}
-	m, cmd = feed(t, m, m.pages[0]) // replay of the same page
-	collect(cmd)
+	m = feedRun(t, m, m.pages[0]) // same page again
 	if len(m.pages) != 1 || rings != 1 {
-		t.Fatalf("replay rang or duplicated: rings=%d pages=%v", rings, m.pages)
+		t.Fatalf("repeat rang or duplicated: rings=%d pages=%v", rings, m.pages)
 	}
-	m, cmd = feed(t, m, clearEvent(3, "answered"))
-	collect(cmd)
-	_, cmd = feed(t, m, pageEvent(3, "again"))
-	collect(cmd)
+	m = feedRun(t, m, clearEvent(3, "answered"))
+	m = feedRun(t, m, pageAt(m, 3, "again", 0))
 	if rings != 2 {
 		t.Fatalf("a new page after a clear must ring, rings=%d", rings)
 	}
 
 	quiet := 0
-	mq, _ := newTestModel(newFakeClient(), Options{NoBell: true, bell: func() { quiet++ }})
-	_, cmd = feed(t, mq, pageEvent(3, "help"))
-	collect(cmd)
+	mq := ringModel(&quiet, Options{NoBell: true})
+	feedRun(t, mq, pageAt(mq, 3, "help", 0))
 	if quiet != 0 {
 		t.Fatal("NoBell must stay quiet")
+	}
+}
+
+func TestOldPageIsListedButSilent(t *testing.T) {
+	rings := 0
+	m := ringModel(&rings, Options{})
+	m = feedRun(t, m, pageAt(m, 3, "help", 5*time.Minute))
+	if len(m.pages) != 1 || rings != 0 {
+		t.Fatalf("pages=%v rings=%d", m.pages, rings)
+	}
+}
+
+func TestReplayAfterReconnectIsSilent(t *testing.T) {
+	rings := 0
+	m := ringModel(&rings, Options{})
+	pg := pageAt(m, 3, "help", time.Second)
+	lg := clearEvent(3, "logoff")
+	m = feedRun(t, m, pg)
+	m = feedRun(t, m, lg)
+	if rings != 1 || len(m.pages) != 0 {
+		t.Fatalf("rings=%d pages=%v", rings, m.pages)
+	}
+	// A reconnect replays the ring: the page returns, then its clear.
+	m = feedRun(t, m, pg)
+	if len(m.pages) != 1 {
+		t.Fatalf("replayed page not listed: %v", m.pages)
+	}
+	m = feedRun(t, m, lg)
+	if rings != 1 || len(m.pages) != 0 {
+		t.Fatalf("replay rang: rings=%d pages=%v", rings, m.pages)
+	}
+}
+
+func TestPKeyWithoutPagesOnlySetsStatus(t *testing.T) {
+	m, _ := pageModel(t)
+	m, _ = update(t, m, keyRune('p'))
+	if m.mode == modePages || m.status != "No pages" {
+		t.Fatalf("mode=%v status=%q", m.mode, m.status)
+	}
+}
+
+func TestPageListReturnsToOpeningMode(t *testing.T) {
+	m, _ := pageModel(t)
+	m, _ = feed(t, m, pageEvent(3, "help"))
+	m.mode = modeDetails
+	m, _ = update(t, m, keyRune('p'))
+	m, _ = update(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.mode != modeDetails {
+		t.Fatalf("mode %v", m.mode)
+	}
+}
+
+func TestSecondSnoopRefusedWhileOpening(t *testing.T) {
+	sc := &snoopClient{fakeClient: newFakeClient(), openErr: errors.New("gone")}
+	m, _ := newTestModel(sc, Options{})
+	m = withNodes(m)
+	m, cmd := update(t, m, keyRune('s'))
+	if cmd == nil || !m.snoopPending {
+		t.Fatal("first S must start an open")
+	}
+	m2, cmd2 := update(t, m, keyRune('s'))
+	if cmd2 != nil || !m2.statusErr {
+		t.Fatalf("second S not refused, status %q", m2.status)
+	}
+	m = run(t, m, cmd) // open fails
+	if m.snoopPending {
+		t.Fatal("pending not cleared after failed open")
+	}
+	_, cmd = update(t, m, keyRune('s'))
+	if cmd == nil {
+		t.Fatal("S must work again after the failure")
+	}
+	// A stale-link open result also clears the flag.
+	m.snoopPending = true
+	m, _ = update(t, m, snoopOpenedMsg{connID: m.connID + 1})
+	if m.snoopPending {
+		t.Fatal("pending not cleared on stale result")
+	}
+	// A finished snoop clears it too.
+	m.snoopPending = true
+	m, _ = update(t, m, snoopResult{node: 1})
+	if m.snoopPending {
+		t.Fatal("pending not cleared after snoop")
 	}
 }
 
