@@ -176,7 +176,7 @@ func TestResyncClearsScreenFirst(t *testing.T) {
 		tp.Output([]byte("x"))
 	}
 	first := <-w.C()
-	if !bytes.HasPrefix(first, []byte("\x1b[2J\x1b[H")) {
+	if !bytes.HasPrefix(first, []byte("\x1b[0m\x1b[2J\x1b[H")) {
 		t.Fatalf("resync snapshot = %q; want it to start with clear and home", first[:min(len(first), 12)])
 	}
 }

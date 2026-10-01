@@ -53,7 +53,58 @@ type chatPane struct {
 	line        []rune // text on the cursor row
 	cells       int    // display cells taken by line; col is cells+1
 	pending     []byte // start of a UTF-8 sequence split across writes
+	esc         int    // escape sequence being skipped, see the esc* constants
 	afterCR     bool   // an LF or NUL straight after CR is part of the same newline
+}
+
+// Escape states: after ESC, inside a CSI sequence, and after ESC O.
+const (
+	escNone = iota
+	escStart
+	escCSI
+	escSS3
+)
+
+// skipEscape consumes c when it belongs to an escape sequence, which is
+// dropped whole. The state persists across put calls. CR and LF end it.
+func (p *chatPane) skipEscape(c byte) bool {
+	switch p.esc {
+	case escNone:
+		if c == 0x1B {
+			p.esc = escStart
+			p.pending = nil
+			return true
+		}
+		return false
+	case escStart:
+		switch c {
+		case '[':
+			p.esc = escCSI
+		case 'O':
+			p.esc = escSS3
+		case 0x1B:
+		default:
+			p.esc = escNone
+			return false
+		}
+		return true
+	case escCSI:
+		switch {
+		case c == '\r' || c == '\n':
+			p.esc = escNone
+			return false
+		case c >= 0x40 && c <= 0x7E:
+			p.esc = escNone
+		}
+		return true
+	default:
+		if c == '\r' || c == '\n' {
+			p.esc = escNone
+			return false
+		}
+		p.esc = escNone
+		return true
+	}
 }
 
 func (p *chatPane) moveTo() {
@@ -132,6 +183,9 @@ func (p *chatPane) wrap() {
 func (p *chatPane) put(b []byte) {
 	p.moveTo()
 	for _, c := range b {
+		if p.skipEscape(c) {
+			continue
+		}
 		afterCR := p.afterCR
 		p.afterCR = false
 		switch {
@@ -196,6 +250,10 @@ func (p *chatPane) putRune(r rune) {
 			return
 		}
 		p.wrap()
+		if p.cells+w > p.width {
+			p.newline()
+			p.moveTo()
+		}
 	}
 	p.emit(r)
 	p.line = append(p.line, r)

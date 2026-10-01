@@ -634,3 +634,47 @@ func TestChatPaneWrapCountsCells(t *testing.T) {
 		t.Fatalf("rows = %q, %q", r1, r2)
 	}
 }
+
+func TestChatPaneDropsEscapeSequencesAcrossPuts(t *testing.T) {
+	for name, parts := range map[string][]string{
+		"csi arrow":   {"\x1b[", "A"},
+		"ss3 arrow":   {"\x1b", "O", "A"},
+		"f-key":       {"\x1b[15", "~"},
+		"one write":   {"\x1b[1;5C"},
+		"esc esc csi": {"\x1b\x1b[B"},
+	} {
+		term, p := paneOn(20, 5)
+		for _, s := range parts {
+			p.put([]byte(s))
+		}
+		p.put([]byte("ok"))
+		if got := term.Row(1); got != "ok" {
+			t.Errorf("%s: row = %q; want ok", name, got)
+		}
+	}
+	term, p := paneOn(20, 5)
+	p.put([]byte("\x1bx"))
+	if got := term.Row(1); got != "x" {
+		t.Errorf("ESC x: row = %q; want x", got)
+	}
+}
+
+func TestChatPaneWideRuneStaysInPane(t *testing.T) {
+	term, p := paneOn(3, 5)
+	p.put([]byte("ab\u4e16"))
+	if r1, r2 := term.Row(1), term.Row(2); r1 != "ab" || r2 != "\u4e16" {
+		t.Fatalf("rows = %q, %q", r1, r2)
+	}
+	// No space to move down with: the rune alone goes to the next line.
+	term, p = paneOn(3, 5)
+	p.put([]byte("a\u4e16\u4e16"))
+	if r1, r2 := term.Row(1), term.Row(2); r1 != "a\u4e16" || r2 != "\u4e16" {
+		t.Fatalf("rows = %q, %q", r1, r2)
+	}
+	// The word moved down with the rune leaves no room for it.
+	term, p = paneOn(3, 5)
+	p.put([]byte("x ab\u4e16"))
+	if r2, r3 := term.Row(2), term.Row(3); r2 != "ab" || r3 != "\u4e16" {
+		t.Fatalf("rows = %q, %q", r2, r3)
+	}
+}

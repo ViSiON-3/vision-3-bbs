@@ -90,7 +90,7 @@ func (t *Tap) resync(w *Watcher) {
 	if !bytes.HasPrefix(snap, clearScreen) {
 		// The queue held the rest of the old screen. Start the snapshot on
 		// a clean one.
-		snap = append([]byte("\x1b[2J\x1b[H"), snap...)
+		snap = append([]byte("\x1b[0m\x1b[2J\x1b[H"), snap...)
 	}
 	w.ch <- snap
 }
