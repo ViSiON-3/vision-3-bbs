@@ -57,7 +57,9 @@ func readLine(r *bufio.Reader) ([]byte, error) {
 
 // ServeSnoop runs the server side of one wfc-snoop channel for sysop.
 func ServeSnoop(rw io.ReadWriteCloser, sysop string, resolve SnoopTarget, audit func(msg string, args ...any)) error {
-	defer rw.Close() // also unblocks the input goroutine's read
+	// Closing also unblocks the input goroutine's read; the channel is
+	// finished either way, so its close error is not actionable.
+	defer func() { _ = rw.Close() }()
 	br := bufio.NewReaderSize(rw, maxSnoopLine)
 	line, err := readLine(br)
 	if err != nil {

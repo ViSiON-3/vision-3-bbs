@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// Errors returned by the keyboard and chat methods.
 var (
 	ErrKeyboardHeld   = errors.New("another sysop has the keyboard")
 	ErrNotHolder      = errors.New("you do not have the keyboard")
@@ -77,6 +78,8 @@ func (k *keyboard) drop() (time.Duration, int) {
 	return held, n
 }
 
+// TakeKeyboard gives handle the keyboard for type-in. handle must be watching
+// the tap, and no other sysop may hold the keyboard.
 func (t *Tap) TakeKeyboard(handle string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -109,6 +112,7 @@ func (t *Tap) ReleaseKeyboard(handle string) (held time.Duration, injected int, 
 	return held, injected, true
 }
 
+// KeyboardHolder returns the handle holding the keyboard, or "" if none.
 func (t *Tap) KeyboardHolder() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -142,13 +146,17 @@ func (t *Tap) Inject(handle string, p []byte) int {
 	}
 }
 
+// Input carries the holder's type-in bytes to the caller's session.
 func (t *Tap) Input() <-chan []byte { return t.kb.input }
 
 // InputReady fires (without consuming) when type-in bytes are queued, so a
 // transport blocked on a socket read can wake itself.
 func (t *Tap) InputReady() <-chan struct{} { return t.kb.ready }
 
+// ChatInput carries the sysop's keys to the chat screen while chat is open.
 func (t *Tap) ChatInput() <-chan []byte { return t.kb.chatIn }
+
+// BreakIn fires when a chat request is waiting for the caller's session.
 func (t *Tap) BreakIn() <-chan struct{} { return t.kb.breakIn }
 
 // RequestChat takes the keyboard for handle and asks the caller's session to
@@ -320,6 +328,7 @@ func (t *Tap) EndChat() <-chan struct{} {
 	return t.kb.endChat
 }
 
+// StopChat ends the open chat. Only the keyboard holder may end it.
 func (t *Tap) StopChat(handle string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -349,6 +358,7 @@ func (t *Tap) Chats() uint64 {
 	return t.kb.chats
 }
 
+// Chatting reports whether chat is open.
 func (t *Tap) Chatting() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()

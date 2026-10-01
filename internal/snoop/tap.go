@@ -8,6 +8,7 @@ import (
 // Mode is what the caller's session is doing, as far as snoop cares.
 type Mode int
 
+// The caller's session modes. Chat is only offered in ModeBBS.
 const (
 	ModeBBS Mode = iota
 	ModeDoor
@@ -199,6 +200,8 @@ func (t *Tap) Snapshot() ([]byte, bool) {
 	return t.buf.snapshot()
 }
 
+// SetMode records what the caller's session is doing. Leaving ModeTransfer
+// re-arms the transfer marker.
 func (t *Tap) SetMode(m Mode) {
 	t.mu.Lock()
 	t.mode = m
@@ -224,18 +227,21 @@ func (t *Tap) SetTransfer(active bool) {
 	}
 }
 
+// Mode returns what the caller's session is doing.
 func (t *Tap) Mode() Mode {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.mode
 }
 
+// SetCP437 records whether the caller's output is CP437 rather than UTF-8.
 func (t *Tap) SetCP437(on bool) {
 	t.mu.Lock()
 	t.cp437 = on
 	t.mu.Unlock()
 }
 
+// CP437 reports whether the caller's output is CP437 rather than UTF-8.
 func (t *Tap) CP437() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()

@@ -271,7 +271,7 @@ func (s *BBSSession) Write(p []byte) (int, error) {
 	if t := s.tap.Load(); t != nil && n > 0 {
 		if s.IsTransferActive() {
 			t.TransferStarted()
-		} else if _, _, isPty := s.Session.Pty(); isPty {
+		} else if _, _, isPty := s.Pty(); isPty {
 			t.Output(normalizeNewlines(p[:n]))
 		} else {
 			t.Output(p[:n])

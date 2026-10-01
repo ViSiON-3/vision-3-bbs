@@ -108,7 +108,7 @@ func (p *chatPane) skipEscape(c byte) bool {
 }
 
 func (p *chatPane) moveTo() {
-	fmt.Fprintf(p.w, "\x1b[%d;%dH%s", p.row, p.col, colorCodeToAnsi(p.color))
+	_, _ = fmt.Fprintf(p.w, "\x1b[%d;%dH%s", p.row, p.col, colorCodeToAnsi(p.color)) // best-effort display
 }
 
 func (p *chatPane) newline() {
@@ -119,7 +119,7 @@ func (p *chatPane) newline() {
 		p.row++
 		return
 	}
-	fmt.Fprintf(p.w, "\x1b[%d;%dr\x1b[%d;1H\n\x1b[r", p.first, p.last, p.last)
+	_, _ = fmt.Fprintf(p.w, "\x1b[%d;%dr\x1b[%d;1H\n\x1b[r", p.first, p.last, p.last) // best-effort display
 }
 
 // cellWidth is the number of terminal columns r takes in the pane and
@@ -309,7 +309,7 @@ func untilNextMinute(now time.Time) time.Duration {
 const chatClockWidth = len(" 15:04 ")
 
 func drawChatClock(w io.Writer, row, width int) {
-	fmt.Fprintf(w, "\x1b[%d;%dH\x1b[0;37m %s \x1b[0m", row, width-chatClockWidth+1, time.Now().Format("15:04"))
+	_, _ = fmt.Fprintf(w, "\x1b[%d;%dH\x1b[0;37m %s \x1b[0m", row, width-chatClockWidth+1, time.Now().Format("15:04")) // best-effort display
 }
 
 // runSysopChat draws the split screen and relays both sides until the caller
@@ -331,7 +331,7 @@ func runSysopChat(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode ans
 	caller := &chatPane{w: w, mode: mode, first: top + 2, last: height, width: width, row: top + 2, col: 1, color: th.ChatUserColor}
 
 	bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, sysopHandle, callerHandle)))
-	fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top+1)
+	_, _ = fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top+1) // best-effort display
 	_ = terminalio.WriteProcessedBytes(w, bar, mode)
 	if fill := width - chatClockWidth - ansi.VisibleLength(string(bar)); fill > 0 {
 		_ = terminalio.WriteProcessedBytes(w, []byte("\x1b[0;37m"+strings.Repeat("\xc4", fill)), mode)
@@ -403,7 +403,7 @@ loop:
 		}
 	}
 
-	fmt.Fprint(w, "\x1b[r\x1b[0m\x1b[2J\x1b[H")
+	_, _ = fmt.Fprint(w, "\x1b[r\x1b[0m\x1b[2J\x1b[H") // best-effort display
 	if !overflowed {
 		_, _ = w.Write(snap)
 	} else {
