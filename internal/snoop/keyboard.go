@@ -26,7 +26,7 @@ type keyboard struct {
 	ready    chan struct{} // buffered 1: signals queued type-in without consuming it
 	chatIn   chan []byte   // sysop bytes while chat is active
 	breakIn  chan struct{} // buffered 1: a pending chat request
-	began    chan struct{} // closed by ChatBegan for the current request
+	req      *chatRequest  // the pending chat request, nil if none
 	endChat  chan struct{} // closed by StopChat/ReleaseKeyboard
 	chatting bool
 	chats    uint64 // chats started over the tap's life
@@ -39,9 +39,13 @@ type keyboard struct {
 	// caller left it) drops the keyboard, so the sysop's next keys are
 	// discarded rather than typed at the caller's prompt.
 	holderEnded bool
-	// refused is why ChatBegan turned down the pending request; RequestChat
-	// returns it.
-	refused error
+}
+
+// chatRequest is one RequestChat waiting on the caller's session. err is set,
+// under Tap.mu, before began closes.
+type chatRequest struct {
+	began chan struct{} // closed by ChatBegan, accepted or refused
+	err   error         // why ChatBegan refused, nil if it accepted
 }
 
 func (k *keyboard) init() {
@@ -170,7 +174,6 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 		t.mu.Unlock()
 		return false, nil
 	}
-	t.kb.refused = nil
 	tookIt := t.kb.holder == ""
 	t.kb.take(handle)
 	t.kb.holderEnded = false
@@ -178,8 +181,8 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 	if tookIt {
 		t.kb.chatTook = handle
 	}
-	began := make(chan struct{})
-	t.kb.began = began
+	req := &chatRequest{began: make(chan struct{})}
+	t.kb.req = req
 	t.kb.endChat = make(chan struct{})
 	select {
 	case t.kb.breakIn <- struct{}{}:
@@ -188,12 +191,9 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 	t.mu.Unlock()
 
 	select {
-	case <-began:
-		t.mu.Lock()
-		defer t.mu.Unlock()
-		if err := t.kb.refused; err != nil {
-			t.kb.refused = nil
-			return false, err
+	case <-req.began:
+		if req.err != nil {
+			return false, req.err
 		}
 		return true, nil
 	case <-t.done:
@@ -202,14 +202,21 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.kb.chatting { // began raced the timer
+	select {
+	case <-req.began: // ChatBegan answered as the timer fired
+		if req.err != nil {
+			return false, req.err // it already cleaned up
+		}
 		return true, nil
+	default:
 	}
 	select {
 	case <-t.kb.breakIn:
 	default:
 	}
-	t.kb.began = nil
+	if t.kb.req == req {
+		t.kb.req = nil
+	}
 	t.kb.chatTook = ""
 	if tookIt && t.kb.holder == handle {
 		t.kb.drop()
@@ -227,11 +234,17 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 func (t *Tap) ChatBegan() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.kb.began == nil {
+	return t.chatBeganLocked()
+}
+
+func (t *Tap) chatBeganLocked() bool {
+	req := t.kb.req
+	if req == nil {
 		return false
 	}
+	t.kb.req = nil
 	if t.mode != ModeBBS {
-		t.kb.refused = fmt.Errorf("%w: in a %s", ErrBusy, t.mode)
+		req.err = fmt.Errorf("%w: in a %s", ErrBusy, t.mode)
 		select {
 		case <-t.kb.breakIn:
 		default:
@@ -241,8 +254,7 @@ func (t *Tap) ChatBegan() bool {
 		}
 		t.kb.chatTook = ""
 		t.stopChatLocked()
-		close(t.kb.began)
-		t.kb.began = nil
+		close(req.began)
 		return false
 	}
 	t.kb.chatting = true
@@ -255,8 +267,7 @@ func (t *Tap) ChatBegan() bool {
 	case <-t.kb.ready:
 	default:
 	}
-	close(t.kb.began)
-	t.kb.began = nil
+	close(req.began)
 	return true
 }
 

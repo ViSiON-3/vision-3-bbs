@@ -457,15 +457,22 @@ func TestChatEndedReportsNothingWhenHolderEnds(t *testing.T) {
 
 func TestChatBeganRefusedWhenCallerLeftBBS(t *testing.T) {
 	tp := newWatchedTap("a")
+	accepted := make(chan bool, 1)
 	go func() {
 		<-tp.BreakIn()
 		tp.SetMode(ModeDoor)
-		if tp.ChatBegan() {
-			t.Error("ChatBegan accepted after the caller entered a door")
-		}
+		accepted <- tp.ChatBegan()
 	}()
 	start := time.Now()
 	started, err := tp.RequestChat("a", 5*time.Second)
+	select {
+	case ok := <-accepted:
+		if ok {
+			t.Fatal("ChatBegan accepted after the caller entered a door")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ChatBegan never returned")
+	}
 	if !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "door") {
 		t.Fatalf("err = %v, want ErrBusy naming the door", err)
 	}
@@ -512,5 +519,36 @@ func TestRequestChatOnRunningChatIsNotStarted(t *testing.T) {
 	started, err := tp.RequestChat("a", 50*time.Millisecond)
 	if err != nil || started {
 		t.Fatalf("RequestChat on running chat = %v, %v; want false, nil", started, err)
+	}
+}
+
+// A refusal that lands after RequestChat's timer fired, but before it took
+// the lock, must still be the error RequestChat returns.
+func TestRequestChatReturnsRefusalThatTiesWithTimeout(t *testing.T) {
+	tp := newWatchedTap("a")
+	type result struct {
+		started bool
+		err     error
+	}
+	got := make(chan result, 1)
+	go func() {
+		started, err := tp.RequestChat("a", 20*time.Millisecond)
+		got <- result{started, err}
+	}()
+	<-tp.BreakIn()
+	tp.SetMode(ModeDoor)
+	tp.mu.Lock()
+	time.Sleep(100 * time.Millisecond) // the timer fires while the lock is held
+	accepted := tp.chatBeganLocked()
+	tp.mu.Unlock()
+	if accepted {
+		t.Fatal("ChatBegan accepted after the caller entered a door")
+	}
+	r := <-got
+	if r.started || !errors.Is(r.err, ErrBusy) {
+		t.Fatalf("RequestChat = %v, %v; want ErrBusy", r.started, r.err)
+	}
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q; the request's keyboard was not released", h)
 	}
 }
