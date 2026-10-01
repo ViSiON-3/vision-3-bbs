@@ -8,8 +8,7 @@ ViSiON/3 daemon over the BBS's **existing SSH server** — so it works the same
 whether the BBS is on localhost or hosted in the cloud.
 
 If the link to the BBS drops, the console **reconnects on its own** and keeps
-going; you never have to restart it. Sysop chat and paging a caller are not in
-this release.
+going; you never have to restart it.
 
 ## Requirements to access WFC
 
@@ -166,7 +165,7 @@ wfc --connect ssh://Felonius@your-bbs-host:2222 --identity ~/.ssh/id_ed25519
 | `--no-color` | Disable color |
 | `--refresh <ms>` | Snapshot poll interval in milliseconds (default 1000) |
 | `--max-events <n>` | Events kept in the feed (default 200) |
-| `--readonly` | View-only: hides and disables the kick command |
+| `--readonly` | View-only: disables kick and snoop (and so type-in and chat) |
 | `--version` / `--help` | Print version / usage |
 
 ## Console functions
@@ -284,6 +283,101 @@ connected console gets a `Kicked by sysop` line in its Callers log. Kicks are
 audited in the BBS log with the admin's handle. `--readonly` hides the command
 entirely.
 
+### Watching a node
+
+`S` on a caller in the Callers list or the details view opens a snoop on that
+node. It uses a second SSH channel (the `wfc-snoop` subsystem) on the
+console's existing connection, under the same access rule as the console:
+CoSysOp level or above, a registered SSH key, WFC Access on. The rule is
+re-checked every 30 seconds.
+
+You see the caller's current screen straight away (up to 64 KiB of output since
+their last clear-screen), then everything they see from then on. CP437 callers
+display correctly on a UTF-8 terminal. During a binary file transfer the screen
+shows `[transfer in progress]` instead of the transfer data.
+
+When your terminal is taller than the caller's screen, a status bar on your
+bottom row shows the node, handle, caller screen size, mode (`WATCH`, `TYPE` or
+`CHAT`), the hotkeys and the last error. Otherwise it is hidden. `Alt-H`
+toggles it.
+
+| Key | Action |
+|-----|--------|
+| `Alt-X` | Leave the snoop and return to the dashboard |
+| `Alt-H` | Show or hide the status bar |
+| `Alt-T` | Type for the caller (see below) |
+| `Alt-C` | Start or end chat (see below) |
+
+If the caller disconnects, `wfc` returns to the dashboard with
+`node N disconnected`. The first byte you type right after leaving the snoop
+screen can be lost. Your terminal size is read when the snoop opens; resizing
+during a snoop is not tracked.
+
+The caller is not told they are being watched. Attach and detach are written
+to the BBS log with your handle.
+
+### Typing for the caller
+
+`Alt-T` toggles type-in. While it is on, your keystrokes reach the caller's
+session as if they had typed them, including inside doors. You must be watching
+the node first, and closing your snoop channel releases the keyboard.
+
+Only one sysop can type on a node at a time. A second sysop who tries gets an
+error naming who has it.
+
+In type-in a plain `Esc` is sent after 300 ms, `Esc Esc` sends a single `Esc`,
+and `Alt-T`, `Alt-C`, `Alt-X` and `Alt-H` stay hotkeys. The log records
+type-in on and off with how long it lasted and how many bytes were sent. It
+never records the keystrokes.
+
+### Chat
+
+`Alt-C` toggles chat. It opens the classic split screen on the caller's
+terminal: your text on top, the caller's below, and a bar between them with
+both handles and the time (`HH:MM`). Each pane word-wraps and scrolls on its
+own. Pane colors come from `chatSysopColor` and `chatUserColor` in
+[`theme.json`](../menus/menu-system.md#theme-themejson).
+
+Chat works only while the caller is in the BBS: menus, prompts, the message
+reader, the editor. It is refused while they are in a door or a file transfer,
+and the reason shows in your status bar. Watching and type-in still work there.
+Chat opens as soon as the caller's session is waiting for a key. If that takes
+more than 3 seconds the request is refused.
+
+Chat ends when you press `Alt-C` again, when the caller presses `Esc` twice (it
+closes about half a second after the second `Esc`), or when your snoop channel
+closes. The caller's screen is put back as it was, including a half-typed line.
+If more than 64 KiB was drawn since their last clear-screen it cannot be
+restored, and they see `[back from chat, press Enter]`.
+
+Chat time is not charged to the caller's time limit, and the idle timeout is
+paused. If you were typing for the caller before chat, you return to type-in
+afterwards; otherwise to watching.
+
+### Pages
+
+A caller pages you with the [`PAGESYSOP`](../reference/menu-commands.md) menu
+command and gives a one-line reason. With no `wfc` console connected they see
+"The SysOp is not available right now." immediately.
+
+Otherwise every connected console shows a `PAGE` badge with the number of
+waiting pages and rings the terminal bell once for each new page. The caller
+sees "Paging SysOp..." with a countdown and a bell each second. They can cancel
+by pressing a key. After `pageSysopTimeout` seconds with no answer they see the
+not-available message. A caller can send one page per `pageSysopCooldown`
+seconds.
+
+`P` opens the page list: node, handle, reason and age. `Enter` opens the snoop
+on that node and starts chat; `Esc` goes back. Pages that were answered, timed
+out or cancelled stay in the list, marked, until the caller logs off.
+
+`pageSysopTimeout` (default 60) and `pageSysopCooldown` (default 300) are in
+`config.json` and in the config TUI under **Access & Security → Access Levels**
+as **Page Timeout** and **Page Cooldown**; see
+[Configuration](../configuration/configuration.md). Changes apply on config
+reload with no restart. The caller's prompts are in the string editor; see
+[String Editor](../advanced/string-editor.md#strings-for-sysop-chat-and-paging).
+
 ### Scrolling the logs
 
 Both logs follow their newest entry. `PgUp` scrolls back a screenful at a
@@ -331,9 +425,13 @@ reported plainly instead of turning into a retry loop.
 | `Enter` | Show details for the selected row |
 | `Esc` | Close the details overlay |
 | `K` | Kick the selected caller (asks `Y`/`N` first) |
+| `S` | Watch the selected caller (snoop) |
+| `P` | Open the page list |
 | `PgUp` / `PgDn` | Scroll the log back / forward (page the cursor on Events) |
 | `R` | Refresh now (not shown on the bar); retry the connection now when offline |
 | `Q` / `Ctrl+C` | Quit |
+
+On the snoop screen: `Alt-X` dashboard, `Alt-T` type-in, `Alt-C` chat, `Alt-H` status bar.
 
 ## Troubleshooting
 
@@ -396,9 +494,10 @@ login because it didn't match a qualifying account.
   each kick, with the admin's handle and address — is written to the BBS log
   via structured logging. Unknown public-key offers are logged at debug level
   with the key fingerprint.
-- **Kick is the only mutation.** Any account that can open the console can
-  disconnect any node; there is no separate permission level. Run remote
-  consoles with `--readonly` if a co-sysop should only watch.
+- **Kick, type-in and chat change things.** Any account that can open the console can
+  disconnect any node, watch it, type for the caller and chat; there is no separate
+  permission level. Watching is not shown to the caller. Run remote consoles
+  with `--readonly` if a co-sysop should only look at the dashboard.
 - **Host-key verified.** The client checks the daemon's SSH host key against
   `known_hosts` unless you pass `--insecure`.
 

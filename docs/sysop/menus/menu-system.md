@@ -253,6 +253,19 @@ the number of files you added. A `has no counterpart in the shipped set`
 warning means a subdirectory name is wrong. `git status menus/` (repo) or the
 `diff -rq` above (instance) should now report nothing.
 
+## Theme (`theme.json`)
+
+`theme.json` in a menu set holds color settings. A copy in
+`menus.d/<set>/theme.json` overrides it. The color numbers are the same as
+for `yesNoHighlightColor`.
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `yesNoHighlightColor` | `31` | Highlighted yes/no prompts |
+| `yesNoRegularColor` | `15` | Regular yes/no prompts |
+| `chatSysopColor` | `11` | Sysop's pane in [split-screen chat](how-to-guides/wfc-console.md#chat) |
+| `chatUserColor` | `10` | Caller's pane in split-screen chat |
+
 ## Menu Configuration Files (.MNU)
 
 Menu configuration files are JSON files that define menu behavior and prompts.

@@ -297,6 +297,22 @@ The editor contains approximately 250 string entries organized by function:
 
 Reserved entries (keys prefixed with `_`) appear in the list as non-editable rows and are skipped when saving.
 
+## Strings for sysop chat and paging
+
+These strings are edited like any other. The `%s` and `%d` verbs follow the
+[format rules](#format-verbs) above.
+
+| Key | Shown | Verbs |
+|-----|-------|-------|
+| `pageSysopReasonPrompt` | Asks the caller for the reason for a page | |
+| `pageSysopPaging` | While the page waits for an answer | |
+| `pageSysopUnavailable` | No console connected, or the page timed out | |
+| `pageSysopCooldown` | Caller paged again too soon | `%d` minutes |
+| `sysopChatHeader` | Bar between the two chat panes | `%s` sysop handle, `%s` caller handle |
+| `sysopChatBack` | Caller's screen after chat when it cannot be restored | |
+
+See [WFC Sysop Console](how-to-guides/wfc-console.md#chat).
+
 ## Building
 
 The string editor is built automatically by `build.sh`:
