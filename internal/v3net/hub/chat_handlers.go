@@ -29,14 +29,12 @@ const (
 )
 
 // allowChat reports whether handle on nodeID may send a chat message of the
-// given kind now, taking from its allowances if so. The user's own allowance
-// is checked first, so a user sending too fast is refused without using up
-// the node-wide allowance that the node's other users share.
+// given kind now. The message must fit both the user's own allowance and
+// the node-wide one, and is taken from both or neither: a user sending too
+// fast does not use up the allowance the node's other users share, and a
+// message refused by the node cap does not count against the user.
 func (h *Hub) allowChat(kind, nodeID, handle string) bool {
-	if !h.chatLimiter.Allow(kind + "\x00" + nodeID + "\x00" + handle) {
-		return false
-	}
-	return h.chatNodeLimiter.Allow(nodeID)
+	return allowBoth(h.chatLimiter, kind+"\x00"+nodeID+"\x00"+handle, h.chatNodeLimiter, nodeID)
 }
 
 // roomSender returns the handle a room request from nodeID is sent as, or ""
