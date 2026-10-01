@@ -699,16 +699,20 @@ const (
 
 // quotePrefixRE matches the quote prefix a line already carries from earlier
 // rounds of quoting: initials then one or more '>', possibly several levels
-// deep ("Sh> ", " Bu>> ", "Sh> > "). The '>' has to end a word, so prose that
-// starts with "a>b" is not taken for a quote.
-var quotePrefixRE = regexp.MustCompile(`^[ \t]*((?:[A-Za-z0-9_]{0,4}>+(?:[ \t]+|$))+)`)
+// deep ("Sh> ", " Bu>> ", "Sh> > "). Initials are any few characters, since
+// quoteInitials takes the first runes of a handle whatever they are ("Ém> ",
+// "[F> "), except the ones that make arrows ("->", "=>", "<>"). The '>' has to
+// end a word, so prose that starts with "a>b" is not taken for a quote. Only
+// the one space after the last '>' belongs to the prefix: any more is the
+// body's own indent.
+var quotePrefixRE = regexp.MustCompile(`^[ \t]*((?:[^\s<>=-]{0,4}>+[ \t]+)*[^\s<>=-]{0,4}>+)(?:[ \t]|$)`)
 
 // listItemRE matches the start of a bullet or numbered list item.
 var listItemRE = regexp.MustCompile(`^(?:[-*+•]|\d{1,3}[.)])[ \t]`)
 
 // splitQuotePrefix splits a cleaned source line into the quote prefix it
 // already carries, normalized to single spaces ("Sh> "), and the text after
-// it. A line with no prefix returns "" and the line unchanged.
+// it, indent included. A line with no prefix returns "" and the line unchanged.
 func splitQuotePrefix(line string) (prefix, body string) {
 	m := quotePrefixRE.FindStringSubmatchIndex(line)
 	if m == nil {
@@ -755,9 +759,11 @@ func continuesParagraph(prev, next string, width int) bool {
 	if listItemRE.MatchString(strings.TrimLeft(nextBody, " \t")) {
 		return false
 	}
+	// A line too long to have been wrapped is a whole paragraph, whichever
+	// side of the pair it is on.
 	prevLen := runeLen(prev)
-	if prevLen > width {
-		return false // a line too long to have been wrapped is a whole paragraph
+	if prevLen > width || runeLen(next) > width {
+		return false
 	}
 	return prevLen+1+runeLen(words[0]) > width
 }

@@ -25,7 +25,11 @@ func TestSplitQuotePrefix(t *testing.T) {
 		{"> usenet style", "> ", "usenet style"},
 		{" Sh>", "Sh> ", ""},
 		{"a>b is not a quote", "", "a>b is not a quote"},
-		{"Sh>   indented body", "Sh> ", "indented body"},
+		{"Sh>   indented body", "Sh> ", "  indented body"},
+		{"Ém> accented initials", "Ém> ", "accented initials"},
+		{"[F> punctuation initials", "[F> ", "punctuation initials"},
+		{"-> an arrow, not a quote", "", "-> an arrow, not a quote"},
+		{"=> nor this", "", "=> nor this"},
 	} {
 		prefix, body := splitQuotePrefix(tc.line)
 		if prefix != tc.prefix || body != tc.body {
@@ -50,6 +54,8 @@ func TestContinuesParagraph(t *testing.T) {
 		{"quote depth changes", full, "Sh> nodelist compile", width, false},
 		{"same quote depth runs on", "Sh> " + full, "Sh> nodelist compile", width + 4, true},
 		{"indented next line", full, "  nodelist compile", width, false},
+		{"indented next line inside a quote", "Sh> " + full, "Sh>   nodelist compile", width + 4, false},
+		{"unwrapped long next line stands alone", full, "nodelist " + full + full, width, false},
 		{"bullet item", full, "- nodelist compile", width, false},
 		{"numbered item", full, "2. nodelist compile", width, false},
 		{"narrow source is never joined", full[:30], "nodelist", 30, false},
@@ -141,6 +147,29 @@ func TestQuoteModeReflowsAParagraph(t *testing.T) {
 	assertFilledParagraph(t, got[:n-2], "Bu> ", reflowText)
 	if got[n-2] != "Bu>" || got[n-1] != "Bu> Second paragraph here." {
 		t.Errorf("block ends %q, want the blank line and second paragraph kept apart", got[n-2:])
+	}
+}
+
+// An unwrapped line is a paragraph of its own even when the line before it
+// was full: joining them would erase the break between the two paragraphs.
+func TestQuoteModeKeepsUnwrappedLineApart(t *testing.T) {
+	src := wrapSource(reflowText, 78)[:1]
+	long := strings.Repeat("unwrapped paragraph sent as one line ", 6)
+	src = append(src, strings.TrimSpace(long))
+	_, ch, _, cleanup := newQuoteHarness(t, "", src)
+	defer cleanup()
+
+	qs := newQuoteSession(ch, src, 1)
+	qs.quoteSelected()
+	qs.quoteSelected()
+
+	if len(qs.paras) != 2 {
+		t.Errorf("quoted %d paragraphs, want 2 — the unwrapped line was joined to the one before it", len(qs.paras))
+	}
+	got := strings.Join(quotedBlock(t, ch), "\n")
+	want := strings.Join(append(wrapQuoted("Bu> ", src[0], MaxLineLength), wrapQuoted("Bu> ", src[1], MaxLineLength)...), "\n")
+	if got != want {
+		t.Errorf("quote block:\n%s\nwant:\n%s", got, want)
 	}
 }
 
