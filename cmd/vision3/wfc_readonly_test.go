@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,10 +19,12 @@ import (
 
 // useAdminAccount replaces the test server's users with one admin, "boss",
 // whose key is signer, stored in a real users.json so the flag can be
-// changed while sessions are open.
-func useAdminAccount(t *testing.T, signer gossh.Signer, readOnly bool) func(bool) {
+// changed while sessions are open. It returns a setter for the flag and the
+// users.json path.
+func useAdminAccount(t *testing.T, signer gossh.Signer, readOnly bool) (func(bool), string) {
 	t.Helper()
-	um, err := user.NewUserManager(t.TempDir())
+	dir := t.TempDir()
+	um, err := user.NewUserManager(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +42,53 @@ func useAdminAccount(t *testing.T, signer gossh.Signer, readOnly bool) func(bool
 	}
 	set(readOnly)
 	userMgr = um
-	return set
+	return set, filepath.Join(dir, "users.json")
+}
+
+// ueEdit changes boss's record in users.json directly, as ue does while the
+// BBS is running.
+func ueEdit(t *testing.T, path string, edit func(rec map[string]any)) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recs []map[string]any
+	if err := json.Unmarshal(data, &recs); err != nil {
+		t.Fatal(err)
+	}
+	for _, rec := range recs {
+		if rec["handle"] == "boss" {
+			edit(rec)
+		}
+	}
+	out, err := json.MarshalIndent(recs, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// waitClosed fails the test unless r reaches an error within d.
+func waitClosed(t *testing.T, what string, r io.Reader, d time.Duration) {
+	t.Helper()
+	closed := make(chan struct{})
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			if _, err := r.Read(buf); err != nil {
+				close(closed)
+				return
+			}
+		}
+	}()
+	select {
+	case <-closed:
+	case <-time.After(d):
+		t.Fatalf("%s still open", what)
+	}
 }
 
 // useAdminServer wires adminServer, which startWFCTestServer restores, with the production type-in and chat
@@ -72,7 +123,7 @@ func nodeCommands(start time.Time) []admin.AdminCommand {
 func TestWFCReadOnlyAccountIsRefused(t *testing.T) {
 	signer := newTestSigner(t)
 	addr, tap, start := startWFCTestServer(t, signer)
-	useAdminAccount(t, signer, true)
+	_, _ = useAdminAccount(t, signer, true)
 	kicks := useAdminServer(t)
 	c := dialWFC(t, addr, gossh.PublicKeys(signer))
 
@@ -108,7 +159,7 @@ func TestWFCReadOnlyAccountIsRefused(t *testing.T) {
 func TestWFCNormalAccountIsNotReadOnly(t *testing.T) {
 	signer := newTestSigner(t)
 	addr, _, start := startWFCTestServer(t, signer)
-	useAdminAccount(t, signer, false)
+	_, _ = useAdminAccount(t, signer, false)
 	kicks := useAdminServer(t)
 	c := dialWFC(t, addr, gossh.PublicKeys(signer))
 
@@ -141,7 +192,7 @@ func TestWFCReadOnlySetMidSession(t *testing.T) {
 	signer := newTestSigner(t)
 	addr, tap, start := startWFCTestServer(t, signer)
 	wfcReauthInterval = 20 * time.Millisecond // restored by startWFCTestServer
-	setReadOnly := useAdminAccount(t, signer, false)
+	setReadOnly, _ := useAdminAccount(t, signer, false)
 	kicks := useAdminServer(t)
 	c := dialWFC(t, addr, gossh.PublicKeys(signer))
 
@@ -213,4 +264,113 @@ func TestWFCReadOnlySetMidSession(t *testing.T) {
 	if !strings.Contains(st2.Header.Handle, "caller") {
 		t.Fatalf("header %+v", st2.Header)
 	}
+}
+
+// ue sets the flag in users.json with nobody online: the open console's
+// commands are refused and its snoop closes at the next re-check, with no
+// restart.
+func TestWFCReadOnlyFromUsersFile(t *testing.T) {
+	signer := newTestSigner(t)
+	addr, _, start := startWFCTestServer(t, signer)
+	wfcReauthInterval = 20 * time.Millisecond // restored by startWFCTestServer
+	_, path := useAdminAccount(t, signer, false)
+	kicks := useAdminServer(t)
+	c := dialWFC(t, addr, gossh.PublicKeys(signer))
+
+	st, err := snoopOpen(t, c, 4, start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	sc := openAdmin(t, c)
+	ctx := context.Background()
+	if _, err := sc.Snapshot(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	ueEdit(t, path, func(rec map[string]any) { rec["wfcReadOnly"] = true })
+
+	waitClosed(t, "snoop", st, 5*time.Second)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		snap, err := sc.Snapshot(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snap.ReadOnly {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("console never told it became read-only")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := sc.Execute(ctx, nodeCommands(start)[0]); err == nil || err.Error() != admin.ErrReadOnly.Error() {
+		t.Fatalf("kick after the ue edit: err = %v", err)
+	}
+	if kicks.Load() != 0 {
+		t.Fatal("kick reached the hook")
+	}
+}
+
+// ue lowers the level in users.json: both open channels close at re-check.
+func TestWFCDemotionFromUsersFile(t *testing.T) {
+	signer := newTestSigner(t)
+	addr, _, start := startWFCTestServer(t, signer)
+	wfcReauthInterval = 20 * time.Millisecond // restored by startWFCTestServer
+	_, path := useAdminAccount(t, signer, false)
+	useAdminServer(t)
+	c := dialWFC(t, addr, gossh.PublicKeys(signer))
+
+	st, err := snoopOpen(t, c, 4, start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	sc := openAdmin(t, c)
+	if _, err := sc.Snapshot(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	ueEdit(t, path, func(rec map[string]any) { rec["accessLevel"] = 10 })
+
+	waitClosed(t, "snoop", st, 5*time.Second)
+	select {
+	case <-sc.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("admin session still open after demotion")
+	}
+}
+
+// A key ue adds to users.json opens the console without a restart.
+func TestWFCKeyFromUsersFile(t *testing.T) {
+	signer, added := newTestSigner(t), newTestSigner(t)
+	addr, _, start := startWFCTestServer(t, signer)
+	_, path := useAdminAccount(t, signer, false)
+
+	ueEdit(t, path, func(rec map[string]any) {
+		rec["publicKeys"] = []string{string(gossh.MarshalAuthorizedKey(added.PublicKey()))}
+	})
+
+	// The file is read at most once a second, so allow a retry.
+	var c *gossh.Client
+	for deadline := time.Now().Add(3 * time.Second); c == nil; {
+		var err error
+		c, err = gossh.Dial("tcp", addr, &gossh.ClientConfig{
+			User: "visitor", Auth: []gossh.AuthMethod{gossh.PublicKeys(added)},
+			HostKeyCallback: gossh.InsecureIgnoreHostKey(), Timeout: 5 * time.Second,
+		})
+		if err != nil && time.Now().After(deadline) {
+			t.Fatalf("dial with the key added on disk: %v", err)
+		}
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	st, err := snoopOpen(t, c, 4, start)
+	if err != nil {
+		t.Fatalf("snoop with the key added on disk: %v", err)
+	}
+	_ = st.Close()
 }

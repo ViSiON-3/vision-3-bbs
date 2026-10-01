@@ -122,6 +122,11 @@ func (um *UserMgr) lookupForRefresh(current *User) (User, bool) {
 	return User{}, false
 }
 
+// SyncFromDisk folds in any ./ue or helper edit to users.json, at most once
+// per diskSyncInterval. Lookups that must see such edits with no caller
+// online, like the WFC access checks, call it first.
+func (um *UserMgr) SyncFromDisk() { um.syncFromDisk() }
+
 // syncFromDisk folds in any external edit to users.json, at most once per
 // diskSyncInterval across the whole process.
 //
@@ -129,6 +134,11 @@ func (um *UserMgr) lookupForRefresh(current *User) (User, bool) {
 // a refresh would keep handing back the same pre-edit values and appear to do
 // nothing.
 func (um *UserMgr) syncFromDisk() {
+	// A manager built in memory has no file; reading "" and locking
+	// ".lock" would act on the working directory.
+	if um.path == "" {
+		return
+	}
 	sessionRefresh.mu.Lock()
 	if time.Since(sessionRefresh.lastSync) < diskSyncInterval {
 		sessionRefresh.mu.Unlock()

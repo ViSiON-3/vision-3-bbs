@@ -66,7 +66,7 @@ A public key is a single line starting `ssh-ed25519 AAAA…` ending in a
 comment. If you're onboarding a remote co-sysop, this is the line they email
 or DM you.
 
-### 3. Register it and restart (on the server)
+### 3. Register it (on the server)
 
 ```bash
 helper users addkey "J0hnny A1pha" /tmp/my.pub   # quote handles with spaces
@@ -74,7 +74,8 @@ helper users listkeys "J0hnny A1pha"             # confirm it landed
 ```
 
 Or pipe the pasted line via stdin: `helper users addkey "J0hnny A1pha" -`.
-Then **restart the BBS** — the daemon reads `users.json` at startup only.
+The running BBS picks the key up on the next WFC connection; no restart is
+needed (see [When edits take effect](#when-edits-take-effect)).
 
 ## Enabling access for a sysop
 
@@ -111,10 +112,20 @@ You can still edit `data/users/users.json` by hand if you prefer — add a
 > Keep your **private** key on your own machine only. Only the **public** key
 > (`.pub`) goes into `users.json`.
 
-> **Restart note:** `ue` and `helper` are separate programs that edit
-> `users.json`; the running BBS loads users at startup and does **not**
-> hot-reload that file. After adding or removing a key while the BBS is running,
-> **restart the BBS** for the change to take effect.
+### When edits take effect
+
+`ue` and `helper` are separate programs that write `users.json`. The running
+BBS reads the file again, at most once a second, when it saves users, when a
+caller changes menu, and on every WFC check: a new connection, each console
+command and snapshot, and the 30-second re-check of an open session. A key
+added, removed or moved, a level change, a deletion, or the **WFC Read Only**
+flag therefore applies without a restart:
+
+- A new connection sees the change at once (allow a second if the file was
+  read just before).
+- An open console's commands follow the change at once.
+- An open console or snoop that is no longer authorized is closed within 30
+  seconds.
 
 ### Read-only accounts
 
@@ -124,11 +135,10 @@ console can watch the dashboard, the logs, the events and the page list.
 The daemon refuses everything that acts on a caller: kick, snoop, type-in and
 chat. The console shows `READ-ONLY` in its title bar and hides those keys.
 
-The daemon reads the flag from the user record on every command, so setting it
-on a connected console stops its commands at once, and an open snoop is closed
-at the next 30-second re-check. Clearing the flag restores the commands without
-a reconnect. The restart note above applies to a change made with `ue` while
-the BBS is running.
+Setting the flag on a connected console stops its commands at once, and an
+open snoop is closed within 30 seconds. Clearing it restores the commands
+without a reconnect. Both apply to edits made with `ue` while the BBS is
+running; see [When edits take effect](#when-edits-take-effect).
 
 ## Getting `wfc`
 
@@ -308,8 +318,9 @@ accounts hide the command, and the daemon refuses it from a read-only account.
 `S` on a caller in the Callers list or the details view opens a snoop on that
 node. It uses a second SSH channel (the `wfc-snoop` subsystem) on the
 console's existing connection, under the same access rule as the console:
-CoSysOp level or above, a registered SSH key, WFC Access on. The rule is
-re-checked every 30 seconds.
+CoSysOp level or above, a registered SSH key, WFC Access on. A
+[read-only account](#read-only-accounts) is refused. The rule is re-checked
+every 30 seconds, and a snoop whose account has become read-only is closed.
 
 You see the caller's current screen straight away (up to 64 KiB of output since
 their last clear-screen), then everything they see from then on. CP437 callers
@@ -475,8 +486,7 @@ publickey], no supported methods remain`** — the server saw your key and
 declined it. `wfc` has no password fallback, so the connection ends. In order
 of likelihood:
 
-1. The public key isn't registered on the account — or was registered but the
-   **BBS wasn't restarted** afterward.
+1. The public key isn't registered on the account.
 2. The key was added to a different account than you're thinking of, or the
    account's `accessLevel` is below `coSysOpLevel` (default 250).
 3. `wfcEnabled` is toggled off in the server config.
@@ -513,11 +523,9 @@ login because it didn't match a qualifying account.
   to the normal caller login; existing logins are unchanged.
 - **Re-checked while connected.** An open WFC session re-verifies every 30
   seconds that the *key* it authenticated with is still registered to a
-  qualifying account. Turning **WFC Access** off, or banning, demoting, or
-  deleting the user in the running BBS, disconnects their console within that
-  window. Key edits made with `ue` or `helper` change `users.json` on disk,
-  which the daemon only reads at startup — so revoking a key that way still
-  requires a **BBS restart** to take effect.
+  qualifying account. Turning **WFC Access** off, removing the key, or banning,
+  demoting or deleting the user disconnects their console within that window,
+  whether the change is made in the running BBS or with `ue` or `helper`.
 - **Everything is visible to every qualifying account.** The console shows all
   active sessions — including **invisible** ones — with each caller's handle,
   IP address, and activity, to *any* account at or above `coSysOpLevel`.

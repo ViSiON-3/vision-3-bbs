@@ -18,8 +18,13 @@ func TestWatchAdminAuthorizationKicksOnRevocation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go watchAdminAuthorization(ctx, "boss", time.Millisecond,
-		func(string) bool { return allowed.Load() },
-		func() { close(kicked) })
+		func(string) string {
+			if allowed.Load() {
+				return ""
+			}
+			return "revoked"
+		},
+		func(string) { close(kicked) })
 
 	// Still authorized: must not be kicked.
 	select {
@@ -44,8 +49,8 @@ func TestWatchAdminAuthorizationStopsOnContextCancel(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		watchAdminAuthorization(ctx, "boss", time.Millisecond,
-			func(string) bool { return true },
-			func() { kicks.Add(1) })
+			func(string) string { return "" },
+			func(string) { kicks.Add(1) })
 		close(done)
 	}()
 

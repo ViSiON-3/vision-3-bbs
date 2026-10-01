@@ -146,13 +146,21 @@ func wfcSnoopSubsystem(sess ssh.Session) {
 		defer stopKA()
 	}
 	// Becoming read-only ends the snoop the way a revocation does.
-	stillAuthorized := func(h string) bool { return authorizeAdminKey(h, keyBytes) && !wfcReadOnly(h) }
+	refusal := func(h string) string {
+		switch {
+		case !authorizeAdminKey(h, keyBytes):
+			return "revoked"
+		case wfcReadOnly(h):
+			return "read-only"
+		}
+		return ""
+	}
 	// The watcher reads the user record; it must not outlive the session.
 	watchDone := make(chan struct{})
 	go func() {
 		defer close(watchDone)
-		watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
-			slog.Warn("wfc-snoop: session revoked, disconnecting", "user", handle, "readOnly", wfcReadOnly(handle))
+		watchAdminAuthorization(ctx, handle, wfcReauthInterval, refusal, func(reason string) {
+			slog.Warn("wfc-snoop: closing channel", "user", handle, "reason", reason)
 			_ = sess.Close()
 		})
 	}()

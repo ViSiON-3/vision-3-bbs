@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -40,12 +41,22 @@ const (
 	wfcKeyExt    = "wfc-key" // marshaled public key
 )
 
+// syncWFCUsers folds ./ue and helper edits to users.json into userMgr before
+// a WFC access check, so they apply with no caller online. It reads the file
+// at most once a second.
+func syncWFCUsers() {
+	if userMgr != nil {
+		userMgr.SyncFromDisk()
+	}
+}
+
 // wfcKeyAdmin returns the admin who owns key, or a reason for refusing it:
 // "unregistered", "disabled" or "level".
 func wfcKeyAdmin(key gossh.PublicKey) (*user.User, string) {
 	if userMgr == nil {
 		return nil, "unregistered"
 	}
+	syncWFCUsers()
 	u, found := userMgr.FindByAuthorizedKey(key.Marshal())
 	if !found || u == nil {
 		return nil, "unregistered"
@@ -152,6 +163,7 @@ func authorizeAdminKey(handle string, keyBytes []byte) bool {
 	if userMgr == nil || adminMinLevel == nil || wfcEnabled == nil || !wfcEnabled() {
 		return false
 	}
+	syncWFCUsers()
 	u, found := userMgr.FindByAuthorizedKey(keyBytes)
 	if !found || u == nil {
 		return false
@@ -169,6 +181,7 @@ func wfcReadOnly(handle string) bool {
 	if userMgr == nil {
 		return true
 	}
+	syncWFCUsers()
 	u, found := userMgr.GetUser(handle)
 	if !found || u == nil {
 		return true
@@ -176,10 +189,10 @@ func wfcReadOnly(handle string) bool {
 	return u.WFCReadOnly
 }
 
-// watchAdminAuthorization re-checks authorized(handle) every interval and
-// calls kick once when it stops holding. It exits on ctx cancellation (normal
-// session end) without kicking.
-func watchAdminAuthorization(ctx context.Context, handle string, interval time.Duration, authorized func(string) bool, kick func()) {
+// watchAdminAuthorization runs refusal(handle) every interval and calls kick
+// with its reason once it returns one ("" means still authorized). It exits
+// on ctx cancellation (normal session end) without kicking.
+func watchAdminAuthorization(ctx context.Context, handle string, interval time.Duration, refusal func(string) string, kick func(reason string)) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
@@ -187,8 +200,8 @@ func watchAdminAuthorization(ctx context.Context, handle string, interval time.D
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if !authorized(handle) {
-				kick()
+			if reason := refusal(handle); reason != "" {
+				kick(reason)
 				return
 			}
 		}
@@ -207,7 +220,8 @@ func wfcAdminSubsystem(sess ssh.Session) {
 		return
 	}
 
-	slog.Info("wfc-admin: session opened", "user", handle, "addr", sess.RemoteAddr(), "readOnly", wfcReadOnly(handle))
+	openedReadOnly := wfcReadOnly(handle)
+	slog.Info("wfc-admin: session opened", "user", handle, "addr", sess.RemoteAddr(), "readOnly", openedReadOnly)
 
 	audit := func(cmd string) {
 		slog.Info("wfc-admin: command", "user", handle, "addr", sess.RemoteAddr(), "cmd", cmd)
@@ -237,13 +251,18 @@ func wfcAdminSubsystem(sess ssh.Session) {
 		})
 		defer stopKA()
 	}
-	stillAuthorized := func(h string) bool { return authorizeAdminKey(h, keyBytes) }
+	refusal := func(h string) string {
+		if !authorizeAdminKey(h, keyBytes) {
+			return "revoked"
+		}
+		return ""
+	}
 	// The watcher reads the user record; it must not outlive the session.
 	watchDone := make(chan struct{})
 	go func() {
 		defer close(watchDone)
-		watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
-			slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr())
+		watchAdminAuthorization(ctx, handle, wfcReauthInterval, refusal, func(reason string) {
+			slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr(), "reason", reason)
 			_ = sess.Close() // unblocks ServeRPC's read loop
 		})
 	}()
@@ -254,8 +273,17 @@ func wfcAdminSubsystem(sess ssh.Session) {
 
 	// ServeRPC's context governs only the internal subscriber goroutine; connection
 	// lifetime is enforced by the SSH session closing, which unblocks the read loop.
-	// The read-only flag is read for every command and snapshot.
-	readOnly := func() bool { return wfcReadOnly(handle) }
+	// The read-only flag is read for every command and snapshot. Both ServeRPC
+	// goroutines call it, hence the atomic.
+	var wasReadOnly atomic.Bool
+	wasReadOnly.Store(openedReadOnly)
+	readOnly := func() bool {
+		ro := wfcReadOnly(handle)
+		if wasReadOnly.Swap(ro) != ro {
+			slog.Info("wfc-admin: read-only changed", "user", handle, "addr", sess.RemoteAddr(), "readOnly", ro)
+		}
+		return ro
+	}
 	if err := admin.ServeRPC(ctx, sess, adminServer, handle, readOnly, audit); err != nil {
 		slog.Info("wfc-admin: session closed", "user", handle, "addr", sess.RemoteAddr(), "reason", err)
 	} else {
