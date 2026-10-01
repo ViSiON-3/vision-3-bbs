@@ -844,3 +844,33 @@ func TestSnoopNoRegionWhenTerminalIsNotTaller(t *testing.T) {
 		t.Fatal("scroll region set on a terminal with no spare row")
 	}
 }
+
+// A caller that resets its scroll region and keeps writing in the same chunk
+// must still scroll inside the mirrored rows. Chat end sends exactly this.
+func TestSnoopRegionResetMidChunkKeepsMirror(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 40)
+	r.out.waitFor(t, "NODE 3")
+	var sb strings.Builder
+	sb.WriteString("\x1b[r\x1b[0m\x1b[2J\x1b[H")
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&sb, "line%02d\r\n", i)
+	}
+	_, _ = r.server.Write([]byte(sb.String()))
+	r.out.waitFor(t, "line40")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	sc := newVTScreen(100, 40)
+	sc.feed(strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J"))
+	if got := sc.line(0); got != "line17" {
+		t.Errorf("row 1 = %q, want line17", got)
+	}
+	if got := sc.line(23); got != "line40" {
+		t.Errorf("row 24 = %q, want line40", got)
+	}
+	if got := sc.line(24); got != "" {
+		t.Errorf("row 25 = %q, want empty", got)
+	}
+	if !strings.Contains(sc.line(39), "NODE 3") {
+		t.Errorf("bar missing from the last row: %q", sc.line(39))
+	}
+}

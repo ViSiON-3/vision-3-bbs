@@ -127,6 +127,7 @@ type cursor struct {
 	origin      bool // origin mode is on
 	top, bot    int  // scroll region
 	regionDirty bool // the caller changed the scroll region
+	regionSets  int  // count of DECSTBM and RIS seen
 	sgr         sgrState
 
 	saved struct {
@@ -287,9 +288,10 @@ func (c *cursor) esc(b byte) {
 		}
 		c.pendingWrap = false
 	case 'c':
-		w, h := c.w, c.h
+		w, h, n := c.w, c.h, c.regionSets
 		c.reset(w, h)
 		c.regionDirty = true
+		c.regionSets = n + 1
 	case 'P', 'X', '^', '_':
 		c.known = false
 	}
@@ -362,6 +364,7 @@ func (c *cursor) csi(final byte, params string, interm bool) {
 		return
 	case 'r':
 		c.regionDirty = true
+		c.regionSets++
 		c.top, c.bot = num(0), c.h
 		if len(parts) > 1 {
 			c.bot = min(num(1), c.h)

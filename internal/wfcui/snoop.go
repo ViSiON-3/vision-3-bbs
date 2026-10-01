@@ -296,8 +296,16 @@ func (c *snoopCmd) pump(done chan<- struct{}) {
 				chunk = ansi.CP437BytesToUTF8(chunk)
 			}
 			c.mu.Lock()
-			_, _ = c.stdout.Write(chunk)
-			c.track.feed(chunk)
+			// Split the chunk after each region change so the mirrored
+			// region is back in force before any output that could scroll.
+			for len(chunk) > 0 {
+				k, region := c.track.feedToRegion(chunk)
+				_, _ = c.stdout.Write(chunk[:k])
+				chunk = chunk[k:]
+				if region {
+					c.mirrorRegionLocked()
+				}
+			}
 			c.mu.Unlock()
 			c.drawStatus()
 		}
@@ -466,6 +474,21 @@ func (c *snoopCmd) setErr(err error) {
 // moves the cursor below it instead of scrolling the mirrored screen.
 func (c *snoopCmd) wantRegion() bool { return c.h > c.st.Header.Height }
 
+// mirrorRegionLocked re-sends the caller's scroll region right after the
+// caller changed it, which also reset the region on the sysop terminal. The
+// caller is mid-chunk here, so it only acts when the position is known; the
+// drawStatus after the chunk covers the rest. c.mu must be held.
+func (c *snoopCmd) mirrorRegionLocked() {
+	cur := &c.track.cur
+	if !c.wantRegion() || c.h <= 0 || !c.track.safe() || !cur.canRestore() {
+		return
+	}
+	_, _ = fmt.Fprintf(c.stdout, "\x1b[%d;%dr%s", cur.top, cur.bot, cur.restore())
+	c.regionOn = true
+	c.regionStale = false
+	cur.regionDirty = false
+}
+
 // drawStatus paints the bar on the sysop terminal's last row, then puts the
 // cursor and text attributes back where the caller's output left them, using
 // the tracked position instead of the terminal's save slot, which belongs to
@@ -550,13 +573,30 @@ const (
 )
 
 func (t *seqTracker) feed(p []byte) {
-	for _, b := range p {
-		t.step(b)
+	for len(p) > 0 {
+		n, _ := t.feedToRegion(p)
+		p = p[n:]
 	}
-	t.tail = append(t.tail, p...)
+}
+
+// feedToRegion tracks p up to and including the first sequence that changes
+// the scroll region (DECSTBM or RIS). It returns the bytes consumed and
+// whether it stopped on such a sequence.
+func (t *seqTracker) feedToRegion(p []byte) (int, bool) {
+	n, region := len(p), false
+	for i, b := range p {
+		sets := t.cur.regionSets
+		t.step(b)
+		if t.cur.regionSets != sets {
+			n, region = i+1, true
+			break
+		}
+	}
+	t.tail = append(t.tail, p[:n]...)
 	if len(t.tail) > utf8.UTFMax {
 		t.tail = append(t.tail[:0], t.tail[len(t.tail)-utf8.UTFMax:]...)
 	}
+	return n, region
 }
 
 // maxOSC bounds an operating system command; past it the tracker gives up
