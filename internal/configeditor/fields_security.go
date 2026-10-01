@@ -44,7 +44,31 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			Set: func(val string) error { cfg.WFCEnabled = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Invisible Lvl", Help: "Level at which user is hidden from who's online", Type: ftInteger, Col: 3, Row: 4, Width: 3, Min: 0, Max: 255,
+			Label: "Page Timeout", Help: "Seconds PAGESYSOP waits for the SysOp to answer", Type: ftInteger, Col: 3, Row: 4, Width: 4, Min: 5, Max: 600,
+			Get: func() string { return strconv.Itoa(cfg.PageSysopTimeoutSeconds) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.PageSysopTimeoutSeconds = n
+				return nil
+			},
+		},
+		{
+			Label: "Page Cooldown", Help: "Seconds before the same caller may page again", Type: ftInteger, Col: 3, Row: 5, Width: 5, Min: 0, Max: 86400,
+			Get: func() string { return strconv.Itoa(cfg.PageSysopCooldownSeconds) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.PageSysopCooldownSeconds = n
+				return nil
+			},
+		},
+		{
+			Label: "Invisible Lvl", Help: "Level at which user is hidden from who's online", Type: ftInteger, Col: 3, Row: 6, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.InvisibleLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -56,7 +80,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "New User Level", Help: "Level assigned to new signups", Type: ftInteger, Col: 3, Row: 5, Width: 3, Min: 0, Max: 255,
+			Label: "New User Level", Help: "Level assigned to new signups", Type: ftInteger, Col: 3, Row: 7, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.NewUserLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -93,7 +117,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Regular Level", Help: "Level assigned when user is validated", Type: ftInteger, Col: 3, Row: 6, Width: 3, Min: 0, Max: 255,
+			Label: "Regular Level", Help: "Level assigned when user is validated", Type: ftInteger, Col: 3, Row: 8, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.RegularUserLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -105,7 +129,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Logon Level", Help: "Minimum access level required to log in (0=disabled)", Type: ftInteger, Col: 3, Row: 7, Width: 3, Min: 0, Max: 255,
+			Label: "Logon Level", Help: "Minimum access level required to log in (0=disabled)", Type: ftInteger, Col: 3, Row: 9, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.LogonLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -117,7 +141,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Anonymous Lvl", Help: "Minimum level required to post anonymously (0=disabled)", Type: ftInteger, Col: 3, Row: 8, Width: 3, Min: 0, Max: 255,
+			Label: "Anonymous Lvl", Help: "Minimum level required to post anonymously (0=disabled)", Type: ftInteger, Col: 3, Row: 10, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.AnonymousLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)

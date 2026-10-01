@@ -11,16 +11,18 @@ import (
 
 // ServerConfig defines server-wide settings
 type ServerConfig struct {
-	BoardName      string `json:"boardName"`
-	SysOpName      string `json:"sysOpName"`
-	QWKID          string `json:"qwkID,omitempty"` // Explicit QWK packet ID; blank = derive from BoardName
-	BBSLocation    string `json:"bbsLocation,omitempty"`
-	Timezone       string `json:"timezone,omitempty"`
-	SysOpLevel     int    `json:"sysOpLevel"`
-	CoSysOpLevel   int    `json:"coSysOpLevel"`
-	WFCEnabled     bool   `json:"wfcEnabled"`     // Allow remote WFC sysop console (wfc-admin subsystem)
-	InvisibleLevel int    `json:"invisibleLevel"` // Access level for invisible logon prompt; 0 = use coSysOpLevel
-	NewUserLevel   int    `json:"newUserLevel"`   // Access level assigned to new signups
+	BoardName                string `json:"boardName"`
+	SysOpName                string `json:"sysOpName"`
+	QWKID                    string `json:"qwkID,omitempty"` // Explicit QWK packet ID; blank = derive from BoardName
+	BBSLocation              string `json:"bbsLocation,omitempty"`
+	Timezone                 string `json:"timezone,omitempty"`
+	SysOpLevel               int    `json:"sysOpLevel"`
+	CoSysOpLevel             int    `json:"coSysOpLevel"`
+	WFCEnabled               bool   `json:"wfcEnabled"`        // Allow remote WFC sysop console (wfc-admin subsystem)
+	PageSysopTimeoutSeconds  int    `json:"pageSysopTimeout"`  // How long PAGESYSOP waits for an answer
+	PageSysopCooldownSeconds int    `json:"pageSysopCooldown"` // Minimum gap between one caller's pages
+	InvisibleLevel           int    `json:"invisibleLevel"`    // Access level for invisible logon prompt; 0 = use coSysOpLevel
+	NewUserLevel             int    `json:"newUserLevel"`      // Access level assigned to new signups
 	// AutoValidateNewUsers marks signups validated on creation. Off by
 	// default, so an upgrading system keeps its current behaviour. Note this
 	// does not affect whether they can log in — that is decided by
@@ -178,6 +180,8 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		SysOpLevel:                   DefaultSysOpLevel,
 		CoSysOpLevel:                 DefaultCoSysOpLevel,
 		WFCEnabled:                   true,
+		PageSysopTimeoutSeconds:      60,
+		PageSysopCooldownSeconds:     300,
 		NewUserLevel:                 1,
 		AutoValidateNewUsers:         false,
 		NotifySysopNewUser:           true,
@@ -247,6 +251,12 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		return defaultConfig, fmt.Errorf("failed to parse config JSON from %s: %w", filePath, err)
 	}
 
+	if config.PageSysopTimeoutSeconds <= 0 {
+		config.PageSysopTimeoutSeconds = 60
+	}
+	if config.PageSysopCooldownSeconds < 0 {
+		config.PageSysopCooldownSeconds = 0
+	}
 	config.SanitizeChallengeGate()
 	config.SanitizeAccessLevels()
 	slog.Info("loaded server configuration", "path", filePath)

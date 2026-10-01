@@ -212,6 +212,15 @@ var StringFallbacks = map[string]string{
 	"doorRemoteConnectFailed": "\r\n|12Unable to connect to |11%s|12. Please try again later.|07\r\n",
 	"doorRemoteDisconnected":  "\r\n|08Disconnected from |07%s|08.|07\r\n",
 
+	// PAGESYSOP and split-screen chat. An upgraded strings.json lacks these,
+	// and the caller would see blank prompts.
+	"pageSysopReasonPrompt": "\r\n|07Reason for paging the SysOp (|15Enter|07 to cancel): ",
+	"pageSysopPaging":       "\r\n|11Paging SysOp|07... ",
+	"pageSysopUnavailable":  "\r\n|12The SysOp is not available right now.|07\r\n",
+	"pageSysopCooldown":     "\r\n|07You paged the SysOp recently. Try again in |15%d|07 minutes.\r\n",
+	"sysopChatHeader":       " |15%s|07 chatting with |15%s|07 ",
+	"sysopChatBack":         "\r\n|08[back from chat, press Enter]|07",
+
 	// Time limit notices. Without them an upgraded strings.json would warn
 	// nobody and disconnect callers with no word of why.
 	"timeLimitExpired": "\r\n|12Your time limit for this call is up. Call again soon!|07\r\n",
