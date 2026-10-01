@@ -266,17 +266,33 @@ Set `min_access_level` to restrict a door to users with a minimum access level. 
 
 Doors with access restrictions are hidden from the door list for unauthorized users.
 
-## Idle Timeout
+## Ending a Door
+
+A door reads the caller's connection directly, so the BBS watches it on the door's behalf and ends the door, then logs the caller off, when:
+
+- the caller sends nothing for their [idle timeout](#idle-timeout);
+- the caller's [time limit](#time-limit) runs out;
+- the caller [hangs up](#hang-up).
+
+### Idle Timeout
 
 The session **Idle Timeout** (`sessionIdleTimeoutMinutes`) applies inside doors as it does in the menus. When a caller sends nothing for that long, the BBS ends the door, shows the idle timeout message and logs the caller off. Every key the caller presses restarts the countdown, as does anything else their terminal sends, such as a reply to a door's terminal query. Output from the door doesn't count. CoSysOps and above are exempt here too.
 
-How the door is ended depends on its type:
-
-- **Native and DOS doors** are hung up on: the BBS sends `SIGHUP` to the door and any programs it started, as a modem dropping carrier would, and `SIGKILL` if it is still running 5 seconds later. On Windows the door process is killed.
-- **RLogin and Telnet doors** have their connection to the door server closed.
-- **Synchronet JavaScript and V3 script doors** are stopped as if the caller had disconnected.
-
 Many doors have their own inactivity timer. If a door's timer is shorter, it ends the session first, as it always has. A door that reads `DROPFILE.INI` can use `IDLE_LIMIT` to match the BBS's timer or to warn the user.
+
+### Time Limit
+
+A caller's per-call **time limit** (`timeLimit`; see [Time Limits](users/user-management.md#time-limits)) runs out inside a door as it does in the menus: the BBS ends the door, shows the time limit message and logs the caller off. A caller with no time left isn't let into a door at all. Doors are still told the time left through their drop file (`TIME_LEFT` and the equivalents), so a well-behaved door can wrap up first. CoSysOps and above have no limit.
+
+### Hang-up
+
+When a caller drops their connection inside a door, the door is ended at once, rather than left running until it notices on its own or its own timer ends it. The node and, for a **Single Instance** door, the door lock are freed straight away.
+
+### How a door is ended
+
+- **Native and DOS doors** are hung up on: the BBS sends `SIGHUP` to the door and any programs it started, as a modem dropping carrier would, and `SIGKILL` to anything still running 5 seconds later. On Windows the door process is killed.
+- **RLogin and Telnet doors** have their connection to the door server closed, including while it is still being made.
+- **Synchronet JavaScript and V3 script doors** are stopped as if the caller had disconnected.
 
 ## Single Instance Locking
 

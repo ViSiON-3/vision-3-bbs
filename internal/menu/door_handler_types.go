@@ -49,7 +49,6 @@ type DoorCtx struct {
 	UserIDStr   string
 	Subs        map[string]string
 
-	// idle counts down IdleTimeout while the door runs; nil when there is
-	// no timeout. Set by executeDoor.
-	idle *doorIdleWatch
+	// watch decides when the BBS must end the door. Set by executeDoor.
+	watch *doorWatch
 }

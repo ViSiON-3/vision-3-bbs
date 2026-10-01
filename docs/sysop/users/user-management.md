@@ -378,10 +378,11 @@ have no limit whatever their record says, as they have no idle timeout.
   disconnected. This happens at the next key they press or wait on, anywhere in
   the BBS. The full-screen message editor is the exception: a caller writing a
   message can finish and save it, and is disconnected when the editor closes.
-- A remote door (rlogin or telnet) is closed when the time runs out, and a
-  caller with no time left can't open one. A local door is told the time left
-  through its drop file and is expected to end itself. The caller is
-  disconnected when they come back from it.
+- Doors are ended when the time runs out, and a caller with no time left
+  can't open one. A door is told the time left through its drop file, so it
+  can wrap up first; if it is still running when the time is up, the BBS ends
+  it (see [Ending a Door](doors/doors.md#ending-a-door)) and the caller sees
+  `timeLimitExpired` and is disconnected.
 
 A limit changed in the User Editor while the caller is online applies from
 their next menu.

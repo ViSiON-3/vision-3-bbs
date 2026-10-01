@@ -219,7 +219,11 @@ func TestDoorcovOpenDoorRunsDoor(t *testing.T) {
 		SingleInstance: true,
 	}})
 
-	r := doorcovRun(env, newDoorcovScripted("game\r"), runOpenDoor, env.caller, "")
+	// The caller stays connected: a session that ended would be a hang-up,
+	// which ends the door and logs the caller off.
+	s := newDoorcovSession()
+	s.send("game\r")
+	r := doorcovRun(env, s, runOpenDoor, env.caller, "")
 	if r.err != nil || r.user != env.caller || r.next != "" {
 		t.Errorf("err=%v user=%v next=%q", r.err, r.user, r.next)
 	}
@@ -326,7 +330,7 @@ func TestDoorcovExecuteDoorSingleInstance(t *testing.T) {
 	})
 
 	t.Run("free", func(t *testing.T) {
-		s := newDoorcovScripted("")
+		s := newDoorcovSession() // still connected: see TestDoorcovOpenDoorRunsDoor
 		if err := doorcovExec(t, s, executeDoor, doorcovCtx(env, s, cfg)); err != nil {
 			t.Fatalf("executeDoor: %v", err)
 		}

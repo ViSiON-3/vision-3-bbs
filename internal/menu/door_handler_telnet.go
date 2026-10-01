@@ -55,8 +55,9 @@ func executeTelnetDoor(ctx *DoorCtx) error {
 
 	writeDoorMessage(ctx, fmt.Sprintf(ctx.Executor.Strings().DoorRemoteConnecting, ctx.DoorName))
 
-	// An idle caller abandons the connection attempt too.
-	dialCtx, cancelDial := idleDialContext(ctx)
+	// A caller the BBS must end the door for abandons the connection attempt
+	// too, such as one who goes idle while it is being made.
+	dialCtx, cancelDial := doorDialContext(ctx)
 	conn, err := telnetclient.Dial(dialCtx, addr, opts, timeout)
 	cancelDial()
 	if err != nil {

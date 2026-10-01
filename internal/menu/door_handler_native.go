@@ -203,7 +203,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to start pty for door '%s': %w", ctx.DoorName, err)
 		} else {
-			stopIdleWatch := watchDoorIdle(ctx, cmd.Process)
+			stopDoorWatch := watchDoorProcess(ctx, cmd.Process)
 			ptmx = pollableDoorFile(ptmx)
 			ctx.Session.Signals(nil)
 			ctx.Session.Break(nil)
@@ -280,7 +280,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 			// Wait for door to exit, then cleanly shut down I/O goroutines
 			cmdErr = cmd.Wait()
-			stopIdleWatch()
+			stopDoorWatch()
 			close(resizeStop)
 			slog.Debug("door process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
@@ -336,7 +336,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				_ = doorSock.Close() // best-effort socket teardown
 				cmdErr = fmt.Errorf("failed to start door '%s' with socket I/O: %w", ctx.DoorName, startErr)
 			} else {
-				stopIdleWatch := watchDoorIdle(ctx, cmd.Process)
+				stopDoorWatch := watchDoorProcess(ctx, cmd.Process)
 				// Parent closes the door's end
 				_ = doorSock.Close() // best-effort socket teardown
 
@@ -370,7 +370,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				}()
 
 				cmdErr = cmd.Wait()
-				stopIdleWatch()
+				stopDoorWatch()
 				slog.Debug("door (socket I/O) process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 				close(readInterrupt)
