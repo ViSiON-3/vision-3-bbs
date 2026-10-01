@@ -111,7 +111,8 @@ func TestBreakInSuspendsIdleTimeout(t *testing.T) {
 		inner <- err
 	})
 	brk <- struct{}{}
-	go func() { _, _ = ih.ReadKey() }()
+	outer := make(chan error, 1)
+	go func() { _, err := ih.ReadKey(); outer <- err }()
 	select {
 	case err := <-inner:
 		if err != nil {
@@ -119,6 +120,16 @@ func TestBreakInSuspendsIdleTimeout(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("break-in did not finish")
+	}
+	// The timeout is put back after fn returns, on the reading goroutine; the
+	// interrupted read then times out on it.
+	select {
+	case err := <-outer:
+		if !errors.Is(err, ErrIdleTimeout) || errors.Is(err, ErrTimeLimit) {
+			t.Fatalf("outer read after break-in = %v, want ErrIdleTimeout", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("outer read never timed out after the break-in")
 	}
 	if got := ih.sessionIdleTimeout(); got != 50*time.Millisecond {
 		t.Fatalf("idle timeout after break-in = %v, want 50ms", got)
