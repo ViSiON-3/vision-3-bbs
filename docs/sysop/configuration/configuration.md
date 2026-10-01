@@ -501,8 +501,8 @@ built-in defaults and overlays whatever the file provides.
 | `logonLevel` | `10` | `10` | Minimum level required to log in |
 | `anonymousLevel` | `50` | `5` | Minimum level to post anonymously (`0` = disabled) |
 | `notifySysopNewUser` | `true` | `true` | Page every co-sysop-or-above who is online when a signup completes |
-| `pageSysopTimeout` | `60` | `60` | Seconds a caller waits for a sysop to answer a `PAGESYSOP` page before being told the SysOp is not available. Shown as **Page Timeout** in the config TUI |
-| `pageSysopCooldown` | `300` | `300` | Seconds a caller must wait between pages. Shown as **Page Cooldown** in the config TUI |
+| `pageSysopTimeout` | `60` | `60` | Seconds a caller waits for a sysop to answer a `PAGESYSOP` page before being told the SysOp is not available. Shown as **Page Timeout** in the config TUI, which accepts 5–600 |
+| `pageSysopCooldown` | `300` | `300` | Seconds a caller must wait between pages; `0` disables the cooldown. Shown as **Page Cooldown** in the config TUI, which accepts 0–86400 |
 
 See [User Management](users/user-management.md#system-access-levels) for how
 these interact, and what happens at signup.

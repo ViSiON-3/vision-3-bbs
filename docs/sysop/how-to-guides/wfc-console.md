@@ -363,13 +363,16 @@ command and gives a one-line reason. With no `wfc` console connected they see
 Otherwise every connected console shows a `PAGE` badge with the number of
 waiting pages and rings the terminal bell once for each new page. The caller
 sees "Paging SysOp..." with a countdown and a bell each second. They can cancel
-by pressing a key. After `pageSysopTimeout` seconds with no answer they see the
+by pressing a key; a caller who cancels this way gets no message. After `pageSysopTimeout` seconds with no answer they see the
 not-available message. A caller can send one page per `pageSysopCooldown`
 seconds.
 
 `P` opens the page list: node, handle, reason and age. `Enter` opens the snoop
-on that node and starts chat; `Esc` goes back. Pages that were answered, timed
+on that node and starts chat; `Esc` goes back. A `--readonly` console can open the list but cannot answer: `Enter` is refused. Pages that were answered, timed
 out or cancelled stay in the list, marked, until the caller logs off.
+
+The Alt keys arrive as `ESC` followed by a letter. In macOS Terminal and iTerm,
+set the Option key to send Meta or Esc+, or press `Esc` and then the letter.
 
 `pageSysopTimeout` (default 60) and `pageSysopCooldown` (default 300) are in
 `config.json` and in the config TUI under **Access & Security → Access Levels**

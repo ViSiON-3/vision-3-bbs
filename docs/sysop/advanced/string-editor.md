@@ -302,14 +302,14 @@ Reserved entries (keys prefixed with `_`) appear in the list as non-editable row
 These strings are edited like any other. The `%s` and `%d` verbs follow the
 [format rules](#format-verbs) above.
 
-| Key | Shown | Verbs |
-|-----|-------|-------|
-| `pageSysopReasonPrompt` | Asks the caller for the reason for a page | |
-| `pageSysopPaging` | While the page waits for an answer | |
-| `pageSysopUnavailable` | No console connected, or the page timed out | |
-| `pageSysopCooldown` | Caller paged again too soon | `%d` minutes |
-| `sysopChatHeader` | Bar between the two chat panes | `%s` sysop handle, `%s` caller handle |
-| `sysopChatBack` | Caller's screen after chat when it cannot be restored | |
+| Key | Editor label | Shown | Verbs |
+|-----|--------------|-------|-------|
+| `pageSysopReasonPrompt` | Page SysOp: Reason | Asks the caller for the reason for a page | |
+| `pageSysopPaging` | Page SysOp: Paging | While the page waits for an answer | |
+| `pageSysopUnavailable` | Page SysOp: Unavailable | No console connected, or the page timed out | |
+| `pageSysopCooldown` | Page SysOp: Cooldown | Caller paged again too soon | `%d` minutes |
+| `sysopChatHeader` | SysOp Chat: Header | Bar between the two chat panes | `%s` sysop handle, `%s` caller handle |
+| `sysopChatBack` | SysOp Chat: Back | Caller's screen after chat when it cannot be restored | |
 
 See [WFC Sysop Console](how-to-guides/wfc-console.md#chat).
 
