@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gliderlabs/ssh"
 
@@ -154,8 +155,9 @@ func TestGenerateDropfileIni(t *testing.T) {
 		}
 	}
 	// Nothing in the file is UTF-8, and empty optional keys are left out.
-	// IDLE_LIMIT and SYS_FTN_ADDR are never written (see the writer's notes),
-	// and with no session there is no IP or terminal type to report.
+	// SYS_FTN_ADDR is never written (see the writer's notes), IDLE_LIMIT is
+	// left out for a caller with no idle timeout, and with no session there
+	// is no IP or terminal type to report.
 	for _, k := range []string{"FILE_UTF8", "USER_LOCATION", "COMM_HANDLE", "COMM_PORT",
 		"IDLE_LIMIT", "SYS_FTN_ADDR", "USER_IP", "TERM_TERMINFO"} {
 		if _, ok := keys[k]; ok {
@@ -201,6 +203,15 @@ func TestGenerateDropfileIniSanitizesText(t *testing.T) {
 	}
 	if got, want := keys["DOOR_NAME"], "A?USER_ROLE=sysop????x"; got != want {
 		t.Errorf("DOOR_NAME = %q, want %q", got, want)
+	}
+}
+
+// IDLE_LIMIT is the idle timeout executeDoor enforces, in seconds.
+func TestGenerateDropfileIniIdleLimit(t *testing.T) {
+	ctx := newTestDoorCtx()
+	ctx.IdleTimeout = 5 * time.Minute
+	if _, keys := readDropfileIni(t, ctx, ""); keys["IDLE_LIMIT"] != "300" {
+		t.Errorf("IDLE_LIMIT = %q, want 300", keys["IDLE_LIMIT"])
 	}
 }
 

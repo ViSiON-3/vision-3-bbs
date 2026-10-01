@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -91,19 +92,35 @@ func executeDoor(ctx *DoorCtx) error {
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
 
-	if ctx.Config.Type == "synchronet_js" {
+	// The BBS idle timeout is enforced in its input loops, which a door
+	// bypasses, so it is enforced here for the door's lifetime (see
+	// door_idle.go).
+	if ctx.IdleTimeout > 0 {
+		ctx.idle = newDoorIdleWatch(ctx.IdleTimeout)
+		defer ctx.idle.stop()
+		ctx.Session = wrapDoorSession(ctx.Session, ctx.idle)
+	}
+
+	err := runDoorByType(ctx)
+	if ctx.idle.hasFired() {
+		slog.Info("door ended: caller idle", "node", ctx.NodeNumber, "door", ctx.DoorName, "doorError", err)
+		return editor.ErrIdleTimeout
+	}
+	return err
+}
+
+// runDoorByType runs the door with the executor for its type.
+func runDoorByType(ctx *DoorCtx) error {
+	switch {
+	case ctx.Config.Type == "synchronet_js":
 		return executeSyncJSDoor(ctx)
-	}
-	if ctx.Config.Type == "v3_script" {
+	case ctx.Config.Type == "v3_script":
 		return executeV3ScriptDoor(ctx)
-	}
-	if ctx.Config.Type == "rlogin" {
+	case ctx.Config.Type == "rlogin":
 		return executeRLoginDoor(ctx)
-	}
-	if ctx.Config.Type == "telnet" {
+	case ctx.Config.Type == "telnet":
 		return executeTelnetDoor(ctx)
-	}
-	if ctx.Config.IsDOS {
+	case ctx.Config.IsDOS:
 		return executeDOSDoor(ctx)
 	}
 	return executeNativeDoor(ctx)
@@ -303,6 +320,10 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		cmdErr := executeDoor(ctx)
 		_ = getSessionIH(s)
 
+		// The caller went idle in the door: log off, as a menu would.
+		if errors.Is(cmdErr, editor.ErrIdleTimeout) {
+			return currentUser, "LOGOFF", cmdErr
+		}
 		if cmdErr != nil {
 			if errors.Is(cmdErr, ErrDoorBusy) {
 				slog.Info("door is busy for user", "node", nodeNumber, "door", upperInput, "handle", currentUser.Handle)

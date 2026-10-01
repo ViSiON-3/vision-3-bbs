@@ -479,7 +479,7 @@ General BBS configuration. All settings in this file are managed through the **S
 - `maxConnectionsPerIP` — Max concurrent connections from one IP (default: `3`)
 - `maxFailedLogins` — Failed BBS logins from an IP before lockout (default: `5`, `0` = disabled)
 - `lockoutMinutes` — Lockout duration in minutes (default: `30`)
-- `sessionIdleTimeoutMinutes` — Idle session cutoff (default: `5`)
+- `sessionIdleTimeoutMinutes` — Idle session cutoff, in menus and in doors (default: `5`, `0` = disabled). CoSysOps and above are exempt
 - `transferTimeoutMinutes` — File transfer timeout (default: `10`)
 
 <a id="access-levels"></a>

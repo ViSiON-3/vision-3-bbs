@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"syscall"
 	"time"
 )
@@ -116,5 +117,32 @@ func drainDoorOutput(f *os.File, outputDone <-chan struct{}, node int, door stri
 	case <-outputDone:
 	case <-timer.C:
 		slog.Error("door output copier did not stop; abandoning it", "node", node, "door", door)
+	}
+}
+
+// setDoorProcessGroup puts a door started without a PTY in a process group of
+// its own, so hanging up on it reaches any children it started, such as the
+// program a use_shell door runs. A PTY door needs none: pty.Start already
+// makes it a session leader, and a process group request would then fail.
+func setDoorProcessGroup(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
+}
+
+// hangUpDoorProcess ends a door as a modem hang-up would: SIGHUP to the door
+// and everything in its process group, then SIGKILL if it has not exited
+// within grace. exited is closed once the process has been waited for.
+func hangUpDoorProcess(p *os.Process, exited <-chan struct{}, grace time.Duration) {
+	target := p.Pid
+	if pgid, err := syscall.Getpgid(p.Pid); err == nil && pgid == p.Pid {
+		target = -p.Pid // the door leads its own group: signal all of it
+	}
+	_ = syscall.Kill(target, syscall.SIGHUP) // best effort: it may have exited
+	select {
+	case <-exited:
+	case <-time.After(grace):
+		_ = syscall.Kill(target, syscall.SIGKILL) // best effort, as above
 	}
 }
