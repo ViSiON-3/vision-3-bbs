@@ -312,6 +312,9 @@ If the caller disconnects, `wfc` returns to the dashboard with
 `node N disconnected`. The status bar follows your terminal size: it shows when
 the terminal is taller than the caller's screen and moves to the new last row
 when you resize. `Alt-H` overrides the size rule until you leave the snoop.
+The bar waits to redraw while the caller's cursor position is unknown (after an
+escape sequence `wfc` does not track) until the caller addresses the cursor
+again.
 Resize tracking needs a Unix terminal; on Windows the size is read once when the
 snoop opens.
 

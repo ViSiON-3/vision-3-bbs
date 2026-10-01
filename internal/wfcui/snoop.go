@@ -141,6 +141,9 @@ func (c *snoopCmd) Run() error {
 		}
 	}
 	c.write("\x1b[0m\x1b[2J\x1b[H")
+	c.mu.Lock()
+	c.track.reset(c.st.Header.Width, c.st.Header.Height)
+	c.mu.Unlock()
 	c.drawStatus()
 
 	outDone := make(chan struct{})
@@ -448,18 +451,24 @@ func (c *snoopCmd) setErr(err error) {
 	c.drawStatus()
 }
 
-// drawStatus paints the bar on the sysop terminal's last row and puts the
-// cursor back where the caller's output left it. It waits for a point where
-// the caller's output is between sequences and characters; the pump calls it
-// again after every chunk.
+// drawStatus paints the bar on the sysop terminal's last row, then puts the
+// cursor and text attributes back where the caller's output left them, using
+// the tracked position instead of the terminal's save slot, which belongs to
+// the caller. It waits for a point where the caller's output is between
+// sequences and characters and the position is known; the pump calls it again
+// after every chunk.
 func (c *snoopCmd) drawStatus() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.track.safe() || c.h <= 0 || c.w <= 0 {
+	if (c.eraseRow == 0 && !c.statusOn) || c.h <= 0 || c.w <= 0 {
 		return
 	}
+	if !c.track.safe() || !c.track.cur.canRestore() {
+		return
+	}
+	back := c.track.cur.restore()
 	if c.eraseRow != 0 {
-		_, _ = fmt.Fprintf(c.stdout, "\x1b7\x1b[%d;1H\x1b[0m\x1b[2K\x1b8", c.eraseRow)
+		_, _ = fmt.Fprintf(c.stdout, "\x1b[%d;1H\x1b[0m\x1b[2K%s", c.eraseRow, back)
 		c.eraseRow = 0
 	}
 	if !c.statusOn {
@@ -476,16 +485,19 @@ func (c *snoopCmd) drawStatus() {
 		r = r[:c.w]
 	}
 	text = string(r) + strings.Repeat(" ", c.w-len(r))
-	_, _ = fmt.Fprintf(c.stdout, "\x1b7\x1b[%d;1H\x1b[0;30;47m%s\x1b[0m\x1b8", c.h, text)
+	_, _ = fmt.Fprintf(c.stdout, "\x1b[%d;1H\x1b[0;30;47m%s\x1b[0m%s", c.h, text, back)
 	c.barRow = c.h
 }
 
 // seqTracker follows the caller's output to tell when it is between escape
-// sequences and complete UTF-8 characters.
+// sequences and complete UTF-8 characters, and where the caller's cursor is.
 type seqTracker struct {
-	state int
-	osc   int    // bytes seen in the current OSC
-	tail  []byte // trailing bytes of the last chunk, for rune completeness
+	state  int
+	osc    int    // bytes seen in the current OSC
+	tail   []byte // trailing bytes of the last chunk, for rune completeness
+	params []byte // parameter bytes of the CSI being read
+	interm bool   // the CSI has an intermediate byte
+	cur    cursor
 }
 
 const (
@@ -511,6 +523,12 @@ func (t *seqTracker) feed(p []byte) {
 // and returns to ground.
 const maxOSC = 512
 
+// maxParams bounds the parameter text kept for one CSI.
+const maxParams = 64
+
+// reset starts tracking a caller screen of w by h at the home position.
+func (t *seqTracker) reset(w, h int) { t.cur.reset(w, h) }
+
 func (t *seqTracker) step(b byte) {
 	if b == 0x18 || b == 0x1a { // CAN and SUB abort any sequence
 		t.state = stGround
@@ -520,11 +538,15 @@ func (t *seqTracker) step(b byte) {
 	case stGround:
 		if b == 0x1b {
 			t.state = stEsc
+			t.cur.rbuf, t.cur.rneed = t.cur.rbuf[:0], 0
+		} else {
+			t.cur.ground(b)
 		}
 	case stEsc:
 		switch b {
 		case '[':
 			t.state = stCSI
+			t.params, t.interm = t.params[:0], false
 		case ']':
 			t.state = stOSC
 			t.osc = 0
@@ -532,13 +554,22 @@ func (t *seqTracker) step(b byte) {
 			t.state = stCharset
 		case 0x1b:
 		default:
+			t.cur.esc(b)
 			t.state = stGround
 		}
 	case stCharset:
 		t.state = stGround
 	case stCSI:
-		if b >= 0x40 && b <= 0x7e {
+		switch {
+		case b >= 0x40 && b <= 0x7e:
 			t.state = stGround
+			t.cur.csi(b, string(t.params), t.interm)
+		case b >= 0x30 && b <= 0x3f:
+			if len(t.params) < maxParams {
+				t.params = append(t.params, b)
+			}
+		case b >= 0x20 && b <= 0x2f:
+			t.interm = true
 		}
 	case stOSC:
 		switch b {

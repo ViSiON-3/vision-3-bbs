@@ -267,8 +267,11 @@ func TestSnoopStatusToggleAndBounds(t *testing.T) {
 	r.send(t, "\x1bx")
 	r.wait(t)
 	out := r.out.String()
-	if !strings.Contains(out, "\x1b7\x1b[24;1H") || !strings.Contains(out, "\x1b8") {
-		t.Fatalf("bar not on the last row with cursor save/restore: %q", out)
+	if !strings.Contains(out, "\x1b[24;1H") || !strings.Contains(out, "\x1b[1;1H") {
+		t.Fatalf("bar not on the last row with an absolute cursor restore: %q", out)
+	}
+	if strings.Contains(out, "\x1b7") || strings.Contains(out, "\x1b8") {
+		t.Fatalf("bar used the shared cursor save slot: %q", out)
 	}
 	if strings.Contains(out, "\x1b[25;") {
 		t.Fatal("bar written past the last row")
