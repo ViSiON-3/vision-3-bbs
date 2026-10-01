@@ -1,12 +1,16 @@
 package hub
 
 import (
+	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -254,12 +258,22 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleSubscribe registers a new leaf node (no auth — bootstrap step).
+// handleSubscribe registers a leaf node. It is the bootstrap step, so it
+// does not use authMiddleware: the hub may not know the node yet. A request
+// may instead be signed with the key it submits (see verifySubscribeSignature),
+// proving the caller holds that key. Node keys are public, so an unsigned
+// request can only register a new node; changing an existing registration
+// (its BBS name and host, or its area subscriptions) requires a signature.
 func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 8*1024) // 8KB limit for subscribe
 
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, `{"error":"request body too large or unreadable"}`, http.StatusBadRequest)
+		return
+	}
 	var req protocol.SubscribeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
@@ -271,7 +285,7 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	// Validate that node_id is the correct derivation of the submitted public key.
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(req.PubKeyB64)
-	if err != nil || len(pubKeyBytes) != 32 {
+	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
 		http.Error(w, `{"error":"invalid pubkey_b64"}`, http.StatusUnprocessableEntity)
 		return
 	}
@@ -282,18 +296,36 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	signed, msg := verifySubscribeSignature(r, body, req.NodeID, pubKeyBytes)
+	if msg != "" {
+		http.Error(w, msg, http.StatusUnauthorized)
+		return
+	}
+
+	// Node IDs are a 64-bit truncation of the key hash, so check the
+	// stored key too rather than trusting the ID alone.
+	existing := h.subscribers.Get(req.NodeID, req.Network)
+	if existing != nil {
+		storedKey, err := base64.StdEncoding.DecodeString(existing.PubKeyB64)
+		if err != nil || !bytes.Equal(storedKey, pubKeyBytes) {
+			http.Error(w, `{"error":"node_id is registered with a different key"}`, http.StatusConflict)
+			return
+		}
+	}
+
 	status := "pending"
 	if h.cfg.AutoApprove {
 		status = "active"
 	}
 
 	sub := Subscriber{
-		NodeID:    req.NodeID,
-		Network:   req.Network,
-		PubKeyB64: req.PubKeyB64,
-		BBSName:   req.BBSName,
-		BBSHost:   req.BBSHost,
-		Status:    status,
+		NodeID:         req.NodeID,
+		Network:        req.Network,
+		PubKeyB64:      req.PubKeyB64,
+		BBSName:        req.BBSName,
+		BBSHost:        req.BBSHost,
+		Status:         status,
+		RequestedAreas: req.AreaTags,
 	}
 
 	actualStatus, err := h.subscribers.Add(sub)
@@ -303,13 +335,48 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A signed re-subscribe updates the node's name and host. Banned nodes
+	// keep the details they were banned under.
+	if existing != nil && signed &&
+		(existing.BBSName != req.BBSName || existing.BBSHost != req.BBSHost) {
+		if _, err := h.subscribers.SetProfileUnlessBanned(req.NodeID, req.Network, req.BBSName, req.BBSHost); err != nil {
+			slog.Error("v3net hub: update subscriber profile", "node", req.NodeID, "error", err)
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Anyone can build an unsigned request for a known node, so one must not
+	// change an existing node's area subscriptions or file access requests
+	// in its name. It may only apply the areas the node's first registration
+	// asked for: an older leaf on a hub that approves nodes by hand gets
+	// none while pending, and re-sends that same request once approved.
+	// Replaying the node's own request grants nothing new.
+	areaTags := req.AreaTags
+	if existing != nil && !signed {
+		areaTags = nil
+		for _, tag := range req.AreaTags {
+			if slices.Contains(existing.RequestedAreas, tag) {
+				areaTags = append(areaTags, tag)
+			}
+		}
+		if len(areaTags) < len(req.AreaTags) {
+			slog.Warn("v3net hub: ignoring area_tags not in the node's first registration on unsigned re-subscribe",
+				"node", req.NodeID, "network", req.Network)
+		}
+		if len(areaTags) == 0 && len(req.AreaTags) > 0 {
+			writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
+			return
+		}
+	}
+
 	// If area_tags are provided, process area subscriptions.
 	// Only process area subscriptions for active network subscribers.
-	if len(req.AreaTags) > 0 && actualStatus != "active" {
+	if len(areaTags) > 0 && actualStatus != "active" {
 		writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
 		return
 	}
-	if len(req.AreaTags) > 0 {
+	if len(areaTags) > 0 {
 		currentNAL, nalErr := h.nalStore.Get(req.Network)
 		if nalErr != nil {
 			slog.Error("get NAL for subscribe", "network", req.Network, "error", nalErr)
@@ -328,13 +395,9 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 			status string
 		}
 		var pending []pendingSubscription
-		type pendingAccessRequest struct {
-			tag string
-		}
-		var pendingRequests []pendingAccessRequest
 
 		// First pass: validate all tags and determine statuses.
-		for _, tag := range req.AreaTags {
+		for _, tag := range areaTags {
 			area := currentNAL.FindArea(tag)
 			if area == nil {
 				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
@@ -354,8 +417,12 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 			case protocol.AccessModeOpen:
 				areaStatus = "active"
 			case protocol.AccessModeApproval:
-				areaStatus = "pending"
-				pendingRequests = append(pendingRequests, pendingAccessRequest{tag: tag})
+				// Approval adds the node to the allow list.
+				if containsStr(area.Access.AllowList, req.NodeID) {
+					areaStatus = "active"
+				} else {
+					areaStatus = "pending"
+				}
 			case protocol.AccessModeClosed:
 				// Only allowed if already on allow list.
 				if containsStr(area.Access.AllowList, req.NodeID) {
@@ -373,21 +440,37 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		// Persistence failures must not be reported as success: Upsert and
 		// Add are both idempotent, so the leaf can safely retry the whole
 		// subscribe request after a 500.
+		//
+		// Upsert never downgrades an active subscription (one a manager
+		// approved, or one made while the area was open), so the status it
+		// stored, not the one asked for, decides whether the node still
+		// needs a manager's approval.
+		var pendingRequests []string
 		for _, ps := range pending {
-			if err := h.areaSubscriptions.Upsert(req.NodeID, req.Network, ps.tag, ps.status); err != nil {
+			stored, err := h.areaSubscriptions.Upsert(req.NodeID, req.Network, ps.tag, ps.status)
+			if err != nil {
 				slog.Error("v3net hub: persist area subscription", "node", req.NodeID, "tag", ps.tag, "error", err)
 				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 				return
 			}
+			if stored == "pending" {
+				pendingRequests = append(pendingRequests, ps.tag)
+			}
 			areaStatuses = append(areaStatuses, protocol.AreaSubscriptionStatus{
 				Tag:    ps.tag,
-				Status: ps.status,
+				Status: stored,
 			})
 		}
 
-		for _, pr := range pendingRequests {
-			if _, err := h.accessRequests.Add(req.Network, pr.tag, req.NodeID, req.BBSName); err != nil {
-				slog.Error("v3net hub: persist access request", "node", req.NodeID, "tag", pr.tag, "error", err)
+		// Name the node as the hub has it registered: an unsigned request's
+		// bbs_name was never checked.
+		bbsName := req.BBSName
+		if reg := h.subscribers.Get(req.NodeID, req.Network); reg != nil {
+			bbsName = reg.BBSName
+		}
+		for _, tag := range pendingRequests {
+			if _, err := h.accessRequests.Add(req.Network, tag, req.NodeID, bbsName); err != nil {
+				slog.Error("v3net hub: persist access request", "node", req.NodeID, "tag", tag, "error", err)
 				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 				return
 			}
@@ -395,9 +478,9 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 			// are never notified about a request that does not exist.
 			ev, _ := protocol.NewEvent(protocol.EventAreaAccessRequested, protocol.AreaAccessRequestedPayload{
 				Network: req.Network,
-				Tag:     pr.tag,
+				Tag:     tag,
 				NodeID:  req.NodeID,
-				BBSName: req.BBSName,
+				BBSName: bbsName,
 			})
 			h.broadcaster.Publish(req.Network, ev)
 		}
@@ -439,4 +522,30 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		slog.Debug("hub: write JSON response", "error", err)
 	}
+}
+
+// verifySubscribeSignature checks an optional signature on a subscribe
+// request, made with the same scheme as authenticated endpoints but verified
+// against the submitted key, since the hub may not have one stored yet.
+// It reports whether the request was signed; a non-empty message means a
+// signature was present but invalid.
+func verifySubscribeSignature(r *http.Request, body []byte, nodeID string, pubKey ed25519.PublicKey) (bool, string) {
+	headerNode := r.Header.Get(headerNodeID)
+	sig := r.Header.Get(headerSignature)
+	if headerNode == "" && sig == "" {
+		return false, ""
+	}
+	if headerNode == "" || sig == "" || r.Header.Get("Date") == "" {
+		return false, `{"error":"missing auth headers"}`
+	}
+	if headerNode != nodeID {
+		return false, `{"error":"node ID header does not match node_id"}`
+	}
+	if msg := checkRequestDate(r.Header.Get("Date")); msg != "" {
+		return false, msg
+	}
+	if !signatureValid(r, body, pubKey) {
+		return false, `{"error":"invalid signature"}`
+	}
+	return true, ""
 }

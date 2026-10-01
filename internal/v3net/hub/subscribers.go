@@ -4,8 +4,11 @@ import (
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -22,6 +25,10 @@ CREATE TABLE IF NOT EXISTS subscribers (
 );
 `
 
+// requestedAreasMigration adds the column holding the area tags a node asked
+// for when it first registered (see Subscriber.RequestedAreas).
+const requestedAreasMigration = `ALTER TABLE subscribers ADD COLUMN requested_area_tags TEXT NOT NULL DEFAULT '[]'`
+
 // ErrUnknownNode is returned by SetStatus and Delete when no subscriber
 // row matches the node/network pair.
 var ErrUnknownNode = errors.New("hub: unknown node")
@@ -35,6 +42,12 @@ type Subscriber struct {
 	BBSHost   string
 	Status    string // "active", "pending", "banned"
 	CreatedAt string // populated by List only
+
+	// RequestedAreas are the area tags the node's first registration asked
+	// for. A node on a hub that approves nodes by hand is pending at first,
+	// so those areas are only subscribed when it re-subscribes after
+	// approval; older leaves do that unsigned, and may apply these tags.
+	RequestedAreas []string
 }
 
 // SubscriberStore manages leaf node subscriptions with SQLite persistence
@@ -51,6 +64,12 @@ func NewSubscriberStore(db *sql.DB) (*SubscriberStore, error) {
 	if _, err := db.Exec(subscribersSchema); err != nil {
 		return nil, fmt.Errorf("hub: create subscribers table: %w", err)
 	}
+	if _, err := db.Exec(requestedAreasMigration); err != nil {
+		// Ignore "duplicate column" — migration already applied.
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return nil, fmt.Errorf("hub: migrate add requested_area_tags column: %w", err)
+		}
+	}
 
 	ss := &SubscriberStore{
 		db:    db,
@@ -64,7 +83,7 @@ func NewSubscriberStore(db *sql.DB) (*SubscriberStore, error) {
 
 func (ss *SubscriberStore) loadCache() error {
 	ss.cache = make(map[string]*Subscriber)
-	rows, err := ss.db.Query("SELECT node_id, network, pubkey_b64, COALESCE(bbs_name, ''), COALESCE(bbs_host, ''), status FROM subscribers")
+	rows, err := ss.db.Query("SELECT node_id, network, pubkey_b64, COALESCE(bbs_name, ''), COALESCE(bbs_host, ''), status, requested_area_tags FROM subscribers")
 	if err != nil {
 		return fmt.Errorf("hub: load subscribers: %w", err)
 	}
@@ -72,9 +91,12 @@ func (ss *SubscriberStore) loadCache() error {
 
 	for rows.Next() {
 		var s Subscriber
-		if err := rows.Scan(&s.NodeID, &s.Network, &s.PubKeyB64, &s.BBSName, &s.BBSHost, &s.Status); err != nil {
+		var requested string
+		if err := rows.Scan(&s.NodeID, &s.Network, &s.PubKeyB64, &s.BBSName, &s.BBSHost, &s.Status, &requested); err != nil {
 			return fmt.Errorf("hub: scan subscriber: %w", err)
 		}
+		// A corrupt value only loses the stored tags, so load the node anyway.
+		_ = json.Unmarshal([]byte(requested), &s.RequestedAreas)
 		ss.cache[s.NodeID+":"+s.Network] = &s
 	}
 	return rows.Err()
@@ -85,10 +107,17 @@ func (ss *SubscriberStore) Add(s Subscriber) (string, error) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
+	requested, err := json.Marshal(s.RequestedAreas)
+	if err != nil {
+		return "", fmt.Errorf("hub: encode requested areas: %w", err)
+	}
+	if s.RequestedAreas == nil {
+		requested = []byte("[]")
+	}
 	result, err := ss.db.Exec(
-		`INSERT OR IGNORE INTO subscribers (node_id, network, pubkey_b64, bbs_name, bbs_host, status)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		s.NodeID, s.Network, s.PubKeyB64, s.BBSName, s.BBSHost, s.Status,
+		`INSERT OR IGNORE INTO subscribers (node_id, network, pubkey_b64, bbs_name, bbs_host, status, requested_area_tags)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		s.NodeID, s.Network, s.PubKeyB64, s.BBSName, s.BBSHost, s.Status, string(requested),
 	)
 	if err != nil {
 		return "", fmt.Errorf("hub: add subscriber: %w", err)
@@ -96,6 +125,7 @@ func (ss *SubscriberStore) Add(s Subscriber) (string, error) {
 
 	// Only update cache if the row was actually inserted (not ignored).
 	if n, err := result.RowsAffected(); err == nil && n > 0 {
+		s.RequestedAreas = slices.Clone(s.RequestedAreas)
 		ss.cache[s.NodeID+":"+s.Network] = &s
 	}
 
@@ -222,6 +252,34 @@ func (ss *SubscriberStore) SetProfile(nodeID, network, bbsName, bbsHost string) 
 		s.BBSHost = bbsHost
 	}
 	return nil
+}
+
+// SetProfileUnlessBanned is SetProfile for a node updating its own
+// details: it leaves a banned node's row unchanged, checking the status in
+// the same statement as the update so a ban landing concurrently is never
+// overridden. It reports whether the row was updated.
+func (ss *SubscriberStore) SetProfileUnlessBanned(nodeID, network, bbsName, bbsHost string) (bool, error) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	res, err := ss.db.Exec(
+		"UPDATE subscribers SET bbs_name = ?, bbs_host = ? WHERE node_id = ? AND network = ? AND status != 'banned'",
+		bbsName, bbsHost, nodeID, network)
+	if err != nil {
+		return false, fmt.Errorf("hub: set profile: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("hub: set profile: %w", err)
+	}
+	if n == 0 {
+		return false, nil
+	}
+	if s := ss.cache[nodeID+":"+network]; s != nil {
+		s.BBSName = bbsName
+		s.BBSHost = bbsHost
+	}
+	return true, nil
 }
 
 // Delete removes a subscriber registration from the DB and cache.

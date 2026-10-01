@@ -14,8 +14,9 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
-// subscribe registers this leaf with the hub. This is the bootstrap step that
-// must succeed before any authenticated requests will work.
+// subscribe registers this leaf with the hub, or updates its registration.
+// This is the bootstrap step that must succeed before any authenticated
+// requests will work.
 func (l *Leaf) subscribe(ctx context.Context) error {
 	req := protocol.SubscribeRequest{
 		Network:   l.cfg.Network,
@@ -30,14 +31,9 @@ func (l *Leaf) subscribe(ctx context.Context) error {
 		return fmt.Errorf("leaf: marshal subscribe: %w", err)
 	}
 
-	url := l.cfg.HubURL + "/v3net/v1/subscribe"
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("leaf: create subscribe request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := l.client.Do(httpReq)
+	// Signed so the hub accepts it as coming from this node, which lets a
+	// re-subscribe update the hub's record of our name and host.
+	resp, err := l.signedPostWithResponse(ctx, "/v3net/v1/subscribe", data)
 	if err != nil {
 		return fmt.Errorf("leaf: subscribe POST: %w", err)
 	}

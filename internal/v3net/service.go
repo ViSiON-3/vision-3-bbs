@@ -319,8 +319,8 @@ func (s *Service) stopLeaf(run *leafRun) {
 // updateHubSelfProfile writes the configured BBSName and BBSHost into the
 // hub's own subscriber row for each hosted network. hubAutoInit runs in New,
 // before the caller has set them, so it registers the node under a
-// placeholder; and a leaf subscribing to its own hub cannot correct the row,
-// because subscribe never changes an existing one. Doing it here on every
+// placeholder; and the hub may host a network it runs no leaf for, so no
+// signed subscribe would ever correct the row. Doing it here on every
 // start also repairs rows left as "hub" with an empty host by older
 // versions. The row is keyed on this process's own node ID.
 func (s *Service) updateHubSelfProfile() {
