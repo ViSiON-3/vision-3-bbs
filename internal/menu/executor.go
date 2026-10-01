@@ -321,6 +321,10 @@ func (e *MenuExecutor) Protocols() []transfer.ProtocolConfig {
 	return append([]transfer.ProtocolConfig(nil), (*p)...)
 }
 
+// sessionIdleUnit is the unit of sessionIdleTimeoutMinutes. A variable so
+// tests can shorten it.
+var sessionIdleUnit = time.Minute
+
 // idleTimeout returns the effective idle timeout duration for the given user.
 // Sysops and co-sysops are exempt and receive 0 (disabled).
 // Pass nil for pre-login contexts (e.g. matrix screen) where there is no
@@ -333,7 +337,13 @@ func (e *MenuExecutor) idleTimeout(u *user.User) time.Duration {
 	if u != nil && u.AccessLevel >= cfg.CoSysOpLevel {
 		return 0
 	}
-	return time.Duration(cfg.SessionIdleTimeoutMinutes) * time.Minute
+	return time.Duration(cfg.SessionIdleTimeoutMinutes) * sessionIdleUnit
+}
+
+// idleTimeoutForLevel is idleTimeout for an authenticated user with the
+// given access level.
+func (e *MenuExecutor) idleTimeoutForLevel(accessLevel int) time.Duration {
+	return e.idleTimeout(&user.User{AccessLevel: accessLevel})
 }
 
 // timeLimit returns u's time limit per call in minutes, 0 meaning none.

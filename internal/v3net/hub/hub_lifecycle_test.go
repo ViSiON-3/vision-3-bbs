@@ -218,14 +218,14 @@ func TestRateLimiter_EvictDropsOnlyStaleKeys(t *testing.T) {
 		t.Fatal("first request for a key should be allowed")
 	}
 	rl.mu.Lock()
-	rl.last["stale"] = time.Now().Add(-11 * time.Minute)
+	rl.tat["stale"] = time.Now().Add(-11 * time.Minute)
 	rl.mu.Unlock()
 
 	rl.evict()
 
 	rl.mu.Lock()
-	_, freshKept := rl.last["fresh"]
-	_, staleKept := rl.last["stale"]
+	_, freshKept := rl.tat["fresh"]
+	_, staleKept := rl.tat["stale"]
 	rl.mu.Unlock()
 	if !freshKept {
 		t.Error("evict removed a key that is still within the TTL")
@@ -322,7 +322,7 @@ func TestSubscribe_Validation(t *testing.T) {
 	}
 }
 
-// subscribeWithAreas posts a subscribe request carrying area tags and returns
+// subscribeWithAreas posts a signed subscribe request carrying area tags and returns
 // the status code and decoded response.
 func subscribeWithAreas(t *testing.T, ts *httptest.Server, ks *keystore.Keystore, tags ...string) (int, protocol.SubscribeWithAreasResponse) {
 	t.Helper()
@@ -330,7 +330,7 @@ func subscribeWithAreas(t *testing.T, ts *httptest.Server, ks *keystore.Keystore
 		Network: "testnet", NodeID: ks.NodeID(), PubKeyB64: ks.PubKeyBase64(),
 		BBSName: "Test BBS", BBSHost: "test.example.net", AreaTags: tags,
 	})
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(string(body)))
+	resp, err := http.DefaultClient.Do(signedRequest(t, ks, "POST", ts.URL+"/v3net/v1/subscribe", string(body)))
 	if err != nil {
 		t.Fatalf("POST subscribe: %v", err)
 	}

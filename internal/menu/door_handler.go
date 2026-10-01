@@ -97,19 +97,24 @@ func executeDoor(ctx *DoorCtx) error {
 		defer t.SetMode(snoop.ModeBBS)
 	}
 
-	if ctx.Config.Type == "synchronet_js" {
+	// The idle timeout and time limit are enforced in the BBS's input loops,
+	// which a door bypasses, and the door can't see the caller hang up, so
+	// the BBS watches for all three while the door runs (see door_watch.go).
+	return runDoorWatched(ctx, runDoorByType)
+}
+
+// runDoorByType runs the door with the executor for its type.
+func runDoorByType(ctx *DoorCtx) error {
+	switch {
+	case ctx.Config.Type == "synchronet_js":
 		return executeSyncJSDoor(ctx)
-	}
-	if ctx.Config.Type == "v3_script" {
+	case ctx.Config.Type == "v3_script":
 		return executeV3ScriptDoor(ctx)
-	}
-	if ctx.Config.Type == "rlogin" {
+	case ctx.Config.Type == "rlogin":
 		return executeRLoginDoor(ctx)
-	}
-	if ctx.Config.Type == "telnet" {
+	case ctx.Config.Type == "telnet":
 		return executeTelnetDoor(ctx)
-	}
-	if ctx.Config.IsDOS {
+	case ctx.Config.IsDOS:
 		return executeDOSDoor(ctx)
 	}
 	return executeNativeDoor(ctx)
@@ -309,6 +314,11 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		cmdErr := executeDoor(ctx)
 		_ = getSessionIH(s)
 
+		// The BBS ended the door because the caller went idle, ran out of
+		// time or hung up: log off, as a menu would.
+		if isSessionFatal(cmdErr) {
+			return currentUser, "LOGOFF", cmdErr
+		}
 		if cmdErr != nil {
 			if errors.Is(cmdErr, ErrDoorBusy) {
 				slog.Info("door is busy for user", "node", nodeNumber, "door", upperInput, "handle", currentUser.Handle)

@@ -21,7 +21,8 @@ type Hub struct {
 	messages          *MessageStore
 	broadcaster       *Broadcaster
 	server            *http.Server
-	chatLimiter       *rateLimiter
+	chatLimiter       *rateLimiter // per user: see allowChat
+	chatNodeLimiter   *rateLimiter // per node, an outer cap over all its users
 	nalStore          *NALStore
 	nalMu             sync.Mutex // serializes NAL read-modify-write operations
 	proposals         *ProposalStore
@@ -103,7 +104,8 @@ func New(cfg Config) (*Hub, error) {
 		subscribers:       subscribers,
 		messages:          messages,
 		broadcaster:       NewBroadcaster(),
-		chatLimiter:       newRateLimiter(time.Second),
+		chatLimiter:       newRateLimiter(chatUserInterval),
+		chatNodeLimiter:   newBurstRateLimiter(chatNodeInterval, chatNodeBurst),
 		nalStore:          nalStore,
 		proposals:         proposals,
 		accessRequests:    accessReqs,
@@ -151,6 +153,7 @@ func (h *Hub) Close() error {
 
 func (h *Hub) close() error {
 	h.chatLimiter.Stop()
+	h.chatNodeLimiter.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	shutdownErr := h.server.Shutdown(ctx)

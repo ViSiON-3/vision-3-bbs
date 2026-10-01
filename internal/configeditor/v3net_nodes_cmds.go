@@ -46,23 +46,36 @@ func loadAdminKeystore(path string) (*keystore.Keystore, error) {
 
 // signedHubRequest builds a signed request to the local hub.
 func signedHubRequest(ks *keystore.Keystore, method string, hubPort int, path string) (*http.Request, error) {
-	emptyHash := sha256.Sum256(nil)
-	bodySHA := hex.EncodeToString(emptyHash[:])
-	dateStr := time.Now().UTC().Format(http.TimeFormat)
-
-	sig, err := ks.Sign(method, path, dateStr, bodySHA)
-	if err != nil {
-		return nil, fmt.Errorf("sign request: %w", err)
-	}
 	url := fmt.Sprintf("http://127.0.0.1:%d%s", hubPort, path)
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		return nil, err
 	}
+	if err := signRequest(req, ks, nil); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+// signRequest sets the V3Net auth headers on req, signing its method, path
+// (with query), the current time and the SHA-256 of body.
+func signRequest(req *http.Request, ks *keystore.Keystore, body []byte) error {
+	bodyHash := sha256.Sum256(body)
+	bodySHA := hex.EncodeToString(bodyHash[:])
+	dateStr := time.Now().UTC().Format(http.TimeFormat)
+
+	path := req.URL.Path
+	if req.URL.RawQuery != "" {
+		path += "?" + req.URL.RawQuery
+	}
+	sig, err := ks.Sign(req.Method, path, dateStr, bodySHA)
+	if err != nil {
+		return fmt.Errorf("sign request: %w", err)
+	}
 	req.Header.Set("Date", dateStr)
 	req.Header.Set("X-V3Net-Node-ID", ks.NodeID())
 	req.Header.Set("X-V3Net-Signature", sig)
-	return req, nil
+	return nil
 }
 
 // fetchHubNodes lists node registrations for a hosted network.

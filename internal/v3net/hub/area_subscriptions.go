@@ -31,18 +31,25 @@ func NewAreaSubscriptionStore(db *sql.DB) (*AreaSubscriptionStore, error) {
 	return &AreaSubscriptionStore{db: db}, nil
 }
 
-// Upsert inserts or updates an area subscription.
-func (as *AreaSubscriptionStore) Upsert(nodeID, network, areaTag, status string) error {
-	_, err := as.db.Exec(
+// Upsert inserts or updates an area subscription and returns the status now
+// stored. An active subscription is never downgraded: re-subscribing must
+// not undo a manager's approval. This is decided in the same statement as
+// the write, so an approval landing between a caller's read and this write
+// is not overwritten.
+func (as *AreaSubscriptionStore) Upsert(nodeID, network, areaTag, status string) (string, error) {
+	var stored string
+	err := as.db.QueryRow(
 		`INSERT INTO area_subscriptions (node_id, network, area_tag, status)
 		 VALUES (?, ?, ?, ?)
-		 ON CONFLICT(node_id, network, area_tag) DO UPDATE SET status = excluded.status`,
+		 ON CONFLICT(node_id, network, area_tag) DO UPDATE SET status =
+		   CASE WHEN area_subscriptions.status = 'active' THEN 'active' ELSE excluded.status END
+		 RETURNING status`,
 		nodeID, network, areaTag, status,
-	)
+	).Scan(&stored)
 	if err != nil {
-		return fmt.Errorf("hub: upsert area subscription: %w", err)
+		return "", fmt.Errorf("hub: upsert area subscription: %w", err)
 	}
-	return nil
+	return stored, nil
 }
 
 // SetStatus updates the status of a specific subscription.

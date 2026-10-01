@@ -10,21 +10,22 @@ import (
 
 // DoorConfig defines the configuration for a single external door program.
 type DoorConfig struct {
-	Code                string            `json:"code"`                            // Unique internal code used in DOOR:CODE commands (uppercase slug)
-	Name                string            `json:"name"`                            // Display label shown to users (free-form, case preserved)
-	WorkingDirectory    string            `json:"working_directory,omitempty"`     // Directory to run the command in (optional)
-	Commands            []string          `json:"commands,omitempty"`              // Commands to execute (native: [0]=executable, [1:]=args; DOS: batch lines)
-	DropfileType        string            `json:"dropfile_type,omitempty"`         // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "DROPFILE.INI", "NONE") (optional, defaults to NONE)
-	DropfileLocation    string            `json:"dropfile_location,omitempty"`     // Where to write dropfile: "startup" (working dir, default; per-node temp dir if none) or "node" (per-node temp dir)
-	DropfileCase        string            `json:"dropfile_case,omitempty"`         // Dropfile filename case: "upper" (default) or "lower"
-	IOMode              string            `json:"io_mode,omitempty"`               // I/O handling ("STDIO", "SOCKET") (optional, defaults to STDIO)
-	RequiresRawTerminal bool              `json:"requires_raw_terminal,omitempty"` // Whether the BBS should attempt to put the terminal in raw mode (optional, defaults to false)
-	UseShell            bool              `json:"use_shell,omitempty"`             // Wrap command in /bin/sh -c (Linux) or cmd /c (Windows)
-	SingleInstance      bool              `json:"single_instance,omitempty"`       // Only allow one node to run this door at a time
-	MinAccessLevel      int               `json:"min_access_level,omitempty"`      // Minimum user access level required (0 = no restriction)
-	CleanupCommand      string            `json:"cleanup_command,omitempty"`       // Command to run after door exits (optional)
-	CleanupArgs         []string          `json:"cleanup_args,omitempty"`          // Arguments for cleanup command (supports placeholders)
-	EnvironmentVars     map[string]string `json:"environment_variables,omitempty"` // Additional environment variables (optional)
+	Code                 string            `json:"code"`                             // Unique internal code used in DOOR:CODE commands (uppercase slug)
+	Name                 string            `json:"name"`                             // Display label shown to users (free-form, case preserved)
+	WorkingDirectory     string            `json:"working_directory,omitempty"`      // Directory to run the command in (optional)
+	Commands             []string          `json:"commands,omitempty"`               // Commands to execute (native: [0]=executable, [1:]=args; DOS: batch lines)
+	DropfileType         string            `json:"dropfile_type,omitempty"`          // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "DROPFILE.INI", "NONE") (optional, defaults to NONE)
+	DropfileLocation     string            `json:"dropfile_location,omitempty"`      // Where to write dropfile: "startup" (working dir, default; per-node temp dir if none) or "node" (per-node temp dir)
+	DropfileCase         string            `json:"dropfile_case,omitempty"`          // Dropfile filename case: "upper" (default) or "lower"
+	DropfileHidePersonal bool              `json:"dropfile_hide_personal,omitempty"` // DROPFILE.INI: leave out the user's real name, location and IP address
+	IOMode               string            `json:"io_mode,omitempty"`                // I/O handling ("STDIO", "SOCKET") (optional, defaults to STDIO)
+	RequiresRawTerminal  bool              `json:"requires_raw_terminal,omitempty"`  // Whether the BBS should attempt to put the terminal in raw mode (optional, defaults to false)
+	UseShell             bool              `json:"use_shell,omitempty"`              // Wrap command in /bin/sh -c (Linux) or cmd /c (Windows)
+	SingleInstance       bool              `json:"single_instance,omitempty"`        // Only allow one node to run this door at a time
+	MinAccessLevel       int               `json:"min_access_level,omitempty"`       // Minimum user access level required (0 = no restriction)
+	CleanupCommand       string            `json:"cleanup_command,omitempty"`        // Command to run after door exits (optional)
+	CleanupArgs          []string          `json:"cleanup_args,omitempty"`           // Arguments for cleanup command (supports placeholders)
+	EnvironmentVars      map[string]string `json:"environment_variables,omitempty"`  // Additional environment variables (optional)
 	// Script door fields
 	Type         string   `json:"type,omitempty"`          // "synchronet_js", "v3_script", "rlogin", "telnet", or empty (legacy native/DOS)
 	Script       string   `json:"script,omitempty"`        // Main JS file to execute (relative to working_directory)

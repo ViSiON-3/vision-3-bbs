@@ -36,7 +36,7 @@ Open the config editor and navigate to **Access & Security → Connection Limits
 | Max Per IP | 3 | Maximum concurrent connections from a single IP address. Prevents connection flooding. |
 | Failed Logins | 5 | Failed BBS login attempts from one IP before lockout. Set to 0 to disable. |
 | Lockout Mins | 30 | Duration of IP lockout after failed login threshold is reached. |
-| Idle Timeout | 5 | Minutes before an idle session is disconnected. |
+| Idle Timeout | 5 | Minutes before an idle session is disconnected, in menus and in doors. CoSysOps and above are exempt. |
 | Xfer Timeout | 10 | Minutes before a stalled file transfer is aborted. |
 
 To set IP blocklist and allowlist file paths, use **Access & Security → IP Blocklist/Allowlist** (item 4).

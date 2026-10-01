@@ -113,6 +113,11 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		cmdErr := executeDoor(ctx)
 		_ = getSessionIH(s)
 
+		// The BBS ended the door because the caller went idle, ran out of
+		// time or hung up: log off, as a menu would.
+		if isSessionFatal(cmdErr) {
+			return currentUser, "LOGOFF", cmdErr
+		}
 		if cmdErr != nil {
 			if errors.Is(cmdErr, ErrDoorBusy) {
 				slog.Info("door is busy", "node", nodeNumber, "door", doorName, "handle", currentUser.Handle)

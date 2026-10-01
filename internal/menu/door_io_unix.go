@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"syscall"
 	"time"
 )
@@ -48,6 +49,25 @@ func pollableDoorFile(f *os.File) *os.File {
 	nf := os.NewFile(uintptr(dupFD), f.Name())
 	_ = f.Close() // the copy keeps the underlying file open
 	return nf
+}
+
+// doorSocketpair creates the socket pair a SOCKET I/O door talks over, with
+// both ends close-on-exec. The door's end reaches it only as ExtraFiles fd 3,
+// which exec clears the flag on. Without the flag, every door started on any
+// node while the pair exists would inherit both ends, handing one caller's
+// session to another node's door; DROPFILE.INI requires a POSIX host to keep
+// other sessions' descriptors out of a door this way. ForkLock is held so no
+// fork lands between creating the pair and marking it.
+func doorSocketpair() ([2]int, error) {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return fds, err
+	}
+	syscall.CloseOnExec(fds[0])
+	syscall.CloseOnExec(fds[1])
+	return fds, nil
 }
 
 // withRawFD runs fn with f's descriptor. Unlike f.Fd it leaves f in
@@ -97,5 +117,43 @@ func drainDoorOutput(f *os.File, outputDone <-chan struct{}, node int, door stri
 	case <-outputDone:
 	case <-timer.C:
 		slog.Error("door output copier did not stop; abandoning it", "node", node, "door", door)
+	}
+}
+
+// setDoorProcessGroup puts a door started without a PTY in a process group of
+// its own, so hanging up on it reaches any children it started, such as the
+// program a use_shell door runs. A PTY door needs none: pty.Start already
+// makes it a session leader, and a process group request would then fail.
+func setDoorProcessGroup(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
+}
+
+// hangUpDoorProcess ends a door as a modem hang-up would: SIGHUP to the door
+// and everything in its process group, then SIGKILL to whatever is left after
+// grace. exited is closed once the door process has been waited for.
+//
+// A door that leads its own process group (every door on Unix: see
+// setDoorProcessGroup) is waited out for the whole grace period even if it
+// exits first, because a child that ignored SIGHUP can outlive it; the group
+// is then killed if anything is left in it. That is safe after the leader is
+// reaped because the kernel doesn't reuse a process ID while a group with
+// that ID still exists. A door without a group is signalled only while it
+// is known to be running, since its ID could be reused once it is reaped.
+func hangUpDoorProcess(p *os.Process, exited <-chan struct{}, grace time.Duration) {
+	pgid, err := syscall.Getpgid(p.Pid)
+	if err == nil && pgid == p.Pid {
+		_ = syscall.Kill(-pgid, syscall.SIGHUP) // best effort: it may have exited
+		time.Sleep(grace)
+		_ = syscall.Kill(-pgid, syscall.SIGKILL) // ESRCH once the group is empty
+		return
+	}
+	_ = p.Signal(syscall.SIGHUP) // best effort: it may have exited
+	select {
+	case <-exited:
+	case <-time.After(grace):
+		_ = p.Kill() // fails harmlessly if it has exited meanwhile
 	}
 }

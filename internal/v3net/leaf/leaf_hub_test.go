@@ -70,6 +70,18 @@ func TestSubscribe_RegistersWithHub(t *testing.T) {
 	if err := l.subscribe(context.Background()); err != nil {
 		t.Errorf("repeat subscribe: %v", err)
 	}
+
+	// The subscribe is signed, so a re-subscribe after the board changes its
+	// name and host updates the hub's record.
+	l.cfg.BBSName = "renamed"
+	l.cfg.BBSHost = "renamed.example.net"
+	if err := l.subscribe(context.Background()); err != nil {
+		t.Fatalf("subscribe after rename: %v", err)
+	}
+	sub = h.Subscribers().Get(l.cfg.Keystore.NodeID(), "testnet")
+	if sub == nil || sub.BBSName != "renamed" || sub.BBSHost != "renamed.example.net" {
+		t.Errorf("hub recorded %+v after rename, want renamed/renamed.example.net", sub)
+	}
 }
 
 func TestSubscribe_Failures(t *testing.T) {
@@ -189,8 +201,8 @@ func TestSendChat_JoinsLobbyAndPosts(t *testing.T) {
 		t.Errorf("Rooms = %+v, %v; want lobby with 1 user", rooms, err)
 	}
 
-	// The hub rate-limits chat per node, so an immediate second message is
-	// joined but not posted, and the caller is told.
+	// The hub rate-limits chat per user, so an immediate second message
+	// from alice is joined but not posted, and the caller is told.
 	err = l.SendChatCtx(context.Background(), "hello?", "alice")
 	if err == nil || !strings.Contains(err.Error(), "chat post returned 429") {
 		t.Errorf("second SendChat = %v, want a 429 post error", err)

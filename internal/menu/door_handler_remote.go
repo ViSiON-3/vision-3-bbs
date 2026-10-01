@@ -94,10 +94,30 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 	}
 	defer closeConn()
 
+	// The connection is closed when the BBS must end the door (see
+	// door_watch.go). Once the relay ends the watch stops, so the door's
+	// cleanup command isn't counted against the caller.
+	relayDone := make(chan struct{})
+	defer close(relayDone)
+	defer ctx.watch.freeze()
+	go func() {
+		select {
+		case <-ctx.watch.Ended():
+			slog.Info("ending remote door", "node", ctx.NodeNumber, "door", ctx.DoorName,
+				"protocol", proto, "reason", ctx.watch.endReason().String())
+			closeConn()
+		case <-relayDone:
+		}
+	}()
+
 	if !deadline.IsZero() {
 		timer := time.AfterFunc(time.Until(deadline), func() {
 			slog.Info("time limit reached during remote door, disconnecting",
 				"node", ctx.NodeNumber, "door", ctx.DoorName, "protocol", proto)
+			// Record why on the watch before closing: the relay freezes the
+			// watch as it finishes, and the watch's own timer for the same
+			// deadline may not have fired yet.
+			ctx.watch.end(doorEndTimeLimit)
 			closeConn()
 		})
 		defer timer.Stop()

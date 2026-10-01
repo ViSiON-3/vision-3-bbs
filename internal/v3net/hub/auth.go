@@ -2,6 +2,7 @@ package hub
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -32,14 +33,8 @@ func (h *Hub) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Check clock skew.
-		reqTime, err := http.ParseTime(dateStr)
-		if err != nil {
-			http.Error(w, `{"error":"invalid Date header"}`, http.StatusUnauthorized)
-			return
-		}
-		if time.Since(reqTime).Abs() > maxClockSkew {
-			http.Error(w, `{"error":"request time outside acceptable range"}`, http.StatusUnauthorized)
+		if msg := checkRequestDate(dateStr); msg != "" {
+			http.Error(w, msg, http.StatusUnauthorized)
 			return
 		}
 
@@ -67,22 +62,42 @@ func (h *Hub) authMiddleware(next http.Handler) http.Handler {
 		}
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
-		bodyHash := sha256.Sum256(bodyBytes)
-		bodySHA := hex.EncodeToString(bodyHash[:])
-
-		// Build canonical path with query string.
-		canonPath := r.URL.Path
-		if r.URL.RawQuery != "" {
-			canonPath += "?" + r.URL.RawQuery
-		}
-
-		if !keystore.Verify(pubKey, r.Method, canonPath, dateStr, bodySHA, sig) {
+		if !signatureValid(r, bodyBytes, pubKey) {
 			http.Error(w, `{"error":"invalid signature"}`, http.StatusUnauthorized)
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// checkRequestDate validates a request's Date header against maxClockSkew.
+// It returns a JSON error body, or "" if the date is acceptable.
+func checkRequestDate(dateStr string) string {
+	reqTime, err := http.ParseTime(dateStr)
+	if err != nil {
+		return `{"error":"invalid Date header"}`
+	}
+	if time.Since(reqTime).Abs() > maxClockSkew {
+		return `{"error":"request time outside acceptable range"}`
+	}
+	return ""
+}
+
+// signatureValid reports whether the request's signature header is a valid
+// signature by pubKey over its method, path (with query), Date header and
+// the SHA-256 of body.
+func signatureValid(r *http.Request, body []byte, pubKey ed25519.PublicKey) bool {
+	bodyHash := sha256.Sum256(body)
+	bodySHA := hex.EncodeToString(bodyHash[:])
+
+	// Build canonical path with query string.
+	canonPath := r.URL.Path
+	if r.URL.RawQuery != "" {
+		canonPath += "?" + r.URL.RawQuery
+	}
+
+	return keystore.Verify(pubKey, r.Method, canonPath, r.Header.Get("Date"), bodySHA, r.Header.Get(headerSignature))
 }
 
 // extractNetwork pulls the network name from a V3Net API path.

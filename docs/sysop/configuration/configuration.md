@@ -256,6 +256,7 @@ Configures external door programs that can be launched from the BBS. The file co
 - `dropfile_type` - Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, `DROPFILE.INI`, or blank
 - `dropfile_location` - Where to write dropfile: `startup` (working dir) or `node` (per-node temp dir)
 - `dropfile_case` - Filename case for the generated dropfile: `upper` (default, e.g. `DOOR32.SYS`) or `lower` (e.g. `door32.sys`). Use `lower` for native Linux doors whose library opens a lowercase dropfile name on a case-sensitive filesystem. Does not affect DOS doors.
+- `dropfile_hide_personal` - `true` leaves the user's real name, location and IP address out of `DROPFILE.INI`, for doors that shouldn't see them. Other dropfile formats are not affected.
 - `min_access_level` - Minimum user access level (0 = no restriction)
 - `single_instance` - Only allow one node to run this door at a time
 - `cleanup_command` / `cleanup_args` - Post-exit cleanup command (supports placeholders)
@@ -478,7 +479,7 @@ General BBS configuration. All settings in this file are managed through the **S
 - `maxConnectionsPerIP` — Max concurrent connections from one IP (default: `3`)
 - `maxFailedLogins` — Failed BBS logins from an IP before lockout (default: `5`, `0` = disabled)
 - `lockoutMinutes` — Lockout duration in minutes (default: `30`)
-- `sessionIdleTimeoutMinutes` — Idle session cutoff (default: `5`)
+- `sessionIdleTimeoutMinutes` — Idle session cutoff, in menus and in doors (default: `5`, `0` = disabled). CoSysOps and above are exempt
 - `transferTimeoutMinutes` — File transfer timeout (default: `10`)
 
 <a id="access-levels"></a>

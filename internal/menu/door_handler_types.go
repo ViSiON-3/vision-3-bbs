@@ -41,7 +41,14 @@ type DoorCtx struct {
 	PortStr     string
 	TimeLeftMin int
 	TimeLeftStr string
+	// IdleTimeout is how long the caller may send nothing before the door
+	// is ended and the caller logged off; 0 for a caller exempt from the
+	// idle timeout.
+	IdleTimeout time.Duration
 	BaudStr     string
 	UserIDStr   string
 	Subs        map[string]string
+
+	// watch decides when the BBS must end the door. Set by executeDoor.
+	watch *doorWatch
 }

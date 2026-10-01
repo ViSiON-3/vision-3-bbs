@@ -68,7 +68,7 @@ func (m Model) updateV3NetAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.message = "Subscribing..."
 		return m, subscribeToAreas(
 			m.areaBrowserHub, m.areaBrowserNetwork, tags,
-			ks.NodeID(), ks.PubKeyBase64(), bbsName, bbsHost,
+			ks, bbsName, bbsHost,
 		)
 
 	case tea.KeyEscape:

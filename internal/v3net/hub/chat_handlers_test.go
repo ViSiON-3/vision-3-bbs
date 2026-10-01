@@ -48,12 +48,14 @@ func waitEvent(t *testing.T, ch <-chan protocol.Event, eventType string) protoco
 	}
 }
 
-// resetChatLimit clears the per-node chat rate limit so a test can send
-// several chat requests back to back.
-func resetChatLimit(h *Hub, nodeID string) {
-	h.chatLimiter.mu.Lock()
-	defer h.chatLimiter.mu.Unlock()
-	delete(h.chatLimiter.last, nodeID)
+// resetChatLimits clears every chat rate limit, per user and per node, so a
+// test can send several chat requests back to back.
+func resetChatLimits(h *Hub) {
+	for _, rl := range []*rateLimiter{h.chatLimiter, h.chatNodeLimiter} {
+		rl.mu.Lock()
+		clear(rl.tat)
+		rl.mu.Unlock()
+	}
 }
 
 func setupChatTest(t *testing.T) (*Hub, *httptest.Server, *keystore.Keystore) {
@@ -182,7 +184,7 @@ func TestChatPost_Validation(t *testing.T) {
 	if code := sendSigned(t, leafKS, "POST", url, `{"room":`, nil); code != http.StatusBadRequest {
 		t.Errorf("invalid JSON: expected 400, got %d", code)
 	}
-	resetChatLimit(h, leafKS.NodeID())
+	resetChatLimits(h)
 	if code := sendSigned(t, leafKS, "POST", url, `{"room":"bad room!","text":"x"}`, nil); code != http.StatusBadRequest {
 		t.Errorf("bad room: expected 400, got %d", code)
 	}
@@ -270,7 +272,7 @@ func TestChatPrivate(t *testing.T) {
 
 	// Once joined, the room handle is used as the sender.
 	sendSigned(t, aliceKS, "POST", base+"join", `{"room":"lobby","handle":"alice"}`, nil)
-	resetChatLimit(h, aliceKS.NodeID())
+	resetChatLimits(h)
 	if code := sendSigned(t, aliceKS, "POST", base+"private", body, nil); code != http.StatusNoContent {
 		t.Fatalf("second private status: %d", code)
 	}
@@ -368,12 +370,13 @@ func TestChatPost_RejectedRequestsKeepRateLimitToken(t *testing.T) {
 	if code := sendSigned(t, leafKS, "POST", base+"post", `{"room":"lobby","text":"again"}`, nil); code != http.StatusTooManyRequests {
 		t.Errorf("back-to-back post: expected 429, got %d", code)
 	}
-	// Room posts and private messages share the node's bucket.
-	resetChatLimit(h, leafKS.NodeID())
+	// Room posts and private messages have separate allowances, so a
+	// private message straight after a post goes through.
+	resetChatLimits(h)
 	sendSigned(t, leafKS, "POST", base+"post", `{"room":"lobby","text":"one"}`, nil)
 	private := fmt.Sprintf(`{"to_handle":"me","to_node":%q,"text":"x"}`, leafKS.NodeID())
-	if code := sendSigned(t, leafKS, "POST", base+"private", private, nil); code != http.StatusTooManyRequests {
-		t.Errorf("private right after a post: expected 429, got %d", code)
+	if code := sendSigned(t, leafKS, "POST", base+"private", private, nil); code != http.StatusNoContent {
+		t.Errorf("private right after a post: expected 204, got %d", code)
 	}
 }
 

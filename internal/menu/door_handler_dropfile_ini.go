@@ -8,14 +8,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
-// DROPFILE.INI is the named-value drop file drafted by Synchronet (draft 0.3):
-// https://github.com/SynchronetBBS/sbbs/blob/master/docs/dropfile_ini.md
+// DROPFILE.INI is the named-value drop file drafted by Synchronet (draft 0.6):
+// https://github.com/SynchronetBBS/sbbs/blob/0fc1667377/docs/dropfile_ini.md
+//
+// SYS_FTN_ADDR is the one key the spec defines that this writer leaves out:
+// it lists the primary address first, and FTN networks here are configured
+// with no primary among them.
 
 const (
 	dropfileIniType = "DROPFILE.INI"
@@ -98,6 +103,45 @@ func dropfileIniASCII(key, val string) string {
 	return val
 }
 
+// dropfileIniPath returns val if it can be written as a path value, and ""
+// otherwise. A path is written byte for byte as the file system gives it,
+// never converted to the file's text encoding and never cut, so one that
+// contains a control character or surrounding whitespace, or doesn't fit
+// the line limit for key, is left out.
+func dropfileIniPath(key, val string) string {
+	// Whitespace here is the spec's: ASCII space and tab only. Other Unicode
+	// spaces are ordinary characters in a file name.
+	if val == "" || len(val) > dropfileIniMaxLine-len(key)-1 || strings.Trim(val, " \t") != val {
+		return ""
+	}
+	for i := 0; i < len(val); i++ {
+		if c := val[i]; c < 0x20 || c == 0x7F {
+			return ""
+		}
+	}
+	// A UTF-8 path is checked for the control characters the spec defines
+	// for UTF-8 text, since those split lines in some readers.
+	if utf8.ValidString(val) && strings.IndexFunc(val, dropfileIniUTF8Control) >= 0 {
+		return ""
+	}
+	return val
+}
+
+// dropfileIniUTF8Control reports whether r is a control character in UTF-8
+// text beyond the ASCII ones: C1 controls, the line and paragraph separators
+// (which Python's splitlines and JavaScript multiline regular expressions
+// treat as line breaks), and the bidirectional format characters.
+func dropfileIniUTF8Control(r rune) bool {
+	switch {
+	case r >= 0x80 && r <= 0x9F,
+		r == 0x2028, r == 0x2029,
+		r >= 0x202A && r <= 0x202E,
+		r >= 0x2066 && r <= 0x2069:
+		return true
+	}
+	return false
+}
+
 // dropfileIniWriter accumulates the sections and keys of a DROPFILE.INI.
 type dropfileIniWriter struct {
 	b strings.Builder
@@ -134,6 +178,14 @@ func (w *dropfileIniWriter) requiredText(key, val string) {
 // is empty or not valid ASCII.
 func (w *dropfileIniWriter) ascii(key, val string) {
 	if v := dropfileIniASCII(key, val); v != "" {
+		w.line(key + "=" + v)
+	}
+}
+
+// path writes an optional path key, leaving it out when the value can't be
+// written unchanged.
+func (w *dropfileIniWriter) path(key, val string) {
+	if v := dropfileIniPath(key, val); v != "" {
 		w.line(key + "=" + v)
 	}
 }
@@ -227,10 +279,17 @@ func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 		role = "cosysop"
 	}
 	w.line("USER_ROLE=" + role)
-	w.text("USER_REALNAME", ctx.User.RealName)
-	w.text("USER_LOCATION", ctx.User.GroupLocation)
+	// The sysop may keep personal details from a door, which may be closed
+	// source or send what it reads to other systems.
+	personal := !ctx.Config.DropfileHidePersonal
+	if personal {
+		w.text("USER_REALNAME", ctx.User.RealName)
+		w.text("USER_LOCATION", ctx.User.GroupLocation)
+	}
 	if ctx.Session != nil {
-		w.ascii("USER_IP", doorUserIP(ctx.Session))
+		if personal {
+			w.ascii("USER_IP", doorUserIP(ctx.Session))
+		}
 		if isTelnetSession(ctx.Session) {
 			w.line("USER_PROTOCOL=telnet")
 		} else {
@@ -254,11 +313,27 @@ func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 	w.num("TERM_ROWS", rows)
 	w.line("TERM_TYPE=ansi")
 	w.line("TERM_CHARSET=" + termCharset)
+	if ctx.Session != nil {
+		// The terminal type the client sent: Telnet TERMINAL-TYPE or the
+		// SSH pty request, passed on as received.
+		if pty, _, ok := ctx.Session.Pty(); ok {
+			w.ascii("TERM_TERMINFO", pty.Term)
+		}
+	}
 
 	w.section("session")
 	w.num("TIME_LEFT", ctx.TimeLeftMin*60)
-	w.text("TEMP_DIR", tempDir)
+	w.path("TEMP_DIR", tempDir)
 	w.line("LOCAL_DISPLAY=0")
+	// The idle timeout executeDoor enforces; left out, meaning no limit, for
+	// a caller exempt from it.
+	if ctx.IdleTimeout > 0 {
+		w.num("IDLE_LIMIT", int(ctx.IdleTimeout/time.Second))
+	}
+
+	w.section("door")
+	w.ascii("DOOR_CODE", ctx.Config.Code)
+	w.text("DOOR_NAME", ctx.Config.Name)
 
 	w.section("x-" + strings.ToLower(dropfileIniVendor))
 	w.num("X_"+dropfileIniVendor+"_LEVEL", ctx.User.AccessLevel)

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
@@ -63,7 +62,7 @@ func registerLeafWithAreas(t *testing.T, ts *httptest.Server, leafKS *keystore.K
 		AreaTags:  areaTags,
 	}
 	body, _ := json.Marshal(req)
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(string(body)))
+	resp, err := http.DefaultClient.Do(signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/subscribe", string(body)))
 	if err != nil {
 		t.Fatalf("subscribe with areas: %v", err)
 	}

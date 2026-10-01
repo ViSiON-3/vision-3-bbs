@@ -203,6 +203,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to start pty for door '%s': %w", ctx.DoorName, err)
 		} else {
+			stopDoorWatch := watchDoorProcess(ctx, cmd.Process)
 			ptmx = pollableDoorFile(ptmx)
 			ctx.Session.Signals(nil)
 			ctx.Session.Break(nil)
@@ -279,6 +280,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 			// Wait for door to exit, then cleanly shut down I/O goroutines
 			cmdErr = cmd.Wait()
+			stopDoorWatch()
 			close(resizeStop)
 			slog.Debug("door process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
@@ -311,7 +313,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		// The other end is bridged bidirectionally to the BBS session.
 		slog.Info("starting door with Socket I/O mode", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
-		fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+		fds, err := doorSocketpair()
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to create socketpair for door '%s': %w", ctx.DoorName, err)
 		} else {
@@ -327,12 +329,14 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 			cmd.ExtraFiles = []*os.File{doorSock} // child FD 3
 			cmd.Env = append(cmd.Env, "DOOR_SOCKET_FD=3")
+			setDoorProcessGroup(cmd)
 
 			if startErr := cmd.Start(); startErr != nil {
 				_ = bbsSock.Close()  // best-effort socket teardown
 				_ = doorSock.Close() // best-effort socket teardown
 				cmdErr = fmt.Errorf("failed to start door '%s' with socket I/O: %w", ctx.DoorName, startErr)
 			} else {
+				stopDoorWatch := watchDoorProcess(ctx, cmd.Process)
 				// Parent closes the door's end
 				_ = doorSock.Close() // best-effort socket teardown
 
@@ -366,6 +370,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				}()
 
 				cmdErr = cmd.Wait()
+				stopDoorWatch()
 				slog.Debug("door (socket I/O) process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 				close(readInterrupt)

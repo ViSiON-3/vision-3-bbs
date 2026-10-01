@@ -59,7 +59,7 @@ Fields the BBS does not track are filled with safe placeholders: phone numbers a
 
 #### DROPFILE.INI
 
-`DROPFILE.INI` is the named-value drop file [drafted by Synchronet](https://github.com/SynchronetBBS/sbbs/blob/master/docs/dropfile_ini.md) (draft 0.3). Instead of giving a value its meaning by line number, it writes `KEY=value` lines under INI sections, so a door reads only the keys it needs. The format is still a draft and its keys may change.
+`DROPFILE.INI` is the named-value drop file [drafted by Synchronet](https://github.com/SynchronetBBS/sbbs/blob/master/docs/dropfile_ini.md) (draft 0.6). Instead of giving a value its meaning by line number, it writes `KEY=value` lines under INI sections, so a door reads only the keys it needs. The format is still a draft and its keys may change.
 
 ViSiON/3 writes these keys:
 
@@ -69,16 +69,23 @@ ViSiON/3 writes these keys:
 | `[system]` | `SYS_SOFTWARE`, `SYS_VENDOR` (`VISION3`), `SYS_VERSION`, `SYS_NAME`, `SYS_OP`, `SYS_NODE_NUM`, `SYS_NODE_COUNT`, `SYS_QWKID`, `SYS_LOCATION` |
 | `[comm]` | `COMM_TYPE`, `COMM_CHARSET`, plus `COMM_HANDLE` or `COMM_PORT` where the type needs one |
 | `[user]` | `USER_ALIAS`, `USER_NUMBER`, `USER_ROLE`, `USER_REALNAME`, `USER_LOCATION`, `USER_IP`, `USER_PROTOCOL` |
-| `[terminal]` | `TERM_COLS`, `TERM_ROWS`, `TERM_TYPE` (`ansi`), `TERM_CHARSET` |
-| `[session]` | `TIME_LEFT` (seconds), `TEMP_DIR`, `LOCAL_DISPLAY` (`0`) |
+| `[terminal]` | `TERM_COLS`, `TERM_ROWS`, `TERM_TYPE` (`ansi`), `TERM_CHARSET`, `TERM_TERMINFO` |
+| `[session]` | `TIME_LEFT` (seconds), `TEMP_DIR`, `LOCAL_DISPLAY` (`0`), `IDLE_LIMIT` (seconds) |
+| `[door]` | `DOOR_CODE`, `DOOR_NAME` (the door's **Code** and **Name**) |
 | `[x-vision3]` | `X_VISION3_LEVEL` (the user's access level) |
 
-Optional keys with nothing to report are left out: `SYS_QWKID` needs an explicit `qwkID` in `config.json`, and `TEMP_DIR` is written only when the file is in a per-node directory (any DOS door, or a native door as described below).
+Optional keys with nothing to report are left out: `SYS_QWKID` needs an explicit `qwkID` in `config.json`, `TERM_TERMINFO` is written only when the caller's client sent a terminal type, and `TEMP_DIR` is written only when the file is in a per-node directory (any DOS door, or a native door as described below).
+
+`IDLE_LIMIT` is the [idle timeout](#idle-timeout) in seconds, so a door can warn the user before it runs out; it is left out for CoSysOps and above, who are exempt. One key the draft defines is never written: `SYS_FTN_ADDR` lists the board's FTN addresses with the primary one first, and FTN networks aren't configured with a primary.
 
 - **`COMM_TYPE`** is `stdio` for a native door, `socket` with `COMM_HANDLE=3` in [SOCKET](#socket) I/O mode, and `fossil` with `COMM_PORT=1` for a DOS door with a **FOSSIL Driver**. A DOS door without one reads and writes the DOS console, which is reported as `stdio`.
 - **`COMM_CHARSET`** is the caller's terminal encoding, `CP437` or `UTF-8`, because the BBS relays a door's bytes untranslated. A DOS door without a FOSSIL driver always gets `CP437`, since dosemu2 translates its screen.
 - **`USER_ROLE`** is `sysop` or `cosysop` when the user's access level reaches `sysOpLevel` or `coSysOpLevel`, otherwise `user`.
+- **`TERM_TERMINFO`** is the terminal type the caller's client sent, through Telnet TERMINAL-TYPE or the SSH pty request, such as `xterm-256color`, for doors that use curses or terminfo.
 - **Text values** are written in CP437; `FILE_UTF8` is never set.
+- **`TEMP_DIR`** is a path, written exactly as the file system gives it. A path that would need changing to fit the file, because it is too long or contains a control character, is left out rather than cut short.
+
+**Personal details.** Some doors are closed source, or send what they read to other systems. Set **Hide Personal** (`dropfile_hide_personal`) on such a door to leave the user's real name (`USER_REALNAME`), location (`USER_LOCATION`) and IP address (`USER_IP`) out of its `DROPFILE.INI`. The other drop file formats are not affected.
 
 The door finds the file through the `DROPFILE_INI` environment variable, which holds its absolute path, or through `{DROPFILE}` on the command line. For a DOS door the BBS adds `SET DROPFILE_INI=C:\NODES\TEMPn\DROPFILE.INI` to the generated batch file when **Dropfile Type** is `DROPFILE.INI`; `{DOSDROPFILE}` gives the same path for the command line. No two nodes' files may share a path, so a native door always gets a per-node directory for `DROPFILE.INI`, as with **Dropfile Location** `node`, unless it is marked **Single Instance**. Only a single-instance door can have the file written to its working directory with `startup`.
 
@@ -196,6 +203,7 @@ These fields apply to both native and DOS doors:
 | `dropfile_type` | string | Dropfile format: `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, `DROPFILE.INI`, or blank for none. See [Supported Dropfile Types](#supported-dropfile-types) |
 | `dropfile_location` | string | Where to write dropfile: `startup` (working dir, default; per-node temp dir if there is no working dir) or `node` (per-node temp dir). Native doors only |
 | `dropfile_case` | string | Dropfile filename case: `upper` (default, `DOOR32.SYS`) or `lower` (`door32.sys`). Native doors only |
+| `dropfile_hide_personal` | bool | Leave the user's real name, location and IP address out of `DROPFILE.INI`. See [DROPFILE.INI](#dropfileini) |
 | `min_access_level` | int | Minimum user access level required (0 = no restriction) |
 | `single_instance` | bool | Only allow one node to run this door at a time |
 | `cleanup_command` | string | Command to run after the door exits (optional) |
@@ -257,6 +265,34 @@ For DOS doors, `dropfile_location` is ignored: every dropfile format is always w
 Set `min_access_level` to restrict a door to users with a minimum access level. Users below the required level will see an "access denied" message. A value of `0` (default) means no restriction.
 
 Doors with access restrictions are hidden from the door list for unauthorized users.
+
+## Ending a Door
+
+A door reads the caller's connection directly, so the BBS watches it on the door's behalf and ends the door, then logs the caller off, when:
+
+- the caller sends nothing for their [idle timeout](#idle-timeout);
+- the caller's [time limit](#time-limit) runs out;
+- the caller [hangs up](#hang-up).
+
+### Idle Timeout
+
+The session **Idle Timeout** (`sessionIdleTimeoutMinutes`) applies inside doors as it does in the menus. When a caller sends nothing for that long, the BBS ends the door, shows the idle timeout message and logs the caller off. Every key the caller presses restarts the countdown, as does anything else their terminal sends, such as a reply to a door's terminal query. Output from the door doesn't count. CoSysOps and above are exempt here too.
+
+Many doors have their own inactivity timer. If a door's timer is shorter, it ends the session first, as it always has. A door that reads `DROPFILE.INI` can use `IDLE_LIMIT` to match the BBS's timer or to warn the user.
+
+### Time Limit
+
+A caller's per-call **time limit** (`timeLimit`; see [Time Limits](users/user-management.md#time-limits)) runs out inside a door as it does in the menus: the BBS ends the door, shows the time limit message and logs the caller off. A caller with no time left isn't let into a door at all. Doors are still told the time left through their drop file (`TIME_LEFT` and the equivalents), so a well-behaved door can wrap up first. CoSysOps and above have no limit.
+
+### Hang-up
+
+When a caller drops their connection inside a door, the door is ended at once, rather than left running until it notices on its own or its own timer ends it. The node and, for a **Single Instance** door, the door lock are freed straight away.
+
+### How a door is ended
+
+- **Native and DOS doors** are hung up on: the BBS sends `SIGHUP` to the door and any programs it started, as a modem dropping carrier would, and `SIGKILL` to anything still running 5 seconds later. On Windows the door process is killed.
+- **RLogin and Telnet doors** have their connection to the door server closed, including while it is still being made.
+- **Synchronet JavaScript and V3 script doors** are stopped as if the caller had disconnected.
 
 ## Single Instance Locking
 
