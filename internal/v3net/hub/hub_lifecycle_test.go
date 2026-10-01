@@ -218,14 +218,14 @@ func TestRateLimiter_EvictDropsOnlyStaleKeys(t *testing.T) {
 		t.Fatal("first request for a key should be allowed")
 	}
 	rl.mu.Lock()
-	rl.last["stale"] = time.Now().Add(-11 * time.Minute)
+	rl.tat["stale"] = time.Now().Add(-11 * time.Minute)
 	rl.mu.Unlock()
 
 	rl.evict()
 
 	rl.mu.Lock()
-	_, freshKept := rl.last["fresh"]
-	_, staleKept := rl.last["stale"]
+	_, freshKept := rl.tat["fresh"]
+	_, staleKept := rl.tat["stale"]
 	rl.mu.Unlock()
 	if !freshKept {
 		t.Error("evict removed a key that is still within the TTL")

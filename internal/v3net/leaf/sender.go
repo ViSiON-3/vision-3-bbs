@@ -97,7 +97,7 @@ func (l *Leaf) SendChatCtx(ctx context.Context, text, handle string) error {
 		return fmt.Errorf("leaf: chat join returned %d", joinResp.StatusCode)
 	}
 
-	postData, err := json.Marshal(protocol.ChatPostRequest{Room: "lobby", Text: text})
+	postData, err := json.Marshal(protocol.ChatPostRequest{Room: "lobby", Text: text, Handle: handle})
 	if err != nil {
 		return fmt.Errorf("leaf: marshal chat post: %w", err)
 	}

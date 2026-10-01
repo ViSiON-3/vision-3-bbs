@@ -14,23 +14,31 @@ type ChatLeaveRequest struct {
 	Handle string `json:"handle"`
 }
 
-// ChatPostRequest posts a message to a room.
+// ChatPostRequest posts a message to a room. Handle names the sending user,
+// who must have joined the room. Older leaves omit it, and the hub then
+// credits the node's first handle in the room.
 type ChatPostRequest struct {
-	Room string `json:"room"`
-	Text string `json:"text"`
+	Room   string `json:"room"`
+	Text   string `json:"text"`
+	Handle string `json:"handle,omitempty"`
 }
 
-// ChatPrivateRequest sends a direct message to a specific user+node.
+// ChatPrivateRequest sends a direct message to a specific user+node. Handle
+// names the sending user; older leaves omit it, and the hub then picks one
+// of the node's joined handles, or its BBS name.
 type ChatPrivateRequest struct {
 	ToHandle string `json:"to_handle"`
 	ToNode   string `json:"to_node"`
 	Text     string `json:"text"`
+	Handle   string `json:"handle,omitempty"`
 }
 
-// ChatTopicRequest sets the topic for a room.
+// ChatTopicRequest sets the topic for a room. Handle names the user setting
+// it, as for ChatPostRequest.
 type ChatTopicRequest struct {
-	Room  string `json:"room"`
-	Topic string `json:"topic"`
+	Room   string `json:"room"`
+	Topic  string `json:"topic"`
+	Handle string `json:"handle,omitempty"`
 }
 
 // --- Response bodies ---

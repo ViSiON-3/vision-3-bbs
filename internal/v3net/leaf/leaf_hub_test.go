@@ -201,8 +201,8 @@ func TestSendChat_JoinsLobbyAndPosts(t *testing.T) {
 		t.Errorf("Rooms = %+v, %v; want lobby with 1 user", rooms, err)
 	}
 
-	// The hub rate-limits chat per node, so an immediate second message is
-	// joined but not posted, and the caller is told.
+	// The hub rate-limits chat per user, so an immediate second message
+	// from alice is joined but not posted, and the caller is told.
 	err = l.SendChatCtx(context.Background(), "hello?", "alice")
 	if err == nil || !strings.Contains(err.Error(), "chat post returned 429") {
 		t.Errorf("second SendChat = %v, want a 429 post error", err)
