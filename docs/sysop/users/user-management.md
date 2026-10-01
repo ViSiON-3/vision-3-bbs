@@ -372,7 +372,8 @@ the moment they connect. `0` means no limit. CoSysOps and above (`coSysOpLevel`)
 have no limit whatever their record says, as they have no idle timeout.
 
 - In the last five minutes, every menu prompt shows `timeLimitWarning` with the
-  minutes left. Lightbar menus don't show it.
+  minutes left. Lightbar menus show it on the bottom row of the screen, with
+  its line breaks removed, so keep that row clear in lightbar art.
 - When the time runs out, the caller sees `timeLimitExpired` and is
   disconnected. This happens at the next key they press or wait on, anywhere in
   the BBS. The full-screen message editor is the exception: a caller writing a

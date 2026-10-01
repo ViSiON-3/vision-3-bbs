@@ -44,7 +44,7 @@ func (m Model) drawDetails(s *screen, g geometry) {
 			{"Connected", formatTimestamp(n.ConnectedAt)},
 			{"Online For", formatOnline(now.Sub(n.ConnectedAt))},
 			{"Last Activity", formatTimestamp(n.LastActivity)},
-			{"Time Left", formatTimeLeft(n.TimeLeftMins)},
+			{"Time Left", formatTimeLeft(n.TimeLeftMins, n.TimeUnlimited)},
 		}
 		if n.Invisible {
 			rows = append(rows, detailRow{"Invisible", "yes"})
@@ -104,9 +104,11 @@ func formatTimestamp(t time.Time) string {
 }
 
 // formatTimeLeft converts the TimeLeftMins value to a human-readable string.
-// -1 means unknown.
-func formatTimeLeft(mins int) string {
+// -1 means unknown, unless the caller has no time limit at all.
+func formatTimeLeft(mins int, unlimited bool) string {
 	switch {
+	case unlimited:
+		return "Unlimited"
 	case mins < 0:
 		return "(unknown)"
 	case mins == 0:

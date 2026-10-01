@@ -36,7 +36,10 @@ type NodeState struct {
 	Invisible    bool       `json:"invisible"`
 	ConnectedAt  time.Time  `json:"connectedAt"`
 	LastActivity time.Time  `json:"lastActivity"`
-	TimeLeftMins int        `json:"timeLeftMins"` // best-effort; -1 if unknown
+	TimeLeftMins int        `json:"timeLeftMins"` // best-effort; -1 if unknown or unlimited
+	// TimeUnlimited marks a caller with no time limit, which includes
+	// CoSysOps and above. TimeLeftMins is -1 for them.
+	TimeUnlimited bool `json:"timeUnlimited,omitempty"`
 }
 
 // Counters holds header counters populated only from existing data sources.

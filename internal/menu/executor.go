@@ -286,6 +286,10 @@ func (e *MenuExecutor) timeLimit(u *user.User) int {
 	return u.TimeLimit
 }
 
+// TimeLimit is timeLimit for callers outside the menu package, such as the
+// WFC console's time-left column.
+func (e *MenuExecutor) TimeLimit(u *user.User) int { return e.timeLimit(u) }
+
 // sessionDeadline returns when u's time runs out for a session that started
 // at sessionStart, or the zero time if u has no limit.
 func (e *MenuExecutor) sessionDeadline(u *user.User, sessionStart time.Time) time.Time {
@@ -401,21 +405,52 @@ func (e *MenuExecutor) handleSessionTimeout(s ssh.Session, terminal *term.Termin
 // being warned at each menu prompt.
 const timeLimitWarnWindow = 5 * time.Minute
 
-// warnTimeLeft tells the caller how many minutes they have left once they are
-// within timeLimitWarnWindow of their time limit. Part of a minute counts as
-// a whole one, so the last warning says 1 rather than 0.
-func (e *MenuExecutor) warnTimeLeft(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode) {
+// timeLeftWarning returns the warning due for s once it is within
+// timeLimitWarnWindow of its time limit, and false before that or with no
+// limit. Part of a minute counts as a whole one, so the last warning says 1
+// rather than 0.
+func (e *MenuExecutor) timeLeftWarning(s ssh.Session) (string, bool) {
 	d, ok := sessionDeadlines.Load(s)
 	if !ok {
-		return
+		return "", false
 	}
 	left := time.Until(d.(time.Time))
 	if left <= 0 || left > timeLimitWarnWindow {
-		return
+		return "", false
 	}
 	minutes := int((left + time.Minute - 1) / time.Minute)
-	msg := fmt.Sprintf(e.Strings().TimeLimitWarning, minutes)
-	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode) // best-effort notice
+	return fmt.Sprintf(e.Strings().TimeLimitWarning, minutes), true
+}
+
+// warnTimeLeft writes the time-limit warning, if one is due, at the cursor.
+// Standard menus call it before their prompt.
+func (e *MenuExecutor) warnTimeLeft(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode) {
+	if msg, ok := e.timeLeftWarning(s); ok {
+		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode) // best-effort notice
+	}
+}
+
+// warnTimeLeftOnRow draws the time-limit warning, if one is due, on screen
+// row row of a width-column terminal and puts the cursor back. Lightbar menus
+// use it: their screens are drawn at fixed positions, so the warning goes on
+// the bottom row and must not scroll it. The string's line breaks are dropped
+// and it is clipped a column short of the width, since text reaching the last
+// column of the bottom row makes some terminals scroll too.
+func (e *MenuExecutor) warnTimeLeftOnRow(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, row, width int) {
+	msg, ok := e.timeLeftWarning(s)
+	if !ok {
+		return
+	}
+	msg = strings.NewReplacer("\r", "", "\n", "").Replace(msg)
+	if row < 1 {
+		row = 1
+	}
+	if width < 2 {
+		width = 80
+	}
+	msg = clipColumns(string(ansi.ReplacePipeCodes([]byte(msg))), width-1, outputMode)
+	out := fmt.Sprintf("\x1b[s\x1b[%d;1H\x1b[2K%s\x1b[0m\x1b[u", row, msg)
+	_ = terminalio.WriteProcessedBytes(terminal, []byte(out), outputMode) // best-effort notice
 }
 
 // handleTimeLimit tells the caller their time limit is up and logs it. Call

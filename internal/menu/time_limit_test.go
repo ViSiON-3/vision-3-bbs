@@ -5,27 +5,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // timeLimitEnv is execcovRunEnv with the time limit strings pinned to markers.
-func timeLimitEnv(t *testing.T) *menuEnv {
+func timeLimitEnv(t *testing.T) (*menuEnv, *execcovMenus) {
 	t.Helper()
-	env, _ := execcovRunEnv(t)
+	env, m := execcovRunEnv(t)
 	execcovStrings(env, func(s *config.StringsConfig) {
 		s.TimeLimitExpired = "\r\nTIME-UP\r\n"
 		s.TimeLimitWarning = "\r\nWARN=%d\r\n"
 		s.IdleTimeout = "\r\nIDLE\r\n"
 	})
-	return env
+	return env, m
 }
 
 // A caller whose time has run out is logged off before the next menu is drawn.
 // A sysop with the same stored limit is not, since CoSysOps and above have no
 // time limit.
 func TestTimeLimit_ExpiredLogsOffAtMenu(t *testing.T) {
-	env := timeLimitEnv(t)
+	env, _ := timeLimitEnv(t)
 	started := time.Now().Add(-2 * time.Hour)
 
 	r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "Q\r", started: started})
@@ -42,7 +43,7 @@ func TestTimeLimit_ExpiredLogsOffAtMenu(t *testing.T) {
 // In the last minutes of their time a caller is warned at each menu prompt,
 // with part of a minute counted as a whole one. Earlier they are not.
 func TestTimeLimit_WarnsNearTheEnd(t *testing.T) {
-	env := timeLimitEnv(t)
+	env, _ := timeLimitEnv(t)
 
 	r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "Q\r",
 		started: time.Now().Add(-57*time.Minute - 30*time.Second)})
@@ -57,10 +58,78 @@ func TestTimeLimit_WarnsNearTheEnd(t *testing.T) {
 	}
 }
 
+// A lightbar menu shows the warning on the bottom row, with its line breaks
+// dropped so the fixed-position screen does not scroll, and puts the cursor
+// back afterwards.
+func TestTimeLimit_WarnsOnLightbarBottomRow(t *testing.T) {
+	env, m := timeLimitEnv(t)
+	m.menu("BARM", MenuRecord{}, "BARM-SCREEN\r\n", CommandRecord{Keys: "A", Command: "LOGOFF"})
+	m.write("bar", "BARM.BAR", execcovBar)
+
+	r := execcovRun(env, execcovCall{user: env.caller, start: "BARM", input: "A", height: 25,
+		started: time.Now().Add(-57*time.Minute - 30*time.Second)})
+	if want := "\x1b[s\x1b[25;1H\x1b[2KWARN=3"; !strings.Contains(r.raw, want) {
+		t.Errorf("no bottom-row warning in %q", r.raw)
+	}
+	if strings.Contains(r.raw, "\r\nWARN=") || strings.Contains(r.raw, "WARN=3\r\n") {
+		t.Errorf("warning kept its line breaks: %q", r.raw)
+	}
+	if !strings.Contains(r.raw, "\x1b[u") {
+		t.Errorf("cursor not restored: %q", r.raw)
+	}
+}
+
+// A warning wider than the terminal is clipped a column short of its width,
+// colours kept, so it cannot wrap off the bottom row and scroll the screen.
+func TestTimeLimit_LightbarWarningClippedToWidth(t *testing.T) {
+	env, m := timeLimitEnv(t)
+	execcovStrings(env, func(s *config.StringsConfig) {
+		s.TimeLimitWarning = "|12W%d" + strings.Repeat("x", 100)
+	})
+	m.menu("BARM", MenuRecord{}, "BARM-SCREEN\r\n", CommandRecord{Keys: "A", Command: "LOGOFF"})
+	m.write("bar", "BARM.BAR", execcovBar)
+
+	r := execcovRun(env, execcovCall{user: env.caller, start: "BARM", input: "A", height: 25,
+		started: time.Now().Add(-57*time.Minute - 30*time.Second)})
+	_, after, ok := strings.Cut(r.raw, "\x1b[25;1H\x1b[2K")
+	if !ok {
+		t.Fatalf("no bottom-row warning in %q", r.raw)
+	}
+	line, _, _ := strings.Cut(after, "\x1b[u")
+	if got := visibleColumns(line, env.outputMode); got != 79 {
+		t.Errorf("warning is %d columns on an 80-column terminal, want 79: %q", got, line)
+	}
+	if !strings.HasPrefix(line, "\x1b[") {
+		t.Errorf("colour code lost: %q", line)
+	}
+}
+
+// clipColumns keeps escapes and counts columns the way the writer renders
+// them: display width in UTF-8 mode, one per rune in CP437 mode, one per byte
+// for text that is not UTF-8.
+func TestClipColumns(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		width    int
+		mode     ansi.OutputMode
+		want     string
+	}{
+		{"fits", "\x1b[31mabc\x1b[0m", 5, ansi.OutputModeUTF8, "\x1b[31mabc\x1b[0m"},
+		{"clipped, escapes kept", "\x1b[31mabcdef\x1b[0m", 3, ansi.OutputModeUTF8, "\x1b[31mabc\x1b[0m"},
+		{"wide rune does not split", "ab漢字", 3, ansi.OutputModeUTF8, "ab"},
+		{"wide rune in CP437 mode is one column", "ab漢字", 3, ansi.OutputModeCP437, "ab漢"},
+		{"CP437 bytes", "ab\xb0\xb1\xb2", 4, ansi.OutputModeCP437, "ab\xb0\xb1"},
+	} {
+		if got := clipColumns(tc.in, tc.width, tc.mode); got != tc.want {
+			t.Errorf("%s: clipColumns(%q, %d) = %q, want %q", tc.name, tc.in, tc.width, got, tc.want)
+		}
+	}
+}
+
 // An input loop reports an expired time limit as an idle timeout, so the
 // session's deadline decides which notice the caller sees.
 func TestTimeLimit_SessionTimeoutNotice(t *testing.T) {
-	env := timeLimitEnv(t)
+	env, _ := timeLimitEnv(t)
 	for _, tc := range []struct {
 		name     string
 		deadline time.Time
