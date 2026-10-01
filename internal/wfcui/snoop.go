@@ -1,6 +1,7 @@
 package wfcui
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 )
 
 const escWindow = 300 * time.Millisecond
@@ -299,6 +301,16 @@ func (c *snoopCmd) toggleChat() {
 	c.mu.Unlock()
 	if m == snoopChat {
 		if err := c.ctl.Chat(false); err != nil {
+			if lostKeyboard(err) {
+				// The caller ended chat, which released the keyboard.
+				c.mu.Lock()
+				c.typeBeforeChat = false
+				c.mode = snoopWatch
+				c.lastErr = "chat ended by caller"
+				c.mu.Unlock()
+				c.drawStatus()
+				return
+			}
 			c.setErr(err)
 		}
 		c.mu.Lock()
@@ -318,6 +330,17 @@ func (c *snoopCmd) toggleChat() {
 	c.typeBeforeChat = m == snoopType
 	c.mu.Unlock()
 	c.setMode(snoopChat)
+}
+
+// lostKeyboard reports whether err says the sysop no longer holds the
+// keyboard. Over RPC the snoop sentinels arrive as plain text.
+func lostKeyboard(err error) bool {
+	for _, e := range []error{snoop.ErrNotHolder, snoop.ErrNotWatching} {
+		if errors.Is(err, e) || strings.Contains(err.Error(), e.Error()) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *snoopCmd) toggleStatus() {

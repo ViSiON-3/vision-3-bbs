@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 )
 
 type fakeRaw struct{ w, h int }
@@ -467,5 +468,31 @@ func TestSnoopBarRedrawsAfterUnterminatedOSC(t *testing.T) {
 	out := r.out.String()
 	if !strings.Contains(out[strings.Index(out, "text"):], "NODE 3") {
 		t.Fatal("bar not redrawn after the OSC was abandoned")
+	}
+}
+
+func TestSnoopChatEndedByCallerDropsToWatch(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 40)
+	got := r.reads()
+	r.send(t, "\x1bt")
+	r.send(t, "\x1bc")
+	r.out.waitFor(t, "CHAT")
+	// The caller left chat; the server no longer has this sysop holding
+	// the keyboard, and the error arrives over RPC as text.
+	r.ctl.mu.Lock()
+	r.ctl.chatErr = errors.New(snoop.ErrNotHolder.Error())
+	r.ctl.mu.Unlock()
+	r.send(t, "\x1bc")
+	r.out.waitFor(t, "WATCH · chat ended by caller")
+	r.send(t, "ok")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	select {
+	case b := <-got:
+		t.Fatalf("watch mode forwarded %q", b)
+	default:
+	}
+	if c := r.ctl.got(); c != "type+,chat+,chat-" {
+		t.Fatalf("calls %s", c)
 	}
 }
