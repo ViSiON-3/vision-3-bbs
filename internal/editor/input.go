@@ -111,6 +111,47 @@ type InputHandler struct {
 	readInterrupt    chan struct{}
 	setReadInterrupt func(<-chan struct{})
 	closeOnce        sync.Once
+
+	// breakIn, when it fires during a key wait, runs breakInFn on the
+	// waiting goroutine (sysop chat). Set once via SetBreakIn; inBreakIn
+	// stops reads made inside breakInFn from servicing it again. Only the
+	// reading goroutine touches inBreakIn, like unreadBuf.
+	breakIn   <-chan struct{}
+	breakInFn func()
+	inBreakIn bool
+}
+
+// SetBreakIn registers fn to run whenever ch fires while a read is waiting
+// for the first byte of a key. fn runs on the reading goroutine with the
+// session deadline suspended; the interrupted read then keeps waiting. Waits
+// inside an escape sequence do not service it. Call before reads begin.
+func (ih *InputHandler) SetBreakIn(ch <-chan struct{}, fn func()) {
+	ih.breakIn = ch
+	ih.breakInFn = fn
+}
+
+// breakInChan is the channel to select on, or nil when the wait must not
+// service a break-in (inside fn, or mid escape sequence).
+func (ih *InputHandler) breakInChan(allow bool) <-chan struct{} {
+	if !allow || ih.inBreakIn {
+		return nil
+	}
+	return ih.breakIn
+}
+
+func (ih *InputHandler) runBreakIn() {
+	ih.inBreakIn = true
+	restore := ih.SuspendSessionDeadline()
+	defer func() {
+		restore()
+		ih.inBreakIn = false
+	}()
+	ih.breakInFn()
+}
+
+// ReadKeyOrEvent is the exported form of readKeyOrEvent.
+func ReadKeyOrEvent[T any](ih *InputHandler, events <-chan T) (int, T, bool, error) {
+	return readKeyOrEvent(ih, events)
 }
 
 // SetSessionIdleTimeout sets the session-level idle timeout applied to every
@@ -301,32 +342,46 @@ func (ih *InputHandler) SkipEnterTrailer() {
 // deadline (SetSessionDeadline) passes, ErrTimeLimit is returned instead, even
 // to a caller who is still typing.
 func (ih *InputHandler) readByte() (byte, error) {
+	return ih.readByteOpt(true)
+}
+
+// readByteOpt is readByte; breakIn says whether the wait may service the
+// break-in hook.
+func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 	if len(ih.unreadBuf) > 0 {
 		b := ih.unreadBuf[0]
 		ih.unreadBuf = ih.unreadBuf[1:]
 		return b, nil
 	}
-	wait, onTimeout, expired := ih.keyWait()
-	if expired {
-		return 0, onTimeout
-	}
-	if wait > 0 {
-		b, err := ih.readByteWithTimeout(wait)
-		if err != nil {
-			if isTimeoutError(err) {
-				return 0, onTimeout
-			}
-			return 0, err
-		}
-		return b, nil
-	}
 	for {
-		b, ok := <-ih.incoming
-		if !ok {
-			return 0, io.EOF
+		wait, onTimeout, expired := ih.keyWait()
+		if expired {
+			return 0, onTimeout
 		}
-		if !ih.lateEnterTrailer(b) {
+		if wait > 0 {
+			b, broke, err := ih.waitByte(wait, breakIn)
+			if broke {
+				ih.runBreakIn()
+				continue
+			}
+			if err != nil {
+				if isTimeoutError(err) {
+					return 0, onTimeout
+				}
+				return 0, err
+			}
 			return b, nil
+		}
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return 0, io.EOF
+			}
+			if !ih.lateEnterTrailer(b) {
+				return b, nil
+			}
+		case <-ih.breakInChan(breakIn):
+			ih.runBreakIn()
 		}
 	}
 }
@@ -337,26 +392,52 @@ func (ih *InputHandler) unreadByte(b byte) {
 }
 
 // readByteWithTimeout reads a single byte, returning errTimeout if none
-// arrives within the given duration.
+// arrives within the given duration. It never services the break-in hook.
 func (ih *InputHandler) readByteWithTimeout(timeout time.Duration) (byte, error) {
 	if len(ih.unreadBuf) > 0 {
 		b := ih.unreadBuf[0]
 		ih.unreadBuf = ih.unreadBuf[1:]
 		return b, nil
 	}
+	b, _, err := ih.waitByte(timeout, false)
+	return b, err
+}
+
+// readFirstByteWithTimeout is readByteWithTimeout for the wait for the first
+// byte of a key: a break-in runs the hook and the wait starts over.
+func (ih *InputHandler) readFirstByteWithTimeout(timeout time.Duration) (byte, error) {
+	for {
+		if len(ih.unreadBuf) > 0 {
+			b := ih.unreadBuf[0]
+			ih.unreadBuf = ih.unreadBuf[1:]
+			return b, nil
+		}
+		b, broke, err := ih.waitByte(timeout, true)
+		if !broke {
+			return b, err
+		}
+		ih.runBreakIn()
+	}
+}
+
+// waitByte waits up to timeout for a byte. broke reports that the break-in
+// channel fired first; the caller services it.
+func (ih *InputHandler) waitByte(timeout time.Duration, breakIn bool) (b byte, broke bool, err error) {
 	deadline := time.After(timeout)
 	for {
 		select {
 		case b, ok := <-ih.incoming:
 			if !ok {
-				return 0, io.EOF
+				return 0, false, io.EOF
 			}
 			if ih.lateEnterTrailer(b) {
 				continue
 			}
-			return b, nil
+			return b, false, nil
 		case <-deadline:
-			return 0, errTimeout
+			return 0, false, errTimeout
+		case <-ih.breakInChan(breakIn):
+			return 0, true, nil
 		}
 	}
 }
@@ -460,7 +541,7 @@ func (ih *InputHandler) ReadKey() (int, error) {
 // unaffected. This is the extensible primitive for idle-disconnect logic.
 func (ih *InputHandler) ReadKeyWithTimeout(idleTimeout time.Duration) (int, error) {
 	// Wait for the first byte with the caller's deadline.
-	first, err := ih.readByteWithTimeout(idleTimeout)
+	first, err := ih.readFirstByteWithTimeout(idleTimeout)
 	if err != nil {
 		if isTimeoutError(err) {
 			return 0, ErrIdleTimeout
@@ -538,7 +619,7 @@ func (ih *InputHandler) parseCSISequence() (int, error) {
 // parseSS3Sequence parses ANSI SS3 escape sequences (ESC O ...).
 // 'O' has already been consumed by ReadKey before this is called.
 func (ih *InputHandler) parseSS3Sequence() (int, error) {
-	b, err := ih.readByte()
+	b, err := ih.readByteOpt(false)
 	if err != nil {
 		return int(KeyEsc), err
 	}
@@ -609,8 +690,9 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 		if expired {
 			return 0, ev, false, onTimeout
 		}
+		var timer *time.Timer
 		if wait > 0 {
-			timer := time.NewTimer(wait)
+			timer = time.NewTimer(wait)
 			defer timer.Stop()
 			idle = timer.C
 		}
@@ -630,6 +712,21 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 				return 0, ev, true, nil
 			case <-idle:
 				return 0, ev, false, onTimeout
+			case <-ih.breakInChan(true):
+				ih.runBreakIn()
+				if timer != nil {
+					wait, onTimeout, expired = ih.keyWait()
+					if expired {
+						return 0, ev, false, onTimeout
+					}
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					timer.Reset(wait)
+				}
 			}
 		}
 	}
