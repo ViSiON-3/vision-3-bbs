@@ -1,10 +1,13 @@
 package hub
 
 import (
+	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -254,12 +257,22 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleSubscribe registers a new leaf node (no auth — bootstrap step).
+// handleSubscribe registers a leaf node. It is the bootstrap step, so it
+// does not use authMiddleware: the hub may not know the node yet. A request
+// may instead be signed with the key it submits (see verifySubscribeSignature),
+// proving the caller holds that key. Node keys are public, so an unsigned
+// request can only register a new node; changing an existing registration
+// (its BBS name and host, or its area subscriptions) requires a signature.
 func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 8*1024) // 8KB limit for subscribe
 
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, `{"error":"request body too large or unreadable"}`, http.StatusBadRequest)
+		return
+	}
 	var req protocol.SubscribeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
@@ -271,7 +284,7 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	// Validate that node_id is the correct derivation of the submitted public key.
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(req.PubKeyB64)
-	if err != nil || len(pubKeyBytes) != 32 {
+	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
 		http.Error(w, `{"error":"invalid pubkey_b64"}`, http.StatusUnprocessableEntity)
 		return
 	}
@@ -280,6 +293,23 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	if req.NodeID != expectedNodeID {
 		http.Error(w, `{"error":"node_id does not match pubkey_b64"}`, http.StatusUnprocessableEntity)
 		return
+	}
+
+	signed, msg := verifySubscribeSignature(r, body, req.NodeID, pubKeyBytes)
+	if msg != "" {
+		http.Error(w, msg, http.StatusUnauthorized)
+		return
+	}
+
+	// Node IDs are a 64-bit truncation of the key hash, so check the
+	// stored key too rather than trusting the ID alone.
+	existing := h.subscribers.Get(req.NodeID, req.Network)
+	if existing != nil {
+		storedKey, err := base64.StdEncoding.DecodeString(existing.PubKeyB64)
+		if err != nil || !bytes.Equal(storedKey, pubKeyBytes) {
+			http.Error(w, `{"error":"node_id is registered with a different key"}`, http.StatusConflict)
+			return
+		}
 	}
 
 	status := "pending"
@@ -300,6 +330,26 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("add subscriber", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// A signed re-subscribe updates the node's name and host. Banned nodes
+	// keep the details they were banned under.
+	if existing != nil && signed && actualStatus != "banned" &&
+		(existing.BBSName != req.BBSName || existing.BBSHost != req.BBSHost) {
+		if err := h.subscribers.SetProfile(req.NodeID, req.Network, req.BBSName, req.BBSHost); err != nil {
+			slog.Error("v3net hub: update subscriber profile", "node", req.NodeID, "error", err)
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Anyone can build an unsigned request for a known node, so one must not
+	// change an existing node's area subscriptions or file access requests
+	// in its name.
+	if len(req.AreaTags) > 0 && existing != nil && !signed {
+		slog.Warn("v3net hub: ignoring area_tags on unsigned re-subscribe", "node", req.NodeID, "network", req.Network)
+		writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
 		return
 	}
 
@@ -349,14 +399,29 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// Re-subscribing never downgrades an active area subscription,
+			// e.g. one a manager approved in an approval-mode area.
+			active, err := h.areaSubscriptions.IsActive(req.NodeID, req.Network, tag)
+			if err != nil {
+				slog.Error("v3net hub: check area subscription", "node", req.NodeID, "tag", tag, "error", err)
+				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+				return
+			}
+
 			var areaStatus string
-			switch area.Access.Mode {
-			case protocol.AccessModeOpen:
+			switch {
+			case active:
 				areaStatus = "active"
-			case protocol.AccessModeApproval:
-				areaStatus = "pending"
-				pendingRequests = append(pendingRequests, pendingAccessRequest{tag: tag})
-			case protocol.AccessModeClosed:
+			case area.Access.Mode == protocol.AccessModeOpen:
+				areaStatus = "active"
+			case area.Access.Mode == protocol.AccessModeApproval:
+				if containsStr(area.Access.AllowList, req.NodeID) {
+					areaStatus = "active"
+				} else {
+					areaStatus = "pending"
+					pendingRequests = append(pendingRequests, pendingAccessRequest{tag: tag})
+				}
+			case area.Access.Mode == protocol.AccessModeClosed:
 				// Only allowed if already on allow list.
 				if containsStr(area.Access.AllowList, req.NodeID) {
 					areaStatus = "active"
@@ -439,4 +504,30 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		slog.Debug("hub: write JSON response", "error", err)
 	}
+}
+
+// verifySubscribeSignature checks an optional signature on a subscribe
+// request, made with the same scheme as authenticated endpoints but verified
+// against the submitted key, since the hub may not have one stored yet.
+// It reports whether the request was signed; a non-empty message means a
+// signature was present but invalid.
+func verifySubscribeSignature(r *http.Request, body []byte, nodeID string, pubKey ed25519.PublicKey) (bool, string) {
+	headerNode := r.Header.Get(headerNodeID)
+	sig := r.Header.Get(headerSignature)
+	if headerNode == "" && sig == "" {
+		return false, ""
+	}
+	if headerNode == "" || sig == "" || r.Header.Get("Date") == "" {
+		return false, `{"error":"missing auth headers"}`
+	}
+	if headerNode != nodeID {
+		return false, `{"error":"node ID header does not match node_id"}`
+	}
+	if msg := checkRequestDate(r.Header.Get("Date")); msg != "" {
+		return false, msg
+	}
+	if !signatureValid(r, body, pubKey) {
+		return false, `{"error":"invalid signature"}`
+	}
+	return true, ""
 }

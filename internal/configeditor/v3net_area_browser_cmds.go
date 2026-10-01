@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -57,15 +58,15 @@ func fetchHubNAL(hubURL, network string) tea.Cmd {
 }
 
 // subscribeToAreas returns a tea.Cmd that POSTs /v3net/v1/subscribe with area tags.
-// The subscribe endpoint is unauthenticated (bootstrap step). The keystore is
-// only needed to populate node_id and pubkey_b64 in the request body.
+// The request is signed with ks: the hub ignores area tags on an unsigned
+// subscribe from a node it already knows.
 func subscribeToAreas(hubURL, network string, areaTags []string,
-	nodeID, pubKeyB64, bbsName, bbsHost string) tea.Cmd {
+	ks *keystore.Keystore, bbsName, bbsHost string) tea.Cmd {
 	return func() tea.Msg {
 		req := protocol.SubscribeRequest{
 			Network:   network,
-			NodeID:    nodeID,
-			PubKeyB64: pubKeyB64,
+			NodeID:    ks.NodeID(),
+			PubKeyB64: ks.PubKeyBase64(),
 			BBSName:   bbsName,
 			BBSHost:   bbsHost,
 			AreaTags:  areaTags,
@@ -82,6 +83,9 @@ func subscribeToAreas(hubURL, network string, areaTags []string,
 			return subscribeAreasMsg{err: err}
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
+		if err := signRequest(httpReq, ks, data); err != nil {
+			return subscribeAreasMsg{err: err}
+		}
 
 		resp, err := client.Do(httpReq)
 		if err != nil {

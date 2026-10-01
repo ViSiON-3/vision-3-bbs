@@ -70,6 +70,18 @@ func TestSubscribe_RegistersWithHub(t *testing.T) {
 	if err := l.subscribe(context.Background()); err != nil {
 		t.Errorf("repeat subscribe: %v", err)
 	}
+
+	// The subscribe is signed, so a re-subscribe after the board changes its
+	// name and host updates the hub's record.
+	l.cfg.BBSName = "renamed"
+	l.cfg.BBSHost = "renamed.example.net"
+	if err := l.subscribe(context.Background()); err != nil {
+		t.Fatalf("subscribe after rename: %v", err)
+	}
+	sub = h.Subscribers().Get(l.cfg.Keystore.NodeID(), "testnet")
+	if sub == nil || sub.BBSName != "renamed" || sub.BBSHost != "renamed.example.net" {
+		t.Errorf("hub recorded %+v after rename, want renamed/renamed.example.net", sub)
+	}
 }
 
 func TestSubscribe_Failures(t *testing.T) {
