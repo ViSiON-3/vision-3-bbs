@@ -72,6 +72,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | --- | --- | --- | --- |
 | `CHAT` | none | Multi-node and inter-BBS chat. Picks a network, then a room, then enters full-screen chat. | |
 | `PAGE` | none | Lists online nodes, asks for a node number and a message, and delivers it to that node. Invisible nodes appear offline unless CoSysOp+. | |
+| `PAGESYSOP` | none | Asks for a reason, alerts every connected WFC console, and counts down while a sysop can answer with split-screen chat. Limited by `pageSysopTimeout` and `pageSysopCooldown`. | |
 
 ## Message areas and reading
 

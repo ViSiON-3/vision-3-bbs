@@ -77,6 +77,7 @@ type MenuExecutor struct {
 	ChatLeaves      ChatLeafProvider              // V3Net chat leaf provider (nil = local only)
 	V3NetReload     func() error                  // Applies v3net.json subscription changes live (nil = restart required)
 	V3NetStatus     V3NetStatusProvider           // V3Net service status (nil if disabled)
+	Pager           SysopPager                    // WFC side of PAGESYSOP (nil = no console)
 
 	// Hot-reloadable configuration.
 	//

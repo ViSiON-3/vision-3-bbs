@@ -887,6 +887,9 @@ func sessionHandler(s ssh.Session) {
 		if sessionRegistry != nil {
 			sessionRegistry.Unregister(int(nodeID))
 		}
+		if adminServer != nil && authenticatedUser != nil {
+			adminServer.ClearPage(int(nodeID), authenticatedUser.Handle, "logoff")
+		}
 
 		// V3Net logoff notification
 		if v3netService != nil && authenticatedUser != nil {
@@ -1965,6 +1968,7 @@ func main() {
 		Chat:      chatHook(sessionRegistry),
 		Snoop:     snoopTarget(sessionRegistry),
 	})
+	menuExecutor.Pager = adminServer
 	go adminServer.Run(context.Background())
 
 	if ftnErr == nil && len(ftnConfig.Networks) > 0 && !ftnConfig.Binkd.Enabled {
