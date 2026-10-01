@@ -81,6 +81,12 @@ func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 		chats = tap.Chats()
 	}
 	for i := cfg.PageSysopTimeoutSeconds; i > 0; i-- {
+		// ReadKeyWithTimeout ignores the session deadline, so check it here
+		// each second. The deadline already includes sysop chat credit.
+		if timeLimitReached(c.s) {
+			e.Pager.ClearPage(c.nodeNumber, handle, "cancelled")
+			return nil, "", editor.ErrTimeLimit
+		}
 		_ = terminalio.WriteProcessedBytes(c.terminal, pageCountdownFrame(i), c.outputMode)
 		_, err := ih.ReadKeyWithTimeout(time.Second)
 		if tap != nil {
@@ -93,7 +99,8 @@ func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 		case err == nil:
 			e.Pager.ClearPage(c.nodeNumber, handle, "cancelled")
 			return nil, "", nil
-		case errors.Is(err, editor.ErrIdleTimeout) && !errors.Is(err, editor.ErrTimeLimit):
+		case errors.Is(err, editor.ErrIdleTimeout):
+			// No key this second; the next pass checks the time limit.
 		default:
 			e.Pager.ClearPage(c.nodeNumber, handle, "cancelled")
 			return nil, "", err

@@ -7,7 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -162,5 +165,105 @@ func TestPageSysopCountdownInEveryOutputMode(t *testing.T) {
 		if !strings.Contains(out, string(pageCountdownFrame(2))) || !strings.Contains(out, string(pageCountdownFrame(1))) {
 			t.Fatalf("%s: countdown frames missing from %q", name, out)
 		}
+	}
+}
+
+// runPageSysopWithLimit pages the sysop from a session whose time limit ends
+// at limitEnds (credit is chat time already credited back), and returns the
+// error runPageSysop gave and how long it took. With bypassIH the deadline is
+// recorded for the session but not armed on its InputHandler, so the reason
+// prompt still reads and the countdown starts, as when the limit runs out
+// between key waits.
+func runPageSysopWithLimit(t *testing.T, env *menuEnv, handle string, limitEnds time.Time, credit time.Duration, bypassIH bool) (error, time.Duration) {
+	t.Helper()
+	// The page cooldown is keyed by handle and outlives the test.
+	handle = fmt.Sprintf("%s%d", handle, time.Now().UnixNano())
+	ts := &holdSession{testSession: newTestSession("help\r"), done: make(chan struct{})}
+	t.Cleanup(func() {
+		close(ts.done)
+		resetSessionIH(ts)
+		ClearSessionIdleTimeout(ts)
+	})
+	addChatCredit(ts, credit)
+	if bypassIH {
+		sessionDeadlines.Store(ts, limitEnds.Add(credit))
+	} else {
+		applySessionDeadline(ts, limitEnds)
+	}
+	c := &cmdCtx{
+		e:                env.e,
+		s:                ts,
+		terminal:         newTestTerminal(ts.testSession),
+		currentUser:      &user.User{Handle: handle, AccessLevel: 10},
+		nodeNumber:       1,
+		sessionStartTime: time.Now(),
+		outputMode:       ansi.OutputModeAuto,
+		termWidth:        80,
+		termHeight:       24,
+	}
+	start := time.Now()
+	_, _, err := runPageSysop(c, "")
+	return err, time.Since(start)
+}
+
+func TestPageSysopStopsWhenTimeLimitRunsOutBetweenKeyWaits(t *testing.T) {
+	env := newMenuEnv(t)
+	p := &fakePager{consoles: 1}
+	env.e.Pager = p
+	setPageConfig(env, 10, 300)
+	err, took := runPageSysopWithLimit(t, env, "PsLimitGone", time.Now().Add(300*time.Millisecond), 0, true)
+	if !errors.Is(err, editor.ErrTimeLimit) {
+		t.Fatalf("err = %v, want ErrTimeLimit", err)
+	}
+	if took > 5*time.Second {
+		t.Fatalf("page waited %v after the time limit ran out", took)
+	}
+	if len(p.raised) != 1 || len(p.cleared) != 1 || p.cleared[0] != "cancelled" {
+		t.Fatalf("raised %v cleared %v, want the page raised then cleared as cancelled", p.raised, p.cleared)
+	}
+}
+
+func TestPageSysopStopsWhenTimeLimitRunsOutMidCountdown(t *testing.T) {
+	env := newMenuEnv(t)
+	p := &fakePager{consoles: 1}
+	env.e.Pager = p
+	setPageConfig(env, 10, 300)
+	err, took := runPageSysopWithLimit(t, env, "PsLimitMid", time.Now().Add(1500*time.Millisecond), 0, false)
+	if !errors.Is(err, editor.ErrTimeLimit) {
+		t.Fatalf("err = %v, want ErrTimeLimit", err)
+	}
+	if took > 5*time.Second {
+		t.Fatalf("page waited %v after the time limit ran out", took)
+	}
+	if len(p.cleared) != 1 || p.cleared[0] != "cancelled" {
+		t.Fatalf("cleared %v", p.cleared)
+	}
+}
+
+func TestPageSysopCountsDownWithTimeLeft(t *testing.T) {
+	env := newMenuEnv(t)
+	p := &fakePager{consoles: 1}
+	env.e.Pager = p
+	setPageConfig(env, 1, 300)
+	err, _ := runPageSysopWithLimit(t, env, "PsLimitLeft", time.Now().Add(time.Hour), 0, false)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(p.cleared) != 1 || p.cleared[0] != "timeout" {
+		t.Fatalf("cleared %v, want the countdown to run out", p.cleared)
+	}
+}
+
+func TestPageSysopChatCreditKeepsLimitOpen(t *testing.T) {
+	env := newMenuEnv(t)
+	p := &fakePager{consoles: 1}
+	env.e.Pager = p
+	setPageConfig(env, 1, 300)
+	err, _ := runPageSysopWithLimit(t, env, "PsLimitCredit", time.Now().Add(-time.Minute), 2*time.Minute, true)
+	if err != nil {
+		t.Fatalf("err = %v, chat time was charged to the caller", err)
+	}
+	if len(p.cleared) != 1 || p.cleared[0] != "timeout" {
+		t.Fatalf("cleared %v, want the countdown to run out", p.cleared)
 	}
 }
