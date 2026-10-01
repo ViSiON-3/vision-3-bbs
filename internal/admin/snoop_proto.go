@@ -1,0 +1,155 @@
+package admin
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
+)
+
+// SnoopRequest is the first line a wfc-snoop client sends.
+type SnoopRequest struct {
+	NodeID      int       `json:"node"`
+	ConnectedAt time.Time `json:"connectedAt"`
+}
+
+// SnoopHeader is the server's one-line reply. A non-empty Error means the
+// request was refused and the stream ends.
+type SnoopHeader struct {
+	Error      string `json:"error,omitempty"`
+	OutputMode string `json:"outputMode"` // "cp437" or "utf8"
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+	Handle     string `json:"handle"`
+}
+
+// SnoopTarget resolves a request to the node's tap and header fields.
+type SnoopTarget func(req SnoopRequest) (*snoop.Tap, SnoopHeader, error)
+
+// SnoopStream is the client end: the header, then raw node output to read
+// and sysop input to write.
+type SnoopStream struct {
+	Header SnoopHeader
+	io.ReadWriteCloser
+	r *bufio.Reader
+}
+
+func (s *SnoopStream) Read(p []byte) (int, error) { return s.r.Read(p) }
+
+const maxSnoopLine = 4 << 10
+
+func readLine(r *bufio.Reader) ([]byte, error) {
+	line, err := r.ReadSlice('\n')
+	if errors.Is(err, bufio.ErrBufferFull) {
+		return nil, fmt.Errorf("admin: snoop line exceeds %d bytes", maxSnoopLine)
+	}
+	return line, err
+}
+
+// ServeSnoop runs the server side of one wfc-snoop channel for sysop.
+func ServeSnoop(rw io.ReadWriteCloser, sysop string, resolve SnoopTarget, audit func(msg string, args ...any)) error {
+	defer rw.Close() // also unblocks the input goroutine's read
+	br := bufio.NewReaderSize(rw, maxSnoopLine)
+	line, err := readLine(br)
+	if err != nil {
+		return err
+	}
+	var req SnoopRequest
+	if err := json.Unmarshal(line, &req); err != nil {
+		return writeHeader(rw, SnoopHeader{Error: "bad request"})
+	}
+	tap, hdr, err := resolve(req)
+	if err != nil {
+		_ = writeHeader(rw, SnoopHeader{Error: err.Error()})
+		return err
+	}
+	if err := writeHeader(rw, hdr); err != nil {
+		return err
+	}
+
+	w := tap.Attach()
+	start := time.Now()
+	audit("snoop attach", "sysop", sysop, "node", req.NodeID, "caller", hdr.Handle)
+	defer func() {
+		w.Close()
+		if held, injected := tap.ReleaseKeyboard(sysop); held > 0 {
+			audit("type-in off", "sysop", sysop, "node", req.NodeID,
+				"duration", held.Round(time.Second), "bytes", injected)
+		}
+		audit("snoop detach", "sysop", sysop, "node", req.NodeID, "caller", hdr.Handle,
+			"duration", time.Since(start).Round(time.Second))
+	}()
+
+	inErr := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 512)
+		for {
+			n, err := br.Read(buf)
+			if n > 0 {
+				tap.Inject(sysop, buf[:n])
+			}
+			if err != nil {
+				inErr <- err
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case chunk, ok := <-w.C():
+			if !ok {
+				return nil // caller left
+			}
+			if _, err := rw.Write(chunk); err != nil {
+				return err
+			}
+		case err := <-inErr:
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+func writeHeader(w io.Writer, h SnoopHeader) error {
+	b, err := json.Marshal(h)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(append(b, '\n'))
+	return err
+}
+
+// ClientSnoop performs the client handshake on rw.
+func ClientSnoop(rw io.ReadWriteCloser, req SnoopRequest) (*SnoopStream, error) {
+	b, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := rw.Write(append(b, '\n')); err != nil {
+		_ = rw.Close()
+		return nil, err
+	}
+	br := bufio.NewReaderSize(rw, maxSnoopLine)
+	line, err := readLine(br)
+	if err != nil {
+		_ = rw.Close()
+		return nil, fmt.Errorf("admin: snoop handshake: %w", err)
+	}
+	var hdr SnoopHeader
+	if err := json.Unmarshal(line, &hdr); err != nil {
+		_ = rw.Close()
+		return nil, fmt.Errorf("admin: snoop header: %w", err)
+	}
+	if hdr.Error != "" {
+		_ = rw.Close()
+		return nil, errors.New(hdr.Error)
+	}
+	return &SnoopStream{Header: hdr, ReadWriteCloser: rw, r: br}, nil
+}
