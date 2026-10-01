@@ -141,9 +141,15 @@ func (ih *InputHandler) breakInChan(allow bool) <-chan struct{} {
 
 func (ih *InputHandler) runBreakIn() {
 	ih.inBreakIn = true
-	restore := ih.SuspendSessionDeadline()
+	start := time.Now()
+	idle := ih.idleNs.Swap(0)
+	deadline := ih.deadlineNs.Swap(0)
 	defer func() {
-		restore()
+		ih.idleNs.CompareAndSwap(0, idle)
+		// Chat time is not charged to the caller.
+		if deadline != 0 {
+			ih.deadlineNs.CompareAndSwap(0, deadline+int64(time.Since(start)))
+		}
 		ih.inBreakIn = false
 	}()
 	ih.breakInFn()
@@ -691,9 +697,13 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 			return 0, ev, false, onTimeout
 		}
 		var timer *time.Timer
+		defer func() {
+			if timer != nil {
+				timer.Stop()
+			}
+		}()
 		if wait > 0 {
 			timer = time.NewTimer(wait)
-			defer timer.Stop()
 			idle = timer.C
 		}
 	wait:
@@ -714,18 +724,25 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 				return 0, ev, false, onTimeout
 			case <-ih.breakInChan(true):
 				ih.runBreakIn()
-				if timer != nil {
-					wait, onTimeout, expired = ih.keyWait()
-					if expired {
-						return 0, ev, false, onTimeout
+				wait, onTimeout, expired = ih.keyWait()
+				if expired {
+					return 0, ev, false, onTimeout
+				}
+				if timer != nil && !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
 					}
-					if !timer.Stop() {
-						select {
-						case <-timer.C:
-						default:
-						}
-					}
+				}
+				switch {
+				case wait <= 0:
+					idle = nil
+				case timer == nil:
+					timer = time.NewTimer(wait)
+					idle = timer.C
+				default:
 					timer.Reset(wait)
+					idle = timer.C
 				}
 			}
 		}

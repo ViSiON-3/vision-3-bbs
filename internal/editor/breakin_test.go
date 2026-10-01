@@ -1,7 +1,6 @@
 package editor
 
 import (
-	"errors"
 	"io"
 	"testing"
 	"time"
@@ -60,43 +59,99 @@ func TestBreakInFnCanReadKeys(t *testing.T) {
 	}
 }
 
+// writeAfter writes b to pw after d.
+func writeAfter(pw *io.PipeWriter, d time.Duration, b string) {
+	go func() {
+		time.Sleep(d)
+		_, _ = pw.Write([]byte(b))
+	}()
+}
+
 func TestBreakInSuspendsDeadline(t *testing.T) {
 	pr, pw := io.Pipe()
 	ih := NewInputHandler(pr)
 	defer ih.Close()
-	ih.SetSessionDeadline(time.Now().Add(50 * time.Millisecond))
+	ih.SetSessionDeadline(time.Now().Add(200 * time.Millisecond))
 	brk := make(chan struct{}, 1)
 	inner := make(chan error, 1)
-	// The key arrives well after the 50ms deadline; the read inside fn only
+	// The key arrives well after the deadline; the read inside fn only
 	// succeeds if the deadline is suspended while fn runs.
 	ih.SetBreakIn(brk, func() {
-		go func() {
-			time.Sleep(150 * time.Millisecond)
-			_, _ = pw.Write([]byte("k"))
-		}()
+		writeAfter(pw, 400*time.Millisecond, "k")
 		_, err := ih.ReadKey()
 		inner <- err
 	})
-	errc := make(chan error, 1)
-	go func() { _, err := ih.ReadKey(); errc <- err }()
 	brk <- struct{}{}
-
+	go func() { _, _ = ih.ReadKey() }()
 	select {
 	case err := <-inner:
 		if err != nil {
 			t.Fatalf("read inside break-in failed: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(3 * time.Second):
 		t.Fatal("break-in did not finish")
 	}
-	// The deadline is back after fn and has passed, so the outer read ends.
+}
+
+func TestBreakInSuspendsIdleTimeout(t *testing.T) {
+	pr, pw := io.Pipe()
+	ih := NewInputHandler(pr)
+	defer ih.Close()
+	ih.SetSessionIdleTimeout(50 * time.Millisecond)
+	brk := make(chan struct{}, 1)
+	inner := make(chan error, 1)
+	ih.SetBreakIn(brk, func() {
+		writeAfter(pw, 300*time.Millisecond, "k")
+		_, err := ih.ReadKey()
+		inner <- err
+	})
+	brk <- struct{}{}
+	go func() { _, _ = ih.ReadKey() }()
 	select {
-	case err := <-errc:
-		if !errors.Is(err, ErrTimeLimit) {
-			t.Fatalf("outer err = %v, want ErrTimeLimit", err)
+	case err := <-inner:
+		if err != nil {
+			t.Fatalf("read inside break-in failed: %v", err)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("outer read still blocked after deadline restored")
+	case <-time.After(3 * time.Second):
+		t.Fatal("break-in did not finish")
+	}
+	if got := ih.sessionIdleTimeout(); got != 50*time.Millisecond {
+		t.Fatalf("idle timeout after break-in = %v, want 50ms", got)
+	}
+}
+
+func TestBreakInDoesNotChargeChatTime(t *testing.T) {
+	pr, pw := io.Pipe()
+	ih := NewInputHandler(pr)
+	defer ih.Close()
+	ih.SetSessionDeadline(time.Now().Add(300 * time.Millisecond))
+	brk := make(chan struct{}, 1)
+	fnDone := make(chan struct{})
+	ih.SetBreakIn(brk, func() {
+		time.Sleep(600 * time.Millisecond)
+		close(fnDone)
+	})
+	type result struct {
+		key int
+		err error
+	}
+	resc := make(chan result, 1)
+	go func() { k, err := ih.ReadKey(); resc <- result{k, err} }()
+	brk <- struct{}{}
+	<-fnDone
+	select {
+	case r := <-resc:
+		t.Fatalf("outer read returned after chat: key=%d err=%v", r.key, r.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	_, _ = pw.Write([]byte("x"))
+	select {
+	case r := <-resc:
+		if r.err != nil || r.key != 'x' {
+			t.Fatalf("outer read = %d, %v; want 'x'", r.key, r.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("outer read did not get the key")
 	}
 }
 
@@ -110,10 +165,13 @@ func TestBreakInNotServicedInsideEscapeSequence(t *testing.T) {
 
 	keyc := make(chan int, 1)
 	go func() { k, _ := ih.ReadKey(); keyc <- k }()
+	// Write returns once ESC is queued, so an empty queue means the reader
+	// took ESC and is now in the inter-byte wait.
 	_, _ = pw.Write([]byte("\x1b["))
-	time.Sleep(30 * time.Millisecond)
+	for i := 0; i < 1000 && len(ih.incoming) > 0; i++ {
+		time.Sleep(time.Millisecond)
+	}
 	brk <- struct{}{}
-	time.Sleep(10 * time.Millisecond)
 	_, _ = pw.Write([]byte("A"))
 	select {
 	case k := <-keyc:
