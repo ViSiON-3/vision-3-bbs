@@ -13,6 +13,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmKick {
 		return m.handleKeyConfirmKick(msg)
 	}
+	if m.mode == modePages {
+		return m.handleKeyPages(msg)
+	}
 	switch msg.Type {
 	case tea.KeyTab:
 		return m.nextTab(1), nil
@@ -30,6 +33,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.refreshOrRetry()
 		case "k", "K":
 			return m.beginKick()
+		case "s", "S":
+			return m.handleKeySnoop()
+		case "p", "P":
+			m.mode = modePages
+			m.clampPageSel()
+			return m, nil
 		}
 	}
 	switch m.mode {

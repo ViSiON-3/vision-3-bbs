@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,6 +20,7 @@ const (
 	modeList viewMode = iota
 	modeDetails
 	modeConfirmKick
+	modePages // the list of caller pages
 )
 
 // group is one of the tabbed views in the lower box. The upper box always
@@ -95,6 +97,8 @@ type Options struct {
 	NoColor   bool
 	ReadOnly  bool
 	MaxEvents int
+	// NoBell silences the terminal bell on a new page.
+	NoBell bool
 	// Refresh is the poll interval. If zero, defaults to 1 second.
 	Refresh time.Duration
 	// Version is shown in the title bar ("WFC v1.2.3").
@@ -106,6 +110,9 @@ type Options struct {
 
 	// now is the clock; tests override it. Nil means time.Now.
 	now func() time.Time
+	// bell rings the terminal bell; tests override it. Nil writes BEL to
+	// stdout.
+	bell func()
 }
 
 // Model is the WFC TUI model.
@@ -122,8 +129,12 @@ type Model struct {
 	// prompt acts on this, not on whatever the cursor index points at by
 	// the time Y is pressed, since a snapshot can reorder the list meanwhile.
 	kickTarget admin.NodeState
-	width      int
-	height     int
+	// pages are the callers' page requests, one per node. A cleared page
+	// stays listed with Type EventPageCleared until the caller logs off.
+	pages   []admin.Event
+	pageSel int
+	width   int
+	height  int
 	// scrollBack is how many log lines the lower box is held back from
 	// the newest entry (PgUp/PgDn); zero follows the tail.
 	scrollBack int
@@ -160,6 +171,9 @@ func New(client admin.AdminClient, opts Options) Model {
 	}
 	if opts.now == nil {
 		opts.now = time.Now
+	}
+	if opts.bell == nil {
+		opts.bell = func() { _, _ = fmt.Fprint(os.Stdout, "\a") }
 	}
 	m := Model{client: client, opts: opts, mode: modeList, conn: connLost}
 	if client != nil {
@@ -567,6 +581,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastSnapAt = m.now()
 			}
 			m.clampSelection()
+			m.dropGonePages()
 		}
 		return m, nil
 
@@ -587,7 +602,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.loseConnection(errEventStreamClosed)
 		}
 		m.appendServerEvent(msg.ev)
-		return m, waitForEvent(msg.connID, msg.ch)
+		next := waitForEvent(msg.connID, msg.ch)
+		if m.applyPageEvent(msg.ev) && !m.opts.NoBell {
+			return m, tea.Batch(next, m.ringBell())
+		}
+		return m, next
 
 	case connLostMsg:
 		if msg.connID != m.connID {
@@ -652,6 +671,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus("Kicked "+who, false)
 		m.pushLocalEvent("Kicked " + who)
 		return m, m.readSnapshot()
+
+	case snoopOpenedMsg:
+		return m.snoopOpened(msg)
+
+	case snoopResult:
+		if msg.reason != "" {
+			m.setStatus(msg.reason, false)
+		}
+		return m, m.refreshNow()
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)

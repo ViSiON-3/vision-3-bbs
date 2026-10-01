@@ -118,7 +118,7 @@ func TestViewMockupGeometry(t *testing.T) {
 	if !strings.HasPrefix(r[23], "   └") {
 		t.Errorf("event box bottom: %q", r[23])
 	}
-	want := "[↑/↓] select [TAB] view [PgUp/PgDn] scroll [ENTER] details [Q] quit [K] kick"
+	want := "[↑↓] [TAB] view [PgUp/Dn] [ENTER] details [K] kick [S] snoop [P] pages [Q] quit"
 	if !strings.Contains(r[24], want) || !centred(r[24], want, 2) {
 		t.Errorf("command bar:\n got %q\nwant centred %q", r[24], want)
 	}

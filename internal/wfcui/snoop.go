@@ -71,6 +71,8 @@ type snoopCmd struct {
 	lastErr  string
 	w, h     int // sysop terminal size
 
+	startChat bool // begin in chat, as when answering a page
+
 	typeBeforeChat bool // type-in was on when chat started
 	erasePending   bool // bar hidden but its row not yet cleared
 	track          seqTracker
@@ -112,6 +114,13 @@ func (c *snoopCmd) Run() error {
 		c.statusOn = false
 	} else {
 		c.statusOn = c.h > c.st.Header.Height
+	}
+	if c.startChat {
+		if err := c.ctl.Chat(true); err != nil {
+			c.lastErr = err.Error()
+		} else {
+			c.mode = snoopChat
+		}
 	}
 	c.write("\x1b[0m\x1b[2J\x1b[H")
 	c.drawStatus()
