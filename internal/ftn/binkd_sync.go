@@ -21,9 +21,16 @@ type BinkdIdentity struct {
 // BinkdLinkSync carries the per-link values synced into a binkd.conf node
 // line. HostPort is "hostname:port"; when empty only the password of an
 // existing line is synced and no new line is created (host unknown).
+//
+// IPFamily is the link's config.IPFamily* setting. A pinned family is always
+// written as -4 / -6. Auto removes a -4 / -6 the line carries only when
+// IPFamilyAuthoritative is set; see applyIPFamily for why only the config
+// editor sets it.
 type BinkdLinkSync struct {
-	SessionPwd string
-	HostPort   string
+	SessionPwd            string
+	HostPort              string
+	IPFamily              string
+	IPFamilyAuthoritative bool
 }
 
 // SyncBinkdConf updates binkd.conf to reflect the current FTN links and BBS
@@ -86,11 +93,11 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 			}
 		}
 
-		// Sync node hostname and session password. The address, host and
-		// password are located by positional rank, not by offset: binkd lets
-		// options like -nomd or -ip sit anywhere on a node line and drops them
-		// from the positional stream, so a flag ahead of the host shifts both
-		// of the fields synced here.
+		// Sync node hostname, session password and address family. The
+		// address, host and password are located by positional rank, not by
+		// offset: binkd lets options like -nomd or -ip sit anywhere on a node
+		// line and drops them from the positional stream, so a flag ahead of
+		// the host shifts both of the fields synced here.
 		if strings.HasPrefix(trimmed, "node ") {
 			fields := strings.Fields(trimmed)
 			// One positional argument is enough to identify the line: a
@@ -113,7 +120,9 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 					// into their positional slots and appends placeholders for
 					// any the line is missing, leaving binkd options and the
 					// trailing flavour and fileboxes untouched.
-					newLine := strings.Join(mergeNodeFields(fields, addr, host, link.SessionPwd), " ")
+					merged := mergeNodeFields(fields, addr, host, link.SessionPwd)
+					merged = applyIPFamily(merged, link.IPFamily, link.IPFamilyAuthoritative)
+					newLine := strings.Join(merged, " ")
 					if newLine != trimmed {
 						out.WriteString(newLine)
 						out.WriteByte('\n')
@@ -157,11 +166,7 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 	sort.Strings(missing)
 	for _, addr := range missing {
 		link := links[addr]
-		pwd := link.SessionPwd
-		if pwd == "" {
-			pwd = "-"
-		}
-		fmt.Fprintf(&out, "node %s %s %s\n", addr, link.HostPort, pwd)
+		fmt.Fprintf(&out, "%s\n", formatNodeLine(addr, link.HostPort, link.SessionPwd, link.IPFamily))
 		changed = true
 	}
 

@@ -134,6 +134,7 @@ func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
 		if link.Port > 0 {
 			w.hubPort = link.Port
 		}
+		w.hubIPFamily = link.IPFamily
 		w.areafixPassword = link.AreafixPassword
 		w.sessionPassword = link.SessionPassword
 		w.packetPassword = link.PacketPassword
@@ -210,6 +211,10 @@ func (m Model) updateFTNWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.toggleFTNWizardYesNo(f)
 			return m, nil
 		}
+		if f.Type == ftLookup {
+			m.cycleFTNWizardLookup(f)
+			return m, nil
+		}
 
 		// "Network" field → open network browser. Not while editing: the
 		// wizard is bound to one configured network, and swapping the identity
@@ -244,8 +249,11 @@ func (m Model) updateFTNWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeySpace:
 		f := m.ftnWizardFields[m.editField]
-		if f.Type == ftYesNo {
+		switch f.Type {
+		case ftYesNo:
 			m.toggleFTNWizardYesNo(f)
+		case ftLookup:
+			m.cycleFTNWizardLookup(f)
 		}
 		return m, nil
 
@@ -356,6 +364,31 @@ func (m *Model) toggleFTNWizardYesNo(f fieldDef) {
 			_ = f.Set("Y") // Y/N field setters never fail
 		}
 		m.message = ""
+	}
+}
+
+// cycleFTNWizardLookup steps a short choice field to its next value, the way
+// a Y/N field toggles. A value the field rejects (IPv6 for a hub given as an
+// IPv4 address) is passed over, and the reason shown.
+func (m *Model) cycleFTNWizardLookup(f fieldDef) {
+	if f.Get == nil || f.Set == nil || f.LookupItems == nil {
+		return
+	}
+	items := f.LookupItems()
+	cur := 0
+	for i, it := range items {
+		if it.Value == f.Get() {
+			cur = i
+			break
+		}
+	}
+	m.message = ""
+	for step := 1; step < len(items); step++ {
+		if err := f.Set(items[(cur+step)%len(items)].Value); err != nil {
+			m.message = fmt.Sprintf("%s: %v", f.Label, err)
+			continue
+		}
+		return
 	}
 }
 

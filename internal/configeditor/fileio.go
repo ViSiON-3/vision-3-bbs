@@ -3,6 +3,7 @@ package configeditor
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
@@ -91,6 +93,7 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 	if err != nil {
 		return ac, fmt.Errorf("loading ftn: %w", err)
 	}
+	adoptBinkdIPFamilies(&ac.FTN, filepath.Join(configPath, "..", "data", "ftn", "binkd.conf"))
 
 	// V3Net
 	ac.V3Net, err = config.LoadV3NetConfig(configPath)
@@ -338,4 +341,30 @@ func confTagByID(confs []conference.Conference, confID int) string {
 		}
 	}
 	return "?"
+}
+
+// adoptBinkdIPFamilies reads into each link with no address family set the
+// -4 / -6 its binkd.conf node line carries. Before the setting existed the
+// only way to pin a hub to IPv4 was to add -4 to binkd.conf by hand, and the
+// editor's save treats an unset family as auto and clears the flag; reading
+// it in first shows the sysop what binkd is really doing and keeps the fix.
+// Best-effort: an unreadable binkd.conf leaves the links as they are, and the
+// save's sync, which reads the same file, will not touch it either.
+func adoptBinkdIPFamilies(ftnCfg *config.FTNConfig, binkdPath string) {
+	fams, err := ftn.ReadBinkdIPFamilies(binkdPath)
+	if err != nil {
+		slog.Warn("could not read binkd.conf address families", "path", binkdPath, "error", err)
+		return
+	}
+	for netKey, nc := range ftnCfg.Networks {
+		for i := range nc.Links {
+			lnk := &nc.Links[i]
+			if lnk.IPFamily != config.IPFamilyAuto {
+				continue
+			}
+			if fam, ok := fams[lnk.Address+"@"+netKey]; ok {
+				lnk.IPFamily = fam
+			}
+		}
+	}
 }

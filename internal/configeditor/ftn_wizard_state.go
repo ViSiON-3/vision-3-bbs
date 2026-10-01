@@ -24,6 +24,7 @@ type ftnWizardState struct {
 	hubAddress      string // "21:1/100"
 	hubHostname     string // "agency.bbs.nz"
 	hubPort         int    // 24556
+	hubIPFamily     string // config.IPFamily*: the family binkd calls the hub over
 	areafixPassword string
 	sessionPassword string
 	packetPassword  string

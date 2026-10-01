@@ -70,10 +70,16 @@ func TestEnterFTNWizardSkipsPickerWhenEmpty(t *testing.T) {
 	}
 }
 
+// withHubIPFamily pins the fsxnet hub of a configuredModel to fam.
+func withHubIPFamily(m Model, fam string) Model {
+	m.configs.FTN.Networks["fsxnet"].Links[0].IPFamily = fam
+	return m
+}
+
 // TestStartFTNWizardEditLoadsExistingConfig covers the reporter's actual ask:
 // the wizard should show what was originally added.
 func TestStartFTNWizardEditLoadsExistingConfig(t *testing.T) {
-	m, _ := configuredModel().startFTNWizardEdit("fsxnet")
+	m, _ := withHubIPFamily(configuredModel(), config.IPFamilyIPv4).startFTNWizardEdit("fsxnet")
 
 	w := m.ftnWizard
 	if !w.editing() || w.editingKey != "fsxnet" {
@@ -88,6 +94,7 @@ func TestStartFTNWizardEditLoadsExistingConfig(t *testing.T) {
 		{"sessionPassword", w.sessionPassword, "sesspw"},
 		{"packetPassword", w.packetPassword, "pktpw"},
 		{"originLine", w.originLine, "Custom Origin Line"},
+		{"hubIPFamily", w.hubIPFamily, config.IPFamilyIPv4},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %q, want %q", tc.name, tc.got, tc.want)
@@ -110,7 +117,7 @@ func TestStartFTNWizardEditLoadsExistingConfig(t *testing.T) {
 // TestConfirmFTNWizardEditPreservesUnaskedSettings is the destructive case:
 // the wizard must not reset settings owned by the Echomail Networks editor.
 func TestConfirmFTNWizardEditPreservesUnaskedSettings(t *testing.T) {
-	m, _ := configuredModel().startFTNWizardEdit("fsxnet")
+	m, _ := withHubIPFamily(configuredModel(), config.IPFamilyIPv4).startFTNWizardEdit("fsxnet")
 	m.ftnWizard.hubHostname = "new.host.example"
 	m.configPath = t.TempDir()
 
@@ -128,6 +135,9 @@ func TestConfirmFTNWizardEditPreservesUnaskedSettings(t *testing.T) {
 	}
 	if net.Links[0].Hostname != "new.host.example" {
 		t.Errorf("Hostname = %q, want the edit applied", net.Links[0].Hostname)
+	}
+	if net.Links[0].IPFamily != config.IPFamilyIPv4 {
+		t.Errorf("IPFamily = %q, want the loaded family kept", net.Links[0].IPFamily)
 	}
 }
 

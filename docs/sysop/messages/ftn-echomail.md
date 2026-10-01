@@ -125,7 +125,10 @@ The wizard walks you through:
    (fsxNet, FidoNet, etc.). Selecting one pre-fills the hub address, hostname,
    BinkP port, and coordinator details.
 2. **Enter your details** — your FTN address (validated), AreaFix / session /
-   packet passwords, and origin line. **Bad/Dupe Areas** (Y by default when
+   packet passwords, and origin line. **Hub IP Family** (Enter or Space
+   cycles Auto / IPv4 / IPv6) pins the address family binkd calls the hub
+   over; leave it on Auto unless polls fail over IPv6, see
+   [Hub polls fail over IPv6](#hub-polls-fail-over-ipv6). **Bad/Dupe Areas** (Y by default when
    they are not set up yet) creates the sysop-only areas described in
    [Bad/undeliverable messages](#badundeliverable-messages).
 3. **Select echo areas** — the wizard downloads the network's echo list
@@ -148,9 +151,9 @@ then initialize the message bases and test the connection (see
 [Step 7](#step-7-initialize-message-bases) and [Step 8](#step-8-test-the-connection)).
 
 > Identity fields and link details are re-synced to `binkd.conf` whenever you
-> save from the config editor: each link's hostname, port, and session password
-> (Echomail Links is the source of truth) update or create the matching `node`
-> line, and the network's poll event follows a changed hub address (created
+> save from the config editor: each link's hostname, port, session password
+> and IP family (Echomail Links is the source of truth) update or create the
+> matching `node` line, and the network's poll event follows a changed hub address (created
 > automatically if missing when the link has a hostname — manually created
 > networks poll without any Events-editor setup). A changed own address
 > replaces the `address` line that declared the old one; any other `address`
@@ -675,6 +678,9 @@ scan/pack frequency; neither is a hub poll schedule.
 | `areafix_password` | Password for AreaFix netmail (subject line; set by hub)  |
 | `name`             | Human-readable hub label                                 |
 | `flavour`          | Delivery mode: `Normal`, `Crash`, `Hold`, `Direct`       |
+| `hostname`         | Hub BinkP hostname or IP address; written to the binkd `node` line (an IPv6 address is bracketed for you) |
+| `port`             | Hub BinkP port (empty = 24554)                           |
+| `ip_family`        | Address family binkd calls the hub over: empty (auto), `ipv4` (binkd `-4`) or `ipv6` (binkd `-6`). **IP Family** under Echomail Links |
 
 **Example:**
 
@@ -823,6 +829,32 @@ node 46:1/100@agoranet hub-hostname:24554 HUBPASS -
 - Verify your hub's hostname, port, and password are correct
 - Make sure `secure_inbound_path` in `ftn.json` matches your mailer's inbound directory
 - Run your mailer in one-shot client mode manually and watch the output (binkd: `bin/binkd -c data/ftn/binkd.conf`)
+
+### Hub polls fail over IPv6
+
+A hub whose hostname has both an IPv4 (A) and an IPv6 (AAAA) record is
+usually called over IPv6 first. On a host with no working IPv6 route every
+poll then fails, and the binkd log shows connection errors to the hub's IPv6
+address while the hub is reachable over IPv4.
+
+Set the link's **IP Family** to **IPv4** (under **Echomail Links**, or **Hub
+IP Family** in the FTN Setup Wizard) and save. The hub's `node` line in
+`data/ftn/binkd.conf` gets binkd's `-4` option:
+
+```
+node 21:1/100@fsxnet -4 agency.bbs.nz:24556 MYSECRET
+```
+
+**IPv6** does the reverse with `-6`. A hub entered as a literal IP address
+can only be pinned to that address's own family; the editor refuses the other
+one. Back on **Auto**, the option is removed and binkd uses whatever the
+hostname resolves to.
+
+If you had already added `-4` or `-6` to `binkd.conf` by hand, the config
+editor reads it in as the link's IP Family when it loads, so it is kept when
+you save. A `-46` or `-64` (try one family, then the other; only in binkd
+builds configured `--with-af-force`) is left alone unless you pin the link to
+a single family.
 
 ### Messages arriving but not visible in BBS
 

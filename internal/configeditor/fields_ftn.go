@@ -350,7 +350,15 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 		{
 			Label: "Hostname", Help: "Hub BinkP hostname; synced to the binkd.conf node line on save. Empty = receive-only: binkd cannot call this link", Type: ftString, Col: 3, Row: 7, Width: 40,
 			Get: func() string { return linkPtr.Hostname },
-			Set: func(val string) error { linkPtr.Hostname = strings.TrimSpace(val); save(); return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := config.ValidateLinkIPFamily(val, linkPtr.IPFamily); err != nil {
+					return err
+				}
+				linkPtr.Hostname = val
+				save()
+				return nil
+			},
 			// Left empty this link is receive-only, which is legitimate but
 			// easy to do by accident: no binkd node line and no poll event are
 			// created, so the network only ever receives mail when the uplink
@@ -404,6 +412,20 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 					{Value: "Direct", Display: "Direct - direct call"},
 				}
 			},
+		},
+		{
+			Label: "IP Family", Help: ipFamilyHelp, Type: ftLookup, Col: 3, Row: 10, Width: 6,
+			Get: func() string { return ipFamilyLabel(linkPtr.IPFamily) },
+			Set: func(val string) error {
+				fam, err := parseIPFamilyField(val, linkPtr.Hostname)
+				if err != nil {
+					return err
+				}
+				linkPtr.IPFamily = fam
+				save()
+				return nil
+			},
+			LookupItems: ipFamilyLookupItems,
 		},
 	}
 }

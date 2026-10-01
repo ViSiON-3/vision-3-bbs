@@ -57,6 +57,7 @@ func buildBinkdRegen(ftnCfg config.FTNConfig, server config.ServerConfig, bbsRoo
 				Hostname:    lnk.HostPort(),
 				SessionPwd:  lnk.SessionPassword,
 				NetworkName: netKey,
+				IPFamily:    lnk.IPFamily,
 			})
 		}
 	}

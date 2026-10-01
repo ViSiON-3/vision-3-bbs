@@ -24,11 +24,7 @@ func RegenerateBinkdConf(confPath string, cfg BinkdConfig, nodes []BinkdNode) er
 	var out strings.Builder
 	writeFreshBinkdConf(&out, cfg, outbound, logPath, secureIn, insecureIn, v3mailPath, boardName, sysop, location)
 	for _, n := range nodes {
-		pwd := n.SessionPwd
-		if pwd == "" {
-			pwd = "-"
-		}
-		fmt.Fprintf(&out, "\n%s\nnode %s %s %s\n", sectionMarker(n.NetworkName), n.Address, n.Hostname, pwd)
+		fmt.Fprintf(&out, "\n%s\n%s\n", sectionMarker(n.NetworkName), formatNodeLine(n.Address, n.Hostname, n.SessionPwd, n.IPFamily))
 	}
 	return writeFileAtomic(confPath, out.String(), 0600)
 }

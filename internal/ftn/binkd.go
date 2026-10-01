@@ -20,6 +20,7 @@ type BinkdNode struct {
 	Hostname    string // host:port
 	SessionPwd  string // session password ("-" if none)
 	NetworkName string // used for section comment markers
+	IPFamily    string // config.IPFamily*: written as binkd's -4 / -6 option
 }
 
 // BinkdConfig holds all data needed to generate or update binkd.conf.
@@ -185,12 +186,12 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 	}
 
 	// This node is already defined: rewrite its line in place rather than
-	// skipping. The wizard can be re-run to change a hub's hostname, port or
-	// session password, and skipping would leave binkd talking to the old
+	// skipping. The wizard can be re-run to change a hub's hostname, port,
+	// session password or address family, and skipping would leave binkd talking to the old
 	// details while ftn.json showed the new ones. Appending instead would give
 	// binkd two lines for one address.
 	if len(existing) > 0 && nodeExists(string(existing), cfg.Node.Address) {
-		updated, changed := replaceNodeLine(string(existing), cfg.Node.Address, cfg.Node.Hostname, cfg.Node.SessionPwd)
+		updated, changed := replaceNodeLine(string(existing), cfg.Node)
 		if !changed {
 			return nil
 		}
@@ -223,7 +224,8 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 
 // buildNodeLine renders the binkd "node" directive for a link.
 func buildNodeLine(cfg BinkdConfig) string {
-	return fmt.Sprintf("node %s %s %s", cfg.Node.Address, cfg.Node.Hostname, nodePassword(cfg.Node.SessionPwd))
+	n := cfg.Node
+	return formatNodeLine(n.Address, n.Hostname, n.SessionPwd, n.IPFamily)
 }
 
 // nodePassword renders a session password, using binkd's "-" for none.
@@ -303,11 +305,14 @@ func mergeNodeFields(existing []string, address, hostname, pwd string) []string 
 	return merged
 }
 
-// replaceNodeLine updates the "node <address> ..." directive for the given
+// replaceNodeLine updates the "node <address> ..." directive for node's
 // address in place, preserving the line's indentation, any binkd flags beyond
-// the fields the wizard manages, and the rest of the file. It reports whether
-// anything actually changed, so an unchanged config is left untouched on disk.
-func replaceNodeLine(content, address, hostname, pwd string) (string, bool) {
+// the fields the wizard manages, and the rest of the file. The wizard owns the
+// address family it asks about, so the line's -4 / -6 follows node.IPFamily.
+// It reports whether anything actually changed, so an unchanged config is left
+// untouched on disk.
+func replaceNodeLine(content string, node BinkdNode) (string, bool) {
+	address := node.Address
 	lines := confLines(content)
 	changed := false
 	for i, l := range lines {
@@ -321,7 +326,7 @@ func replaceNodeLine(content, address, hostname, pwd string) (string, bool) {
 			continue
 		}
 
-		merged := strings.Join(mergeNodeFields(fields, address, hostname, pwd), " ")
+		merged := strings.Join(applyIPFamily(mergeNodeFields(fields, address, node.Hostname, node.SessionPwd), node.IPFamily, true), " ")
 		if trimmed == merged {
 			continue // already correct
 		}

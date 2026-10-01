@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,19 +26,72 @@ type FTNLinkConfig struct {
 	Flavour         string `json:"flavour,omitempty"`          // Delivery flavour: Normal (default), Crash, Hold, Direct
 	Hostname        string `json:"hostname,omitempty"`         // Hub BinkP hostname; source of truth for the binkd.conf node line
 	Port            int    `json:"port,omitempty"`             // Hub BinkP port (default 24554 when Hostname is set)
+	IPFamily        string `json:"ip_family,omitempty"`        // Address family binkd calls the hub over: "" (auto), "ipv4" or "ipv6"
+}
+
+// Address families a link can be called over (FTNLinkConfig.IPFamily).
+const (
+	IPFamilyAuto = ""     // whatever the hostname resolves to, binkd's default
+	IPFamilyIPv4 = "ipv4" // IPv4 only: binkd's "-4" node option
+	IPFamilyIPv6 = "ipv6" // IPv6 only: binkd's "-6" node option
+)
+
+// NormalizeIPFamily maps a configured address family to one of the IPFamily
+// constants, case-insensitively. ok is false for a value that is none of them,
+// which normalizes to IPFamilyAuto.
+func NormalizeIPFamily(s string) (fam string, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "auto":
+		return IPFamilyAuto, true
+	case "ipv4", "4":
+		return IPFamilyIPv4, true
+	case "ipv6", "6":
+		return IPFamilyIPv6, true
+	}
+	return IPFamilyAuto, false
+}
+
+// ValidateLinkIPFamily rejects a family the hostname cannot be reached over:
+// an IPv6 literal forced to IPv4, or an IPv4 literal forced to IPv6. binkd
+// would never connect, and only say so in its log. A DNS name is always
+// accepted, since which records it has is only known when binkd resolves it.
+func ValidateLinkIPFamily(hostname, fam string) error {
+	ip := net.ParseIP(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(hostname), "["), "]"))
+	if ip == nil {
+		return nil
+	}
+	switch {
+	case fam == IPFamilyIPv4 && ip.To4() == nil:
+		return fmt.Errorf("%s is an IPv6 address and cannot be reached over IPv4", hostname)
+	case fam == IPFamilyIPv6 && ip.To4() != nil:
+		return fmt.Errorf("%s is an IPv4 address and cannot be reached over IPv6", hostname)
+	}
+	return nil
 }
 
 // HostPort returns "hostname:port" for the link, defaulting the port to
-// 24554. Empty when no hostname is configured.
+// 24554. Empty when no hostname is configured. An IPv6 literal is bracketed
+// ("[2001:db8::1]:24554"), the form binkd needs to tell the port from the
+// address; written bare, binkd takes the address's last group for the port.
 func (c FTNLinkConfig) HostPort() string {
-	if c.Hostname == "" {
+	return JoinBinkpHostPort(c.Hostname, c.Port)
+}
+
+// JoinBinkpHostPort renders a BinkP host and port for a binkd node line,
+// defaulting the port to 24554 and bracketing an IPv6 literal. Empty when
+// host is empty.
+func JoinBinkpHostPort(host string, port int) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
 		return ""
 	}
-	port := c.Port
 	if port <= 0 {
 		port = 24554
 	}
-	return fmt.Sprintf("%s:%d", c.Hostname, port)
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		host = "[" + host + "]"
+	}
+	return fmt.Sprintf("%s:%d", host, port)
 }
 
 // UnmarshalJSON supports backward compatibility: "password" is read into PacketPassword
@@ -52,6 +106,7 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 		Flavour         string  `json:"flavour,omitempty"`
 		Hostname        string  `json:"hostname,omitempty"`
 		Port            int     `json:"port,omitempty"`
+		IPFamily        string  `json:"ip_family,omitempty"`
 		LegacyPassword  string  `json:"password"`
 	}
 	if err := json.Unmarshal(data, &r); err != nil {
@@ -64,6 +119,12 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 	c.Flavour = r.Flavour
 	c.Hostname = r.Hostname
 	c.Port = r.Port
+	fam, ok := NormalizeIPFamily(r.IPFamily)
+	if !ok {
+		slog.Warn("ftn link has an unknown ip_family; calling it over whatever its hostname resolves to",
+			"link", r.Address, "ip_family", r.IPFamily, "valid", "ipv4, ipv6 or empty")
+	}
+	c.IPFamily = fam
 	if r.PacketPassword != nil {
 		c.PacketPassword = *r.PacketPassword
 	} else if r.LegacyPassword != "" {
