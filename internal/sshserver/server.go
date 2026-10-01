@@ -292,8 +292,9 @@ func normalizeNewlines(p []byte) []byte {
 // SetTransferActive marks/unmarks the session as being in a binary transfer.
 // While active, nothing should write to the session via session.Write()
 // (which does CRLF conversion) because it would corrupt the binary stream.
-// The tap mode follows, except that a door keeps ModeDoor: doors can run
-// transfers and the door handler owns that mode.
+// The tap mode moves between ModeBBS and ModeTransfer only; ModeDoor is never
+// changed because doors can run transfers and the door handler owns that mode.
+// Output suppression during a transfer relies on IsTransferActive, not the mode.
 func (s *BBSSession) SetTransferActive(active bool) {
 	if active {
 		s.transferActive.Store(1)
@@ -301,10 +302,10 @@ func (s *BBSSession) SetTransferActive(active bool) {
 		s.transferActive.Store(0)
 	}
 	if t := s.tap.Load(); t != nil {
-		switch {
-		case active:
+		switch m := t.Mode(); {
+		case active && m == snoop.ModeBBS:
 			t.SetMode(snoop.ModeTransfer)
-		case t.Mode() == snoop.ModeTransfer:
+		case !active && m == snoop.ModeTransfer:
 			t.SetMode(snoop.ModeBBS)
 		}
 	}
@@ -392,11 +393,8 @@ func (s *BBSSession) Read(p []byte) (int, error) {
 			s.pending = &res
 			// Check the current interrupt before delivering the received bytes.
 		case b := <-tapInput:
-			n := copy(p, b)
-			if n < len(b) {
-				s.pending = &readResult{data: b[n:]}
-			}
-			return n, nil
+			// Deliver through the pending branch so the interrupt is re-checked.
+			s.pending = &readResult{data: b}
 		}
 	}
 }

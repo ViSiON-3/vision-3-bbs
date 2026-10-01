@@ -115,3 +115,48 @@ func TestReadInterruptStillWorksWithTap(t *testing.T) {
 		t.Fatal("interrupt ignored")
 	}
 }
+
+func TestDoorModeSurvivesTransfer(t *testing.T) {
+	pr, _ := io.Pipe()
+	bs := WrapSession(&pipeSession{r: pr})
+	tp := snoop.NewTap()
+	bs.SetTap(tp)
+	w := tp.Attach()
+	defer w.Close()
+	tp.SetMode(snoop.ModeDoor)
+	bs.SetTransferActive(true)
+	if tp.Mode() != snoop.ModeDoor {
+		t.Fatalf("mode = %v during in-door transfer", tp.Mode())
+	}
+	_, _ = bs.RawWrite([]byte{0x2a, 0x18, 0x42})
+	if got := <-w.C(); string(got) != snoop.TransferMarker {
+		t.Fatalf("got %q; want marker", got)
+	}
+	bs.SetTransferActive(false)
+	if tp.Mode() != snoop.ModeDoor {
+		t.Fatalf("mode = %v after in-door transfer", tp.Mode())
+	}
+}
+
+func TestLargeTapChunkSpansReads(t *testing.T) {
+	pr, _ := io.Pipe()
+	bs := WrapSession(&pipeSession{r: pr})
+	tp := snoop.NewTap()
+	bs.SetTap(tp)
+	if err := tp.TakeKeyboard("sysop"); err != nil {
+		t.Fatal(err)
+	}
+	tp.Inject("sysop", []byte("abcdefgh"))
+	buf := make([]byte, 3)
+	var got []string
+	for i := 0; i < 3; i++ {
+		n, err := bs.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, string(buf[:n]))
+	}
+	if got[0] != "abc" || got[1] != "def" || got[2] != "gh" {
+		t.Fatalf("reads = %q", got)
+	}
+}
