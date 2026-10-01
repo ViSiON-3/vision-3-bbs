@@ -3,6 +3,7 @@ package menu
 import (
 	"errors"
 	"io"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -267,5 +268,65 @@ func TestRunDoorWatchedRefusesExhaustedTime(t *testing.T) {
 	err := runDoorWatched(ctx, func(*DoorCtx) error { ran = true; return nil })
 	if !errors.Is(err, editor.ErrTimeLimit) || ran {
 		t.Errorf("err=%v ran=%v, want editor.ErrTimeLimit without running the door", err, ran)
+	}
+}
+
+// An outbound RLogin door is ended for each reason the BBS ends a door: its
+// connection to the door server is closed, and executeDoor reports why.
+func TestDoorWatchEndsRLoginDoor(t *testing.T) {
+	tests := []struct {
+		name         string
+		setup        func(ctx *DoorCtx, sess *relaySession)
+		afterConnect bool // run setup once the door server has the connection
+		want         error
+	}{
+		{"caller hangs up", func(_ *DoorCtx, sess *relaySession) { _ = sess.pw.Close() }, true, io.EOF},
+		{"caller idle", func(ctx *DoorCtx, _ *relaySession) { ctx.IdleTimeout = 300 * time.Millisecond }, false, editor.ErrIdleTimeout},
+		{"time limit", func(ctx *DoorCtx, _ *relaySession) {
+			ctx.User.TimeLimit = 1
+			ctx.SessionStartTime = time.Now().Add(-time.Minute + 300*time.Millisecond)
+		}, false, editor.ErrTimeLimit},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ds := newDoorServer(t)
+			host, port := ds.hostPort(t)
+			sess := newRelaySession()
+			ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
+
+			if !tt.afterConnect {
+				tt.setup(ctx, sess)
+			}
+			done := make(chan error, 1)
+			go func() { done <- executeDoor(ctx) }()
+
+			var conn net.Conn
+			select {
+			case conn = <-ds.conns:
+				t.Cleanup(func() { _ = conn.Close() })
+			case err := <-done:
+				t.Fatalf("door ended before connecting: %v", err)
+			case <-time.After(5 * time.Second):
+				t.Fatal("door server never received a connection")
+			}
+			if tt.afterConnect {
+				tt.setup(ctx, sess)
+			}
+
+			select {
+			case err := <-done:
+				// errors.Is is exact here: ErrTimeLimit wraps ErrIdleTimeout,
+				// but a plain idle error doesn't match ErrTimeLimit.
+				if !errors.Is(err, tt.want) {
+					t.Errorf("err = %v, want %v", err, tt.want)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("RLogin door still running")
+			}
+			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			if _, err := io.Copy(io.Discard, conn); err != nil {
+				t.Errorf("door server read after the door ended: %v, want EOF", err)
+			}
+		})
 	}
 }
