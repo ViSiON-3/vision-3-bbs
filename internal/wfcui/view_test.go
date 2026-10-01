@@ -612,3 +612,14 @@ func TestHostOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestEventTextChatState(t *testing.T) {
+	for msg, want := range map[string]string{
+		"on SysOp": "Chat with SysOp started",
+		"off":      "Chat ended",
+	} {
+		if got := eventText(admin.Event{Type: admin.EventChatState, Message: msg}); got != want {
+			t.Errorf("eventText(%q) = %q, want %q", msg, got, want)
+		}
+	}
+}

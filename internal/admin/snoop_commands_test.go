@@ -157,3 +157,18 @@ func TestClearPageClearsOutstandingPageOnce(t *testing.T) {
 	srv.ClearPage(3, "caller", "logoff")
 	noEvent(t, ch)
 }
+
+func TestChatStopEmitsNoState(t *testing.T) {
+	srv := newTestServer(ServerConfig{Chat: func(string, int, time.Time, bool) error { return nil }})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := srv.Subscribe(ctx)
+	if _, err := srv.ExecuteAs("jim", AdminCommand{Command: CommandChat, NodeID: 2, Payload: map[string]any{"start": false}}); err != nil {
+		t.Fatal(err)
+	}
+	noEvent(t, ch)
+	srv.ChatEnded(2, "caller")
+	if ev := nextEvent(t, ch); ev.Type != EventChatState || ev.NodeID != 2 || ev.Message != "off" {
+		t.Fatalf("event %+v", ev)
+	}
+}

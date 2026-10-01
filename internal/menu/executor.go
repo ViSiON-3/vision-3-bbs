@@ -132,7 +132,7 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	e.SetServerConfig(serverCfg)
 	e.SetLoginSequence(loginSequence)
 	e.SetProtocols(protocols)
-	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, caller: e.chatCaller})
+	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, caller: e.chatCaller, ended: e.chatEnded})
 	return e
 }
 
@@ -151,6 +151,30 @@ func (e *MenuExecutor) chatCaller(tap *snoop.Tap) (handle string, width, height 
 		return bs.User.Handle, bs.User.ScreenWidth, bs.User.ScreenHeight
 	}
 	return "", 0, 0
+}
+
+// chatEnded tells the WFC consoles, through Pager, that chat on the session
+// carrying tap is over.
+func (e *MenuExecutor) chatEnded(tap *snoop.Tap) {
+	p, ok := e.Pager.(interface {
+		ChatEnded(nodeID int, handle string)
+	})
+	if !ok {
+		return
+	}
+	for _, bs := range e.activeSessions() {
+		if bs.Tap != tap {
+			continue
+		}
+		bs.Mutex.RLock()
+		node, handle := bs.NodeID, ""
+		if bs.User != nil {
+			handle = bs.User.Handle
+		}
+		bs.Mutex.RUnlock()
+		p.ChatEnded(node, handle)
+		return
+	}
 }
 
 // --- Hot Reload Methods ---

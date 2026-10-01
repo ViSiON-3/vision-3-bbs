@@ -1,8 +1,10 @@
 package menu
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,7 +12,9 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
+	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // chatSession is a scripted session carrying a tap. It embeds the concrete
@@ -456,5 +460,59 @@ func TestChatTimeIsCreditedToTimeLimit(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("read after chat did not get the key")
+	}
+}
+
+func TestCallerEndedChatIsReported(t *testing.T) {
+	r := newPromptRig(t)
+	ended := make(chan *snoop.Tap, 1)
+	env := *sysopChat.Load()
+	env.ended = func(tp *snoop.Tap) { ended <- tp }
+	SetSysopChatEnv(env)
+	if err := r.tap.TakeKeyboard("SysOp"); err != nil {
+		t.Fatal(err)
+	}
+	r.openChat(t)
+	r.sess.Send("\x1b\x1b")
+	select {
+	case tp := <-ended:
+		if tp != r.tap {
+			t.Fatal("ended reported for another tap")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("caller-ended chat not reported")
+	}
+	if h := r.tap.KeyboardHolder(); h != "" {
+		t.Fatalf("holder after caller ended chat = %q; want none", h)
+	}
+	if n := r.tap.Inject("SysOp", []byte("ok, bye\r")); n != 0 {
+		t.Fatal("sysop keys reached the caller's prompt after chat")
+	}
+	r.finish(t, "c\r", "abc")
+}
+
+type chatEndPager struct {
+	fakePager
+	mu    sync.Mutex
+	ended []string
+}
+
+func (p *chatEndPager) ChatEnded(node int, handle string) {
+	p.mu.Lock()
+	p.ended = append(p.ended, fmt.Sprintf("%d %s", node, handle))
+	p.mu.Unlock()
+}
+
+func TestExecutorChatEndedNotifiesPager(t *testing.T) {
+	env := newMenuEnv(t)
+	p := &chatEndPager{}
+	env.e.Pager = p
+	tap := snoop.NewTap()
+	t.Cleanup(tap.Close)
+	env.e.SessionRegistry.Register(&session.BbsSession{NodeID: 4, Tap: tap, User: &user.User{Handle: "caller"}})
+	env.e.chatEnded(snoop.NewTap())
+	env.e.chatEnded(tap)
+	if got := strings.Join(p.ended, ","); got != "4 caller" {
+		t.Fatalf("ChatEnded calls = %q, want %q", got, "4 caller")
 	}
 }

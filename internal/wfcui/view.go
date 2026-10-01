@@ -738,6 +738,13 @@ func eventText(ev admin.Event) string {
 		return "Paged sysop: " + msg
 	case admin.EventPageCleared:
 		return "Page " + msg
+	case admin.EventChatState:
+		if sysop, ok := strings.CutPrefix(msg, "on "); ok {
+			return "Chat with " + sysop + " started"
+		}
+		if msg == "off" {
+			return "Chat ended"
+		}
 	}
 	return msg
 }

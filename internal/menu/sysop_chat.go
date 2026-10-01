@@ -27,6 +27,9 @@ type chatEnv struct {
 	// caller returns the logged-in handle and saved screen size of the
 	// session carrying tap; zero values when unknown.
 	caller func(*snoop.Tap) (handle string, width, height int)
+	// ended reports that chat on the session carrying tap is over, however
+	// it ended. May be nil.
+	ended func(*snoop.Tap)
 }
 
 var sysopChat atomic.Pointer[chatEnv]
@@ -270,7 +273,12 @@ func serviceSysopChat(s ssh.Session, ih *editor.InputHandler, tap *snoop.Tap) {
 	if !tap.ChatBegan() {
 		return
 	}
-	defer tap.ChatEnded()
+	defer func() {
+		tap.ChatEnded()
+		if env.ended != nil {
+			env.ended(tap)
+		}
+	}()
 
 	handle, width, height := env.caller(tap)
 	if handle == "" {

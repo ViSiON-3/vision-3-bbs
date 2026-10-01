@@ -302,12 +302,12 @@ func (s *Server) ExecuteAs(sysop string, cmd AdminCommand) (*Result, error) {
 		if err := s.cfg.Chat(sysop, cmd.NodeID, cmd.ConnectedAt, start); err != nil {
 			return nil, err
 		}
-		msg := "off"
+		// The end of chat is reported by ChatEnded, from the caller's
+		// session, however it ended.
 		if start {
-			msg = "on " + sysop
+			handle, _ := s.nodeIdentity(cmd.NodeID, cmd.ConnectedAt)
+			s.emit(Event{Time: timeNow(), Type: EventChatState, NodeID: cmd.NodeID, Handle: handle, Message: "on " + sysop})
 		}
-		handle, _ := s.nodeIdentity(cmd.NodeID, cmd.ConnectedAt)
-		s.emit(Event{Time: timeNow(), Type: EventChatState, NodeID: cmd.NodeID, Handle: handle, Message: msg})
 		return &Result{OK: true}, nil
 	default:
 		return nil, fmt.Errorf("admin: unsupported command: %s", cmd.Command)
@@ -336,6 +336,12 @@ func (s *Server) ClearPage(nodeID int, handle, why string) {
 	s.publishLocked([]Event{{Time: timeNow(), Type: EventPageCleared, NodeID: nodeID, Handle: handle, Message: why}})
 	s.mu.Unlock()
 	slog.Info("page cleared", "node", nodeID, "handle", handle, "why", why)
+}
+
+// ChatEnded tells every console that sysop chat on nodeID is over, whoever
+// ended it.
+func (s *Server) ChatEnded(nodeID int, handle string) {
+	s.emit(Event{Time: timeNow(), Type: EventChatState, NodeID: nodeID, Handle: handle, Message: "off"})
 }
 
 // Consoles reports how many event subscribers (WFC consoles) are attached.
