@@ -229,13 +229,11 @@ func (p *chatPane) backspace() {
 	p.line = p.line[:len(p.line)-1]
 	p.cells -= w
 	p.col -= w
-	for range w {
-		_, _ = io.WriteString(p.w, "\b")
-	}
+	// Position absolutely: after a full-width line the terminal cursor sits
+	// on the last column, not at col, so a relative BS lands one cell short.
+	p.moveTo()
 	_, _ = io.WriteString(p.w, strings.Repeat(" ", w))
-	for range w {
-		_, _ = io.WriteString(p.w, "\b")
-	}
+	p.moveTo()
 }
 
 func (p *chatPane) putRune(r rune) {

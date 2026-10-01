@@ -678,3 +678,28 @@ func TestChatPaneWideRuneStaysInPane(t *testing.T) {
 		t.Fatalf("rows = %q, %q", r2, r3)
 	}
 }
+
+// A pane as wide as the terminal leaves the cursor on the last column after
+// a full line, one short of col. Backspace must still erase the last cell.
+func TestChatPaneBackspaceAtFullWidth(t *testing.T) {
+	for name, parts := range map[string][]string{
+		"same write": {"abcdefghij\b"},
+		"next write": {"abcdefghij", "\b"},
+	} {
+		term := testterm.New(10, 5)
+		p := &chatPane{w: term, first: 1, last: 5, width: 10, row: 1, col: 1}
+		for _, s := range parts {
+			p.put([]byte(s))
+		}
+		if got := term.Row(1); got != "abcdefghi" {
+			t.Errorf("%s: screen row = %q; want abcdefghi", name, got)
+		}
+		if got := string(p.line); got != "abcdefghi" {
+			t.Errorf("%s: buffer = %q; want abcdefghi", name, got)
+		}
+		p.put([]byte("Z"))
+		if got := term.Row(1); got != "abcdefghiZ" {
+			t.Errorf("%s: after retyping row = %q; want abcdefghiZ", name, got)
+		}
+	}
+}
