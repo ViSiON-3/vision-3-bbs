@@ -116,9 +116,8 @@ func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) (
 // wfcSnoopSubsystem serves one wfc-snoop channel. Authorization matches
 // wfc-admin and is re-checked for the life of the channel.
 func wfcSnoopSubsystem(sess ssh.Session) {
-	handle, _ := sess.Context().Value(wfcAdminHandleKey{}).(string)
-	keyBytes, _ := sess.Context().Value(wfcAdminPubKey{}).([]byte)
-	if handle == "" || len(keyBytes) == 0 || !authorizeAdminKey(handle, keyBytes) {
+	handle, keyBytes := wfcStashedIdentity(sess.Context())
+	if handle == "" || !authorizeAdminKey(handle, keyBytes) {
 		slog.Warn("wfc-snoop: access denied", "user", handle, "addr", sess.RemoteAddr())
 		_ = admin.WriteSnoopError(sess, "access denied") // best-effort notice to client
 		return

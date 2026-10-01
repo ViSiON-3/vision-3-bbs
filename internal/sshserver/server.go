@@ -37,6 +37,10 @@ type Config struct {
 	// PublicKeyHandler, when non-nil, is called to authenticate connecting
 	// clients by their public key. Return true to allow access.
 	PublicKeyHandler func(ctx ssh.Context, key ssh.PublicKey) bool
+	// VerifiedPublicKeyCallback, when non-nil, runs only after a client has
+	// signed with a key PublicKeyHandler accepted. The permissions it returns
+	// become the connection's (gossh.ServerConn.Permissions).
+	VerifiedPublicKeyCallback func(conn gossh.ConnMetadata, key gossh.PublicKey, perms *gossh.Permissions, algo string) (*gossh.Permissions, error)
 	// SubsystemHandlers maps SSH subsystem names (e.g. "wfc-admin") to their
 	// handler functions. Clients may request a subsystem via the SSH protocol.
 	SubsystemHandlers map[string]func(ssh.Session)
@@ -89,8 +93,11 @@ func NewServer(cfg Config) (*Server, error) {
 	// (diffie-hellman-group1-sha1, 3des-cbc, hmac-sha1, ssh-rsa)
 	// required by retro BBS clients.
 	legacy := cfg.LegacySSHAlgorithms
+	verified := cfg.VerifiedPublicKeyCallback
 	srv.ServerConfigCallback = func(ctx ssh.Context) *gossh.ServerConfig {
-		sc := &gossh.ServerConfig{}
+		// gliderlabs adds its auth callbacks to this config but leaves
+		// VerifiedPublicKeyCallback alone.
+		sc := &gossh.ServerConfig{VerifiedPublicKeyCallback: verified}
 		if legacy {
 			slog.Debug("SSH legacy algorithms enabled for retro BBS client compatibility")
 			sc.KeyExchanges = []string{

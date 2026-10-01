@@ -41,6 +41,49 @@ type wfcAdminHandleKey struct{}
 // key itself — not just the account — for the life of the session.
 type wfcAdminPubKey struct{}
 
+// wfcKeyFPExt is the connection permissions extension holding the SHA256
+// fingerprint of the key the client signed with.
+const wfcKeyFPExt = "wfc-key-fp"
+
+// wfcVerifiedKey records the fingerprint of a key whose signature verified.
+// x/crypto calls wfcPublicKeyHandler for unsigned queries as well, so the
+// stash alone does not prove the client holds the key.
+func wfcVerifiedKey(_ gossh.ConnMetadata, key gossh.PublicKey, perms *gossh.Permissions, _ string) (*gossh.Permissions, error) {
+	out := &gossh.Permissions{Extensions: map[string]string{}}
+	if perms != nil {
+		out.CriticalOptions = perms.CriticalOptions
+		out.ExtraData = perms.ExtraData
+		for k, v := range perms.Extensions {
+			out.Extensions[k] = v
+		}
+	}
+	out.Extensions[wfcKeyFPExt] = gossh.FingerprintSHA256(key)
+	return out, nil
+}
+
+// wfcStashedIdentity returns the stashed admin handle and key when the
+// connection signed with that same key, and empty values otherwise.
+func wfcStashedIdentity(ctx ssh.Context) (string, []byte) {
+	handle, _ := ctx.Value(wfcAdminHandleKey{}).(string)
+	keyBytes, _ := ctx.Value(wfcAdminPubKey{}).([]byte)
+	if handle == "" || len(keyBytes) == 0 {
+		return "", nil
+	}
+	conn, ok := ctx.Value(ssh.ContextKeyConn).(*gossh.ServerConn)
+	if !ok || conn == nil || conn.Permissions == nil {
+		return "", nil
+	}
+	key, err := gossh.ParsePublicKey(keyBytes)
+	if err != nil {
+		return "", nil
+	}
+	fp := conn.Permissions.Extensions[wfcKeyFPExt]
+	if fp == "" || fp != gossh.FingerprintSHA256(key) {
+		return "", nil
+	}
+	return handle, keyBytes
+}
+
 // wfcPublicKeyHandler is the SSH-level public-key auth handler for admin clients.
 // If the key is registered to a BBS user with sufficient access level, the
 // handle is stashed in the context and the function returns true (allowing the
@@ -138,12 +181,11 @@ func watchAdminAuthorization(ctx context.Context, handle string, interval time.D
 
 // wfcAdminSubsystem handles an SSH "wfc-admin" subsystem session by serving
 // the binary admin RPC protocol over the session stream. Access is re-checked
-// against the stashed handle and public key before any data is exchanged, and
+// against the stashed handle and the key the client signed with before any data is exchanged, and
 // periodically for the life of the session.
 func wfcAdminSubsystem(sess ssh.Session) {
-	handle, _ := sess.Context().Value(wfcAdminHandleKey{}).(string)
-	keyBytes, _ := sess.Context().Value(wfcAdminPubKey{}).([]byte)
-	if handle == "" || len(keyBytes) == 0 || !authorizeAdminKey(handle, keyBytes) {
+	handle, keyBytes := wfcStashedIdentity(sess.Context())
+	if handle == "" || !authorizeAdminKey(handle, keyBytes) {
 		slog.Warn("wfc-admin: subsystem access denied", "user", handle, "addr", sess.RemoteAddr())
 		_, _ = fmt.Fprintf(sess, "access denied\n") // best-effort notice to client
 		return

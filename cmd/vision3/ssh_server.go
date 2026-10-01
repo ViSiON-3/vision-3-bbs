@@ -28,6 +28,7 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 		PasswordHandler:            sshPasswordHandler,
 		KeyboardInteractiveHandler: sshKeyboardInteractiveHandler,
 		PublicKeyHandler:           wfcPublicKeyHandler,
+		VerifiedPublicKeyCallback:  wfcVerifiedKey,
 		SubsystemHandlers: map[string]func(ssh.Session){
 			"wfc-admin": wfcAdminSubsystem,
 			"wfc-snoop": wfcSnoopSubsystem,
