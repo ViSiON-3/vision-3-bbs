@@ -158,6 +158,49 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 		field string
 	}
 	aliases := map[string][]binding{}
+
+	// Locals that hold the whole strings struct, as in
+	//
+	//	th, st := env.theme(), env.strings()
+	//	fmt.Sprintf(st.SysopChatHeader, ...)
+	//
+	// st.Field is then as good as x.Strings().Field.
+	holders := map[string]bool{}
+	ast.Inspect(body, func(n ast.Node) bool {
+		if _, isClosure := n.(*ast.FuncLit); isClosure {
+			return false
+		}
+		assign, ok := n.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for i, lhs := range assign.Lhs {
+			id, ok := lhs.(*ast.Ident)
+			if !ok || i >= len(assign.Rhs) {
+				continue
+			}
+			call, ok := assign.Rhs[i].(*ast.CallExpr)
+			if !ok || len(call.Args) != 0 {
+				continue
+			}
+			if fn, ok := call.Fun.(*ast.SelectorExpr); ok && (fn.Sel.Name == "strings" || fn.Sel.Name == "Strings") {
+				holders[id.Name] = true
+			}
+		}
+		return true
+	})
+	stringsField := func(expr ast.Expr) (string, bool) {
+		if field, ok := stringsFieldName(expr); ok {
+			return field, true
+		}
+		if sel, ok := expr.(*ast.SelectorExpr); ok {
+			if id, ok := sel.X.(*ast.Ident); ok && holders[id.Name] {
+				return sel.Sel.Name, true
+			}
+		}
+		return "", false
+	}
+
 	ast.Inspect(body, func(n ast.Node) bool {
 		if _, isClosure := n.(*ast.FuncLit); isClosure {
 			// A closure is its own function: scanCallSites visits it
@@ -174,7 +217,7 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 			if !ok || i >= len(assign.Rhs) {
 				continue
 			}
-			if field, ok := stringsFieldName(assign.Rhs[i]); ok {
+			if field, ok := stringsField(assign.Rhs[i]); ok {
 				aliases[id.Name] = append(aliases[id.Name], binding{assign.Pos(), field})
 			}
 		}
@@ -217,7 +260,7 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 		}
 
 		var fields []string
-		if field, ok := stringsFieldName(call.Args[at]); ok {
+		if field, ok := stringsField(call.Args[at]); ok {
 			fields = []string{field}
 		} else if id, ok := call.Args[at].(*ast.Ident); ok {
 			if field, ok := nearestField(id.Name, call.Pos()); ok {
