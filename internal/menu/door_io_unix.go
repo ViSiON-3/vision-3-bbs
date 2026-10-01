@@ -50,6 +50,25 @@ func pollableDoorFile(f *os.File) *os.File {
 	return nf
 }
 
+// doorSocketpair creates the socket pair a SOCKET I/O door talks over, with
+// both ends close-on-exec. The door's end reaches it only as ExtraFiles fd 3,
+// which exec clears the flag on. Without the flag, every door started on any
+// node while the pair exists would inherit both ends, handing one caller's
+// session to another node's door; DROPFILE.INI requires a POSIX host to keep
+// other sessions' descriptors out of a door this way. ForkLock is held so no
+// fork lands between creating the pair and marking it.
+func doorSocketpair() ([2]int, error) {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return fds, err
+	}
+	syscall.CloseOnExec(fds[0])
+	syscall.CloseOnExec(fds[1])
+	return fds, nil
+}
+
 // withRawFD runs fn with f's descriptor. Unlike f.Fd it leaves f in
 // non-blocking mode, so deadlines keep working on a pollableDoorFile.
 func withRawFD(f *os.File, fn func(fd int)) error {
