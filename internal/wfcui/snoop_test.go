@@ -3,6 +3,7 @@ package wfcui
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -520,5 +521,92 @@ func TestSnoopChatEndedByCallerDropsToWatch(t *testing.T) {
 	}
 	if c := r.ctl.got(); c != "type+,chat+,chat-" {
 		t.Fatalf("calls %s", c)
+	}
+}
+
+// sizedRaw is a terminal whose size the test changes.
+type sizedRaw struct {
+	mu   sync.Mutex
+	w, h int
+}
+
+func (f *sizedRaw) MakeRaw() (func(), error) { return func() {}, nil }
+
+func (f *sizedRaw) Size() (int, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.w, f.h, nil
+}
+
+func (f *sizedRaw) set(w, h int) {
+	f.mu.Lock()
+	f.w, f.h = w, h
+	f.mu.Unlock()
+}
+
+func newResizeRig(t *testing.T, raw *sizedRaw) *snoopRig {
+	t.Helper()
+	a, server := net.Pipe()
+	t.Cleanup(func() { server.Close() })
+	r := &snoopRig{server: server, out: &syncBuf{}, ctl: &fakeCtl{}, done: make(chan error, 1)}
+	inR, inW := io.Pipe()
+	t.Cleanup(func() { inW.Close() })
+	r.in = inW
+	r.cmd = newSnoopCmd(admin.NewSnoopStream(utf8Hdr, a), r.ctl, 3, raw)
+	r.cmd.SetStdin(inR)
+	r.cmd.SetStdout(r.out)
+	r.cmd.resize = make(chan struct{}, 1)
+	go func() { r.done <- r.cmd.Run() }()
+	return r
+}
+
+func TestSnoopResizeShowsBarOnTallerTerminal(t *testing.T) {
+	raw := &sizedRaw{w: 80, h: utf8Hdr.Height}
+	r := newResizeRig(t, raw)
+	_, _ = r.server.Write([]byte("hi"))
+	r.out.waitFor(t, "hi")
+	if strings.Contains(r.out.String(), "NODE 3") {
+		t.Fatal("bar drawn on a terminal with no spare row")
+	}
+	raw.set(100, utf8Hdr.Height+10)
+	r.cmd.resize <- struct{}{}
+	r.out.waitFor(t, fmt.Sprintf("\x1b[%d;1H\x1b[0;30;47m", utf8Hdr.Height+10))
+	r.send(t, "\x1bx")
+	r.wait(t)
+}
+
+func TestSnoopResizeHidesAndClearsBarOnShorterTerminal(t *testing.T) {
+	raw := &sizedRaw{w: 100, h: utf8Hdr.Height + 10}
+	r := newResizeRig(t, raw)
+	r.out.waitFor(t, "NODE 3")
+	raw.set(80, utf8Hdr.Height)
+	r.cmd.resize <- struct{}{}
+	r.out.waitFor(t, fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", utf8Hdr.Height+10))
+	n := strings.Count(r.out.String(), "NODE 3")
+	_, _ = r.server.Write([]byte("more"))
+	r.out.waitFor(t, "more")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if got := strings.Count(r.out.String(), "NODE 3"); got != n {
+		t.Fatal("bar redrawn on a terminal with no spare row")
+	}
+}
+
+func TestSnoopResizeKeepsSysopToggle(t *testing.T) {
+	raw := &sizedRaw{w: 100, h: utf8Hdr.Height + 10}
+	r := newResizeRig(t, raw)
+	r.out.waitFor(t, "NODE 3")
+	r.send(t, "\x1bh")
+	r.out.waitFor(t, "\x1b[2K")
+	raw.set(100, utf8Hdr.Height+12)
+	r.cmd.resize <- struct{}{}
+	time.Sleep(50 * time.Millisecond)
+	n := strings.Count(r.out.String(), "NODE 3")
+	_, _ = r.server.Write([]byte("more"))
+	r.out.waitFor(t, "more")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if got := strings.Count(r.out.String(), "NODE 3"); got != n {
+		t.Fatal("resize re-enabled a bar the sysop hid")
 	}
 }

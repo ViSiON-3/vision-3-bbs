@@ -309,8 +309,11 @@ toggles it.
 | `Alt-C` | Start or end chat (see below) |
 
 If the caller disconnects, `wfc` returns to the dashboard with
-`node N disconnected`. Your terminal size is read when the snoop opens; resizing
-during a snoop is not tracked.
+`node N disconnected`. The status bar follows your terminal size: it shows when
+the terminal is taller than the caller's screen and moves to the new last row
+when you resize. `Alt-H` overrides the size rule until you leave the snoop.
+Resize tracking needs a Unix terminal; on Windows the size is read once when the
+snoop opens.
 
 The caller is not told they are being watched. Attach and detach are written
 to the BBS log with your handle.

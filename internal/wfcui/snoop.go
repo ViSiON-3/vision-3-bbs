@@ -71,16 +71,21 @@ type snoopCmd struct {
 	// openIn wraps stdin in a reader whose pending read can be canceled.
 	openIn func(io.Reader) (cancelreader.CancelReader, error)
 
-	mu       sync.Mutex // guards stdout, mode, statusOn, lastErr
-	mode     string
-	statusOn bool
-	lastErr  string
-	w, h     int // sysop terminal size
+	// resize delivers terminal size changes; nil means watch SIGWINCH.
+	resize chan struct{}
+
+	mu           sync.Mutex // guards stdout, mode, statusOn, lastErr, w, h, bar state
+	mode         string
+	statusOn     bool
+	statusManual bool // the sysop toggled the bar, so size no longer decides
+	lastErr      string
+	w, h         int // sysop terminal size
 
 	startChat bool // begin in chat, as when answering a page
 
 	typeBeforeChat bool // type-in was on when chat started
-	erasePending   bool // bar hidden but its row not yet cleared
+	barRow         int  // row the bar was last drawn on, 0 if none
+	eraseRow       int  // row to clear at the next safe point, 0 if none
 	track          seqTracker
 
 	result snoopResult
@@ -145,6 +150,13 @@ func (c *snoopCmd) Run() error {
 	if err != nil {
 		cr = plainReader{c.stdin}
 	}
+	var resize <-chan struct{} = c.resize
+	if c.resize == nil {
+		ch, stop := watchResize()
+		defer stop()
+		resize = ch
+	}
+
 	done := make(chan struct{})
 	in := make(chan byte)
 	inEnd := make(chan struct{})
@@ -153,6 +165,8 @@ func (c *snoopCmd) Run() error {
 		defer close(readerGone)
 		c.readStdin(cr, in, inEnd, done)
 	}()
+
+	go c.followResize(resize, done)
 
 	reason := c.loop(in, inEnd, outDone)
 
@@ -185,6 +199,44 @@ func (c *snoopCmd) Run() error {
 	_, _ = io.WriteString(c.stdout, "\x1b[r\x1b[0m\x1b[2J")
 	c.mu.Unlock()
 	return nil
+}
+
+// followResize re-reads the terminal size on each resize event until done
+// closes.
+func (c *snoopCmd) followResize(resize <-chan struct{}, done <-chan struct{}) {
+	for {
+		select {
+		case <-resize:
+			c.onResize()
+		case <-done:
+			return
+		}
+	}
+}
+
+// onResize adopts the new terminal size. The bar follows the default
+// visibility rule unless the sysop toggled it, moves to the new last row,
+// and the row it left is cleared.
+func (c *snoopCmd) onResize() {
+	w, h, err := c.raw.Size()
+	if err != nil || w <= 0 || h <= 0 {
+		return
+	}
+	c.mu.Lock()
+	if w == c.w && h == c.h {
+		c.mu.Unlock()
+		return
+	}
+	c.w, c.h = w, h
+	if !c.statusManual {
+		c.statusOn = h > c.st.Header.Height
+	}
+	if c.barRow != 0 && (!c.statusOn || c.barRow != h) {
+		c.eraseRow = c.barRow
+		c.barRow = 0
+	}
+	c.mu.Unlock()
+	c.drawStatus()
 }
 
 // readStdin sends stdin bytes to in until done closes or stdin ends.
@@ -372,7 +424,11 @@ func lostKeyboard(err error) bool {
 func (c *snoopCmd) toggleStatus() {
 	c.mu.Lock()
 	c.statusOn = !c.statusOn
-	c.erasePending = !c.statusOn
+	c.statusManual = true
+	if !c.statusOn && c.barRow != 0 {
+		c.eraseRow = c.barRow
+		c.barRow = 0
+	}
 	c.mu.Unlock()
 	c.drawStatus()
 }
@@ -402,9 +458,9 @@ func (c *snoopCmd) drawStatus() {
 	if !c.track.safe() || c.h <= 0 || c.w <= 0 {
 		return
 	}
-	if c.erasePending {
-		c.erasePending = false
-		_, _ = fmt.Fprintf(c.stdout, "\x1b7\x1b[%d;1H\x1b[0m\x1b[2K\x1b8", c.h)
+	if c.eraseRow != 0 {
+		_, _ = fmt.Fprintf(c.stdout, "\x1b7\x1b[%d;1H\x1b[0m\x1b[2K\x1b8", c.eraseRow)
+		c.eraseRow = 0
 	}
 	if !c.statusOn {
 		return
@@ -421,6 +477,7 @@ func (c *snoopCmd) drawStatus() {
 	}
 	text = string(r) + strings.Repeat(" ", c.w-len(r))
 	_, _ = fmt.Fprintf(c.stdout, "\x1b7\x1b[%d;1H\x1b[0;30;47m%s\x1b[0m\x1b8", c.h, text)
+	c.barRow = c.h
 }
 
 // seqTracker follows the caller's output to tell when it is between escape
