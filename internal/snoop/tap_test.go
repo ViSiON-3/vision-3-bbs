@@ -168,3 +168,29 @@ func TestSetTransferLeavesDoorAndTeleconfMode(t *testing.T) {
 		}
 	}
 }
+
+func TestResyncClearsScreenFirst(t *testing.T) {
+	tp := NewTap()
+	w := tp.Attach()
+	for i := 0; i < watcherQueue+1; i++ {
+		tp.Output([]byte("x"))
+	}
+	first := <-w.C()
+	if !bytes.HasPrefix(first, []byte("\x1b[2J\x1b[H")) {
+		t.Fatalf("resync snapshot = %q; want it to start with clear and home", first[:min(len(first), 12)])
+	}
+}
+
+func TestResyncKeepsOwnClearScreen(t *testing.T) {
+	tp := NewTap()
+	w := tp.Attach()
+	tp.Output([]byte("\x1b[2Jscreen"))
+	<-w.C()
+	for i := 0; i < watcherQueue+1; i++ {
+		tp.Output([]byte("x"))
+	}
+	first := <-w.C()
+	if !bytes.HasPrefix(first, []byte("\x1b[2Jscreen")) {
+		t.Fatalf("resync snapshot = %q; want the buffer's own clear first", first[:min(len(first), 12)])
+	}
+}

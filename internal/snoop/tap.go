@@ -1,6 +1,9 @@
 package snoop
 
-import "sync"
+import (
+	"bytes"
+	"sync"
+)
 
 // Mode is what the caller's session is doing, as far as snoop cares.
 type Mode int
@@ -84,6 +87,11 @@ func (t *Tap) resync(w *Watcher) {
 		break
 	}
 	snap, _ := t.buf.snapshot()
+	if !bytes.HasPrefix(snap, clearScreen) {
+		// The queue held the rest of the old screen. Start the snapshot on
+		// a clean one.
+		snap = append([]byte("\x1b[2J\x1b[H"), snap...)
+	}
 	w.ch <- snap
 }
 
