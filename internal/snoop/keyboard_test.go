@@ -2,6 +2,7 @@ package snoop
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -451,6 +452,57 @@ func TestChatEndedReportsNothingWhenHolderEnds(t *testing.T) {
 	}
 	if dropped, _, _ := tp.ChatEnded(); dropped != "" {
 		t.Fatalf("dropped = %q after the holder ended chat", dropped)
+	}
+}
+
+func TestChatBeganRefusedWhenCallerLeftBBS(t *testing.T) {
+	tp := newWatchedTap("a")
+	go func() {
+		<-tp.BreakIn()
+		tp.SetMode(ModeDoor)
+		if tp.ChatBegan() {
+			t.Error("ChatBegan accepted after the caller entered a door")
+		}
+	}()
+	start := time.Now()
+	started, err := tp.RequestChat("a", 5*time.Second)
+	if !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "door") {
+		t.Fatalf("err = %v, want ErrBusy naming the door", err)
+	}
+	if started {
+		t.Fatal("started with an error")
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("refusal took %v; RequestChat waited for the timeout", time.Since(start))
+	}
+	if tp.Chatting() || tp.Chats() != 0 {
+		t.Fatal("a chat opened")
+	}
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q; the request's keyboard was not released", h)
+	}
+	select {
+	case <-tp.BreakIn():
+		t.Fatal("break-in still pending")
+	default:
+	}
+}
+
+func TestChatBeganRefusalKeepsTypeInHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		<-tp.BreakIn()
+		tp.SetMode(ModeTransfer)
+		tp.ChatBegan()
+	}()
+	if _, err := tp.RequestChat("a", 5*time.Second); !errors.Is(err, ErrBusy) {
+		t.Fatalf("err = %v, want ErrBusy", err)
+	}
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder = %q; want the earlier type-in hold kept", h)
 	}
 }
 

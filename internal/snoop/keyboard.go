@@ -39,6 +39,9 @@ type keyboard struct {
 	// caller left it) drops the keyboard, so the sysop's next keys are
 	// discarded rather than typed at the caller's prompt.
 	holderEnded bool
+	// refused is why ChatBegan turned down the pending request; RequestChat
+	// returns it.
+	refused error
 }
 
 func (k *keyboard) init() {
@@ -167,6 +170,7 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 		t.mu.Unlock()
 		return false, nil
 	}
+	t.kb.refused = nil
 	tookIt := t.kb.holder == ""
 	t.kb.take(handle)
 	t.kb.holderEnded = false
@@ -185,6 +189,12 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 
 	select {
 	case <-began:
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if err := t.kb.refused; err != nil {
+			t.kb.refused = nil
+			return false, err
+		}
 		return true, nil
 	case <-t.done:
 		return false, ErrTapClosed
@@ -211,11 +221,28 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 
 // ChatBegan is called by the session when it is ready to open chat. It
 // returns false, and changes nothing, when no request is pending (the
-// request timed out first); the session must then not open chat.
+// request timed out first); the session must then not open chat. It also
+// refuses when the caller has left the BBS (door, transfer) since the
+// request, and wakes RequestChat with the reason.
 func (t *Tap) ChatBegan() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.kb.began == nil {
+		return false
+	}
+	if t.mode != ModeBBS {
+		t.kb.refused = fmt.Errorf("%w: in a %s", ErrBusy, t.mode)
+		select {
+		case <-t.kb.breakIn:
+		default:
+		}
+		if t.kb.chatTook != "" && t.kb.holder == t.kb.chatTook {
+			t.kb.drop()
+		}
+		t.kb.chatTook = ""
+		t.stopChatLocked()
+		close(t.kb.began)
+		t.kb.began = nil
 		return false
 	}
 	t.kb.chatting = true
