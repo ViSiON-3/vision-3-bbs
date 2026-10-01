@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -97,6 +98,17 @@ var sessionOutputModes sync.Map
 // with the same encoding the terminal is using for output.
 func SetSessionOutputMode(s ssh.Session, mode ansi.OutputMode) {
 	sessionOutputModes.Store(s, mode)
+	if t := tapOf(s); t != nil {
+		t.SetCP437(mode == ansi.OutputModeCP437)
+	}
+}
+
+// tapOf returns the snoop tap carried by s, or nil.
+func tapOf(s ssh.Session) *snoop.Tap {
+	if tp, ok := s.(snoop.Tapped); ok {
+		return tp.Tap()
+	}
+	return nil
 }
 
 // sessionOutputMode returns the recorded output mode for s, defaulting to

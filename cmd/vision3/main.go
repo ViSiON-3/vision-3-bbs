@@ -38,6 +38,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
@@ -852,6 +853,11 @@ func (ct *ConnectionTracker) StopWatching() {
 // --- BBS sessionHandler (Original logic) ---
 func sessionHandler(s ssh.Session) {
 	nodeID := allocateNodeIDForSession(s)
+	tap := snoop.NewTap()
+	defer tap.Close()
+	if ts, ok := s.(interface{ SetTap(*snoop.Tap) }); ok {
+		ts.SetTap(tap)
+	}
 	remoteAddr := s.RemoteAddr().String()
 
 	// Extract session ID if available (type-specific)
@@ -1188,6 +1194,7 @@ func sessionHandler(s ssh.Session) {
 	sessionStartTime := time.Now()
 
 	bbsSession = &session.BbsSession{
+		Tap:          tap,
 		NodeID:       int(nodeID),
 		StartTime:    sessionStartTime,
 		LastActivity: sessionStartTime,
