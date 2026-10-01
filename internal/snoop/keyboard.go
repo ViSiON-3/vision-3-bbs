@@ -246,19 +246,26 @@ func drain(ch chan []byte) {
 // ChatEnded is called by the session after chat has closed and the screen
 // has been restored. The keyboard is released, so the sysop's next keys do
 // not land on the caller's prompt as type-in, unless the holder ended the
-// chat and already had type-in before it.
-func (t *Tap) ChatEnded() {
+// chat and already had type-in before it. It returns the handle of a
+// pre-chat type-in hold it dropped, with that hold's duration and injected
+// byte count, so the caller can audit it; dropped is empty otherwise.
+func (t *Tap) ChatEnded() (dropped string, held time.Duration, injected int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.kb.chatting = false
 	switch {
 	case !t.kb.holderEnded && t.kb.holder != "":
-		t.kb.drop()
+		dropped = t.kb.holder
+		if t.kb.chatTook == dropped {
+			dropped = "" // taken for the chat, never used for type-in
+		}
+		held, injected = t.kb.drop()
 	case t.kb.chatTook != "" && t.kb.holder == t.kb.chatTook:
 		t.kb.drop()
 	}
 	t.kb.chatTook = ""
 	t.kb.holderEnded = false
+	return dropped, held, injected
 }
 
 // EndChat is closed when the sysop ends chat or drops the keyboard.

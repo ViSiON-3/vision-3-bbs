@@ -30,6 +30,9 @@ type chatEnv struct {
 	// ended reports that chat on the session carrying tap is over, however
 	// it ended. May be nil.
 	ended func(*snoop.Tap)
+	// holdDropped audits a type-in hold that ended with the chat because the
+	// caller ended it. May be nil.
+	holdDropped func(tap *snoop.Tap, sysop string, held time.Duration, injected int)
 }
 
 var sysopChat atomic.Pointer[chatEnv]
@@ -274,7 +277,11 @@ func serviceSysopChat(s ssh.Session, ih *editor.InputHandler, tap *snoop.Tap) {
 		return
 	}
 	defer func() {
-		tap.ChatEnded()
+		if dropped, held, n := tap.ChatEnded(); dropped != "" {
+			if env.holdDropped != nil {
+				env.holdDropped(tap, dropped, held, n)
+			}
+		}
 		if env.ended != nil {
 			env.ended(tap)
 		}

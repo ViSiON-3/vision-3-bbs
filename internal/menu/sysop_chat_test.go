@@ -516,3 +516,34 @@ func TestExecutorChatEndedNotifiesPager(t *testing.T) {
 		t.Fatalf("ChatEnded calls = %q, want %q", got, "4 caller")
 	}
 }
+
+func TestCallerEndedChatAuditsDroppedTypeIn(t *testing.T) {
+	r := newPromptRig(t)
+	type drop struct {
+		sysop string
+		held  time.Duration
+		n     int
+	}
+	dropped := make(chan drop, 1)
+	env := *sysopChat.Load()
+	env.holdDropped = func(tp *snoop.Tap, sysop string, held time.Duration, n int) {
+		dropped <- drop{sysop, held, n}
+	}
+	SetSysopChatEnv(env)
+	if err := r.tap.TakeKeyboard("SysOp"); err != nil {
+		t.Fatal(err)
+	}
+	if n := r.tap.Inject("SysOp", []byte("ab")); n != 2 {
+		t.Fatalf("Inject = %d", n)
+	}
+	r.openChat(t)
+	r.sess.Send("\x1b\x1b")
+	select {
+	case d := <-dropped:
+		if d.sysop != "SysOp" || d.n != 2 || d.held <= 0 {
+			t.Fatalf("audit = %+v", d)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("dropped type-in hold not audited")
+	}
+}

@@ -413,3 +413,43 @@ func TestChatsCountsStartedChats(t *testing.T) {
 		t.Fatalf("chats %d, want 1", tp.Chats())
 	}
 }
+
+func TestChatEndedReportsHoldDroppedWhenCallerEnds(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	if n := tp.Inject("a", []byte("hello")); n != 5 {
+		t.Fatalf("Inject = %d", n)
+	}
+	beginChat(t, tp, "a")
+	dropped, held, injected := tp.ChatEnded()
+	if dropped != "a" || injected != 5 || held <= 0 {
+		t.Fatalf("ChatEnded = %q, %v, %d; want a, >0, 5", dropped, held, injected)
+	}
+}
+
+func TestChatEndedReportsNothingForChatOnlyHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	beginChat(t, tp, "a") // RequestChat took the free keyboard
+	if dropped, _, _ := tp.ChatEnded(); dropped != "" {
+		t.Fatalf("dropped = %q for a hold taken only for chat", dropped)
+	}
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q", h)
+	}
+}
+
+func TestChatEndedReportsNothingWhenHolderEnds(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	beginChat(t, tp, "a")
+	if err := tp.StopChat("a"); err != nil {
+		t.Fatal(err)
+	}
+	if dropped, _, _ := tp.ChatEnded(); dropped != "" {
+		t.Fatalf("dropped = %q after the holder ended chat", dropped)
+	}
+}

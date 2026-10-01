@@ -132,7 +132,7 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	e.SetServerConfig(serverCfg)
 	e.SetLoginSequence(loginSequence)
 	e.SetProtocols(protocols)
-	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, caller: e.chatCaller, ended: e.chatEnded})
+	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, caller: e.chatCaller, ended: e.chatEnded, holdDropped: e.chatHoldDropped})
 	return e
 }
 
@@ -175,6 +175,22 @@ func (e *MenuExecutor) chatEnded(tap *snoop.Tap) {
 		p.ChatEnded(node, handle)
 		return
 	}
+}
+
+// chatHoldDropped logs the end of a type-in hold that the caller's end of
+// chat dropped. It records no keystrokes.
+func (e *MenuExecutor) chatHoldDropped(tap *snoop.Tap, sysop string, held time.Duration, injected int) {
+	node := 0
+	for _, bs := range e.activeSessions() {
+		if bs.Tap == tap {
+			bs.Mutex.RLock()
+			node = bs.NodeID
+			bs.Mutex.RUnlock()
+			break
+		}
+	}
+	slog.Info("wfc-snoop: type-in off", "sysop", sysop, "node", node,
+		"duration", held.Round(time.Second), "bytes", injected)
 }
 
 // --- Hot Reload Methods ---
