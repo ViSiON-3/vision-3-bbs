@@ -339,8 +339,8 @@ own. Pane colors come from `chatSysopColor` and `chatUserColor` in
 [`theme.json`](../menus/menu-system.md#theme-themejson).
 
 Chat works only while the caller is in the BBS: menus, prompts, the message
-reader, the editor. It is refused while they are in a door or a file transfer,
-and the reason shows in your status bar. Watching and type-in still work there.
+reader, the editor. It is refused while they are in a door, a file transfer or
+the teleconference (`CHAT`), and the reason shows in your status bar. Watching and type-in still work there.
 Chat opens as soon as the caller's session is waiting for a key. If that takes
 more than 3 seconds the request is refused.
 
@@ -351,8 +351,15 @@ If more than 64 KiB was drawn since their last clear-screen it cannot be
 restored, and they see `[back from chat, press Enter]`.
 
 Chat time is not charged to the caller's time limit, and the idle timeout is
-paused. If you were typing for the caller before chat, you return to type-in
-afterwards; otherwise to watching.
+paused. If you end chat with `Alt-C` and were typing for the caller before it,
+you return to type-in; otherwise to watching.
+
+When the caller ends chat with `Esc` `Esc`, you lose the keyboard, including a
+type-in you had before chat. Anything you type after that is thrown away
+rather than landing on the caller's prompt. The snoop screen still shows
+`CHAT` until you press `Alt-C`, which returns you to watching with "chat ended
+by caller" in the status bar. The event log shows "Chat with <sysop> started"
+and "Chat ended" for each chat.
 
 ### Pages
 
