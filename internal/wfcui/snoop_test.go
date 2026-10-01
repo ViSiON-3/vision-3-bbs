@@ -434,3 +434,38 @@ func TestSnoopResultCarriesNodeWhenRawFails(t *testing.T) {
 		t.Fatalf("node %d", cmd.Result().node)
 	}
 }
+
+func TestSeqTrackerRecovers(t *testing.T) {
+	var tr seqTracker
+	tr.feed([]byte("\x1b]0;title"))
+	if tr.safe() {
+		t.Fatal("inside an OSC")
+	}
+	tr.feed([]byte("\x1b[31m"))
+	if !tr.safe() {
+		t.Fatal("ESC [ did not abort the OSC and complete a CSI")
+	}
+	tr.feed([]byte("\x1b[3"))
+	tr.feed([]byte{0x18})
+	if !tr.safe() {
+		t.Fatal("CAN did not end the CSI")
+	}
+	tr.feed(append([]byte("\x1b]"), bytes.Repeat([]byte("x"), maxOSC+1)...))
+	if !tr.safe() {
+		t.Fatal("overlong OSC did not recover")
+	}
+}
+
+func TestSnoopBarRedrawsAfterUnterminatedOSC(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 40)
+	_, _ = r.server.Write([]byte("\x1b]0;stuck"))
+	r.out.waitFor(t, "stuck")
+	_, _ = r.server.Write([]byte("\x1b[31mtext"))
+	r.out.waitFor(t, "text")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	out := r.out.String()
+	if !strings.Contains(out[strings.Index(out, "text"):], "NODE 3") {
+		t.Fatal("bar not redrawn after the OSC was abandoned")
+	}
+}

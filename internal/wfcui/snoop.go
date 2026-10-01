@@ -369,6 +369,7 @@ func (c *snoopCmd) drawStatus() {
 // sequences and complete UTF-8 characters.
 type seqTracker struct {
 	state int
+	osc   int    // bytes seen in the current OSC
 	tail  []byte // trailing bytes of the last chunk, for rune completeness
 }
 
@@ -383,47 +384,66 @@ const (
 
 func (t *seqTracker) feed(p []byte) {
 	for _, b := range p {
-		switch t.state {
-		case stGround:
-			if b == 0x1b {
-				t.state = stEsc
-			}
-		case stEsc:
-			switch b {
-			case '[':
-				t.state = stCSI
-			case ']':
-				t.state = stOSC
-			case '(', ')':
-				t.state = stCharset
-			case 0x1b:
-			default:
-				t.state = stGround
-			}
-		case stCharset:
-			t.state = stGround
-		case stCSI:
-			if b >= 0x40 && b <= 0x7e {
-				t.state = stGround
-			}
-		case stOSC:
-			switch b {
-			case 0x07:
-				t.state = stGround
-			case 0x1b:
-				t.state = stOSCEsc
-			}
-		case stOSCEsc:
-			if b == '\\' {
-				t.state = stGround
-			} else {
-				t.state = stOSC
-			}
-		}
+		t.step(b)
 	}
 	t.tail = append(t.tail, p...)
 	if len(t.tail) > utf8.UTFMax {
 		t.tail = append(t.tail[:0], t.tail[len(t.tail)-utf8.UTFMax:]...)
+	}
+}
+
+// maxOSC bounds an operating system command; past it the tracker gives up
+// and returns to ground.
+const maxOSC = 512
+
+func (t *seqTracker) step(b byte) {
+	if b == 0x18 || b == 0x1a { // CAN and SUB abort any sequence
+		t.state = stGround
+		return
+	}
+	switch t.state {
+	case stGround:
+		if b == 0x1b {
+			t.state = stEsc
+		}
+	case stEsc:
+		switch b {
+		case '[':
+			t.state = stCSI
+		case ']':
+			t.state = stOSC
+			t.osc = 0
+		case '(', ')':
+			t.state = stCharset
+		case 0x1b:
+		default:
+			t.state = stGround
+		}
+	case stCharset:
+		t.state = stGround
+	case stCSI:
+		if b >= 0x40 && b <= 0x7e {
+			t.state = stGround
+		}
+	case stOSC:
+		switch b {
+		case 0x07:
+			t.state = stGround
+		case 0x1b:
+			t.state = stOSCEsc
+		default:
+			if t.osc++; t.osc > maxOSC {
+				t.state = stGround
+			}
+		}
+	case stOSCEsc:
+		if b == '\\' {
+			t.state = stGround
+			return
+		}
+		// Any other byte aborts the OSC and is read as the byte after ESC.
+		t.state = stEsc
+		t.step(b)
 	}
 }
 
