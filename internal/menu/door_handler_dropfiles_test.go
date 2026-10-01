@@ -285,6 +285,11 @@ func TestDropfileIniPath(t *testing.T) {
 		{"line separator", "/tmp/a\u2028b", ""},
 		{"bidi override", "/tmp/\u202eb", ""},
 		{"trailing space", "/tmp/a ", ""},
+		{"leading tab", "\t/tmp/a", ""},
+		// Only space and tab are whitespace to the spec: a name ending in an
+		// em space or ideographic space is kept.
+		{"unicode space kept", "/tmp/a\u2003", "/tmp/a\u2003"},
+		{"ideographic space kept", "/tmp/\u3000a", "/tmp/\u3000a"},
 		{"empty", "", ""},
 	}
 	for _, tt := range tests {

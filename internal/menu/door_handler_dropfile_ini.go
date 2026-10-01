@@ -112,7 +112,9 @@ func dropfileIniASCII(key, val string) string {
 // contains a control character or surrounding whitespace, or doesn't fit
 // the line limit for key, is left out.
 func dropfileIniPath(key, val string) string {
-	if val == "" || len(val) > dropfileIniMaxLine-len(key)-1 || strings.TrimSpace(val) != val {
+	// Whitespace here is the spec's: ASCII space and tab only. Other Unicode
+	// spaces are ordinary characters in a file name.
+	if val == "" || len(val) > dropfileIniMaxLine-len(key)-1 || strings.Trim(val, " \t") != val {
 		return ""
 	}
 	for i := 0; i < len(val); i++ {
