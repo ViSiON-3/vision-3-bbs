@@ -19,6 +19,7 @@ func TestJoinBinkpHostPort(t *testing.T) {
 		{"203.0.113.5", 24556, "203.0.113.5:24556"},
 		{"2001:db8::1", 0, "[2001:db8::1]:24554"},
 		{"[2001:db8::1]", 24556, "[2001:db8::1]:24556"},
+		{"::ffff:192.0.2.1", 0, "[::ffff:192.0.2.1]:24554"}, // IPv4-mapped, still colon syntax
 		{" hub.example ", 1, "hub.example:1"},
 	} {
 		if got := JoinBinkpHostPort(tc.host, tc.port); got != tc.want {

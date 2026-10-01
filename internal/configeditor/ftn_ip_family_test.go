@@ -112,7 +112,8 @@ func TestFTNLinkIPFamily_AdoptsAHandAddedFlag(t *testing.T) {
 	}
 	m.dirty = true // seeded directly, so nothing has marked it for saving
 	saveAndQuit(t, m)
-	const handFixed = "node 1337:3/100@tqwnet -4 hub.example:24554 pw\n"
+	// The domain written in other case is the same domain to binkd.
+	const handFixed = "node 1337:3/100@TQWNet -4 hub.example:24554 pw\n"
 	writeBinkdConf(t, dir, handFixed)
 
 	m2, err := New(dir)

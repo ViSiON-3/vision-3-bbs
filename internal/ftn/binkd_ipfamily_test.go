@@ -78,6 +78,38 @@ func TestSyncBinkdConfAddressFamily(t *testing.T) {
 	}
 }
 
+// binkd matches the "node" keyword and a node's address case-insensitively,
+// so a hand-written line in other case is still that link's line: synced in
+// place, never duplicated, and its flag read back.
+func TestBinkdNodeLineMatchingIgnoresCase(t *testing.T) {
+	const hand = "NODE 21:1/100@TQWNet -4 hub.example:24554 pw\n"
+	p := writeConf(t, hand)
+	links := map[string]BinkdLinkSync{
+		"21:1/100@tqwnet": {SessionPwd: "pw", HostPort: "hub.example:24554", IPFamily: config.IPFamilyIPv4, IPFamilyAuthoritative: true},
+	}
+	if err := SyncBinkdConf(p, BinkdIdentity{}, links); err != nil {
+		t.Fatal(err)
+	}
+	got := readConf(t, p)
+	if n := strings.Count(strings.ToLower(got), "21:1/100@tqwnet"); n != 1 {
+		t.Errorf("binkd.conf has %d lines for the node, want 1:\n%s", n, got)
+	}
+	if !strings.Contains(got, "-4") {
+		t.Errorf("binkd.conf lost the -4:\n%s", got)
+	}
+
+	fams, err := ReadBinkdIPFamilies(writeConf(t, hand))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fams["21:1/100@tqwnet"] != config.IPFamilyIPv4 {
+		t.Errorf("ReadBinkdIPFamilies() = %v, want the lower-cased address mapped to ipv4", fams)
+	}
+	if !nodeExists(hand, "21:1/100@tqwnet") {
+		t.Error("nodeExists missed the mixed-case line")
+	}
+}
+
 func TestSyncBinkdConfAppendsPinnedNode(t *testing.T) {
 	p := writeConf(t, "# conf\n")
 	links := map[string]BinkdLinkSync{

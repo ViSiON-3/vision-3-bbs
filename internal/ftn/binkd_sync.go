@@ -54,6 +54,12 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 	var out strings.Builder
 	changed := false
 	seenNodes := make(map[string]bool)
+	// Lines are matched to links case-insensitively, as binkd matches
+	// addresses: a hand-written "@TQWNet" line is the tqwnet link's line.
+	linkKeys := make(map[string]string, len(links))
+	for addr := range links {
+		linkKeys[strings.ToLower(addr)] = addr
+	}
 
 	// confLines, not bufio.Scanner: an over-64KB line would stop a scanner
 	// early and the append path below would then persist a truncated file.
@@ -98,15 +104,15 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 		// offset: binkd lets options like -nomd or -ip sit anywhere on a node
 		// line and drops them from the positional stream, so a flag ahead of
 		// the host shifts both of the fields synced here.
-		if strings.HasPrefix(trimmed, "node ") {
-			fields := strings.Fields(trimmed)
+		if fields, ok := nodeDirective(trimmed); ok {
 			// One positional argument is enough to identify the line: a
 			// directive naming only an address still has to be recognised, or
 			// the append pass below adds a second line for the same node.
 			if idx := nodePositionalIdx(fields, 2); len(idx) >= 1 {
 				addr := fields[idx[0]] // e.g. "21:1/100@fsxnet"
-				if link, ok := links[addr]; ok {
-					seenNodes[addr] = true
+				if key, ok := linkKeys[strings.ToLower(addr)]; ok {
+					link := links[key]
+					seenNodes[key] = true
 					// A link with no hostname configured leaves whatever host
 					// the line already carries alone.
 					host := link.HostPort

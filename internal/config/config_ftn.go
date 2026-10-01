@@ -88,7 +88,9 @@ func JoinBinkpHostPort(host string, port int) string {
 	if port <= 0 {
 		port = 24554
 	}
-	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+	// By its colons, not ip.To4: an IPv4-mapped literal ("::ffff:192.0.2.1")
+	// has a 4-byte form but is still written with colons.
+	if strings.Contains(host, ":") && net.ParseIP(host) != nil {
 		host = "[" + host + "]"
 	}
 	return fmt.Sprintf("%s:%d", host, port)

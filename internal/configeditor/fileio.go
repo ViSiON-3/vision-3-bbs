@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
@@ -362,7 +363,7 @@ func adoptBinkdIPFamilies(ftnCfg *config.FTNConfig, binkdPath string) {
 			if lnk.IPFamily != config.IPFamilyAuto {
 				continue
 			}
-			if fam, ok := fams[lnk.Address+"@"+netKey]; ok {
+			if fam, ok := fams[strings.ToLower(lnk.Address+"@"+netKey)]; ok {
 				lnk.IPFamily = fam
 			}
 		}

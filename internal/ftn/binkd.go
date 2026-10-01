@@ -317,12 +317,12 @@ func replaceNodeLine(content string, node BinkdNode) (string, bool) {
 	changed := false
 	for i, l := range lines {
 		trimmed := strings.TrimSpace(l)
-		if !strings.HasPrefix(trimmed, "node ") {
+		fields, ok := nodeDirective(trimmed)
+		if !ok {
 			continue
 		}
-		fields := strings.Fields(trimmed)
 		idx := nodePositionalIdx(fields, 1)
-		if len(idx) == 0 || fields[idx[0]] != address {
+		if len(idx) == 0 || !strings.EqualFold(fields[idx[0]], address) {
 			continue
 		}
 
@@ -347,13 +347,24 @@ func replaceNodeLine(content string, node BinkdNode) (string, bool) {
 // nodeExists checks whether a node address is already defined in the config.
 func nodeExists(content, address string) bool {
 	for _, l := range confLines(content) {
-		line := strings.TrimSpace(l)
-		if strings.HasPrefix(line, "node ") {
-			fields := strings.Fields(line)
-			if idx := nodePositionalIdx(fields, 1); len(idx) > 0 && fields[idx[0]] == address {
+		if fields, ok := nodeDirective(strings.TrimSpace(l)); ok {
+			if idx := nodePositionalIdx(fields, 1); len(idx) > 0 && strings.EqualFold(fields[idx[0]], address) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// nodeDirective splits a trimmed binkd.conf line into its fields when it is a
+// "node" directive. binkd reads its keywords case-insensitively, and matches
+// a node's address the same way (its domain especially: "@TQWNet" is the
+// tqwnet domain), so callers compare addresses with strings.EqualFold. Taking
+// "NODE" or "@TQWNet" for some other node would append a second line for it.
+func nodeDirective(trimmed string) ([]string, bool) {
+	fields := strings.Fields(trimmed)
+	if len(fields) < 2 || !strings.EqualFold(fields[0], "node") {
+		return nil, false
+	}
+	return fields, true
 }

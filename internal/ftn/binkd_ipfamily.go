@@ -117,8 +117,9 @@ func nodeLineIPFamily(fields []string) string {
 }
 
 // ReadBinkdIPFamilies returns the family each node line in binkd.conf pins,
-// keyed by the line's address ("21:1/100@fsxnet"). Lines with no "-4" or "-6"
-// are left out. A missing file yields an empty map.
+// keyed by the line's address lower-cased ("21:1/100@fsxnet"), since binkd
+// matches addresses case-insensitively. Lines with no "-4" or "-6" are left
+// out. A missing file yields an empty map.
 //
 // The config editor reads this on load so a link whose binkd.conf line was
 // given "-4" by hand shows IPv4 rather than auto, and saving it keeps the flag
@@ -133,17 +134,16 @@ func ReadBinkdIPFamilies(confPath string) (map[string]string, error) {
 	}
 	out := make(map[string]string)
 	for _, l := range confLines(string(data)) {
-		trimmed := strings.TrimSpace(l)
-		if !strings.HasPrefix(trimmed, "node ") {
+		fields, ok := nodeDirective(strings.TrimSpace(l))
+		if !ok {
 			continue
 		}
-		fields := strings.Fields(trimmed)
 		idx := nodePositionalIdx(fields, 1)
 		if len(idx) == 0 {
 			continue
 		}
 		if fam := nodeLineIPFamily(fields); fam != config.IPFamilyAuto {
-			out[fields[idx[0]]] = fam
+			out[strings.ToLower(fields[idx[0]])] = fam
 		}
 	}
 	return out, nil
