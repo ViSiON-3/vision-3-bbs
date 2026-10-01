@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -61,6 +60,9 @@ func runPageSysopMode(t *testing.T, env *menuEnv, handle, input string, mode ans
 	t.Cleanup(func() {
 		close(ts.done)
 		resetSessionIH(ts)
+		// The cooldown outlives the test; a rerun (-count=2) would be
+		// refused before RaisePage. Calls within one test still share it.
+		pageCooldowns.Delete(strings.ToLower(handle))
 	})
 	c := &cmdCtx{
 		e:                env.e,
@@ -161,7 +163,7 @@ func TestPageSysopCountdownInEveryOutputMode(t *testing.T) {
 		env := newMenuEnv(t)
 		env.e.Pager = &fakePager{consoles: 1}
 		setPageConfig(env, 2, 300)
-		out := runPageSysopMode(t, env, fmt.Sprintf("PsCount%s%d", name, time.Now().UnixNano()), "help\r", mode)
+		out := runPageSysopMode(t, env, "PsCount"+name, "help\r", mode)
 		if !strings.Contains(out, string(pageCountdownFrame(2))) || !strings.Contains(out, string(pageCountdownFrame(1))) {
 			t.Fatalf("%s: countdown frames missing from %q", name, out)
 		}
@@ -176,13 +178,12 @@ func TestPageSysopCountdownInEveryOutputMode(t *testing.T) {
 // between key waits.
 func runPageSysopWithLimit(t *testing.T, env *menuEnv, handle string, limitEnds time.Time, credit time.Duration, bypassIH bool) (time.Duration, error) {
 	t.Helper()
-	// The page cooldown is keyed by handle and outlives the test.
-	handle = fmt.Sprintf("%s%d", handle, time.Now().UnixNano())
 	ts := &holdSession{testSession: newTestSession("help\r"), done: make(chan struct{})}
 	t.Cleanup(func() {
 		close(ts.done)
 		resetSessionIH(ts)
 		ClearSessionIdleTimeout(ts)
+		pageCooldowns.Delete(strings.ToLower(handle))
 	})
 	addChatCredit(ts, credit)
 	if bypassIH {
