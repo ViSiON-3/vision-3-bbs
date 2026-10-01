@@ -35,7 +35,12 @@ type chatRig struct {
 
 func newChatRig(t *testing.T, keys string) *chatRig {
 	t.Helper()
-	term := testterm.New(80, 25)
+	return newChatRigOpts(t, keys)
+}
+
+func newChatRigOpts(t *testing.T, keys string, opts ...testterm.Option) *chatRig {
+	t.Helper()
+	term := testterm.New(80, 25, opts...)
 	sess := testterm.NewSession(term, keys)
 	ih := editor.NewInputHandler(sess)
 	t.Cleanup(ih.Close)
@@ -72,9 +77,13 @@ func (r *chatRig) begin(t *testing.T) {
 func (r *chatRig) run() <-chan struct{} { return r.runSized(80, 25) }
 
 func (r *chatRig) runSized(width, height int) <-chan struct{} {
+	return r.runMode(ansi.OutputModeUTF8, width, height)
+}
+
+func (r *chatRig) runMode(mode ansi.OutputMode, width, height int) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
-		runSysopChat(r.ih, r.tap, r.term, ansi.OutputModeUTF8, width, height, "SysOp", "Caller")
+		runSysopChat(r.ih, r.tap, r.term, mode, width, height, "SysOp", "Caller")
 		close(done)
 	}()
 	return done
@@ -545,5 +554,83 @@ func TestCallerEndedChatAuditsDroppedTypeIn(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("dropped type-in hold not audited")
+	}
+}
+
+func TestChatShowsNonASCIIInUTF8Session(t *testing.T) {
+	r := newChatRig(t, "")
+	r.begin(t)
+	done := r.run()
+	r.tap.Inject("SysOp", []byte("caf\u00e9 \u4e16"))
+	r.sess.Send("na\xc3\xafve")
+	waitFor(t, func() bool {
+		return r.term.Row(1) == "caf\u00e9 \u4e16" && r.term.Row(14) == "na\u00efve"
+	}, "non-ASCII text not rendered in both panes")
+	_ = r.tap.StopChat("SysOp")
+	waitDone(t, done, "chat ignored StopChat")
+}
+
+func TestChatShowsNonASCIIInCP437Session(t *testing.T) {
+	r := newChatRigOpts(t, "", testterm.CP437())
+	r.begin(t)
+	done := r.runMode(ansi.OutputModeCP437, 80, 25)
+	// The sysop's UTF-8 is converted; a rune with no CP437 mapping shows as ?.
+	r.tap.Inject("SysOp", []byte("caf\u00e9 \u20ac"))
+	// The caller's CP437 byte 0x82 is e-acute.
+	r.sess.Send("caf\x82")
+	waitFor(t, func() bool {
+		return r.term.Row(1) == "caf\u00e9 ?" && r.term.Row(14) == "caf\u00e9"
+	}, "CP437 text not rendered in both panes")
+	_ = r.tap.StopChat("SysOp")
+	waitDone(t, done, "chat ignored StopChat")
+}
+
+func TestChatPaneNeverEchoesEscape(t *testing.T) {
+	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
+		var out strings.Builder
+		p := &chatPane{w: &out, mode: mode, first: 1, last: 5, width: 40, row: 1, col: 1}
+		p.put([]byte("a\x1b[2Jb\x9bc\x07d"))
+		// U+2190 is the CP437 glyph for byte 0x1B.
+		p.put([]byte("\u2190\u263a"))
+		got := out.String()
+		// Only the pane's own cursor moves and colours may carry ESC.
+		body := regexp.MustCompile("\x1b\\[[0-9;]*[Hm]").ReplaceAllString(got, "")
+		if strings.ContainsAny(body, "\x1b\x07\x01\x9b") {
+			t.Fatalf("mode %v echoed a control byte: %q", mode, got)
+		}
+	}
+}
+
+func TestChatPaneBackspaceRemovesWholeRune(t *testing.T) {
+	term, p := paneOn(10, 5)
+	p.put([]byte("a\u00e9\u4e16"))
+	p.put([]byte("\b"))
+	if got := term.Row(1); got != "a\u00e9" {
+		t.Fatalf("after wide backspace row = %q", got)
+	}
+	p.put([]byte("\x7f"))
+	if got := term.Row(1); got != "a" {
+		t.Fatalf("after rune backspace row = %q", got)
+	}
+	if p.col != 2 || p.cells != 1 {
+		t.Fatalf("col, cells = %d, %d; want 2, 1", p.col, p.cells)
+	}
+}
+
+func TestChatPaneJoinsSplitUTF8(t *testing.T) {
+	term, p := paneOn(10, 5)
+	p.put([]byte{0xc3})
+	p.put([]byte{0xa9, 'x'})
+	if got := term.Row(1); got != "\u00e9x" {
+		t.Fatalf("row = %q", got)
+	}
+}
+
+func TestChatPaneWrapCountsCells(t *testing.T) {
+	term, p := paneOn(6, 5)
+	p.put([]byte("ab \u4e16\u4e16\u4e16"))
+	// Three wide runes fill the line: 3 + 6 cells do not fit in 6.
+	if r1, r2 := term.Row(1), term.Row(2); r1 != "ab" || r2 != "\u4e16\u4e16\u4e16" {
+		t.Fatalf("rows = %q, %q", r1, r2)
 	}
 }

@@ -1,15 +1,17 @@
 package menu
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -43,11 +45,14 @@ func SetSysopChatEnv(env chatEnv) { sysopChat.Store(&env) }
 // chatPane is one half of the split screen: rows first..last (1-based).
 type chatPane struct {
 	w           io.Writer
+	mode        ansi.OutputMode // the caller's terminal encoding
 	first, last int
 	width       int
 	row, col    int
 	color       int
-	line        []byte // text on the cursor row; col is len(line)+1
+	line        []rune // text on the cursor row
+	cells       int    // display cells taken by line; col is cells+1
+	pending     []byte // start of a UTF-8 sequence split across writes
 	afterCR     bool   // an LF or NUL straight after CR is part of the same newline
 }
 
@@ -58,6 +63,7 @@ func (p *chatPane) moveTo() {
 func (p *chatPane) newline() {
 	p.col = 1
 	p.line = p.line[:0]
+	p.cells = 0
 	if p.row < p.last {
 		p.row++
 		return
@@ -65,28 +71,64 @@ func (p *chatPane) newline() {
 	fmt.Fprintf(p.w, "\x1b[%d;%dr\x1b[%d;1H\n\x1b[r", p.first, p.last, p.last)
 }
 
+// cellWidth is the number of terminal columns r takes in the pane and
+// whether it can be shown at all. A CP437 terminal draws one cell per byte,
+// and a rune with no CP437 mapping is shown as '?'. Control characters, and
+// runes a CP437 terminal would take for one (the glyph-set codes below 0x20),
+// are refused so neither side can send an escape sequence to the other.
+func (p *chatPane) cellWidth(r rune) (int, bool) {
+	if r < 0x20 || r == 0x7F || unicode.IsControl(r) {
+		return 0, false
+	}
+	if p.mode == ansi.OutputModeCP437 {
+		if b, ok := ansi.UnicodeToCP437[r]; ok && (b < 0x20 || b == 0x7F) {
+			return 0, false
+		}
+		return 1, true
+	}
+	if w := runewidth.RuneWidth(r); w > 0 {
+		return w, true
+	}
+	return 0, false
+}
+
+func (p *chatPane) emit(r ...rune) {
+	_ = terminalio.WriteProcessedBytes(p.w, []byte(string(r)), p.mode)
+}
+
 // wrap starts a new line for a character that does not fit. The word being
 // typed moves down with it unless it fills the whole line.
 func (p *chatPane) wrap() {
-	var word []byte
-	if i := bytes.LastIndexByte(p.line, ' '); i >= 0 {
-		word = append(word, p.line[i+1:]...)
-		if len(word) > 0 {
-			p.col = i + 2
-			p.moveTo()
-			_, _ = io.WriteString(p.w, strings.Repeat(" ", len(word)))
+	var word []rune
+	wordCells := 0
+	for i := len(p.line) - 1; i >= 0; i-- {
+		if p.line[i] != ' ' {
+			continue
 		}
+		word = append(word, p.line[i+1:]...)
+		for _, r := range word {
+			w, _ := p.cellWidth(r)
+			wordCells += w
+		}
+		if len(word) > 0 {
+			p.col = 1 + p.cells - wordCells
+			p.moveTo()
+			_, _ = io.WriteString(p.w, strings.Repeat(" ", wordCells))
+		}
+		break
 	}
 	p.newline()
 	p.moveTo()
-	_, _ = p.w.Write(word)
+	p.emit(word...)
 	p.line = append(p.line, word...)
-	p.col = len(p.line) + 1
+	p.cells = wordCells
+	p.col = p.cells + 1
 }
 
-// put writes printable ASCII at the pane's cursor, word-wrapping at the pane
-// width. CR, LF or CR LF starts a new line; BS and DEL erase back to the
-// start of the line.
+// put writes text at the pane's cursor, word-wrapping at the pane width. b is
+// UTF-8; a sequence split across calls is completed by the next one. CR, LF
+// or CR LF starts a new line; BS and DEL erase the last character on the
+// line. Other control bytes, including ESC, are dropped.
 func (p *chatPane) put(b []byte) {
 	p.moveTo()
 	for _, c := range b {
@@ -94,6 +136,7 @@ func (p *chatPane) put(b []byte) {
 		p.afterCR = false
 		switch {
 		case c == '\r' || c == '\n':
+			p.pending = nil
 			if c == '\n' && afterCR {
 				continue
 			}
@@ -103,25 +146,61 @@ func (p *chatPane) put(b []byte) {
 		case c == 0x00:
 			p.afterCR = afterCR
 		case c == 0x08 || c == 0x7F:
-			if len(p.line) > 0 {
-				p.line = p.line[:len(p.line)-1]
-				p.col--
-				_, _ = io.WriteString(p.w, "\b \b")
-			}
-		case c >= 0x20 && c < 0x7F:
-			if len(p.line) >= p.width {
-				if c == ' ' {
-					p.newline()
-					p.moveTo()
+			p.pending = nil
+			p.backspace()
+		case c < 0x20:
+			p.pending = nil
+		default:
+			var seq []byte
+			if c < 0x80 {
+				p.pending = nil
+				seq = []byte{c}
+			} else {
+				_, seq, p.pending = ansi.DecodeExtendedKey(nil, ansi.OutputModeUTF8, c, p.pending)
+				if seq == nil {
 					continue
 				}
-				p.wrap()
 			}
-			_, _ = p.w.Write([]byte{c})
-			p.line = append(p.line, c)
-			p.col++
+			r, _ := utf8.DecodeRune(seq)
+			p.putRune(r)
 		}
 	}
+}
+
+func (p *chatPane) backspace() {
+	if len(p.line) == 0 {
+		return
+	}
+	w, _ := p.cellWidth(p.line[len(p.line)-1])
+	p.line = p.line[:len(p.line)-1]
+	p.cells -= w
+	p.col -= w
+	for range w {
+		_, _ = io.WriteString(p.w, "\b")
+	}
+	_, _ = io.WriteString(p.w, strings.Repeat(" ", w))
+	for range w {
+		_, _ = io.WriteString(p.w, "\b")
+	}
+}
+
+func (p *chatPane) putRune(r rune) {
+	w, ok := p.cellWidth(r)
+	if !ok {
+		return
+	}
+	if p.cells+w > p.width {
+		if r == ' ' {
+			p.newline()
+			p.moveTo()
+			return
+		}
+		p.wrap()
+	}
+	p.emit(r)
+	p.line = append(p.line, r)
+	p.cells += w
+	p.col += w
 }
 
 type chatEventKind int
@@ -192,8 +271,8 @@ func runSysopChat(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode ans
 	width = max(width, 20)
 	th, st := env.theme(), env.strings()
 	top := (height - 1) / 2
-	sysop := &chatPane{w: w, first: 1, last: top, width: width, row: 1, col: 1, color: th.ChatSysopColor}
-	caller := &chatPane{w: w, first: top + 2, last: height, width: width, row: top + 2, col: 1, color: th.ChatUserColor}
+	sysop := &chatPane{w: w, mode: mode, first: 1, last: top, width: width, row: 1, col: 1, color: th.ChatSysopColor}
+	caller := &chatPane{w: w, mode: mode, first: top + 2, last: height, width: width, row: top + 2, col: 1, color: th.ChatUserColor}
 
 	bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, sysopHandle, callerHandle)))
 	fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top+1)
@@ -216,6 +295,7 @@ func runSysopChat(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode ans
 	}()
 
 	lastEsc := false
+	var keyPending []byte
 loop:
 	for {
 		k, ev, isEvent, err := editor.ReadKeyOrEvent(ih, events)
@@ -252,8 +332,18 @@ loop:
 			continue
 		}
 		lastEsc = false
-		if k >= 0 && k < 0x80 {
+		switch {
+		case k >= 0 && k < 0x80:
+			keyPending = nil
 			caller.put([]byte{byte(k)})
+		case k >= 0x80 && k <= 0xFF:
+			// A key byte arrives in the caller's encoding: CP437 is one
+			// byte per character, UTF-8 a sequence a byte at a time.
+			var text []byte
+			text, _, keyPending = ansi.DecodeExtendedKey(nil, mode, byte(k), keyPending)
+			caller.put(text)
+		default:
+			keyPending = nil
 		}
 	}
 
