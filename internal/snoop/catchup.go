@@ -11,12 +11,15 @@ const CatchupLimit = 64 << 10
 
 var clearScreen = []byte("\x1b[2J")
 
-// catchup holds the output since the last clear-screen, capped at limit.
-// It is not safe for concurrent use; Tap serialises access.
+// catchup holds the output since the last clear-screen; snapshot returns at
+// most limit bytes of it. The buffer may grow to twice limit before it is
+// cut back, so a long screen costs one copy per limit bytes written rather
+// than one per write. It is not safe for concurrent use; Tap serialises
+// access.
 type catchup struct {
-	limit      int
-	buf        []byte
-	overflowed bool
+	limit   int
+	buf     []byte
+	dropped bool // bytes since the last clear-screen were cut
 }
 
 func newCatchup(limit int) *catchup { return &catchup{limit: limit} }
@@ -32,15 +35,19 @@ func (c *catchup) write(p []byte) {
 	c.buf = append(c.buf, p...)
 	if i := bytes.LastIndex(c.buf[from:], clearScreen); i >= 0 {
 		c.buf = append(c.buf[:0], c.buf[from+i:]...)
-		c.overflowed = false
+		c.dropped = false
 	}
-	if len(c.buf) > c.limit {
+	if len(c.buf) > 2*c.limit {
 		c.buf = append(c.buf[:0], c.buf[len(c.buf)-c.limit:]...)
-		c.overflowed = true
+		c.dropped = true
 	}
 }
 
-// snapshot returns a copy of the buffer and whether it lost bytes.
+// snapshot returns a copy of the last limit bytes and whether any bytes
+// since the last clear-screen are missing from it.
 func (c *catchup) snapshot() ([]byte, bool) {
-	return bytes.Clone(c.buf), c.overflowed
+	if len(c.buf) > c.limit {
+		return bytes.Clone(c.buf[len(c.buf)-c.limit:]), true
+	}
+	return bytes.Clone(c.buf), c.dropped
 }
