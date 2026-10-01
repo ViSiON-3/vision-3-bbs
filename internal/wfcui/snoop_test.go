@@ -356,3 +356,81 @@ func TestSnoopStdinReaderTakesAtMostOneByteAfterRun(t *testing.T) {
 		t.Fatalf("reader kept consuming stdin after Run: %d bytes", got)
 	}
 }
+
+func TestSnoopBarNotSplicedIntoCSI(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 40)
+	_, _ = r.server.Write([]byte("A\x1b[3"))
+	r.out.waitFor(t, "A\x1b[3")
+	time.Sleep(20 * time.Millisecond)
+	_, _ = r.server.Write([]byte("1mB"))
+	r.out.waitFor(t, "B")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	out := r.out.String()
+	if !strings.Contains(out, "A\x1b[31mB") {
+		t.Fatalf("CSI interrupted: %q", out)
+	}
+	if !strings.Contains(out[strings.Index(out, "B"):], "NODE 3") {
+		t.Fatal("bar not redrawn after the sequence completed")
+	}
+}
+
+func TestSnoopBarNotSplicedIntoRune(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 40)
+	_, _ = r.server.Write([]byte{'A', 0xe2, 0x96})
+	r.out.waitFor(t, "A\xe2\x96")
+	time.Sleep(20 * time.Millisecond)
+	_, _ = r.server.Write([]byte{0x88})
+	r.out.waitFor(t, "A█")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	out := r.out.String()
+	i := strings.Index(out, "A█")
+	if !strings.Contains(out[i:], "NODE 3") {
+		t.Fatal("bar not redrawn after the rune completed")
+	}
+}
+
+func TestSnoopChatFromTypeReturnsToType(t *testing.T) {
+	r := newRig(t, utf8Hdr, 80, 25)
+	got := r.reads()
+	r.send(t, "\x1bt")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bc")
+	r.send(t, "q")
+	expect(t, got, "q")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if c := r.ctl.got(); c != "type+,chat+,chat-,type-" {
+		t.Fatalf("calls %s", c)
+	}
+}
+
+func TestSnoopExitFromChatEnteredFromTypeReleasesBoth(t *testing.T) {
+	r := newRig(t, utf8Hdr, 80, 25)
+	r.send(t, "\x1bt")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if c := r.ctl.got(); c != "type+,chat+,chat-,type-" {
+		t.Fatalf("calls %s", c)
+	}
+}
+
+type failRaw struct{ fakeRaw }
+
+func (failRaw) MakeRaw() (func(), error) { return nil, errors.New("no tty") }
+
+func TestSnoopResultCarriesNodeWhenRawFails(t *testing.T) {
+	a, server := net.Pipe()
+	defer server.Close()
+	cmd := newSnoopCmd(admin.NewSnoopStream(utf8Hdr, a), &fakeCtl{}, 7, failRaw{})
+	cmd.SetStdin(strings.NewReader(""))
+	cmd.SetStdout(io.Discard)
+	if err := cmd.Run(); err == nil {
+		t.Fatal("want error")
+	}
+	if cmd.Result().node != 7 {
+		t.Fatalf("node %d", cmd.Result().node)
+	}
+}

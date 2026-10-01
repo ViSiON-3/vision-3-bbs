@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 
@@ -70,6 +71,10 @@ type snoopCmd struct {
 	lastErr  string
 	w, h     int // sysop terminal size
 
+	typeBeforeChat bool // type-in was on when chat started
+	erasePending   bool // bar hidden but its row not yet cleared
+	track          seqTracker
+
 	result snoopResult
 }
 
@@ -94,6 +99,7 @@ func (c *snoopCmd) write(p string) {
 // Run shows the caller's screen until Alt-X, the caller leaving or sysop
 // input ending.
 func (c *snoopCmd) Run() error {
+	c.result = snoopResult{node: c.node}
 	restore, err := c.raw.MakeRaw()
 	if err != nil {
 		return err
@@ -107,7 +113,6 @@ func (c *snoopCmd) Run() error {
 	} else {
 		c.statusOn = c.h > c.st.Header.Height
 	}
-	c.result = snoopResult{node: c.node}
 	c.write("\x1b[0m\x1b[2J\x1b[H")
 	c.drawStatus()
 
@@ -123,18 +128,21 @@ func (c *snoopCmd) Run() error {
 
 	// The stdin goroutine stays parked on the real stdin. Once done is
 	// closed it drops the byte it is holding when the read returns, so a
-	// keystroke typed in the instant of exit is lost but Bubble Tea gets
-	// every later one.
+	// byte typed in the instant of exit is lost (it can be the first byte of
+	// a key sequence) but Bubble Tea gets every later one.
 	close(done)
 
 	c.mu.Lock()
 	mode := c.mode
 	c.mu.Unlock()
-	switch mode {
-	case snoopType:
-		_ = c.ctl.TypeIn(false)
-	case snoopChat:
+	c.mu.Lock()
+	typeHeld := mode == snoopType || (mode == snoopChat && c.typeBeforeChat)
+	c.mu.Unlock()
+	if mode == snoopChat {
 		_ = c.ctl.Chat(false)
+	}
+	if typeHeld {
+		_ = c.ctl.TypeIn(false)
 	}
 	_ = c.st.Close()
 	<-outDone
@@ -187,6 +195,7 @@ func (c *snoopCmd) pump(done chan<- struct{}) {
 			}
 			c.mu.Lock()
 			_, _ = c.stdout.Write(chunk)
+			c.track.feed(chunk)
 			c.mu.Unlock()
 			c.drawStatus()
 		}
@@ -283,26 +292,31 @@ func (c *snoopCmd) toggleChat() {
 		if err := c.ctl.Chat(false); err != nil {
 			c.setErr(err)
 		}
-		c.setMode(snoopWatch)
+		c.mu.Lock()
+		back := snoopWatch
+		if c.typeBeforeChat {
+			back = snoopType
+		}
+		c.mu.Unlock()
+		c.setMode(back)
 		return
 	}
 	if err := c.ctl.Chat(true); err != nil {
 		c.setErr(err)
 		return
 	}
+	c.mu.Lock()
+	c.typeBeforeChat = m == snoopType
+	c.mu.Unlock()
 	c.setMode(snoopChat)
 }
 
 func (c *snoopCmd) toggleStatus() {
 	c.mu.Lock()
 	c.statusOn = !c.statusOn
-	on := c.statusOn
+	c.erasePending = !c.statusOn
 	c.mu.Unlock()
-	if on {
-		c.drawStatus()
-		return
-	}
-	c.write(fmt.Sprintf("\x1b7\x1b[%d;1H\x1b[0m\x1b[2K\x1b8", c.h))
+	c.drawStatus()
 }
 
 func (c *snoopCmd) setMode(m string) {
@@ -321,11 +335,20 @@ func (c *snoopCmd) setErr(err error) {
 }
 
 // drawStatus paints the bar on the sysop terminal's last row and puts the
-// cursor back where the caller's output left it.
+// cursor back where the caller's output left it. It waits for a point where
+// the caller's output is between sequences and characters; the pump calls it
+// again after every chunk.
 func (c *snoopCmd) drawStatus() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.statusOn || c.h <= 0 || c.w <= 0 {
+	if !c.track.safe() || c.h <= 0 || c.w <= 0 {
+		return
+	}
+	if c.erasePending {
+		c.erasePending = false
+		_, _ = fmt.Fprintf(c.stdout, "\x1b7\x1b[%d;1H\x1b[0m\x1b[2K\x1b8", c.h)
+	}
+	if !c.statusOn {
 		return
 	}
 	hd := c.st.Header
@@ -340,4 +363,79 @@ func (c *snoopCmd) drawStatus() {
 	}
 	text = string(r) + strings.Repeat(" ", c.w-len(r))
 	_, _ = fmt.Fprintf(c.stdout, "\x1b7\x1b[%d;1H\x1b[0;30;47m%s\x1b[0m\x1b8", c.h, text)
+}
+
+// seqTracker follows the caller's output to tell when it is between escape
+// sequences and complete UTF-8 characters.
+type seqTracker struct {
+	state int
+	tail  []byte // trailing bytes of the last chunk, for rune completeness
+}
+
+const (
+	stGround = iota
+	stEsc
+	stCharset // after ESC ( or ESC )
+	stCSI
+	stOSC
+	stOSCEsc
+)
+
+func (t *seqTracker) feed(p []byte) {
+	for _, b := range p {
+		switch t.state {
+		case stGround:
+			if b == 0x1b {
+				t.state = stEsc
+			}
+		case stEsc:
+			switch b {
+			case '[':
+				t.state = stCSI
+			case ']':
+				t.state = stOSC
+			case '(', ')':
+				t.state = stCharset
+			case 0x1b:
+			default:
+				t.state = stGround
+			}
+		case stCharset:
+			t.state = stGround
+		case stCSI:
+			if b >= 0x40 && b <= 0x7e {
+				t.state = stGround
+			}
+		case stOSC:
+			switch b {
+			case 0x07:
+				t.state = stGround
+			case 0x1b:
+				t.state = stOSCEsc
+			}
+		case stOSCEsc:
+			if b == '\\' {
+				t.state = stGround
+			} else {
+				t.state = stOSC
+			}
+		}
+	}
+	t.tail = append(t.tail, p...)
+	if len(t.tail) > utf8.UTFMax {
+		t.tail = append(t.tail[:0], t.tail[len(t.tail)-utf8.UTFMax:]...)
+	}
+}
+
+func (t *seqTracker) safe() bool {
+	if t.state != stGround {
+		return false
+	}
+	// A rune is incomplete when the last start byte has too few bytes after it.
+	for i := len(t.tail) - 1; i >= 0; i-- {
+		if utf8.RuneStart(t.tail[i]) {
+			return t.tail[i] < utf8.RuneSelf || utf8.FullRune(t.tail[i:])
+		}
+	}
+	return len(t.tail) == 0
 }
