@@ -168,6 +168,21 @@ func (t *Tap) SetMode(m Mode) {
 	t.mu.Unlock()
 }
 
+// SetTransfer records a binary transfer starting or ending. A transfer
+// started from the BBS moves the tap to ModeTransfer and back; a door's
+// ModeDoor is left alone, since chat must stay refused for the whole door.
+func (t *Tap) SetTransfer(active bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	switch {
+	case active && t.mode == ModeBBS:
+		t.mode = ModeTransfer
+	case !active && t.mode == ModeTransfer:
+		t.mode = ModeBBS
+		t.marked = false
+	}
+}
+
 func (t *Tap) Mode() Mode {
 	t.mu.Lock()
 	defer t.mu.Unlock()

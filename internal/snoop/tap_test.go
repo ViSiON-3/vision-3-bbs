@@ -132,3 +132,37 @@ func TestTapRace(t *testing.T) {
 	wg.Wait()
 	tp.Close()
 }
+
+func TestSetTransferMovesBBSAndBack(t *testing.T) {
+	tp := NewTap()
+	w := tp.Attach()
+	defer w.Close()
+	tp.SetTransfer(true)
+	if tp.Mode() != ModeTransfer {
+		t.Fatalf("mode = %v, want transfer", tp.Mode())
+	}
+	tp.TransferStarted()
+	recv(t, w)
+	tp.SetTransfer(false)
+	if tp.Mode() != ModeBBS {
+		t.Fatalf("mode = %v, want bbs", tp.Mode())
+	}
+	tp.SetTransfer(true)
+	tp.TransferStarted()
+	if got := recv(t, w); string(got) != TransferMarker {
+		t.Fatalf("second transfer marker = %q", got)
+	}
+}
+
+func TestSetTransferLeavesDoorMode(t *testing.T) {
+	tp := NewTap()
+	tp.SetMode(ModeDoor)
+	tp.SetTransfer(true)
+	if tp.Mode() != ModeDoor {
+		t.Fatalf("mode = %v after start, want door", tp.Mode())
+	}
+	tp.SetTransfer(false)
+	if tp.Mode() != ModeDoor {
+		t.Fatalf("mode = %v after end, want door", tp.Mode())
+	}
+}

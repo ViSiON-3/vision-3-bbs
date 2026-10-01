@@ -292,8 +292,7 @@ func normalizeNewlines(p []byte) []byte {
 // SetTransferActive marks/unmarks the session as being in a binary transfer.
 // While active, nothing should write to the session via session.Write()
 // (which does CRLF conversion) because it would corrupt the binary stream.
-// The tap mode moves between ModeBBS and ModeTransfer only; ModeDoor is never
-// changed because doors can run transfers and the door handler owns that mode.
+// The tap mode change is left to Tap.SetTransfer, which never leaves ModeDoor.
 // Output suppression during a transfer relies on IsTransferActive, not the mode.
 func (s *BBSSession) SetTransferActive(active bool) {
 	if active {
@@ -302,12 +301,7 @@ func (s *BBSSession) SetTransferActive(active bool) {
 		s.transferActive.Store(0)
 	}
 	if t := s.tap.Load(); t != nil {
-		switch m := t.Mode(); {
-		case active && m == snoop.ModeBBS:
-			t.SetMode(snoop.ModeTransfer)
-		case !active && m == snoop.ModeTransfer:
-			t.SetMode(snoop.ModeBBS)
-		}
+		t.SetTransfer(active)
 	}
 }
 
