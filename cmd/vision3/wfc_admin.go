@@ -17,8 +17,8 @@ import (
 // wfcReauthInterval is how often an open admin session re-checks that its
 // authorization still holds (key not revoked, level not lowered, WFC not
 // disabled). Revocation therefore takes effect within this window instead of
-// only at the next connection.
-const wfcReauthInterval = 30 * time.Second
+// only at the next connection. Tests shorten it.
+var wfcReauthInterval = 30 * time.Second
 
 // adminServer is the WFC admin server instance shared across all admin sessions.
 var adminServer *admin.Server
@@ -162,6 +162,20 @@ func authorizeAdminKey(handle string, keyBytes []byte) bool {
 	return u.AccessLevel >= adminMinLevel()
 }
 
+// wfcReadOnly reports whether handle's WFC console is limited to watching.
+// It reads the user record on every call, so a change applies to open
+// sessions. An account that cannot be found is treated as read-only.
+func wfcReadOnly(handle string) bool {
+	if userMgr == nil {
+		return true
+	}
+	u, found := userMgr.GetUser(handle)
+	if !found || u == nil {
+		return true
+	}
+	return u.WFCReadOnly
+}
+
 // watchAdminAuthorization re-checks authorized(handle) every interval and
 // calls kick once when it stops holding. It exits on ctx cancellation (normal
 // session end) without kicking.
@@ -193,7 +207,7 @@ func wfcAdminSubsystem(sess ssh.Session) {
 		return
 	}
 
-	slog.Info("wfc-admin: session opened", "user", handle, "addr", sess.RemoteAddr())
+	slog.Info("wfc-admin: session opened", "user", handle, "addr", sess.RemoteAddr(), "readOnly", wfcReadOnly(handle))
 
 	audit := func(cmd string) {
 		slog.Info("wfc-admin: command", "user", handle, "addr", sess.RemoteAddr(), "cmd", cmd)
@@ -224,14 +238,25 @@ func wfcAdminSubsystem(sess ssh.Session) {
 		defer stopKA()
 	}
 	stillAuthorized := func(h string) bool { return authorizeAdminKey(h, keyBytes) }
-	go watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
-		slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr())
-		_ = sess.Close() // unblocks ServeRPC's read loop
-	})
+	// The watcher reads the user record; it must not outlive the session.
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
+			slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr())
+			_ = sess.Close() // unblocks ServeRPC's read loop
+		})
+	}()
+	defer func() {
+		cancel()
+		<-watchDone
+	}()
 
 	// ServeRPC's context governs only the internal subscriber goroutine; connection
 	// lifetime is enforced by the SSH session closing, which unblocks the read loop.
-	if err := admin.ServeRPC(ctx, sess, adminServer, handle, audit); err != nil {
+	// The read-only flag is read for every command and snapshot.
+	readOnly := func() bool { return wfcReadOnly(handle) }
+	if err := admin.ServeRPC(ctx, sess, adminServer, handle, readOnly, audit); err != nil {
 		slog.Info("wfc-admin: session closed", "user", handle, "addr", sess.RemoteAddr(), "reason", err)
 	} else {
 		slog.Info("wfc-admin: session closed", "user", handle, "addr", sess.RemoteAddr())

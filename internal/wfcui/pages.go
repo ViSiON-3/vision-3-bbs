@@ -142,7 +142,7 @@ type snoopOpenedMsg struct {
 // beginSnoop opens a snoop on n, the session the sysop picked. With chat set
 // the snoop screen starts in chat (answering a page).
 func (m Model) beginSnoop(n admin.NodeState, chat bool) (tea.Model, tea.Cmd) {
-	if m.opts.ReadOnly {
+	if m.readOnly() {
 		m.setStatus("Read-only console: snoop is disabled", true)
 		return m, nil
 	}

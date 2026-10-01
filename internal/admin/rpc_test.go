@@ -22,7 +22,7 @@ func TestRPCStreamClientServer(t *testing.T) {
 	go srv.Run(ctx)
 
 	cliConn, srvConn := net.Pipe()
-	go ServeRPC(ctx, srvConn, srv, "sysop", func(string) {})
+	go ServeRPC(ctx, srvConn, srv, "sysop", nil, func(string) {})
 
 	var c AdminClient = NewStreamClient(cliConn)
 	defer c.Close()
@@ -58,7 +58,7 @@ func TestStreamClientReportsDeadLink(t *testing.T) {
 	defer cancel()
 
 	cliConn, srvConn := net.Pipe()
-	go func() { _ = ServeRPC(ctx, srvConn, srv, "sysop", nil) }()
+	go func() { _ = ServeRPC(ctx, srvConn, srv, "sysop", nil, nil) }()
 
 	c := NewStreamClient(cliConn)
 	defer c.Close()
@@ -101,7 +101,7 @@ func TestExecuteDiscardsLateReplyOfTimedOutCommand(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cliConn, srvConn := net.Pipe()
-	go func() { _ = ServeRPC(ctx, srvConn, srv, "sysop", nil) }()
+	go func() { _ = ServeRPC(ctx, srvConn, srv, "sysop", nil, nil) }()
 	c := NewStreamClient(cliConn)
 	defer c.Close()
 	if _, err := c.Snapshot(ctx); err != nil {

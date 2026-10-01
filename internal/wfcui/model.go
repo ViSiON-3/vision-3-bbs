@@ -459,6 +459,12 @@ func (m *Model) clampScroll() {
 	}
 }
 
+// readOnly reports whether node control (kick, snoop, type-in, chat) is off:
+// asked for with --readonly, or the daemon marks the account read-only.
+func (m Model) readOnly() bool {
+	return m.opts.ReadOnly || (m.snapshot != nil && m.snapshot.ReadOnly)
+}
+
 // hasSchema reports whether the daemon stamps snapshots with at least
 // schema n, i.e. whether it reports the fields that version added.
 func (m Model) hasSchema(n int) bool { return m.snapshot != nil && m.snapshot.Schema >= n }

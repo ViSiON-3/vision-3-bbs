@@ -14,9 +14,13 @@ import (
 // until ctx is cancelled or the stream errors. audit, if non-nil, is called
 // with a short description of each command for slog auditing.
 //
+// readOnly, if non-nil, is asked before every command and snapshot. While it
+// reports true the console may only refresh: other commands fail with
+// ErrReadOnly, and its snapshots carry ReadOnly so it can hide them.
+//
 // rw must be closable (e.g. net.Conn or ssh.Session); ServeRPC closes it when
 // the event-streaming goroutine fails so that the outer ReadFrame unblocks.
-func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop string, audit func(string)) error {
+func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop string, readOnly func() bool, audit func(string)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -27,6 +31,17 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 		defer writeMu.Unlock()
 		return WriteFrame(rw, f)
 	}
+	isReadOnly := func() bool { return readOnly != nil && readOnly() }
+	// The server's snapshot is shared by every console, so a read-only one
+	// gets a marked copy.
+	writeSnap := func(snap *SystemSnapshot) error {
+		if snap != nil && isReadOnly() {
+			c := *snap
+			c.ReadOnly = true
+			snap = &c
+		}
+		return write(&Frame{Kind: KindSnapshot, Snapshot: snap})
+	}
 
 	// Ensure the server has a snapshot before sending it.
 	// If srv.Snapshot() is nil (first tick not yet scheduled), force one tick
@@ -36,7 +51,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 		srv.tick(timeNow())
 		initialSnap = srv.Snapshot()
 	}
-	if err := write(&Frame{Kind: KindSnapshot, Snapshot: initialSnap}); err != nil {
+	if err := writeSnap(initialSnap); err != nil {
 		return err
 	}
 
@@ -68,7 +83,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 			case <-subCtx.Done():
 				return
 			case <-snapTicker.C:
-				if err := write(&Frame{Kind: KindSnapshot, Snapshot: srv.Snapshot()}); err != nil {
+				if err := writeSnap(srv.Snapshot()); err != nil {
 					cancel()
 					closeRW()
 					return
@@ -96,10 +111,18 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 		if f.Kind != KindCommand || f.Command == nil {
 			continue
 		}
-		if audit != nil {
-			audit(string(f.Command.Command))
+		var res *Result
+		if f.Command.Command != CommandRefresh && isReadOnly() {
+			err = ErrReadOnly
+			if audit != nil {
+				audit(string(f.Command.Command) + " refused: read-only")
+			}
+		} else {
+			if audit != nil {
+				audit(string(f.Command.Command))
+			}
+			res, err = srv.ExecuteAs(sysop, *f.Command)
 		}
-		res, err := srv.ExecuteAs(sysop, *f.Command)
 		out := &Frame{Kind: KindResult, ID: f.ID}
 		if err != nil {
 			out.Kind = KindError

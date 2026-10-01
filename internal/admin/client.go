@@ -76,6 +76,9 @@ type SystemSnapshot struct {
 	// run history, for the console's Events tab. Nil when the daemon has no
 	// scheduler.
 	ScheduledEvents []ScheduledEvent `json:"scheduledEvents,omitempty"`
+	// ReadOnly tells the receiving console that its account may watch but
+	// not kick, snoop, type in or chat. ServeRPC sets it per console.
+	ReadOnly bool `json:"readOnly,omitempty"`
 }
 
 // ScheduledEvent is one event-scheduler entry as shown on the console.

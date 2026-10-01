@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ func startWFCTestServer(t *testing.T, adminSigner gossh.Signer, opts ...func(*ss
 	t.Helper()
 	keyLine := string(gossh.MarshalAuthorizedKey(adminSigner.PublicKey()))
 	oldUM, oldMin, oldEn, oldReg := userMgr, adminMinLevel, wfcEnabled, sessionRegistry
+	oldAdmin, oldReauth := adminServer, wfcReauthInterval
 	userMgr = user.NewUserMgrForTest(&user.User{Handle: "boss", AccessLevel: 255, PublicKeys: []string{keyLine}})
 	adminMinLevel = func() int { return 250 }
 	wfcEnabled = func() bool { return true }
@@ -60,7 +62,10 @@ func startWFCTestServer(t *testing.T, adminSigner gossh.Signer, opts ...func(*ss
 	tap = snoop.NewTap()
 	sessionRegistry.Register(&session.BbsSession{NodeID: 4, StartTime: start, Width: 80, Height: 25, Tap: tap,
 		User: &user.User{Handle: "caller"}})
-	t.Cleanup(func() { userMgr, adminMinLevel, wfcEnabled, sessionRegistry = oldUM, oldMin, oldEn, oldReg })
+	t.Cleanup(func() {
+		userMgr, adminMinLevel, wfcEnabled, sessionRegistry = oldUM, oldMin, oldEn, oldReg
+		adminServer, wfcReauthInterval = oldAdmin, oldReauth
+	})
 
 	_, hostPriv, _ := ed25519.GenerateKey(rand.Reader)
 	blk, err := gossh.MarshalPrivateKey(hostPriv, "")
@@ -83,12 +88,37 @@ func startWFCTestServer(t *testing.T, adminSigner gossh.Signer, opts ...func(*ss
 	for _, o := range opts {
 		o(&cfg)
 	}
+	// The globals above are restored only once every handler has returned.
+	var (
+		handlers sync.WaitGroup
+		mu       sync.Mutex
+		stopped  bool
+	)
+	for name, h := range cfg.SubsystemHandlers {
+		cfg.SubsystemHandlers[name] = func(s ssh.Session) {
+			mu.Lock()
+			if stopped {
+				mu.Unlock()
+				return
+			}
+			handlers.Add(1)
+			mu.Unlock()
+			defer handlers.Done()
+			h(s)
+		}
+	}
 	srv, err := sshserver.NewServer(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	go func() { _ = srv.ListenAndServe() }()
-	t.Cleanup(func() { _ = srv.Close() })
+	t.Cleanup(func() {
+		mu.Lock()
+		stopped = true
+		mu.Unlock()
+		_ = srv.Close()
+		handlers.Wait()
+	})
 	addr = fmt.Sprintf("127.0.0.1:%d", port)
 	for i := 0; i < 100; i++ {
 		if c, err := net.Dial("tcp", addr); err == nil {

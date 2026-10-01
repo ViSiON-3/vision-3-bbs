@@ -74,6 +74,8 @@ Users are stored as a JSON array. Each user account contains:
 - `accessLevel` - Numeric access level (0-255)
 - `flags` - String of single-character flags for ACS checks (e.g., "ABC")
 - `validated` - Whether user is validated by SysOp
+- `publicKeys` - OpenSSH public keys that may open the [WFC console](how-to-guides/wfc-console.md) (omitted when empty)
+- `wfcReadOnly` - The account's WFC console may watch but not kick, snoop, type in or chat (omitted when false)
 
 #### Statistics
 

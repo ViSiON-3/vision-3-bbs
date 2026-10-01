@@ -48,11 +48,11 @@ func TestRightMovesToTheAdjacentColumn(t *testing.T) {
 	}
 }
 
-// Right from a left-column row with no right-column counterpart lands on the
-// nearest editable one rather than failing or jumping to the top.
-func TestRightFromBelowTheRightColumnClampsToNearest(t *testing.T) {
+// Right from a left-column row with no editable right-column counterpart
+// lands on the nearest editable one rather than failing or jumping to the top.
+func TestRightWithoutAnEditableNeighbourClampsToNearest(t *testing.T) {
 	m := editing(t)
-	m.editField = m.at(t, leftCol, 15) // WFC Keys, below the last editable right field
+	m.editField = m.at(t, leftCol, 12) // Custom Prompt, beside the right column's display fields
 	m.editField = m.horizontalField(rightCol)
 
 	f := m.fields[m.editField]
@@ -62,7 +62,7 @@ func TestRightFromBelowTheRightColumnClampsToNearest(t *testing.T) {
 	if f.Type == ftDisplay {
 		t.Errorf("landed on read-only field %q", f.Label)
 	}
-	if f.Row != 11 { // Output Mode: the last editable right-column row
+	if f.Row != 11 { // Output Mode: the nearest editable right-column row
 		t.Errorf("landed on row %d, want the nearest editable row 11", f.Row)
 	}
 }
@@ -106,7 +106,7 @@ func TestVerticalStaysInItsColumn(t *testing.T) {
 // walk did before, only scoped to the column.
 func TestVerticalWrapsWithinTheColumn(t *testing.T) {
 	m := editing(t)
-	m.editField = m.at(t, rightCol, 11) // Output Mode, last editable right field
+	m.editField = m.at(t, rightCol, 15) // WFC Read Only, last editable right field
 	m.editField = m.verticalField(1)
 
 	if f := m.fields[m.editField]; f.Col != rightCol || f.Row != 4 {
@@ -115,8 +115,8 @@ func TestVerticalWrapsWithinTheColumn(t *testing.T) {
 
 	m.editField = m.at(t, rightCol, 4)
 	m.editField = m.verticalField(-1)
-	if f := m.fields[m.editField]; f.Col != rightCol || f.Row != 11 {
-		t.Errorf("Up wrapped to col %d row %d, want col %d row 11", f.Col, f.Row, rightCol)
+	if f := m.fields[m.editField]; f.Col != rightCol || f.Row != 15 {
+		t.Errorf("Up wrapped to col %d row %d, want col %d row 15", f.Col, f.Row, rightCol)
 	}
 }
 

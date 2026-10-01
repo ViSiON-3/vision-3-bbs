@@ -39,8 +39,9 @@ type User struct {
 	Handle         string    `json:"handle"`
 	LegacyUsername string    `json:"username,omitempty"` // Migration only: used during load when Handle is absent; cleared on save
 	AccessLevel    int       `json:"accessLevel"`
-	Flags          string    `json:"flags"`                // Added Flags string for ACS 'F' check (e.g., "XYZ")
-	PublicKeys     []string  `json:"publicKeys,omitempty"` // OpenSSH authorized_keys lines authorized for WFC admin
+	Flags          string    `json:"flags"`                 // Added Flags string for ACS 'F' check (e.g., "XYZ")
+	PublicKeys     []string  `json:"publicKeys,omitempty"`  // OpenSSH authorized_keys lines authorized for WFC admin
+	WFCReadOnly    bool      `json:"wfcReadOnly,omitempty"` // WFC console may watch only: no kick, snoop, type-in or chat
 	LastLogin      time.Time `json:"lastLogin"`
 	// PreviousLogin is the LastLogin value from before the current session's
 	// authentication. Authenticate() overwrites LastLogin with time.Now()

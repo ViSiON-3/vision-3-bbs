@@ -222,6 +222,11 @@ func (m Model) drawTitle(s *screen, g geometry) {
 		s.text(boxX, titleY, badge, cBlue, cLightGray, g.w)
 		noteX += runeCount(badge) + 1
 	}
+	if m.readOnly() {
+		note := "READ-ONLY"
+		s.text(noteX, titleY, note, cYellow, cBlue, g.w/2-runeCount(name)/2-1)
+		noteX += runeCount(note) + 1
+	}
 
 	if m.snapshot != nil && len(m.snapshot.PendingReloads) > 0 {
 		// A structural config change is queued for the next idle window;
@@ -801,11 +806,13 @@ func (m Model) drawCmdBar(s *screen, g geometry) {
 		drawSegments(s, y, []segment{{m.status, fg}}, cBlue)
 		return
 	}
-	canKick := !m.opts.ReadOnly && !m.focusBottom()
+	canKick := !m.readOnly() && !m.focusBottom()
 	var segs []segment
 	switch {
 	case m.mode == modePages:
-		segs = append(segs, keySeg("ENTER", "answer")...)
+		if !m.readOnly() {
+			segs = append(segs, keySeg("ENTER", "answer")...)
+		}
 		segs = append(segs, keySeg("ESC", "back")...)
 		segs = append(segs, keySeg("Q", "quit")...)
 	case m.mode == modeDetails:
@@ -842,7 +849,7 @@ func (m Model) listBar(w int) []segment {
 		{string(gDown), cYellow}, {"] select ", cCyan}}
 	actions := func() []segment {
 		var out []segment
-		if !m.opts.ReadOnly && !m.focusBottom() {
+		if !m.readOnly() && !m.focusBottom() {
 			out = append(out, keySeg("K", "kick")...)
 			out = append(out, keySeg("S", "snoop")...)
 		}

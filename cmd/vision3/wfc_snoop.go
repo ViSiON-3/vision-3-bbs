@@ -118,12 +118,18 @@ func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) (
 }
 
 // wfcSnoopSubsystem serves one wfc-snoop channel. Authorization matches
-// wfc-admin and is re-checked for the life of the channel.
+// wfc-admin and is re-checked for the life of the channel. A read-only
+// account is refused, and loses an open channel at the next re-check.
 func wfcSnoopSubsystem(sess ssh.Session) {
 	handle, keyBytes := wfcVerifiedIdentity(sess.Context())
 	if handle == "" || !authorizeAdminKey(handle, keyBytes) {
 		slog.Warn("wfc-snoop: access denied", "user", handle, "addr", sess.RemoteAddr())
 		_ = admin.RefuseSnoop(sess, "access denied", snoopRefuseWait) // best-effort notice to client
+		return
+	}
+	if wfcReadOnly(handle) {
+		slog.Warn("wfc-snoop: refused, read-only account", "user", handle, "addr", sess.RemoteAddr())
+		_ = admin.RefuseSnoop(sess, admin.ErrReadOnly.Error(), snoopRefuseWait) // best-effort notice to client
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -139,11 +145,21 @@ func wfcSnoopSubsystem(sess ssh.Session) {
 		})
 		defer stopKA()
 	}
-	stillAuthorized := func(h string) bool { return authorizeAdminKey(h, keyBytes) }
-	go watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
-		slog.Warn("wfc-snoop: session revoked, disconnecting", "user", handle)
-		_ = sess.Close()
-	})
+	// Becoming read-only ends the snoop the way a revocation does.
+	stillAuthorized := func(h string) bool { return authorizeAdminKey(h, keyBytes) && !wfcReadOnly(h) }
+	// The watcher reads the user record; it must not outlive the session.
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
+			slog.Warn("wfc-snoop: session revoked, disconnecting", "user", handle, "readOnly", wfcReadOnly(handle))
+			_ = sess.Close()
+		})
+	}()
+	defer func() {
+		cancel()
+		<-watchDone
+	}()
 	audit := func(msg string, args ...any) { slog.Info("wfc-snoop: "+msg, args...) }
 	if err := admin.ServeSnoop(sess, handle, snoopTarget(sessionRegistry), audit); err != nil {
 		slog.Info("wfc-snoop: channel closed", "user", handle, "reason", err)

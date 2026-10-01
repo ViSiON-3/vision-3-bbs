@@ -29,6 +29,10 @@ A key that isn't registered, belongs to a below-CoSysOp user, or arrives while
 WFC Access is disabled simply falls through to the **normal caller login**.
 Adding WFC access never affects regular logins.
 
+An account can also be marked **WFC Read Only**. Its console shows the
+dashboard, logs, events and page list, but the daemon refuses its kick, snoop,
+type-in and chat. See [Read-only accounts](#read-only-accounts).
+
 ## Getting an SSH key onto the server
 
 WFC authenticates with an SSH keypair on the machine you run `wfc` from. The
@@ -112,6 +116,20 @@ You can still edit `data/users/users.json` by hand if you prefer — add a
 > hot-reload that file. After adding or removing a key while the BBS is running,
 > **restart the BBS** for the change to take effect.
 
+### Read-only accounts
+
+Set **WFC Read Only** to `Y` in `ue` (right column of the user's edit screen),
+or add `"wfcReadOnly": true` to the account in `users.json`. A read-only
+console can watch the dashboard, the logs, the events and the page list.
+The daemon refuses everything that acts on a caller: kick, snoop, type-in and
+chat. The console shows `READ-ONLY` in its title bar and hides those keys.
+
+The daemon reads the flag from the user record on every command, so setting it
+on a connected console stops its commands at once, and an open snoop is closed
+at the next 30-second re-check. Clearing the flag restores the commands without
+a reconnect. The restart note above applies to a change made with `ue` while
+the BBS is running.
+
 ## Getting `wfc`
 
 The release bundle includes `wfc` from v0.9.4, next to `vision3`, for every
@@ -165,7 +183,7 @@ wfc --connect ssh://Felonius@your-bbs-host:2222 --identity ~/.ssh/id_ed25519
 | `--no-color` | Disable color |
 | `--refresh <ms>` | Snapshot poll interval in milliseconds (default 1000) |
 | `--max-events <n>` | Events kept in the feed (default 200) |
-| `--readonly` | View-only: disables kick and snoop (and so type-in and chat) |
+| `--readonly` | View-only on this console: disables kick and snoop (and so type-in and chat). It is a client setting; use a [read-only account](#read-only-accounts) to restrict another sysop |
 | `--version` / `--help` | Print version / usage |
 
 ## Console functions
@@ -182,7 +200,9 @@ refreshes on its own (once a second by default; tune with `--refresh`).
 The title bar shows the BBS name (from `config.json`; `ViSiON/3 WFC` until the
 first snapshot arrives) and, at the right, the console version — or the link
 state when something is wrong (see [Reconnecting](#reconnecting) below). A
-queued structural config reload is flagged here as `RELOAD PENDING`.
+queued structural config reload is flagged here as `RELOAD PENDING`, and a
+console started with `--readonly` or signed in with a read-only account shows
+`READ-ONLY`.
 
 The counter row underneath:
 
@@ -280,8 +300,8 @@ select again. The caller sees a short
 "disconnected by the SysOp" notice, their session ends through the normal
 hang-up path (so the disconnect is logged and the node is freed), and every
 connected console gets a `Kicked by sysop` line in its Callers log. Kicks are
-audited in the BBS log with the admin's handle. `--readonly` hides the command
-entirely.
+audited in the BBS log with the admin's handle. `--readonly` and read-only
+accounts hide the command, and the daemon refuses it from a read-only account.
 
 ### Watching a node
 
@@ -380,7 +400,7 @@ not-available message. A caller can send one page per `pageSysopCooldown`
 seconds.
 
 `P` opens the page list: node, handle, reason and age. `Enter` opens the snoop
-on that node and starts chat; `Esc` goes back. A `--readonly` console can open the list but cannot answer: `Enter` is refused. Pages that were answered, timed
+on that node and starts chat; `Esc` goes back. A `--readonly` console, or one signed in with a read-only account, can open the list but cannot answer: `Enter` is refused. Pages that were answered, timed
 out or cancelled stay in the list, marked, until the caller logs off.
 
 The Alt keys arrive as `ESC` followed by a letter. In macOS Terminal and iTerm,
@@ -510,9 +530,12 @@ login because it didn't match a qualifying account.
   via structured logging. Unknown public-key offers are logged at debug level
   with the key fingerprint.
 - **Kick, type-in and chat change things.** Any account that can open the console can
-  disconnect any node, watch it, type for the caller and chat; there is no separate
-  permission level. Watching is not shown to the caller. Run remote consoles
-  with `--readonly` if a co-sysop should only look at the dashboard.
+  disconnect any node, watch it, type for the caller and chat, unless the
+  account is marked **WFC Read Only**. Watching is not shown to the caller.
+  Mark a co-sysop's account read-only if they should only look at the
+  dashboard. The daemon enforces it on the admin channel and the snoop
+  channel. `--readonly` only changes the console it is passed to, so it does
+  not restrict anyone else.
 - **Host-key verified.** The client checks the daemon's SSH host key against
   `known_hosts` unless you pass `--insecure`.
 

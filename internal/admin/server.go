@@ -250,6 +250,9 @@ var ErrKickUnsupported = errors.New("admin: kick not supported by this server")
 
 var errNoSysop = errors.New("admin: sysop identity required")
 
+// ErrReadOnly refuses every command but refresh from a read-only WFC account.
+var ErrReadOnly = errors.New("read-only WFC account")
+
 // Execute runs cmd with no sysop identity; node-control commands refuse it.
 func (s *Server) Execute(cmd AdminCommand) (*Result, error) { return s.ExecuteAs("", cmd) }
 

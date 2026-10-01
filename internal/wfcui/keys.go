@@ -98,7 +98,7 @@ func (m Model) refreshOrRetry() (tea.Model, tea.Cmd) {
 
 // beginKick is K: open the confirm prompt for the selected connection.
 func (m Model) beginKick() (tea.Model, tea.Cmd) {
-	if m.opts.ReadOnly {
+	if m.readOnly() {
 		m.setStatus("Read-only console: kick is disabled", true)
 		return m, nil
 	}

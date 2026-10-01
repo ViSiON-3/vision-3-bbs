@@ -25,7 +25,7 @@ func TestSnoopSSH(t *testing.T) {
 		HostSigners:      []gliderssh.Signer{genEd25519Signer(t)},
 		PublicKeyHandler: func(_ gliderssh.Context, _ gliderssh.PublicKey) bool { return true },
 		SubsystemHandlers: map[string]gliderssh.SubsystemHandler{
-			"wfc-admin": func(s gliderssh.Session) { _ = ServeRPC(srvCtx, s, srv, "sysop", nil) },
+			"wfc-admin": func(s gliderssh.Session) { _ = ServeRPC(srvCtx, s, srv, "sysop", nil, nil) },
 			"wfc-snoop": func(s gliderssh.Session) { _ = ServeSnoop(s, "sysop", target, func(string, ...any) {}) },
 		},
 	}
