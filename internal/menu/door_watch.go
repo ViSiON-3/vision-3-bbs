@@ -100,8 +100,11 @@ func newDoorWatch(idleTimeout time.Duration, deadline time.Time) *doorWatch {
 }
 
 // end ends the door for reason, unless the watch has already ended or been
-// frozen.
+// frozen. It is safe on a nil watch.
 func (w *doorWatch) end(reason doorEndReason) {
+	if w == nil {
+		return
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.frozen {

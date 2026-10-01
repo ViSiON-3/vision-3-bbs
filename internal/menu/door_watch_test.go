@@ -330,3 +330,40 @@ func TestDoorWatchEndsRLoginDoor(t *testing.T) {
 		})
 	}
 }
+
+// A remote door's own deadline timer and the watch's share a deadline.
+// Whichever fires first, the caller is told it was the time limit.
+func TestRemoteDoorTimeLimitWinsRace(t *testing.T) {
+	ds := newDoorServer(t)
+	host, port := ds.hostPort(t)
+	sess := newRelaySession()
+	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
+	ctx.User.TimeLimit = 1
+	ctx.SessionStartTime = time.Now().Add(-time.Minute + 300*time.Millisecond)
+
+	// Stand in for the watch's timer losing the race: a watch with no
+	// deadline of its own, so only the relay's timer can end the door.
+	ctx.watch = newDoorWatch(0, time.Time{})
+	done := make(chan error, 1)
+	go func() {
+		err := executeRLoginDoor(ctx)
+		if reason := ctx.watch.endReason(); reason != 0 {
+			err = reason.err()
+		}
+		done <- err
+	}()
+	select {
+	case conn := <-ds.conns:
+		t.Cleanup(func() { _ = conn.Close() })
+	case <-time.After(5 * time.Second):
+		t.Fatal("door server never received a connection")
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, editor.ErrTimeLimit) {
+			t.Errorf("err = %v, want editor.ErrTimeLimit", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RLogin door outlived the time limit")
+	}
+}
