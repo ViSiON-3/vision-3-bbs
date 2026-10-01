@@ -336,3 +336,23 @@ func TestChatEndedKeepsHoldRetakenForTypeIn(t *testing.T) {
 		t.Fatalf("holder after chat = %q; want a", h)
 	}
 }
+
+func TestChatsCountsStartedChats(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	if tp.Chats() != 0 {
+		t.Fatal("fresh tap has chats")
+	}
+	if tp.ChatBegan() {
+		t.Fatal("ChatBegan true with no request")
+	}
+	if tp.Chats() != 0 {
+		t.Fatal("refused ChatBegan was counted")
+	}
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if err := tp.RequestChat("a", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if tp.Chats() != 1 {
+		t.Fatalf("chats %d, want 1", tp.Chats())
+	}
+}

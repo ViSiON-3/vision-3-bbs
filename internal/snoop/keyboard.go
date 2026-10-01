@@ -29,6 +29,7 @@ type keyboard struct {
 	began    chan struct{} // closed by ChatBegan for the current request
 	endChat  chan struct{} // closed by StopChat/ReleaseKeyboard
 	chatting bool
+	chats    uint64 // chats started over the tap's life
 	// chatTook is the handle whose RequestChat took a free keyboard for the
 	// current chat; ChatEnded gives it back. Empty when the sysop already
 	// held it for type-in.
@@ -211,6 +212,7 @@ func (t *Tap) ChatBegan() bool {
 		return false
 	}
 	t.kb.chatting = true
+	t.kb.chats++
 	// Bytes left from a previous chat must not open this one.
 	for drained := false; !drained; {
 		select {
@@ -265,6 +267,14 @@ func (t *Tap) stopChatLocked() {
 			close(t.kb.endChat)
 		}
 	}
+}
+
+// Chats returns how many chats have started on this tap. A caller that
+// sees it change knows a sysop answered.
+func (t *Tap) Chats() uint64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.kb.chats
 }
 
 func (t *Tap) Chatting() bool {
