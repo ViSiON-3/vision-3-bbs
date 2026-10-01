@@ -56,7 +56,13 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 	}
 
 	subCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// The goroutines below call readOnly and srv; none may outlive the call,
+	// or a caller's state is read after ServeRPC has returned.
+	var workers sync.WaitGroup
+	defer func() {
+		cancel()
+		workers.Wait()
+	}()
 	events := srv.Subscribe(subCtx)
 
 	// A2: when ctx is cancelled, close rw so ReadFrame below unblocks.
@@ -65,7 +71,9 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 	// any log noise from double-close.
 	var closeOnce sync.Once
 	closeRW := func() { closeOnce.Do(func() { _ = rw.Close() }) }
+	workers.Add(3)
 	go func() {
+		defer workers.Done()
 		<-subCtx.Done()
 		closeRW()
 	}()
@@ -78,6 +86,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 	snapTicker := time.NewTicker(refreshInterval)
 	defer snapTicker.Stop()
 	go func() {
+		defer workers.Done()
 		for {
 			select {
 			case <-subCtx.Done():
@@ -93,6 +102,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop str
 	}()
 
 	go func() {
+		defer workers.Done()
 		for e := range events {
 			ev := e
 			if err := write(&Frame{Kind: KindEvent, Event: &ev}); err != nil {

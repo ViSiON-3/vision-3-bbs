@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -129,5 +130,57 @@ func TestReadOnlyChangeAppliesMidSession(t *testing.T) {
 			t.Fatal("snapshots never reported the change")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// ServeRPC returns only after its snapshot writer has finished asking
+// readOnly, so the caller may tear down what readOnly reads.
+func TestServeRPCWaitsForReadOnlyCallsBeforeReturning(t *testing.T) {
+	srv := NewServer(ServerConfig{Reg: &fakeRegistry{}, Refresh: 5 * time.Millisecond, MaxEvents: 8})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go srv.Run(ctx)
+
+	var (
+		calls   atomic.Int32
+		inside  atomic.Int32
+		once    sync.Once
+		entered = make(chan struct{})
+		release = make(chan struct{})
+	)
+	readOnly := func() bool {
+		if calls.Add(1) == 1 {
+			return false // initial snapshot
+		}
+		inside.Add(1)
+		defer inside.Add(-1)
+		once.Do(func() { close(entered) })
+		<-release
+		return false
+	}
+	cliConn, srvConn := net.Pipe()
+	returned := make(chan struct{})
+	go func() {
+		_ = ServeRPC(ctx, srvConn, srv, "sysop", readOnly, nil)
+		close(returned)
+	}()
+	c := NewStreamClient(cliConn)
+	if _, err := c.Snapshot(ctx); err != nil {
+		t.Fatal(err)
+	}
+	<-entered // the snapshot writer is now blocked inside readOnly
+	_ = c.Close()
+
+	// Give a ServeRPC that does not wait time to return early.
+	var early int32
+	select {
+	case <-returned:
+		early = inside.Load()
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(release)
+	<-returned
+	if early != 0 {
+		t.Fatalf("ServeRPC returned with %d readOnly call(s) still running", early)
 	}
 }
