@@ -161,12 +161,15 @@ func (um *UserMgr) syncFromDisk() {
 	if err != nil {
 		slog.Debug("refreshing users without the cross-process lock", "path", um.path, "error", err)
 	}
-	defer lock.Release() // nil-safe
 
 	// Read and fingerprint once, outside um.mu. This runs on the path of every
 	// menu change on every node, so holding the manager's write lock across
 	// file I/O would put each session's disk read in the way of all the others.
 	data, err := os.ReadFile(um.path)
+	// Drop the file lock before touching um.mu. SaveUsers takes um.mu and then
+	// the file lock, so holding both here in the other order would stall a
+	// save for the full lock timeout.
+	lock.Release() // nil-safe
 	if err != nil {
 		return // missing or unreadable: nothing to fold in
 	}
