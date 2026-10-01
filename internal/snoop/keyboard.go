@@ -39,6 +39,8 @@ type keyboard struct {
 	// caller left it) drops the keyboard, so the sysop's next keys are
 	// discarded rather than typed at the caller's prompt.
 	holderEnded bool
+	// now is the clock for hold durations; tests replace it.
+	now func() time.Time
 }
 
 // chatRequest is one RequestChat waiting on the caller's session. err is set,
@@ -53,6 +55,7 @@ func (k *keyboard) init() {
 	k.ready = make(chan struct{}, 1)
 	k.chatIn = make(chan []byte, inputQueue)
 	k.breakIn = make(chan struct{}, 1)
+	k.now = time.Now
 }
 
 // take makes handle the holder. It keeps the existing hold if handle already
@@ -62,13 +65,13 @@ func (k *keyboard) take(handle string) {
 		return
 	}
 	k.holder = handle
-	k.since = time.Now()
+	k.since = k.now()
 	k.injected = 0
 }
 
 // drop clears the holder and returns how long it held and what it injected.
 func (k *keyboard) drop() (time.Duration, int) {
-	held, n := time.Since(k.since), k.injected
+	held, n := k.now().Sub(k.since), k.injected
 	k.holder, k.since, k.injected = "", time.Time{}, 0
 	k.chatTook = ""
 	return held, n
@@ -91,18 +94,19 @@ func (t *Tap) TakeKeyboard(handle string) error {
 }
 
 // ReleaseKeyboard gives up the keyboard and ends chat if handle was in it.
-// It returns how long handle held the keyboard and how many bytes it
-// injected; both are zero when handle was not the holder.
-func (t *Tap) ReleaseKeyboard(handle string) (held time.Duration, injected int) {
+// ok reports whether handle held the keyboard; held and injected are how long
+// it held it and how many bytes it injected. held can be zero on a coarse
+// clock, so callers test ok rather than held.
+func (t *Tap) ReleaseKeyboard(handle string) (held time.Duration, injected int, ok bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.kb.holder != handle {
-		return 0, 0
+	if handle == "" || t.kb.holder != handle {
+		return 0, 0, false
 	}
 	held, injected = t.kb.drop()
 	t.kb.holderEnded = true
 	t.stopChatLocked()
-	return held, injected
+	return held, injected, true
 }
 
 func (t *Tap) KeyboardHolder() string {

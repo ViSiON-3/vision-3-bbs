@@ -67,8 +67,8 @@ func typeInHook(reg *session.SessionRegistry) func(string, int, time.Time, bool)
 			return err
 		}
 		if !on {
-			held, injected := tap.ReleaseKeyboard(sysop)
-			if held == 0 {
+			held, injected, ok := tap.ReleaseKeyboard(sysop)
+			if !ok {
 				return snoop.ErrNotHolder
 			}
 			slog.Info("wfc-snoop: type-in off", "sysop", sysop, "node", nodeID,

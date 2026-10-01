@@ -37,10 +37,25 @@ func TestOnlyOneHolder(t *testing.T) {
 	}
 }
 
+// frozenClock makes tp's clock stand still until advance is called, like a
+// coarse Windows clock over a short hold.
+func frozenClock(tp *Tap) (advance func(time.Duration)) {
+	t0 := time.Unix(1_700_000_000, 0)
+	tp.mu.Lock()
+	tp.kb.now = func() time.Time { return t0 }
+	tp.mu.Unlock()
+	return func(d time.Duration) {
+		tp.mu.Lock()
+		t0 = t0.Add(d)
+		tp.mu.Unlock()
+	}
+}
+
 func TestReleaseKeyboardReportsHoldAndBytes(t *testing.T) {
 	tp := newWatchedTap("a", "b")
-	if held, n := tp.ReleaseKeyboard("a"); held != 0 || n != 0 {
-		t.Fatalf("release without holding = %v, %d; want 0, 0", held, n)
+	advance := frozenClock(tp)
+	if held, n, ok := tp.ReleaseKeyboard("a"); ok || held != 0 || n != 0 {
+		t.Fatalf("release without holding = %v, %d, %v; want 0, 0, false", held, n, ok)
 	}
 	if err := tp.TakeKeyboard("a"); err != nil {
 		t.Fatal(err)
@@ -48,19 +63,35 @@ func TestReleaseKeyboardReportsHoldAndBytes(t *testing.T) {
 	tp.Inject("a", []byte("abc"))
 	tp.Inject("a", []byte("de"))
 	tp.Inject("b", []byte("zzz"))
-	time.Sleep(10 * time.Millisecond)
-	if held, n := tp.ReleaseKeyboard("b"); held != 0 || n != 0 {
-		t.Fatalf("non-holder release = %v, %d; want 0, 0", held, n)
+	advance(3 * time.Second)
+	if held, n, ok := tp.ReleaseKeyboard("b"); ok || held != 0 || n != 0 {
+		t.Fatalf("non-holder release = %v, %d, %v; want 0, 0, false", held, n, ok)
 	}
-	held, n := tp.ReleaseKeyboard("a")
-	if held < 10*time.Millisecond || n != 5 {
-		t.Fatalf("release = %v, %d; want >=10ms, 5", held, n)
+	held, n, ok := tp.ReleaseKeyboard("a")
+	if !ok || held != 3*time.Second || n != 5 {
+		t.Fatalf("release = %v, %d, %v; want 3s, 5, true", held, n, ok)
 	}
 	if err := tp.TakeKeyboard("a"); err != nil {
 		t.Fatal(err)
 	}
-	if held, n := tp.ReleaseKeyboard("a"); n != 0 || held >= 10*time.Millisecond {
-		t.Fatalf("second hold = %v, %d; counters were not reset", held, n)
+	if held, n, ok := tp.ReleaseKeyboard("a"); !ok || n != 0 || held != 0 {
+		t.Fatalf("second hold = %v, %d, %v; counters were not reset", held, n, ok)
+	}
+}
+
+// A hold too short for the clock to tick still reports that it was held.
+func TestReleaseKeyboardReportsZeroLengthHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	frozenClock(tp)
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	held, n, ok := tp.ReleaseKeyboard("a")
+	if !ok || held != 0 || n != 0 {
+		t.Fatalf("release = %v, %d, %v; want 0, 0, true", held, n, ok)
+	}
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after release", h)
 	}
 }
 
@@ -417,6 +448,7 @@ func TestChatsCountsStartedChats(t *testing.T) {
 
 func TestChatEndedReportsHoldDroppedWhenCallerEnds(t *testing.T) {
 	tp := newWatchedTap("a")
+	frozenClock(tp) // a zero-length hold must still be reported
 	if err := tp.TakeKeyboard("a"); err != nil {
 		t.Fatal(err)
 	}
@@ -425,8 +457,8 @@ func TestChatEndedReportsHoldDroppedWhenCallerEnds(t *testing.T) {
 	}
 	beginChat(t, tp, "a")
 	dropped, held, injected := tp.ChatEnded()
-	if dropped != "a" || injected != 5 || held <= 0 {
-		t.Fatalf("ChatEnded = %q, %v, %d; want a, >0, 5", dropped, held, injected)
+	if dropped != "a" || injected != 5 || held != 0 {
+		t.Fatalf("ChatEnded = %q, %v, %d; want a, 0, 5", dropped, held, injected)
 	}
 }
 
