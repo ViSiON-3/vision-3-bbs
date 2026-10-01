@@ -43,13 +43,17 @@ func TestBreakInFnCanReadKeys(t *testing.T) {
 	defer ih.Close()
 	brk := make(chan struct{}, 1)
 	inner := make(chan int, 1)
+	started := make(chan struct{})
 	ih.SetBreakIn(brk, func() {
+		close(started)
 		k, _ := ih.ReadKey()
 		inner <- k
 	})
 	outer := make(chan int, 1)
 	go func() { k, _ := ih.ReadKey(); outer <- k }()
 	brk <- struct{}{}
+	// Write only once the break-in runs, or the outer read can take the key.
+	<-started
 	_, _ = pw.Write([]byte("a"))
 	if k := <-inner; k != 'a' {
 		t.Fatalf("inner = %q", k)
