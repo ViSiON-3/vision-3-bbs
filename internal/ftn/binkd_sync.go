@@ -104,7 +104,7 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 		// offset: binkd lets options like -nomd or -ip sit anywhere on a node
 		// line and drops them from the positional stream, so a flag ahead of
 		// the host shifts both of the fields synced here.
-		if fields, ok := nodeDirective(trimmed); ok {
+		if fields, comment, ok := nodeDirective(trimmed); ok {
 			// One positional argument is enough to identify the line: a
 			// directive naming only an address still has to be recognised, or
 			// the append pass below adds a second line for the same node.
@@ -128,7 +128,7 @@ func SyncBinkdConf(confPath string, identity BinkdIdentity, links map[string]Bin
 					// trailing flavour and fileboxes untouched.
 					merged := mergeNodeFields(fields, addr, host, link.SessionPwd)
 					merged = applyIPFamily(merged, link.IPFamily, link.IPFamilyAuthoritative)
-					newLine := strings.Join(merged, " ")
+					newLine := joinNodeLine(merged, comment)
 					if newLine != trimmed {
 						out.WriteString(newLine)
 						out.WriteByte('\n')

@@ -20,6 +20,8 @@ func TestJoinBinkpHostPort(t *testing.T) {
 		{"2001:db8::1", 0, "[2001:db8::1]:24554"},
 		{"[2001:db8::1]", 24556, "[2001:db8::1]:24556"},
 		{"::ffff:192.0.2.1", 0, "[::ffff:192.0.2.1]:24554"}, // IPv4-mapped, still colon syntax
+		{"fe80::1%eth0", 0, "[fe80::1%eth0]:24554"},         // link-local, zone kept
+		{"[fe80::1%eth0]", 24556, "[fe80::1%eth0]:24556"},
 		{" hub.example ", 1, "hub.example:1"},
 	} {
 		if got := JoinBinkpHostPort(tc.host, tc.port); got != tc.want {
@@ -42,6 +44,11 @@ func TestValidateLinkIPFamily(t *testing.T) {
 		{"203.0.113.5", IPFamilyIPv4, true},
 		{"203.0.113.5", IPFamilyAuto, true},
 		{"", IPFamilyIPv4, true},
+		{"fe80::1%eth0", IPFamilyIPv4, false},
+		{"[fe80::1%eth0]", IPFamilyIPv4, false},
+		{"fe80::1%eth0", IPFamilyIPv6, true},
+		{"::ffff:192.0.2.1", IPFamilyIPv6, false},
+		{"::ffff:192.0.2.1", IPFamilyIPv4, true},
 	} {
 		if err := ValidateLinkIPFamily(tc.host, tc.fam); (err == nil) != tc.ok {
 			t.Errorf("ValidateLinkIPFamily(%q, %q) = %v, want ok=%v", tc.host, tc.fam, err, tc.ok)

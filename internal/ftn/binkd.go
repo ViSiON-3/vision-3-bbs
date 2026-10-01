@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -317,7 +318,7 @@ func replaceNodeLine(content string, node BinkdNode) (string, bool) {
 	changed := false
 	for i, l := range lines {
 		trimmed := strings.TrimSpace(l)
-		fields, ok := nodeDirective(trimmed)
+		fields, comment, ok := nodeDirective(trimmed)
 		if !ok {
 			continue
 		}
@@ -326,7 +327,7 @@ func replaceNodeLine(content string, node BinkdNode) (string, bool) {
 			continue
 		}
 
-		merged := strings.Join(applyIPFamily(mergeNodeFields(fields, address, node.Hostname, node.SessionPwd), node.IPFamily, true), " ")
+		merged := joinNodeLine(applyIPFamily(mergeNodeFields(fields, address, node.Hostname, node.SessionPwd), node.IPFamily, true), comment)
 		if trimmed == merged {
 			continue // already correct
 		}
@@ -347,7 +348,7 @@ func replaceNodeLine(content string, node BinkdNode) (string, bool) {
 // nodeExists checks whether a node address is already defined in the config.
 func nodeExists(content, address string) bool {
 	for _, l := range confLines(content) {
-		if fields, ok := nodeDirective(strings.TrimSpace(l)); ok {
+		if fields, _, ok := nodeDirective(strings.TrimSpace(l)); ok {
 			if idx := nodePositionalIdx(fields, 1); len(idx) > 0 && strings.EqualFold(fields[idx[0]], address) {
 				return true
 			}
@@ -357,14 +358,39 @@ func nodeExists(content, address string) bool {
 }
 
 // nodeDirective splits a trimmed binkd.conf line into its fields when it is a
-// "node" directive. binkd reads its keywords case-insensitively, and matches
-// a node's address the same way (its domain especially: "@TQWNet" is the
-// tqwnet domain), so callers compare addresses with strings.EqualFold. Taking
-// "NODE" or "@TQWNet" for some other node would append a second line for it.
-func nodeDirective(trimmed string) ([]string, bool) {
-	fields := strings.Fields(trimmed)
-	if len(fields) < 2 || !strings.EqualFold(fields[0], "node") {
-		return nil, false
+// "node" directive, and the comment that ends it, if any.
+//
+// binkd reads its keywords case-insensitively, and matches a node's address
+// the same way (its domain especially: "@TQWNet" is the tqwnet domain), so
+// callers compare addresses with strings.EqualFold. Taking "NODE" or
+// "@TQWNet" for some other node would append a second line for it.
+//
+// A word starting with '#' starts a comment that runs to the end of the line
+// (binkd's getword, GWX_HASH); a '#' inside a word, as in a password, does
+// not. The fields stop short of the comment, so a "-6" written in it is never
+// read as an option, and callers put the comment back with joinNodeLine.
+func nodeDirective(trimmed string) (fields []string, comment string, ok bool) {
+	active := trimmed
+	if loc := nodeCommentRE.FindStringIndex(trimmed); loc != nil {
+		active = trimmed[:loc[0]]
+		comment = strings.TrimSpace(trimmed[loc[0]:])
 	}
-	return fields, true
+	fields = strings.Fields(active)
+	if len(fields) < 2 || !strings.EqualFold(fields[0], "node") {
+		return nil, "", false
+	}
+	return fields, comment, true
+}
+
+// nodeCommentRE finds the word that starts a comment on a binkd.conf line.
+var nodeCommentRE = regexp.MustCompile(`(^|[ \t])#`)
+
+// joinNodeLine renders a node directive's fields, followed by the comment
+// nodeDirective split off it.
+func joinNodeLine(fields []string, comment string) string {
+	line := strings.Join(fields, " ")
+	if comment != "" {
+		line += " " + comment
+	}
+	return line
 }

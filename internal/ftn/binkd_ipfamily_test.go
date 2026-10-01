@@ -110,6 +110,60 @@ func TestBinkdNodeLineMatchingIgnoresCase(t *testing.T) {
 	}
 }
 
+// binkd ends a line at a word starting with '#'. A "-6" in the comment is not
+// an option: it must not be read as the node's family, and the comment must
+// come through a rewrite unchanged. A '#' inside a word, as in a password,
+// starts no comment.
+func TestBinkdNodeLineComments(t *testing.T) {
+	const line = "node 1337:3/100@tqwnet -4 hub.example:24554 pw # -6 does not work here\n"
+	fams, err := ReadBinkdIPFamilies(writeConf(t, line))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fams["1337:3/100@tqwnet"] != config.IPFamilyIPv4 {
+		t.Errorf("family read as %q, want ipv4 — the -6 in the comment was taken for an option", fams["1337:3/100@tqwnet"])
+	}
+
+	for _, tc := range []struct {
+		name string
+		link BinkdLinkSync
+		want string
+	}{
+		{"unchanged line is left alone",
+			BinkdLinkSync{SessionPwd: "pw", HostPort: "hub.example:24554", IPFamily: config.IPFamilyIPv4, IPFamilyAuthoritative: true},
+			line},
+		{"a rewrite keeps the comment",
+			BinkdLinkSync{SessionPwd: "newpw", HostPort: "hub.example:24554", IPFamily: config.IPFamilyIPv4, IPFamilyAuthoritative: true},
+			"node 1337:3/100@tqwnet -4 hub.example:24554 newpw # -6 does not work here\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := writeConf(t, line)
+			if err := SyncBinkdConf(p, BinkdIdentity{}, map[string]BinkdLinkSync{"1337:3/100@tqwnet": tc.link}); err != nil {
+				t.Fatal(err)
+			}
+			if got := readConf(t, p); got != tc.want {
+				t.Errorf("binkd.conf =\n%s\nwant\n%s", got, tc.want)
+			}
+		})
+	}
+
+	// A short directive is grown ahead of its comment, not after it.
+	p := writeConf(t, "node 1337:3/100@tqwnet # hub\n")
+	link := BinkdLinkSync{SessionPwd: "pw", HostPort: "hub.example:24554"}
+	if err := SyncBinkdConf(p, BinkdIdentity{}, map[string]BinkdLinkSync{"1337:3/100@tqwnet": link}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := readConf(t, p), "node 1337:3/100@tqwnet hub.example:24554 pw # hub\n"; got != want {
+		t.Errorf("binkd.conf = %q, want %q", got, want)
+	}
+
+	// '#' inside a password is part of it.
+	fields, comment, ok := nodeDirective("node 1:2/3@fido h:1 pa#ss")
+	if !ok || comment != "" || fields[len(fields)-1] != "pa#ss" {
+		t.Errorf("nodeDirective split a '#' inside a word: fields %q, comment %q", fields, comment)
+	}
+}
+
 func TestSyncBinkdConfAppendsPinnedNode(t *testing.T) {
 	p := writeConf(t, "# conf\n")
 	links := map[string]BinkdLinkSync{

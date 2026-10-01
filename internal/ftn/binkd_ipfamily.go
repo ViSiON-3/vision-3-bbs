@@ -134,7 +134,7 @@ func ReadBinkdIPFamilies(confPath string) (map[string]string, error) {
 	}
 	out := make(map[string]string)
 	for _, l := range confLines(string(data)) {
-		fields, ok := nodeDirective(strings.TrimSpace(l))
+		fields, _, ok := nodeDirective(strings.TrimSpace(l))
 		if !ok {
 			continue
 		}

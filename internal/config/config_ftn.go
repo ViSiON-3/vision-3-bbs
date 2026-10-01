@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"log/slog"
-	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -56,17 +56,32 @@ func NormalizeIPFamily(s string) (fam string, ok bool) {
 // would never connect, and only say so in its log. A DNS name is always
 // accepted, since which records it has is only known when binkd resolves it.
 func ValidateLinkIPFamily(hostname, fam string) error {
-	ip := net.ParseIP(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(hostname), "["), "]"))
-	if ip == nil {
+	ip, ok := parseIPLiteral(hostname)
+	if !ok {
 		return nil
 	}
+	// An IPv4-mapped literal ("::ffff:192.0.2.1") is an IPv4 host.
+	is4 := ip.Unmap().Is4()
 	switch {
-	case fam == IPFamilyIPv4 && ip.To4() == nil:
+	case fam == IPFamilyIPv4 && !is4:
 		return fmt.Errorf("%s is an IPv6 address and cannot be reached over IPv4", hostname)
-	case fam == IPFamilyIPv6 && ip.To4() != nil:
+	case fam == IPFamilyIPv6 && is4:
 		return fmt.Errorf("%s is an IPv4 address and cannot be reached over IPv6", hostname)
 	}
 	return nil
+}
+
+// parseIPLiteral parses a hostname that is an IP address, bracketed or not.
+// netip, not net.ParseIP: a link-local IPv6 address needs its zone
+// ("fe80::1%eth0"), and net.ParseIP rejects one, which would let it pass for
+// a DNS name.
+func parseIPLiteral(hostname string) (netip.Addr, bool) {
+	h := strings.TrimSpace(hostname)
+	if strings.HasPrefix(h, "[") && strings.HasSuffix(h, "]") {
+		h = h[1 : len(h)-1]
+	}
+	ip, err := netip.ParseAddr(h)
+	return ip, err == nil
 }
 
 // HostPort returns "hostname:port" for the link, defaulting the port to
@@ -88,10 +103,13 @@ func JoinBinkpHostPort(host string, port int) string {
 	if port <= 0 {
 		port = 24554
 	}
-	// By its colons, not ip.To4: an IPv4-mapped literal ("::ffff:192.0.2.1")
-	// has a 4-byte form but is still written with colons.
-	if strings.Contains(host, ":") && net.ParseIP(host) != nil {
-		host = "[" + host + "]"
+	// By its colons, not by family: an IPv4-mapped literal
+	// ("::ffff:192.0.2.1") is an IPv4 host but is still written with colons.
+	// The zone of a link-local address stays inside the brackets.
+	if !strings.HasPrefix(host, "[") && strings.Contains(host, ":") {
+		if _, ok := parseIPLiteral(host); ok {
+			host = "[" + host + "]"
+		}
 	}
 	return fmt.Sprintf("%s:%d", host, port)
 }

@@ -132,3 +132,32 @@ func TestFTNLinkIPFamily_AdoptsAHandAddedFlag(t *testing.T) {
 		t.Errorf("binkd.conf =\n%s\nwant the hand-added -4 kept", got)
 	}
 }
+
+// The review case: a comment mentioning -6 on a line pinned with -4 is read
+// as IPv4, and a save of an unrelated change leaves the line as it was.
+func TestFTNLinkIPFamily_IgnoresACommentOnTheLine(t *testing.T) {
+	m, dir := newDiskModel(t)
+	m.configs.FTN.Networks = map[string]config.FTNNetworkConfig{
+		"tqwnet": {OwnAddress: "1337:3/999", Links: []config.FTNLinkConfig{
+			{Address: "1337:3/100", Name: "Hub", Hostname: "hub.example", SessionPassword: "pw"},
+		}},
+	}
+	m.dirty = true
+	saveAndQuit(t, m)
+	const line = "node 1337:3/100@tqwnet -4 hub.example:24554 pw # -6 does not work here\n"
+	writeBinkdConf(t, dir, line)
+
+	m2, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m2.configs.FTN.Networks["tqwnet"].Links[0].IPFamily; got != config.IPFamilyIPv4 {
+		t.Fatalf("loaded IPFamily = %q, want %q", got, config.IPFamilyIPv4)
+	}
+	m2 = press(t, openRecordList(t, m2, "ftnlink"), "enter")
+	m2 = setRecField(t, m2, "Name", "TQW Hub")
+	saveAndQuit(t, m2)
+	if got := readBinkdConf(t, dir); !strings.Contains(got, line) {
+		t.Errorf("binkd.conf =\n%s\nwant the line unchanged", got)
+	}
+}
