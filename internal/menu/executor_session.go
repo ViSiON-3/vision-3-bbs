@@ -49,6 +49,7 @@ func clearSessionIdleTimeout(s ssh.Session) {
 func ClearSessionIdleTimeout(s ssh.Session) {
 	clearSessionIdleTimeout(s)
 	sessionDeadlines.Delete(s)
+	sessionChatCredits.Delete(s)
 }
 
 // sessionDeadlines remembers when each session's time limit runs out, for the
@@ -56,9 +57,37 @@ func ClearSessionIdleTimeout(s ssh.Session) {
 // recreated InputHandler. A session with no limit has no entry.
 var sessionDeadlines sync.Map
 
-// applySessionDeadline records the time-limit deadline for s and applies it to
-// the current InputHandler. The zero time means no limit.
+// sessionChatCredits holds, per session, the time spent in sysop chat. Chat
+// is not charged to the caller, so it is added to every deadline armed for
+// the session. It outlives MenuExecutor.Run, which runs once per menu.
+var sessionChatCredits sync.Map
+
+func chatCredit(s ssh.Session) time.Duration {
+	if v, ok := sessionChatCredits.Load(s); ok {
+		return v.(time.Duration)
+	}
+	return 0
+}
+
+// addChatCredit credits d of chat to s and moves its recorded deadline out
+// by d. The InputHandler's own deadline is moved by the break-in itself.
+func addChatCredit(s ssh.Session, d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	sessionChatCredits.Store(s, chatCredit(s)+d)
+	if v, ok := sessionDeadlines.Load(s); ok {
+		sessionDeadlines.Store(s, v.(time.Time).Add(d))
+	}
+}
+
+// applySessionDeadline records the time-limit deadline for s, extended by
+// its chat credit, and applies it to the current InputHandler. The zero time
+// means no limit.
 func applySessionDeadline(s ssh.Session, deadline time.Time) {
+	if !deadline.IsZero() {
+		deadline = deadline.Add(chatCredit(s))
+	}
 	if deadline.IsZero() {
 		sessionDeadlines.Delete(s)
 	} else {

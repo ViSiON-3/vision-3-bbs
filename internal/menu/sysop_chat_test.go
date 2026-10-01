@@ -400,3 +400,61 @@ func TestChatTinyScreenKeepsPanesApart(t *testing.T) {
 	_ = r.tap.StopChat("SysOp")
 	waitDone(t, done, "chat ignored StopChat")
 }
+
+func TestChatTimeIsCreditedToTimeLimit(t *testing.T) {
+	term := testterm.New(80, 25)
+	tap := snoop.NewTap()
+	t.Cleanup(tap.Close)
+	w := tap.AttachAs("SysOp")
+	t.Cleanup(w.Close)
+	sess := testterm.NewSession(term, "")
+	s := &chatSession{sess, tap}
+	newChatRig(t, "") // installs the chat env
+	SetSessionOutput(s, term)
+	SetSessionOutputMode(s, ansi.OutputModeUTF8)
+	t.Cleanup(func() {
+		resetSessionIH(s)
+		ClearSessionOutput(s)
+		ClearSessionOutputMode(s)
+		ClearSessionIdleTimeout(s)
+	})
+	limitEnds := time.Now().Add(500 * time.Millisecond)
+	applySessionDeadline(s, limitEnds)
+	ih := getSessionIH(s)
+	keys := make(chan error, 1)
+	go func() {
+		_, err := ih.ReadKey()
+		keys <- err
+	}()
+
+	if err := tap.RequestChat("SysOp", 2*time.Second); err != nil {
+		t.Fatalf("RequestChat: %v", err)
+	}
+	time.Sleep(800 * time.Millisecond)
+	if err := tap.StopChat("SysOp"); err != nil {
+		t.Fatalf("StopChat: %v", err)
+	}
+	waitFor(t, func() bool { return !tap.Chatting() }, "chat did not end")
+
+	if c := chatCredit(s); c < 800*time.Millisecond {
+		t.Fatalf("chat credit = %v, want >= 800ms", c)
+	}
+	// The next menu re-arms the limit from the session start, as Run does.
+	applySessionDeadline(s, limitEnds)
+	if timeLimitReached(s) {
+		t.Fatal("caller logged off for time spent in chat")
+	}
+	d, _ := sessionDeadlines.Load(s)
+	if left := time.Until(d.(time.Time)); left < 300*time.Millisecond {
+		t.Fatalf("time left after chat = %v, want the chat credited back", left)
+	}
+	sess.Send("x")
+	select {
+	case err := <-keys:
+		if err != nil {
+			t.Fatalf("read after chat = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("read after chat did not get the key")
+	}
+}

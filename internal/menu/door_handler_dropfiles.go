@@ -52,7 +52,7 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	remainingMinutes := unlimitedDoorMinutes
 	if timeLimit > 0 {
-		remainingMinutes = timeLimit - int(time.Since(sessionStartTime).Minutes())
+		remainingMinutes = timeLimit - int((time.Since(sessionStartTime) - chatCredit(s)).Minutes())
 		if remainingMinutes < 0 {
 			remainingMinutes = 0
 		}

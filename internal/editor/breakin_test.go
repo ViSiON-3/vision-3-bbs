@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -152,6 +153,31 @@ func TestBreakInDoesNotChargeChatTime(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("outer read did not get the key")
+	}
+}
+
+func TestBreakInExtendedDeadlineStillExpires(t *testing.T) {
+	pr, _ := io.Pipe()
+	ih := NewInputHandler(pr)
+	defer ih.Close()
+	start := time.Now()
+	ih.SetSessionDeadline(start.Add(200 * time.Millisecond))
+	brk := make(chan struct{}, 1)
+	ih.SetBreakIn(brk, func() { time.Sleep(300 * time.Millisecond) })
+	resc := make(chan error, 1)
+	go func() { _, err := ih.ReadKey(); resc <- err }()
+	brk <- struct{}{}
+	select {
+	case err := <-resc:
+		if !errors.Is(err, ErrTimeLimit) {
+			t.Fatalf("err = %v, want ErrTimeLimit", err)
+		}
+		// 200ms limit plus 300ms of chat.
+		if took := time.Since(start); took < 480*time.Millisecond {
+			t.Fatalf("time limit hit after %v, before the extended deadline", took)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("ErrTimeLimit never fired after the extended deadline")
 	}
 }
 

@@ -294,5 +294,7 @@ func serviceSysopChat(s ssh.Session, ih *editor.InputHandler, tap *snoop.Tap) {
 	start := time.Now()
 	slog.Info("sysop chat started", "caller", handle, "sysop", sysop)
 	runSysopChat(ih, tap, v.(io.Writer), sessionOutputMode(s), width, height, sysop, handle)
-	slog.Info("sysop chat ended", "caller", handle, "sysop", sysop, "duration", time.Since(start).Round(time.Second))
+	took := time.Since(start)
+	addChatCredit(s, took)
+	slog.Info("sysop chat ended", "caller", handle, "sysop", sysop, "duration", took.Round(time.Second))
 }
