@@ -15,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -130,7 +131,25 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	e.SetServerConfig(serverCfg)
 	e.SetLoginSequence(loginSequence)
 	e.SetProtocols(protocols)
+	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, caller: e.chatCaller})
 	return e
+}
+
+// chatCaller returns the handle and saved screen size of the logged-in user
+// on the session carrying tap, or zero values when there is none.
+func (e *MenuExecutor) chatCaller(tap *snoop.Tap) (handle string, width, height int) {
+	for _, bs := range e.activeSessions() {
+		if bs.Tap != tap {
+			continue
+		}
+		bs.Mutex.RLock()
+		defer bs.Mutex.RUnlock()
+		if bs.User == nil {
+			return "", 0, 0
+		}
+		return bs.User.Handle, bs.User.ScreenWidth, bs.User.ScreenHeight
+	}
+	return "", 0, 0
 }
 
 // --- Hot Reload Methods ---

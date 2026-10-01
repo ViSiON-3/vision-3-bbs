@@ -169,6 +169,9 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	if d, ok := sessionDeadlines.Load(s); ok {
 		ih.SetSessionDeadline(d.(time.Time))
 	}
+	if tap := tapOf(s); tap != nil {
+		ih.SetBreakIn(tap.BreakIn(), func() { serviceSysopChat(s, ih, tap) })
+	}
 	sessionInputHandlers.Store(s, ih)
 	return ih
 }
