@@ -768,6 +768,7 @@ func continuesParagraph(prev, next string, width int) bool {
 	return prevLen+1+runeLen(words[0]) > width
 }
 
+// leadingSpace counts the blanks a line of text is indented by.
 func leadingSpace(s string) int {
 	return runeLen(s) - runeLen(strings.TrimLeft(s, " \t"))
 }
