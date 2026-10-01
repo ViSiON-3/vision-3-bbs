@@ -47,6 +47,10 @@ type wfcAdminPubKey struct{}
 // connection). Otherwise it returns false so non-admin keys fall through to the
 // normal caller login flow via password auth.
 func wfcPublicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
+	// Clear the identity an earlier query stashed, so a rejected key never
+	// leaves it behind for the subsystems to find.
+	ctx.SetValue(wfcAdminHandleKey{}, "")
+	ctx.SetValue(wfcAdminPubKey{}, []byte(nil))
 	if userMgr == nil {
 		return false
 	}
