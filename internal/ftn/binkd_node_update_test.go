@@ -104,7 +104,7 @@ func TestUpdateBinkdConfNoOpWhenUnchanged(t *testing.T) {
 // TestReplaceNodeLinePreservesIndentation keeps an indented directive indented.
 func TestReplaceNodeLinePreservesIndentation(t *testing.T) {
 	content := "  node 1:2/3 old.host pw\n"
-	got, changed := replaceNodeLine(content, "1:2/3", "new.host", "pw2")
+	got, changed := replaceNodeLine(content, BinkdNode{Address: "1:2/3", Hostname: "new.host", SessionPwd: "pw2"})
 	if !changed {
 		t.Fatal("expected a change")
 	}
@@ -120,7 +120,7 @@ func TestReplaceNodeLinePreservesIndentation(t *testing.T) {
 func TestReplaceNodeLinePreservesExtraFields(t *testing.T) {
 	content := "node 1:2/3 old.host:24554 oldpw -md -ip 10.0.0.1\n"
 
-	got, changed := replaceNodeLine(content, "1:2/3", "new.host:24554", "newpw")
+	got, changed := replaceNodeLine(content, BinkdNode{Address: "1:2/3", Hostname: "new.host:24554", SessionPwd: "newpw"})
 
 	if !changed {
 		t.Fatal("expected a change")
@@ -134,7 +134,7 @@ func TestReplaceNodeLinePreservesExtraFields(t *testing.T) {
 // TestReplaceNodeLineGrowsShortDirective covers a directive with no password
 // field, which must still take the new values.
 func TestReplaceNodeLineGrowsShortDirective(t *testing.T) {
-	got, changed := replaceNodeLine("node 1:2/3 old.host\n", "1:2/3", "new.host", "")
+	got, changed := replaceNodeLine("node 1:2/3 old.host\n", BinkdNode{Address: "1:2/3", Hostname: "new.host"})
 	if !changed {
 		t.Fatal("expected a change")
 	}

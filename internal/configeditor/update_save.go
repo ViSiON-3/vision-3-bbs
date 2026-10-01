@@ -105,6 +105,11 @@ func (m *Model) saveAll() bool {
 				links[addr] = ftn.BinkdLinkSync{
 					SessionPwd: lnk.SessionPassword,
 					HostPort:   lnk.HostPort(),
+					// The editor read any hand-added -4 / -6 into the setting
+					// on load (adoptBinkdIPFamilies), so auto here is the
+					// sysop's choice and clears the flag.
+					IPFamily:              lnk.IPFamily,
+					IPFamilyAuthoritative: true,
 				}
 			}
 		}

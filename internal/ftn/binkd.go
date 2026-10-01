@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -20,6 +21,7 @@ type BinkdNode struct {
 	Hostname    string // host:port
 	SessionPwd  string // session password ("-" if none)
 	NetworkName string // used for section comment markers
+	IPFamily    string // config.IPFamily*: written as binkd's -4 / -6 option
 }
 
 // BinkdConfig holds all data needed to generate or update binkd.conf.
@@ -185,12 +187,12 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 	}
 
 	// This node is already defined: rewrite its line in place rather than
-	// skipping. The wizard can be re-run to change a hub's hostname, port or
-	// session password, and skipping would leave binkd talking to the old
+	// skipping. The wizard can be re-run to change a hub's hostname, port,
+	// session password or address family, and skipping would leave binkd talking to the old
 	// details while ftn.json showed the new ones. Appending instead would give
 	// binkd two lines for one address.
 	if len(existing) > 0 && nodeExists(string(existing), cfg.Node.Address) {
-		updated, changed := replaceNodeLine(string(existing), cfg.Node.Address, cfg.Node.Hostname, cfg.Node.SessionPwd)
+		updated, changed := replaceNodeLine(string(existing), cfg.Node)
 		if !changed {
 			return nil
 		}
@@ -223,7 +225,8 @@ func UpdateBinkdConf(confPath string, cfg BinkdConfig) error {
 
 // buildNodeLine renders the binkd "node" directive for a link.
 func buildNodeLine(cfg BinkdConfig) string {
-	return fmt.Sprintf("node %s %s %s", cfg.Node.Address, cfg.Node.Hostname, nodePassword(cfg.Node.SessionPwd))
+	n := cfg.Node
+	return formatNodeLine(n.Address, n.Hostname, n.SessionPwd, n.IPFamily)
 }
 
 // nodePassword renders a session password, using binkd's "-" for none.
@@ -303,25 +306,28 @@ func mergeNodeFields(existing []string, address, hostname, pwd string) []string 
 	return merged
 }
 
-// replaceNodeLine updates the "node <address> ..." directive for the given
+// replaceNodeLine updates the "node <address> ..." directive for node's
 // address in place, preserving the line's indentation, any binkd flags beyond
-// the fields the wizard manages, and the rest of the file. It reports whether
-// anything actually changed, so an unchanged config is left untouched on disk.
-func replaceNodeLine(content, address, hostname, pwd string) (string, bool) {
+// the fields the wizard manages, and the rest of the file. The wizard owns the
+// address family it asks about, so the line's -4 / -6 follows node.IPFamily.
+// It reports whether anything actually changed, so an unchanged config is left
+// untouched on disk.
+func replaceNodeLine(content string, node BinkdNode) (string, bool) {
+	address := node.Address
 	lines := confLines(content)
 	changed := false
 	for i, l := range lines {
 		trimmed := strings.TrimSpace(l)
-		if !strings.HasPrefix(trimmed, "node ") {
+		fields, comment, ok := nodeDirective(trimmed)
+		if !ok {
 			continue
 		}
-		fields := strings.Fields(trimmed)
 		idx := nodePositionalIdx(fields, 1)
-		if len(idx) == 0 || fields[idx[0]] != address {
+		if len(idx) == 0 || !strings.EqualFold(fields[idx[0]], address) {
 			continue
 		}
 
-		merged := strings.Join(mergeNodeFields(fields, address, hostname, pwd), " ")
+		merged := joinNodeLine(applyIPFamily(mergeNodeFields(fields, address, node.Hostname, node.SessionPwd), node.IPFamily, true), comment)
 		if trimmed == merged {
 			continue // already correct
 		}
@@ -342,13 +348,49 @@ func replaceNodeLine(content, address, hostname, pwd string) (string, bool) {
 // nodeExists checks whether a node address is already defined in the config.
 func nodeExists(content, address string) bool {
 	for _, l := range confLines(content) {
-		line := strings.TrimSpace(l)
-		if strings.HasPrefix(line, "node ") {
-			fields := strings.Fields(line)
-			if idx := nodePositionalIdx(fields, 1); len(idx) > 0 && fields[idx[0]] == address {
+		if fields, _, ok := nodeDirective(strings.TrimSpace(l)); ok {
+			if idx := nodePositionalIdx(fields, 1); len(idx) > 0 && strings.EqualFold(fields[idx[0]], address) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// nodeDirective splits a trimmed binkd.conf line into its fields when it is a
+// "node" directive, and the comment that ends it, if any.
+//
+// binkd reads its keywords case-insensitively, and matches a node's address
+// the same way (its domain especially: "@TQWNet" is the tqwnet domain), so
+// callers compare addresses with strings.EqualFold. Taking "NODE" or
+// "@TQWNet" for some other node would append a second line for it.
+//
+// A word starting with '#' starts a comment that runs to the end of the line
+// (binkd's getword, GWX_HASH); a '#' inside a word, as in a password, does
+// not. The fields stop short of the comment, so a "-6" written in it is never
+// read as an option, and callers put the comment back with joinNodeLine.
+func nodeDirective(trimmed string) (fields []string, comment string, ok bool) {
+	active := trimmed
+	if loc := nodeCommentRE.FindStringIndex(trimmed); loc != nil {
+		active = trimmed[:loc[0]]
+		comment = strings.TrimSpace(trimmed[loc[0]:])
+	}
+	fields = strings.Fields(active)
+	if len(fields) < 2 || !strings.EqualFold(fields[0], "node") {
+		return nil, "", false
+	}
+	return fields, comment, true
+}
+
+// nodeCommentRE finds the word that starts a comment on a binkd.conf line.
+var nodeCommentRE = regexp.MustCompile(`(^|[ \t])#`)
+
+// joinNodeLine renders a node directive's fields, followed by the comment
+// nodeDirective split off it.
+func joinNodeLine(fields []string, comment string) string {
+	line := strings.Join(fields, " ")
+	if comment != "" {
+		line += " " + comment
+	}
+	return line
 }

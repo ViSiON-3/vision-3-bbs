@@ -256,6 +256,10 @@ func (s *Service) syncConf(snap config.FTNConfig) ftn.BinkdOutbound {
 			links[fmt.Sprintf("%s@%s", lnk.Address, netKey)] = ftn.BinkdLinkSync{
 				SessionPwd: lnk.SessionPassword,
 				HostPort:   lnk.HostPort(),
+				// Not authoritative: an unset family must not strip a -4 a
+				// sysop added to binkd.conf by hand before the setting
+				// existed. The config editor reads that flag in on load.
+				IPFamily: lnk.IPFamily,
 			}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
@@ -135,6 +136,9 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 				if val == "" {
 					return fmt.Errorf("cannot be empty")
 				}
+				if err := config.ValidateLinkIPFamily(val, w.hubIPFamily); err != nil {
+					return err
+				}
 				w.hubHostname = val
 				w.hubAutofilled = false
 				return nil
@@ -153,6 +157,19 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 				w.hubAutofilled = false
 				return nil
 			},
+		},
+		{
+			Label: "Hub IP Family", Help: ipFamilyHelp, Type: ftLookup, Col: 3, Row: 11, Width: 6,
+			Get: func() string { return ipFamilyLabel(w.hubIPFamily) },
+			Set: func(val string) error {
+				fam, err := parseIPFamilyField(val, w.hubHostname)
+				if err != nil {
+					return err
+				}
+				w.hubIPFamily = fam
+				return nil
+			},
+			LookupItems: ipFamilyLookupItems,
 		},
 		{
 			Label: "Areafix Pwd", Help: "AreaFix password (required, case-insensitive)", Type: ftString, Col: 3, Row: 12, Width: 20, Masked: true,
@@ -242,4 +259,41 @@ func (m *Model) validateFTNWizard() error {
 		}
 	}
 	return nil
+}
+
+// ipFamilyHelp is the help line for the address-family field of a link.
+const ipFamilyHelp = "Auto, IPv4 or IPv6: the address family binkd calls the hub over. " +
+	"Pick IPv4 if the hub has an IPv6 address but this host cannot reach IPv6"
+
+// ipFamilyLabel shows a link's address family as the field displays it.
+func ipFamilyLabel(fam string) string {
+	switch fam {
+	case config.IPFamilyIPv4:
+		return "IPv4"
+	case config.IPFamilyIPv6:
+		return "IPv6"
+	}
+	return "Auto"
+}
+
+// ipFamilyLookupItems lists the choices for a link's address family.
+func ipFamilyLookupItems() []LookupItem {
+	return []LookupItem{
+		{Value: "Auto", Display: "Auto - whatever the hostname resolves to"},
+		{Value: "IPv4", Display: "IPv4 - only connect over IPv4 (binkd -4)"},
+		{Value: "IPv6", Display: "IPv6 - only connect over IPv6 (binkd -6)"},
+	}
+}
+
+// parseIPFamilyField reads an address-family field value and checks it can
+// reach hostname: a literal address of the other family never connects.
+func parseIPFamilyField(val, hostname string) (string, error) {
+	fam, ok := config.NormalizeIPFamily(val)
+	if !ok {
+		return "", fmt.Errorf("must be Auto, IPv4 or IPv6")
+	}
+	if err := config.ValidateLinkIPFamily(hostname, fam); err != nil {
+		return "", err
+	}
+	return fam, nil
 }

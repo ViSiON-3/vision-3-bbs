@@ -109,6 +109,16 @@ func TestFTNWizard_KeyboardFlowSavesNetwork(t *testing.T) {
 	m = setFTNField(t, m, "Areafix Pwd", "afpw")
 	m = setFTNField(t, m, "Session Pwd", "sesspw")
 	m = press(t, gotoFTNField(t, m, "Newscan Default"), "space")
+	// Hub IP Family cycles Auto -> IPv4 -> IPv6 -> Auto; leave it on IPv4.
+	m = press(t, gotoFTNField(t, m, "Hub IP Family"), "enter")
+	if got := m.ftnWizard.hubIPFamily; got != config.IPFamilyIPv4 {
+		t.Fatalf("after one Enter, hub family = %q, want %q", got, config.IPFamilyIPv4)
+	}
+	m = press(t, m, "space", "space")
+	if got := m.ftnWizard.hubIPFamily; got != config.IPFamilyAuto {
+		t.Fatalf("after cycling round, hub family = %q, want auto", got)
+	}
+	m = press(t, m, "enter")
 
 	m = press(t, m, "pgdown")
 	if _, ok := m.configs.FTN.Networks["fsxnet"]; !ok {
@@ -124,7 +134,8 @@ func TestFTNWizard_KeyboardFlowSavesNetwork(t *testing.T) {
 		t.Fatalf("ftn.json networks = %v", ac.FTN.Networks)
 	}
 	if net.OwnAddress != "21:4/999" || len(net.Links) != 1 || net.Links[0].Address != "21:1/100" ||
-		net.Links[0].SessionPassword != "sesspw" || net.Links[0].Port != 24556 {
+		net.Links[0].SessionPassword != "sesspw" || net.Links[0].Port != 24556 ||
+		net.Links[0].IPFamily != config.IPFamilyIPv4 {
 		t.Errorf("saved network = %+v", net)
 	}
 	var echoes []string
@@ -164,8 +175,8 @@ func TestFTNWizard_KeyboardFlowSavesNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("binkd.conf: %v", err)
 	}
-	if !strings.Contains(string(conf), "21:1/100") {
-		t.Error("binkd.conf has no node line for the hub")
+	if !strings.Contains(string(conf), "node 21:1/100@fsxnet -4 agency.bbs.nz:24556 sesspw") {
+		t.Errorf("binkd.conf has no IPv4-pinned node line for the hub:\n%s", conf)
 	}
 }
 

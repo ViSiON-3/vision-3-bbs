@@ -69,6 +69,7 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		Flavour:         "Crash",
 		Hostname:        w.hubHostname,
 		Port:            w.hubPort,
+		IPFamily:        w.hubIPFamily,
 	}
 
 	if existing, ok := m.configs.FTN.Networks[netKey]; ok && editing {
@@ -188,9 +189,10 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		NetworkOutbound: ftn.NetworkOutbounds(m.configs.FTN),
 		Node: ftn.BinkdNode{
 			Address:     fmt.Sprintf("%s@%s", w.hubAddress, netKey),
-			Hostname:    fmt.Sprintf("%s:%d", w.hubHostname, w.hubPort),
+			Hostname:    config.JoinBinkpHostPort(w.hubHostname, w.hubPort),
 			SessionPwd:  w.sessionPassword,
 			NetworkName: w.networkName,
+			IPFamily:    w.hubIPFamily,
 		},
 	}
 	// Non-fatal: binkd.conf update is best-effort, but the operator has to be
