@@ -7,6 +7,7 @@ package telnetserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/gliderlabs/ssh"
 )
 
@@ -128,6 +130,9 @@ type TelnetSessionAdapter struct {
 	ptyMu          sync.Mutex // protects pty from concurrent access
 	pty            ssh.Pty
 	transferActive atomic.Int32
+
+	tap        atomic.Pointer[snoop.Tap]
+	tapPending []byte // sysop bytes that did not fit the last Read; only touched by Read
 }
 
 // NewTelnetSessionAdapter creates an adapter that implements ssh.Session for a telnet connection.
@@ -178,14 +183,71 @@ func NewTelnetSessionAdapter(tc *TelnetConn) *TelnetSessionAdapter {
 	return adapter
 }
 
-// Read reads from the telnet connection (IAC-filtered).
-func (a *TelnetSessionAdapter) Read(p []byte) (int, error) {
-	return a.telnetConn.Read(p)
+// SetTap attaches the node's snoop tap. While a Read blocks on the socket, a
+// watcher goroutine wakes it whenever the sysop types.
+func (a *TelnetSessionAdapter) SetTap(t *snoop.Tap) {
+	a.tap.Store(t)
 }
 
-// Write writes to the telnet connection (IAC-escaped).
+// Tap returns the attached snoop tap, or nil.
+func (a *TelnetSessionAdapter) Tap() *snoop.Tap { return a.tap.Load() }
+
+// Read reads from the telnet connection (IAC-filtered). With a tap attached,
+// queued sysop bytes are returned before the socket is read again; a Read
+// already blocked on the socket is woken when sysop bytes arrive. Neither
+// source drops bytes and each keeps its own order.
+func (a *TelnetSessionAdapter) Read(p []byte) (int, error) {
+	if len(a.tapPending) > 0 {
+		n := copy(p, a.tapPending)
+		a.tapPending = a.tapPending[n:]
+		return n, nil
+	}
+	t := a.tap.Load()
+	if t == nil {
+		return a.telnetConn.Read(p)
+	}
+	for {
+		select {
+		case b := <-t.Input():
+			n := copy(p, b)
+			a.tapPending = b[n:]
+			return n, nil
+		default:
+		}
+		stop := make(chan struct{})
+		exited := make(chan struct{})
+		go func() {
+			defer close(exited)
+			select {
+			case <-t.InputReady():
+				a.telnetConn.Wake()
+			case <-stop:
+			}
+		}()
+		n, err := a.telnetConn.Read(p)
+		close(stop)
+		<-exited
+		if errors.Is(err, ErrWoken) {
+			continue
+		}
+		a.telnetConn.clearWake()
+		return n, err
+	}
+}
+
+// Write writes to the telnet connection (IAC-escaped) and copies what was
+// sent to the snoop tap. During a binary transfer the tap gets a marker
+// instead of the data.
 func (a *TelnetSessionAdapter) Write(p []byte) (int, error) {
-	return a.telnetConn.Write(p)
+	n, err := a.telnetConn.Write(p)
+	if t := a.tap.Load(); t != nil && n > 0 {
+		if a.IsTransferActive() {
+			t.TransferStarted()
+		} else {
+			t.Output(p[:n])
+		}
+	}
+	return n, err
 }
 
 // RawWrite provides a binary-safe write path for transfer protocols (ZMODEM
@@ -194,7 +256,7 @@ func (a *TelnetSessionAdapter) Write(p []byte) (int, error) {
 // satisfies the rawBinaryWriter interface used by RunCommandDirect, avoiding
 // the fallback warning and keeping the code path consistent with BBSSession.
 func (a *TelnetSessionAdapter) RawWrite(p []byte) (int, error) {
-	return a.telnetConn.Write(p)
+	return a.Write(p)
 }
 
 // Close closes the telnet session.
@@ -306,6 +368,9 @@ func (a *TelnetSessionAdapter) SetTransferActive(active bool) {
 		a.transferActive.Store(1)
 	} else {
 		a.transferActive.Store(0)
+	}
+	if t := a.tap.Load(); t != nil {
+		t.SetTransfer(active)
 	}
 }
 

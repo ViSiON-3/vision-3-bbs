@@ -175,3 +175,14 @@ func TestTimeoutClosesEndChat(t *testing.T) {
 		t.Fatal("EndChat of the expired request not closed")
 	}
 }
+
+func TestInputReadyFiresOnInject(t *testing.T) {
+	tp := NewTap()
+	_ = tp.TakeKeyboard("a")
+	tp.Inject("a", []byte("x"))
+	select {
+	case <-tp.InputReady():
+	default:
+		t.Fatal("InputReady not signalled")
+	}
+}

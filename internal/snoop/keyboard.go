@@ -22,6 +22,7 @@ type keyboard struct {
 	since    time.Time     // when holder took the keyboard
 	injected int           // bytes holder has injected
 	input    chan []byte   // type-in bytes for the transport's Read
+	ready    chan struct{} // buffered 1: signals queued type-in without consuming it
 	chatIn   chan []byte   // sysop bytes while chat is active
 	breakIn  chan struct{} // buffered 1: a pending chat request
 	began    chan struct{} // closed by ChatBegan for the current request
@@ -31,6 +32,7 @@ type keyboard struct {
 
 func (k *keyboard) init() {
 	k.input = make(chan []byte, inputQueue)
+	k.ready = make(chan struct{}, 1)
 	k.chatIn = make(chan []byte, inputQueue)
 	k.breakIn = make(chan struct{}, 1)
 }
@@ -101,13 +103,24 @@ func (t *Tap) Inject(handle string, p []byte) int {
 	select {
 	case dst <- append([]byte(nil), p...):
 		t.kb.injected += len(p)
+		if dst == t.kb.input {
+			select {
+			case t.kb.ready <- struct{}{}:
+			default:
+			}
+		}
 		return len(p)
 	default:
 		return 0
 	}
 }
 
-func (t *Tap) Input() <-chan []byte     { return t.kb.input }
+func (t *Tap) Input() <-chan []byte { return t.kb.input }
+
+// InputReady fires (without consuming) when type-in bytes are queued, so a
+// transport blocked on a socket read can wake itself.
+func (t *Tap) InputReady() <-chan struct{} { return t.kb.ready }
+
 func (t *Tap) ChatInput() <-chan []byte { return t.kb.chatIn }
 func (t *Tap) BreakIn() <-chan struct{} { return t.kb.breakIn }
 
