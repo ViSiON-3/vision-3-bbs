@@ -47,6 +47,7 @@ type BbsSession struct {
 	PendingPages []string             // Queued page messages for delivery at next prompt
 	Invisible    bool                 // True if user logged in invisibly (SysOp/CoSysOp only)
 	Tap          *snoop.Tap           // WFC snoop point for this node; nil in tests
+	ChatCredit   func() time.Duration // Sysop chat time credited to the caller; nil means none
 }
 
 // AddPage queues a page message for delivery at the user's next menu prompt.

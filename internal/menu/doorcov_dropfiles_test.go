@@ -92,7 +92,7 @@ func TestDoorcovBuildDoorCtxUnlimited(t *testing.T) {
 			if ctx.User.TimeLimit != 0 {
 				t.Errorf("User.TimeLimit = %d, want 0", ctx.User.TimeLimit)
 			}
-			if deadline, _, expired := doorDeadline(ctx.User.TimeLimit, start, 0, time.Now()); expired || !deadline.IsZero() {
+			if deadline, _, expired := doorDeadline(ctx.User.TimeLimit, start, 0, time.Now(), 0); expired || !deadline.IsZero() {
 				t.Errorf("doorDeadline = %v expired=%v, want no deadline", deadline, expired)
 			}
 		})
@@ -287,5 +287,30 @@ func TestDoorcovCleanupDropfiles(t *testing.T) {
 	cleanupDropfiles(dir)
 	if doorcovExists(filepath.Join(dir, "CHAIN.TXT")) {
 		t.Error("CHAIN.TXT survived cleanup after an earlier removal failed")
+	}
+}
+
+// Sysop chat time is not charged, so a door's time left and a remote door's
+// deadline both include the session's chat credit.
+func TestDoorChatCreditExtendsTimeLeft(t *testing.T) {
+	env := newMenuEnv(t)
+	s := newDoorcovSession()
+	t.Cleanup(func() { ClearSessionIdleTimeout(s) })
+	start := time.Now().Add(-15 * time.Minute)
+	addChatCredit(s, 10*time.Minute)
+
+	if got := ChatCredit(s); got != 10*time.Minute {
+		t.Fatalf("ChatCredit = %v, want 10m", got)
+	}
+	ctx := buildDoorCtx(env.e, s, nil, 7, "Neo", "Thomas Anderson", 50, 60, 12, "Zion",
+		132, 37, 3, start, ansi.OutputModeCP437, config.DoorConfig{}, "LORD")
+	if ctx.TimeLeftMin != 55 {
+		t.Errorf("TimeLeftMin = %d, want 55", ctx.TimeLeftMin)
+	}
+
+	now := time.Now()
+	deadline, _, _ := doorDeadline(60, start, 0, now, ChatCredit(s))
+	if want := start.Add(70 * time.Minute); !deadline.Equal(want) {
+		t.Errorf("door deadline = %v, want %v", deadline, want)
 	}
 }

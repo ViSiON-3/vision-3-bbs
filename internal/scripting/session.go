@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/dop251/goja"
 )
 
@@ -18,15 +19,15 @@ func registerSession(v3 *goja.Object, eng *Engine) {
 
 	// timeLeft — seconds remaining in session (dynamic)
 	jsutil.DefineAccessor(obj, "timeLeft", vm.ToValue(func(call goja.FunctionCall) goja.Value {
-		limit := time.Duration(eng.session.TimeLimit) * time.Minute
-		if limit <= 0 {
+		var credit time.Duration
+		if eng.session.ChatCredit != nil {
+			credit = eng.session.ChatCredit()
+		}
+		remaining, limited := timeleft.Remaining(eng.session.TimeLimit, eng.session.SessionStartTime, time.Now(), credit)
+		if !limited {
 			// No limit: report a steady hour rather than counting one down,
 			// which would tell the script the caller had run out.
 			return vm.ToValue(int(time.Hour.Seconds()))
-		}
-		remaining := limit - time.Since(eng.session.SessionStartTime)
-		if remaining < 0 {
-			remaining = 0
 		}
 		return vm.ToValue(int(remaining.Seconds()))
 	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)

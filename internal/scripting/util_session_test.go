@@ -130,3 +130,21 @@ func TestSessionOnlineFalseAfterCancel(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// TestSessionTimeLeftIncludesChatCredit: sysop chat time is not charged, so
+// timeLeft grows by the credit, read live.
+func TestSessionTimeLeftIncludesChatCredit(t *testing.T) {
+	credit := 0 * time.Minute
+	h := newHarness(t, harnessOpts{session: func(sc *SessionContext) {
+		sc.TimeLimit = 5
+		sc.SessionStartTime = time.Now().Add(-4 * time.Minute)
+		sc.ChatCredit = func() time.Duration { return credit }
+	}})
+	if left := h.eval(`v3.session.timeLeft`).ToInteger(); left > 60 {
+		t.Fatalf("timeLeft = %d before credit, want <= 60", left)
+	}
+	credit = 10 * time.Minute
+	if left := h.eval(`v3.session.timeLeft`).ToInteger(); left < 10*60 || left > 11*60 {
+		t.Errorf("timeLeft = %d with credit, want ~660", left)
+	}
+}

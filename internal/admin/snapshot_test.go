@@ -22,7 +22,7 @@ func TestBuildSnapshotMapsFields(t *testing.T) {
 		{NodeID: 2, User: nil, CurrentMenu: "", StartTime: now}, // pre-auth
 	}}
 
-	snap := BuildSnapshot(reg, "Test BBS", start, now, Counters{CallsToday: 14, NewUsers: -1, MailWaiting: -1}, nil)
+	snap := BuildSnapshot(reg, "Test BBS", start, now, Counters{CallsToday: 14, NewUsers: -1, MailWaiting: -1}, nil, nil)
 
 	if snap.SystemName != "Test BBS" || snap.UptimeSecs != 600 {
 		t.Fatalf("header wrong: %+v", snap)
@@ -58,7 +58,7 @@ func TestBuildSnapshotEffectiveTimeLimit(t *testing.T) {
 		return u.TimeLimit
 	}
 
-	snap := BuildSnapshot(reg, "Test BBS", start, now, Counters{}, exemptSysops)
+	snap := BuildSnapshot(reg, "Test BBS", start, now, Counters{}, exemptSysops, nil)
 	for i, want := range []struct {
 		left      int
 		unlimited bool
@@ -68,5 +68,29 @@ func TestBuildSnapshotEffectiveTimeLimit(t *testing.T) {
 			t.Errorf("%s: TimeLeftMins=%d TimeUnlimited=%v, want %d/%v",
 				n.Handle, n.TimeLeftMins, n.TimeUnlimited, want.left, want.unlimited)
 		}
+	}
+}
+
+// A ChatCredit hook adds sysop chat time to the time left, per node.
+func TestBuildSnapshotChatCredit(t *testing.T) {
+	start := time.Unix(1700000000, 0).UTC()
+	now := start.Add(10 * time.Minute)
+	reg := &fakeRegistry{sessions: []*session.BbsSession{
+		{NodeID: 1, User: &user.User{Handle: "A", AccessLevel: 10, TimeLimit: 60}, StartTime: start},
+		{NodeID: 2, User: &user.User{Handle: "B", AccessLevel: 10, TimeLimit: 60}, StartTime: start},
+	}}
+	credit := func(nodeID int) time.Duration {
+		if nodeID == 1 {
+			return 7 * time.Minute
+		}
+		return 0
+	}
+
+	snap := BuildSnapshot(reg, "Test BBS", start, now, Counters{}, nil, credit)
+	if got := snap.Nodes[0].TimeLeftMins; got != 57 {
+		t.Errorf("node 1 TimeLeftMins = %d, want 57", got)
+	}
+	if got := snap.Nodes[1].TimeLeftMins; got != 50 {
+		t.Errorf("node 2 TimeLeftMins = %d, want 50", got)
 	}
 }

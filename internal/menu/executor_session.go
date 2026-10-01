@@ -69,6 +69,10 @@ func chatCredit(s ssh.Session) time.Duration {
 	return 0
 }
 
+// ChatCredit returns the sysop chat time credited to s, for time-left values
+// computed outside the menu package.
+func ChatCredit(s ssh.Session) time.Duration { return chatCredit(s) }
+
 // addChatCredit credits d of chat to s and moves its recorded deadline out
 // by d. The InputHandler's own deadline is moved by the break-in itself.
 func addChatCredit(s ssh.Session, d time.Duration) {

@@ -46,8 +46,9 @@ func remoteDoorAddr(d config.DoorConfig) string {
 //
 // A zero deadline means no limit, matching how the rest of the BBS reads
 // TimeLimit <= 0. expired reports a caller who has no time left at all, who
-// should not reach the door server in the first place.
-func doorDeadline(timeLimitMin int, sessionStart time.Time, connectTimeoutSecs int, now time.Time) (deadline time.Time, timeout time.Duration, expired bool) {
+// should not reach the door server in the first place. credit is the sysop
+// chat time not charged to the caller.
+func doorDeadline(timeLimitMin int, sessionStart time.Time, connectTimeoutSecs int, now time.Time, credit time.Duration) (deadline time.Time, timeout time.Duration, expired bool) {
 	timeout = time.Duration(connectTimeoutSecs) * time.Second
 	if timeout <= 0 {
 		timeout = remoteDoorDefaultTimeout
@@ -56,7 +57,7 @@ func doorDeadline(timeLimitMin int, sessionStart time.Time, connectTimeoutSecs i
 		return time.Time{}, timeout, false
 	}
 
-	deadline = sessionStart.Add(time.Duration(timeLimitMin) * time.Minute)
+	deadline = sessionStart.Add(time.Duration(timeLimitMin)*time.Minute + credit)
 	left := deadline.Sub(now)
 	if left <= 0 {
 		return deadline, 0, true

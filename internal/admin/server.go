@@ -40,6 +40,9 @@ type ServerConfig struct {
 	// have no limit whatever their record says). Nil means u.TimeLimit as
 	// stored.
 	TimeLimit func(u *user.User) int
+	// ChatCredit reports the sysop chat time credited to the caller on
+	// nodeID, which the time left adds back. Nil means none.
+	ChatCredit func(nodeID int) time.Duration
 	// Kick disconnects the caller on nodeID whose session started at
 	// connectedAt (a zero time skips that check). Nil means the server
 	// rejects CommandKick as unsupported.
@@ -141,7 +144,7 @@ func (s *Server) tickLocked(now time.Time) {
 	if s.cfg.PendingReloads != nil {
 		pending = s.cfg.PendingReloads()
 	}
-	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, counters, s.cfg.TimeLimit)
+	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, counters, s.cfg.TimeLimit, s.cfg.ChatCredit)
 	snap.Schema = SnapshotSchema
 	snap.PendingReloads = pending
 	if s.cfg.MaxNodes != nil {

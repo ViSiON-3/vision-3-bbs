@@ -142,3 +142,21 @@ func wfcSnoopSubsystem(sess ssh.Session) {
 		slog.Info("wfc-snoop: channel closed", "user", handle, "reason", err)
 	}
 }
+
+// chatCreditHook reports the sysop chat time credited to the caller on a
+// node, so the WFC time left matches what the caller is allowed.
+func chatCreditHook(reg *session.SessionRegistry) func(int) time.Duration {
+	return func(nodeID int) time.Duration {
+		s := reg.Get(nodeID)
+		if s == nil {
+			return 0
+		}
+		s.Mutex.RLock()
+		credit := s.ChatCredit
+		s.Mutex.RUnlock()
+		if credit == nil {
+			return 0
+		}
+		return credit()
+	}
+}

@@ -1198,6 +1198,7 @@ func sessionHandler(s ssh.Session) {
 
 	bbsSession = &session.BbsSession{
 		Tap:          tap,
+		ChatCredit:   func() time.Duration { return menu.ChatCredit(s) },
 		NodeID:       int(nodeID),
 		StartTime:    sessionStartTime,
 		LastActivity: sessionStartTime,
@@ -1963,10 +1964,11 @@ func main() {
 		Kick: func(nodeID int, connectedAt time.Time) error {
 			return kickNode(sessionRegistry, nodeID, connectedAt)
 		},
-		TimeLimit: menuExecutor.TimeLimit,
-		TypeIn:    typeInHook(sessionRegistry),
-		Chat:      chatHook(sessionRegistry),
-		Snoop:     snoopTarget(sessionRegistry),
+		TimeLimit:  menuExecutor.TimeLimit,
+		ChatCredit: chatCreditHook(sessionRegistry),
+		TypeIn:     typeInHook(sessionRegistry),
+		Chat:       chatHook(sessionRegistry),
+		Snoop:      snoopTarget(sessionRegistry),
 	})
 	menuExecutor.Pager = adminServer
 	go adminServer.Run(context.Background())

@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -51,11 +52,8 @@ func buildDoorCtx(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	remainingMinutes := unlimitedDoorMinutes
-	if timeLimit > 0 {
-		remainingMinutes = timeLimit - int((time.Since(sessionStartTime) - chatCredit(s)).Minutes())
-		if remainingMinutes < 0 {
-			remainingMinutes = 0
-		}
+	if mins, limited := timeleft.Minutes(timeLimit, sessionStartTime, time.Now(), chatCredit(s)); limited {
+		remainingMinutes = mins
 	}
 	timeLeftStr := strconv.Itoa(remainingMinutes)
 	baudStr := "38400"

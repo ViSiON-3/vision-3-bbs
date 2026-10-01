@@ -39,6 +39,8 @@ type SessionContext struct {
 	// Session info
 	NodeNumber       int
 	SessionStartTime time.Time
+	// ChatCredit reports sysop chat time not charged to the caller; may be nil.
+	ChatCredit func() time.Duration
 
 	// BBS info
 	BoardName  string
