@@ -218,3 +218,15 @@ func TestSnoopWriteErrorEndsServe(t *testing.T) {
 		t.Fatal("ServeSnoop did not return after the client closed")
 	}
 }
+
+func TestSnoopTakeKeyboardRightAfterOpen(t *testing.T) {
+	tap := snoop.NewTap()
+	st, err := startSnoop(t, tap, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := tap.TakeKeyboard("sysop"); err != nil {
+		t.Fatalf("TakeKeyboard right after open: %v", err)
+	}
+}

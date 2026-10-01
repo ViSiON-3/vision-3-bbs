@@ -72,11 +72,14 @@ func ServeSnoop(rw io.ReadWriteCloser, sysop string, resolve SnoopTarget, audit 
 		_ = writeHeader(rw, SnoopHeader{Error: err.Error()})
 		return err
 	}
+	// Attach before the header so a client that has the header can take
+	// the keyboard at once. The catch-up chunk waits in the watcher queue
+	// until the loop below runs.
+	w := tap.AttachAs(sysop)
 	if err := writeHeader(rw, hdr); err != nil {
+		w.Close()
 		return err
 	}
-
-	w := tap.AttachAs(sysop)
 	start := time.Now()
 	audit("snoop attach", "sysop", sysop, "node", req.NodeID, "caller", hdr.Handle)
 	defer func() {
