@@ -108,3 +108,52 @@ var (
 	_ Snooper = (*InProcessClient)(nil)
 	_ Snooper = (*SSHChannelClient)(nil)
 )
+
+// nextEvent returns the next event on ch, or fails after a short wait.
+func nextEvent(t *testing.T, ch <-chan Event) Event {
+	t.Helper()
+	select {
+	case ev := <-ch:
+		return ev
+	case <-time.After(time.Second):
+		t.Fatal("no event")
+		return Event{}
+	}
+}
+
+func noEvent(t *testing.T, ch <-chan Event) {
+	t.Helper()
+	select {
+	case ev := <-ch:
+		t.Fatalf("unexpected event %+v", ev)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestClearPageWithoutPageIsSilent(t *testing.T) {
+	srv := newTestServer(ServerConfig{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := srv.Subscribe(ctx)
+	srv.ClearPage(3, "caller", "logoff")
+	srv.ClearPage(3, "caller", "answered")
+	noEvent(t, ch)
+}
+
+func TestClearPageClearsOutstandingPageOnce(t *testing.T) {
+	srv := newTestServer(ServerConfig{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := srv.Subscribe(ctx)
+	srv.RaisePage(3, "caller", "help")
+	if ev := nextEvent(t, ch); ev.Type != EventPage {
+		t.Fatalf("event %+v", ev)
+	}
+	srv.ClearPage(4, "other", "logoff")
+	srv.ClearPage(3, "caller", "answered")
+	if ev := nextEvent(t, ch); ev.Type != EventPageCleared || ev.NodeID != 3 || ev.Message != "answered" {
+		t.Fatalf("event %+v", ev)
+	}
+	srv.ClearPage(3, "caller", "logoff")
+	noEvent(t, ch)
+}

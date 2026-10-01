@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -62,6 +63,7 @@ type Server struct {
 	ring     []Event
 	subs     map[chan Event]struct{}
 	lastTick time.Time
+	pages    map[int]time.Time // node -> when its outstanding page was raised
 }
 
 // RefreshInterval returns the configured polling interval.
@@ -75,7 +77,7 @@ func NewServer(cfg ServerConfig) *Server {
 	if cfg.Refresh <= 0 {
 		cfg.Refresh = time.Second
 	}
-	return &Server{cfg: cfg, subs: make(map[chan Event]struct{})}
+	return &Server{cfg: cfg, subs: make(map[chan Event]struct{}), pages: make(map[int]time.Time)}
 }
 
 // Run polls until ctx is cancelled.
@@ -314,12 +316,26 @@ func (s *Server) ExecuteAs(sysop string, cmd AdminCommand) (*Result, error) {
 
 // RaisePage tells every console that the caller on nodeID paged the sysop.
 func (s *Server) RaisePage(nodeID int, handle, reason string) {
-	s.emit(Event{Time: timeNow(), Type: EventPage, NodeID: nodeID, Handle: handle, Message: reason})
+	now := timeNow()
+	s.mu.Lock()
+	s.pages[nodeID] = now
+	s.publishLocked([]Event{{Time: now, Type: EventPage, NodeID: nodeID, Handle: handle, Message: reason}})
+	s.mu.Unlock()
+	slog.Info("page raised", "node", nodeID, "handle", handle, "reason", reason)
 }
 
-// ClearPage withdraws a page; why is answered, timeout or logoff.
+// ClearPage withdraws nodeID's outstanding page; why is answered, cancelled,
+// timeout or logoff. It does nothing when the node has no page outstanding.
 func (s *Server) ClearPage(nodeID int, handle, why string) {
-	s.emit(Event{Time: timeNow(), Type: EventPageCleared, NodeID: nodeID, Handle: handle, Message: why})
+	s.mu.Lock()
+	if _, ok := s.pages[nodeID]; !ok {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.pages, nodeID)
+	s.publishLocked([]Event{{Time: timeNow(), Type: EventPageCleared, NodeID: nodeID, Handle: handle, Message: why}})
+	s.mu.Unlock()
+	slog.Info("page cleared", "node", nodeID, "handle", handle, "why", why)
 }
 
 // Consoles reports how many event subscribers (WFC consoles) are attached.
