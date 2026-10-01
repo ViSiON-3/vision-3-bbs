@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/muesli/cancelreader"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 )
@@ -316,24 +318,48 @@ func TestSnoopReleasesKeyboardWhenCallerLeaves(t *testing.T) {
 	}
 }
 
-// feedReader hands out bytes from a channel and counts them.
-type feedReader struct {
-	ch chan byte
-	n  atomic.Int32
+// cancelFeed is a cancelable reader over a byte channel. It counts bytes
+// handed out and, once canceled, returns without taking any more.
+type cancelFeed struct {
+	ch     chan byte
+	n      atomic.Int32
+	cancel chan struct{}
+	once   sync.Once
 }
 
-func (f *feedReader) Read(p []byte) (int, error) {
-	p[0] = <-f.ch
-	f.n.Add(1)
-	return 1, nil
+func newCancelFeed() *cancelFeed {
+	return &cancelFeed{ch: make(chan byte), cancel: make(chan struct{})}
 }
 
-func TestSnoopStdinReaderTakesAtMostOneByteAfterRun(t *testing.T) {
+func (f *cancelFeed) Read(p []byte) (int, error) {
+	select {
+	case <-f.cancel:
+		return 0, cancelreader.ErrCanceled
+	default:
+	}
+	select {
+	case b := <-f.ch:
+		f.n.Add(1)
+		p[0] = b
+		return 1, nil
+	case <-f.cancel:
+		return 0, cancelreader.ErrCanceled
+	}
+}
+
+func (f *cancelFeed) Cancel() bool {
+	f.once.Do(func() { close(f.cancel) })
+	return true
+}
+
+func (f *cancelFeed) Close() error { return nil }
+
+func TestSnoopStdinReaderTakesNothingAfterRun(t *testing.T) {
 	a, server := net.Pipe()
 	defer server.Close()
-	in := &feedReader{ch: make(chan byte)}
+	in := newCancelFeed()
 	cmd := newSnoopCmd(admin.NewSnoopStream(utf8Hdr, a), &fakeCtl{}, 3, fakeRaw{w: 80, h: 25})
-	cmd.SetStdin(in)
+	cmd.openIn = func(io.Reader) (cancelreader.CancelReader, error) { return in, nil }
 	cmd.SetStdout(io.Discard)
 	done := make(chan error, 1)
 	go func() { done <- cmd.Run() }()
@@ -353,8 +379,8 @@ func TestSnoopStdinReaderTakesAtMostOneByteAfterRun(t *testing.T) {
 		}
 	}()
 	time.Sleep(50 * time.Millisecond)
-	if got := in.n.Load() - before; got > 1 {
-		t.Fatalf("reader kept consuming stdin after Run: %d bytes", got)
+	if got := in.n.Load() - before; got != 0 {
+		t.Fatalf("reader took %d bytes after Run", got)
 	}
 }
 

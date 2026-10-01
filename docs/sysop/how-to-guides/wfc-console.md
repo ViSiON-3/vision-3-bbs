@@ -309,8 +309,7 @@ toggles it.
 | `Alt-C` | Start or end chat (see below) |
 
 If the caller disconnects, `wfc` returns to the dashboard with
-`node N disconnected`. The first byte you type right after leaving the snoop
-screen can be lost. Your terminal size is read when the snoop opens; resizing
+`node N disconnected`. Your terminal size is read when the snoop opens; resizing
 during a snoop is not tracked.
 
 The caller is not told they are being watched. Attach and detach are written

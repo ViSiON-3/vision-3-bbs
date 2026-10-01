@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/muesli/cancelreader"
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
@@ -67,6 +68,9 @@ type snoopCmd struct {
 	stdin  io.Reader
 	stdout io.Writer
 
+	// openIn wraps stdin in a reader whose pending read can be canceled.
+	openIn func(io.Reader) (cancelreader.CancelReader, error)
+
 	mu       sync.Mutex // guards stdout, mode, statusOn, lastErr
 	mode     string
 	statusOn bool
@@ -84,8 +88,15 @@ type snoopCmd struct {
 
 func newSnoopCmd(st *admin.SnoopStream, ctl snoopControl, node int, raw rawTerm) *snoopCmd {
 	return &snoopCmd{st: st, ctl: ctl, node: node, raw: raw, mode: snoopWatch,
-		stdin: os.Stdin, stdout: os.Stdout}
+		stdin: os.Stdin, stdout: os.Stdout, openIn: cancelreader.NewReader}
 }
+
+// plainReader is the fallback when no cancelable reader can be built; its
+// reads cannot be interrupted.
+type plainReader struct{ io.Reader }
+
+func (plainReader) Cancel() bool { return false }
+func (plainReader) Close() error { return nil }
 
 func (c *snoopCmd) SetStdin(r io.Reader)  { c.stdin = r }
 func (c *snoopCmd) SetStdout(w io.Writer) { c.stdout = w }
@@ -130,18 +141,29 @@ func (c *snoopCmd) Run() error {
 	outDone := make(chan struct{})
 	go c.pump(outDone)
 
+	cr, err := c.openIn(c.stdin)
+	if err != nil {
+		cr = plainReader{c.stdin}
+	}
 	done := make(chan struct{})
 	in := make(chan byte)
 	inEnd := make(chan struct{})
-	go c.readStdin(in, inEnd, done)
+	readerGone := make(chan struct{})
+	go func() {
+		defer close(readerGone)
+		c.readStdin(cr, in, inEnd, done)
+	}()
 
 	reason := c.loop(in, inEnd, outDone)
 
-	// The stdin goroutine stays parked on the real stdin. Once done is
-	// closed it drops the byte it is holding when the read returns, so a
-	// byte typed in the instant of exit is lost (it can be the first byte of
-	// a key sequence) but Bubble Tea gets every later one.
+	// Cancel the pending stdin read so it takes no more input. When the
+	// reader cannot be canceled the goroutine stays parked until the next
+	// byte arrives and drops it.
 	close(done)
+	if cr.Cancel() {
+		<-readerGone
+	}
+	_ = cr.Close()
 
 	c.mu.Lock()
 	mode := c.mode
@@ -166,10 +188,10 @@ func (c *snoopCmd) Run() error {
 }
 
 // readStdin sends stdin bytes to in until done closes or stdin ends.
-func (c *snoopCmd) readStdin(in chan<- byte, end chan<- struct{}, done <-chan struct{}) {
+func (c *snoopCmd) readStdin(r io.Reader, in chan<- byte, end chan<- struct{}, done <-chan struct{}) {
 	buf := make([]byte, 1)
 	for {
-		n, err := c.stdin.Read(buf)
+		n, err := r.Read(buf)
 		if n > 0 {
 			select {
 			case in <- buf[0]:
@@ -178,7 +200,11 @@ func (c *snoopCmd) readStdin(in chan<- byte, end chan<- struct{}, done <-chan st
 			}
 		}
 		if err != nil {
-			close(end)
+			select {
+			case <-done:
+			default:
+				close(end)
+			}
 			return
 		}
 		select {
