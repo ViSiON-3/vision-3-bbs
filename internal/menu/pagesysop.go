@@ -24,6 +24,13 @@ type SysopPager interface {
 // pageCooldowns maps a lower-cased handle to the time of its last page.
 var pageCooldowns sync.Map
 
+// pageCountdownFrame rings the bell and redraws the seconds left in place.
+// Every output mode is an ANSI terminal, so cursor save and restore apply to
+// all of them.
+func pageCountdownFrame(left int) []byte {
+	return []byte(fmt.Sprintf("\a\x1b[s%3d\x1b[u", left))
+}
+
 func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	if c.currentUser == nil {
@@ -74,7 +81,7 @@ func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 		chats = tap.Chats()
 	}
 	for i := cfg.PageSysopTimeoutSeconds; i > 0; i-- {
-		c.terminal.Write([]byte(fmt.Sprintf("\a\x1b[s%3d\x1b[u", i)))
+		_ = terminalio.WriteProcessedBytes(c.terminal, pageCountdownFrame(i), c.outputMode)
 		_, err := ih.ReadKeyWithTimeout(time.Second)
 		if tap != nil {
 			// The chat hook already cleared the page.

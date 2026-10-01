@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -48,6 +49,11 @@ func (h *holdSession) Read(p []byte) (int, error) {
 
 func runPageSysopFor(t *testing.T, env *menuEnv, handle, input string) string {
 	t.Helper()
+	return runPageSysopMode(t, env, handle, input, ansi.OutputModeAuto)
+}
+
+func runPageSysopMode(t *testing.T, env *menuEnv, handle, input string, mode ansi.OutputMode) string {
+	t.Helper()
 	ts := &holdSession{testSession: newTestSession(input), done: make(chan struct{})}
 	t.Cleanup(func() {
 		close(ts.done)
@@ -60,7 +66,7 @@ func runPageSysopFor(t *testing.T, env *menuEnv, handle, input string) string {
 		currentUser:      &user.User{Handle: handle, AccessLevel: 10},
 		nodeNumber:       1,
 		sessionStartTime: time.Now(),
-		outputMode:       ansi.OutputModeAuto,
+		outputMode:       mode,
 		termWidth:        80,
 		termHeight:       24,
 	}
@@ -144,5 +150,17 @@ func TestPageSysopCooldown(t *testing.T) {
 	}
 	if !strings.Contains(out, "recently") || !strings.Contains(out, "5") {
 		t.Fatalf("no cooldown notice: %q", out)
+	}
+}
+
+func TestPageSysopCountdownInEveryOutputMode(t *testing.T) {
+	for name, mode := range map[string]ansi.OutputMode{"utf8": ansi.OutputModeUTF8, "cp437": ansi.OutputModeCP437} {
+		env := newMenuEnv(t)
+		env.e.Pager = &fakePager{consoles: 1}
+		setPageConfig(env, 2, 300)
+		out := runPageSysopMode(t, env, fmt.Sprintf("PsCount%s%d", name, time.Now().UnixNano()), "help\r", mode)
+		if !strings.Contains(out, string(pageCountdownFrame(2))) || !strings.Contains(out, string(pageCountdownFrame(1))) {
+			t.Fatalf("%s: countdown frames missing from %q", name, out)
+		}
 	}
 }
