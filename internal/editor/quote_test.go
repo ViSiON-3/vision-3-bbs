@@ -357,8 +357,7 @@ func TestQuoteModeDimmingTracksRepeatedQuotes(t *testing.T) {
 	defer cleanup()
 
 	// Driving the session directly keeps the key script out of the assertion.
-	qs := &quoteSession{ch: ch, src: quoteBody[:3], quoted: make([]int, 3), prefix: "Bu> ", origLine: 1}
-	qs.layout()
+	qs := newQuoteSession(ch, quoteBody[:3], 1)
 	qs.quoteSelected() // quotes line 1, bar steps to line 2
 	qs.moveTo(0)
 	qs.quoteSelected() // quotes line 1 a second time
