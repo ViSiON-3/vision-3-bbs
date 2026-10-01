@@ -85,7 +85,8 @@ type snoopCmd struct {
 
 	typeBeforeChat bool // type-in was on when chat started
 	barRow         int  // row the bar was last drawn on, 0 if none
-	regionH        int  // bottom of the scroll region set on the sysop terminal, 0 if none
+	regionOn       bool // a scroll region was set on the sysop terminal
+	regionStale    bool // a resize may have reset it, so send it again
 	eraseRow       int  // row to clear at the next safe point, 0 if none
 	track          seqTracker
 
@@ -237,6 +238,7 @@ func (c *snoopCmd) onResize() {
 		return
 	}
 	c.w, c.h = w, h
+	c.regionStale = true
 	if !c.statusManual {
 		c.statusOn = h > c.st.Header.Height
 	}
@@ -477,26 +479,33 @@ func (c *snoopCmd) drawStatus() {
 		return
 	}
 	callerH := c.st.Header.Height
+	cur := &c.track.cur
 	want := c.wantRegion()
-	regionOff := !want && c.regionH != 0
-	regionSet := want && (c.regionH != callerH || c.track.cur.regionDirty)
-	if c.eraseRow == 0 && !c.statusOn && !regionOff && !regionSet {
+	custom := cur.top != 1 || cur.bot != callerH
+	regionOff := !want && c.regionOn
+	regionSet := want && (!c.regionOn || c.regionStale || cur.regionDirty)
+	regionKeep := !want && !c.regionOn && c.regionStale && custom
+	if c.eraseRow == 0 && !c.statusOn && !regionOff && !regionSet && !regionKeep {
 		return
 	}
-	if !c.track.safe() || !c.track.cur.canRestore() {
+	if !c.track.safe() || !cur.canRestore() {
 		return
 	}
-	back := c.track.cur.restore()
+	back := cur.restore()
+	// The sysop terminal mirrors the caller's scroll region, which is the
+	// whole caller screen unless the caller set one. DECSTBM homes the
+	// cursor, so the tracked position goes back after it.
 	switch {
-	case regionOff:
-		// DECSTBM homes the cursor, so the tracked position goes back after it.
+	case regionOff && !custom:
 		_, _ = fmt.Fprintf(c.stdout, "\x1b[r%s", back)
-		c.regionH = 0
-	case regionSet:
-		_, _ = fmt.Fprintf(c.stdout, "\x1b[1;%dr%s", callerH, back)
-		c.regionH = callerH
-		c.track.cur.top, c.track.cur.bot = 1, callerH
-		c.track.cur.regionDirty = false
+		c.regionOn = false
+	case regionOff, regionSet, regionKeep:
+		_, _ = fmt.Fprintf(c.stdout, "\x1b[%d;%dr%s", cur.top, cur.bot, back)
+		c.regionOn = want
+	}
+	if regionSet || regionKeep || regionOff {
+		c.regionStale = false
+		cur.regionDirty = false
 	}
 	if c.eraseRow != 0 {
 		_, _ = fmt.Fprintf(c.stdout, "\x1b[%d;1H\x1b[0m\x1b[2K%s", c.eraseRow, back)

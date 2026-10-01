@@ -770,14 +770,66 @@ func TestSnoopMirroredScreenScrollsUnderBar(t *testing.T) {
 	}
 }
 
-func TestSnoopCallerRegionChangeReassertsOurs(t *testing.T) {
+func TestSnoopCallerRegionStaysInForce(t *testing.T) {
 	r := newRig(t, utf8Hdr, 100, 40)
 	r.out.waitFor(t, "\x1b[1;25r")
+	mark := len(r.out.String())
 	_, _ = r.server.Write([]byte("\x1b[3;10r"))
-	r.out.waitFor(t, "\x1b[3;10r")
-	r.out.waitFor(t, "\x1b[3;10r\x1b[1;25r\x1b[1;1H")
-	_, _ = r.server.Write([]byte("\x1bc"))
+	r.out.waitFor(t, "\x1b[3;10r\x1b[3;10r\x1b[1;1H")
+	_, _ = r.server.Write([]byte("\x1b[r"))
+	r.out.waitFor(t, "\x1b[r\x1b[1;25r")
+	_, _ = r.server.Write([]byte("\x1b[3;10r\x1bc"))
 	r.out.waitFor(t, "\x1bc\x1b[1;25r")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	between := r.out.String()[mark:]
+	between = between[:strings.Index(between, "\x1b[r\x1b[1;25r")]
+	if strings.Contains(between, "\x1b[1;25r") {
+		t.Fatalf("caller region overwritten: %q", between)
+	}
+}
+
+func TestSnoopCallerRegionScrollsOnlyItsRows(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 40)
+	r.out.waitFor(t, "NODE 3")
+	// The DECSTBM is split across chunks.
+	for _, chunk := range []string{"top1\r\ntop2", "\x1b[3;1", "0r\x1b[3;1H"} {
+		_, _ = r.server.Write([]byte(chunk))
+	}
+	var sb strings.Builder
+	for i := 1; i <= 12; i++ {
+		fmt.Fprintf(&sb, "m%02d\r\n", i)
+	}
+	_, _ = r.server.Write([]byte(sb.String()))
+	r.out.waitFor(t, "m12")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	sc := newVTScreen(100, 40)
+	sc.feed(strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J"))
+	want := map[int]string{0: "top1", 1: "top2", 2: "m06", 8: "m12", 9: "", 10: ""}
+	for row, w := range want {
+		if got := sc.line(row); got != w {
+			t.Errorf("row %d = %q, want %q", row+1, got, w)
+		}
+	}
+	if !strings.Contains(sc.line(39), "NODE 3") {
+		t.Fatalf("bar missing: %q", sc.line(39))
+	}
+}
+
+func TestSnoopResizeResendsRegion(t *testing.T) {
+	raw := &sizedRaw{w: 100, h: utf8Hdr.Height + 10}
+	r := newResizeRig(t, raw)
+	r.out.waitFor(t, "\x1b[1;25r")
+	raw.set(100, utf8Hdr.Height+12)
+	r.cmd.resize <- struct{}{}
+	deadline := time.Now().Add(2 * time.Second)
+	for strings.Count(r.out.String(), "\x1b[1;25r") < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("region not re-sent after the resize")
+		}
+		time.Sleep(time.Millisecond)
+	}
 	r.send(t, "\x1bx")
 	r.wait(t)
 }
@@ -788,7 +840,7 @@ func TestSnoopNoRegionWhenTerminalIsNotTaller(t *testing.T) {
 	r.out.waitFor(t, "hi")
 	r.send(t, "\x1bx")
 	r.wait(t)
-	if strings.Contains(r.out.String(), "r\x1b[") && strings.Contains(r.out.String(), "\x1b[1;25r") {
+	if strings.Contains(r.out.String(), "\x1b[1;25r") {
 		t.Fatal("scroll region set on a terminal with no spare row")
 	}
 }
