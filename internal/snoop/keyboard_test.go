@@ -584,3 +584,43 @@ func TestRequestChatReturnsRefusalThatTiesWithTimeout(t *testing.T) {
 		t.Fatalf("holder = %q; the request's keyboard was not released", h)
 	}
 }
+
+func TestRequestChatRefusedWhilePending(t *testing.T) {
+	tp := newWatchedTap("a")
+	first := make(chan error, 1)
+	go func() {
+		started, err := tp.RequestChat("a", 5*time.Second)
+		if err == nil && !started {
+			err = errors.New("not started")
+		}
+		first <- err
+	}()
+	for pending := false; !pending; {
+		tp.mu.Lock()
+		pending = tp.kb.req != nil
+		tp.mu.Unlock()
+		if !pending {
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	if started, err := tp.RequestChat("a", time.Second); started || !errors.Is(err, ErrChatPending) {
+		t.Fatalf("second RequestChat = %v, %v; want false, ErrChatPending", started, err)
+	}
+	end := tp.EndChat()
+	<-tp.BreakIn()
+	if !tp.ChatBegan() {
+		t.Fatal("ChatBegan refused the first request")
+	}
+	if err := <-first; err != nil {
+		t.Fatalf("first RequestChat: %v", err)
+	}
+	select {
+	case <-end:
+		t.Fatal("chat ended by the refused request")
+	default:
+	}
+	if !tp.Chatting() || tp.KeyboardHolder() != "a" {
+		t.Fatalf("chatting=%v holder=%q; want true, a", tp.Chatting(), tp.KeyboardHolder())
+	}
+}

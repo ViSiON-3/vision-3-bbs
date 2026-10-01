@@ -14,6 +14,7 @@ var (
 	ErrChatNotStarted = errors.New("caller's session is not waiting for input")
 	ErrTapClosed      = errors.New("caller disconnected")
 	ErrNotWatching    = errors.New("attach a watch before taking the keyboard")
+	ErrChatPending    = errors.New("a chat request is already waiting for the caller")
 )
 
 const inputQueue = 64
@@ -185,6 +186,12 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 	if t.kb.chatting {
 		t.mu.Unlock()
 		return false, nil
+	}
+	// A second request would replace the first's channels, and the first
+	// one's timeout would then end the chat the second one started.
+	if t.kb.req != nil {
+		t.mu.Unlock()
+		return false, ErrChatPending
 	}
 	tookIt := t.kb.holder == ""
 	t.kb.take(handle)
