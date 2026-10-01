@@ -85,6 +85,7 @@ type snoopCmd struct {
 
 	typeBeforeChat bool // type-in was on when chat started
 	barRow         int  // row the bar was last drawn on, 0 if none
+	regionH        int  // bottom of the scroll region set on the sysop terminal, 0 if none
 	eraseRow       int  // row to clear at the next safe point, 0 if none
 	track          seqTracker
 
@@ -169,7 +170,11 @@ func (c *snoopCmd) Run() error {
 		c.readStdin(cr, in, inEnd, done)
 	}()
 
-	go c.followResize(resize, done)
+	resizeGone := make(chan struct{})
+	go func() {
+		defer close(resizeGone)
+		c.followResize(resize, done)
+	}()
 
 	reason := c.loop(in, inEnd, outDone)
 
@@ -181,6 +186,7 @@ func (c *snoopCmd) Run() error {
 		<-readerGone
 	}
 	_ = cr.Close()
+	<-resizeGone
 
 	c.mu.Lock()
 	mode := c.mode
@@ -235,7 +241,9 @@ func (c *snoopCmd) onResize() {
 		c.statusOn = h > c.st.Header.Height
 	}
 	if c.barRow != 0 && (!c.statusOn || c.barRow != h) {
-		c.eraseRow = c.barRow
+		if c.barRow <= h {
+			c.eraseRow = c.barRow
+		}
 		c.barRow = 0
 	}
 	c.mu.Unlock()
@@ -451,6 +459,11 @@ func (c *snoopCmd) setErr(err error) {
 	c.drawStatus()
 }
 
+// wantRegion reports whether the sysop terminal needs a scroll region that
+// stops above the bar row. Without one, a line feed on the caller's last row
+// moves the cursor below it instead of scrolling the mirrored screen.
+func (c *snoopCmd) wantRegion() bool { return c.h > c.st.Header.Height }
+
 // drawStatus paints the bar on the sysop terminal's last row, then puts the
 // cursor and text attributes back where the caller's output left them, using
 // the tracked position instead of the terminal's save slot, which belongs to
@@ -460,13 +473,31 @@ func (c *snoopCmd) setErr(err error) {
 func (c *snoopCmd) drawStatus() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if (c.eraseRow == 0 && !c.statusOn) || c.h <= 0 || c.w <= 0 {
+	if c.h <= 0 || c.w <= 0 {
+		return
+	}
+	callerH := c.st.Header.Height
+	want := c.wantRegion()
+	regionOff := !want && c.regionH != 0
+	regionSet := want && (c.regionH != callerH || c.track.cur.regionDirty)
+	if c.eraseRow == 0 && !c.statusOn && !regionOff && !regionSet {
 		return
 	}
 	if !c.track.safe() || !c.track.cur.canRestore() {
 		return
 	}
 	back := c.track.cur.restore()
+	switch {
+	case regionOff:
+		// DECSTBM homes the cursor, so the tracked position goes back after it.
+		_, _ = fmt.Fprintf(c.stdout, "\x1b[r%s", back)
+		c.regionH = 0
+	case regionSet:
+		_, _ = fmt.Fprintf(c.stdout, "\x1b[1;%dr%s", callerH, back)
+		c.regionH = callerH
+		c.track.cur.top, c.track.cur.bot = 1, callerH
+		c.track.cur.regionDirty = false
+	}
 	if c.eraseRow != 0 {
 		_, _ = fmt.Fprintf(c.stdout, "\x1b[%d;1H\x1b[0m\x1b[2K%s", c.eraseRow, back)
 		c.eraseRow = 0
@@ -538,7 +569,7 @@ func (t *seqTracker) step(b byte) {
 	case stGround:
 		if b == 0x1b {
 			t.state = stEsc
-			t.cur.rbuf, t.cur.rneed = t.cur.rbuf[:0], 0
+			t.cur.cutRune()
 		} else {
 			t.cur.ground(b)
 		}

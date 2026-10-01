@@ -584,12 +584,15 @@ func TestSnoopResizeHidesAndClearsBarOnShorterTerminal(t *testing.T) {
 	r.out.waitFor(t, "NODE 3")
 	raw.set(80, utf8Hdr.Height)
 	r.cmd.resize <- struct{}{}
-	r.out.waitFor(t, fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", utf8Hdr.Height+10))
+	r.out.waitFor(t, "\x1b[r\x1b[1;1H")
 	n := strings.Count(r.out.String(), "NODE 3")
 	_, _ = r.server.Write([]byte("more"))
 	r.out.waitFor(t, "more")
 	r.send(t, "\x1bx")
 	r.wait(t)
+	if strings.Contains(r.out.String(), "\x1b[2K") {
+		t.Fatal("cleared a row that is off the shorter terminal")
+	}
 	if got := strings.Count(r.out.String(), "NODE 3"); got != n {
 		t.Fatal("bar redrawn on a terminal with no spare row")
 	}
@@ -611,5 +614,181 @@ func TestSnoopResizeKeepsSysopToggle(t *testing.T) {
 	r.wait(t)
 	if got := strings.Count(r.out.String(), "NODE 3"); got != n {
 		t.Fatal("resize re-enabled a bar the sysop hid")
+	}
+}
+
+func TestSnoopResizeClearsBarRowStillOnScreen(t *testing.T) {
+	raw := &sizedRaw{w: 100, h: utf8Hdr.Height + 10}
+	r := newResizeRig(t, raw)
+	r.out.waitFor(t, "NODE 3")
+	raw.set(100, utf8Hdr.Height+20)
+	r.cmd.resize <- struct{}{}
+	r.out.waitFor(t, fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", utf8Hdr.Height+10))
+	r.send(t, "\x1bx")
+	r.wait(t)
+}
+
+func TestSnoopNoWriteAfterRunReturns(t *testing.T) {
+	for i := 0; i < 30; i++ {
+		raw := &sizedRaw{w: 100, h: utf8Hdr.Height + 10}
+		r := newResizeRig(t, raw)
+		r.out.waitFor(t, "NODE 3")
+		raw.set(100, utf8Hdr.Height+12+i)
+		r.cmd.resize <- struct{}{}
+		r.send(t, "\x1bx")
+		r.wait(t)
+		if got := r.out.String(); !strings.HasSuffix(got, "\x1b[r\x1b[0m\x1b[2J") {
+			t.Fatalf("wrote after Run returned: %q", got[max(0, len(got)-60):])
+		}
+	}
+}
+
+// vtScreen is a minimal terminal: text, CR, LF, CUP, DECSTBM, ED and EL.
+type vtScreen struct {
+	w, h     int
+	cells    [][]rune
+	row, col int // 0-based
+	top, bot int
+	scrolls  int
+}
+
+func newVTScreen(w, h int) *vtScreen {
+	s := &vtScreen{w: w, h: h, top: 0, bot: h - 1}
+	for i := 0; i < h; i++ {
+		s.cells = append(s.cells, s.blank())
+	}
+	return s
+}
+
+func (s *vtScreen) blank() []rune { return []rune(strings.Repeat(" ", s.w)) }
+
+func (s *vtScreen) lf() {
+	if s.row == s.bot {
+		copy(s.cells[s.top:s.bot], s.cells[s.top+1:s.bot+1])
+		s.cells[s.bot] = s.blank()
+		s.scrolls++
+	} else if s.row < s.h-1 {
+		s.row++
+	}
+}
+
+func (s *vtScreen) feed(in string) {
+	b := []rune(in)
+	for i := 0; i < len(b); i++ {
+		switch r := b[i]; {
+		case r == 0x1b && i+1 < len(b) && b[i+1] == '[':
+			j := i + 2
+			for j < len(b) && (b[j] < 0x40 || b[j] > 0x7e) {
+				j++
+			}
+			if j >= len(b) {
+				return
+			}
+			s.csi(b[j], string(b[i+2:j]))
+			i = j
+		case r == 0x1b:
+			i++
+		case r == '\r':
+			s.col = 0
+		case r == '\n':
+			s.lf()
+		case r >= 0x20:
+			if s.col >= s.w {
+				s.col = s.w - 1
+			}
+			s.cells[s.row][s.col] = r
+			s.col++
+		}
+	}
+}
+
+func (s *vtScreen) csi(final rune, params string) {
+	var n []int
+	for _, p := range strings.Split(params, ";") {
+		v := 0
+		fmt.Sscanf(p, "%d", &v)
+		n = append(n, v)
+	}
+	arg := func(i, def int) int {
+		if i < len(n) && n[i] > 0 {
+			return n[i]
+		}
+		return def
+	}
+	switch final {
+	case 'H':
+		s.row, s.col = arg(0, 1)-1, arg(1, 1)-1
+	case 'r':
+		s.top, s.bot = arg(0, 1)-1, arg(1, s.h)-1
+		s.row, s.col = 0, 0
+	case 'J':
+		if arg(0, 0) == 2 {
+			for i := range s.cells {
+				s.cells[i] = s.blank()
+			}
+		}
+	case 'K':
+		if arg(0, 0) == 2 {
+			s.cells[s.row] = s.blank()
+		}
+	}
+}
+
+func (s *vtScreen) line(i int) string { return strings.TrimRight(string(s.cells[i]), " ") }
+
+func TestSnoopMirroredScreenScrollsUnderBar(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 40)
+	r.out.waitFor(t, "NODE 3")
+	var sb strings.Builder
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&sb, "line%02d\r\n", i)
+	}
+	_, _ = r.server.Write([]byte(sb.String()))
+	r.out.waitFor(t, "line40")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	out := strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J")
+	sc := newVTScreen(100, 40)
+	sc.feed(out)
+	if sc.scrolls == 0 {
+		t.Fatal("the mirrored vtScreen never scrolled")
+	}
+	if got := sc.line(0); got != "line17" {
+		t.Fatalf("row 1 = %q, want line17", got)
+	}
+	if got := sc.line(23); got != "line40" {
+		t.Fatalf("row 24 = %q, want line40", got)
+	}
+	if got := sc.line(24); got != "" {
+		t.Fatalf("row 25 = %q, want empty", got)
+	}
+	if !strings.Contains(sc.line(39), "NODE 3") {
+		t.Fatalf("bar missing from the last row: %q", sc.line(39))
+	}
+	if !strings.HasSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J") {
+		t.Fatal("scroll region not reset at exit")
+	}
+}
+
+func TestSnoopCallerRegionChangeReassertsOurs(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 40)
+	r.out.waitFor(t, "\x1b[1;25r")
+	_, _ = r.server.Write([]byte("\x1b[3;10r"))
+	r.out.waitFor(t, "\x1b[3;10r")
+	r.out.waitFor(t, "\x1b[3;10r\x1b[1;25r\x1b[1;1H")
+	_, _ = r.server.Write([]byte("\x1bc"))
+	r.out.waitFor(t, "\x1bc\x1b[1;25r")
+	r.send(t, "\x1bx")
+	r.wait(t)
+}
+
+func TestSnoopNoRegionWhenTerminalIsNotTaller(t *testing.T) {
+	r := newRig(t, utf8Hdr, 80, 25)
+	_, _ = r.server.Write([]byte("hi"))
+	r.out.waitFor(t, "hi")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if strings.Contains(r.out.String(), "r\x1b[") && strings.Contains(r.out.String(), "\x1b[1;25r") {
+		t.Fatal("scroll region set on a terminal with no spare row")
 	}
 }

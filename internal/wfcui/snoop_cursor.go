@@ -9,6 +9,14 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+// cond measures runes the same way whatever the locale: ambiguous-width
+// characters take one cell.
+var cond = func() *runewidth.Condition {
+	c := runewidth.NewCondition()
+	c.EastAsianWidth = false
+	return c
+}()
+
 // sgrState is the caller's current text attributes.
 type sgrState struct {
 	bits   uint32 // bit n set while SGR attribute n is on
@@ -118,6 +126,7 @@ type cursor struct {
 	wrapOff     bool // autowrap is off
 	origin      bool // origin mode is on
 	top, bot    int  // scroll region
+	regionDirty bool // the caller changed the scroll region
 	sgr         sgrState
 
 	saved struct {
@@ -129,6 +138,17 @@ type cursor struct {
 
 	rbuf  []byte // bytes of the UTF-8 rune being read
 	rneed int
+}
+
+// cutRune ends a rune that an escape sequence interrupted. It draws as one
+// replacement glyph.
+func (c *cursor) cutRune() {
+	if c.rneed > 0 {
+		c.rbuf, c.rneed = c.rbuf[:0], 0
+		if c.known {
+			c.print(1)
+		}
+	}
 }
 
 func (c *cursor) reset(w, h int) {
@@ -188,7 +208,7 @@ func (c *cursor) ground(b byte) {
 				r, _ := utf8.DecodeRune(c.rbuf)
 				c.rbuf, c.rneed = c.rbuf[:0], 0
 				if c.known {
-					c.print(runewidth.RuneWidth(r))
+					c.print(cond.RuneWidth(r))
 				}
 			}
 			return
@@ -211,7 +231,10 @@ func (c *cursor) ground(b byte) {
 			c.rneed = 2
 		}
 	case b >= 0x80:
-		// Stray continuation byte.
+		// A stray continuation byte draws as one replacement glyph.
+		if c.known {
+			c.print(1)
+		}
 	case b >= 0x20 && b != 0x7f:
 		if c.known {
 			c.print(1)
@@ -266,6 +289,7 @@ func (c *cursor) esc(b byte) {
 	case 'c':
 		w, h := c.w, c.h
 		c.reset(w, h)
+		c.regionDirty = true
 	case 'P', 'X', '^', '_':
 		c.known = false
 	}
@@ -337,6 +361,7 @@ func (c *cursor) csi(final byte, params string, interm bool) {
 		c.pendingWrap, c.known = false, true
 		return
 	case 'r':
+		c.regionDirty = true
 		c.top, c.bot = num(0), c.h
 		if len(parts) > 1 {
 			c.bot = min(num(1), c.h)

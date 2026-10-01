@@ -61,6 +61,9 @@ func TestCursorTracking(t *testing.T) {
 		{"index", []string{"ab\x1bD"}, pos{2, 3, true}},
 		{"next line", []string{"ab\x1bE"}, pos{2, 1, true}},
 		{"reverse index at top", []string{"ab\x1bM"}, pos{1, 3, true}},
+		{"stray continuation byte is one cell", []string{"a\x80b"}, pos{1, 4, true}},
+		{"rune cut by escape is one cell", []string{"a\xe6\x97\x1b[1m"}, pos{1, 3, true}},
+		{"rune cut by ascii is one cell", []string{"a\xe6\x97b"}, pos{1, 4, true}},
 		{"osc text is not printed", []string{"\x1b]0;title\x07a"}, pos{1, 2, true}},
 	}
 	for _, tc := range cases {
@@ -171,5 +174,12 @@ func TestSnoopBarSkippedWhileCursorUnknown(t *testing.T) {
 	r.wait(t)
 	if got := strings.Count(r.out.String(), "NODE 3"); got <= n {
 		t.Fatal("bar not drawn once a CUP made the position known")
+	}
+}
+
+func TestCursorAmbiguousWidthIsOneCell(t *testing.T) {
+	// U+00B1 and U+2500 are ambiguous width: one cell whatever the locale.
+	if c := trackOf(10, 5, "\u00b1\u2500"); c.col != 3 {
+		t.Fatalf("col %d, want 3", c.col)
 	}
 }
