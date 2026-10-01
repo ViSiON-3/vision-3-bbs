@@ -19,38 +19,15 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 	slog.Info("configuring SSH server", "host", sshHost, "port", sshPort)
 
 	server, err := sshserver.NewServer(sshserver.Config{
-		HostKeyPath:         hostKeyPath,
-		Host:                sshHost,
-		Port:                sshPort,
-		LegacySSHAlgorithms: legacyAlgorithms,
-		SessionHandler:      sshSessionHandler,
-		Version:             "Vision3",
-		PasswordHandler: func(ctx ssh.Context, password string) bool {
-			username := ctx.User()
-			slog.Debug("SSH password auth", "user", username, "addr", ctx.RemoteAddr())
-
-			// If username matches a known BBS user and password is correct,
-			// stash the authenticated user for auto-login. Otherwise accept
-			// the connection anyway and let the BBS LOGIN menu handle it.
-			if username != "" && userMgr != nil {
-				if bbsUser, found := userMgr.GetUser(username); found && bbsUser != nil {
-					authedUser, ok := userMgr.Authenticate(username, password)
-					if ok {
-						ctx.SetValue(sshAuthUserKey{}, authedUser)
-						slog.Info("SSH pre-authenticated user", "user", username, "addr", ctx.RemoteAddr())
-					} else {
-						slog.Info("SSH password mismatch, deferring to BBS login", "user", username, "addr", ctx.RemoteAddr())
-					}
-				}
-			}
-
-			return true
-		},
-		KeyboardInteractiveHandler: func(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool {
-			slog.Debug("SSH keyboard-interactive auth", "user", ctx.User(), "addr", ctx.RemoteAddr())
-			return true
-		},
-		PublicKeyHandler: wfcPublicKeyHandler,
+		HostKeyPath:                hostKeyPath,
+		Host:                       sshHost,
+		Port:                       sshPort,
+		LegacySSHAlgorithms:        legacyAlgorithms,
+		SessionHandler:             sshSessionHandler,
+		Version:                    "Vision3",
+		PasswordHandler:            sshPasswordHandler,
+		KeyboardInteractiveHandler: sshKeyboardInteractiveHandler,
+		PublicKeyHandler:           wfcPublicKeyHandler,
 		SubsystemHandlers: map[string]func(ssh.Session){
 			"wfc-admin": wfcAdminSubsystem,
 			"wfc-snoop": wfcSnoopSubsystem,
@@ -75,6 +52,46 @@ func startSSHServer(hostKeyPath, sshHost string, sshPort int, legacyAlgorithms b
 	slog.Info("SSH server ready", "host", sshHost, "port", sshPort)
 	return cleanup, nil
 }
+
+// clearWFCKeyStash drops the admin identity wfcPublicKeyHandler stashed.
+// x/crypto calls the public-key callback for unsigned key queries too, so a
+// stash can exist on a connection whose client never proved it holds the
+// key. Any connection that authenticates another way must not keep it.
+func clearWFCKeyStash(ctx ssh.Context) {
+	ctx.SetValue(wfcAdminHandleKey{}, nil)
+	ctx.SetValue(wfcAdminPubKey{}, nil)
+}
+
+func sshPasswordHandler(ctx ssh.Context, password string) bool {
+	clearWFCKeyStash(ctx)
+	username := ctx.User()
+	slog.Debug("SSH password auth", "user", username, "addr", ctx.RemoteAddr())
+
+	// If username matches a known BBS user and password is correct,
+	// stash the authenticated user for auto-login. Otherwise accept
+	// the connection anyway and let the BBS LOGIN menu handle it.
+	if username != "" && userMgr != nil {
+		if bbsUser, found := userMgr.GetUser(username); found && bbsUser != nil {
+			authedUser, ok := userMgr.Authenticate(username, password)
+			if ok {
+				ctx.SetValue(sshAuthUserKey{}, authedUser)
+				slog.Info("SSH pre-authenticated user", "user", username, "addr", ctx.RemoteAddr())
+			} else {
+				slog.Info("SSH password mismatch, deferring to BBS login", "user", username, "addr", ctx.RemoteAddr())
+			}
+		}
+	}
+
+	return true
+
+}
+
+func sshKeyboardInteractiveHandler(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool {
+	clearWFCKeyStash(ctx)
+	slog.Debug("SSH keyboard-interactive auth", "user", ctx.User(), "addr", ctx.RemoteAddr())
+	return true
+}
+
 func sshSessionHandler(sess ssh.Session) {
 	// Wrap the session to add SetReadInterrupt support
 	wrapped := sshserver.WrapSession(sess)
