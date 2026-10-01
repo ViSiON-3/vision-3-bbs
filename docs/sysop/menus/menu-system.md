@@ -261,10 +261,14 @@ for `yesNoHighlightColor`.
 
 | Field | Default | Meaning |
 |-------|---------|---------|
-| `yesNoHighlightColor` | `31` | Highlighted yes/no prompts |
+| `yesNoHighlightColor` | `112` | Highlighted yes/no prompts |
 | `yesNoRegularColor` | `15` | Regular yes/no prompts |
 | `chatSysopColor` | `11` | Sysop's pane in [split-screen chat](how-to-guides/wfc-console.md#chat) |
 | `chatUserColor` | `10` | Caller's pane in split-screen chat |
+
+The defaults apply to fields missing from `theme.json`. The shipped `v3`
+set's `theme.json` sets `yesNoHighlightColor` to `31` and
+`yesNoRegularColor` to `13`.
 
 ## Menu Configuration Files (.MNU)
 

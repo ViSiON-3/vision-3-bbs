@@ -372,7 +372,7 @@ never records the keystrokes.
 terminal: your text on top, the caller's below, and a bar between them with
 both handles and the time (`HH:MM`). Each pane word-wraps and scrolls on its
 own. Pane colors come from `chatSysopColor` and `chatUserColor` in
-[`theme.json`](../menus/menu-system.md#theme-themejson).
+[`theme.json`](menus/menu-system.md#theme-themejson).
 
 Chat works only while the caller is in the BBS: menus, prompts, the message
 reader, the editor. It is refused while they are in a door, a file transfer or
@@ -399,7 +399,7 @@ and "Chat ended" for each chat.
 
 ### Pages
 
-A caller pages you with the [`PAGESYSOP`](../reference/menu-commands.md) menu
+A caller pages you with the [`PAGESYSOP`](reference/menu-commands.md) menu
 command and gives a one-line reason. With no `wfc` console connected they see
 "The SysOp is not available right now." immediately.
 
@@ -420,9 +420,9 @@ set the Option key to send Meta or Esc+, or press `Esc` and then the letter.
 `pageSysopTimeout` (default 60) and `pageSysopCooldown` (default 300) are in
 `config.json` and in the config TUI under **Access & Security → Access Levels**
 as **Page Timeout** and **Page Cooldown**; see
-[Configuration](../configuration/configuration.md). Changes apply on config
+[Configuration](configuration/configuration.md). Changes apply on config
 reload with no restart. The caller's prompts are in the string editor; see
-[String Editor](../advanced/string-editor.md#strings-for-sysop-chat-and-paging).
+[String Editor](advanced/string-editor.md#strings-for-sysop-chat-and-paging).
 
 ### Scrolling the logs
 
