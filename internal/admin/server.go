@@ -43,6 +43,13 @@ type ServerConfig struct {
 	// connectedAt (a zero time skips that check). Nil means the server
 	// rejects CommandKick as unsupported.
 	Kick func(nodeID int, connectedAt time.Time) error
+	// TypeIn turns sysop type-in on or off for the caller on nodeID whose
+	// session started at connectedAt. Nil means unsupported.
+	TypeIn func(sysop string, nodeID int, connectedAt time.Time, on bool) error
+	// Chat starts or ends split-screen chat. Nil means unsupported.
+	Chat func(sysop string, nodeID int, connectedAt time.Time, start bool) error
+	// Snoop resolves wfc-snoop requests; used by the in-process client.
+	Snoop SnoopTarget
 }
 
 // Server polls SessionRegistry, keeps the latest snapshot, and fans out
@@ -236,8 +243,18 @@ func (s *Server) Subscribe(ctx context.Context) <-chan Event {
 // Kick hook wired.
 var ErrKickUnsupported = errors.New("admin: kick not supported by this server")
 
-// Execute runs an admin command.
-func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
+var errNoSysop = errors.New("admin: sysop identity required")
+
+// Execute runs cmd with no sysop identity; node-control commands refuse it.
+func (s *Server) Execute(cmd AdminCommand) (*Result, error) { return s.ExecuteAs("", cmd) }
+
+func payloadBool(p map[string]any, key string) bool {
+	v, _ := p[key].(bool)
+	return v
+}
+
+// ExecuteAs runs an admin command on behalf of sysop.
+func (s *Server) ExecuteAs(sysop string, cmd AdminCommand) (*Result, error) {
 	switch cmd.Command {
 	case CommandRefresh:
 		// Rate-limit forced ticks: a client spamming refresh must not drive
@@ -260,7 +277,54 @@ func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 		// rather than on the next scheduled tick.
 		s.refreshIfDue()
 		return &Result{OK: true, Message: fmt.Sprintf("node %d disconnected", cmd.NodeID)}, nil
+	case CommandTypeIn:
+		if s.cfg.TypeIn == nil {
+			return nil, fmt.Errorf("admin: type-in not supported by this server")
+		}
+		if sysop == "" {
+			return nil, errNoSysop
+		}
+		on := payloadBool(cmd.Payload, "on")
+		if err := s.cfg.TypeIn(sysop, cmd.NodeID, cmd.ConnectedAt, on); err != nil {
+			return nil, err
+		}
+		return &Result{OK: true}, nil
+	case CommandChat:
+		if s.cfg.Chat == nil {
+			return nil, fmt.Errorf("admin: chat not supported by this server")
+		}
+		if sysop == "" {
+			return nil, errNoSysop
+		}
+		start := payloadBool(cmd.Payload, "start")
+		if err := s.cfg.Chat(sysop, cmd.NodeID, cmd.ConnectedAt, start); err != nil {
+			return nil, err
+		}
+		msg := "off"
+		if start {
+			msg = "on " + sysop
+		}
+		handle, _ := s.nodeIdentity(cmd.NodeID, cmd.ConnectedAt)
+		s.emit(Event{Time: timeNow(), Type: EventChatState, NodeID: cmd.NodeID, Handle: handle, Message: msg})
+		return &Result{OK: true}, nil
 	default:
 		return nil, fmt.Errorf("admin: unsupported command: %s", cmd.Command)
 	}
+}
+
+// RaisePage tells every console that the caller on nodeID paged the sysop.
+func (s *Server) RaisePage(nodeID int, handle, reason string) {
+	s.emit(Event{Time: timeNow(), Type: EventPage, NodeID: nodeID, Handle: handle, Message: reason})
+}
+
+// ClearPage withdraws a page; why is answered, timeout or logoff.
+func (s *Server) ClearPage(nodeID int, handle, why string) {
+	s.emit(Event{Time: timeNow(), Type: EventPageCleared, NodeID: nodeID, Handle: handle, Message: why})
+}
+
+// Consoles reports how many event subscribers (WFC consoles) are attached.
+func (s *Server) Consoles() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.subs)
 }

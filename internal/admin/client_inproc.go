@@ -1,6 +1,11 @@
 package admin
 
-import "context"
+import (
+	"context"
+	"errors"
+	"net"
+	"time"
+)
 
 // InProcessClient adapts a *Server to the AdminClient interface without any
 // network serialization. It is intentional architecture, NOT dead code.
@@ -44,3 +49,13 @@ func (c *InProcessClient) Execute(ctx context.Context, cmd AdminCommand) (*Resul
 // Close implements AdminClient. It is a no-op: there is no connection to
 // release, and the wrapped Server stays running.
 func (c *InProcessClient) Close() error { return nil }
+
+// OpenSnoop implements Snooper over an in-memory pipe.
+func (c *InProcessClient) OpenSnoop(ctx context.Context, nodeID int, connectedAt time.Time) (*SnoopStream, error) {
+	if c.srv.cfg.Snoop == nil {
+		return nil, errors.New("admin: snoop not supported by this server")
+	}
+	srvSide, cliSide := net.Pipe()
+	go func() { _ = ServeSnoop(srvSide, "local", c.srv.cfg.Snoop, func(string, ...any) {}) }()
+	return ClientSnoop(cliSide, SnoopRequest{NodeID: nodeID, ConnectedAt: connectedAt})
+}

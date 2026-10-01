@@ -183,7 +183,7 @@ func wfcAdminSubsystem(sess ssh.Session) {
 
 	// ServeRPC's context governs only the internal subscriber goroutine; connection
 	// lifetime is enforced by the SSH session closing, which unblocks the read loop.
-	if err := admin.ServeRPC(ctx, sess, adminServer, audit); err != nil {
+	if err := admin.ServeRPC(ctx, sess, adminServer, handle, audit); err != nil {
 		slog.Info("wfc-admin: session closed", "user", handle, "addr", sess.RemoteAddr(), "reason", err)
 	} else {
 		slog.Info("wfc-admin: session closed", "user", handle, "addr", sess.RemoteAddr())

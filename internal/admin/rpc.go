@@ -16,7 +16,7 @@ import (
 //
 // rw must be closable (e.g. net.Conn or ssh.Session); ServeRPC closes it when
 // the event-streaming goroutine fails so that the outer ReadFrame unblocks.
-func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, audit func(string)) error {
+func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, sysop string, audit func(string)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func ServeRPC(ctx context.Context, rw io.ReadWriteCloser, srv *Server, audit fun
 		if audit != nil {
 			audit(string(f.Command.Command))
 		}
-		res, err := srv.Execute(*f.Command)
+		res, err := srv.ExecuteAs(sysop, *f.Command)
 		out := &Frame{Kind: KindResult, ID: f.ID}
 		if err != nil {
 			out.Kind = KindError
