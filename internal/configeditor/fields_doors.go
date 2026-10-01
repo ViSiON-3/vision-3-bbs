@@ -476,6 +476,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 			},
 		})
 
+		// Offered for every native and DOS door: a DOS door is given every
+		// dropfile format, DROPFILE.INI included, whatever its type says.
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Hide Personal", Help: "DROPFILE.INI: leave out the user's real name, location and IP address", Type: ftYesNo, Col: 3, Row: row, Width: 1,
+			Get: func() string { return uitext.BoolToYN(dPtr.DropfileHidePersonal) },
+			Set: func(val string) error { dPtr.DropfileHidePersonal = uitext.YNToBool(val); save(); return nil },
+		})
+
 		// Dropfile Case only affects native/Windows doors; DOS doors use a
 		// separate dosDropfileName path that ignores it, so hide it for DOS.
 		if !dPtr.IsDOS {

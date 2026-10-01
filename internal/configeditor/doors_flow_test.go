@@ -163,6 +163,9 @@ func TestDoorFields_DOS(t *testing.T) {
 	m = setRecField(t, m, "Commands", "CD GAME, GAME.EXE")
 	m = pickRecField(t, m, "Dropfile Type", "DOOR.SYS")
 	m = pickRecField(t, m, "Dropfile Location", "node")
+	// A DOS door gets every dropfile, DROPFILE.INI included, so it offers
+	// the DROPFILE.INI privacy switch whatever its dropfile type.
+	m = press(t, gotoField(t, m, "Hide Personal"), "space")
 	m = setRecField(t, m, "Drive C Path", "/dos/c")
 	m = pickRecField(t, m, "DOS Emulator", "dosemu")
 	m = setRecField(t, m, "FOSSIL Driver", `C:\X00.EXE`)
@@ -178,7 +181,7 @@ func TestDoorFields_DOS(t *testing.T) {
 	d := savedDoor(t, m, dir)
 	if !d.IsDOS || strings.Join(d.Commands, "|") != "CD GAME|GAME.EXE" || d.DropfileType != "DOOR.SYS" ||
 		d.DropfileLocation != "node" || d.DriveCPath != "/dos/c" || d.DOSEmulator != "dosemu" ||
-		d.FossilDriver != `C:\X00.EXE` || d.DosemuConfig != "my.rc" {
+		d.FossilDriver != `C:\X00.EXE` || d.DosemuConfig != "my.rc" || !d.DropfileHidePersonal {
 		t.Errorf("door = %+v", d)
 	}
 	if d.CleanupCommand != "rm" || strings.Join(d.CleanupArgs, "|") != "-f|a" {

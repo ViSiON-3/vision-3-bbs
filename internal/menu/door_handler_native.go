@@ -311,7 +311,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 		// The other end is bridged bidirectionally to the BBS session.
 		slog.Info("starting door with Socket I/O mode", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
-		fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+		fds, err := doorSocketpair()
 		if err != nil {
 			cmdErr = fmt.Errorf("failed to create socketpair for door '%s': %w", ctx.DoorName, err)
 		} else {

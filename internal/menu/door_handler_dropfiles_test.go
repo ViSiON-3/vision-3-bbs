@@ -1,10 +1,13 @@
 package menu
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gliderlabs/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -91,6 +94,7 @@ func TestGenerateDropfileIni(t *testing.T) {
 	ctx.NodeNumber = 2
 	ctx.User.ScreenWidth, ctx.User.ScreenHeight = 132, 37
 	ctx.OutputMode = ansi.OutputModeCP437
+	ctx.Config.Code, ctx.Config.Name = "LORD", "Legend of the Red Dragon"
 
 	raw, keys := readDropfileIni(t, ctx, "/tmp/node2")
 
@@ -99,6 +103,15 @@ func TestGenerateDropfileIni(t *testing.T) {
 	}
 	if first := strings.Index(raw, "["); !strings.HasPrefix(raw[first:], "[file]\r\n") {
 		t.Errorf("[file] must be the first section")
+	}
+	var sections []string
+	for _, line := range strings.Split(raw, "\r\n") {
+		if strings.HasPrefix(line, "[") {
+			sections = append(sections, line)
+		}
+	}
+	if got, want := strings.Join(sections, ""), "[file][system][comm][user][terminal][session][door][x-vision3]"; got != want {
+		t.Errorf("sections = %s, want %s", got, want)
 	}
 	for _, line := range strings.Split(raw, "\r\n") {
 		if len(line) > dropfileIniMaxLine {
@@ -127,6 +140,8 @@ func TestGenerateDropfileIni(t *testing.T) {
 		"TEMP_DIR":        "/tmp/node2",
 		"X_VISION3_LEVEL": "50",
 		"LOCAL_DISPLAY":   "0",
+		"DOOR_CODE":       "LORD",
+		"DOOR_NAME":       "Legend of the Red Dragon",
 	}
 	for k, v := range want {
 		if got, ok := keys[k]; !ok || got != v {
@@ -139,7 +154,10 @@ func TestGenerateDropfileIni(t *testing.T) {
 		}
 	}
 	// Nothing in the file is UTF-8, and empty optional keys are left out.
-	for _, k := range []string{"FILE_UTF8", "USER_LOCATION", "COMM_HANDLE", "COMM_PORT"} {
+	// IDLE_LIMIT and SYS_FTN_ADDR are never written (see the writer's notes),
+	// and with no session there is no IP or terminal type to report.
+	for _, k := range []string{"FILE_UTF8", "USER_LOCATION", "COMM_HANDLE", "COMM_PORT",
+		"IDLE_LIMIT", "SYS_FTN_ADDR", "USER_IP", "TERM_TERMINFO"} {
 		if _, ok := keys[k]; ok {
 			t.Errorf("%s should not be written", k)
 		}
@@ -150,6 +168,10 @@ func TestGenerateDropfileIniSanitizesText(t *testing.T) {
 	ctx := newTestDoorCtx()
 	ctx.Executor = newExecutorWithServerConfig(config.ServerConfig{BoardName: "  ", SysOpLevel: 255, CoSysOpLevel: 250})
 	ctx.User.Handle = " J\u00f6rg\tthe\x07Red\r\nCOMM_TYPE=local "
+	// Line and paragraph separators split lines in some readers, and
+	// bidirectional and C1 controls are invisible: all are control
+	// characters, so none may reach the file.
+	ctx.Config.Name = "A\u2028USER_ROLE=sysop\u2029\u202e\u2066\u0085x"
 	ctx.User.RealName = strings.Repeat("x", 400)
 	ctx.User.GroupLocation = "\u00a0"
 	ctx.User.AccessLevel = 255
@@ -176,6 +198,101 @@ func TestGenerateDropfileIniSanitizesText(t *testing.T) {
 	}
 	if got := keys["USER_ROLE"]; got != "sysop" {
 		t.Errorf("USER_ROLE = %q, want sysop", got)
+	}
+	if got, want := keys["DOOR_NAME"], "A?USER_ROLE=sysop????x"; got != want {
+		t.Errorf("DOOR_NAME = %q, want %q", got, want)
+	}
+}
+
+// dropfileIniSession is a session that reports a terminal type and a remote
+// address, as the SSH and telnet adapters do.
+type dropfileIniSession struct {
+	ssh.Session
+	term string
+}
+
+func (s dropfileIniSession) Pty() (ssh.Pty, <-chan ssh.Window, bool) {
+	return ssh.Pty{Term: s.term}, nil, s.term != ""
+}
+
+func (s dropfileIniSession) RemoteAddr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(203, 0, 113, 7), Port: 51234}
+}
+
+func TestGenerateDropfileIniSessionKeys(t *testing.T) {
+	ctx := newTestDoorCtx()
+	ctx.User.GroupLocation = "Zion"
+	ctx.Session = dropfileIniSession{term: "xterm-256color"}
+
+	_, keys := readDropfileIni(t, ctx, "")
+	want := map[string]string{
+		"TERM_TERMINFO": "xterm-256color",
+		"USER_IP":       "203.0.113.7",
+		"USER_REALNAME": "Thomas Anderson",
+		"USER_LOCATION": "Zion",
+		"USER_PROTOCOL": "ssh",
+	}
+	for k, v := range want {
+		if keys[k] != v {
+			t.Errorf("%s = %q, want %q", k, keys[k], v)
+		}
+	}
+
+	// A type that isn't a valid ascii value is left out, and so is one from
+	// a client that sent none.
+	for _, term := range []string{"vt 100", ""} {
+		ctx.Session = dropfileIniSession{term: term}
+		if _, keys := readDropfileIni(t, ctx, ""); keys["TERM_TERMINFO"] != "" {
+			t.Errorf("terminal type %q: TERM_TERMINFO = %q, want it left out", term, keys["TERM_TERMINFO"])
+		}
+	}
+}
+
+// The sysop can keep a door from seeing the user's personal details.
+func TestGenerateDropfileIniHidePersonal(t *testing.T) {
+	ctx := newTestDoorCtx()
+	ctx.User.GroupLocation = "Zion"
+	ctx.Session = dropfileIniSession{term: "ansi"}
+	ctx.Config.DropfileHidePersonal = true
+
+	_, keys := readDropfileIni(t, ctx, "")
+	for _, k := range []string{"USER_REALNAME", "USER_LOCATION", "USER_IP"} {
+		if v, ok := keys[k]; ok {
+			t.Errorf("%s = %q written although personal details are hidden", k, v)
+		}
+	}
+	if keys["USER_ALIAS"] != "Neo" || keys["USER_PROTOCOL"] != "ssh" || keys["TERM_TERMINFO"] != "ansi" {
+		t.Errorf("hiding personal details dropped other keys: %v", keys)
+	}
+}
+
+func TestDropfileIniPath(t *testing.T) {
+	long := "/" + strings.Repeat("d", dropfileIniMaxLine-len("TEMP_DIR=")-1)
+	tests := []struct {
+		name, val, want string
+	}{
+		{"posix", "/tmp/node2", "/tmp/node2"},
+		{"dos", `C:\NODE1`, `C:\NODE1`},
+		// Paths are bytes from the file system: UTF-8 and Latin-1 names are
+		// written as they are, never converted to CP437.
+		{"utf-8 name kept", "/home/j\u00f6rg", "/home/j\u00f6rg"},
+		{"latin-1 name kept", "/home/j\xf6rg", "/home/j\xf6rg"},
+		{"exactly fits", long, long},
+		// Anything that would need changing is left out rather than cut.
+		{"too long", long + "d", ""},
+		{"control character", "/tmp/a\tb", ""},
+		{"DEL", "/tmp/a\x7fb", ""},
+		{"line separator", "/tmp/a\u2028b", ""},
+		{"bidi override", "/tmp/\u202eb", ""},
+		{"trailing space", "/tmp/a ", ""},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := dropfileIniPath("TEMP_DIR", tt.val); got != tt.want {
+				t.Errorf("dropfileIniPath(%q) = %q, want %q", tt.val, got, tt.want)
+			}
+		})
 	}
 }
 
