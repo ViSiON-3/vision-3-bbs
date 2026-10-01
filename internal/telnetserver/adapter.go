@@ -195,7 +195,9 @@ func (a *TelnetSessionAdapter) Tap() *snoop.Tap { return a.tap.Load() }
 // Read reads from the telnet connection (IAC-filtered). With a tap attached,
 // queued sysop bytes are returned before the socket is read again; a Read
 // already blocked on the socket is woken when sysop bytes arrive. Neither
-// source drops bytes and each keeps its own order.
+// source drops bytes and each keeps its own order. Read must not be called
+// from two goroutines at once: tapPending and TelnetConn's parser state
+// assume a single reader.
 func (a *TelnetSessionAdapter) Read(p []byte) (int, error) {
 	if len(a.tapPending) > 0 {
 		n := copy(p, a.tapPending)

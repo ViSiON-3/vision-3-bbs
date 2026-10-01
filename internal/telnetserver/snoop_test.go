@@ -1,6 +1,7 @@
 package telnetserver
 
 import (
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -166,5 +167,46 @@ func TestTelnetTransferWriteSendsMarkerNotData(t *testing.T) {
 	}
 	if got := <-w.C(); string(got) != snoop.TransferMarker {
 		t.Fatalf("tap got %q", got)
+	}
+}
+
+// A wake racing a read interrupt must not erase the interrupt's deadline.
+func TestTelnetWakeRacingReadInterruptStillEnds(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		server, client := net.Pipe()
+		tc := NewTelnetConn(server)
+		intr := make(chan struct{})
+		tc.SetReadInterrupt(intr)
+
+		res := make(chan error, 1)
+		go func() {
+			_, err := tc.Read(make([]byte, 8))
+			res <- err
+		}()
+		time.Sleep(time.Duration(i%4) * 50 * time.Microsecond)
+		go tc.Wake()
+		go close(intr)
+
+		deadline := time.After(time.Second)
+		for {
+			select {
+			case err := <-res:
+				if err == ErrWoken {
+					go func() {
+						_, err := tc.Read(make([]byte, 8))
+						res <- err
+					}()
+					continue
+				}
+				if err != io.EOF {
+					t.Fatalf("iter %d: read = %v, want EOF", i, err)
+				}
+			case <-deadline:
+				t.Fatalf("iter %d: interrupted read hung", i)
+			}
+			break
+		}
+		server.Close()
+		client.Close()
 	}
 }
