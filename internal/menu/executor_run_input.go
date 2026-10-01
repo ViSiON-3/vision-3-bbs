@@ -167,7 +167,7 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 	slog.Debug("checking prompt display for menu", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt())
 	if menuRec.GetUsePrompt() { // Condition changed: Only check UsePrompt
 		slog.Debug("calling displayPrompt for menu", "menu", st.currentMenuName)
-		err := e.displayPrompt(terminal, menuRec, st.currentUser, userManager, nodeNumber, st.currentMenuName, sessionStartTime, outputMode, st.currentAreaName) // Pass st.currentAreaName
+		err := e.displayPrompt(s, terminal, menuRec, st.currentUser, userManager, nodeNumber, st.currentMenuName, sessionStartTime, outputMode, st.currentAreaName) // Pass st.currentAreaName
 		slog.Debug("returned from displayPrompt for menu", "menu", st.currentMenuName, "error", err)
 		if err != nil {
 			return "", loopReturn, err // Propagate the error

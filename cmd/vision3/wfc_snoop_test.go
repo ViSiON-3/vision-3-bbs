@@ -79,3 +79,20 @@ func TestTypeInHookOffWithoutHoldIsRefused(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNotHolder", err)
 	}
 }
+
+func TestChatCreditHook(t *testing.T) {
+	reg := session.NewSessionRegistry()
+	reg.Register(&session.BbsSession{NodeID: 1})
+	reg.Register(&session.BbsSession{NodeID: 2, ChatCredit: func() time.Duration { return 7 * time.Minute }})
+	hook := chatCreditHook(reg)
+
+	if got := hook(9); got != 0 {
+		t.Errorf("missing node = %v, want 0", got)
+	}
+	if got := hook(1); got != 0 {
+		t.Errorf("nil credit func = %v, want 0", got)
+	}
+	if got := hook(2); got != 7*time.Minute {
+		t.Errorf("credit = %v, want 7m", got)
+	}
+}

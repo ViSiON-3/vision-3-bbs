@@ -12,6 +12,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // doorcovDropCtx is a DoorCtx with every field the dropfile generators read
@@ -312,5 +313,39 @@ func TestDoorChatCreditExtendsTimeLeft(t *testing.T) {
 	deadline, _, _ := doorDeadline(60, start, 0, now, ChatCredit(s))
 	if want := start.Add(70 * time.Minute); !deadline.Equal(want) {
 		t.Errorf("door deadline = %v, want %v", deadline, want)
+	}
+}
+
+// The |TL placeholder and the ACS T check both count sysop chat time as time
+// the caller still has. chatCredit(nil) is zero, so checkACS callers with no
+// session are unaffected.
+func TestTimeLeftPlaceholderAndACSIncludeChatCredit(t *testing.T) {
+	env := newMenuEnv(t)
+	s := newDoorcovSession()
+	t.Cleanup(func() { ClearSessionIdleTimeout(s) })
+	u := &user.User{AccessLevel: 10, TimeLimit: 30}
+	start := time.Now().Add(-20 * time.Minute)
+
+	if got := env.e.timeLeftPlaceholder(s, u, start); got != "9" && got != "10" {
+		t.Fatalf("|TL before credit = %q, want 9 or 10", got)
+	}
+	if checkACS("T15", u, s, nil, start) {
+		t.Fatal("T15 passed before credit")
+	}
+	addChatCredit(s, 10*time.Minute)
+	if got := env.e.timeLeftPlaceholder(s, u, start); got != "19" && got != "20" {
+		t.Errorf("|TL with credit = %q, want 19 or 20", got)
+	}
+	if !checkACS("T15", u, s, nil, start) {
+		t.Error("T15 failed with credit")
+	}
+	if checkACS("T15", u, nil, nil, start) {
+		t.Error("T15 passed for a nil session with no credit")
+	}
+	if got := chatCredit(nil); got != 0 {
+		t.Errorf("chatCredit(nil) = %v", got)
+	}
+	if got := env.e.timeLeftPlaceholder(s, &user.User{}, start); got != "Unlimited" {
+		t.Errorf("no limit |TL = %q", got)
 	}
 }

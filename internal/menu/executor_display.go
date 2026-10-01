@@ -14,7 +14,9 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
 
@@ -306,7 +308,7 @@ func applyUserPlaceholders(placeholders map[string]string, u *user.User) {
 	}
 }
 
-func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string) error {
+func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string) error {
 	promptParts := make([]string, 0, 2)
 	if strings.TrimSpace(menu.Prompt1) != "" {
 		promptParts = append(promptParts, menu.Prompt1)
@@ -408,18 +410,7 @@ func (e *MenuExecutor) displayPrompt(terminal *term.Terminal, menu *MenuRecord, 
 		}
 
 		// Calculate Time Left |TL
-		if limit := e.timeLimit(currentUser); limit <= 0 {
-			placeholders["|TL"] = "Unlimited"
-		} else {
-			elapsedSeconds := time.Since(sessionStartTime).Seconds()
-			totalSeconds := float64(limit * 60)
-			remainingSeconds := totalSeconds - elapsedSeconds
-			if remainingSeconds < 0 {
-				remainingSeconds = 0
-			}
-			remainingMinutes := int(remainingSeconds / 60)
-			placeholders["|TL"] = strconv.Itoa(remainingMinutes)
-		}
+		placeholders["|TL"] = e.timeLeftPlaceholder(s, currentUser, sessionStartTime)
 
 		if currentMenuName == "MAIN" && currentUser.AccessLevel >= 100 {
 			placeholders["|PV"] = strconv.Itoa(pendingValidationCount(userManager))
@@ -552,4 +543,14 @@ func (e *MenuExecutor) processFileIncludes(prompt string, depth int) string {
 	}
 
 	return result
+}
+
+// timeLeftPlaceholder is the |TL value for u: whole minutes left, with sysop
+// chat time credited back, or "Unlimited".
+func (e *MenuExecutor) timeLeftPlaceholder(s ssh.Session, u *user.User, sessionStart time.Time) string {
+	mins, limited := timeleft.Minutes(e.timeLimit(u), sessionStart, time.Now(), chatCredit(s))
+	if !limited {
+		return "Unlimited"
+	}
+	return strconv.Itoa(mins)
 }

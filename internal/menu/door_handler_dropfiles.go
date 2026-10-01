@@ -2,7 +2,6 @@ package menu
 
 import (
 	"fmt"
-	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )

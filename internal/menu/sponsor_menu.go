@@ -90,7 +90,7 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 
 	for {
 		if menuRec != nil && menuRec.GetUsePrompt() {
-			if err := e.displayPrompt(terminal, menuRec, currentUser, userManager, nodeNumber, "SPONSORM", sessionStartTime, outputMode, ""); err != nil {
+			if err := e.displayPrompt(s, terminal, menuRec, currentUser, userManager, nodeNumber, "SPONSORM", sessionStartTime, outputMode, ""); err != nil {
 				slog.Warn("displayPrompt failed for SPONSORM", "node", nodeNumber, "error", err)
 			}
 		} else {
