@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -64,10 +65,12 @@ func (r *chatRig) begin(t *testing.T) {
 }
 
 // run starts runSysopChat and returns a channel closed when it returns.
-func (r *chatRig) run() <-chan struct{} {
+func (r *chatRig) run() <-chan struct{} { return r.runSized(80, 25) }
+
+func (r *chatRig) runSized(width, height int) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
-		runSysopChat(r.ih, r.tap, r.term, ansi.OutputModeUTF8, 80, 25, "SysOp", "Caller")
+		runSysopChat(r.ih, r.tap, r.term, ansi.OutputModeUTF8, width, height, "SysOp", "Caller")
 		close(done)
 	}()
 	return done
@@ -327,4 +330,73 @@ func TestChatEscEscKeyGoesToPromptFirst(t *testing.T) {
 		t.Fatalf("prompt key after chat = %q; want x", k)
 	}
 	r.finish(t, "z\r", "abxz")
+}
+
+// paneOn is a pane drawn on its own terminal, for layout tests.
+func paneOn(width, rows int) (*testterm.Term, *chatPane) {
+	term := testterm.New(40, rows)
+	return term, &chatPane{w: term, first: 1, last: rows, width: width, row: 1, col: 1}
+}
+
+func TestChatPaneWordWrap(t *testing.T) {
+	term, p := paneOn(10, 5)
+	p.put([]byte("one two thr"))
+	if r1, r2 := term.Row(1), term.Row(2); r1 != "one two" || r2 != "thr" {
+		t.Fatalf("rows = %q, %q; want \"one two\", \"thr\"", r1, r2)
+	}
+	p.put([]byte("\b\bree"))
+	if r2 := term.Row(2); r2 != "tree" {
+		t.Fatalf("row 2 after backspace = %q; want tree", r2)
+	}
+}
+
+func TestChatPaneLongWordBreaksAtWidth(t *testing.T) {
+	term, p := paneOn(5, 5)
+	p.put([]byte("abcdefgh"))
+	if r1, r2 := term.Row(1), term.Row(2); r1 != "abcde" || r2 != "fgh" {
+		t.Fatalf("rows = %q, %q; want abcde, fgh", r1, r2)
+	}
+}
+
+func TestChatPaneCRLFIsOneNewline(t *testing.T) {
+	term, p := paneOn(20, 5)
+	p.put([]byte("a\r\nb\r"))
+	p.put([]byte("\x00c\r"))
+	p.put([]byte("\nd"))
+	got := []string{term.Row(1), term.Row(2), term.Row(3), term.Row(4)}
+	want := []string{"a", "b", "c", "d"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("rows = %q; want %q", got, want)
+		}
+	}
+}
+
+var hhmm = regexp.MustCompile(`─ [0-2][0-9]:[0-5][0-9]$`)
+
+func TestChatDividerShowsTime(t *testing.T) {
+	r := newChatRig(t, "")
+	r.begin(t)
+	done := r.run()
+	waitFor(t, func() bool { return strings.Contains(r.term.Row(13), "chatting with") }, "chat screen not drawn")
+	// Row trims the trailing blank of the " HH:MM " field.
+	if got := r.term.Row(13); !hhmm.MatchString(got) || len([]rune(got)) != 79 {
+		t.Fatalf("divider = %q; want the fill then HH:MM in the last field", got)
+	}
+	_ = r.tap.StopChat("SysOp")
+	waitDone(t, done, "chat ignored StopChat")
+}
+
+func TestChatTinyScreenKeepsPanesApart(t *testing.T) {
+	r := newChatRig(t, "")
+	r.begin(t)
+	done := r.runSized(80, 2)
+	r.tap.Inject("SysOp", []byte("from sysop"))
+	r.sess.Send("from caller")
+	waitFor(t, func() bool {
+		return r.term.Row(1) == "from sysop" && strings.Contains(r.term.Row(3), "chatting with") &&
+			r.term.Row(4) == "from caller"
+	}, "panes overlap on a 2-row screen")
+	_ = r.tap.StopChat("SysOp")
+	waitDone(t, done, "chat ignored StopChat")
 }

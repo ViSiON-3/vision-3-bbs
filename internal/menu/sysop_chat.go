@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
@@ -40,6 +41,8 @@ type chatPane struct {
 	width       int
 	row, col    int
 	color       int
+	line        []byte // text on the cursor row; col is len(line)+1
+	afterCR     bool   // an LF or NUL straight after CR is part of the same newline
 }
 
 func (p *chatPane) moveTo() {
@@ -48,6 +51,7 @@ func (p *chatPane) moveTo() {
 
 func (p *chatPane) newline() {
 	p.col = 1
+	p.line = p.line[:0]
 	if p.row < p.last {
 		p.row++
 		return
@@ -55,26 +59,60 @@ func (p *chatPane) newline() {
 	fmt.Fprintf(p.w, "\x1b[%d;%dr\x1b[%d;1H\n\x1b[r", p.first, p.last, p.last)
 }
 
-// put writes printable ASCII at the pane's cursor, wrapping at the pane
-// width. CR or LF starts a new line; BS and DEL erase back to column 1.
+// wrap starts a new line for a character that does not fit. The word being
+// typed moves down with it unless it fills the whole line.
+func (p *chatPane) wrap() {
+	var word []byte
+	if i := bytes.LastIndexByte(p.line, ' '); i >= 0 {
+		word = append(word, p.line[i+1:]...)
+		if len(word) > 0 {
+			p.col = i + 2
+			p.moveTo()
+			_, _ = io.WriteString(p.w, strings.Repeat(" ", len(word)))
+		}
+	}
+	p.newline()
+	p.moveTo()
+	_, _ = p.w.Write(word)
+	p.line = append(p.line, word...)
+	p.col = len(p.line) + 1
+}
+
+// put writes printable ASCII at the pane's cursor, word-wrapping at the pane
+// width. CR, LF or CR LF starts a new line; BS and DEL erase back to the
+// start of the line.
 func (p *chatPane) put(b []byte) {
 	p.moveTo()
 	for _, c := range b {
+		afterCR := p.afterCR
+		p.afterCR = false
 		switch {
 		case c == '\r' || c == '\n':
+			if c == '\n' && afterCR {
+				continue
+			}
+			p.afterCR = c == '\r'
 			p.newline()
 			p.moveTo()
+		case c == 0x00:
+			p.afterCR = afterCR
 		case c == 0x08 || c == 0x7F:
-			if p.col > 1 {
+			if len(p.line) > 0 {
+				p.line = p.line[:len(p.line)-1]
 				p.col--
 				_, _ = io.WriteString(p.w, "\b \b")
 			}
 		case c >= 0x20 && c < 0x7F:
-			if p.col > p.width {
-				p.newline()
-				p.moveTo()
+			if len(p.line) >= p.width {
+				if c == ' ' {
+					p.newline()
+					p.moveTo()
+					continue
+				}
+				p.wrap()
 			}
 			_, _ = p.w.Write([]byte{c})
+			p.line = append(p.line, c)
 			p.col++
 		}
 	}
@@ -86,6 +124,7 @@ const (
 	chatSysopBytes chatEventKind = iota
 	chatEnd
 	chatCallerGone
+	chatMinute
 )
 
 type chatEvent struct {
@@ -96,9 +135,14 @@ type chatEvent struct {
 // forwardChatEvents turns the tap's chat channels into events for
 // ReadKeyOrEvent until stop closes. It never touches the input handler.
 func forwardChatEvents(tap *snoop.Tap, end <-chan struct{}, events chan<- chatEvent, stop <-chan struct{}) {
+	minute := time.NewTimer(untilNextMinute(time.Now()))
+	defer minute.Stop()
 	for {
 		var ev chatEvent
 		select {
+		case <-minute.C:
+			minute.Reset(untilNextMinute(time.Now()))
+			ev = chatEvent{kind: chatMinute}
 		case b := <-tap.ChatInput():
 			ev = chatEvent{kind: chatSysopBytes, data: b}
 		case <-end:
@@ -116,6 +160,17 @@ func forwardChatEvents(tap *snoop.Tap, end <-chan struct{}, events chan<- chatEv
 	}
 }
 
+func untilNextMinute(now time.Time) time.Duration {
+	return now.Truncate(time.Minute).Add(time.Minute).Sub(now)
+}
+
+// chatClockWidth is the clock field at the right end of the divider.
+const chatClockWidth = len(" 15:04 ")
+
+func drawChatClock(w io.Writer, row, width int) {
+	fmt.Fprintf(w, "\x1b[%d;%dH\x1b[0;37m %s \x1b[0m", row, width-chatClockWidth+1, time.Now().Format("15:04"))
+}
+
 // runSysopChat draws the split screen and relays both sides until the caller
 // presses ESC twice, the sysop ends chat, or the caller disconnects. The
 // caller's keys are read on this goroutine. When chat ends normally the
@@ -127,6 +182,8 @@ func runSysopChat(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode ans
 		return
 	}
 	snap, overflowed := tap.Snapshot()
+	height = max(height, 5)
+	width = max(width, 20)
 	th, st := env.theme(), env.strings()
 	top := (height - 1) / 2
 	sysop := &chatPane{w: w, first: 1, last: top, width: width, row: 1, col: 1, color: th.ChatSysopColor}
@@ -135,10 +192,10 @@ func runSysopChat(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode ans
 	bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, sysopHandle, callerHandle)))
 	fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top+1)
 	_ = terminalio.WriteProcessedBytes(w, bar, mode)
-	if fill := width - ansi.VisibleLength(string(bar)); fill > 0 {
+	if fill := width - chatClockWidth - ansi.VisibleLength(string(bar)); fill > 0 {
 		_ = terminalio.WriteProcessedBytes(w, []byte("\x1b[0;37m"+strings.Repeat("\xc4", fill)), mode)
 	}
-	fmt.Fprint(w, "\x1b[0m")
+	drawChatClock(w, top+1, width)
 
 	events := make(chan chatEvent)
 	stop := make(chan struct{})
@@ -175,6 +232,10 @@ loop:
 				break loop
 			case chatCallerGone:
 				return
+			case chatMinute:
+				drawChatClock(w, top+1, width)
+				caller.moveTo()
+				continue
 			}
 		}
 		if k == editor.KeyEsc {
