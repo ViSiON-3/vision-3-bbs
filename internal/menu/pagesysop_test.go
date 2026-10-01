@@ -174,7 +174,7 @@ func TestPageSysopCountdownInEveryOutputMode(t *testing.T) {
 // recorded for the session but not armed on its InputHandler, so the reason
 // prompt still reads and the countdown starts, as when the limit runs out
 // between key waits.
-func runPageSysopWithLimit(t *testing.T, env *menuEnv, handle string, limitEnds time.Time, credit time.Duration, bypassIH bool) (error, time.Duration) {
+func runPageSysopWithLimit(t *testing.T, env *menuEnv, handle string, limitEnds time.Time, credit time.Duration, bypassIH bool) (time.Duration, error) {
 	t.Helper()
 	// The page cooldown is keyed by handle and outlives the test.
 	handle = fmt.Sprintf("%s%d", handle, time.Now().UnixNano())
@@ -203,7 +203,7 @@ func runPageSysopWithLimit(t *testing.T, env *menuEnv, handle string, limitEnds 
 	}
 	start := time.Now()
 	_, _, err := runPageSysop(c, "")
-	return err, time.Since(start)
+	return time.Since(start), err
 }
 
 func TestPageSysopStopsWhenTimeLimitRunsOutBetweenKeyWaits(t *testing.T) {
@@ -211,7 +211,7 @@ func TestPageSysopStopsWhenTimeLimitRunsOutBetweenKeyWaits(t *testing.T) {
 	p := &fakePager{consoles: 1}
 	env.e.Pager = p
 	setPageConfig(env, 10, 300)
-	err, took := runPageSysopWithLimit(t, env, "PsLimitGone", time.Now().Add(300*time.Millisecond), 0, true)
+	took, err := runPageSysopWithLimit(t, env, "PsLimitGone", time.Now().Add(300*time.Millisecond), 0, true)
 	if !errors.Is(err, editor.ErrTimeLimit) {
 		t.Fatalf("err = %v, want ErrTimeLimit", err)
 	}
@@ -228,7 +228,7 @@ func TestPageSysopStopsWhenTimeLimitRunsOutMidCountdown(t *testing.T) {
 	p := &fakePager{consoles: 1}
 	env.e.Pager = p
 	setPageConfig(env, 10, 300)
-	err, took := runPageSysopWithLimit(t, env, "PsLimitMid", time.Now().Add(1500*time.Millisecond), 0, false)
+	took, err := runPageSysopWithLimit(t, env, "PsLimitMid", time.Now().Add(1500*time.Millisecond), 0, false)
 	if !errors.Is(err, editor.ErrTimeLimit) {
 		t.Fatalf("err = %v, want ErrTimeLimit", err)
 	}
@@ -245,7 +245,7 @@ func TestPageSysopCountsDownWithTimeLeft(t *testing.T) {
 	p := &fakePager{consoles: 1}
 	env.e.Pager = p
 	setPageConfig(env, 1, 300)
-	err, _ := runPageSysopWithLimit(t, env, "PsLimitLeft", time.Now().Add(time.Hour), 0, false)
+	_, err := runPageSysopWithLimit(t, env, "PsLimitLeft", time.Now().Add(time.Hour), 0, false)
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -259,7 +259,7 @@ func TestPageSysopChatCreditKeepsLimitOpen(t *testing.T) {
 	p := &fakePager{consoles: 1}
 	env.e.Pager = p
 	setPageConfig(env, 1, 300)
-	err, _ := runPageSysopWithLimit(t, env, "PsLimitCredit", time.Now().Add(-time.Minute), 2*time.Minute, true)
+	_, err := runPageSysopWithLimit(t, env, "PsLimitCredit", time.Now().Add(-time.Minute), 2*time.Minute, true)
 	if err != nil {
 		t.Fatalf("err = %v, chat time was charged to the caller", err)
 	}
