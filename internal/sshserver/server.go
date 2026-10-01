@@ -6,6 +6,7 @@
 package sshserver
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 )
 
 // ErrReadInterrupted is returned by BBSSession.Read when a read interrupt fires.
@@ -177,6 +180,9 @@ type BBSSession struct {
 	// repaint on window resize) because session.Write() does CRLF conversion
 	// that would interleave with RawWrite binary data on the same channel.
 	transferActive atomic.Int32
+	// tap, when set, receives a copy of everything written to the caller
+	// and supplies sysop keystrokes to Read (see internal/snoop).
+	tap atomic.Pointer[snoop.Tap]
 }
 
 // WrapSession wraps a gliderlabs ssh.Session to add BBS-specific features
@@ -229,20 +235,78 @@ func extractRawChannel(s ssh.Session) gossh.Channel {
 // ZMODEM, YMODEM, or XMODEM frames. Falls back to session.Write() when the
 // raw channel is unavailable (e.g. in tests using mock sessions).
 func (s *BBSSession) RawWrite(p []byte) (int, error) {
+	var n int
+	var err error
 	if s.rawCh != nil {
-		return s.rawCh.Write(p)
+		n, err = s.rawCh.Write(p)
+	} else {
+		n, err = s.Session.Write(p) //nolint:staticcheck // explicit: bypasses BBSSession wrappers
 	}
-	return s.Session.Write(p) //nolint:staticcheck // explicit: bypasses BBSSession wrappers
+	if t := s.tap.Load(); t != nil && n > 0 {
+		if s.IsTransferActive() {
+			t.TransferStarted()
+		} else {
+			t.Output(p[:n])
+		}
+	}
+	return n, err
+}
+
+// SetTap attaches the node's snoop tap.
+func (s *BBSSession) SetTap(t *snoop.Tap) { s.tap.Store(t) }
+
+// Tap returns the node's snoop tap, or nil.
+func (s *BBSSession) Tap() *snoop.Tap { return s.tap.Load() }
+
+// Write sends p to the caller and copies it to the snoop tap.
+func (s *BBSSession) Write(p []byte) (int, error) {
+	n, err := s.Session.Write(p)
+	if t := s.tap.Load(); t != nil && n > 0 {
+		if s.IsTransferActive() {
+			t.TransferStarted()
+		} else if _, _, isPty := s.Session.Pty(); isPty {
+			t.Output(normalizeNewlines(p[:n]))
+		} else {
+			t.Output(p[:n])
+		}
+	}
+	return n, err
+}
+
+// normalizeNewlines mirrors gliderlabs' PTY output conversion so the tap
+// sees the bytes the caller's terminal received.
+func normalizeNewlines(p []byte) []byte {
+	if !bytes.Contains(p, []byte{'\n'}) {
+		return p
+	}
+	out := make([]byte, 0, len(p)+8)
+	for i, b := range p {
+		if b == '\n' && (i == 0 || p[i-1] != '\r') {
+			out = append(out, '\r')
+		}
+		out = append(out, b)
+	}
+	return out
 }
 
 // SetTransferActive marks/unmarks the session as being in a binary transfer.
 // While active, nothing should write to the session via session.Write()
 // (which does CRLF conversion) because it would corrupt the binary stream.
+// The tap mode follows, except that a door keeps ModeDoor: doors can run
+// transfers and the door handler owns that mode.
 func (s *BBSSession) SetTransferActive(active bool) {
 	if active {
 		s.transferActive.Store(1)
 	} else {
 		s.transferActive.Store(0)
+	}
+	if t := s.tap.Load(); t != nil {
+		switch {
+		case active:
+			t.SetMode(snoop.ModeTransfer)
+		case t.Mode() == snoop.ModeTransfer:
+			t.SetMode(snoop.ModeBBS)
+		}
 	}
 }
 
@@ -273,6 +337,12 @@ func (s *BBSSession) Read(p []byte) (int, error) {
 	}
 	s.readMu.Lock()
 	defer s.readMu.Unlock()
+
+	// nil when no tap is set, so the select case below never fires.
+	var tapInput <-chan []byte
+	if t := s.tap.Load(); t != nil {
+		tapInput = t.Input()
+	}
 
 	for {
 		s.riMu.Lock()
@@ -321,6 +391,12 @@ func (s *BBSSession) Read(p []byte) (int, error) {
 			s.readCh = nil
 			s.pending = &res
 			// Check the current interrupt before delivering the received bytes.
+		case b := <-tapInput:
+			n := copy(p, b)
+			if n < len(b) {
+				s.pending = &readResult{data: b[n:]}
+			}
+			return n, nil
 		}
 	}
 }
