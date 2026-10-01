@@ -44,6 +44,7 @@ func TestSnoopTargetHeader(t *testing.T) {
 func TestTypeInHookTakesAndReleases(t *testing.T) {
 	start := time.Unix(100, 0)
 	reg, bs := regWithNode(start)
+	bs.Tap.AttachAs("jim")
 	hook := typeInHook(reg)
 	if err := hook("jim", 4, start, true); err != nil {
 		t.Fatal(err)
@@ -62,6 +63,7 @@ func TestTypeInHookTakesAndReleases(t *testing.T) {
 func TestChatHookRefusedInDoor(t *testing.T) {
 	start := time.Unix(100, 0)
 	reg, bs := regWithNode(start)
+	bs.Tap.AttachAs("jim")
 	bs.Tap.SetMode(snoop.ModeDoor)
 	err := chatHook(reg)("jim", 4, start, true)
 	if err == nil || !strings.Contains(err.Error(), "door") {

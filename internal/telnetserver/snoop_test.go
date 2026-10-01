@@ -19,6 +19,7 @@ func pipeAdapter(t *testing.T) (*TelnetSessionAdapter, net.Conn) {
 func TestTelnetInjectWakesBlockedRead(t *testing.T) {
 	a, _ := pipeAdapter(t)
 	tp := snoop.NewTap()
+	tp.AttachAs("sysop")
 	a.SetTap(tp)
 	if err := tp.TakeKeyboard("sysop"); err != nil {
 		t.Fatal(err)
@@ -44,6 +45,7 @@ func TestTelnetInjectWakesBlockedRead(t *testing.T) {
 func TestTelnetCallerBytesStillArriveAfterWake(t *testing.T) {
 	a, client := pipeAdapter(t)
 	tp := snoop.NewTap()
+	tp.AttachAs("sysop")
 	a.SetTap(tp)
 	_ = tp.TakeKeyboard("sysop")
 	tp.Inject("sysop", []byte("s"))
@@ -65,6 +67,7 @@ func TestTelnetWakeRacingCallerReadLeavesNoStaleDeadline(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		a, client := pipeAdapter(t)
 		tp := snoop.NewTap()
+		tp.AttachAs("sysop")
 		a.SetTap(tp)
 		_ = tp.TakeKeyboard("sysop")
 		go func() {
@@ -101,6 +104,7 @@ func TestTelnetWakeRacingCallerReadLeavesNoStaleDeadline(t *testing.T) {
 func TestTelnetSysopBytesKeepOrderAcrossSmallReads(t *testing.T) {
 	a, _ := pipeAdapter(t)
 	tp := snoop.NewTap()
+	tp.AttachAs("sysop")
 	a.SetTap(tp)
 	_ = tp.TakeKeyboard("sysop")
 	tp.Inject("sysop", []byte("abc"))

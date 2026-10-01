@@ -60,9 +60,10 @@ func NewTap() *Tap {
 
 // Watcher receives a node's output. The first chunk is the catch-up buffer.
 type Watcher struct {
-	tap  *Tap
-	ch   chan []byte
-	once sync.Once
+	tap    *Tap
+	ch     chan []byte
+	handle string // sysop this watch belongs to; "" for an anonymous watch
+	once   sync.Once
 }
 
 // resync replaces whatever is queued with the catch-up buffer so a lagging
@@ -91,15 +92,41 @@ func (w *Watcher) Close() {
 		if _, ok := w.tap.watchers[w]; ok {
 			delete(w.tap.watchers, w)
 			close(w.ch)
+			w.tap.lostWatcherLocked(w.handle)
 		}
 		w.tap.mu.Unlock()
 	})
 }
 
-// Attach adds a watcher primed with the current screen. On a closed tap the
-// returned watcher's channel is already closed.
-func (t *Tap) Attach() *Watcher {
-	w := &Watcher{tap: t, ch: make(chan []byte, watcherQueue)}
+// watchingLocked reports whether handle has an attached watcher.
+func (t *Tap) watchingLocked(handle string) bool {
+	for w := range t.watchers {
+		if w.handle == handle {
+			return true
+		}
+	}
+	return false
+}
+
+// lostWatcherLocked releases handle's keyboard and chat once its last watcher
+// is gone, so a sysop who stops watching cannot keep typing into the node.
+func (t *Tap) lostWatcherLocked(handle string) {
+	if handle == "" || t.kb.holder != handle || t.watchingLocked(handle) {
+		return
+	}
+	t.kb.drop()
+	t.stopChatLocked()
+}
+
+// Attach adds an anonymous watcher primed with the current screen. On a
+// closed tap the returned watcher's channel is already closed.
+func (t *Tap) Attach() *Watcher { return t.AttachAs("") }
+
+// AttachAs is Attach for a named sysop. Only a handle with an attached
+// watcher can take the keyboard or request chat, and closing its last
+// watcher releases both.
+func (t *Tap) AttachAs(handle string) *Watcher {
+	w := &Watcher{tap: t, ch: make(chan []byte, watcherQueue), handle: handle}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {
@@ -213,6 +240,10 @@ func (t *Tap) Close() {
 		delete(t.watchers, w)
 		close(w.ch)
 	}
+	if t.kb.holder != "" {
+		t.kb.drop()
+	}
+	t.stopChatLocked()
 	close(t.done)
 	t.mu.Unlock()
 }

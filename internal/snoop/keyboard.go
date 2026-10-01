@@ -12,6 +12,7 @@ var (
 	ErrBusy           = errors.New("caller is busy")
 	ErrChatNotStarted = errors.New("caller's session is not waiting for input")
 	ErrTapClosed      = errors.New("caller disconnected")
+	ErrNotWatching    = errors.New("attach a watch before taking the keyboard")
 )
 
 const inputQueue = 64
@@ -60,6 +61,9 @@ func (t *Tap) TakeKeyboard(handle string) error {
 	defer t.mu.Unlock()
 	if t.closed {
 		return ErrTapClosed
+	}
+	if !t.watchingLocked(handle) {
+		return ErrNotWatching
 	}
 	if t.kb.holder != "" && t.kb.holder != handle {
 		return fmt.Errorf("%w: %s", ErrKeyboardHeld, t.kb.holder)
@@ -132,6 +136,10 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) error {
 	if t.closed {
 		t.mu.Unlock()
 		return ErrTapClosed
+	}
+	if !t.watchingLocked(handle) {
+		t.mu.Unlock()
+		return ErrNotWatching
 	}
 	if t.mode != ModeBBS {
 		m := t.mode

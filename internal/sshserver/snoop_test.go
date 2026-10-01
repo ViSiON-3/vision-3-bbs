@@ -66,6 +66,7 @@ func TestInjectedBytesComeOutOfRead(t *testing.T) {
 	pr, pw := io.Pipe()
 	bs := WrapSession(&pipeSession{r: pr})
 	tp := snoop.NewTap()
+	tp.AttachAs("sysop")
 	bs.SetTap(tp)
 	if err := tp.TakeKeyboard("sysop"); err != nil {
 		t.Fatal(err)
@@ -142,6 +143,7 @@ func TestLargeTapChunkSpansReads(t *testing.T) {
 	pr, _ := io.Pipe()
 	bs := WrapSession(&pipeSession{r: pr})
 	tp := snoop.NewTap()
+	tp.AttachAs("sysop")
 	bs.SetTap(tp)
 	if err := tp.TakeKeyboard("sysop"); err != nil {
 		t.Fatal(err)

@@ -14,7 +14,7 @@ func TestInjectDroppedWithoutKeyboard(t *testing.T) {
 }
 
 func TestOnlyOneHolder(t *testing.T) {
-	tp := NewTap()
+	tp := newWatchedTap("a", "b")
 	if err := tp.TakeKeyboard("a"); err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestOnlyOneHolder(t *testing.T) {
 }
 
 func TestReleaseKeyboardReportsHoldAndBytes(t *testing.T) {
-	tp := NewTap()
+	tp := newWatchedTap("a", "b")
 	if held, n := tp.ReleaseKeyboard("a"); held != 0 || n != 0 {
 		t.Fatalf("release without holding = %v, %d; want 0, 0", held, n)
 	}
@@ -65,7 +65,7 @@ func TestReleaseKeyboardReportsHoldAndBytes(t *testing.T) {
 
 func TestRequestChatRefusedInDoorAndTransfer(t *testing.T) {
 	for _, m := range []Mode{ModeDoor, ModeTransfer} {
-		tp := NewTap()
+		tp := newWatchedTap("a", "b")
 		tp.SetMode(m)
 		err := tp.RequestChat("a", 50*time.Millisecond)
 		if !errors.Is(err, ErrBusy) {
@@ -75,7 +75,7 @@ func TestRequestChatRefusedInDoorAndTransfer(t *testing.T) {
 }
 
 func TestRequestChatTimesOutWhenNobodyServicesBreakIn(t *testing.T) {
-	tp := NewTap()
+	tp := newWatchedTap("a", "b")
 	err := tp.RequestChat("a", 50*time.Millisecond)
 	if !errors.Is(err, ErrChatNotStarted) {
 		t.Fatalf("err = %v; want ErrChatNotStarted", err)
@@ -91,7 +91,7 @@ func TestRequestChatTimesOutWhenNobodyServicesBreakIn(t *testing.T) {
 }
 
 func TestChatHandshakeAndRouting(t *testing.T) {
-	tp := NewTap()
+	tp := newWatchedTap("a", "b")
 	go func() {
 		<-tp.BreakIn()
 		tp.ChatBegan()
@@ -121,7 +121,7 @@ func TestChatHandshakeAndRouting(t *testing.T) {
 }
 
 func TestReleaseKeyboardEndsChat(t *testing.T) {
-	tp := NewTap()
+	tp := newWatchedTap("a", "b")
 	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
 	if err := tp.RequestChat("a", time.Second); err != nil {
 		t.Fatal(err)
@@ -136,7 +136,7 @@ func TestReleaseKeyboardEndsChat(t *testing.T) {
 }
 
 func TestLateChatBeganAfterTimeoutIsRefused(t *testing.T) {
-	tp := NewTap()
+	tp := newWatchedTap("a", "b")
 	serviced := make(chan struct{})
 	go func() { <-tp.BreakIn(); close(serviced) }()
 	err := tp.RequestChat("a", 50*time.Millisecond)
@@ -161,7 +161,7 @@ func TestLateChatBeganAfterTimeoutIsRefused(t *testing.T) {
 }
 
 func TestTimeoutClosesEndChat(t *testing.T) {
-	tp := NewTap()
+	tp := newWatchedTap("a", "b")
 	done := make(chan error, 1)
 	go func() { done <- tp.RequestChat("a", 50*time.Millisecond) }()
 	<-tp.BreakIn()
@@ -177,12 +177,89 @@ func TestTimeoutClosesEndChat(t *testing.T) {
 }
 
 func TestInputReadyFiresOnInject(t *testing.T) {
-	tp := NewTap()
+	tp := newWatchedTap("a", "b")
 	_ = tp.TakeKeyboard("a")
 	tp.Inject("a", []byte("x"))
 	select {
 	case <-tp.InputReady():
 	default:
 		t.Fatal("InputReady not signalled")
+	}
+}
+
+// newWatchedTap returns a tap with one open watch per handle.
+func newWatchedTap(handles ...string) *Tap {
+	tp := NewTap()
+	for _, h := range handles {
+		tp.AttachAs(h)
+	}
+	return tp
+}
+
+func TestTakeKeyboardNeedsWatch(t *testing.T) {
+	tp := NewTap()
+	if err := tp.TakeKeyboard("a"); !errors.Is(err, ErrNotWatching) {
+		t.Fatalf("TakeKeyboard err = %v, want ErrNotWatching", err)
+	}
+	if err := tp.RequestChat("a", 50*time.Millisecond); !errors.Is(err, ErrNotWatching) {
+		t.Fatalf("RequestChat err = %v, want ErrNotWatching", err)
+	}
+	tp.Attach() // an anonymous watch does not count for a handle
+	if err := tp.TakeKeyboard("a"); !errors.Is(err, ErrNotWatching) {
+		t.Fatalf("TakeKeyboard with anonymous watch err = %v", err)
+	}
+}
+
+func TestLastWatcherClosingReleasesKeyboardAndChat(t *testing.T) {
+	tp := NewTap()
+	w := tp.AttachAs("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	end := tp.EndChat()
+	w.Close()
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after last watcher closed", h)
+	}
+	select {
+	case <-end:
+	default:
+		t.Fatal("EndChat not closed")
+	}
+}
+
+func TestOtherWatcherClosingKeepsKeyboard(t *testing.T) {
+	tp := NewTap()
+	w1, w2 := tp.AttachAs("a"), tp.AttachAs("a")
+	other := tp.AttachAs("b")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	w1.Close()
+	other.Close()
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder = %q, want a", h)
+	}
+	w2.Close()
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after last watcher closed", h)
+	}
+}
+
+func TestTapCloseDropsKeyboardAndEndsChat(t *testing.T) {
+	tp := NewTap()
+	tp.AttachAs("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	end := tp.EndChat()
+	tp.Close()
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after Close", h)
+	}
+	select {
+	case <-end:
+	default:
+		t.Fatal("EndChat not closed")
 	}
 }
