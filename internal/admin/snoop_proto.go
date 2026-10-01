@@ -38,6 +38,11 @@ type SnoopStream struct {
 	r *bufio.Reader
 }
 
+// NewSnoopStream wraps an already-handshaken connection as a SnoopStream.
+func NewSnoopStream(h SnoopHeader, rwc io.ReadWriteCloser) *SnoopStream {
+	return &SnoopStream{Header: h, ReadWriteCloser: rwc, r: bufio.NewReader(rwc)}
+}
+
 func (s *SnoopStream) Read(p []byte) (int, error) { return s.r.Read(p) }
 
 const maxSnoopLine = 4 << 10
