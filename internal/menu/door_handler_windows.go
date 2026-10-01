@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -203,23 +204,26 @@ func executeDoor(ctx *DoorCtx) error {
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
 	}
 
-	if ctx.Config.Type == "synchronet_js" {
-		return executeSyncJSDoor(ctx)
-	}
-	if ctx.Config.Type == "v3_script" {
-		return executeV3ScriptDoor(ctx)
-	}
-	if ctx.Config.Type == "rlogin" {
-		return executeRLoginDoor(ctx)
-	}
-	if ctx.Config.Type == "telnet" {
-		return executeTelnetDoor(ctx)
-	}
+	// The BBS idle timeout is enforced in its input loops, which a door
+	// bypasses, so it is enforced here for the door's lifetime (see
+	// door_idle.go).
+	return runDoorWithIdleTimeout(ctx, runDoorByType)
+}
 
-	if ctx.Config.IsDOS {
+// runDoorByType runs the door with the executor for its type.
+func runDoorByType(ctx *DoorCtx) error {
+	switch {
+	case ctx.Config.Type == "synchronet_js":
+		return executeSyncJSDoor(ctx)
+	case ctx.Config.Type == "v3_script":
+		return executeV3ScriptDoor(ctx)
+	case ctx.Config.Type == "rlogin":
+		return executeRLoginDoor(ctx)
+	case ctx.Config.Type == "telnet":
+		return executeTelnetDoor(ctx)
+	case ctx.Config.IsDOS:
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
 	}
-
 	return executeNativeDoorWindows(ctx)
 }
 
@@ -458,6 +462,10 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		cmdErr := executeDoor(ctx)
 		_ = getSessionIH(s)
 
+		// The caller went idle in the door: log off, as a menu would.
+		if errors.Is(cmdErr, editor.ErrIdleTimeout) {
+			return currentUser, "LOGOFF", cmdErr
+		}
 		if cmdErr != nil {
 			if errors.Is(cmdErr, ErrDoorBusy) {
 				slog.Info("door is busy for user", "node", nodeNumber, "door", upperInput, "handle", currentUser.Handle)

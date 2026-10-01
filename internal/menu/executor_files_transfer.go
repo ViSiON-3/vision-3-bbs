@@ -19,7 +19,7 @@ import (
 
 // isTelnetSession returns true when s was established over a raw telnet connection.
 func isTelnetSession(s ssh.Session) bool {
-	_, ok := s.(*telnetserver.TelnetSessionAdapter)
+	_, ok := unwrapSession(s).(*telnetserver.TelnetSessionAdapter)
 	return ok
 }
 

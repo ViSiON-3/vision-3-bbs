@@ -18,12 +18,9 @@ import (
 // DROPFILE.INI is the named-value drop file drafted by Synchronet (draft 0.6):
 // https://github.com/SynchronetBBS/sbbs/blob/0fc1667377/docs/dropfile_ini.md
 //
-// Keys the spec defines that this writer leaves out, and why:
-//   - IDLE_LIMIT: the BBS idle timeout applies only in its own input loops,
-//     never while a door runs, so the host never ends a door session for
-//     idling and the default (no limit) is the truth.
-//   - SYS_FTN_ADDR: it lists the primary address first, and FTN networks
-//     here are configured with no primary among them.
+// SYS_FTN_ADDR is the one key the spec defines that this writer leaves out:
+// it lists the primary address first, and FTN networks here are configured
+// with no primary among them.
 
 const (
 	dropfileIniType = "DROPFILE.INI"
@@ -328,6 +325,11 @@ func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 	w.num("TIME_LEFT", ctx.TimeLeftMin*60)
 	w.path("TEMP_DIR", tempDir)
 	w.line("LOCAL_DISPLAY=0")
+	// The idle timeout executeDoor enforces; left out, meaning no limit, for
+	// a caller exempt from it.
+	if ctx.IdleTimeout > 0 {
+		w.num("IDLE_LIMIT", int(ctx.IdleTimeout/time.Second))
+	}
 
 	w.section("door")
 	w.ascii("DOOR_CODE", ctx.Config.Code)

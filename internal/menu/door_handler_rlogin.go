@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -70,7 +69,10 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 
 	writeDoorMessage(ctx, fmt.Sprintf(ctx.Executor.Strings().DoorRemoteConnecting, ctx.DoorName))
 
-	conn, err := rlogin.Dial(context.Background(), addr, handshake, timeout)
+	// An idle caller abandons the connection attempt too.
+	dialCtx, cancelDial := idleDialContext(ctx)
+	conn, err := rlogin.Dial(dialCtx, addr, handshake, timeout)
+	cancelDial()
 	if err != nil {
 		// The caller has already been told, in the sysop's own wording, that
 		// the door server is unreachable. Returning the error as well would

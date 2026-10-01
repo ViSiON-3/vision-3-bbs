@@ -70,13 +70,13 @@ ViSiON/3 writes these keys:
 | `[comm]` | `COMM_TYPE`, `COMM_CHARSET`, plus `COMM_HANDLE` or `COMM_PORT` where the type needs one |
 | `[user]` | `USER_ALIAS`, `USER_NUMBER`, `USER_ROLE`, `USER_REALNAME`, `USER_LOCATION`, `USER_IP`, `USER_PROTOCOL` |
 | `[terminal]` | `TERM_COLS`, `TERM_ROWS`, `TERM_TYPE` (`ansi`), `TERM_CHARSET`, `TERM_TERMINFO` |
-| `[session]` | `TIME_LEFT` (seconds), `TEMP_DIR`, `LOCAL_DISPLAY` (`0`) |
+| `[session]` | `TIME_LEFT` (seconds), `TEMP_DIR`, `LOCAL_DISPLAY` (`0`), `IDLE_LIMIT` (seconds) |
 | `[door]` | `DOOR_CODE`, `DOOR_NAME` (the door's **Code** and **Name**) |
 | `[x-vision3]` | `X_VISION3_LEVEL` (the user's access level) |
 
 Optional keys with nothing to report are left out: `SYS_QWKID` needs an explicit `qwkID` in `config.json`, `TERM_TERMINFO` is written only when the caller's client sent a terminal type, and `TEMP_DIR` is written only when the file is in a per-node directory (any DOS door, or a native door as described below).
 
-Two keys the draft defines are never written. `IDLE_LIMIT` tells a door when the BBS will end an idle session, but the BBS idle timeout doesn't apply while a door is running, so there is no limit to report. `SYS_FTN_ADDR` lists the board's FTN addresses with the primary one first, and FTN networks aren't configured with a primary.
+`IDLE_LIMIT` is the [idle timeout](#idle-timeout) in seconds, so a door can warn the user before it runs out; it is left out for CoSysOps and above, who are exempt. One key the draft defines is never written: `SYS_FTN_ADDR` lists the board's FTN addresses with the primary one first, and FTN networks aren't configured with a primary.
 
 - **`COMM_TYPE`** is `stdio` for a native door, `socket` with `COMM_HANDLE=3` in [SOCKET](#socket) I/O mode, and `fossil` with `COMM_PORT=1` for a DOS door with a **FOSSIL Driver**. A DOS door without one reads and writes the DOS console, which is reported as `stdio`.
 - **`COMM_CHARSET`** is the caller's terminal encoding, `CP437` or `UTF-8`, because the BBS relays a door's bytes untranslated. A DOS door without a FOSSIL driver always gets `CP437`, since dosemu2 translates its screen.
@@ -265,6 +265,18 @@ For DOS doors, `dropfile_location` is ignored: every dropfile format is always w
 Set `min_access_level` to restrict a door to users with a minimum access level. Users below the required level will see an "access denied" message. A value of `0` (default) means no restriction.
 
 Doors with access restrictions are hidden from the door list for unauthorized users.
+
+## Idle Timeout
+
+The session **Idle Timeout** (`sessionIdleTimeoutMinutes`) applies inside doors as it does in the menus. When a caller sends nothing for that long, the BBS ends the door, shows the idle timeout message and logs the caller off. Every key the caller presses restarts the countdown, as does anything else their terminal sends, such as a reply to a door's terminal query. Output from the door doesn't count. CoSysOps and above are exempt here too.
+
+How the door is ended depends on its type:
+
+- **Native and DOS doors** are hung up on: the BBS sends `SIGHUP` to the door and any programs it started, as a modem dropping carrier would, and `SIGKILL` if it is still running 5 seconds later. On Windows the door process is killed.
+- **RLogin and Telnet doors** have their connection to the door server closed.
+- **Synchronet JavaScript and V3 script doors** are stopped as if the caller had disconnected.
+
+Many doors have their own inactivity timer. If a door's timer is shorter, it ends the session first, as it always has. A door that reads `DROPFILE.INI` can use `IDLE_LIMIT` to match the BBS's timer or to warn the user.
 
 ## Single Instance Locking
 

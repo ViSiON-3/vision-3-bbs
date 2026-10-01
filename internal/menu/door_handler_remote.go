@@ -93,6 +93,22 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 	}
 	defer closeConn()
 
+	// A caller who goes idle is hung up on, as when their time runs out.
+	// Once the relay ends the idle countdown stops, so the door's cleanup
+	// command isn't counted as idle time.
+	relayDone := make(chan struct{})
+	defer close(relayDone)
+	defer ctx.idle.freeze()
+	go func() {
+		select {
+		case <-ctx.idle.Fired():
+			slog.Info("caller idle in remote door, disconnecting",
+				"node", ctx.NodeNumber, "door", ctx.DoorName, "protocol", proto)
+			closeConn()
+		case <-relayDone:
+		}
+	}()
+
 	if !deadline.IsZero() {
 		timer := time.AfterFunc(time.Until(deadline), func() {
 			slog.Info("time limit reached during remote door, disconnecting",

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -113,6 +114,10 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 		cmdErr := executeDoor(ctx)
 		_ = getSessionIH(s)
 
+		// The caller went idle in the door: log off, as a menu would.
+		if errors.Is(cmdErr, editor.ErrIdleTimeout) {
+			return currentUser, "LOGOFF", cmdErr
+		}
 		if cmdErr != nil {
 			if errors.Is(cmdErr, ErrDoorBusy) {
 				slog.Info("door is busy", "node", nodeNumber, "door", doorName, "handle", currentUser.Handle)

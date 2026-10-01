@@ -81,6 +81,14 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 	// Derive from the SSH session context so scripts cancel on disconnect.
 	engineCtx, engineCancel := context.WithCancel(ctx.Session.Context())
 	defer engineCancel()
+	// A caller who goes idle ends the script, as a disconnect does.
+	go func() {
+		select {
+		case <-ctx.idle.Fired():
+			engineCancel()
+		case <-engineCtx.Done():
+		}
+	}()
 
 	eng := syncjs.NewEngine(engineCtx, session, cfg)
 

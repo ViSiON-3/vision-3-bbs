@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -56,7 +55,10 @@ func executeTelnetDoor(ctx *DoorCtx) error {
 
 	writeDoorMessage(ctx, fmt.Sprintf(ctx.Executor.Strings().DoorRemoteConnecting, ctx.DoorName))
 
-	conn, err := telnetclient.Dial(context.Background(), addr, opts, timeout)
+	// An idle caller abandons the connection attempt too.
+	dialCtx, cancelDial := idleDialContext(ctx)
+	conn, err := telnetclient.Dial(dialCtx, addr, opts, timeout)
+	cancelDial()
 	if err != nil {
 		// As for rlogin: the caller has been told in the sysop's own wording,
 		// and returning the error too would print a second, different
