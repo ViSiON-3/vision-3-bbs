@@ -349,6 +349,12 @@ also named `.na` (tqwNet's `tqw_file.na`, with lines like
 it with `helper fileecho` to create file areas that receive the network's
 files by TIC. See [File Echoes](files/file-echoes.md).
 
+**Nodelists:** once the network's nodelist echo (e.g. `FSX_NODE`) has a file
+area, set the network's **Nodelist Echo** and **Nodelist Files** so each new
+nodelist is compiled as it arrives, and run `helper nodelist import` once for
+the first one. Callers then see who they are sending netmail to. See
+[FTN Nodelists](messages/nodelists.md).
+
 ### Step 3b: Send AreaFix Commands
 
 The `helper areafix` command sends an AreaFix netmail to your hub. AreaFix lets you subscribe/unsubscribe to echo areas, list areas, and rescan without contacting your hub operator.
@@ -659,6 +665,7 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
 | `own_address`             | Your FTN address (e.g., `21:4/158.1`)               |
 | `origin`                  | Origin line text (empty = board name)               |
 | `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one, but when several networks share the global one (empty, or set to the same path) all but one are given `<global>_<network>` automatically — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
+| `nodelist`                | Optional: `{ "file_echo": "FSX_NODE", "file_pattern": "FSXNET.Z*" }` (**Nodelist Echo** / **Nodelist Files** in the editor). The file echo the network's nodelist arrives in; `v3mail toss` compiles each one for lookups. See [FTN Nodelists](messages/nodelists.md). |
 
 Hub polling is controlled by the per-network `echomail_poll_<network>` event
 under **Events**. The wizard creates it with a 15-minute cron schedule; edit
