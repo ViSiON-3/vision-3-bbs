@@ -31,12 +31,17 @@ func TestComposeRecipientKindFor(t *testing.T) {
 // runRecipientPrompt drives promptComposeRecipient with scripted keystrokes.
 func runRecipientPrompt(t *testing.T, area message.MessageArea, input string) (to, name string, aborted bool, out string) {
 	t.Helper()
+	return runRecipientPromptWith(t, &MenuExecutor{}, area, input)
+}
+
+// runRecipientPromptWith is runRecipientPrompt on a given executor.
+func runRecipientPromptWith(t *testing.T, e *MenuExecutor, area message.MessageArea, input string) (to, name string, aborted bool, out string) {
+	t.Helper()
 	um := user.NewUserMgrForTest(
 		&user.User{ID: 1, Handle: "Bob", AccessLevel: 10},
 		&user.User{ID: 2, Handle: "Gone", AccessLevel: 10, DeletedUser: true},
 	)
 	ts := newTestSession(input)
-	e := &MenuExecutor{}
 	to, name, aborted, err := e.promptComposeRecipient(ts, newTestTerminal(ts), um, &area, ansi.OutputModeUTF8, 1, 80, 24)
 	if err != nil {
 		t.Fatalf("promptComposeRecipient(%q): %v", input, err)

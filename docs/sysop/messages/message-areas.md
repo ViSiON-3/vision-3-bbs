@@ -349,7 +349,10 @@ The **To:** prompt depends on the area:
   name, in which case you are asked for the address. An address in a
   different zone from the area's origin address asks "Send anyway?" first,
   since the mail still goes out through this network's links. Answering No
-  asks for the address again.
+  asks for the address again. When the network has a compiled
+  [nodelist](messages/nodelists.md#writing-netmail), the system the address
+  belongs to is shown, and an address that is not listed, or is listed as
+  Down, asks "Send anyway?" the same way.
 
 In `PRIVMAIL` and netmail, leaving To (or the netmail address) blank abandons
 the post.

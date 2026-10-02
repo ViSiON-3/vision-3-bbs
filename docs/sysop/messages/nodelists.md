@@ -6,7 +6,8 @@ networks send a new one each week through a file echo — fsxNet's in
 `FSX_NODE`, tqwNet's in `TQW_NODE`, Agoranet's in `AGN_NODE`.
 
 ViSiON/3 compiles each network's nodelist into
-`data/ftn/nodelist/<network>.json`, which it looks systems up in. `v3mail toss`
+`data/ftn/nodelist/<network>.json`, and looks systems up in it, for example
+when a caller writes netmail. `v3mail toss`
 does this whenever a new nodelist arrives by file echo; `helper nodelist
 import` does it by hand.
 
@@ -59,6 +60,30 @@ nodelist are skipped without an error.
 The file itself stays in its file area for callers to download. Last week's
 file is removed when the new one's TIC says it replaces it (see
 [Replaced files](files/file-echoes.md#replaced-files)).
+
+## Where the BBS uses it
+
+### Writing netmail
+
+Once a network has a compiled nodelist, a caller addressing netmail in one of
+its netmail areas is shown the system the address belongs to:
+
+```text
+To: Paul Hayton@21:1/100
+Sending to Risa HUB, Dunedin NZL (Paul Hayton)
+```
+
+A point address shows the system it is a point of. The caller is asked before
+sending, and can enter another address, when the address:
+
+- is not in the nodelist: `21:4/999 is not in the fsxnet nodelist of
+  2026-10-02. Send anyway?`
+- is listed as **Down**.
+
+A system listed as **Hold** or **Pvt** gets a note, since its mail waits at or
+goes through its host. Nothing is refused: the list can be a week old, and a
+new system may not be in it yet. Nothing is shown when the network has no
+compiled nodelist, or the address is in a zone the list does not cover.
 
 ## `helper nodelist import`
 

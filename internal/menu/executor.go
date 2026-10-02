@@ -13,6 +13,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
@@ -78,6 +79,7 @@ type MenuExecutor struct {
 	V3NetReload     func() error                  // Applies v3net.json subscription changes live (nil = restart required)
 	V3NetStatus     V3NetStatusProvider           // V3Net service status (nil if disabled)
 	Pager           SysopPager                    // WFC side of PAGESYSOP (nil = no console)
+	Nodelists       *ftn.NodelistIndex            // Compiled FTN nodelists (nil = netmail addresses are not looked up)
 
 	// Hot-reloadable configuration.
 	//
