@@ -95,6 +95,52 @@ func TestNegotiate_NoTermTypeRequestWithoutWill(t *testing.T) {
 	}
 }
 
+func TestNegotiate_WaitsForRepliesSplitAcrossPackets(t *testing.T) {
+	// On a real network the client's replies can arrive in several packets
+	// with pauses between them. Negotiate must keep reading until it has the
+	// answer to DO TERM_TYPE and then the type itself, rather than stop at the
+	// first pause — stopping there left a UTF-8 terminal typed as "ansi" and
+	// sent it raw CP437 art.
+	server, client := net.Pipe()
+	tc := NewTelnetConn(server)
+	t.Cleanup(func() { _ = tc.Close(); _ = client.Close() })
+	// net.Pipe writes block until read, so a server that stops reading early
+	// would otherwise hang the test instead of failing it.
+	_ = client.SetDeadline(time.Now().Add(2 * negotiationTimeout))
+
+	done := make(chan error, 1)
+	go func() { done <- tc.Negotiate() }()
+
+	send := func(b ...byte) {
+		t.Helper()
+		time.Sleep(50 * time.Millisecond)
+		if _, err := client.Write(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	expectBytes(t, client, "option negotiation", negotiationBytes)
+	send(IAC, WILL, OptSGA)
+	send(IAC, SB, OptNAWS, 0, 80, 0, 25, IAC, SE)
+	send(IAC, WILL, OptTermType)
+
+	expectBytes(t, client, "TERM_TYPE request", termTypeRequest)
+	send(IAC, SB, OptTermType, TermTypeIs, 'x', 't', 'e')
+	send('r', 'm', IAC, SE)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Negotiate: %v", err)
+		}
+	case <-time.After(2 * negotiationTimeout):
+		t.Fatal("Negotiate did not return")
+	}
+	if got := tc.TermType(); got != "xterm" {
+		t.Errorf("TermType() = %q, want xterm", got)
+	}
+}
+
 func TestNegotiate_WriteErrors(t *testing.T) {
 	// The very first write fails.
 	tc := NewTelnetConn(&failingConn{fakeConn: newFakeConn(nil)})
