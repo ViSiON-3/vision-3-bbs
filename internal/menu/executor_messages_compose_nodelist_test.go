@@ -122,3 +122,25 @@ func TestNetmailWithoutANodelistAsksNothing(t *testing.T) {
 		t.Errorf("other zone: to=%q output %q", to, out)
 	}
 }
+
+// A nodelist comes from another system: pipe codes and control characters in
+// it are shown as text or dropped, never acted on.
+func TestNetmailNodelistTextIsNotInterpreted(t *testing.T) {
+	dir := t.TempDir()
+	list := &ftn.CompiledNodelist{Network: "fsxnet", Nodes: []ftn.CompiledNode{
+		{Address: "21:21/0", Status: "Zone", Name: "ZC"},
+		{Address: "21:4/158", Name: "Evil|CL BBS", Location: "Here\x1b[2J", Sysop: "|15Op"},
+	}}
+	if _, _, err := ftn.SaveCompiledNodelist(dir, "fsxnet", list, false); err != nil {
+		t.Fatal(err)
+	}
+	e := &MenuExecutor{Nodelists: ftn.NewNodelistIndex(dir)}
+	_, _, _, raw := runRecipientPromptWith(t, e, fsxNetmail, "Op@21:4/158\r")
+	if strings.Contains(raw, "\x1b[2J") || strings.Contains(raw, "\x1b[H") {
+		t.Errorf("a control sequence from the nodelist reached the terminal: %q", raw)
+	}
+	out := ansiEscapes.ReplaceAllString(raw, "")
+	if !strings.Contains(out, "Sending to Evil|CL BBS, Here[2J (|15Op)") {
+		t.Errorf("nodelist text not shown literally, output %q", out)
+	}
+}

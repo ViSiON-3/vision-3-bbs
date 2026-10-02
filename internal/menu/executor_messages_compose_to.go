@@ -230,12 +230,12 @@ func (e *MenuExecutor) confirmNetmailNode(s ssh.Session, terminal *term.Terminal
 		return ask(fmt.Sprintf("|07%s is not in the %s nodelist%s. Send anyway? @", what, area.Network, nodelistDated(list)))
 	}
 
-	system := "|15" + node.Name + "|07"
+	system := "|15" + nodelistText(node.Name) + "|07"
 	if node.Location != "" {
-		system += ", " + node.Location
+		system += ", " + nodelistText(node.Location)
 	}
 	if node.Sysop != "" {
-		system += " (" + node.Sysop + ")"
+		system += " (" + nodelistText(node.Sysop) + ")"
 	}
 	if a.Point != 0 {
 		say(fmt.Sprintf("|07Sending to a point of %s\r\n", system))
@@ -245,13 +245,27 @@ func (e *MenuExecutor) confirmNetmailNode(s ssh.Session, terminal *term.Terminal
 
 	switch node.Status {
 	case "Down":
-		return ask(fmt.Sprintf("|07%s is listed as Down in the %s nodelist. Send anyway? @", node.Address, area.Network))
+		return ask(fmt.Sprintf("|07%s is listed as Down in the %s nodelist. Send anyway? @", nodelistText(node.Address), area.Network))
 	case "Hold":
 		say("|08Listed as Hold: its mail waits at its host until it calls in.|07\r\n")
 	case "Pvt":
 		say("|08Listed as Private: its mail goes through its host.|07\r\n")
 	}
 	return true, nil
+}
+
+// nodelistText makes text from a nodelist safe to show in a prompt, where
+// pipe codes are processed: the list comes from another system, so a "|CL" in
+// a system's name is text, not a code, and a control character is dropped
+// rather than sent to the caller's terminal.
+func nodelistText(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.ReplaceAll(s, "|", "||")
 }
 
 // nodelistDated describes a compiled nodelist's date for a prompt.
