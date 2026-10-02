@@ -20,7 +20,8 @@ import (
 // describing it (which echo, its CRC, its description, the password agreed
 // with the sending link). processTICs matches each TIC to the file area linked
 // to that echo for this network, checks it, and moves the file into the area
-// with a file record. A TIC that cannot be delivered is moved aside, with its
+// with a file record, then removes the files in the area that the TIC's
+// Replaces lines say it supersedes. A TIC that cannot be delivered is moved aside, with its
 // file, to the temp path's bad TIC directory.
 
 // BadTICDirName is the subdirectory of the temp path that undeliverable TICs
@@ -41,6 +42,7 @@ type FileAreaStore interface {
 	GetFilesForArea(areaID int) []file.FileRecord
 	AddFileRecord(record file.FileRecord) error
 	UpdateFileRecord(fileID uuid.UUID, updateFunc func(*file.FileRecord)) error
+	DeleteFileRecordIf(fileID uuid.UUID, deleteFromDisk bool, cond func(file.FileRecord) bool) (bool, error)
 }
 
 // SetFileAreas gives the tosser the file areas, so ProcessInbound also
@@ -220,6 +222,45 @@ func (t *Tosser) processTIC(dir, ticName string, secure bool, areas map[string]f
 		result.FilesImported++
 		slog.Info("received file echo file", "network", t.networkName, "echo", tic.Area, "file", dataName,
 			"area", area.Tag, "size", info.Size(), "replaced", outcome == ticReplaced)
+	}
+	t.removeReplaced(area, dataName, tic, result)
+}
+
+// removeReplaced deletes the files in area that the TIC's Replaces lines name:
+// how a weekly nodelist with a day-number extension (NODELIST.Z12, then
+// NODELIST.Z19) keeps its area from growing by a file a week. It runs once
+// the file is safely in the area, as a new file or a duplicate, and never
+// removes it (delivered is its name in the area). Running it for a duplicate
+// too means a hub resending the TIC retries a removal that failed.
+//
+// A remote system is deciding what to delete here, so only files that came
+// in by TIC (the only records with a CRC) are candidates: a file the sysop
+// put in the area is never removed on a TIC's say-so. That is checked again
+// under the file list's lock as the record is deleted, so a file renamed or
+// moved since the list was read is left alone. Each removal is logged.
+func (t *Tosser) removeReplaced(area file.FileArea, delivered string, tic *ftn.TIC, result *TossResult) {
+	if len(tic.Replaces) == 0 {
+		return
+	}
+	replaced := func(r file.FileRecord) bool {
+		return r.AreaID == area.ID && r.CRC32 != "" && !strings.EqualFold(r.Filename, delivered) && tic.ReplacesFile(r.Filename)
+	}
+	for _, r := range t.fileAreas.GetFilesForArea(area.ID) {
+		if !replaced(r) {
+			continue
+		}
+		deleted, err := t.fileAreas.DeleteFileRecordIf(r.ID, true, replaced)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("remove %s from file area %s, replaced by %s: %v",
+				r.Filename, area.Tag, delivered, err))
+			continue
+		}
+		if !deleted {
+			continue // changed since the list was read
+		}
+		result.FilesRemoved++
+		slog.Info("removed file echo file replaced by a newer one", "network", t.networkName, "echo", tic.Area,
+			"area", area.Tag, "removed", r.Filename, "by", delivered, "replaces", strings.Join(tic.Replaces, ", "))
 	}
 }
 

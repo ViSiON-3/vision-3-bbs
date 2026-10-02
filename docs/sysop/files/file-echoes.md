@@ -140,6 +140,23 @@ its CRC matches — it is dropped — and a **new version** when it does not: it
 replaces the old file and updates its record, keeping the download count.
 Weekly nodelists and infopacks that reuse one file name work this way.
 
+### Replaced files
+
+Files whose name changes every week, such as nodelists with a day-number
+extension (`FSXNET.Z75`, then `FSXNET.Z82`), come with a TIC that names the
+files they supersede on a `Replaces` line, for example `Replaces FSXNET.Z*`.
+Once the new file is delivered, the files in the same area that match are
+removed, with their records. `*` and `?` are wildcards, and names compare
+ignoring case.
+
+Because the sending system decides what is removed, only files that came in
+by TIC are removed this way; a file you added to the area yourself stays,
+whatever the pattern says. The new file itself is never removed. Each removal
+is logged, and the toss reports how many files were removed. A duplicate's
+`Replaces` lines apply too, so if a removal fails (it is reported as a toss
+error), the hub resending the TIC retries it, as does next week's file naming
+the same pattern.
+
 ### Undeliverable TICs
 
 A TIC that fails a check — wrong or missing password, no linked area, no

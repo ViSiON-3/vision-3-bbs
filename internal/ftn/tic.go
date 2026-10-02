@@ -8,14 +8,15 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // TIC is a parsed .TIC control file: the description that travels with a
 // file distributed through an FTN file echo. Each line is a keyword and its
 // value; keywords are case-insensitive, and several may repeat.
 //
-// Keywords the inbound processor has no use for (Magic, Replaces, Date,
-// Created, ...) are ignored.
+// Keywords the inbound processor has no use for (Magic, Date, Created, ...)
+// are ignored.
 type TIC struct {
 	Area     string   // file echo tag, e.g. "TQW_LINUXFILES"
 	AreaDesc string   // Areadesc: the echo's description
@@ -29,6 +30,7 @@ type TIC struct {
 	Path     []string // systems the file has passed through
 	SeenBy   []string // systems that have the file
 	Password string   // Pw: the password agreed with the sending link
+	Replaces []string // files in the area this one supersedes; may hold * and ? wildcards
 
 	Size   int64 // -1 when the TIC has no Size line
 	CRC    uint32
@@ -77,6 +79,10 @@ func ParseTIC(r io.Reader) (*TIC, error) {
 			t.SeenBy = append(t.SeenBy, value)
 		case "pw":
 			t.Password = value
+		case "replaces":
+			if value != "" {
+				t.Replaces = append(t.Replaces, value)
+			}
 		case "size":
 			n, err := strconv.ParseInt(value, 10, 64)
 			if err != nil || n < 0 {
@@ -143,6 +149,61 @@ func (t *TIC) Description() string {
 		return strings.Join(t.LDesc, "\n")
 	}
 	return strings.Join(t.Desc, "\n")
+}
+
+// ReplacesFile reports whether name is a file one of the TIC's Replaces lines
+// names, by MatchFileName.
+func (t *TIC) ReplacesFile(name string) bool {
+	for _, pattern := range t.Replaces {
+		if MatchFileName(pattern, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// MatchFileName reports whether a file name matches a pattern in which * (any
+// run of characters) and ? (any one character) are the only wildcards. Other
+// characters match themselves, ignoring case the way strings.EqualFold does,
+// so this agrees with the case-insensitive name comparisons elsewhere.
+func MatchFileName(pattern, name string) bool {
+	p, n := []rune(pattern), []rune(name)
+	pi, ni := 0, 0
+	star, resume := -1, 0 // last * seen, and where in name it is matching from
+	for ni < len(n) {
+		switch {
+		case pi < len(p) && p[pi] == '*':
+			star, resume = pi, ni
+			pi++
+		case pi < len(p) && (p[pi] == '?' || equalFoldRune(p[pi], n[ni])):
+			pi++
+			ni++
+		case star >= 0:
+			// Let the last * take one more character and try again.
+			resume++
+			pi, ni = star+1, resume
+		default:
+			return false
+		}
+	}
+	for pi < len(p) && p[pi] == '*' {
+		pi++
+	}
+	return pi == len(p)
+}
+
+// equalFoldRune reports whether a and b are equal under Unicode simple case
+// folding.
+func equalFoldRune(a, b rune) bool {
+	if a == b {
+		return true
+	}
+	for r := unicode.SimpleFold(a); r != a; r = unicode.SimpleFold(r) {
+		if r == b {
+			return true
+		}
+	}
+	return false
 }
 
 // FromAddress parses the From line, ignoring any "@domain" suffix.

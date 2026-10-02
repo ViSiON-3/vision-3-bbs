@@ -483,3 +483,113 @@ func TestTICReplacementIsReviewed(t *testing.T) {
 		t.Error("the replaced record is still unreviewed")
 	}
 }
+
+// A weekly nodelist with a day-number extension: the new week's TIC says it
+// replaces NODELIST.*, so last week's file and record go, and the new one,
+// which the pattern also matches, stays.
+func TestTICReplacesRemovesSupersededFiles(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	writeTIC(t, e.inboundDir, "a.tic", "nodelist.z12", "week twelve")
+	writeTIC(t, e.inboundDir, "b.tic", "nodediff.z12", "diff twelve")
+	e.tosser.ProcessInbound()
+
+	writeTIC(t, e.inboundDir, "c.tic", "nodelist.z19", "week nineteen", "Replaces NODELIST.*")
+	result := e.tosser.ProcessInbound()
+
+	if result.FilesImported != 1 || result.FilesRemoved != 1 || len(result.Errors) != 0 {
+		t.Fatalf("FilesImported = %d, FilesRemoved = %d, errors %v; want 1, 1, none",
+			result.FilesImported, result.FilesRemoved, result.Errors)
+	}
+	var names []string
+	for _, r := range e.files.GetFilesForArea(1) {
+		names = append(names, r.Filename)
+	}
+	if strings.Join(names, ",") != "nodediff.z12,nodelist.z19" {
+		t.Errorf("LINUX holds %v, want nodediff.z12 and nodelist.z19", names)
+	}
+	if exists(e.areaFile("linux", "nodelist.z12")) {
+		t.Error("the replaced file is still on disk")
+	}
+	if !exists(e.areaFile("linux", "nodelist.z19")) || !exists(e.areaFile("linux", "nodediff.z12")) {
+		t.Error("a file the TIC does not replace was removed")
+	}
+}
+
+// Only files that came in by TIC are removed: one the sysop added, or one in
+// another area, stays whatever the pattern says.
+func TestTICReplacesLeavesOtherFilesAlone(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	addLocal := func(areaID int, dir, name, crc string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(e.dataDir, "files", dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(e.areaFile(dir, name), []byte("local"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := e.files.AddFileRecord(file.FileRecord{ID: uuid.New(), AreaID: areaID, Filename: name, CRC32: crc}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	addLocal(1, "linux", "readme.txt", "")        // uploaded by the sysop: no CRC
+	addLocal(3, "local", "notes.txt", "0A1B2C3D") // another area
+
+	writeTIC(t, e.inboundDir, "a.tic", "tools.zip", "zipdata", "Replaces *")
+	result := e.tosser.ProcessInbound()
+
+	if result.FilesImported != 1 || result.FilesRemoved != 0 {
+		t.Fatalf("FilesImported = %d, FilesRemoved = %d; want 1 and 0", result.FilesImported, result.FilesRemoved)
+	}
+	if n := len(e.files.GetFilesForArea(1)); n != 2 || !exists(e.areaFile("linux", "readme.txt")) {
+		t.Errorf("LINUX has %d records; the sysop's file must stay", n)
+	}
+	if len(e.files.GetFilesForArea(3)) != 1 || !exists(e.areaFile("local", "notes.txt")) {
+		t.Error("a file in another area was removed")
+	}
+}
+
+// A duplicate is already in the area, so its Replaces lines apply too: a hub
+// resending the TIC retries a removal that failed the first time.
+func TestTICDuplicateAppliesReplaces(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	writeTIC(t, e.inboundDir, "a.tic", "nodelist.z12", "week twelve")
+	writeTIC(t, e.inboundDir, "b.tic", "nodelist.z19", "week nineteen")
+	e.tosser.ProcessInbound()
+
+	writeTIC(t, e.inboundDir, "c.tic", "nodelist.z19", "week nineteen", "Replaces NODELIST.*")
+	result := e.tosser.ProcessInbound()
+
+	recs := e.files.GetFilesForArea(1)
+	if result.FilesDuped != 1 || result.FilesRemoved != 1 || len(recs) != 1 || recs[0].Filename != "nodelist.z19" {
+		t.Errorf("FilesDuped = %d, FilesRemoved = %d, records %+v; want 1, 1, nodelist.z19 only",
+			result.FilesDuped, result.FilesRemoved, recs)
+	}
+}
+
+// deletesRenamed is a file area store that renames each record just before
+// the tosser deletes it, as a sysop could between the tosser reading the list
+// and the delete taking the lock.
+type deletesRenamed struct{ *file.FileManager }
+
+func (d deletesRenamed) DeleteFileRecordIf(id uuid.UUID, fromDisk bool, cond func(file.FileRecord) bool) (bool, error) {
+	if err := d.UpdateFileRecord(id, func(r *file.FileRecord) { r.Filename = "keepme.zip" }); err != nil {
+		return false, err
+	}
+	return d.FileManager.DeleteFileRecordIf(id, fromDisk, cond)
+}
+
+// The replacement condition is checked again as the record is deleted.
+func TestTICReplacesRechecksUnderTheLock(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	writeTIC(t, e.inboundDir, "a.tic", "nodelist.z12", "week twelve")
+	e.tosser.ProcessInbound()
+
+	e.tosser.SetFileAreas(deletesRenamed{e.files})
+	writeTIC(t, e.inboundDir, "b.tic", "nodelist.z19", "week nineteen", "Replaces NODELIST.*")
+	result := e.tosser.ProcessInbound()
+
+	if result.FilesRemoved != 0 || len(result.Errors) != 0 || len(e.files.GetFilesForArea(1)) != 2 {
+		t.Errorf("FilesRemoved = %d, errors %v, records %d; want the renamed record kept",
+			result.FilesRemoved, result.Errors, len(e.files.GetFilesForArea(1)))
+	}
+}
