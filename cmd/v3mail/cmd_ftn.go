@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -28,7 +29,7 @@ func cmdToss(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	if tossFTN(ftnCfg, msgMgr, dupeDB, loadRecipients(*dataDir), loadFileAreas(*dataDir, *configDir), *networkName, *quiet) {
+	if tossFTN(ftnCfg, msgMgr, dupeDB, loadRecipients(*dataDir), loadFileAreas(*dataDir, *configDir), ftn.NodelistDir(*dataDir), *networkName, *quiet) {
 		os.Exit(1)
 	}
 }
@@ -39,7 +40,8 @@ func cmdToss(args []string) {
 // addressed to the handle recipients resolves its To to; recipients may be nil
 // (see tosser.Tosser.SetRecipientResolver). Inbound file echoes are delivered
 // into fileAreas; nil leaves TICs in the inbound (see tosser.Tosser.SetFileAreas).
-func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, recipients user.RecipientResolver, fileAreas tosser.FileAreaStore, networkName string, quiet bool) bool {
+// Nodelists among them are compiled into nodelistDir; "" skips that.
+func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, recipients user.RecipientResolver, fileAreas tosser.FileAreaStore, nodelistDir, networkName string, quiet bool) bool {
 	tosser.WarnOrphanFTNAreas(ftnCfg, msgMgr.ListAreas())
 
 	totalImported, totalDupes, totalPackets := 0, 0, 0
@@ -75,6 +77,7 @@ func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *to
 		t.SetRecipientResolver(recipients)
 		if fileAreas != nil {
 			t.SetFileAreas(fileAreas)
+			t.SetNodelistDir(nodelistDir)
 		}
 
 		result := t.ProcessInbound()
@@ -104,6 +107,9 @@ func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *to
 					result.FilesImported, result.FilesDuped, result.FilesBad)
 				if result.FilesRemoved > 0 {
 					fmt.Printf(", %d replaced files removed", result.FilesRemoved)
+				}
+				if result.NodelistsCompiled > 0 {
+					fmt.Printf(", nodelist compiled")
 				}
 			}
 			if len(result.Errors) > 0 {

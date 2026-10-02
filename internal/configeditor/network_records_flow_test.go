@@ -158,3 +158,20 @@ func TestQWKGlobalBadAreaTag(t *testing.T) {
 		t.Errorf("qwknet globals = %+v", q)
 	}
 }
+
+// TestFTNNetworkNodelistFields pins the nodelist settings on a network: the
+// echo tag is upper-cased and refused with spaces, and both are saved.
+func TestFTNNetworkNodelistFields(t *testing.T) {
+	m, dir := newDiskModel(t)
+	seedFTN(&m)
+	m = press(t, openRecordList(t, m, "ftn"), "enter")
+	wantScreen(t, m, "Nodelist Echo")
+	m = refuseRecField(t, m, "Nodelist Echo", "FIDO NODE")
+	m = setRecField(t, m, "Nodelist Echo", " nodelist ")
+	m = setRecField(t, m, "Nodelist Files", "NODELIST.Z*")
+	saveAndQuit(t, m)
+	got := reloadConfigs(t, dir).FTN.Networks["fidonet"].Nodelist
+	if got != (config.FTNNodelistConfig{FileEcho: "NODELIST", FilePattern: "NODELIST.Z*"}) {
+		t.Errorf("saved nodelist = %+v", got)
+	}
+}

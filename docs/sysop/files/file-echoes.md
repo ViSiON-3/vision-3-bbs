@@ -112,6 +112,12 @@ Ask your hub to send you the echoes, or use its file echo manager (often
 called FileFix or AllFix) by netmail. Files start arriving with the next
 poll.
 
+### 5. Nodelists
+
+If one of the echoes carries the network's nodelist, set the network's
+**Nodelist Echo** and **Nodelist Files** so that each new nodelist is compiled
+for lookups as it arrives. See [FTN Nodelists](messages/nodelists.md).
+
 ## How inbound TICs are processed
 
 On every `v3mail toss` (and `v3mail poll`), before any packets are tossed,
