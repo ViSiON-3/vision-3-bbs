@@ -22,7 +22,7 @@ type FTNLinkConfig struct {
 	PacketPassword  string `json:"packet_password"`            // Packet password (formerly "password")
 	SessionPassword string `json:"session_password,omitempty"` // BinkP session/connection password
 	AreafixPassword string `json:"areafix_password,omitempty"` // Password for AreaFix netmail (subject line)
-	TICPassword     string `json:"tic_password,omitempty"`     // Password inbound TIC files from this link must carry (Pw line); empty = none required
+	TICPassword     string `json:"tic_password,omitempty"`     // Password inbound TIC files from this link must carry (Pw line); empty = accepted only from the secure inbound
 	Name            string `json:"name"`                       // Human-readable name
 	Flavour         string `json:"flavour,omitempty"`          // Delivery flavour: Normal (default), Crash, Hold, Direct
 	Hostname        string `json:"hostname,omitempty"`         // Hub BinkP hostname; source of truth for the binkd.conf node line

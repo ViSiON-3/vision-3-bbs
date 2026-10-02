@@ -357,6 +357,9 @@ func loadFileAreas(dataDir, configDir string) tosser.FileAreaStore {
 	// Checked first because NewFileManager creates a missing file_areas.json,
 	// and a mail run has no business doing that.
 	if _, err := os.Stat(filepath.Join(configDir, "file_areas.json")); err != nil {
+		if !os.IsNotExist(err) {
+			slog.Warn("inbound file echoes will not be delivered: cannot read file_areas.json", "error", err)
+		}
 		return nil
 	}
 	fm, err := file.NewFileManager(dataDir, configDir)

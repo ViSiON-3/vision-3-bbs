@@ -191,7 +191,7 @@ Each link defines a connected FTN node:
 - `packet_password` — Packet password (shared secret)
 - `session_password` — Optional BinkP session password
 - `areafix_password` — Optional AreaFix password
-- `tic_password` — Optional password for inbound file echo TICs ([File Echoes](../files/file-echoes.md))
+- `tic_password` — Optional password for inbound file echo TICs ([File Echoes](files/file-echoes.md))
 - `name` — Human-readable label
 - `hostname` — Hub hostname used to generate the binkd node configuration
 - `port` — Hub BinkP port (defaults to 24554)

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
@@ -38,6 +40,26 @@ func TestPlanFileEchoAreas(t *testing.T) {
 	// No description: named after the echo; the echo tag is stored upper-cased.
 	if linux.ID != 9 || linux.Name != "tqw_linuxfiles" || linux.FileEcho != "TQW_LINUXFILES" || linux.Tag != "TQW_LINUXFILES" {
 		t.Errorf("linux area = %+v", linux)
+	}
+}
+
+func TestPlanFileEchoAreasSkipsUnsafeTags(t *testing.T) {
+	added, _ := planFileEchoAreas(nil, []ftn.EchoArea{{Tag: ".."}, {Tag: "a/b"}, {Tag: "OK"}}, fileEchoOptions{network: "tqwnet"})
+	if len(added) != 1 || added[0].Path != "tqwnet/ok" {
+		t.Errorf("added = %+v, want only OK", added)
+	}
+}
+
+func TestCheckConference(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "conferences.json")
+	if err := os.WriteFile(path, []byte(`[{"id":2,"tag":"T","name":"T"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkConference(path, 2); err != nil {
+		t.Errorf("existing conference rejected: %v", err)
+	}
+	if err := checkConference(path, 9); err == nil {
+		t.Error("unknown conference accepted")
 	}
 }
 

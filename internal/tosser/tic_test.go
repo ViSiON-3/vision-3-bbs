@@ -3,6 +3,7 @@ package tosser
 import (
 	"archive/zip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"os"
@@ -12,15 +13,18 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/google/uuid"
 )
 
 // ticEnv is a tosser for "testnet" (link 21:4/158) with file areas: LINUX is
 // fed by file echo TQW_LINUXFILES on testnet, OTHER by the same tag on
-// another network, LOCAL by nothing.
+// another network, LOCAL by nothing. inboundDir is the secure inbound;
+// unsecuredDir is the inbound sessions without a password write to.
 type ticEnv struct {
 	*testEnv
-	files  *file.FileManager
-	tosser *Tosser
+	files        *file.FileManager
+	tosser       *Tosser
+	unsecuredDir string
 }
 
 func setupTICEnv(t *testing.T, link linkConfig) *ticEnv {
@@ -39,13 +43,21 @@ func setupTICEnv(t *testing.T, link linkConfig) *ticEnv {
 	if err != nil {
 		t.Fatalf("NewFileManager: %v", err)
 	}
+	unsecured := env.inboundDir
+	secure := filepath.Join(env.dataDir, "ftn", "secure_in")
+	if err := os.MkdirAll(secure, 0755); err != nil {
+		t.Fatal(err)
+	}
+	env.globalCfg.SecureInboundPath = secure
+	env.inboundDir = secure
+
 	env.netCfg.Links = []linkConfig{link}
 	tsr, err := New("testnet", env.netCfg, env.globalCfg, env.dupeDB, env.msgMgr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	tsr.SetFileAreas(fm)
-	return &ticEnv{testEnv: env, files: fm, tosser: tsr}
+	return &ticEnv{testEnv: env, files: fm, tosser: tsr, unsecuredDir: unsecured}
 }
 
 func hub() linkConfig { return linkConfig{Address: "21:4/158", Name: "Hub"} }
@@ -184,6 +196,8 @@ func TestTICRejections(t *testing.T) {
 		{"wrong password", linkConfig{Address: "21:4/158", TICPassword: "secret"}, []string{"Pw nope"}, "password"},
 		{"missing password", linkConfig{Address: "21:4/158", TICPassword: "secret"}, nil, "password"},
 		{"no linked area", hub(), []string{"Area TQW_NOSUCH"}, "no file area"},
+		// A malformed line: the TIC is unusable, and still takes its file.
+		{"unparsable", hub(), []string{"Size lots"}, "unusable TIC"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -229,7 +243,7 @@ func TestTICUnsafeFileNameIsNeverDelivered(t *testing.T) {
 		e := setupTICEnv(t, hub())
 		// The file the name would refer to, so only the name check stops it.
 		_ = os.WriteFile(filepath.Join(e.inboundDir, "metadata.json"), []byte("[]"), 0644)
-		tic := "Area TQW_LINUXFILES\r\nFrom 21:4/158\r\nFile " + name + "\r\n"
+		tic := "Area TQW_LINUXFILES\r\nFrom 21:4/158\r\nFile " + name + "\r\nCrc 0\r\n"
 		ticPath := filepath.Join(e.inboundDir, "a.tic")
 		if err := os.WriteFile(ticPath, []byte(tic), 0644); err != nil {
 			t.Fatal(err)
@@ -384,5 +398,88 @@ func TestZIPWithoutPacketsIsLeftInPlace(t *testing.T) {
 
 	if !exists(zipPath) {
 		t.Fatal("a ZIP with no packets in it was deleted")
+	}
+}
+
+// A TIC from the unsecured inbound is believed only with a password: its
+// From line is just text.
+func TestTICFromUnsecuredInboundNeedsPassword(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	ticPath, filePath := writeTIC(t, e.unsecuredDir, "a.tic", "tools.zip", "zipdata")
+
+	result := e.tosser.ProcessInbound()
+
+	if result.FilesBad != 1 || result.FilesImported != 0 || exists(ticPath) || exists(filePath) {
+		t.Fatalf("FilesBad = %d, FilesImported = %d; want the TIC and its file moved aside", result.FilesBad, result.FilesImported)
+	}
+	if !strings.Contains(strings.Join(result.Errors, " "), "unsecured inbound") {
+		t.Errorf("errors = %v", result.Errors)
+	}
+
+	withPw := setupTICEnv(t, linkConfig{Address: "21:4/158", TICPassword: "pw"})
+	writeTIC(t, withPw.unsecuredDir, "a.tic", "tools.zip", "zipdata", "Pw pw")
+	if r := withPw.tosser.ProcessInbound(); r.FilesImported != 1 {
+		t.Errorf("a TIC with the right password was refused from the unsecured inbound: %v", r.Errors)
+	}
+}
+
+func TestTICWithoutCRCIsRejected(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	_, filePath := writeTIC(t, e.inboundDir, "a.tic", "tools.zip", "zipdata", "Crc ")
+	result := e.tosser.ProcessInbound()
+	if result.FilesBad != 1 || exists(filePath) {
+		t.Errorf("FilesBad = %d; want a TIC without a usable Crc rejected with its file", result.FilesBad)
+	}
+}
+
+// failingRecords is a file area store whose record writes fail.
+type failingRecords struct{ *file.FileManager }
+
+func (failingRecords) AddFileRecord(file.FileRecord) error { return errors.New("disk full") }
+func (failingRecords) UpdateFileRecord(uuid.UUID, func(*file.FileRecord)) error {
+	return errors.New("disk full")
+}
+
+// When the record cannot be written the file goes back to the inbound, so
+// the next toss retries it, and a file it replaced is restored.
+func TestTICRecordFailureRollsBack(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	writeTIC(t, e.inboundDir, "a.tic", "nodelist.zip", "week one")
+	e.tosser.ProcessInbound()
+
+	e.tosser.SetFileAreas(failingRecords{e.files})
+	ticPath, filePath := writeTIC(t, e.inboundDir, "b.tic", "nodelist.zip", "week two!")
+	result := e.tosser.ProcessInbound()
+
+	if len(result.Errors) != 1 || result.FilesImported != 0 {
+		t.Fatalf("errors = %v, FilesImported = %d", result.Errors, result.FilesImported)
+	}
+	if !exists(ticPath) || !exists(filePath) {
+		t.Error("the TIC and its file are not both back in the inbound for a retry")
+	}
+	got, _ := os.ReadFile(e.areaFile("linux", "nodelist.zip"))
+	if string(got) != "week one" {
+		t.Errorf("area file holds %q, want the old version restored", got)
+	}
+
+	e.tosser.SetFileAreas(e.files)
+	if r := e.tosser.ProcessInbound(); r.FilesImported != 1 {
+		t.Errorf("retry: FilesImported = %d, errors %v", r.FilesImported, r.Errors)
+	}
+}
+
+// A replacement is network content like a new file: reviewed.
+func TestTICReplacementIsReviewed(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	writeTIC(t, e.inboundDir, "a.tic", "nodelist.zip", "week one")
+	e.tosser.ProcessInbound()
+	id := e.files.GetFilesForArea(1)[0].ID
+	if err := e.files.UpdateFileRecord(id, func(r *file.FileRecord) { r.Reviewed = false }); err != nil {
+		t.Fatal(err)
+	}
+	writeTIC(t, e.inboundDir, "b.tic", "nodelist.zip", "week two!")
+	e.tosser.ProcessInbound()
+	if !e.files.GetFilesForArea(1)[0].Reviewed {
+		t.Error("the replaced record is still unreviewed")
 	}
 }

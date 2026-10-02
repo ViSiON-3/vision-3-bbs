@@ -240,7 +240,8 @@ func (r *UnclaimedReport) QuarantineStale(tempPath string) {
 		// A TIC takes its file along, so the pair can be moved back together.
 		var dataPath string
 		if isTICName(path) {
-			if tic, err := ftn.ReadTIC(path); err == nil {
+			// Even a TIC that does not parse names its file, as far as it got.
+			if tic, _ := ftn.ReadTIC(path); tic != nil {
 				_, dataPath, _ = findTICFile(filepath.Dir(path), tic)
 			}
 		}

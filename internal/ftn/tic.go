@@ -35,11 +35,15 @@ type TIC struct {
 	HasCRC bool
 }
 
-// ParseTIC reads a TIC control file. It fails when the Area or File line is
-// missing, or a Crc or Size value does not parse, since such a file cannot be
-// processed safely.
+// ParseTIC reads a TIC control file. It fails when the Area, File or Crc line
+// is missing, or a Crc or Size value does not parse, since such a file cannot
+// be delivered safely: the CRC is the only check that the file is the one the
+// TIC describes. On such a failure it still returns what it read, so the
+// caller can find the file the TIC names and set it aside with it; the TIC is
+// nil only when reading failed.
 func ParseTIC(r io.Reader) (*TIC, error) {
 	t := &TIC{Size: -1}
+	var invalid error
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
@@ -76,13 +80,15 @@ func ParseTIC(r io.Reader) (*TIC, error) {
 		case "size":
 			n, err := strconv.ParseInt(value, 10, 64)
 			if err != nil || n < 0 {
-				return nil, fmt.Errorf("invalid Size %q", value)
+				invalid = fmt.Errorf("invalid Size %q", value)
+				continue
 			}
 			t.Size = n
 		case "crc":
 			n, err := strconv.ParseUint(value, 16, 32)
 			if err != nil {
-				return nil, fmt.Errorf("invalid Crc %q", value)
+				invalid = fmt.Errorf("invalid Crc %q", value)
+				continue
 			}
 			t.CRC = uint32(n)
 			t.HasCRC = true
@@ -91,16 +97,21 @@ func ParseTIC(r io.Reader) (*TIC, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-	if t.Area == "" {
-		return nil, fmt.Errorf("no Area line")
-	}
-	if t.File == "" {
-		return nil, fmt.Errorf("no File line")
+	switch {
+	case invalid != nil:
+		return t, invalid
+	case t.Area == "":
+		return t, fmt.Errorf("no Area line")
+	case t.File == "":
+		return t, fmt.Errorf("no File line")
+	case !t.HasCRC:
+		return t, fmt.Errorf("no Crc line")
 	}
 	return t, nil
 }
 
-// ReadTIC parses the TIC control file at path.
+// ReadTIC parses the TIC control file at path. See ParseTIC for what it
+// returns on failure.
 func ReadTIC(path string) (*TIC, error) {
 	f, err := os.Open(path)
 	if err != nil {

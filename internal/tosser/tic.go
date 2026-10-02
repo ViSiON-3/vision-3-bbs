@@ -66,8 +66,9 @@ func ticReferencedFiles(dir string, entries []os.DirEntry) map[string]bool {
 		if e.IsDir() || !isTICName(e.Name()) {
 			continue
 		}
-		tic, err := ftn.ReadTIC(filepath.Join(dir, e.Name()))
-		if err != nil {
+		// A TIC that does not parse still protects the file it names.
+		tic, _ := ftn.ReadTIC(filepath.Join(dir, e.Name()))
+		if tic == nil {
 			continue
 		}
 		for _, n := range []string{tic.File, tic.LongName} {
@@ -110,23 +111,33 @@ func (t *Tosser) processTICs(dir string, result *TossResult) {
 		}
 	}
 
+	// Only the secure inbound is written by sessions that passed binkd's
+	// password check. A TIC anywhere else is trusted only on its own Pw line.
+	secure := t.paths.SecureInboundPath != "" && dir == t.paths.SecureInboundPath
 	for _, name := range tics {
-		t.processTIC(dir, name, areas, result)
+		t.processTIC(dir, name, secure, areas, result)
 	}
 }
 
-// processTIC delivers a single TIC.
-func (t *Tosser) processTIC(dir, ticName string, areas map[string]file.FileArea, result *TossResult) {
+// processTIC delivers a single TIC. secure reports whether dir is the secure
+// inbound.
+func (t *Tosser) processTIC(dir, ticName string, secure bool, areas map[string]file.FileArea, result *TossResult) {
 	ticPath := filepath.Join(dir, ticName)
 	tic, err := ftn.ReadTIC(ticPath)
 	if err != nil {
-		t.rejectTIC(ticPath, "", fmt.Sprintf("unreadable TIC: %v", err), result)
+		// What did parse is enough to find the file, which goes with it.
+		var dataPath string
+		if tic != nil {
+			_, dataPath, _ = findTICFile(dir, tic)
+		}
+		t.rejectTIC(ticPath, dataPath, fmt.Sprintf("unusable TIC: %v", err), result)
 		return
 	}
 
 	from, err := tic.FromAddress()
 	if err != nil {
-		t.rejectTIC(ticPath, "", fmt.Sprintf("TIC has no usable From address (%q)", tic.From), result)
+		_, dataPath, _ := findTICFile(dir, tic)
+		t.rejectTIC(ticPath, dataPath, fmt.Sprintf("TIC has no usable From address (%q)", tic.From), result)
 		return
 	}
 	link, ok := t.linkFor(from)
@@ -141,6 +152,14 @@ func (t *Tosser) processTIC(dir, ticName string, areas map[string]file.FileArea,
 	// reason takes its file with it into the bad TIC directory.
 	dataName, dataPath, found := findTICFile(dir, tic)
 
+	// From is whatever the TIC says. Without a password to prove it, only a
+	// TIC that came in over an authenticated session is believed: anyone
+	// can put a file in the unsecured inbound.
+	if link.TICPassword == "" && !secure {
+		t.rejectTIC(ticPath, dataPath, fmt.Sprintf("TIC claiming to be from %s arrived in the unsecured inbound, "+
+			"and the link has no tic_password to prove it", link.Address), result)
+		return
+	}
 	if link.TICPassword != "" && !strings.EqualFold(tic.Password, link.TICPassword) {
 		t.rejectTIC(ticPath, dataPath, fmt.Sprintf("TIC password from %s does not match the link's tic_password", link.Address), result)
 		return
@@ -176,7 +195,7 @@ func (t *Tosser) processTIC(dir, ticName string, areas map[string]file.FileArea,
 		result.Errors = append(result.Errors, fmt.Sprintf("read %s: %v", dataPath, err))
 		return
 	}
-	if tic.HasCRC && crc != tic.CRC {
+	if crc != tic.CRC {
 		t.rejectTIC(ticPath, dataPath, fmt.Sprintf("%s has CRC %s, the TIC says %s",
 			dataName, ftn.FormatCRC32(crc), ftn.FormatCRC32(tic.CRC)), result)
 		return
@@ -216,6 +235,10 @@ const (
 // the area already holds under the same name with the same CRC is a dupe and
 // is dropped; with a different CRC it is a new version and replaces the old
 // one, keeping its record (and download count).
+//
+// If the record cannot be written, everything is put back: the received file
+// returns to the inbound, so the TIC still finds it on the next toss, and a
+// file it replaced is restored.
 func (t *Tosser) deliverTICFile(area file.FileArea, name, srcPath, crc string, size int64, tic *ftn.TIC) (ticOutcome, error) {
 	areaDir, err := t.fileAreas.GetAreaUploadPath(area.ID)
 	if err != nil {
@@ -250,8 +273,38 @@ func (t *Tosser) deliverTICFile(area file.FileArea, name, srcPath, crc string, s
 		dstPath = filepath.Join(areaDir, existing.Filename)
 	}
 
-	if err := moveIntoArea(srcPath, dstPath); err != nil {
+	// Whatever is at the destination now (the old version, or a stray file
+	// with no record) is set aside rather than overwritten, until the record
+	// is safely written.
+	backup, err := setAside(dstPath)
+	if err != nil {
 		return 0, err
+	}
+	restore := func() {
+		if backup != "" {
+			if err := os.Rename(backup, dstPath); err != nil {
+				slog.Error("failed to restore the file a file echo delivery replaced", "path", dstPath, "backup", backup, "error", err)
+			}
+		}
+	}
+	if err := moveIntoArea(srcPath, dstPath); err != nil {
+		restore()
+		return 0, err
+	}
+	undo := func() {
+		if err := moveFile(dstPath, srcPath); err != nil {
+			slog.Error("failed to return a file echo file to the inbound after its record could not be written",
+				"path", dstPath, "inbound", srcPath, "error", err)
+			return // keep the backup out of the way rather than lose the new file
+		}
+		restore()
+	}
+	commit := func() {
+		if backup != "" {
+			if err := os.Remove(backup); err != nil {
+				slog.Warn("failed to remove the previous version of a file echo file", "path", backup, "error", err)
+			}
+		}
 	}
 
 	uploader := tic.Origin
@@ -266,8 +319,14 @@ func (t *Tosser) deliverTICFile(area file.FileArea, name, srcPath, crc string, s
 			r.CRC32 = crc
 			r.UploadedAt = now
 			r.UploadedBy = uploader
+			r.Reviewed = true // network-delivered content, as for a new record
 		})
-		return ticReplaced, err
+		if err != nil {
+			undo()
+			return 0, err
+		}
+		commit()
+		return ticReplaced, nil
 	}
 	err = t.fileAreas.AddFileRecord(file.FileRecord{
 		ID:          uuid.New(),
@@ -281,7 +340,25 @@ func (t *Tosser) deliverTICFile(area file.FileArea, name, srcPath, crc string, s
 		Reviewed: true,
 		CRC32:    crc,
 	})
-	return ticAdded, err
+	if err != nil {
+		undo()
+		return 0, err
+	}
+	commit()
+	return ticAdded, nil
+}
+
+// setAside renames an existing file at path to a hidden name beside it and
+// returns that name, or "" when nothing is there.
+func setAside(path string) (string, error) {
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return "", nil
+	}
+	backup := filepath.Join(filepath.Dir(path), ".tic-old-"+uuid.NewString())
+	if err := os.Rename(path, backup); err != nil {
+		return "", fmt.Errorf("set aside %s: %w", filepath.Base(path), err)
+	}
+	return backup, nil
 }
 
 // findTICFile finds the file a TIC describes in its directory, matching names
@@ -297,7 +374,7 @@ func findTICFile(dir string, tic *ftn.TIC) (name, path string, ok bool) {
 		// Nor the TIC itself, nor a name that would land on the area's own
 		// metadata.
 		if want == "" || file.CheckFilename(want) != nil || isTICName(want) ||
-			file.IsMetadataFile(strings.ToLower(want)) {
+			file.IsMetadataFile(want) {
 			continue
 		}
 		for _, e := range entries {

@@ -77,7 +77,7 @@ func TestParseTICKeywordsAreCaseInsensitive(t *testing.T) {
 
 // The single description is used when there is no long one.
 func TestTICDescriptionFallsBackToDesc(t *testing.T) {
-	tic, err := ParseTIC(strings.NewReader("Area X\nFile A.ZIP\nDesc One line\n"))
+	tic, err := ParseTIC(strings.NewReader("Area X\nFile A.ZIP\nCrc 0\nDesc One line\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,14 +88,20 @@ func TestTICDescriptionFallsBackToDesc(t *testing.T) {
 
 func TestParseTICRejectsUnusable(t *testing.T) {
 	cases := map[string]string{
-		"no area":  "File A.ZIP\n",
-		"no file":  "Area X\n",
+		"no area":  "File A.ZIP\nCrc 0\n",
+		"no file":  "Area X\nCrc 0\n",
+		"no crc":   "Area X\nFile A.ZIP\n",
 		"bad crc":  "Area X\nFile A.ZIP\nCrc nothex\n",
-		"bad size": "Area X\nFile A.ZIP\nSize -3\n",
+		"bad size": "Area X\nFile A.ZIP\nCrc 0\nSize -3\n",
 	}
 	for name, body := range cases {
-		if _, err := ParseTIC(strings.NewReader(body)); err == nil {
+		tic, err := ParseTIC(strings.NewReader(body))
+		if err == nil {
 			t.Errorf("%s: ParseTIC accepted %q", name, body)
+		}
+		// What was read is still returned, so the file can be set aside.
+		if tic == nil {
+			t.Errorf("%s: no partial TIC returned", name)
 		}
 	}
 }

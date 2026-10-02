@@ -17,7 +17,7 @@ supported yet.
 File echoes ride on an FTN network that is already set up for echomail:
 the network must be in `configs/ftn.json` with its hub as a link, and binkd
 must be delivering into the inbound directory. See
-[FTN Echomail](../messages/ftn-echomail.md) if that is not done yet.
+[FTN Echomail](messages/ftn-echomail.md) if that is not done yet.
 
 ## Setting up file echo areas
 
@@ -99,8 +99,12 @@ Echomail Links → **TIC Password**, or in `ftn.json`:
 ```
 
 When `tic_password` is set, a TIC from that link without the matching
-password (compared case-insensitively) is refused. When it is empty, TIC
-passwords are not checked.
+password (compared case-insensitively) is refused. When it is empty, TICs
+from that link are accepted only from the **secure** inbound
+(`secure_inbound_path`, binkd's `inbound`), which only sessions that passed
+the link's session password can write to. A TIC's `From` line is just text,
+so without either check anyone able to drop files in the unsecured inbound
+could pose as your hub.
 
 ### 4. Subscribe at your hub
 
@@ -118,13 +122,15 @@ each network looks at the `.TIC` files in the inbound directories:
    address is left for another network; if no network takes it, it is
    reported as unclaimed mail like a packet would be, and moved (with its
    file) to `temp_path/unclaimed` after a day.
-2. **Password** — checked against the link's `tic_password`, if set.
+2. **Password** — checked against the link's `tic_password`, if set. With
+   no `tic_password`, the TIC must have arrived in the secure inbound.
 3. **Area** — the file area whose network and file echo match. There must
    be one; ViSiON/3 never creates areas on its own.
 4. **The file** — found next to the TIC, by its `File` or long (`Lfile` /
    `Fullname`) name, ignoring case. If it has not arrived yet the TIC waits;
    after a day without it, the TIC is moved aside.
-5. **Size and CRC** — checked against the TIC's `Size` and `Crc` lines.
+5. **Size and CRC** — the TIC must have a `Crc` line, and the file must
+   match it; `Size` is checked when the TIC has one.
 6. **Delivery** — the file is moved into the area and recorded, with the
    TIC's long description (or its one-line description), uploaded by the
    address that hatched it, and marked reviewed. The TIC is deleted.
@@ -136,8 +142,9 @@ Weekly nodelists and infopacks that reuse one file name work this way.
 
 ### Undeliverable TICs
 
-A TIC that fails a check — wrong password, no linked area, CRC or size
-mismatch, or a file that never arrived — is moved together with its file to
+A TIC that fails a check — wrong or missing password, no linked area, no
+CRC or a CRC or size mismatch, a line that does not parse, or a file that
+never arrived — is moved together with its file to
 `temp_path/badtic`, and the toss reports it as an error, saying why. Nothing
 is deleted. Fix the cause (add the area, set the password), move both files
 back into the inbound directory, and toss again.

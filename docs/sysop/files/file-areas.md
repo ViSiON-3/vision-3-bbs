@@ -41,7 +41,7 @@ File areas are defined in `configs/file_areas.json`:
 - `acs_download` - ACS required to download
 - `conference_id` - Conference the area belongs to (0 = ungrouped)
 - `network` / `file_echo` - FTN network and file echo tag feeding the area by
-  TIC; both empty for a local area. See [File Echoes](file-echoes.md).
+  TIC; both empty for a local area. See [File Echoes](files/file-echoes.md).
 
 ## File Storage
 

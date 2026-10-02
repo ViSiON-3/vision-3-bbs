@@ -58,6 +58,10 @@ func TestParseFileEchoListRejectsRepeats(t *testing.T) {
 	if _, err := ParseFileEchoList(strings.NewReader("TQW_NODE a\ntqw_node b\n")); err == nil {
 		t.Error("a repeated tag was accepted")
 	}
+	// Dot-only tags would name a directory outside the network's.
+	if areas, err := ParseFileEchoList(strings.NewReader("Area .. 0 ! up\n. here\nTQW_OK fine\n")); err != nil || len(areas) != 1 {
+		t.Errorf("got %+v, %v; want only TQW_OK", areas, err)
+	}
 	if _, err := ParseFileEchoList(strings.NewReader("; nothing\n")); err == nil {
 		t.Error("an empty list was accepted")
 	}

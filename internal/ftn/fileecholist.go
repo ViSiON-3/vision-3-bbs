@@ -65,9 +65,10 @@ func ParseFileEchoList(r io.Reader) ([]EchoArea, error) {
 }
 
 // isFileEchoTag reports whether s can be a file echo tag: letters, digits and
-// _ - . only, at most 50 characters (the echomail importer's rule).
+// _ - . only, at most 50 characters (the echomail importer's rule), and not
+// dots alone — a tag names a directory, and "." or ".." would escape it.
 func isFileEchoTag(s string) bool {
-	if s == "" || len(s) > 50 {
+	if s == "" || len(s) > 50 || strings.Trim(s, ".") == "" {
 		return false
 	}
 	for _, r := range s {

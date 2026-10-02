@@ -69,6 +69,17 @@ func cmdFileEcho(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: network %q is not in ftn.json — set the network up first (helper ftnsetup)\n", *network)
 		os.Exit(1)
 	}
+	// The network name becomes a directory under data/files.
+	if err := file.CheckFilename(netName); err != nil || strings.Trim(netName, ".") == "" {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: network name %q cannot be used as a directory name\n", netName)
+		os.Exit(1)
+	}
+	if *conferenceID != 0 {
+		if err := checkConference(filepath.Join(*configDir, "conferences.json"), *conferenceID); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
 
 	areasPath := filepath.Join(*configDir, "file_areas.json")
 	areas, err := loadFileAreas(*configDir)
@@ -111,6 +122,20 @@ func cmdFileEcho(args []string) {
 	}
 	fmt.Printf("Added %d file areas to %s.\n", len(added), areasPath)
 	fmt.Printf("Subscribe to the echoes at your %s hub, and set each link's tic_password if the hub uses one.\n", netName)
+}
+
+// checkConference reports an error unless conferences.json defines id.
+func checkConference(path string, id int) error {
+	confs, err := loadConferences(path)
+	if err != nil {
+		return fmt.Errorf("--conference-id %d: cannot read %s: %w", id, path, err)
+	}
+	for _, c := range confs {
+		if c.ID == id {
+			return nil
+		}
+	}
+	return fmt.Errorf("--conference-id %d: no such conference in %s", id, path)
 }
 
 // findNetwork returns the ftn.json spelling of a network name, matched
@@ -157,6 +182,11 @@ func planFileEchoAreas(existing []file.FileArea, echoes []ftn.EchoArea, opt file
 		echo := strings.ToUpper(e.Tag)
 		if a, ok := carried[echo]; ok {
 			linked = append(linked, a)
+			continue
+		}
+		// Parsed tags are never dots alone, but this is also the last
+		// check before a tag becomes a directory.
+		if file.CheckFilename(e.Tag) != nil || strings.Trim(e.Tag, ".") == "" {
 			continue
 		}
 		tag := uniqueName(strings.ToUpper(opt.tagPrefix+e.Tag), usedTags, "_")

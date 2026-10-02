@@ -343,7 +343,7 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			Set: func(val string) error { linkPtr.AreafixPassword = val; save(); return nil },
 		},
 		{
-			Label: "TIC Password", Help: "Password file echo TICs from this link carry (Pw line); empty = not checked", Type: ftString, Col: 3, Row: 6, Width: 20, Masked: true,
+			Label: "TIC Password", Help: "Password file echo TICs from this link carry (Pw line); empty = accept TICs only from the secure inbound", Type: ftString, Col: 3, Row: 6, Width: 20, Masked: true,
 			Get: func() string { return linkPtr.TICPassword },
 			Set: func(val string) error { linkPtr.TICPassword = strings.TrimSpace(val); save(); return nil },
 		},
