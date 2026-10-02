@@ -216,3 +216,15 @@ func TestDownloadNodelistRefusesNodediff(t *testing.T) {
 		}
 	}
 }
+
+// Text from a nodelist is shown to callers, so control characters are removed.
+func TestCompileNodelistStripsControlCharacters(t *testing.T) {
+	nl := &Nodelist{Entries: []NodelistEntry{{
+		Address: Address{Zone: 21, Net: 1, Node: 100},
+		Name:    "Evil\x1b[2JBBS", Location: "Here\x07", Sysop: "Op\u009b31m", Flags: []string{"CM", "\x1b"},
+	}}}
+	n := CompileNodelist(nl, "fsxnet", "x").Nodes[0]
+	if n.Name != "Evil[2JBBS" || n.Location != "Here" || n.Sysop != "Op31m" || strings.Join(n.Flags, ",") != "CM" {
+		t.Errorf("compiled = %+v", n)
+	}
+}

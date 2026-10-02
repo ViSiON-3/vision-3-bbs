@@ -59,20 +59,32 @@ func CompileNodelist(nl *Nodelist, network, source string) *CompiledNodelist {
 	for _, e := range nl.Entries {
 		flags := make([]string, 0, len(e.Flags))
 		for _, f := range e.Flags {
-			if f = strings.TrimSpace(f); f != "" {
+			if f = stripControl(strings.TrimSpace(f)); f != "" {
 				flags = append(flags, f)
 			}
 		}
 		c.Nodes = append(c.Nodes, CompiledNode{
 			Address:  e.Address.String(),
 			Status:   e.Keyword,
-			Name:     e.Name,
-			Location: e.Location,
-			Sysop:    e.Sysop,
+			Name:     stripControl(e.Name),
+			Location: stripControl(e.Location),
+			Sysop:    stripControl(e.Sysop),
 			Flags:    flags,
 		})
 	}
 	return c
+}
+
+// stripControl removes control characters. A nodelist comes from another
+// system, and its text is shown to callers: an escape sequence in a system's
+// name must not reach their terminal.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // HasZone reports whether the list has a Zone entry for zone: a check that a
