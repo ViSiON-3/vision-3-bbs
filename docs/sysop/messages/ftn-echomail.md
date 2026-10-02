@@ -343,6 +343,12 @@ Each line has an echo tag followed by a description.
 
 With `--tag-prefix fd_`, areas get prefixed tags (e.g. `FD_LINUX`) and base paths (e.g. `msgbases/fd_linux`), useful to avoid conflicts with local areas when importing Fidonet.
 
+**File echoes:** some networks also publish a *file* echo list, sometimes
+also named `.na` (tqwNet's `tqw_file.na`, with lines like
+`Area TQW_NODE 0 ! Weekly Nodelists`). `helper ftnsetup` refuses it; import
+it with `helper fileecho` to create file areas that receive the network's
+files by TIC. See [File Echoes](../files/file-echoes.md).
+
 ### Step 3b: Send AreaFix Commands
 
 The `helper areafix` command sends an AreaFix netmail to your hub. AreaFix lets you subscribe/unsubscribe to echo areas, list areas, and rescan without contacting your hub operator.
@@ -676,6 +682,7 @@ scan/pack frequency; neither is a hub poll schedule.
 | `address`          | Hub FTN address                                          |
 | `packet_password`  | Packet password shared with hub                          |
 | `areafix_password` | Password for AreaFix netmail (subject line; set by hub)  |
+| `tic_password`     | Password inbound file echo TICs from this link must carry; empty = not checked ([File Echoes](../files/file-echoes.md)) |
 | `name`             | Human-readable hub label                                 |
 | `flavour`          | Delivery mode: `Normal`, `Crash`, `Hold`, `Direct`       |
 | `hostname`         | Hub BinkP hostname or IP address; written to the binkd `node` line (an IPv6 address is bracketed for you) |

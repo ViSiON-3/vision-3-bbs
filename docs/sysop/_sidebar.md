@@ -76,6 +76,7 @@
 * [File Transfer](files/file-transfer.md)
 * [ZipLab Upload Processing](files/ziplab.md)
 * [Bulk Import](files/bulk-import.md)
+* [FTN File Echoes (TIC)](files/file-echoes.md)
 * [SAUCE Metadata](files/sauce-metadata.md)
 
 * **DOORS**
