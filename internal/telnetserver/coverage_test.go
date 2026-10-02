@@ -799,6 +799,53 @@ func TestServer_SessionLifecycle(t *testing.T) {
 	}
 }
 
+// The cursor-report height must survive the session starting. NAWS (25 rows)
+// is queued during negotiation, before the cursor report finds 24 usable rows;
+// the stale NAWS size used to stay queued, and the adapter applied it once its
+// forwarding goroutine ran, so every session ended up 25 rows high. The
+// handler waits for that goroutine rather than reading the size at once,
+// which is what let TestServer_SessionLifecycle pass most of the time.
+func TestServer_CursorReportHeightIsNotOverwritten(t *testing.T) {
+	type result struct {
+		final  ssh.Window
+		events []ssh.Window
+	}
+	results := make(chan result, 1)
+	addr := startServer(t, func(a *TelnetSessionAdapter) {
+		_, winCh, _ := a.Pty()
+		var events []ssh.Window
+		deadline := time.After(300 * time.Millisecond)
+	collect:
+		for {
+			select {
+			case w := <-winCh:
+				events = append(events, w)
+			case <-deadline:
+				break collect
+			}
+		}
+		pty, _, _ := a.Pty()
+		results <- result{pty.Window, events}
+	})
+	conn := dialTelnet(t, addr)
+	clientHandshake(t, conn, "XTERM", []byte{0, 100, 0, 25}, "\033[24;100R")
+
+	select {
+	case got := <-results:
+		want := ssh.Window{Width: 100, Height: 24}
+		if got.final != want {
+			t.Errorf("session window = %+v after it settled, want %+v", got.final, want)
+		}
+		for _, w := range got.events {
+			if w != want {
+				t.Errorf("session was told the window is %+v, want only %+v", w, want)
+			}
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("session handler never completed")
+	}
+}
+
 func TestServer_HandlerPanicClosesConnection(t *testing.T) {
 	addr := startServer(t, func(*TelnetSessionAdapter) { panic("handler blew up") })
 

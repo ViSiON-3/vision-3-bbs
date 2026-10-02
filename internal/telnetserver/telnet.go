@@ -276,16 +276,7 @@ func (tc *TelnetConn) handleSubnegotiation() {
 			height = 25
 		}
 
-		tc.sizeMu.Lock()
-		tc.width = width
-		tc.height = height
-		tc.sizeMu.Unlock()
-
-		// Non-blocking send of window size update
-		select {
-		case tc.winCh <- ssh.Window{Width: width, Height: height}:
-		default:
-		}
+		tc.setWindowSize(width, height)
 
 	case OptTermType:
 		// sbData[0] is TermTypeIs (0); terminal type string follows
@@ -493,7 +484,10 @@ func (tc *TelnetConn) Write(p []byte) (int, error) {
 // Close closes the telnet connection.
 func (tc *TelnetConn) Close() error {
 	if atomic.CompareAndSwapInt32(&tc.closed, 0, 1) {
+		// Under sizeMu, so setWindowSize never sends on a closed channel.
+		tc.sizeMu.Lock()
 		close(tc.winCh)
+		tc.sizeMu.Unlock()
 		return tc.conn.Close()
 	}
 	return nil
@@ -507,6 +501,31 @@ func (tc *TelnetConn) RemoteAddr() net.Addr {
 // LocalAddr returns the local network address.
 func (tc *TelnetConn) LocalAddr() net.Addr {
 	return tc.conn.LocalAddr()
+}
+
+// setWindowSize records the terminal size and queues it for the session
+// adapter. The queue holds one size and always the latest: an unread older
+// size is replaced rather than the new one dropped. NAWS arrives during
+// negotiation, before the cursor-report probe finds the usable height (one
+// row less under a status line); with the NAWS size still queued, the probe's
+// size used to be dropped and the adapter then applied the stale NAWS height
+// to the session.
+func (tc *TelnetConn) setWindowSize(width, height int) {
+	tc.sizeMu.Lock()
+	defer tc.sizeMu.Unlock()
+	tc.width, tc.height = width, height
+	// Close closes winCh under sizeMu, so this check holds until we're done.
+	if atomic.LoadInt32(&tc.closed) != 0 {
+		return
+	}
+	select {
+	case <-tc.winCh: // drop an unread, now stale size
+	default:
+	}
+	select {
+	case tc.winCh <- ssh.Window{Width: width, Height: height}:
+	default:
+	}
 }
 
 // WindowSize returns the current terminal dimensions.
@@ -524,16 +543,7 @@ func (tc *TelnetConn) DetectTerminalSize() (width, height int, method string) {
 	// Step 1: Try ANSI cursor position reporting (CPR)
 	w, h, err := tc.detectViaCursorPositioning()
 	if err == nil && w > 0 && h > 0 {
-		tc.sizeMu.Lock()
-		tc.width = w
-		tc.height = h
-		tc.sizeMu.Unlock()
-
-		// Non-blocking send of updated window size
-		select {
-		case tc.winCh <- ssh.Window{Width: w, Height: h}:
-		default:
-		}
+		tc.setWindowSize(w, h)
 
 		slog.Info("telnet terminal size detected via ANSI CPR", "width", w, "height", h)
 		return w, h, "ANSI"
@@ -553,10 +563,7 @@ func (tc *TelnetConn) DetectTerminalSize() (width, height int, method string) {
 	}
 
 	// Step 3: Safe defaults
-	tc.sizeMu.Lock()
-	tc.width = 80
-	tc.height = 25
-	tc.sizeMu.Unlock()
+	tc.setWindowSize(80, 25)
 
 	slog.Info("telnet terminal size using defaults", "width", 80, "height", 25)
 	return 80, 25, "DEFAULT"
